@@ -27,6 +27,9 @@ public sealed class FCurveCanvas : Control
     private Point _pointerStart;
     private Point _originStart;
     private FCurveKey? _dragKey;
+    private FCurveKey[] _dragKeys = [];
+    private Point _selectionEnd;
+    private bool _selectionAdditive;
     private DragMode _dragMode;
 
     public FCurveCanvas()
@@ -76,6 +79,9 @@ public sealed class FCurveCanvas : Control
             DrawCurve(context, display.Curve, new Pen(display.Brush, ReferenceEquals(display.Node, _model.Node) ? 2 : 1.5));
         if (_model.Curve is { } curve && _model.VisibleCurves.Any(item => ReferenceEquals(item.Node, _model.Node)))
             DrawKeys(context, curve);
+        if (_dragMode == DragMode.Select)
+            context.DrawRectangle(ThemeSettingsService.EditorBrush("SelectionFill"),
+                new Pen(ThemeSettingsService.EditorBrush("SelectionBorder")), SelectionRect(_pointerStart, _selectionEnd));
     }
 
     public void FrameAll()
@@ -84,10 +90,19 @@ public sealed class FCurveCanvas : Control
         InvalidateVisual();
     }
 
-    private void UpdateFrame()
+    public void FrameSelected()
     {
-        var keys = _model?.VisibleCurves.SelectMany(item => item.Curve.Keys).ToArray() ?? [];
-        if (keys.Length == 0 || Bounds.Width <= 0 || Bounds.Height <= 0)
+        if (_model?.SelectedKeys is { Count: > 0 } keys)
+        {
+            UpdateFrame(keys);
+            InvalidateVisual();
+        }
+    }
+
+    private void UpdateFrame(IReadOnlyList<FCurveKey>? selected = null)
+    {
+        var keys = selected ?? _model?.VisibleCurves.SelectMany(item => item.Curve.Keys).ToArray() ?? [];
+        if (keys.Count == 0 || Bounds.Width <= 0 || Bounds.Height <= 0)
         {
             _scaleX = 5;
             _scaleY = 80;
@@ -195,7 +210,7 @@ public sealed class FCurveCanvas : Control
                 if (index < curve.Keys.Count - 1 && key.Interpolation == CurveInterpolation.Cubic)
                     DrawHandle(context, point, HandlePoint(key, incoming: false));
             }
-            context.DrawEllipse(_model?.SelectedKey?.Id == key.Id ? SelectedBrush : KeyBrush, null, point, 5, 5);
+            context.DrawEllipse(_model?.IsKeySelected(key.Id) == true ? SelectedBrush : KeyBrush, null, point, 5, 5);
         }
     }
 
@@ -258,8 +273,22 @@ public sealed class FCurveCanvas : Control
         if (_dragMode == DragMode.None)
         {
             _dragKey = curve.Keys.Reverse().FirstOrDefault(key => Near(point, ToPoint(key.Frame, key.Value)));
-            _model.SelectKey(_dragKey?.Id);
-            if (_dragKey is not null) _dragMode = DragMode.Key;
+            var additive = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+            if (_dragKey is not null)
+            {
+                _model.SelectKey(_dragKey.Id, toggle: additive, preserveSelection: !additive);
+                if (_model.IsKeySelected(_dragKey.Id))
+                {
+                    _dragMode = DragMode.Key;
+                    _dragKeys = _model.SelectedKeys.ToArray();
+                }
+            }
+            else
+            {
+                _dragMode = DragMode.Select;
+                _selectionAdditive = additive;
+                _selectionEnd = point;
+            }
         }
         if (_dragMode != DragMode.None)
         {
@@ -278,13 +307,18 @@ public sealed class FCurveCanvas : Control
             _origin = new Point(_originStart.X + point.X - _pointerStart.X, _originStart.Y + point.Y - _pointerStart.Y);
             InvalidateVisual();
         }
+        else if (_dragMode == DragMode.Select)
+        {
+            _selectionEnd = point;
+            InvalidateVisual();
+        }
         else if (_dragKey is { } key && _model is not null)
         {
             if (_dragMode == DragMode.Key)
             {
                 var frame = key.Frame + (point.X - _pointerStart.X) / _scaleX;
                 if (_model.SnapToFrames) frame = Math.Round(frame);
-                _model.PreviewKey(key with { Frame = frame, Value = key.Value - (point.Y - _pointerStart.Y) / _scaleY });
+                _model.PreviewKeys(_dragKeys, frame - key.Frame, -(point.Y - _pointerStart.Y) / _scaleY);
             }
             else
             {
@@ -301,20 +335,30 @@ public sealed class FCurveCanvas : Control
     {
         base.OnPointerReleased(e);
         if (_dragMode == DragMode.None) return;
-        var wasEditing = _dragMode != DragMode.Pan;
+        var mode = _dragMode;
+        if (mode == DragMode.Select && _model?.Curve is { } curve)
+        {
+            var rect = SelectionRect(_pointerStart, e.GetPosition(this)).Inflate(2);
+            _model.SelectKeys(curve.Keys.Where(key => rect.Contains(ToPoint(key.Frame, key.Value)))
+                .Select(key => key.Id), _selectionAdditive);
+        }
         _dragMode = DragMode.None;
         _dragKey = null;
+        _dragKeys = [];
         e.Pointer.Capture(null);
-        if (wasEditing) _model?.CommitPreview();
+        if (mode is DragMode.Key or DragMode.InSlope or DragMode.OutSlope) _model?.CommitPreview();
+        InvalidateVisual();
         e.Handled = true;
     }
 
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
     {
         base.OnPointerCaptureLost(e);
-        if (_dragMode != DragMode.None && _dragMode != DragMode.Pan) _model?.CancelPreview();
+        if (_dragMode is DragMode.Key or DragMode.InSlope or DragMode.OutSlope) _model?.CancelPreview();
         _dragMode = DragMode.None;
         _dragKey = null;
+        _dragKeys = [];
+        InvalidateVisual();
     }
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
@@ -348,12 +392,18 @@ public sealed class FCurveCanvas : Control
         else if (shortcuts.Matches("curve.add", e) && _model.AddKeyCommand.CanExecute(null))
             _model.AddKeyCommand.Execute(null);
         else if (shortcuts.Matches("curve.frame", e))
-            FrameAll();
+        {
+            if (_model.HasSelectedKeys) FrameSelected();
+            else FrameAll();
+        }
         else return;
         e.Handled = true;
     }
 
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e) => InvalidateVisual();
     private static bool Near(Point a, Point b) => Math.Abs(a.X - b.X) <= 8 && Math.Abs(a.Y - b.Y) <= 8;
-    private enum DragMode { None, Pan, Key, InSlope, OutSlope }
+    private static Rect SelectionRect(Point start, Point end) => new(
+        new Point(Math.Min(start.X, end.X), Math.Min(start.Y, end.Y)),
+        new Point(Math.Max(start.X, end.X), Math.Max(start.Y, end.Y)));
+    private enum DragMode { None, Pan, Select, Key, InSlope, OutSlope }
 }

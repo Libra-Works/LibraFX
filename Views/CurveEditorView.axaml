@@ -9,6 +9,7 @@
             <Button Content="Add key" Command="{Binding AddKeyCommand}" />
             <Button Content="Delete" Command="{Binding DeleteKeyCommand}" />
             <Button Content="Frame all" Click="OnFrameAllClick" />
+            <Button Content="Frame selected" Click="OnFrameSelectedClick" IsEnabled="{Binding HasSelectedKeys}" />
             <Button Content="−" ToolTip.Tip="Zoom out" Click="OnZoomOutClick" />
             <Button Content="+" ToolTip.Tip="Zoom in" Click="OnZoomInClick" />
             <CheckBox Content="Snap frames" IsChecked="{Binding SnapToFrames}" VerticalAlignment="Center" />

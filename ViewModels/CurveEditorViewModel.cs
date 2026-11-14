@@ -16,7 +16,8 @@ public sealed class CurveEditorViewModel : Tool
     private GraphWorkspaceViewModel _graph;
     private GraphNodeViewModel? _node;
     private FCurveSnapshot? _preview;
-    private Guid? _selectedKeyId;
+    private readonly HashSet<Guid> _selectedKeyIds = [];
+    private Guid? _selectionNodeId;
     private Guid? _previewRevision;
     private string _status = "Select a Float F-Curve node in the graph.";
     private bool _snapToFrames = true;
@@ -45,7 +46,9 @@ public sealed class CurveEditorViewModel : Tool
     public FCurveSnapshot? Curve => _preview ?? _node?.Curve;
     public bool HasCurve => _node?.Curve is not null;
     public bool HasKey => SelectedKey is not null;
-    public FCurveKey? SelectedKey => Curve?.Keys.FirstOrDefault(key => key.Id == _selectedKeyId);
+    public IReadOnlyList<FCurveKey> SelectedKeys => Curve?.Keys.Where(key => _selectedKeyIds.Contains(key.Id)).ToArray() ?? [];
+    public bool HasSelectedKeys => SelectedKeys.Count > 0;
+    public FCurveKey? SelectedKey => SelectedKeys.Count == 1 ? SelectedKeys[0] : null;
     public IReadOnlyList<CurveInterpolation> Interpolations { get; } = Enum.GetValues<CurveInterpolation>();
     public string Status { get => _status; private set => SetProperty(ref _status, value); }
     public bool SnapToFrames { get => _snapToFrames; set => SetProperty(ref _snapToFrames, value); }
@@ -75,7 +78,7 @@ public sealed class CurveEditorViewModel : Tool
         _graph.PropertyChanged += OnGraphChanged;
         _graph.Nodes.CollectionChanged += OnNodesChanged;
         AddKeyCommand = new RelayCommand(AddKeyAtEnd, () => HasCurve);
-        DeleteKeyCommand = new RelayCommand(DeleteSelectedKey, () => HasKey);
+        DeleteKeyCommand = new RelayCommand(DeleteSelectedKeys, () => HasSelectedKeys);
         SynchronizeChannels();
         RefreshNode();
     }
@@ -114,9 +117,25 @@ public sealed class CurveEditorViewModel : Tool
         OnPropertyChanged(nameof(VisibleCurves));
     }
 
-    public void SelectKey(Guid? id)
+    public bool IsKeySelected(Guid id) => _selectedKeyIds.Contains(id);
+
+    public void SelectKey(Guid? id, bool toggle = false, bool preserveSelection = false)
     {
-        _selectedKeyId = id;
+        if (!toggle && !(preserveSelection && id is { } selected && _selectedKeyIds.Contains(selected)))
+            _selectedKeyIds.Clear();
+        if (id is { } keyId && Curve?.Keys.Any(key => key.Id == keyId) == true)
+        {
+            if (toggle && !_selectedKeyIds.Add(keyId)) _selectedKeyIds.Remove(keyId);
+            else if (!toggle) _selectedKeyIds.Add(keyId);
+        }
+        NotifyCurve();
+    }
+
+    public void SelectKeys(IEnumerable<Guid> ids, bool additive)
+    {
+        if (!additive) _selectedKeyIds.Clear();
+        var available = Curve?.Keys.Select(key => key.Id).ToHashSet() ?? [];
+        _selectedKeyIds.UnionWith(ids.Where(available.Contains));
         NotifyCurve();
     }
 
@@ -128,7 +147,8 @@ public sealed class CurveEditorViewModel : Tool
         {
             var updated = new FCurveSnapshot(curve.Keys.Append(key).OrderBy(item => item.Frame).ToArray());
             _graph.SetCurve(_node, updated, "Add F-Curve key");
-            _selectedKeyId = key.Id;
+            _selectedKeyIds.Clear();
+            _selectedKeyIds.Add(key.Id);
             Status = "Key added.";
         }
         catch (InvalidDataException ex) { Status = ex.Message; }
@@ -147,7 +167,25 @@ public sealed class CurveEditorViewModel : Tool
             _preview = preview;
             NotifyCurve();
         }
-        catch (InvalidDataException) { }
+
+        catch (InvalidDataException) { _preview = null; NotifyCurve(); }
+    }
+
+    public void PreviewKeys(IReadOnlyList<FCurveKey> selected, double frameDelta, double valueDelta)
+    {
+        if (_node?.Curve is not { } curve || selected.Count == 0) return;
+        var changed = selected.ToDictionary(key => key.Id,
+            key => key with { Frame = key.Frame + frameDelta, Value = key.Value + valueDelta });
+        try
+        {
+            var preview = new FCurveSnapshot(curve.Keys.Select(key => changed.GetValueOrDefault(key.Id, key))
+                .OrderBy(key => key.Frame).ToArray());
+            FCurve.Validate(preview);
+            _previewRevision ??= _graph.History.CurrentNodeId;
+            _preview = preview;
+            NotifyCurve();
+        }
+        catch (InvalidDataException) { _preview = null; NotifyCurve(); }
     }
 
     public void CommitPreview()
@@ -155,7 +193,7 @@ public sealed class CurveEditorViewModel : Tool
         var preview = _preview;
         _preview = null;
         if (preview is not null && _node is not null && _previewRevision == _graph.History.CurrentNodeId)
-            _graph.SetCurve(_node, preview, "Move F-Curve key");
+            _graph.SetCurve(_node, preview, SelectedKeys.Count > 1 ? "Move F-Curve keys" : "Move F-Curve key");
         _previewRevision = null;
         NotifyCurve();
     }
@@ -174,11 +212,12 @@ public sealed class CurveEditorViewModel : Tool
         AddKey(last is null ? 0 : last.Frame + 10, last?.Value ?? 0);
     }
 
-    private void DeleteSelectedKey()
+    private void DeleteSelectedKeys()
     {
-        if (_node?.Curve is not { } curve || _selectedKeyId is not { } id) return;
-        _graph.SetCurve(_node, new FCurveSnapshot(curve.Keys.Where(key => key.Id != id).ToArray()), "Delete F-Curve key");
-        _selectedKeyId = null;
+        if (_node?.Curve is not { } curve || _selectedKeyIds.Count == 0) return;
+        _graph.SetCurve(_node, new FCurveSnapshot(curve.Keys.Where(key => !_selectedKeyIds.Contains(key.Id)).ToArray()),
+            _selectedKeyIds.Count > 1 ? "Delete F-Curve keys" : "Delete F-Curve key");
+        _selectedKeyIds.Clear();
         NotifyCurve();
     }
 
@@ -217,6 +256,8 @@ public sealed class CurveEditorViewModel : Tool
         foreach (var node in _observedNodes) node.PropertyChanged -= OnNodeChanged;
         _observedNodes.Clear();
         _graph = _activeGraph.Graph;
+        _selectedKeyIds.Clear();
+        _selectionNodeId = null;
         _graph.PropertyChanged += OnGraphChanged;
         _graph.Nodes.CollectionChanged += OnNodesChanged;
         SynchronizeChannels();
@@ -250,8 +291,14 @@ public sealed class CurveEditorViewModel : Tool
         _node = node;
         _preview = null;
         _previewRevision = null;
-        if (_node is not null && _node.Curve?.Keys.Any(key => key.Id == _selectedKeyId) != true) _selectedKeyId = null;
-        Status = _node is null ? "Select a Float F-Curve node in the graph." : "Double-click to add a key; drag keys or tangent handles.";
+        if (_node?.Curve is { } curve)
+        {
+            if (_selectionNodeId != _node.Id) _selectedKeyIds.Clear();
+            _selectionNodeId = _node.Id;
+            _selectedKeyIds.IntersectWith(curve.Keys.Select(key => key.Id));
+        }
+        Status = _node is null ? "Select a Float F-Curve node in the graph." :
+            "Double-click to add; Ctrl-click or drag a box to select keys; F frames selection.";
         OnPropertyChanged(nameof(Node));
         NotifyCurve();
     }
@@ -262,6 +309,8 @@ public sealed class CurveEditorViewModel : Tool
         OnPropertyChanged(nameof(VisibleCurves));
         OnPropertyChanged(nameof(HasCurve));
         OnPropertyChanged(nameof(SelectedKey));
+        OnPropertyChanged(nameof(SelectedKeys));
+        OnPropertyChanged(nameof(HasSelectedKeys));
         OnPropertyChanged(nameof(HasKey));
         OnPropertyChanged(nameof(FrameText));
         OnPropertyChanged(nameof(ValueText));

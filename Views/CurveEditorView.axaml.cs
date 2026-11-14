@@ -9,6 +9,7 @@ public partial class CurveEditorView : UserControl
     public CurveEditorView() => InitializeComponent();
 
     private void OnFrameAllClick(object? sender, RoutedEventArgs e) => CurveCanvas.FrameAll();
+    private void OnFrameSelectedClick(object? sender, RoutedEventArgs e) => CurveCanvas.FrameSelected();
 
     private void OnZoomInClick(object? sender, RoutedEventArgs e) => CurveCanvas.ZoomBy(1.25);
     private void OnZoomOutClick(object? sender, RoutedEventArgs e) => CurveCanvas.ZoomBy(1 / 1.25);
