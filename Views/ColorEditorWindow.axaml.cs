@@ -94,6 +94,7 @@ public partial class ColorEditorWindow : Window
 
     private void UpdateComponentFields()
     {
+        CurrentSwatch.Color = _color.Preview;
         var boxes = new[] { RedBox, GreenBox, BlueBox, AlphaBox };
         var components = _color.Components;
         for (var i = 0; i < boxes.Length; i++)
