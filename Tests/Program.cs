@@ -40,7 +40,7 @@ internal static class Program
             if (view.FindControl<Image>("EmbeddedImage")!.Source is null)
                 throw new InvalidOperationException("Valid comment image did not render.");
             var definition = node.Definition.Parameters.Single(item => item.Id == "image");
-            var largePng = CreateLargePng();
+            var largePng = CreateLargeImage(PngBitmapEncoderOptions.Default);
             if (largePng.Length <= CommentImage.MaximumBytes)
                 throw new InvalidOperationException("Large image fixture is too small.");
             Import(largePng);
@@ -49,6 +49,17 @@ internal static class Program
                 !view.FindControl<TextBlock>("ImageStatus")!.Text!.Contains("optimized") ||
                 Convert.FromBase64String(original!).Length > CommentImage.MaximumBytes)
                 throw new InvalidOperationException("A large PNG was not optimized and displayed.");
+            var largeJpeg = CreateLargeImage(new JpegBitmapEncoderOptions { Quality = 100 });
+            if (largeJpeg.Length <= CommentImage.MaximumBytes)
+                throw new InvalidOperationException("Large JPEG fixture is too small.");
+            Import(largeJpeg);
+            original = node.GetParameterValue(definition).GetString();
+            var embeddedJpeg = Convert.FromBase64String(original!);
+            if (view.FindControl<Image>("EmbeddedImage")!.Source is null ||
+                !view.FindControl<TextBlock>("ImageStatus")!.Text!.Contains("optimized") ||
+                embeddedJpeg.Length > CommentImage.MaximumBytes ||
+                embeddedJpeg[0] != 255 || embeddedJpeg[1] != 216)
+                throw new InvalidOperationException("A large JPEG was not optimized and displayed.");
             Import(new byte[CommentImage.MaximumSourceBytes + 1]);
             if (!view.FindControl<TextBlock>("ImageStatus")!.Text!.Contains("16 MiB") ||
                 node.GetParameterValue(definition).GetString() != original)
@@ -71,7 +82,7 @@ internal static class Program
         Console.WriteLine("Project profile and group library checks passed.");
     }
 
-    private static byte[] CreateLargePng()
+    private static byte[] CreateLargeImage(BitmapEncoderOptions options)
     {
         using var bitmap = new WriteableBitmap(new PixelSize(1024, 768), new Vector(96, 96),
             PixelFormat.Bgra8888, AlphaFormat.Premul);
@@ -83,7 +94,7 @@ internal static class Program
             System.Runtime.InteropServices.Marshal.Copy(data, 0, pixels.Address, data.Length);
         }
         using var output = new MemoryStream();
-        bitmap.Save(output, PngBitmapEncoderOptions.Default);
+        bitmap.Save(output, options);
         return output.ToArray();
     }
 }
