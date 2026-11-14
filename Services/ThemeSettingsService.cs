@@ -31,9 +31,9 @@ public sealed class ThemeSettingsService
 
     private readonly Dictionary<string, SchemeFile> _schemes = new(StringComparer.Ordinal);
     private readonly string _settingsPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LiberaFx", "settings.json");
+        AppDataDirectory.Root, "LiberaFx", "settings.json");
     private readonly string _legacySettingsPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EffectTool", "settings.json");
+        AppDataDirectory.Root, "EffectTool", "settings.json");
 
     public ThemeSettings Current { get; private set; }
     public IReadOnlyList<string> ColorSchemes { get; }

@@ -44,7 +44,7 @@ public sealed class ShortcutService : ObservableObject
     private string _status = "Click a shortcut and press a key combination.";
 
     public static ShortcutService Shared { get; } = new(Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LiberaFx", "shortcuts.json"));
+        AppDataDirectory.Root, "LiberaFx", "shortcuts.json"));
 
     public ObservableCollection<ShortcutEntry> Entries { get; } =
     [
