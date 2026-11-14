@@ -27,6 +27,8 @@
                           Command="{Binding SaveProjectCommand}" />
                 <MenuItem Header="Save _As..."
                           Command="{Binding SaveProjectAsCommand}" />
+                <MenuItem Header="_Export VFX..."
+                          Command="{Binding ExportVfxCommand}" />
                 <Separator />
                 <MenuItem Header="_Close Document"
                           Click="OnCloseDocumentClick" />

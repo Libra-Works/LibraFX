@@ -63,10 +63,6 @@
                         IsEnabled="{Binding HasSelection}" />
                 <Button Content="Group" Click="OnGroupSelectionClick"
                         IsEnabled="{Binding HasSelection}" />
-                <Button Content="Open group" Click="OnOpenGroupClick"
-                        ToolTip.Tip="Open the selected Graph Group" />
-                <Button Content="Export VFX..." Click="OnExportVfxClick"
-                        ToolTip.Tip="Compile the current graph to VFX bytecode" />
                 <TextBlock Text="{Binding ConnectionStatus}"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource EffectMutedForegroundBrush}" />

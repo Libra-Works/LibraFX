@@ -13,8 +13,6 @@ using System.Text.Json;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using Avalonia.Threading;
-using Avalonia.Platform.Storage;
-using LiberaFx.Services.Compilation;
 
 namespace LiberaFx.Views;
 
@@ -281,40 +279,10 @@ public partial class GraphEditorView : UserControl
         graph.SelectNode(node);
     }
 
-    private async void OnExportVfxClick(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is not GraphWorkspaceViewModel graph || TopLevel.GetTopLevel(this) is not { } top) return;
-        try
-        {
-            var bytes = VfxProgram.Compile(graph.CreateCurrentSnapshot()).ToBinary();
-            var file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
-            {
-                Title = "Export VFX bytecode",
-                SuggestedFileName = "effect.lfxb",
-                DefaultExtension = "lfxb",
-                FileTypeChoices = [new FilePickerFileType("LIBERA FX bytecode") { Patterns = ["*.lfxb"] }]
-            });
-            if (file is null) return;
-            await using var stream = await file.OpenWriteAsync();
-            if (stream.CanSeek) stream.SetLength(0);
-            await stream.WriteAsync(bytes);
-            graph.ReportStatus($"Exported {bytes.Length} bytes of VFX bytecode.");
-        }
-        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException or InvalidOperationException)
-        {
-            graph.ReportStatus($"Export failed: {ex.Message}");
-        }
-    }
     private void OnBreadcrumbClick(object? sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: int depth } && DataContext is GraphWorkspaceViewModel graph)
             graph.NavigateToGraph(depth);
-    }
-
-    private void OnOpenGroupClick(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is GraphWorkspaceViewModel { SelectedNode: { } node } graph && !graph.EnterGraph(node))
-            graph.ReportStatus("Select a Graph Group to open it.");
     }
 
     private async void OnGraphKeyDown(object? sender, KeyEventArgs e)

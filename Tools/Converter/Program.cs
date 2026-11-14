@@ -82,7 +82,7 @@ internal static class Converter
             Console.WriteLine($"{input} -> {output}");
             return true;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidDataException or
                                    System.Text.Json.JsonException or InvalidOperationException)
         {
             Console.Error.WriteLine($"{input}: {ex.Message}");

@@ -8,6 +8,7 @@ using Dock.Model.Mvvm.Controls;
 using LiberaFx.Models.Appearance;
 using LiberaFx.Models.Commands;
 using LiberaFx.Services;
+using LiberaFx.Services.Compilation;
 
 namespace LiberaFx.ViewModels;
 
@@ -109,6 +110,8 @@ public partial class MainViewModel : ViewModelBase
 
     public IAsyncRelayCommand SaveProjectAsCommand { get; }
 
+    public IAsyncRelayCommand ExportVfxCommand { get; }
+
     public IReadOnlyList<string> ColorSchemes => _themeSettings.ColorSchemes;
     public string AppearanceWarnings => _themeSettings.LoadWarnings;
     public string AppearanceStatus { get => _appearanceStatus; private set => SetProperty(ref _appearanceStatus, value); }
@@ -167,6 +170,7 @@ public partial class MainViewModel : ViewModelBase
         SaveProjectAsCommand = new AsyncRelayCommand(
             () => SaveActiveProjectAsync(saveAs: true),
             () => ActiveDocument is not null);
+        ExportVfxCommand = new AsyncRelayCommand(ExportVfxAsync, () => ActiveDocument is not null);
         _themeSettings.SettingsChanged += OnThemeSettingsChanged;
     }
 
@@ -285,6 +289,56 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
+    public async Task ExportVfxAsync()
+    {
+        var document = ActiveDocument;
+        if (document is null)
+        {
+            FileStatus = "There is no active document to export.";
+            return;
+        }
+        if (_storageProvider is null)
+        {
+            FileStatus = "The platform file picker is not available.";
+            return;
+        }
+
+        IStorageFile? file = null;
+        try
+        {
+            var bytes = VfxProgram.Compile(document.Workspace.CreateSnapshot()).ToBinary();
+            file = await _storageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Export LIBERA FX binary",
+                DefaultExtension = "lfxb",
+                SuggestedFileName = Path.GetFileNameWithoutExtension(document.FileName) + ".lfxb",
+                FileTypeChoices = [VfxBinaryFileType]
+            });
+            if (file is null) return;
+            if (!file.Name.EndsWith(".lfxb", StringComparison.OrdinalIgnoreCase) ||
+                Documents.Any(open => open.FileKey is not null &&
+                    string.Equals(open.FileKey, GetFileKey(file), StringComparison.OrdinalIgnoreCase)))
+                throw new IOException("Choose a .lfxb file that is not an open project.");
+
+            await using var stream = await file.OpenWriteAsync();
+            if (stream.CanSeek)
+            {
+                stream.SetLength(0);
+                stream.Position = 0;
+            }
+            await stream.WriteAsync(bytes);
+            await stream.FlushAsync();
+            FileStatus = $"Exported {file.Name}.";
+        }
+        catch (Exception ex) when (IsFileOperationException(ex) ||
+                                   ex is InvalidDataException or InvalidOperationException or ArgumentException)
+        {
+            FileStatus = $"Could not export VFX: {ex.Message}";
+        }
+        catch (OperationCanceledException) { }
+        finally { file?.Dispose(); }
+    }
+
     public async Task<bool> SaveActiveProjectAsync(bool saveAs)
     {
         var document = ActiveDocument;
@@ -293,7 +347,6 @@ public partial class MainViewModel : ViewModelBase
             FileStatus = "There is no active document to save.";
             return false;
         }
-
         if (_storageProvider is null)
         {
             FileStatus = "The platform file picker is not available.";
@@ -457,6 +510,7 @@ public partial class MainViewModel : ViewModelBase
         RedoCommand?.NotifyCanExecuteChanged();
         SaveProjectCommand?.NotifyCanExecuteChanged();
         SaveProjectAsCommand?.NotifyCanExecuteChanged();
+        ExportVfxCommand?.NotifyCanExecuteChanged();
     }
 
     private GraphWorkspaceViewModel CreateWorkspace()
@@ -548,5 +602,10 @@ public partial class MainViewModel : ViewModelBase
     {
         Patterns = [$"*{ProjectFileService.FileExtension}"],
         MimeTypes = ["application/json"]
+    };
+
+    private static readonly FilePickerFileType VfxBinaryFileType = new("LIBERA FX Binary")
+    {
+        Patterns = ["*.lfxb"]
     };
 }
