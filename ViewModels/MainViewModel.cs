@@ -50,6 +50,7 @@ public partial class MainViewModel : ViewModelBase
 
     public ShortcutService Shortcuts => ShortcutService.Shared;
     public ServerSettingsService ServerSettings { get; }
+    public TeamProfilesService TeamProfiles { get; } = new();
 
     public string McpAccessToken { get; }
 
