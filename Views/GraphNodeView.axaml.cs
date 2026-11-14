@@ -76,7 +76,8 @@ public partial class GraphNodeView : UserControl
         }
 
         _dragNode = node;
-        _dragNodes = node.Workspace.SelectedNodes.Select(selected => (selected, selected.X, selected.Y)).ToArray();
+        _dragNodes = node.Workspace.GetMoveTargets(node.Workspace.SelectedNodes)
+            .Select(selected => (selected, selected.X, selected.Y)).ToArray();
         _pointerStart = e.GetPosition(_dragEditor);
         e.Pointer.Capture(header);
         e.Handled = true;

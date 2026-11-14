@@ -796,7 +796,34 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             return;
         }
 
+        if (node.IsComment)
+        {
+            var dx = x - node.X;
+            var dy = y - node.Y;
+            MoveNodes(GetMoveTargets([node]).Select(item => (item, item.X + dx, item.Y + dy)));
+            return;
+        }
         _history.Execute(new MoveGraphNodeCommand(node, node.X, node.Y, x, y));
+    }
+
+    public IReadOnlyList<GraphNodeViewModel> GetMoveTargets(IEnumerable<GraphNodeViewModel> selection)
+    {
+        var selected = selection.Where(Nodes.Contains).Distinct().ToArray();
+        var result = selected.ToHashSet();
+        foreach (var comment in selected.Where(node => node.IsComment))
+        {
+            var right = comment.X + comment.CommentWidth;
+            var bottom = comment.Y + comment.CommentHeight;
+            foreach (var node in Nodes)
+            {
+                if (ReferenceEquals(node, comment)) continue;
+                var height = node.IsComment ? node.CommentHeight : node.RenderedHeight;
+                if (node.X >= comment.X && node.Y >= comment.Y &&
+                    node.X + node.RenderedWidth <= right && node.Y + height <= bottom)
+                    result.Add(node);
+            }
+        }
+        return Nodes.Where(result.Contains).ToArray();
     }
 
     public void MoveNodes(IEnumerable<(GraphNodeViewModel Node, double X, double Y)> positions)
