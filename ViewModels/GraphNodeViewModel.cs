@@ -117,7 +117,7 @@ public sealed class GraphNodeViewModel : ObservableObject
         _curve = definition.Kind == GraphNodeKind.FloatFCurve ? curve ?? FCurve.CreateDefault() : null;
         ChildGraph = definition.Kind == GraphNodeKind.GraphGroup ? childGraph ?? new GraphSnapshot([], []) : null;
         _parameters = parameters;
-        InlineParameters = definition.Parameters
+        InlineParameters = definition.Parameters.Where(parameter => !IsComment || parameter.Id != "image")
             .Select(parameter => new NodeParameterEditorViewModel(workspace, this, parameter)).ToArray();
         SelectCommand = new RelayCommand(() => _workspace.SelectNode(this));
         SelectInputPortCommand = new RelayCommand(() => _workspace.CompleteConnection(this));

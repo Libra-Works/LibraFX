@@ -15,6 +15,16 @@ public static class NodeParameter
 {
     public static bool IsValidValue(string type, JsonElement value)
     {
+        if (type == "commentImage")
+        {
+            if (value.ValueKind != JsonValueKind.String) return false;
+            var text = value.GetString()!;
+            if (text.Length == 0) return true;
+            if (text.Length > 699052 || text.Length % 4 != 0) return false;
+            var bytes = new byte[text.Length / 4 * 3];
+            if (!Convert.TryFromBase64String(text, bytes, out var length) || length > 512 * 1024) return false;
+            return CommentImage.IsValid(bytes.AsSpan(0, length));
+        }
         if (value.ValueKind is JsonValueKind.Undefined || value.GetRawText().Length > 16384) return false;
         if (type.StartsWith("enum:", StringComparison.Ordinal))
             return GraphEnumDefinition.TryGetTypeId(type, out _) &&

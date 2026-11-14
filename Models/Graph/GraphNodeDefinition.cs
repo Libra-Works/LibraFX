@@ -214,7 +214,8 @@ public sealed record GraphNodeDefinition(
             (node.Kind != "Comment" ||
              !parameters.Any(item => item.Id == "text" && item.Type == "string") ||
              !parameters.Any(item => item.Id == "width" && item.Type == "float") ||
-             !parameters.Any(item => item.Id == "height" && item.Type == "float")))
+             !parameters.Any(item => item.Id == "height" && item.Type == "float") ||
+             !parameters.Any(item => item.Id == "image" && item.Type == "commentImage")))
             throw new InvalidDataException("Invalid built-in comment definition.");
         ids.Add(node.TypeId);
         names.Add(qualifiedName);

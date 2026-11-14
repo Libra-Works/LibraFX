@@ -3,6 +3,12 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
+using Avalonia.Interactivity;
+using System.ComponentModel;
+using System.Text.Json;
+using LiberaFx.Models.Graph;
 using LiberaFx.ViewModels;
 
 namespace LiberaFx.Views;
@@ -23,6 +29,8 @@ public partial class GraphNodeView : UserControl
     private double _resizeWidth;
     private double _resizeHeight;
     private Guid _resizeRevision;
+    private GraphNodeViewModel? _imageNode;
+    private Bitmap? _commentBitmap;
 
     public GraphNodeView()
     {
@@ -36,10 +44,123 @@ public partial class GraphNodeView : UserControl
         };
     }
 
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        AttachImageNode();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        DetachImageNode();
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    protected override void OnDataContextChanged(EventArgs e)
+    {
+        base.OnDataContextChanged(e);
+        DetachImageNode();
+        if (this.IsAttachedToVisualTree()) AttachImageNode();
+    }
+
+    private void AttachImageNode()
+    {
+        if (DataContext is not GraphNodeViewModel { IsComment: true } node || _imageNode == node) return;
+        _imageNode = node;
+        node.PropertyChanged += OnImageNodeChanged;
+        UpdateCommentImage();
+    }
+
+    private void DetachImageNode()
+    {
+        if (_imageNode is not null) _imageNode.PropertyChanged -= OnImageNodeChanged;
+        _imageNode = null;
+        EmbeddedImage.Source = null;
+        _commentBitmap?.Dispose();
+        _commentBitmap = null;
+    }
+
+    private void OnImageNodeChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(GraphNodeViewModel.Parameters)) UpdateCommentImage();
+    }
+
+    private void UpdateCommentImage()
+    {
+        EmbeddedImage.Source = null;
+        _commentBitmap?.Dispose();
+        _commentBitmap = null;
+        ImageStatus.Text = "";
+        var definition = _imageNode?.Definition.Parameters.FirstOrDefault(item => item.Id == "image");
+        var value = definition is null ? null : _imageNode!.GetParameterValue(definition).GetString();
+        if (string.IsNullOrEmpty(value)) return;
+        try
+        {
+            using var stream = new MemoryStream(Convert.FromBase64String(value), false);
+            var bitmap = new Bitmap(stream);
+            if (bitmap.PixelSize.Width > 4096 || bitmap.PixelSize.Height > 4096)
+            {
+                bitmap.Dispose();
+                ImageStatus.Text = "Image exceeds 4096 pixels.";
+                return;
+            }
+            _commentBitmap = bitmap;
+            EmbeddedImage.Source = bitmap;
+        }
+        catch (Exception ex) when (ex is FormatException or ArgumentException or IOException or InvalidOperationException)
+        {
+            ImageStatus.Text = "Image could not be decoded.";
+        }
+    }
+
+    private async void OnAddImageClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not GraphNodeViewModel { IsComment: true } node ||
+            TopLevel.GetTopLevel(this) is not { } top) return;
+        try
+        {
+            var files = await top.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Choose a comment image",
+                AllowMultiple = false,
+                FileTypeFilter = [new FilePickerFileType("PNG or JPEG") { Patterns = ["*.png", "*.jpg", "*.jpeg"] }]
+            });
+            if (files.Count == 0) return;
+            await using var input = await files[0].OpenReadAsync();
+            using var buffer = new MemoryStream();
+            var chunk = new byte[16384];
+            int count;
+            while ((count = await input.ReadAsync(chunk)) > 0)
+            {
+                if (buffer.Length + count > CommentImage.MaximumBytes) throw new InvalidDataException("Image exceeds 512 KiB.");
+                buffer.Write(chunk, 0, count);
+            }
+            var value = JsonSerializer.SerializeToElement(Convert.ToBase64String(buffer.ToArray()));
+            if (!NodeParameter.IsValidValue("commentImage", value)) throw new InvalidDataException("Choose a PNG or JPEG image.");
+            buffer.Position = 0;
+            using var bitmap = new Bitmap(buffer);
+            if (bitmap.PixelSize.Width > 4096 || bitmap.PixelSize.Height > 4096)
+                throw new InvalidDataException("Image exceeds 4096 pixels.");
+            if (ReferenceEquals(DataContext, node) && node.Workspace.Nodes.Contains(node))
+                node.Workspace.SetParameter(node, "image", value);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            ImageStatus.Text = ex.Message;
+        }
+    }
+
+    private void OnRemoveImageClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is GraphNodeViewModel { IsComment: true } node)
+            node.Workspace.SetParameter(node, "image", JsonSerializer.SerializeToElement(""));
+    }
+
     private void OnHeaderPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (e.Source is Visual source &&
-            (ReferenceEquals(source, DetailsToggle) || source.GetVisualAncestors().Contains(DetailsToggle)))
+            (ReferenceEquals(source, DetailsToggle) || source.GetVisualAncestors().Contains(DetailsToggle) ||
+             source.GetSelfAndVisualAncestors().OfType<Button>().Any()))
             return;
 
         if (DataContext is not GraphNodeViewModel node ||
