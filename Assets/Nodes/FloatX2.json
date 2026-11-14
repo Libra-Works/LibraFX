@@ -3,7 +3,7 @@
   "typeId": "d98eb6f5-ee2e-432a-9450-09e44dcc42e3",
   "namespace": "LiberaFx",
   "kind": "FloatX2",
-  "name": "FloatX2",
+  "name": "Vector2",
   "group": "Parameter nodes",
   "portType": "FloatX2",
   "portCategory": "Parameter"

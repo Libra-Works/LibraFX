@@ -351,6 +351,7 @@ public partial class GraphEditorView : UserControl
         var search = NodeSearchBox.Text?.Trim() ?? string.Empty;
         var entries = GraphNodeDefinition.All
             .Where(definition => definition.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                                 definition.Kind.Value.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                                  definition.QualifiedName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                                  definition.Group.Contains(search, StringComparison.OrdinalIgnoreCase))
             .Select(definition => new NodeCatalogEntryViewModel(definition)).ToArray();

@@ -3,7 +3,7 @@
   "typeId": "c7410281-9b6e-46f0-9bb7-334cc3b40767",
   "namespace": "LiberaFx",
   "kind": "Int32",
-  "name": "Int32",
+  "name": "Int",
   "group": "Parameter nodes",
   "portType": "Int32",
   "portCategory": "Parameter"

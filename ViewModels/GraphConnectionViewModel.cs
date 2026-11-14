@@ -22,7 +22,7 @@ public sealed class GraphConnectionViewModel : ObservableObject
 
     public Point EndPoint => new(EndX, EndY);
 
-    public string Description => $"{Source.Name} → {Target.Name} ({Source.PortType})";
+    public string Description => $"{Source.Name} → {Target.Name} ({Source.DisplayPortType})";
 
     public GraphConnectionViewModel(GraphNodeViewModel source, GraphNodeViewModel target)
     {

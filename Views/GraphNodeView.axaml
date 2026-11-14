@@ -46,7 +46,7 @@
                                Foreground="{DynamicResource EffectForegroundBrush}" />
                 </StackPanel>
                 <TextBlock Grid.Column="1"
-                           Text="{Binding PortType}"
+                           Text="{Binding DisplayPortType}"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource EffectMutedForegroundBrush}" />

@@ -3,7 +3,7 @@
   "typeId": "19aa71e5-b3c7-453d-860e-baad3b9d0fc4",
   "namespace": "LiberaFx",
   "kind": "Float",
-  "name": "Float",
+  "name": "Scalar",
   "group": "Parameter nodes",
   "portType": "Float",
   "portCategory": "Parameter"

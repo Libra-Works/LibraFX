@@ -135,7 +135,7 @@ public sealed class OutlinerViewModel : Tool
                 definition.Name.Contains(search, StringComparison.OrdinalIgnoreCase) || children.Count > 0)
             {
                 var item = _nodesById.GetValueOrDefault(node.Id) ?? new OutlinerNode(node.Id);
-                item.Update(node.Name, node.PortType, path);
+                item.Update(node.Name, GraphNodeDefinition.DisplayPortType(node.PortType), path);
                 Reconcile(item.Children, children);
                 current[node.Id] = item;
                 result.Add(item);

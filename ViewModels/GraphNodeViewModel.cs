@@ -61,6 +61,7 @@ public sealed class GraphNodeViewModel : ObservableObject
     public IBrush BorderBrush => ThemeSettingsService.EditorBrush(IsSelected ? "NodeSelectedBorder" : "NodeBorder");
 
     public string PortType => Definition.PortType;
+    public string DisplayPortType => GraphNodeDefinition.DisplayPortType(PortType);
 
     public IBrush PortBrush =>
         ThemeSettingsService.EditorBrush(Definition.PortCategory == GraphPortCategory.Signal ? "GraphSignal" : "GraphParameter");

@@ -79,8 +79,23 @@ public sealed record GraphNodeDefinition(
             string.Equals(item.Kind.Value, value, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(item.QualifiedName, value, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(item.TypeId.ToString("D"), value, StringComparison.OrdinalIgnoreCase));
+        if (definition is null)
+        {
+            var matches = All.Where(item => string.Equals(item.Name, value, StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
+            if (matches.Length == 1) definition = matches[0];
+        }
         return definition is not null;
     }
+
+    public static string DisplayPortType(string portType) => portType switch
+    {
+        "Float" => "Scalar",
+        "FloatX2" => "Vector2",
+        "FloatX3" => "Vector3",
+        "FloatX4" => "Vector4",
+        "Int32" => "Int",
+        _ => portType
+    };
 
     private static IReadOnlyList<GraphNodeDefinition> LoadAll()
     {

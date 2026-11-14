@@ -594,7 +594,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         SelectNode(source);
         _pendingOutputNode = source;
         OnPropertyChanged(nameof(PendingOutputNode));
-        ConnectionStatus = $"Choose an input for {source.Name} ({source.PortType}).";
+        ConnectionStatus = $"Choose an input for {source.Name} ({source.DisplayPortType}).";
     }
 
     public void PreviewConnection(Point point)

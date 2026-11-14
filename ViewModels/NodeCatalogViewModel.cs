@@ -37,6 +37,7 @@ public sealed class NodeCatalogViewModel : Tool
         var search = SearchText.Trim();
         var groups = _entries
             .Where(entry => entry.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                            entry.KindName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.Namespace.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.Group.Contains(search, StringComparison.OrdinalIgnoreCase))
             .GroupBy(entry => entry.Group)
