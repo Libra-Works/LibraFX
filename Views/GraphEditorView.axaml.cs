@@ -43,11 +43,15 @@ public partial class GraphEditorView : UserControl
         _nodeOffset.Y = _graphOrigin.Y;
         NodeItems.RenderTransform = _nodeOffset;
         SceneLayer.GraphOrigin = _graphOrigin;
+        GraphScrollViewer.AddHandler(InputElement.PointerWheelChangedEvent, OnViewportPointerWheelChanged,
+            RoutingStrategies.Tunnel);
         AttachedToVisualTree += (_, _) => Dispatcher.UIThread.Post(InitializeViewport);
     }
 
     internal Point ToGraphPoint(Point canvasPoint) =>
         new(canvasPoint.X - _graphOrigin.X, canvasPoint.Y - _graphOrigin.Y);
+
+    internal double DebugZoom => _zoom;
 
     private void InitializeViewport()
     {
