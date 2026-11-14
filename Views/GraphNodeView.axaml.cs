@@ -92,8 +92,8 @@ public partial class GraphNodeView : UserControl
         }
 
         var current = e.GetPosition(_dragCanvas);
-        var dx = Math.Max(-_dragNodes.Min(item => item.X), current.X - _pointerStart.X);
-        var dy = Math.Max(-_dragNodes.Min(item => item.Y), current.Y - _pointerStart.Y);
+        var dx = current.X - _pointerStart.X;
+        var dy = current.Y - _pointerStart.Y;
         foreach (var item in _dragNodes)
         {
             item.Node.PreviewMoveTo(item.X + dx, item.Y + dy);
@@ -179,7 +179,8 @@ public partial class GraphNodeView : UserControl
 
         if (_connectionMoved)
         {
-            source.Workspace.PreviewConnection(position);
+            var editor = this.FindAncestorOfType<GraphEditorView>();
+            source.Workspace.PreviewConnection(editor?.ToGraphPoint(position) ?? position);
         }
 
         e.Handled = true;

@@ -32,7 +32,7 @@
                         IsEnabled="{Binding HasSelection}" />
                 <Button Content="−" ToolTip.Tip="Zoom out" Click="OnZoomOutClick" />
                 <Button x:Name="ZoomButton" Content="100%"
-                        ToolTip.Tip="Reset zoom (Ctrl + mouse wheel to zoom)"
+                        ToolTip.Tip="Reset zoom (mouse wheel to zoom)"
                         Click="OnResetZoomClick" />
                 <Button Content="+" ToolTip.Tip="Zoom in" Click="OnZoomInClick" />
                 <Button Content="Frame selected" Click="OnFrameSelectionClick"
@@ -54,6 +54,7 @@
                       PointerReleased="OnViewportPointerReleased"
                       PointerCaptureLost="OnViewportPointerCaptureLost"
                       PointerWheelChanged="OnViewportPointerWheelChanged"
+                      ScrollChanged="OnViewportScrollChanged"
                       HorizontalScrollBarVisibility="Auto"
                       VerticalScrollBarVisibility="Auto">
             <LayoutTransformControl x:Name="ZoomHost">
@@ -80,9 +81,9 @@
                         PointerReleased="OnBackgroundPointerReleased"
                         PointerCaptureLost="OnBackgroundPointerCaptureLost" />
 
-                <views:GraphSceneLayer DataContext="{Binding}" />
+                <views:GraphSceneLayer x:Name="SceneLayer" DataContext="{Binding}" />
 
-                <ItemsControl ItemsSource="{Binding Nodes}">
+                <ItemsControl x:Name="NodeItems" ItemsSource="{Binding Nodes}">
                     <ItemsControl.ItemContainerTheme>
                         <ControlTheme TargetType="ContentPresenter">
                             <Setter Property="Canvas.Left" Value="{ReflectionBinding DisplayX}" />

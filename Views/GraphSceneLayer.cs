@@ -20,6 +20,20 @@ public sealed class GraphSceneLayer : Control
 
     private readonly HashSet<GraphConnectionViewModel> _observedConnections = [];
     private GraphWorkspaceViewModel? _workspace;
+    private Vector _graphOrigin;
+    private Rect _visibleArea;
+
+    public Vector GraphOrigin
+    {
+        get => _graphOrigin;
+        set { _graphOrigin = value; InvalidateVisual(); }
+    }
+
+    public Rect VisibleArea
+    {
+        get => _visibleArea;
+        set { if (_visibleArea != value) { _visibleArea = value; InvalidateVisual(); } }
+    }
 
     public GraphSceneLayer()
     {
@@ -83,32 +97,38 @@ public sealed class GraphSceneLayer : Control
         if (_workspace.PendingOutputNode is { } source && _workspace.ConnectionPreviewPoint is { } end)
         {
             var start = new Point(
-                source.DisplayX + GraphNodeViewModel.NodeWidth - GraphNodeViewModel.PortHorizontalOffset,
-                source.DisplayY + GraphNodeViewModel.PortCenterOffset);
-            DrawConnection(context, start, end, source.Definition.PortCategory);
+                source.DisplayX + GraphNodeViewModel.NodeWidth - GraphNodeViewModel.PortHorizontalOffset + _graphOrigin.X,
+                source.DisplayY + GraphNodeViewModel.PortCenterOffset + _graphOrigin.Y);
+            DrawConnection(context, start, end + _graphOrigin, source.Definition.PortCategory);
         }
     }
 
     private void DrawGrid(DrawingContext context)
     {
-        var minorIndex = 0;
-        for (var x = 0d; x <= Bounds.Width; x += GridSpacing)
+        var visible = _visibleArea.Intersect(new Rect(Bounds.Size));
+        if (visible.Width <= 0 || visible.Height <= 0) return;
+        var startX = (long)Math.Floor((visible.Left - _graphOrigin.X) / GridSpacing);
+        var endX = (long)Math.Ceiling((visible.Right - _graphOrigin.X) / GridSpacing);
+        for (var index = startX; index <= endX; index++)
         {
-            var pen = minorIndex++ % MajorGridInterval == 0 ? MajorGridPen : MinorGridPen;
-            context.DrawLine(pen, new Point(x, 0), new Point(x, Bounds.Height));
+            var x = index * GridSpacing + _graphOrigin.X;
+            var pen = index % MajorGridInterval == 0 ? MajorGridPen : MinorGridPen;
+            context.DrawLine(pen, new Point(x, visible.Top), new Point(x, visible.Bottom));
         }
 
-        var majorIndex = 0;
-        for (var y = 0d; y <= Bounds.Height; y += GridSpacing)
+        var startY = (long)Math.Floor((visible.Top - _graphOrigin.Y) / GridSpacing);
+        var endY = (long)Math.Ceiling((visible.Bottom - _graphOrigin.Y) / GridSpacing);
+        for (var index = startY; index <= endY; index++)
         {
-            var pen = majorIndex++ % MajorGridInterval == 0 ? MajorGridPen : MinorGridPen;
-            context.DrawLine(pen, new Point(0, y), new Point(Bounds.Width, y));
+            var y = index * GridSpacing + _graphOrigin.Y;
+            var pen = index % MajorGridInterval == 0 ? MajorGridPen : MinorGridPen;
+            context.DrawLine(pen, new Point(visible.Left, y), new Point(visible.Right, y));
         }
     }
 
-    private static void DrawConnection(DrawingContext context, GraphConnectionViewModel connection)
+    private void DrawConnection(DrawingContext context, GraphConnectionViewModel connection)
     {
-        DrawConnection(context, connection.StartPoint, connection.EndPoint, connection.Source.Definition.PortCategory);
+        DrawConnection(context, connection.StartPoint + _graphOrigin, connection.EndPoint + _graphOrigin, connection.Source.Definition.PortCategory);
     }
 
     private static void DrawConnection(DrawingContext context, Point start, Point end, Models.Graph.GraphPortCategory category)

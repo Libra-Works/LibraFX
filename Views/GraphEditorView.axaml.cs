@@ -18,9 +18,15 @@ namespace LiberaFx.Views;
 public partial class GraphEditorView : UserControl
 {
     private bool _isPanning;
+    private bool _panMoved;
+    private MouseButton _panButton;
     private Point _panStart;
     private Vector _panOffset;
     private double _zoom = 1;
+    private const double OriginStep = 2400;
+    private Vector _graphOrigin = new(OriginStep, OriginStep);
+    private readonly TranslateTransform _nodeOffset = new();
+    private bool _viewportInitialized;
     private bool _isSelecting;
     private Point _selectionStart;
     private GraphNodeViewModel[] _selectionBefore = [];
@@ -33,6 +39,24 @@ public partial class GraphEditorView : UserControl
     public GraphEditorView()
     {
         InitializeComponent();
+        _nodeOffset.X = _graphOrigin.X;
+        _nodeOffset.Y = _graphOrigin.Y;
+        NodeItems.RenderTransform = _nodeOffset;
+        SceneLayer.GraphOrigin = _graphOrigin;
+        AttachedToVisualTree += (_, _) => Dispatcher.UIThread.Post(InitializeViewport);
+    }
+
+    internal Point ToGraphPoint(Point canvasPoint) =>
+        new(canvasPoint.X - _graphOrigin.X, canvasPoint.Y - _graphOrigin.Y);
+
+    private void InitializeViewport()
+    {
+        if (_viewportInitialized) return;
+        _viewportInitialized = true;
+        UpdateCanvasExtent();
+        GraphScrollViewer.UpdateLayout();
+        GraphScrollViewer.Offset = _graphOrigin * _zoom;
+        UpdateSceneViewport();
     }
 
     protected override void OnDataContextChanged(EventArgs e)
@@ -73,8 +97,33 @@ public partial class GraphEditorView : UserControl
     private void UpdateCanvasExtent()
     {
         if (GraphCanvas is null) return;
-        GraphCanvas.Width = Math.Clamp(_observedNodes.Select(n => n.DisplayX + GraphNodeViewModel.NodeWidth + 200).DefaultIfEmpty(1600).Max(), 1600, 10_000_000);
-        GraphCanvas.Height = Math.Clamp(_observedNodes.Select(n => n.DisplayY + 300).DefaultIfEmpty(1000).Max(), 1000, 10_000_000);
+        var minX = _observedNodes.Select(n => n.DisplayX).DefaultIfEmpty(0).Min();
+        var minY = _observedNodes.Select(n => n.DisplayY).DefaultIfEmpty(0).Min();
+        var shiftX = Math.Max(0, Math.Ceiling((-minX - _graphOrigin.X + 200) / OriginStep) * OriginStep);
+        var shiftY = Math.Max(0, Math.Ceiling((-minY - _graphOrigin.Y + 200) / OriginStep) * OriginStep);
+        if (shiftX > 0 || shiftY > 0) ShiftOrigin(shiftX, shiftY);
+        GraphCanvas.Width = Math.Max(GraphCanvas.Width,
+            _graphOrigin.X + Math.Max(1600, _observedNodes.Select(n => n.DisplayX + GraphNodeViewModel.NodeWidth + 200).DefaultIfEmpty(1600).Max()));
+        GraphCanvas.Height = Math.Max(GraphCanvas.Height,
+            _graphOrigin.Y + Math.Max(1000, _observedNodes.Select(n => n.DisplayY + 300).DefaultIfEmpty(1000).Max()));
+    }
+
+    private void ShiftOrigin(double x, double y)
+    {
+        if (x == 0 && y == 0) return;
+        _graphOrigin += new Vector(x, y);
+        GraphCanvas.Width += x;
+        GraphCanvas.Height += y;
+        _nodeOffset.X = _graphOrigin.X;
+        _nodeOffset.Y = _graphOrigin.Y;
+        SceneLayer.GraphOrigin = _graphOrigin;
+        if (_viewportInitialized)
+        {
+            var delta = new Vector(x * _zoom, y * _zoom);
+            _panOffset += delta;
+            GraphScrollViewer.UpdateLayout();
+            GraphScrollViewer.Offset += delta;
+        }
     }
 
     private void OnGraphCanvasDragOver(object? sender, DragEventArgs e)
@@ -90,7 +139,7 @@ public partial class GraphEditorView : UserControl
             return;
         }
 
-        var position = e.GetPosition(GraphCanvas);
+        var position = ToGraphPoint(e.GetPosition(GraphCanvas));
         try { graph.CreateNode(kind, position.X, position.Y); }
         catch (InvalidOperationException ex) { graph.ReportStatus(ex.Message); }
         e.Handled = true;
@@ -120,7 +169,7 @@ public partial class GraphEditorView : UserControl
             _selectionBefore = e.KeyModifiers.HasFlag(KeyModifiers.Control)
                 ? graph.SelectedNodes.ToArray()
                 : [];
-            _pastePosition = _selectionStart;
+            _pastePosition = ToGraphPoint(_selectionStart);
             e.Pointer.Capture(background);
             e.Handled = true;
         }
@@ -186,7 +235,7 @@ public partial class GraphEditorView : UserControl
             return;
         }
 
-        _pastePosition = e.GetPosition(GraphCanvas);
+        _pastePosition = ToGraphPoint(e.GetPosition(GraphCanvas));
         if (e.Source is Visual visual &&
             visual.GetSelfAndVisualAncestors().OfType<GraphNodeView>().FirstOrDefault()?.DataContext
                 is GraphNodeViewModel node && !node.IsSelected)
@@ -249,8 +298,8 @@ public partial class GraphEditorView : UserControl
         else if (shortcuts.Matches("graph.search", e))
         {
             var center = new Point(
-                (GraphScrollViewer.Offset.X + GraphScrollViewer.Viewport.Width / 2) / _zoom,
-                (GraphScrollViewer.Offset.Y + GraphScrollViewer.Viewport.Height / 2) / _zoom);
+                (GraphScrollViewer.Offset.X + GraphScrollViewer.Viewport.Width / 2) / _zoom - _graphOrigin.X,
+                (GraphScrollViewer.Offset.Y + GraphScrollViewer.Viewport.Height / 2) / _zoom - _graphOrigin.Y);
             ShowNodeSearch(_lastGraphPointer ?? center);
             e.Handled = true;
         }
@@ -273,7 +322,7 @@ public partial class GraphEditorView : UserControl
 
     private void ShowNodeSearch(Point position)
     {
-        _nodeSearchPosition = new Point(Math.Max(0, position.X), Math.Max(0, position.Y));
+        _nodeSearchPosition = position;
         NodeSearchBox.Text = string.Empty;
         RefreshNodeSearch();
         NodeSearchPopup.IsOpen = true;
@@ -380,7 +429,7 @@ public partial class GraphEditorView : UserControl
 
             var snapshot = JsonSerializer.Deserialize<GraphSnapshot>(text[ClipboardPrefix.Length..])
                 ?? throw new InvalidDataException("The clipboard graph is empty.");
-            graph.PasteSnapshot(snapshot, Math.Max(0, _pastePosition.X), Math.Max(0, _pastePosition.Y));
+            graph.PasteSnapshot(snapshot, _pastePosition.X, _pastePosition.Y);
             _pastePosition = new Point(_pastePosition.X + 24, _pastePosition.Y + 24);
         }
         catch (Exception ex)
@@ -391,12 +440,15 @@ public partial class GraphEditorView : UserControl
 
     private void OnViewportPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (!e.GetCurrentPoint(GraphScrollViewer).Properties.IsMiddleButtonPressed)
+        var properties = e.GetCurrentPoint(GraphScrollViewer).Properties;
+        if (!properties.IsRightButtonPressed && !properties.IsMiddleButtonPressed)
         {
             return;
         }
 
         _isPanning = true;
+        _panMoved = false;
+        _panButton = properties.IsRightButtonPressed ? MouseButton.Right : MouseButton.Middle;
         _panStart = e.GetPosition(GraphScrollViewer);
         _panOffset = GraphScrollViewer.Offset;
         e.Pointer.Capture(GraphScrollViewer);
@@ -408,16 +460,28 @@ public partial class GraphEditorView : UserControl
         var graphPoint = e.GetPosition(GraphCanvas);
         if (graphPoint.X >= 0 && graphPoint.Y >= 0 &&
             graphPoint.X <= GraphCanvas.Width && graphPoint.Y <= GraphCanvas.Height)
-            _lastGraphPointer = graphPoint;
+            _lastGraphPointer = ToGraphPoint(graphPoint);
         if (!_isPanning)
         {
             return;
         }
 
         var position = e.GetPosition(GraphScrollViewer);
-        GraphScrollViewer.Offset = new Vector(
+        var target = new Vector(
             _panOffset.X + _panStart.X - position.X,
             _panOffset.Y + _panStart.Y - position.Y);
+        if (Math.Abs(position.X - _panStart.X) >= 4 || Math.Abs(position.Y - _panStart.Y) >= 4)
+            _panMoved = true;
+        if (!_panMoved) return;
+        var shiftX = target.X < 200 ? OriginStep : 0;
+        var shiftY = target.Y < 200 ? OriginStep : 0;
+        if (shiftX > 0 || shiftY > 0)
+        {
+            ShiftOrigin(shiftX, shiftY);
+            target += new Vector(shiftX * _zoom, shiftY * _zoom);
+        }
+        EnsureViewportExtent(target);
+        GraphScrollViewer.Offset = target;
         e.Handled = true;
     }
 
@@ -425,9 +489,11 @@ public partial class GraphEditorView : UserControl
     {
         if (_isPanning)
         {
+            var openMenu = _panButton == MouseButton.Right && !_panMoved;
             _isPanning = false;
             e.Pointer.Capture(null);
             e.Handled = true;
+            if (openMenu) GraphCanvas.ContextMenu?.Open(GraphCanvas);
         }
     }
 
@@ -438,13 +504,36 @@ public partial class GraphEditorView : UserControl
 
     private void OnViewportPointerWheelChanged(object? sender, PointerWheelEventArgs e)
     {
-        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.Delta.Y == 0)
+        if (e.Delta.Y == 0)
         {
             return;
         }
 
         SetZoom(_zoom * Math.Pow(1.15, e.Delta.Y), e.GetPosition(GraphScrollViewer));
         e.Handled = true;
+    }
+
+    private void EnsureViewportExtent(Vector offset)
+    {
+        var width = (offset.X + GraphScrollViewer.Viewport.Width) / _zoom + OriginStep;
+        var height = (offset.Y + GraphScrollViewer.Viewport.Height) / _zoom + OriginStep;
+        if (width > GraphCanvas.Width || height > GraphCanvas.Height)
+        {
+            GraphCanvas.Width = Math.Max(GraphCanvas.Width, width);
+            GraphCanvas.Height = Math.Max(GraphCanvas.Height, height);
+            GraphScrollViewer.UpdateLayout();
+        }
+    }
+
+    private void OnViewportScrollChanged(object? sender, ScrollChangedEventArgs e) => UpdateSceneViewport();
+
+    private void UpdateSceneViewport()
+    {
+        SceneLayer.VisibleArea = new Rect(
+            GraphScrollViewer.Offset.X / _zoom,
+            GraphScrollViewer.Offset.Y / _zoom,
+            GraphScrollViewer.Viewport.Width / _zoom,
+            GraphScrollViewer.Viewport.Height / _zoom);
     }
 
     private void OnResetZoomClick(object? sender, RoutedEventArgs e)
@@ -479,21 +568,34 @@ public partial class GraphEditorView : UserControl
         var zoom = Math.Min(Math.Max(1, viewport.Width - 80) / Math.Max(1, right - left),
                             Math.Max(1, viewport.Height - 80) / Math.Max(1, bottom - top));
         SetZoom(zoom, new Point(viewport.Width / 2, viewport.Height / 2));
-        GraphScrollViewer.Offset = new Vector((left + right) / 2 * _zoom - viewport.Width / 2,
-                                               (top + bottom) / 2 * _zoom - viewport.Height / 2);
+        var offset = new Vector(((left + right) / 2 + _graphOrigin.X) * _zoom - viewport.Width / 2,
+                                ((top + bottom) / 2 + _graphOrigin.Y) * _zoom - viewport.Height / 2);
+        EnsureViewportExtent(offset);
+        GraphScrollViewer.Offset = offset;
     }
 
     private void SetZoom(double zoom, Point anchor)
     {
         zoom = Math.Clamp(zoom, 0.05, 4);
         var oldOffset = GraphScrollViewer.Offset;
-        var graphX = (oldOffset.X + anchor.X) / _zoom;
-        var graphY = (oldOffset.Y + anchor.Y) / _zoom;
+        var graphX = (oldOffset.X + anchor.X) / _zoom - _graphOrigin.X;
+        var graphY = (oldOffset.Y + anchor.Y) / _zoom - _graphOrigin.Y;
         _zoom = zoom;
         ZoomHost.LayoutTransform = new ScaleTransform(zoom, zoom);
         ZoomHost.UpdateLayout();
         GraphScrollViewer.UpdateLayout();
-        GraphScrollViewer.Offset = new Vector(graphX * zoom - anchor.X, graphY * zoom - anchor.Y);
+        var offset = new Vector((graphX + _graphOrigin.X) * zoom - anchor.X,
+                                (graphY + _graphOrigin.Y) * zoom - anchor.Y);
+        var shiftX = offset.X < 0 ? Math.Ceiling(-offset.X / (OriginStep * zoom)) * OriginStep : 0;
+        var shiftY = offset.Y < 0 ? Math.Ceiling(-offset.Y / (OriginStep * zoom)) * OriginStep : 0;
+        if (shiftX > 0 || shiftY > 0)
+        {
+            ShiftOrigin(shiftX, shiftY);
+            offset += new Vector(shiftX * zoom, shiftY * zoom);
+        }
+        EnsureViewportExtent(offset);
+        GraphScrollViewer.Offset = offset;
+        UpdateSceneViewport();
         ZoomButton.Content = $"{zoom:P0}";
     }
 }
