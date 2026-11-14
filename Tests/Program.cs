@@ -1,6 +1,8 @@
 using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using LiberaFx;
 using LiberaFx.Models.Commands;
@@ -38,9 +40,17 @@ internal static class Program
             if (view.FindControl<Image>("EmbeddedImage")!.Source is null)
                 throw new InvalidOperationException("Valid comment image did not render.");
             var definition = node.Definition.Parameters.Single(item => item.Id == "image");
+            var largePng = CreateLargePng();
+            if (largePng.Length <= CommentImage.MaximumBytes)
+                throw new InvalidOperationException("Large image fixture is too small.");
+            Import(largePng);
             var original = node.GetParameterValue(definition).GetString();
-            Import(new byte[CommentImage.MaximumBytes + 1]);
-            if (!view.FindControl<TextBlock>("ImageStatus")!.Text!.Contains("512 KiB") ||
+            if (view.FindControl<Image>("EmbeddedImage")!.Source is null ||
+                !view.FindControl<TextBlock>("ImageStatus")!.Text!.Contains("optimized") ||
+                Convert.FromBase64String(original!).Length > CommentImage.MaximumBytes)
+                throw new InvalidOperationException("A large PNG was not optimized and displayed.");
+            Import(new byte[CommentImage.MaximumSourceBytes + 1]);
+            if (!view.FindControl<TextBlock>("ImageStatus")!.Text!.Contains("16 MiB") ||
                 node.GetParameterValue(definition).GetString() != original)
                 throw new InvalidOperationException("Oversized image was not safely rejected.");
             Import([0, 1, 2, 3]);
@@ -57,6 +67,24 @@ internal static class Program
         {
             window.Close();
         }
+        GroupLibraryTests.Run();
+        Console.WriteLine("Project profile and group library checks passed.");
+    }
+
+    private static byte[] CreateLargePng()
+    {
+        using var bitmap = new WriteableBitmap(new PixelSize(1024, 768), new Vector(96, 96),
+            PixelFormat.Bgra8888, AlphaFormat.Premul);
+        using (var pixels = bitmap.Lock())
+        {
+            var data = new byte[pixels.RowBytes * pixels.Size.Height];
+            new Random(42).NextBytes(data);
+            for (var index = 3; index < data.Length; index += 4) data[index] = 255;
+            System.Runtime.InteropServices.Marshal.Copy(data, 0, pixels.Address, data.Length);
+        }
+        using var output = new MemoryStream();
+        bitmap.Save(output, PngBitmapEncoderOptions.Default);
+        return output.ToArray();
     }
 }
 

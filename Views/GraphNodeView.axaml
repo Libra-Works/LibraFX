@@ -131,7 +131,7 @@
                     <Button DockPanel.Dock="Right" Content="×" Padding="5,0" Click="OnRemoveImageClick"
                             ToolTip.Tip="Remove comment image" />
                     <Button DockPanel.Dock="Right" Content="Image" Padding="5,0" Click="OnAddImageClick"
-                            ToolTip.Tip="Embed a PNG or JPEG image (maximum 512 KiB)" />
+                            ToolTip.Tip="Embed a PNG or JPEG image (up to 16 MiB; large images are optimized)" />
                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center"
                                Foreground="{DynamicResource EffectForegroundBrush}" />
                 </DockPanel>

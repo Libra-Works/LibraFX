@@ -148,24 +148,50 @@ public partial class GraphNodeView : UserControl
             int count;
             while ((count = await input.ReadAsync(chunk)) > 0)
             {
-                if (buffer.Length + count > CommentImage.MaximumBytes) throw new InvalidDataException("Image exceeds 512 KiB.");
+                if (buffer.Length + count > CommentImage.MaximumSourceBytes)
+                    throw new InvalidDataException("Image exceeds 16 MiB.");
                 buffer.Write(chunk, 0, count);
             }
-            var value = JsonSerializer.SerializeToElement(Convert.ToBase64String(buffer.ToArray()));
+            var data = buffer.ToArray();
+            if (!CommentImage.IsValidSource(data, out var width, out var height))
+                throw new InvalidDataException("Choose a PNG or JPEG image no larger than 8192 x 8192 pixels.");
+            var optimized = data.Length > CommentImage.MaximumBytes || width > 4096 || height > 4096;
+            if (optimized) data = OptimizeCommentImage(data, width, height);
+            else
+            {
+                buffer.Position = 0;
+                using var bitmap = new Bitmap(buffer);
+            }
+            var value = JsonSerializer.SerializeToElement(Convert.ToBase64String(data));
             if (!NodeParameter.IsValidValue("commentImage", value))
-                throw new InvalidDataException("Choose a PNG or JPEG image no larger than 4096 x 4096 pixels.");
-            buffer.Position = 0;
-            using var bitmap = new Bitmap(buffer);
-            if (bitmap.PixelSize.Width > 4096 || bitmap.PixelSize.Height > 4096)
-                throw new InvalidDataException("Image exceeds 4096 pixels.");
+                throw new InvalidDataException("Image could not be prepared for embedding.");
             if (ReferenceEquals(DataContext, node) && node.Workspace.Nodes.Contains(node))
+            {
                 node.Workspace.SetParameter(node, "image", value);
+                if (optimized) ImageStatus.Text = "Image optimized for the project.";
+            }
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or
                                    ArgumentException or InvalidOperationException or NotSupportedException)
         {
             if (ReferenceEquals(DataContext, node)) ImageStatus.Text = ex.Message;
         }
+    }
+
+    private static byte[] OptimizeCommentImage(byte[] source, int width, int height)
+    {
+        var png = source.AsSpan().StartsWith(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 });
+        foreach (var size in new[] { 1024, 768, 512, 256 })
+        {
+            using var input = new MemoryStream(source, false);
+            using var bitmap = width >= height
+                ? Bitmap.DecodeToWidth(input, Math.Min(size, width), BitmapInterpolationMode.HighQuality)
+                : Bitmap.DecodeToHeight(input, Math.Min(size, height), BitmapInterpolationMode.HighQuality);
+            using var output = new MemoryStream();
+            bitmap.Save(output, png ? PngBitmapEncoderOptions.Default : JpegBitmapEncoderOptions.Default);
+            if (output.Length <= CommentImage.MaximumBytes) return output.ToArray();
+        }
+        throw new InvalidDataException("Image could not be reduced to the embedding limit.");
     }
 
     private void OnRemoveImageClick(object? sender, RoutedEventArgs e)

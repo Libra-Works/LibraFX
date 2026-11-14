@@ -5,16 +5,39 @@ namespace LiberaFx.Models.Graph;
 public static class CommentImage
 {
     public const int MaximumBytes = 512 * 1024;
+    public const int MaximumSourceBytes = 16 * 1024 * 1024;
     private const int MaximumDimension = 4096;
+    private const int MaximumSourceDimension = 8192;
 
     public static bool IsValid(ReadOnlySpan<byte> data)
     {
-        if (data.Length > MaximumBytes) return false;
+        return data.Length <= MaximumBytes && TryGetDimensions(data, out var width, out var height) &&
+               ValidDimensions(width, height, MaximumDimension);
+    }
+
+    public static bool IsValidSource(ReadOnlySpan<byte> data, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        if (data.Length > MaximumSourceBytes || !TryGetDimensions(data, out var w, out var h) ||
+            !ValidDimensions(w, h, MaximumSourceDimension)) return false;
+        width = (int)w;
+        height = (int)h;
+        return true;
+    }
+
+    private static bool TryGetDimensions(ReadOnlySpan<byte> data, out uint width, out uint height)
+    {
+        width = 0;
+        height = 0;
         if (data.Length >= 24 &&
             data[..8].SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }) &&
             data.Slice(12, 4).SequenceEqual("IHDR"u8))
-            return ValidDimensions(BinaryPrimitives.ReadUInt32BigEndian(data.Slice(16, 4)),
-                BinaryPrimitives.ReadUInt32BigEndian(data.Slice(20, 4)));
+        {
+            width = BinaryPrimitives.ReadUInt32BigEndian(data.Slice(16, 4));
+            height = BinaryPrimitives.ReadUInt32BigEndian(data.Slice(20, 4));
+            return true;
+        }
         if (data.Length < 4 || data[0] != 255 || data[1] != 216) return false;
         var index = 2;
         while (index < data.Length)
@@ -31,14 +54,15 @@ public static class CommentImage
                 0xc9 or 0xca or 0xcb or 0xcd or 0xce or 0xcf)
             {
                 if (length < 7) return false;
-                return ValidDimensions(BinaryPrimitives.ReadUInt16BigEndian(data.Slice(index + 5, 2)),
-                    BinaryPrimitives.ReadUInt16BigEndian(data.Slice(index + 3, 2)));
+                width = BinaryPrimitives.ReadUInt16BigEndian(data.Slice(index + 5, 2));
+                height = BinaryPrimitives.ReadUInt16BigEndian(data.Slice(index + 3, 2));
+                return true;
             }
             index += length;
         }
         return false;
     }
 
-    private static bool ValidDimensions(uint width, uint height) =>
-        width is > 0 and <= MaximumDimension && height is > 0 and <= MaximumDimension;
+    private static bool ValidDimensions(uint width, uint height, int maximum) =>
+        width > 0 && width <= maximum && height > 0 && height <= maximum;
 }
