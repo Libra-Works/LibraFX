@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
@@ -23,6 +24,7 @@ public partial class GraphEditorView : UserControl
     private Point _panStart;
     private Vector _panOffset;
     private double _zoom = 1;
+    private bool _updatingZoomSlider;
     private const double OriginStep = 2400;
     private Vector _graphOrigin = new(OriginStep, OriginStep);
     public static readonly DirectProperty<GraphEditorView, double> OriginXProperty =
@@ -567,6 +569,12 @@ public partial class GraphEditorView : UserControl
 
     private void OnZoomInClick(object? sender, RoutedEventArgs e) => ZoomBy(1.25);
     private void OnZoomOutClick(object? sender, RoutedEventArgs e) => ZoomBy(1 / 1.25);
+    private void OnZoomSliderChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_updatingZoomSlider || !_viewportInitialized) return;
+        SetZoom(Math.Pow(2, e.NewValue),
+            new Point(GraphScrollViewer.Viewport.Width / 2, GraphScrollViewer.Viewport.Height / 2));
+    }
     private void OnFrameSelectionClick(object? sender, RoutedEventArgs e) => FrameSelection();
     private void OnGroupSelectionClick(object? sender, RoutedEventArgs e)
     {
@@ -622,6 +630,9 @@ public partial class GraphEditorView : UserControl
         EnsureViewportExtent(offset);
         GraphScrollViewer.Offset = offset;
         UpdateSceneViewport();
+        _updatingZoomSlider = true;
+        ZoomSlider.Value = Math.Log2(zoom);
+        _updatingZoomSlider = false;
         ZoomButton.Content = $"{zoom:P0}";
     }
 }
