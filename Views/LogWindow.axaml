@@ -1,0 +1,29 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:LiberaFx.ViewModels"
+        xmlns:services="using:LiberaFx.Services"
+        x:Class="LiberaFx.Views.LogWindow"
+        x:DataType="vm:MainViewModel"
+        Title="LIBERA FX - Log" Width="860" Height="460" MinWidth="420" MinHeight="220"
+        Background="{DynamicResource EffectWindowBackgroundBrush}">
+    <Grid RowDefinitions="Auto,*">
+        <Border Padding="10" Background="{DynamicResource EffectSurfaceBrush}"
+                BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="0,0,0,1">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Clear" Click="OnClearClick" />
+                <TextBlock Text="Editor activity" VerticalAlignment="Center" FontWeight="SemiBold" />
+            </DockPanel>
+        </Border>
+        <ListBox Grid.Row="1" ItemsSource="{Binding Log.Entries}">
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="services:EditorLogEntry">
+                    <Grid ColumnDefinitions="95,90,*" ColumnSpacing="8" Margin="4,2">
+                        <TextBlock Text="{Binding Time}" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Category}" FontWeight="SemiBold" />
+                        <TextBlock Grid.Column="2" Text="{Binding Message}" TextWrapping="Wrap" />
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </Grid>
+</Window>

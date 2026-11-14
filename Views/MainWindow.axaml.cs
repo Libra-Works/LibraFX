@@ -6,6 +6,7 @@ namespace LiberaFx.Views;
 
 public partial class MainWindow : Window
 {
+    private LogWindow? _logWindow;
     public MainWindow()
     {
         InitializeComponent();
@@ -33,6 +34,19 @@ public partial class MainWindow : Window
             DataContext = DataContext
         };
         await settings.ShowDialog(this);
+    }
+
+    private void OnLogClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_logWindow is not null)
+        {
+            _logWindow.Activate();
+            return;
+        }
+
+        _logWindow = new LogWindow { DataContext = DataContext };
+        _logWindow.Closed += (_, _) => _logWindow = null;
+        _logWindow.Show(this);
     }
 
     private async void OnCloseDocumentClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

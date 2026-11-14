@@ -52,6 +52,7 @@ public sealed class UndoRedoManager
     public bool IsCurrentPinned => RequireCurrent().IsPinned;
 
     public event EventHandler? StateChanged;
+    public event Action<string>? ActionPerformed;
 
     public void Configure(
         Func<GraphSnapshot> captureState,
@@ -94,6 +95,7 @@ public sealed class UndoRedoManager
         _current = node;
         _timelineRevisionId = Guid.NewGuid();
         OnStateChanged();
+        ActionPerformed?.Invoke(command.Description);
     }
 
     public bool Undo()
@@ -112,6 +114,7 @@ public sealed class UndoRedoManager
 
         _current = parent;
         OnStateChanged();
+        ActionPerformed?.Invoke($"Undo: {current.Description}");
         return true;
     }
 
@@ -133,6 +136,7 @@ public sealed class UndoRedoManager
 
         _current = child;
         OnStateChanged();
+        ActionPerformed?.Invoke($"Redo: {child.Description}");
         return true;
     }
 
@@ -156,6 +160,7 @@ public sealed class UndoRedoManager
 
         _current = target;
         OnStateChanged();
+        ActionPerformed?.Invoke($"History: {target.Description}");
         return true;
     }
 
@@ -174,6 +179,7 @@ public sealed class UndoRedoManager
         node.IsPinned = isPinned;
         _timelineRevisionId = Guid.NewGuid();
         OnStateChanged();
+        ActionPerformed?.Invoke($"{(isPinned ? "Pin" : "Unpin")}: {node.Description}");
     }
 
     public IReadOnlyList<UndoRedoHistoryItem> GetItems()

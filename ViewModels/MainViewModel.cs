@@ -23,6 +23,7 @@ public partial class MainViewModel : ViewModelBase
     private string _fileStatus = "Ready";
     private string _appearanceStatus = string.Empty;
 
+    public EditorLog Log { get; } = new();
     public string McpEndpoint => McpHost.Endpoint;
 
     public ShortcutService Shortcuts => ShortcutService.Shared;
@@ -32,13 +33,19 @@ public partial class MainViewModel : ViewModelBase
     public string McpStatus
     {
         get => _mcpStatus;
-        set => SetProperty(ref _mcpStatus, value);
+        set
+        {
+            if (SetProperty(ref _mcpStatus, value)) Log.Add("MCP", value);
+        }
     }
 
     public string FileStatus
     {
         get => _fileStatus;
-        private set => SetProperty(ref _fileStatus, value);
+        private set
+        {
+            if (SetProperty(ref _fileStatus, value)) Log.Add("File", value);
+        }
     }
 
     public IRootDock Layout { get; }
@@ -101,6 +108,7 @@ public partial class MainViewModel : ViewModelBase
 
     public MainViewModel(string mcpAccessToken = "")
     {
+        Log.Add("Application", "Editor started.");
         McpAccessToken = mcpAccessToken;
         var initialWorkspace = CreateWorkspace();
         var initialDocument = new GraphDocumentViewModel(initialWorkspace)
@@ -422,8 +430,17 @@ public partial class MainViewModel : ViewModelBase
         SaveProjectAsCommand?.NotifyCanExecuteChanged();
     }
 
-    private static GraphWorkspaceViewModel CreateWorkspace() =>
-        new(new UndoRedoManager());
+    private GraphWorkspaceViewModel CreateWorkspace()
+    {
+        var workspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+        workspace.History.ActionPerformed += message => Log.Add("Edit", message);
+        workspace.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(GraphWorkspaceViewModel.ConnectionStatus))
+                Log.Add("Graph", workspace.ConnectionStatus);
+        };
+        return workspace;
+    }
 
     private static string GetFileKey(IStorageFile file) => file.Path.AbsoluteUri;
 
