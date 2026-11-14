@@ -56,10 +56,13 @@
                       ScrollChanged="OnViewportScrollChanged"
                       HorizontalScrollBarVisibility="Auto"
                       VerticalScrollBarVisibility="Auto">
-            <LayoutTransformControl x:Name="ZoomHost">
+            <Grid x:Name="ZoomHost" HorizontalAlignment="Left" VerticalAlignment="Top">
             <Grid x:Name="GraphCanvas"
                   Width="1600"
                   Height="1000"
+                  HorizontalAlignment="Left"
+                  VerticalAlignment="Top"
+                  RenderTransformOrigin="0%,0%"
                   PointerPressed="OnGraphCanvasPointerPressed"
                   DragDrop.AllowDrop="True"
                   DragDrop.DragOver="OnGraphCanvasDragOver"
@@ -106,7 +109,7 @@
                             BorderBrush="{DynamicResource EffectSelectionBorderBrush}" BorderThickness="1" />
                 </Canvas>
             </Grid>
-            </LayoutTransformControl>
+            </Grid>
         </ScrollViewer>
         <Popup x:Name="NodeSearchPopup" Grid.Row="2" PlacementTarget="{Binding #GraphScrollViewer}"
                Placement="Center" IsLightDismissEnabled="True">

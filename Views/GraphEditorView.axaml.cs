@@ -26,6 +26,7 @@ public partial class GraphEditorView : UserControl
     private const double OriginStep = 2400;
     private Vector _graphOrigin = new(OriginStep, OriginStep);
     private readonly TranslateTransform _nodeOffset = new();
+    private readonly ScaleTransform _graphScale = new(1, 1);
     private bool _viewportInitialized;
     private bool _isSelecting;
     private Point _selectionStart;
@@ -42,6 +43,7 @@ public partial class GraphEditorView : UserControl
         _nodeOffset.X = _graphOrigin.X;
         _nodeOffset.Y = _graphOrigin.Y;
         NodeItems.RenderTransform = _nodeOffset;
+        GraphCanvas.RenderTransform = _graphScale;
         SceneLayer.GraphOrigin = _graphOrigin;
         GraphScrollViewer.AddHandler(InputElement.PointerWheelChangedEvent, OnViewportPointerWheelChanged,
             RoutingStrategies.Tunnel);
@@ -110,6 +112,13 @@ public partial class GraphEditorView : UserControl
             _graphOrigin.X + Math.Max(1600, _observedNodes.Select(n => n.DisplayX + GraphNodeViewModel.NodeWidth + 200).DefaultIfEmpty(1600).Max()));
         GraphCanvas.Height = Math.Max(GraphCanvas.Height,
             _graphOrigin.Y + Math.Max(1000, _observedNodes.Select(n => n.DisplayY + 300).DefaultIfEmpty(1000).Max()));
+        UpdateZoomExtent();
+    }
+
+    private void UpdateZoomExtent()
+    {
+        ZoomHost.Width = GraphCanvas.Width * _zoom;
+        ZoomHost.Height = GraphCanvas.Height * _zoom;
     }
 
     private void ShiftOrigin(double x, double y)
@@ -118,6 +127,7 @@ public partial class GraphEditorView : UserControl
         _graphOrigin += new Vector(x, y);
         GraphCanvas.Width += x;
         GraphCanvas.Height += y;
+        UpdateZoomExtent();
         _nodeOffset.X = _graphOrigin.X;
         _nodeOffset.Y = _graphOrigin.Y;
         SceneLayer.GraphOrigin = _graphOrigin;
@@ -525,6 +535,7 @@ public partial class GraphEditorView : UserControl
         {
             GraphCanvas.Width = Math.Max(GraphCanvas.Width, width);
             GraphCanvas.Height = Math.Max(GraphCanvas.Height, height);
+            UpdateZoomExtent();
             GraphScrollViewer.UpdateLayout();
         }
     }
@@ -585,7 +596,9 @@ public partial class GraphEditorView : UserControl
         var graphX = (oldOffset.X + anchor.X) / _zoom - _graphOrigin.X;
         var graphY = (oldOffset.Y + anchor.Y) / _zoom - _graphOrigin.Y;
         _zoom = zoom;
-        ZoomHost.LayoutTransform = new ScaleTransform(zoom, zoom);
+        _graphScale.ScaleX = zoom;
+        _graphScale.ScaleY = zoom;
+        UpdateZoomExtent();
         ZoomHost.UpdateLayout();
         GraphScrollViewer.UpdateLayout();
         var offset = new Vector((graphX + _graphOrigin.X) * zoom - anchor.X,
