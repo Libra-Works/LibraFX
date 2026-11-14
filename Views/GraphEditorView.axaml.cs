@@ -25,7 +25,12 @@ public partial class GraphEditorView : UserControl
     private double _zoom = 1;
     private const double OriginStep = 2400;
     private Vector _graphOrigin = new(OriginStep, OriginStep);
-    private readonly TranslateTransform _nodeOffset = new();
+    public static readonly DirectProperty<GraphEditorView, double> OriginXProperty =
+        AvaloniaProperty.RegisterDirect<GraphEditorView, double>(nameof(OriginX), view => view.OriginX);
+    public static readonly DirectProperty<GraphEditorView, double> OriginYProperty =
+        AvaloniaProperty.RegisterDirect<GraphEditorView, double>(nameof(OriginY), view => view.OriginY);
+    public double OriginX => _graphOrigin.X;
+    public double OriginY => _graphOrigin.Y;
     private readonly ScaleTransform _graphScale = new(1, 1);
     private bool _viewportInitialized;
     private bool _isSelecting;
@@ -40,9 +45,6 @@ public partial class GraphEditorView : UserControl
     public GraphEditorView()
     {
         InitializeComponent();
-        _nodeOffset.X = _graphOrigin.X;
-        _nodeOffset.Y = _graphOrigin.Y;
-        NodeItems.RenderTransform = _nodeOffset;
         GraphCanvas.RenderTransform = _graphScale;
         SceneLayer.GraphOrigin = _graphOrigin;
         GraphScrollViewer.AddHandler(InputElement.PointerWheelChangedEvent, OnViewportPointerWheelChanged,
@@ -124,12 +126,13 @@ public partial class GraphEditorView : UserControl
     private void ShiftOrigin(double x, double y)
     {
         if (x == 0 && y == 0) return;
+        var oldOrigin = _graphOrigin;
         _graphOrigin += new Vector(x, y);
         GraphCanvas.Width += x;
         GraphCanvas.Height += y;
         UpdateZoomExtent();
-        _nodeOffset.X = _graphOrigin.X;
-        _nodeOffset.Y = _graphOrigin.Y;
+        RaisePropertyChanged(OriginXProperty, oldOrigin.X, _graphOrigin.X);
+        RaisePropertyChanged(OriginYProperty, oldOrigin.Y, _graphOrigin.Y);
         SceneLayer.GraphOrigin = _graphOrigin;
         if (_viewportInitialized)
         {

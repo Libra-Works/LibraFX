@@ -8,7 +8,7 @@ namespace LiberaFx.Views;
 
 public partial class GraphNodeView : UserControl
 {
-    private Canvas? _dragCanvas;
+    private GraphEditorView? _dragEditor;
     private GraphNodeViewModel? _dragNode;
     private (GraphNodeViewModel Node, double X, double Y)[] _dragNodes = [];
     private Point _pointerStart;
@@ -38,8 +38,8 @@ public partial class GraphNodeView : UserControl
             return;
         }
 
-        _dragCanvas = this.FindAncestorOfType<Canvas>();
-        if (_dragCanvas is null)
+        _dragEditor = this.FindAncestorOfType<GraphEditorView>();
+        if (_dragEditor is null)
         {
             return;
         }
@@ -59,7 +59,7 @@ public partial class GraphNodeView : UserControl
 
         _dragNode = node;
         _dragNodes = node.Workspace.SelectedNodes.Select(selected => (selected, selected.X, selected.Y)).ToArray();
-        _pointerStart = e.GetPosition(_dragCanvas);
+        _pointerStart = e.GetPosition(_dragEditor);
         e.Pointer.Capture(header);
         e.Handled = true;
     }
@@ -86,14 +86,14 @@ public partial class GraphNodeView : UserControl
 
     private void OnHeaderPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (_dragNode is null || _dragCanvas is null)
+        if (_dragNode is null || _dragEditor is null)
         {
             return;
         }
 
-        var current = e.GetPosition(_dragCanvas);
-        var dx = current.X - _pointerStart.X;
-        var dy = current.Y - _pointerStart.Y;
+        var current = e.GetPosition(_dragEditor);
+        var dx = (current.X - _pointerStart.X) / _dragEditor.DebugZoom;
+        var dy = (current.Y - _pointerStart.Y) / _dragEditor.DebugZoom;
         foreach (var item in _dragNodes)
         {
             item.Node.PreviewMoveTo(item.X + dx, item.Y + dy);
@@ -138,7 +138,7 @@ public partial class GraphNodeView : UserControl
 
     private void ResetDrag()
     {
-        _dragCanvas = null;
+        _dragEditor = null;
         _dragNode = null;
         _dragNodes = [];
     }

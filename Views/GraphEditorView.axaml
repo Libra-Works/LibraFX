@@ -6,6 +6,9 @@
              Focusable="True"
              KeyDown="OnGraphKeyDown"
              x:DataType="vm:GraphWorkspaceViewModel">
+    <UserControl.Resources>
+        <views:GraphPositionConverter x:Key="GraphPositionConverter" />
+    </UserControl.Resources>
     <Grid RowDefinitions="Auto,Auto,*">
         <Border Grid.Row="0" Padding="6,3" Background="{DynamicResource EffectSurfaceBrush}"
                 BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="0,0,0,1">
@@ -93,8 +96,20 @@
                 <ItemsControl x:Name="NodeItems" ItemsSource="{Binding Nodes}">
                     <ItemsControl.ItemContainerTheme>
                         <ControlTheme TargetType="ContentPresenter">
-                            <Setter Property="Canvas.Left" Value="{ReflectionBinding DisplayX}" />
-                            <Setter Property="Canvas.Top" Value="{ReflectionBinding DisplayY}" />
+                            <Setter Property="Canvas.Left">
+                                <MultiBinding Converter="{StaticResource GraphPositionConverter}">
+                                    <ReflectionBinding Path="DisplayX" />
+                                    <ReflectionBinding Path="OriginX"
+                                                       RelativeSource="{RelativeSource FindAncestor, AncestorType={x:Type views:GraphEditorView}}" />
+                                </MultiBinding>
+                            </Setter>
+                            <Setter Property="Canvas.Top">
+                                <MultiBinding Converter="{StaticResource GraphPositionConverter}">
+                                    <ReflectionBinding Path="DisplayY" />
+                                    <ReflectionBinding Path="OriginY"
+                                                       RelativeSource="{RelativeSource FindAncestor, AncestorType={x:Type views:GraphEditorView}}" />
+                                </MultiBinding>
+                            </Setter>
                         </ControlTheme>
                     </ItemsControl.ItemContainerTheme>
                     <ItemsControl.ItemsPanel>
