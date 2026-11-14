@@ -58,7 +58,7 @@
   "Messages.DefaultProject": "既定",
   "Messages.LoadProfilesFailed": "チームプロファイルを読み込めませんでした: {0}",
   "Messages.ActiveProject": "アクティブなプロジェクト: {0}。",
-  "Messages.EnterProjectDetails": "プロジェクト名とグループディレクトリの絶対パスを入力してください。ディレクトリは空でも構いません。",
+  "Messages.EnterProjectDetails": "プロジェクト名と、ノード定義・グループのディレクトリの絶対パスを入力してください。ディレクトリは空でも構いません。",
   "Messages.ProjectMissing": "選択したプロジェクトは存在しません。",
   "Messages.UniqueProjectNames": "プロジェクト名は重複できません。",
   "Messages.TeamProjectSaved": "プロジェクトを保存しました: {0}。",

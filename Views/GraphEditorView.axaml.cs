@@ -55,9 +55,23 @@ public partial class GraphEditorView : UserControl
         AttachedToVisualTree += (_, _) => Dispatcher.UIThread.Post(InitializeViewport);
         AttachedToVisualTree += (_, _) => LocalizationService.Shared.LanguageChanged += OnLanguageChanged;
         DetachedFromVisualTree += (_, _) => LocalizationService.Shared.LanguageChanged -= OnLanguageChanged;
+        AttachedToVisualTree += (_, _) => ObserveDefinitionChanges(true);
+        DetachedFromVisualTree += (_, _) => ObserveDefinitionChanges(false);
     }
 
     private void OnLanguageChanged(object? sender, EventArgs e) => RefreshNodeSearch();
+
+    private void OnNodeDefinitionsChanged(object? sender, EventArgs e)
+    {
+        if (NodeSearchPopup.IsOpen) RefreshNodeSearch();
+    }
+
+    private void ObserveDefinitionChanges(bool subscribe)
+    {
+        if (_observedGraph?.NodeDefinitions is not { } definitions) return;
+        definitions.Changed -= OnNodeDefinitionsChanged;
+        if (subscribe) definitions.Changed += OnNodeDefinitionsChanged;
+    }
 
     internal Point ToGraphPoint(Point canvasPoint) =>
         new(canvasPoint.X - _graphOrigin.X, canvasPoint.Y - _graphOrigin.Y);
@@ -76,11 +90,13 @@ public partial class GraphEditorView : UserControl
 
     protected override void OnDataContextChanged(EventArgs e)
     {
+        ObserveDefinitionChanges(false);
         if (_observedGraph is not null) _observedGraph.Nodes.CollectionChanged -= OnNodesChanged;
         foreach (var node in _observedNodes) node.PropertyChanged -= OnNodePositionChanged;
         _observedNodes.Clear();
         _observedGraph = DataContext as GraphWorkspaceViewModel;
         if (_observedGraph is not null) _observedGraph.Nodes.CollectionChanged += OnNodesChanged;
+        ObserveDefinitionChanges(TopLevel.GetTopLevel(this) is not null);
         SynchronizeNodes();
         base.OnDataContextChanged(e);
     }
@@ -177,10 +193,11 @@ public partial class GraphEditorView : UserControl
         e.Handled = true;
     }
 
-    private static bool TryGetNodeKind(DragEventArgs e, out GraphNodeKind kind)
+    private bool TryGetNodeKind(DragEventArgs e, out GraphNodeKind kind)
     {
         var kindName = e.DataTransfer.TryGetText();
-        if (GraphNodeDefinition.TryFind(kindName, out var definition))
+        if (GraphNodeDefinition.TryFind(kindName, out var definition,
+            (DataContext as GraphWorkspaceViewModel)?.AvailableNodeDefinitions ?? GraphNodeDefinition.Core))
         {
             kind = definition!.Kind;
             return true;
@@ -365,7 +382,11 @@ public partial class GraphEditorView : UserControl
     private void ShowNodeSearch(Point position)
     {
         _nodeSearchPosition = position;
-        if (DataContext is GraphWorkspaceViewModel graph) graph.GroupAssets?.Refresh();
+        if (DataContext is GraphWorkspaceViewModel graph)
+        {
+            graph.NodeDefinitions?.Refresh();
+            graph.GroupAssets?.Refresh();
+        }
         NodeSearchBox.Text = string.Empty;
         RefreshNodeSearch();
         NodeSearchPopup.IsOpen = true;
@@ -378,7 +399,9 @@ public partial class GraphEditorView : UserControl
     {
         if (NodeSearchResults is null || NodeSearchBox is null) return;
         var search = NodeSearchBox.Text?.Trim() ?? string.Empty;
-        var entries = GraphNodeDefinition.All.Select(definition => new NodeCatalogEntryViewModel(definition))
+        var workspace = DataContext as GraphWorkspaceViewModel;
+        var entries = (workspace?.AvailableNodeDefinitions ?? GraphNodeDefinition.Core)
+            .Select(definition => new NodeCatalogEntryViewModel(definition, workspace?.NodeDefinitions?.ProjectName))
             .Concat((DataContext as GraphWorkspaceViewModel)?.GroupAssets?.Assets
                 .Select(asset => new NodeCatalogEntryViewModel(asset)) ?? [])
             .Where(entry => entry.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
@@ -419,7 +442,7 @@ public partial class GraphEditorView : UserControl
         try
         {
             if (entry.GroupAssetId is { } id) graph.CreateGroupAssetNode(id, _nodeSearchPosition.X, _nodeSearchPosition.Y);
-            else if (GraphNodeDefinition.TryFind(entry.KindName, out var definition))
+            else if (GraphNodeDefinition.TryFind(entry.KindName, out var definition, graph.AvailableNodeDefinitions))
                 graph.CreateNode(definition!.Kind, _nodeSearchPosition.X, _nodeSearchPosition.Y);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or

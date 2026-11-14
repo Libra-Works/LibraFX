@@ -10,12 +10,16 @@ public sealed class NodeCatalogViewModel : Tool
 {
     private IReadOnlyList<NodeCatalogEntryViewModel> _entries;
     private readonly GroupAssetCatalog? _groups;
+    private readonly NodeDefinitionCatalog? _definitions;
     private string _searchText = string.Empty;
 
     public ObservableCollection<NodeCatalogGroupViewModel> Groups { get; } = [];
     public IRelayCommand RefreshCommand { get; }
+    public string ProjectName => _definitions?.ProjectName ?? string.Empty;
     public string LoadWarnings => string.Join(Environment.NewLine,
-        GraphNodeDefinition.LoadWarnings.Concat(string.IsNullOrEmpty(_groups?.Warnings) ? [] : [_groups.Warnings]));
+        GraphNodeDefinition.LoadWarnings
+            .Concat(string.IsNullOrEmpty(_definitions?.Warnings) ? [] : [_definitions.Warnings])
+            .Concat(string.IsNullOrEmpty(_groups?.Warnings) ? [] : [_groups.Warnings]));
 
     public string SearchText
     {
@@ -32,19 +36,27 @@ public sealed class NodeCatalogViewModel : Tool
     public NodeCatalogViewModel(ActiveGraphProvider activeGraph, GroupAssetCatalog? groups = null)
     {
         _groups = groups;
+        _definitions = activeGraph.Graph.NodeDefinitions;
         _entries = [];
-        RefreshCommand = new RelayCommand(() => _groups?.Refresh());
+        RefreshCommand = new RelayCommand(() =>
+        {
+            _definitions?.Refresh();
+            _groups?.Refresh();
+        });
         if (_groups is not null) _groups.Changed += (_, _) => RefreshEntries();
+        if (_definitions is not null) _definitions.Changed += (_, _) => RefreshEntries();
         RefreshEntries();
         MessageLocalization.Observe(this, static catalog => catalog.RefreshEntries());
     }
 
     private void RefreshEntries()
     {
-        _entries = GraphNodeDefinition.All.Select(definition => new NodeCatalogEntryViewModel(definition))
+        _entries = (_definitions?.AvailableDefinitions ?? GraphNodeDefinition.Core)
+            .Select(definition => new NodeCatalogEntryViewModel(definition, ProjectName))
             .Concat((_groups?.Assets ?? []).Select(asset => new NodeCatalogEntryViewModel(asset)))
             .ToArray();
         OnPropertyChanged(nameof(LoadWarnings));
+        OnPropertyChanged(nameof(ProjectName));
         RefreshGroups();
     }
 
@@ -90,14 +102,16 @@ public sealed class NodeCatalogEntryViewModel
     public string DragIdentifier { get; }
     public Guid? GroupAssetId { get; }
 
-    public NodeCatalogEntryViewModel(GraphNodeDefinition definition)
+    public NodeCatalogEntryViewModel(GraphNodeDefinition definition, string? projectName = null)
     {
         Name = LocalizationService.Shared.GetOrDefault(definition.DisplayNameKey, definition.Name);
         OriginalName = definition.Name;
         KindName = definition.Kind.ToString();
         Namespace = definition.Namespace;
         QualifiedName = definition.QualifiedName;
-        Group = $"{definition.Namespace} / {LocalizationService.Shared.GetOrDefault(definition.GroupNameKey, definition.Group)}";
+        var source = GraphNodeDefinition.Core.Contains(definition)
+            ? LocalizationService.Shared.Get("Editor.CoreNodes") : projectName ?? definition.Namespace;
+        Group = $"{source} / {LocalizationService.Shared.GetOrDefault(definition.GroupNameKey, definition.Group)}";
         DragIdentifier = definition.Kind.ToString();
     }
 

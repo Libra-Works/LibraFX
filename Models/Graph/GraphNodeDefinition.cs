@@ -79,7 +79,10 @@ public sealed record GraphNodeDefinition(
     };
 
     private static readonly List<string> Warnings = [];
-    public static IReadOnlyList<GraphNodeDefinition> All { get; } = LoadAll();
+    private static readonly object RegistryLock = new();
+    private static IReadOnlyList<GraphNodeDefinition> _all = LoadAll();
+    public static IReadOnlyList<GraphNodeDefinition> All => Volatile.Read(ref _all);
+    public static IReadOnlyList<GraphNodeDefinition> Core { get; } = _all;
     public static IReadOnlyList<string> LoadWarnings => Warnings;
     public string QualifiedName => $"{Namespace}.{TypeName}";
     public string TypeName { get; init; } = string.Empty;
@@ -95,18 +98,65 @@ public sealed record GraphNodeDefinition(
         return port is null ? null : port.PortType ?? PortType;
     }
 
-    public static bool TryFind(string? value, out GraphNodeDefinition? definition)
+    public static bool TryFind(string? value, out GraphNodeDefinition? definition,
+        IEnumerable<GraphNodeDefinition>? available = null)
     {
-        definition = All.FirstOrDefault(item =>
+        var definitions = available ?? All;
+        definition = definitions.FirstOrDefault(item =>
             string.Equals(item.Kind.Value, value, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(item.QualifiedName, value, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(item.TypeId.ToString("D"), value, StringComparison.OrdinalIgnoreCase));
         if (definition is null)
         {
-            var matches = All.Where(item => string.Equals(item.Name, value, StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
+            var matches = definitions.Where(item => string.Equals(item.Name, value, StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
             if (matches.Length == 1) definition = matches[0];
         }
         return definition is not null;
+    }
+
+    public static IReadOnlyList<GraphNodeDefinition> LoadDirectory(string directory, out IReadOnlyList<string> warnings)
+    {
+        var loaded = new List<GraphNodeDefinition>();
+        var errors = new List<string>();
+        var ids = new HashSet<Guid>();
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in Directory.EnumerateFiles(directory, "*.json").OrderBy(path => path, StringComparer.Ordinal))
+        {
+            try
+            {
+                var parsed = new List<GraphNodeDefinition>();
+                using var stream = File.OpenRead(path);
+                AddDefinition(stream, parsed, ids, names);
+                var definition = parsed.Single();
+                lock (RegistryLock)
+                {
+                    if (Core.Any(item => item.TypeId == definition.TypeId ||
+                        string.Equals(item.QualifiedName, definition.QualifiedName, StringComparison.OrdinalIgnoreCase)))
+                        throw new InvalidDataException("Project definitions cannot replace Core node types.");
+                    var existing = _all.FirstOrDefault(item => item.TypeId == definition.TypeId ||
+                        string.Equals(item.QualifiedName, definition.QualifiedName, StringComparison.OrdinalIgnoreCase));
+                    if (existing is not null)
+                    {
+                        if (JsonSerializer.Serialize(existing, SerializerOptions) != JsonSerializer.Serialize(definition, SerializerOptions))
+                            throw new InvalidDataException(
+                                "This UUID or qualified name has a different registered definition. Use a unique type UUID and qualified name, or restart after updating its definition.");
+                        loaded.Add(existing);
+                    }
+                    else
+                    {
+                        // Keep registered types immutable so project switching cannot invalidate open graphs or history.
+                        Volatile.Write(ref _all, Array.AsReadOnly<GraphNodeDefinition>([.. _all, definition]));
+                        loaded.Add(definition);
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)
+            {
+                errors.Add($"{Path.GetFileName(path)}: {ex.Message}");
+            }
+        }
+        warnings = errors.AsReadOnly();
+        return loaded.AsReadOnly();
     }
 
     public static string DisplayPortType(string portType) => portType switch

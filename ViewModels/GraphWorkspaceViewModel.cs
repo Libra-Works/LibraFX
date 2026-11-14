@@ -15,6 +15,9 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     private const int MaxGraphDepth = 12;
     private readonly UndoRedoManager _history;
     public GroupAssetCatalog? GroupAssets { get; }
+    public NodeDefinitionCatalog? NodeDefinitions { get; }
+    public IReadOnlyList<GraphNodeDefinition> AvailableNodeDefinitions =>
+        NodeDefinitions?.AvailableDefinitions ?? GraphNodeDefinition.Core;
     private int _nextNodeIndex;
     private GraphNodeViewModel? _selectedNode;
     private readonly List<GraphNodeViewModel> _selectedNodes = [];
@@ -125,10 +128,12 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
     public IRelayCommand DeleteSelectedNodeCommand { get; }
 
-    public GraphWorkspaceViewModel(UndoRedoManager history, GroupAssetCatalog? groupAssets = null)
+    public GraphWorkspaceViewModel(UndoRedoManager history, GroupAssetCatalog? groupAssets = null,
+        NodeDefinitionCatalog? nodeDefinitions = null)
     {
         _history = history;
         GroupAssets = groupAssets;
+        NodeDefinitions = nodeDefinitions;
         Nodes.CollectionChanged += OnNodesChanged;
         DeleteSelectedNodeCommand = new RelayCommand(DeleteSelectedNode, () => HasSelection);
         Connections.CollectionChanged += (_, _) => RefreshSelectedConnections();
@@ -1126,7 +1131,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     {
         if (kind == GraphNodeKind.GraphGroup && _graphPath.Count >= MaxGraphDepth)
             throw new InvalidOperationException("The graph hierarchy has reached its maximum depth.");
-        var definition = GraphNodeDefinition.All.Single(item => item.Kind == kind);
+        var definition = AvailableNodeDefinitions.FirstOrDefault(item => item.Kind == kind)
+            ?? throw new ArgumentException(LocalizationService.Shared.Get("Editor.NodeNotInProject"));
         var index = _nextNodeIndex++;
         var node = new GraphNodeViewModel(
             this,
@@ -1193,7 +1199,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     {
         if (specification.Kind == GraphNodeKind.GraphGroup && _graphPath.Count >= MaxGraphDepth)
             throw new ArgumentException("The graph hierarchy has reached its maximum depth.");
-        if (!GraphNodeDefinition.All.Any(item => item.Kind == specification.Kind))
+        if (!AvailableNodeDefinitions.Any(item => item.Kind == specification.Kind))
         {
             throw new ArgumentException($"Unsupported node kind '{specification.Kind}'.");
         }

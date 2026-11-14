@@ -3,7 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace LiberaFx.Services;
 
-public sealed record TeamProfile(Guid Id, string Name, string GroupDirectory);
+public sealed record TeamProfile(Guid Id, string Name, string GroupDirectory, string NodeDirectory = "");
 
 public sealed class TeamProfilesService : ObservableObject
 {
@@ -54,12 +54,14 @@ public sealed class TeamProfilesService : ObservableObject
         return Commit(Profiles, selected, "Messages.ActiveProject", selected.Name);
     }
 
-    public bool Save(Guid? id, string name, string directory)
+    public bool Save(Guid? id, string name, string directory, string? nodeDirectory = null)
     {
         name = (name ?? string.Empty).Trim();
         directory = (directory ?? string.Empty).Trim();
+        nodeDirectory = (nodeDirectory ?? Profiles.FirstOrDefault(profile => profile.Id == id)?.NodeDirectory ?? string.Empty).Trim();
         if (name.Length is 0 or > 100 || directory.Length > 4096 ||
-            (directory.Length != 0 && !Path.IsPathFullyQualified(directory)))
+            (directory.Length != 0 && !Path.IsPathFullyQualified(directory)) ||
+            !IsValidDirectory(nodeDirectory))
         {
             SetStatus("Messages.EnterProjectDetails");
             return false;
@@ -74,7 +76,7 @@ public sealed class TeamProfilesService : ObservableObject
             SetStatus("Messages.UniqueProjectNames");
             return false;
         }
-        var profile = new TeamProfile(id ?? Guid.NewGuid(), name, directory);
+        var profile = new TeamProfile(id ?? Guid.NewGuid(), name, directory, nodeDirectory);
         var profiles = id is null
             ? Profiles.Append(profile).ToArray()
             : Profiles.Select(item => item.Id == id ? profile : item).ToArray();
@@ -144,7 +146,10 @@ public sealed class TeamProfilesService : ObservableObject
     private static bool IsValid(TeamProfile? profile) =>
         profile is not null && profile.Id != Guid.Empty && !string.IsNullOrWhiteSpace(profile.Name) &&
         profile.Name.Length <= 100 && profile.GroupDirectory is { Length: <= 4096 } directory &&
-        (directory.Length == 0 || Path.IsPathFullyQualified(directory));
+        (directory.Length == 0 || Path.IsPathFullyQualified(directory)) && IsValidDirectory(profile.NodeDirectory);
+
+    private static bool IsValidDirectory(string? directory) =>
+        directory is { Length: <= 4096 } && (directory.Length == 0 || Path.IsPathFullyQualified(directory));
 
     private sealed record ProfilesFile(int Version, Guid ActiveId, List<TeamProfile>? Profiles);
 }

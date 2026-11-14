@@ -60,6 +60,7 @@ public partial class SettingsWindow : Window
             ProjectList.SelectedItem = model.TeamProfiles.Active;
             ProjectNameBox.Text = model.TeamProfiles.Active.Name;
             GroupDirectoryBox.Text = model.TeamProfiles.Active.GroupDirectory;
+            NodeDirectoryBox.Text = model.TeamProfiles.Active.NodeDirectory;
         }
     }
 
@@ -81,7 +82,7 @@ public partial class SettingsWindow : Window
         _updatingProjects = true;
         try
         {
-            if (model.TeamProfiles.Save(selected.Id, ProjectNameBox.Text ?? "", GroupDirectoryBox.Text ?? ""))
+            if (model.TeamProfiles.Save(selected.Id, ProjectNameBox.Text ?? "", GroupDirectoryBox.Text ?? "", NodeDirectoryBox.Text ?? ""))
                 RefreshProjectSelection();
         }
         finally { _updatingProjects = false; }
@@ -93,7 +94,7 @@ public partial class SettingsWindow : Window
         _updatingProjects = true;
         try
         {
-            if (model.TeamProfiles.Save(null, ProjectNameBox.Text ?? "", GroupDirectoryBox.Text ?? ""))
+            if (model.TeamProfiles.Save(null, ProjectNameBox.Text ?? "", GroupDirectoryBox.Text ?? "", NodeDirectoryBox.Text ?? ""))
                 RefreshProjectSelection();
         }
         finally { _updatingProjects = false; }
@@ -111,6 +112,12 @@ public partial class SettingsWindow : Window
     }
 
     private async void OnBrowseGroupDirectoryClick(object? sender, RoutedEventArgs e)
+        => await BrowseDirectoryAsync(GroupDirectoryBox);
+
+    private async void OnBrowseNodeDirectoryClick(object? sender, RoutedEventArgs e)
+        => await BrowseDirectoryAsync(NodeDirectoryBox);
+
+    private async Task BrowseDirectoryAsync(TextBox target)
     {
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
@@ -119,6 +126,6 @@ public partial class SettingsWindow : Window
         });
         if (folders.Count == 0) return;
         using var folder = folders[0];
-        if (folder.TryGetLocalPath() is { } path) GroupDirectoryBox.Text = path;
+        if (folder.TryGetLocalPath() is { } path) target.Text = path;
     }
 }

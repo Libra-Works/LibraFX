@@ -165,6 +165,14 @@
                     </ComboBox>
                     <TextBlock Text="{DynamicResource Text.Editor.ProjectName}" />
                     <TextBox x:Name="ProjectNameBox" />
+                    <TextBlock Text="{DynamicResource Text.Editor.NodeDirectory}" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBox x:Name="NodeDirectoryBox" PlaceholderText="{DynamicResource Text.Editor.DirectoryPlaceholder}"
+                                 AutomationProperties.Name="{DynamicResource Text.Editor.NodeDirectory}" />
+                        <views:IconButton Grid.Column="1" Icon="Open" Click="OnBrowseNodeDirectoryClick"
+                                          ToolTip.Tip="{DynamicResource Text.Editor.BrowseDirectory}"
+                                          AutomationProperties.Name="{DynamicResource Text.Editor.BrowseDirectory}" />
+                    </Grid>
                     <TextBlock Text="{DynamicResource Text.Editor.GroupDirectory}" />
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                         <TextBox x:Name="GroupDirectoryBox" PlaceholderText="{DynamicResource Text.Editor.DirectoryPlaceholder}" />

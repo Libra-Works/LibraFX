@@ -144,6 +144,8 @@ internal static class Program
         Console.WriteLine("Project profile and group library checks passed.");
         EditorInterfaceTests.Run();
         Console.WriteLine("Inspector actions and English/Japanese localization checks passed.");
+        ProjectNodeCatalogTests.Run();
+        Console.WriteLine("Layered project node catalog, quick search and retained history checks passed.");
     }
 
     private static byte[] CreateLargeImage(BitmapEncoderOptions options)

@@ -5,11 +5,13 @@
              x:Class="LiberaFx.Views.NodeCatalogView"
              x:DataType="vm:NodeCatalogViewModel">
     <Grid RowDefinitions="Auto,*,Auto">
-        <Grid ColumnDefinitions="*,Auto" Margin="10" ColumnSpacing="6">
-            <TextBox PlaceholderText="{DynamicResource Text.Editor.SearchNodes}"
+        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" Margin="10" ColumnSpacing="6" RowSpacing="6">
+            <TextBlock Grid.ColumnSpan="2" Text="{Binding ProjectName}"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <TextBox Grid.Row="1" PlaceholderText="{DynamicResource Text.Editor.SearchNodes}"
                      AutomationProperties.Name="{DynamicResource Text.Editor.SearchNodes}"
                      Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-            <views:IconButton Grid.Column="1" Icon="Refresh" Command="{Binding RefreshCommand}"
+            <views:IconButton Grid.Row="1" Grid.Column="1" Icon="Refresh" Command="{Binding RefreshCommand}"
                               ToolTip.Tip="{DynamicResource Text.Editor.Refresh}"
                               AutomationProperties.Name="{DynamicResource Text.Editor.Refresh}" />
         </Grid>

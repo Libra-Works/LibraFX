@@ -46,8 +46,8 @@ public sealed class LiberaFxMcpTools
 
     [McpServerTool(Name = "libera_graph_list_node_types", ReadOnly = true, OpenWorld = false)]
     [Description("List node types and their compatible port types and categories.")]
-    public static async Task<string> ListNodeTypes() =>
-        await Dispatcher.UIThread.InvokeAsync(() => JsonSerializer.Serialize(GraphNodeDefinition.All, JsonOptions));
+    public static async Task<string> ListNodeTypes(ActiveGraphProvider activeGraph) =>
+        await Dispatcher.UIThread.InvokeAsync(() => JsonSerializer.Serialize(activeGraph.Graph.AvailableNodeDefinitions, JsonOptions));
 
     [McpServerTool(Name = "libera_graph_create_node", Destructive = false, OpenWorld = false)]
     [Description("Create one node in the active graph. Omit x and y to use automatic positions.")]
@@ -60,7 +60,7 @@ public sealed class LiberaFxMcpTools
         {
             ValidatePosition(x, y);
             var graph = activeGraph.Graph;
-            var node = graph.CreateNode(ParseKind(kind), x, y);
+            var node = graph.CreateNode(ParseKind(kind, graph), x, y);
             return SerializeNode(graph, node.Id);
         });
 
@@ -143,7 +143,7 @@ public sealed class LiberaFxMcpTools
 
             var plan = new LiberaGraphEditPlan(
                 nodes.Select(node => new LiberaGraphNodeSpec(
-                    node.Key, ParseKind(node.Kind), node.Name, node.X, node.Y)).ToArray(),
+                    node.Key, ParseKind(node.Kind, activeGraph.Graph), node.Name, node.X, node.Y)).ToArray(),
                 connections.Select(connection => new LiberaGraphConnectionSpec(
                     connection.SourceKey, connection.TargetKey, connection.TargetPortId)).ToArray());
             try
@@ -157,9 +157,9 @@ public sealed class LiberaFxMcpTools
             }
         });
 
-    private static GraphNodeKind ParseKind(string kind)
+    private static GraphNodeKind ParseKind(string kind, GraphWorkspaceViewModel graph)
     {
-        return GraphNodeDefinition.TryFind(kind, out var definition)
+        return GraphNodeDefinition.TryFind(kind, out var definition, graph.AvailableNodeDefinitions)
             ? definition!.Kind
             : throw new McpException($"Unknown node kind '{kind}'. Use libera_graph_list_node_types for available kinds.");
     }

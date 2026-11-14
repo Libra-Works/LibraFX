@@ -58,7 +58,7 @@
   "Messages.DefaultProject": "Default",
   "Messages.LoadProfilesFailed": "Could not load team profiles: {0}",
   "Messages.ActiveProject": "Active project: {0}.",
-  "Messages.EnterProjectDetails": "Enter a project name and an absolute group directory, or leave the directory empty.",
+  "Messages.EnterProjectDetails": "Enter a project name and absolute node/group directory paths, or leave the directories empty.",
   "Messages.ProjectMissing": "The selected project no longer exists.",
   "Messages.UniqueProjectNames": "Project names must be unique.",
   "Messages.TeamProjectSaved": "Saved project: {0}.",

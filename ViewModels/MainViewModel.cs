@@ -62,6 +62,7 @@ public partial class MainViewModel : ViewModelBase
     public ServerSettingsService ServerSettings { get; }
     public TeamProfilesService TeamProfiles { get; } = new();
     public GroupAssetCatalog GroupAssets { get; }
+    public NodeDefinitionCatalog NodeDefinitions { get; }
     public LocalizationService Localization => LocalizationService.Shared;
 
     public string McpAccessToken { get; }
@@ -203,6 +204,7 @@ public partial class MainViewModel : ViewModelBase
     {
         ServerSettings = serverSettings ?? new ServerSettingsService();
         GroupAssets = new GroupAssetCatalog(TeamProfiles);
+        NodeDefinitions = new NodeDefinitionCatalog(TeamProfiles);
         Log.Add("Application", LocalizationService.Shared.Get("Messages.EditorStarted"));
         McpAccessToken = mcpAccessToken;
         PreviewAccessToken = previewAccessToken;
@@ -583,7 +585,7 @@ public partial class MainViewModel : ViewModelBase
 
     private GraphWorkspaceViewModel CreateWorkspace()
     {
-        var workspace = new GraphWorkspaceViewModel(new UndoRedoManager(), GroupAssets);
+        var workspace = new GraphWorkspaceViewModel(new UndoRedoManager(), GroupAssets, NodeDefinitions);
         workspace.History.ActionPerformed += message => Log.Add("Edit", message);
         workspace.PropertyChanged += (_, e) =>
         {
@@ -598,6 +600,7 @@ public partial class MainViewModel : ViewModelBase
     public void DisposeStorageFiles()
     {
         GroupAssets.Dispose();
+        NodeDefinitions.Dispose();
         var disposed = new HashSet<IStorageFile>(ReferenceEqualityComparer.Instance);
         foreach (var file in _storageFiles.Values)
         {
