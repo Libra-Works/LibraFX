@@ -33,7 +33,8 @@ public sealed class McpHost
         builder.Services.AddSingleton(activeGraph);
         builder.Services.AddMcpServer()
             .WithHttpTransport(options => options.Stateless = true)
-            .WithTools<LiberaFxMcpTools>();
+            .WithTools<LiberaFxMcpTools>()
+            .WithTools<GraphDebugTools>();
 
         var app = builder.Build();
         try

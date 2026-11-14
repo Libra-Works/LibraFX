@@ -57,7 +57,9 @@ public partial class App : Application
             await Task.Run(() => _mcpHost.StartAsync(viewModel.ActiveGraphProvider));
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                viewModel.McpStatus = "Running (loopback only; access token required)";
+                viewModel.McpStatus = Environment.GetEnvironmentVariable("LIBERAFX_MCP_DEBUG") == "1"
+                    ? "Running (loopback only; token required; graph UI debug enabled)"
+                    : "Running (loopback only; access token required)";
             });
         }
         catch (Exception ex)
