@@ -11,3 +11,5 @@ TestResults/
 !.env.example
 .github/skills/
 *.md
+.mcp.json
+.vscode/mcp.json
