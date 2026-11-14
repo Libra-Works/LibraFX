@@ -1,0 +1,78 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:LiberaFx.ViewModels"
+        xmlns:services="using:LiberaFx.Services"
+        x:Class="LiberaFx.Views.SettingsWindow"
+        x:DataType="vm:MainViewModel"
+        Title="LIBERA FX Settings"
+        Width="650"
+        Height="600"
+        MinWidth="400"
+        MinHeight="260"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource EffectWindowBackgroundBrush}">
+    <Grid RowDefinitions="*,Auto" Margin="20">
+        <TabControl>
+        <TabItem Header="Appearance">
+        <StackPanel Margin="10" Spacing="14">
+            <TextBlock Text="Appearance"
+                       FontSize="18"
+                       FontWeight="SemiBold" />
+            <StackPanel Spacing="6">
+                <TextBlock Text="Color scheme" />
+                <ComboBox ItemsSource="{Binding ColorSchemes}"
+                          SelectedItem="{Binding SelectedColorScheme}" />
+            </StackPanel>
+            <StackPanel Spacing="6">
+                <TextBlock Text="Accent color" />
+                <ComboBox ItemsSource="{Binding AccentPalettes}"
+                          SelectedItem="{Binding SelectedAccentPalette}" />
+            </StackPanel>
+            <TextBlock Text="Appearance preferences are saved automatically."
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <TextBlock Text="{Binding AppearanceWarnings}" TextWrapping="Wrap"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <TextBlock Text="{Binding AppearanceStatus}" TextWrapping="Wrap"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+        </StackPanel>
+            </TabItem>
+            <TabItem Header="Shortcuts">
+                <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="10">
+                    <TextBlock Text="Click a shortcut, then press a key combination. Escape cancels."
+                               TextWrapping="Wrap" />
+                    <ScrollViewer Grid.Row="1" Margin="0,8">
+                        <ItemsControl ItemsSource="{Binding Shortcuts.Entries}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="services:ShortcutEntry">
+                                    <Grid ColumnDefinitions="90,*,150" ColumnSpacing="8" Margin="0,2">
+                                        <TextBlock Text="{Binding Scope}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Label}" VerticalAlignment="Center" />
+                                        <TextBox Grid.Column="2" Text="{Binding Gesture}" Tag="{Binding Id}"
+                                                 IsReadOnly="True" KeyDown="OnShortcutKeyDown"
+                                                 ToolTip.Tip="Click here and press a key combination" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="F-Curve pan:" VerticalAlignment="Center" />
+                        <ComboBox ItemsSource="{Binding Shortcuts.PanOptions}" SelectedItem="{Binding Shortcuts.CurvePanButton}" />
+                        <TextBlock Text="Wheel zoom modifier:" VerticalAlignment="Center" />
+                        <ComboBox ItemsSource="{Binding Shortcuts.ZoomOptions}" SelectedItem="{Binding Shortcuts.CurveZoomModifier}" />
+                        <Button Content="Reset" Click="OnResetShortcutsClick" />
+                    </StackPanel>
+                    <TextBlock Grid.Row="3" Margin="0,6,0,0" Text="{Binding Shortcuts.Status}"
+                               TextWrapping="Wrap" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                </Grid>
+            </TabItem>
+            </TabControl>
+        <Button Grid.Row="1"
+                HorizontalAlignment="Right"
+                MinWidth="90"
+                Content="Close"
+                IsDefault="True"
+                Click="OnCloseClick" />
+    </Grid>
+</Window>

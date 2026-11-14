@@ -1,0 +1,66 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="LiberaFx.App"
+             xmlns:local="using:LiberaFx"
+             xmlns:vm="using:LiberaFx.ViewModels"
+             xmlns:views="using:LiberaFx.Views"
+             RequestedThemeVariant="Default">
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <SolidColorBrush x:Key="EffectWindowBackgroundBrush"
+                             Color="{DynamicResource SystemRegionColor}" />
+            <SolidColorBrush x:Key="EffectSurfaceBrush"
+                             Color="{DynamicResource SystemAltHighColor}" />
+            <SolidColorBrush x:Key="EffectForegroundBrush"
+                             Color="{DynamicResource SystemBaseHighColor}" />
+            <SolidColorBrush x:Key="EffectMutedForegroundBrush"
+                             Color="{DynamicResource SystemBaseMediumColor}" />
+            <SolidColorBrush x:Key="EffectBorderBrush"
+                             Color="{DynamicResource SystemBaseMediumLowColor}" />
+            <SolidColorBrush x:Key="DockApplicationAccentBrushLow"
+                             Color="{DynamicResource SystemAccentColor}" />
+            <SolidColorBrush x:Key="DockApplicationAccentBrushMed"
+                             Color="{DynamicResource SystemAccentColor}" />
+            <SolidColorBrush x:Key="DockApplicationAccentBrushHigh"
+                             Color="{DynamicResource SystemAccentColor}" />
+            <SolidColorBrush x:Key="DockApplicationAccentBrushIndicator"
+                             Color="{DynamicResource SystemAccentColor}" />
+        </ResourceDictionary>
+    </Application.Resources>
+
+    <Application.DataTemplates>
+        <local:ViewLocator />
+        <DataTemplate DataType="vm:GraphDocumentViewModel">
+            <views:GraphEditorView DataContext="{Binding Workspace}" />
+        </DataTemplate>
+        <DataTemplate DataType="vm:NodeCatalogViewModel">
+            <views:NodeCatalogView />
+        </DataTemplate>
+        <DataTemplate DataType="vm:OutlinerViewModel">
+            <views:OutlinerView />
+        </DataTemplate>
+        <DataTemplate DataType="vm:CurveEditorViewModel">
+            <views:CurveEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vm:NodePropertiesPaneViewModel">
+            <views:NodePropertiesView />
+        </DataTemplate>
+        <DataTemplate DataType="vm:HistoryPaneViewModel">
+            <views:HistoryView />
+        </DataTemplate>
+        <DataTemplate DataType="vm:ToolPaneViewModel">
+            <ScrollViewer>
+                <TextBlock Margin="12"
+                           Text="{Binding Description}"
+                           Foreground="{DynamicResource EffectForegroundBrush}"
+                           TextWrapping="Wrap" />
+            </ScrollViewer>
+        </DataTemplate>
+    </Application.DataTemplates>
+
+    <Application.Styles>
+        <FluentTheme />
+        <DockFluentTheme />
+    </Application.Styles>
+</Application>

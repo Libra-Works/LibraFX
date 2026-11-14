@@ -1,0 +1,136 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:LiberaFx.ViewModels"
+             xmlns:views="using:LiberaFx.Views"
+             x:Class="LiberaFx.Views.GraphEditorView"
+             Focusable="True"
+             KeyDown="OnGraphKeyDown"
+             x:DataType="vm:GraphWorkspaceViewModel">
+    <Grid RowDefinitions="Auto,Auto,*">
+        <Border Grid.Row="0" Padding="6,3" Background="{DynamicResource EffectSurfaceBrush}"
+                BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="0,0,0,1">
+            <ItemsControl ItemsSource="{Binding Breadcrumbs}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:GraphBreadcrumb">
+                        <Button Content="{Binding Name}" Tag="{Binding Depth}"
+                                Click="OnBreadcrumbClick" Padding="8,2" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
+        <Border Grid.Row="1"
+                Padding="8"
+                Background="{DynamicResource EffectSurfaceBrush}"
+                BorderBrush="{DynamicResource EffectBorderBrush}"
+                BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <Button Content="Delete selected"
+                        Command="{Binding DeleteSelectedNodeCommand}"
+                        IsEnabled="{Binding HasSelection}" />
+                <Button Content="−" ToolTip.Tip="Zoom out" Click="OnZoomOutClick" />
+                <Button x:Name="ZoomButton" Content="100%"
+                        ToolTip.Tip="Reset zoom (Ctrl + mouse wheel to zoom)"
+                        Click="OnResetZoomClick" />
+                <Button Content="+" ToolTip.Tip="Zoom in" Click="OnZoomInClick" />
+                <Button Content="Frame selected" Click="OnFrameSelectionClick"
+                        IsEnabled="{Binding HasSelection}" />
+                <Button Content="Group" Click="OnGroupSelectionClick"
+                        IsEnabled="{Binding HasSelection}" />
+                <Button Content="Open group" Click="OnOpenGroupClick"
+                        ToolTip.Tip="Open the selected Graph Group" />
+                <TextBlock Text="{Binding ConnectionStatus}"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="2"
+                      x:Name="GraphScrollViewer"
+                      PointerPressed="OnViewportPointerPressed"
+                      PointerMoved="OnViewportPointerMoved"
+                      PointerReleased="OnViewportPointerReleased"
+                      PointerCaptureLost="OnViewportPointerCaptureLost"
+                      PointerWheelChanged="OnViewportPointerWheelChanged"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto">
+            <LayoutTransformControl x:Name="ZoomHost">
+            <Grid x:Name="GraphCanvas"
+                  Width="1600"
+                  Height="1000"
+                  PointerPressed="OnGraphCanvasPointerPressed"
+                  DragDrop.AllowDrop="True"
+                  DragDrop.DragOver="OnGraphCanvasDragOver"
+                  DragDrop.Drop="OnGraphCanvasDrop">
+                <Grid.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="_Add node..." Click="OnAddNodeClick" />
+                        <Separator />
+                        <MenuItem Header="_Copy" IsEnabled="{Binding HasSelection}" Click="OnCopyClick" />
+                        <MenuItem Header="Cu_t" IsEnabled="{Binding HasSelection}" Click="OnCutClick" />
+                        <MenuItem Header="_Paste" Click="OnPasteClick" />
+                    </ContextMenu>
+                </Grid.ContextMenu>
+                <Border x:Name="GraphBackground"
+                        Background="{DynamicResource EffectWindowBackgroundBrush}"
+                        PointerPressed="OnBackgroundPointerPressed"
+                        PointerMoved="OnBackgroundPointerMoved"
+                        PointerReleased="OnBackgroundPointerReleased"
+                        PointerCaptureLost="OnBackgroundPointerCaptureLost" />
+
+                <views:GraphSceneLayer DataContext="{Binding}" />
+
+                <ItemsControl ItemsSource="{Binding Nodes}">
+                    <ItemsControl.ItemContainerTheme>
+                        <ControlTheme TargetType="ContentPresenter">
+                            <Setter Property="Canvas.Left" Value="{ReflectionBinding DisplayX}" />
+                            <Setter Property="Canvas.Top" Value="{ReflectionBinding DisplayY}" />
+                        </ControlTheme>
+                    </ItemsControl.ItemContainerTheme>
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <Canvas Classes="graphNodePanel" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:GraphNodeViewModel">
+                            <views:GraphNodeView />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Canvas IsHitTestVisible="False">
+                    <Border x:Name="SelectionBox" IsVisible="False"
+                            Background="{DynamicResource EffectSelectionFillBrush}"
+                            BorderBrush="{DynamicResource EffectSelectionBorderBrush}" BorderThickness="1" />
+                </Canvas>
+            </Grid>
+            </LayoutTransformControl>
+        </ScrollViewer>
+        <Popup x:Name="NodeSearchPopup" Grid.Row="2" PlacementTarget="{Binding #GraphScrollViewer}"
+               Placement="Center" IsLightDismissEnabled="True">
+            <Border Width="340" MaxHeight="400" Padding="8" BorderThickness="1"
+                    BorderBrush="{DynamicResource EffectBorderBrush}"
+                    Background="{DynamicResource EffectSurfaceBrush}">
+                <Grid RowDefinitions="Auto,*">
+                    <TextBox x:Name="NodeSearchBox" PlaceholderText="Search node types..."
+                             TextChanged="OnNodeSearchTextChanged" KeyDown="OnNodeSearchKeyDown" />
+                    <ListBox x:Name="NodeSearchResults" Grid.Row="1" Margin="0,6,0,0"
+                             MaxHeight="320" DoubleTapped="OnNodeSearchDoubleTapped"
+                             KeyDown="OnNodeSearchKeyDown">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="vm:NodeCatalogEntryViewModel">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Name}" />
+                                    <TextBlock Text="{Binding Group}" FontSize="11"
+                                               Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>

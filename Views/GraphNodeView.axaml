@@ -1,0 +1,78 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:LiberaFx.ViewModels"
+             x:Class="LiberaFx.Views.GraphNodeView"
+             PointerPressed="OnNodePointerPressed"
+             x:DataType="vm:GraphNodeViewModel">
+    <Border Width="240"
+            Background="{DynamicResource EffectSurfaceBrush}"
+            BorderBrush="{Binding BorderBrush}"
+            BorderThickness="2"
+            CornerRadius="4">
+        <Grid RowDefinitions="Auto,Auto">
+            <Border Grid.Row="0"
+                    x:Name="NodeHeader"
+                    Padding="8"
+                    Background="{DynamicResource EffectBorderBrush}"
+                    PointerPressed="OnHeaderPointerPressed"
+                    PointerMoved="OnHeaderPointerMoved"
+                    PointerReleased="OnHeaderPointerReleased"
+                    PointerCaptureLost="OnHeaderPointerCaptureLost">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" Text="▶" IsVisible="{Binding IsGraphGroup}"
+                               Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                    <TextBlock Text="{Binding Name}"
+                               Foreground="{DynamicResource EffectForegroundBrush}"
+                               FontWeight="SemiBold" />
+                </DockPanel>
+            </Border>
+            <Grid Grid.Row="1"
+                  Margin="8"
+                  IsVisible="{Binding HasPorts}"
+                  ColumnDefinitions="Auto,*,Auto">
+                <StackPanel Orientation="Horizontal"
+                            Spacing="4"
+                            VerticalAlignment="Center">
+                    <Button Width="18"
+                            Height="18"
+                            Padding="0"
+                            Tag="InputPort"
+                            Content="●"
+                            Background="Transparent"
+                            Foreground="{Binding PortBrush}"
+                            Command="{Binding SelectInputPortCommand}" />
+                    <TextBlock Text="In"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource EffectForegroundBrush}" />
+                </StackPanel>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding PortType}"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            Spacing="4"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="Out"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource EffectForegroundBrush}" />
+                    <Border Width="18" Height="18"
+                            Background="Transparent"
+                            Tag="OutputPort"
+                            PointerPressed="OnOutputPointerPressed"
+                            PointerMoved="OnOutputPointerMoved"
+                            PointerReleased="OnOutputPointerReleased"
+                            PointerCaptureLost="OnOutputPointerCaptureLost">
+                        <TextBlock Text="●"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Foreground="{Binding PortBrush}" />
+                    </Border>
+                </StackPanel>
+            </Grid>
+            <TextBlock Grid.Row="1" Margin="8" IsVisible="{Binding IsGraphGroup}"
+                       Text="Double-click to open" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+        </Grid>
+    </Border>
+</UserControl>

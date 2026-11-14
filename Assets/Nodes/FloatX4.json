@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "typeId": "0a613e91-1039-478e-9ca7-b8555a67f988",
+  "namespace": "LiberaFx",
+  "kind": "FloatX4",
+  "name": "FloatX4",
+  "group": "Parameter nodes",
+  "portType": "FloatX4",
+  "portCategory": "Parameter"
+}

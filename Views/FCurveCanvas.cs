@@ -1,0 +1,355 @@
+using System.ComponentModel;
+using System.Globalization;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Media;
+using LiberaFx.Models.Graph;
+using LiberaFx.ViewModels;
+using LiberaFx.Services;
+
+namespace LiberaFx.Views;
+
+public sealed class FCurveCanvas : Control
+{
+    private static readonly IBrush BackgroundBrush = ThemeSettingsService.EditorBrush("CurveBackground");
+    private static readonly Pen GridPen = new(ThemeSettingsService.EditorBrush("CurveGrid"), 1);
+    private static readonly Pen AxisPen = new(ThemeSettingsService.EditorBrush("CurveAxis"), 1);
+    private static readonly Pen HandlePen = new(ThemeSettingsService.EditorBrush("CurveHandle"), 1);
+    private static readonly IBrush KeyBrush = ThemeSettingsService.EditorBrush("CurveKey");
+    private static readonly IBrush SelectedBrush = ThemeSettingsService.EditorBrush("CurveSelected");
+    private static readonly IBrush LabelBrush = ThemeSettingsService.EditorBrush("CurveLabel");
+    private CurveEditorViewModel? _model;
+    private GraphNodeViewModel? _framedNode;
+    private double _scaleX = 5;
+    private double _scaleY = 80;
+    private Point _origin = new(50, 150);
+    private Point _pointerStart;
+    private Point _originStart;
+    private FCurveKey? _dragKey;
+    private DragMode _dragMode;
+
+    public FCurveCanvas()
+    {
+        Focusable = true;
+        ClipToBounds = true;
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        ThemeSettingsService.EditorColorsChanged += OnEditorColorsChanged;
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        ThemeSettingsService.EditorColorsChanged -= OnEditorColorsChanged;
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    private void OnEditorColorsChanged(object? sender, EventArgs e) => InvalidateVisual();
+
+    protected override void OnDataContextChanged(EventArgs e)
+    {
+        if (_model is not null) _model.PropertyChanged -= OnModelChanged;
+        _model = DataContext as CurveEditorViewModel;
+        if (_model is not null) _model.PropertyChanged += OnModelChanged;
+        _framedNode = null;
+        InvalidateVisual();
+        base.OnDataContextChanged(e);
+    }
+
+    public override void Render(DrawingContext context)
+    {
+        base.Render(context);
+        context.DrawRectangle(BackgroundBrush, null, new Rect(Bounds.Size));
+        if (_model?.Node != _framedNode && Bounds.Width > 0 && Bounds.Height > 0)
+        {
+            _framedNode = _model?.Node;
+            FrameAll();
+        }
+
+        using var clip = context.PushClip(new Rect(Bounds.Size));
+        DrawGrid(context);
+        if (_model is null) return;
+        foreach (var display in _model.VisibleCurves.OrderBy(item => ReferenceEquals(item.Node, _model.Node)))
+            DrawCurve(context, display.Curve, new Pen(display.Brush, ReferenceEquals(display.Node, _model.Node) ? 2 : 1.5));
+        if (_model.Curve is { } curve && _model.VisibleCurves.Any(item => ReferenceEquals(item.Node, _model.Node)))
+            DrawKeys(context, curve);
+    }
+
+    public void FrameAll()
+    {
+        var keys = _model?.VisibleCurves.SelectMany(item => item.Curve.Keys).ToArray() ?? [];
+        if (keys.Length == 0 || Bounds.Width <= 0 || Bounds.Height <= 0)
+        {
+            _scaleX = 5;
+            _scaleY = 80;
+            _origin = new Point(50, Math.Max(50, Bounds.Height / 2));
+            InvalidateVisual();
+            return;
+        }
+
+        var minX = keys.Min(key => key.Frame);
+        var maxX = keys.Max(key => key.Frame);
+        var minY = keys.Min(key => key.Value);
+        var maxY = keys.Max(key => key.Value);
+        var width = Math.Max(10, maxX - minX);
+        var height = Math.Max(1, maxY - minY);
+        _scaleX = Math.Clamp(Math.Max(1, Bounds.Width - 100) / width, 0.001, 2000);
+        _scaleY = Math.Clamp(Math.Max(1, Bounds.Height - 80) / height, 0.001, 10000);
+        _origin = new Point(Bounds.Width / 2 - (minX + maxX) / 2 * _scaleX,
+                            Bounds.Height / 2 + (minY + maxY) / 2 * _scaleY);
+        InvalidateVisual();
+    }
+
+    private void DrawGrid(DrawingContext context)
+    {
+        var stepX = GridStep(_scaleX);
+        var stepY = GridStep(_scaleY);
+        var left = (0 - _origin.X) / _scaleX;
+        var right = (Bounds.Width - _origin.X) / _scaleX;
+        var bottom = (_origin.Y - Bounds.Height) / _scaleY;
+        var top = _origin.Y / _scaleY;
+        for (var value = Math.Ceiling(left / stepX) * stepX; value <= right; value += stepX)
+        {
+            var x = _origin.X + value * _scaleX;
+            context.DrawLine(Math.Abs(value) < stepX * 0.001 ? AxisPen : GridPen, new Point(x, 0), new Point(x, Bounds.Height));
+            DrawLabel(context, value, new Point(x + 3, 2));
+        }
+        for (var value = Math.Ceiling(bottom / stepY) * stepY; value <= top; value += stepY)
+        {
+            var y = _origin.Y - value * _scaleY;
+            context.DrawLine(Math.Abs(value) < stepY * 0.001 ? AxisPen : GridPen, new Point(0, y), new Point(Bounds.Width, y));
+            DrawLabel(context, value, new Point(3, y + 2));
+        }
+    }
+
+    private static double GridStep(double scale)
+    {
+        var raw = 75 / scale;
+        var magnitude = Math.Pow(10, Math.Floor(Math.Log10(raw)));
+        var unit = raw / magnitude;
+        return (unit <= 1 ? 1 : unit <= 2 ? 2 : unit <= 5 ? 5 : 10) * magnitude;
+    }
+
+    private static void DrawLabel(DrawingContext context, double value, Point point)
+    {
+        var text = new FormattedText(value.ToString("0.###", CultureInfo.CurrentCulture),
+            CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Arial"), 10, LabelBrush);
+        context.DrawText(text, point);
+    }
+
+    private void DrawCurve(DrawingContext context, FCurveSnapshot curve, Pen curvePen)
+    {
+        var keys = curve.Keys;
+        if (keys.Count == 0) return;
+        var leftFrame = -_origin.X / _scaleX;
+        var rightFrame = (Bounds.Width - _origin.X) / _scaleX;
+        if (leftFrame < keys[0].Frame)
+            context.DrawLine(curvePen, ToPoint(leftFrame, keys[0].Value), ToPoint(Math.Min(rightFrame, keys[0].Frame), keys[0].Value));
+        for (var i = 0; i < keys.Count - 1; i++)
+        {
+            var left = keys[i];
+            var right = keys[i + 1];
+            if (right.Frame < leftFrame || left.Frame > rightFrame) continue;
+            if (left.Interpolation == CurveInterpolation.Constant)
+            {
+                context.DrawLine(curvePen, ToPoint(left.Frame, left.Value), ToPoint(right.Frame, left.Value));
+                context.DrawLine(curvePen, ToPoint(right.Frame, left.Value), ToPoint(right.Frame, right.Value));
+                continue;
+            }
+
+            var start = Math.Max(left.Frame, leftFrame);
+            var end = Math.Min(right.Frame, rightFrame);
+            var count = left.Interpolation == CurveInterpolation.Linear ? 1 :
+                Math.Clamp((int)Math.Ceiling((end - start) * _scaleX / 4), 1, 2000);
+            var last = ToPoint(start, FCurve.Evaluate(curve, start));
+            for (var sample = 1; sample <= count; sample++)
+            {
+                var frame = start + (end - start) * sample / count;
+                var next = ToPoint(frame, FCurve.Evaluate(curve, frame));
+                context.DrawLine(curvePen, last, next);
+                last = next;
+            }
+        }
+        if (rightFrame > keys[^1].Frame)
+            context.DrawLine(curvePen, ToPoint(Math.Max(leftFrame, keys[^1].Frame), keys[^1].Value), ToPoint(rightFrame, keys[^1].Value));
+    }
+
+    private void DrawKeys(DrawingContext context, FCurveSnapshot curve)
+    {
+        foreach (var key in curve.Keys)
+        {
+            var point = ToPoint(key.Frame, key.Value);
+            if (point.X < -150 || point.X > Bounds.Width + 150) continue;
+            if (_model?.SelectedKey?.Id == key.Id)
+            {
+                var index = curve.Keys.ToList().FindIndex(item => item.Id == key.Id);
+                if (index > 0 && curve.Keys[index - 1].Interpolation == CurveInterpolation.Cubic)
+                    DrawHandle(context, point, HandlePoint(key, incoming: true));
+                if (index < curve.Keys.Count - 1 && key.Interpolation == CurveInterpolation.Cubic)
+                    DrawHandle(context, point, HandlePoint(key, incoming: false));
+            }
+            context.DrawEllipse(_model?.SelectedKey?.Id == key.Id ? SelectedBrush : KeyBrush, null, point, 5, 5);
+        }
+    }
+
+    private static void DrawHandle(DrawingContext context, Point key, Point handle)
+    {
+        context.DrawLine(HandlePen, key, handle);
+        context.DrawEllipse(SelectedBrush, null, handle, 4, 4);
+    }
+
+    private Point ToPoint(double frame, double value) =>
+        new(Math.Clamp(_origin.X + frame * _scaleX, -1_000_000, 1_000_000),
+            Math.Clamp(_origin.Y - value * _scaleY, -1_000_000, 1_000_000));
+
+    private Point HandlePoint(FCurveKey key, bool incoming)
+    {
+        var delta = (incoming ? -40 : 40) / _scaleX;
+        return ToPoint(key.Frame + delta, key.Value + delta * (incoming ? key.InSlope : key.OutSlope));
+    }
+
+    protected override void OnPointerPressed(PointerPressedEventArgs e)
+    {
+        base.OnPointerPressed(e);
+        var point = e.GetPosition(this);
+        var pointer = e.GetCurrentPoint(this).Properties;
+        if (ShortcutService.Shared.CurvePanButton == "Middle"
+            ? pointer.IsMiddleButtonPressed
+            : pointer.IsRightButtonPressed)
+        {
+            _dragMode = DragMode.Pan;
+            _pointerStart = point;
+            _originStart = _origin;
+            e.Pointer.Capture(this);
+            e.Handled = true;
+            return;
+        }
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed || _model?.Curve is not { } curve ||
+            !_model.VisibleCurves.Any(item => ReferenceEquals(item.Node, _model.Node))) return;
+        Focus();
+        if (e.ClickCount >= 2)
+        {
+            var frame = (point.X - _origin.X) / _scaleX;
+            if (_model.SnapToFrames) frame = Math.Round(frame);
+            _model.AddKey(frame, (_origin.Y - point.Y) / _scaleY);
+            e.Handled = true;
+            return;
+        }
+
+        var selected = _model.SelectedKey;
+        if (selected is not null)
+        {
+            var index = curve.Keys.ToList().FindIndex(key => key.Id == selected.Id);
+            if (index > 0 && curve.Keys[index - 1].Interpolation == CurveInterpolation.Cubic &&
+                Near(point, HandlePoint(selected, true)))
+                _dragMode = DragMode.InSlope;
+            else if (index >= 0 && index < curve.Keys.Count - 1 &&
+                     selected.Interpolation == CurveInterpolation.Cubic && Near(point, HandlePoint(selected, false)))
+                _dragMode = DragMode.OutSlope;
+            if (_dragMode != DragMode.None) _dragKey = selected;
+        }
+        if (_dragMode == DragMode.None)
+        {
+            _dragKey = curve.Keys.Reverse().FirstOrDefault(key => Near(point, ToPoint(key.Frame, key.Value)));
+            _model.SelectKey(_dragKey?.Id);
+            if (_dragKey is not null) _dragMode = DragMode.Key;
+        }
+        if (_dragMode != DragMode.None)
+        {
+            _pointerStart = point;
+            e.Pointer.Capture(this);
+        }
+        e.Handled = true;
+    }
+
+    protected override void OnPointerMoved(PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        var point = e.GetPosition(this);
+        if (_dragMode == DragMode.Pan)
+        {
+            _origin = new Point(_originStart.X + point.X - _pointerStart.X, _originStart.Y + point.Y - _pointerStart.Y);
+            InvalidateVisual();
+        }
+        else if (_dragKey is { } key && _model is not null)
+        {
+            if (_dragMode == DragMode.Key)
+            {
+                var frame = key.Frame + (point.X - _pointerStart.X) / _scaleX;
+                if (_model.SnapToFrames) frame = Math.Round(frame);
+                _model.PreviewKey(key with { Frame = frame, Value = key.Value - (point.Y - _pointerStart.Y) / _scaleY });
+            }
+            else
+            {
+                var origin = ToPoint(key.Frame, key.Value);
+                var delta = (_dragMode == DragMode.InSlope ? -40 : 40) / _scaleX;
+                var slope = Math.Clamp((origin.Y - point.Y) / _scaleY / delta, -1_000_000, 1_000_000);
+                _model.PreviewKey(_dragMode == DragMode.InSlope ? key with { InSlope = slope } : key with { OutSlope = slope });
+            }
+        }
+        if (_dragMode != DragMode.None) e.Handled = true;
+    }
+
+    protected override void OnPointerReleased(PointerReleasedEventArgs e)
+    {
+        base.OnPointerReleased(e);
+        if (_dragMode == DragMode.None) return;
+        var wasEditing = _dragMode != DragMode.Pan;
+        _dragMode = DragMode.None;
+        _dragKey = null;
+        e.Pointer.Capture(null);
+        if (wasEditing) _model?.CommitPreview();
+        e.Handled = true;
+    }
+
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        if (_dragMode != DragMode.None && _dragMode != DragMode.Pan) _model?.CancelPreview();
+        _dragMode = DragMode.None;
+        _dragKey = null;
+    }
+
+    protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
+    {
+        base.OnPointerWheelChanged(e);
+        if (ShortcutService.Shared.CurveZoomModifier == "Control" &&
+            !e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
+        ZoomAt(Math.Pow(1.15, e.Delta.Y), e.GetPosition(this));
+        e.Handled = true;
+    }
+
+    public void ZoomBy(double factor) => ZoomAt(factor, new Point(Bounds.Width / 2, Bounds.Height / 2));
+
+    private void ZoomAt(double factor, Point point)
+    {
+        var frame = (point.X - _origin.X) / _scaleX;
+        var value = (_origin.Y - point.Y) / _scaleY;
+        _scaleX = Math.Clamp(_scaleX * factor, 0.001, 2000);
+        _scaleY = Math.Clamp(_scaleY * factor, 0.001, 10000);
+        _origin = new Point(point.X - frame * _scaleX, point.Y + value * _scaleY);
+        InvalidateVisual();
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (_model is null) return;
+        var shortcuts = ShortcutService.Shared;
+        if (shortcuts.Matches("curve.delete", e) && _model.DeleteKeyCommand.CanExecute(null))
+            _model.DeleteKeyCommand.Execute(null);
+        else if (shortcuts.Matches("curve.add", e) && _model.AddKeyCommand.CanExecute(null))
+            _model.AddKeyCommand.Execute(null);
+        else if (shortcuts.Matches("curve.frame", e))
+            FrameAll();
+        else return;
+        e.Handled = true;
+    }
+
+    private void OnModelChanged(object? sender, PropertyChangedEventArgs e) => InvalidateVisual();
+    private static bool Near(Point a, Point b) => Math.Abs(a.X - b.X) <= 8 && Math.Abs(a.Y - b.Y) <= 8;
+    private enum DragMode { None, Pan, Key, InSlope, OutSlope }
+}

@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:LiberaFx.ViewModels"
+             x:Class="LiberaFx.Views.NodePropertiesView"
+             x:DataType="vm:NodePropertiesPaneViewModel">
+    <StackPanel Margin="12" Spacing="8">
+        <TextBlock Text="Selected node"
+                   FontWeight="SemiBold"
+                   Foreground="{DynamicResource EffectForegroundBrush}" />
+        <TextBlock Text="Select a node in the graph to edit its name."
+                   IsVisible="{Binding Graph.HasNoSelection}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+        <StackPanel IsVisible="{Binding Graph.HasSelection}" Spacing="6">
+            <TextBlock Text="Type"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <TextBlock Text="{Binding Graph.SelectedNodeType}"
+                       Foreground="{DynamicResource EffectForegroundBrush}" />
+            <TextBlock Text="Name"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <TextBox Text="{Binding Graph.SelectedNodeName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            <TextBlock Text="Connections" Margin="0,10,0,0"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <ItemsControl ItemsSource="{Binding Graph.SelectedConnections}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:GraphConnectionViewModel">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4" Margin="0,2">
+                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Content="×" Tag="{Binding}"
+                                    ToolTip.Tip="Disconnect"
+                                    Click="OnDisconnectClick" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

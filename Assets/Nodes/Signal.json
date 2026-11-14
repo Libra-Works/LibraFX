@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "typeId": "a40e6f94-c2c1-48ed-9a7b-2087c422ad5a",
+  "namespace": "LiberaFx",
+  "kind": "Signal",
+  "name": "Signal",
+  "group": "Signal nodes",
+  "portType": "Signal",
+  "portCategory": "Signal"
+}

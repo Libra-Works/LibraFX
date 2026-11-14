@@ -1,0 +1,34 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="LiberaFx.Views.UnsavedChangesWindow"
+        Title="Unsaved changes"
+        Width="420"
+        Height="190"
+        MinWidth="420"
+        MinHeight="190"
+        MaxWidth="420"
+        MaxHeight="190"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource EffectWindowBackgroundBrush}">
+    <Grid RowDefinitions="*,Auto" Margin="20">
+        <TextBlock Text="One or more documents have unsaved changes. Save them before continuing?"
+                   TextWrapping="Wrap"
+                   VerticalAlignment="Center" />
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="8">
+            <Button Content="Cancel"
+                    MinWidth="80"
+                    Click="OnCancelClick" />
+            <Button Content="Discard"
+                    MinWidth="80"
+                    Click="OnDiscardClick" />
+            <Button Content="Save all"
+                    MinWidth="90"
+                    IsDefault="True"
+                    Click="OnSaveClick" />
+        </StackPanel>
+    </Grid>
+</Window>

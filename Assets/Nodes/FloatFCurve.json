@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "typeId": "f54171ee-4aa3-498b-b2ff-8c9983fc1501",
+  "namespace": "LiberaFx",
+  "kind": "FloatFCurve",
+  "name": "Float F-Curve",
+  "group": "Curve nodes",
+  "portType": "Float",
+  "portCategory": "Parameter"
+}

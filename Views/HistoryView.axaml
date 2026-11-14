@@ -1,0 +1,45 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:LiberaFx.ViewModels"
+             x:Class="LiberaFx.Views.HistoryView"
+             x:DataType="vm:HistoryPaneViewModel">
+    <Grid RowDefinitions="Auto,*">
+        <StackPanel Margin="10" Spacing="6">
+            <TextBlock Text="{Binding CurrentBranch}"
+                       FontWeight="SemiBold" />
+            <TextBlock Text="{Binding CurrentDescription}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <Button Content="Pin current state"
+                    Command="{Binding PinCurrentCommand}"
+                    IsEnabled="{Binding CanPinCurrent}" />
+        </StackPanel>
+        <ScrollViewer Grid.Row="1">
+            <ItemsControl ItemsSource="{Binding Entries}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:HistoryEntryViewModel">
+                        <Grid ColumnDefinitions="*,Auto"
+                              Margin="6,2"
+                              ColumnSpacing="4">
+                            <Button Grid.Column="0"
+                                    HorizontalContentAlignment="Stretch"
+                                    Command="{Binding NavigateCommand}">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{Binding DisplayDescription}"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding BranchName}"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                                </StackPanel>
+                            </Button>
+                            <Button Grid.Column="1"
+                                    Content="{Binding PinButtonText}"
+                                    Command="{Binding TogglePinCommand}"
+                                    VerticalAlignment="Center" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "typeId": "149e6e41-9976-4b69-a74c-3f6e6b254e5a",
+  "namespace": "LiberaFx",
+  "kind": "GraphGroup",
+  "name": "Graph Group",
+  "group": "Graph nodes",
+  "portType": "Float",
+  "portCategory": "Parameter"
+}

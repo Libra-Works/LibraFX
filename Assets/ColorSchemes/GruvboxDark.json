@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "name": "GruvboxDark",
+  "variant": "Dark",
+  "palette": {
+    "region": "#282828",
+    "surface": "#3C3836",
+    "foreground": "#EBDBB2",
+    "mutedForeground": "#A89984",
+    "border": "#504945",
+    "accent": "#FABD2F"
+  },
+  "editorColors": {
+    "GraphMinorGrid": "#282E37",
+    "GraphMajorGrid": "#343C47",
+    "GraphParameter": "#4A9EFF",
+    "GraphSignal": "#F4A261",
+    "NodeBorder": "#58616E",
+    "NodeSelectedBorder": "#7AA2F7",
+    "SelectionFill": "#307AA2F7",
+    "SelectionBorder": "#7AA2F7",
+    "CurveBackground": "#20252E",
+    "CurveGrid": "#39414D",
+    "CurveAxis": "#687786",
+    "CurveLine": "#64D7A3",
+    "CurveHandle": "#E5B86A",
+    "CurveKey": "#E9EEF4",
+    "CurveSelected": "#FFBD59",
+    "CurveLabel": "#AEB9C7"
+  },
+  "accentColors": {
+    "Blue": "#0078D4",
+    "Purple": "#8764B8",
+    "Teal": "#008272",
+    "Orange": "#D83B01",
+    "Pink": "#C239B3"
+  }
+}
