@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "typeId": "8f4bc759-b775-41ab-a7da-2ac5c17e29ed",
+  "namespace": "LiberaFx",
+  "kind": "Comment",
+  "name": "Comment",
+  "group": "Utilities",
+  "portType": "Comment",
+  "portCategory": "Parameter",
+  "parameters": [
+    { "id": "text", "name": "Text", "type": "string", "defaultValue": "" },
+    { "id": "width", "name": "Width", "type": "float", "defaultValue": 360 },
+    { "id": "height", "name": "Height", "type": "float", "defaultValue": 200 }
+  ]
+}

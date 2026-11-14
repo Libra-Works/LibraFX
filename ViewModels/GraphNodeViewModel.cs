@@ -19,6 +19,8 @@ public sealed class GraphNodeViewModel : ObservableObject
     private double _y;
     private double? _previewX;
     private double? _previewY;
+    private double? _previewWidth;
+    private double? _previewHeight;
     private bool _isSelected;
     private bool _isDetailsExpanded;
     private FCurveSnapshot? _curve;
@@ -34,7 +36,17 @@ public sealed class GraphNodeViewModel : ObservableObject
     public IReadOnlyList<NodeParameterSnapshot>? Parameters => _parameters;
     public GraphSnapshot? ChildGraph { get; }
     public bool IsGraphGroup => ChildGraph is not null;
-    public bool HasPorts => !IsGraphGroup;
+    public bool IsComment => Definition.Kind == GraphNodeKind.Comment;
+    public bool HasPorts => !IsGraphGroup && !IsComment;
+    public double CommentWidth => _previewWidth ?? CommentNumber("width", 360, 180, 4000);
+    public double CommentHeight => _previewHeight ?? CommentNumber("height", 200, 80, 4000);
+    public double RenderedWidth => IsComment ? CommentWidth : NodeWidth;
+    public string CommentText
+    {
+        get => IsComment && Definition.Parameters.FirstOrDefault(item => item.Id == "text") is { } definition
+            ? GetParameterValue(definition).GetString() ?? "" : "";
+        set { if (IsComment) _workspace.SetParameter(this, "text", JsonSerializer.SerializeToElement(value ?? "")); }
+    }
     public bool HasParameters => InlineParameters.Count > 0;
     public IReadOnlyList<NodeParameterEditorViewModel> InlineParameters { get; }
     internal double RenderedHeight { get; set; } = 80;
@@ -152,7 +164,36 @@ public sealed class GraphNodeViewModel : ObservableObject
     internal void SetParametersValue(IReadOnlyList<NodeParameterSnapshot>? parameters)
     {
         if (SetProperty(ref _parameters, parameters, nameof(Parameters)))
+        {
             foreach (var parameter in InlineParameters) parameter.Refresh();
+            OnPropertyChanged(nameof(CommentText));
+            OnPropertyChanged(nameof(CommentWidth));
+            OnPropertyChanged(nameof(CommentHeight));
+            OnPropertyChanged(nameof(RenderedWidth));
+        }
+    }
+
+    internal void PreviewCommentSize(double width, double height)
+    {
+        SetProperty(ref _previewWidth, Math.Clamp(width, 180, 4000), nameof(CommentWidth));
+        SetProperty(ref _previewHeight, Math.Clamp(height, 80, 4000), nameof(CommentHeight));
+        OnPropertyChanged(nameof(RenderedWidth));
+    }
+
+    internal void CancelCommentSize()
+    {
+        _previewWidth = null;
+        _previewHeight = null;
+        OnPropertyChanged(nameof(CommentWidth));
+        OnPropertyChanged(nameof(CommentHeight));
+        OnPropertyChanged(nameof(RenderedWidth));
+    }
+
+    private double CommentNumber(string id, double fallback, double min, double max)
+    {
+        if (!IsComment) return fallback;
+        var definition = Definition.Parameters.FirstOrDefault(item => item.Id == id);
+        return definition is null ? fallback : Math.Clamp(GetParameterValue(definition).GetDouble(), min, max);
     }
 
     internal void SetPosition(double x, double y)

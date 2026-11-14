@@ -16,6 +16,7 @@ public readonly record struct GraphNodeKind(string Value)
     public static GraphNodeKind Signal => new("Signal");
     public static GraphNodeKind FloatFCurve => new("FloatFCurve");
     public static GraphNodeKind GraphGroup => new("GraphGroup");
+    public static GraphNodeKind Comment => new("Comment");
     public override string ToString() => Value ?? string.Empty;
 }
 
@@ -64,7 +65,8 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("c7410281-9b6e-46f0-9bb7-334cc3b40767")] = "Int32",
         [Guid.Parse("a40e6f94-c2c1-48ed-9a7b-2087c422ad5a")] = "Signal",
         [Guid.Parse("f54171ee-4aa3-498b-b2ff-8c9983fc1501")] = "FloatFCurve",
-        [Guid.Parse("149e6e41-9976-4b69-a74c-3f6e6b254e5a")] = "GraphGroup"
+        [Guid.Parse("149e6e41-9976-4b69-a74c-3f6e6b254e5a")] = "GraphGroup",
+        [Guid.Parse("8f4bc759-b775-41ab-a7da-2ac5c17e29ed")] = "Comment"
     };
 
     private static readonly List<string> Warnings = [];
@@ -208,6 +210,12 @@ public sealed record GraphNodeDefinition(
                 !NodeParameter.IsValidValue(dependency.Type, condition.Expected))
                 throw new InvalidDataException("Invalid parameter enable condition.");
         }
+        if (node.TypeId == Guid.Parse("8f4bc759-b775-41ab-a7da-2ac5c17e29ed") &&
+            (node.Kind != "Comment" ||
+             !parameters.Any(item => item.Id == "text" && item.Type == "string") ||
+             !parameters.Any(item => item.Id == "width" && item.Type == "float") ||
+             !parameters.Any(item => item.Id == "height" && item.Type == "float")))
+            throw new InvalidDataException("Invalid built-in comment definition.");
         ids.Add(node.TypeId);
         names.Add(qualifiedName);
         var kind = new GraphNodeKind(BuiltInIds.GetValueOrDefault(node.TypeId) ?? node.TypeId.ToString("D"));

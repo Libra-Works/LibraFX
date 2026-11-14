@@ -49,6 +49,7 @@ public partial class GraphEditorView : UserControl
         InitializeComponent();
         GraphCanvas.RenderTransform = _graphScale;
         SceneLayer.GraphOrigin = _graphOrigin;
+        ConnectionLayer.GraphOrigin = _graphOrigin;
         GraphScrollViewer.AddHandler(InputElement.PointerWheelChangedEvent, OnViewportPointerWheelChanged,
             RoutingStrategies.Tunnel);
         AttachedToVisualTree += (_, _) => Dispatcher.UIThread.Post(InitializeViewport);
@@ -100,7 +101,8 @@ public partial class GraphEditorView : UserControl
 
     private void OnNodePositionChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(GraphNodeViewModel.DisplayX) or nameof(GraphNodeViewModel.DisplayY))
+        if (e.PropertyName is nameof(GraphNodeViewModel.DisplayX) or nameof(GraphNodeViewModel.DisplayY) or
+            nameof(GraphNodeViewModel.RenderedWidth) or nameof(GraphNodeViewModel.CommentHeight))
             UpdateCanvasExtent();
     }
 
@@ -113,7 +115,7 @@ public partial class GraphEditorView : UserControl
         var shiftY = Math.Max(0, Math.Ceiling((-minY - _graphOrigin.Y + 200) / OriginStep) * OriginStep);
         if (shiftX > 0 || shiftY > 0) ShiftOrigin(shiftX, shiftY);
         GraphCanvas.Width = Math.Max(GraphCanvas.Width,
-            _graphOrigin.X + Math.Max(1600, _observedNodes.Select(n => n.DisplayX + GraphNodeViewModel.NodeWidth + 200).DefaultIfEmpty(1600).Max()));
+            _graphOrigin.X + Math.Max(1600, _observedNodes.Select(n => n.DisplayX + n.RenderedWidth + 200).DefaultIfEmpty(1600).Max()));
         GraphCanvas.Height = Math.Max(GraphCanvas.Height,
             _graphOrigin.Y + Math.Max(1000, _observedNodes.Select(n => n.DisplayY + n.RenderedHeight + 200).DefaultIfEmpty(1000).Max()));
         UpdateZoomExtent();
@@ -136,6 +138,7 @@ public partial class GraphEditorView : UserControl
         RaisePropertyChanged(OriginXProperty, oldOrigin.X, _graphOrigin.X);
         RaisePropertyChanged(OriginYProperty, oldOrigin.Y, _graphOrigin.Y);
         SceneLayer.GraphOrigin = _graphOrigin;
+        ConnectionLayer.GraphOrigin = _graphOrigin;
         if (_viewportInitialized)
         {
             var delta = new Vector(x * _zoom, y * _zoom);
@@ -269,6 +272,12 @@ public partial class GraphEditorView : UserControl
 
     private async void OnPasteClick(object? sender, RoutedEventArgs e) => await PasteAsync();
     private void OnAddNodeClick(object? sender, RoutedEventArgs e) => ShowNodeSearch(_pastePosition);
+    private void OnAddCommentClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not GraphWorkspaceViewModel graph) return;
+        var node = graph.CreateNode(GraphNodeKind.Comment, _pastePosition.X, _pastePosition.Y);
+        graph.SelectNode(node);
+    }
     private void OnBreadcrumbClick(object? sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: int depth } && DataContext is GraphWorkspaceViewModel graph)
@@ -592,7 +601,7 @@ public partial class GraphEditorView : UserControl
             .Where(view => view.DataContext is GraphNodeViewModel node && selected.Contains(node)).ToArray();
         var left = selected.Min(node => node.DisplayX);
         var top = selected.Min(node => node.DisplayY);
-        var right = selected.Max(node => node.DisplayX + GraphNodeViewModel.NodeWidth);
+        var right = selected.Max(node => node.DisplayX + node.RenderedWidth);
         var bottom = selected.Max(node => node.DisplayY +
             (views.FirstOrDefault(view => ReferenceEquals(view.DataContext, node))?.Bounds.Height ?? 80));
         var viewport = GraphScrollViewer.Viewport;

@@ -22,6 +22,8 @@ public sealed class GraphSceneLayer : Control
     private GraphWorkspaceViewModel? _workspace;
     private Vector _graphOrigin;
     private Rect _visibleArea;
+    public bool GridOnly { get; set; }
+    public bool ConnectionsOnly { get; set; }
 
     public Vector GraphOrigin
     {
@@ -83,8 +85,8 @@ public sealed class GraphSceneLayer : Control
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-        DrawGrid(context);
-        if (_workspace is null)
+        if (!ConnectionsOnly) DrawGrid(context);
+        if (_workspace is null || GridOnly)
         {
             return;
         }

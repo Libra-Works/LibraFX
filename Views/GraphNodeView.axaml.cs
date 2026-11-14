@@ -17,6 +17,12 @@ public partial class GraphNodeView : UserControl
     private Grid? _connectionCanvas;
     private Point _connectionStart;
     private bool _connectionMoved;
+    private GraphNodeViewModel? _resizeNode;
+    private GraphEditorView? _resizeEditor;
+    private Point _resizeStart;
+    private double _resizeWidth;
+    private double _resizeHeight;
+    private Guid _resizeRevision;
 
     public GraphNodeView()
     {
@@ -153,6 +159,51 @@ public partial class GraphNodeView : UserControl
         _dragEditor = null;
         _dragNode = null;
         _dragNodes = [];
+    }
+
+    private void OnResizePressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is not GraphNodeViewModel { IsComment: true } node ||
+            sender is not Control handle || !e.GetCurrentPoint(handle).Properties.IsLeftButtonPressed ||
+            this.FindAncestorOfType<GraphEditorView>() is not { } editor) return;
+        node.SelectCommand.Execute(null);
+        _resizeNode = node;
+        _resizeEditor = editor;
+        _resizeStart = e.GetPosition(editor);
+        _resizeWidth = node.CommentWidth;
+        _resizeHeight = node.CommentHeight;
+        _resizeRevision = node.Workspace.History.CurrentNodeId;
+        e.Pointer.Capture(handle);
+        e.Handled = true;
+    }
+
+    private void OnResizeMoved(object? sender, PointerEventArgs e)
+    {
+        if (_resizeNode is not { } node || _resizeEditor is not { } editor) return;
+        var delta = (e.GetPosition(editor) - _resizeStart) / editor.DebugZoom;
+        node.PreviewCommentSize(_resizeWidth + delta.X, _resizeHeight + delta.Y);
+        e.Handled = true;
+    }
+
+    private void OnResizeReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (_resizeNode is not { } node) return;
+        var width = node.CommentWidth;
+        var height = node.CommentHeight;
+        _resizeNode = null;
+        _resizeEditor = null;
+        node.CancelCommentSize();
+        e.Pointer.Capture(null);
+        if (node.Workspace.History.CurrentNodeId == _resizeRevision)
+            node.Workspace.SetCommentSize(node, width, height);
+        e.Handled = true;
+    }
+
+    private void OnResizeCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        _resizeNode?.CancelCommentSize();
+        _resizeNode = null;
+        _resizeEditor = null;
     }
 
     private void OnOutputPointerPressed(object? sender, PointerPressedEventArgs e)

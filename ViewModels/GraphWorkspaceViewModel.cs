@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Text.Json;
 using Avalonia;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -22,6 +23,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     private readonly List<Guid> _graphPath = [];
 
     public ObservableCollection<GraphNodeViewModel> Nodes { get; } = [];
+    public ObservableCollection<GraphNodeViewModel> CommentNodes { get; } = [];
+    public ObservableCollection<GraphNodeViewModel> ForegroundNodes { get; } = [];
     public ObservableCollection<GraphBreadcrumb> Breadcrumbs { get; } = [new("Top", 0)];
 
     public ObservableCollection<GraphConnectionViewModel> Connections { get; } = [];
@@ -90,9 +93,32 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     public GraphWorkspaceViewModel(UndoRedoManager history)
     {
         _history = history;
+        Nodes.CollectionChanged += OnNodesChanged;
         DeleteSelectedNodeCommand = new RelayCommand(DeleteSelectedNode, () => HasSelection);
         Connections.CollectionChanged += (_, _) => RefreshSelectedConnections();
         _history.Configure(CreateSnapshot, RestoreFromHistory, ValidateSnapshot);
+    }
+
+    private void OnNodesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action is NotifyCollectionChangedAction.Reset or NotifyCollectionChangedAction.Move)
+        {
+            CommentNodes.Clear();
+            ForegroundNodes.Clear();
+            foreach (var node in Nodes)
+                (node.IsComment ? CommentNodes : ForegroundNodes).Add(node);
+            return;
+        }
+        if (e.OldItems is not null)
+            foreach (GraphNodeViewModel node in e.OldItems)
+                (node.IsComment ? CommentNodes : ForegroundNodes).Remove(node);
+        if (e.NewItems is not null)
+            foreach (GraphNodeViewModel node in e.NewItems)
+            {
+                var target = node.IsComment ? CommentNodes : ForegroundNodes;
+                var index = Nodes.TakeWhile(item => item != node).Count(item => item.IsComment == node.IsComment);
+                target.Insert(index, node);
+            }
     }
 
     public void SelectNode(GraphNodeViewModel? node)
@@ -431,6 +457,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 !nodeSpecifications.TryGetValue(specification.TargetNodeId, out var target) ||
                 source.Id == target.Id ||
                 source.Kind == GraphNodeKind.GraphGroup || target.Kind == GraphNodeKind.GraphGroup ||
+                source.Kind == GraphNodeKind.Comment || target.Kind == GraphNodeKind.Comment ||
                 source.PortType != target.PortType ||
                 source.PortCategory != target.PortCategory ||
                 !connectionKeys.Add((source.Id, target.Id)))
@@ -575,6 +602,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
             if (source.IsGraphGroup || target.IsGraphGroup)
                 throw new ArgumentException("Group boundary ports are not implemented yet.", nameof(plan));
+            if (source.IsComment || target.IsComment)
+                throw new ArgumentException("Comment nodes do not have ports.", nameof(plan));
 
             if (source.Definition.PortCategory != target.Definition.PortCategory ||
                 source.Definition.PortType != target.Definition.PortType)
@@ -674,6 +703,11 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         if (source.IsGraphGroup || target.IsGraphGroup)
         {
             error = "Group boundary ports are not implemented yet.";
+            return false;
+        }
+        if (source.IsComment || target.IsComment)
+        {
+            error = "Comment nodes do not have ports.";
             return false;
         }
 
@@ -819,6 +853,26 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         if (index < 0) parameters.Add(updated);
         else parameters[index] = updated;
         _history.Execute(new SetNodeParametersCommand(node, node.Parameters, parameters.AsReadOnly(), definition.Name));
+    }
+
+    internal void SetCommentSize(GraphNodeViewModel node, double width, double height)
+    {
+        if (!Nodes.Contains(node) || !node.IsComment || !double.IsFinite(width) || !double.IsFinite(height))
+            throw new InvalidOperationException("The comment size is invalid.");
+        width = Math.Clamp(width, 180, 4000);
+        height = Math.Clamp(height, 80, 4000);
+        var values = node.Parameters?.ToList() ?? [];
+        foreach (var (id, value) in new[] { ("width", width), ("height", height) })
+        {
+            var item = new NodeParameterSnapshot(id, "float", JsonSerializer.SerializeToElement(value));
+            var index = values.FindIndex(existing => existing.Id == id);
+            if (index < 0) values.Add(item);
+            else values[index] = item;
+        }
+        var oldWidth = node.GetParameterValue(node.Definition.Parameters.Single(item => item.Id == "width")).GetDouble();
+        var oldHeight = node.GetParameterValue(node.Definition.Parameters.Single(item => item.Id == "height")).GetDouble();
+        if (oldWidth == width && oldHeight == height) return;
+        _history.Execute(new SetNodeParametersCommand(node, node.Parameters, values.AsReadOnly(), "comment size"));
     }
 
     public GraphNodeViewModel CreateNode(GraphNodeKind kind, double? x = null, double? y = null)

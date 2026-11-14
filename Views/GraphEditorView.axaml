@@ -94,6 +94,7 @@
                 <Grid.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="_Add node..." Click="OnAddNodeClick" />
+                        <MenuItem Header="Add _comment" Click="OnAddCommentClick" />
                         <Separator />
                         <MenuItem Header="_Copy" IsEnabled="{Binding HasSelection}" Click="OnCopyClick" />
                         <MenuItem Header="Cu_t" IsEnabled="{Binding HasSelection}" Click="OnCutClick" />
@@ -107,9 +108,36 @@
                         PointerReleased="OnBackgroundPointerReleased"
                         PointerCaptureLost="OnBackgroundPointerCaptureLost" />
 
-                <views:GraphSceneLayer x:Name="SceneLayer" DataContext="{Binding}" />
+                <views:GraphSceneLayer x:Name="SceneLayer" DataContext="{Binding}" GridOnly="True" />
 
-                <ItemsControl x:Name="NodeItems" ItemsSource="{Binding Nodes}">
+                <ItemsControl ItemsSource="{Binding CommentNodes}">
+                    <ItemsControl.ItemContainerTheme>
+                        <ControlTheme TargetType="ContentPresenter">
+                            <Setter Property="Canvas.Left">
+                                <MultiBinding Converter="{StaticResource GraphPositionConverter}">
+                                    <ReflectionBinding Path="DisplayX" />
+                                    <ReflectionBinding Path="OriginX"
+                                                       RelativeSource="{RelativeSource FindAncestor, AncestorType={x:Type views:GraphEditorView}}" />
+                                </MultiBinding>
+                            </Setter>
+                            <Setter Property="Canvas.Top">
+                                <MultiBinding Converter="{StaticResource GraphPositionConverter}">
+                                    <ReflectionBinding Path="DisplayY" />
+                                    <ReflectionBinding Path="OriginY"
+                                                       RelativeSource="{RelativeSource FindAncestor, AncestorType={x:Type views:GraphEditorView}}" />
+                                </MultiBinding>
+                            </Setter>
+                        </ControlTheme>
+                    </ItemsControl.ItemContainerTheme>
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><Canvas Classes="graphNodePanel" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:GraphNodeViewModel"><views:GraphNodeView /></DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <views:GraphSceneLayer x:Name="ConnectionLayer" DataContext="{Binding}" ConnectionsOnly="True" />
+                <ItemsControl x:Name="NodeItems" ItemsSource="{Binding ForegroundNodes}">
                     <ItemsControl.ItemContainerTheme>
                         <ControlTheme TargetType="ContentPresenter">
                             <Setter Property="Canvas.Left">
