@@ -86,6 +86,13 @@ public sealed record GraphNodeDefinition(
     public IReadOnlyList<NodeParameterDefinition> Parameters { get; init; } = [];
     public IReadOnlyList<GraphInputPortDefinition>? InputPorts { get; init; }
 
+    public string? GetInputPortType(string? portId)
+    {
+        if (InputPorts is null) return portId is null ? PortType : null;
+        var port = InputPorts.FirstOrDefault(port => port.Id == portId);
+        return port is null ? null : port.PortType ?? PortType;
+    }
+
     public static bool TryFind(string? value, out GraphNodeDefinition? definition)
     {
         definition = All.FirstOrDefault(item =>
@@ -182,9 +189,11 @@ public sealed record GraphNodeDefinition(
             foreach (var port in node.InputPorts)
             {
                 if (port is null || !IsIdentifier(port.Id) || !inputIds.Add(port.Id!) ||
-                    string.IsNullOrWhiteSpace(port.Name) || inputs.Count >= 32)
+                    string.IsNullOrWhiteSpace(port.Name) ||
+                    (port.PortType is not null && (string.IsNullOrWhiteSpace(port.PortType) || port.PortType.Length > 128)) ||
+                    inputs.Count >= 32)
                     throw new InvalidDataException("Invalid input port definition.");
-                inputs.Add(new GraphInputPortDefinition(port.Id!, port.Name));
+                inputs.Add(new GraphInputPortDefinition(port.Id!, port.Name, port.PortType));
             }
         }
         var parameterIds = new HashSet<string>(StringComparer.Ordinal);
@@ -273,6 +282,7 @@ public sealed record GraphNodeDefinition(
     {
         public string? Id { get; set; }
         public string? Name { get; set; }
+        public string? PortType { get; set; }
     }
 
     private sealed class NodeParameterFile
@@ -301,4 +311,4 @@ public sealed record GraphNodeDefinition(
     }
 }
 
-public sealed record GraphInputPortDefinition(string Id, string Name);
+public sealed record GraphInputPortDefinition(string Id, string Name, string? PortType = null);

@@ -563,7 +563,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 throw new ArgumentException("The target input port does not exist.", nameof(plan));
 
             if (source.Definition.PortCategory != target.Definition.PortCategory ||
-                source.Definition.PortType != target.Definition.PortType)
+                source.Definition.PortType != target.Definition.GetInputPortType(targetPortId))
             {
                 throw new ArgumentException(
                     "Port categories and data types must match.",
@@ -692,7 +692,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         }
 
         if (source.Definition.PortCategory != target.Definition.PortCategory ||
-            source.Definition.PortType != target.Definition.PortType)
+            source.Definition.PortType != target.Definition.GetInputPortType(targetPortId))
         {
             error = "Port categories and data types must match.";
             return false;
