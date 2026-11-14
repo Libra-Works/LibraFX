@@ -51,6 +51,7 @@ public partial class MainViewModel : ViewModelBase
     public ShortcutService Shortcuts => ShortcutService.Shared;
     public ServerSettingsService ServerSettings { get; }
     public TeamProfilesService TeamProfiles { get; } = new();
+    public GroupAssetCatalog GroupAssets { get; }
 
     public string McpAccessToken { get; }
 
@@ -137,6 +138,7 @@ public partial class MainViewModel : ViewModelBase
         ServerSettingsService? serverSettings = null)
     {
         ServerSettings = serverSettings ?? new ServerSettingsService();
+        GroupAssets = new GroupAssetCatalog(TeamProfiles);
         Log.Add("Application", "Editor started.");
         McpAccessToken = mcpAccessToken;
         PreviewAccessToken = previewAccessToken;
@@ -516,7 +518,7 @@ public partial class MainViewModel : ViewModelBase
 
     private GraphWorkspaceViewModel CreateWorkspace()
     {
-        var workspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var workspace = new GraphWorkspaceViewModel(new UndoRedoManager(), GroupAssets);
         workspace.History.ActionPerformed += message => Log.Add("Edit", message);
         workspace.PropertyChanged += (_, e) =>
         {
@@ -530,6 +532,7 @@ public partial class MainViewModel : ViewModelBase
 
     public void DisposeStorageFiles()
     {
+        GroupAssets.Dispose();
         var disposed = new HashSet<IStorageFile>(ReferenceEqualityComparer.Instance);
         foreach (var file in _storageFiles.Values)
         {

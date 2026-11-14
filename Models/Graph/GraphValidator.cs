@@ -20,6 +20,8 @@ public static class GraphValidator
                 node.PortType != definition.PortType || node.PortCategory != definition.PortCategory ||
                 (node.Kind == GraphNodeKind.FloatFCurve) != (node.Curve is not null) ||
                 (node.Kind == GraphNodeKind.GraphGroup) != (node.ChildGraph is not null) ||
+                (node.GroupAsset is not null &&
+                 (node.Kind != GraphNodeKind.GraphGroup || node.GroupAsset.Id == Guid.Empty || node.GroupAsset.Revision < 1)) ||
                 !nodes.TryAdd(node.Id, node))
                 throw new InvalidDataException("The project contains an invalid graph node.");
             if (node.Curve is not null) FCurve.Validate(node.Curve);

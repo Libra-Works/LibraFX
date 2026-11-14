@@ -30,7 +30,7 @@ public sealed class DockFactory : Factory
             Id = "Outliner",
             Title = "Outliner"
         };
-        var nodeList = new NodeCatalogViewModel(_activeGraph)
+        var nodeList = new NodeCatalogViewModel(_activeGraph, _main.GroupAssets)
         {
             Id = "NodeList",
             Title = "Node List"

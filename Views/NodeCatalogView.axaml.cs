@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using LiberaFx.Models.Graph;
+using LiberaFx.ViewModels;
 
 namespace LiberaFx.Views;
 
@@ -36,7 +37,8 @@ public partial class NodeCatalogView : UserControl
             _pressed is not { } pressed ||
             !e.GetCurrentPoint(source).Properties.IsLeftButtonPressed ||
             (Math.Abs(current.X - _dragStart.X) < 5 && Math.Abs(current.Y - _dragStart.Y) < 5) ||
-            !GraphNodeDefinition.TryFind(kindName, out var definition))
+            !(kindName.StartsWith(NodeCatalogEntryViewModel.GroupPrefix, StringComparison.Ordinal) ||
+              GraphNodeDefinition.TryFind(kindName, out _)))
         {
             return;
         }
@@ -45,7 +47,7 @@ public partial class NodeCatalogView : UserControl
         _pressed = null;
         e.Pointer.Capture(null);
         var transfer = new DataTransfer();
-        transfer.Add(DataTransferItem.CreateText(definition!.Kind.ToString()));
+        transfer.Add(DataTransferItem.CreateText(kindName));
         await DragDrop.DoDragDropAsync(pressed, transfer, DragDropEffects.Copy);
     }
 

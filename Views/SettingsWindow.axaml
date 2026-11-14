@@ -96,7 +96,7 @@
             <TabItem Header="Projects">
                 <StackPanel Margin="10" Spacing="12">
                     <TextBlock Text="Project / team" FontSize="18" FontWeight="SemiBold" />
-                    <TextBlock Text="Configure project group library paths. Node list integration is not available yet. Switching projects does not change open documents."
+                    <TextBlock Text="Each project uses its own group library. Switching projects does not change open documents."
                                TextWrapping="Wrap" />
                     <ComboBox x:Name="ProjectList" ItemsSource="{Binding TeamProfiles.Profiles}"
                               SelectionChanged="OnProjectSelected">

@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
+using LiberaFx.Services;
 
 namespace LiberaFx.ViewModels;
 
@@ -13,6 +14,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 {
     private const int MaxGraphDepth = 12;
     private readonly UndoRedoManager _history;
+    public GroupAssetCatalog? GroupAssets { get; }
     private int _nextNodeIndex;
     private GraphNodeViewModel? _selectedNode;
     private readonly List<GraphNodeViewModel> _selectedNodes = [];
@@ -90,9 +92,10 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
     public IRelayCommand DeleteSelectedNodeCommand { get; }
 
-    public GraphWorkspaceViewModel(UndoRedoManager history)
+    public GraphWorkspaceViewModel(UndoRedoManager history, GroupAssetCatalog? groupAssets = null)
     {
         _history = history;
+        GroupAssets = groupAssets;
         Nodes.CollectionChanged += OnNodesChanged;
         DeleteSelectedNodeCommand = new RelayCommand(DeleteSelectedNode, () => HasSelection);
         Connections.CollectionChanged += (_, _) => RefreshSelectedConnections();
@@ -201,7 +204,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             var definition = GraphNodeDefinition.All.Single(item => item.Kind == specification.Kind);
             var node = new GraphNodeViewModel(this, definition, specification.Name, newX, newY,
                 curve: specification.Curve, childGraph: specification.ChildGraph is null ? null : CloneGraph(specification.ChildGraph),
-                parameters: specification.Parameters);
+                parameters: specification.Parameters, groupAsset: specification.GroupAsset);
             nodesByOldId.Add(specification.Id, node);
             commands.Add(new AddGraphNodeCommand(this, node, Nodes.Count + commands.Count));
         }
@@ -257,7 +260,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 node.Definition.PortCategory,
                 node.Curve,
                 node.ChildGraph,
-                node.Parameters))
+                node.Parameters,
+                node.GroupAsset))
             .ToArray();
         var connections = Connections
             .Select(connection => new GraphConnectionSnapshot(
@@ -299,12 +303,202 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     public bool EnterGraph(GraphNodeViewModel node)
     {
         if (!Nodes.Contains(node) || node.ChildGraph is null || _graphPath.Count >= MaxGraphDepth) return false;
+        if (node.GroupAsset is { } reference)
+        {
+            try
+            {
+                var asset = GroupAssets?.Library().Load(reference.Id)
+                    ?? throw new InvalidOperationException("The group library is unavailable.");
+                if (asset.Locked)
+                {
+                    ConnectionStatus = "This group asset is locked. Unlock it before editing.";
+                    return false;
+                }
+
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
+                                       InvalidOperationException or ArgumentException)
+            {
+                ConnectionStatus = $"Cannot edit linked group: {ex.Message}";
+                return false;
+            }
+        }
         CreateSnapshot();
         _graphPath.Add(node.Id);
         RestoreCurrentGraph(node.ChildGraph);
         RefreshBreadcrumbs();
         ConnectionStatus = "Editing nested graph.";
         return true;
+    }
+
+    public GraphNodeViewModel CreateGroupAssetNode(Guid assetId, double x, double y)
+    {
+        if (!double.IsFinite(x) || !double.IsFinite(y)) throw new ArgumentException("A finite position is required.");
+        var catalog = GroupAssets ?? throw new InvalidOperationException("The group library is unavailable.");
+        var asset = catalog.Library().Load(assetId);
+        ValidateSnapshot(asset.Graph, new HashSet<Guid>(), _graphPath.Count + 1);
+        var definition = GraphNodeDefinition.All.Single(item => item.Kind == GraphNodeKind.GraphGroup);
+        var reference = new GroupAssetReference(asset.Id, asset.Revision, asset.Locked);
+        var node = new GraphNodeViewModel(this, definition, asset.Name, x, y,
+            childGraph: CloneGraph(asset.Graph), groupAsset: reference);
+        _history.Execute(new AddGraphNodeCommand(this, node, Nodes.Count));
+        SelectNode(node);
+        ConnectionStatus = $"Added group {asset.Name} (version {asset.Revision}).";
+        return node;
+    }
+
+    public void SaveSelectedGroupAsset()
+    {
+        if (SelectedNode is not { IsGraphGroup: true } node || node.ChildGraph is null)
+            throw new InvalidOperationException("Select one Graph Group to save.");
+        var catalog = GroupAssets ?? throw new InvalidOperationException("The group library is unavailable.");
+        var library = catalog.Library();
+        var asset = node.GroupAsset is { } reference
+            ? library.Save(reference.Id, reference.Revision, node.Name, node.ChildGraph)
+            : library.Create(node.Name, node.ChildGraph);
+        var current = new GroupAssetReference(asset.Id, asset.Revision, asset.Locked);
+        _history.Execute(new SetGroupAssetCommand(node, node.GroupAsset, current));
+        catalog.Refresh();
+        ConnectionStatus = $"Saved group {asset.Name} (version {asset.Revision}).";
+    }
+
+    public void ToggleSelectedGroupAssetLock()
+    {
+        if (SelectedNode?.GroupAsset is not { } reference)
+            throw new InvalidOperationException("Select a saved group asset.");
+        var catalog = GroupAssets ?? throw new InvalidOperationException("The group library is unavailable.");
+        var library = catalog.Library();
+        var asset = library.Load(reference.Id);
+        asset = library.SetLocked(reference.Id, !asset.Locked);
+        catalog.Refresh();
+        ConnectionStatus = asset.Locked ? $"Locked group {asset.Name}." : $"Unlocked group {asset.Name}.";
+    }
+
+    public IReadOnlyList<GroupUpdateCandidate> FindGroupUpdates()
+    {
+        var catalog = GroupAssets;
+        if (catalog is null || catalog.Assets.Count == 0) return [];
+        var library = catalog.Library();
+        var latest = catalog.Assets.ToDictionary(asset => asset.Id);
+        var results = new List<GroupUpdateCandidate>();
+        bool Visit(GraphSnapshot graph)
+        {
+            var anyConflict = false;
+            foreach (var node in graph.Nodes)
+            {
+                var childConflict = node.ChildGraph is not null && Visit(node.ChildGraph);
+                if (node.GroupAsset is { } reference && node.ChildGraph is { } child &&
+                    latest.TryGetValue(reference.Id, out var asset) && asset.Revision > reference.Revision)
+                {
+                    var changed = true;
+                    try
+                    {
+                        var baseline = library.LoadRevision(reference.Id, reference.Revision);
+                        changed = !GraphSnapshot.EquivalentIgnoringIds(baseline.Graph, child);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
+                    {
+                    }
+                    changed |= childConflict;
+                    results.Add(new GroupUpdateCandidate(node.Id, reference.Id, node.Name,
+                        reference.Revision, asset.Revision, changed));
+                    anyConflict |= changed;
+                }
+                anyConflict |= childConflict;
+            }
+            return anyConflict;
+        }
+        Visit(CreateSnapshot());
+        return results;
+    }
+
+    public PreparedGroupUpdates? PrepareGroupUpdates(IReadOnlyList<GroupUpdateCandidate> candidates)
+    {
+        var catalog = GroupAssets ?? throw new InvalidOperationException("The group library is unavailable.");
+        var library = catalog.Library();
+        var requested = candidates.Where(candidate => !candidate.HasLocalChanges).ToDictionary(candidate => candidate.NodeId);
+        if (requested.Count == 0) return null;
+        var currentCandidates = FindGroupUpdates().ToDictionary(candidate => candidate.NodeId);
+        if (requested.Any(item => !currentCandidates.TryGetValue(item.Key, out var current) || current != item.Value))
+            throw new InvalidOperationException("The graph or group library changed; check for updates again.");
+        var approved = requested.Values.Select(item => (item.AssetId, item.CurrentRevision, item.LatestRevision)).ToHashSet();
+        var before = CreateSnapshot();
+        var count = 0;
+        GraphSnapshot RewriteNewChildren(GraphSnapshot graph, HashSet<Guid> ancestors)
+        {
+            var nodes = graph.Nodes.Select(node =>
+            {
+                if (node.ChildGraph is not { } child) return node;
+                if (node.GroupAsset is not { } reference)
+                    return node with { ChildGraph = RewriteNewChildren(child, ancestors) };
+                if (!ancestors.Add(reference.Id)) return node;
+                try
+                {
+                    var approvedUpdate = approved.FirstOrDefault(item =>
+                        item.AssetId == reference.Id && item.CurrentRevision == reference.Revision);
+                    if (approvedUpdate != default)
+                    {
+                        var baseline = library.LoadRevision(reference.Id, reference.Revision);
+                        var current = library.Load(reference.Id);
+                        if (current.Revision != approvedUpdate.LatestRevision)
+                            throw new InvalidOperationException($"Group '{node.Name}' changed again; check for updates again.");
+                        if (GraphSnapshot.EquivalentIgnoringIds(baseline.Graph, child))
+                        {
+                            child = CloneGraph(current.Graph);
+                            reference = new GroupAssetReference(current.Id, current.Revision, current.Locked);
+                            count++;
+                        }
+                    }
+                    return node with { ChildGraph = RewriteNewChildren(child, ancestors), GroupAsset = reference };
+                }
+                finally { ancestors.Remove(reference.Id); }
+            }).ToArray();
+            return graph with { Nodes = nodes };
+        }
+        GraphSnapshot Rewrite(GraphSnapshot graph)
+        {
+            var nodes = graph.Nodes.Select(node =>
+            {
+                if (node.GroupAsset is { } reference && node.ChildGraph is { } child &&
+                    requested.TryGetValue(node.Id, out var candidate) &&
+                    reference.Id == candidate.AssetId && reference.Revision == candidate.CurrentRevision)
+                {
+                    var baseline = library.LoadRevision(reference.Id, reference.Revision);
+                    var current = library.Load(reference.Id);
+                    if (current.Revision != candidate.LatestRevision)
+                        throw new InvalidOperationException($"Group '{node.Name}' changed again; check for updates again.");
+                    if (!GraphSnapshot.EquivalentIgnoringIds(baseline.Graph, child))
+                        throw new InvalidOperationException($"Group '{node.Name}' has local changes.");
+                    count++;
+                    return node with
+                    {
+                        ChildGraph = RewriteNewChildren(CloneGraph(current.Graph), [current.Id]),
+                        GroupAsset = new GroupAssetReference(current.Id, current.Revision, current.Locked)
+                    };
+                }
+                return node.ChildGraph is null ? node : node with { ChildGraph = Rewrite(node.ChildGraph) };
+            }).ToArray();
+            return graph with { Nodes = nodes };
+        }
+        var after = Rewrite(before);
+        if (count == 0) return null;
+        ValidateSnapshot(after);
+        return new PreparedGroupUpdates(before, after, count);
+    }
+
+    public int CommitGroupUpdates(PreparedGroupUpdates prepared)
+    {
+        if (!GraphSnapshot.ContentEquals(prepared.Before, CreateSnapshot()))
+            throw new InvalidOperationException("The graph changed; check for updates again.");
+        _history.Execute(new ReplaceGraphSnapshotCommand(this, prepared.Before, prepared.After));
+        ConnectionStatus = $"Updated {prepared.Count} linked group(s).";
+        return prepared.Count;
+    }
+
+    public int ApplyGroupUpdates(IReadOnlyList<GroupUpdateCandidate> candidates)
+    {
+        var prepared = PrepareGroupUpdates(candidates);
+        return prepared is null ? 0 : CommitGroupUpdates(prepared);
     }
 
     public void NavigateToGraph(int depth)
@@ -425,11 +619,14 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             graph = child;
             validDepth++;
         }
+
         if (validDepth < _graphPath.Count) _graphPath.RemoveRange(validDepth, _graphPath.Count - validDepth);
         RestoreCurrentGraph(graph);
         RefreshBreadcrumbs();
         ConnectionStatus = "History state restored.";
     }
+
+    internal void RestoreSnapshotForCommand(GraphSnapshot snapshot) => RestoreFromHistory(snapshot);
 
     private void RestoreCurrentGraph(GraphSnapshot snapshot)
     {
@@ -449,7 +646,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 specification.Id,
                 specification.Curve,
                 specification.ChildGraph,
-                specification.Parameters)
+                specification.Parameters,
+                specification.GroupAsset)
             {
                 IsDetailsExpanded = expandedNodes.Contains(specification.Id)
             };

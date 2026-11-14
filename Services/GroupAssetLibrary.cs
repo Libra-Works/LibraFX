@@ -108,8 +108,16 @@ public sealed class GroupAssetLibrary
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         if (stream.Length > MaxFileBytes) throw new InvalidDataException("Group asset is too large.");
-        var asset = JsonSerializer.Deserialize<GroupAsset>(stream, Options)
-            ?? throw new InvalidDataException("Group asset is empty.");
+        GroupAsset asset;
+        try
+        {
+            asset = JsonSerializer.Deserialize<GroupAsset>(stream, Options)
+                ?? throw new InvalidDataException("Group asset is empty.");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException("Group asset contains invalid JSON.", ex);
+        }
         Validate(asset);
         return asset;
     }

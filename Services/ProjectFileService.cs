@@ -38,7 +38,8 @@ public sealed class ProjectFileService
                     node.Y,
                     node.Curve,
                     node.ChildGraph,
-                    node.Parameters))
+                    node.Parameters,
+                    node.GroupAsset))
                 .ToList(),
             Connections = snapshot.Connections
                 .Select(connection => new LiberaFxProjectConnection(

@@ -150,20 +150,26 @@ public partial class GraphEditorView : UserControl
 
     private void OnGraphCanvasDragOver(object? sender, DragEventArgs e)
     {
-        e.DragEffects = TryGetNodeKind(e, out _) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.DragEffects = TryGetNodeKind(e, out _) || TryGetGroupId(e, out _)
+            ? DragDropEffects.Copy : DragDropEffects.None;
     }
 
     private void OnGraphCanvasDrop(object? sender, DragEventArgs e)
     {
-        if (DataContext is not GraphWorkspaceViewModel graph ||
-            !TryGetNodeKind(e, out var kind))
-        {
-            return;
-        }
+        if (DataContext is not GraphWorkspaceViewModel graph) return;
 
         var position = ToGraphPoint(e.GetPosition(GraphCanvas));
-        try { graph.CreateNode(kind, position.X, position.Y); }
-        catch (InvalidOperationException ex) { graph.ReportStatus(ex.Message); }
+        try
+        {
+            if (TryGetGroupId(e, out var assetId)) graph.CreateGroupAssetNode(assetId, position.X, position.Y);
+            else if (TryGetNodeKind(e, out var kind)) graph.CreateNode(kind, position.X, position.Y);
+            else return;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
+                                   InvalidOperationException or ArgumentException)
+        {
+            graph.ReportStatus(ex.Message);
+        }
         e.Handled = true;
     }
 
@@ -175,8 +181,17 @@ public partial class GraphEditorView : UserControl
             kind = definition!.Kind;
             return true;
         }
+
         kind = default;
         return false;
+    }
+
+    private static bool TryGetGroupId(DragEventArgs e, out Guid id)
+    {
+        var text = e.DataTransfer.TryGetText();
+        id = Guid.Empty;
+        return text is not null && text.StartsWith(NodeCatalogEntryViewModel.GroupPrefix, StringComparison.Ordinal) &&
+               Guid.TryParse(text[NodeCatalogEntryViewModel.GroupPrefix.Length..], out id) && id != Guid.Empty;
     }
 
     private void OnBackgroundPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -346,6 +361,7 @@ public partial class GraphEditorView : UserControl
     private void ShowNodeSearch(Point position)
     {
         _nodeSearchPosition = position;
+        if (DataContext is GraphWorkspaceViewModel graph) graph.GroupAssets?.Refresh();
         NodeSearchBox.Text = string.Empty;
         RefreshNodeSearch();
         NodeSearchPopup.IsOpen = true;
@@ -358,12 +374,15 @@ public partial class GraphEditorView : UserControl
     {
         if (NodeSearchResults is null || NodeSearchBox is null) return;
         var search = NodeSearchBox.Text?.Trim() ?? string.Empty;
-        var entries = GraphNodeDefinition.All
-            .Where(definition => definition.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                                 definition.Kind.Value.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                                 definition.QualifiedName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                                 definition.Group.Contains(search, StringComparison.OrdinalIgnoreCase))
-            .Select(definition => new NodeCatalogEntryViewModel(definition)).ToArray();
+        var entries = GraphNodeDefinition.All.Select(definition => new NodeCatalogEntryViewModel(definition))
+            .Concat((DataContext as GraphWorkspaceViewModel)?.GroupAssets?.Assets
+                .Select(asset => new NodeCatalogEntryViewModel(asset)) ?? [])
+            .Where(entry => entry.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                            entry.KindName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                            entry.QualifiedName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                            entry.Namespace.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                            entry.Group.Contains(search, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
         NodeSearchResults.ItemsSource = entries;
         NodeSearchResults.SelectedIndex = entries.Length > 0 ? 0 : -1;
     }
@@ -391,10 +410,18 @@ public partial class GraphEditorView : UserControl
     private void AddSearchSelection()
     {
         if (DataContext is not GraphWorkspaceViewModel graph ||
-            NodeSearchResults.SelectedItem is not NodeCatalogEntryViewModel entry ||
-            !GraphNodeDefinition.TryFind(entry.KindName, out var definition)) return;
-        try { graph.CreateNode(definition!.Kind, _nodeSearchPosition.X, _nodeSearchPosition.Y); }
-        catch (InvalidOperationException ex) { graph.ReportStatus(ex.Message); }
+            NodeSearchResults.SelectedItem is not NodeCatalogEntryViewModel entry) return;
+        try
+        {
+            if (entry.GroupAssetId is { } id) graph.CreateGroupAssetNode(id, _nodeSearchPosition.X, _nodeSearchPosition.Y);
+            else if (GraphNodeDefinition.TryFind(entry.KindName, out var definition))
+                graph.CreateNode(definition!.Kind, _nodeSearchPosition.X, _nodeSearchPosition.Y);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
+                                   InvalidOperationException or ArgumentException)
+        {
+            graph.ReportStatus(ex.Message);
+        }
         NodeSearchPopup.IsOpen = false;
         Focus();
     }
@@ -583,6 +610,23 @@ public partial class GraphEditorView : UserControl
     private void OnGroupSelectionClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is GraphWorkspaceViewModel graph) graph.GroupSelection();
+    }
+
+    private void OnSaveGroupClick(object? sender, RoutedEventArgs e) =>
+        RunGroupAction(graph => graph.SaveSelectedGroupAsset());
+
+    private void OnToggleGroupLockClick(object? sender, RoutedEventArgs e) =>
+        RunGroupAction(graph => graph.ToggleSelectedGroupAssetLock());
+
+    private void RunGroupAction(Action<GraphWorkspaceViewModel> action)
+    {
+        if (DataContext is not GraphWorkspaceViewModel graph) return;
+        try { action(graph); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
+                                   InvalidOperationException or ArgumentException)
+        {
+            graph.ReportStatus(ex.Message);
+        }
     }
 
     private void ZoomBy(double factor) =>

@@ -4,8 +4,11 @@
              x:Class="LiberaFx.Views.NodeCatalogView"
              x:DataType="vm:NodeCatalogViewModel">
     <Grid RowDefinitions="Auto,*,Auto">
-        <TextBox Margin="10" PlaceholderText="Search nodes"
-                 Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+        <Grid ColumnDefinitions="*,Auto" Margin="10" ColumnSpacing="6">
+            <TextBox PlaceholderText="Search nodes"
+                     Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            <Button Grid.Column="1" Content="Refresh" Command="{Binding RefreshCommand}" />
+        </Grid>
         <ScrollViewer Grid.Row="1">
         <StackPanel Margin="10,0,10,10" Spacing="6">
             <ItemsControl ItemsSource="{Binding Groups}">
@@ -20,7 +23,7 @@
                                     <DataTemplate DataType="vm:NodeCatalogEntryViewModel">
                                         <Border Padding="8,5" Margin="0,1"
                                                 Background="{DynamicResource EffectSurfaceBrush}"
-                                                Tag="{Binding KindName}"
+                                                Tag="{Binding DragIdentifier}"
                                                 ToolTip.Tip="Drag to graph"
                                                 PointerPressed="OnNodePointerPressed"
                                                 PointerMoved="OnNodePointerMoved"

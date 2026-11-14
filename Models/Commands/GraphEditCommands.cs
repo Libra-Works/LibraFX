@@ -25,6 +25,26 @@ public sealed class SetFCurveCommand(
     public void Undo() => node.SetCurveValue(oldCurve);
 }
 
+public sealed class SetGroupAssetCommand(
+    GraphNodeViewModel node,
+    GroupAssetReference? previous,
+    GroupAssetReference? current) : IUndoableCommand
+{
+    public string Description => $"Link {node.Name} to group asset";
+    public void Execute() => node.SetGroupAssetValue(current);
+    public void Undo() => node.SetGroupAssetValue(previous);
+}
+
+public sealed class ReplaceGraphSnapshotCommand(
+    GraphWorkspaceViewModel graph,
+    GraphSnapshot before,
+    GraphSnapshot after) : IUndoableCommand
+{
+    public string Description => "Update linked groups";
+    public void Execute() => graph.RestoreSnapshotForCommand(after);
+    public void Undo() => graph.RestoreSnapshotForCommand(before);
+}
+
 public sealed class AddGraphNodeCommand : IUndoableCommand
 {
     private readonly GraphWorkspaceViewModel _graph;

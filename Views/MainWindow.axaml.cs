@@ -1,5 +1,8 @@
 using Avalonia.Controls;
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
+using Avalonia.Threading;
 using LiberaFx.ViewModels;
 
 namespace LiberaFx.Views;
@@ -8,9 +11,16 @@ public partial class MainWindow : Window
 {
     private LogWindow? _logWindow;
     private McpWindow? _mcpWindow;
+    private MainViewModel? _groupModel;
+    private bool _checkingGroupUpdates;
+    private bool _pendingGroupCheck;
+    private readonly HashSet<(string Document, Guid Node, long Revision)> _deferredGroupUpdates = [];
     public MainWindow()
     {
         InitializeComponent();
+        DataContextChanged += OnGroupDataContextChanged;
+        Opened += (_, _) => QueueGroupUpdateCheck();
+        Closed += (_, _) => DetachGroupEvents();
     }
 
     private void OnMainKeyDown(object? sender, KeyEventArgs e)
@@ -35,6 +45,7 @@ public partial class MainWindow : Window
             DataContext = DataContext
         };
         await settings.ShowDialog(this);
+        QueueGroupUpdateCheck();
     }
 
     private async void OnHelpClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
@@ -95,6 +106,83 @@ public partial class MainWindow : Window
                  await viewModel.SaveAllDocumentsAsync())
         {
             viewModel.CloseActiveDocument(discardChanges: false);
+        }
+    }
+
+    private void OnGroupDataContextChanged(object? sender, EventArgs e)
+    {
+        DetachGroupEvents();
+        if (DataContext is not MainViewModel model) return;
+        _groupModel = model;
+        model.GroupAssets.Changed += OnGroupCatalogChanged;
+        model.ActiveGraphProvider.PropertyChanged += OnActiveGraphChanged;
+        if (IsVisible) QueueGroupUpdateCheck();
+    }
+
+    private void DetachGroupEvents()
+    {
+        if (_groupModel is null) return;
+        _groupModel.GroupAssets.Changed -= OnGroupCatalogChanged;
+        _groupModel.ActiveGraphProvider.PropertyChanged -= OnActiveGraphChanged;
+        _groupModel = null;
+    }
+
+    private void OnGroupCatalogChanged(object? sender, EventArgs e) => QueueGroupUpdateCheck();
+
+    private void OnActiveGraphChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ActiveGraphProvider.Graph)) QueueGroupUpdateCheck();
+    }
+
+    private void QueueGroupUpdateCheck()
+    {
+        _pendingGroupCheck = true;
+        Dispatcher.UIThread.Post(async () => await CheckGroupUpdatesAsync());
+    }
+
+    private async Task CheckGroupUpdatesAsync()
+    {
+        if (_checkingGroupUpdates || !IsVisible || _groupModel is not { } model) return;
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop &&
+            desktop.Windows.OfType<SettingsWindow>().Any(window => window.IsVisible)) return;
+        _pendingGroupCheck = false;
+        _checkingGroupUpdates = true;
+        try
+        {
+            var batches = model.Documents.Select(document => new
+            {
+                Document = document,
+                Candidates = document.Workspace.FindGroupUpdates()
+                    .Where(item => !_deferredGroupUpdates.Contains((document.Id, item.NodeId, item.LatestRevision)))
+                    .ToArray()
+            }).Where(batch => batch.Candidates.Length != 0).ToArray();
+            if (batches.Length == 0) return;
+            var candidates = batches.SelectMany(batch => batch.Candidates).ToArray();
+            var update = await new GroupUpdatesWindow(candidates).ShowDialog<bool>(this);
+            var prepared = update
+                ? batches.Where(batch => model.Documents.Contains(batch.Document))
+                    .Select(batch => (batch.Document, Updates: batch.Document.Workspace.PrepareGroupUpdates(batch.Candidates)))
+                    .ToArray()
+                : [];
+            foreach (var item in prepared)
+                if (item.Updates is not null) item.Document.Workspace.CommitGroupUpdates(item.Updates);
+            foreach (var batch in batches)
+            {
+                if (!model.Documents.Contains(batch.Document)) continue;
+                foreach (var item in batch.Candidates.Where(item => !update || item.HasLocalChanges))
+                    _deferredGroupUpdates.Add((batch.Document.Id, item.NodeId, item.LatestRevision));
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
+                                   InvalidOperationException or ArgumentException)
+        {
+            model.Log.Add("Groups", $"Could not update groups: {ex.Message}");
+            model.ActiveGraphProvider.Graph.ReportStatus($"Could not update groups: {ex.Message}");
+        }
+        finally
+        {
+            _checkingGroupUpdates = false;
+            if (_pendingGroupCheck) QueueGroupUpdateCheck();
         }
     }
 

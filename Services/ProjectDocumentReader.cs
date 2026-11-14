@@ -8,7 +8,7 @@ namespace LiberaFx.Services;
 
 public static class ProjectDocumentReader
 {
-    public const int CurrentFormatVersion = 6;
+    public const int CurrentFormatVersion = 7;
     private static readonly JsonSerializerOptions Options = new()
     {
         Converters = { new JsonStringEnumConverter() }
@@ -30,7 +30,8 @@ public static class ProjectDocumentReader
             if (node is null || !GraphNodeDefinition.TryFind(node.Kind, out var definition))
                 throw new InvalidDataException("The project contains an unknown node type.");
             nodes.Add(new GraphNodeSnapshot(node.Id, definition!.Kind, node.Name, node.X, node.Y,
-                definition.PortType, definition.PortCategory, node.Curve, node.ChildGraph, node.Parameters));
+                definition.PortType, definition.PortCategory, node.Curve, node.ChildGraph, node.Parameters,
+                node.GroupAsset));
         }
         var connections = document.Connections.Select(connection => connection is null
             ? throw new InvalidDataException("The project contains an empty connection.")

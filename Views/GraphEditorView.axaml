@@ -63,6 +63,10 @@
                         IsEnabled="{Binding HasSelection}" />
                 <Button Content="Group" Click="OnGroupSelectionClick"
                         IsEnabled="{Binding HasSelection}" />
+                <Button Content="Save group" Click="OnSaveGroupClick"
+                        ToolTip.Tip="Save the selected group to the active project library" />
+                <Button Content="Lock / unlock group" Click="OnToggleGroupLockClick"
+                        ToolTip.Tip="Toggle editing of the selected saved group asset" />
                 <TextBlock Text="{Binding ConnectionStatus}"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource EffectMutedForegroundBrush}" />

@@ -35,6 +35,7 @@ public sealed class GraphNodeViewModel : ObservableObject
     public FCurveSnapshot? Curve => _curve;
     public IReadOnlyList<NodeParameterSnapshot>? Parameters => _parameters;
     public GraphSnapshot? ChildGraph { get; }
+    public GroupAssetReference? GroupAsset { get; private set; }
     public bool IsGraphGroup => ChildGraph is not null;
     public bool IsComment => Definition.Kind == GraphNodeKind.Comment;
     public bool HasPorts => !IsGraphGroup && !IsComment;
@@ -109,7 +110,8 @@ public sealed class GraphNodeViewModel : ObservableObject
         Guid? id = null,
         FCurveSnapshot? curve = null,
         GraphSnapshot? childGraph = null,
-        IReadOnlyList<NodeParameterSnapshot>? parameters = null)
+        IReadOnlyList<NodeParameterSnapshot>? parameters = null,
+        GroupAssetReference? groupAsset = null)
     {
         _workspace = workspace;
         Definition = definition;
@@ -119,6 +121,7 @@ public sealed class GraphNodeViewModel : ObservableObject
         _y = y;
         _curve = definition.Kind == GraphNodeKind.FloatFCurve ? curve ?? FCurve.CreateDefault() : null;
         ChildGraph = definition.Kind == GraphNodeKind.GraphGroup ? childGraph ?? new GraphSnapshot([], []) : null;
+        GroupAsset = definition.Kind == GraphNodeKind.GraphGroup ? groupAsset : null;
         _parameters = parameters;
         InlineParameters = definition.Parameters.Where(parameter => !IsComment || parameter.Id != "image")
             .Select(parameter => new NodeParameterEditorViewModel(workspace, this, parameter)).ToArray();
@@ -174,6 +177,12 @@ public sealed class GraphNodeViewModel : ObservableObject
             OnPropertyChanged(nameof(CommentHeight));
             OnPropertyChanged(nameof(RenderedWidth));
         }
+    }
+
+    internal void SetGroupAssetValue(GroupAssetReference? value)
+    {
+        GroupAsset = value;
+        OnPropertyChanged(nameof(GroupAsset));
     }
 
     internal void PreviewCommentSize(double width, double height)

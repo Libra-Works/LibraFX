@@ -1,0 +1,21 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="LiberaFx.Views.GroupUpdatesWindow"
+        Title="Group updates available" Width="520" Height="330" MinWidth="420" MinHeight="280"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource EffectWindowBackgroundBrush}">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="20" RowSpacing="12">
+        <TextBlock Text="Group assets have changed" FontSize="20" FontWeight="SemiBold" />
+        <ScrollViewer Grid.Row="1">
+            <StackPanel Spacing="8">
+                <TextBlock x:Name="Summary" TextWrapping="Wrap" />
+                <TextBlock x:Name="Details" TextWrapping="Wrap"
+                           Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            </StackPanel>
+        </ScrollViewer>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="Keep current versions" Click="OnKeepClick" />
+            <Button x:Name="ApplyButton" Content="Update all unchanged" Click="OnApplyClick" />
+        </StackPanel>
+    </Grid>
+</Window>
