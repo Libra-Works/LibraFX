@@ -16,8 +16,12 @@ public sealed class McpHost
 {
     public const int Port = 8765;
     public const string Endpoint = "http://127.0.0.1:8765/mcp";
+    private readonly int _port;
+    public string ActualEndpoint => $"http://127.0.0.1:{_port}/mcp";
     public string AccessToken { get; } = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
     private WebApplication? _app;
+
+    public McpHost(int port = Port) => _port = port;
 
     public async Task StartAsync(ActiveGraphProvider activeGraph)
     {
@@ -29,7 +33,7 @@ public sealed class McpHost
         });
         // Do not allow application or environment configuration to add Kestrel endpoints.
         builder.Configuration.Sources.Clear();
-        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, Port));
+        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, _port));
         builder.Services.AddSingleton(activeGraph);
         builder.Services.AddMcpServer()
             .WithHttpTransport(options => options.Stateless = true)
@@ -44,7 +48,7 @@ public sealed class McpHost
                 var host = context.Request.Host;
                 var loopbackHost = string.Equals(host.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
                                    string.Equals(host.Host, "localhost", StringComparison.OrdinalIgnoreCase);
-                if (!loopbackHost || (host.Port is not null && host.Port != Port) ||
+                if (!loopbackHost || (host.Port is not null && host.Port != _port) ||
                     context.Connection.RemoteIpAddress is not { } remote || !IPAddress.IsLoopback(remote) ||
                     context.Request.Headers.ContainsKey("Origin"))
                 {

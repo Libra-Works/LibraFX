@@ -11,8 +11,8 @@ namespace LiberaFx;
 
 public partial class App : Application
 {
-    private readonly McpHost _mcpHost = new();
-    private readonly PreviewHost _previewHost = new();
+    private readonly McpHost _mcpHost = new(DebugPort("LIBERAFX_MCP_DEBUG_PORT", McpHost.Port));
+    private readonly PreviewHost _previewHost = new(DebugPort("LIBERAFX_PREVIEW_DEBUG_PORT", PreviewHost.Port));
     private Task _mcpStart = Task.CompletedTask;
     private Task _previewStart = Task.CompletedTask;
     private bool _shutdownInProgress;
@@ -27,7 +27,8 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            var viewModel = new MainViewModel(_mcpHost.AccessToken, _previewHost.AccessToken, _previewHost.Fingerprint);
+            var viewModel = new MainViewModel(_mcpHost.AccessToken, _previewHost.AccessToken, _previewHost.Fingerprint,
+                _mcpHost.ActualEndpoint, _previewHost.ActualEndpoint);
             var window = new MainWindow
             {
                 DataContext = viewModel,
@@ -52,6 +53,11 @@ public partial class App : Application
 
         base.OnFrameworkInitializationCompleted();
     }
+
+    private static int DebugPort(string name, int fallback) =>
+        Environment.GetEnvironmentVariable("LIBERAFX_MCP_DEBUG") == "1" &&
+        int.TryParse(Environment.GetEnvironmentVariable(name), out var port) && port is >= 1024 and <= 65535
+            ? port : fallback;
 
     private async Task StartPreviewAsync(MainViewModel viewModel)
     {

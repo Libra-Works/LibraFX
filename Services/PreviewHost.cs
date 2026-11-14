@@ -21,6 +21,8 @@ public sealed class PreviewHost : IDisposable
 {
     public const int Port = 8766;
     public const string Endpoint = "wss://<editor-ip>:8766/preview";
+    private readonly int _port;
+    public string ActualEndpoint => $"wss://<editor-ip>:{_port}/preview";
     private const int MaxClients = 16;
     private readonly X509Certificate2 _certificate = CreateCertificate();
     private readonly SemaphoreSlim _clientSlots = new(MaxClients, MaxClients);
@@ -40,6 +42,8 @@ public sealed class PreviewHost : IDisposable
     public string AccessToken { get; } = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
     public string Fingerprint => Convert.ToHexString(SHA256.HashData(_certificate.RawData));
 
+    public PreviewHost(int port = Port) => _port = port;
+
     public async Task StartAsync(MainViewModel model)
     {
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
@@ -53,7 +57,7 @@ public sealed class PreviewHost : IDisposable
         {
             options.Limits.MaxConcurrentConnections = 64;
             options.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(10);
-            options.Listen(IPAddress.Any, Port, listen => listen.UseHttps(_certificate));
+            options.Listen(IPAddress.Any, _port, listen => listen.UseHttps(_certificate));
         });
 
         var app = builder.Build();

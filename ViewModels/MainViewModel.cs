@@ -26,8 +26,8 @@ public partial class MainViewModel : ViewModelBase
     private int _previewClientCount;
 
     public EditorLog Log { get; } = new();
-    public string McpEndpoint => McpHost.Endpoint;
-    public string PreviewEndpoint => PreviewHost.Endpoint;
+    public string McpEndpoint { get; }
+    public string PreviewEndpoint { get; }
     public string PreviewAccessToken { get; }
     public string PreviewFingerprint { get; }
     public string PreviewStatus
@@ -127,12 +127,15 @@ public partial class MainViewModel : ViewModelBase
         set => ChangeThemeSettings(_themeSettings.Current with { AccentPalette = value });
     }
 
-    public MainViewModel(string mcpAccessToken = "", string previewAccessToken = "", string previewFingerprint = "")
+    public MainViewModel(string mcpAccessToken = "", string previewAccessToken = "", string previewFingerprint = "",
+        string mcpEndpoint = McpHost.Endpoint, string previewEndpoint = PreviewHost.Endpoint)
     {
         Log.Add("Application", "Editor started.");
         McpAccessToken = mcpAccessToken;
         PreviewAccessToken = previewAccessToken;
         PreviewFingerprint = previewFingerprint;
+        McpEndpoint = mcpEndpoint;
+        PreviewEndpoint = previewEndpoint;
         var initialWorkspace = CreateWorkspace();
         var initialDocument = new GraphDocumentViewModel(initialWorkspace)
         {
