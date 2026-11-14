@@ -4,8 +4,8 @@
   "namespace": "LiberaFx",
   "name": "Interpolation",
   "values": [
-    { "value": 0, "name": "Constant" },
-    { "value": 1, "name": "Linear" },
-    { "value": 2, "name": "Smooth" }
+    { "value": 0, "name": "Constant", "displayNameKey": "Editor.Option.Constant" },
+    { "value": 1, "name": "Linear", "displayNameKey": "Editor.Option.Linear" },
+    { "value": 2, "name": "Smooth", "displayNameKey": "Editor.Option.Smooth" }
   ]
 }

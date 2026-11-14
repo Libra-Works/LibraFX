@@ -6,6 +6,7 @@ public sealed record NodeParameterEditorDefinition(string Kind, double? Minimum,
 public sealed record NodeParameterCondition(string Parameter, JsonElement Expected);
 public sealed record NodeParameterDefinition(string Id, string Name, string Type, JsonElement DefaultValue)
 {
+    public string? DisplayNameKey { get; init; }
     public NodeParameterEditorDefinition? Editor { get; init; }
     public NodeParameterCondition? EnabledWhen { get; init; }
 }

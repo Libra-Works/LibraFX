@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using System.Globalization;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services;
@@ -15,9 +16,16 @@ namespace LiberaFx.Views;
 
 public sealed class ParameterEditorHost : ContentControl
 {
+    private readonly List<RadioButton> _booleanOptions = [];
+    private readonly List<TextBlock> _scrubLabels = [];
+    private TextBlock? _missingEditorMessage;
+
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
+        _booleanOptions.Clear();
+        _scrubLabels.Clear();
+        _missingEditorMessage = null;
         if (DataContext is not NodeParameterEditorViewModel parameter)
         {
             Content = null;
@@ -31,14 +39,16 @@ public sealed class ParameterEditorHost : ContentControl
         Bind(IsEnabledProperty, new Binding(nameof(parameter.IsEnabled)));
         var status = new TextBlock { Foreground = Brushes.OrangeRed, TextWrapping = TextWrapping.Wrap };
         status.Bind(TextBlock.TextProperty, new Binding(nameof(parameter.Status)));
-        var missing = new TextBlock
+        _missingEditorMessage = new TextBlock
         {
-            Text = $"Inspector '{editorKind}' is unavailable; using the standard editor.",
             IsVisible = custom is null && editorKind is not (null or "slider" or "text" or "radio"),
             Foreground = Brushes.OrangeRed,
             TextWrapping = TextWrapping.Wrap
         };
-        var label = new TextBlock { Text = parameter.Name, FontWeight = FontWeight.SemiBold };
+        var missing = _missingEditorMessage;
+        missing.IsVisible = custom is null && editorKind is not (null or "slider" or "text" or "radio");
+        var label = new TextBlock { FontWeight = FontWeight.SemiBold };
+        label.Bind(TextBlock.TextProperty, new Binding(nameof(parameter.Name)));
         if (parameter.Type is "float" or "int" && editor is TextBox scalar)
             EnableScrubbing(label, scalar, parameter, nameof(parameter.ValueText));
         Content = new StackPanel
@@ -52,9 +62,39 @@ public sealed class ParameterEditorHost : ContentControl
                 missing
             }
         };
+        RefreshLocalizedLabels(editorKind);
     }
 
-    private static Control CreateStandard(NodeParameterEditorViewModel parameter)
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        LocalizationService.Shared.LanguageChanged += OnLanguageChanged;
+        RefreshLocalizedLabels(DataContext is NodeParameterEditorViewModel parameter ? parameter.Editor?.Kind : null);
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        LocalizationService.Shared.LanguageChanged -= OnLanguageChanged;
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e) =>
+        RefreshLocalizedLabels(DataContext is NodeParameterEditorViewModel parameter ? parameter.Editor?.Kind : null);
+
+    private void RefreshLocalizedLabels(string? editorKind)
+    {
+        if (_missingEditorMessage is not null && DataContext is NodeParameterEditorViewModel parameter)
+            _missingEditorMessage.Text = LocalizationService.Shared.Get("Panels.MissingInspector", editorKind);
+        if (_booleanOptions.Count == 2)
+        {
+            _booleanOptions[0].Content = LocalizationService.Shared.Get("Panels.True");
+            _booleanOptions[1].Content = LocalizationService.Shared.Get("Panels.False");
+        }
+        foreach (var label in _scrubLabels)
+            ToolTip.SetTip(label, LocalizationService.Shared.Get("Panels.ScrubValueHelp"));
+    }
+
+    private Control CreateStandard(NodeParameterEditorViewModel parameter)
     {
         if (parameter.Type == "bool")
         {
@@ -119,11 +159,13 @@ public sealed class ParameterEditorHost : ContentControl
         return CreateTextBox(nameof(parameter.ValueText));
     }
 
-    private static Control CreateBooleanRadio(NodeParameterEditorViewModel parameter)
+    private Control CreateBooleanRadio(NodeParameterEditorViewModel parameter)
     {
         var group = Guid.NewGuid().ToString();
-        var on = new RadioButton { Content = "True", GroupName = group };
-        var off = new RadioButton { Content = "False", GroupName = group };
+        var on = new RadioButton { GroupName = group };
+        var off = new RadioButton { GroupName = group };
+        _booleanOptions.Add(on);
+        _booleanOptions.Add(off);
         var syncing = false;
         void Refresh()
         {
@@ -216,15 +258,16 @@ public sealed class ParameterEditorHost : ContentControl
         return new StackPanel { Spacing = 4, Children = { slider, box } };
     }
 
-    private static void EnableScrubbing(TextBlock label, TextBox box, NodeParameterEditorViewModel parameter, string property)
+    private void EnableScrubbing(TextBlock label, TextBox box, NodeParameterEditorViewModel parameter, string property)
     {
-        label.Cursor = new Cursor(StandardCursorType.SizeWestEast);
-        ToolTip.SetTip(label, "Drag left or right to adjust the value.");
+        _scrubLabels.Add(label);
+        ToolTip.SetTip(label, LocalizationService.Shared.Get("Panels.ScrubValueHelp"));
         IPointer? active = null;
         Point start = default;
         double initial = 0;
         string? original = null;
         string? preview = null;
+        label.Cursor = new Cursor(StandardCursorType.SizeWestEast);
         label.PointerPressed += (_, e) =>
         {
             if (!e.GetCurrentPoint(label).Properties.IsLeftButtonPressed ||

@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:dock="using:Dock.Avalonia.Controls"
         xmlns:vm="using:LiberaFx.ViewModels"
+        xmlns:views="using:LiberaFx.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
@@ -17,39 +18,65 @@
 
     <Grid RowDefinitions="Auto,*,Auto">
         <Menu Grid.Row="0">
-            <MenuItem Header="_File">
-                <MenuItem Header="_New"
-                          Command="{Binding NewDocumentCommand}" />
-                <MenuItem Header="_Open..."
-                          Command="{Binding OpenProjectCommand}" />
+            <MenuItem Header="{DynamicResource Text.Editor.File}">
+                <MenuItem Header="{DynamicResource Text.Editor.New}"
+                          Command="{Binding NewDocumentCommand}">
+                    <MenuItem.Icon><views:EditorIconView Icon="Add" /></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="{DynamicResource Text.Editor.Open}"
+                          Command="{Binding OpenProjectCommand}">
+                    <MenuItem.Icon><views:EditorIconView Icon="Open" /></MenuItem.Icon>
+                </MenuItem>
                 <Separator />
-                <MenuItem Header="_Save"
-                          Command="{Binding SaveProjectCommand}" />
-                <MenuItem Header="Save _As..."
-                          Command="{Binding SaveProjectAsCommand}" />
-                <MenuItem Header="_Export VFX..."
-                          Command="{Binding ExportVfxCommand}" />
+                <MenuItem Header="{DynamicResource Text.Editor.Save}"
+                          Command="{Binding SaveProjectCommand}">
+                    <MenuItem.Icon><views:EditorIconView Icon="Save" /></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="{DynamicResource Text.Editor.SaveAs}"
+                          Command="{Binding SaveProjectAsCommand}">
+                    <MenuItem.Icon><views:EditorIconView Icon="SaveAs" /></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="{DynamicResource Text.Editor.Export}"
+                          Command="{Binding ExportVfxCommand}">
+                    <MenuItem.Icon><views:EditorIconView Icon="Export" /></MenuItem.Icon>
+                </MenuItem>
                 <Separator />
-                <MenuItem Header="_Close Document"
-                          Click="OnCloseDocumentClick" />
+                <MenuItem Header="{DynamicResource Text.Editor.CloseDocument}"
+                          Click="OnCloseDocumentClick">
+                    <MenuItem.Icon><views:EditorIconView Icon="Close" /></MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
-            <MenuItem Header="_Edit">
-                <MenuItem Header="_Undo"
-                          Command="{Binding UndoCommand}" />
-                <MenuItem Header="_Redo"
-                          Command="{Binding RedoCommand}" />
+            <MenuItem Header="{DynamicResource Text.Editor.Edit}">
+                <MenuItem Header="{DynamicResource Text.Editor.Undo}"
+                          Command="{Binding UndoCommand}">
+                    <MenuItem.Icon><views:EditorIconView Icon="Undo" /></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="{DynamicResource Text.Editor.Redo}"
+                          Command="{Binding RedoCommand}">
+                    <MenuItem.Icon><views:EditorIconView Icon="Redo" /></MenuItem.Icon>
+                </MenuItem>
                 <Separator />
-                <MenuItem Header="_Settings..."
-                          Click="OnSettingsClick" />
+                <MenuItem Header="{DynamicResource Text.Editor.Settings}"
+                          Click="OnSettingsClick">
+                    <MenuItem.Icon><views:EditorIconView Icon="Settings" /></MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
-            <MenuItem Header="_View">
-                <MenuItem Header="_Log" Click="OnLogClick" />
-                <MenuItem Header="_MCP connection..." Click="OnMcpClick" />
+            <MenuItem Header="{DynamicResource Text.Editor.View}">
+                <MenuItem Header="{DynamicResource Text.Editor.Log}" Click="OnLogClick">
+                    <MenuItem.Icon><views:EditorIconView Icon="Info" /></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="{DynamicResource Text.Editor.Mcp}" Click="OnMcpClick">
+                    <MenuItem.Icon><views:EditorIconView Icon="Link" /></MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
-            <MenuItem Header="_Help">
-                <MenuItem Header="_Getting started..." Click="OnHelpClick" />
+            <MenuItem Header="{DynamicResource Text.Editor.Help}">
+                <MenuItem Header="{DynamicResource Text.Editor.GettingStarted}" Click="OnHelpClick">
+                    <MenuItem.Icon><views:EditorIconView Icon="Help" /></MenuItem.Icon>
+                </MenuItem>
                 <Separator />
-                <MenuItem Header="_About LIBERA FX..." Click="OnAboutClick" />
+                <MenuItem Header="{DynamicResource Text.Editor.About}" Click="OnAboutClick">
+                    <MenuItem.Icon><views:EditorIconView Icon="Info" /></MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
         </Menu>
 

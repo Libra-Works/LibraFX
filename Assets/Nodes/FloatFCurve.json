@@ -4,6 +4,8 @@
   "namespace": "LiberaFx",
   "kind": "FloatFCurve",
   "name": "Float F-Curve",
+  "displayNameKey": "Editor.Node.FloatFCurve",
+  "groupNameKey": "Editor.NodeGroup.Curves",
   "group": "Curve nodes",
   "portType": "Float",
   "portCategory": "Parameter"

@@ -36,6 +36,7 @@ public sealed class NodeCatalogViewModel : Tool
         RefreshCommand = new RelayCommand(() => _groups?.Refresh());
         if (_groups is not null) _groups.Changed += (_, _) => RefreshEntries();
         RefreshEntries();
+        MessageLocalization.Observe(this, static catalog => catalog.RefreshEntries());
     }
 
     private void RefreshEntries()
@@ -52,6 +53,7 @@ public sealed class NodeCatalogViewModel : Tool
         var search = SearchText.Trim();
         var groups = _entries
             .Where(entry => entry.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                            entry.OriginalName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.KindName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.QualifiedName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.Namespace.Contains(search, StringComparison.OrdinalIgnoreCase) ||
@@ -78,6 +80,7 @@ public sealed class NodeCatalogEntryViewModel
 {
     public const string GroupPrefix = "liberafx-group:";
     public string Name { get; }
+    public string OriginalName { get; }
 
     public string KindName { get; }
 
@@ -89,21 +92,23 @@ public sealed class NodeCatalogEntryViewModel
 
     public NodeCatalogEntryViewModel(GraphNodeDefinition definition)
     {
-        Name = definition.Name;
+        Name = LocalizationService.Shared.GetOrDefault(definition.DisplayNameKey, definition.Name);
+        OriginalName = definition.Name;
         KindName = definition.Kind.ToString();
         Namespace = definition.Namespace;
         QualifiedName = definition.QualifiedName;
-        Group = $"{definition.Namespace} / {definition.Group}";
+        Group = $"{definition.Namespace} / {LocalizationService.Shared.GetOrDefault(definition.GroupNameKey, definition.Group)}";
         DragIdentifier = definition.Kind.ToString();
     }
 
     public NodeCatalogEntryViewModel(GroupAsset asset)
     {
         Name = asset.Name;
+        OriginalName = asset.Name;
         KindName = "GraphGroup";
         Namespace = "Project";
         QualifiedName = $"Project.{asset.Name}";
-        Group = "Project / Groups";
+        Group = LocalizationService.Shared.Get("Messages.ProjectGroups");
         GroupAssetId = asset.Id;
         DragIdentifier = GroupPrefix + asset.Id.ToString("D");
     }

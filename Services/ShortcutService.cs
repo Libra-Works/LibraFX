@@ -7,20 +7,36 @@ namespace LiberaFx.Services;
 
 public sealed class ShortcutEntry : ObservableObject
 {
+    private readonly string _label;
+
     internal ShortcutEntry(string id, string label, string scope, Key key, KeyModifiers modifiers)
     {
         Id = id;
-        Label = label;
+        _label = label;
         Scope = scope;
         Key = key;
         Modifiers = modifiers;
         DefaultKey = key;
         DefaultModifiers = modifiers;
+        MessageLocalization.Observe(this, static entry =>
+        {
+            entry.OnPropertyChanged(nameof(Label));
+            entry.OnPropertyChanged(nameof(ScopeLabel));
+        });
     }
 
     public string Id { get; }
-    public string Label { get; }
+    public string Label
+    {
+        get
+        {
+            var key = "Messages.Shortcut." + Id;
+            var text = LocalizationService.Shared.Get(key);
+            return text == key ? _label : text;
+        }
+    }
     public string Scope { get; }
+    public string ScopeLabel => LocalizationService.Shared.Get("Messages.ShortcutScope." + Scope);
     public string Gesture => new KeyGesture(Key, Modifiers).ToString();
     internal Key Key { get; private set; }
     internal KeyModifiers Modifiers { get; private set; }
@@ -41,7 +57,8 @@ public sealed class ShortcutService : ObservableObject
     private string _curveZoomModifier = "None";
     private string _graphPanButton = "Right + Middle";
     private string _graphZoomModifier = "None";
-    private string _status = "Click a shortcut and press a key combination.";
+    private string _statusKey = "Messages.ShortcutHint";
+    private object?[] _statusArgs = [];
 
     public static ShortcutService Shared { get; } = new(Path.Combine(
         AppDataDirectory.Root, "LiberaFx", "shortcuts.json"));
@@ -68,7 +85,7 @@ public sealed class ShortcutService : ObservableObject
     public IReadOnlyList<string> PanOptions { get; } = ["Middle", "Right"];
     public IReadOnlyList<string> GraphPanOptions { get; } = ["Right + Middle", "Right", "Middle"];
     public IReadOnlyList<string> ZoomOptions { get; } = ["None", "Control"];
-    public string Status { get => _status; private set => SetProperty(ref _status, value); }
+    public string Status => LocalizationService.Shared.Get(_statusKey, _statusArgs);
     public string CurvePanButton
     {
         get => _curvePanButton;
@@ -93,7 +110,20 @@ public sealed class ShortcutService : ObservableObject
     public ShortcutService(string path)
     {
         _path = path;
+        MessageLocalization.Observe(this, static service => service.OnPropertyChanged(nameof(Status)));
         Load();
+    }
+
+    private void SetStatus(string key, params object?[] args)
+    {
+        _statusKey = key;
+        _statusArgs = args;
+        OnPropertyChanged(nameof(Status));
+    }
+
+    private sealed record ShortcutText(ShortcutEntry Entry, bool IsScope = false)
+    {
+        public override string ToString() => IsScope ? Entry.ScopeLabel : Entry.Label;
     }
 
     public bool Matches(string id, KeyEventArgs e)
@@ -108,7 +138,7 @@ public sealed class ShortcutService : ObservableObject
         modifiers &= ModifierMask;
         if (!Enum.IsDefined(key) || key == Key.None || key == Key.Escape || key == Key.Tab || IsModifier(key))
         {
-            Status = "Choose a non-modifier key other than Tab or Escape.";
+            SetStatus("Messages.ShortcutChooseKey");
             return;
         }
 
@@ -117,7 +147,7 @@ public sealed class ShortcutService : ObservableObject
             other.Key == key && other.Modifiers == modifiers);
         if (conflict is not null)
         {
-            Status = $"Already assigned to {conflict.Label} ({conflict.Scope}).";
+            SetStatus("Messages.ShortcutConflict", new ShortcutText(conflict), new ShortcutText(conflict, true));
             return;
         }
 
@@ -129,7 +159,7 @@ public sealed class ShortcutService : ObservableObject
             entry.Set(oldKey, oldModifiers);
             return;
         }
-        Status = $"{entry.Label}: {entry.Gesture}";
+        SetStatus("Messages.ShortcutAssigned", new ShortcutText(entry), entry.Gesture);
     }
 
     public void Reset()
@@ -152,7 +182,7 @@ public sealed class ShortcutService : ObservableObject
             _graphPanButton = oldGraphPan;
             _graphZoomModifier = oldGraphZoom;
         }
-        else Status = "Default shortcuts restored.";
+        else SetStatus("Messages.ShortcutsRestored");
         OnPropertyChanged(nameof(CurvePanButton));
         OnPropertyChanged(nameof(CurveZoomModifier));
         OnPropertyChanged(nameof(GraphPanButton));
@@ -165,7 +195,7 @@ public sealed class ShortcutService : ObservableObject
         var old = field;
         field = value;
         if (!TrySave()) field = old;
-        else Status = "Mouse shortcut saved.";
+        else SetStatus("Messages.MouseShortcutSaved");
         OnPropertyChanged(property);
     }
 
@@ -192,7 +222,7 @@ public sealed class ShortcutService : ObservableObject
                 Enumerable.Range(i + 1, Entries.Count - i - 1).Any(j =>
                     loaded[i] && loaded[j] && ScopesConflict(Entries[i], Entries[j]) &&
                     desired[i] == desired[j]));
-            if (conflict) Status = "Conflicting saved shortcuts; defaults are in use.";
+            if (conflict) SetStatus("Messages.SavedShortcutConflict");
             else
             {
                 for (var i = 0; i < Entries.Count; i++)
@@ -205,7 +235,7 @@ public sealed class ShortcutService : ObservableObject
                             ((Key)key, KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift));
                         desired[i] = candidates.First(candidate => !Enumerable.Range(0, Entries.Count).Any(j =>
                             loaded[j] && ScopesConflict(Entries[i], Entries[j]) && desired[j] == candidate));
-                        Status = "Some new shortcuts were reassigned to preserve your existing settings.";
+                        SetStatus("Messages.ShortcutsReassigned");
                     }
                     loaded[i] = true;
                 }
@@ -218,7 +248,7 @@ public sealed class ShortcutService : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
         {
-            Status = "Could not load shortcuts; defaults are in use.";
+            SetStatus("Messages.LoadShortcutsFailed");
         }
     }
 
@@ -243,7 +273,7 @@ public sealed class ShortcutService : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            Status = $"Could not save shortcuts: {ex.Message}";
+            SetStatus("Messages.SaveShortcutsFailed", ex.Message);
             return false;
         }
         finally

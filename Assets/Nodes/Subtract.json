@@ -4,6 +4,8 @@
   "namespace": "LiberaFx",
   "kind": "Subtract",
   "name": "Subtract",
+  "displayNameKey": "Editor.Node.Subtract",
+  "groupNameKey": "Editor.NodeGroup.Math",
   "group": "Math",
   "portType": "Float",
   "portCategory": "Parameter",

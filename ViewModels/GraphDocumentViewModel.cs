@@ -1,6 +1,7 @@
 using Dock.Model.Mvvm.Controls;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
+using LiberaFx.Services;
 
 namespace LiberaFx.ViewModels;
 
@@ -9,7 +10,7 @@ public sealed class GraphDocumentViewModel : Document
     private GraphSnapshot _savedSnapshot;
     private Guid? _savedHistoryRevisionId;
     private Guid? _savedHistoryNodeId;
-    private string _fileName = "Untitled";
+    private string _fileName = LocalizationService.Shared.Get("Messages.Untitled");
     private bool _isDirty;
 
     public GraphWorkspaceViewModel Workspace { get; }
@@ -46,7 +47,7 @@ public sealed class GraphDocumentViewModel : Document
         GraphSnapshot savedSnapshot,
         UndoRedoHistorySnapshot? savedHistory)
     {
-        _fileName = string.IsNullOrWhiteSpace(fileName) ? "Untitled" : fileName;
+        _fileName = string.IsNullOrWhiteSpace(fileName) ? LocalizationService.Shared.Get("Messages.Untitled") : fileName;
         FileKey = fileKey;
         _savedSnapshot = savedSnapshot;
         _savedHistoryRevisionId = savedHistory?.TimelineRevisionId;

@@ -8,17 +8,19 @@ public sealed class ServerSettingsService : ObservableObject
     private readonly string _path;
     private string _mcpPort;
     private string _previewPort;
-    private string _status = "Changes take effect after restarting LIBERA FX.";
+    private string _statusKey = "Messages.ServerRestartRequired";
+    private object?[] _statusArgs = [];
 
     public int StartupMcpPort { get; }
     public int StartupPreviewPort { get; }
     public string McpPort { get => _mcpPort; set => SetProperty(ref _mcpPort, value); }
     public string PreviewPort { get => _previewPort; set => SetProperty(ref _previewPort, value); }
-    public string Status { get => _status; private set => SetProperty(ref _status, value); }
+    public string Status => LocalizationService.Shared.Get(_statusKey, _statusArgs);
 
     public ServerSettingsService(string? path = null)
     {
         _path = path ?? Path.Combine(AppDataDirectory.Root, "LiberaFx", "server-settings.json");
+        MessageLocalization.Observe(this, static service => service.OnPropertyChanged(nameof(Status)));
         var settings = new ServerSettings(McpHost.Port, PreviewHost.Port);
         try
         {
@@ -32,7 +34,7 @@ public sealed class ServerSettingsService : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)
         {
-            Status = $"Could not load server settings: {ex.Message} Using defaults.";
+            SetStatus("Messages.LoadServerSettingsFailed", ex.Message);
         }
         StartupMcpPort = settings.McpPort;
         StartupPreviewPort = settings.PreviewPort;
@@ -45,7 +47,7 @@ public sealed class ServerSettingsService : ObservableObject
         if (!int.TryParse(McpPort, out var mcp) || !int.TryParse(PreviewPort, out var preview) ||
             !Valid(new ServerSettings(mcp, preview)))
         {
-            Status = "Enter two different ports between 1024 and 65535.";
+            SetStatus("Messages.EnterServerPorts");
             return;
         }
         string? temporary = null;
@@ -58,11 +60,11 @@ public sealed class ServerSettingsService : ObservableObject
                 new JsonSerializerOptions { WriteIndented = true }));
             File.Move(temporary, _path, true);
             temporary = null;
-            Status = "Saved. Restart LIBERA FX to use these ports.";
+            SetStatus("Messages.ServerSettingsSaved");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Status = $"Could not save server settings: {ex.Message}";
+            SetStatus("Messages.SaveServerSettingsFailed", ex.Message);
         }
         finally
         {
@@ -72,6 +74,13 @@ public sealed class ServerSettingsService : ObservableObject
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
             }
         }
+    }
+
+    private void SetStatus(string key, params object?[] args)
+    {
+        _statusKey = key;
+        _statusArgs = args;
+        OnPropertyChanged(nameof(Status));
     }
 
     private static bool Valid(ServerSettings settings) =>

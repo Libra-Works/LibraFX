@@ -4,6 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Threading;
 using LiberaFx.ViewModels;
+using LiberaFx.Services;
 
 namespace LiberaFx.Views;
 
@@ -176,8 +177,10 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
                                    InvalidOperationException or ArgumentException)
         {
-            model.Log.Add("Groups", $"Could not update groups: {ex.Message}");
-            model.ActiveGraphProvider.Graph.ReportStatus($"Could not update groups: {ex.Message}");
+            var detail = MessageLocalization.Error(ex.Message);
+            var message = LocalizationService.Shared.Get("Editor.GroupUpdateError", detail);
+            model.Log.Add("Groups", message);
+            model.ActiveGraphProvider.Graph.SetConnectionStatus("Editor.GroupUpdateError", detail);
         }
         finally
         {

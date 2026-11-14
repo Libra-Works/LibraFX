@@ -53,7 +53,11 @@ public partial class GraphEditorView : UserControl
         GraphScrollViewer.AddHandler(InputElement.PointerWheelChangedEvent, OnViewportPointerWheelChanged,
             RoutingStrategies.Tunnel);
         AttachedToVisualTree += (_, _) => Dispatcher.UIThread.Post(InitializeViewport);
+        AttachedToVisualTree += (_, _) => LocalizationService.Shared.LanguageChanged += OnLanguageChanged;
+        DetachedFromVisualTree += (_, _) => LocalizationService.Shared.LanguageChanged -= OnLanguageChanged;
     }
+
+    private void OnLanguageChanged(object? sender, EventArgs e) => RefreshNodeSearch();
 
     internal Point ToGraphPoint(Point canvasPoint) =>
         new(canvasPoint.X - _graphOrigin.X, canvasPoint.Y - _graphOrigin.Y);
@@ -378,6 +382,7 @@ public partial class GraphEditorView : UserControl
             .Concat((DataContext as GraphWorkspaceViewModel)?.GroupAssets?.Assets
                 .Select(asset => new NodeCatalogEntryViewModel(asset)) ?? [])
             .Where(entry => entry.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                            entry.OriginalName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.KindName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.QualifiedName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.Namespace.Contains(search, StringComparison.OrdinalIgnoreCase) ||
@@ -436,7 +441,7 @@ public partial class GraphEditorView : UserControl
         try
         {
             var clipboard = TopLevel.GetTopLevel(this)?.Clipboard
-                ?? throw new InvalidOperationException("The clipboard is unavailable.");
+                ?? throw new InvalidOperationException(LocalizationService.Shared.Get("Editor.ClipboardUnavailable"));
             var nodes = graph.SelectedNodes.ToArray();
             var revision = graph.History.CurrentNodeId;
             var text = ClipboardPrefix + JsonSerializer.Serialize(graph.CreateSelectionSnapshot());
@@ -445,17 +450,17 @@ public partial class GraphEditorView : UserControl
             {
                 if (graph.History.CurrentNodeId != revision || nodes.Any(node => !graph.Nodes.Contains(node)))
                 {
-                    graph.ReportStatus("The graph changed while copying; cut was cancelled.");
+                    graph.SetConnectionStatus("Editor.CutCancelled");
                     return;
                 }
 
                 graph.DeleteNodes(nodes);
             }
-            graph.ReportStatus(cut ? "Nodes cut." : "Nodes copied.");
+            graph.SetConnectionStatus(cut ? "Editor.NodesCut" : "Editor.NodesCopied");
         }
         catch (Exception ex)
         {
-            graph.ReportStatus($"Clipboard operation failed: {ex.Message}");
+            graph.SetConnectionStatus("Editor.ClipboardFailed", MessageLocalization.Error(ex.Message));
         }
     }
 
@@ -469,23 +474,23 @@ public partial class GraphEditorView : UserControl
         try
         {
             var clipboard = TopLevel.GetTopLevel(this)?.Clipboard
-                ?? throw new InvalidOperationException("The clipboard is unavailable.");
+                ?? throw new InvalidOperationException(LocalizationService.Shared.Get("Editor.ClipboardUnavailable"));
             var text = await clipboard.TryGetTextAsync();
             if (text is null || text.Length > 1_000_000 ||
                 !text.StartsWith(ClipboardPrefix, StringComparison.Ordinal))
             {
-                graph.ReportStatus("The clipboard does not contain LIBERA FX nodes.");
+                graph.SetConnectionStatus("Editor.ClipboardNotNodes");
                 return;
             }
 
             var snapshot = JsonSerializer.Deserialize<GraphSnapshot>(text[ClipboardPrefix.Length..])
-                ?? throw new InvalidDataException("The clipboard graph is empty.");
+                ?? throw new InvalidDataException(LocalizationService.Shared.Get("Editor.ClipboardEmpty"));
             graph.PasteSnapshot(snapshot, _pastePosition.X, _pastePosition.Y);
             _pastePosition = new Point(_pastePosition.X + 24, _pastePosition.Y + 24);
         }
         catch (Exception ex)
         {
-            graph.ReportStatus($"Could not paste nodes: {ex.Message}");
+            graph.SetConnectionStatus("Editor.PasteFailed", MessageLocalization.Error(ex.Message));
         }
     }
 
@@ -612,23 +617,6 @@ public partial class GraphEditorView : UserControl
         if (DataContext is GraphWorkspaceViewModel graph) graph.GroupSelection();
     }
 
-    private void OnSaveGroupClick(object? sender, RoutedEventArgs e) =>
-        RunGroupAction(graph => graph.SaveSelectedGroupAsset());
-
-    private void OnToggleGroupLockClick(object? sender, RoutedEventArgs e) =>
-        RunGroupAction(graph => graph.ToggleSelectedGroupAssetLock());
-
-    private void RunGroupAction(Action<GraphWorkspaceViewModel> action)
-    {
-        if (DataContext is not GraphWorkspaceViewModel graph) return;
-        try { action(graph); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
-                                   InvalidOperationException or ArgumentException)
-        {
-            graph.ReportStatus(ex.Message);
-        }
-    }
-
     private void ZoomBy(double factor) =>
         SetZoom(_zoom * factor, new Point(GraphScrollViewer.Viewport.Width / 2, GraphScrollViewer.Viewport.Height / 2));
 
@@ -681,6 +669,6 @@ public partial class GraphEditorView : UserControl
         _updatingZoomSlider = true;
         ZoomSlider.Value = Math.Log2(zoom);
         _updatingZoomSlider = false;
-        ZoomButton.Content = $"{zoom:P0}";
+        ZoomText.Text = $"{zoom:P0}";
     }
 }

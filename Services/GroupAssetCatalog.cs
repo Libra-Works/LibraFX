@@ -9,8 +9,10 @@ public sealed class GroupAssetCatalog : IDisposable
     private string? _watchedDirectory;
     private int _refreshScheduled;
     private bool _disposed;
+    private string? _catalogDirectory;
 
     public IReadOnlyList<GroupAsset> Assets { get; private set; } = [];
+    public bool HasLibraryDirectory => !string.IsNullOrWhiteSpace(_profiles.Active.GroupDirectory);
     public string Warnings { get; private set; } = string.Empty;
     public event EventHandler? Changed;
 
@@ -24,7 +26,7 @@ public sealed class GroupAssetCatalog : IDisposable
     public GroupAssetLibrary Library()
     {
         if (string.IsNullOrWhiteSpace(_profiles.Active.GroupDirectory))
-            throw new InvalidOperationException("Set a group library directory in Settings / Projects.");
+            throw new InvalidOperationException(LocalizationService.Shared.Get("Editor.GroupNoLibrary"));
         return new GroupAssetLibrary(_profiles.Active.GroupDirectory);
     }
 
@@ -33,6 +35,8 @@ public sealed class GroupAssetCatalog : IDisposable
         if (_disposed) return;
         var oldAssets = Assets;
         var oldWarnings = Warnings;
+        var directoryChanged = !string.Equals(_catalogDirectory, _profiles.Active.GroupDirectory, StringComparison.OrdinalIgnoreCase);
+        _catalogDirectory = _profiles.Active.GroupDirectory;
         try
         {
             if (string.IsNullOrWhiteSpace(_profiles.Active.GroupDirectory))
@@ -50,9 +54,9 @@ public sealed class GroupAssetCatalog : IDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
             Assets = [];
-            Warnings = $"Could not load group library: {ex.Message}";
+            Warnings = LocalizationService.Shared.Get("Editor.LoadGroupLibraryFailed", ex.Message);
         }
-        if (Warnings != oldWarnings || !oldAssets.Select(Identity).SequenceEqual(Assets.Select(Identity)))
+        if (directoryChanged || Warnings != oldWarnings || !oldAssets.Select(Identity).SequenceEqual(Assets.Select(Identity)))
             Changed?.Invoke(this, EventArgs.Empty);
     }
 

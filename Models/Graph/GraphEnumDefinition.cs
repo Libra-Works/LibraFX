@@ -2,7 +2,10 @@ using System.Text.Json;
 
 namespace LiberaFx.Models.Graph;
 
-public sealed record GraphEnumValue(int Value, string Name);
+public sealed record GraphEnumValue(int Value, string Name)
+{
+    public string? DisplayNameKey { get; init; }
+}
 
 public sealed record GraphEnumDefinition(Guid TypeId, string Namespace, string Name, IReadOnlyList<GraphEnumValue> Values)
 {
@@ -60,7 +63,8 @@ public sealed record GraphEnumDefinition(Guid TypeId, string Namespace, string N
             result.ContainsKey(file.TypeId) || !names.Add($"{file.Namespace}.{file.Name}"))
             throw new InvalidDataException("Invalid or duplicate enum definition.");
         result.Add(file.TypeId, new GraphEnumDefinition(file.TypeId, file.Namespace, file.Name,
-            file.Values.Select(item => new GraphEnumValue(item!.Value, item.Name!)).ToArray()));
+            file.Values.Select(item => new GraphEnumValue(item!.Value, item.Name!)
+                { DisplayNameKey = item.DisplayNameKey }).ToArray()));
     }
 
     private sealed class EnumFile
@@ -76,5 +80,6 @@ public sealed record GraphEnumDefinition(Guid TypeId, string Namespace, string N
     {
         public int Value { get; set; }
         public string? Name { get; set; }
+        public string? DisplayNameKey { get; set; }
     }
 }

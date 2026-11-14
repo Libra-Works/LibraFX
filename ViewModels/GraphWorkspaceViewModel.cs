@@ -20,14 +20,16 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     private readonly List<GraphNodeViewModel> _selectedNodes = [];
     private GraphNodeViewModel? _pendingOutputNode;
     private Point? _connectionPreviewPoint;
-    private string _connectionStatus = "Choose a node output, then a compatible input.";
+    private string _connectionStatus = LocalizationService.Shared.Get("Messages.ChooseConnection");
+    private string? _connectionStatusKey = "Messages.ChooseConnection";
+    private object?[] _connectionStatusArgs = [];
     private GraphSnapshot _rootSnapshot = new([], []);
     private readonly List<Guid> _graphPath = [];
 
     public ObservableCollection<GraphNodeViewModel> Nodes { get; } = [];
     public ObservableCollection<GraphNodeViewModel> CommentNodes { get; } = [];
     public ObservableCollection<GraphNodeViewModel> ForegroundNodes { get; } = [];
-    public ObservableCollection<GraphBreadcrumb> Breadcrumbs { get; } = [new("Top", 0)];
+    public ObservableCollection<GraphBreadcrumb> Breadcrumbs { get; } = [new(LocalizationService.Shared.Get("Messages.Top"), 0)];
 
     public ObservableCollection<GraphConnectionViewModel> Connections { get; } = [];
 
@@ -74,12 +76,43 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         }
     }
 
-    public string SelectedNodeType => SelectedNode?.Definition.Name ?? string.Empty;
+    public string SelectedNodeType => SelectedNode is { } node
+        ? LocalizationService.Shared.GetOrDefault(node.Definition.DisplayNameKey, node.Definition.Name) : string.Empty;
 
     public string ConnectionStatus
     {
         get => _connectionStatus;
-        private set => SetProperty(ref _connectionStatus, value);
+        private set
+        {
+            _connectionStatusKey = null;
+            _connectionStatusArgs = [];
+            SetProperty(ref _connectionStatus, value);
+        }
+    }
+
+    internal bool IsRefreshingLocalizedText { get; private set; }
+
+    internal void SetConnectionStatus(string key, params object?[] args)
+    {
+        ConnectionStatus = LocalizationService.Shared.Get(key, args);
+        _connectionStatusKey = key;
+        _connectionStatusArgs = args;
+    }
+
+    private void RefreshLocalizedText()
+    {
+        RefreshBreadcrumbs();
+        OnPropertyChanged(nameof(SelectedNodeType));
+        if (_connectionStatusKey is not { } key) return;
+        IsRefreshingLocalizedText = true;
+        try
+        {
+            SetProperty(ref _connectionStatus, LocalizationService.Shared.Get(key, _connectionStatusArgs), nameof(ConnectionStatus));
+        }
+        finally
+        {
+            IsRefreshingLocalizedText = false;
+        }
     }
 
     public GraphNodeViewModel? PendingOutputNode => _pendingOutputNode;
@@ -100,6 +133,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         DeleteSelectedNodeCommand = new RelayCommand(DeleteSelectedNode, () => HasSelection);
         Connections.CollectionChanged += (_, _) => RefreshSelectedConnections();
         _history.Configure(CreateSnapshot, RestoreFromHistory, ValidateSnapshot);
+        MessageLocalization.Observe(this, static graph => graph.RefreshLocalizedText());
     }
 
     private void OnNodesChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -216,10 +250,10 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 targetPortId: connection.TargetPortId));
         }
 
-        _history.Execute(new CompositeUndoableCommand("Paste nodes", commands));
+        _history.Execute(new CompositeUndoableCommand(LocalizationService.Shared.Get("Messages.History.PasteNodes"), commands));
         _nextNodeIndex += snapshot.Nodes.Count;
         SetSelection(snapshot.Nodes.Select(node => nodesByOldId[node.Id]));
-        ConnectionStatus = $"Pasted {snapshot.Nodes.Count} node(s).";
+        SetConnectionStatus("Messages.NodesPasted", snapshot.Nodes.Count);
     }
 
     public void DeleteNodes(IEnumerable<GraphNodeViewModel> nodes)
@@ -231,13 +265,16 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         }
 
         _history.Execute(new CompositeUndoableCommand(
-            "Delete nodes",
+            LocalizationService.Shared.Get("Messages.History.DeleteNodes"),
             selected.Select(node => new DeleteGraphNodeCommand(this, node))));
     }
 
     public void ReportStatus(string status)
     {
-        ConnectionStatus = status;
+        if (MessageLocalization.ErrorKey(status) is { } key)
+            SetConnectionStatus(key);
+        else
+            ConnectionStatus = status;
     }
 
     public GraphSnapshot CreateSnapshot()
@@ -311,7 +348,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                     ?? throw new InvalidOperationException("The group library is unavailable.");
                 if (asset.Locked)
                 {
-                    ConnectionStatus = "This group asset is locked. Unlock it before editing.";
+                    SetConnectionStatus("Messages.GroupLocked");
                     return false;
                 }
 
@@ -319,7 +356,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
                                        InvalidOperationException or ArgumentException)
             {
-                ConnectionStatus = $"Cannot edit linked group: {ex.Message}";
+                SetConnectionStatus("Messages.EditLinkedGroupFailed", ex.Message);
                 return false;
             }
         }
@@ -327,7 +364,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         _graphPath.Add(node.Id);
         RestoreCurrentGraph(node.ChildGraph);
         RefreshBreadcrumbs();
-        ConnectionStatus = "Editing nested graph.";
+        SetConnectionStatus("Messages.EditingNestedGraph");
         return true;
     }
 
@@ -343,7 +380,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             childGraph: CloneGraph(asset.Graph), groupAsset: reference);
         _history.Execute(new AddGraphNodeCommand(this, node, Nodes.Count));
         SelectNode(node);
-        ConnectionStatus = $"Added group {asset.Name} (version {asset.Revision}).";
+        SetConnectionStatus("Messages.GroupAdded", asset.Name, asset.Revision);
         return node;
     }
 
@@ -359,7 +396,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         var current = new GroupAssetReference(asset.Id, asset.Revision, asset.Locked);
         _history.Execute(new SetGroupAssetCommand(node, node.GroupAsset, current));
         catalog.Refresh();
-        ConnectionStatus = $"Saved group {asset.Name} (version {asset.Revision}).";
+        SetConnectionStatus("Messages.GroupSaved", asset.Name, asset.Revision);
     }
 
     public void ToggleSelectedGroupAssetLock()
@@ -371,7 +408,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         var asset = library.Load(reference.Id);
         asset = library.SetLocked(reference.Id, !asset.Locked);
         catalog.Refresh();
-        ConnectionStatus = asset.Locked ? $"Locked group {asset.Name}." : $"Unlocked group {asset.Name}.";
+        SetConnectionStatus(asset.Locked ? "Messages.GroupNowLocked" : "Messages.GroupNowUnlocked", asset.Name);
     }
 
     public IReadOnlyList<GroupUpdateCandidate> FindGroupUpdates()
@@ -491,7 +528,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         if (!GraphSnapshot.ContentEquals(prepared.Before, CreateSnapshot()))
             throw new InvalidOperationException("The graph changed; check for updates again.");
         _history.Execute(new ReplaceGraphSnapshotCommand(this, prepared.Before, prepared.After));
-        ConnectionStatus = $"Updated {prepared.Count} linked group(s).";
+        SetConnectionStatus("Messages.LinkedGroupsUpdated", prepared.Count);
         return prepared.Count;
     }
 
@@ -508,7 +545,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         _graphPath.RemoveRange(depth, _graphPath.Count - depth);
         RestoreCurrentGraph(GetCurrentGraph());
         RefreshBreadcrumbs();
-        ConnectionStatus = "Graph level changed.";
+        SetConnectionStatus("Messages.GraphLevelChanged");
     }
 
     public void NavigateToNode(IReadOnlyList<Guid> parentPath, Guid nodeId)
@@ -531,14 +568,14 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         if (_selectedNodes.Count == 0) return false;
         if (_graphPath.Count >= MaxGraphDepth)
         {
-            ConnectionStatus = "The graph hierarchy has reached its maximum depth.";
+            SetConnectionStatus("Messages.MaxGraphDepth");
             return false;
         }
         var selected = _selectedNodes.ToArray();
         var ids = selected.Select(node => node.Id).ToHashSet();
         if (Connections.Any(connection => ids.Contains(connection.Source.Id) != ids.Contains(connection.Target.Id)))
         {
-            ConnectionStatus = "Cannot group nodes with connections to unselected nodes yet.";
+            SetConnectionStatus("Messages.CannotGroupExternalConnections");
             return false;
         }
         var selection = CreateSelectionSnapshot();
@@ -551,15 +588,15 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         try { ValidateSnapshot(child, new HashSet<Guid>(), _graphPath.Count + 1); }
         catch (InvalidDataException ex)
         {
-            ConnectionStatus = ex.Message;
+            ReportStatus(ex.Message);
             return false;
         }
         var definition = GraphNodeDefinition.All.Single(item => item.Kind == GraphNodeKind.GraphGroup);
         var group = new GraphNodeViewModel(this, definition, definition.Name, minX, minY, childGraph: child);
         var commands = selected.Select(node => (IUndoableCommand)new DeleteGraphNodeCommand(this, node)).ToList();
         commands.Add(new AddGraphNodeCommand(this, group, Nodes.Count));
-        _history.Execute(new CompositeUndoableCommand("Group nodes", commands));
-        ConnectionStatus = $"Grouped {selected.Length} node(s).";
+        _history.Execute(new CompositeUndoableCommand(LocalizationService.Shared.Get("Messages.History.GroupNodes"), commands));
+        SetConnectionStatus("Messages.NodesGrouped", selected.Length);
         return true;
     }
 
@@ -574,7 +611,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     private void RefreshBreadcrumbs()
     {
         Breadcrumbs.Clear();
-        Breadcrumbs.Add(new GraphBreadcrumb("Top", 0));
+        Breadcrumbs.Add(new GraphBreadcrumb(LocalizationService.Shared.Get("Messages.Top"), 0));
         var graph = _rootSnapshot;
         foreach (var id in _graphPath)
         {
@@ -623,7 +660,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         if (validDepth < _graphPath.Count) _graphPath.RemoveRange(validDepth, _graphPath.Count - validDepth);
         RestoreCurrentGraph(graph);
         RefreshBreadcrumbs();
-        ConnectionStatus = "History state restored.";
+        SetConnectionStatus("Messages.HistoryRestored");
     }
 
     internal void RestoreSnapshotForCommand(GraphSnapshot snapshot) => RestoreFromHistory(snapshot);
@@ -798,7 +835,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         SelectNode(source);
         _pendingOutputNode = source;
         OnPropertyChanged(nameof(PendingOutputNode));
-        ConnectionStatus = $"Choose an input for {source.Name} ({source.DisplayPortType}).";
+        SetConnectionStatus("Messages.ChooseInput", source.Name, source.DisplayPortType);
     }
 
     public void PreviewConnection(Point point)
@@ -814,7 +851,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         _pendingOutputNode = null;
         ConnectionPreviewPoint = null;
         OnPropertyChanged(nameof(PendingOutputNode));
-        ConnectionStatus = "Choose a node output, then a compatible input.";
+        SetConnectionStatus("Messages.ChooseConnection");
     }
 
     public void CompleteConnection(GraphNodeViewModel target, string? targetPortId = null)
@@ -823,7 +860,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
         if (_pendingOutputNode is null)
         {
-            ConnectionStatus = "Choose an output port first.";
+            SetConnectionStatus("Messages.ChooseOutputFirst");
             return;
         }
 
@@ -833,11 +870,16 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         OnPropertyChanged(nameof(PendingOutputNode));
         if (TryConnectNodes(source, target, out var error, targetPortId))
         {
-            ConnectionStatus = $"Connected {source.Name} to {target.Name}.";
+            SetConnectionStatus("Messages.NodesConnected", source.Name, target.Name);
         }
         else
         {
-            ConnectionStatus = error ?? "The connection could not be created.";
+            if (error is null)
+                SetConnectionStatus("Messages.ConnectionFailed");
+            else if (MessageLocalization.ErrorKey(error) is { } key)
+                SetConnectionStatus(key);
+            else
+                ConnectionStatus = error;
         }
     }
 
@@ -920,7 +962,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         if (Connections.Contains(connection))
         {
             _history.Execute(new RemoveGraphConnectionCommand(this, connection));
-            ConnectionStatus = "Connection removed.";
+            SetConnectionStatus("Messages.ConnectionRemoved");
         }
     }
 
@@ -1014,7 +1056,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             .ToArray();
         if (commands.Length > 0)
         {
-            _history.Execute(new CompositeUndoableCommand("Move nodes", commands));
+            _history.Execute(new CompositeUndoableCommand(LocalizationService.Shared.Get("Messages.History.MoveNodes"), commands));
         }
     }
 
@@ -1077,7 +1119,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         var oldWidth = node.GetParameterValue(node.Definition.Parameters.Single(item => item.Id == "width")).GetDouble();
         var oldHeight = node.GetParameterValue(node.Definition.Parameters.Single(item => item.Id == "height")).GetDouble();
         if (oldWidth == width && oldHeight == height) return;
-        _history.Execute(new SetNodeParametersCommand(node, node.Parameters, values.AsReadOnly(), "comment size"));
+        _history.Execute(new SetNodeParametersCommand(node, node.Parameters, values.AsReadOnly(), LocalizationService.Shared.Get("Messages.History.CommentSize")));
     }
 
     public GraphNodeViewModel CreateNode(GraphNodeKind kind, double? x = null, double? y = null)
@@ -1123,7 +1165,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         if (_pendingOutputNode == node)
         {
             CancelConnection();
-            ConnectionStatus = "The pending connection was cancelled because its node was deleted.";
+            SetConnectionStatus("Messages.PendingConnectionDeleted");
         }
 
         return index;

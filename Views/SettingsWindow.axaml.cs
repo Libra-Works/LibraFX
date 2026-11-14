@@ -10,15 +10,30 @@ namespace LiberaFx.Views;
 public partial class SettingsWindow : Window
 {
     private bool _updatingProjects;
+    private bool _updatingLanguage;
     public SettingsWindow()
     {
         InitializeComponent();
         DataContextChanged += (_, _) => RefreshProjectSelection();
+        Closed += (_, _) => DataContext = null;
     }
 
     private void OnCloseClick(object? sender, RoutedEventArgs e)
     {
         Close();
+    }
+
+    private void OnLanguageSelected(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingLanguage || DataContext is not MainViewModel model ||
+            LanguageList.SelectedItem is not EditorLanguage language) return;
+        _updatingLanguage = true;
+        try
+        {
+            model.Localization.SelectedLanguage = language;
+            LanguageList.SetCurrentValue(ComboBox.SelectedItemProperty, model.Localization.SelectedLanguage);
+        }
+        finally { _updatingLanguage = false; }
     }
 
     private void OnShortcutKeyDown(object? sender, KeyEventArgs e)
@@ -99,7 +114,7 @@ public partial class SettingsWindow : Window
     {
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = "Choose group library directory",
+            Title = LocalizationService.Shared.Get("Editor.BrowseDirectory"),
             AllowMultiple = false
         });
         if (folders.Count == 0) return;

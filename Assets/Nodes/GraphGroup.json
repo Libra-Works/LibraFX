@@ -4,6 +4,8 @@
   "namespace": "LiberaFx",
   "kind": "GraphGroup",
   "name": "Graph Group",
+  "displayNameKey": "Editor.Node.GraphGroup",
+  "groupNameKey": "Editor.NodeGroup.Graphs",
   "group": "Graph nodes",
   "portType": "Float",
   "portCategory": "Parameter"

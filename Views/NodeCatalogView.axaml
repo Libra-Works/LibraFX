@@ -1,13 +1,17 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:LiberaFx.ViewModels"
+             xmlns:views="using:LiberaFx.Views"
              x:Class="LiberaFx.Views.NodeCatalogView"
              x:DataType="vm:NodeCatalogViewModel">
     <Grid RowDefinitions="Auto,*,Auto">
         <Grid ColumnDefinitions="*,Auto" Margin="10" ColumnSpacing="6">
-            <TextBox PlaceholderText="Search nodes"
+            <TextBox PlaceholderText="{DynamicResource Text.Editor.SearchNodes}"
+                     AutomationProperties.Name="{DynamicResource Text.Editor.SearchNodes}"
                      Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-            <Button Grid.Column="1" Content="Refresh" Command="{Binding RefreshCommand}" />
+            <views:IconButton Grid.Column="1" Icon="Refresh" Command="{Binding RefreshCommand}"
+                              ToolTip.Tip="{DynamicResource Text.Editor.Refresh}"
+                              AutomationProperties.Name="{DynamicResource Text.Editor.Refresh}" />
         </Grid>
         <ScrollViewer Grid.Row="1">
         <StackPanel Margin="10,0,10,10" Spacing="6">
@@ -24,7 +28,7 @@
                                         <Border Padding="8,5" Margin="0,1"
                                                 Background="{DynamicResource EffectSurfaceBrush}"
                                                 Tag="{Binding DragIdentifier}"
-                                                ToolTip.Tip="Drag to graph"
+                                                ToolTip.Tip="{DynamicResource Text.Editor.DragNode}"
                                                 PointerPressed="OnNodePointerPressed"
                                                 PointerMoved="OnNodePointerMoved"
                                                 PointerReleased="OnNodePointerReleased"
@@ -39,7 +43,7 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
             <TextBlock Margin="0,8,0,0"
-                       Text="Drag a node to the graph to add it."
+                       Text="{DynamicResource Text.Editor.DragHint}"
                        TextWrapping="Wrap"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
         </StackPanel>

@@ -4,10 +4,12 @@
   "namespace": "LiberaFx",
   "kind": "Bool",
   "name": "Bool",
+  "displayNameKey": "Editor.Node.Bool",
+  "groupNameKey": "Editor.NodeGroup.Parameters",
   "group": "Parameter nodes",
   "portType": "Bool",
   "portCategory": "Parameter",
   "parameters": [
-    { "id": "value", "name": "Value", "type": "bool", "defaultValue": false }
+    { "id": "value", "name": "Value", "displayNameKey": "Editor.Parameter.Value", "type": "bool", "defaultValue": false }
   ]
 }

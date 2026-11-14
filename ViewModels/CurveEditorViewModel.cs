@@ -19,7 +19,7 @@ public sealed class CurveEditorViewModel : Tool
     private readonly HashSet<Guid> _selectedKeyIds = [];
     private Guid? _selectionNodeId;
     private Guid? _previewRevision;
-    private string _status = "Select a Float F-Curve node in the graph.";
+    private string _status = "Messages.SelectCurveNode";
     private bool _snapToFrames = true;
     private string _channelSearch = string.Empty;
     private readonly Dictionary<Guid, bool> _channelVisibility = [];
@@ -50,7 +50,7 @@ public sealed class CurveEditorViewModel : Tool
     public bool HasSelectedKeys => SelectedKeys.Count > 0;
     public FCurveKey? SelectedKey => SelectedKeys.Count == 1 ? SelectedKeys[0] : null;
     public IReadOnlyList<CurveInterpolation> Interpolations { get; } = Enum.GetValues<CurveInterpolation>();
-    public string Status { get => _status; private set => SetProperty(ref _status, value); }
+    public string Status { get => LocalizationService.Shared.Get(_status); private set => SetProperty(ref _status, value); }
     public bool SnapToFrames { get => _snapToFrames; set => SetProperty(ref _snapToFrames, value); }
     public IRelayCommand AddKeyCommand { get; }
     public IRelayCommand DeleteKeyCommand { get; }
@@ -66,7 +66,7 @@ public sealed class CurveEditorViewModel : Tool
         set
         {
             if (SelectedKey is { } key && Enum.IsDefined(value))
-                CommitKey(key with { Interpolation = value }, "Change curve interpolation");
+                CommitKey(key with { Interpolation = value }, LocalizationService.Shared.Get("Messages.History.CurveInterpolation"));
         }
     }
 
@@ -81,6 +81,7 @@ public sealed class CurveEditorViewModel : Tool
         DeleteKeyCommand = new RelayCommand(DeleteSelectedKeys, () => HasSelectedKeys);
         SynchronizeChannels();
         RefreshNode();
+        MessageLocalization.Observe(this, static editor => editor.OnPropertyChanged(nameof(Status)));
     }
 
     public void SelectChannel(CurveChannelViewModel channel)
@@ -146,10 +147,10 @@ public sealed class CurveEditorViewModel : Tool
         try
         {
             var updated = new FCurveSnapshot(curve.Keys.Append(key).OrderBy(item => item.Frame).ToArray());
-            _graph.SetCurve(_node, updated, "Add F-Curve key");
+            _graph.SetCurve(_node, updated, LocalizationService.Shared.Get("Messages.History.AddCurveKey"));
             _selectedKeyIds.Clear();
             _selectedKeyIds.Add(key.Id);
-            Status = "Key added.";
+            Status = "Messages.CurveKeyAdded";
         }
         catch (InvalidDataException ex) { Status = ex.Message; }
         NotifyCurve();
@@ -193,7 +194,8 @@ public sealed class CurveEditorViewModel : Tool
         var preview = _preview;
         _preview = null;
         if (preview is not null && _node is not null && _previewRevision == _graph.History.CurrentNodeId)
-            _graph.SetCurve(_node, preview, SelectedKeys.Count > 1 ? "Move F-Curve keys" : "Move F-Curve key");
+            _graph.SetCurve(_node, preview, LocalizationService.Shared.Get(
+                SelectedKeys.Count > 1 ? "Messages.History.MoveCurveKeys" : "Messages.History.MoveCurveKey"));
         _previewRevision = null;
         NotifyCurve();
     }
@@ -216,7 +218,7 @@ public sealed class CurveEditorViewModel : Tool
     {
         if (_node?.Curve is not { } curve || _selectedKeyIds.Count == 0) return;
         _graph.SetCurve(_node, new FCurveSnapshot(curve.Keys.Where(key => !_selectedKeyIds.Contains(key.Id)).ToArray()),
-            _selectedKeyIds.Count > 1 ? "Delete F-Curve keys" : "Delete F-Curve key");
+            LocalizationService.Shared.Get(_selectedKeyIds.Count > 1 ? "Messages.History.DeleteCurveKeys" : "Messages.History.DeleteCurveKey"));
         _selectedKeyIds.Clear();
         NotifyCurve();
     }
@@ -226,10 +228,10 @@ public sealed class CurveEditorViewModel : Tool
         if (SelectedKey is { } key &&
             double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value) &&
             double.IsFinite(value))
-            CommitKey(change(key, value), "Edit F-Curve key");
+            CommitKey(change(key, value), LocalizationService.Shared.Get("Messages.History.EditCurveKey"));
         else
         {
-            Status = "Enter a finite number.";
+            Status = "Messages.EnterFiniteNumber";
             NotifyCurve();
         }
     }
@@ -242,7 +244,7 @@ public sealed class CurveEditorViewModel : Tool
             var updated = new FCurveSnapshot(curve.Keys.Select(item => item.Id == key.Id ? key : item)
                 .OrderBy(item => item.Frame).ToArray());
             _graph.SetCurve(_node, updated, description);
-            Status = "Key updated.";
+            Status = "Messages.CurveKeyUpdated";
         }
         catch (InvalidDataException ex) { Status = ex.Message; }
         NotifyCurve();
@@ -297,8 +299,7 @@ public sealed class CurveEditorViewModel : Tool
             _selectionNodeId = _node.Id;
             _selectedKeyIds.IntersectWith(curve.Keys.Select(key => key.Id));
         }
-        Status = _node is null ? "Select a Float F-Curve node in the graph." :
-            "Double-click to add; Ctrl-click or drag a box to select keys; F frames selection.";
+        Status = _node is null ? "Messages.SelectCurveNode" : "Messages.CurveEditingHint";
         OnPropertyChanged(nameof(Node));
         NotifyCurve();
     }

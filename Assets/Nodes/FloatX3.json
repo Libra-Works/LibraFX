@@ -4,10 +4,12 @@
   "namespace": "LiberaFx",
   "kind": "FloatX3",
   "name": "Vector3",
+  "displayNameKey": "Editor.Node.Vector3",
+  "groupNameKey": "Editor.NodeGroup.Parameters",
   "group": "Parameter nodes",
   "portType": "FloatX3",
   "portCategory": "Parameter",
   "parameters": [
-    { "id": "value", "name": "Value", "type": "vector3", "defaultValue": [0.0, 0.0, 0.0] }
+    { "id": "value", "name": "Value", "displayNameKey": "Editor.Parameter.Value", "type": "vector3", "defaultValue": [0.0, 0.0, 0.0] }
   ]
 }

@@ -1,26 +1,29 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:LiberaFx.ViewModels"
+        xmlns:views="using:LiberaFx.Views"
         x:Class="LiberaFx.Views.McpWindow"
         x:DataType="vm:MainViewModel"
-        Title="MCP Connection"
+        Title="{DynamicResource Text.Panels.McpConnectionTitle}"
         Width="580" Height="360" MinWidth="420" MinHeight="280"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
     <ScrollViewer>
         <StackPanel Margin="20" Spacing="8">
-            <TextBlock Text="MCP connection" FontSize="18" FontWeight="SemiBold" />
+            <TextBlock Text="{DynamicResource Text.Panels.McpConnection}" FontSize="18" FontWeight="SemiBold" />
             <TextBlock Text="{Binding McpStatus}" TextWrapping="Wrap" />
-            <TextBlock Text="Streamable HTTP endpoint" Margin="0,8,0,0" />
+            <TextBlock Text="{DynamicResource Text.Panels.StreamableHttpEndpoint}" Margin="0,8,0,0" />
             <TextBox Text="{Binding McpEndpoint}" IsReadOnly="True" />
             <TextBlock Text="X-LiberaFx-Token" Margin="0,8,0,0" />
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                 <TextBox x:Name="TokenBox" Text="{Binding McpAccessToken}"
                          IsReadOnly="True" PasswordChar="●" />
-                <Button Grid.Column="1" Content="Copy" Click="OnCopyTokenClick" />
+                <views:IconButton Grid.Column="1" Icon="Copy" Click="OnCopyTokenClick"
+                                  ToolTip.Tip="{DynamicResource Text.Panels.CopyAccessToken}"
+                                  AutomationProperties.Name="{DynamicResource Text.Panels.CopyAccessToken}" />
             </Grid>
-            <CheckBox Content="Show token" IsCheckedChanged="OnShowTokenChanged" />
-            <TextBlock Text="Loopback only. Keep the token private; browser Origin requests are blocked."
+            <CheckBox Content="{DynamicResource Text.Panels.ShowToken}" IsCheckedChanged="OnShowTokenChanged" />
+            <TextBlock Text="{DynamicResource Text.Panels.McpSecurityNotice}"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" TextWrapping="Wrap" />
         </StackPanel>
     </ScrollViewer>

@@ -4,10 +4,12 @@
   "namespace": "LiberaFx",
   "kind": "Float",
   "name": "Scalar",
+  "displayNameKey": "Editor.Node.Scalar",
+  "groupNameKey": "Editor.NodeGroup.Parameters",
   "group": "Parameter nodes",
   "portType": "Float",
   "portCategory": "Parameter",
   "parameters": [
-    { "id": "value", "name": "Value", "type": "float", "defaultValue": 0.0 }
+    { "id": "value", "name": "Value", "displayNameKey": "Editor.Parameter.Value", "type": "float", "defaultValue": 0.0 }
   ]
 }

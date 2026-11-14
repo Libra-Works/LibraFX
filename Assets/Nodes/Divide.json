@@ -4,6 +4,8 @@
   "namespace": "LiberaFx",
   "kind": "Divide",
   "name": "Divide",
+  "displayNameKey": "Editor.Node.Divide",
+  "groupNameKey": "Editor.NodeGroup.Math",
   "group": "Math",
   "portType": "Float",
   "portCategory": "Parameter",

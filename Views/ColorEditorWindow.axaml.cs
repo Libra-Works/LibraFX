@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Automation;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia;
@@ -11,12 +12,16 @@ namespace LiberaFx.Views;
 public partial class ColorEditorWindow : Window
 {
     private readonly ColorPaletteService _palette = new();
+    private readonly List<MenuItem> _favoriteMenuItems = [];
     private RgbaColor _color = new(1, 1, 1, 1);
     private bool _updating;
+    private string? _componentStatusKey;
 
     public ColorEditorWindow()
     {
         InitializeComponent();
+        LocalizationService.Shared.LanguageChanged += OnLanguageChanged;
+        Closed += OnClosed;
         Picker.ColorChanged += (_, _) => OnPickerColorChanged();
         UpdateControls();
         RefreshPalette();
@@ -38,6 +43,18 @@ public partial class ColorEditorWindow : Window
         Close(_color);
     }
     private void OnCancel(object? sender, RoutedEventArgs e) => Close(null);
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        if (_componentStatusKey is { } key)
+            ComponentStatus.Text = LocalizationService.Shared.Get(key);
+        UpdatePaletteStatus();
+        foreach (var item in _favoriteMenuItems)
+            item.Header = LocalizationService.Shared.Get("Panels.RemoveFavorite");
+    }
+
+    private void OnClosed(object? sender, EventArgs e) =>
+        LocalizationService.Shared.LanguageChanged -= OnLanguageChanged;
 
     private void OnAddFavorite(object? sender, RoutedEventArgs e)
     {
@@ -64,12 +81,15 @@ public partial class ColorEditorWindow : Window
             if (!double.TryParse(boxes[i].Text, NumberStyles.Float, CultureInfo.CurrentCulture, out values[i]))
             {
                 color = default;
-                ComponentStatus.Text = "Enter finite numeric RGBA values.";
+                SetComponentStatus("Panels.InvalidRgbaNumber");
                 return false;
             }
         }
         color = new RgbaColor(values[0], values[1], values[2], values[3]);
-        ComponentStatus.Text = color.IsValid ? "" : "RGB must be non-negative and alpha must be between 0 and 1.";
+        if (color.IsValid)
+            SetComponentStatus(null);
+        else
+            SetComponentStatus("Panels.InvalidRgbaRange");
         return color.IsValid;
     }
 
@@ -99,19 +119,37 @@ public partial class ColorEditorWindow : Window
         var components = _color.Components;
         for (var i = 0; i < boxes.Length; i++)
             boxes[i].Text = components[i].ToString("G17", CultureInfo.CurrentCulture);
-        ComponentStatus.Text = "";
+        SetComponentStatus(null);
     }
 
     private void RefreshPalette()
     {
         Populate(FavoritesPanel, _palette.Favorites, true);
         Populate(RecentPanel, _palette.Recent, false);
-        PaletteStatus.Text = _palette.Status;
+        UpdatePaletteStatus();
+    }
+
+    private void UpdatePaletteStatus()
+    {
+        const string loadFailure = "Could not load colors: ";
+        const string saveFailure = "Could not save colors: ";
+        var status = _palette.Status;
+        PaletteStatus.Text = status switch
+        {
+            "Invalid color." => LocalizationService.Shared.Get("Panels.PaletteInvalidColor"),
+            "Favorites are full." => LocalizationService.Shared.Get("Panels.PaletteFavoritesFull"),
+            _ when status.StartsWith(loadFailure, StringComparison.Ordinal) =>
+                LocalizationService.Shared.Get("Panels.PaletteLoadFailed", status[loadFailure.Length..]),
+            _ when status.StartsWith(saveFailure, StringComparison.Ordinal) =>
+                LocalizationService.Shared.Get("Panels.PaletteSaveFailed", status[saveFailure.Length..]),
+            _ => status
+        };
     }
 
     private void Populate(WrapPanel panel, IReadOnlyList<RgbaColor> colors, bool favorite)
     {
         panel.Children.Clear();
+        if (favorite) _favoriteMenuItems.Clear();
         foreach (var color in colors)
         {
             var swatch = new Button
@@ -121,15 +159,29 @@ public partial class ColorEditorWindow : Window
                 Background = Brushes.Transparent,
                 BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1)
             };
-            ToolTip.SetTip(swatch, $"R {color.R:G5}  G {color.G:G5}  B {color.B:G5}  A {color.A:G5}");
+            var description = LocalizationService.Shared.Get(
+                "Panels.ColorSwatch", color.R, color.G, color.B, color.A);
+            ToolTip.SetTip(swatch, description);
+            AutomationProperties.SetName(swatch, description);
             swatch.Click += (_, _) => { _color = color; UpdateControls(); };
             if (favorite)
             {
-                var remove = new MenuItem { Header = "Remove favorite" };
+                var remove = new MenuItem
+                {
+                    Header = LocalizationService.Shared.Get("Panels.RemoveFavorite"),
+                    Icon = new EditorIconView { Icon = LiberaFx.Models.Appearance.EditorIcon.Delete }
+                };
+                _favoriteMenuItems.Add(remove);
                 remove.Click += (_, _) => { _palette.RemoveFavorite(color); RefreshPalette(); };
                 swatch.ContextMenu = new ContextMenu { Items = { remove } };
             }
             panel.Children.Add(swatch);
         }
+    }
+
+    private void SetComponentStatus(string? key)
+    {
+        _componentStatusKey = key;
+        ComponentStatus.Text = key is null ? "" : LocalizationService.Shared.Get(key);
     }
 }

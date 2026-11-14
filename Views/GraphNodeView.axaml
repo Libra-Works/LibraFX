@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:LiberaFx.ViewModels"
              xmlns:graph="using:LiberaFx.Models.Graph"
+             xmlns:views="using:LiberaFx.Views"
              x:Class="LiberaFx.Views.GraphNodeView"
              PointerPressed="OnNodePointerPressed"
              x:DataType="vm:GraphNodeViewModel">
@@ -27,8 +28,8 @@
                                   Width="22" Height="20" Padding="0"
                                   IsVisible="{Binding HasParameters}"
                                   IsChecked="{Binding IsDetailsExpanded, Mode=TwoWay}"
-                                  ToolTip.Tip="Show or hide node parameters"
-                                  AutomationProperties.Name="Show or hide node parameters">
+                                  ToolTip.Tip="{DynamicResource Text.Panels.ShowHideNodeParameters}"
+                                  AutomationProperties.Name="{DynamicResource Text.Panels.ShowHideNodeParameters}">
                         <Grid>
                             <TextBlock Text="▸" IsVisible="{Binding !IsDetailsExpanded}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -57,7 +58,7 @@
                             Background="Transparent"
                             Foreground="{Binding PortBrush}"
                             Command="{Binding SelectInputPortCommand}" />
-                    <TextBlock Text="In"
+                    <TextBlock Text="{DynamicResource Text.Panels.Input}"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource EffectForegroundBrush}" />
                 </StackPanel>
@@ -82,7 +83,7 @@
                             Orientation="Horizontal"
                             Spacing="4"
                             VerticalAlignment="Top">
-                    <TextBlock Text="Out"
+                    <TextBlock Text="{DynamicResource Text.Panels.Output}"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource EffectForegroundBrush}" />
                     <Border Width="18" Height="18"
@@ -100,7 +101,7 @@
                 </StackPanel>
             </Grid>
             <TextBlock Grid.Row="1" Margin="8" IsVisible="{Binding IsGraphGroup}"
-                       Text="Double-click to open" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                       Text="{DynamicResource Text.Panels.DoubleClickToOpen}" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <Border Grid.Row="2" IsVisible="{Binding IsDetailsExpanded}" Padding="8,5"
                     BorderThickness="0,1,0,0" BorderBrush="{DynamicResource EffectBorderBrush}">
                 <ItemsControl ItemsSource="{Binding InlineParameters}">
@@ -128,10 +129,14 @@
                     PointerPressed="OnHeaderPointerPressed" PointerMoved="OnHeaderPointerMoved"
                     PointerReleased="OnHeaderPointerReleased" PointerCaptureLost="OnHeaderPointerCaptureLost">
                 <DockPanel>
-                    <Button DockPanel.Dock="Right" Content="×" Padding="5,0" Click="OnRemoveImageClick"
-                            ToolTip.Tip="Remove comment image" />
-                    <Button DockPanel.Dock="Right" Content="Image" Padding="5,0" Click="OnAddImageClick"
-                            ToolTip.Tip="Embed a PNG or JPEG image (up to 16 MiB; large images are optimized)" />
+                    <views:IconButton DockPanel.Dock="Right" Icon="Delete" Padding="5,0"
+                                      Click="OnRemoveImageClick"
+                                      ToolTip.Tip="{DynamicResource Text.Panels.RemoveCommentImage}"
+                                      AutomationProperties.Name="{DynamicResource Text.Panels.RemoveCommentImage}" />
+                    <views:IconButton DockPanel.Dock="Right" Icon="Image" Padding="5,0"
+                                      Click="OnAddImageClick"
+                                      ToolTip.Tip="{DynamicResource Text.Panels.EmbedCommentImage}"
+                                      AutomationProperties.Name="{DynamicResource Text.Panels.EmbedCommentImage}" />
                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center"
                                Foreground="{DynamicResource EffectForegroundBrush}" />
                 </DockPanel>
@@ -139,7 +144,7 @@
             <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
                 <TextBox Margin="8" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="2048"
                          Text="{Binding CommentText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                         PlaceholderText="Write a comment..." VerticalContentAlignment="Top" />
+                         PlaceholderText="{DynamicResource Text.Panels.WriteComment}" VerticalContentAlignment="Top" />
                 <StackPanel Grid.Column="1" MaxWidth="160" Margin="4">
                     <Image x:Name="EmbeddedImage" MaxWidth="160" MaxHeight="120"
                            Stretch="Uniform" IsHitTestVisible="False" />
@@ -151,7 +156,8 @@
                     Background="Transparent" Cursor="BottomRightCorner"
                     PointerPressed="OnResizePressed" PointerMoved="OnResizeMoved"
                     PointerReleased="OnResizeReleased" PointerCaptureLost="OnResizeCaptureLost"
-                    ToolTip.Tip="Resize comment">
+                    ToolTip.Tip="{DynamicResource Text.Panels.ResizeComment}"
+                    AutomationProperties.Name="{DynamicResource Text.Panels.ResizeComment}">
                 <TextBlock Text="◢" HorizontalAlignment="Center"
                            Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             </Border>

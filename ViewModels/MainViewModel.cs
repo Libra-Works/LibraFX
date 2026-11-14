@@ -20,11 +20,19 @@ public partial class MainViewModel : ViewModelBase
     private readonly Dictionary<string, IStorageFile> _storageFiles = new(StringComparer.Ordinal);
     private IStorageProvider? _storageProvider;
     private GraphDocumentViewModel? _activeDocument;
-    private string _mcpStatus = "Starting";
-    private string _fileStatus = "Ready";
+    private string _mcpStatus = LocalizationService.Shared.Get("Messages.Starting");
+    private string _fileStatus = LocalizationService.Shared.Get("Messages.Ready");
     private string _appearanceStatus = string.Empty;
-    private string _previewStatus = "Starting";
+    private string _previewStatus = LocalizationService.Shared.Get("Messages.Starting");
     private int _previewClientCount;
+    private string? _mcpStatusKey = "Messages.Starting";
+    private object?[] _mcpStatusArgs = [];
+    private string? _previewStatusKey = "Messages.Starting";
+    private object?[] _previewStatusArgs = [];
+    private string? _fileStatusKey = "Messages.Ready";
+    private object?[] _fileStatusArgs = [];
+    private string? _appearanceStatusKey;
+    private object?[] _appearanceStatusArgs = [];
 
     public EditorLog Log { get; } = new();
     public string McpEndpoint { get; }
@@ -36,6 +44,8 @@ public partial class MainViewModel : ViewModelBase
         get => _previewStatus;
         set
         {
+            _previewStatusKey = null;
+            _previewStatusArgs = [];
             if (SetProperty(ref _previewStatus, value)) Log.Add("Preview", value);
         }
     }
@@ -44,7 +54,7 @@ public partial class MainViewModel : ViewModelBase
         get => _previewClientCount;
         set
         {
-            if (SetProperty(ref _previewClientCount, value)) Log.Add("Preview", $"Connected clients: {value}");
+            if (SetProperty(ref _previewClientCount, value)) Log.Add("Preview", LocalizationService.Shared.Get("Messages.ConnectedClients", value));
         }
     }
 
@@ -52,6 +62,7 @@ public partial class MainViewModel : ViewModelBase
     public ServerSettingsService ServerSettings { get; }
     public TeamProfilesService TeamProfiles { get; } = new();
     public GroupAssetCatalog GroupAssets { get; }
+    public LocalizationService Localization => LocalizationService.Shared;
 
     public string McpAccessToken { get; }
 
@@ -60,8 +71,50 @@ public partial class MainViewModel : ViewModelBase
         get => _mcpStatus;
         set
         {
+            _mcpStatusKey = null;
+            _mcpStatusArgs = [];
             if (SetProperty(ref _mcpStatus, value)) Log.Add("MCP", value);
         }
+    }
+
+    public void SetMcpStatus(string key, params object?[] args)
+    {
+        McpStatus = LocalizationService.Shared.Get(key, args);
+        _mcpStatusKey = key;
+        _mcpStatusArgs = args;
+    }
+
+    public void SetPreviewStatus(string key, params object?[] args)
+    {
+        PreviewStatus = LocalizationService.Shared.Get(key, args);
+        _previewStatusKey = key;
+        _previewStatusArgs = args;
+    }
+
+    private void RefreshLocalizedStatuses()
+    {
+        if (_mcpStatusKey is { } mcpKey)
+            SetProperty(ref _mcpStatus, LocalizationService.Shared.Get(mcpKey, _mcpStatusArgs), nameof(McpStatus));
+        if (_previewStatusKey is { } previewKey)
+            SetProperty(ref _previewStatus, LocalizationService.Shared.Get(previewKey, _previewStatusArgs), nameof(PreviewStatus));
+        if (_fileStatusKey is { } fileKey)
+            SetProperty(ref _fileStatus, LocalizationService.Shared.Get(fileKey, _fileStatusArgs), nameof(FileStatus));
+        if (_appearanceStatusKey is { } appearanceKey)
+            SetProperty(ref _appearanceStatus, LocalizationService.Shared.Get(appearanceKey, _appearanceStatusArgs), nameof(AppearanceStatus));
+    }
+
+    private void SetFileStatus(string key, params object?[] args)
+    {
+        FileStatus = LocalizationService.Shared.Get(key, args);
+        _fileStatusKey = key;
+        _fileStatusArgs = args;
+    }
+
+    private void SetAppearanceStatus(string key, params object?[] args)
+    {
+        AppearanceStatus = LocalizationService.Shared.Get(key, args);
+        _appearanceStatusKey = key;
+        _appearanceStatusArgs = args;
     }
 
     public string FileStatus
@@ -69,6 +122,8 @@ public partial class MainViewModel : ViewModelBase
         get => _fileStatus;
         private set
         {
+            _fileStatusKey = null;
+            _fileStatusArgs = [];
             if (SetProperty(ref _fileStatus, value)) Log.Add("File", value);
         }
     }
@@ -116,7 +171,16 @@ public partial class MainViewModel : ViewModelBase
 
     public IReadOnlyList<string> ColorSchemes => _themeSettings.ColorSchemes;
     public string AppearanceWarnings => _themeSettings.LoadWarnings;
-    public string AppearanceStatus { get => _appearanceStatus; private set => SetProperty(ref _appearanceStatus, value); }
+    public string AppearanceStatus
+    {
+        get => _appearanceStatus;
+        private set
+        {
+            _appearanceStatusKey = null;
+            _appearanceStatusArgs = [];
+            SetProperty(ref _appearanceStatus, value);
+        }
+    }
 
     public IReadOnlyList<AccentPalette> AccentPalettes { get; } =
         Enum.GetValues<AccentPalette>();
@@ -139,7 +203,7 @@ public partial class MainViewModel : ViewModelBase
     {
         ServerSettings = serverSettings ?? new ServerSettingsService();
         GroupAssets = new GroupAssetCatalog(TeamProfiles);
-        Log.Add("Application", "Editor started.");
+        Log.Add("Application", LocalizationService.Shared.Get("Messages.EditorStarted"));
         McpAccessToken = mcpAccessToken;
         PreviewAccessToken = previewAccessToken;
         PreviewFingerprint = previewFingerprint;
@@ -175,6 +239,7 @@ public partial class MainViewModel : ViewModelBase
             () => ActiveDocument is not null);
         ExportVfxCommand = new AsyncRelayCommand(ExportVfxAsync, () => ActiveDocument is not null);
         _themeSettings.SettingsChanged += OnThemeSettingsChanged;
+        MessageLocalization.Observe(this, static main => main.RefreshLocalizedStatuses());
     }
 
     public void SetStorageProvider(IStorageProvider storageProvider)
@@ -209,14 +274,14 @@ public partial class MainViewModel : ViewModelBase
         Documents.Add(document);
         _dockFactory.DocumentsDock.AddDocument(document);
         ActivateDocument(document);
-        FileStatus = "Created a new untitled document.";
+        SetFileStatus("Messages.DocumentCreated");
     }
 
     private async Task OpenProjectsAsync()
     {
         if (_storageProvider is null)
         {
-            FileStatus = "The platform file picker is not available.";
+            SetFileStatus("Messages.FilePickerUnavailable");
             return;
         }
 
@@ -224,7 +289,7 @@ public partial class MainViewModel : ViewModelBase
         {
             var files = await _storageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = "Open LIBERA FX project",
+                Title = LocalizationService.Shared.Get("Messages.OpenProjectTitle"),
                 AllowMultiple = true,
                 FileTypeFilter = [ProjectFileType]
             });
@@ -240,7 +305,7 @@ public partial class MainViewModel : ViewModelBase
         }
         catch (Exception ex) when (IsFileOperationException(ex))
         {
-            FileStatus = $"Could not open project: {ex.Message}";
+            SetFileStatus("Messages.OpenProjectFailed", ex.Message);
         }
     }
 
@@ -254,7 +319,7 @@ public partial class MainViewModel : ViewModelBase
             if (existing is not null)
             {
                 ActivateDocument(existing);
-                FileStatus = $"Already open: {file.Name}";
+                SetFileStatus("Messages.AlreadyOpen", file.Name);
                 return;
             }
 
@@ -277,11 +342,11 @@ public partial class MainViewModel : ViewModelBase
             ActivateDocument(document);
             StoreStorageFile(fileKey, file);
             retained = true;
-            FileStatus = $"Opened {file.Name}.";
+            SetFileStatus("Messages.ProjectOpened", file.Name);
         }
         catch (Exception ex) when (IsFileOperationException(ex))
         {
-            FileStatus = $"Could not open '{file.Name}': {ex.Message}";
+            SetFileStatus("Messages.OpenFileFailed", file.Name, ex.Message);
         }
         finally
         {
@@ -297,12 +362,12 @@ public partial class MainViewModel : ViewModelBase
         var document = ActiveDocument;
         if (document is null)
         {
-            FileStatus = "There is no active document to export.";
+            SetFileStatus("Messages.NoDocumentToExport");
             return;
         }
         if (_storageProvider is null)
         {
-            FileStatus = "The platform file picker is not available.";
+            SetFileStatus("Messages.FilePickerUnavailable");
             return;
         }
 
@@ -312,7 +377,7 @@ public partial class MainViewModel : ViewModelBase
             var bytes = VfxProgram.Compile(document.Workspace.CreateSnapshot()).ToBinary();
             file = await _storageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
-                Title = "Export LIBERA FX binary",
+                Title = LocalizationService.Shared.Get("Messages.ExportBinaryTitle"),
                 DefaultExtension = "lfxb",
                 SuggestedFileName = Path.GetFileNameWithoutExtension(document.FileName) + ".lfxb",
                 FileTypeChoices = [VfxBinaryFileType]
@@ -321,7 +386,7 @@ public partial class MainViewModel : ViewModelBase
             if (!file.Name.EndsWith(".lfxb", StringComparison.OrdinalIgnoreCase) ||
                 Documents.Any(open => open.FileKey is not null &&
                     string.Equals(open.FileKey, GetFileKey(file), StringComparison.OrdinalIgnoreCase)))
-                throw new IOException("Choose a .lfxb file that is not an open project.");
+                throw new IOException(LocalizationService.Shared.Get("Messages.Error.ChooseBinaryFile"));
 
             await using var stream = await file.OpenWriteAsync();
             if (stream.CanSeek)
@@ -331,12 +396,12 @@ public partial class MainViewModel : ViewModelBase
             }
             await stream.WriteAsync(bytes);
             await stream.FlushAsync();
-            FileStatus = $"Exported {file.Name}.";
+            SetFileStatus("Messages.BinaryExported", file.Name);
         }
         catch (Exception ex) when (IsFileOperationException(ex) ||
                                    ex is InvalidDataException or InvalidOperationException or ArgumentException)
         {
-            FileStatus = $"Could not export VFX: {ex.Message}";
+            SetFileStatus("Messages.ExportFailed", ex.Message);
         }
         catch (OperationCanceledException) { }
         finally { file?.Dispose(); }
@@ -347,12 +412,12 @@ public partial class MainViewModel : ViewModelBase
         var document = ActiveDocument;
         if (document is null)
         {
-            FileStatus = "There is no active document to save.";
+            SetFileStatus("Messages.NoDocumentToSave");
             return false;
         }
         if (_storageProvider is null)
         {
-            FileStatus = "The platform file picker is not available.";
+            SetFileStatus("Messages.FilePickerUnavailable");
             return false;
         }
 
@@ -369,7 +434,7 @@ public partial class MainViewModel : ViewModelBase
 
             file ??= await _storageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
-                Title = "Save LIBERA FX project",
+                Title = LocalizationService.Shared.Get("Messages.SaveProjectTitle"),
                 DefaultExtension = ProjectFileService.FileExtension.TrimStart('.'),
                 SuggestedFileName = document.FileName,
                 FileTypeChoices = [ProjectFileType]
@@ -411,12 +476,12 @@ public partial class MainViewModel : ViewModelBase
                 ReleaseStorageFile(oldFileKey);
             }
 
-            FileStatus = $"Saved {file.Name}.";
+            SetFileStatus("Messages.ProjectSaved", file.Name);
             return true;
         }
         catch (Exception ex) when (IsFileOperationException(ex))
         {
-            FileStatus = $"Could not save project: {ex.Message}";
+            SetFileStatus("Messages.SaveProjectFailed", ex.Message);
             return false;
         }
         catch (OperationCanceledException)
@@ -457,7 +522,7 @@ public partial class MainViewModel : ViewModelBase
         var allSaved = Documents.All(document => !document.IsDirty);
         if (!allSaved)
         {
-            FileStatus = "Some documents changed while saving. Save them again before closing.";
+            SetFileStatus("Messages.DocumentsChangedWhileSaving");
         }
 
         return allSaved;
@@ -522,7 +587,7 @@ public partial class MainViewModel : ViewModelBase
         workspace.History.ActionPerformed += message => Log.Add("Edit", message);
         workspace.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(GraphWorkspaceViewModel.ConnectionStatus))
+            if (e.PropertyName == nameof(GraphWorkspaceViewModel.ConnectionStatus) && !workspace.IsRefreshingLocalizedText)
                 Log.Add("Graph", workspace.ConnectionStatus);
         };
         return workspace;
@@ -584,7 +649,7 @@ public partial class MainViewModel : ViewModelBase
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            AppearanceStatus = $"Could not save appearance settings: {ex.Message}";
+            SetAppearanceStatus("Messages.SaveAppearanceFailed", ex.Message);
             OnPropertyChanged(nameof(SelectedColorScheme));
             OnPropertyChanged(nameof(SelectedAccentPalette));
         }
@@ -602,13 +667,13 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(SelectedAccentPalette));
     }
 
-    private static readonly FilePickerFileType ProjectFileType = new("LIBERA FX Project")
+    private static FilePickerFileType ProjectFileType => new(LocalizationService.Shared.Get("Messages.ProjectFileType"))
     {
         Patterns = [$"*{ProjectFileService.FileExtension}"],
         MimeTypes = ["application/json"]
     };
 
-    private static readonly FilePickerFileType VfxBinaryFileType = new("LIBERA FX Binary")
+    private static FilePickerFileType VfxBinaryFileType => new(LocalizationService.Shared.Get("Messages.BinaryFileType"))
     {
         Patterns = ["*.lfxb"]
     };

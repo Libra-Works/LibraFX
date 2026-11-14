@@ -10,18 +10,20 @@ public sealed class TeamProfilesService : ObservableObject
     private readonly string _path;
     private IReadOnlyList<TeamProfile> _profiles;
     private TeamProfile _active;
-    private string _status = string.Empty;
+    private string? _statusKey;
+    private object?[] _statusArgs = [];
     private bool _loadFailed;
 
     public IReadOnlyList<TeamProfile> Profiles => _profiles;
     public TeamProfile Active => _active;
-    public string Status { get => _status; private set => SetProperty(ref _status, value); }
+    public string Status => _statusKey is null ? string.Empty : LocalizationService.Shared.Get(_statusKey, _statusArgs);
     public event EventHandler? Changed;
 
     public TeamProfilesService(string? path = null)
     {
         _path = path ?? Path.Combine(AppDataDirectory.Root, "LiberaFx", "team-profiles.json");
-        var fallback = new TeamProfile(Guid.NewGuid(), "Default", string.Empty);
+        MessageLocalization.Observe(this, static service => service.OnPropertyChanged(nameof(Status)));
+        var fallback = new TeamProfile(Guid.NewGuid(), LocalizationService.Shared.Get("Messages.DefaultProject"), string.Empty);
         _profiles = [fallback];
         _active = fallback;
         try
@@ -40,7 +42,7 @@ public sealed class TeamProfilesService : ObservableObject
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or ArgumentException)
         {
             _loadFailed = true;
-            Status = $"Could not load team profiles: {ex.Message}";
+            SetStatus("Messages.LoadProfilesFailed", ex.Message);
         }
     }
 
@@ -49,7 +51,7 @@ public sealed class TeamProfilesService : ObservableObject
         var selected = Profiles.FirstOrDefault(profile => profile.Id == id);
         if (selected is null) return false;
         if (selected.Id == Active.Id) return true;
-        return Commit(Profiles, selected, $"Active project: {selected.Name}.");
+        return Commit(Profiles, selected, "Messages.ActiveProject", selected.Name);
     }
 
     public bool Save(Guid? id, string name, string directory)
@@ -59,44 +61,44 @@ public sealed class TeamProfilesService : ObservableObject
         if (name.Length is 0 or > 100 || directory.Length > 4096 ||
             (directory.Length != 0 && !Path.IsPathFullyQualified(directory)))
         {
-            Status = "Enter a project name and an absolute group directory, or leave the directory empty.";
+            SetStatus("Messages.EnterProjectDetails");
             return false;
         }
         if (id is not null && Profiles.All(profile => profile.Id != id))
         {
-            Status = "The selected project no longer exists.";
+            SetStatus("Messages.ProjectMissing");
             return false;
         }
         if (Profiles.Any(profile => profile.Id != id && string.Equals(profile.Name, name, StringComparison.OrdinalIgnoreCase)))
         {
-            Status = "Project names must be unique.";
+            SetStatus("Messages.UniqueProjectNames");
             return false;
         }
         var profile = new TeamProfile(id ?? Guid.NewGuid(), name, directory);
         var profiles = id is null
             ? Profiles.Append(profile).ToArray()
             : Profiles.Select(item => item.Id == id ? profile : item).ToArray();
-        return Commit(profiles, profile, $"Saved project: {profile.Name}.");
+        return Commit(profiles, profile, "Messages.TeamProjectSaved", profile.Name);
     }
 
     public bool Remove(Guid id)
     {
         if (Profiles.Count <= 1)
         {
-            Status = "At least one project is required.";
+            SetStatus("Messages.ProjectRequired");
             return false;
         }
         if (Profiles.All(profile => profile.Id != id)) return false;
         var profiles = Profiles.Where(profile => profile.Id != id).ToArray();
         var active = Active.Id == id ? profiles[0] : Active;
-        return Commit(profiles, active, $"Active project: {active.Name}.");
+        return Commit(profiles, active, "Messages.ActiveProject", active.Name);
     }
 
-    private bool Commit(IReadOnlyList<TeamProfile> profiles, TeamProfile active, string status)
+    private bool Commit(IReadOnlyList<TeamProfile> profiles, TeamProfile active, string statusKey, params object?[] statusArgs)
     {
         if (_loadFailed)
         {
-            Status = "Team profiles could not be loaded. Restore or repair the settings file before saving.";
+            SetStatus("Messages.ProfilesNeedRepair");
             return false;
         }
         string? temporary = null;
@@ -113,13 +115,13 @@ public sealed class TeamProfilesService : ObservableObject
             _active = active;
             OnPropertyChanged(nameof(Profiles));
             OnPropertyChanged(nameof(Active));
-            Status = status;
+            SetStatus(statusKey, statusArgs);
             Changed?.Invoke(this, EventArgs.Empty);
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            Status = $"Could not save team profiles: {ex.Message}";
+            SetStatus("Messages.SaveProfilesFailed", ex.Message);
             return false;
         }
         finally
@@ -130,6 +132,13 @@ public sealed class TeamProfilesService : ObservableObject
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
             }
         }
+    }
+
+    private void SetStatus(string key, params object?[] args)
+    {
+        _statusKey = key;
+        _statusArgs = args;
+        OnPropertyChanged(nameof(Status));
     }
 
     private static bool IsValid(TeamProfile? profile) =>

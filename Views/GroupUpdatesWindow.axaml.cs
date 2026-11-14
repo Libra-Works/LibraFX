@@ -1,26 +1,47 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using LiberaFx.ViewModels;
+using LiberaFx.Services;
 
 namespace LiberaFx.Views;
 
 public partial class GroupUpdatesWindow : Window
 {
-    public GroupUpdatesWindow() => InitializeComponent();
+    private IReadOnlyList<GroupUpdateCandidate> _candidates = [];
+
+    public GroupUpdatesWindow()
+    {
+        InitializeComponent();
+        Opened += (_, _) =>
+        {
+            LocalizationService.Shared.LanguageChanged += OnLanguageChanged;
+            RefreshText();
+        };
+        Closed += (_, _) => LocalizationService.Shared.LanguageChanged -= OnLanguageChanged;
+    }
 
     public GroupUpdatesWindow(IReadOnlyList<GroupUpdateCandidate> candidates) : this()
     {
-        var eligible = candidates.Count(item => !item.HasLocalChanges);
-        var conflicts = candidates.Count - eligible;
-        Summary.Text = $"{candidates.Count} linked group(s) have newer versions. Update all unchanged groups, or keep the versions currently embedded in your documents.";
-        var lines = candidates.Take(30).Select(item =>
+        _candidates = candidates;
+        RefreshText();
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e) => RefreshText();
+
+    private void RefreshText()
+    {
+        var text = LocalizationService.Shared;
+        var eligible = _candidates.Count(item => !item.HasLocalChanges);
+        var conflicts = _candidates.Count - eligible;
+        Summary.Text = text.Get("Editor.GroupUpdatesSummary", _candidates.Count);
+        var lines = _candidates.Take(30).Select(item =>
             $"{item.Name}: v{item.CurrentRevision} -> v{item.LatestRevision}" +
-            (item.HasLocalChanges ? " (conflict; kept)" : ""));
+            (item.HasLocalChanges ? text.Get("Editor.GroupUpdateConflict") : ""));
         var note = conflicts == 0
-            ? "Updates can be undone in each document."
-            : $"{conflicts} group(s) have local changes, a nested conflict, or a missing original revision and will not be overwritten. Updates can be undone in each document.";
+            ? text.Get("Editor.GroupUpdateUndo")
+            : text.Get("Editor.GroupUpdateConflicts", conflicts);
         Details.Text = string.Join(Environment.NewLine, lines) +
-            (candidates.Count > 30 ? $"{Environment.NewLine}..." : "") + $"{Environment.NewLine}{Environment.NewLine}{note}";
+            (_candidates.Count > 30 ? $"{Environment.NewLine}..." : "") + $"{Environment.NewLine}{Environment.NewLine}{note}";
         ApplyButton.IsEnabled = eligible > 0;
     }
 

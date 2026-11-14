@@ -4,10 +4,12 @@
   "namespace": "LiberaFx",
   "kind": "InterpolationMode",
   "name": "Interpolation Mode",
+  "displayNameKey": "Editor.Node.Interpolation",
+  "groupNameKey": "Editor.NodeGroup.Parameters",
   "group": "Parameter nodes",
   "portType": "enum:c0bb0566-0892-4c0f-b8eb-ce5a38d3f0b2",
   "portCategory": "Parameter",
   "parameters": [
-    { "id": "value", "name": "Value", "type": "enum:c0bb0566-0892-4c0f-b8eb-ce5a38d3f0b2", "defaultValue": 1 }
+    { "id": "value", "name": "Value", "displayNameKey": "Editor.Parameter.Value", "type": "enum:c0bb0566-0892-4c0f-b8eb-ce5a38d3f0b2", "defaultValue": 1 }
   ]
 }

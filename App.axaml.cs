@@ -11,7 +11,7 @@ namespace LiberaFx;
 
 public partial class App : Application
 {
-    private readonly ServerSettingsService _serverSettings = new();
+    private ServerSettingsService _serverSettings = null!;
     private McpHost _mcpHost = null!;
     private PreviewHost _previewHost = null!;
     private Task _mcpStart = Task.CompletedTask;
@@ -22,6 +22,8 @@ public partial class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+        LocalizationService.Initialize(this);
+        _serverSettings = new ServerSettingsService();
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -76,12 +78,12 @@ public partial class App : Application
         try
         {
             await Task.Run(() => _previewHost.StartAsync(viewModel));
-            await Dispatcher.UIThread.InvokeAsync(() => viewModel.PreviewStatus = "Running (TLS; token required)");
+            await Dispatcher.UIThread.InvokeAsync(() => viewModel.SetPreviewStatus("Editor.PreviewRunning"));
         }
         catch (Exception ex)
         {
             Trace.TraceError("Preview startup failed: {0}", ex);
-            await Dispatcher.UIThread.InvokeAsync(() => viewModel.PreviewStatus = $"Startup failed: {ex.Message}");
+            await Dispatcher.UIThread.InvokeAsync(() => viewModel.SetPreviewStatus("Editor.StartupFailed", ex.Message));
         }
     }
 
@@ -92,9 +94,8 @@ public partial class App : Application
             await Task.Run(() => _mcpHost.StartAsync(viewModel.ActiveGraphProvider));
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                viewModel.McpStatus = Environment.GetEnvironmentVariable("LIBERAFX_MCP_DEBUG") == "1"
-                    ? "Running (loopback only; token required; graph UI debug enabled)"
-                    : "Running (loopback only; access token required)";
+                viewModel.SetMcpStatus(Environment.GetEnvironmentVariable("LIBERAFX_MCP_DEBUG") == "1"
+                    ? "Editor.McpRunningDebug" : "Editor.McpRunning");
             });
         }
         catch (Exception ex)
@@ -102,7 +103,7 @@ public partial class App : Application
             Trace.TraceError("MCP startup failed: {0}", ex);
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                viewModel.McpStatus = $"Startup failed: {ex.Message}";
+                viewModel.SetMcpStatus("Editor.StartupFailed", ex.Message);
             });
         }
     }
@@ -124,7 +125,7 @@ public partial class App : Application
             await _previewStart;
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                viewModel.McpStatus = "Stopping";
+                viewModel.SetMcpStatus("Editor.Stopping");
             });
             await Task.Run(() => _mcpHost.StopAsync());
             await _previewHost.StopAsync();
@@ -141,7 +142,7 @@ public partial class App : Application
             Trace.TraceError("MCP shutdown failed: {0}", ex);
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                viewModel.McpStatus = $"Shutdown failed: {ex.Message}. Close the window to retry.";
+                viewModel.SetMcpStatus("Editor.ShutdownFailed", ex.Message);
                 _shutdownInProgress = false;
             });
         }

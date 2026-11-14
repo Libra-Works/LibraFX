@@ -2,9 +2,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:LiberaFx.ViewModels"
         xmlns:services="using:LiberaFx.Services"
+        xmlns:views="using:LiberaFx.Views"
         x:Class="LiberaFx.Views.SettingsWindow"
         x:DataType="vm:MainViewModel"
-        Title="LIBERA FX Settings"
+        Title="{DynamicResource Text.Editor.SettingsTitle}"
         Width="650"
         Height="600"
         MinWidth="400"
@@ -13,22 +14,48 @@
         Background="{DynamicResource EffectWindowBackgroundBrush}">
     <Grid RowDefinitions="*,Auto" Margin="20">
         <TabControl x:Name="SettingsTabs">
-        <TabItem Header="Appearance">
+        <TabItem Header="{DynamicResource Text.Editor.Appearance}">
+        <ScrollViewer>
         <StackPanel Margin="10" Spacing="14">
-            <TextBlock Text="Appearance"
+            <TextBlock Text="{DynamicResource Text.Editor.Appearance}"
                        FontSize="18"
                        FontWeight="SemiBold" />
             <StackPanel Spacing="6">
-                <TextBlock Text="Color scheme" />
-                <ComboBox ItemsSource="{Binding ColorSchemes}"
-                          SelectedItem="{Binding SelectedColorScheme}" />
+                <TextBlock Text="{DynamicResource Text.Editor.Language}" />
+                <ComboBox x:Name="LanguageList" ItemsSource="{Binding Localization.Languages}"
+                          IsEnabled="{Binding Localization.CanChangeLanguage}"
+                          SelectedItem="{Binding Localization.SelectedLanguage, Mode=OneWay}"
+                          SelectionChanged="OnLanguageSelected"
+                          AutomationProperties.Name="{DynamicResource Text.Editor.Language}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate DataType="services:EditorLanguage">
+                            <TextBlock Text="{Binding Name}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <TextBlock Text="{DynamicResource Text.Editor.LanguageHint}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                <TextBlock Text="{Binding Localization.Status}" TextWrapping="Wrap" />
             </StackPanel>
             <StackPanel Spacing="6">
-                <TextBlock Text="Accent color" />
-                <ComboBox ItemsSource="{Binding AccentPalettes}"
-                          SelectedItem="{Binding SelectedAccentPalette}" />
+                <TextBlock Text="{DynamicResource Text.Editor.ColorScheme}" />
+                <ComboBox ItemsSource="{Binding ColorSchemes}"
+                          SelectedItem="{Binding SelectedColorScheme}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate><views:LocalizedOptionText Value="{ReflectionBinding}" /></DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
             </StackPanel>
-            <TextBlock Text="Appearance preferences are saved automatically."
+            <StackPanel Spacing="6">
+                <TextBlock Text="{DynamicResource Text.Editor.Accent}" />
+                <ComboBox ItemsSource="{Binding AccentPalettes}"
+                          SelectedItem="{Binding SelectedAccentPalette}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate><views:LocalizedOptionText Value="{ReflectionBinding}" /></DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </StackPanel>
+            <TextBlock Text="{DynamicResource Text.Editor.AppearanceHint}"
                        TextWrapping="Wrap"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <TextBlock Text="{Binding AppearanceWarnings}" TextWrapping="Wrap"
@@ -36,67 +63,97 @@
             <TextBlock Text="{Binding AppearanceStatus}" TextWrapping="Wrap"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
         </StackPanel>
+        </ScrollViewer>
             </TabItem>
-            <TabItem Header="Shortcuts">
+            <TabItem Header="{DynamicResource Text.Editor.Shortcuts}">
                 <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="10">
-                    <TextBlock Text="Click a shortcut, then press a key combination. Escape cancels."
+                    <TextBlock Text="{DynamicResource Text.Editor.ShortcutHint}"
                                TextWrapping="Wrap" />
                     <ScrollViewer Grid.Row="1" Margin="0,8">
                         <ItemsControl ItemsSource="{Binding Shortcuts.Entries}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="services:ShortcutEntry">
                                     <Grid ColumnDefinitions="90,*,150" ColumnSpacing="8" Margin="0,2">
-                                        <TextBlock Text="{Binding Scope}" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding ScopeLabel}" VerticalAlignment="Center" />
                                         <TextBlock Grid.Column="1" Text="{Binding Label}" VerticalAlignment="Center" />
                                         <TextBox Grid.Column="2" Text="{Binding Gesture}" Tag="{Binding Id}"
                                                  IsReadOnly="True" KeyDown="OnShortcutKeyDown"
-                                                 ToolTip.Tip="Click here and press a key combination" />
+                                                 ToolTip.Tip="{DynamicResource Text.Editor.ShortcutTooltip}" />
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
-                    <StackPanel Grid.Row="2" Spacing="6">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="Graph pan:" VerticalAlignment="Center" />
-                            <ComboBox ItemsSource="{Binding Shortcuts.GraphPanOptions}" SelectedItem="{Binding Shortcuts.GraphPanButton}" />
-                            <TextBlock Text="Wheel modifier:" VerticalAlignment="Center" />
-                            <ComboBox ItemsSource="{Binding Shortcuts.ZoomOptions}" SelectedItem="{Binding Shortcuts.GraphZoomModifier}" />
+                    <Grid Grid.Row="2" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="{DynamicResource Text.Editor.GraphPan}" VerticalAlignment="Center" />
+                            <ComboBox ItemsSource="{Binding Shortcuts.GraphPanOptions}" SelectedItem="{Binding Shortcuts.GraphPanButton}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate><views:LocalizedOptionText Value="{ReflectionBinding}" /></DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
                         </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="F-Curve pan:" VerticalAlignment="Center" />
-                            <ComboBox ItemsSource="{Binding Shortcuts.PanOptions}" SelectedItem="{Binding Shortcuts.CurvePanButton}" />
-                            <TextBlock Text="Wheel modifier:" VerticalAlignment="Center" />
-                            <ComboBox ItemsSource="{Binding Shortcuts.ZoomOptions}" SelectedItem="{Binding Shortcuts.CurveZoomModifier}" />
-                            <Button Content="Reset" Click="OnResetShortcutsClick" />
+                        <StackPanel Grid.Column="1" Spacing="4">
+                            <TextBlock Text="{DynamicResource Text.Editor.WheelModifier}" VerticalAlignment="Center" />
+                            <ComboBox ItemsSource="{Binding Shortcuts.ZoomOptions}" SelectedItem="{Binding Shortcuts.GraphZoomModifier}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate><views:LocalizedOptionText Value="{ReflectionBinding}" /></DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
                         </StackPanel>
-                    </StackPanel>
-                    <TextBlock Grid.Row="3" Margin="0,6,0,0" Text="{Binding Shortcuts.Status}"
+                        <StackPanel Grid.Row="1" Spacing="4">
+                            <TextBlock Text="{DynamicResource Text.Editor.CurvePan}" VerticalAlignment="Center" />
+                            <ComboBox ItemsSource="{Binding Shortcuts.PanOptions}" SelectedItem="{Binding Shortcuts.CurvePanButton}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate><views:LocalizedOptionText Value="{ReflectionBinding}" /></DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
+                            <TextBlock Text="{DynamicResource Text.Editor.WheelModifier}" VerticalAlignment="Center" />
+                            <ComboBox ItemsSource="{Binding Shortcuts.ZoomOptions}" SelectedItem="{Binding Shortcuts.CurveZoomModifier}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate><views:LocalizedOptionText Value="{ReflectionBinding}" /></DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </StackPanel>
+                    </Grid>
+                    <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <TextBlock Margin="0,6,0,0" Text="{Binding Shortcuts.Status}"
                                TextWrapping="Wrap" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                    <views:IconButton Grid.Column="1" Icon="Reset" Click="OnResetShortcutsClick"
+                                      ToolTip.Tip="{DynamicResource Text.Editor.ResetShortcuts}"
+                                      AutomationProperties.Name="{DynamicResource Text.Editor.ResetShortcuts}" />
+                    </Grid>
                 </Grid>
             </TabItem>
-            <TabItem Header="Servers">
+            <TabItem Header="{DynamicResource Text.Editor.Servers}">
+                <ScrollViewer>
                 <StackPanel Margin="10" Spacing="12">
-                    <TextBlock Text="Server ports" FontSize="18" FontWeight="SemiBold" />
-                    <TextBlock Text="MCP listens on loopback only. Preview accepts authenticated TLS connections."
+                    <TextBlock Text="{DynamicResource Text.Editor.ServerPorts}" FontSize="18" FontWeight="SemiBold" />
+                    <TextBlock Text="{DynamicResource Text.Editor.ServerHint}"
                                TextWrapping="Wrap" />
                     <Grid ColumnDefinitions="190,120" ColumnSpacing="8">
-                        <TextBlock Text="MCP port" VerticalAlignment="Center" />
+                        <TextBlock Text="{DynamicResource Text.Editor.McpPort}" VerticalAlignment="Center" />
                         <TextBox x:Name="McpPortBox" Grid.Column="1" Text="{Binding ServerSettings.McpPort, Mode=TwoWay}" />
                     </Grid>
                     <Grid ColumnDefinitions="190,120" ColumnSpacing="8">
-                        <TextBlock Text="Preview port" VerticalAlignment="Center" />
+                        <TextBlock Text="{DynamicResource Text.Editor.PreviewPort}" VerticalAlignment="Center" />
                         <TextBox x:Name="PreviewPortBox" Grid.Column="1" Text="{Binding ServerSettings.PreviewPort, Mode=TwoWay}" />
                     </Grid>
-                    <Button Content="Save server settings" HorizontalAlignment="Left" Click="OnSaveServersClick" />
+                    <views:IconButton Icon="Save" HorizontalAlignment="Left" Click="OnSaveServersClick"
+                                      ToolTip.Tip="{DynamicResource Text.Editor.SaveServers}"
+                                      AutomationProperties.Name="{DynamicResource Text.Editor.SaveServers}" />
                     <TextBlock Text="{Binding ServerSettings.Status}" TextWrapping="Wrap"
                                Foreground="{DynamicResource EffectMutedForegroundBrush}" />
                 </StackPanel>
+                </ScrollViewer>
             </TabItem>
-            <TabItem Header="Projects">
+            <TabItem Header="{DynamicResource Text.Editor.Projects}">
+                <ScrollViewer>
                 <StackPanel Margin="10" Spacing="12">
-                    <TextBlock Text="Project / team" FontSize="18" FontWeight="SemiBold" />
-                    <TextBlock Text="Each project uses its own group library. Switching projects does not change open documents."
+                    <TextBlock Text="{DynamicResource Text.Editor.ProjectTeam}" FontSize="18" FontWeight="SemiBold" />
+                    <TextBlock Text="{DynamicResource Text.Editor.ProjectHint}"
                                TextWrapping="Wrap" />
                     <ComboBox x:Name="ProjectList" ItemsSource="{Binding TeamProfiles.Profiles}"
                               SelectionChanged="OnProjectSelected">
@@ -106,27 +163,37 @@
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
-                    <TextBlock Text="Project name" />
+                    <TextBlock Text="{DynamicResource Text.Editor.ProjectName}" />
                     <TextBox x:Name="ProjectNameBox" />
-                    <TextBlock Text="Group library directory" />
+                    <TextBlock Text="{DynamicResource Text.Editor.GroupDirectory}" />
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                        <TextBox x:Name="GroupDirectoryBox" PlaceholderText="Absolute directory path" />
-                        <Button Grid.Column="1" Content="Browse..." Click="OnBrowseGroupDirectoryClick" />
+                        <TextBox x:Name="GroupDirectoryBox" PlaceholderText="{DynamicResource Text.Editor.DirectoryPlaceholder}" />
+                        <views:IconButton Grid.Column="1" Icon="Open" Click="OnBrowseGroupDirectoryClick"
+                                          ToolTip.Tip="{DynamicResource Text.Editor.BrowseDirectory}"
+                                          AutomationProperties.Name="{DynamicResource Text.Editor.BrowseDirectory}" />
                     </Grid>
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="Save project" Click="OnSaveProjectProfileClick" />
-                        <Button Content="Add project" Click="OnAddProjectProfileClick" />
-                        <Button Content="Remove project" Click="OnRemoveProjectProfileClick" />
+                        <views:IconButton Icon="Save" Click="OnSaveProjectProfileClick"
+                                          ToolTip.Tip="{DynamicResource Text.Editor.SaveProject}"
+                                          AutomationProperties.Name="{DynamicResource Text.Editor.SaveProject}" />
+                        <views:IconButton Icon="Add" Click="OnAddProjectProfileClick"
+                                          ToolTip.Tip="{DynamicResource Text.Editor.AddProject}"
+                                          AutomationProperties.Name="{DynamicResource Text.Editor.AddProject}" />
+                        <views:IconButton Icon="Remove" Click="OnRemoveProjectProfileClick"
+                                          ToolTip.Tip="{DynamicResource Text.Editor.RemoveProject}"
+                                          AutomationProperties.Name="{DynamicResource Text.Editor.RemoveProject}" />
                     </StackPanel>
                     <TextBlock Text="{Binding TeamProfiles.Status}" TextWrapping="Wrap"
                                Foreground="{DynamicResource EffectMutedForegroundBrush}" />
                 </StackPanel>
+                </ScrollViewer>
             </TabItem>
             </TabControl>
-        <Button Grid.Row="1"
+        <views:IconButton Grid.Row="1"
                 HorizontalAlignment="Right"
-                MinWidth="90"
-                Content="Close"
+                Icon="Close"
+                ToolTip.Tip="{DynamicResource Text.Editor.Close}"
+                AutomationProperties.Name="{DynamicResource Text.Editor.Close}"
                 IsDefault="True"
                 Click="OnCloseClick" />
     </Grid>

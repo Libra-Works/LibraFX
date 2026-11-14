@@ -1,11 +1,12 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="using:LiberaFx.Views"
         x:Class="LiberaFx.Views.GroupUpdatesWindow"
-        Title="Group updates available" Width="520" Height="330" MinWidth="420" MinHeight="280"
+        Title="{DynamicResource Text.Editor.GroupUpdatesTitle}" Width="600" Height="370" MinWidth="420" MinHeight="280"
         ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
     <Grid RowDefinitions="Auto,*,Auto" Margin="20" RowSpacing="12">
-        <TextBlock Text="Group assets have changed" FontSize="20" FontWeight="SemiBold" />
+        <TextBlock Text="{DynamicResource Text.Editor.GroupUpdatesHeading}" FontSize="20" FontWeight="SemiBold" />
         <ScrollViewer Grid.Row="1">
             <StackPanel Spacing="8">
                 <TextBlock x:Name="Summary" TextWrapping="Wrap" />
@@ -14,8 +15,18 @@
             </StackPanel>
         </ScrollViewer>
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-            <Button Content="Keep current versions" Click="OnKeepClick" />
-            <Button x:Name="ApplyButton" Content="Update all unchanged" Click="OnApplyClick" />
+            <Button Click="OnKeepClick" AutomationProperties.Name="{DynamicResource Text.Editor.KeepVersions}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <views:EditorIconView Icon="Close" />
+                    <TextBlock Text="{DynamicResource Text.Editor.KeepVersions}" />
+                </StackPanel>
+            </Button>
+            <Button x:Name="ApplyButton" Click="OnApplyClick" AutomationProperties.Name="{DynamicResource Text.Editor.UpdateAll}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <views:EditorIconView Icon="Refresh" />
+                    <TextBlock Text="{DynamicResource Text.Editor.UpdateAll}" />
+                </StackPanel>
+            </Button>
         </StackPanel>
     </Grid>
 </Window>

@@ -6,21 +6,40 @@
              x:DataType="vm:NodePropertiesPaneViewModel">
     <ScrollViewer HorizontalScrollBarVisibility="Auto">
     <StackPanel Margin="12" Spacing="8">
-        <TextBlock Text="Selected node"
+        <TextBlock Text="{DynamicResource Text.Editor.SelectedNode}"
                    FontWeight="SemiBold"
                    Foreground="{DynamicResource EffectForegroundBrush}" />
-        <TextBlock Text="Select a node in the graph to edit its name."
+        <TextBlock Text="{DynamicResource Text.Editor.SelectNodeHint}"
                    IsVisible="{Binding Graph.HasNoSelection}"
                    TextWrapping="Wrap"
                    Foreground="{DynamicResource EffectMutedForegroundBrush}" />
         <StackPanel IsVisible="{Binding Graph.HasSelection}" Spacing="6">
-            <TextBlock Text="Type"
+            <TextBlock Text="{DynamicResource Text.Editor.Type}"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <TextBlock Text="{Binding Graph.SelectedNodeType}"
                        Foreground="{DynamicResource EffectForegroundBrush}" />
-            <TextBlock Text="Name"
+            <TextBlock Text="{DynamicResource Text.Editor.Name}"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <TextBox Text="{Binding Graph.SelectedNodeName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            <Border IsVisible="{Binding IsGroup}" Margin="0,8,0,0" Padding="10"
+                    BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="1" CornerRadius="4">
+                <StackPanel Spacing="8">
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                        <TextBlock Text="{DynamicResource Text.Editor.GroupAsset}" VerticalAlignment="Center"
+                                   FontWeight="SemiBold" />
+                        <views:IconButton x:Name="SaveGroupButton" Grid.Column="1" Icon="Save"
+                                          Command="{Binding SaveGroupCommand}"
+                                          ToolTip.Tip="{DynamicResource Text.Editor.SaveGroup}"
+                                          AutomationProperties.Name="{DynamicResource Text.Editor.SaveGroup}" />
+                        <views:IconButton x:Name="GroupLockButton" Grid.Column="2" Icon="{Binding GroupLockIcon}"
+                                          IsVisible="{Binding IsLinkedGroup}" Command="{Binding ToggleGroupLockCommand}"
+                                          ToolTip.Tip="{Binding GroupLockHint}" AutomationProperties.Name="{Binding GroupLockHint}" />
+                    </Grid>
+                    <TextBlock Text="{Binding GroupRevision}" IsVisible="{Binding IsLinkedGroup}" />
+                    <TextBlock Text="{Binding GroupStatus}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                </StackPanel>
+            </Border>
             <ItemsControl ItemsSource="{Binding Parameters}" Margin="0,8,0,0">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="vm:NodeParameterEditorViewModel">
@@ -30,15 +49,16 @@
             </ItemsControl>
             <TextBlock Text="{Binding PluginStatus}" TextWrapping="Wrap" FontSize="11"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <TextBlock Text="Connections" Margin="0,10,0,0"
+            <TextBlock Text="{DynamicResource Text.Editor.Connections}" Margin="0,10,0,0"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <ItemsControl ItemsSource="{Binding Graph.SelectedConnections}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="vm:GraphConnectionViewModel">
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4" Margin="0,2">
                             <TextBlock Text="{Binding Description}" TextWrapping="Wrap" VerticalAlignment="Center" />
-                            <Button Grid.Column="1" Content="×" Tag="{Binding}"
-                                    ToolTip.Tip="Disconnect"
+                            <views:IconButton Grid.Column="1" Icon="Disconnect" Tag="{Binding}"
+                                    ToolTip.Tip="{DynamicResource Text.Editor.Disconnect}"
+                                    AutomationProperties.Name="{DynamicResource Text.Editor.Disconnect}"
                                     Click="OnDisconnectClick" />
                         </Grid>
                     </DataTemplate>

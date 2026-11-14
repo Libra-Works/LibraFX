@@ -2,6 +2,7 @@ using Dock.Model.Controls;
 using Dock.Model.Core;
 using Dock.Model.Mvvm;
 using Dock.Model.Mvvm.Controls;
+using LiberaFx.Services;
 
 namespace LiberaFx.ViewModels;
 
@@ -9,6 +10,7 @@ public sealed class DockFactory : Factory
 {
     private readonly ActiveGraphProvider _activeGraph;
     private readonly MainViewModel _main;
+    private readonly List<(IDockable Tool, string Key)> _localizedTools = [];
 
     public GraphDocumentViewModel InitialDocument { get; }
 
@@ -19,6 +21,7 @@ public sealed class DockFactory : Factory
         _activeGraph = activeGraph;
         InitialDocument = initialDocument;
         _main = main;
+        MessageLocalization.Observe(this, static factory => factory.RefreshLocalizedTitles());
     }
 
     public override IRootDock CreateLayout()
@@ -28,45 +31,55 @@ public sealed class DockFactory : Factory
         var outliner = new OutlinerViewModel(_activeGraph)
         {
             Id = "Outliner",
-            Title = "Outliner"
+            Title = LocalizationService.Shared.Get("Messages.Tool.Outliner")
         };
         var nodeList = new NodeCatalogViewModel(_activeGraph, _main.GroupAssets)
         {
             Id = "NodeList",
-            Title = "Node List"
+            Title = LocalizationService.Shared.Get("Messages.Tool.NodeList")
         };
         var resources = new ToolPaneViewModel
         {
             Id = "Resources",
-            Title = "Resources",
-            Description = "Asset browsing and engine asset integration are not implemented yet."
+            Title = LocalizationService.Shared.Get("Messages.Tool.Resources"),
+            DescriptionKey = "Messages.ResourcesUnavailable"
         };
         var properties = new NodePropertiesPaneViewModel(_activeGraph)
         {
             Id = "Properties",
-            Title = "Properties"
+            Title = LocalizationService.Shared.Get("Messages.Tool.Properties")
         };
         var engineConnection = new PreviewPaneViewModel(_main)
         {
             Id = "EngineConnection",
-            Title = "Engine Connection"
+            Title = LocalizationService.Shared.Get("Messages.Tool.EngineConnection")
         };
         var history = new HistoryPaneViewModel(_activeGraph)
         {
             Id = "History",
-            Title = "History"
+            Title = LocalizationService.Shared.Get("Messages.Tool.History")
         };
         var timeline = new ToolPaneViewModel
         {
             Id = "Timeline",
-            Title = "Timeline",
-            Description = "Timeline editing is not implemented yet. Timeline data will be represented by the underlying graph."
+            Title = LocalizationService.Shared.Get("Messages.Tool.Timeline"),
+            DescriptionKey = "Messages.TimelineUnavailable"
         };
         var curves = new CurveEditorViewModel(_activeGraph)
         {
             Id = "Curves",
-            Title = "F-Curve"
+            Title = LocalizationService.Shared.Get("Messages.Tool.Curves")
         };
+        _localizedTools.Clear();
+        _localizedTools.AddRange([
+            (outliner, "Messages.Tool.Outliner"),
+            (nodeList, "Messages.Tool.NodeList"),
+            (resources, "Messages.Tool.Resources"),
+            (properties, "Messages.Tool.Properties"),
+            (engineConnection, "Messages.Tool.EngineConnection"),
+            (history, "Messages.Tool.History"),
+            (timeline, "Messages.Tool.Timeline"),
+            (curves, "Messages.Tool.Curves")]);
 
         var leftDock = new ProportionalDock
         {
@@ -138,5 +151,11 @@ public sealed class DockFactory : Factory
         rootDock.ActiveDockable = mainLayout;
         rootDock.VisibleDockables = CreateList<IDockable>(mainLayout);
         return rootDock;
+    }
+
+    private void RefreshLocalizedTitles()
+    {
+        foreach (var (tool, key) in _localizedTools)
+            tool.Title = LocalizationService.Shared.Get(key);
     }
 }

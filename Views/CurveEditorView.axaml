@@ -6,27 +6,46 @@
              x:DataType="vm:CurveEditorViewModel">
     <Grid RowDefinitions="Auto,*,Auto">
         <StackPanel Orientation="Horizontal" Spacing="8" Margin="6,4">
-            <Button Content="Add key" Command="{Binding AddKeyCommand}" />
-            <Button Content="Delete" Command="{Binding DeleteKeyCommand}" />
-            <Button Content="Frame all" Click="OnFrameAllClick" />
-            <Button Content="Frame selected" Click="OnFrameSelectedClick" IsEnabled="{Binding HasSelectedKeys}" />
-            <Button Content="−" ToolTip.Tip="Zoom out" Click="OnZoomOutClick" />
-            <Button Content="+" ToolTip.Tip="Zoom in" Click="OnZoomInClick" />
-            <CheckBox Content="Snap frames" IsChecked="{Binding SnapToFrames}" VerticalAlignment="Center" />
+            <views:IconButton Icon="Add" Command="{Binding AddKeyCommand}"
+                              ToolTip.Tip="{DynamicResource Text.Panels.AddKey}"
+                              AutomationProperties.Name="{DynamicResource Text.Panels.AddKey}" />
+            <views:IconButton Icon="Delete" Command="{Binding DeleteKeyCommand}"
+                              ToolTip.Tip="{DynamicResource Text.Panels.DeleteKey}"
+                              AutomationProperties.Name="{DynamicResource Text.Panels.DeleteKey}" />
+            <views:IconButton Icon="Frame" Click="OnFrameAllClick"
+                              ToolTip.Tip="{DynamicResource Text.Panels.FrameAll}"
+                              AutomationProperties.Name="{DynamicResource Text.Panels.FrameAll}" />
+            <views:IconButton Icon="Frame" Click="OnFrameSelectedClick" IsEnabled="{Binding HasSelectedKeys}"
+                              ToolTip.Tip="{DynamicResource Text.Panels.FrameSelected}"
+                              AutomationProperties.Name="{DynamicResource Text.Panels.FrameSelected}" />
+            <views:IconButton Icon="ZoomOut" Click="OnZoomOutClick"
+                              ToolTip.Tip="{DynamicResource Text.Panels.ZoomOut}"
+                              AutomationProperties.Name="{DynamicResource Text.Panels.ZoomOut}" />
+            <views:IconButton Icon="ZoomIn" Click="OnZoomInClick"
+                              ToolTip.Tip="{DynamicResource Text.Panels.ZoomIn}"
+                              AutomationProperties.Name="{DynamicResource Text.Panels.ZoomIn}" />
+            <CheckBox Content="{DynamicResource Text.Panels.SnapFrames}" IsChecked="{Binding SnapToFrames}" VerticalAlignment="Center" />
             <TextBlock Text="{Binding Node.Name}" VerticalAlignment="Center" FontWeight="SemiBold" />
         </StackPanel>
         <Grid Grid.Row="1" ColumnDefinitions="190,*,210">
             <Grid RowDefinitions="Auto,*" Margin="4">
-                <TextBox PlaceholderText="Search curves" Text="{Binding ChannelSearch, Mode=TwoWay}" />
+                <TextBox PlaceholderText="{DynamicResource Text.Panels.SearchCurves}" Text="{Binding ChannelSearch, Mode=TwoWay}" />
                 <ScrollViewer Grid.Row="1">
                     <ItemsControl ItemsSource="{Binding FilteredChannels}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="vm:CurveChannelViewModel">
                                 <Expander Header="{Binding Name}" IsExpanded="True" Margin="0,2">
                                     <StackPanel Orientation="Horizontal" Margin="16,0,0,0" Spacing="4">
-                                        <CheckBox IsChecked="{Binding IsVisible}" ToolTip.Tip="Show or hide curve" />
-                                        <Button Content="Value" Foreground="{Binding Brush}"
-                                                Tag="{Binding}" Click="OnChannelClick" Padding="4,1" />
+                                        <CheckBox IsChecked="{Binding IsVisible}"
+                                                  ToolTip.Tip="{DynamicResource Text.Panels.ShowHideCurve}"
+                                                  AutomationProperties.Name="{DynamicResource Text.Panels.ShowHideCurve}" />
+                                        <Button Foreground="{Binding Brush}" Tag="{Binding}" Click="OnChannelClick" Padding="4,1"
+                                                AutomationProperties.Name="{DynamicResource Text.Panels.Value}">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <views:EditorIconView Icon="Frame" Stroke="{Binding Brush}" />
+                                                <TextBlock Text="{DynamicResource Text.Panels.Value}" />
+                                            </StackPanel>
+                                        </Button>
                                     </StackPanel>
                                 </Expander>
                             </DataTemplate>
@@ -37,23 +56,27 @@
             <views:FCurveCanvas Grid.Column="1" x:Name="CurveCanvas" MinHeight="130" />
             <ScrollViewer Grid.Column="2">
                 <StackPanel Margin="8,0" Spacing="4" IsEnabled="{Binding HasKey}">
-                    <TextBlock Text="Selected key" FontWeight="SemiBold" />
+                    <TextBlock Text="{DynamicResource Text.Panels.SelectedKey}" FontWeight="SemiBold" />
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                        <TextBlock Text="Frame" VerticalAlignment="Center" />
+                        <TextBlock Text="{DynamicResource Text.Panels.Frame}" VerticalAlignment="Center" />
                         <TextBox Grid.Column="1" Text="{Binding FrameText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
                     </Grid>
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                        <TextBlock Text="Value" VerticalAlignment="Center" />
+                        <TextBlock Text="{DynamicResource Text.Panels.Value}" VerticalAlignment="Center" />
                         <TextBox Grid.Column="1" Text="{Binding ValueText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
                     </Grid>
                     <ComboBox ItemsSource="{Binding Interpolations}"
-                              SelectedItem="{Binding SelectedInterpolation, Mode=TwoWay}" />
+                              SelectedItem="{Binding SelectedInterpolation, Mode=TwoWay}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate><views:LocalizedOptionText Value="{ReflectionBinding}" /></DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                        <TextBlock Text="In slope" VerticalAlignment="Center" />
+                        <TextBlock Text="{DynamicResource Text.Panels.InSlope}" VerticalAlignment="Center" />
                         <TextBox Grid.Column="1" Text="{Binding InSlopeText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
                     </Grid>
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                        <TextBlock Text="Out slope" VerticalAlignment="Center" />
+                        <TextBlock Text="{DynamicResource Text.Panels.OutSlope}" VerticalAlignment="Center" />
                         <TextBox Grid.Column="1" Text="{Binding OutSlopeText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
                     </Grid>
                 </StackPanel>

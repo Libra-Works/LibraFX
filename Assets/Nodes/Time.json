@@ -4,6 +4,8 @@
   "namespace": "LiberaFx",
   "kind": "Time",
   "name": "Time",
+  "displayNameKey": "Editor.Node.Time",
+  "groupNameKey": "Editor.NodeGroup.Math",
   "group": "Math",
   "portType": "Float",
   "portCategory": "Parameter",

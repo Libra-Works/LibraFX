@@ -13,11 +13,73 @@ using LiberaFx.Views;
 internal static class Program
 {
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
-        Environment.SetEnvironmentVariable("LIBERAFX_DATA_ROOT",
-            Path.Combine(Path.GetTempPath(), "liberafx-comment-test-" + Guid.NewGuid().ToString("N")));
+        var dataRoot = Path.Combine(Path.GetTempPath(), "liberafx-comment-test-" + Guid.NewGuid().ToString("N"));
+        Environment.SetEnvironmentVariable("LIBERAFX_DATA_ROOT", dataRoot);
+        try { Run(args); }
+        finally
+        {
+            if (Directory.Exists(dataRoot)) Directory.Delete(dataRoot, recursive: true);
+        }
+    }
+
+    private static void Run(string[] args)
+    {
+        string? languageFixture = null;
+        if (args is ["--language-startup", var mode])
+        {
+            languageFixture = mode switch
+            {
+                "ja" => """{"Language":"ja"}""",
+                "invalid" => "{invalid",
+                "unsupported" => """{"Language":"unsupported"}""",
+                "save-failure" => "",
+                _ => throw new ArgumentException("Unknown language startup fixture.")
+            };
+            var directory = Path.Combine(LiberaFx.Services.AppDataDirectory.Root, "LiberaFx");
+            Directory.CreateDirectory(directory);
+            if (mode == "save-failure") Directory.CreateDirectory(Path.Combine(directory, "language.json"));
+            else File.WriteAllText(Path.Combine(directory, "language.json"), languageFixture);
+        }
         AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+        if (languageFixture is not null)
+        {
+            var localization = LiberaFx.Services.LocalizationService.Shared;
+            var valid = args[1] == "ja";
+            if (args[1] == "save-failure")
+            {
+                var model = new MainViewModel();
+                var settings = new SettingsWindow { DataContext = model };
+                settings.Show();
+                try
+                {
+                    var languageList = settings.FindControl<ComboBox>("LanguageList")!;
+                    languageList.SelectedItem = localization.Languages.Single(language => language.Id == "ja");
+                    Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                    if (localization.SelectedLanguage.Id != "en" || string.IsNullOrEmpty(localization.Status) ||
+                        languageList.SelectedItem is not LiberaFx.Services.EditorLanguage selected ||
+                        selected != localization.SelectedLanguage ||
+                        Directory.EnumerateFiles(Path.Combine(LiberaFx.Services.AppDataDirectory.Root, "LiberaFx"), ".language-*.tmp").Any())
+                        throw new InvalidOperationException("Failed language saves changed the UI or left temporary files.");
+                }
+                finally
+                {
+                    settings.Close();
+                    model.DisposeStorageFiles();
+                }
+                Console.WriteLine("Language save failure checks passed.");
+                return;
+            }
+            if (localization.SelectedLanguage.Id != (valid ? "ja" : "en"))
+                throw new InvalidOperationException("Startup did not load the expected language.");
+            localization.SelectedLanguage = localization.Languages.Single(language => language.Id == (valid ? "en" : "ja"));
+            if (!valid && (localization.SelectedLanguage.Id != "en" || string.IsNullOrEmpty(localization.Status) ||
+                          File.ReadAllText(Path.Combine(LiberaFx.Services.AppDataDirectory.Root, "LiberaFx", "language.json")) != languageFixture))
+                throw new InvalidOperationException("Invalid language settings were overwritten or not safely rejected.");
+            Console.WriteLine("Language startup and settings protection checks passed.");
+            return;
+        }
         var workspace = new GraphWorkspaceViewModel(new UndoRedoManager());
         var node = workspace.CreateNode(GraphNodeKind.Comment);
         var view = new GraphNodeView { DataContext = node };
@@ -80,6 +142,8 @@ internal static class Program
         }
         GroupLibraryTests.Run();
         Console.WriteLine("Project profile and group library checks passed.");
+        EditorInterfaceTests.Run();
+        Console.WriteLine("Inspector actions and English/Japanese localization checks passed.");
     }
 
     private static byte[] CreateLargeImage(BitmapEncoderOptions options)

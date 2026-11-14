@@ -2,16 +2,19 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:LiberaFx.ViewModels"
         xmlns:services="using:LiberaFx.Services"
+        xmlns:views="using:LiberaFx.Views"
         x:Class="LiberaFx.Views.LogWindow"
         x:DataType="vm:MainViewModel"
-        Title="LIBERA FX - Log" Width="860" Height="460" MinWidth="420" MinHeight="220"
+        Title="{DynamicResource Text.Panels.LogTitle}" Width="860" Height="460" MinWidth="420" MinHeight="220"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
     <Grid RowDefinitions="Auto,*">
         <Border Padding="10" Background="{DynamicResource EffectSurfaceBrush}"
                 BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="0,0,0,1">
             <DockPanel>
-                <Button DockPanel.Dock="Right" Content="Clear" Click="OnClearClick" />
-                <TextBlock Text="Editor activity" VerticalAlignment="Center" FontWeight="SemiBold" />
+                <views:IconButton DockPanel.Dock="Right" Icon="Delete" Click="OnClearClick"
+                                  ToolTip.Tip="{DynamicResource Text.Panels.ClearLog}"
+                                  AutomationProperties.Name="{DynamicResource Text.Panels.ClearLog}" />
+                <TextBlock Text="{DynamicResource Text.Panels.EditorActivity}" VerticalAlignment="Center" FontWeight="SemiBold" />
             </DockPanel>
         </Border>
         <ListBox Grid.Row="1" ItemsSource="{Binding Log.Entries}">

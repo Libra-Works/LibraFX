@@ -4,7 +4,7 @@
              x:Class="LiberaFx.Views.OutlinerView"
              x:DataType="vm:OutlinerViewModel">
     <Grid RowDefinitions="Auto,*">
-        <TextBox Margin="10" PlaceholderText="Search nodes"
+        <TextBox Margin="10" PlaceholderText="{DynamicResource Text.Panels.SearchNodes}"
                  Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
         <TreeView Grid.Row="1"
                   ItemsSource="{Binding Nodes}"

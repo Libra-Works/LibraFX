@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Dock.Model.Mvvm.Controls;
 using LiberaFx.Models.Commands;
+using LiberaFx.Services;
 
 namespace LiberaFx.ViewModels;
 
@@ -105,7 +106,7 @@ public sealed class HistoryEntryViewModel : ObservableObject
 
     public Thickness Indent { get; }
     public string PinButtonText => IsPinned ? "◆" : "◇";
-    public string PinToolTip => IsPinned ? "Unpin this state" : "Pin this state";
+    public string PinToolTip => LocalizationService.Shared.Get(IsPinned ? "Messages.UnpinState" : "Messages.PinState");
 
     public IRelayCommand NavigateCommand { get; }
 
@@ -123,5 +124,6 @@ public sealed class HistoryEntryViewModel : ObservableObject
         Indent = new Thickness(Math.Min(indent, 12) * 14, 0, 0, 0);
         NavigateCommand = new RelayCommand(() => _history.NavigateTo(Id));
         TogglePinCommand = new RelayCommand(() => _history.SetPinned(Id, !IsPinned));
+        MessageLocalization.Observe(this, static entry => entry.OnPropertyChanged(nameof(PinToolTip)));
     }
 }

@@ -4,10 +4,12 @@
   "namespace": "LiberaFx",
   "kind": "String",
   "name": "String",
+  "displayNameKey": "Editor.Node.String",
+  "groupNameKey": "Editor.NodeGroup.Parameters",
   "group": "Parameter nodes",
   "portType": "String",
   "portCategory": "Parameter",
   "parameters": [
-    { "id": "value", "name": "Value", "type": "string", "defaultValue": "" }
+    { "id": "value", "name": "Value", "displayNameKey": "Editor.Parameter.Value", "type": "string", "defaultValue": "" }
   ]
 }

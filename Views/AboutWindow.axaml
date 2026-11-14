@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="using:LiberaFx.Views"
         x:Class="LiberaFx.Views.AboutWindow"
-        Title="About LIBERA FX" Width="560" Height="440" CanResize="False"
+        Title="{DynamicResource Text.Panels.AboutTitle}" Width="560" Height="440" CanResize="False"
         ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
         Background="#10121D">
     <Grid RowDefinitions="Auto,*,Auto">
@@ -13,7 +13,10 @@
             <TextBlock Text="LIBERA FX" FontSize="18" FontWeight="SemiBold" Foreground="#F1F1FA" />
             <TextBlock x:Name="VersionText" Foreground="#B6B7CC" />
         </StackPanel>
-        <Button Grid.Row="2" Content="Close" HorizontalAlignment="Right"
-                Margin="0,0,26,20" MinWidth="80" Click="OnCloseClick" />
+        <views:IconButton Grid.Row="2" Icon="Close"
+                          ToolTip.Tip="{DynamicResource Text.Panels.Close}"
+                          AutomationProperties.Name="{DynamicResource Text.Panels.Close}"
+                          HorizontalAlignment="Right" Margin="0,0,26,20"
+                          Click="OnCloseClick" />
     </Grid>
 </Window>

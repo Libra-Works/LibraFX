@@ -4,6 +4,8 @@
   "namespace": "LiberaFx",
   "kind": "Multiply",
   "name": "Multiply",
+  "displayNameKey": "Editor.Node.Multiply",
+  "groupNameKey": "Editor.NodeGroup.Math",
   "group": "Math",
   "portType": "Float",
   "portCategory": "Parameter",

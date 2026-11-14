@@ -22,8 +22,13 @@
                             <TextBlock Text="›" IsVisible="{Binding HasSeparator}"
                                        FontSize="18" VerticalAlignment="Center"
                                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-                            <Button Content="{Binding Name}" Tag="{Binding Depth}"
-                                    Click="OnBreadcrumbClick" Padding="8,2" />
+                            <Button Tag="{Binding Depth}" AutomationProperties.Name="{Binding Name}"
+                                    Click="OnBreadcrumbClick" Padding="8,2">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <views:EditorIconView Icon="Group" />
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
@@ -35,38 +40,33 @@
                 BorderBrush="{DynamicResource EffectBorderBrush}"
                 BorderThickness="0,0,0,1">
             <StackPanel Orientation="Horizontal" Spacing="6">
-                <Button Content="Delete selected"
+                <views:IconButton Icon="Delete" ToolTip.Tip="{DynamicResource Text.Editor.Delete}"
+                        AutomationProperties.Name="{DynamicResource Text.Editor.Delete}"
                         Command="{Binding DeleteSelectedNodeCommand}"
                         IsEnabled="{Binding HasSelection}" />
-                <Button ToolTip.Tip="Zoom out" AutomationProperties.Name="Zoom out"
-                        Click="OnZoomOutClick" Padding="7">
-                    <Path Width="18" Height="18" Stretch="Uniform"
-                          Stroke="{DynamicResource EffectForegroundBrush}" StrokeThickness="1.7"
-                          StrokeLineCap="Round"
-                          Data="M 13,8 A 5,5 0 1 1 3,8 A 5,5 0 1 1 13,8 M 12,12 L 17,17 M 5.5,8 L 10.5,8" />
-                </Button>
+                <views:IconButton Icon="ZoomOut" ToolTip.Tip="{DynamicResource Text.Editor.ZoomOut}"
+                        AutomationProperties.Name="{DynamicResource Text.Editor.ZoomOut}" Click="OnZoomOutClick" />
                 <Slider x:Name="ZoomSlider" Width="105" Minimum="-4.321928094887363" Maximum="2"
                         Value="0" ValueChanged="OnZoomSliderChanged"
-                        VerticalAlignment="Center" ToolTip.Tip="Graph zoom"
-                        AutomationProperties.Name="Graph zoom" />
-                <Button x:Name="ZoomButton" Content="100%"
-                        ToolTip.Tip="Reset zoom"
-                        Click="OnResetZoomClick" />
-                <Button ToolTip.Tip="Zoom in" AutomationProperties.Name="Zoom in"
-                        Click="OnZoomInClick" Padding="7">
-                    <Path Width="18" Height="18" Stretch="Uniform"
-                          Stroke="{DynamicResource EffectForegroundBrush}" StrokeThickness="1.7"
-                          StrokeLineCap="Round"
-                          Data="M 13,8 A 5,5 0 1 1 3,8 A 5,5 0 1 1 13,8 M 12,12 L 17,17 M 5.5,8 L 10.5,8 M 8,5.5 L 8,10.5" />
+                        VerticalAlignment="Center" ToolTip.Tip="{DynamicResource Text.Editor.GraphZoom}"
+                        AutomationProperties.Name="{DynamicResource Text.Editor.GraphZoom}" />
+                <Button x:Name="ZoomButton"
+                        ToolTip.Tip="{DynamicResource Text.Editor.ResetZoom}"
+                        AutomationProperties.Name="{DynamicResource Text.Editor.ResetZoom}"
+                        Click="OnResetZoomClick">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <views:EditorIconView Icon="Reset" />
+                        <TextBlock x:Name="ZoomText" Text="100%" VerticalAlignment="Center" />
+                    </StackPanel>
                 </Button>
-                <Button Content="Frame selected" Click="OnFrameSelectionClick"
+                <views:IconButton Icon="ZoomIn" ToolTip.Tip="{DynamicResource Text.Editor.ZoomIn}"
+                        AutomationProperties.Name="{DynamicResource Text.Editor.ZoomIn}" Click="OnZoomInClick" />
+                <views:IconButton Icon="Frame" ToolTip.Tip="{DynamicResource Text.Editor.Frame}"
+                        AutomationProperties.Name="{DynamicResource Text.Editor.Frame}" Click="OnFrameSelectionClick"
                         IsEnabled="{Binding HasSelection}" />
-                <Button Content="Group" Click="OnGroupSelectionClick"
+                <views:IconButton Icon="Group" ToolTip.Tip="{DynamicResource Text.Editor.Group}"
+                        AutomationProperties.Name="{DynamicResource Text.Editor.Group}" Click="OnGroupSelectionClick"
                         IsEnabled="{Binding HasSelection}" />
-                <Button Content="Save group" Click="OnSaveGroupClick"
-                        ToolTip.Tip="Save the selected group to the active project library" />
-                <Button Content="Lock / unlock group" Click="OnToggleGroupLockClick"
-                        ToolTip.Tip="Toggle editing of the selected saved group asset" />
                 <TextBlock Text="{Binding ConnectionStatus}"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource EffectMutedForegroundBrush}" />
@@ -95,12 +95,22 @@
                   DragDrop.Drop="OnGraphCanvasDrop">
                 <Grid.ContextMenu>
                     <ContextMenu>
-                        <MenuItem Header="_Add node..." Click="OnAddNodeClick" />
-                        <MenuItem Header="Add _comment" Click="OnAddCommentClick" />
+                        <MenuItem Header="{DynamicResource Text.Editor.AddNode}" Click="OnAddNodeClick">
+                            <MenuItem.Icon><views:EditorIconView Icon="Add" /></MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="{DynamicResource Text.Editor.AddComment}" Click="OnAddCommentClick">
+                            <MenuItem.Icon><views:EditorIconView Icon="Info" /></MenuItem.Icon>
+                        </MenuItem>
                         <Separator />
-                        <MenuItem Header="_Copy" IsEnabled="{Binding HasSelection}" Click="OnCopyClick" />
-                        <MenuItem Header="Cu_t" IsEnabled="{Binding HasSelection}" Click="OnCutClick" />
-                        <MenuItem Header="_Paste" Click="OnPasteClick" />
+                        <MenuItem Header="{DynamicResource Text.Editor.Copy}" IsEnabled="{Binding HasSelection}" Click="OnCopyClick">
+                            <MenuItem.Icon><views:EditorIconView Icon="Copy" /></MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="{DynamicResource Text.Editor.Cut}" IsEnabled="{Binding HasSelection}" Click="OnCutClick">
+                            <MenuItem.Icon><views:EditorIconView Icon="Cut" /></MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="{DynamicResource Text.Editor.Paste}" Click="OnPasteClick">
+                            <MenuItem.Icon><views:EditorIconView Icon="Paste" /></MenuItem.Icon>
+                        </MenuItem>
                     </ContextMenu>
                 </Grid.ContextMenu>
                 <Border x:Name="GraphBackground"
@@ -183,7 +193,7 @@
                     BorderBrush="{DynamicResource EffectBorderBrush}"
                     Background="{DynamicResource EffectSurfaceBrush}">
                 <Grid RowDefinitions="Auto,*">
-                    <TextBox x:Name="NodeSearchBox" PlaceholderText="Search node types..."
+                    <TextBox x:Name="NodeSearchBox" PlaceholderText="{DynamicResource Text.Editor.SearchNodeTypes}"
                              TextChanged="OnNodeSearchTextChanged" KeyDown="OnNodeSearchKeyDown" />
                     <ListBox x:Name="NodeSearchResults" Grid.Row="1" Margin="0,6,0,0"
                              MaxHeight="320" DoubleTapped="OnNodeSearchDoubleTapped"

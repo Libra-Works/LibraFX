@@ -4,6 +4,8 @@
   "namespace": "LiberaFx",
   "kind": "Add",
   "name": "Add",
+  "displayNameKey": "Editor.Node.Add",
+  "groupNameKey": "Editor.NodeGroup.Math",
   "group": "Math",
   "portType": "Float",
   "portCategory": "Parameter",

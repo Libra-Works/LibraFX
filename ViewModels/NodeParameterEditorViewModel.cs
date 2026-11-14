@@ -3,6 +3,7 @@ using System.Text.Json;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LiberaFx.Models.Graph;
+using LiberaFx.Services;
 
 namespace LiberaFx.ViewModels;
 
@@ -13,7 +14,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     private readonly NodeParameterDefinition _definition;
     private string _status = string.Empty;
 
-    public string Name => _definition.Name;
+    public string Name => LocalizationService.Shared.GetOrDefault(_definition.DisplayNameKey, _definition.Name);
     public string Type => _definition.Type;
     public string Id => _definition.Id;
     public NodeParameterEditorDefinition? Editor => _definition.Editor;
@@ -33,9 +34,11 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
             if (!GraphEnumDefinition.TryGetTypeId(Type, out var id) ||
                 !GraphEnumDefinition.All.TryGetValue(id, out var definition)) return [];
             var current = Value.GetInt32();
-            return definition.Values.Any(item => item.Value == current)
-                ? definition.Values
-                : definition.Values.Append(new GraphEnumValue(current, $"Unknown ({current})")).ToArray();
+            var values = definition.Values.Select(item => item with
+                { Name = LocalizationService.Shared.GetOrDefault(item.DisplayNameKey, item.Name) }).ToArray();
+            return values.Any(item => item.Value == current)
+                ? values
+                : values.Append(new GraphEnumValue(current, LocalizationService.Shared.Get("Messages.UnknownEnumValue", current))).ToArray();
         }
     }
     public int EnumValue
@@ -43,7 +46,12 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         get => Value.GetInt32();
         set => SetValue(JsonSerializer.SerializeToElement(value));
     }
-    public string Status { get => _status; private set => SetProperty(ref _status, value); }
+    public string Status
+    {
+        get => _status.StartsWith("Messages.", StringComparison.Ordinal)
+            ? LocalizationService.Shared.Get(_status) : _status;
+        private set => SetProperty(ref _status, value);
+    }
     public string JsonValue => Value.GetRawText();
     public string DisplayValue => Type switch
     {
@@ -78,6 +86,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         _graph = graph;
         _node = node;
         _definition = definition;
+        MessageLocalization.Observe(this, static editor => editor.Refresh());
     }
 
     public string ValueText
@@ -101,7 +110,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
             else if (Type is not ("float" or "int"))
                 SetJsonValue(value);
             else
-                Reject("Enter a valid number.");
+                Reject("Messages.EnterValidNumber");
         }
     }
 
@@ -135,7 +144,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         }
         catch (JsonException)
         {
-            Reject("Enter valid JSON.");
+            Reject("Messages.EnterValidJson");
             return false;
         }
     }
@@ -146,6 +155,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
 
     public void Refresh()
     {
+        OnPropertyChanged(nameof(Name));
         OnPropertyChanged(nameof(ValueText));
         OnPropertyChanged(nameof(DisplayValue));
         OnPropertyChanged(nameof(IsEnabled));
@@ -160,6 +170,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(W));
         OnPropertyChanged(nameof(ColorValue));
         OnPropertyChanged(nameof(ColorComponents));
+        OnPropertyChanged(nameof(Status));
     }
 
     private string Component(int index)
@@ -172,7 +183,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     {
         if (!double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var number) || !double.IsFinite(number))
         {
-            Reject("Enter a valid number.");
+            Reject("Messages.EnterValidNumber");
             return;
         }
         var values = Value.EnumerateArray().Select(item => item.GetDouble()).ToArray();
@@ -192,7 +203,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            Reject(ex.Message);
+            Reject(MessageLocalization.Error(ex.Message));
             return false;
         }
     }

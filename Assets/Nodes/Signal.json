@@ -4,6 +4,8 @@
   "namespace": "LiberaFx",
   "kind": "Signal",
   "name": "Signal",
+  "displayNameKey": "Editor.Node.Signal",
+  "groupNameKey": "Editor.NodeGroup.Signals",
   "group": "Signal nodes",
   "portType": "Signal",
   "portCategory": "Signal"

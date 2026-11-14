@@ -9,6 +9,7 @@ using Avalonia.Interactivity;
 using System.ComponentModel;
 using System.Text.Json;
 using LiberaFx.Models.Graph;
+using LiberaFx.Services;
 using LiberaFx.ViewModels;
 
 namespace LiberaFx.Views;
@@ -31,6 +32,7 @@ public partial class GraphNodeView : UserControl
     private Guid _resizeRevision;
     private GraphNodeViewModel? _imageNode;
     private Bitmap? _commentBitmap;
+    private string? _imageStatusKey;
 
     public GraphNodeView()
     {
@@ -47,11 +49,13 @@ public partial class GraphNodeView : UserControl
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
+        LocalizationService.Shared.LanguageChanged += OnLanguageChanged;
         AttachImageNode();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
+        LocalizationService.Shared.LanguageChanged -= OnLanguageChanged;
         DetachImageNode();
         base.OnDetachedFromVisualTree(e);
     }
@@ -85,12 +89,39 @@ public partial class GraphNodeView : UserControl
         if (e.PropertyName == nameof(GraphNodeViewModel.Parameters)) UpdateCommentImage();
     }
 
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        if (_imageStatusKey is { } key)
+            ImageStatus.Text = LocalizationService.Shared.Get(key);
+    }
+
+    private void SetImageStatus(string? key, string? externalMessage = null)
+    {
+        _imageStatusKey = key;
+        ImageStatus.Text = key is null
+            ? externalMessage ?? ""
+            : LocalizationService.Shared.Get(key);
+    }
+
+    private void SetImageError(Exception exception)
+    {
+        var key = exception.Message switch
+        {
+            "Image exceeds 16 MiB." => "Panels.CommentImageSourceTooLarge",
+            "Choose a PNG or JPEG image no larger than 8192 x 8192 pixels." => "Panels.CommentImageInvalid",
+            "Image could not be prepared for embedding." => "Panels.CommentImagePrepareFailed",
+            "Image could not be reduced to the embedding limit." => "Panels.CommentImageOptimizeFailed",
+            _ => null
+        };
+        SetImageStatus(key, exception.Message);
+    }
+
     private void UpdateCommentImage()
     {
         EmbeddedImage.Source = null;
         _commentBitmap?.Dispose();
         _commentBitmap = null;
-        ImageStatus.Text = "";
+        SetImageStatus(null);
         var definition = _imageNode?.Definition.Parameters.FirstOrDefault(item => item.Id == "image");
         var value = definition is null ? null : _imageNode!.GetParameterValue(definition).GetString();
         if (string.IsNullOrEmpty(value)) return;
@@ -101,7 +132,7 @@ public partial class GraphNodeView : UserControl
             if (bitmap.PixelSize.Width > 4096 || bitmap.PixelSize.Height > 4096)
             {
                 bitmap.Dispose();
-                ImageStatus.Text = "Image exceeds 4096 pixels.";
+                SetImageStatus("Panels.CommentImageDisplayTooLarge");
                 return;
             }
             _commentBitmap = bitmap;
@@ -110,7 +141,7 @@ public partial class GraphNodeView : UserControl
         catch (Exception ex) when (ex is FormatException or ArgumentException or IOException or InvalidDataException or
                                    InvalidOperationException or NotSupportedException)
         {
-            ImageStatus.Text = "Image could not be decoded.";
+            SetImageStatus("Panels.CommentImageDecodeFailed");
         }
     }
 
@@ -122,9 +153,9 @@ public partial class GraphNodeView : UserControl
         {
             var files = await top.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = "Choose a comment image",
+                Title = LocalizationService.Shared.Get("Panels.ChooseCommentImage"),
                 AllowMultiple = false,
-                FileTypeFilter = [new FilePickerFileType("PNG or JPEG") { Patterns = ["*.png", "*.jpg", "*.jpeg"] }]
+                FileTypeFilter = [new FilePickerFileType(LocalizationService.Shared.Get("Panels.PngOrJpeg")) { Patterns = ["*.png", "*.jpg", "*.jpeg"] }]
             });
             if (files.Count == 0) return;
             using var file = files[0];
@@ -134,7 +165,7 @@ public partial class GraphNodeView : UserControl
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or
                                    ArgumentException or InvalidOperationException or NotSupportedException)
         {
-            if (ReferenceEquals(DataContext, node)) ImageStatus.Text = ex.Message;
+            if (ReferenceEquals(DataContext, node)) SetImageError(ex);
         }
     }
 
@@ -168,13 +199,13 @@ public partial class GraphNodeView : UserControl
             if (ReferenceEquals(DataContext, node) && node.Workspace.Nodes.Contains(node))
             {
                 node.Workspace.SetParameter(node, "image", value);
-                if (optimized) ImageStatus.Text = "Image optimized for the project.";
+                if (optimized) SetImageStatus("Panels.CommentImageOptimized");
             }
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or
                                    ArgumentException or InvalidOperationException or NotSupportedException)
         {
-            if (ReferenceEquals(DataContext, node)) ImageStatus.Text = ex.Message;
+            if (ReferenceEquals(DataContext, node)) SetImageError(ex);
         }
     }
 

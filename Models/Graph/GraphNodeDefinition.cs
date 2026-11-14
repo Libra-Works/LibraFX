@@ -83,6 +83,8 @@ public sealed record GraphNodeDefinition(
     public static IReadOnlyList<string> LoadWarnings => Warnings;
     public string QualifiedName => $"{Namespace}.{TypeName}";
     public string TypeName { get; init; } = string.Empty;
+    public string? DisplayNameKey { get; init; }
+    public string? GroupNameKey { get; init; }
     public IReadOnlyList<NodeParameterDefinition> Parameters { get; init; } = [];
     public IReadOnlyList<GraphInputPortDefinition>? InputPorts { get; init; }
 
@@ -232,7 +234,10 @@ public sealed record GraphNodeDefinition(
             var condition = parameter.EnabledWhen is { } when
                 ? new NodeParameterCondition(when.Parameter ?? "", when.Expected.Clone()) : null;
             parameters.Add(new NodeParameterDefinition(parameter.Id!, parameter.Name, parameter.Type,
-                parameter.DefaultValue.Clone()) { Editor = editor, EnabledWhen = condition });
+                parameter.DefaultValue.Clone())
+            {
+                Editor = editor, EnabledWhen = condition, DisplayNameKey = parameter.DisplayNameKey
+            });
         }
         foreach (var parameter in parameters)
         {
@@ -255,6 +260,8 @@ public sealed record GraphNodeDefinition(
         definitions.Add(new GraphNodeDefinition(kind, node.TypeId, node.Namespace, node.Name, node.PortType, category, node.Group)
         {
             TypeName = node.Kind!,
+            DisplayNameKey = node.DisplayNameKey,
+            GroupNameKey = node.GroupNameKey,
             Parameters = parameters.AsReadOnly(),
             InputPorts = inputs?.AsReadOnly()
         });
@@ -271,6 +278,8 @@ public sealed record GraphNodeDefinition(
         public string? Namespace { get; set; }
         public string? Kind { get; set; }
         public string? Name { get; set; }
+        public string? DisplayNameKey { get; set; }
+        public string? GroupNameKey { get; set; }
         public string? Group { get; set; }
         public string? PortType { get; set; }
         public string? PortCategory { get; set; }
@@ -289,6 +298,7 @@ public sealed record GraphNodeDefinition(
     {
         public string? Id { get; set; }
         public string? Name { get; set; }
+        public string? DisplayNameKey { get; set; }
         public string? Type { get; set; }
         public JsonElement DefaultValue { get; set; }
         public ParameterEditorFile? Editor { get; set; }

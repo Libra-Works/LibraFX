@@ -4,13 +4,15 @@
   "namespace": "LiberaFx",
   "kind": "Comment",
   "name": "Comment",
+  "displayNameKey": "Editor.Node.Comment",
+  "groupNameKey": "Editor.NodeGroup.Utilities",
   "group": "Utilities",
   "portType": "Comment",
   "portCategory": "Parameter",
   "parameters": [
-    { "id": "text", "name": "Text", "type": "string", "defaultValue": "" },
-    { "id": "width", "name": "Width", "type": "float", "defaultValue": 360 },
-    { "id": "height", "name": "Height", "type": "float", "defaultValue": 200 },
-    { "id": "image", "name": "Image", "type": "commentImage", "defaultValue": "" }
+    { "id": "text", "name": "Text", "displayNameKey": "Editor.Parameter.Text", "type": "string", "defaultValue": "" },
+    { "id": "width", "name": "Width", "displayNameKey": "Editor.Parameter.Width", "type": "float", "defaultValue": 360 },
+    { "id": "height", "name": "Height", "displayNameKey": "Editor.Parameter.Height", "type": "float", "defaultValue": 200 },
+    { "id": "image", "name": "Image", "displayNameKey": "Editor.Parameter.Image", "type": "commentImage", "defaultValue": "" }
   ]
 }

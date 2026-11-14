@@ -4,10 +4,12 @@
   "namespace": "LiberaFx",
   "kind": "Color",
   "name": "Color",
+  "displayNameKey": "Editor.Node.Color",
+  "groupNameKey": "Editor.NodeGroup.Parameters",
   "group": "Parameter nodes",
   "portType": "Color",
   "portCategory": "Parameter",
   "parameters": [
-    { "id": "value", "name": "Value", "type": "color", "defaultValue": [1.0, 1.0, 1.0, 1.0] }
+    { "id": "value", "name": "Value", "displayNameKey": "Editor.Parameter.Value", "type": "color", "defaultValue": [1.0, 1.0, 1.0, 1.0] }
   ]
 }
