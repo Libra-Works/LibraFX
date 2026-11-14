@@ -8,15 +8,17 @@ namespace LiberaFx.ViewModels;
 public sealed class DockFactory : Factory
 {
     private readonly ActiveGraphProvider _activeGraph;
+    private readonly MainViewModel _main;
 
     public GraphDocumentViewModel InitialDocument { get; }
 
     public DocumentDock DocumentsDock { get; private set; } = null!;
 
-    public DockFactory(ActiveGraphProvider activeGraph, GraphDocumentViewModel initialDocument)
+    public DockFactory(ActiveGraphProvider activeGraph, GraphDocumentViewModel initialDocument, MainViewModel main)
     {
         _activeGraph = activeGraph;
         InitialDocument = initialDocument;
+        _main = main;
     }
 
     public override IRootDock CreateLayout()
@@ -44,11 +46,10 @@ public sealed class DockFactory : Factory
             Id = "Properties",
             Title = "Properties"
         };
-        var engineConnection = new ToolPaneViewModel
+        var engineConnection = new PreviewPaneViewModel(_main)
         {
             Id = "EngineConnection",
-            Title = "Engine Connection",
-            Description = "Connect to a Unity or Unreal runtime and send effect data. Playback happens in the external engine; transport and payload formats are not implemented yet."
+            Title = "Engine Connection"
         };
         var history = new HistoryPaneViewModel(_activeGraph)
         {

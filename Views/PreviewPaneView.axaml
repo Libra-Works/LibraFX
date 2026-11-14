@@ -1,0 +1,26 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:LiberaFx.ViewModels"
+             x:Class="LiberaFx.Views.PreviewPaneView"
+             x:DataType="vm:PreviewPaneViewModel">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="12" Spacing="8">
+            <TextBlock Text="Preview transport" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding Main.PreviewStatus}" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="Connected clients:" />
+                <TextBlock Text="{Binding Main.PreviewClientCount}" />
+            </StackPanel>
+            <TextBlock Text="Endpoint (replace &lt;editor-ip&gt; with this machine's IP)" TextWrapping="Wrap" />
+            <TextBox Text="{Binding Main.PreviewEndpoint}" IsReadOnly="True" />
+            <TextBlock Text="X-LiberaFx-Preview-Token" />
+            <TextBox Text="{Binding Main.PreviewAccessToken}" IsReadOnly="True" />
+            <TextBlock Text="TLS certificate SHA-256 fingerprint" />
+            <TextBox Text="{Binding Main.PreviewFingerprint}" IsReadOnly="True" TextWrapping="Wrap" />
+            <TextBlock Text="Keep the token private. Clients must verify the fingerprint before sending it."
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" TextWrapping="Wrap" />
+            <TextBlock Text="Protocol v1 sends full graph snapshots. Engine adapters and effect playback are not implemented yet."
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" TextWrapping="Wrap" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

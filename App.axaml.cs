@@ -12,7 +12,9 @@ namespace LiberaFx;
 public partial class App : Application
 {
     private readonly McpHost _mcpHost = new();
+    private readonly PreviewHost _previewHost = new();
     private Task _mcpStart = Task.CompletedTask;
+    private Task _previewStart = Task.CompletedTask;
     private bool _shutdownInProgress;
     private bool _allowShutdown;
 
@@ -25,7 +27,7 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            var viewModel = new MainViewModel(_mcpHost.AccessToken);
+            var viewModel = new MainViewModel(_mcpHost.AccessToken, _previewHost.AccessToken, _previewHost.Fingerprint);
             var window = new MainWindow
             {
                 DataContext = viewModel,
@@ -45,9 +47,24 @@ public partial class App : Application
                 _ = ShutdownAsync(desktop, viewModel);
             };
             _mcpStart = StartMcpAsync(viewModel);
+            _previewStart = StartPreviewAsync(viewModel);
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private async Task StartPreviewAsync(MainViewModel viewModel)
+    {
+        try
+        {
+            await Task.Run(() => _previewHost.StartAsync(viewModel));
+            await Dispatcher.UIThread.InvokeAsync(() => viewModel.PreviewStatus = "Running (TLS; token required)");
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceError("Preview startup failed: {0}", ex);
+            await Dispatcher.UIThread.InvokeAsync(() => viewModel.PreviewStatus = $"Startup failed: {ex.Message}");
+        }
     }
 
     private async Task StartMcpAsync(MainViewModel viewModel)
@@ -86,11 +103,14 @@ public partial class App : Application
             }
 
             await _mcpStart;
+            await _previewStart;
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 viewModel.McpStatus = "Stopping";
             });
             await Task.Run(() => _mcpHost.StopAsync());
+            await _previewHost.StopAsync();
+            _previewHost.Dispose();
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 viewModel.DisposeStorageFiles();

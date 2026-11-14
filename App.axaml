@@ -49,6 +49,9 @@
         <DataTemplate DataType="vm:HistoryPaneViewModel">
             <views:HistoryView />
         </DataTemplate>
+        <DataTemplate DataType="vm:PreviewPaneViewModel">
+            <views:PreviewPaneView />
+        </DataTemplate>
         <DataTemplate DataType="vm:ToolPaneViewModel">
             <ScrollViewer>
                 <TextBlock Margin="12"

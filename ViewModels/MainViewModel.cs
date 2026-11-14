@@ -22,9 +22,30 @@ public partial class MainViewModel : ViewModelBase
     private string _mcpStatus = "Starting";
     private string _fileStatus = "Ready";
     private string _appearanceStatus = string.Empty;
+    private string _previewStatus = "Starting";
+    private int _previewClientCount;
 
     public EditorLog Log { get; } = new();
     public string McpEndpoint => McpHost.Endpoint;
+    public string PreviewEndpoint => PreviewHost.Endpoint;
+    public string PreviewAccessToken { get; }
+    public string PreviewFingerprint { get; }
+    public string PreviewStatus
+    {
+        get => _previewStatus;
+        set
+        {
+            if (SetProperty(ref _previewStatus, value)) Log.Add("Preview", value);
+        }
+    }
+    public int PreviewClientCount
+    {
+        get => _previewClientCount;
+        set
+        {
+            if (SetProperty(ref _previewClientCount, value)) Log.Add("Preview", $"Connected clients: {value}");
+        }
+    }
 
     public ShortcutService Shortcuts => ShortcutService.Shared;
 
@@ -106,10 +127,12 @@ public partial class MainViewModel : ViewModelBase
         set => ChangeThemeSettings(_themeSettings.Current with { AccentPalette = value });
     }
 
-    public MainViewModel(string mcpAccessToken = "")
+    public MainViewModel(string mcpAccessToken = "", string previewAccessToken = "", string previewFingerprint = "")
     {
         Log.Add("Application", "Editor started.");
         McpAccessToken = mcpAccessToken;
+        PreviewAccessToken = previewAccessToken;
+        PreviewFingerprint = previewFingerprint;
         var initialWorkspace = CreateWorkspace();
         var initialDocument = new GraphDocumentViewModel(initialWorkspace)
         {
@@ -117,7 +140,7 @@ public partial class MainViewModel : ViewModelBase
             CanClose = false
         };
         ActiveGraphProvider = new ActiveGraphProvider(initialWorkspace);
-        _dockFactory = new DockFactory(ActiveGraphProvider, initialDocument);
+        _dockFactory = new DockFactory(ActiveGraphProvider, initialDocument, this);
         Layout = _dockFactory.CreateLayout();
         _dockFactory.InitLayout(Layout);
         Documents.Add(initialDocument);
