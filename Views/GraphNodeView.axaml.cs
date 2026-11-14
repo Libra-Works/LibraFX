@@ -107,7 +107,8 @@ public partial class GraphNodeView : UserControl
             _commentBitmap = bitmap;
             EmbeddedImage.Source = bitmap;
         }
-        catch (Exception ex) when (ex is FormatException or ArgumentException or IOException or InvalidOperationException)
+        catch (Exception ex) when (ex is FormatException or ArgumentException or IOException or InvalidDataException or
+                                   InvalidOperationException or NotSupportedException)
         {
             ImageStatus.Text = "Image could not be decoded.";
         }
@@ -126,7 +127,22 @@ public partial class GraphNodeView : UserControl
                 FileTypeFilter = [new FilePickerFileType("PNG or JPEG") { Patterns = ["*.png", "*.jpg", "*.jpeg"] }]
             });
             if (files.Count == 0) return;
-            await using var input = await files[0].OpenReadAsync();
+            using var file = files[0];
+            await AddCommentImageAsync(node, file);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or
+                                   ArgumentException or InvalidOperationException or NotSupportedException)
+        {
+            if (ReferenceEquals(DataContext, node)) ImageStatus.Text = ex.Message;
+        }
+    }
+
+    private async Task AddCommentImageAsync(GraphNodeViewModel node, IStorageFile file)
+    {
+        try
+        {
+            await using var input = await file.OpenReadAsync();
             using var buffer = new MemoryStream();
             var chunk = new byte[16384];
             int count;
@@ -136,7 +152,8 @@ public partial class GraphNodeView : UserControl
                 buffer.Write(chunk, 0, count);
             }
             var value = JsonSerializer.SerializeToElement(Convert.ToBase64String(buffer.ToArray()));
-            if (!NodeParameter.IsValidValue("commentImage", value)) throw new InvalidDataException("Choose a PNG or JPEG image.");
+            if (!NodeParameter.IsValidValue("commentImage", value))
+                throw new InvalidDataException("Choose a PNG or JPEG image no larger than 4096 x 4096 pixels.");
             buffer.Position = 0;
             using var bitmap = new Bitmap(buffer);
             if (bitmap.PixelSize.Width > 4096 || bitmap.PixelSize.Height > 4096)
@@ -144,9 +161,10 @@ public partial class GraphNodeView : UserControl
             if (ReferenceEquals(DataContext, node) && node.Workspace.Nodes.Contains(node))
                 node.Workspace.SetParameter(node, "image", value);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or
+                                   ArgumentException or InvalidOperationException or NotSupportedException)
         {
-            ImageStatus.Text = ex.Message;
+            if (ReferenceEquals(DataContext, node)) ImageStatus.Text = ex.Message;
         }
     }
 
