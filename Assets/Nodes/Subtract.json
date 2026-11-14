@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "typeId": "a49f3240-e62f-4d86-b3ab-312246e72db2",
+  "namespace": "LiberaFx",
+  "kind": "Subtract",
+  "name": "Subtract",
+  "group": "Math",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "inputPorts": [{ "id": "a", "name": "A" }, { "id": "b", "name": "B" }],
+  "parameters": [
+    { "id": "a", "name": "A", "type": "float", "defaultValue": 0.0 },
+    { "id": "b", "name": "B", "type": "float", "defaultValue": 0.0 }
+  ]
+}

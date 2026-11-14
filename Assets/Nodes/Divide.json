@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "typeId": "3983558b-d822-44be-81c7-274fd62d62be",
+  "namespace": "LiberaFx",
+  "kind": "Divide",
+  "name": "Divide",
+  "group": "Math",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "inputPorts": [{ "id": "a", "name": "A" }, { "id": "b", "name": "B" }],
+  "parameters": [
+    { "id": "a", "name": "A", "type": "float", "defaultValue": 0.0 },
+    { "id": "b", "name": "B", "type": "float", "defaultValue": 1.0 }
+  ]
+}

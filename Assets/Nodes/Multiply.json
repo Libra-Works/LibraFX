@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "typeId": "3fec134e-1d88-438c-bbf2-4c8ead69bdaa",
+  "namespace": "LiberaFx",
+  "kind": "Multiply",
+  "name": "Multiply",
+  "group": "Math",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "inputPorts": [{ "id": "a", "name": "A" }, { "id": "b", "name": "B" }],
+  "parameters": [
+    { "id": "a", "name": "A", "type": "float", "defaultValue": 1.0 },
+    { "id": "b", "name": "B", "type": "float", "defaultValue": 1.0 }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "typeId": "c6de2a2a-a44b-41cb-8173-3c417a92bca5",
+  "namespace": "LiberaFx",
+  "kind": "Add",
+  "name": "Add",
+  "group": "Math",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "inputPorts": [{ "id": "a", "name": "A" }, { "id": "b", "name": "B" }],
+  "parameters": [
+    { "id": "a", "name": "A", "type": "float", "defaultValue": 0.0 },
+    { "id": "b", "name": "B", "type": "float", "defaultValue": 0.0 }
+  ]
+}

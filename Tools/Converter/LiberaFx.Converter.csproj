@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>LiberaFxConverter</AssemblyName>
+    <DefineConstants>$(DefineConstants);LIBERAFX_CONVERTER</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Models\Graph\BuiltInAssets.cs" Link="Models\BuiltInAssets.cs" />
+    <Compile Include="..\..\Models\Graph\CommentImage.cs" Link="Models\CommentImage.cs" />
+    <Compile Include="..\..\Models\Graph\FCurve.cs" Link="Models\FCurve.cs" />
+    <Compile Include="..\..\Models\Graph\GraphEnumDefinition.cs" Link="Models\GraphEnumDefinition.cs" />
+    <Compile Include="..\..\Models\Graph\GraphNodeDefinition.cs" Link="Models\GraphNodeDefinition.cs" />
+    <Compile Include="..\..\Models\Graph\GraphSnapshot.cs" Link="Models\GraphSnapshot.cs" />
+    <Compile Include="..\..\Models\Graph\GraphValidator.cs" Link="Models\GraphValidator.cs" />
+    <Compile Include="..\..\Models\Graph\NodeParameter.cs" Link="Models\NodeParameter.cs" />
+    <Compile Include="..\..\Models\Commands\IUndoableCommand.cs" Link="Models\IUndoableCommand.cs" />
+    <Compile Include="..\..\Models\Commands\UndoRedoManager.cs" Link="Models\UndoRedoManager.cs" />
+    <Compile Include="..\..\Models\Project\LiberaFxProjectDocument.cs" Link="Models\LiberaFxProjectDocument.cs" />
+    <Compile Include="..\..\Services\ProjectDocumentReader.cs" Link="Services\ProjectDocumentReader.cs" />
+    <Compile Include="..\..\Services\Compilation\VfxProgram.cs" Link="Services\VfxProgram.cs" />
+    <EmbeddedResource Include="..\..\Assets\Nodes\*.json" LogicalName="LiberaFx.Assets.Nodes.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\Assets\Enums\*.json" LogicalName="LiberaFx.Assets.Enums.%(Filename)%(Extension)" />
+    <None Include="..\..\Assets\Nodes\*.json" Link="Assets\Nodes\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Assets\Enums\*.json" Link="Assets\Enums\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

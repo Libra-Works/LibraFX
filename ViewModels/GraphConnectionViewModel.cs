@@ -9,6 +9,7 @@ public sealed class GraphConnectionViewModel : ObservableObject
     public GraphNodeViewModel Source { get; }
 
     public GraphNodeViewModel Target { get; }
+    public string? TargetPortId { get; }
 
     public double StartX => Source.DisplayX + GraphNodeViewModel.NodeWidth - GraphNodeViewModel.PortHorizontalOffset;
 
@@ -16,18 +17,20 @@ public sealed class GraphConnectionViewModel : ObservableObject
 
     public double EndX => Target.DisplayX + GraphNodeViewModel.PortHorizontalOffset;
 
-    public double EndY => Target.DisplayY + GraphNodeViewModel.PortCenterOffset;
+    public double EndY => Target.DisplayY + GraphNodeViewModel.PortCenterOffset +
+        InputOffset();
 
     public Point StartPoint => new(StartX, StartY);
 
     public Point EndPoint => new(EndX, EndY);
 
-    public string Description => $"{Source.Name} → {Target.Name} ({Source.DisplayPortType})";
+    public string Description => $"{Source.Name} → {Target.Name}{(TargetPortId is null ? "" : $" [{TargetPortId}]")} ({Source.DisplayPortType})";
 
-    public GraphConnectionViewModel(GraphNodeViewModel source, GraphNodeViewModel target)
+    public GraphConnectionViewModel(GraphNodeViewModel source, GraphNodeViewModel target, string? targetPortId = null)
     {
         Source = source;
         Target = target;
+        TargetPortId = targetPortId;
         Source.PropertyChanged += OnNodePropertyChanged;
         Target.PropertyChanged += OnNodePropertyChanged;
     }
@@ -48,5 +51,12 @@ public sealed class GraphConnectionViewModel : ObservableObject
             OnPropertyChanged(nameof(StartPoint));
             OnPropertyChanged(nameof(EndPoint));
         }
+    }
+
+    private double InputOffset()
+    {
+        for (var index = 0; index < Target.InputPorts.Count; index++)
+            if (Target.InputPorts[index].Id == TargetPortId) return 5 + index * 24;
+        return 0;
     }
 }

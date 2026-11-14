@@ -37,4 +37,4 @@ public sealed record GraphNodeSnapshot(
     GraphSnapshot? ChildGraph = null,
     IReadOnlyList<NodeParameterSnapshot>? Parameters = null);
 
-public sealed record GraphConnectionSnapshot(Guid SourceNodeId, Guid TargetNodeId);
+public sealed record GraphConnectionSnapshot(Guid SourceNodeId, Guid TargetNodeId, string? TargetPortId = null);

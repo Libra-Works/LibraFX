@@ -15,4 +15,4 @@ public sealed record LiberaGraphNodeSpec(
     double Y);
 
 /// <summary>Connects two node keys declared in the same graph plan.</summary>
-public sealed record LiberaGraphConnectionSpec(string SourceKey, string TargetKey);
+public sealed record LiberaGraphConnectionSpec(string SourceKey, string TargetKey, string? TargetPortId = null);

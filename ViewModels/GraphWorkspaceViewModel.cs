@@ -209,7 +209,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         foreach (var connection in snapshot.Connections)
         {
             commands.Add(new AddGraphConnectionCommand(
-                this, nodesByOldId[connection.SourceNodeId], nodesByOldId[connection.TargetNodeId]));
+                this, nodesByOldId[connection.SourceNodeId], nodesByOldId[connection.TargetNodeId],
+                targetPortId: connection.TargetPortId));
         }
 
         _history.Execute(new CompositeUndoableCommand("Paste nodes", commands));
@@ -261,7 +262,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         var connections = Connections
             .Select(connection => new GraphConnectionSnapshot(
                 connection.Source.Id,
-                connection.Target.Id))
+                connection.Target.Id,
+                connection.TargetPortId))
             .ToArray();
 
         return new GraphSnapshot(nodes, connections);
@@ -291,7 +293,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 ChildGraph = node.ChildGraph is null ? null : CloneGraph(node.ChildGraph)
             }).ToArray(),
             source.Connections.Select(connection => new GraphConnectionSnapshot(
-                ids[connection.SourceNodeId], ids[connection.TargetNodeId])).ToArray());
+                ids[connection.SourceNodeId], ids[connection.TargetNodeId], connection.TargetPortId)).ToArray());
     }
 
     public bool EnterGraph(GraphNodeViewModel node)
@@ -403,68 +405,11 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         _history.Clear();
     }
 
-    public static void ValidateSnapshot(GraphSnapshot snapshot) =>
-        ValidateSnapshot(snapshot, new HashSet<Guid>(), 0);
+    public static void ValidateSnapshot(GraphSnapshot snapshot) => GraphValidator.Validate(snapshot);
 
     private static void ValidateSnapshot(GraphSnapshot snapshot, HashSet<Guid> allIds, int depth)
     {
-        if (depth > MaxGraphDepth) throw new InvalidDataException("The graph hierarchy is too deep.");
-        ArgumentNullException.ThrowIfNull(snapshot);
-        ArgumentNullException.ThrowIfNull(snapshot.Nodes);
-        ArgumentNullException.ThrowIfNull(snapshot.Connections);
-        var definitions = GraphNodeDefinition.All.ToDictionary(definition => definition.Kind);
-        var nodeSpecifications = new Dictionary<Guid, GraphNodeSnapshot>();
-        foreach (var specification in snapshot.Nodes)
-        {
-            if (specification is null ||
-                specification.Id == Guid.Empty ||
-                !allIds.Add(specification.Id) ||
-                string.IsNullOrWhiteSpace(specification.Name) ||
-                !double.IsFinite(specification.X) ||
-                !double.IsFinite(specification.Y) ||
-                !definitions.TryGetValue(specification.Kind, out var definition) ||
-                specification.PortType != definition.PortType ||
-                specification.PortCategory != definition.PortCategory ||
-                (specification.Kind == GraphNodeKind.FloatFCurve) != (specification.Curve is not null) ||
-                (specification.Kind == GraphNodeKind.GraphGroup) != (specification.ChildGraph is not null) ||
-                !nodeSpecifications.TryAdd(specification.Id, specification))
-            {
-                throw new InvalidDataException("The project contains an invalid graph node.");
-            }
-
-            if (specification.Curve is not null)
-            {
-                FCurve.Validate(specification.Curve);
-            }
-            if (specification.Parameters is { } parameters)
-            {
-                var ids = new HashSet<string>(StringComparer.Ordinal);
-                if (parameters.Count > 256 || parameters.Any(parameter =>
-                        parameter is null || string.IsNullOrWhiteSpace(parameter.Id) || parameter.Id.Length > 128 ||
-                        !ids.Add(parameter.Id) || string.IsNullOrWhiteSpace(parameter.Type) ||
-                        parameter.Type.Length > 128 || !NodeParameter.IsValidValue(parameter.Type, parameter.Value)))
-                    throw new InvalidDataException("The project contains invalid node parameters.");
-            }
-            if (specification.ChildGraph is not null)
-                ValidateSnapshot(specification.ChildGraph, allIds, depth + 1);
-        }
-
-        var connectionKeys = new HashSet<(Guid SourceId, Guid TargetId)>();
-        foreach (var specification in snapshot.Connections)
-        {
-            if (specification is null ||
-                !nodeSpecifications.TryGetValue(specification.SourceNodeId, out var source) ||
-                !nodeSpecifications.TryGetValue(specification.TargetNodeId, out var target) ||
-                source.Id == target.Id ||
-                source.Kind == GraphNodeKind.GraphGroup || target.Kind == GraphNodeKind.GraphGroup ||
-                source.Kind == GraphNodeKind.Comment || target.Kind == GraphNodeKind.Comment ||
-                source.PortType != target.PortType ||
-                source.PortCategory != target.PortCategory ||
-                !connectionKeys.Add((source.Id, target.Id)))
-            {
-                throw new InvalidDataException("The project contains an invalid graph connection.");
-            }
-        }
+        GraphValidator.Validate(snapshot, allIds, depth);
     }
 
     private void RestoreFromHistory(GraphSnapshot snapshot)
@@ -516,7 +461,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         {
             var source = nodesById[specification.SourceNodeId];
             var target = nodesById[specification.TargetNodeId];
-            connections.Add(new GraphConnectionViewModel(source, target));
+            connections.Add(new GraphConnectionViewModel(source, target, specification.TargetPortId));
         }
 
         SelectNode(null);
@@ -575,7 +520,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         }
 
         var connectionKeys = Connections
-            .Select(connection => (connection.Source.Id, connection.Target.Id))
+            .Select(connection => (Source: connection.Source.Id, Target: connection.Target.Id, Port: connection.TargetPortId))
             .ToHashSet();
         for (var index = 0; index < plan.Connections.Count; index++)
         {
@@ -605,6 +550,18 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             if (source.IsComment || target.IsComment)
                 throw new ArgumentException("Comment nodes do not have ports.", nameof(plan));
 
+            var targetPortId = specification.TargetPortId;
+            if (target.Definition.InputPorts is { } ports)
+            {
+                targetPortId ??= ports.FirstOrDefault()?.Id;
+                if (targetPortId is null || !ports.Any(port => port.Id == targetPortId))
+                    throw new ArgumentException("The target input port does not exist.", nameof(plan));
+                if (connectionKeys.Any(key => key.Target == target.Id && key.Port == targetPortId))
+                    throw new ArgumentException("The target input is already connected.", nameof(plan));
+            }
+            else if (targetPortId is not null)
+                throw new ArgumentException("The target input port does not exist.", nameof(plan));
+
             if (source.Definition.PortCategory != target.Definition.PortCategory ||
                 source.Definition.PortType != target.Definition.PortType)
             {
@@ -613,12 +570,14 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                     nameof(plan));
             }
 
-            if (!connectionKeys.Add((source.Id, target.Id)))
+            if (!connectionKeys.Add((source.Id, target.Id, targetPortId)))
             {
                 throw new ArgumentException("The graph plan contains a duplicate connection.", nameof(plan));
             }
 
-            if (WouldCreateCycle(source.Id, target.Id, connectionKeys.Where(key => key != (source.Id, target.Id))))
+            if (WouldCreateCycle(source.Id, target.Id,
+                    connectionKeys.Where(key => key != (source.Id, target.Id, targetPortId))
+                        .Select(key => (key.Source, key.Target))))
             {
                 throw new ArgumentException("Connections cannot create a cycle.", nameof(plan));
             }
@@ -627,7 +586,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 this,
                 source,
                 target,
-                Connections.Count + index));
+                Connections.Count + index,
+                targetPortId));
         }
 
         _history.Execute(new CompositeUndoableCommand("Apply graph plan", commands));
@@ -659,7 +619,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         ConnectionStatus = "Choose a node output, then a compatible input.";
     }
 
-    public void CompleteConnection(GraphNodeViewModel target)
+    public void CompleteConnection(GraphNodeViewModel target, string? targetPortId = null)
     {
         SelectNode(target);
 
@@ -673,7 +633,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         _pendingOutputNode = null;
         ConnectionPreviewPoint = null;
         OnPropertyChanged(nameof(PendingOutputNode));
-        if (TryConnectNodes(source, target, out var error))
+        if (TryConnectNodes(source, target, out var error, targetPortId))
         {
             ConnectionStatus = $"Connected {source.Name} to {target.Name}.";
         }
@@ -686,7 +646,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     public bool TryConnectNodes(
         GraphNodeViewModel source,
         GraphNodeViewModel target,
-        out string? error)
+        out string? error,
+        string? targetPortId = null)
     {
         if (!Nodes.Contains(source) || !Nodes.Contains(target))
         {
@@ -710,6 +671,25 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             error = "Comment nodes do not have ports.";
             return false;
         }
+        if (target.Definition.InputPorts is { } ports)
+        {
+            targetPortId ??= ports.FirstOrDefault()?.Id;
+            if (targetPortId is null || !ports.Any(port => port.Id == targetPortId))
+            {
+                error = "The target input port does not exist.";
+                return false;
+            }
+            if (Connections.Any(connection => connection.Target == target && connection.TargetPortId == targetPortId))
+            {
+                error = "The target input is already connected.";
+                return false;
+            }
+        }
+        else if (targetPortId is not null)
+        {
+            error = "The target input port does not exist.";
+            return false;
+        }
 
         if (source.Definition.PortCategory != target.Definition.PortCategory ||
             source.Definition.PortType != target.Definition.PortType)
@@ -719,7 +699,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         }
 
         if (Connections.Any(connection =>
-                connection.Source == source && connection.Target == target))
+                connection.Source == source && connection.Target == target && connection.TargetPortId == targetPortId))
         {
             error = "These ports are already connected.";
             return false;
@@ -732,7 +712,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             return false;
         }
 
-        _history.Execute(new AddGraphConnectionCommand(this, source, target));
+        _history.Execute(new AddGraphConnectionCommand(this, source, target, targetPortId: targetPortId));
         error = null;
         return true;
     }

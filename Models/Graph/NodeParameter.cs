@@ -48,8 +48,8 @@ public static class NodeParameter
             case "color":
                 return value.ValueKind == JsonValueKind.Array && value.GetArrayLength() == 4 &&
                        value.EnumerateArray().All(IsFiniteNumber) &&
-                       new RgbaColor(value[0].GetDouble(), value[1].GetDouble(),
-                           value[2].GetDouble(), value[3].GetDouble()).IsValid;
+                       value[0].GetDouble() >= 0 && value[1].GetDouble() >= 0 &&
+                       value[2].GetDouble() >= 0 && value[3].GetDouble() is >= 0 and <= 1;
             default:
                 return value.ValueKind != JsonValueKind.Undefined;
         }

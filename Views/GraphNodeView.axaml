@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:LiberaFx.ViewModels"
+             xmlns:graph="using:LiberaFx.Models.Graph"
              x:Class="LiberaFx.Views.GraphNodeView"
              PointerPressed="OnNodePointerPressed"
              x:DataType="vm:GraphNodeViewModel">
@@ -46,6 +47,7 @@
                   ColumnDefinitions="Auto,*,Auto">
                 <StackPanel Orientation="Horizontal"
                             Spacing="4"
+                            IsVisible="{Binding HasLegacyInput}"
                             VerticalAlignment="Center">
                     <Button Width="18"
                             Height="18"
@@ -59,6 +61,18 @@
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource EffectForegroundBrush}" />
                 </StackPanel>
+                <ItemsControl ItemsSource="{Binding InputPorts}" IsVisible="{Binding HasCustomInputs}"
+                              HorizontalAlignment="Left" VerticalAlignment="Top">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="graph:GraphInputPortDefinition">
+                            <StackPanel Orientation="Horizontal" Spacing="4" Height="24">
+                                <Button Width="18" Height="18" Padding="0" Tag="{Binding}"
+                                        Content="●" Background="Transparent" Click="OnCustomInputClick" />
+                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
                 <TextBlock Grid.Column="1"
                            Text="{Binding DisplayPortType}"
                            HorizontalAlignment="Center"
@@ -67,7 +81,7 @@
                 <StackPanel Grid.Column="2"
                             Orientation="Horizontal"
                             Spacing="4"
-                            VerticalAlignment="Center">
+                            VerticalAlignment="Top">
                     <TextBlock Text="Out"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource EffectForegroundBrush}" />

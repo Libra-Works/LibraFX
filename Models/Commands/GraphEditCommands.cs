@@ -170,10 +170,11 @@ public sealed class AddGraphConnectionCommand : IUndoableCommand
         GraphWorkspaceViewModel graph,
         GraphNodeViewModel source,
         GraphNodeViewModel target,
-        int? index = null)
+        int? index = null,
+        string? targetPortId = null)
     {
         _graph = graph;
-        _connection = new GraphConnectionViewModel(source, target);
+        _connection = new GraphConnectionViewModel(source, target, targetPortId);
         _index = index ?? graph.Connections.Count;
     }
 

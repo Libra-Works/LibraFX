@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Avalonia.Platform;
 
 namespace LiberaFx.Models.Graph;
 
@@ -17,6 +16,11 @@ public readonly record struct GraphNodeKind(string Value)
     public static GraphNodeKind FloatFCurve => new("FloatFCurve");
     public static GraphNodeKind GraphGroup => new("GraphGroup");
     public static GraphNodeKind Comment => new("Comment");
+    public static GraphNodeKind Time => new("Time");
+    public static GraphNodeKind Add => new("Add");
+    public static GraphNodeKind Subtract => new("Subtract");
+    public static GraphNodeKind Multiply => new("Multiply");
+    public static GraphNodeKind Divide => new("Divide");
     public override string ToString() => Value ?? string.Empty;
 }
 
@@ -66,7 +70,12 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("a40e6f94-c2c1-48ed-9a7b-2087c422ad5a")] = "Signal",
         [Guid.Parse("f54171ee-4aa3-498b-b2ff-8c9983fc1501")] = "FloatFCurve",
         [Guid.Parse("149e6e41-9976-4b69-a74c-3f6e6b254e5a")] = "GraphGroup",
-        [Guid.Parse("8f4bc759-b775-41ab-a7da-2ac5c17e29ed")] = "Comment"
+        [Guid.Parse("8f4bc759-b775-41ab-a7da-2ac5c17e29ed")] = "Comment",
+        [Guid.Parse("e97a5832-31c5-461c-b7bb-c176c804c115")] = "Time",
+        [Guid.Parse("c6de2a2a-a44b-41cb-8173-3c417a92bca5")] = "Add",
+        [Guid.Parse("a49f3240-e62f-4d86-b3ab-312246e72db2")] = "Subtract",
+        [Guid.Parse("3fec134e-1d88-438c-bbf2-4c8ead69bdaa")] = "Multiply",
+        [Guid.Parse("3983558b-d822-44be-81c7-274fd62d62be")] = "Divide"
     };
 
     private static readonly List<string> Warnings = [];
@@ -75,6 +84,7 @@ public sealed record GraphNodeDefinition(
     public string QualifiedName => $"{Namespace}.{TypeName}";
     public string TypeName { get; init; } = string.Empty;
     public IReadOnlyList<NodeParameterDefinition> Parameters { get; init; } = [];
+    public IReadOnlyList<GraphInputPortDefinition>? InputPorts { get; init; }
 
     public static bool TryFind(string? value, out GraphNodeDefinition? definition)
     {
@@ -122,7 +132,7 @@ public sealed record GraphNodeDefinition(
             {
                 Trace.TraceWarning("Using embedded node definition for {0}: {1}", path, ex.Message);
                 Warnings.Add($"{Path.GetFileName(path)}: {ex.Message} (using built-in definition)");
-                using var stream = AssetLoader.Open(new Uri($"avares://LiberaFx/Assets/Nodes/{name}.json"));
+                using var stream = BuiltInAssets.Open("Nodes", name);
                 AddDefinition(stream, definitions, ids, names, id);
             }
         }
@@ -164,6 +174,19 @@ public sealed record GraphNodeDefinition(
         if (ids.Contains(node.TypeId) || names.Contains(qualifiedName))
             throw new InvalidDataException("Duplicate node type UUID or qualified name.");
         var parameters = new List<NodeParameterDefinition>();
+        List<GraphInputPortDefinition>? inputs = null;
+        if (node.InputPorts is not null)
+        {
+            inputs = [];
+            var inputIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var port in node.InputPorts)
+            {
+                if (port is null || !IsIdentifier(port.Id) || !inputIds.Add(port.Id!) ||
+                    string.IsNullOrWhiteSpace(port.Name) || inputs.Count >= 32)
+                    throw new InvalidDataException("Invalid input port definition.");
+                inputs.Add(new GraphInputPortDefinition(port.Id!, port.Name));
+            }
+        }
         var parameterIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var parameter in node.Parameters ?? [])
         {
@@ -223,7 +246,8 @@ public sealed record GraphNodeDefinition(
         definitions.Add(new GraphNodeDefinition(kind, node.TypeId, node.Namespace, node.Name, node.PortType, category, node.Group)
         {
             TypeName = node.Kind!,
-            Parameters = parameters.AsReadOnly()
+            Parameters = parameters.AsReadOnly(),
+            InputPorts = inputs?.AsReadOnly()
         });
     }
 
@@ -242,6 +266,13 @@ public sealed record GraphNodeDefinition(
         public string? PortType { get; set; }
         public string? PortCategory { get; set; }
         public List<NodeParameterFile>? Parameters { get; set; }
+        public List<InputPortFile>? InputPorts { get; set; }
+    }
+
+    private sealed class InputPortFile
+    {
+        public string? Id { get; set; }
+        public string? Name { get; set; }
     }
 
     private sealed class NodeParameterFile
@@ -269,3 +300,5 @@ public sealed record GraphNodeDefinition(
         public double? Step { get; set; }
     }
 }
+
+public sealed record GraphInputPortDefinition(string Id, string Name);

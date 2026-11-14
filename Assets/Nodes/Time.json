@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "typeId": "e97a5832-31c5-461c-b7bb-c176c804c115",
+  "namespace": "LiberaFx",
+  "kind": "Time",
+  "name": "Time",
+  "group": "Math",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "inputPorts": []
+}

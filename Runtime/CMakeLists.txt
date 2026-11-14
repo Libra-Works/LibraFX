@@ -1,0 +1,15 @@
+cmake_minimum_required(VERSION 3.16)
+project(LiberaFxRuntime LANGUAGES CXX)
+
+add_library(liberafx_runtime STATIC Core/VfxRuntime.cpp)
+target_include_directories(liberafx_runtime PUBLIC include)
+target_compile_features(liberafx_runtime PUBLIC cxx_std_17)
+
+option(LIBERAFX_BUILD_TESTS "Build runtime tests" OFF)
+if(LIBERAFX_BUILD_TESTS)
+    enable_testing()
+    find_package(Threads REQUIRED)
+    add_executable(liberafx_runtime_tests tests/VfxRuntimeTests.cpp)
+    target_link_libraries(liberafx_runtime_tests PRIVATE liberafx_runtime Threads::Threads)
+    add_test(NAME liberafx_runtime_tests COMMAND liberafx_runtime_tests)
+endif()

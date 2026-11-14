@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Avalonia.Platform;
 
 namespace LiberaFx.Models.Graph;
 
@@ -42,7 +41,7 @@ public sealed record GraphEnumDefinition(Guid TypeId, string Namespace, string N
         }
         if (!File.Exists(builtIn))
         {
-            using var stream = AssetLoader.Open(new Uri("avares://LiberaFx/Assets/Enums/Interpolation.json"));
+            using var stream = BuiltInAssets.Open("Enums", "Interpolation");
             try { Add(stream, result, names); }
             catch (InvalidDataException ex) { Warnings.Add($"Interpolation.json: {ex.Message}"); }
         }

@@ -12,6 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Tools\**\*.cs" />
     <Folder Include="Models\" />
     <AvaloniaResource Include="Assets\**" Exclude="Assets\Inspectors\**" />
     <None Update="Assets\Nodes\*.json" CopyToOutputDirectory="PreserveNewest" />

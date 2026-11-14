@@ -38,6 +38,9 @@ public sealed class GraphNodeViewModel : ObservableObject
     public bool IsGraphGroup => ChildGraph is not null;
     public bool IsComment => Definition.Kind == GraphNodeKind.Comment;
     public bool HasPorts => !IsGraphGroup && !IsComment;
+    public bool HasLegacyInput => HasPorts && Definition.InputPorts is null;
+    public bool HasCustomInputs => HasPorts && Definition.InputPorts is { Count: > 0 };
+    public IReadOnlyList<GraphInputPortDefinition> InputPorts => Definition.InputPorts ?? [];
     public double CommentWidth => _previewWidth ?? CommentNumber("width", 360, 180, 4000);
     public double CommentHeight => _previewHeight ?? CommentNumber("height", 200, 80, 4000);
     public double RenderedWidth => IsComment ? CommentWidth : NodeWidth;

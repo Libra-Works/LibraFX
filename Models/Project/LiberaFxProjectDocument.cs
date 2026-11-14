@@ -5,7 +5,7 @@ namespace LiberaFx.Models.Project;
 
 public sealed record LiberaFxProjectDocument
 {
-    public int FormatVersion { get; init; } = 5;
+    public int FormatVersion { get; init; } = 6;
 
     public List<LiberaFxProjectNode>? Nodes { get; init; } = [];
 
@@ -24,7 +24,7 @@ public sealed record LiberaFxProjectNode(
     GraphSnapshot? ChildGraph = null,
     IReadOnlyList<NodeParameterSnapshot>? Parameters = null);
 
-public sealed record LiberaFxProjectConnection(Guid SourceNodeId, Guid TargetNodeId);
+public sealed record LiberaFxProjectConnection(Guid SourceNodeId, Guid TargetNodeId, string? TargetPortId = null);
 
 public sealed record LoadedLiberaFxProject(
     GraphSnapshot Graph,

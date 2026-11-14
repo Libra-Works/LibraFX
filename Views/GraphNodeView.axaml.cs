@@ -384,9 +384,9 @@ public partial class GraphNodeView : UserControl
         _connectionSource = null;
         _connectionCanvas = null;
         e.Pointer.Capture(null);
-        if (target is not null)
+        if (target is { } input)
         {
-            target.SelectInputPortCommand.Execute(null);
+            input.Node.Workspace.CompleteConnection(input.Node, input.PortId);
         }
         else if (moved)
         {
@@ -396,13 +396,18 @@ public partial class GraphNodeView : UserControl
         e.Handled = true;
     }
 
-    private static GraphNodeViewModel? FindInputAt(Grid canvas, Point position)
+    private void OnCustomInputClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is GraphNodeViewModel node &&
+            sender is Button { Tag: GraphInputPortDefinition port })
+            node.Workspace.CompleteConnection(node, port.Id);
+    }
+
+    private static (GraphNodeViewModel Node, string? PortId)? FindInputAt(Grid canvas, Point position)
     {
         foreach (var button in canvas.GetVisualDescendants().OfType<Button>().Reverse())
         {
-            if (button.Tag is not string tag || tag != "InputPort" ||
-                !button.IsEffectivelyVisible ||
-                button.DataContext is not GraphNodeViewModel node ||
+            if (!button.IsEffectivelyVisible ||
                 button.TranslatePoint(default, canvas) is not { } origin)
             {
                 continue;
@@ -410,7 +415,12 @@ public partial class GraphNodeView : UserControl
 
             if (new Rect(origin, button.Bounds.Size).Contains(position))
             {
-                return node;
+                if (button.Tag is string tag && tag == "InputPort" &&
+                    button.DataContext is GraphNodeViewModel node)
+                    return (node, null);
+                if (button.Tag is GraphInputPortDefinition port &&
+                    button.FindAncestorOfType<GraphNodeView>()?.DataContext is GraphNodeViewModel owner)
+                    return (owner, port.Id);
             }
         }
 
