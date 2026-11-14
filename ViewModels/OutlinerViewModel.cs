@@ -1,20 +1,34 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using Avalonia.Threading;
+using CommunityToolkit.Mvvm.ComponentModel;
 using Dock.Model.Mvvm.Controls;
+using LiberaFx.Models.Graph;
 
 namespace LiberaFx.ViewModels;
 
 public sealed class OutlinerViewModel : Tool
 {
     private readonly ActiveGraphProvider _activeGraph;
-    private readonly HashSet<GraphNodeViewModel> _observedNodes = [];
     private GraphWorkspaceViewModel _graph;
     private string _searchText = string.Empty;
+    private bool _refreshPending;
+    private bool _refreshing;
+    private OutlinerNode? _selectedNode;
+    private Dictionary<Guid, OutlinerNode> _nodesById = [];
 
-    public ObservableCollection<GraphNodeViewModel> Nodes { get; } = [];
-
+    public ObservableCollection<OutlinerNode> Nodes { get; } = [];
     public GraphWorkspaceViewModel Graph => _graph;
+    public OutlinerNode? SelectedNode
+    {
+        get => _selectedNode;
+        set
+        {
+            if (SetProperty(ref _selectedNode, value) && !_refreshing && value is not null)
+                Select(value);
+        }
+    }
 
     public string SearchText
     {
@@ -22,9 +36,7 @@ public sealed class OutlinerViewModel : Tool
         set
         {
             if (SetProperty(ref _searchText, value ?? string.Empty))
-            {
                 Refresh();
-            }
         }
     }
 
@@ -33,75 +45,132 @@ public sealed class OutlinerViewModel : Tool
         _activeGraph = activeGraph;
         _graph = activeGraph.Graph;
         _activeGraph.PropertyChanged += OnActiveGraphChanged;
-        _graph.Nodes.CollectionChanged += OnNodesChanged;
+        Subscribe();
         Refresh();
     }
 
+    public void Select(OutlinerNode node) => _graph.NavigateToNode(node.ParentPath, node.Id);
+
     private void OnActiveGraphChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(ActiveGraphProvider.Graph))
-        {
-            return;
-        }
-
-        _graph.Nodes.CollectionChanged -= OnNodesChanged;
+        if (e.PropertyName != nameof(ActiveGraphProvider.Graph)) return;
+        Unsubscribe();
         _graph = _activeGraph.Graph;
-        _graph.Nodes.CollectionChanged += OnNodesChanged;
+        Subscribe();
         OnPropertyChanged(nameof(Graph));
         Refresh();
     }
 
-    private void OnNodesChanged(object? sender, NotifyCollectionChangedEventArgs e) => Refresh();
-
-    private void OnNodeChanged(object? sender, PropertyChangedEventArgs e)
+    private void Subscribe()
     {
-        if (e.PropertyName == nameof(GraphNodeViewModel.Name))
+        _graph.History.StateChanged += OnHistoryChanged;
+        _graph.Breadcrumbs.CollectionChanged += OnBreadcrumbsChanged;
+        _graph.PropertyChanged += OnGraphChanged;
+    }
+
+    private void Unsubscribe()
+    {
+        _graph.History.StateChanged -= OnHistoryChanged;
+        _graph.Breadcrumbs.CollectionChanged -= OnBreadcrumbsChanged;
+        _graph.PropertyChanged -= OnGraphChanged;
+    }
+
+    private void OnHistoryChanged(object? sender, EventArgs e) => Refresh();
+    private void OnGraphChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(GraphWorkspaceViewModel.SelectedNode) && !_refreshing)
+            SyncSelection();
+    }
+
+    private void OnBreadcrumbsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (_refreshPending) return;
+        _refreshPending = true;
+        Dispatcher.UIThread.Post(() =>
         {
+            _refreshPending = false;
             Refresh();
-        }
+        });
     }
 
     private void Refresh()
     {
-        var current = _graph.Nodes.ToHashSet();
-        foreach (var node in _observedNodes.Except(current).ToArray())
-        {
-            node.PropertyChanged -= OnNodeChanged;
-            _observedNodes.Remove(node);
-        }
-
-        foreach (var node in current.Except(_observedNodes))
-        {
-            node.PropertyChanged += OnNodeChanged;
-            _observedNodes.Add(node);
-        }
-
         var search = SearchText.Trim();
-        var visible = _graph.Nodes
-            .Where(node => node.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                           node.Definition.Name.Contains(search, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        for (var index = Nodes.Count - 1; index >= 0; index--)
+        var root = _graph.CreateSnapshot();
+        var current = new Dictionary<Guid, OutlinerNode>();
+        _refreshing = true;
+        try
         {
-            if (!visible.Contains(Nodes[index]))
+            var nodes = BuildNodes(root, [], search, current);
+            Reconcile(Nodes, nodes);
+            _nodesById = current;
+        }
+        finally
+        {
+            _refreshing = false;
+        }
+        SyncSelection();
+    }
+
+    private void SyncSelection()
+    {
+        var id = _graph.SelectedNode?.Id;
+        var node = id is { } value && _nodesById.TryGetValue(value, out var item) ? item : null;
+        _refreshing = true;
+        try { SelectedNode = node; }
+        finally { _refreshing = false; }
+    }
+
+    private IReadOnlyList<OutlinerNode> BuildNodes(GraphSnapshot graph, Guid[] path, string search,
+        Dictionary<Guid, OutlinerNode> current)
+    {
+        var result = new List<OutlinerNode>();
+        foreach (var node in graph.Nodes)
+        {
+            var children = node.ChildGraph is null
+                ? []
+                : BuildNodes(node.ChildGraph, [.. path, node.Id], search, current);
+            var definition = GraphNodeDefinition.All.First(item => item.Kind == node.Kind);
+            if (search.Length == 0 || node.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                definition.Name.Contains(search, StringComparison.OrdinalIgnoreCase) || children.Count > 0)
             {
-                Nodes.RemoveAt(index);
+                var item = _nodesById.GetValueOrDefault(node.Id) ?? new OutlinerNode(node.Id);
+                item.Update(node.Name, node.PortType, path);
+                Reconcile(item.Children, children);
+                current[node.Id] = item;
+                result.Add(item);
             }
         }
+        return result;
+    }
 
-        for (var index = 0; index < visible.Length; index++)
+    private static void Reconcile(ObservableCollection<OutlinerNode> target, IReadOnlyList<OutlinerNode> desired)
+    {
+        for (var index = target.Count - 1; index >= 0; index--)
+            if (!desired.Contains(target[index])) target.RemoveAt(index);
+        for (var index = 0; index < desired.Count; index++)
         {
-            var existing = Nodes.IndexOf(visible[index]);
-            if (existing < 0)
-            {
-                Nodes.Insert(index, visible[index]);
-            }
-            else if (existing != index)
-            {
-                Nodes.Move(existing, index);
-            }
+            var oldIndex = target.IndexOf(desired[index]);
+            if (oldIndex < 0) target.Insert(index, desired[index]);
+            else if (oldIndex != index) target.Move(oldIndex, index);
         }
+    }
+}
 
-        OnPropertyChanged(nameof(Graph));
+public sealed class OutlinerNode(Guid id) : ObservableObject
+{
+    private string _name = string.Empty;
+    private string _portType = string.Empty;
+    public Guid Id { get; } = id;
+    public string Name { get => _name; private set => SetProperty(ref _name, value); }
+    public string PortType { get => _portType; private set => SetProperty(ref _portType, value); }
+    public Guid[] ParentPath { get; private set; } = [];
+    public ObservableCollection<OutlinerNode> Children { get; } = [];
+
+    internal void Update(string name, string portType, Guid[] path)
+    {
+        Name = name;
+        PortType = portType;
+        ParentPath = path;
     }
 }

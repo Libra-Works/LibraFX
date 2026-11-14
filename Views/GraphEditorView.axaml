@@ -15,8 +15,13 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="vm:GraphBreadcrumb">
-                        <Button Content="{Binding Name}" Tag="{Binding Depth}"
-                                Click="OnBreadcrumbClick" Padding="8,2" />
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="›" IsVisible="{Binding HasSeparator}"
+                                       FontSize="18" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                            <Button Content="{Binding Name}" Tag="{Binding Depth}"
+                                    Click="OnBreadcrumbClick" Padding="8,2" />
+                        </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>

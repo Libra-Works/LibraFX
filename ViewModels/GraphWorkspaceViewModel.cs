@@ -286,6 +286,21 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         ConnectionStatus = "Graph level changed.";
     }
 
+    public void NavigateToNode(IReadOnlyList<Guid> parentPath, Guid nodeId)
+    {
+        if (!_graphPath.SequenceEqual(parentPath))
+        {
+            NavigateToGraph(0);
+            foreach (var id in parentPath)
+            {
+                var group = Nodes.FirstOrDefault(node => node.Id == id);
+                if (group is null || !EnterGraph(group)) return;
+            }
+        }
+        var target = Nodes.FirstOrDefault(node => node.Id == nodeId);
+        if (target is not null) SelectNode(target);
+    }
+
     public bool GroupSelection()
     {
         if (_selectedNodes.Count == 0) return false;
@@ -883,4 +898,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
 }
 
-public sealed record GraphBreadcrumb(string Name, int Depth);
+public sealed record GraphBreadcrumb(string Name, int Depth)
+{
+    public bool HasSeparator => Depth > 0;
+}
