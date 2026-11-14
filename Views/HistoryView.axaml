@@ -4,39 +4,43 @@
              x:Class="LiberaFx.Views.HistoryView"
              x:DataType="vm:HistoryPaneViewModel">
     <Grid RowDefinitions="Auto,*">
-        <StackPanel Margin="10" Spacing="6">
-            <TextBlock Text="{Binding CurrentBranch}"
-                       FontWeight="SemiBold" />
-            <TextBlock Text="{Binding CurrentDescription}"
-                       TextWrapping="Wrap"
-                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <Button Content="Pin current state"
-                    Command="{Binding PinCurrentCommand}"
-                    IsEnabled="{Binding CanPinCurrent}" />
-        </StackPanel>
-        <ScrollViewer Grid.Row="1">
+        <Border Padding="12,10" Background="{DynamicResource EffectSurfaceBrush}"
+                BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <StackPanel Spacing="3">
+                    <TextBlock Text="{Binding CurrentBranch}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding CurrentDescription}" TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                </StackPanel>
+                <Button Grid.Column="1" Content="Pin current"
+                        Command="{Binding PinCurrentCommand}" IsEnabled="{Binding CanPinCurrent}"
+                        VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
             <ItemsControl ItemsSource="{Binding Entries}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="vm:HistoryEntryViewModel">
-                        <Grid ColumnDefinitions="*,Auto"
-                              Margin="6,2"
-                              ColumnSpacing="4">
-                            <Button Grid.Column="0"
-                                    HorizontalContentAlignment="Stretch"
-                                    Command="{Binding NavigateCommand}">
-                                <StackPanel Spacing="2">
-                                    <TextBlock Text="{Binding DisplayDescription}"
-                                               TextWrapping="Wrap" />
-                                    <TextBlock Text="{Binding BranchName}"
-                                               FontSize="11"
-                                               Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-                                </StackPanel>
-                            </Button>
-                            <Button Grid.Column="1"
-                                    Content="{Binding PinButtonText}"
-                                    Command="{Binding TogglePinCommand}"
-                                    VerticalAlignment="Center" />
-                        </Grid>
+                        <Border Margin="{Binding Indent}"
+                                BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="0,0,0,1">
+                            <Grid ColumnDefinitions="3,*,Auto">
+                                <Border Background="{DynamicResource DockApplicationAccentBrushIndicator}"
+                                        IsVisible="{Binding IsCurrent}" />
+                                <Button Grid.Column="1" Background="Transparent" BorderThickness="0"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                        Padding="10,7" Command="{Binding NavigateCommand}">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="{Binding Description}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding BranchName}" FontSize="11"
+                                                   Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Grid.Column="2" Content="{Binding PinButtonText}"
+                                        ToolTip.Tip="{Binding PinToolTip}" Command="{Binding TogglePinCommand}"
+                                        Background="Transparent" BorderThickness="0" Padding="8,4"
+                                        VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
