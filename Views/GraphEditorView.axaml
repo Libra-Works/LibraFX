@@ -32,7 +32,7 @@
                         IsEnabled="{Binding HasSelection}" />
                 <Button Content="−" ToolTip.Tip="Zoom out" Click="OnZoomOutClick" />
                 <Button x:Name="ZoomButton" Content="100%"
-                        ToolTip.Tip="Reset zoom (mouse wheel to zoom)"
+                        ToolTip.Tip="Reset zoom"
                         Click="OnResetZoomClick" />
                 <Button Content="+" ToolTip.Tip="Zoom in" Click="OnZoomInClick" />
                 <Button Content="Frame selected" Click="OnFrameSelectionClick"

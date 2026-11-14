@@ -39,6 +39,8 @@ public sealed class ShortcutService : ObservableObject
     private readonly string _path;
     private string _curvePanButton = "Middle";
     private string _curveZoomModifier = "None";
+    private string _graphPanButton = "Right + Middle";
+    private string _graphZoomModifier = "None";
     private string _status = "Click a shortcut and press a key combination.";
 
     public static ShortcutService Shared { get; } = new(Path.Combine(
@@ -64,6 +66,7 @@ public sealed class ShortcutService : ObservableObject
     ];
 
     public IReadOnlyList<string> PanOptions { get; } = ["Middle", "Right"];
+    public IReadOnlyList<string> GraphPanOptions { get; } = ["Right + Middle", "Right", "Middle"];
     public IReadOnlyList<string> ZoomOptions { get; } = ["None", "Control"];
     public string Status { get => _status; private set => SetProperty(ref _status, value); }
     public string CurvePanButton
@@ -75,6 +78,16 @@ public sealed class ShortcutService : ObservableObject
     {
         get => _curveZoomModifier;
         set => SetMouseOption(ref _curveZoomModifier, value, ZoomOptions, nameof(CurveZoomModifier));
+    }
+    public string GraphPanButton
+    {
+        get => _graphPanButton;
+        set => SetMouseOption(ref _graphPanButton, value, GraphPanOptions, nameof(GraphPanButton));
+    }
+    public string GraphZoomModifier
+    {
+        get => _graphZoomModifier;
+        set => SetMouseOption(ref _graphZoomModifier, value, ZoomOptions, nameof(GraphZoomModifier));
     }
 
     public ShortcutService(string path)
@@ -124,18 +137,26 @@ public sealed class ShortcutService : ObservableObject
         var old = Entries.Select(entry => (entry.Key, entry.Modifiers)).ToArray();
         var oldPan = _curvePanButton;
         var oldZoom = _curveZoomModifier;
+        var oldGraphPan = _graphPanButton;
+        var oldGraphZoom = _graphZoomModifier;
         foreach (var entry in Entries) entry.Set(entry.DefaultKey, entry.DefaultModifiers);
         _curvePanButton = "Middle";
         _curveZoomModifier = "None";
+        _graphPanButton = "Right + Middle";
+        _graphZoomModifier = "None";
         if (!TrySave())
         {
             for (var i = 0; i < Entries.Count; i++) Entries[i].Set(old[i].Key, old[i].Modifiers);
             _curvePanButton = oldPan;
             _curveZoomModifier = oldZoom;
+            _graphPanButton = oldGraphPan;
+            _graphZoomModifier = oldGraphZoom;
         }
         else Status = "Default shortcuts restored.";
         OnPropertyChanged(nameof(CurvePanButton));
         OnPropertyChanged(nameof(CurveZoomModifier));
+        OnPropertyChanged(nameof(GraphPanButton));
+        OnPropertyChanged(nameof(GraphZoomModifier));
     }
 
     private void SetMouseOption(ref string field, string value, IReadOnlyList<string> options, string property)
@@ -192,6 +213,8 @@ public sealed class ShortcutService : ObservableObject
             }
             if (PanOptions.Contains(file.CurvePanButton)) _curvePanButton = file.CurvePanButton!;
             if (ZoomOptions.Contains(file.CurveZoomModifier)) _curveZoomModifier = file.CurveZoomModifier!;
+            if (GraphPanOptions.Contains(file.GraphPanButton)) _graphPanButton = file.GraphPanButton!;
+            if (ZoomOptions.Contains(file.GraphZoomModifier)) _graphZoomModifier = file.GraphZoomModifier!;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
         {
@@ -209,7 +232,9 @@ public sealed class ShortcutService : ObservableObject
             {
                 Bindings = Entries.ToDictionary(entry => entry.Id, entry => new ShortcutSetting(entry.Key.ToString(), entry.Modifiers)),
                 CurvePanButton = _curvePanButton,
-                CurveZoomModifier = _curveZoomModifier
+                CurveZoomModifier = _curveZoomModifier,
+                GraphPanButton = _graphPanButton,
+                GraphZoomModifier = _graphZoomModifier
             };
             temporary = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             File.WriteAllText(temporary, JsonSerializer.Serialize(file, new JsonSerializerOptions { WriteIndented = true }));
@@ -241,5 +266,7 @@ public sealed class ShortcutService : ObservableObject
         public Dictionary<string, ShortcutSetting>? Bindings { get; set; }
         public string? CurvePanButton { get; set; }
         public string? CurveZoomModifier { get; set; }
+        public string? GraphPanButton { get; set; }
+        public string? GraphZoomModifier { get; set; }
     }
 }

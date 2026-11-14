@@ -56,12 +56,20 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="F-Curve pan:" VerticalAlignment="Center" />
-                        <ComboBox ItemsSource="{Binding Shortcuts.PanOptions}" SelectedItem="{Binding Shortcuts.CurvePanButton}" />
-                        <TextBlock Text="Wheel zoom modifier:" VerticalAlignment="Center" />
-                        <ComboBox ItemsSource="{Binding Shortcuts.ZoomOptions}" SelectedItem="{Binding Shortcuts.CurveZoomModifier}" />
-                        <Button Content="Reset" Click="OnResetShortcutsClick" />
+                    <StackPanel Grid.Row="2" Spacing="6">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Graph pan:" VerticalAlignment="Center" />
+                            <ComboBox ItemsSource="{Binding Shortcuts.GraphPanOptions}" SelectedItem="{Binding Shortcuts.GraphPanButton}" />
+                            <TextBlock Text="Wheel modifier:" VerticalAlignment="Center" />
+                            <ComboBox ItemsSource="{Binding Shortcuts.ZoomOptions}" SelectedItem="{Binding Shortcuts.GraphZoomModifier}" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="F-Curve pan:" VerticalAlignment="Center" />
+                            <ComboBox ItemsSource="{Binding Shortcuts.PanOptions}" SelectedItem="{Binding Shortcuts.CurvePanButton}" />
+                            <TextBlock Text="Wheel modifier:" VerticalAlignment="Center" />
+                            <ComboBox ItemsSource="{Binding Shortcuts.ZoomOptions}" SelectedItem="{Binding Shortcuts.CurveZoomModifier}" />
+                            <Button Content="Reset" Click="OnResetShortcutsClick" />
+                        </StackPanel>
                     </StackPanel>
                     <TextBlock Grid.Row="3" Margin="0,6,0,0" Text="{Binding Shortcuts.Status}"
                                TextWrapping="Wrap" Foreground="{DynamicResource EffectMutedForegroundBrush}" />

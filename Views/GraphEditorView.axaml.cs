@@ -455,14 +455,17 @@ public partial class GraphEditorView : UserControl
     private void OnViewportPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         var properties = e.GetCurrentPoint(GraphScrollViewer).Properties;
-        if (!properties.IsRightButtonPressed && !properties.IsMiddleButtonPressed)
+        var panButton = ShortcutService.Shared.GraphPanButton;
+        var right = properties.IsRightButtonPressed && panButton is "Right" or "Right + Middle";
+        var middle = properties.IsMiddleButtonPressed && panButton is "Middle" or "Right + Middle";
+        if (!right && !middle)
         {
             return;
         }
 
         _isPanning = true;
         _panMoved = false;
-        _panButton = properties.IsRightButtonPressed ? MouseButton.Right : MouseButton.Middle;
+        _panButton = right ? MouseButton.Right : MouseButton.Middle;
         _panStart = e.GetPosition(GraphScrollViewer);
         _panOffset = GraphScrollViewer.Offset;
         e.Pointer.Capture(GraphScrollViewer);
@@ -518,7 +521,9 @@ public partial class GraphEditorView : UserControl
 
     private void OnViewportPointerWheelChanged(object? sender, PointerWheelEventArgs e)
     {
-        if (e.Delta.Y == 0)
+        if (e.Delta.Y == 0 ||
+            (ShortcutService.Shared.GraphZoomModifier == "Control" &&
+             !e.KeyModifiers.HasFlag(KeyModifiers.Control)))
         {
             return;
         }
