@@ -11,8 +11,9 @@ namespace LiberaFx;
 
 public partial class App : Application
 {
-    private readonly McpHost _mcpHost = new(DebugPort("LIBERAFX_MCP_DEBUG_PORT", McpHost.Port));
-    private readonly PreviewHost _previewHost = new(DebugPort("LIBERAFX_PREVIEW_DEBUG_PORT", PreviewHost.Port));
+    private readonly ServerSettingsService _serverSettings = new();
+    private McpHost _mcpHost = null!;
+    private PreviewHost _previewHost = null!;
     private Task _mcpStart = Task.CompletedTask;
     private Task _previewStart = Task.CompletedTask;
     private bool _shutdownInProgress;
@@ -27,8 +28,10 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            _mcpHost = new McpHost(DebugPort("LIBERAFX_MCP_DEBUG_PORT", _serverSettings.StartupMcpPort));
+            _previewHost = new PreviewHost(DebugPort("LIBERAFX_PREVIEW_DEBUG_PORT", _serverSettings.StartupPreviewPort));
             var viewModel = new MainViewModel(_mcpHost.AccessToken, _previewHost.AccessToken, _previewHost.Fingerprint,
-                _mcpHost.ActualEndpoint, _previewHost.ActualEndpoint);
+                _mcpHost.ActualEndpoint, _previewHost.ActualEndpoint, _serverSettings);
             var window = new MainWindow
             {
                 DataContext = viewModel,

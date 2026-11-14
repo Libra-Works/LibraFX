@@ -28,4 +28,9 @@ public partial class SettingsWindow : Window
     {
         if (DataContext is MainViewModel model) model.Shortcuts.Reset();
     }
+
+    private void OnSaveServersClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel model) model.ServerSettings.Save();
+    }
 }

@@ -48,6 +48,7 @@ public partial class MainViewModel : ViewModelBase
     }
 
     public ShortcutService Shortcuts => ShortcutService.Shared;
+    public ServerSettingsService ServerSettings { get; }
 
     public string McpAccessToken { get; }
 
@@ -128,8 +129,10 @@ public partial class MainViewModel : ViewModelBase
     }
 
     public MainViewModel(string mcpAccessToken = "", string previewAccessToken = "", string previewFingerprint = "",
-        string mcpEndpoint = McpHost.Endpoint, string previewEndpoint = PreviewHost.Endpoint)
+        string mcpEndpoint = McpHost.Endpoint, string previewEndpoint = PreviewHost.Endpoint,
+        ServerSettingsService? serverSettings = null)
     {
+        ServerSettings = serverSettings ?? new ServerSettingsService();
         Log.Add("Application", "Editor started.");
         McpAccessToken = mcpAccessToken;
         PreviewAccessToken = previewAccessToken;
