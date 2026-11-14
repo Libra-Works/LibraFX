@@ -15,6 +15,7 @@
     <Folder Include="Models\" />
     <AvaloniaResource Include="Assets\**" Exclude="Assets\Inspectors\**" />
     <None Update="Assets\Nodes\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\Enums\*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\ColorSchemes\*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\Inspectors\*.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

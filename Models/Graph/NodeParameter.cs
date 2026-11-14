@@ -3,9 +3,11 @@ using System.Text.Json;
 namespace LiberaFx.Models.Graph;
 
 public sealed record NodeParameterEditorDefinition(string Kind, double? Minimum, double? Maximum, double? Step);
+public sealed record NodeParameterCondition(string Parameter, JsonElement Expected);
 public sealed record NodeParameterDefinition(string Id, string Name, string Type, JsonElement DefaultValue)
 {
     public NodeParameterEditorDefinition? Editor { get; init; }
+    public NodeParameterCondition? EnabledWhen { get; init; }
 }
 public sealed record NodeParameterSnapshot(string Id, string Type, JsonElement Value);
 
@@ -14,6 +16,9 @@ public static class NodeParameter
     public static bool IsValidValue(string type, JsonElement value)
     {
         if (value.ValueKind is JsonValueKind.Undefined || value.GetRawText().Length > 16384) return false;
+        if (type.StartsWith("enum:", StringComparison.Ordinal))
+            return GraphEnumDefinition.TryGetTypeId(type, out _) &&
+                   value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out _);
         switch (type)
         {
             case "float":

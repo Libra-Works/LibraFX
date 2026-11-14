@@ -17,6 +17,32 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     public string Type => _definition.Type;
     public string Id => _definition.Id;
     public NodeParameterEditorDefinition? Editor => _definition.Editor;
+    public bool IsEnabled
+    {
+        get
+        {
+            if (_definition.EnabledWhen is not { } condition) return true;
+            var dependency = _node.Definition.Parameters.FirstOrDefault(item => item.Id == condition.Parameter);
+            return dependency is not null && JsonElement.DeepEquals(_node.GetParameterValue(dependency), condition.Expected);
+        }
+    }
+    public IReadOnlyList<GraphEnumValue> EnumValues
+    {
+        get
+        {
+            if (!GraphEnumDefinition.TryGetTypeId(Type, out var id) ||
+                !GraphEnumDefinition.All.TryGetValue(id, out var definition)) return [];
+            var current = Value.GetInt32();
+            return definition.Values.Any(item => item.Value == current)
+                ? definition.Values
+                : definition.Values.Append(new GraphEnumValue(current, $"Unknown ({current})")).ToArray();
+        }
+    }
+    public int EnumValue
+    {
+        get => Value.GetInt32();
+        set => SetValue(JsonSerializer.SerializeToElement(value));
+    }
     public string Status { get => _status; private set => SetProperty(ref _status, value); }
     public string JsonValue => Value.GetRawText();
     public string DisplayValue => Type switch
@@ -25,6 +51,8 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         "vector3" => $"({X}, {Y}, {Z})",
         "vector4" => $"({X}, {Y}, {Z}, {W})",
         "color" => ColorValue.ToString(),
+        _ when GraphEnumDefinition.TryGetTypeId(Type, out _) =>
+            EnumValues.FirstOrDefault(item => item.Value == EnumValue)?.Name ?? ValueText,
         _ => ValueText
     };
     private JsonElement Value => _node.GetParameterValue(_definition);
@@ -118,6 +146,9 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(ValueText));
         OnPropertyChanged(nameof(DisplayValue));
+        OnPropertyChanged(nameof(IsEnabled));
+        OnPropertyChanged(nameof(EnumValues));
+        OnPropertyChanged(nameof(EnumValue));
         OnPropertyChanged(nameof(NumericValue));
         OnPropertyChanged(nameof(JsonValue));
         OnPropertyChanged(nameof(BoolValue));

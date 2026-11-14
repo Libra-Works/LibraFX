@@ -95,6 +95,8 @@ public sealed record GraphNodeDefinition(
         "FloatX3" => "Vector3",
         "FloatX4" => "Vector4",
         "Int32" => "Int",
+        _ when GraphEnumDefinition.TryGetTypeId(portType, out var id) &&
+               GraphEnumDefinition.All.TryGetValue(id, out var definition) => definition.Name,
         _ => portType
     };
 
@@ -167,6 +169,11 @@ public sealed record GraphNodeDefinition(
                 string.IsNullOrWhiteSpace(parameter.Name) || string.IsNullOrWhiteSpace(parameter.Type) ||
                 parameter.Type.Length > 128 || !NodeParameter.IsValidValue(parameter.Type, parameter.DefaultValue))
                 throw new InvalidDataException("Invalid node parameter definition.");
+            if (parameter.Type.StartsWith("enum:", StringComparison.Ordinal) &&
+                (!GraphEnumDefinition.TryGetTypeId(parameter.Type, out var enumId) ||
+                 !GraphEnumDefinition.All.TryGetValue(enumId, out var enumDefinition) ||
+                 !enumDefinition.Values.Any(item => item.Value == parameter.DefaultValue.GetInt32())))
+                throw new InvalidDataException("Unknown enum or invalid default enum value.");
             NodeParameterEditorDefinition? editor = null;
             if (parameter.Editor is { } config)
             {
@@ -175,6 +182,8 @@ public sealed record GraphNodeDefinition(
                     (config.Minimum is { } minimum && !double.IsFinite(minimum)) ||
                     (config.Maximum is { } maximum && !double.IsFinite(maximum)))
                     throw new InvalidDataException("Invalid parameter editor definition.");
+                if (config.Kind == "radio" && parameter.Type != "bool")
+                    throw new InvalidDataException("Radio editor requires a bool parameter.");
                 if (config.Kind == "slider" &&
                     (parameter.Type is not ("float" or "int") ||
                      config.Minimum is not { } min || config.Maximum is not { } max || min >= max ||
@@ -184,8 +193,20 @@ public sealed record GraphNodeDefinition(
                     throw new InvalidDataException("Invalid slider editor definition.");
                 editor = new NodeParameterEditorDefinition(config.Kind, config.Minimum, config.Maximum, config.Step);
             }
+            if (parameter.EnabledWhen is { Expected.ValueKind: JsonValueKind.Undefined })
+                throw new InvalidDataException("Parameter enable condition requires a value.");
+            var condition = parameter.EnabledWhen is { } when
+                ? new NodeParameterCondition(when.Parameter ?? "", when.Expected.Clone()) : null;
             parameters.Add(new NodeParameterDefinition(parameter.Id!, parameter.Name, parameter.Type,
-                parameter.DefaultValue.Clone()) { Editor = editor });
+                parameter.DefaultValue.Clone()) { Editor = editor, EnabledWhen = condition });
+        }
+        foreach (var parameter in parameters)
+        {
+            if (parameter.EnabledWhen is not { } condition) continue;
+            var dependency = parameters.FirstOrDefault(item => item.Id == condition.Parameter);
+            if (dependency is null || dependency.Id == parameter.Id ||
+                !NodeParameter.IsValidValue(dependency.Type, condition.Expected))
+                throw new InvalidDataException("Invalid parameter enable condition.");
         }
         ids.Add(node.TypeId);
         names.Add(qualifiedName);
@@ -221,6 +242,14 @@ public sealed record GraphNodeDefinition(
         public string? Type { get; set; }
         public JsonElement DefaultValue { get; set; }
         public ParameterEditorFile? Editor { get; set; }
+        public ParameterConditionFile? EnabledWhen { get; set; }
+    }
+
+    private sealed class ParameterConditionFile
+    {
+        public string? Parameter { get; set; }
+        [JsonPropertyName("equals")]
+        public JsonElement Expected { get; set; }
     }
 
     private sealed class ParameterEditorFile

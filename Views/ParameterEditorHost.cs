@@ -7,6 +7,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using System.Globalization;
+using LiberaFx.Models.Graph;
 using LiberaFx.Services;
 using LiberaFx.ViewModels;
 
@@ -27,12 +28,13 @@ public sealed class ParameterEditorHost : ContentControl
             ? InspectorEditors.CreateEditor(parameter)
             : InspectorEditors.CreateNamedEditor(parameter, editorKind);
         var editor = custom ?? (editorKind == "slider" ? CreateSlider(parameter) : CreateStandard(parameter));
+        Bind(IsEnabledProperty, new Binding(nameof(parameter.IsEnabled)));
         var status = new TextBlock { Foreground = Brushes.OrangeRed, TextWrapping = TextWrapping.Wrap };
         status.Bind(TextBlock.TextProperty, new Binding(nameof(parameter.Status)));
         var missing = new TextBlock
         {
             Text = $"Inspector '{editorKind}' is unavailable; using the standard editor.",
-            IsVisible = custom is null && editorKind is not (null or "slider" or "text"),
+            IsVisible = custom is null && editorKind is not (null or "slider" or "text" or "radio"),
             Foreground = Brushes.OrangeRed,
             TextWrapping = TextWrapping.Wrap
         };
@@ -56,10 +58,13 @@ public sealed class ParameterEditorHost : ContentControl
     {
         if (parameter.Type == "bool")
         {
+            if (parameter.Editor?.Kind == "radio") return CreateBooleanRadio(parameter);
             var check = new CheckBox();
             check.Bind(ToggleButton.IsCheckedProperty, new Binding(nameof(parameter.BoolValue)) { Mode = BindingMode.TwoWay });
             return check;
         }
+        if (GraphEnumDefinition.TryGetTypeId(parameter.Type, out _))
+            return CreateEnumEditor(parameter);
         if (parameter.Type is "vector2" or "vector3" or "vector4")
         {
             var count = parameter.Type == "vector2" ? 2 : parameter.Type == "vector3" ? 3 : 4;
@@ -111,6 +116,47 @@ public sealed class ParameterEditorHost : ContentControl
             return button;
         }
         return CreateTextBox(nameof(parameter.ValueText));
+    }
+
+    private static Control CreateBooleanRadio(NodeParameterEditorViewModel parameter)
+    {
+        var group = Guid.NewGuid().ToString();
+        var on = new RadioButton { Content = "True", GroupName = group };
+        var off = new RadioButton { Content = "False", GroupName = group };
+        var syncing = false;
+        void Refresh()
+        {
+            syncing = true;
+            on.IsChecked = parameter.BoolValue;
+            off.IsChecked = !parameter.BoolValue;
+            syncing = false;
+        }
+        Refresh();
+        on.IsCheckedChanged += (_, _) => { if (!syncing && on.IsChecked == true) parameter.BoolValue = true; };
+        off.IsCheckedChanged += (_, _) => { if (!syncing && off.IsChecked == true) parameter.BoolValue = false; };
+        parameter.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(parameter.BoolValue)) Refresh(); };
+        return new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12, Children = { on, off } };
+    }
+
+    private static Control CreateEnumEditor(NodeParameterEditorViewModel parameter)
+    {
+        var combo = new ComboBox { DisplayMemberBinding = new Binding(nameof(GraphEnumValue.Name)) };
+        var syncing = false;
+        void Refresh()
+        {
+            syncing = true;
+            var values = parameter.EnumValues;
+            combo.ItemsSource = values;
+            combo.SelectedItem = values.FirstOrDefault(item => item.Value == parameter.EnumValue);
+            syncing = false;
+        }
+        Refresh();
+        combo.SelectionChanged += (_, _) =>
+        {
+            if (!syncing && combo.SelectedItem is GraphEnumValue value) parameter.EnumValue = value.Value;
+        };
+        parameter.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(parameter.EnumValue)) Refresh(); };
+        return combo;
     }
 
     private static Control CreateSlider(NodeParameterEditorViewModel parameter)

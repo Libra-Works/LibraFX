@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "typeId": "04de6bed-9b82-42bd-a39d-9e2c9736fc9c",
+  "namespace": "LiberaFx",
+  "kind": "InterpolationMode",
+  "name": "Interpolation Mode",
+  "group": "Parameter nodes",
+  "portType": "enum:c0bb0566-0892-4c0f-b8eb-ce5a38d3f0b2",
+  "portCategory": "Parameter",
+  "parameters": [
+    { "id": "value", "name": "Value", "type": "enum:c0bb0566-0892-4c0f-b8eb-ce5a38d3f0b2", "defaultValue": 1 }
+  ]
+}

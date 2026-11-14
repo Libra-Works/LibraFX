@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "typeId": "c0bb0566-0892-4c0f-b8eb-ce5a38d3f0b2",
+  "namespace": "LiberaFx",
+  "name": "Interpolation",
+  "values": [
+    { "value": 0, "name": "Constant" },
+    { "value": 1, "name": "Linear" },
+    { "value": 2, "name": "Smooth" }
+  ]
+}
