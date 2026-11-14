@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "typeId": "b102696d-6e2b-4b90-b5be-fafc9df53cf6",
+  "namespace": "LiberaFx",
+  "kind": "Bool",
+  "name": "Bool",
+  "group": "Parameter nodes",
+  "portType": "Bool",
+  "portCategory": "Parameter",
+  "parameters": [
+    { "id": "value", "name": "Value", "type": "bool", "defaultValue": false }
+  ]
+}

@@ -6,5 +6,8 @@
   "name": "Vector3",
   "group": "Parameter nodes",
   "portType": "FloatX3",
-  "portCategory": "Parameter"
+  "portCategory": "Parameter",
+  "parameters": [
+    { "id": "value", "name": "Value", "type": "vector3", "defaultValue": [0.0, 0.0, 0.0] }
+  ]
 }

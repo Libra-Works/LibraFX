@@ -13,3 +13,4 @@ TestResults/
 *.md
 .mcp.json
 .vscode/mcp.json
+Assets/Inspectors/

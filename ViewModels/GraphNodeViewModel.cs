@@ -1,4 +1,5 @@
 using Avalonia.Media;
+using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LiberaFx.Models.Graph;
@@ -19,7 +20,9 @@ public sealed class GraphNodeViewModel : ObservableObject
     private double? _previewX;
     private double? _previewY;
     private bool _isSelected;
+    private bool _isDetailsExpanded;
     private FCurveSnapshot? _curve;
+    private IReadOnlyList<NodeParameterSnapshot>? _parameters;
 
     public Guid Id { get; }
 
@@ -28,9 +31,19 @@ public sealed class GraphNodeViewModel : ObservableObject
     public GraphNodeDefinition Definition { get; }
 
     public FCurveSnapshot? Curve => _curve;
+    public IReadOnlyList<NodeParameterSnapshot>? Parameters => _parameters;
     public GraphSnapshot? ChildGraph { get; }
     public bool IsGraphGroup => ChildGraph is not null;
     public bool HasPorts => !IsGraphGroup;
+    public bool HasParameters => InlineParameters.Count > 0;
+    public IReadOnlyList<NodeParameterEditorViewModel> InlineParameters { get; }
+    internal double RenderedHeight { get; set; } = 80;
+
+    public bool IsDetailsExpanded
+    {
+        get => _isDetailsExpanded;
+        set => SetProperty(ref _isDetailsExpanded, value);
+    }
 
     public string Name
     {
@@ -80,7 +93,8 @@ public sealed class GraphNodeViewModel : ObservableObject
         double y,
         Guid? id = null,
         FCurveSnapshot? curve = null,
-        GraphSnapshot? childGraph = null)
+        GraphSnapshot? childGraph = null,
+        IReadOnlyList<NodeParameterSnapshot>? parameters = null)
     {
         _workspace = workspace;
         Definition = definition;
@@ -90,6 +104,9 @@ public sealed class GraphNodeViewModel : ObservableObject
         _y = y;
         _curve = definition.Kind == GraphNodeKind.FloatFCurve ? curve ?? FCurve.CreateDefault() : null;
         ChildGraph = definition.Kind == GraphNodeKind.GraphGroup ? childGraph ?? new GraphSnapshot([], []) : null;
+        _parameters = parameters;
+        InlineParameters = definition.Parameters
+            .Select(parameter => new NodeParameterEditorViewModel(workspace, this, parameter)).ToArray();
         SelectCommand = new RelayCommand(() => _workspace.SelectNode(this));
         SelectInputPortCommand = new RelayCommand(() => _workspace.CompleteConnection(this));
         SelectOutputPortCommand = new RelayCommand(() => _workspace.BeginConnection(this));
@@ -126,6 +143,16 @@ public sealed class GraphNodeViewModel : ObservableObject
     internal void SetCurveValue(FCurveSnapshot value)
     {
         SetProperty(ref _curve, value, nameof(Curve));
+    }
+
+    public JsonElement GetParameterValue(NodeParameterDefinition definition) =>
+        Parameters?.FirstOrDefault(item => item.Id == definition.Id && item.Type == definition.Type)?.Value
+        ?? definition.DefaultValue;
+
+    internal void SetParametersValue(IReadOnlyList<NodeParameterSnapshot>? parameters)
+    {
+        if (SetProperty(ref _parameters, parameters, nameof(Parameters)))
+            foreach (var parameter in InlineParameters) parameter.Refresh();
     }
 
     internal void SetPosition(double x, double y)

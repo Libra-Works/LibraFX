@@ -72,6 +72,7 @@ public sealed record GraphNodeDefinition(
     public static IReadOnlyList<string> LoadWarnings => Warnings;
     public string QualifiedName => $"{Namespace}.{TypeName}";
     public string TypeName { get; init; } = string.Empty;
+    public IReadOnlyList<NodeParameterDefinition> Parameters { get; init; } = [];
 
     public static bool TryFind(string? value, out GraphNodeDefinition? definition)
     {
@@ -158,12 +159,41 @@ public sealed record GraphNodeDefinition(
             throw new InvalidDataException("A built-in qualified name belongs to another UUID.");
         if (ids.Contains(node.TypeId) || names.Contains(qualifiedName))
             throw new InvalidDataException("Duplicate node type UUID or qualified name.");
+        var parameters = new List<NodeParameterDefinition>();
+        var parameterIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var parameter in node.Parameters ?? [])
+        {
+            if (parameter is null || !IsIdentifier(parameter.Id) || !parameterIds.Add(parameter.Id!) ||
+                string.IsNullOrWhiteSpace(parameter.Name) || string.IsNullOrWhiteSpace(parameter.Type) ||
+                parameter.Type.Length > 128 || !NodeParameter.IsValidValue(parameter.Type, parameter.DefaultValue))
+                throw new InvalidDataException("Invalid node parameter definition.");
+            NodeParameterEditorDefinition? editor = null;
+            if (parameter.Editor is { } config)
+            {
+                if (string.IsNullOrWhiteSpace(config.Kind) || config.Kind.Length > 128 ||
+                    (config.Step is { } step && (!double.IsFinite(step) || step <= 0)) ||
+                    (config.Minimum is { } minimum && !double.IsFinite(minimum)) ||
+                    (config.Maximum is { } maximum && !double.IsFinite(maximum)))
+                    throw new InvalidDataException("Invalid parameter editor definition.");
+                if (config.Kind == "slider" &&
+                    (parameter.Type is not ("float" or "int") ||
+                     config.Minimum is not { } min || config.Maximum is not { } max || min >= max ||
+                     (parameter.Type == "int" && (min < int.MinValue || max > int.MaxValue ||
+                         Math.Truncate(min) != min || Math.Truncate(max) != max ||
+                         (config.Step is { } intStep && Math.Truncate(intStep) != intStep)))))
+                    throw new InvalidDataException("Invalid slider editor definition.");
+                editor = new NodeParameterEditorDefinition(config.Kind, config.Minimum, config.Maximum, config.Step);
+            }
+            parameters.Add(new NodeParameterDefinition(parameter.Id!, parameter.Name, parameter.Type,
+                parameter.DefaultValue.Clone()) { Editor = editor });
+        }
         ids.Add(node.TypeId);
         names.Add(qualifiedName);
         var kind = new GraphNodeKind(BuiltInIds.GetValueOrDefault(node.TypeId) ?? node.TypeId.ToString("D"));
         definitions.Add(new GraphNodeDefinition(kind, node.TypeId, node.Namespace, node.Name, node.PortType, category, node.Group)
         {
-            TypeName = node.Kind!
+            TypeName = node.Kind!,
+            Parameters = parameters.AsReadOnly()
         });
     }
 
@@ -181,5 +211,23 @@ public sealed record GraphNodeDefinition(
         public string? Group { get; set; }
         public string? PortType { get; set; }
         public string? PortCategory { get; set; }
+        public List<NodeParameterFile>? Parameters { get; set; }
+    }
+
+    private sealed class NodeParameterFile
+    {
+        public string? Id { get; set; }
+        public string? Name { get; set; }
+        public string? Type { get; set; }
+        public JsonElement DefaultValue { get; set; }
+        public ParameterEditorFile? Editor { get; set; }
+    }
+
+    private sealed class ParameterEditorFile
+    {
+        public string? Kind { get; set; }
+        public double? Minimum { get; set; }
+        public double? Maximum { get; set; }
+        public double? Step { get; set; }
     }
 }

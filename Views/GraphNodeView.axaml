@@ -9,7 +9,7 @@
             BorderBrush="{Binding BorderBrush}"
             BorderThickness="2"
             CornerRadius="4">
-        <Grid RowDefinitions="Auto,Auto">
+        <Grid RowDefinitions="Auto,Auto,Auto">
             <Border Grid.Row="0"
                     x:Name="NodeHeader"
                     Padding="8"
@@ -21,6 +21,19 @@
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Right" Text="▶" IsVisible="{Binding IsGraphGroup}"
                                Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                    <ToggleButton x:Name="DetailsToggle" DockPanel.Dock="Right"
+                                  Width="22" Height="20" Padding="0"
+                                  IsVisible="{Binding HasParameters}"
+                                  IsChecked="{Binding IsDetailsExpanded, Mode=TwoWay}"
+                                  ToolTip.Tip="Show or hide node parameters"
+                                  AutomationProperties.Name="Show or hide node parameters">
+                        <Grid>
+                            <TextBlock Text="▸" IsVisible="{Binding !IsDetailsExpanded}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <TextBlock Text="▾" IsVisible="{Binding IsDetailsExpanded}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Grid>
+                    </ToggleButton>
                     <TextBlock Text="{Binding Name}"
                                Foreground="{DynamicResource EffectForegroundBrush}"
                                FontWeight="SemiBold" />
@@ -73,6 +86,23 @@
             </Grid>
             <TextBlock Grid.Row="1" Margin="8" IsVisible="{Binding IsGraphGroup}"
                        Text="Double-click to open" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <Border Grid.Row="2" IsVisible="{Binding IsDetailsExpanded}" Padding="8,5"
+                    BorderThickness="0,1,0,0" BorderBrush="{DynamicResource EffectBorderBrush}">
+                <ItemsControl ItemsSource="{Binding InlineParameters}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:NodeParameterEditorViewModel">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2">
+                                <TextBlock Text="{Binding Name}"
+                                           Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                                <TextBlock Grid.Column="1" Text="{Binding DisplayValue}"
+                                           ToolTip.Tip="{Binding DisplayValue}"
+                                           HorizontalAlignment="Right" TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource EffectForegroundBrush}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
         </Grid>
     </Border>
 </UserControl>

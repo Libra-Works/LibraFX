@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using LiberaFx.ViewModels;
 
@@ -20,10 +21,21 @@ public partial class GraphNodeView : UserControl
     public GraphNodeView()
     {
         InitializeComponent();
+        SizeChanged += (_, _) =>
+        {
+            if (DataContext is not GraphNodeViewModel node) return;
+            node.RenderedHeight = Bounds.Height;
+            var editor = this.FindAncestorOfType<GraphEditorView>();
+            if (editor is not null) Dispatcher.UIThread.Post(editor.UpdateCanvasExtent);
+        };
     }
 
     private void OnHeaderPointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        if (e.Source is Visual source &&
+            (ReferenceEquals(source, DetailsToggle) || source.GetVisualAncestors().Contains(DetailsToggle)))
+            return;
+
         if (DataContext is not GraphNodeViewModel node ||
             sender is not Control header ||
             !e.GetCurrentPoint(header).Properties.IsLeftButtonPressed)

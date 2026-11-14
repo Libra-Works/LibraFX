@@ -6,5 +6,8 @@
   "name": "Vector4",
   "group": "Parameter nodes",
   "portType": "FloatX4",
-  "portCategory": "Parameter"
+  "portCategory": "Parameter",
+  "parameters": [
+    { "id": "value", "name": "Value", "type": "vector4", "defaultValue": [0.0, 0.0, 0.0, 0.0] }
+  ]
 }

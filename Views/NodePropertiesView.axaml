@@ -1,8 +1,10 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:LiberaFx.ViewModels"
+             xmlns:views="using:LiberaFx.Views"
              x:Class="LiberaFx.Views.NodePropertiesView"
              x:DataType="vm:NodePropertiesPaneViewModel">
+    <ScrollViewer HorizontalScrollBarVisibility="Auto">
     <StackPanel Margin="12" Spacing="8">
         <TextBlock Text="Selected node"
                    FontWeight="SemiBold"
@@ -19,6 +21,15 @@
             <TextBlock Text="Name"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <TextBox Text="{Binding Graph.SelectedNodeName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            <ItemsControl ItemsSource="{Binding Parameters}" Margin="0,8,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:NodeParameterEditorViewModel">
+                        <views:ParameterEditorHost Margin="0,0,0,10" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="{Binding PluginStatus}" TextWrapping="Wrap" FontSize="11"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <TextBlock Text="Connections" Margin="0,10,0,0"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <ItemsControl ItemsSource="{Binding Graph.SelectedConnections}">
@@ -35,4 +46,5 @@
             </ItemsControl>
         </StackPanel>
     </StackPanel>
+    </ScrollViewer>
 </UserControl>

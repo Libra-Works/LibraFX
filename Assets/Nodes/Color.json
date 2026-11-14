@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "typeId": "554aaa8a-74a0-4620-9e28-d1e7bd20ffda",
+  "namespace": "LiberaFx",
+  "kind": "Color",
+  "name": "Color",
+  "group": "Parameter nodes",
+  "portType": "Color",
+  "portCategory": "Parameter",
+  "parameters": [
+    { "id": "value", "name": "Value", "type": "color", "defaultValue": [1.0, 1.0, 1.0, 1.0] }
+  ]
+}

@@ -6,5 +6,8 @@
   "name": "Scalar",
   "group": "Parameter nodes",
   "portType": "Float",
-  "portCategory": "Parameter"
+  "portCategory": "Parameter",
+  "parameters": [
+    { "id": "value", "name": "Value", "type": "float", "defaultValue": 0.0 }
+  ]
 }

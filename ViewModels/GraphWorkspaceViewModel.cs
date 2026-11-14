@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.Json;
 using Avalonia;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -173,7 +174,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
             var definition = GraphNodeDefinition.All.Single(item => item.Kind == specification.Kind);
             var node = new GraphNodeViewModel(this, definition, specification.Name, newX, newY,
-                curve: specification.Curve, childGraph: specification.ChildGraph is null ? null : CloneGraph(specification.ChildGraph));
+                curve: specification.Curve, childGraph: specification.ChildGraph is null ? null : CloneGraph(specification.ChildGraph),
+                parameters: specification.Parameters);
             nodesByOldId.Add(specification.Id, node);
             commands.Add(new AddGraphNodeCommand(this, node, Nodes.Count + commands.Count));
         }
@@ -227,7 +229,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 node.Definition.PortType,
                 node.Definition.PortCategory,
                 node.Curve,
-                node.ChildGraph))
+                node.ChildGraph,
+                node.Parameters))
             .ToArray();
         var connections = Connections
             .Select(connection => new GraphConnectionSnapshot(
@@ -407,6 +410,15 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             {
                 FCurve.Validate(specification.Curve);
             }
+            if (specification.Parameters is { } parameters)
+            {
+                var ids = new HashSet<string>(StringComparer.Ordinal);
+                if (parameters.Count > 256 || parameters.Any(parameter =>
+                        parameter is null || string.IsNullOrWhiteSpace(parameter.Id) || parameter.Id.Length > 128 ||
+                        !ids.Add(parameter.Id) || string.IsNullOrWhiteSpace(parameter.Type) ||
+                        parameter.Type.Length > 128 || !NodeParameter.IsValidValue(parameter.Type, parameter.Value)))
+                    throw new InvalidDataException("The project contains invalid node parameters.");
+            }
             if (specification.ChildGraph is not null)
                 ValidateSnapshot(specification.ChildGraph, allIds, depth + 1);
         }
@@ -450,6 +462,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     private void RestoreCurrentGraph(GraphSnapshot snapshot)
     {
         var selectedIds = SelectedNodes.Select(node => node.Id).ToArray();
+        var expandedNodes = Nodes.Where(node => node.IsDetailsExpanded).Select(node => node.Id).ToHashSet();
         var definitions = GraphNodeDefinition.All.ToDictionary(definition => definition.Kind);
         var nodesById = new Dictionary<Guid, GraphNodeViewModel>();
         foreach (var specification in snapshot.Nodes)
@@ -463,7 +476,11 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 specification.Y,
                 specification.Id,
                 specification.Curve,
-                specification.ChildGraph);
+                specification.ChildGraph,
+                specification.Parameters)
+            {
+                IsDetailsExpanded = expandedNodes.Contains(specification.Id)
+            };
             nodesById.Add(node.Id, node);
         }
 
@@ -786,6 +803,22 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         }
 
         _history.Execute(new SetFCurveCommand(node, node.Curve, curve, description));
+    }
+
+    public void SetParameter(GraphNodeViewModel node, string id, JsonElement value)
+    {
+        if (!Nodes.Contains(node)) throw new InvalidOperationException("The node is not in this graph.");
+        var definition = node.Definition.Parameters.FirstOrDefault(parameter => parameter.Id == id)
+            ?? throw new InvalidOperationException("The node parameter no longer exists.");
+        if (!NodeParameter.IsValidValue(definition.Type, value))
+            throw new ArgumentException("The value is invalid for this parameter.", nameof(value));
+        if (NodeParameter.ValuesEqual(node.GetParameterValue(definition), value)) return;
+        var parameters = node.Parameters?.ToList() ?? [];
+        var index = parameters.FindIndex(parameter => parameter.Id == id);
+        var updated = new NodeParameterSnapshot(id, definition.Type, value.Clone());
+        if (index < 0) parameters.Add(updated);
+        else parameters[index] = updated;
+        _history.Execute(new SetNodeParametersCommand(node, node.Parameters, parameters.AsReadOnly(), definition.Name));
     }
 
     public GraphNodeViewModel CreateNode(GraphNodeKind kind, double? x = null, double? y = null)

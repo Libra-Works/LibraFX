@@ -11,7 +11,7 @@ public sealed class ProjectFileService
 {
     public const string FileExtension = ".lfxproj";
 
-    private const int CurrentFormatVersion = 4;
+    private const int CurrentFormatVersion = 5;
     private const int FirstSupportedFormatVersion = 1;
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
@@ -38,7 +38,8 @@ public sealed class ProjectFileService
                     node.X,
                     node.Y,
                     node.Curve,
-                    node.ChildGraph))
+                    node.ChildGraph,
+                    node.Parameters))
                 .ToList(),
             Connections = snapshot.Connections
                 .Select(connection => new LiberaFxProjectConnection(
@@ -94,7 +95,8 @@ public sealed class ProjectFileService
                 definition.PortType,
                 definition.PortCategory,
                 node.Curve,
-                node.ChildGraph));
+                node.ChildGraph,
+                node.Parameters));
         }
 
         var connections = document.Connections

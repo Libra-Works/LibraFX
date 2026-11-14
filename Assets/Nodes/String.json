@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "typeId": "9e6f3485-c6fe-4cbf-acd7-43699c30b258",
+  "namespace": "LiberaFx",
+  "kind": "String",
+  "name": "String",
+  "group": "Parameter nodes",
+  "portType": "String",
+  "portCategory": "Parameter",
+  "parameters": [
+    { "id": "value", "name": "Value", "type": "string", "defaultValue": "" }
+  ]
+}

@@ -3,6 +3,17 @@ using LiberaFx.Models.Graph;
 
 namespace LiberaFx.Models.Commands;
 
+public sealed class SetNodeParametersCommand(
+    GraphNodeViewModel node,
+    IReadOnlyList<NodeParameterSnapshot>? oldValues,
+    IReadOnlyList<NodeParameterSnapshot> newValues,
+    string parameterName) : IUndoableCommand
+{
+    public string Description => $"Edit {node.Name}: {parameterName}";
+    public void Execute() => node.SetParametersValue(newValues);
+    public void Undo() => node.SetParametersValue(oldValues);
+}
+
 public sealed class SetFCurveCommand(
     GraphNodeViewModel node,
     FCurveSnapshot oldCurve,

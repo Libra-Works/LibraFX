@@ -102,7 +102,7 @@ public partial class GraphEditorView : UserControl
             UpdateCanvasExtent();
     }
 
-    private void UpdateCanvasExtent()
+    internal void UpdateCanvasExtent()
     {
         if (GraphCanvas is null) return;
         var minX = _observedNodes.Select(n => n.DisplayX).DefaultIfEmpty(0).Min();
@@ -113,7 +113,7 @@ public partial class GraphEditorView : UserControl
         GraphCanvas.Width = Math.Max(GraphCanvas.Width,
             _graphOrigin.X + Math.Max(1600, _observedNodes.Select(n => n.DisplayX + GraphNodeViewModel.NodeWidth + 200).DefaultIfEmpty(1600).Max()));
         GraphCanvas.Height = Math.Max(GraphCanvas.Height,
-            _graphOrigin.Y + Math.Max(1000, _observedNodes.Select(n => n.DisplayY + 300).DefaultIfEmpty(1000).Max()));
+            _graphOrigin.Y + Math.Max(1000, _observedNodes.Select(n => n.DisplayY + n.RenderedHeight + 200).DefaultIfEmpty(1000).Max()));
         UpdateZoomExtent();
     }
 
