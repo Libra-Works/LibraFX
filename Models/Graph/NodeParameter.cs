@@ -32,18 +32,21 @@ public static class NodeParameter
             case "vector2":
             case "vector3":
             case "vector4":
-            case "color":
                 var length = type switch { "vector2" => 2, "vector3" => 3, _ => 4 };
                 return value.ValueKind == JsonValueKind.Array && value.GetArrayLength() == length &&
-                       value.EnumerateArray().All(item => IsFiniteNumber(item) &&
-                           (type != "color" || item.GetDouble() is >= 0 and <= 1));
+                       value.EnumerateArray().All(IsFiniteNumber);
+            case "color":
+                return value.ValueKind == JsonValueKind.Array && value.GetArrayLength() == 4 &&
+                       value.EnumerateArray().All(IsFiniteNumber) &&
+                       new RgbaColor(value[0].GetDouble(), value[1].GetDouble(),
+                           value[2].GetDouble(), value[3].GetDouble()).IsValid;
             default:
                 return value.ValueKind != JsonValueKind.Undefined;
         }
     }
 
     public static bool ValuesEqual(JsonElement left, JsonElement right) =>
-        left.ValueKind == right.ValueKind && left.GetRawText() == right.GetRawText();
+        JsonElement.DeepEquals(left, right);
 
     private static bool IsFiniteNumber(JsonElement value) =>
         value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number) && double.IsFinite(number);

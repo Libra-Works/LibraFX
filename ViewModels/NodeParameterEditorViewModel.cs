@@ -50,7 +50,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         "vector2" => $"({X}, {Y})",
         "vector3" => $"({X}, {Y}, {Z})",
         "vector4" => $"({X}, {Y}, {Z}, {W})",
-        "color" => ColorValue.ToString(),
+        "color" => $"({X}, {Y}, {Z}, {W})",
         _ when GraphEnumDefinition.TryGetTypeId(Type, out _) =>
             EnumValues.FirstOrDefault(item => item.Value == EnumValue)?.Name ?? ValueText,
         _ => ValueText
@@ -116,14 +116,15 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     public string Z { get => Component(2); set => SetComponent(2, value); }
     public string W { get => Component(3); set => SetComponent(3, value); }
 
-    public Color ColorValue
+    public RgbaColor ColorComponents
     {
         get
         {
             var components = Value.EnumerateArray().Select(item => item.GetDouble()).ToArray();
-            return Color.FromArgb(ToByte(components[3]), ToByte(components[0]), ToByte(components[1]), ToByte(components[2]));
+            return new RgbaColor(components[0], components[1], components[2], components[3]);
         }
     }
+    public Color ColorValue => ColorComponents.Preview;
 
     public bool SetJsonValue(string? json)
     {
@@ -141,6 +142,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
 
     public void SetColor(Color color) => SetValue(JsonSerializer.SerializeToElement(
         new[] { color.R / 255.0, color.G / 255.0, color.B / 255.0, color.A / 255.0 }));
+    public void SetColor(RgbaColor color) => SetValue(JsonSerializer.SerializeToElement(color.Components));
 
     public void Refresh()
     {
@@ -157,6 +159,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(Z));
         OnPropertyChanged(nameof(W));
         OnPropertyChanged(nameof(ColorValue));
+        OnPropertyChanged(nameof(ColorComponents));
     }
 
     private string Component(int index)
@@ -200,5 +203,4 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         Refresh();
     }
 
-    private static byte ToByte(double value) => (byte)Math.Round(Math.Clamp(value, 0, 1) * 255);
 }

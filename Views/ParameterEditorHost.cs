@@ -95,9 +95,10 @@ public sealed class ParameterEditorHost : ContentControl
                     Spacing = 8,
                     Children =
                     {
-                        new Border { Width = 24, Height = 18, Background = new SolidColorBrush(color),
+                        new Border { Width = 24, Height = 18, Child = new ColorSwatch { Color = color },
                             BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1) },
-                        new TextBlock { Text = color.ToString() }
+                        new TextBlock { Text = parameter.ColorComponents.Intensity > 1
+                            ? $"HDR {parameter.DisplayValue}" : color.ToString(), TextTrimming = TextTrimming.CharacterEllipsis }
                     }
                 };
             }
@@ -109,8 +110,8 @@ public sealed class ParameterEditorHost : ContentControl
             button.Click += async (_, _) =>
             {
                 if (TopLevel.GetTopLevel(button) is not Window owner) return;
-                var dialog = new ColorEditorWindow(parameter.ColorValue);
-                var selected = await dialog.ShowDialog<Color?>(owner);
+                var dialog = new ColorEditorWindow(parameter.ColorComponents);
+                var selected = await dialog.ShowDialog<RgbaColor?>(owner);
                 if (selected is { } color) parameter.SetColor(color);
             };
             return button;
