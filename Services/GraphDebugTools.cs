@@ -3,6 +3,7 @@ using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Input.Raw;
 using Avalonia.Media.Imaging;
@@ -75,10 +76,39 @@ public sealed class GraphDebugTools
             var modifiers = (control ? KeyModifiers.Control : KeyModifiers.None) |
                             (shift ? KeyModifiers.Shift : KeyModifiers.None) |
                             (alt ? KeyModifiers.Alt : KeyModifiers.None);
-            view.Focus();
-            view.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = parsed, KeyModifiers = modifiers });
+            var popup = view.FindControl<Popup>("NodeSearchPopup")!;
+            var target = popup.IsOpen ? (InputElement)view.FindControl<TextBox>("NodeSearchBox")! : view;
+            target.Focus();
+            target.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = parsed, KeyModifiers = modifiers });
+            TopLevel.GetTopLevel(view)?.UpdateLayout();
             return JsonSerializer.Serialize(Inspect(view));
         });
+
+    [McpServerTool(Name = "libera_debug_graph_type", OpenWorld = false)]
+    [Description("Type text into the graph's open node search using UI text input. Requires LIBERAFX_MCP_DEBUG=1.")]
+    public static async Task<string> TypeSearch(
+        ActiveGraphProvider activeGraph,
+        [Description("Text to type into the open node search, up to 200 characters.")] string text)
+    {
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var view = FindView(activeGraph);
+            if (string.IsNullOrEmpty(text) || text.Length > 200 || text.Any(char.IsControl))
+                throw new McpException("Text must contain 1 to 200 non-control characters.");
+            if (view.FindControl<Popup>("NodeSearchPopup") is not { IsOpen: true })
+                throw new McpException("Open node search with the graph search shortcut first.");
+            var input = view.FindControl<TextBox>("NodeSearchBox")!;
+            input.Focus();
+            input.RaiseEvent(new TextInputEventArgs { RoutedEvent = InputElement.TextInputEvent, Text = text });
+        });
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        return await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var view = FindView(activeGraph);
+            TopLevel.GetTopLevel(view)?.UpdateLayout();
+            return JsonSerializer.Serialize(Inspect(view));
+        });
+    }
 
     private static GraphEditorView FindView(ActiveGraphProvider provider)
     {
@@ -97,6 +127,9 @@ public sealed class GraphDebugTools
         var viewport = view.FindControl<ScrollViewer>("GraphScrollViewer")!;
         var scene = view.FindControl<GraphSceneLayer>("SceneLayer")!;
         var graph = (GraphWorkspaceViewModel)view.DataContext!;
+        var popup = view.FindControl<Popup>("NodeSearchPopup")!;
+        var search = view.FindControl<TextBox>("NodeSearchBox")!;
+        var results = view.FindControl<ListBox>("NodeSearchResults")!;
         var nodes = viewport.GetVisualDescendants().OfType<GraphNodeView>()
             .Where(item => item.DataContext is GraphNodeViewModel && item.IsEffectivelyVisible)
             .Select(item =>
@@ -114,6 +147,14 @@ public sealed class GraphDebugTools
             origin = scene.GraphOrigin,
             visibleArea = scene.VisibleArea,
             selectionCount = graph.SelectionCount,
+            nodeSearch = new
+            {
+                isOpen = popup.IsOpen,
+                query = popup.IsOpen ? search.Text : null,
+                selectedIndex = popup.IsOpen ? results.SelectedIndex : -1,
+                results = popup.IsOpen ? results.Items.OfType<NodeCatalogEntryViewModel>()
+                    .Select(entry => new { entry.Name, entry.KindName, entry.Namespace, entry.Group }).ToArray() : []
+            },
             nodes
         };
     }
