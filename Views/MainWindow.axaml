@@ -42,6 +42,7 @@
             </MenuItem>
             <MenuItem Header="_View">
                 <MenuItem Header="_Log" Click="OnLogClick" />
+                <MenuItem Header="_MCP connection..." Click="OnMcpClick" />
             </MenuItem>
         </Menu>
 
@@ -52,22 +53,6 @@
             <TextBlock Text="{Binding FileStatus}"
                        TextWrapping="Wrap"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <TextBlock Text="Effect playback runs in the connected game engine."
-                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <StackPanel Orientation="Horizontal" Spacing="6">
-                <TextBlock Text="MCP (Streamable HTTP):" />
-                <TextBlock Text="{Binding McpEndpoint}" />
-                <TextBlock Text="{Binding McpStatus}" TextWrapping="Wrap" />
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" Spacing="6">
-                <TextBlock Text="Header X-LiberaFx-Token:" VerticalAlignment="Center" />
-                <TextBox Width="420"
-                         IsReadOnly="True"
-                         Text="{Binding McpAccessToken}" />
-            </StackPanel>
-            <TextBlock Text="Loopback only; keep this access token private. Browser Origin requests are blocked."
-                       Foreground="{DynamicResource EffectMutedForegroundBrush}"
-                       TextWrapping="Wrap" />
         </StackPanel>
     </Grid>
 

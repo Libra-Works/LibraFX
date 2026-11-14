@@ -7,6 +7,7 @@ namespace LiberaFx.Views;
 public partial class MainWindow : Window
 {
     private LogWindow? _logWindow;
+    private McpWindow? _mcpWindow;
     public MainWindow()
     {
         InitializeComponent();
@@ -47,6 +48,19 @@ public partial class MainWindow : Window
         _logWindow = new LogWindow { DataContext = DataContext };
         _logWindow.Closed += (_, _) => _logWindow = null;
         _logWindow.Show(this);
+    }
+
+    private void OnMcpClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_mcpWindow is not null)
+        {
+            _mcpWindow.Activate();
+            return;
+        }
+
+        _mcpWindow = new McpWindow { DataContext = DataContext };
+        _mcpWindow.Closed += (_, _) => _mcpWindow = null;
+        _mcpWindow.Show(this);
     }
 
     private async void OnCloseDocumentClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
