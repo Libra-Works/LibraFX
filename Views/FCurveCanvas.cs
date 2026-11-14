@@ -66,7 +66,7 @@ public sealed class FCurveCanvas : Control
         if (_model?.Node != _framedNode && Bounds.Width > 0 && Bounds.Height > 0)
         {
             _framedNode = _model?.Node;
-            FrameAll();
+            UpdateFrame();
         }
 
         using var clip = context.PushClip(new Rect(Bounds.Size));
@@ -80,13 +80,18 @@ public sealed class FCurveCanvas : Control
 
     public void FrameAll()
     {
+        UpdateFrame();
+        InvalidateVisual();
+    }
+
+    private void UpdateFrame()
+    {
         var keys = _model?.VisibleCurves.SelectMany(item => item.Curve.Keys).ToArray() ?? [];
         if (keys.Length == 0 || Bounds.Width <= 0 || Bounds.Height <= 0)
         {
             _scaleX = 5;
             _scaleY = 80;
             _origin = new Point(50, Math.Max(50, Bounds.Height / 2));
-            InvalidateVisual();
             return;
         }
 
@@ -100,7 +105,6 @@ public sealed class FCurveCanvas : Control
         _scaleY = Math.Clamp(Math.Max(1, Bounds.Height - 80) / height, 0.001, 10000);
         _origin = new Point(Bounds.Width / 2 - (minX + maxX) / 2 * _scaleX,
                             Bounds.Height / 2 + (minY + maxY) / 2 * _scaleY);
-        InvalidateVisual();
     }
 
     private void DrawGrid(DrawingContext context)
