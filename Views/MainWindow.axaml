@@ -44,6 +44,11 @@
                 <MenuItem Header="_Log" Click="OnLogClick" />
                 <MenuItem Header="_MCP connection..." Click="OnMcpClick" />
             </MenuItem>
+            <MenuItem Header="_Help">
+                <MenuItem Header="_Getting started..." Click="OnHelpClick" />
+                <Separator />
+                <MenuItem Header="_About LIBERA FX..." Click="OnAboutClick" />
+            </MenuItem>
         </Menu>
 
         <dock:DockControl Grid.Row="1"

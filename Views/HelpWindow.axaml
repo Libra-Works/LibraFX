@@ -1,0 +1,26 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="LiberaFx.Views.HelpWindow"
+        Title="LIBERA FX Help" Width="560" Height="440" MinWidth="400" MinHeight="300"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource EffectWindowBackgroundBrush}">
+    <Grid RowDefinitions="*,Auto" Margin="24">
+        <ScrollViewer>
+            <StackPanel Spacing="12">
+                <TextBlock Text="Getting started" FontSize="22" FontWeight="SemiBold" />
+                <TextBlock Text="Create or open a project from the File menu. Add nodes in the graph editor, then connect compatible ports to build an effect."
+                           TextWrapping="Wrap" />
+                <TextBlock Text="Editing" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Text="Select nodes to edit their parameters. Use the Edit menu for undo, redo, appearance, and shortcut settings. Comments can contain text and images."
+                           TextWrapping="Wrap" />
+                <TextBlock Text="Connections" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Text="View / MCP connection shows the connection information for external tools. Keep access tokens private."
+                           TextWrapping="Wrap" />
+                <TextBlock Text="LIBERA FX is under development; some node types are not yet supported by the runtime."
+                           TextWrapping="Wrap" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            </StackPanel>
+        </ScrollViewer>
+        <Button Grid.Row="1" Content="Close" HorizontalAlignment="Right"
+                Margin="0,16,0,0" MinWidth="80" Click="OnCloseClick" />
+    </Grid>
+</Window>

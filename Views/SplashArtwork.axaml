@@ -1,0 +1,56 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="LiberaFx.Views.SplashArtwork"
+        Width="720" Height="390">
+    <Grid ClipToBounds="True">
+        <Grid.Background>
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Color="#111522" Offset="0" />
+                <GradientStop Color="#171729" Offset="0.55" />
+                <GradientStop Color="#101520" Offset="1" />
+            </LinearGradientBrush>
+        </Grid.Background>
+        <Canvas IsHitTestVisible="False">
+            <Ellipse Canvas.Left="400" Canvas.Top="-130" Width="400" Height="400" Opacity="0.32">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#8979FA" Offset="0" />
+                        <GradientStop Color="#008979FA" Offset="1" />
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+            <Ellipse Canvas.Left="300" Canvas.Top="125" Width="340" Height="340" Opacity="0.26">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#23C4D7" Offset="0" />
+                        <GradientStop Color="#0023C4D7" Offset="1" />
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+            <Path Stroke="#615B99" StrokeThickness="1" Opacity="0.6"
+                  Data="M 334,288 C 402,139 535,62 707,28 M 380,340 C 465,207 585,156 758,166 M 422,375 C 493,275 600,244 742,252" />
+            <Path Stroke="#AC9AFF" StrokeThickness="2" Opacity="0.8"
+                  Data="M 380,322 C 451,194 565,104 738,93" />
+            <Path Stroke="#6DE3DC" StrokeThickness="1.5" Opacity="0.65"
+                  Data="M 330,354 C 424,230 572,195 749,204" />
+            <Ellipse Canvas.Left="524" Canvas.Top="152" Width="5" Height="5" Fill="#E3DFFF" />
+            <Ellipse Canvas.Left="629" Canvas.Top="96" Width="3" Height="3" Fill="#7FEAE7" />
+            <Ellipse Canvas.Left="457" Canvas.Top="254" Width="4" Height="4" Fill="#A9A1FF" />
+            <Ellipse Canvas.Left="652" Canvas.Top="205" Width="6" Height="6" Fill="#7FEAE7" />
+        </Canvas>
+        <Border BorderBrush="#4B5067" BorderThickness="1" Margin="0" />
+        <StackPanel Margin="50,55,0,45" HorizontalAlignment="Left">
+            <TextBlock Text="L I B E R A" FontSize="13" FontWeight="SemiBold" Foreground="#A8A7CB" />
+            <TextBlock Text="LIBERA FX" Margin="0,32,0,0" FontSize="44" FontWeight="Bold"
+                       Foreground="#F1F1FA" LetterSpacing="1.5" />
+            <Border Width="46" Height="3" HorizontalAlignment="Left" Margin="2,16,0,0"
+                    Background="#9E8DFF" />
+            <TextBlock Text="VISUAL EFFECTS  /  NODE GRAPH" Margin="0,20,0,0"
+                       FontSize="12" Foreground="#A6A9BD" />
+        </StackPanel>
+        <TextBlock Text="CREATIVE WORKSPACE" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                   Margin="52,0,0,36" FontSize="10" Foreground="#777D98" />
+        <TextBlock Text="FX" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                   Margin="0,0,42,29" FontSize="24" FontWeight="Bold" Foreground="#8D8BB5" Opacity="0.6" />
+    </Grid>
+</UserControl>

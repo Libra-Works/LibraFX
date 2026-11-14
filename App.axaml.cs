@@ -36,7 +36,16 @@ public partial class App : Application
             {
                 DataContext = viewModel,
             };
-            window.Opened += (_, _) => viewModel.SetStorageProvider(window.StorageProvider);
+            window.Opened += (_, _) =>
+            {
+                viewModel.SetStorageProvider(window.StorageProvider);
+                var splash = new SplashWindow();
+                splash.Show(window);
+                DispatcherTimer.RunOnce(() =>
+                {
+                    if (splash.IsVisible) splash.Close();
+                }, TimeSpan.FromMilliseconds(500));
+            };
             desktop.MainWindow = window;
             window.Closing += (_, e) =>
             {

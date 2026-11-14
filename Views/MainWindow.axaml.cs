@@ -37,6 +37,12 @@ public partial class MainWindow : Window
         await settings.ShowDialog(this);
     }
 
+    private async void OnHelpClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
+        await new HelpWindow().ShowDialog(this);
+
+    private async void OnAboutClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
+        await new AboutWindow().ShowDialog(this);
+
     private void OnLogClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_logWindow is not null)
