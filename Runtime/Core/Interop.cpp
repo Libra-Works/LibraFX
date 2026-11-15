@@ -10,10 +10,44 @@
 #include <new>
 #include <unordered_map>
 #include <vector>
+#include <type_traits>
 
 namespace {
 static_assert(static_cast<int>(liberafx::Result::InstructionBudgetExceeded) == LIBRA_INSTRUCTION_BUDGET_EXCEEDED);
 static_assert(sizeof(LibraValue) == 40 && sizeof(LibraAtlasFrame) == 20 && sizeof(LibraSpriteVertex) == 36);
+static_assert(std::is_standard_layout<LibraValue>::value && std::is_trivially_copyable<LibraValue>::value);
+static_assert(std::is_standard_layout<LibraAtlasFrame>::value && std::is_trivially_copyable<LibraAtlasFrame>::value);
+static_assert(std::is_standard_layout<LibraSpriteVertex>::value && std::is_trivially_copyable<LibraSpriteVertex>::value);
+template<class T>
+struct AlignedAllocator {
+    using value_type = T;
+    using propagate_on_container_move_assignment = std::true_type;
+    using is_always_equal = std::false_type;
+    static constexpr auto minimumAlignment = alignof(T) > 16 ? alignof(T) : 16;
+    std::size_t alignment = minimumAlignment;
+    AlignedAllocator() noexcept = default;
+    explicit AlignedAllocator(std::size_t required) noexcept
+        : alignment(required > minimumAlignment ? required : minimumAlignment) {}
+    template<class U> AlignedAllocator(const AlignedAllocator<U>& other) noexcept
+        : AlignedAllocator(other.alignment) {}
+    auto allocate(std::size_t count) -> T*
+    {
+        if (count > std::numeric_limits<std::size_t>::max() / sizeof(T)) throw std::bad_array_new_length{};
+        return static_cast<T*>(::operator new(count * sizeof(T), std::align_val_t{alignment}));
+    }
+    void deallocate(T* memory, std::size_t) noexcept
+    {
+        ::operator delete(memory, std::align_val_t{alignment});
+    }
+    template<class U> auto operator==(const AlignedAllocator<U>& other) const noexcept -> bool
+    {
+        return alignment == other.alignment;
+    }
+    template<class U> auto operator!=(const AlignedAllocator<U>& other) const noexcept -> bool
+    {
+        return !(*this == other);
+    }
+};
 struct NativeProgram {
     std::vector<std::uint8_t> bytes;
     std::vector<liberafx::CustomNodeBinding> bindings;
@@ -21,7 +55,7 @@ struct NativeProgram {
 };
 struct NativeInstance {
     std::shared_ptr<NativeProgram> owner;
-    std::vector<double> work, defaults;
+    std::vector<double, AlignedAllocator<double>> work, defaults;
     std::vector<liberafx::ValueHandle> values;
     std::vector<liberafx::ParameterHandle> parameters;
     std::size_t valueCount = 0, parameterCount = 0;
@@ -64,7 +98,7 @@ auto readValues(NativeInstance& native, const LibraBinding* bindings,
                 std::uint32_t count, LibraValue* out) -> LibraResult
 {
     for (auto i = 0u; i < count; ++i) {
-        auto lanes = std::array<double, 4>{};
+        alignas(16) auto lanes = std::array<double, 4>{};
         const auto& handle = native.values[bindings[i] - 1];
         auto result = native.instance.value(handle, lanes.data());
         if (result != liberafx::Result::Ok) return static_cast<LibraResult>(result);
@@ -118,8 +152,15 @@ LibraResult LIBRA_INTEROP_CALL libra_instance_create(LibraProgram program, Libra
         auto native = std::make_unique<NativeInstance>();
         native->owner = found->second;
         const auto& core = native->owner->program;
+        native->work = decltype(native->work){AlignedAllocator<double>{core.workAlignment()}};
+        native->defaults = decltype(native->defaults){AlignedAllocator<double>{core.defaultsAlignment()}};
         native->work.resize((core.workBytes() + sizeof(double) - 1) / sizeof(double));
         native->defaults.resize(core.parameterValueCount());
+        if ((!native->work.empty() && reinterpret_cast<std::uintptr_t>(native->work.data()) %
+                native->work.get_allocator().alignment != 0) ||
+            (!native->defaults.empty() && reinterpret_cast<std::uintptr_t>(native->defaults.data()) %
+                native->defaults.get_allocator().alignment != 0))
+            return LIBRA_INTERNAL_ERROR;
         native->values.resize(core.nodeCount());
         native->parameters.resize(core.parameterValueCount());
         auto result = native->instance.initialize(core, native->work.data(), native->work.size(),

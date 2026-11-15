@@ -2,6 +2,13 @@
 #define LIBERAFX_INTEROP_H
 
 #include <stdint.h>
+#include <stddef.h>
+
+#if defined(_MSC_VER)
+#define LIBRA_INTEROP_ALIGN(bytes) __declspec(align(bytes))
+#else
+#define LIBRA_INTEROP_ALIGN(bytes) __attribute__((aligned(bytes)))
+#endif
 
 #if defined(_WIN32)
 #define LIBRA_INTEROP_CALL __cdecl
@@ -33,27 +40,61 @@ enum {
     LIBRA_OUT_OF_MEMORY = 15, LIBRA_INTERNAL_ERROR = 16
 };
 
-typedef struct LibraValue {
+/* These are host ABI records, not packed bytecode/wire overlays. Preserve the
+   layout even when an includer's current packing differs. They are not SIMD
+   vectors: values require 8-byte alignment, atlas/vertices require 4, not 16. */
+#pragma pack(push, 8)
+typedef struct LIBRA_INTEROP_ALIGN(8) LibraValue {
     double x, y, z, w;
     uint32_t componentCount;
     uint32_t reserved;
 } LibraValue;
 
-typedef struct LibraAtlasFrame {
+typedef struct LIBRA_INTEROP_ALIGN(4) LibraAtlasFrame {
     uint32_t frameIndex;
     float u, v, width, height;
 } LibraAtlasFrame;
 
-typedef struct LibraSpriteVertex {
+typedef struct LIBRA_INTEROP_ALIGN(4) LibraSpriteVertex {
     float x, y, z;
     float u, v;
     float r, g, b, a;
 } LibraSpriteVertex;
+#pragma pack(pop)
+
+#if defined(__cplusplus)
+#define LIBRA_INTEROP_ASSERT(expression) static_assert(expression, "LiberaFx ABI layout")
+#define LIBRA_INTEROP_ALIGNOF(type) alignof(type)
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+#define LIBRA_INTEROP_ASSERT(expression) _Static_assert(expression, "LiberaFx ABI layout")
+#define LIBRA_INTEROP_ALIGNOF(type) _Alignof(type)
+#endif
+#ifdef LIBRA_INTEROP_ASSERT
+LIBRA_INTEROP_ASSERT(sizeof(LibraValue) == 40 && LIBRA_INTEROP_ALIGNOF(LibraValue) == 8);
+LIBRA_INTEROP_ASSERT(offsetof(LibraValue, x) == 0 && offsetof(LibraValue, y) == 8 &&
+    offsetof(LibraValue, z) == 16 && offsetof(LibraValue, w) == 24 &&
+    offsetof(LibraValue, componentCount) == 32 && offsetof(LibraValue, reserved) == 36);
+LIBRA_INTEROP_ASSERT(sizeof(LibraAtlasFrame) == 20 && LIBRA_INTEROP_ALIGNOF(LibraAtlasFrame) == 4);
+LIBRA_INTEROP_ASSERT(offsetof(LibraAtlasFrame, frameIndex) == 0 && offsetof(LibraAtlasFrame, u) == 4 &&
+    offsetof(LibraAtlasFrame, v) == 8 && offsetof(LibraAtlasFrame, width) == 12 &&
+    offsetof(LibraAtlasFrame, height) == 16);
+LIBRA_INTEROP_ASSERT(sizeof(LibraSpriteVertex) == 36 && LIBRA_INTEROP_ALIGNOF(LibraSpriteVertex) == 4);
+LIBRA_INTEROP_ASSERT(offsetof(LibraSpriteVertex, x) == 0 && offsetof(LibraSpriteVertex, y) == 4 &&
+    offsetof(LibraSpriteVertex, z) == 8 && offsetof(LibraSpriteVertex, u) == 12 &&
+    offsetof(LibraSpriteVertex, v) == 16 && offsetof(LibraSpriteVertex, r) == 20 &&
+    offsetof(LibraSpriteVertex, g) == 24 && offsetof(LibraSpriteVertex, b) == 28 &&
+    offsetof(LibraSpriteVertex, a) == 32);
+#undef LIBRA_INTEROP_ASSERT
+#undef LIBRA_INTEROP_ALIGNOF
+#endif
 
 /* All lengths are element counts except byteCount. Pointers are borrowed only
    during the call, must address valid storage, and must not alias output arrays.
    IDs are 16 bytes in compiler/Guid big-endian order, not Windows GUID layout.
    Calls serialize internally; evaluation executes synchronously on the caller.
+   Native work/default allocations are explicitly aligned to at least 16 bytes.
+   No borrowed work/GPU buffer API is exposed. Output POD arrays need only their
+   declared type alignment; never cast their lanes to aligned SIMD vectors.
    Buffers are allocated only during create. Bind tokens once before frame loops.
    Tokens are instance-local; never use them with another instance. */
 LIBRA_INTEROP_API uint32_t LIBRA_INTEROP_CALL libra_abi_version(void);

@@ -41,7 +41,7 @@ namespace LiberaFx.Unity
         private readonly int textureProperty = Shader.PropertyToID("_MainTex");
         private readonly int atlasProperty = Shader.PropertyToID("_AtlasRect");
 
-        [StructLayout(LayoutKind.Sequential)]
+        [StructLayout(LayoutKind.Sequential, Pack = 4, Size = 20)]
         private struct Vertex
         {
             public Vector3 Position;

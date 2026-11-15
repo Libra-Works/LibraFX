@@ -1,0 +1,6 @@
+{
+  "name": "LiberaFx.Unity.Contracts",
+  "rootNamespace": "LiberaFx.Unity.Tests",
+  "references": ["LiberaFx.Unity"],
+  "includePlatforms": ["Editor"]
+}

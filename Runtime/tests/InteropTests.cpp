@@ -1,4 +1,6 @@
+#pragma pack(push, 1)
 #include "liberafx/Interop.h"
+#pragma pack(pop)
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -95,7 +97,9 @@ int main()
 {
     auto bytes = scalarFixture();
     auto program = LibraProgram{};
-    assert(libra_program_create(bytes.data(), bytes.size(), &program) == LIBRA_OK);
+    auto unalignedWire = std::vector<std::uint8_t>(bytes.size() + 1);
+    std::memcpy(unalignedWire.data() + 1, bytes.data(), bytes.size());
+    assert(libra_program_create(unalignedWire.data() + 1, bytes.size(), &program) == LIBRA_OK);
     auto instance = LibraInstance{};
     assert(libra_instance_create(program, &instance) == LIBRA_OK);
     auto id = std::array<std::uint8_t, 16>{};
@@ -107,6 +111,11 @@ int main()
     auto output = LibraValue{};
     assert(libra_values_read(instance, &binding, 1, &output) == LIBRA_NOT_READY);
     assert(libra_evaluate(instance, 7, &binding, 1, &output) == LIBRA_OK && output.x == 10 && output.componentCount == 1);
+    struct alignas(16) ValueStorage { double prefix; LibraValue value; };
+    auto valueStorage = ValueStorage{};
+    assert(reinterpret_cast<std::uintptr_t>(&valueStorage.value) % 16 == 8);
+    assert(libra_evaluate(instance, 7, &binding, 1, &valueStorage.value) == LIBRA_OK &&
+           valueStorage.value.x == 10);
     id[15] = 1;
     auto parameter = LibraBinding{};
     assert(libra_bind_parameter(instance, id.data(), 0, 0, &parameter) == LIBRA_OK);
@@ -182,6 +191,11 @@ int main()
     assert(libra_make_sprite_quad(&atlas, 2, 4, quad.data()) == LIBRA_OK &&
            quad[0].x == -1 && quad[0].y == 2 && quad[0].u == 0.75f &&
            quad[2].x == 1 && quad[2].y == -2 && quad[2].v == 1);
+    struct alignas(16) VertexStorage { std::uint32_t prefix; LibraSpriteVertex vertices[4]; };
+    auto vertexStorage = VertexStorage{};
+    assert(reinterpret_cast<std::uintptr_t>(vertexStorage.vertices) % 16 == 4);
+    assert(libra_make_sprite_quad(&atlas, 2, 4, vertexStorage.vertices) == LIBRA_OK &&
+           vertexStorage.vertices[2].u == 1);
     assert(libra_make_sprite_quad(&atlas, -1, 1, quad.data()) == LIBRA_INVALID_ARGUMENT);
     atlas.width = 0.5f;
     assert(libra_make_sprite_quad(&atlas, 1, 1, quad.data()) == LIBRA_INVALID_ARGUMENT);

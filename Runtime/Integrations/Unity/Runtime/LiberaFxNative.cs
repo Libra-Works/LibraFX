@@ -12,24 +12,70 @@ namespace LiberaFx.Unity
         OutOfMemory, InternalError
     }
 
-    [StructLayout(LayoutKind.Sequential)]
+    [StructLayout(LayoutKind.Explicit, Pack = 8, Size = 40)]
     public struct NativeValue
     {
-        public double X, Y, Z, W;
-        public uint ComponentCount, Reserved;
+        [FieldOffset(0)] public double X;
+        [FieldOffset(8)] public double Y;
+        [FieldOffset(16)] public double Z;
+        [FieldOffset(24)] public double W;
+        [FieldOffset(32)] public uint ComponentCount;
+        [FieldOffset(36)] public uint Reserved;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
+    [StructLayout(LayoutKind.Explicit, Pack = 4, Size = 20)]
     public struct AtlasFrame
     {
-        public uint FrameIndex;
-        public float U, V, Width, Height;
+        [FieldOffset(0)] public uint FrameIndex;
+        [FieldOffset(4)] public float U;
+        [FieldOffset(8)] public float V;
+        [FieldOffset(12)] public float Width;
+        [FieldOffset(16)] public float Height;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
+    [StructLayout(LayoutKind.Explicit, Pack = 4, Size = 36)]
     public struct SpriteVertex
     {
-        public float X, Y, Z, U, V, R, G, B, A;
+        [FieldOffset(0)] public float X;
+        [FieldOffset(4)] public float Y;
+        [FieldOffset(8)] public float Z;
+        [FieldOffset(12)] public float U;
+        [FieldOffset(16)] public float V;
+        [FieldOffset(20)] public float R;
+        [FieldOffset(24)] public float G;
+        [FieldOffset(28)] public float B;
+        [FieldOffset(32)] public float A;
+    }
+
+    public static class NativeAbi
+    {
+        // Initialization-time contract test, never called by the frame loop.
+        public static void ValidateLayout()
+        {
+            if (Marshal.SizeOf<NativeValue>() != 40 || Marshal.SizeOf<AtlasFrame>() != 20 ||
+                Marshal.SizeOf<SpriteVertex>() != 36 ||
+                Marshal.OffsetOf<NativeValue>(nameof(NativeValue.X)).ToInt32() != 0 ||
+                Marshal.OffsetOf<NativeValue>(nameof(NativeValue.Y)).ToInt32() != 8 ||
+                Marshal.OffsetOf<NativeValue>(nameof(NativeValue.Z)).ToInt32() != 16 ||
+                Marshal.OffsetOf<NativeValue>(nameof(NativeValue.W)).ToInt32() != 24 ||
+                Marshal.OffsetOf<NativeValue>(nameof(NativeValue.ComponentCount)).ToInt32() != 32 ||
+                Marshal.OffsetOf<NativeValue>(nameof(NativeValue.Reserved)).ToInt32() != 36 ||
+                Marshal.OffsetOf<AtlasFrame>(nameof(AtlasFrame.FrameIndex)).ToInt32() != 0 ||
+                Marshal.OffsetOf<AtlasFrame>(nameof(AtlasFrame.U)).ToInt32() != 4 ||
+                Marshal.OffsetOf<AtlasFrame>(nameof(AtlasFrame.V)).ToInt32() != 8 ||
+                Marshal.OffsetOf<AtlasFrame>(nameof(AtlasFrame.Width)).ToInt32() != 12 ||
+                Marshal.OffsetOf<AtlasFrame>(nameof(AtlasFrame.Height)).ToInt32() != 16 ||
+                Marshal.OffsetOf<SpriteVertex>(nameof(SpriteVertex.X)).ToInt32() != 0 ||
+                Marshal.OffsetOf<SpriteVertex>(nameof(SpriteVertex.Y)).ToInt32() != 4 ||
+                Marshal.OffsetOf<SpriteVertex>(nameof(SpriteVertex.Z)).ToInt32() != 8 ||
+                Marshal.OffsetOf<SpriteVertex>(nameof(SpriteVertex.U)).ToInt32() != 12 ||
+                Marshal.OffsetOf<SpriteVertex>(nameof(SpriteVertex.V)).ToInt32() != 16 ||
+                Marshal.OffsetOf<SpriteVertex>(nameof(SpriteVertex.R)).ToInt32() != 20 ||
+                Marshal.OffsetOf<SpriteVertex>(nameof(SpriteVertex.G)).ToInt32() != 24 ||
+                Marshal.OffsetOf<SpriteVertex>(nameof(SpriteVertex.B)).ToInt32() != 28 ||
+                Marshal.OffsetOf<SpriteVertex>(nameof(SpriteVertex.A)).ToInt32() != 32)
+                throw new TypeLoadException("LiberaFx POD layout does not match the native C ABI.");
+        }
     }
 
     internal static unsafe class Native
@@ -75,6 +121,7 @@ namespace LiberaFx.Unity
         public NativeProgram(byte[] compiledBytes)
         {
             if (compiledBytes == null) throw new ArgumentNullException(nameof(compiledBytes));
+            NativeAbi.ValidateLayout();
             if (Native.libra_abi_version() != 1) throw new NotSupportedException("LiberaFx ABI version mismatch.");
             fixed (byte* bytes = compiledBytes)
             {

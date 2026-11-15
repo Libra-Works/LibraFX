@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="InteropContractTests.cs" />
+    <Compile Include="..\Runtime\LiberaFxNative.cs" />
+    <Compile Include="..\Runtime\LiberaFxSampleProgram.cs" />
+  </ItemGroup>
+</Project>

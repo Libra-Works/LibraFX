@@ -92,6 +92,29 @@ ABI and ownership
 Interop.h compiles as C or C++; cdecl exports use uint64 program/instance handles,
 uint32 instance-local binding tokens, int32 result codes and fixed-layout POD.
 LibraValue is 40 bytes; LibraAtlasFrame 20; LibraSpriteVertex 36.
+Host ABI records are not wire overlays. The C header asserts every field offset,
+size and alignment even inside a caller's pack(1) include; C# uses explicit
+FieldOffset/Size/Pack and tests Marshal.SizeOf/OffsetOf during program creation.
+LibraValue requires 8-byte alignment; atlas and sprite vertices require 4 bytes.
+Their array strides remain 40/20/36 bytes: no 16-byte SIMD alignment is assumed.
+Unity's position/UV vertex stream is explicitly packed to 20 bytes, with offsets
+0/12. Sprite vertex position/UV/color offsets are 0/12/20, not SIMD vector offsets.
+Native work/default buffers use a C++17 aligned allocator guaranteeing at least
+16-byte base alignment on every platform, not ordinary heap alignment assumptions.
+The allocator honors Program::workAlignment()/defaultsAlignment() dynamically,
+including 32/64-byte custom state requirements; matching aligned delete is used.
+Internal state offsets must independently obey the Core's state alignment rules.
+No borrowed work-buffer API is exported; any future such API must explicitly
+publish its required alignment and validate it. Never reinterpret packed wire
+bytes, sprite colors or float3 vertex fields as aligned SIMD vectors.
+For repeatable managed contract tests (no Unity assemblies or packages needed),
+put the matching native DLL directory on PATH and run:
+  dotnet run --project Runtime\Integrations\Unity\Tests\LiberaFx.InteropTests.csproj
+The test calls Marshal size/offset validation and checks real batched POD results,
+program retention, defaults, atlas/quad transfers and steady-state managed GC.
+Optionally copy Tests into Unity too; its Editor-only asmdef adds
+LiberaFx > Verify native ABI contracts. These are forward P/Invoke tests, not
+GPU/Play Mode tests.
 GUID bytes are compiler big-endian order, not Guid.ToByteArray() Windows layout.
 The C# binding code converts canonical GUID text once during initialization.
 Program creation COPIES bytecode and owns v3 builtin binding storage. v1/v2/v3
