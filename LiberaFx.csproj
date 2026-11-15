@@ -9,6 +9,7 @@
     <Product>LIBERA FX</Product>
     <RootNamespace>LiberaFx</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\Brand\LibraFx.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

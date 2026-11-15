@@ -10,6 +10,7 @@
         KeyDown="OnMainKeyDown"
         x:DataType="vm:MainViewModel"
         Title="LIBERA FX"
+        Icon="avares://LiberaFx/Assets/Brand/LibraFx.ico"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
 
     <Design.DataContext>
