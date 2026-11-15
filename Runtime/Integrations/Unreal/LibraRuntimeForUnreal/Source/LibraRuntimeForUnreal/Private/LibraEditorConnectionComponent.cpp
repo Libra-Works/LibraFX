@@ -271,7 +271,7 @@ auto ULibraEditorConnectionComponent::ConnectToEditor() -> bool
     for (const auto& capability : {TEXT("profiling"), TEXT("values"), TEXT("assets"), TEXT("rendering"), TEXT("thumbnails")})
         capabilities.Add(MakeShared<FJsonValueString>(capability));
     hello->SetArrayField(TEXT("capabilities"), MoveTemp(capabilities));
-    auto viewerName = FApp::GetProjectName();
+    auto viewerName = FString(FApp::GetProjectName());
     if (GetOwner()) viewerName += TEXT(" / ") + GetOwner()->GetName();
     hello->SetStringField(TEXT("viewerName"), viewerName);
     hello->SetStringField(TEXT("viewerId"), ViewerId.ToString(EGuidFormats::DigitsWithHyphensLower));
@@ -279,7 +279,7 @@ auto ULibraEditorConnectionComponent::ConnectToEditor() -> bool
     hello->SetStringField(TEXT("platform"), FPlatformProperties::PlatformName());
     auto helloText = FString{};
     auto helloWriter = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&helloText);
-    FJsonSerializer::Serialize(hello.ToSharedRef(), helloWriter);
+    FJsonSerializer::Serialize(hello, helloWriter);
     helloWriter->Close();
     candidate->transport.QueueText(
 #if WITH_EDITOR
@@ -407,7 +407,7 @@ auto ULibraEditorConnectionComponent::ApplyMessage(TConstArrayView<uint8> messag
             reply->SetField(TEXT("error"), MakeShared<FJsonValueNull>());
             auto response = FString{};
             auto writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&response);
-            FJsonSerializer::Serialize(reply.ToSharedRef(), writer);
+            FJsonSerializer::Serialize(reply, writer);
             writer->Close();
             if (!QueueEditorMessage(response)) return true;
             auto weakThis = TWeakObjectPtr<ULibraEditorConnectionComponent>(this);

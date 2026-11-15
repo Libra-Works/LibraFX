@@ -14,6 +14,7 @@
 #include "Materials/MaterialExpressionMultiply.h"
 #include "Materials/MaterialExpressionTextureCoordinate.h"
 #include "Materials/MaterialExpressionTextureSample.h"
+#include "Materials/MaterialExpressionTextureSampleParameter2D.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
 #include "Components/StaticMeshComponent.h"
 #include "EditorViewportClient.h"
@@ -148,6 +149,9 @@ namespace
         return value;
     }
 }
+
+FLibraEditorPreviewSession::FLibraEditorPreviewSession() = default;
+FLibraEditorPreviewSession::~FLibraEditorPreviewSession() = default;
 
 void FLibraEditorPreviewSession::Start()
 {

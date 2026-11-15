@@ -21,6 +21,8 @@ class UStaticMeshComponent;
 class FLibraEditorPreviewSession final
 {
 public:
+    FLibraEditorPreviewSession();
+    ~FLibraEditorPreviewSession();
     void Start();
     void Stop();
 

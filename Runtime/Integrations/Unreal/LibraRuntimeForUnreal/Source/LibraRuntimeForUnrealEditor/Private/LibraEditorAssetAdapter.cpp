@@ -12,7 +12,8 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
-#include "ThumbnailRendering/ThumbnailTools.h"
+#include "ObjectTools.h"
+#include "TextureResource.h"
 #include "UObject/SoftObjectPath.h"
 
 namespace
@@ -255,17 +256,18 @@ namespace
         target->UpdateResourceImmediate(true);
         auto resource = target->GameThread_GetRenderTargetResource();
         if (!resource) return TEXT("Unreal's render hardware interface is unavailable for thumbnails.");
-        ThumbnailTools::RenderThumbnail(asset, size, size, EThumbnailTextureFlushMode::AlwaysFlush,
+        ThumbnailTools::RenderThumbnail(asset, size, size, ThumbnailTools::EThumbnailTextureFlushMode::AlwaysFlush,
             resource);
         auto pixels = TArray<FColor>{};
-        if (!FImageUtils::GetRenderTargetImage(resource, pixels) ||
+        if (!resource->ReadPixels(pixels) ||
             pixels.Num() != size * size)
             return TEXT("Unreal could not render a CPU-readable thumbnail for this asset.");
-        auto png = TArray<uint8>{};
-        FImageUtils::CompressImageArray(size, size, pixels, png);
+        auto png = TArray64<uint8>{};
+        FImageUtils::PNGCompressImageArray(size, size,
+            TArrayView64<const FColor>(pixels.GetData(), pixels.Num()), png);
         if (png.IsEmpty() || png.Num() > MaxThumbnailBytes) return TEXT("Thumbnail exceeds the bounded image size.");
         auto encoded = FString{};
-        FBase64::Encode(png, encoded);
+        encoded = FBase64::Encode(png.GetData(), static_cast<uint32>(png.Num()));
         if (encoded.Len() > 900000) return TEXT("Thumbnail cannot fit the live-preview message limit.");
         reply->SetStringField(TEXT("type"), TEXT("asset_result"));
         reply->SetStringField(TEXT("requestId"), requestId);
