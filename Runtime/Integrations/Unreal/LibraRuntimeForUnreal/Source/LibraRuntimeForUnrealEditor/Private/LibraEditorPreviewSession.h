@@ -79,4 +79,6 @@ private:
     TSharedPtr<SWidget> previewSettings;
     bool bTabRegistered = false;
     bool bSettingsVisible = true;
+    int32 previousPreviewProfileIndex = INDEX_NONE;
+    FString previousPreviewProfileName;
 };

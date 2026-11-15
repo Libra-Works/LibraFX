@@ -24,6 +24,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "EditorViewportClient.h"
+#include "Editor/EditorPerProjectUserSettings.h"
 #include "Framework/Docking/TabManager.h"
 #include "Misc/CoreDelegates.h"
 #include "Misc/CommandLine.h"
@@ -361,12 +362,14 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
     {
         if (!GEngine) return true;
         UE_LOG(LogTemp, Display, TEXT("LIBERA FX preview: creating isolated scene."));
+        auto userSettings = GetMutableDefault<UEditorPerProjectUserSettings>();
+        previousPreviewProfileIndex = userSettings->AssetViewerProfileIndex;
+        previousPreviewProfileName = userSettings->AssetViewerProfileName;
         auto construction = FPreviewScene::ConstructionValues{};
         construction.SetTransactional(false).SetCreatePhysicsScene(false).AllowAudioPlayback(false);
         previewScene = MakeShared<FAdvancedPreviewScene>(construction);
         auto settings = UAssetViewerSettings::Get();
         auto profileName = FString(TEXT("LIBERA FX"));
-        GConfig->GetString(PreviewSettingsSection, TEXT("ProfileName"), profileName, GEditorPerProjectIni);
         GConfig->GetBool(PreviewSettingsSection, TEXT("SettingsVisible"), bSettingsVisible, GEditorPerProjectIni);
         auto profileIndex = settings->Profiles.IndexOfByPredicate([&profileName](const FPreviewSceneProfile& profile)
         {
@@ -383,6 +386,8 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
             settings->Save();
         }
         previewScene->SetProfileIndex(profileIndex);
+        userSettings->AssetViewerProfileIndex = profileIndex;
+        userSettings->AssetViewerProfileName = profileName;
         world.Reset(previewScene->GetWorld());
         if (!world.IsValid())
         {
@@ -862,6 +867,14 @@ void FLibraEditorPreviewSession::Stop()
     }
     previewTab.Reset();
     previewSettings.Reset();
+    if (previousPreviewProfileIndex != INDEX_NONE)
+    {
+        auto userSettings = GetMutableDefault<UEditorPerProjectUserSettings>();
+        userSettings->AssetViewerProfileIndex = previousPreviewProfileIndex;
+        userSettings->AssetViewerProfileName = previousPreviewProfileName;
+        previousPreviewProfileIndex = INDEX_NONE;
+        previousPreviewProfileName.Reset();
+    }
     if (bTabRegistered)
     {
         FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(PreviewTabId);
