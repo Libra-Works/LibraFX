@@ -475,6 +475,7 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
         viewportClient->SetViewMode(VMI_Lit);
         viewportClient->SetRealtime(true);
         sceneViewport = MakeShareable(new FSceneViewport(viewportClient.Get(), viewportWidget));
+        viewportClient->Viewport = sceneViewport.Get();
         viewportWidget->SetViewportInterface(sceneViewport.ToSharedRef());
         auto& previewModule = FModuleManager::LoadModuleChecked<FAdvancedPreviewSceneModule>(TEXT("AdvancedPreviewScene"));
         previewSettings = previewModule.CreateAdvancedPreviewSceneSettingsWidget(previewScene.ToSharedRef());
@@ -903,6 +904,7 @@ void FLibraEditorPreviewSession::Stop()
         FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(PreviewTabId);
         bTabRegistered = false;
     }
+    if (viewportClient.IsValid()) viewportClient->Viewport = nullptr;
     sceneViewport.Reset();
     viewportClient.Reset();
     viewportWidget.Reset();
