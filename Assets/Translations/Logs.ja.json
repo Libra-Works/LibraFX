@@ -1,0 +1,17 @@
+{
+  "Logs.AllCategories": "すべての分類",
+  "Logs.Category": "分類で絞り込み",
+  "Logs.Filter": "ログを絞り込み",
+  "Logs.ResetFilters": "絞り込みを解除",
+  "Logs.Search": "表示中のログを検索（Enter: 次へ、Shift+Enter: 前へ）",
+  "Logs.PreviousMatch": "前の検索結果",
+  "Logs.NextMatch": "次の検索結果",
+  "Logs.Wrap": "折り返し",
+  "Logs.Follow": "末尾に追従",
+  "Logs.SaveAll": "ログ全体を保存",
+  "Logs.SaveVisible": "絞り込み結果を保存",
+  "Logs.EntryCounts": "{0} / {1} 件",
+  "Logs.MatchCounts": "検索結果 {0} / {1} 件",
+  "Logs.Saved": "ログを保存しました。",
+  "Logs.SaveFailed": "ログを保存できませんでした: {0}"
+}

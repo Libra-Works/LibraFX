@@ -1,0 +1,17 @@
+{
+  "Logs.AllCategories": "All categories",
+  "Logs.Category": "Filter by category",
+  "Logs.Filter": "Filter log lines",
+  "Logs.ResetFilters": "Reset filters",
+  "Logs.Search": "Find in visible log (Enter: next, Shift+Enter: previous)",
+  "Logs.PreviousMatch": "Previous match",
+  "Logs.NextMatch": "Next match",
+  "Logs.Wrap": "Wrap",
+  "Logs.Follow": "Follow",
+  "Logs.SaveAll": "Save entire log",
+  "Logs.SaveVisible": "Save filtered log",
+  "Logs.EntryCounts": "{0} / {1} entries",
+  "Logs.MatchCounts": "{0} / {1} matches",
+  "Logs.Saved": "Log saved.",
+  "Logs.SaveFailed": "Could not save log: {0}"
+}
