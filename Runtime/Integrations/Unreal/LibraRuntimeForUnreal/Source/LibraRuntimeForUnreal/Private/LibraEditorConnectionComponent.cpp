@@ -528,6 +528,19 @@ void ULibraEditorConnectionComponent::TickComponent(float deltaTime, ELevelTick 
         }
     }
     SendFeedback(*state, state->programSequence);
+    if (EditorRenderStatusHandler && state->sceneProgramSequence == state->programSequence &&
+        state->sequence.hasProgram())
+    {
+        if (auto target = state->target.Get(); target && !target->IsEvaluationPending())
+        {
+            auto status = EditorRenderStatusHandler(state->programSequence, target->LastEvaluatedTimeSeconds);
+            auto now = FPlatformTime::Seconds();
+            if (now >= state->nextRenderStatus && !status.IsEmpty())
+            {
+                if (state->transport.QueueText(status)) state->nextRenderStatus = now + 0.25;
+            }
+        }
+    }
     if (state->pendingEvaluation)
     {
         auto target = state->target.Get();
@@ -537,17 +550,6 @@ void ULibraEditorConnectionComponent::TickComponent(float deltaTime, ELevelTick 
         {
             state->pendingEvaluation = false;
             LastResult = result;
-        }
-    }
-    if (EditorRenderStatusHandler && state->sceneProgramSequence == state->programSequence &&
-        state->sequence.hasProgram() && !state->pendingEvaluation)
-    {
-        auto status = EditorRenderStatusHandler(state->programSequence, state->target->LastEvaluatedTimeSeconds);
-        auto now = FPlatformTime::Seconds();
-        if (now >= state->nextRenderStatus)
-        {
-            state->nextRenderStatus = now + 0.25;
-            if (!status.IsEmpty()) state->transport.QueueText(status);
         }
     }
     Status = state->diagnostic.IsEmpty() ? state->transport.GetStatus() : state->diagnostic;
