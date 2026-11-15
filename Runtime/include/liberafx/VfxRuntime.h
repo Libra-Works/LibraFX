@@ -54,9 +54,15 @@ struct LIBRA_RUNTIME_CORE_API CustomNodeDescriptor final {
     CustomNodeInitialize initialize = nullptr;
     CustomNodeCleanup cleanup = nullptr;
     void* context = nullptr;
+    // Power-of-two alignment required for state (16 through 64). State storage is
+    // placed at this alignment; workAlignment() reports the Program-wide requirement.
+    std::size_t stateAlignment = 16;
 };
 
 struct CustomNodeInvocation final {
+    // inputs/constants are 16-byte aligned; outputs and state meet the Program and
+    // descriptor alignment requirements respectively. All double pointers are at
+    // least alignof(double)-aligned.
     const double* inputs = nullptr;
     std::uint8_t inputCount = 0;
     const std::uint8_t* inputWidths = nullptr;
@@ -117,7 +123,11 @@ public:
                        const ProfilingHooks& profiling = {}) noexcept;
     std::size_t nodeCount() const noexcept { return nodeCount_; }
     std::size_t workBytes() const noexcept;
+    // Caller-owned work storage must be aligned to this value and contain workBytes().
+    std::size_t workAlignment() const noexcept;
     std::size_t parameterValueCount() const noexcept;
+    // Defaults contain doubles and need at least defaultsAlignment() alignment.
+    std::size_t defaultsAlignment() const noexcept;
     std::size_t bindingCount() const noexcept { return version_ == 3 ? nodeCount_ : 0; }
     std::uint16_t version() const noexcept { return version_; }
 
@@ -138,7 +148,9 @@ public:
     // callback code must outlive this Instance, including native state cleanup.
     Result setProfiling(const ProfilingHooks& profiling) noexcept;
     // Call control/read methods from one owner thread; the scheduler runs parameter callbacks on a worker.
-    // Work is owned by the caller and must remain alive until all jobs complete.
+    // Work is owned by the caller, must satisfy Program::workAlignment(), and must
+    // remain alive until all jobs complete. Optional defaults must satisfy
+    // Program::defaultsAlignment().
     Result initialize(const Program& program, double* work, std::size_t workCount) noexcept;
     // The optional defaults buffer is caller-owned, separate from work, and has parameterValueCount() lanes.
     Result initialize(const Program& program, double* work, std::size_t workCount,

@@ -83,6 +83,28 @@ auto fixture() -> std::vector<std::uint8_t>
 
 void verify(const std::vector<std::uint8_t>& bytes)
 {
+    auto shiftedBytes = std::vector<std::uint8_t>(bytes.size() + 1);
+    std::memcpy(shiftedBytes.data() + 1, bytes.data(), bytes.size());
+    auto shiftedProgram = liberafx::Program{};
+    assert(liberafx::Program::load(shiftedBytes.data() + 1, bytes.size(), shiftedProgram) ==
+           liberafx::Result::Ok);
+    assert(shiftedProgram.workAlignment() == alignof(double));
+
+    alignas(16) auto misalignedWorkStorage = std::array<std::uint8_t, 25>{};
+    misalignedWorkStorage.fill(0xa5);
+    auto misalignedWork = reinterpret_cast<double*>(misalignedWorkStorage.data() + 1);
+    auto shiftedInstance = liberafx::Instance{};
+    assert(shiftedInstance.initialize(shiftedProgram, misalignedWork, 3) ==
+           liberafx::Result::InvalidArgument);
+    for (auto byte : misalignedWorkStorage) assert(byte == 0xa5);
+    auto alignedWork = std::array<double, 3>{};
+    alignas(16) auto misalignedDefaultsStorage = std::array<std::uint8_t, 49>{};
+    misalignedDefaultsStorage.fill(0x5a);
+    auto misalignedDefaults = reinterpret_cast<double*>(misalignedDefaultsStorage.data() + 1);
+    assert(shiftedInstance.initialize(shiftedProgram, alignedWork.data(), alignedWork.size(),
+                                      misalignedDefaults, 6) == liberafx::Result::InvalidArgument);
+    for (auto byte : misalignedDefaultsStorage) assert(byte == 0x5a);
+
     auto profileCounters = std::array<liberafx::ProfileCounter, 16>{};
     auto recorder = liberafx::ProfileRecorder{};
     recorder.initialize(profileCounters.data(), profileCounters.size());
@@ -196,12 +218,15 @@ struct StateCounters {
     std::uint32_t initializations = 0;
     std::uint32_t cleanups = 0;
     bool fail = false;
+    std::size_t requiredAlignment = 16;
 };
 
 auto initializeCustomState(void* state, std::size_t stateBytes, void* context) noexcept -> liberafx::Result
 {
     auto counters = static_cast<StateCounters*>(context);
     ++counters->initializations;
+    if (reinterpret_cast<std::uintptr_t>(state) % counters->requiredAlignment != 0)
+        return liberafx::Result::InvalidArgument;
     if (stateBytes >= sizeof(std::uint64_t)) *static_cast<std::uint64_t*>(state) = 1;
     return counters->fail ? liberafx::Result::InvalidArgument : liberafx::Result::Ok;
 }
@@ -328,8 +353,9 @@ void verifyCustom()
     assert(liberafx::Program::load(bytes.data(), bytes.size(), descriptors.data(), descriptors.size(),
                                    bindings.data(), bindings.size(), program) == liberafx::Result::Ok);
     assert(program.version() == 3 && program.workBytes() == 12 * sizeof(double));
-    auto work = std::array<double, 12>{};
-    auto otherWork = std::array<double, 12>{};
+    assert(program.workAlignment() == 16 && program.defaultsAlignment() == alignof(double));
+    alignas(16) auto work = std::array<double, 12>{};
+    alignas(16) auto otherWork = std::array<double, 12>{};
     auto defaults = std::array<double, 48>{};
     auto otherDefaults = std::array<double, 48>{};
     {
@@ -382,6 +408,13 @@ void verifyCustom()
     assert(liberafx::Program::load(malformed.data(), malformed.size(), descriptors.data(), descriptors.size(),
                                    bindings.data(), bindings.size(), program) ==
            liberafx::Result::InvalidBinary);
+    alignas(16) auto misalignedBindingsStorage =
+        std::array<std::uint8_t, sizeof(liberafx::CustomNodeBinding) * 3 + 1>{};
+    auto misalignedBindings = reinterpret_cast<liberafx::CustomNodeBinding*>(
+        misalignedBindingsStorage.data() + 1);
+    assert(liberafx::Program::load(bytes.data(), bytes.size(), descriptors.data(), descriptors.size(),
+                                   misalignedBindings, bindings.size(), program) ==
+           liberafx::Result::InvalidArgument);
 
     auto stateCounters = std::array<StateCounters, 3>{};
     stateCounters[1].fail = true;
@@ -389,13 +422,16 @@ void verifyCustom()
     for (auto index = 0u; index < stateDescriptors.size(); ++index)
     {
         stateDescriptors[index].stateBytes = sizeof(std::uint64_t);
+        stateDescriptors[index].stateAlignment = 64;
+        stateCounters[index].requiredAlignment = 64;
         stateDescriptors[index].initialize = initializeCustomState;
         stateDescriptors[index].cleanup = cleanupCustomState;
         stateDescriptors[index].context = &stateCounters[index];
     }
     assert(liberafx::Program::load(bytes.data(), bytes.size(), stateDescriptors.data(), stateDescriptors.size(),
                                    bindings.data(), bindings.size(), program) == liberafx::Result::Ok);
-    auto stateWork = std::array<double, 15>{};
+    assert(program.workBytes() == 264 && program.workAlignment() == 64);
+    alignas(64) auto stateWork = std::array<double, 33>{};
     auto stateDefaults = std::array<double, 48>{};
     auto failedInstance = liberafx::Instance{};
     assert(failedInstance.initialize(program, stateWork.data(), stateWork.size(),
@@ -404,6 +440,11 @@ void verifyCustom()
     assert(stateCounters[0].initializations == 1 && stateCounters[0].cleanups == 1 &&
            stateCounters[1].initializations == 1 && stateCounters[1].cleanups == 1 &&
            stateCounters[2].initializations == 0);
+    auto invalidAlignment = stateDescriptors;
+    invalidAlignment[0].stateAlignment = 24;
+    assert(liberafx::Program::load(bytes.data(), bytes.size(), invalidAlignment.data(),
+                                   invalidAlignment.size(), bindings.data(), bindings.size(), program) ==
+           liberafx::Result::InvalidArgument);
 }
 
 auto signalFixture() -> std::vector<std::uint8_t>
@@ -472,7 +513,7 @@ void verifyCustomSignal()
     auto bindings = std::array<liberafx::CustomNodeBinding, 3>{};
     assert(liberafx::Program::load(bytes.data(), bytes.size(), descriptors.data(), descriptors.size(),
                                    bindings.data(), bindings.size(), program) == liberafx::Result::Ok);
-    auto work = std::array<double, 12>{};
+    alignas(16) auto work = std::array<double, 12>{};
     auto defaults = std::array<double, 48>{};
     auto instance = liberafx::Instance{};
     assert(instance.initialize(program, work.data(), work.size(), defaults.data(), defaults.size()) ==
@@ -495,7 +536,7 @@ void verifyCustomSignal()
     auto reentrantProgram = liberafx::Program{};
     assert(liberafx::Program::load(bytes.data(), bytes.size(), reentrantDescriptors.data(),
         reentrantDescriptors.size(), reentrantBindings.data(), reentrantBindings.size(), reentrantProgram) == liberafx::Result::Ok);
-    auto reentrantWork = std::array<double, 12>{};
+    alignas(16) auto reentrantWork = std::array<double, 12>{};
     auto reentrantDefaults = std::array<double, 48>{};
     auto reentrantInstance = liberafx::Instance{};
     context.instance = &reentrantInstance;

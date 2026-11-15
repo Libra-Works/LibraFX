@@ -1,6 +1,7 @@
 #include "liberafx/VfxRuntime.h"
 #include "liberafx/math/VectorMath.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstring>
@@ -19,6 +20,8 @@ constexpr auto noInput = std::uint32_t{0xffffffffu};
 constexpr auto customParameterOpcode = std::uint8_t{40};
 constexpr auto customSignalOpcode = std::uint8_t{41};
 constexpr auto customMaxPorts = std::uint8_t{4};
+constexpr auto customWorkAlignment = std::size_t{16};
+constexpr auto maxCustomStateAlignment = std::size_t{64};
 std::atomic<std::uint64_t> nextProgramGeneration{1};
 std::atomic<std::uint64_t> nextInstanceGeneration{1};
 static_assert(sizeof(double) == 8 && std::numeric_limits<double>::is_iec559,
@@ -52,9 +55,24 @@ auto instruction(const std::uint8_t* bytes, std::uint16_t version, std::size_t i
     return bytes + (version == 1 ? legacyHeaderSize : typedHeaderSize) + index * stride;
 }
 
-auto alignedStateSize(std::size_t bytes) noexcept -> std::size_t
+auto validStateAlignment(std::size_t alignment) noexcept -> bool
 {
-    return (bytes + 7u) & ~std::size_t{7u};
+    return alignment >= customWorkAlignment && alignment <= maxCustomStateAlignment &&
+           (alignment & (alignment - 1)) == 0;
+}
+
+auto alignUp(std::size_t value, std::size_t alignment, std::size_t& out) noexcept -> bool
+{
+    auto padding = alignment - 1;
+    if (value > std::numeric_limits<std::size_t>::max() - padding) return false;
+    out = (value + padding) & ~padding;
+    return true;
+}
+
+auto isAligned(const void* pointer, std::size_t alignment) noexcept -> bool
+{
+    return pointer != nullptr &&
+           reinterpret_cast<std::uintptr_t>(pointer) % alignment == 0;
 }
 
 auto stateOffset(const CustomNodeBinding* bindings, std::size_t nodeIndex) noexcept -> std::size_t
@@ -294,14 +312,17 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
     auto count = read32(data + 8);
     if (count > maxNodes || size != typedHeaderSize + std::size_t{count} * customInstructionSize)
         return Result::InvalidBinary;
-    if ((count != 0 && (bindings == nullptr || bindingCount < count)) ||
+    if ((count != 0 && (bindings == nullptr || bindingCount < count ||
+                        !isAligned(bindings, alignof(CustomNodeBinding)))) ||
+        (registryCount != 0 && !isAligned(registry, alignof(CustomNodeDescriptor))) ||
         (registryCount != 0 && registry == nullptr))
         return Result::InvalidArgument;
     for (auto index = std::size_t{0}; index < registryCount; ++index)
     {
         const auto& descriptor = registry[index];
         if (descriptor.abiVersion == 0 || descriptor.function == nullptr ||
-            descriptor.inputCount > customMaxPorts || descriptor.stateBytes > (std::numeric_limits<std::size_t>::max() - 7u))
+            descriptor.inputCount > customMaxPorts || !validStateAlignment(descriptor.stateAlignment) ||
+            descriptor.stateBytes > (std::numeric_limits<std::size_t>::max() - descriptor.stateAlignment + 1))
             return Result::InvalidArgument;
         if ((descriptor.execution == CustomExecution::Parameter &&
              (descriptor.outputWidth < 1 || descriptor.outputWidth > 4 || descriptor.branchCount != 0)) ||
@@ -343,7 +364,8 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
             }
         return nullptr;
     };
-    auto totalStateBytes = std::size_t{0};
+    auto valuesSize = std::size_t{count} * 4 * sizeof(double);
+    auto totalWorkBytes = valuesSize;
     for (auto index = std::uint32_t{0}; index < count; ++index)
     {
         auto current = instruction(data, 3, index);
@@ -400,11 +422,12 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
             descriptor->outputWidth != outputWidth || descriptor->branchCount != branchCount ||
             descriptor->outputIsColor != ((current[20] & 1) != 0))
             return Result::UnsupportedBinary;
-        if (descriptor->stateBytes > std::numeric_limits<std::size_t>::max() - 7u ||
-            alignedStateSize(descriptor->stateBytes) >
-                std::numeric_limits<std::size_t>::max() - totalStateBytes)
+        auto alignedStateOffset = std::size_t{0};
+        if (!validStateAlignment(descriptor->stateAlignment) ||
+            !alignUp(totalWorkBytes, descriptor->stateAlignment, alignedStateOffset) ||
+            descriptor->stateBytes > std::numeric_limits<std::size_t>::max() - alignedStateOffset)
             return Result::InvalidBinary;
-        totalStateBytes += alignedStateSize(descriptor->stateBytes);
+        totalWorkBytes = alignedStateOffset + descriptor->stateBytes;
 
         for (auto input = 0u; input < customMaxPorts; ++input)
         {
@@ -458,10 +481,7 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
             else if (target != noInput) return Result::InvalidBinary;
         }
     }
-    if (totalStateBytes > std::numeric_limits<std::size_t>::max() -
-        std::size_t{count} * 4 * sizeof(double))
-        return Result::InvalidBinary;
-    auto boundStateOffset = std::size_t{count} * 4 * sizeof(double);
+    auto boundStateOffset = valuesSize;
     for (auto index = std::uint32_t{0}; index < count; ++index)
     {
         auto current = instruction(data, 3, index);
@@ -471,15 +491,22 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
             auto registeredType = false;
             descriptor = resolveDescriptor(current + 24, read32(current + 40), registeredType);
         }
+        if (descriptor != nullptr)
+        {
+            auto alignedStateOffset = std::size_t{0};
+            if (!alignUp(boundStateOffset, descriptor->stateAlignment, alignedStateOffset))
+                return Result::InvalidBinary;
+            boundStateOffset = alignedStateOffset;
+        }
         bindings[index].descriptor = descriptor;
         bindings[index].stateOffset = boundStateOffset;
-        if (descriptor != nullptr) boundStateOffset += alignedStateSize(descriptor->stateBytes);
+        if (descriptor != nullptr) boundStateOffset += descriptor->stateBytes;
     }
     out.bytes_ = data;
     out.nodeCount_ = count;
     out.version_ = version;
     out.bindings_ = bindings;
-    out.stateBytes_ = totalStateBytes;
+    out.stateBytes_ = totalWorkBytes - valuesSize;
     out.generation_ = nextProgramGeneration.fetch_add(1, std::memory_order_relaxed);
     return Result::Ok;
 }
@@ -490,9 +517,24 @@ auto Program::workBytes() const noexcept -> std::size_t
     return values + (version_ == 3 ? stateBytes_ : 0);
 }
 
+auto Program::workAlignment() const noexcept -> std::size_t
+{
+    auto alignment = version_ == 3 ? customWorkAlignment : alignof(double);
+    if (version_ == 3 && bindings_ != nullptr)
+        for (auto index = std::size_t{0}; index < nodeCount_; ++index)
+            if (bindings_[index].descriptor != nullptr)
+                alignment = std::max(alignment, bindings_[index].descriptor->stateAlignment);
+    return alignment;
+}
+
 auto Program::parameterValueCount() const noexcept -> std::size_t
 {
     return std::size_t{nodeCount_} * (version_ == 1 ? 2 : version_ == 2 ? 8 : 16);
+}
+
+auto Program::defaultsAlignment() const noexcept -> std::size_t
+{
+    return alignof(double);
 }
 
 auto Instance::initialize(const Program& program, double* work, std::size_t workCount) noexcept -> Result
@@ -506,13 +548,19 @@ auto Instance::initialize(const Program& program, double* work, std::size_t work
     if (dispatching_) return Result::Busy;
     if (phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
     auto profileScope = ProfileScope(profiling_, ProfileEvent::Initialize);
-    auto workRequiredCount = (program.workBytes() + sizeof(double) - 1) / sizeof(double);
+    auto workBytes = program.workBytes();
+    auto workRequiredCount = workBytes / sizeof(double) +
+        (workBytes % sizeof(double) == 0 ? 0 : 1);
     auto defaultsRequiredCount = program.parameterValueCount();
     if (program.bytes_ == nullptr || (workRequiredCount > 0 && work == nullptr))
         return Result::InvalidArgument;
     if (workCount < workRequiredCount || (defaults != nullptr && defaultsCount < defaultsRequiredCount))
         return Result::InsufficientWork;
     if (defaults == nullptr && defaultsCount != 0) return Result::InvalidArgument;
+    if (workRequiredCount != 0 && !isAligned(work, program.workAlignment()))
+        return Result::InvalidArgument;
+    if (defaults != nullptr && !isAligned(defaults, program.defaultsAlignment()))
+        return Result::InvalidArgument;
     if (defaults != nullptr &&
         rangesOverlap(work, workRequiredCount * sizeof(double), defaults, defaultsRequiredCount * sizeof(double)))
         return Result::InvalidArgument;
@@ -971,9 +1019,9 @@ auto Instance::dispatchSignal(const SignalHandle& entry, double time,
         auto descriptor = program_->bindings_[index].descriptor;
         if (descriptor == nullptr || descriptor->execution != CustomExecution::Signal)
             return Result::UnknownCustomNode;
-        auto inputs = std::array<double, customMaxPorts * 4>{};
+        alignas(customWorkAlignment) auto inputs = std::array<double, customMaxPorts * 4>{};
         auto inputWidths = std::array<std::uint8_t, customMaxPorts>{};
-        auto constants = std::array<double, customMaxPorts * 4>{};
+        alignas(customWorkAlignment) auto constants = std::array<double, customMaxPorts * 4>{};
         for (auto input = 0u; input < current[18]; ++input)
         {
             auto inputRecord = current + 48 + input * 8;
@@ -1055,9 +1103,9 @@ auto Instance::evaluate() noexcept -> Result
             if (opcode == customSignalOpcode) continue;
             auto descriptor = program_->bindings_[index].descriptor;
             if (descriptor == nullptr) return Result::UnknownCustomNode;
-            auto inputs = std::array<double, customMaxPorts * 4>{};
+            alignas(customWorkAlignment) auto inputs = std::array<double, customMaxPorts * 4>{};
             auto inputWidths = std::array<std::uint8_t, customMaxPorts>{};
-            auto constants = std::array<double, customMaxPorts * 4>{};
+            alignas(customWorkAlignment) auto constants = std::array<double, customMaxPorts * 4>{};
             for (auto input = 0u; input < current[18]; ++input)
             {
                 auto inputRecord = current + 48 + input * 8;

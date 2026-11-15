@@ -29,7 +29,10 @@ inline auto arithmetic(double* output, const double* left, const double* right,
                        std::size_t width, Arithmetic operation) noexcept -> ArithmeticResult
 {
     if (width == 0 || width > 4 || output == nullptr || left == nullptr || right == nullptr ||
-        operation > Arithmetic::Divide)
+        operation > Arithmetic::Divide ||
+        reinterpret_cast<std::uintptr_t>(output) % alignof(double) != 0 ||
+        reinterpret_cast<std::uintptr_t>(left) % alignof(double) != 0 ||
+        reinterpret_cast<std::uintptr_t>(right) % alignof(double) != 0)
         return ArithmeticResult::InvalidArgument;
 
     auto zeroMask = std::uint8_t{0};
@@ -104,7 +107,9 @@ inline auto arithmetic(double* output, const double* left, const double* right,
 
 inline auto allFinite(const double* values, std::size_t width) noexcept -> bool
 {
-    if (values == nullptr || width == 0 || width > 4) return false;
+    if (values == nullptr || width == 0 || width > 4 ||
+        reinterpret_cast<std::uintptr_t>(values) % alignof(double) != 0)
+        return false;
     for (auto lane = std::size_t{0}; lane < width; ++lane)
         if (!std::isfinite(values[lane])) return false;
     return true;

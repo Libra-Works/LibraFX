@@ -133,11 +133,29 @@ void checkExceptionalLanes()
             ArithmeticResult::InvalidArgument);
     require(!allFinite(nullptr, 2) && !allFinite(left.data(), 0) && !allFinite(left.data(), 5));
 }
+
+void checkScalarAlignment()
+{
+    alignas(16) auto storage = std::array<std::uint8_t, 64>{};
+    auto misaligned = reinterpret_cast<double*>(storage.data() + 1);
+    auto left = std::array<double, 2>{2, 3};
+    auto right = std::array<double, 2>{4, 5};
+    auto output = std::array<double, 2>{17, 19};
+    require(arithmetic(misaligned, left.data(), right.data(), 2, Arithmetic::Add) ==
+            ArithmeticResult::InvalidArgument);
+    require(arithmetic(output.data(), misaligned, right.data(), 2, Arithmetic::Add) ==
+            ArithmeticResult::InvalidArgument);
+    require(arithmetic(output.data(), left.data(), misaligned, 2, Arithmetic::Add) ==
+            ArithmeticResult::InvalidArgument);
+    require(output == std::array<double, 2>{17, 19});
+    require(!allFinite(misaligned, 2));
+}
 }
 
 int main()
 {
     checkArithmetic();
     checkExceptionalLanes();
+    checkScalarAlignment();
     std::cout << "Portable vector math checks passed.\n";
 }
