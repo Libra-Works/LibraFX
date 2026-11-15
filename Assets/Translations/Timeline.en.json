@@ -1,0 +1,16 @@
+{
+  "Timeline.PlayPause": "Play / pause",
+  "Timeline.Stop": "Stop and rewind",
+  "Timeline.StepBack": "Previous frame",
+  "Timeline.StepForward": "Next frame",
+  "Timeline.Range": "Preview range",
+  "Timeline.Loop": "Loop",
+  "Timeline.Start": "Start frame",
+  "Timeline.Duration": "Duration (frames)",
+  "Timeline.InvalidRange": "The preview range must span at least one frame within -1,000,000 to 1,000,000.",
+  "Timeline.InvalidFps": "FPS must be between 1 and 240.",
+  "Timeline.InvalidNumber": "Enter a finite number.",
+  "Timeline.InvalidClip": "The retimed curve exceeds its valid frame, duration or tangent limits.",
+  "Timeline.Hint": "Curve tracks edit the graph directly. Drag a clip to move it, its right edge to retime it, or the ruler to seek. Wheel zooms.",
+  "Timeline.RetimeHistory": "Retime curve track"
+}

@@ -64,6 +64,7 @@ public partial class MainViewModel : ViewModelBase
     public GroupAssetCatalog GroupAssets { get; }
     public NodeDefinitionCatalog NodeDefinitions { get; }
     public LocalizationService Localization => LocalizationService.Shared;
+    public EditorPlayback Playback { get; } = new();
 
     public string McpAccessToken { get; }
 
@@ -599,6 +600,7 @@ public partial class MainViewModel : ViewModelBase
 
     public void DisposeStorageFiles()
     {
+        Playback.Dispose();
         GroupAssets.Dispose();
         NodeDefinitions.Dispose();
         var disposed = new HashSet<IStorageFile>(ReferenceEqualityComparer.Instance);

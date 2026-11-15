@@ -5,7 +5,6 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using Avalonia.Threading;
 using LiberaFx.Models.Graph;
@@ -27,16 +26,12 @@ public sealed class PreviewHost : IDisposable
     private readonly X509Certificate2 _certificate = CreateCertificate();
     private readonly SemaphoreSlim _clientSlots = new(MaxClients, MaxClients);
     private readonly ConcurrentDictionary<Guid, WebSocket> _sockets = new();
-    private readonly Dictionary<Guid, Channel<byte[]>> _clients = [];
+    private readonly Dictionary<Guid, PreviewClient> _clients = [];
     private readonly object _sync = new();
-    private readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web)
-    {
-        Converters = { new JsonStringEnumConverter() }
-    };
     private WebApplication? _app;
     private MainViewModel? _model;
     private GraphWorkspaceViewModel? _graph;
-    private byte[]? _latest;
+    private PreviewPublication? _latest;
     private long _sequence;
 
     public string AccessToken { get; } = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
@@ -71,6 +66,7 @@ public sealed class PreviewHost : IDisposable
             {
                 _model = model;
                 model.ActiveGraphProvider.PropertyChanged += OnActiveGraphChanged;
+                model.Playback.StateChanged += OnPlaybackChanged;
                 AttachGraph(model.ActiveGraphProvider.Graph);
                 Publish();
             });
@@ -111,6 +107,7 @@ public sealed class PreviewHost : IDisposable
     private void DetachGraph()
     {
         if (_model is not null) _model.ActiveGraphProvider.PropertyChanged -= OnActiveGraphChanged;
+        if (_model is not null) _model.Playback.StateChanged -= OnPlaybackChanged;
         if (_graph is not null) _graph.History.StateChanged -= OnHistoryChanged;
         _model = null;
         _graph = null;
@@ -125,28 +122,24 @@ public sealed class PreviewHost : IDisposable
         }
     }
 
-    private void Publish()
+    private void OnPlaybackChanged(object? sender, EventArgs e)
+    {
+        try { Publish(reuseGraph: true); }
+        catch (Exception ex)
+        {
+            if (_model is not null) _model.PreviewStatus = $"Snapshot error: {ex.Message}";
+        }
+    }
+
+    private void Publish(bool reuseGraph = false)
     {
         if (_model?.ActiveDocument is not { } document || _graph is null) return;
-        var payload = JsonSerializer.SerializeToUtf8Bytes(new
-        {
-            type = "snapshot",
-            protocolVersion = 1,
-            sequence = ++_sequence,
-            documentId = document.Id,
-            graph = _graph.CreateSnapshot(),
-            nodeTypes = GraphNodeDefinition.All.Select(type => new
-            {
-                kind = type.Kind.Value,
-                type.TypeId,
-                type.Namespace,
-                type.TypeName
-            })
-        }, _json);
+        var graph = reuseGraph && _latest?.DocumentId == document.Id ? _latest.Graph : _graph.CreateSnapshot();
+        var publication = new PreviewPublication(++_sequence, document.Id, graph, GraphNodeDefinition.All, _model.Playback.Snapshot);
         lock (_sync)
         {
-            _latest = payload;
-            foreach (var channel in _clients.Values) channel.Writer.TryWrite(payload);
+            _latest = publication;
+            foreach (var client in _clients.Values) client.Channel.Writer.TryWrite(publication);
         }
         if (_model.PreviewStatus.StartsWith("Snapshot error:", StringComparison.Ordinal))
             _model.PreviewStatus = "Running (TLS; token required)";
@@ -177,28 +170,30 @@ public sealed class PreviewHost : IDisposable
             return;
         }
 
-        var id = Guid.NewGuid();
-        var channel = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(1)
+        var version = context.Request.Query["protocol"].ToString();
+        if (version is not ("" or "1" or "2"))
         {
-            FullMode = BoundedChannelFullMode.DropOldest,
-            SingleReader = true
-        });
+            _clientSlots.Release();
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            return;
+        }
+        var id = Guid.NewGuid();
+        var client = new PreviewClient(version == "2");
         try
         {
             using var socket = await context.WebSockets.AcceptWebSocketAsync();
             _sockets[id] = socket;
             lock (_sync)
             {
-                _clients.Add(id, channel);
-                if (_latest is not null) channel.Writer.TryWrite(_latest);
+                _clients.Add(id, client);
+                if (_latest is not null) client.Channel.Writer.TryWrite(_latest);
             }
             UpdateClientCount();
             using var cancel = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
-            var sending = SendAsync(socket, channel.Reader, cancel.Token);
+            var sending = SendAsync(socket, client, cancel.Token);
             try
             {
-                var buffer = new byte[1];
-                var receiving = socket.ReceiveAsync(buffer.AsMemory(), cancel.Token).AsTask();
+                var receiving = ReceiveAsync(socket, client, cancel.Token);
                 await Task.WhenAny(sending, receiving);
                 cancel.Cancel();
                 socket.Abort();
@@ -218,16 +213,64 @@ public sealed class PreviewHost : IDisposable
         {
             lock (_sync) _clients.Remove(id);
             _sockets.TryRemove(id, out _);
-            channel.Writer.TryComplete();
+            client.Channel.Writer.TryComplete();
             _clientSlots.Release();
             UpdateClientCount();
         }
     }
 
-    private static async Task SendAsync(WebSocket socket, ChannelReader<byte[]> reader, CancellationToken cancellation)
+    private static async Task SendAsync(WebSocket socket, PreviewClient client, CancellationToken cancellation)
     {
-        await foreach (var message in reader.ReadAllAsync(cancellation))
-            await socket.SendAsync(message.AsMemory(), WebSocketMessageType.Text, true, cancellation);
+        PreviewPublication? baseline = null;
+        await foreach (var publication in client.Channel.Reader.ReadAllAsync(cancellation))
+        {
+            // Diff against the last message actually sent, never a dropped pending update.
+            var payload = client.Version2
+                ? PreviewProtocol.Encode(publication, baseline, Interlocked.Exchange(ref client.ForceSnapshot, 0) != 0)
+                : publication.LegacyPayload;
+            await socket.SendAsync(payload.AsMemory(), WebSocketMessageType.Text, true, cancellation);
+            baseline = publication;
+        }
+    }
+
+    private async Task ReceiveAsync(WebSocket socket, PreviewClient client, CancellationToken cancellation)
+    {
+        var buffer = new byte[256];
+        while (!cancellation.IsCancellationRequested)
+        {
+            var count = 0;
+            var fragments = 0;
+            ValueWebSocketReceiveResult result;
+            do
+            {
+                result = await socket.ReceiveAsync(buffer.AsMemory(count), cancellation);
+                if (result.MessageType == WebSocketMessageType.Close) return;
+                count += result.Count;
+                if (!client.Version2 || result.MessageType != WebSocketMessageType.Text ||
+                    count == buffer.Length || ++fragments > 16)
+                    return;
+            } while (!result.EndOfMessage);
+            try
+            {
+                using var request = JsonDocument.Parse(buffer.AsMemory(0, count));
+                if (!request.RootElement.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String ||
+                    type.GetString() != "resync") return;
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException) { return; }
+            lock (_sync)
+            {
+                Interlocked.Exchange(ref client.ForceSnapshot, 1);
+                if (_latest is not null) client.Channel.Writer.TryWrite(_latest);
+            }
+        }
+    }
+
+    private sealed class PreviewClient(bool version2)
+    {
+        public bool Version2 { get; } = version2;
+        public int ForceSnapshot;
+        public Channel<PreviewPublication> Channel { get; } = System.Threading.Channels.Channel.CreateBounded<PreviewPublication>(
+            new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
     }
 
     private void UpdateClientCount()

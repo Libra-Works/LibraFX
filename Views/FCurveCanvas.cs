@@ -79,6 +79,11 @@ public sealed class FCurveCanvas : Control
             DrawCurve(context, display.Curve, new Pen(display.Brush, ReferenceEquals(display.Node, _model.Node) ? 2 : 1.5));
         if (_model.Curve is { } curve && _model.VisibleCurves.Any(item => ReferenceEquals(item.Node, _model.Node)))
             DrawKeys(context, curve);
+        if (_model.PlayheadFrame is { } frame)
+        {
+            var x = _origin.X + frame * _scaleX;
+            context.DrawLine(new Pen(SelectedBrush, 1.5), new Point(x, 0), new Point(x, Bounds.Height));
+        }
         if (_dragMode == DragMode.Select)
             context.DrawRectangle(ThemeSettingsService.EditorBrush("SelectionFill"),
                 new Pen(ThemeSettingsService.EditorBrush("SelectionBorder")), SelectionRect(_pointerStart, _selectionEnd));

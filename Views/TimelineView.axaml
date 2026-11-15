@@ -1,0 +1,45 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:LiberaFx.ViewModels" xmlns:views="using:LiberaFx.Views"
+             x:Class="LiberaFx.Views.TimelineView" x:DataType="vm:TimelineViewModel">
+    <Grid RowDefinitions="Auto,*,Auto">
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+        <StackPanel Orientation="Horizontal" Spacing="6" Margin="6">
+            <views:IconButton Icon="StepBack" Command="{Binding Playback.StepBackCommand}"
+                              ToolTip.Tip="{DynamicResource Text.Timeline.StepBack}" AutomationProperties.Name="{DynamicResource Text.Timeline.StepBack}" />
+            <views:IconButton Icon="{Binding Playback.PlayIcon}" Command="{Binding Playback.PlayPauseCommand}"
+                              ToolTip.Tip="{DynamicResource Text.Timeline.PlayPause}" AutomationProperties.Name="{DynamicResource Text.Timeline.PlayPause}" />
+            <views:IconButton Icon="Stop" Command="{Binding Playback.StopCommand}"
+                              ToolTip.Tip="{DynamicResource Text.Timeline.Stop}" AutomationProperties.Name="{DynamicResource Text.Timeline.Stop}" />
+            <views:IconButton Icon="StepForward" Command="{Binding Playback.StepForwardCommand}"
+                              ToolTip.Tip="{DynamicResource Text.Timeline.StepForward}" AutomationProperties.Name="{DynamicResource Text.Timeline.StepForward}" />
+            <views:IconButton Icon="Frame" Click="OnFrameAllClick"
+                              ToolTip.Tip="{DynamicResource Text.Panels.FrameAll}" AutomationProperties.Name="{DynamicResource Text.Panels.FrameAll}" />
+            <TextBlock Text="{DynamicResource Text.Panels.Frame}" VerticalAlignment="Center" />
+            <TextBox Width="80" Text="{Binding Playback.FrameText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            <TextBlock Text="{DynamicResource Text.Timeline.Range}" VerticalAlignment="Center" />
+            <TextBox Width="70" Text="{Binding Playback.StartText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            <TextBox Width="70" Text="{Binding Playback.EndText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            <TextBlock Text="FPS" VerticalAlignment="Center" />
+            <TextBox Width="50" Text="{Binding Playback.FpsText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            <CheckBox Content="{DynamicResource Text.Timeline.Loop}" IsChecked="{Binding Playback.Loop}" />
+        </StackPanel>
+        </ScrollViewer>
+        <Grid Grid.Row="1" ColumnDefinitions="*,180">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                <views:TimelineCanvas x:Name="Canvas" Height="{Binding CanvasHeight}" />
+            </ScrollViewer>
+            <StackPanel Grid.Column="1" Spacing="4" Margin="8">
+                <TextBlock Text="{Binding SelectedTrack.Name}" FontWeight="SemiBold" />
+                <TextBlock Text="{DynamicResource Text.Timeline.Start}" />
+                <TextBox Text="{Binding SelectedTrack.StartText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                <TextBlock Text="{DynamicResource Text.Timeline.Duration}" />
+                <TextBox IsEnabled="{Binding SelectedTrack.CanStretch}" Text="{Binding SelectedTrack.DurationText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            </StackPanel>
+        </Grid>
+        <StackPanel Grid.Row="2" Margin="8,3">
+            <TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Text="{Binding Playback.Status}" />
+        </StackPanel>
+    </Grid>
+</UserControl>

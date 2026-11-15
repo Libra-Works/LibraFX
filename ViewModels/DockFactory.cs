@@ -59,13 +59,12 @@ public sealed class DockFactory : Factory
             Id = "History",
             Title = LocalizationService.Shared.Get("Messages.Tool.History")
         };
-        var timeline = new ToolPaneViewModel
+        var timeline = new TimelineViewModel(_activeGraph, _main.Playback)
         {
             Id = "Timeline",
-            Title = LocalizationService.Shared.Get("Messages.Tool.Timeline"),
-            DescriptionKey = "Messages.TimelineUnavailable"
+            Title = LocalizationService.Shared.Get("Messages.Tool.Timeline")
         };
-        var curves = new CurveEditorViewModel(_activeGraph)
+        var curves = new CurveEditorViewModel(_activeGraph, _main.Playback)
         {
             Id = "Curves",
             Title = LocalizationService.Shared.Get("Messages.Tool.Curves")

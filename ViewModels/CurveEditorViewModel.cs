@@ -27,6 +27,8 @@ public sealed class CurveEditorViewModel : Tool
     private static readonly string[] ChannelColors = ["CurveLine", "GraphParameter", "GraphSignal", "CurveSelected"];
 
     public GraphNodeViewModel? Node => _node;
+    public EditorPlayback? Playback { get; }
+    public double? PlayheadFrame => Playback?.Frame;
     public ObservableCollection<CurveChannelViewModel> Channels { get; } = [];
     public IReadOnlyList<CurveChannelViewModel> FilteredChannels => Channels
         .Where(channel => channel.Name.Contains(ChannelSearch.Trim(), StringComparison.OrdinalIgnoreCase)).ToArray();
@@ -70,8 +72,13 @@ public sealed class CurveEditorViewModel : Tool
         }
     }
 
-    public CurveEditorViewModel(ActiveGraphProvider activeGraph)
+    public CurveEditorViewModel(ActiveGraphProvider activeGraph, EditorPlayback? playback = null)
     {
+        Playback = playback;
+        if (playback is not null) playback.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(EditorPlayback.Frame)) OnPropertyChanged(nameof(PlayheadFrame));
+        };
         _activeGraph = activeGraph;
         _graph = activeGraph.Graph;
         _activeGraph.PropertyChanged += OnActiveGraphChanged;

@@ -146,6 +146,18 @@ internal static class Program
         Console.WriteLine("Inspector actions and English/Japanese localization checks passed.");
         ProjectNodeCatalogTests.Run();
         Console.WriteLine("Layered project node catalog, quick search and retained history checks passed.");
+        LogViewerTests.Run();
+        Console.WriteLine("Plain log window, filter, search, clear and atomic export checks passed.");
+        CommentMarkupTests.Run();
+        Console.WriteLine("Comment text/Markdown/HTML and undoable task-list checks passed.");
+        GroupCompilationTests.Run();
+        Console.WriteLine("Latest/frozen group compilation and deterministic instance checks passed.");
+        PreviewProtocolTests.Run();
+        Console.WriteLine("Preview parameter deltas, slow-client baselines and TLS resynchronization checks passed.");
+        TimelineTests.Run();
+        Console.WriteLine("Timeline retiming, shared playhead and graph persistence checks passed.");
+        LiberaFx.Tests.VectorArithmeticTests.Run();
+        Console.WriteLine("Vector operations, explicit conversions and persistent multi-output Break pins passed.");
     }
 
     private static byte[] CreateLargeImage(BitmapEncoderOptions options)

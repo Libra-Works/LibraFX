@@ -1,0 +1,16 @@
+{
+  "Timeline.PlayPause": "再生 / 一時停止",
+  "Timeline.Stop": "停止して先頭に戻る",
+  "Timeline.StepBack": "1 フレーム戻る",
+  "Timeline.StepForward": "1 フレーム進む",
+  "Timeline.Range": "プレビュー範囲",
+  "Timeline.Loop": "ループ",
+  "Timeline.Start": "開始フレーム",
+  "Timeline.Duration": "長さ（フレーム）",
+  "Timeline.InvalidRange": "プレビュー範囲は -1,000,000 ～ 1,000,000 の間で、1 フレーム以上にしてください。",
+  "Timeline.InvalidFps": "FPS は 1 ～ 240 にしてください。",
+  "Timeline.InvalidNumber": "有限の数値を入力してください。",
+  "Timeline.InvalidClip": "変更後のカーブがフレーム・長さ・接線の有効範囲を超えています。",
+  "Timeline.Hint": "カーブトラックはグラフを直接編集します。本体をドラッグで移動、右端で長さ変更、目盛りで時間移動、ホイールで拡大縮小できます。",
+  "Timeline.RetimeHistory": "カーブトラックの時間を変更"
+}

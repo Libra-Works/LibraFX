@@ -43,6 +43,9 @@
         <DataTemplate DataType="vm:CurveEditorViewModel">
             <views:CurveEditorView />
         </DataTemplate>
+        <DataTemplate DataType="vm:TimelineViewModel">
+            <views:TimelineView />
+        </DataTemplate>
         <DataTemplate DataType="vm:NodePropertiesPaneViewModel">
             <views:NodePropertiesView />
         </DataTemplate>
