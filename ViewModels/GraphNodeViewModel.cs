@@ -14,6 +14,8 @@ public sealed class GraphNodeViewModel : ObservableObject
     public const double PortHorizontalOffset = 19;
 
     private readonly GraphWorkspaceViewModel _workspace;
+    private readonly GraphNodeDefinition _baseDefinition;
+    private GraphNodeDefinition _definition;
     private string _name;
     private double _x;
     private double _y;
@@ -30,7 +32,7 @@ public sealed class GraphNodeViewModel : ObservableObject
 
     internal GraphWorkspaceViewModel Workspace => _workspace;
 
-    public GraphNodeDefinition Definition { get; }
+    public GraphNodeDefinition Definition => _definition;
 
     public FCurveSnapshot? Curve => _curve;
     public IReadOnlyList<NodeParameterSnapshot>? Parameters => _parameters;
@@ -65,7 +67,7 @@ public sealed class GraphNodeViewModel : ObservableObject
         ? (CommentFormat)value : CommentFormat.Text;
     public bool HasFormattedComment => IsComment && CommentStyle != CommentFormat.Text;
     public bool HasParameters => InlineParameters.Count > 0;
-    public IReadOnlyList<NodeParameterEditorViewModel> InlineParameters { get; }
+    public IReadOnlyList<NodeParameterEditorViewModel> InlineParameters { get; private set; }
     internal double RenderedHeight { get; set; } = 80;
 
     public bool IsDetailsExpanded
@@ -127,7 +129,8 @@ public sealed class GraphNodeViewModel : ObservableObject
         GroupAssetReference? groupAsset = null)
     {
         _workspace = workspace;
-        Definition = definition;
+        _baseDefinition = definition;
+        _definition = RenderNodeSchema.Effective(definition, parameters);
         Id = id ?? Guid.NewGuid();
         _name = name;
         _x = x;
@@ -136,7 +139,7 @@ public sealed class GraphNodeViewModel : ObservableObject
         ChildGraph = definition.Kind == GraphNodeKind.GraphGroup ? childGraph ?? new GraphSnapshot([], []) : null;
         GroupAsset = definition.Kind == GraphNodeKind.GraphGroup ? groupAsset : null;
         _parameters = parameters;
-        InlineParameters = definition.Parameters.Where(parameter => !IsComment || parameter.Id != "image")
+        InlineParameters = VisibleParameters(_definition)
             .Select(parameter => new NodeParameterEditorViewModel(workspace, this, parameter)).ToArray();
         SelectCommand = new RelayCommand(() => _workspace.SelectNode(this));
         SelectInputPortCommand = new RelayCommand(() => _workspace.CompleteConnection(this));
@@ -182,8 +185,11 @@ public sealed class GraphNodeViewModel : ObservableObject
 
     internal void SetParametersValue(IReadOnlyList<NodeParameterSnapshot>? parameters)
     {
+        var oldSchema = SchemaValue(_parameters);
         if (SetProperty(ref _parameters, parameters, nameof(Parameters)))
         {
+            if (!SchemaValuesEqual(oldSchema, SchemaValue(_parameters)))
+                RefreshEffectiveDefinition();
             foreach (var parameter in InlineParameters) parameter.Refresh();
             OnPropertyChanged(nameof(CommentText));
             OnPropertyChanged(nameof(CommentStyle));
@@ -193,6 +199,36 @@ public sealed class GraphNodeViewModel : ObservableObject
             OnPropertyChanged(nameof(RenderedWidth));
         }
     }
+
+    private JsonElement? SchemaValue(IReadOnlyList<NodeParameterSnapshot>? parameters) =>
+        _baseDefinition.Parameters.FirstOrDefault(parameter => parameter.Id == "materialSchema") is { } schema
+            ? parameters?.FirstOrDefault(parameter => parameter.Id == schema.Id && parameter.Type == schema.Type)?.Value
+              ?? schema.DefaultValue
+            : null;
+
+    private static bool SchemaValuesEqual(JsonElement? left, JsonElement? right) =>
+        left is null && right is null ||
+        left is { } a && right is { } b && JsonElement.DeepEquals(a, b);
+
+    private void RefreshEffectiveDefinition()
+    {
+        var effective = RenderNodeSchema.Effective(_baseDefinition, _parameters);
+        if (ReferenceEquals(effective, _definition)) return;
+        if (!SetProperty(ref _definition, effective, nameof(Definition))) return;
+        InlineParameters = VisibleParameters(effective)
+            .Select(parameter => new NodeParameterEditorViewModel(_workspace, this, parameter)).ToArray();
+        OnPropertyChanged(nameof(InlineParameters));
+        OnPropertyChanged(nameof(InputPorts));
+        OnPropertyChanged(nameof(HasCustomInputs));
+        OnPropertyChanged(nameof(HasLegacyInput));
+        OnPropertyChanged(nameof(HasParameters));
+    }
+
+    private IReadOnlyList<NodeParameterDefinition> VisibleParameters(GraphNodeDefinition definition) =>
+        definition.Parameters.Where(parameter =>
+            (!IsComment || parameter.Id != "image") &&
+            (!RenderNodeSchema.IsRenderNode(definition) ||
+             parameter.Id != "materialSchema" && !parameter.Id.StartsWith("material_", StringComparison.Ordinal))).ToArray();
 
     internal void SetGroupAssetValue(GroupAssetReference? value)
     {

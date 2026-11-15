@@ -1,0 +1,91 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:LiberaFx.ViewModels"
+        xmlns:services="using:LiberaFx.Services"
+        x:Class="LiberaFx.Views.EngineAssetsWindow"
+        x:DataType="vm:EngineAssetsWindowViewModel"
+        Title="{DynamicResource Text.Asset.Title}" Width="1200" Height="800"
+        MinWidth="900" MinHeight="620" ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource EffectWindowBackgroundBrush}">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16" RowSpacing="12">
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{DynamicResource Text.Asset.Peer}" VerticalAlignment="Center" />
+                <ComboBox x:Name="PeerPicker" Width="260" ItemsSource="{Binding Peers}"
+                          SelectedItem="{Binding SelectedPeer}" />
+                <TextBox Width="250" PlaceholderText="{DynamicResource Text.Asset.SearchHint}"
+                         Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}" />
+                <ComboBox Width="130" ItemsSource="{Binding AssetClasses}" SelectedItem="{Binding AssetClass}" />
+            </StackPanel>
+            <Button Grid.Column="1" Command="{Binding SearchCommand}" Content="{DynamicResource Text.Asset.Search}" />
+            <Button Grid.Column="2" Click="OnReconnectClick" Content="{DynamicResource Text.Asset.Reconnect}" />
+        </Grid>
+        <Grid Grid.Row="1" ColumnDefinitions="2*,3*" ColumnSpacing="14">
+            <Grid RowDefinitions="*,Auto">
+                <ListBox ItemsSource="{Binding Assets}" SelectedItem="{Binding SelectedAsset}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="services:EngineAsset">
+                            <Grid ColumnDefinitions="*,Auto" Margin="4">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding Path}" FontSize="11"
+                                               Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="{Binding AssetClass}" VerticalAlignment="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10" Margin="0,8,0,0">
+                    <Button Command="{Binding PreviousCommand}" Content="{DynamicResource Text.Asset.Previous}" />
+                    <TextBlock Text="{Binding Total}" VerticalAlignment="Center" />
+                    <Button Command="{Binding NextCommand}" Content="{DynamicResource Text.Asset.Next}" />
+                </StackPanel>
+            </Grid>
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="9">
+                    <Grid ColumnDefinitions="256,*" ColumnSpacing="12">
+                        <Border Width="256" Height="256" CornerRadius="5"
+                                Background="{DynamicResource EffectWindowBackgroundBrush}">
+                            <Image Source="{Binding Thumbnail}" Stretch="Uniform" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                            <TextBlock Text="{Binding SelectedAsset.Name}" FontSize="20" FontWeight="SemiBold"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding SelectedAsset.Path}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Text="{DynamicResource Text.Asset.MaterialDetails}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding AssetDetails}" TextWrapping="Wrap"
+                               FontFamily="Consolas" FontSize="12" />
+                    <TextBlock Text="{DynamicResource Text.Asset.Description}" />
+                    <TextBox Text="{Binding Description}" AcceptsReturn="True" MinHeight="54" TextWrapping="Wrap" />
+                    <TextBlock Text="{DynamicResource Text.Asset.SemanticUsage}" />
+                    <TextBox Text="{Binding SemanticUsage}" PlaceholderText="{DynamicResource Text.Asset.SemanticHint}" />
+                    <TextBlock Text="{DynamicResource Text.Asset.Tags}" />
+                    <TextBox Text="{Binding Tags}" PlaceholderText="{DynamicResource Text.Asset.TagsHint}" />
+                    <TextBlock Text="{DynamicResource Text.Asset.Atlas}" FontWeight="SemiBold" />
+                    <Grid ColumnDefinitions="Auto,*,Auto,*,Auto,*" ColumnSpacing="6">
+                        <TextBlock Text="{DynamicResource Text.Asset.Columns}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1" Text="{Binding Columns}" />
+                        <TextBlock Grid.Column="2" Text="{DynamicResource Text.Asset.Rows}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="3" Text="{Binding Rows}" />
+                        <TextBlock Grid.Column="4" Text="{DynamicResource Text.Asset.Fps}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="5" Text="{Binding Fps}" />
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Command="{Binding SaveMetadataCommand}" Content="{DynamicResource Text.Asset.SaveMetadata}" />
+                        <Button Command="{Binding AddModelCommand}" Content="{DynamicResource Text.Asset.AddModel}" />
+                        <Button Command="{Binding AddSpriteCommand}" Content="{DynamicResource Text.Asset.AddSprite}" />
+                        <Button Command="{Binding AssignCommand}" Content="{DynamicResource Text.Asset.Assign}" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding Status}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Click="OnCloseClick" Content="{DynamicResource Text.Asset.Close}" />
+        </StackPanel>
+    </Grid>
+</Window>

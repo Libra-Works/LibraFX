@@ -12,6 +12,7 @@ public static class GraphValidator
         ArgumentNullException.ThrowIfNull(snapshot.Connections);
         var definitions = GraphNodeDefinition.All.ToDictionary(definition => definition.Kind);
         var nodes = new Dictionary<Guid, GraphNodeSnapshot>();
+        var effectiveDefinitions = new Dictionary<Guid, GraphNodeDefinition>();
         foreach (var node in snapshot.Nodes)
         {
             if (node is null || node.Id == Guid.Empty || !allIds.Add(node.Id) ||
@@ -31,9 +32,11 @@ public static class GraphValidator
                 if (parameters.Count > 256 || parameters.Any(parameter =>
                         parameter is null || string.IsNullOrWhiteSpace(parameter.Id) || parameter.Id.Length > 128 ||
                         !ids.Add(parameter.Id) || string.IsNullOrWhiteSpace(parameter.Type) ||
-                        parameter.Type.Length > 128 || !NodeParameter.IsValidValue(parameter.Type, parameter.Value)))
+                        parameter.Type.Length > 128 || !RenderNodeSchema.IsValidParameterValue(definition, parameter)))
                     throw new InvalidDataException("The project contains invalid node parameters.");
             }
+            effectiveDefinitions.Add(node.Id, RenderNodeSchema.Effective(definition, node.Parameters));
+            RenderNodeSchema.ValidateNodeParameters(definition, node.Parameters);
             if (node.ChildGraph is not null) Validate(node.ChildGraph, allIds, depth + 1);
         }
 
@@ -47,14 +50,14 @@ public static class GraphValidator
                 source.Id == target.Id ||
                 source.Kind == GraphNodeKind.GraphGroup || target.Kind == GraphNodeKind.GraphGroup ||
                 source.Kind == GraphNodeKind.Comment || target.Kind == GraphNodeKind.Comment ||
-                definitions[source.Kind].GetOutputPortType(connection.SourcePortId) !=
-                definitions[target.Kind].GetInputPortType(connection.TargetPortId) ||
-                definitions[source.Kind].GetOutputPortCategory(connection.SourcePortId) !=
-                definitions[target.Kind].GetInputPortCategory(connection.TargetPortId) ||
-                (definitions[target.Kind].InputPorts is null
+                effectiveDefinitions[source.Id].GetOutputPortType(connection.SourcePortId) !=
+                effectiveDefinitions[target.Id].GetInputPortType(connection.TargetPortId) ||
+                effectiveDefinitions[source.Id].GetOutputPortCategory(connection.SourcePortId) !=
+                effectiveDefinitions[target.Id].GetInputPortCategory(connection.TargetPortId) ||
+                (effectiveDefinitions[target.Id].InputPorts is null
                     ? connection.TargetPortId is not null
                     : connection.TargetPortId is not { } port ||
-                      !definitions[target.Kind].InputPorts!.Any(item => item.Id == port) ||
+                      !effectiveDefinitions[target.Id].InputPorts!.Any(item => item.Id == port) ||
                       !occupiedInputs.Add((target.Id, port))) ||
                 !connections.Add((source.Id, connection.SourcePortId, target.Id, connection.TargetPortId)))
                 throw new InvalidDataException("The project contains an invalid graph connection.");

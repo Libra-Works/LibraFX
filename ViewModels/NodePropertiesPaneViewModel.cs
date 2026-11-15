@@ -4,6 +4,7 @@ using System.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Dock.Model.Mvvm.Controls;
 using LiberaFx.Models.Appearance;
+using LiberaFx.Models.Graph;
 using LiberaFx.Services;
 
 namespace LiberaFx.ViewModels;
@@ -73,6 +74,11 @@ public sealed class NodePropertiesPaneViewModel : Tool
 
     private void OnNodeChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(GraphNodeViewModel.Definition))
+        {
+            RefreshNode();
+            return;
+        }
         if (e.PropertyName == nameof(GraphNodeViewModel.Parameters))
             foreach (var parameter in Parameters) parameter.Refresh();
         if (e.PropertyName == nameof(GraphNodeViewModel.GroupAsset)) RefreshGroupState();
@@ -123,7 +129,8 @@ public sealed class NodePropertiesPaneViewModel : Tool
         RefreshGroupState();
         if (_node is null) return;
         _node.PropertyChanged += OnNodeChanged;
-        foreach (var definition in _node.Definition.Parameters)
+        foreach (var definition in _node.Definition.Parameters.Where(parameter =>
+                     !RenderNodeSchema.IsRenderNode(_node.Definition) || parameter.Id != "materialSchema"))
             Parameters.Add(new NodeParameterEditorViewModel(_graph, _node, definition));
     }
 }

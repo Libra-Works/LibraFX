@@ -770,6 +770,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             .Select(connection => (Source: connection.Source.Id, Target: connection.Target.Id,
                 TargetPort: connection.TargetPortId, SourcePort: connection.SourcePortId))
             .ToHashSet();
+        var plannedConnections = new List<GraphConnectionSnapshot>(plan.Connections.Count);
         for (var index = 0; index < plan.Connections.Count; index++)
         {
             var specification = plan.Connections[index];
@@ -846,8 +847,26 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 Connections.Count + index,
                 targetPortId,
                 sourcePortId));
+            plannedConnections.Add(new GraphConnectionSnapshot(
+                source.Id, target.Id, targetPortId, sourcePortId));
         }
 
+        var current = CreateCurrentSnapshot();
+        var plannedNodes = nodesByKey.Values.Select(node => new GraphNodeSnapshot(
+            node.Id,
+            node.Definition.Kind,
+            node.Name,
+            node.X,
+            node.Y,
+            node.Definition.PortType,
+            node.Definition.PortCategory,
+            node.Curve,
+            node.ChildGraph,
+            node.Parameters,
+            node.GroupAsset));
+        GraphValidator.Validate(new GraphSnapshot(
+            current.Nodes.Concat(plannedNodes).ToArray(),
+            current.Connections.Concat(plannedConnections).ToArray()));
         _history.Execute(new CompositeUndoableCommand("Apply graph plan", commands));
         _nextNodeIndex += plan.Nodes.Count;
         return CreateCurrentSnapshot();
@@ -1137,10 +1156,23 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     public void SetParameter(GraphNodeViewModel node, string id, JsonElement value)
     {
         if (!Nodes.Contains(node)) throw new InvalidOperationException("The node is not in this graph.");
+        if (RenderNodeSchema.IsRenderNode(node.Definition) && id == "materialSchema")
+            throw new InvalidOperationException("Assign an engine asset to update the material schema.");
         var definition = node.Definition.Parameters.FirstOrDefault(parameter => parameter.Id == id)
             ?? throw new InvalidOperationException("The node parameter no longer exists.");
         if (!NodeParameter.IsValidValue(definition.Type, value))
             throw new ArgumentException("The value is invalid for this parameter.", nameof(value));
+        if (RenderNodeSchema.IsRenderNode(node.Definition) && id == "assetPath" &&
+            value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 0 } assetPath &&
+            !RenderNodeSchema.IsSafeAssetPath(assetPath))
+            throw new ArgumentException("The engine asset path is invalid.", nameof(value));
+        if (RenderNodeSchema.IsRenderNode(node.Definition) &&
+            RenderNodeSchema.Read(GraphNodeDefinition.All.Single(item => item.Kind == node.Definition.Kind), node.Parameters)
+                .FirstOrDefault(parameter => parameter.Id == id && parameter.Kind == "texture") is not null &&
+            value.ValueKind == JsonValueKind.String &&
+            value.GetString() is { Length: > 0 } texturePath &&
+            !RenderNodeSchema.IsSafeAssetPath(texturePath))
+            throw new ArgumentException("The texture parameter must use a safe engine asset path.", nameof(value));
         if (NodeParameter.ValuesEqual(node.GetParameterValue(definition), value)) return;
         var parameters = node.Parameters?.ToList() ?? [];
         var index = parameters.FindIndex(parameter => parameter.Id == id);
@@ -1148,6 +1180,67 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         if (index < 0) parameters.Add(updated);
         else parameters[index] = updated;
         _history.Execute(new SetNodeParametersCommand(node, node.Parameters, parameters.AsReadOnly(), definition.Name));
+    }
+
+    public void AssignRenderAsset(GraphNodeViewModel node, EngineAsset asset)
+    {
+        ArgumentNullException.ThrowIfNull(asset);
+        if (!Nodes.Contains(node) || !RenderNodeSchema.IsRenderNode(node.Definition))
+            throw new InvalidOperationException("Select a model or sprite render node.");
+        var assetPath = RenderNodeSchema.IsSafeAssetPath(asset.Path)
+            ? asset.Path
+            : throw new ArgumentException("The engine asset path is invalid.", nameof(asset));
+        var schema = RenderNodeSchema.Encode(asset);
+        var pathDefinition = node.Definition.Parameters.FirstOrDefault(parameter => parameter.Id == "assetPath")
+            ?? throw new InvalidOperationException("The render node does not define an asset path.");
+        var schemaDefinition = node.Definition.Parameters.FirstOrDefault(parameter => parameter.Id == "materialSchema")
+            ?? throw new InvalidOperationException("The render node does not define a material schema.");
+
+        var values = node.Parameters?.ToList() ?? [];
+        var oldSchema = node.Parameters?.FirstOrDefault(parameter =>
+            parameter.Id == schemaDefinition.Id && parameter.Type == schemaDefinition.Type)?.Value
+            ?? schemaDefinition.DefaultValue;
+        var oldIds = RenderNodeSchema.Describe(oldSchema.ValueKind == JsonValueKind.String
+            ? oldSchema.GetString() : "[]").Select(parameter => parameter.Id).ToHashSet(StringComparer.Ordinal);
+        var newIds = RenderNodeSchema.Describe(schema).Select(parameter => parameter.Id).ToHashSet(StringComparer.Ordinal);
+        values.RemoveAll(parameter => oldIds.Contains(parameter.Id) && !newIds.Contains(parameter.Id));
+        SetValue(values, pathDefinition.Id, pathDefinition.Type, JsonSerializer.SerializeToElement(assetPath));
+        SetValue(values, schemaDefinition.Id, schemaDefinition.Type, JsonSerializer.SerializeToElement(schema));
+
+        var updated = values.AsReadOnly();
+        var newDefinition = RenderNodeSchema.Effective(
+            GraphNodeDefinition.All.Single(definition => definition.Kind == node.Definition.Kind), updated);
+        var commands = new List<IUndoableCommand>();
+        if (!ParameterSnapshotsEqual(node.Parameters, updated))
+            commands.Add(new SetNodeParametersCommand(node, node.Parameters, updated, "engine asset"));
+        foreach (var connection in Connections.Where(connection => connection.Target == node).ToArray())
+        {
+            var sourceType = connection.Source.Definition.GetOutputPortType(connection.SourcePortId);
+            var targetType = newDefinition.GetInputPortType(connection.TargetPortId);
+            var sourceCategory = connection.Source.Definition.GetOutputPortCategory(connection.SourcePortId);
+            var targetCategory = newDefinition.GetInputPortCategory(connection.TargetPortId);
+            var validPort = newDefinition.InputPorts?.Any(port => port.Id == connection.TargetPortId) == true;
+            if (!validPort || sourceType is null || sourceType != targetType || sourceCategory != targetCategory)
+                commands.Add(new RemoveGraphConnectionCommand(this, connection));
+        }
+        if (commands.Count != 0)
+            _history.Execute(new CompositeUndoableCommand("Assign engine asset", commands));
+
+        static void SetValue(List<NodeParameterSnapshot> parameters, string id, string type, JsonElement value)
+        {
+            var index = parameters.FindIndex(parameter => parameter.Id == id);
+            var item = new NodeParameterSnapshot(id, type, value.Clone());
+            if (index < 0) parameters.Add(item);
+            else parameters[index] = item;
+        }
+
+        static bool ParameterSnapshotsEqual(
+            IReadOnlyList<NodeParameterSnapshot>? left,
+            IReadOnlyList<NodeParameterSnapshot> right) =>
+            left is not null && left.Count == right.Count &&
+            left.Zip(right).All(pair => pair.First.Id == pair.Second.Id && pair.First.Type == pair.Second.Type &&
+                NodeParameter.ValuesEqual(pair.First.Value, pair.Second.Value)) ||
+            left is null && right.Count == 0;
     }
 
     internal void SetCommentSize(GraphNodeViewModel node, double width, double height)
@@ -1242,10 +1335,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     {
         if (specification.Kind == GraphNodeKind.GraphGroup && _graphPath.Count >= MaxGraphDepth)
             throw new ArgumentException("The graph hierarchy has reached its maximum depth.");
-        if (!AvailableNodeDefinitions.Any(item => item.Kind == specification.Kind))
-        {
-            throw new ArgumentException($"Unsupported node kind '{specification.Kind}'.");
-        }
+        var definition = AvailableNodeDefinitions.FirstOrDefault(item => item.Kind == specification.Kind)
+            ?? throw new ArgumentException($"Unsupported node kind '{specification.Kind}'.");
 
         if (string.IsNullOrWhiteSpace(specification.Name))
         {
@@ -1257,13 +1348,13 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             throw new ArgumentException("Node positions must be finite numbers.");
         }
 
-        var definition = GraphNodeDefinition.All.Single(item => item.Kind == specification.Kind);
         return new GraphNodeViewModel(
             this,
             definition,
             specification.Name,
             specification.X,
-            specification.Y);
+            specification.Y,
+            parameters: specification.Parameters);
     }
 
     private void DeleteSelectedNode()
