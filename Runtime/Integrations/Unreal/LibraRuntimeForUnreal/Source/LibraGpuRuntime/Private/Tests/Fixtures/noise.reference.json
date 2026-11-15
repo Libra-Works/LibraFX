@@ -1,0 +1,471 @@
+{
+  "floatTolerance": 0.0002,
+  "finiteDifferenceEpsilon": 0.001,
+  "divergenceTolerance": 0.006,
+  "cases": [
+    {
+      "label": "origin",
+      "inputPosition": [
+        0,
+        0,
+        0
+      ],
+      "seed": 0,
+      "expectedPosition": [
+        -0.041666668,
+        -0.020833334,
+        0
+      ],
+      "expectedVelocity": [
+        0,
+        0,
+        0
+      ],
+      "expectedColor": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "expectedSize": [
+        0,
+        0
+      ]
+    },
+    {
+      "label": "positive",
+      "inputPosition": [
+        0.23,
+        0.41,
+        0.67
+      ],
+      "seed": 0,
+      "expectedPosition": [
+        -0.068897925,
+        0.01578274,
+        -0.011538324
+      ],
+      "expectedVelocity": [
+        0.022512292,
+        0.019151228,
+        0.12868334
+      ],
+      "expectedColor": [
+        0.2545718,
+        0.021111485,
+        0.15668114,
+        1
+      ],
+      "expectedSize": [
+        0.022512292,
+        0.022512292
+      ]
+    },
+    {
+      "label": "negative",
+      "inputPosition": [
+        -1.23,
+        0.41,
+        -0.67
+      ],
+      "seed": 7,
+      "expectedPosition": [
+        0.057772968,
+        -0.01072745,
+        -0.0060872138
+      ],
+      "expectedVelocity": [
+        0.11216354,
+        0.016944202,
+        0.14915039
+      ],
+      "expectedColor": [
+        -0.114020124,
+        0.006315045,
+        0.1388115,
+        1
+      ],
+      "expectedSize": [
+        -0.08820072,
+        0.08820072
+      ]
+    },
+    {
+      "label": "seed_max",
+      "inputPosition": [
+        0.23,
+        0.41,
+        0.67
+      ],
+      "seed": 4294967295,
+      "expectedPosition": [
+        0.016342763,
+        -0.041835643,
+        0.025472
+      ],
+      "expectedVelocity": [
+        -0.17292815,
+        -0.1960735,
+        0.1960735
+      ],
+      "expectedColor": [
+        0.022512292,
+        -0.09749699,
+        0.2212097,
+        1
+      ],
+      "expectedSize": [
+        -0.21633527,
+        0.21633527
+      ]
+    },
+    {
+      "label": "seed_one",
+      "inputPosition": [
+        0.23,
+        0.41,
+        0.67
+      ],
+      "seed": 1,
+      "expectedPosition": [
+        0.006014338,
+        0.024266778,
+        -0.013537379
+      ],
+      "expectedVelocity": [
+        0.2545718,
+        -0.12605886,
+        0.28939724
+      ],
+      "expectedColor": [
+        -0.11225843,
+        0.0013251398,
+        0.19107984,
+        1
+      ],
+      "expectedSize": [
+        -0.3272199,
+        0.3272199
+      ]
+    },
+    {
+      "label": "lattice_boundary",
+      "inputPosition": [
+        -0.0001,
+        0.23,
+        0.47
+      ],
+      "seed": 3,
+      "expectedPosition": [
+        -0.035073638,
+        -0.00052274234,
+        0.023496391
+      ],
+      "expectedVelocity": [
+        -0.23739365,
+        0.19352956,
+        0.19909084
+      ],
+      "expectedColor": [
+        -0.12631935,
+        0.116633624,
+        0.14540839,
+        1
+      ],
+      "expectedSize": [
+        0.31098545,
+        0.31098545
+      ]
+    },
+    {
+      "label": "beyond_octave8",
+      "inputPosition": [
+        8193,
+        0.23,
+        0.47
+      ],
+      "seed": 0,
+      "expectedPosition": [
+        0.0011917053,
+        -0.02144625,
+        -0.019002203
+      ],
+      "expectedVelocity": [
+        0.11322024,
+        0.14102955,
+        0.14102955
+      ],
+      "expectedColor": [
+        0.00399895,
+        0,
+        0,
+        1
+      ],
+      "expectedSize": [
+        0.11322024,
+        0.11322024
+      ]
+    },
+    {
+      "label": "outside_domain",
+      "inputPosition": [
+        1048577,
+        0,
+        0
+      ],
+      "seed": 0,
+      "expectedPosition": [
+        0,
+        0,
+        0
+      ],
+      "expectedVelocity": [
+        0,
+        0,
+        0
+      ],
+      "expectedColor": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "expectedSize": [
+        0,
+        0
+      ]
+    },
+    {
+      "label": "computed_overflow",
+      "inputPosition": [
+        2,
+        3,
+        4
+      ],
+      "seed": 9,
+      "expectedPosition": [
+        0.0625,
+        0,
+        0
+      ],
+      "expectedVelocity": [
+        0,
+        0,
+        0
+      ],
+      "expectedColor": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "expectedSize": [
+        0,
+        0
+      ]
+    },
+    {
+      "label": "divergence_center",
+      "inputPosition": [
+        0.123,
+        0.456,
+        -0.789
+      ],
+      "seed": 7,
+      "expectedPosition": [
+        0.016379524,
+        -0.0136037,
+        -0.017177317
+      ],
+      "expectedVelocity": [
+        0.017890273,
+        -0.113340616,
+        0.11511368
+      ],
+      "expectedColor": [
+        0.37306023,
+        -0.092122726,
+        0.18895882,
+        1
+      ],
+      "expectedSize": [
+        0.0015514403,
+        0.0015514403
+      ]
+    },
+    {
+      "label": "divergence_plus_x",
+      "inputPosition": [
+        0.124000005,
+        0.456,
+        -0.789
+      ],
+      "seed": 7,
+      "expectedPosition": [
+        0.016597133,
+        -0.013788738,
+        -0.01733956
+      ],
+      "expectedVelocity": [
+        0.018120138,
+        -0.11299544,
+        0.114816085
+      ],
+      "expectedColor": [
+        0.3728404,
+        -0.09856666,
+        0.19492222,
+        1
+      ],
+      "expectedSize": [
+        0.0015930611,
+        0.0015930611
+      ]
+    },
+    {
+      "label": "divergence_minus_x",
+      "inputPosition": [
+        0.122,
+        0.456,
+        -0.789
+      ],
+      "seed": 7,
+      "expectedPosition": [
+        0.016162008,
+        -0.013425525,
+        -0.017005313
+      ],
+      "expectedVelocity": [
+        0.017663715,
+        -0.11367507,
+        0.11540102
+      ],
+      "expectedColor": [
+        0.37327704,
+        -0.08588629,
+        0.18312134,
+        1
+      ],
+      "expectedSize": [
+        0.0015102045,
+        0.0015102045
+      ]
+    },
+    {
+      "label": "divergence_plus_y",
+      "inputPosition": [
+        0.123,
+        0.457,
+        -0.789
+      ],
+      "seed": 7,
+      "expectedPosition": [
+        0.016256956,
+        -0.013772945,
+        -0.017286992
+      ],
+      "expectedVelocity": [
+        0.017096313,
+        -0.11391942,
+        0.11488217
+      ],
+      "expectedColor": [
+        0.37317857,
+        -0.08559492,
+        0.18094707,
+        1
+      ],
+      "expectedSize": [
+        0.0008424116,
+        0.0008424116
+      ]
+    },
+    {
+      "label": "divergence_minus_y",
+      "inputPosition": [
+        0.123,
+        0.455,
+        -0.789
+      ],
+      "seed": 7,
+      "expectedPosition": [
+        0.016505081,
+        -0.013434211,
+        -0.017065786
+      ],
+      "expectedVelocity": [
+        0.018683702,
+        -0.11275265,
+        0.11533612
+      ],
+      "expectedColor": [
+        0.37293828,
+        -0.08642089,
+        0.18446761,
+        1
+      ],
+      "expectedSize": [
+        0.0022605427,
+        0.0022605427
+      ]
+    },
+    {
+      "label": "divergence_plus_z",
+      "inputPosition": [
+        0.123,
+        0.456,
+        -0.788
+      ],
+      "seed": 7,
+      "expectedPosition": [
+        0.01643092,
+        -0.013941515,
+        -0.017224804
+      ],
+      "expectedVelocity": [
+        0.017697902,
+        -0.1140675,
+        0.1155254
+      ],
+      "expectedColor": [
+        0.37371534,
+        -0.0887346,
+        0.18853782,
+        1
+      ],
+      "expectedSize": [
+        0.0012756573,
+        0.0012756573
+      ]
+    },
+    {
+      "label": "divergence_minus_z",
+      "inputPosition": [
+        0.123,
+        0.456,
+        -0.78999996
+      ],
+      "seed": 7,
+      "expectedPosition": [
+        0.016328203,
+        -0.013264256,
+        -0.017128399
+      ],
+      "expectedVelocity": [
+        0.018080493,
+        -0.112607725,
+        0.114692286
+      ],
+      "expectedColor": [
+        0.3724053,
+        -0.09454022,
+        0.18820085,
+        1
+      ],
+      "expectedSize": [
+        0.0018239925,
+        0.0018239925
+      ]
+    }
+  ]
+}

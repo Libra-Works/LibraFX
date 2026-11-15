@@ -1,0 +1,1389 @@
+{
+  "absoluteTolerance": 0.0002,
+  "relativeTolerance": 0.0001,
+  "cases": [
+    {
+      "kernelId": "abs",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        2.5,
+        1.5,
+        0.25,
+        4
+      ]
+    },
+    {
+      "kernelId": "abs",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        1,
+        2,
+        0.5
+      ]
+    },
+    {
+      "kernelId": "abs",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        100,
+        1E+30,
+        1E+30,
+        0
+      ]
+    },
+    {
+      "kernelId": "floor",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        -3,
+        -2,
+        0,
+        4
+      ]
+    },
+    {
+      "kernelId": "floor",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        1,
+        2,
+        0
+      ]
+    },
+    {
+      "kernelId": "floor",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ]
+    },
+    {
+      "kernelId": "ceil",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        -2,
+        -1,
+        1,
+        4
+      ]
+    },
+    {
+      "kernelId": "ceil",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        1,
+        2,
+        1
+      ]
+    },
+    {
+      "kernelId": "ceil",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ]
+    },
+    {
+      "kernelId": "round",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        -2,
+        -2,
+        0,
+        4
+      ]
+    },
+    {
+      "kernelId": "round",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        1,
+        2,
+        0
+      ]
+    },
+    {
+      "kernelId": "round",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ]
+    },
+    {
+      "kernelId": "frac",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0.5,
+        0.5,
+        0.25,
+        0
+      ]
+    },
+    {
+      "kernelId": "frac",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        0,
+        0,
+        0.5
+      ]
+    },
+    {
+      "kernelId": "frac",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "kernelId": "mod",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        -0,
+        -1.5,
+        0.25,
+        0
+      ]
+    },
+    {
+      "kernelId": "mod",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "kernelId": "mod",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        0,
+        -0,
+        0
+      ]
+    },
+    {
+      "kernelId": "sign",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        -1,
+        -1,
+        1,
+        1
+      ]
+    },
+    {
+      "kernelId": "sign",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "kernelId": "sign",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        1,
+        1,
+        -1,
+        0
+      ]
+    },
+    {
+      "kernelId": "pow",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        2.25,
+        16,
+        1
+      ]
+    },
+    {
+      "kernelId": "pow",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        1,
+        0.25,
+        1
+      ]
+    },
+    {
+      "kernelId": "pow",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        10,
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "kernelId": "sqrt",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        0,
+        0.5,
+        2
+      ]
+    },
+    {
+      "kernelId": "sqrt",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        1,
+        1.4142135,
+        0.70710677
+      ]
+    },
+    {
+      "kernelId": "sqrt",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        10,
+        1E+15,
+        0,
+        0
+      ]
+    },
+    {
+      "kernelId": "exp",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0.082085,
+        0.22313017,
+        1.2840254,
+        54.59815
+      ]
+    },
+    {
+      "kernelId": "exp",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        1,
+        2.7182817,
+        7.389056,
+        1.6487212
+      ]
+    },
+    {
+      "kernelId": "exp",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "kernelId": "log",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        0,
+        -1.3862944,
+        1.3862944
+      ]
+    },
+    {
+      "kernelId": "log",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        0,
+        0.6931472,
+        -0.6931472
+      ]
+    },
+    {
+      "kernelId": "log",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        4.6051702,
+        69.07755,
+        0,
+        0
+      ]
+    },
+    {
+      "kernelId": "lerp",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        -1.75,
+        -0.625,
+        -0.3125,
+        3
+      ]
+    },
+    {
+      "kernelId": "lerp",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0.125,
+        1.25,
+        1,
+        0.375
+      ]
+    },
+    {
+      "kernelId": "lerp",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        75.125,
+        7.5000005E+29,
+        -7.5000005E+29,
+        0
+      ]
+    },
+    {
+      "kernelId": "smoothstep",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        0,
+        0.68359375,
+        1
+      ]
+    },
+    {
+      "kernelId": "smoothstep",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0.5,
+        1,
+        1,
+        0.84375
+      ]
+    },
+    {
+      "kernelId": "smoothstep",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        1,
+        1,
+        0,
+        0.5
+      ]
+    },
+    {
+      "kernelId": "remap",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        -7.5,
+        -2.5,
+        6.25,
+        25
+      ]
+    },
+    {
+      "kernelId": "remap",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        5,
+        10,
+        15,
+        7.5
+      ]
+    },
+    {
+      "kernelId": "remap",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        505,
+        5E+30,
+        -5E+30,
+        5
+      ]
+    },
+    {
+      "kernelId": "dot",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Rotation",
+      "expected": [
+        32
+      ]
+    },
+    {
+      "kernelId": "dot",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Rotation",
+      "expected": [
+        32
+      ]
+    },
+    {
+      "kernelId": "dot",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Rotation",
+      "expected": [
+        32
+      ]
+    },
+    {
+      "kernelId": "cross",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Position",
+      "expected": [
+        -3,
+        6,
+        -3
+      ]
+    },
+    {
+      "kernelId": "cross",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Position",
+      "expected": [
+        -3,
+        6,
+        -3
+      ]
+    },
+    {
+      "kernelId": "cross",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Position",
+      "expected": [
+        -3,
+        6,
+        -3
+      ]
+    },
+    {
+      "kernelId": "distance",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Rotation",
+      "expected": [
+        5.196152
+      ]
+    },
+    {
+      "kernelId": "distance",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Rotation",
+      "expected": [
+        5.196152
+      ]
+    },
+    {
+      "kernelId": "distance",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Rotation",
+      "expected": [
+        5.196152
+      ]
+    },
+    {
+      "kernelId": "saturate",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        -2.5,
+        -1.5,
+        0.25,
+        4
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        0,
+        0.25,
+        1
+      ]
+    },
+    {
+      "kernelId": "saturate",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        0,
+        1,
+        2,
+        0.5
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        0,
+        1,
+        1,
+        0.5
+      ]
+    },
+    {
+      "kernelId": "saturate",
+      "inputPosition": [
+        1,
+        2,
+        3
+      ],
+      "inputVelocity": [
+        4,
+        5,
+        6
+      ],
+      "inputColor": [
+        100,
+        1E+30,
+        -1E+30,
+        -0
+      ],
+      "outputAttribute": "Color",
+      "expected": [
+        1,
+        1,
+        0,
+        -0
+      ]
+    }
+  ]
+}

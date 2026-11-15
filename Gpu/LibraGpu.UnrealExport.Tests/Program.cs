@@ -51,3 +51,24 @@ try
 }
 catch (NotSupportedException) { }
 Console.WriteLine("PASS Unreal source bundle");
+
+if (args.Length == 4 && args[0] == "--ue-fixtures")
+{
+    var sourceDirectory = args[1];
+    var destinationDirectory = args[2];
+    Directory.CreateDirectory(destinationDirectory);
+    foreach (var name in new[] { "math", "noise", "noiseguards" })
+    {
+        var fixtureProgram = GpuCompiler.Parse(File.ReadAllText(Path.Combine(sourceDirectory, name + ".json")));
+        var fixture = UnrealGpuExporter.Compile(fixtureProgram, new Dictionary<string, string>());
+        File.WriteAllText(Path.Combine(destinationDirectory, name + ".lfxgpu"), UnrealGpuExporter.Serialize(fixture));
+        var reference = Path.Combine(sourceDirectory, name + ".reference.json");
+        if (File.Exists(reference))
+            File.Copy(reference, Path.Combine(destinationDirectory, name + ".reference.json"), overwrite: true);
+    }
+    var support = GpuShaderSupport.EmitHlslInclude();
+    File.WriteAllText(args[3], support, new System.Text.UTF8Encoding(false));
+    File.WriteAllText(Path.Combine(destinationDirectory, "LibraGpuSupport.hlsl"), support, new System.Text.UTF8Encoding(false));
+    Check(File.ReadAllText(args[3]) == support, "Owned UE helper must match canonical Core helper.");
+    Console.WriteLine("PASS Generated canonical UE new-op fixtures and exact shared helper");
+}

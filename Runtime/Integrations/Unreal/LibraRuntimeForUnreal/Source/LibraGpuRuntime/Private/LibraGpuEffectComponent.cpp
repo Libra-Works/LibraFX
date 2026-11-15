@@ -151,6 +151,9 @@ struct FLibraGpuState
     TRefCountPtr<FRDGPooledBuffer> Particles;
     TRefCountPtr<FRDGPooledBuffer> Registers;
     TArray<TRefCountPtr<FRDGPooledBuffer>> Programs;
+#if WITH_DEV_AUTOMATION_TESTS
+    TArray<uint8> TestInitialParticles;
+#endif
 
     void Dispatch(FRHICommandListImmediate& commandList, const FLibraGpuFrame& frame)
     {
@@ -159,9 +162,17 @@ struct FLibraGpuState
         FRDGBufferRef registers;
         if (!Particles)
         {
-            particles = graph.CreateBuffer(FRDGBufferDesc::CreateStructuredDesc(80, Capacity), TEXT("LibraGpu.Particles"));
+#if WITH_DEV_AUTOMATION_TESTS
+            if (TestInitialParticles.Num() == Capacity * 80)
+                particles = CreateStructuredBuffer(graph, TEXT("LibraGpu.TestParticles"), 80, Capacity,
+                    TestInitialParticles.GetData(), TestInitialParticles.Num());
+            else
+#endif
+            {
+                particles = graph.CreateBuffer(FRDGBufferDesc::CreateStructuredDesc(80, Capacity), TEXT("LibraGpu.Particles"));
+                AddClearUAVPass(graph, graph.CreateUAV(particles), 0);
+            }
             registers = graph.CreateBuffer(FRDGBufferDesc::CreateStructuredDesc(16, FMath::Max(1u, uint32(Capacity) * MaximumRegisters)), TEXT("LibraGpu.Registers"));
-            AddClearUAVPass(graph, graph.CreateUAV(particles), 0);
             Particles = graph.ConvertToExternalBuffer(particles);
             Registers = graph.ConvertToExternalBuffer(registers);
             Programs.Reserve(Kernels.Num());
@@ -482,7 +493,13 @@ bool ULibraGpuEffectComponent::VerifyGpuSmoke(FString& report)
 #endif
 
 #if WITH_DEV_AUTOMATION_TESTS
+#include "Dom/JsonObject.h"
+#include "Interfaces/IPluginManager.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 
 namespace
 {
@@ -670,6 +687,229 @@ bool FLibraGpuBillboardReadbackTest::RunTest(const FString& parameters)
     TestTrue(TEXT("GPU billboard vertex/pixel pipeline produced framebuffer pixels"), litPixels[0] > 512);
     TestEqual(TEXT("Dead particles produce no framebuffer pixels"), litPixels[1], 0);
     AddInfo(FString::Printf(TEXT("GPU framebuffer proof: live=%d dead=%d nonblack pixels"), litPixels[0], litPixels[1]));
+    return true;
+}
+
+namespace
+{
+FString LibraGpuFixturePath(const FString& name)
+{
+    auto plugin = IPluginManager::Get().FindPlugin(TEXT("LibraRuntimeForUnreal"));
+    return plugin ? FPaths::Combine(plugin->GetBaseDir(),
+        TEXT("Source/LibraGpuRuntime/Private/Tests/Fixtures"), name) : FString();
+}
+
+TSharedPtr<FJsonObject> LibraGpuReadReference(const FString& name)
+{
+    FString text;
+    TSharedPtr<FJsonObject> result;
+    if (FFileHelper::LoadFileToString(text, *LibraGpuFixturePath(name)))
+        FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(text), result);
+    return result;
+}
+
+ULibraGpuEffectAsset* LibraGpuReadFixture(const FString& name, FString& error)
+{
+    FString text;
+    if (!FFileHelper::LoadFileToString(text, *LibraGpuFixturePath(name + TEXT(".lfxgpu"))))
+    {
+        error = TEXT("Missing generated canonical UE GPU fixture.");
+        return nullptr;
+    }
+    auto asset = NewObject<ULibraGpuEffectAsset>();
+    return asset->ImportBundle(text, error) ? asset : nullptr;
+}
+
+FVector4f LibraGpuReferenceVector(const TSharedPtr<FJsonObject>& object, const FString& field,
+    FVector4f fallback = FVector4f(0, 0, 0, 0))
+{
+    const TArray<TSharedPtr<FJsonValue>>* values = nullptr;
+    if (!object->TryGetArrayField(field, values)) return fallback;
+    auto result = fallback;
+    for (auto i = 0; i < FMath::Min(values->Num(), 4); ++i) result[i] = float((*values)[i]->AsNumber());
+    return result;
+}
+
+FTestParticle LibraGpuReferenceInput(const TSharedPtr<FJsonObject>& reference)
+{
+    FTestParticle result;
+    result.PositionAge = LibraGpuReferenceVector(reference, TEXT("inputPosition"));
+    result.VelocityLifetime = LibraGpuReferenceVector(reference, TEXT("inputVelocity"));
+    result.VelocityLifetime.W = 1000;
+    result.Color = LibraGpuReferenceVector(reference, TEXT("inputColor"), FVector4f(1, 1, 1, 1));
+    result.SizeRotation = FVector4f(1, 1, 0, 0);
+    double seed = 0;
+    reference->TryGetNumberField(TEXT("seed"), seed);
+    result.SeedAlive = FUintVector4(uint32(seed), 1, 0, 0);
+    return result;
+}
+
+bool LibraGpuEvaluateReferences(ULibraGpuEffectAsset* asset, const FString& kernelId,
+    const TArray<FTestParticle>& inputs, TArray<FTestParticle>& outputs)
+{
+    auto kernel = asset->GetKernels().FindByPredicate([&kernelId](const FLibraGpuKernelPacket& packet) { return packet.Id == kernelId; });
+    if (!kernel || inputs.IsEmpty()) return false;
+    auto state = MakeShared<FLibraGpuState, ESPMode::ThreadSafe>();
+    state->Capacity = inputs.Num();
+    state->Kernels.Add(*kernel);
+    state->MaximumRegisters = ComponentPacketWord(kernel->Bytes, 16);
+    FLibraGpuFlowStep step;
+    step.Kind = kernel->bUpdate ? TEXT("Update") : TEXT("Spawn");
+    step.Index = 0;
+    state->Flow.Add(step);
+    state->TestInitialParticles.SetNumUninitialized(inputs.Num() * sizeof(FTestParticle));
+    FMemory::Memcpy(state->TestInitialParticles.GetData(), inputs.GetData(), state->TestInitialParticles.Num());
+    outputs.SetNum(inputs.Num());
+    auto copied = false;
+    ENQUEUE_RENDER_COMMAND(LibraGpuReferenceReadback)([state, &outputs, &copied](FRHICommandListImmediate& commandList)
+    {
+        FLibraGpuFrame frame;
+        state->Dispatch(commandList, frame);
+        FRHIGPUBufferReadback readback(TEXT("LibraGpu.CanonicalReference"));
+        FRDGBuilder graph(commandList);
+        auto bytes = outputs.Num() * sizeof(FTestParticle);
+        AddEnqueueCopyPass(graph, &readback, graph.RegisterExternalBuffer(state->Particles), bytes);
+        graph.Execute();
+        commandList.SubmitAndBlockUntilGPUIdle();
+        if (!readback.IsReady()) return;
+        auto data = readback.Lock(bytes);
+        if (data)
+        {
+            FMemory::Memcpy(outputs.GetData(), data, bytes);
+            copied = true;
+        }
+        readback.Unlock();
+    });
+    FlushRenderingCommands();
+    return copied;
+}
+
+bool LibraGpuReferenceClose(FAutomationTestBase& test, const FString& label, const FVector4f& actual,
+    const FVector4f& expected, int32 components, float absolute, float relative = 0)
+{
+    auto passed = true;
+    for (auto i = 0; i < components; ++i)
+        passed &= test.TestTrue(FString::Printf(TEXT("%s lane%d actual=%.9g expected=%.9g"), *label, i, actual[i], expected[i]),
+            FMath::IsFinite(actual[i]) && FMath::Abs(actual[i] - expected[i]) <= absolute + relative * FMath::Abs(expected[i]));
+    return passed;
+}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraGpuExtendedMathTest,
+    "Libra.GPU.Compute.ExtendedMathCanonicalReferences",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraGpuExtendedMathTest::RunTest(const FString& parameters)
+{
+    if (GUsingNullRHI || GMaxRHIFeatureLevel < ERHIFeatureLevel::SM5) { AddError(TEXT("Real SM5 GPU required.")); return false; }
+    FString error;
+    auto asset = LibraGpuReadFixture(TEXT("math"), error);
+    auto reference = LibraGpuReadReference(TEXT("math.reference.json"));
+    if (!asset || !reference) { AddError(FString::Printf(TEXT("Canonical math fixture unavailable: %s"), *error)); return false; }
+    auto absolute = float(reference->GetNumberField(TEXT("absoluteTolerance")));
+    auto relative = float(reference->GetNumberField(TEXT("relativeTolerance")));
+    TMap<FString, TArray<TSharedPtr<FJsonObject>>> groups;
+    for (const auto& value : reference->GetArrayField(TEXT("cases")))
+    {
+        auto item = value->AsObject();
+        groups.FindOrAdd(item->GetStringField(TEXT("kernelId"))).Add(item);
+    }
+    auto compared = 0;
+    for (const auto& group : groups)
+    {
+        TArray<FTestParticle> inputs, outputs;
+        for (const auto& item : group.Value) inputs.Add(LibraGpuReferenceInput(item));
+        if (!LibraGpuEvaluateReferences(asset, group.Key, inputs, outputs))
+        {
+            AddError(FString::Printf(TEXT("GPU reference dispatch failed: %s"), *group.Key));
+            return false;
+        }
+        for (auto i = 0; i < outputs.Num(); ++i)
+        {
+            auto target = group.Value[i]->GetStringField(TEXT("outputAttribute"));
+            FVector4f actual(0, 0, 0, 0);
+            auto components = 4;
+            if (target == TEXT("Color")) actual = outputs[i].Color;
+            else if (target == TEXT("Position")) { actual = outputs[i].PositionAge; components = 3; }
+            else if (target == TEXT("Rotation")) { actual.X = outputs[i].SizeRotation.Z; components = 1; }
+            else { AddError(TEXT("Unknown canonical math output attribute.")); return false; }
+            LibraGpuReferenceClose(*this, group.Key, actual, LibraGpuReferenceVector(group.Value[i], TEXT("expected")),
+                components, absolute, relative);
+            TestEqual(TEXT("Math output remains alive"), outputs[i].SeedAlive.Y, 1u);
+            ++compared;
+        }
+    }
+    AddInfo(FString::Printf(TEXT("Canonical GPU math proof: %d cases across %d kernels"), compared, groups.Num()));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraGpuNoiseReferenceTest,
+    "Libra.GPU.Compute.NoiseCanonicalReferencesAndCurlDivergence",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraGpuNoiseReferenceTest::RunTest(const FString& parameters)
+{
+    if (GUsingNullRHI || GMaxRHIFeatureLevel < ERHIFeatureLevel::SM5) { AddError(TEXT("Real SM5 GPU required.")); return false; }
+    FString error;
+    auto asset = LibraGpuReadFixture(TEXT("noise"), error);
+    auto reference = LibraGpuReadReference(TEXT("noise.reference.json"));
+    if (!asset || !reference) { AddError(FString::Printf(TEXT("Canonical noise fixture unavailable: %s"), *error)); return false; }
+    const auto& cases = reference->GetArrayField(TEXT("cases"));
+    TArray<FTestParticle> inputs, outputs;
+    for (const auto& value : cases) inputs.Add(LibraGpuReferenceInput(value->AsObject()));
+    if (!LibraGpuEvaluateReferences(asset, TEXT("noise"), inputs, outputs)) { AddError(TEXT("GPU noise dispatch failed.")); return false; }
+    auto tolerance = float(reference->GetNumberField(TEXT("floatTolerance")));
+    TMap<FString, FVector3f> curl;
+    for (auto i = 0; i < cases.Num(); ++i)
+    {
+        auto item = cases[i]->AsObject();
+        auto label = item->GetStringField(TEXT("label"));
+        LibraGpuReferenceClose(*this, label + TEXT(".curl"), outputs[i].PositionAge,
+            LibraGpuReferenceVector(item, TEXT("expectedPosition")), 3, tolerance);
+        LibraGpuReferenceClose(*this, label + TEXT(".velocity"), outputs[i].VelocityLifetime,
+            LibraGpuReferenceVector(item, TEXT("expectedVelocity")), 3, tolerance);
+        LibraGpuReferenceClose(*this, label + TEXT(".color"), outputs[i].Color,
+            LibraGpuReferenceVector(item, TEXT("expectedColor")), 4, tolerance);
+        LibraGpuReferenceClose(*this, label + TEXT(".size"), outputs[i].SizeRotation,
+            LibraGpuReferenceVector(item, TEXT("expectedSize")), 2, tolerance);
+        TestEqual(TEXT("Noise retains live finite particle"), outputs[i].SeedAlive.Y, 1u);
+        curl.Add(label, FVector3f(outputs[i].PositionAge.X, outputs[i].PositionAge.Y, outputs[i].PositionAge.Z));
+    }
+    auto h = float(reference->GetNumberField(TEXT("finiteDifferenceEpsilon")));
+    auto divergence = ((curl[TEXT("divergence_plus_x")].X - curl[TEXT("divergence_minus_x")].X) +
+        (curl[TEXT("divergence_plus_y")].Y - curl[TEXT("divergence_minus_y")].Y) +
+        (curl[TEXT("divergence_plus_z")].Z - curl[TEXT("divergence_minus_z")].Z)) / (2 * h);
+    TestTrue(TEXT("Analytic GPU curl field has near-zero central divergence"),
+        FMath::IsFinite(divergence) && FMath::Abs(divergence) <= reference->GetNumberField(TEXT("divergenceTolerance")));
+    TestTrue(TEXT("Noise seed variation is observable"), !curl[TEXT("positive")].Equals(curl[TEXT("seed_one")], tolerance));
+
+    auto guards = LibraGpuReadFixture(TEXT("noiseguards"), error);
+    if (!guards) { AddError(error); return false; }
+    TArray<FTestParticle> guardInput = {LibraGpuReferenceInput(cases[0]->AsObject())};
+    TArray<FTestParticle> guardOutput;
+    if (!LibraGpuEvaluateReferences(guards, TEXT("noiseGuards"), guardInput, guardOutput)) return false;
+    LibraGpuReferenceClose(*this, TEXT("Computed invalid noise parameters return zero position"), guardOutput[0].PositionAge,
+        FVector4f(0, 0, 0, 0), 3, tolerance);
+    LibraGpuReferenceClose(*this, TEXT("Computed invalid noise parameters return zero velocity"), guardOutput[0].VelocityLifetime,
+        FVector4f(0, 0, 0, 0), 3, tolerance);
+    TestEqual(TEXT("Guarded noise result stays alive"), guardOutput[0].SeedAlive.Y, 1u);
+    AddInfo(FString::Printf(TEXT("Canonical GPU noise proof: %d cases, curl divergence=%.9g"), cases.Num(), divergence));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraGpuSharedSupportTest,
+    "Libra.GPU.Assets.CanonicalSharedShaderSupport",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraGpuSharedSupportTest::RunTest(const FString& parameters)
+{
+    auto plugin = IPluginManager::Get().FindPlugin(TEXT("LibraRuntimeForUnreal"));
+    if (!plugin) return false;
+    TArray<uint8> actual, canonical;
+    auto loaded = FFileHelper::LoadFileToArray(actual, *FPaths::Combine(plugin->GetBaseDir(), TEXT("Shaders/Private/LibraGpuSupport.ush"))) &&
+        FFileHelper::LoadFileToArray(canonical, *LibraGpuFixturePath(TEXT("LibraGpuSupport.hlsl")));
+    TestTrue(TEXT("Shared helper fixtures exist"), loaded);
+    TestTrue(TEXT("UE helper is byte-identical to the canonical Core export"), loaded && actual == canonical);
     return true;
 }
 #endif

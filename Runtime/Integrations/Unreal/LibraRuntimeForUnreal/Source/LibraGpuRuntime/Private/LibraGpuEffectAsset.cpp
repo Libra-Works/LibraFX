@@ -67,13 +67,18 @@ bool ValidatePacket(const FLibraGpuKernelPacket& packet, int32 capacity, FString
             Word(bytes, base + 16), Word(bytes, base + 28)};
         auto type = Word(bytes, base + 20);
         auto aux = Word(bytes, base + 24);
-        if (op > 18 || type > 6) return fail(TEXT("Unknown GPU opcode or type."));
+        if (op > 40 || type > 6) return fail(TEXT("Unknown GPU opcode or type."));
         auto arity = 0;
         if (op >= 3 && op <= 6) arity = 2;
         else if (op == 7 || op == 8 || op == 12 || op == 13 || op == 16 || op == 17 || op == 18) arity = 1;
         else if (op == 9 || op == 15) arity = 3;
         else if (op == 10 || op == 11) arity = 2;
         else if (op == 14) arity = Components(type);
+        else if (op == 19 || (op >= 20 && op <= 23) || op == 25 ||
+            (op >= 27 && op <= 29) || op == 36) arity = 1;
+        else if (op == 24 || op == 26 || (op >= 33 && op <= 35) || op == 37) arity = 2;
+        else if (op >= 30 && op <= 32) arity = 3;
+        else if (op >= 38) arity = 4;
         for (auto j = 0; j < 4; ++j)
             if ((j < arity && args[j] >= uint32(types.Num())) || (j >= arity && args[j] != Missing))
                 return fail(TEXT("GPU packet has an invalid or forward register reference."));
@@ -105,9 +110,10 @@ bool ValidatePacket(const FLibraGpuKernelPacket& packet, int32 capacity, FString
             }
         }
         else if (op == 2) valid = aux < UE_ARRAY_COUNT(uniformTypes) && type == uniformTypes[aux];
-        else if ((op >= 3 && op <= 6) || (op >= 9 && op <= 11))
+        else if ((op >= 3 && op <= 6) || (op >= 9 && op <= 11) || op == 24 ||
+            op == 26 || op == 30 || op == 31)
         {
-            valid = aux == 0 && IsNumeric(type);
+            valid = aux == 0 && ((op == 26 || op == 30 || op == 31) ? IsFloat(type) : IsNumeric(type));
             auto exact = false;
             for (auto j = 0; j < arity; ++j)
             {
@@ -128,6 +134,38 @@ bool ValidatePacket(const FLibraGpuKernelPacket& packet, int32 capacity, FString
         else if (op == 15) valid = aux == 0 && types[args[0]] == 3 && types[args[1]] == type && types[args[2]] == type;
         else if (op == 16) valid = aux == 0 && type == 0 && types[args[0]] == 2;
         else if (op == 17) valid = type == 0 && types[args[0]] >= 4 && types[args[0]] <= 6 && aux < uint32(Components(types[args[0]]));
+        else if (op == 19 || op == 25) valid = aux == 0 && IsNumeric(type) && types[args[0]] == type;
+        else if ((op >= 20 && op <= 23) || (op >= 27 && op <= 29) || op == 36)
+            valid = aux == 0 && IsFloat(type) && types[args[0]] == type;
+        else if (op == 32) valid = aux == 0 && IsFloat(type) && types[args[0]] == type &&
+            types[args[1]] == 4 && types[args[2]] == 4;
+        else if (op == 33) valid = aux == 0 && type == 0 && types[args[0]] == types[args[1]] &&
+            types[args[0]] >= 4 && types[args[0]] <= 6;
+        else if (op == 34) valid = aux == 0 && type == 5 && types[args[0]] == 5 && types[args[1]] == 5;
+        else if (op == 35) valid = aux == 0 && type == 0 && types[args[0]] == types[args[1]] && IsFloat(types[args[0]]);
+        else if (op == 37) valid = aux == 0 && type == 0 && types[args[0]] == 5 && types[args[1]] == 2;
+        else if (op >= 38)
+        {
+            valid = aux == 0 && type == (op == 40 ? 5u : 0u) && types[args[0]] == 5 &&
+                types[args[1]] == 2 && types[args[2]] == 1 && types[args[3]] == 0;
+            for (auto j = 2; j < 4 && valid; ++j)
+            {
+                auto parameter = int32(64 + args[j] * 64);
+                if (Word(bytes, parameter) != 0) continue;
+                if (j == 2)
+                {
+                    auto octaves = int32(Word(bytes, parameter + 48));
+                    valid &= octaves >= 1 && octaves <= 8;
+                }
+                else
+                {
+                    auto bits = Word(bytes, parameter + 32);
+                    float gain;
+                    FMemory::Memcpy(&gain, &bits, sizeof(gain));
+                    valid &= gain >= 0 && gain <= 1;
+                }
+            }
+        }
         if (!valid) return fail(TEXT("GPU packet has an invalid operation, type, or payload."));
         for (auto j = 0; j < 4; ++j)
         {
@@ -146,6 +184,23 @@ bool ValidatePacket(const FLibraGpuKernelPacket& packet, int32 capacity, FString
 }
 
 bool NameValid(const FString& value) { return !value.IsEmpty() && value.Len() <= 128; }
+
+bool LibraGpuBufferBudget(const TArray<FLibraGpuKernelPacket>& kernels, int32 capacity, FString& error)
+{
+    uint32 registers = 0;
+    uint64 programBytes = 0;
+    for (const auto& kernel : kernels)
+    {
+        registers = FMath::Max(registers, Word(kernel.Bytes, 16));
+        programBytes += uint64(kernel.Bytes.Num());
+    }
+    if (uint64(capacity) * (80 + uint64(registers) * 16) + programBytes > ULibraGpuEffectAsset::MaximumGpuBytes)
+    {
+        error = TEXT("Combined GPU particle, register, and instruction buffer budget exceeded.");
+        return false;
+    }
+    return true;
+}
 
 bool BoundedJsonDepth(const FString& text)
 {
@@ -183,6 +238,7 @@ bool ULibraGpuEffectAsset::ValidateProgram(FString& error) const
     }
     for (const auto& packet : Kernels)
         if (!ValidatePacket(packet, Capacity, error)) return false;
+    if (!LibraGpuBufferBudget(Kernels, Capacity, error)) return false;
     for (const auto& texture : Textures)
         if (!texture.Texture)
         {
@@ -338,6 +394,7 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
         kernelIndices.Add(id, newKernels.Num());
         newKernels.Add(MoveTemp(packet));
     }
+    if (!LibraGpuBufferBudget(newKernels, newCapacity, error)) return false;
     for (const auto& value : *textureJson)
     {
         auto object = value->AsObject();

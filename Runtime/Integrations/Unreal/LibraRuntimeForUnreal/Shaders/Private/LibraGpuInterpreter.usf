@@ -1,4 +1,5 @@
 #include "/Engine/Public/Platform.ush"
+#include "/LibraGpu/Private/LibraGpuSupport.ush"
 
 struct LibraParticle
 {
@@ -92,6 +93,25 @@ int SafeIntDiv(int a, int b)
     if (b == 0) return 0;
     if (a == (-2147483647 - 1) && b == -1) return (-2147483647 - 1);
     return a / b;
+}
+
+float ExtendedScalar(uint op, float a, float b, float c, float2 sourceRange, float2 targetRange)
+{
+    if (op == 19) return LibraGpuAbs(a);
+    if (op == 20) return LibraGpuFloor(a);
+    if (op == 21) return LibraGpuCeil(a);
+    if (op == 22) return LibraGpuRound(a);
+    if (op == 23) return LibraGpuFrac(a);
+    if (op == 24) return LibraGpuMod(a, b);
+    if (op == 25) return LibraGpuSign(a);
+    if (op == 26) return LibraGpuPow(a, b);
+    if (op == 27) return LibraGpuSqrt(a);
+    if (op == 28) return LibraGpuExp(a);
+    if (op == 29) return LibraGpuLog(a);
+    if (op == 30) return LibraGpuLerp(a, b, c);
+    if (op == 31) return LibraGpuSmoothstep(a, b, c);
+    if (op == 32) return LibraGpuRemap(a, sourceRange, targetRange);
+    return LibraGpuSaturate(a);
 }
 
 [numthreads(64, 1, 1)]
@@ -199,6 +219,62 @@ void MainCS(uint3 threadId : SV_DispatchThreadID)
         else if (op == 16) result.x = asuint(float(Hash(a.x) >> 8) * (1.0f / 16777216.0f));
         else if (op == 17) result.x = a[aux];
         else if (op == 18) StoreAttribute(p, aux, a);
+        else if ((op >= 19 && op <= 32) || op == 36)
+        {
+            if (type == 1)
+            {
+                int value = asint(a.x);
+                if (op == 19) result.x = asuint(LibraGpuAbs(value));
+                else if (op == 25) result.x = asuint(LibraGpuSign(value));
+                else result.x = asuint(LibraGpuMod(value, asint(b.x)));
+            }
+            else if (type == 2)
+            {
+                if (op == 19) result.x = LibraGpuAbs(a.x);
+                else if (op == 25) result.x = LibraGpuSign(a.x);
+                else result.x = LibraGpuMod(a.x, b.x);
+            }
+            else
+            {
+                float4 x = asfloat(a), y = asfloat(b), z = asfloat(c);
+                if (op == 24 || op == 26 || op == 30 || op == 31)
+                {
+                    x = FloatInput(a, first.z, type);
+                    y = FloatInput(b, first.w, type);
+                    if (op == 30 || op == 31) z = FloatInput(c, second.x, type);
+                }
+                result = asuint(float4(
+                    ExtendedScalar(op, x.x, y.x, z.x, asfloat(b.xy), asfloat(c.xy)),
+                    ExtendedScalar(op, x.y, y.y, z.y, asfloat(b.xy), asfloat(c.xy)),
+                    ExtendedScalar(op, x.z, y.z, z.z, asfloat(b.xy), asfloat(c.xy)),
+                    ExtendedScalar(op, x.w, y.w, z.w, asfloat(b.xy), asfloat(c.xy))));
+            }
+        }
+        else if (op == 33 || op == 35)
+        {
+            float4 x = asfloat(a), y = asfloat(b);
+            uint sourceType = Instructions[5 + first.z * 4].y;
+            float value = 0;
+            if (op == 33)
+            {
+                if (sourceType == 4) value = LibraGpuDot(x.xy, y.xy);
+                else if (sourceType == 5) value = LibraGpuDot(x.xyz, y.xyz);
+                else value = LibraGpuDot(x, y);
+            }
+            else
+            {
+                if (sourceType == 0) value = LibraGpuDistance(x.x, y.x);
+                else if (sourceType == 4) value = LibraGpuDistance(x.xy, y.xy);
+                else if (sourceType == 5) value = LibraGpuDistance(x.xyz, y.xyz);
+                else value = LibraGpuDistance(x, y);
+            }
+            result.x = asuint(value);
+        }
+        else if (op == 34) result = asuint(float4(LibraGpuCross(asfloat(a.xyz), asfloat(b.xyz)), 0));
+        else if (op == 37) result.x = asuint(LibraGpuGradientNoise3D(asfloat(a.xyz), b.x));
+        else if (op == 38) result.x = asuint(LibraGpuFbm(asfloat(a.xyz), b.x, asint(c.x), asfloat(d.x)));
+        else if (op == 39) result.x = asuint(LibraGpuTurbulence(asfloat(a.xyz), b.x, asint(c.x), asfloat(d.x)));
+        else if (op == 40) result = asuint(float4(LibraGpuCurlNoise(asfloat(a.xyz), b.x, asint(c.x), asfloat(d.x)), 0));
         if (op != 18)
         {
             Registers[i * RegisterCount + dst] = result;
