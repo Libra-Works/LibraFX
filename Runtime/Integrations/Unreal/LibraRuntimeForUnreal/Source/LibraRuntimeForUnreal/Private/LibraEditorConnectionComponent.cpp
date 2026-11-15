@@ -47,6 +47,7 @@ struct FLibraEditorConnectionState final
     bool profilePending = false;
     double nextRenderStatus = 0;
     int64 sceneProgramSequence = 0;
+    FString lastTransportStatus;
 };
 
 namespace {
@@ -550,6 +551,12 @@ void ULibraEditorConnectionComponent::TickComponent(float deltaTime, ELevelTick 
         }
     }
     Status = state->diagnostic.IsEmpty() ? state->transport.GetStatus() : state->diagnostic;
+    auto transportStatus = state->transport.GetStatus();
+    if (transportStatus != state->lastTransportStatus)
+    {
+        state->lastTransportStatus = transportStatus;
+        UE_LOG(LogTemp, Display, TEXT("LIBERA FX preview transport: %s"), *transportStatus);
+    }
 }
 
 bool ULibraEditorConnectionComponent::QueueEditorMessage(const FString& message)
