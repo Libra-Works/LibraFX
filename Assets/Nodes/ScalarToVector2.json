@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "typeId": "2c5e5bb8-117b-4a01-9a01-000000000013",
+  "namespace": "LiberaFx",
+  "kind": "ScalarToVector2",
+  "name": "Scalar to Vector2",
+  "displayNameKey": "Vectors.Node.ScalarToVector2",
+  "groupNameKey": "Vectors.Group",
+  "group": "Vectors",
+  "portType": "FloatX2",
+  "portCategory": "Parameter",
+  "inputPorts": [{ "id": "a", "name": "Value", "portType": "Float" }]
+}

@@ -82,6 +82,7 @@
                 <StackPanel Grid.Column="2"
                             Orientation="Horizontal"
                             Spacing="4"
+                            IsVisible="{Binding HasLegacyOutput}"
                             VerticalAlignment="Top">
                     <TextBlock Text="{DynamicResource Text.Panels.Output}"
                                VerticalAlignment="Center"
@@ -99,6 +100,25 @@
                                    Foreground="{Binding PortBrush}" />
                     </Border>
                 </StackPanel>
+                <ItemsControl Grid.Column="2" ItemsSource="{Binding OutputPorts}"
+                              IsVisible="{Binding HasCustomOutputs}"
+                              HorizontalAlignment="Right" VerticalAlignment="Top">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="graph:GraphOutputPortDefinition">
+                            <StackPanel Orientation="Horizontal" Spacing="4" Height="24">
+                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                <Border Width="18" Height="18" Background="Transparent" Tag="{Binding}"
+                                        PointerPressed="OnOutputPointerPressed"
+                                        PointerMoved="OnOutputPointerMoved"
+                                        PointerReleased="OnOutputPointerReleased"
+                                        PointerCaptureLost="OnOutputPointerCaptureLost">
+                                    <TextBlock Text="●" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource EffectGraphParameterBrush}" />
+                                </Border>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </Grid>
             <TextBlock Grid.Row="1" Margin="8" IsVisible="{Binding IsGraphGroup}"
                        Text="{DynamicResource Text.Panels.DoubleClickToOpen}" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
@@ -129,6 +149,10 @@
                     PointerPressed="OnHeaderPointerPressed" PointerMoved="OnHeaderPointerMoved"
                     PointerReleased="OnHeaderPointerReleased" PointerCaptureLost="OnHeaderPointerCaptureLost">
                 <DockPanel>
+                    <views:IconButton x:Name="EditCommentButton" DockPanel.Dock="Right" Icon="Edit" Padding="5,0"
+                                      IsVisible="{Binding HasFormattedComment}" Click="OnEditCommentClick"
+                                      ToolTip.Tip="{DynamicResource Text.Comments.EditSource}"
+                                      AutomationProperties.Name="{DynamicResource Text.Comments.EditSource}" />
                     <views:IconButton DockPanel.Dock="Right" Icon="Delete" Padding="5,0"
                                       Click="OnRemoveImageClick"
                                       ToolTip.Tip="{DynamicResource Text.Panels.RemoveCommentImage}"
@@ -142,9 +166,12 @@
                 </DockPanel>
             </Border>
             <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
-                <TextBox Margin="8" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="2048"
+                <TextBox x:Name="CommentSource" Margin="8" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="4096"
                          Text="{Binding CommentText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                          PlaceholderText="{DynamicResource Text.Panels.WriteComment}" VerticalContentAlignment="Top" />
+                <views:CommentMarkupView x:Name="CommentPreview" Margin="8" IsVisible="False"
+                                         Text="{Binding CommentText}" Format="{Binding CommentStyle}"
+                                         TaskChanged="OnCommentTaskChanged" />
                 <StackPanel Grid.Column="1" MaxWidth="160" Margin="4">
                     <Image x:Name="EmbeddedImage" MaxWidth="160" MaxHeight="120"
                            Stretch="Uniform" IsHitTestVisible="False" />

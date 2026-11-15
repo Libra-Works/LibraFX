@@ -39,7 +39,8 @@ public sealed record GraphSnapshot(
         return left.Connections.Zip(right.Connections).All(pair =>
             ids.TryGetValue(pair.First.SourceNodeId, out var source) && source == pair.Second.SourceNodeId &&
             ids.TryGetValue(pair.First.TargetNodeId, out var target) && target == pair.Second.TargetNodeId &&
-            pair.First.TargetPortId == pair.Second.TargetPortId);
+            pair.First.TargetPortId == pair.Second.TargetPortId &&
+            pair.First.SourcePortId == pair.Second.SourcePortId);
     }
 
     private static bool ParametersEqual(IReadOnlyList<NodeParameterSnapshot>? left, IReadOnlyList<NodeParameterSnapshot>? right) =>
@@ -64,4 +65,5 @@ public sealed record GraphNodeSnapshot(
 
 public sealed record GroupAssetReference(Guid Id, long Revision, bool Locked);
 
-public sealed record GraphConnectionSnapshot(Guid SourceNodeId, Guid TargetNodeId, string? TargetPortId = null);
+public sealed record GraphConnectionSnapshot(
+    Guid SourceNodeId, Guid TargetNodeId, string? TargetPortId = null, string? SourcePortId = null);

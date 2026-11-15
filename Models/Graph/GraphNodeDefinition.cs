@@ -21,6 +21,35 @@ public readonly record struct GraphNodeKind(string Value)
     public static GraphNodeKind Subtract => new("Subtract");
     public static GraphNodeKind Multiply => new("Multiply");
     public static GraphNodeKind Divide => new("Divide");
+    public static GraphNodeKind AddVector2 => new("AddVector2");
+    public static GraphNodeKind SubtractVector2 => new("SubtractVector2");
+    public static GraphNodeKind MultiplyVector2 => new("MultiplyVector2");
+    public static GraphNodeKind DivideVector2 => new("DivideVector2");
+    public static GraphNodeKind AddVector3 => new("AddVector3");
+    public static GraphNodeKind SubtractVector3 => new("SubtractVector3");
+    public static GraphNodeKind MultiplyVector3 => new("MultiplyVector3");
+    public static GraphNodeKind DivideVector3 => new("DivideVector3");
+    public static GraphNodeKind AddVector4 => new("AddVector4");
+    public static GraphNodeKind SubtractVector4 => new("SubtractVector4");
+    public static GraphNodeKind MultiplyVector4 => new("MultiplyVector4");
+    public static GraphNodeKind DivideVector4 => new("DivideVector4");
+    public static GraphNodeKind ScalarToVector2 => new("ScalarToVector2");
+    public static GraphNodeKind ScalarToVector3 => new("ScalarToVector3");
+    public static GraphNodeKind ScalarToVector4 => new("ScalarToVector4");
+    public static GraphNodeKind BreakVector2 => new("BreakVector2");
+    public static GraphNodeKind BreakVector3 => new("BreakVector3");
+    public static GraphNodeKind BreakVector4 => new("BreakVector4");
+    public static GraphNodeKind Vector2ToVector3 => new("Vector2ToVector3");
+    public static GraphNodeKind Vector2ToVector4 => new("Vector2ToVector4");
+    public static GraphNodeKind Vector3ToVector2 => new("Vector3ToVector2");
+    public static GraphNodeKind Vector3ToVector4 => new("Vector3ToVector4");
+    public static GraphNodeKind Vector4ToVector2 => new("Vector4ToVector2");
+    public static GraphNodeKind Vector4ToVector3 => new("Vector4ToVector3");
+    public static GraphNodeKind MaskVector2 => new("MaskVector2");
+    public static GraphNodeKind MaskVector3 => new("MaskVector3");
+    public static GraphNodeKind MaskVector4 => new("MaskVector4");
+    public static GraphNodeKind ColorToVector4 => new("ColorToVector4");
+    public static GraphNodeKind Vector4ToColor => new("Vector4ToColor");
     public override string ToString() => Value ?? string.Empty;
 }
 
@@ -75,7 +104,36 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("c6de2a2a-a44b-41cb-8173-3c417a92bca5")] = "Add",
         [Guid.Parse("a49f3240-e62f-4d86-b3ab-312246e72db2")] = "Subtract",
         [Guid.Parse("3fec134e-1d88-438c-bbf2-4c8ead69bdaa")] = "Multiply",
-        [Guid.Parse("3983558b-d822-44be-81c7-274fd62d62be")] = "Divide"
+        [Guid.Parse("3983558b-d822-44be-81c7-274fd62d62be")] = "Divide",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000001")] = "AddVector2",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000002")] = "SubtractVector2",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000003")] = "MultiplyVector2",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000004")] = "DivideVector2",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000005")] = "AddVector3",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000006")] = "SubtractVector3",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000007")] = "MultiplyVector3",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000008")] = "DivideVector3",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000009")] = "AddVector4",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000010")] = "SubtractVector4",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000011")] = "MultiplyVector4",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000012")] = "DivideVector4",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000013")] = "ScalarToVector2",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000014")] = "ScalarToVector3",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000015")] = "ScalarToVector4",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000016")] = "BreakVector2",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000017")] = "BreakVector3",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000018")] = "BreakVector4",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000019")] = "Vector2ToVector3",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000020")] = "Vector2ToVector4",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000021")] = "Vector3ToVector2",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000022")] = "Vector3ToVector4",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000023")] = "Vector4ToVector2",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000024")] = "Vector4ToVector3",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000025")] = "MaskVector2",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000026")] = "MaskVector3",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000027")] = "MaskVector4",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000028")] = "ColorToVector4",
+        [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000029")] = "Vector4ToColor"
     };
 
     private static readonly List<string> Warnings = [];
@@ -90,12 +148,20 @@ public sealed record GraphNodeDefinition(
     public string? GroupNameKey { get; init; }
     public IReadOnlyList<NodeParameterDefinition> Parameters { get; init; } = [];
     public IReadOnlyList<GraphInputPortDefinition>? InputPorts { get; init; }
+    public IReadOnlyList<GraphOutputPortDefinition>? OutputPorts { get; init; }
 
     public string? GetInputPortType(string? portId)
     {
         if (InputPorts is null) return portId is null ? PortType : null;
         var port = InputPorts.FirstOrDefault(port => port.Id == portId);
         return port is null ? null : port.PortType ?? PortType;
+    }
+
+    public string? GetOutputPortType(string? portId)
+    {
+        if (OutputPorts is null) return portId is null ? PortType : null;
+        var port = OutputPorts.FirstOrDefault(port => port.Id == portId);
+        return port?.PortType ?? (port is null ? null : PortType);
     }
 
     public static bool TryFind(string? value, out GraphNodeDefinition? definition,
@@ -248,6 +314,22 @@ public sealed record GraphNodeDefinition(
                 inputs.Add(new GraphInputPortDefinition(port.Id!, port.Name, port.PortType));
             }
         }
+        List<GraphOutputPortDefinition>? outputs = null;
+        if (node.OutputPorts is not null)
+        {
+            outputs = [];
+            var outputIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var port in node.OutputPorts)
+            {
+                if (port is null || !IsIdentifier(port.Id) || !outputIds.Add(port.Id!) ||
+                    string.IsNullOrWhiteSpace(port.Name) ||
+                    (port.PortType is not null && (string.IsNullOrWhiteSpace(port.PortType) || port.PortType.Length > 128)) ||
+                    outputs.Count >= 32)
+                    throw new InvalidDataException("Invalid output port definition.");
+                outputs.Add(new GraphOutputPortDefinition(port.Id!, port.Name, port.PortType));
+            }
+            if (outputs.Count == 0) throw new InvalidDataException("Output port definitions must not be empty.");
+        }
         var parameterIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var parameter in node.Parameters ?? [])
         {
@@ -313,7 +395,8 @@ public sealed record GraphNodeDefinition(
             DisplayNameKey = node.DisplayNameKey,
             GroupNameKey = node.GroupNameKey,
             Parameters = parameters.AsReadOnly(),
-            InputPorts = inputs?.AsReadOnly()
+            InputPorts = inputs?.AsReadOnly(),
+            OutputPorts = outputs?.AsReadOnly()
         });
     }
 
@@ -335,9 +418,17 @@ public sealed record GraphNodeDefinition(
         public string? PortCategory { get; set; }
         public List<NodeParameterFile>? Parameters { get; set; }
         public List<InputPortFile>? InputPorts { get; set; }
+        public List<OutputPortFile>? OutputPorts { get; set; }
     }
 
     private sealed class InputPortFile
+    {
+        public string? Id { get; set; }
+        public string? Name { get; set; }
+        public string? PortType { get; set; }
+    }
+
+    private sealed class OutputPortFile
     {
         public string? Id { get; set; }
         public string? Name { get; set; }
@@ -372,3 +463,4 @@ public sealed record GraphNodeDefinition(
 }
 
 public sealed record GraphInputPortDefinition(string Id, string Name, string? PortType = null);
+public sealed record GraphOutputPortDefinition(string Id, string Name, string? PortType = null);

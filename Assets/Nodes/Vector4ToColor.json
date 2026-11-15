@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "typeId": "2c5e5bb8-117b-4a01-9a01-000000000029",
+  "namespace": "LiberaFx",
+  "kind": "Vector4ToColor",
+  "name": "Vector4 to Color",
+  "displayNameKey": "Vectors.Node.Vector4ToColor",
+  "groupNameKey": "Vectors.Group",
+  "group": "Vectors",
+  "portType": "Color",
+  "portCategory": "Parameter",
+  "inputPorts": [{ "id": "a", "name": "Value", "portType": "FloatX4" }]
+}

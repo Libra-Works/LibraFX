@@ -1,0 +1,7 @@
+{
+  "Comments.Format": "コメントの書式",
+  "Comments.Text": "プレーンテキスト",
+  "Comments.Markdown": "Markdown",
+  "Comments.Html": "HTML",
+  "Comments.EditSource": "ソースを編集 / 整形したコメントを表示"
+}

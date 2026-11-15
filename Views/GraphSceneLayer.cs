@@ -100,7 +100,8 @@ public sealed class GraphSceneLayer : Control
         {
             var start = new Point(
                 source.DisplayX + GraphNodeViewModel.NodeWidth - GraphNodeViewModel.PortHorizontalOffset + _graphOrigin.X,
-                source.DisplayY + GraphNodeViewModel.PortCenterOffset + _graphOrigin.Y);
+                source.DisplayY + GraphNodeViewModel.PortCenterOffset +
+                source.OutputPortOffset(_workspace.PendingOutputPortId) + _graphOrigin.Y);
             DrawConnection(context, start, end + _graphOrigin, source.Definition.PortCategory);
         }
     }
@@ -157,7 +158,8 @@ public sealed class GraphSceneLayer : Control
     private void OnWorkspacePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(GraphWorkspaceViewModel.ConnectionPreviewPoint) or
-            nameof(GraphWorkspaceViewModel.PendingOutputNode))
+            nameof(GraphWorkspaceViewModel.PendingOutputNode) or
+            nameof(GraphWorkspaceViewModel.PendingOutputPortId))
         {
             InvalidateVisual();
         }

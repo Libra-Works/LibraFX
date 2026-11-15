@@ -45,7 +45,8 @@ public sealed class ProjectFileService
                 .Select(connection => new LiberaFxProjectConnection(
                     connection.SourceNodeId,
                     connection.TargetNodeId,
-                    connection.TargetPortId))
+                    connection.TargetPortId,
+                    connection.SourcePortId))
                 .ToList(),
             History = history
         };

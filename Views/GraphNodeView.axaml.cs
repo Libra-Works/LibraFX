@@ -21,6 +21,7 @@ public partial class GraphNodeView : UserControl
     private (GraphNodeViewModel Node, double X, double Y)[] _dragNodes = [];
     private Point _pointerStart;
     private GraphNodeViewModel? _connectionSource;
+    private string? _connectionSourcePortId;
     private Grid? _connectionCanvas;
     private Point _connectionStart;
     private bool _connectionMoved;
@@ -33,6 +34,7 @@ public partial class GraphNodeView : UserControl
     private GraphNodeViewModel? _imageNode;
     private Bitmap? _commentBitmap;
     private string? _imageStatusKey;
+    private bool _editingComment;
 
     public GraphNodeView()
     {
@@ -72,6 +74,8 @@ public partial class GraphNodeView : UserControl
         if (DataContext is not GraphNodeViewModel { IsComment: true } node || _imageNode == node) return;
         _imageNode = node;
         node.PropertyChanged += OnImageNodeChanged;
+        _editingComment = false;
+        UpdateCommentBody();
         UpdateCommentImage();
     }
 
@@ -86,7 +90,35 @@ public partial class GraphNodeView : UserControl
 
     private void OnImageNodeChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(GraphNodeViewModel.Parameters)) UpdateCommentImage();
+        if (e.PropertyName == nameof(GraphNodeViewModel.Parameters))
+        {
+            UpdateCommentImage();
+            UpdateCommentBody();
+        }
+    }
+
+    private void UpdateCommentBody()
+    {
+        var formatted = _imageNode?.HasFormattedComment == true;
+        CommentSource.IsVisible = !formatted || _editingComment;
+        CommentPreview.IsVisible = formatted && !_editingComment;
+        EditCommentButton.Icon = _editingComment ? Models.Appearance.EditorIcon.Check : Models.Appearance.EditorIcon.Settings;
+    }
+
+    private void OnEditCommentClick(object? sender, RoutedEventArgs e)
+    {
+        if (_editingComment && _imageNode is { } node) node.CommentText = CommentSource.Text ?? "";
+        _editingComment = !_editingComment;
+        UpdateCommentBody();
+        if (_editingComment) CommentSource.Focus();
+        e.Handled = true;
+    }
+
+    private void OnCommentTaskChanged(object? sender, CommentTaskChangedEventArgs e)
+    {
+        if (_imageNode is not { CommentStyle: CommentFormat.Markdown } node ||
+            !node.Workspace.Nodes.Contains(node) || node.CommentText != e.Source || e.Offset < 0) return;
+        node.CommentText = CommentMarkup.ToggleTask(e.Source, e.Offset, e.Value);
     }
 
     private void OnLanguageChanged(object? sender, EventArgs e)
@@ -417,7 +449,9 @@ public partial class GraphNodeView : UserControl
         _connectionCanvas = canvas;
         _connectionStart = e.GetPosition(canvas);
         _connectionMoved = false;
-        node.SelectOutputPortCommand.Execute(null);
+        _connectionSourcePortId = port.Tag is GraphOutputPortDefinition outputPort ? outputPort.Id : null;
+        if (_connectionSourcePortId is null) node.SelectOutputPortCommand.Execute(null);
+        else node.Workspace.BeginConnection(node, _connectionSourcePortId);
         e.Pointer.Capture(port);
         e.Handled = true;
     }
@@ -457,11 +491,13 @@ public partial class GraphNodeView : UserControl
         var position = e.GetPosition(canvas);
         var target = moved ? FindInputAt(canvas, position) : null;
         _connectionSource = null;
+        var sourcePortId = _connectionSourcePortId;
+        _connectionSourcePortId = null;
         _connectionCanvas = null;
         e.Pointer.Capture(null);
         if (target is { } input)
         {
-            input.Node.Workspace.CompleteConnection(input.Node, input.PortId);
+            input.Node.Workspace.CompleteConnection(input.Node, input.PortId, sourcePortId);
         }
         else if (moved)
         {
@@ -506,6 +542,7 @@ public partial class GraphNodeView : UserControl
     {
         _connectionSource?.Workspace.CancelConnection();
         _connectionSource = null;
+        _connectionSourcePortId = null;
         _connectionCanvas = null;
     }
 }

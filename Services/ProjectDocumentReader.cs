@@ -8,7 +8,7 @@ namespace LiberaFx.Services;
 
 public static class ProjectDocumentReader
 {
-    public const int CurrentFormatVersion = 7;
+    public const int CurrentFormatVersion = 8;
     private static readonly JsonSerializerOptions Options = new()
     {
         Converters = { new JsonStringEnumConverter() }
@@ -35,7 +35,8 @@ public static class ProjectDocumentReader
         }
         var connections = document.Connections.Select(connection => connection is null
             ? throw new InvalidDataException("The project contains an empty connection.")
-            : new GraphConnectionSnapshot(connection.SourceNodeId, connection.TargetNodeId, connection.TargetPortId)).ToArray();
+            : new GraphConnectionSnapshot(connection.SourceNodeId, connection.TargetNodeId,
+                connection.TargetPortId, connection.SourcePortId)).ToArray();
         var graph = new GraphSnapshot(nodes, connections);
         ValidateGraph(graph);
         if (document.FormatVersion >= 2 && document.History is null)

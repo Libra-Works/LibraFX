@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "typeId": "2c5e5bb8-117b-4a01-9a01-000000000019",
+  "namespace": "LiberaFx",
+  "kind": "Vector2ToVector3",
+  "name": "Vector2 to Vector3",
+  "displayNameKey": "Vectors.Node.Vector2ToVector3",
+  "groupNameKey": "Vectors.Group",
+  "group": "Vectors",
+  "portType": "FloatX3",
+  "portCategory": "Parameter",
+  "inputPorts": [{ "id": "a", "name": "Value", "portType": "FloatX2" }],
+  "parameters": [{ "id": "fill", "name": "Added component fill", "displayNameKey": "Vectors.Parameter.Fill", "type": "float", "defaultValue": 0.0 }]
+}

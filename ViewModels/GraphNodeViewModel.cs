@@ -42,6 +42,15 @@ public sealed class GraphNodeViewModel : ObservableObject
     public bool HasLegacyInput => HasPorts && Definition.InputPorts is null;
     public bool HasCustomInputs => HasPorts && Definition.InputPorts is { Count: > 0 };
     public IReadOnlyList<GraphInputPortDefinition> InputPorts => Definition.InputPorts ?? [];
+    public bool HasLegacyOutput => HasPorts && Definition.OutputPorts is null;
+    public bool HasCustomOutputs => HasPorts && Definition.OutputPorts is { Count: > 0 };
+    public IReadOnlyList<GraphOutputPortDefinition> OutputPorts => Definition.OutputPorts ?? [];
+    public double OutputPortOffset(string? portId)
+    {
+        for (var index = 0; index < OutputPorts.Count; index++)
+            if (OutputPorts[index].Id == portId) return 5 + index * 24;
+        return 0;
+    }
     public double CommentWidth => _previewWidth ?? CommentNumber("width", 360, 180, 4000);
     public double CommentHeight => _previewHeight ?? CommentNumber("height", 200, 80, 4000);
     public double RenderedWidth => IsComment ? CommentWidth : NodeWidth;
@@ -51,6 +60,10 @@ public sealed class GraphNodeViewModel : ObservableObject
             ? GetParameterValue(definition).GetString() ?? "" : "";
         set { if (IsComment) _workspace.SetParameter(this, "text", JsonSerializer.SerializeToElement(value ?? "")); }
     }
+    public CommentFormat CommentStyle => IsComment && Definition.Parameters.FirstOrDefault(item => item.Id == "format") is { } format
+        && GetParameterValue(format).TryGetInt32(out var value) && Enum.IsDefined((CommentFormat)value)
+        ? (CommentFormat)value : CommentFormat.Text;
+    public bool HasFormattedComment => IsComment && CommentStyle != CommentFormat.Text;
     public bool HasParameters => InlineParameters.Count > 0;
     public IReadOnlyList<NodeParameterEditorViewModel> InlineParameters { get; }
     internal double RenderedHeight { get; set; } = 80;
@@ -173,6 +186,8 @@ public sealed class GraphNodeViewModel : ObservableObject
         {
             foreach (var parameter in InlineParameters) parameter.Refresh();
             OnPropertyChanged(nameof(CommentText));
+            OnPropertyChanged(nameof(CommentStyle));
+            OnPropertyChanged(nameof(HasFormattedComment));
             OnPropertyChanged(nameof(CommentWidth));
             OnPropertyChanged(nameof(CommentHeight));
             OnPropertyChanged(nameof(RenderedWidth));

@@ -41,12 +41,12 @@ public sealed class ParameterEditorHost : ContentControl
         status.Bind(TextBlock.TextProperty, new Binding(nameof(parameter.Status)));
         _missingEditorMessage = new TextBlock
         {
-            IsVisible = custom is null && editorKind is not (null or "slider" or "text" or "radio"),
+            IsVisible = custom is null && editorKind is not (null or "slider" or "text" or "radio" or "multiline"),
             Foreground = Brushes.OrangeRed,
             TextWrapping = TextWrapping.Wrap
         };
         var missing = _missingEditorMessage;
-        missing.IsVisible = custom is null && editorKind is not (null or "slider" or "text" or "radio");
+        missing.IsVisible = custom is null && editorKind is not (null or "slider" or "text" or "radio" or "multiline");
         var label = new TextBlock { FontWeight = FontWeight.SemiBold };
         label.Bind(TextBlock.TextProperty, new Binding(nameof(parameter.Name)));
         if (parameter.Type is "float" or "int" && editor is TextBox scalar)
@@ -156,7 +156,15 @@ public sealed class ParameterEditorHost : ContentControl
             };
             return button;
         }
-        return CreateTextBox(nameof(parameter.ValueText));
+        var text = CreateTextBox(nameof(parameter.ValueText));
+        if (parameter.Editor?.Kind == "multiline")
+        {
+            text.AcceptsReturn = true;
+            text.TextWrapping = TextWrapping.Wrap;
+            text.MinHeight = 100;
+            text.MaxHeight = 280;
+        }
+        return text;
     }
 
     private Control CreateBooleanRadio(NodeParameterEditorViewModel parameter)

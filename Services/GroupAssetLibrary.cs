@@ -9,6 +9,7 @@ public sealed record GroupAsset(int FormatVersion, Guid Id, string Name, long Re
 public sealed class GroupAssetLibrary
 {
     public const string FileExtension = ".lfxgroup";
+    private const int CurrentFormatVersion = 2;
     private const long MaxFileBytes = 16 * 1024 * 1024;
     private readonly string _directory;
     private static readonly JsonSerializerOptions Options = new()
@@ -73,7 +74,7 @@ public sealed class GroupAssetLibrary
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(graph);
-        var asset = new GroupAsset(1, Guid.NewGuid(), name.Trim(), 1, false, graph);
+        var asset = new GroupAsset(CurrentFormatVersion, Guid.NewGuid(), name.Trim(), 1, false, graph);
         Validate(asset);
         Write(asset, false);
         return asset;
@@ -87,7 +88,7 @@ public sealed class GroupAssetLibrary
         var current = Load(id);
         if (current.Locked) throw new InvalidOperationException("The group asset is locked.");
         if (current.Revision != expectedRevision) throw new InvalidOperationException("The group asset changed; reload it first.");
-        var updated = current with { Name = name.Trim(), Revision = checked(current.Revision + 1), Graph = graph };
+        var updated = current with { FormatVersion = CurrentFormatVersion, Name = name.Trim(), Revision = checked(current.Revision + 1), Graph = graph };
         Validate(updated);
         Archive(current);
         Write(updated, true);
@@ -99,7 +100,7 @@ public sealed class GroupAssetLibrary
         using var guard = Lock(id);
         var current = Load(id);
         if (current.Locked == locked) return current;
-        var updated = current with { Locked = locked };
+        var updated = current with { FormatVersion = CurrentFormatVersion, Locked = locked };
         Write(updated, true);
         return updated;
     }
@@ -124,7 +125,7 @@ public sealed class GroupAssetLibrary
 
     private static void Validate(GroupAsset asset)
     {
-        if (asset.FormatVersion != 1 || asset.Id == Guid.Empty || asset.Revision < 1 ||
+        if (asset.FormatVersion is < 1 or > CurrentFormatVersion || asset.Id == Guid.Empty || asset.Revision < 1 ||
             string.IsNullOrWhiteSpace(asset.Name) || asset.Name.Length > 200 || asset.Graph is null)
             throw new InvalidDataException("Invalid group asset metadata.");
         try { GraphValidator.Validate(asset.Graph); }

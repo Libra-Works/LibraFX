@@ -11,7 +11,8 @@ using ModelContextProtocol.Server;
 namespace LiberaFx.Services;
 
 public sealed record LiberaFxMcpPlanNode(string Key, string Kind, string Name, double X, double Y);
-public sealed record LiberaFxMcpPlanConnection(string SourceKey, string TargetKey, string? TargetPortId = null);
+public sealed record LiberaFxMcpPlanConnection(
+    string SourceKey, string TargetKey, string? TargetPortId = null, string? SourcePortId = null);
 
 [McpServerToolType]
 public sealed class LiberaFxMcpTools
@@ -28,7 +29,7 @@ public sealed class LiberaFxMcpTools
             () => JsonSerializer.Serialize(activeGraph.Graph.CreateCurrentSnapshot(), JsonOptions));
 
     [McpServerTool(Name = "libera_graph_compile", ReadOnly = true, OpenWorld = false)]
-    [Description("Compile supported scalar and arithmetic nodes to versioned little-endian VFX bytecode.")]
+    [Description("Compile supported scalar, vector, conversion, and arithmetic nodes to versioned little-endian VFX bytecode.")]
     public static async Task<string> CompileGraph(ActiveGraphProvider activeGraph)
     {
         var snapshot = await Dispatcher.UIThread.InvokeAsync(() => activeGraph.Graph.CreateCurrentSnapshot());
@@ -37,7 +38,7 @@ public sealed class LiberaFxMcpTools
             var program = VfxProgram.Compile(snapshot);
             return JsonSerializer.Serialize(new
             {
-                format = "LFXB", version = 1, byteOrder = "little-endian",
+                format = "LFXB", version = program.BinaryVersion, byteOrder = "little-endian",
                 workBytes = program.WorkSizeBytes, bytecodeBase64 = Convert.ToBase64String(program.ToBinary())
             }, JsonOptions);
         }
@@ -70,16 +71,18 @@ public sealed class LiberaFxMcpTools
         ActiveGraphProvider activeGraph,
         [Description("Source node ID.")] string sourceId,
         [Description("Target node ID.")] string targetId,
-        [Description("Optional input port ID; defaults to the first input.")] string? targetPortId = null) =>
+        [Description("Optional input port ID; defaults to the first input.")] string? targetPortId = null,
+        [Description("Output port ID for multi-output nodes (for example BreakVector4.w).")] string? sourcePortId = null) =>
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
             var graph = activeGraph.Graph;
             var source = FindNode(graph, sourceId);
             var target = FindNode(graph, targetId);
-            if (!graph.TryConnectNodes(source, target, out var error, targetPortId))
+            if (!graph.TryConnectNodes(source, target, out var error, targetPortId, sourcePortId))
                 throw new McpException(error ?? "The connection could not be created.");
             var connection = graph.Connections.Last();
-            return JsonSerializer.Serialize(new GraphConnectionSnapshot(source.Id, target.Id, connection.TargetPortId), JsonOptions);
+            return JsonSerializer.Serialize(new GraphConnectionSnapshot(source.Id, target.Id,
+                connection.TargetPortId, connection.SourcePortId), JsonOptions);
         });
 
     [McpServerTool(Name = "libera_graph_rename_node", OpenWorld = false)]
@@ -145,7 +148,7 @@ public sealed class LiberaFxMcpTools
                 nodes.Select(node => new LiberaGraphNodeSpec(
                     node.Key, ParseKind(node.Kind, activeGraph.Graph), node.Name, node.X, node.Y)).ToArray(),
                 connections.Select(connection => new LiberaGraphConnectionSpec(
-                    connection.SourceKey, connection.TargetKey, connection.TargetPortId)).ToArray());
+                    connection.SourceKey, connection.TargetKey, connection.TargetPortId, connection.SourcePortId)).ToArray());
             try
             {
                 var graph = activeGraph.Graph;

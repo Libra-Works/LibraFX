@@ -22,6 +22,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     private GraphNodeViewModel? _selectedNode;
     private readonly List<GraphNodeViewModel> _selectedNodes = [];
     private GraphNodeViewModel? _pendingOutputNode;
+    private string? _pendingOutputPortId;
     private Point? _connectionPreviewPoint;
     private string _connectionStatus = LocalizationService.Shared.Get("Messages.ChooseConnection");
     private string? _connectionStatusKey = "Messages.ChooseConnection";
@@ -119,6 +120,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     }
 
     public GraphNodeViewModel? PendingOutputNode => _pendingOutputNode;
+    public string? PendingOutputPortId => _pendingOutputPortId;
 
     public Point? ConnectionPreviewPoint
     {
@@ -252,7 +254,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         {
             commands.Add(new AddGraphConnectionCommand(
                 this, nodesByOldId[connection.SourceNodeId], nodesByOldId[connection.TargetNodeId],
-                targetPortId: connection.TargetPortId));
+                targetPortId: connection.TargetPortId, sourcePortId: connection.SourcePortId));
         }
 
         _history.Execute(new CompositeUndoableCommand(LocalizationService.Shared.Get("Messages.History.PasteNodes"), commands));
@@ -309,7 +311,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             .Select(connection => new GraphConnectionSnapshot(
                 connection.Source.Id,
                 connection.Target.Id,
-                connection.TargetPortId))
+                connection.TargetPortId,
+                connection.SourcePortId))
             .ToArray();
 
         return new GraphSnapshot(nodes, connections);
@@ -339,7 +342,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 ChildGraph = node.ChildGraph is null ? null : CloneGraph(node.ChildGraph)
             }).ToArray(),
             source.Connections.Select(connection => new GraphConnectionSnapshot(
-                ids[connection.SourceNodeId], ids[connection.TargetNodeId], connection.TargetPortId)).ToArray());
+                ids[connection.SourceNodeId], ids[connection.TargetNodeId],
+                connection.TargetPortId, connection.SourcePortId)).ToArray());
     }
 
     public bool EnterGraph(GraphNodeViewModel node)
@@ -701,7 +705,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         {
             var source = nodesById[specification.SourceNodeId];
             var target = nodesById[specification.TargetNodeId];
-            connections.Add(new GraphConnectionViewModel(source, target, specification.TargetPortId));
+            connections.Add(new GraphConnectionViewModel(source, target,
+                specification.TargetPortId, specification.SourcePortId));
         }
 
         SelectNode(null);
@@ -720,8 +725,10 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         SetSelection(selectedIds.Where(nodesById.ContainsKey).Select(id => nodesById[id]));
         _nextNodeIndex = Nodes.Count;
         _pendingOutputNode = null;
+        _pendingOutputPortId = null;
         ConnectionPreviewPoint = null;
         OnPropertyChanged(nameof(PendingOutputNode));
+        OnPropertyChanged(nameof(PendingOutputPortId));
     }
 
     public GraphNodeViewModel GetNode(Guid id)
@@ -760,7 +767,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         }
 
         var connectionKeys = Connections
-            .Select(connection => (Source: connection.Source.Id, Target: connection.Target.Id, Port: connection.TargetPortId))
+            .Select(connection => (Source: connection.Source.Id, Target: connection.Target.Id,
+                TargetPort: connection.TargetPortId, SourcePort: connection.SourcePortId))
             .ToHashSet();
         for (var index = 0; index < plan.Connections.Count; index++)
         {
@@ -796,27 +804,36 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 targetPortId ??= ports.FirstOrDefault()?.Id;
                 if (targetPortId is null || !ports.Any(port => port.Id == targetPortId))
                     throw new ArgumentException("The target input port does not exist.", nameof(plan));
-                if (connectionKeys.Any(key => key.Target == target.Id && key.Port == targetPortId))
+                if (connectionKeys.Any(key => key.Target == target.Id && key.TargetPort == targetPortId))
                     throw new ArgumentException("The target input is already connected.", nameof(plan));
             }
             else if (targetPortId is not null)
                 throw new ArgumentException("The target input port does not exist.", nameof(plan));
 
+            var sourcePortId = specification.SourcePortId;
+            if (source.Definition.OutputPorts is { } outputPorts)
+            {
+                if (sourcePortId is null || !outputPorts.Any(port => port.Id == sourcePortId))
+                    throw new ArgumentException("The source output port does not exist.", nameof(plan));
+            }
+            else if (sourcePortId is not null)
+                throw new ArgumentException("The source output port does not exist.", nameof(plan));
+
             if (source.Definition.PortCategory != target.Definition.PortCategory ||
-                source.Definition.PortType != target.Definition.GetInputPortType(targetPortId))
+                source.Definition.GetOutputPortType(sourcePortId) != target.Definition.GetInputPortType(targetPortId))
             {
                 throw new ArgumentException(
                     "Port categories and data types must match.",
                     nameof(plan));
             }
 
-            if (!connectionKeys.Add((source.Id, target.Id, targetPortId)))
+            if (!connectionKeys.Add((source.Id, target.Id, targetPortId, sourcePortId)))
             {
                 throw new ArgumentException("The graph plan contains a duplicate connection.", nameof(plan));
             }
 
             if (WouldCreateCycle(source.Id, target.Id,
-                    connectionKeys.Where(key => key != (source.Id, target.Id, targetPortId))
+                    connectionKeys.Where(key => key != (source.Id, target.Id, targetPortId, sourcePortId))
                         .Select(key => (key.Source, key.Target))))
             {
                 throw new ArgumentException("Connections cannot create a cycle.", nameof(plan));
@@ -827,7 +844,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 source,
                 target,
                 Connections.Count + index,
-                targetPortId));
+                targetPortId,
+                sourcePortId));
         }
 
         _history.Execute(new CompositeUndoableCommand("Apply graph plan", commands));
@@ -835,12 +853,15 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         return CreateCurrentSnapshot();
     }
 
-    public void BeginConnection(GraphNodeViewModel source)
+    public void BeginConnection(GraphNodeViewModel source, string? sourcePortId = null)
     {
         SelectNode(source);
+        _pendingOutputPortId = sourcePortId;
         _pendingOutputNode = source;
         OnPropertyChanged(nameof(PendingOutputNode));
-        SetConnectionStatus("Messages.ChooseInput", source.Name, source.DisplayPortType);
+        OnPropertyChanged(nameof(PendingOutputPortId));
+        SetConnectionStatus("Messages.ChooseInput", source.Name,
+            GraphNodeDefinition.DisplayPortType(source.Definition.GetOutputPortType(sourcePortId) ?? source.PortType));
     }
 
     public void PreviewConnection(Point point)
@@ -854,12 +875,14 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     public void CancelConnection()
     {
         _pendingOutputNode = null;
+        _pendingOutputPortId = null;
         ConnectionPreviewPoint = null;
         OnPropertyChanged(nameof(PendingOutputNode));
+        OnPropertyChanged(nameof(PendingOutputPortId));
         SetConnectionStatus("Messages.ChooseConnection");
     }
 
-    public void CompleteConnection(GraphNodeViewModel target, string? targetPortId = null)
+    public void CompleteConnection(GraphNodeViewModel target, string? targetPortId = null, string? sourcePortId = null)
     {
         SelectNode(target);
 
@@ -870,10 +893,13 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         }
 
         var source = _pendingOutputNode;
+        sourcePortId ??= _pendingOutputPortId;
         _pendingOutputNode = null;
+        _pendingOutputPortId = null;
         ConnectionPreviewPoint = null;
         OnPropertyChanged(nameof(PendingOutputNode));
-        if (TryConnectNodes(source, target, out var error, targetPortId))
+        OnPropertyChanged(nameof(PendingOutputPortId));
+        if (TryConnectNodes(source, target, out var error, targetPortId, sourcePortId))
         {
             SetConnectionStatus("Messages.NodesConnected", source.Name, target.Name);
         }
@@ -892,7 +918,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         GraphNodeViewModel source,
         GraphNodeViewModel target,
         out string? error,
-        string? targetPortId = null)
+        string? targetPortId = null,
+        string? sourcePortId = null)
     {
         if (!Nodes.Contains(source) || !Nodes.Contains(target))
         {
@@ -936,15 +963,30 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             return false;
         }
 
+        if (source.Definition.OutputPorts is { } outputPorts)
+        {
+            if (sourcePortId is null || !outputPorts.Any(port => port.Id == sourcePortId))
+            {
+                error = "The source output port does not exist.";
+                return false;
+            }
+        }
+        else if (sourcePortId is not null)
+        {
+            error = "The source output port does not exist.";
+            return false;
+        }
+
         if (source.Definition.PortCategory != target.Definition.PortCategory ||
-            source.Definition.PortType != target.Definition.GetInputPortType(targetPortId))
+            source.Definition.GetOutputPortType(sourcePortId) != target.Definition.GetInputPortType(targetPortId))
         {
             error = "Port categories and data types must match.";
             return false;
         }
 
         if (Connections.Any(connection =>
-                connection.Source == source && connection.Target == target && connection.TargetPortId == targetPortId))
+                connection.Source == source && connection.Target == target &&
+                connection.TargetPortId == targetPortId && connection.SourcePortId == sourcePortId))
         {
             error = "These ports are already connected.";
             return false;
@@ -957,7 +999,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             return false;
         }
 
-        _history.Execute(new AddGraphConnectionCommand(this, source, target, targetPortId: targetPortId));
+        _history.Execute(new AddGraphConnectionCommand(this, source, target,
+            targetPortId: targetPortId, sourcePortId: sourcePortId));
         error = null;
         return true;
     }

@@ -1,6 +1,7 @@
 using Avalonia;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using LiberaFx.Models.Graph;
 
 namespace LiberaFx.ViewModels;
 
@@ -10,10 +11,11 @@ public sealed class GraphConnectionViewModel : ObservableObject
 
     public GraphNodeViewModel Target { get; }
     public string? TargetPortId { get; }
+    public string? SourcePortId { get; }
 
     public double StartX => Source.DisplayX + GraphNodeViewModel.NodeWidth - GraphNodeViewModel.PortHorizontalOffset;
 
-    public double StartY => Source.DisplayY + GraphNodeViewModel.PortCenterOffset;
+    public double StartY => Source.DisplayY + GraphNodeViewModel.PortCenterOffset + Source.OutputPortOffset(SourcePortId);
 
     public double EndX => Target.DisplayX + GraphNodeViewModel.PortHorizontalOffset;
 
@@ -24,13 +26,18 @@ public sealed class GraphConnectionViewModel : ObservableObject
 
     public Point EndPoint => new(EndX, EndY);
 
-    public string Description => $"{Source.Name} → {Target.Name}{(TargetPortId is null ? "" : $" [{TargetPortId}]")} ({Source.DisplayPortType})";
+    public string Description =>
+        $"{Source.Name}{(SourcePortId is null ? "" : $" [{SourcePortId}]")} → {Target.Name}" +
+        $"{(TargetPortId is null ? "" : $" [{TargetPortId}]")} " +
+        $"({GraphNodeDefinition.DisplayPortType(Source.Definition.GetOutputPortType(SourcePortId) ?? Source.PortType)})";
 
-    public GraphConnectionViewModel(GraphNodeViewModel source, GraphNodeViewModel target, string? targetPortId = null)
+    public GraphConnectionViewModel(GraphNodeViewModel source, GraphNodeViewModel target,
+        string? targetPortId = null, string? sourcePortId = null)
     {
         Source = source;
         Target = target;
         TargetPortId = targetPortId;
+        SourcePortId = sourcePortId;
         Source.PropertyChanged += OnNodePropertyChanged;
         Target.PropertyChanged += OnNodePropertyChanged;
     }
@@ -59,4 +66,5 @@ public sealed class GraphConnectionViewModel : ObservableObject
             if (Target.InputPorts[index].Id == TargetPortId) return 5 + index * 24;
         return 0;
     }
+
 }

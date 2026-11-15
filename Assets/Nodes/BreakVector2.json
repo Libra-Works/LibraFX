@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "typeId": "2c5e5bb8-117b-4a01-9a01-000000000016",
+  "namespace": "LiberaFx",
+  "kind": "BreakVector2",
+  "name": "Break Vector2",
+  "displayNameKey": "Vectors.Node.BreakVector2",
+  "groupNameKey": "Vectors.Group",
+  "group": "Vectors",
+  "portType": "FloatX2",
+  "portCategory": "Parameter",
+  "inputPorts": [{ "id": "a", "name": "Value", "portType": "FloatX2" }],
+  "outputPorts": [
+    { "id": "x", "name": "X", "portType": "Float" },
+    { "id": "y", "name": "Y", "portType": "Float" }
+  ]
+}

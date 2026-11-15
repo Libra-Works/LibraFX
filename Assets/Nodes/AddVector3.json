@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "typeId": "2c5e5bb8-117b-4a01-9a01-000000000005",
+  "namespace": "LiberaFx",
+  "kind": "AddVector3",
+  "name": "Add Vector3",
+  "displayNameKey": "Vectors.Node.AddVector3",
+  "groupNameKey": "Vectors.Group",
+  "group": "Vectors",
+  "portType": "FloatX3",
+  "portCategory": "Parameter",
+  "inputPorts": [{ "id": "a", "name": "A" }, { "id": "b", "name": "B" }],
+  "parameters": [
+    { "id": "a", "name": "A", "displayNameKey": "Vectors.Parameter.A", "type": "vector3", "defaultValue": [0.0, 0.0, 0.0] },
+    { "id": "b", "name": "B", "displayNameKey": "Vectors.Parameter.B", "type": "vector3", "defaultValue": [0.0, 0.0, 0.0] }
+  ]
+}

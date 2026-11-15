@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "typeId": "2c5e5bb8-117b-4a01-9a01-000000000027",
+  "namespace": "LiberaFx",
+  "kind": "MaskVector4",
+  "name": "Mask Vector4",
+  "displayNameKey": "Vectors.Node.MaskVector4",
+  "groupNameKey": "Vectors.Group",
+  "group": "Vectors",
+  "portType": "FloatX4",
+  "portCategory": "Parameter",
+  "inputPorts": [{ "id": "a", "name": "Value", "portType": "FloatX4" }],
+  "parameters": [{ "id": "channels", "name": "Channels (x, y, z, w)", "displayNameKey": "Vectors.Parameter.Channels", "type": "string", "defaultValue": "xyzw" }]
+}

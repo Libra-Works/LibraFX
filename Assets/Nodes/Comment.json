@@ -10,7 +10,8 @@
   "portType": "Comment",
   "portCategory": "Parameter",
   "parameters": [
-    { "id": "text", "name": "Text", "displayNameKey": "Editor.Parameter.Text", "type": "string", "defaultValue": "" },
+    { "id": "text", "name": "Text", "displayNameKey": "Editor.Parameter.Text", "type": "string", "defaultValue": "", "editor": { "kind": "multiline" } },
+    { "id": "format", "name": "Format", "displayNameKey": "Comments.Format", "type": "enum:c1c90dae-c39c-46c9-bc67-c0b6fd7cf06b", "defaultValue": 0 },
     { "id": "width", "name": "Width", "displayNameKey": "Editor.Parameter.Width", "type": "float", "defaultValue": 360 },
     { "id": "height", "name": "Height", "displayNameKey": "Editor.Parameter.Height", "type": "float", "defaultValue": 200 },
     { "id": "image", "name": "Image", "displayNameKey": "Editor.Parameter.Image", "type": "commentImage", "defaultValue": "" }

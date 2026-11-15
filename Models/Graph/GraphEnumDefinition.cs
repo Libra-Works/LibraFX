@@ -26,11 +26,33 @@ public sealed record GraphEnumDefinition(Guid TypeId, string Namespace, string N
         var result = new Dictionary<Guid, GraphEnumDefinition>();
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var directory = Path.Combine(AppContext.BaseDirectory, "Assets", "Enums");
-        var builtIn = Path.Combine(directory, "Interpolation.json");
+        var builtIns = new Dictionary<Guid, string>
+        {
+            [Guid.Parse("c0bb0566-0892-4c0f-b8eb-ce5a38d3f0b2")] = "Interpolation",
+            [Guid.Parse("c1c90dae-c39c-46c9-bc67-c0b6fd7cf06b")] = "CommentFormat"
+        };
+        var builtInPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (id, name) in builtIns)
+        {
+            var path = Path.Combine(directory, name + ".json");
+            builtInPaths.Add(path);
+            try
+            {
+                using var stream = File.OpenRead(path);
+                Add(stream, result, names, id);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)
+            {
+                Warnings.Add($"{name}.json: {ex.Message} (using built-in definition)");
+                using var stream = BuiltInAssets.Open("Enums", name);
+                Add(stream, result, names, id);
+            }
+        }
         if (Directory.Exists(directory))
         {
             foreach (var path in Directory.EnumerateFiles(directory, "*.json").OrderBy(path => path, StringComparer.Ordinal))
             {
+                if (builtInPaths.Contains(path)) continue;
                 try
                 {
                     using var stream = File.OpenRead(path);
@@ -42,19 +64,14 @@ public sealed record GraphEnumDefinition(Guid TypeId, string Namespace, string N
                 }
             }
         }
-        if (!File.Exists(builtIn))
-        {
-            using var stream = BuiltInAssets.Open("Enums", "Interpolation");
-            try { Add(stream, result, names); }
-            catch (InvalidDataException ex) { Warnings.Add($"Interpolation.json: {ex.Message}"); }
-        }
         return result;
     }
 
-    private static void Add(Stream stream, Dictionary<Guid, GraphEnumDefinition> result, HashSet<string> names)
+    private static void Add(Stream stream, Dictionary<Guid, GraphEnumDefinition> result, HashSet<string> names, Guid? expectedId = null)
     {
         var file = JsonSerializer.Deserialize<EnumFile>(stream, Options);
         if (file is null || file.SchemaVersion != 1 || file.TypeId == Guid.Empty ||
+            (expectedId.HasValue && file.TypeId != expectedId) ||
             string.IsNullOrWhiteSpace(file.Namespace) || string.IsNullOrWhiteSpace(file.Name) ||
             file.Values is not { Count: > 0 } ||
             file.Values.Any(item => item is null || string.IsNullOrWhiteSpace(item.Name)) ||

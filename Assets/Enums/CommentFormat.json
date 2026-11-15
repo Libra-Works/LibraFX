@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "typeId": "c1c90dae-c39c-46c9-bc67-c0b6fd7cf06b",
+  "namespace": "LiberaFx",
+  "name": "CommentFormat",
+  "values": [
+    { "value": 0, "name": "Text", "displayNameKey": "Comments.Text" },
+    { "value": 1, "name": "Markdown", "displayNameKey": "Comments.Markdown" },
+    { "value": 2, "name": "HTML", "displayNameKey": "Comments.Html" }
+  ]
+}

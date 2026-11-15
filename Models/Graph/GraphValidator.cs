@@ -37,7 +37,7 @@ public static class GraphValidator
             if (node.ChildGraph is not null) Validate(node.ChildGraph, allIds, depth + 1);
         }
 
-        var connections = new HashSet<(Guid SourceId, Guid TargetId, string? PortId)>();
+        var connections = new HashSet<(Guid SourceId, string? SourcePortId, Guid TargetId, string? TargetPortId)>();
         var occupiedInputs = new HashSet<(Guid TargetId, string PortId)>();
         foreach (var connection in snapshot.Connections)
         {
@@ -47,14 +47,15 @@ public static class GraphValidator
                 source.Id == target.Id ||
                 source.Kind == GraphNodeKind.GraphGroup || target.Kind == GraphNodeKind.GraphGroup ||
                 source.Kind == GraphNodeKind.Comment || target.Kind == GraphNodeKind.Comment ||
-                source.PortType != definitions[target.Kind].GetInputPortType(connection.TargetPortId) ||
+                definitions[source.Kind].GetOutputPortType(connection.SourcePortId) !=
+                definitions[target.Kind].GetInputPortType(connection.TargetPortId) ||
                 source.PortCategory != target.PortCategory ||
                 (definitions[target.Kind].InputPorts is null
                     ? connection.TargetPortId is not null
                     : connection.TargetPortId is not { } port ||
                       !definitions[target.Kind].InputPorts!.Any(item => item.Id == port) ||
                       !occupiedInputs.Add((target.Id, port))) ||
-                !connections.Add((source.Id, target.Id, connection.TargetPortId)))
+                !connections.Add((source.Id, connection.SourcePortId, target.Id, connection.TargetPortId)))
                 throw new InvalidDataException("The project contains an invalid graph connection.");
         }
     }
