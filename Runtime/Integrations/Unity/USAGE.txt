@@ -141,7 +141,10 @@ C11 header compile smoke passed with MSVC and Clang; DLL exports only the C brid
 Runtime + editor scripts compiled against installed Unity 6000.2.6f1 assemblies.
 Real .NET forward P/Invoke into the DLL exercised the C#-generated sample,
 GUID bindings, default mutation, atlas/quad and 10,000 no-GC evaluate calls.
-Unity Play Mode, actual GPU rendering, shader compilation, IL2CPP, non-Windows
-plugins and native engine-neutral draw-command streaming were not exercised.
+Unity 6000.2.6f1 synchronous Editor lifecycle checks also passed on Direct3D11:
+shader compilation, cube/atlas framebuffer readback, dynamic buffer reuse and
+zero managed GC across 1,000 updates per mode. See Editor\Tests\VALIDATION.txt.
+Play Mode scheduling, IL2CPP, non-Windows plugins and native engine-neutral
+draw-command streaming were not exercised.
 The sample pulls bound numeric outputs; it does not yet import engine asset
 catalogs or consume an entire graph's render-command stream.
