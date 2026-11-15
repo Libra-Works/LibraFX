@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Avalonia.Threading;
 using LiberaFx.Models.Graph;
+using LiberaFx.Services.Compilation;
 using LiberaFx.ViewModels;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -34,6 +35,7 @@ public sealed class PreviewHost : IDisposable
     private PreviewPublication? _latest;
     private long _sequence;
     private PreviewTelemetryStore? _telemetry;
+    private PreviewAssetStore? _assets;
 
     public string AccessToken { get; } = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
     public string Fingerprint => Convert.ToHexString(SHA256.HashData(_certificate.RawData));
@@ -67,6 +69,7 @@ public sealed class PreviewHost : IDisposable
             {
                 _model = model;
                 _telemetry = model.PreviewTelemetry;
+                _assets = model.PreviewAssets;
                 model.ActiveGraphProvider.PropertyChanged += OnActiveGraphChanged;
                 model.Playback.StateChanged += OnPlaybackChanged;
                 AttachGraph(model.ActiveGraphProvider.Graph);
@@ -193,8 +196,9 @@ public sealed class PreviewHost : IDisposable
             UpdateClientCount();
             using var cancel = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
             var clientCancellation = cancel.Token;
-            _telemetry?.Connect(id, client.Version, bytes => SendControlAsync(socket, client, bytes, clientCancellation));
-            var sending = Task.Run(() => SendAsync(socket, client, cancel.Token), cancel.Token);
+            _telemetry?.Connect(id, client.Version, bytes => SendControlAsync(socket, client, bytes, clientCancellation),
+                context.Connection.RemoteIpAddress?.ToString());
+            var sending = Task.Run(() => SendAsync(socket, id, client, cancel.Token), cancel.Token);
             try
             {
                 var receiving = ReceiveAsync(socket, id, client, cancel.Token);
@@ -217,6 +221,7 @@ public sealed class PreviewHost : IDisposable
         {
             lock (_sync) _clients.Remove(id);
             _telemetry?.Disconnect(id);
+            _assets?.Disconnect(id);
             _sockets.TryRemove(id, out _);
             client.Channel.Writer.TryComplete();
             _clientSlots.Release();
@@ -224,7 +229,7 @@ public sealed class PreviewHost : IDisposable
         }
     }
 
-    private static async Task SendAsync(WebSocket socket, PreviewClient client, CancellationToken cancellation)
+    private async Task SendAsync(WebSocket socket, Guid id, PreviewClient client, CancellationToken cancellation)
     {
         PreviewPublication? baseline = null;
         var compiled = new CompiledPreviewSender();
@@ -237,6 +242,12 @@ public sealed class PreviewHost : IDisposable
                 var message = compiled.Prepare(publication, force);
                 if (message is null) continue;
                 await SendSerializedAsync(socket, client, message.Bytes, WebSocketMessageType.Binary, cancellation);
+                if (message.Kind == CompiledPreviewKind.Program && _assets?.Supports(id, "rendering") == true)
+                {
+                    var scene = RenderProgramBindings.CreateScene(publication.Graph, publication.Sequence);
+                    await SendSerializedAsync(socket, client, CompiledPreviewProtocol.CreateScene(scene),
+                        WebSocketMessageType.Binary, cancellation);
+                }
                 compiled.Sent(message);
                 continue;
             }
@@ -271,7 +282,7 @@ public sealed class PreviewHost : IDisposable
 
     private async Task ReceiveAsync(WebSocket socket, Guid id, PreviewClient client, CancellationToken cancellation)
     {
-        var limit = client.Version == 3 ? PreviewTelemetryStore.MaxFrameBytes : 255;
+        var limit = client.Version == 3 ? CompiledPreviewProtocol.MaxSceneBytes : 255;
         var buffer = new byte[limit + 1];
         while (!cancellation.IsCancellationRequested)
         {
@@ -294,7 +305,18 @@ public sealed class PreviewHost : IDisposable
                     !request.RootElement.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String) return;
                 if (type.GetString() != "resync")
                 {
-                    if (client.Version != 3 || _telemetry?.Receive(id, buffer.AsMemory(0, count)) != true) return;
+                    if (client.Version != 3 ||
+                        (_telemetry?.Receive(id, buffer.AsMemory(0, count)) != true &&
+                         _assets?.Receive(id, buffer.AsMemory(0, count)) != true)) return;
+                    UpdateClientCount();
+                    if (type.GetString() == "hello" && _assets?.Supports(id, "rendering") == true)
+                    {
+                        lock (_sync)
+                        {
+                            Interlocked.Exchange(ref client.ForceSnapshot, 1);
+                            if (_latest is not null) client.Channel.Writer.TryWrite(_latest);
+                        }
+                    }
                     continue;
                 }
                 if (client.Version == 3 && request.RootElement.EnumerateObject().Count() != 1) return;
@@ -323,6 +345,7 @@ public sealed class PreviewHost : IDisposable
         Dispatcher.UIThread.Post(() =>
         {
             if (_model is not null) _model.PreviewClientCount = _sockets.Count;
+            _model?.RefreshPreviewConnections();
         });
     }
 

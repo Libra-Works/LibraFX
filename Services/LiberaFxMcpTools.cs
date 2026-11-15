@@ -28,6 +28,7 @@ public sealed class LiberaFxMcpTools
         JsonSerializer.Serialize(telemetry.Clients().Select(peer => new
         {
             peer.ClientId, peer.Protocol, peer.Engine, peer.Role, helloVersion = peer.Engine is null ? (int?)null : 1,
+            peer.ViewerName, peer.EngineVersion, peer.Platform, peer.RemoteAddress, peer.ConnectedAt, peer.LastReceivedAt,
             peer.Capabilities, peer.ProfilePending, peer.RequestedProfile, peer.WatchedNodes,
             profile = peer.Profile is { } profile ? new
             { profile.ProgramSequence, profile.SnapshotId, profile.Dropped, metricCount = profile.Metrics.Count } : null,

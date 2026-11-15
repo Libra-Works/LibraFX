@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "typeId": "5bf459b5-77aa-4ec5-a704-cc59df700002",
+  "namespace": "LiberaFx",
+  "kind": "SpriteDraw",
+  "name": "Sprite Draw",
+  "displayNameKey": "Assets.SpriteDraw",
+  "groupNameKey": "Assets.Rendering",
+  "group": "Rendering",
+  "portType": "RenderInstance",
+  "portCategory": "Parameter",
+  "inputPorts": [
+    { "id": "position", "name": "Position", "portType": "FloatX3" },
+    { "id": "rotation", "name": "Rotation", "portType": "FloatX3" },
+    { "id": "scale", "name": "Scale", "portType": "FloatX3" },
+    { "id": "tint", "name": "Tint", "portType": "FloatX4" },
+    { "id": "frame", "name": "Frame", "portType": "Float" }
+  ],
+  "parameters": [
+    { "id": "assetPath", "name": "Texture", "type": "string", "defaultValue": "" },
+    { "id": "materialSchema", "name": "Material schema", "type": "string", "defaultValue": "[]" },
+    { "id": "position", "name": "Position", "type": "vector3", "defaultValue": [0, 0, 0] },
+    { "id": "rotation", "name": "Rotation (degrees)", "type": "vector3", "defaultValue": [0, 0, 0] },
+    { "id": "scale", "name": "Scale", "type": "vector3", "defaultValue": [1, 1, 1] },
+    { "id": "tint", "name": "Tint", "type": "vector4", "defaultValue": [1, 1, 1, 1] },
+    { "id": "frame", "name": "Frame (-1 = time)", "type": "float", "defaultValue": 0 },
+    { "id": "columns", "name": "Columns", "type": "int", "defaultValue": 1 },
+    { "id": "rows", "name": "Rows", "type": "int", "defaultValue": 1 },
+    { "id": "fps", "name": "Frames / second", "type": "float", "defaultValue": 12 },
+    { "id": "playing", "name": "Animate", "type": "bool", "defaultValue": false },
+    { "id": "billboard", "name": "Billboard", "type": "bool", "defaultValue": true }
+  ]
+}

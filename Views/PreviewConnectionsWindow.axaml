@@ -1,0 +1,34 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:services="using:LiberaFx.Services"
+        x:Class="LiberaFx.Views.PreviewConnectionsWindow"
+        Title="{DynamicResource Text.Connections.Title}"
+        Width="940" Height="480" MinWidth="640" MinHeight="320"
+        Background="{DynamicResource EffectWindowBackgroundBrush}">
+  <Grid RowDefinitions="Auto,*,Auto" Margin="16" RowSpacing="12">
+    <TextBlock Text="{DynamicResource Text.Connections.Hint}" TextWrapping="Wrap" />
+    <ListBox Grid.Row="1" x:Name="Peers" SelectionChanged="OnSelectionChanged">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="services:PreviewPeer">
+          <Grid Margin="8" RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto">
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <TextBlock Text="{Binding Engine}" FontWeight="Bold" FontSize="18" />
+              <TextBlock Text="{Binding EngineVersion}" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Role}" VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Grid.Column="1" Text="{Binding Platform}" />
+            <TextBlock Grid.Row="1" Text="{Binding ViewerName}" Margin="0,6" FontSize="15" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RemoteAddress}" Margin="12,6,0,6" />
+            <TextBlock Grid.Row="2" Text="{Binding ClientId}" Opacity="0.6" />
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding ConnectedAt}" Opacity="0.6" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
+      <TextBlock x:Name="Status" VerticalAlignment="Center" TextWrapping="Wrap" />
+      <Button Grid.Column="1" x:Name="ReconnectButton" Click="OnReconnect"
+              Content="{DynamicResource Text.Connections.Reconnect}" />
+    </Grid>
+  </Grid>
+</Window>

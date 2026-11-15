@@ -67,8 +67,10 @@ public sealed class VfxProgram
     public static VfxProgram Compile(GraphSnapshot graph)
     {
         GraphValidator.Validate(graph);
+        _ = RenderProgramBindings.CreateScene(graph, 0);
         var nodes = Flatten(graph)
-            .Where(node => node.Kind != GraphNodeKind.Comment && node.Kind != GraphNodeKind.GraphGroup)
+            .Where(node => node.Kind != GraphNodeKind.Comment && node.Kind != GraphNodeKind.GraphGroup &&
+                !RenderProgramBindings.IsRenderNode(node.Kind))
             .ToArray();
         if (nodes.Length > MaxInstructions) throw new InvalidDataException("Too many runtime nodes.");
         var byId = nodes.ToDictionary(node => node.Id);

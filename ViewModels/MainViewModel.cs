@@ -36,6 +36,18 @@ public partial class MainViewModel : ViewModelBase
 
     public EditorLog Log { get; } = new();
     public PreviewTelemetryStore PreviewTelemetry { get; } = new();
+    public PreviewAssetStore PreviewAssets { get; }
+    public AssetMetadataStore AssetMetadata { get; } = new();
+    public string PreviewConnectionSummary
+    {
+        get
+        {
+            var peers = PreviewTelemetry.Clients();
+            return peers.Count == 0 ? LocalizationService.Shared.Get("Connections.Disconnected") :
+                string.Join(" | ", peers.Select(peer => $"{peer.Engine ?? "?"} / {peer.Role ?? "?"} / {peer.ViewerName ?? peer.ClientId.ToString("D")[..8]}"));
+        }
+    }
+    public void RefreshPreviewConnections() => OnPropertyChanged(nameof(PreviewConnectionSummary));
     public string McpEndpoint { get; }
     public string PreviewEndpoint { get; }
     public string PreviewAccessToken { get; }
@@ -205,6 +217,7 @@ public partial class MainViewModel : ViewModelBase
         ServerSettingsService? serverSettings = null)
     {
         ServerSettings = serverSettings ?? new ServerSettingsService();
+        PreviewAssets = new PreviewAssetStore(PreviewTelemetry);
         GroupAssets = new GroupAssetCatalog(TeamProfiles);
         NodeDefinitions = new NodeDefinitionCatalog(TeamProfiles);
         Log.Add("Application", LocalizationService.Shared.Get("Messages.EditorStarted"));

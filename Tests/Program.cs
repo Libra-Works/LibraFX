@@ -43,6 +43,15 @@ internal static class Program
             else File.WriteAllText(Path.Combine(directory, "language.json"), languageFixture);
         }
         AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+        if (args is ["--asset-render"])
+        {
+            LiberaFx.Tests.BuiltinMathCompilationTests.Run();
+            AssetSceneProtocolTests.Run();
+            AssetAuthoringTests.Run();
+            EffectSampleAuthoringTests.Run();
+            Console.WriteLine("Portable math, asset protocol and render sample authoring checks passed.");
+            return;
+        }
         if (args is ["--runtime-integration"])
         {
             CompiledPreviewProtocolTests.Run();

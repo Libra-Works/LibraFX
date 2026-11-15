@@ -12,7 +12,8 @@ public sealed record LiberaGraphNodeSpec(
     GraphNodeKind Kind,
     string Name,
     double X,
-    double Y);
+    double Y,
+    IReadOnlyList<NodeParameterSnapshot>? Parameters = null);
 
 /// <summary>Connects two node keys declared in the same graph plan.</summary>
 public sealed record LiberaGraphConnectionSpec(

@@ -7,7 +7,7 @@ using LiberaFx.Services.Compilation;
 
 namespace LiberaFx.Services;
 
-public enum CompiledPreviewKind : ushort { Program = 1, Playback = 2, CompileError = 3, Control = 4 }
+public enum CompiledPreviewKind : ushort { Program = 1, Playback = 2, CompileError = 3, Control = 4, Scene = 5 }
 
 public sealed record CompiledPreviewMessage(byte[] Bytes, CompiledPreviewKind Kind, PreviewPublication Publication);
 
@@ -17,9 +17,49 @@ public static class CompiledPreviewProtocol
     public const int MaxProgramBytes = 128 * 1024 * 1024;
     public const int MaxErrorBytes = 4096;
     public const int MaxControlBytes = 4096;
+    public const int MaxSceneBytes = 1024 * 1024;
     private static readonly ConditionalWeakTable<GraphSnapshot, Lazy<Compilation>> Cache = new();
 
     private sealed record Compilation(byte[]? Bytes, byte[]? Error);
+
+    public static byte[] CreateScene(ReadOnlySpan<byte> utf8Json)
+    {
+        if (utf8Json.Length is 0 or > MaxSceneBytes) throw new ArgumentException("Invalid scene payload size.");
+        try
+        {
+            _ = new UTF8Encoding(false, true).GetString(utf8Json);
+            using var json = JsonDocument.Parse(utf8Json.ToArray(), new JsonDocumentOptions { MaxDepth = 32 });
+            if (json.RootElement.ValueKind != JsonValueKind.Object ||
+                !json.RootElement.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String ||
+                type.GetString() is not ("asset_catalog" or "asset_details" or "asset_thumbnail" or "render_config" or "reconnect"))
+                throw new ArgumentException("Unknown scene command.");
+            ValidateUniqueProperties(json.RootElement);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or DecoderFallbackException)
+        { throw new ArgumentException("Invalid scene command JSON.", nameof(utf8Json), ex); }
+        var bytes = new byte[HeaderSize + utf8Json.Length];
+        "LFXP"u8.CopyTo(bytes);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(4), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(6), (ushort)CompiledPreviewKind.Scene);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(44), (uint)utf8Json.Length);
+        utf8Json.CopyTo(bytes.AsSpan(HeaderSize));
+        return bytes;
+    }
+
+    internal static void ValidateUniqueProperties(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Object)
+        {
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var property in value.EnumerateObject())
+            {
+                if (!names.Add(property.Name)) throw new JsonException("Duplicate object property.");
+                ValidateUniqueProperties(property.Value);
+            }
+        }
+        else if (value.ValueKind == JsonValueKind.Array)
+            foreach (var item in value.EnumerateArray()) ValidateUniqueProperties(item);
+    }
 
     public static byte[] CreateControl(ReadOnlySpan<byte> utf8Json)
     {

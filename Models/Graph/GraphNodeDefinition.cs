@@ -93,6 +93,9 @@ public sealed record GraphNodeDefinition(
     private static readonly JsonSerializerOptions SerializerOptions = new() { PropertyNameCaseInsensitive = true };
     private static readonly Dictionary<Guid, string> BuiltInIds = new()
     {
+        [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700001")] = "ModelDraw",
+        [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700002")] = "SpriteDraw",
+        [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700003")] = "SpriteAnimation",
         [Guid.Parse("19aa71e5-b3c7-453d-860e-baad3b9d0fc4")] = "Float",
         [Guid.Parse("d98eb6f5-ee2e-432a-9450-09e44dcc42e3")] = "FloatX2",
         [Guid.Parse("7ef61949-53c4-41fb-aabd-840b0a4680f7")] = "FloatX3",

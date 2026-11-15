@@ -70,6 +70,8 @@
                     <MenuItem.Icon><views:EditorIconView Icon="Link" /></MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="{DynamicResource Text.Profiler.Title}" Click="OnProfilerClick" />
+                <MenuItem Header="{DynamicResource Text.Connections.Title}" Click="OnConnectionsClick" />
+                <MenuItem Header="{DynamicResource Text.Asset.Title}" Click="OnContentClick" />
             </MenuItem>
             <MenuItem Header="{DynamicResource Text.Editor.Help}">
                 <MenuItem Header="{DynamicResource Text.Editor.GettingStarted}" Click="OnHelpClick">
@@ -94,6 +96,8 @@
                           Layout="{Binding Layout}" />
 
         <StackPanel Grid.Row="2" Margin="8,4" Spacing="2">
+            <Button Content="{Binding PreviewConnectionSummary}" Click="OnConnectionsClick"
+                    HorizontalAlignment="Left" Padding="4,2" />
             <TextBlock Text="{Binding FileStatus}"
                        TextWrapping="Wrap"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />

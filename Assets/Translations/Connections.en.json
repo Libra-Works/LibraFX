@@ -1,0 +1,11 @@
+{
+  "Connections.Title": "Preview connections",
+  "Connections.Hint": "Connected engines and viewers. Reconnect targets only the selected editor; unsupported peers are never silently redirected.",
+  "Connections.Disconnected": "No preview viewer connected",
+  "Connections.Select": "Select an editor to reconnect.",
+  "Connections.Selected": "Selected viewer: {0}",
+  "Connections.Reconnect": "Reconnect selected viewer",
+  "Connections.Reconnecting": "Requesting reconnection...",
+  "Connections.ReconnectSent": "Editor acknowledged the reconnect request. Waiting for its new connection.",
+  "Connections.Failed": "Reconnect failed: {0}"
+}

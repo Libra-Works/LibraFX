@@ -1,0 +1,11 @@
+{
+  "Connections.Title": "プレビュー接続",
+  "Connections.Hint": "接続中のエンジンとビューワーを表示します。再接続は選択したエディターだけを対象にし、別の接続へ自動的に切り替えません。",
+  "Connections.Disconnected": "プレビュービューワー未接続",
+  "Connections.Select": "再接続するエディターを選択してください。",
+  "Connections.Selected": "選択中のビューワー: {0}",
+  "Connections.Reconnect": "選択したビューワーに再接続",
+  "Connections.Reconnecting": "再接続を要求中...",
+  "Connections.ReconnectSent": "エディターが再接続要求を受け付けました。新しい接続を待っています。",
+  "Connections.Failed": "再接続できませんでした: {0}"
+}

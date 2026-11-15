@@ -13,6 +13,8 @@ public partial class MainWindow : Window
     private LogWindow? _logWindow;
     private McpWindow? _mcpWindow;
     private PreviewProfilerWindow? _profilerWindow;
+    private PreviewConnectionsWindow? _connectionsWindow;
+    private EngineAssetsWindow? _contentWindow;
     private MainViewModel? _groupModel;
     private bool _checkingGroupUpdates;
     private bool _pendingGroupCheck;
@@ -88,6 +90,23 @@ public partial class MainWindow : Window
         _profilerWindow = new PreviewProfilerWindow { DataContext = DataContext };
         _profilerWindow.Closed += (_, _) => _profilerWindow = null;
         _profilerWindow.Show(this);
+    }
+
+    private void OnConnectionsClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_connectionsWindow is not null) { _connectionsWindow.Activate(); return; }
+        _connectionsWindow = new PreviewConnectionsWindow { DataContext = DataContext };
+        _connectionsWindow.Closed += (_, _) => _connectionsWindow = null;
+        _connectionsWindow.Show(this);
+    }
+
+    private void OnContentClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model) return;
+        if (_contentWindow is not null) { _contentWindow.Activate(); return; }
+        _contentWindow = new EngineAssetsWindow(model);
+        _contentWindow.Closed += (_, _) => _contentWindow = null;
+        _contentWindow.Show(this);
     }
 
     private async void OnCloseDocumentClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

@@ -18,7 +18,9 @@ public sealed record PreviewValues(long ProgramSequence, double EvaluationTime, 
 public sealed record PreviewProfileControl(bool Enabled, bool Nodes, bool Accessors, int IntervalMs);
 public sealed record PreviewPeer(Guid ClientId, int Protocol, string? Engine, string? Role,
     IReadOnlyList<string> Capabilities, PreviewProfile? Profile, PreviewValues? Values,
-    bool ProfilePending, PreviewProfileControl? RequestedProfile, IReadOnlyList<Guid> WatchedNodes);
+    bool ProfilePending, PreviewProfileControl? RequestedProfile, IReadOnlyList<Guid> WatchedNodes,
+    string? ViewerName = null, string? EngineVersion = null, string? Platform = null,
+    string? RemoteAddress = null, DateTimeOffset ConnectedAt = default, DateTimeOffset LastReceivedAt = default);
 
 // Host-scoped, bounded and independent of the UI dispatcher. Only complete snapshots are published.
 public sealed class PreviewTelemetryStore
@@ -40,6 +42,12 @@ public sealed class PreviewTelemetryStore
         public PendingProfile? Pending;
         public PreviewProfileControl? RequestedProfile;
         public IReadOnlyList<Guid> WatchedNodes = System.Array.Empty<Guid>();
+        public string? ViewerName;
+        public string? EngineVersion;
+        public string? Platform;
+        public string? RemoteAddress;
+        public readonly DateTimeOffset ConnectedAt = DateTimeOffset.UtcNow;
+        public DateTimeOffset LastReceivedAt = DateTimeOffset.UtcNow;
     }
 
     private sealed class PendingProfile(long sequence, ulong id, int total, ulong dropped)
@@ -52,12 +60,13 @@ public sealed class PreviewTelemetryStore
         public readonly HashSet<(string, Guid?)> Keys = [];
     }
 
-    public void Connect(Guid id, int protocol, Func<byte[], Task> send)
+    public void Connect(Guid id, int protocol, Func<byte[], Task> send, string? remoteAddress = null)
     {
         lock (_sync)
         {
             if (_peers.Count >= 16 || !_peers.TryAdd(id, new(protocol, send)))
                 throw new InvalidOperationException("Preview peer limit reached.");
+            _peers[id].RemoteAddress = remoteAddress;
         }
     }
 
@@ -74,7 +83,8 @@ public sealed class PreviewTelemetryStore
                 var p = pair.Value;
                 return new PreviewPeer(pair.Key, p.Protocol, p.Engine, p.Role,
                     System.Array.AsReadOnly(p.Capabilities), p.Profile, p.Values, p.Pending is not null,
-                    p.RequestedProfile, p.WatchedNodes);
+                    p.RequestedProfile, p.WatchedNodes, p.ViewerName, p.EngineVersion, p.Platform,
+                    p.RemoteAddress, p.ConnectedAt, p.LastReceivedAt);
             }).ToArray();
         }
     }
@@ -92,6 +102,7 @@ public sealed class PreviewTelemetryStore
             lock (_sync)
             {
                 if (!_peers.TryGetValue(id, out var peer) || peer.Protocol != 3) return false;
+                peer.LastReceivedAt = DateTimeOffset.UtcNow;
                 switch (type)
                 {
                     case "hello":
@@ -102,9 +113,15 @@ public sealed class PreviewTelemetryStore
                         var caps = Array(root, "capabilities", 16);
                         var capabilities = caps.EnumerateArray().Select(c => String(c, 32)).ToArray();
                         if (capabilities.Distinct(StringComparer.Ordinal).Count() != capabilities.Length) return false;
+                        var viewerName = OptionalText(root, "viewerName", 128);
+                        var engineVersion = OptionalText(root, "engineVersion", 64);
+                        var platform = OptionalText(root, "platform", 64);
                         peer.Engine = engine;
                         peer.Role = role;
                         peer.Capabilities = capabilities;
+                        peer.ViewerName = viewerName;
+                        peer.EngineVersion = engineVersion;
+                        peer.Platform = platform;
                         return true;
                     case "profile":
                         if (!peer.Capabilities.Contains("profiling", StringComparer.Ordinal)) return false;
@@ -121,6 +138,22 @@ public sealed class PreviewTelemetryStore
         {
             return false;
         }
+    }
+
+    private static string? OptionalText(JsonElement root, string name, int limit) =>
+        root.TryGetProperty(name, out var value) ? String(value, limit) : null;
+
+    public Task SceneControlAsync(ReadOnlyMemory<byte> json, Guid clientId, string capability = "assets")
+    {
+        Func<byte[], Task> send;
+        lock (_sync)
+        {
+            if (!_peers.TryGetValue(clientId, out var peer) || peer.Protocol != 3 ||
+                peer.Role != "editor" || !peer.Capabilities.Contains(capability, StringComparer.Ordinal))
+                throw new InvalidOperationException("Selected editor does not support this scene operation.");
+            send = peer.Send;
+        }
+        return send(CompiledPreviewProtocol.CreateScene(json.Span));
     }
 
     private static bool ReceiveProfile(PeerState peer, JsonElement root)
