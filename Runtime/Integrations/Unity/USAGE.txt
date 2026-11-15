@@ -15,25 +15,9 @@ and Texture references are the engine asset handles in this sample.
 
 Build the native plugin
 -----------------------
-The parent Runtime CMake must include this hookup (paths relative to Runtime):
-
-  set_target_properties(liberafx_runtime PROPERTIES
-      POSITION_INDEPENDENT_CODE ON CXX_VISIBILITY_PRESET hidden
-      VISIBILITY_INLINES_HIDDEN ON)
-  find_package(Threads REQUIRED)
-  add_library(liberafx_native SHARED Core/Interop.cpp)
-  target_link_libraries(liberafx_native PRIVATE liberafx_runtime Threads::Threads)
-  target_include_directories(liberafx_native PUBLIC include)
-  target_compile_features(liberafx_native PRIVATE cxx_std_17)
-  target_compile_definitions(liberafx_native PRIVATE LIBRA_INTEROP_BUILD=1)
-  set_target_properties(liberafx_native PROPERTIES
-      CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
-
-Inside LIBERAFX_BUILD_TESTS:
-
-  add_executable(liberafx_interop_tests tests/InteropTests.cpp)
-  target_link_libraries(liberafx_interop_tests PRIVATE liberafx_native)
-  add_test(NAME liberafx_interop_tests COMMAND liberafx_interop_tests)
+Runtime CMake builds liberafx_native by default. Set LIBERAFX_BUILD_INTEROP=OFF
+when only the static Core library is needed. LIBERAFX_BUILD_TESTS=ON also
+includes the bridge ownership, alignment, evaluation and allocation checks.
 
 Example Windows commands from the repository:
   cmake -S Runtime -B build\native -DLIBERAFX_BUILD_TESTS=ON

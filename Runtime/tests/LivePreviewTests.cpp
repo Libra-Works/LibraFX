@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <vector>
 
 namespace {
 void require(bool condition) { if (!condition) std::abort(); }
@@ -76,6 +77,16 @@ int main()
     put(control.data() + 8, 0, 8);
     control[headerBytes] = 0xff;
     require(decodeFrame(control.data(), control.size(), frame) == DecodeResult::InvalidFrame);
+    auto scene = std::vector<std::uint8_t>(headerBytes + maxErrorBytes + 1, ' ');
+    std::memset(scene.data(), 0, headerBytes);
+    std::memcpy(scene.data(), "LFXP", 4);
+    put(scene.data() + 4, 1, 2);
+    put(scene.data() + 6, 5, 2);
+    put(scene.data() + 44, maxErrorBytes + 1, 4);
+    require(decodeFrame(scene.data(), scene.size(), frame) == DecodeResult::Ok &&
+        frame.kind == Kind::Scene && cursor.commit(frame) == SequenceResult::Resync);
+    put(scene.data() + 6, 4, 2);
+    require(decodeFrame(scene.data(), scene.size(), frame) == DecodeResult::InvalidFrame);
 
     require(decodeFrame(nullptr, bytes.size(), frame) == DecodeResult::InvalidFrame);
     require(decodeFrame(bytes.data(), 47, frame) == DecodeResult::InvalidFrame);

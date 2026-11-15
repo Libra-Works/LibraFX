@@ -12,8 +12,9 @@ namespace liberafx::livepreview {
 constexpr std::size_t headerBytes = 48;
 constexpr std::size_t maxProgramBytes = 128u * 1024u * 1024u;
 constexpr std::size_t maxErrorBytes = 4096;
+constexpr std::size_t maxSceneBytes = 1024u * 1024u;
 
-enum class Kind : std::uint16_t { Program = 1, Playback = 2, CompileError = 3, Control = 4 };
+enum class Kind : std::uint16_t { Program = 1, Playback = 2, CompileError = 3, Control = 4, Scene = 5 };
 enum class DecodeResult : std::uint8_t { Ok, InvalidFrame };
 enum class SequenceResult : std::uint8_t { Accept, Stale, Resync };
 
