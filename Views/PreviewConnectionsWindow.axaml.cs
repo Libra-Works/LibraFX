@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using LiberaFx.Services;
@@ -67,5 +68,21 @@ public partial class PreviewConnectionsWindow : Window
             OperationCanceledException or System.Net.WebSockets.WebSocketException)
         { Status.Text = LocalizationService.Shared.Get("Connections.Failed", ex.Message); }
         finally { _busy = false; Refresh(); }
+    }
+
+    private async void OnCopyConnection(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model || Clipboard is not { } clipboard) return;
+        try
+        {
+            var invitation = PreviewConnectionInvitation.Create(model.PreviewEndpoint,
+                model.PreviewAccessToken, model.PreviewFingerprint);
+            await clipboard.SetTextAsync(invitation);
+            InvitationStatus.Text = LocalizationService.Shared.Get("Connections.ConnectionCopied");
+        }
+        catch (Exception)
+        {
+            InvitationStatus.Text = LocalizationService.Shared.Get("Connections.CopyFailed");
+        }
     }
 }

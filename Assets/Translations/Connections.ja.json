@@ -1,6 +1,10 @@
 {
   "Connections.Title": "プレビュー接続",
   "Connections.Hint": "接続中のエンジンとビューワーを表示します。再接続は選択したエディターだけを対象にし、別の接続へ自動的に切り替えません。",
+  "Connections.ConnectHint": "ここで接続情報をコピーし、UEの「LIBERA FX Preview」で「Connect」を押してください。一時的なアクセストークンを含むため、共有・保存しないでください。",
+  "Connections.CopyConnection": "接続情報をコピー",
+  "Connections.ConnectionCopied": "コピーしました。UEの「LIBERA FX Preview」で「Connect」を押してください。",
+  "Connections.CopyFailed": "プレビューの接続情報をコピーできませんでした。",
   "Connections.Disconnected": "プレビュービューワー未接続",
   "Connections.Select": "再接続するエディターを選択してください。",
   "Connections.Selected": "選択中のビューワー: {0}",

@@ -3,11 +3,20 @@
         xmlns:services="using:LiberaFx.Services"
         x:Class="LiberaFx.Views.PreviewConnectionsWindow"
         Title="{DynamicResource Text.Connections.Title}"
-        Width="940" Height="480" MinWidth="640" MinHeight="320"
+        Width="940" Height="560" MinWidth="640" MinHeight="400"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
-  <Grid RowDefinitions="Auto,*,Auto" Margin="16" RowSpacing="12">
+  <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="16" RowSpacing="12">
     <TextBlock Text="{DynamicResource Text.Connections.Hint}" TextWrapping="Wrap" />
-    <ListBox Grid.Row="1" x:Name="Peers" SelectionChanged="OnSelectionChanged">
+    <StackPanel Grid.Row="1" Spacing="6">
+      <TextBlock Text="{DynamicResource Text.Connections.ConnectHint}" TextWrapping="Wrap" />
+      <Button x:Name="CopyConnectionButton" Click="OnCopyConnection"
+              Content="{DynamicResource Text.Connections.CopyConnection}"
+              AutomationProperties.Name="{DynamicResource Text.Connections.CopyConnection}"
+              HorizontalAlignment="Left" />
+      <TextBlock x:Name="InvitationStatus" TextWrapping="Wrap"
+                 Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+    </StackPanel>
+    <ListBox Grid.Row="2" x:Name="Peers" SelectionChanged="OnSelectionChanged">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="services:PreviewPeer">
           <Grid Margin="8" RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto">
@@ -25,7 +34,7 @@
         </DataTemplate>
       </ListBox.ItemTemplate>
     </ListBox>
-    <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
+    <Grid Grid.Row="3" ColumnDefinitions="*,Auto">
       <TextBlock x:Name="Status" VerticalAlignment="Center" TextWrapping="Wrap" />
       <Button Grid.Column="1" x:Name="ReconnectButton" Click="OnReconnect"
               Content="{DynamicResource Text.Connections.Reconnect}" />

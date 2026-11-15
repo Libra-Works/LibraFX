@@ -5,6 +5,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using LiberaFx.Models.Appearance;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
@@ -16,6 +17,7 @@ internal static class EditorInterfaceTests
 {
     public static void Run()
     {
+        VerifyGraphToolbars();
         VerifyParameterRows();
         VerifyContainerPresentation();
         VerifyCatalogs();
@@ -100,6 +102,7 @@ internal static class EditorInterfaceTests
                 if (new IconButton { Icon = icon }.Content is not Avalonia.Controls.Shapes.Path { Data: not null })
                     throw new InvalidOperationException($"Icon {icon} has no vector geometry.");
         }
+
         finally
         {
             text.SelectedLanguage = originalLanguage;
@@ -121,6 +124,42 @@ internal static class EditorInterfaceTests
             if (Directory.Exists(root)) Directory.Delete(root);
         }
         VerifySettingsBindingLifetime();
+    }
+
+    public static void VerifyGraphToolbars()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        graph.CreateNode(GraphNodeKind.Float);
+        var view = new GraphEditorView { DataContext = graph };
+        var window = new Window { Width = 950, Height = 650, Content = view };
+        window.Show();
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            var toolbar = view.FindControl<Border>("GraphToolbar")!;
+            var viewport = view.FindControl<ScrollViewer>("GraphScrollViewer")!;
+            if (toolbar.Bounds.Top < viewport.Bounds.Bottom - 1 ||
+                toolbar.GetVisualDescendants().OfType<IconButton>().Any(button => button.Icon == EditorIcon.Delete) ||
+                !graph.DeleteSelectedNodeCommand.CanExecute(null))
+                throw new InvalidOperationException("Graph controls must be below the viewport without removing selection deletion.");
+            var gpu = new GpuWorkspaceView();
+            window.Content = gpu;
+            var container = GpuParticleEditorService.Create(graph);
+            gpu.Open(graph, container.Id);
+            try
+            {
+                gpu.Workspace!.EnterKernel(gpu.Workspace.State.Program.Kernels[0].Id);
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                var gpuToolbar = gpu.FindControl<StackPanel>("KernelToolbar")!;
+                var gpuViewport = gpu.FindControl<ScrollViewer>("GpuGraphScrollViewer")!;
+                if (gpuToolbar.Bounds.Top < gpuViewport.Bounds.Bottom - 1)
+                    throw new InvalidOperationException("GPU graph controls must be below the viewport too.");
+            }
+            finally { gpu.CloseWorkspace(); }
+        }
+        finally { window.Close(); }
     }
 
     public static void VerifyContainerPresentation()

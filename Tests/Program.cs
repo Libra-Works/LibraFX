@@ -86,6 +86,7 @@ internal static class Program
         }
         if (args is ["--runtime-integration"])
         {
+            EditorInterfaceTests.VerifyGraphToolbars();
             CompiledPreviewProtocolTests.Run();
             PreviewTelemetryTests.Run();
             McpParameterTests.Run();

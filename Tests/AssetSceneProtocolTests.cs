@@ -8,8 +8,30 @@ internal static class AssetSceneProtocolTests
 {
     public static void Run()
     {
+        VerifyConnectionInvitation();
         VerifyGpuScenes();
         VerifyQueriesAsync().GetAwaiter().GetResult();
+    }
+
+    private static void VerifyConnectionInvitation()
+    {
+        var token = new string('a', 64);
+        var fingerprint = new string('b', 64);
+        using var invitation = JsonDocument.Parse(PreviewConnectionInvitation.Create(
+            "wss://<editor-ip>:19426/preview", token, fingerprint));
+        var root = invitation.RootElement;
+        Require(root.GetProperty("type").GetString() == "librafx_preview_connection" &&
+            root.GetProperty("host").GetString() == "127.0.0.1" &&
+            root.GetProperty("port").GetInt32() == 19426 &&
+            root.GetProperty("accessToken").GetString() == token &&
+            root.GetProperty("certificateFingerprint").GetString() == fingerprint,
+            "Manual preview invitations must use the configured TLS preview endpoint and credentials.");
+        try
+        {
+            PreviewConnectionInvitation.Create("ws://localhost:19426/preview", token, fingerprint);
+            throw new Exception("Insecure preview invitations must be rejected.");
+        }
+        catch (ArgumentException) { }
     }
 
     private static void VerifyGpuScenes()

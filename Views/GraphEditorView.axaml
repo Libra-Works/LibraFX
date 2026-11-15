@@ -9,7 +9,7 @@
     <UserControl.Resources>
         <views:GraphPositionConverter x:Key="GraphPositionConverter" />
     </UserControl.Resources>
-    <Grid RowDefinitions="Auto,Auto,*">
+    <Grid RowDefinitions="Auto,*,Auto">
         <Border Grid.Row="0" Padding="6,3" Background="{DynamicResource EffectSurfaceBrush}"
                 BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="0,0,0,1">
             <ItemsControl ItemsSource="{Binding Breadcrumbs}">
@@ -34,16 +34,12 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </Border>
-        <Border Grid.Row="1"
+        <Border x:Name="GraphToolbar" Grid.Row="2"
                 Padding="8"
                 Background="{DynamicResource EffectSurfaceBrush}"
                 BorderBrush="{DynamicResource EffectBorderBrush}"
-                BorderThickness="0,0,0,1">
+                BorderThickness="0,1,0,0">
             <StackPanel Orientation="Horizontal" Spacing="6">
-                <views:IconButton Icon="Delete" ToolTip.Tip="{DynamicResource Text.Editor.Delete}"
-                        AutomationProperties.Name="{DynamicResource Text.Editor.Delete}"
-                        Command="{Binding DeleteSelectedNodeCommand}"
-                        IsEnabled="{Binding HasSelection}" />
                 <views:IconButton Icon="ZoomOut" ToolTip.Tip="{DynamicResource Text.Editor.ZoomOut}"
                         AutomationProperties.Name="{DynamicResource Text.Editor.ZoomOut}" Click="OnZoomOutClick" />
                 <Slider x:Name="ZoomSlider" Width="105" Minimum="-4.321928094887363" Maximum="2"
@@ -73,7 +69,7 @@
             </StackPanel>
         </Border>
 
-        <ScrollViewer Grid.Row="2"
+        <ScrollViewer Grid.Row="1"
                       x:Name="GraphScrollViewer"
                       PointerPressed="OnViewportPointerPressed"
                       PointerMoved="OnViewportPointerMoved"
