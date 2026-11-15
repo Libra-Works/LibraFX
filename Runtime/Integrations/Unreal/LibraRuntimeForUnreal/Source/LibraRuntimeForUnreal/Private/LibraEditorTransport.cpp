@@ -20,6 +20,13 @@
 
 #if LIBRA_WITH_EDITOR_TRANSPORT && WITH_SSL
 #include "SocketSubsystem.h"
+#pragma push_macro("UI")
+#pragma push_macro("min")
+#pragma push_macro("max")
+#undef UI
+// OpenSSL's UI typedef conflicts with UE's UI namespace.
+#define UI LIBRA_OPENSSL_UI
+THIRD_PARTY_INCLUDES_START
 #include <libwebsockets.h>
 #include <openssl/crypto.h>
 #include <openssl/ec.h>
@@ -27,6 +34,10 @@
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 #include <openssl/sha.h>
+THIRD_PARTY_INCLUDES_END
+#pragma pop_macro("max")
+#pragma pop_macro("min")
+#pragma pop_macro("UI")
 #endif
 
 #if LIBRA_WITH_EDITOR_TRANSPORT && WITH_SSL
@@ -579,12 +590,12 @@ struct FLibraEditorTransport::FImpl
 			SetFailure(TEXT("Connection failed"));
 		}
 
-		auto CloseDeadline = std::chrono::steady_clock::time_point::max();
+		auto CloseDeadline = (std::chrono::steady_clock::time_point::max)();
 		while (!Failed.load())
 		{
 			if (StopRequested.load())
 			{
-				if (CloseDeadline == std::chrono::steady_clock::time_point::max())
+				if (CloseDeadline == (std::chrono::steady_clock::time_point::max)())
 				{
 					CloseDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
 				}

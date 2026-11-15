@@ -4,8 +4,9 @@ Scope
   Engine-independent CPU bytecode evaluation, project-native nodes, bound values
   and parameters, explicit game-thread signals, and live editor communication.
   This is not a GPU particle renderer. Viewer/rendering integration is separate.
-  Source targets UE 5.7 and later; only the local 5.7.4 SDK was inspected.
-  No Unreal build, UHT run, or engine launch was performed during implementation.
+  Source targets UE 5.7 and later. UHT and the Win64 Development Editor build
+  succeeded using the local UE 5.7.4 SDK and MyProject28 linked installation.
+  UE automation and live editor interoperability have not been run.
   The editor WebSocket transport targets Win64, Linux (including ARM64), and
   macOS with UE's libWebSockets/OpenSSL/SSL libraries. Other targets fail closed.
   DNS uses UE's platform socket subsystem; TLS pinning remains connection-local.
@@ -108,4 +109,6 @@ Validation sources
   Native CMake has runtime, render-queue and live-preview codec test targets.
   Managed smoke tests include custom-node compilation and protocol-v3 WSS cases.
   UE automation includes asset ownership, GUID identity and transport checks.
-  Compiled tests and actual UE/editor interoperability still require your build.
+  UE automation sources compile in the Win64 Editor build; execution remains
+  pending. Standalone native/managed tests and actual UE/editor interoperability
+  still require separate validation.

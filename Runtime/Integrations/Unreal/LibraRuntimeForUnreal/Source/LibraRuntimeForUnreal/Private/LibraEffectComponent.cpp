@@ -91,19 +91,19 @@ auto ULibraEffectComponent::EnsureState() -> ELibraRuntimeResult
     return CreateLibraState(MoveTemp(compiled), MaximumWorkingBytes, NativeState);
 }
 
-auto ULibraEffectComponent::SetEffect(ULibraEffectAsset* effect) -> ELibraRuntimeResult
+auto ULibraEffectComponent::SetEffect(ULibraEffectAsset* newEffect) -> ELibraRuntimeResult
 {
     check(IsInGameThread());
     TSharedPtr<FLibraEffectState, ESPMode::NotThreadSafe> candidate;
-    if (effect)
+    if (newEffect)
     {
-        auto result = CreateLibraState(effect->GetCompiledProgram(), MaximumWorkingBytes, candidate);
+        auto result = CreateLibraState(newEffect->GetCompiledProgram(), MaximumWorkingBytes, candidate);
         if (result != ELibraRuntimeResult::Ok) return result;
     }
     Stop();
-    Effect = effect;
+    Effect = newEffect;
     NativeState = MoveTemp(candidate);
-    LastResult = effect ? ELibraRuntimeResult::Ok : ELibraRuntimeResult::InvalidArgument;
+    LastResult = newEffect ? ELibraRuntimeResult::Ok : ELibraRuntimeResult::InvalidArgument;
     return LastResult;
 }
 
@@ -145,13 +145,13 @@ void ULibraEffectComponent::Stop()
     SetComponentTickEnabled(false);
 }
 
-auto ULibraEffectComponent::EvaluateAtTime(double timeSeconds) -> ELibraRuntimeResult
+auto ULibraEffectComponent::EvaluateAtTime(double evaluationTimeSeconds) -> ELibraRuntimeResult
 {
     if (!IsRegistered()) return LastResult = ELibraRuntimeResult::NotReady;
-    if (!FMath::IsFinite(timeSeconds)) return LastResult = ELibraRuntimeResult::NonFinite;
+    if (!FMath::IsFinite(evaluationTimeSeconds)) return LastResult = ELibraRuntimeResult::NonFinite;
     if (NativeState && NativeState->pending) return LastResult = ELibraRuntimeResult::Busy;
     bIsPlaying = false;
-    return QueueEvaluation(timeSeconds);
+    return QueueEvaluation(evaluationTimeSeconds);
 }
 
 auto ULibraEffectComponent::QueueEvaluation(double timeSeconds) -> ELibraRuntimeResult

@@ -47,7 +47,7 @@ public:
     FOnLibraEvaluationCompleted OnEvaluationCompleted;
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
-    ELibraRuntimeResult SetEffect(ULibraEffectAsset* effect);
+    ELibraRuntimeResult SetEffect(ULibraEffectAsset* newEffect);
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult Play(bool bRestart = true);
@@ -59,7 +59,7 @@ public:
     void Stop();
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
-    ELibraRuntimeResult EvaluateAtTime(double timeSeconds);
+    ELibraRuntimeResult EvaluateAtTime(double evaluationTimeSeconds);
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult SetParameterComponent(FGuid nodeId, double value,
