@@ -1,0 +1,12 @@
+{
+  "Library.Title": "Local projects",
+  "Library.Hint": "Browse .lfxproj files in a selected folder. Open projects from this list; engine assets remain in Content.",
+  "Library.ChooseFolder": "Choose folder",
+  "Library.Refresh": "Refresh",
+  "Library.Search": "Search project name or path",
+  "Library.Subfolders": "Include subfolders",
+  "Library.Open": "Open project",
+  "Library.Loading": "Reading local projects...",
+  "Library.Count": "{0} local projects",
+  "Library.Truncated": "Showing the first {0} projects. Choose a narrower folder."
+}

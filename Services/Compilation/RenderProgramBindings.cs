@@ -35,7 +35,7 @@ public static class RenderProgramBindings
                 return new
                 {
                     name = entry.Name, kind = entry.Kind, slot = entry.Slot,
-                    association = entry.Association, index = entry.Index
+                    association = MaterialAssociation(entry), index = entry.Index
                 };
             }
             var inputs = new List<object>();
@@ -81,12 +81,25 @@ public static class RenderProgramBindings
             }
             var textures = materialEntries.Where(entry => entry.Kind == "texture")
                 .Select(entry => new { name = entry.Name, slot = entry.Slot,
-                    path = Parameter(entry.Id).GetString(), association = entry.Association, index = entry.Index }).ToArray();
+                    path = Parameter(entry.Id).GetString(), association = MaterialAssociation(entry), index = entry.Index }).ToArray();
+            var materials = materialEntries.Where(entry => !string.IsNullOrEmpty(entry.MaterialPath))
+                .GroupBy(entry => entry.Slot).Select(slot =>
+                {
+                    var paths = slot.Select(entry => entry.MaterialPath).Distinct(StringComparer.Ordinal).ToArray();
+                    if (paths.Length != 1) throw new InvalidDataException("A material slot has conflicting overrides.");
+                    if (sprite && paths[0] == "builtin:unlit-color")
+                        throw new InvalidDataException("The builtin color material is only supported for models.");
+                    return new { slot = slot.Key, path = paths[0] };
+                }).ToArray();
             renderNodes.Add(new { nodeId = node.Id, kind = sprite ? "sprite" : "model", assetPath = path,
-                materials = Array.Empty<object>(), inputs, textures, billboard = sprite && Parameter("billboard").GetBoolean() });
+                materials, inputs, textures, billboard = sprite && Parameter("billboard").GetBoolean() });
         }
         return JsonSerializer.SerializeToUtf8Bytes(new { type = "render_config", programSequence, nodes = renderNodes }, JsonOptions);
     }
+
+    // Older schemas used Layer/-1 for global parameters; keep their pin IDs while correcting delivery.
+    private static int MaterialAssociation(RenderMaterialParameter parameter) =>
+        parameter.Association == 0 && parameter.Index == -1 ? 2 : parameter.Association;
 
     private static IEnumerable<GraphNodeSnapshot> Flatten(GraphSnapshot graph) => graph.Nodes.SelectMany(node =>
         node.KindDomain == "GpuParticle" || node.Kind == GraphNodeKind.SpawnableGroup ? Array.Empty<GraphNodeSnapshot>() :

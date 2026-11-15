@@ -16,6 +16,8 @@ public partial class MainWindow : Window
     private PreviewProfilerWindow? _profilerWindow;
     private PreviewConnectionsWindow? _connectionsWindow;
     private EngineAssetsWindow? _contentWindow;
+    private SpriteEditorWindow? _spriteEditorWindow;
+    private LocalProjectsWindow? _localProjectsWindow;
     private ProblemsWindow? _problemsWindow;
     private WindowLayoutsWindow? _windowLayoutsWindow;
     private LayoutWindowBounds? _normalLayoutBounds;
@@ -197,6 +199,24 @@ public partial class MainWindow : Window
         _contentWindow = new EngineAssetsWindow(model);
         _contentWindow.Closed += (_, _) => _contentWindow = null;
         _contentWindow.Show(this);
+    }
+
+    private void OnSpriteEditorClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model) return;
+        if (_spriteEditorWindow is not null) { _spriteEditorWindow.Activate(); return; }
+        _spriteEditorWindow = new SpriteEditorWindow(model);
+        _spriteEditorWindow.Closed += (_, _) => _spriteEditorWindow = null;
+        _spriteEditorWindow.Show(this);
+    }
+
+    private void OnLocalProjectsClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model) return;
+        if (_localProjectsWindow is not null) { _localProjectsWindow.Activate(); return; }
+        _localProjectsWindow = new LocalProjectsWindow(model);
+        _localProjectsWindow.Closed += (_, _) => _localProjectsWindow = null;
+        _localProjectsWindow.Show(this);
     }
 
     private async void OnCloseDocumentClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

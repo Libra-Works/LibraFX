@@ -50,6 +50,7 @@
                 <Button x:Name="ZoomLabel" Content="100%" Click="OnResetZoom" />
                 <Button Content="+" Click="OnZoomIn" />
                 <Button x:Name="FrameButton" Content="{DynamicResource Text.Gpu.Frame}" Click="OnFrame" IsEnabled="False" />
+                <Button x:Name="ArrangeButton" Content="{DynamicResource Text.Gpu.Arrange}" Click="OnArrange" />
                 <TextBlock Text="{DynamicResource Text.Gpu.Gestures}" VerticalAlignment="Center"
                            Foreground="{DynamicResource EffectMutedForegroundBrush}" />
               </StackPanel>

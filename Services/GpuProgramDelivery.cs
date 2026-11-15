@@ -4,10 +4,12 @@ using LiberaFx.Models.Graph;
 namespace LiberaFx.Services;
 
 public sealed record GpuKernelPacket(string Id, KernelStage Stage, string Base64);
+public sealed record GpuRendererBinding(string FlowId, string Renderer, string Material, double SizeScale);
 public sealed record GpuProgramDelivery(
     long ProgramSequence, Guid NodeId, string CanonicalJson, GpuExportMetadata Metadata,
     string ShaderSource, IReadOnlyList<GpuKernelPacket> RegisterKernels,
-    IReadOnlyDictionary<string, string> ResourceAssetPaths);
+    IReadOnlyDictionary<string, string> ResourceAssetPaths,
+    int RendererBindingsVersion, IReadOnlyList<GpuRendererBinding> RendererBindings);
 public sealed record GpuContainerDiagnostic(Guid NodeId, GpuDiagnostic Diagnostic);
 
 public static class GpuProgramDeliveryService
@@ -41,7 +43,12 @@ public static class GpuProgramDeliveryService
                 compiled.GetExportMetadata(format), shader.Text,
                 compiled.RegisterKernels.Select(k => new GpuKernelPacket(k.KernelId, k.Stage,
                     Convert.ToBase64String(k.SerializeLittleEndian()))).ToArray(),
-                new Dictionary<string, string>(state.ResourceAssetPaths));
+                new Dictionary<string, string>(state.ResourceAssetPaths), 1,
+                state.Program.Flow.Where(f => f.Kind == FlowKind.RenderBillboard).Select(f =>
+                {
+                    var settings = state.RendererSettings.GetValueOrDefault(f.Id) ?? new GpuRendererSettings();
+                    return new GpuRendererBinding(f.Id, "builtin:billboard", settings.Material, settings.SizeScale);
+                }).ToArray());
         }).ToArray();
     }
 }

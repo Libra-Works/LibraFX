@@ -1,0 +1,61 @@
+SolarSystem.lfxproj
+==================
+Open this project from Window -> Local projects (the initial folder lists the
+bundled samples), or through File -> Open. Compile/play with the Unreal preview
+connected. Elapsed preview seconds drive every orbit; there are no random nodes
+or external asset files. Reset elapsed time to reproduce the initial pose.
+
+Prerequisites: Unreal's engine content must include:
+  /Engine/BasicShapes/Sphere.Sphere
+  /Engine/BasicShapes/Cube.Cube
+The sample explicitly selects Libra's builtin:unlit-color model material.
+This is a real generated unlit shader with a Color vector parameter, not a
+claim that the engine mesh's default material exposes Color. The render
+configuration supplies slot 0 and Global association 2 / index -1.
+No /Game assets, downloads, generated images, or plugin-supplied art are required.
+The scene spans about 1,400 Unreal units; frame/zoom the preview to see Mars.
+The Sun is 75 units across; Earth is 35, Moon is 13, assuming the standard
+100-unit engine meshes. A small yellow cube marks Earth's independent spin.
+
+Graph semantics
+---------------
+Matrices are real affine 4x4 matrices represented by four FloatX4 row nodes,
+not opaque sixteen-lane values (the portable numeric runtime uses four lanes).
+Column-vector convention: world = parent * local.
+Every product is evaluated by DotVector4(parent row, local column).
+The translation column is extracted and connected to the actual ModelDraw
+Position input. Parent planar orientation plus independently authored spin
+drives ModelDraw Rotation (degrees); mesh size drives Scale.
+There is no unsupported Matrix/Transform pin hidden behind this sample.
+
+Sun/root = Translate(80,-40,30) * RotateZ(0.25 radians).
+Planet frame = Sun/root * RotateZ(time * orbitSpeed) * Translate(radius,0,0).
+             Radius   Orbit radians/second   Spin radians/second
+Mercury      170      1.6                    1.1
+Venus        270      1.05                  -0.35
+Earth        400      0.65                   2.4
+Mars         600      0.4                    1.8
+Earth display/marker = Earth frame * RotateZ(time * 2.4).
+Moon frame = Earth frame * RotateZ(time * 2) * Translate(100,0,0).
+Thus Moon inherits Earth's orbit/position but not Earth's display spin.
+Changing Earth's spin changes its marker, not Earth's center or Moon's orbit.
+These are intentionally circular, coplanar illustrative orbits, not an
+astronomical simulation. Frame transforms are rigid; mesh scale is separate.
+
+Verification
+------------
+Tests/CommentImageSmokeTests: --solar-system [fixture-output-directory]
+validates the factory, saved bundled project/history, compiler and actual
+render bindings, and exports bytecode plus independent analytic expectations.
+Runtime/tests/SolarSystemMatrixTests.cpp executes those fixtures in the
+production VM (solar-bundled, solar, solar-spin-changed, matrix). The matrix case verifies
+a rotated translated parent maps local (3,0,0) to world (10,23,30).
+Solar checks cover times 0, pi/2, 10 and repeated 0, seven positions and Earth's
+rotation, including negative replacement spin and no spin inheritance by Moon.
+
+The fixture directories also contain program.lfxb, render-config.json and
+expected.json. Run Libra.Editor.Preview.CpuRootFixture with
+-LibraPreviewCpuFixture=<fixture-directory> in the matching Unreal preview build
+to check actual native transforms, MID values and framebuffer colors for all
+seven models at every fixed time. Numeric-only tests do not establish pixels.
+Do not overwrite loaded native DLLs or restart an editor with unsaved changes.

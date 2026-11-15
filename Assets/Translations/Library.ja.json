@@ -1,0 +1,12 @@
+{
+  "Library.Title": "ローカルプロジェクト",
+  "Library.Hint": "選択したフォルダの .lfxproj を一覧表示し、ここから開けます。外部エンジンのアセットはコンテントで確認できます。",
+  "Library.ChooseFolder": "フォルダを選択",
+  "Library.Refresh": "更新",
+  "Library.Search": "プロジェクト名・パスで検索",
+  "Library.Subfolders": "サブフォルダも含める",
+  "Library.Open": "プロジェクトを開く",
+  "Library.Loading": "ローカルプロジェクトを読み込んでいます…",
+  "Library.Count": "ローカルプロジェクト：{0} 件",
+  "Library.Truncated": "先頭 {0} 件を表示しています。フォルダを絞り込んでください。"
+}

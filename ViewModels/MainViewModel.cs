@@ -326,6 +326,16 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
+    public async Task OpenProjectPathAsync(string path)
+    {
+        if (_storageProvider is null) throw new InvalidOperationException("File picker is unavailable.");
+        if (!Path.IsPathFullyQualified(path) || !Path.GetExtension(path).Equals(".lfxproj", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Select a local .lfxproj file.");
+        var file = await _storageProvider.TryGetFileFromPathAsync(new Uri(Path.GetFullPath(path)))
+            ?? throw new FileNotFoundException("Project file was not found.", path);
+        await OpenProjectAsync(file);
+    }
+
     private async Task OpenProjectAsync(IStorageFile file)
     {
         var retained = false;

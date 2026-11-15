@@ -5,6 +5,7 @@
 #include "Engine/StreamableManager.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
+#include "GameFramework/Actor.h"
 #include "GlobalShader.h"
 #include "GlobalRenderResources.h"
 #include "LibraGpuEffectAsset.h"
@@ -62,6 +63,7 @@ class FLibraGpuBillboardVS : public FGlobalShader
         SHADER_PARAMETER(FVector3f, PreViewTranslation)
         SHADER_PARAMETER(FVector3f, CameraRight)
         SHADER_PARAMETER(FVector3f, CameraUp)
+        SHADER_PARAMETER(float, SizeScale)
     END_SHADER_PARAMETER_STRUCT()
     static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& parameters)
     {
@@ -94,18 +96,20 @@ END_SHADER_PARAMETER_STRUCT()
 
 static void AddLibraGpuBillboardRasterPass(FRDGBuilder& graph,
     FLibraGpuBillboardPassParameters* parameters, FIntRect rect, int32 count,
-    ERHIFeatureLevel::Type featureLevel)
+    ERHIFeatureLevel::Type featureLevel, ELibraGpuBillboardBlend blend = ELibraGpuBillboardBlend::Alpha)
 {
     auto shaderMap = GetGlobalShaderMap(featureLevel);
     TShaderMapRef<FLibraGpuBillboardVS> vertexShader(shaderMap);
     TShaderMapRef<FLibraGpuBillboardPS> pixelShader(shaderMap);
     graph.AddPass(RDG_EVENT_NAME("LibraGpu.Billboards"), parameters, ERDGPassFlags::Raster,
-        [parameters, vertexShader, pixelShader, rect, count](FRHICommandList& commandList)
+        [parameters, vertexShader, pixelShader, rect, count, blend](FRHICommandList& commandList)
         {
             FGraphicsPipelineStateInitializer pipeline;
             commandList.ApplyCachedRenderTargets(pipeline);
-            pipeline.BlendState = TStaticBlendState<CW_RGBA, BO_Add, BF_SourceAlpha, BF_InverseSourceAlpha,
-                BO_Add, BF_One, BF_InverseSourceAlpha>::GetRHI();
+            pipeline.BlendState = blend == ELibraGpuBillboardBlend::Additive ?
+                TStaticBlendState<CW_RGBA, BO_Add, BF_SourceAlpha, BF_One, BO_Add, BF_One, BF_One>::GetRHI() :
+                TStaticBlendState<CW_RGBA, BO_Add, BF_SourceAlpha, BF_InverseSourceAlpha,
+                    BO_Add, BF_One, BF_InverseSourceAlpha>::GetRHI();
             pipeline.RasterizerState = TStaticRasterizerState<FM_Solid, CM_None>::GetRHI();
             pipeline.DepthStencilState = TStaticDepthStencilState<false, CF_Always>::GetRHI();
             pipeline.BoundShaderState.VertexDeclarationRHI = GEmptyVertexDeclaration.VertexDeclarationRHI;
@@ -139,6 +143,18 @@ struct FLibraGpuFrame
     float Time = 0;
     FVector3f Position = FVector3f::ZeroVector;
 };
+
+struct FLibraGpuRenderTexture
+{
+    bool bBuiltinWhite = false;
+    FTextureReferenceRHIRef Reference;
+
+    FRHITexture* GetTexture() const
+    {
+        if (bBuiltinWhite) return GWhiteTexture ? GWhiteTexture->TextureRHI.GetReference() : nullptr;
+        return Reference.GetReference();
+    }
+};
 }
 
 struct FLibraGpuState
@@ -147,7 +163,7 @@ struct FLibraGpuState
     uint32 MaximumRegisters = 0;
     TArray<FLibraGpuKernelPacket> Kernels;
     TArray<FLibraGpuFlowStep> Flow;
-    TArray<FTextureReferenceRHIRef> Textures;
+    TArray<FLibraGpuRenderTexture> Textures;
     TRefCountPtr<FRDGPooledBuffer> Particles;
     TRefCountPtr<FRDGPooledBuffer> Registers;
     TArray<TRefCountPtr<FRDGPooledBuffer>> Programs;
@@ -254,17 +270,19 @@ public:
         auto particles = graph.RegisterExternalBuffer(State->Particles);
         for (const auto& step : State->Flow)
         {
-            if (step.Kind != TEXT("RenderBillboard") || !State->Textures.IsValidIndex(step.Index) || !State->Textures[step.Index]) continue;
+            if (step.Kind != TEXT("RenderBillboard") || !State->Textures.IsValidIndex(step.Index) ||
+                !State->Textures[step.Index].GetTexture()) continue;
             auto parameters = graph.AllocParameters<FLibraGpuBillboardPassParameters>();
             parameters->VS.ParticleData = graph.CreateSRV(particles);
             parameters->VS.ViewProjection = FMatrix44f(view.ViewMatrices.GetTranslatedViewProjectionMatrix());
             parameters->VS.PreViewTranslation = FVector3f(view.ViewMatrices.GetPreViewTranslation());
             parameters->VS.CameraRight = FVector3f(view.ViewMatrices.GetInvViewMatrix().GetUnitAxis(EAxis::X));
             parameters->VS.CameraUp = FVector3f(view.ViewMatrices.GetInvViewMatrix().GetUnitAxis(EAxis::Y));
-            parameters->PS.BillboardTexture = State->Textures[step.Index];
+            parameters->VS.SizeScale = step.SizeScale;
+            parameters->PS.BillboardTexture = State->Textures[step.Index].GetTexture();
             parameters->PS.BillboardSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
             parameters->PS.RenderTargets[0] = FRenderTargetBinding(output.Texture, ERenderTargetLoadAction::ELoad);
-            AddLibraGpuBillboardRasterPass(graph, parameters, output.ViewRect, State->Capacity, view.GetFeatureLevel());
+            AddLibraGpuBillboardRasterPass(graph, parameters, output.ViewRect, State->Capacity, view.GetFeatureLevel(), step.BillboardBlend);
         }
         return output;
     }
@@ -347,7 +365,12 @@ bool ULibraGpuEffectComponent::ResetEffect()
     state->Kernels = Effect->GetKernels();
     state->Flow = Effect->GetFlow();
     for (const auto& texture : Effect->GetTextures())
-        state->Textures.Add(texture.Texture->TextureReference.TextureReferenceRHI);
+    {
+        FLibraGpuRenderTexture binding;
+        binding.bBuiltinWhite = texture.bBuiltinWhite;
+        if (texture.Texture) binding.Reference = texture.Texture->TextureReference.TextureReferenceRHI;
+        state->Textures.Add(MoveTemp(binding));
+    }
     for (const auto& kernel : state->Kernels) state->MaximumRegisters = FMath::Max(state->MaximumRegisters, ComponentPacketWord(kernel.Bytes, 16));
     State = MoveTemp(state);
     ViewExtension.Reset();
@@ -367,6 +390,18 @@ bool ULibraGpuEffectComponent::Play()
 }
 
 void ULibraGpuEffectComponent::Pause() { bIsPlaying = false; }
+
+bool ULibraGpuEffectComponent::GetPreviewBounds(FBox& outBounds) const
+{
+    if (!Effect || !LocalPreviewBounds.IsValid ||
+        LocalPreviewBounds.Min.ContainsNaN() || LocalPreviewBounds.Max.ContainsNaN() ||
+        GetComponentLocation().ContainsNaN() ||
+        LocalPreviewBounds.Min.X > LocalPreviewBounds.Max.X ||
+        LocalPreviewBounds.Min.Y > LocalPreviewBounds.Max.Y ||
+        LocalPreviewBounds.Min.Z > LocalPreviewBounds.Max.Z) return false;
+    outBounds = LocalPreviewBounds.ShiftBy(GetComponentLocation());
+    return !outBounds.Min.ContainsNaN() && !outBounds.Max.ContainsNaN();
+}
 
 void ULibraGpuEffectComponent::Stop()
 {
@@ -654,6 +689,7 @@ bool FLibraGpuBillboardReadbackTest::RunTest(const FString& parameters)
             draw->VS.PreViewTranslation = FVector3f::ZeroVector;
             draw->VS.CameraRight = FVector3f(1, 0, 0);
             draw->VS.CameraUp = FVector3f(0, 1, 0);
+            draw->VS.SizeScale = 1;
             draw->PS.BillboardTexture = GWhiteTexture->TextureRHI;
             draw->PS.BillboardSampler = TStaticSamplerState<SF_Bilinear>::GetRHI();
             draw->PS.RenderTargets[0] = FRenderTargetBinding(target, ERenderTargetLoadAction::ELoad);
@@ -793,6 +829,158 @@ bool LibraGpuReferenceClose(FAutomationTestBase& test, const FString& label, con
             FMath::IsFinite(actual[i]) && FMath::Abs(actual[i] - expected[i]) <= absolute + relative * FMath::Abs(expected[i]));
     return passed;
 }
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraGpuDefaultEmitterRendererTest,
+    "Libra.GPU.Render.AuthoredDefaultEmitterBuiltinWhite",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraGpuDefaultEmitterRendererTest::RunTest(const FString& parameters)
+{
+    if (GUsingNullRHI || GMaxRHIFeatureLevel < ERHIFeatureLevel::SM5)
+    {
+        AddError(TEXT("A real SM5 GPU is required for authored starter rendering proof."));
+        return false;
+    }
+    FString error;
+    auto asset = LibraGpuReadFixture(TEXT("white-emitter"), error);
+    if (!asset) { AddError(error); return false; }
+    auto init = UWorld::InitializationValues().AllowAudioPlayback(false).RequiresHitProxies(false)
+        .CreatePhysicsScene(false).CreateNavigation(false).CreateAISystem(false)
+        .ShouldSimulatePhysics(false).SetTransactional(false);
+    auto world = UWorld::CreateWorld(EWorldType::Game, false, FName(TEXT("LibraGpuStarterRenderWorld")),
+        nullptr, true, ERHIFeatureLevel::Num, &init);
+    auto actor = world->SpawnActor<AActor>();
+    if (!actor) { world->DestroyWorld(false); return false; }
+    auto component = NewObject<ULibraGpuEffectComponent>(actor);
+    actor->AddInstanceComponent(component);
+    component->RegisterComponent();
+    TestTrue(TEXT("Actual component accepts the canonical default starter"), component->SetEffect(asset));
+    TestTrue(TEXT("Actual component starts GPU playback"), component->Play());
+    component->TickComponent(0.2f, LEVELTICK_All, nullptr);
+    auto state = component->State;
+    if (!state)
+    {
+        AddError(component->LastError);
+        component->Stop();
+        world->DestroyWorld(false);
+        return false;
+    }
+    auto copied = false;
+    FTestParticle first;
+    auto readParticle = [&copied, &first, state]()
+    {
+        copied = false;
+        ENQUEUE_RENDER_COMMAND(LibraGpuStarterParticle)([&copied, &first, state](FRHICommandListImmediate& commandList)
+        {
+            if (!state->Particles) return;
+            FRHIGPUBufferReadback readback(TEXT("LibraGpu.StarterParticle"));
+            FRDGBuilder graph(commandList);
+            AddEnqueueCopyPass(graph, &readback, graph.RegisterExternalBuffer(state->Particles), sizeof(first));
+            graph.Execute();
+            commandList.SubmitAndBlockUntilGPUIdle();
+            if (!readback.IsReady()) return;
+            if (auto data = readback.Lock(sizeof(first)))
+            {
+                FMemory::Memcpy(&first, data, sizeof(first));
+                copied = true;
+            }
+            readback.Unlock();
+        });
+        FlushRenderingCommands();
+    };
+    readParticle();
+    TestTrue(TEXT("Actual starter Spawn+Update dispatched to GPU"), copied);
+    TestEqual(TEXT("Canonical Size stays 0.1; visibility is not a synthetic large particle"), first.SizeRotation.X, 0.1f);
+    TestTrue(TEXT("Canonical gravity/position/age execute on GPU"),
+        FMath::IsNearlyEqual(first.VelocityLifetime.Y, 1.038f, 0.0001f) &&
+        FMath::IsNearlyEqual(first.PositionAge.Y, 0.2076f, 0.0001f) &&
+        FMath::IsNearlyEqual(first.PositionAge.W, 0.2f, 0.0001f) && first.SeedAlive.Y == 1);
+    int32 litPixels[3]{};
+    int32 centerGreen[2]{};
+    ENQUEUE_RENDER_COMMAND(LibraGpuStarterFramebuffer)([state, &litPixels, &centerGreen](FRHICommandListImmediate& commandList)
+    {
+        auto render = [&commandList, state](int32& lit, int32* green, ELibraGpuBillboardBlend blend, float sizeScale)
+        {
+            FRHIGPUTextureReadback readback(TEXT("LibraGpu.AuthoredStarterFramebuffer"));
+            FRDGBuilder graph(commandList);
+            auto target = graph.CreateTexture(FRDGTextureDesc::Create2D(FIntPoint(128, 128),
+                PF_R8G8B8A8, FClearValueBinding::Black, TexCreate_RenderTargetable | TexCreate_ShaderResource),
+                TEXT("LibraGpu.StarterFramebuffer"));
+            AddClearRenderTargetPass(graph, target);
+            auto draw = graph.AllocParameters<FLibraGpuBillboardPassParameters>();
+            draw->VS.ParticleData = graph.CreateSRV(graph.RegisterExternalBuffer(state->Particles));
+            // Perspective at 200 UE units, 90-degree FOV, Y-forward/Z-up: not an identity/huge-quad test.
+            draw->VS.ViewProjection = FMatrix44f(
+                FPlane4f(1, 0, 0, 0), FPlane4f(0, 0, 0, 1),
+                FPlane4f(0, 1, 0, 0), FPlane4f(0, 0, 100, 200));
+            draw->VS.PreViewTranslation = FVector3f::ZeroVector;
+            draw->VS.CameraRight = FVector3f(1, 0, 0);
+            draw->VS.CameraUp = FVector3f(0, 0, 1);
+            draw->VS.SizeScale = sizeScale;
+            draw->PS.BillboardTexture = state->Textures[0].GetTexture();
+            draw->PS.BillboardSampler = TStaticSamplerState<SF_Bilinear>::GetRHI();
+            draw->PS.RenderTargets[0] = FRenderTargetBinding(target, ERenderTargetLoadAction::ELoad);
+            AddLibraGpuBillboardRasterPass(graph, draw, FIntRect(0, 0, 128, 128), state->Capacity, GMaxRHIFeatureLevel, blend);
+            AddEnqueueCopyPass(graph, &readback, target);
+            graph.Execute();
+            commandList.SubmitAndBlockUntilGPUIdle();
+            if (!readback.IsReady()) return;
+            int32 pitch = 0;
+            if (auto pixels = static_cast<const uint8*>(readback.Lock(pitch)))
+            {
+                for (auto y = 0; y < 128; ++y)
+                    for (auto x = 0; x < 128; ++x)
+                    {
+                        auto pixel = pixels + (y * pitch + x) * 4;
+                        if (pixel[0] > 16 || pixel[1] > 16 || pixel[2] > 16) ++lit;
+                    }
+                if (green) *green = pixels[(64 * pitch + 64) * 4 + 1];
+            }
+            readback.Unlock();
+        };
+        render(litPixels[0], nullptr, state->Flow.Last().BillboardBlend, state->Flow.Last().SizeScale);
+        render(litPixels[1], nullptr, state->Flow.Last().BillboardBlend, 1);
+        render(litPixels[2], &centerGreen[0], ELibraGpuBillboardBlend::Alpha, 100);
+        render(litPixels[2], &centerGreen[1], ELibraGpuBillboardBlend::Additive, 100);
+    });
+    FlushRenderingCommands();
+    TestTrue(TEXT("Explicit white/default Size0.1 renders visible pixels at a realistic camera distance"), litPixels[0] >= 16);
+    TestTrue(TEXT("Explicit renderer sizeScale fixes the centimeter subpixel starter"), litPixels[0] > litPixels[1]);
+    TestTrue(TEXT("Additive and alpha material presets actually produce different framebuffer colors"),
+        centerGreen[1] > centerGreen[0] + 30);
+    component->Pause();
+    auto paused = first;
+    component->TickComponent(0.25f, LEVELTICK_All, nullptr);
+    readParticle();
+    TestTrue(TEXT("Pause preserves actual GPU particle bytes"), copied && FMemory::Memcmp(&first, &paused, sizeof(first)) == 0);
+    TestTrue(TEXT("Resume retains the same GPU state"), component->Play());
+    component->TickComponent(0.1f, LEVELTICK_All, nullptr);
+    readParticle();
+    TestTrue(TEXT("Resume advances real GPU age"), copied && first.PositionAge.W > paused.PositionAge.W);
+    FString editedBundle;
+    if (FFileHelper::LoadFileToString(editedBundle, *LibraGpuFixturePath(TEXT("white-emitter.lfxgpu"))))
+    {
+        editedBundle = editedBundle.Replace(TEXT("builtin:unlit-additive"), TEXT("builtin:unlit-alpha"));
+        auto alphaAsset = ULibraGpuEffectAsset::CreateInMemory(actor, editedBundle, error);
+        TestTrue(TEXT("Accepted material edit can replace the real component effect"), alphaAsset && component->SetEffect(alphaAsset));
+        TestTrue(TEXT("Material edit starts a fresh renderer snapshot"), component->Play() && component->State != state);
+        if (component->State)
+            TestEqual(TEXT("Replacement actually selects alpha instead of additive"),
+                component->State->Flow.Last().BillboardBlend, ELibraGpuBillboardBlend::Alpha);
+    }
+    else AddError(TEXT("Missing starter fixture for material replacement test."));
+    FBox bounds;
+    TestFalse(TEXT("No invented dynamic particle bounds"), component->GetPreviewBounds(bounds));
+    component->LocalPreviewBounds = FBox(FVector(-100), FVector(100));
+    TestTrue(TEXT("Explicit conservative framing bounds are available"), component->GetPreviewBounds(bounds));
+    component->Stop();
+    FlushRenderingCommands();
+    world->DestroyWorld(false);
+    FlushRenderingCommands();
+    AddInfo(FString::Printf(TEXT("Canonical starter GPU render: size0.1 scale100=%d pixels, legacy scale1=%d; pause/resume verified"),
+        litPixels[0], litPixels[1]));
+    return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraGpuExtendedMathTest,

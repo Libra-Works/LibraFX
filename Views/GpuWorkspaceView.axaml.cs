@@ -292,9 +292,6 @@ public partial class GpuWorkspaceView : UserControl
             FlowPanel.Children.Add(border);
         }
     }
-    private GpuPosition Position(KernelGraph k, GpuNode n, int index) =>
-        Workspace!.State.Positions.GetValueOrDefault(GpuParticleEditorService.Key(k.Id, n.Id))
-        ?? new(30 + index % 4 * 280, 30 + index / 4 * 160);
     private void BuildGraph()
     {
         var vm = Workspace!; var k = vm.Kernel!;
@@ -462,7 +459,7 @@ public partial class GpuWorkspaceView : UserControl
         {
             var n = k.Nodes[i];
             if (!_nodeVisuals.TryGetValue(n.Id, out var visual)) continue;
-            var p = Position(k, n, i);
+            var p = Workspace.GetPosition(n);
             visual.Position = new(p.X, p.Y);
             visual.PreviewOffset = default;
             if (!visual.AnchorInitialized)
@@ -678,6 +675,12 @@ public partial class GpuWorkspaceView : UserControl
     private void OnZoomIn(object? sender, RoutedEventArgs e) => _viewport.SetZoom(_viewport.Zoom * 1.25);
     private void OnZoomOut(object? sender, RoutedEventArgs e) => _viewport.SetZoom(_viewport.Zoom / 1.25);
     private void OnResetZoom(object? sender, RoutedEventArgs e) => _viewport.SetZoom(1);
+    private void OnArrange(object? sender, RoutedEventArgs e) => Run(() =>
+    {
+        FinishDrag(commit: false);
+        Workspace!.ArrangeNodes();
+        _viewport.Frame(NodeBounds(_nodeVisuals.Values));
+    });
     private void OnFrame(object? sender, RoutedEventArgs e)
     {
         if (_selectedNodes.Count > 0)
@@ -859,13 +862,40 @@ public partial class GpuWorkspaceView : UserControl
     {
         BindingsPanel.Children.Clear();
         var vm = Workspace!;
+        foreach (var flow in vm.State.Program.Flow.Where(f => f.Kind == FlowKind.RenderBillboard))
+        {
+            var settings = vm.State.RendererSettings.GetValueOrDefault(flow.Id) ?? new GpuRendererSettings();
+            BindingsPanel.Children.Add(new TextBlock
+            {
+                Text = LocalizationService.Shared.Get("Gpu.BillboardRenderer") + " : " + flow.Id,
+                TextWrapping = TextWrapping.Wrap
+            });
+            var presets = new[] { "builtin:unlit-alpha", "builtin:unlit-additive" };
+            var material = new ComboBox
+            {
+                ItemsSource = new[] { LocalizationService.Shared.Get("Gpu.MaterialAlpha"),
+                    LocalizationService.Shared.Get("Gpu.MaterialAdditive") },
+                SelectedIndex = Array.IndexOf(presets, settings.Material)
+            };
+            BindingsPanel.Children.Add(material);
+            BindingsPanel.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.DrawSizeMultiplier") });
+            var scale = new TextBox { Text = settings.SizeScale.ToString("G", CultureInfo.InvariantCulture) };
+            BindingsPanel.Children.Add(scale);
+            BindingsPanel.Children.Add(Button(LocalizationService.Shared.Get("Gpu.ApplyRenderer"), () =>
+                vm.Edit(new()
+                {
+                    Action = "renderer", NodeId = flow.Id, Material = presets[material.SelectedIndex],
+                    SizeScale = double.Parse(scale.Text!, CultureInfo.InvariantCulture)
+                })));
+        }
         foreach (var resource in vm.State.Program.Resources)
         {
-            BindingsPanel.Children.Add(new TextBlock { Text = $"Texture binding / テクスチャ : {resource.Id}", TextWrapping = TextWrapping.Wrap });
+            BindingsPanel.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.TextureBinding") + " : " + resource.Id,
+                TextWrapping = TextWrapping.Wrap });
             var path = new TextBox { Text = vm.State.ResourceAssetPaths.GetValueOrDefault(resource.Id) ?? "",
-                PlaceholderText = "Engine asset object path (UI metadata)" };
+                PlaceholderText = LocalizationService.Shared.Get("Gpu.TexturePathHint") };
             BindingsPanel.Children.Add(path);
-            BindingsPanel.Children.Add(Button("Bind / バインド", () => vm.Edit(new()
+            BindingsPanel.Children.Add(Button(LocalizationService.Shared.Get("Gpu.BindTexture"), () => vm.Edit(new()
             {
                 Action = "resource", Resource = resource, AssetPath = path.Text ?? ""
             })));

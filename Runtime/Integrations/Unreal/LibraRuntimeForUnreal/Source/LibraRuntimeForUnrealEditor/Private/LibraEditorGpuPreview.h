@@ -26,6 +26,7 @@ private:
         TStrongObjectPtr<ULibraGpuEffectAsset> asset;
         TStrongObjectPtr<ULibraGpuEffectComponent> component;
         TMap<FString, FString> resourcePaths;
+        FString rendererIdentity;
         double timeSeconds = 0;
         bool executed = false;
     };

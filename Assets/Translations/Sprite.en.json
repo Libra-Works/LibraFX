@@ -1,0 +1,22 @@
+{
+  "Sprite.Title": "Sprite / Flipbook",
+  "Sprite.FramePreview": "Frame preview",
+  "Sprite.Frame": "Frame",
+  "Sprite.Playing": "Animate (from frame 0)",
+  "Sprite.ThumbnailNotice": "Engine-generated 128 px thumbnail; framing or padding may differ from the texture. Click a cell to select a static frame.",
+  "Sprite.FrameBindingNotice": "A connected Frame input overrides these settings. Local files cannot be transferred to the engine; select an engine texture.",
+  "Sprite.MaterialNotice": "The Unreal sprite preview uses a generated material. Custom sprite materials are not supported.",
+  "Sprite.OpenLocal": "Open local image for preview",
+  "Sprite.LocalPreview": "Local image is preview only; Apply uses the selected engine texture.",
+  "Sprite.EnginePreview": "Preview source: engine thumbnail.",
+  "Sprite.InvalidImage": "Choose a PNG or JPEG up to 16 MiB and 8192 × 8192 pixels.",
+  "Sprite.LoadSelected": "Load selected sprite settings",
+  "Sprite.ApplySelected": "Apply to selected sprite",
+  "Sprite.Create": "Create sprite node",
+  "Sprite.Loaded": "Loaded settings from {0}. Select that texture in the catalog before applying.",
+  "Sprite.NoDocument": "Open a graph document first.",
+  "Sprite.SelectTexture": "Select an engine texture first.",
+  "Sprite.SelectNode": "Select a sprite node first.",
+  "Sprite.InvalidSettings": "Enter valid columns, rows, FPS and an in-range frame.",
+  "Sprite.Applied": "Sprite settings applied as one undoable edit."
+}

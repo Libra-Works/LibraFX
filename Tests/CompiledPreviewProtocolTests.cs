@@ -63,7 +63,7 @@ internal static class CompiledPreviewProtocolTests
         RunWithDispatcher(VerifyTransportAsync());
     }
 
-    public static void RunUnrealGpuPreview() => RunWithDispatcher(VerifyUnrealGpuPreviewAsync(), 150);
+    public static void RunUnrealGpuPreview() => RunWithDispatcher(VerifyUnrealGpuPreviewAsync(), 330);
 
     private static void RunWithDispatcher(Task task, int timeoutSeconds = 35)
     {
@@ -86,7 +86,8 @@ internal static class CompiledPreviewProtocolTests
         var project = Environment.GetEnvironmentVariable("LIBERAFX_UNREAL_PROJECT")
             ?? throw new InvalidOperationException("Set LIBERAFX_UNREAL_PROJECT to the preview-enabled .uproject.");
         var texture = Environment.GetEnvironmentVariable("LIBERAFX_UNREAL_TEXTURE")
-            ?? throw new InvalidOperationException("Set LIBERAFX_UNREAL_TEXTURE to a native billboard texture asset path.");
+            ?? "builtin:white";
+        var useDiscovery = Environment.GetEnvironmentVariable("LIBERAFX_UNREAL_DISCOVERY") == "1";
         var probe = new TcpListener(IPAddress.Loopback, 0);
         probe.Start();
         var port = ((IPEndPoint)probe.LocalEndpoint).Port;
@@ -94,6 +95,7 @@ internal static class CompiledPreviewProtocolTests
         using var host = new PreviewHost(port);
         var model = new MainViewModel();
         Process? native = null;
+        PreviewDiscoveryPipe? discovery = null;
         try
         {
             var node = model.Graph.CreateNode(GpuParticleEditorService.Kind);
@@ -105,22 +107,37 @@ internal static class CompiledPreviewProtocolTests
             model.Playback.Loop = false;
             model.Playback.EndText = "6000";
             await host.StartAsync(model);
+            if (useDiscovery)
+                discovery = new PreviewDiscoveryPipe(host.ActualEndpoint, host.AccessToken, host.Fingerprint,
+                    PreviewDiscoveryPipe.Prefix + Environment.ProcessId + ".integration");
             var start = new ProcessStartInfo(executable) { UseShellExecute = false };
             foreach (var argument in new[] { project, "/Engine/Maps/Entry", "-unattended", "-NoCrashDialog",
-                "-nosplash", "-LibraPreview", "-ExecCmds=Automation RunTests Libra.Editor.Preview.GpuSceneTransactions",
+                "-nosplash", "-ExecCmds=Automation RunTests Libra.Editor.Preview." +
+                    (useDiscovery ? "PostStartupDiscovery" : "GpuSceneTransactions"),
                 "-TestExit=Automation Test Queue Empty" })
                 start.ArgumentList.Add(argument);
             if (Environment.GetEnvironmentVariable("LIBERAFX_UNREAL_LOG") is { Length: > 0 } log)
                 start.ArgumentList.Add("-AbsLog=" + log);
-            start.Environment["LIBRA_PREVIEW_PORT"] = port.ToString();
-            start.Environment["LIBRA_PREVIEW_TOKEN"] = host.AccessToken;
-            start.Environment["LIBRA_PREVIEW_FINGERPRINT"] = host.Fingerprint;
+            if (useDiscovery)
+            {
+                start.ArgumentList.Add("-LibraPreviewDiscoveryPipe=" + discovery!.Name);
+                foreach (var variable in new[] { "LIBRA_PREVIEW_PORT", "LIBRA_PREVIEW_TOKEN",
+                    "LIBRA_PREVIEW_FINGERPRINT", "LIBRA_AUTOMATION_PREVIEW" })
+                    start.Environment.Remove(variable);
+            }
+            else
+            {
+                start.ArgumentList.Add("-LibraPreview");
+                start.Environment["LIBRA_PREVIEW_PORT"] = port.ToString();
+                start.Environment["LIBRA_PREVIEW_TOKEN"] = host.AccessToken;
+                start.Environment["LIBRA_PREVIEW_FINGERPRINT"] = host.Fingerprint;
+            }
             native = Process.Start(start) ?? throw new InvalidOperationException("Unreal failed to start.");
             Guid? peer = null;
             JsonElement? lastStatus = null;
             var executed = false;
             var startedPlayback = false;
-            var deadline = DateTime.UtcNow.AddSeconds(120);
+            var deadline = DateTime.UtcNow.AddSeconds(240);
             while (!native.HasExited && DateTime.UtcNow < deadline)
             {
                 peer ??= model.PreviewTelemetry.Clients().FirstOrDefault(client =>
@@ -165,16 +182,27 @@ internal static class CompiledPreviewProtocolTests
                 await Task.Delay(50);
             }
             Require(paused, "Remote pause did not reach the actual GPU preview.");
-            await native.WaitForExitAsync();
+            using var exitTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            await native.WaitForExitAsync(exitTimeout.Token);
             Require(native.ExitCode == 0, "Unreal preview automation did not exit cleanly.");
             Console.WriteLine("Actual Root-to-Unreal GPU publication, execution and feedback passed.");
         }
         finally
         {
+            discovery?.Dispose();
             await host.StopAsync();
             if (native is not null)
             {
-                await native.WaitForExitAsync();
+                if (!native.HasExited)
+                {
+                    using var shutdownTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                    try { await native.WaitForExitAsync(shutdownTimeout.Token); }
+                    catch (OperationCanceledException)
+                    {
+                        native.Kill(entireProcessTree: true);
+                        await native.WaitForExitAsync();
+                    }
+                }
                 native.Dispose();
             }
             await Dispatcher.UIThread.InvokeAsync(model.DisposeStorageFiles);

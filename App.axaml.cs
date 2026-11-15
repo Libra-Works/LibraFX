@@ -15,6 +15,7 @@ public partial class App : Application
     private McpHost _mcpHost = null!;
     private PreviewHost _previewHost = null!;
     private DebugSessionPipe? _debugSessionPipe;
+    private PreviewDiscoveryPipe? _previewDiscovery;
     private Task _mcpStart = Task.CompletedTask;
     private Task _previewStart = Task.CompletedTask;
     private bool _shutdownInProgress;
@@ -34,7 +35,11 @@ public partial class App : Application
             _mcpHost = new McpHost(DebugPort("LIBERAFX_MCP_DEBUG_PORT", _serverSettings.StartupMcpPort));
             _previewHost = new PreviewHost(DebugPort("LIBERAFX_PREVIEW_DEBUG_PORT", _serverSettings.StartupPreviewPort));
             _debugSessionPipe = new DebugSessionPipe(_mcpHost, _previewHost);
-            desktop.Exit += (_, _) => _debugSessionPipe?.Dispose();
+            desktop.Exit += (_, _) =>
+            {
+                _previewDiscovery?.Dispose();
+                _debugSessionPipe?.Dispose();
+            };
             var viewModel = new MainViewModel(_mcpHost.AccessToken, _previewHost.AccessToken, _previewHost.Fingerprint,
                 _mcpHost.ActualEndpoint, _previewHost.ActualEndpoint, _serverSettings);
             var window = new MainWindow
@@ -81,6 +86,8 @@ public partial class App : Application
         try
         {
             await Task.Run(() => _previewHost.StartAsync(viewModel));
+            _previewDiscovery = new PreviewDiscoveryPipe(_previewHost.ActualEndpoint,
+                _previewHost.AccessToken, _previewHost.Fingerprint);
             await Dispatcher.UIThread.InvokeAsync(() => viewModel.SetPreviewStatus("Editor.PreviewRunning"));
         }
         catch (Exception ex)
@@ -132,6 +139,8 @@ public partial class App : Application
                 viewModel.SetMcpStatus("Editor.Stopping");
             });
             await Task.Run(() => _mcpHost.StopAsync());
+            _previewDiscovery?.Dispose();
+            _previewDiscovery = null;
             await _previewHost.StopAsync();
             _debugSessionPipe?.Dispose();
             _debugSessionPipe = null;

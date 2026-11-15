@@ -8,7 +8,7 @@ public class LibraRuntimeForUnrealEditor : ModuleRules
         PrivateDependencyModuleNames.AddRange(new[] {
             "Core", "CoreUObject", "Engine", "UnrealEd", "AssetRegistry", "Json",
             "Slate", "SlateCore", "InputCore", "EditorStyle", "EditorFramework",
-            "AdvancedPreviewScene",
+            "AdvancedPreviewScene", "ToolMenus", "ApplicationCore", "RenderCore", "RHI",
             "LibraRuntimeCore", "LibraRuntimeForUnreal", "LibraGpuRuntime"
         });
     }

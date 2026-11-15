@@ -92,9 +92,28 @@ bool FLibraGpuNativeAssetLifecycleTest::RunTest(const FString& parameters)
     FParse::Value(FCommandLine::Get(), TEXT("LibraGpuTexture="), texturePath);
     for (const auto& binding : asset->GetTextures())
     {
+        if (binding.bBuiltinWhite)
+        {
+            TestNull(TEXT("Serialized explicit builtin remains independent of a texture UObject"), binding.Texture.Get());
+            continue;
+        }
         TestNotNull(TEXT("Saved hard Texture2D reference resolves"), binding.Texture.Get());
-        if (!texturePath.IsEmpty())
+        if (binding.Texture && !texturePath.IsEmpty())
             TestEqual(TEXT("Native texture dependency survives package reload"), binding.Texture->GetPathName(), texturePath);
+    }
+    FString expectedMaterial;
+    if (FParse::Value(FCommandLine::Get(), TEXT("LibraGpuExpectedMaterial="), expectedMaterial))
+    {
+        auto expectedBlend = expectedMaterial == TEXT("builtin:unlit-additive") ?
+            ELibraGpuBillboardBlend::Additive : ELibraGpuBillboardBlend::Alpha;
+        float expectedSizeScale = 1;
+        FParse::Value(FCommandLine::Get(), TEXT("LibraGpuExpectedSizeScale="), expectedSizeScale);
+        for (const auto& step : asset->GetFlow())
+            if (step.Kind == TEXT("RenderBillboard"))
+            {
+                TestEqual(TEXT("Serialized renderer material survives fresh package reload"), step.BillboardBlend, expectedBlend);
+                TestEqual(TEXT("Serialized draw-size scale survives fresh package reload"), step.SizeScale, expectedSizeScale);
+            }
     }
 
     auto init = UWorld::InitializationValues().AllowAudioPlayback(false).RequiresHitProxies(false)

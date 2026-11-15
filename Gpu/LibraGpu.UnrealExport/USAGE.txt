@@ -5,17 +5,35 @@ LibraGpu.UnrealExport: portable .NET 10 source interchange, not an Unreal asset.
   var json = UnrealGpuExporter.Serialize(bundle);
 
 textureObjectPaths maps every declared Texture2D resource ID to an Unreal object
-path, for example /Game/FX/T_Spark.T_Spark. Export checks basic path syntax but
+path, for example /Game/FX/T_Spark.T_Spark, or the exact explicit token
+builtin:white. Unknown builtin tokens are rejected; missing mappings never
+fall back to white. Export checks basic path syntax but
 does not load assets or validate their types; a UE importer must do so and store
 typed UObject references. Extra and missing mappings are rejected.
 The current UE interpreter's 256-register and 256 MiB combined particle/register
 storage limits are checked during export, before the bundle reaches Unreal.
 
 Version 1 JSON has camelCase properties: version, purpose (SourceExport),
-runtimeExecuted (false), canonicalJson, usf, metadata, kernels, textures. Each
+runtimeExecuted (false), canonicalJson, usf, metadata, kernels, textures, and
+additive rendererBindingsVersion (1), rendererBindings. Each
 kernel contains id, stage and packet (base64 LGPK v1 from Core); each texture
 contains id and objectPath. Metadata is Core's USF export metadata; its hashes
 identify canonical IR and exact source respectively. JSON and packets are
 untrusted input; a consumer must validate all instructions, indices, types,
 bounds, hashes and references before upload. This exporter neither installs
 shaders in UE nor implements an interpreter, GPU execution, rendering or cooking.
+
+Compile accepts an optional IReadOnlyList<UnrealGpuRendererBinding>. If omitted,
+every RenderBillboard flow gets builtin:billboard / builtin:unlit-alpha / sizeScale1.
+Explicit bindings must cover each RenderBillboard flow ID exactly once.
+Only builtin:unlit-alpha and builtin:unlit-additive are valid materials.
+Native UE /Game material graphs are not evaluated by this fixed billboard shader.
+sizeScale is a finite 0<float<=10000 quad half-extent multiplier, not simulation,
+position, velocity, or physics-unit conversion. Example for an explicit UE
+starter (canonical Size0.1 becomes 10cm quad half-extents):
+  var paths = new Dictionary<string,string> { ["billboardTexture"] = "builtin:white" };
+  var renderers = new[] {
+    new UnrealGpuRendererBinding("renderStep", Material:"builtin:unlit-alpha", SizeScale:100)
+  };
+  var bundle = UnrealGpuExporter.Compile(program, paths, renderers);
+Legacy bundles without renderer fields retain alpha/sizeScale1 in the UE importer.

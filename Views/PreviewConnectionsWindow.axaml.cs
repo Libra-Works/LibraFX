@@ -40,6 +40,43 @@ public partial class PreviewConnectionsWindow : Window
         }
         ReconnectButton.IsEnabled = !_busy && _selectedId is { } id && model.PreviewAssets.Supports(id);
         if (peers.Count == 0) Status.Text = LocalizationService.Shared.Get("Connections.Disconnected");
+        var feedback = new List<string>();
+        foreach (var peer in peers.Where(peer => model.PreviewAssets.Supports(peer.ClientId, "rendering")))
+        {
+            try
+            {
+                if (model.PreviewAssets.RenderStatus(peer.ClientId) is not { } render) continue;
+                var errors = render.GetProperty("errors").EnumerateArray().Select(error => error.GetString())
+                    .Where(error => !string.IsNullOrEmpty(error)).Take(8).ToArray();
+                if (errors.Length > 0)
+                    feedback.Add(LocalizationService.Shared.Get("Connections.RenderErrors", string.Join("\n", errors)));
+            }
+            catch (InvalidOperationException) { }
+        }
+        foreach (var peer in peers.Where(peer => model.PreviewAssets.Supports(peer.ClientId, "gpuParticles")))
+        {
+            try
+            {
+                var gpu = model.PreviewAssets.GpuStatus(peer.ClientId);
+                if (gpu is null)
+                {
+                    feedback.Add(LocalizationService.Shared.Get("Connections.GpuPending"));
+                    continue;
+                }
+                var errors = gpu.Value.GetProperty("errors").EnumerateArray()
+                    .Select(error => error.GetString()).Where(error => !string.IsNullOrEmpty(error)).ToList();
+                foreach (var program in gpu.Value.GetProperty("programs").EnumerateArray())
+                    if (program.TryGetProperty("errors", out var programErrors))
+                        errors.AddRange(programErrors.EnumerateArray().Select(error => error.GetString())
+                            .Where(error => !string.IsNullOrEmpty(error)));
+                feedback.Add(errors.Count > 0
+                    ? LocalizationService.Shared.Get("Connections.GpuErrors", string.Join("\n", errors.Take(8)))
+                    : LocalizationService.Shared.Get(gpu.Value.GetProperty("runtimeExecuted").GetBoolean()
+                        ? "Connections.GpuExecuted" : "Connections.GpuPending"));
+            }
+            catch (InvalidOperationException) { }
+        }
+        GpuFeedback.Text = string.Join("\n", feedback.Distinct());
         model.RefreshPreviewConnections();
     }
 

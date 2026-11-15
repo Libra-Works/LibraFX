@@ -425,6 +425,14 @@ LibraResult LIBRA_INTEROP_CALL libra_generator_pool_create(
     LibraProgram program, const uint8_t containerId[16], uint32_t maxActive,
     uint64_t memoryBudgetBytes, uint32_t eventCapacity, LibraGeneratorPool* outPool)
 {
+    return libra_generator_pool_create_ex(program, containerId, maxActive, memoryBudgetBytes,
+                                          eventCapacity, 16, outPool);
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_pool_create_ex(
+    LibraProgram program, const uint8_t containerId[16], uint32_t maxActive,
+    uint64_t memoryBudgetBytes, uint32_t eventCapacity, uint32_t maxCaptureLanes,
+    LibraGeneratorPool* outPool)
+{
     if (!outPool || !containerId || memoryBudgetBytes > std::numeric_limits<std::size_t>::max())
         return LIBRA_INVALID_ARGUMENT;
     *outPool = 0;
@@ -434,8 +442,8 @@ LibraResult LIBRA_INTEROP_CALL libra_generator_pool_create(
         auto native = std::make_shared<NativeGeneratorPool>();
         native->owner = found->second;
         std::memcpy(native->containerId.data(), containerId, 16);
-        auto result = liberafx::GeneratorPool::create(native->owner->program, containerId,
-            maxActive, static_cast<std::size_t>(memoryBudgetBytes), eventCapacity, native->pool);
+        auto result = liberafx::GeneratorPool::createWithCaptureLimit(native->owner->program, containerId,
+            maxActive, static_cast<std::size_t>(memoryBudgetBytes), eventCapacity, maxCaptureLanes, native->pool);
         if (result != liberafx::Result::Ok) return static_cast<LibraResult>(result);
         if (!nextHandle) return LIBRA_INSUFFICIENT_WORK;
         auto handle = nextHandle++;
@@ -485,10 +493,16 @@ LibraResult LIBRA_INTEROP_CALL libra_generator_enqueue_spawn(LibraGeneratorPool 
     const LibraGeneratorCapture* captures, uint32_t count)
 {
     if (count > 16 || (count && !captures)) return LIBRA_INVALID_ARGUMENT;
+    return libra_generator_enqueue_spawn_ex(pool, time, captures, count);
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_enqueue_spawn_ex(LibraGeneratorPool pool, double time,
+    const LibraGeneratorCapture* captures, uint32_t count)
+{
+    if (count > 256 || (count && !captures)) return LIBRA_INVALID_ARGUMENT;
     return guarded([&]() -> LibraResult {
         auto found = generatorPools.find(pool);
         if (found == generatorPools.end()) return LIBRA_INVALID_HANDLE;
-        auto converted = std::array<liberafx::GeneratorCapture, 16>{};
+        auto converted = std::array<liberafx::GeneratorCapture, 256>{};
         for (auto i = 0u; i < count; ++i) {
             if (captures[i].inputSlot > 3 || captures[i].component > 3) return LIBRA_INVALID_ARGUMENT;
             std::memcpy(converted[i].nodeId, captures[i].nodeId, 16);
@@ -497,6 +511,39 @@ LibraResult LIBRA_INTEROP_CALL libra_generator_enqueue_spawn(LibraGeneratorPool 
             converted[i].value = captures[i].value;
         }
         return static_cast<LibraResult>(found->second->pool->enqueueSpawn(time, converted.data(), count));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_configure_lifecycle(
+    LibraGeneratorPool pool, const LibraGeneratorLifecycle* lifecycle)
+{
+    if (!lifecycle || (lifecycle->flags & ~(LIBRA_LIFECYCLE_ON_START | LIBRA_LIFECYCLE_LIFE)))
+        return LIBRA_INVALID_ARGUMENT;
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        if (found == generatorPools.end()) return LIBRA_INVALID_HANDLE;
+        auto config = liberafx::GeneratorLifecycle{};
+        std::memcpy(config.onStartNodeId, lifecycle->onStartNodeId, 16);
+        std::memcpy(config.lifeNodeId, lifecycle->lifeNodeId, 16);
+        config.hasOnStart = (lifecycle->flags & LIBRA_LIFECYCLE_ON_START) != 0;
+        config.hasLife = (lifecycle->flags & LIBRA_LIFECYCLE_LIFE) != 0;
+        config.instructionBudget = lifecycle->instructionBudget;
+        return static_cast<LibraResult>(found->second->pool->configureLifecycle(config));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_start(LibraGeneratorPool pool, LibraGeneratorInstance instance)
+{
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        return found == generatorPools.end() ? LIBRA_INVALID_HANDLE :
+            static_cast<LibraResult>(found->second->pool->start(instance));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_finalize(LibraGeneratorPool pool, LibraGeneratorInstance instance)
+{
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        return found == generatorPools.end() ? LIBRA_INVALID_HANDLE :
+            static_cast<LibraResult>(found->second->pool->finalize(instance));
     });
 }
 LibraResult LIBRA_INTEROP_CALL libra_generator_process_spawns(
@@ -519,6 +566,25 @@ LibraResult LIBRA_INTEROP_CALL libra_generator_reset(LibraGeneratorPool pool)
         auto found = generatorPools.find(pool);
         return found == generatorPools.end() ? LIBRA_INVALID_HANDLE :
             static_cast<LibraResult>(found->second->pool->reset());
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_set_live(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance,
+    const LibraGeneratorCapture* values, uint32_t count)
+{
+    if (count > 256 || (count && !values)) return LIBRA_INVALID_ARGUMENT;
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        if (found == generatorPools.end()) return LIBRA_INVALID_HANDLE;
+        auto converted = std::array<liberafx::GeneratorCapture, 256>{};
+        for (auto i = 0u; i < count; ++i) {
+            if (values[i].inputSlot > 3 || values[i].component > 3) return LIBRA_INVALID_ARGUMENT;
+            std::memcpy(converted[i].nodeId, values[i].nodeId, 16);
+            converted[i].inputSlot = static_cast<std::uint8_t>(values[i].inputSlot);
+            converted[i].component = static_cast<std::uint8_t>(values[i].component);
+            converted[i].value = values[i].value;
+        }
+        return static_cast<LibraResult>(found->second->pool->setLive(instance, converted.data(), count));
     });
 }
 LibraResult LIBRA_INTEROP_CALL libra_generator_evaluate(

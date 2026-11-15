@@ -1,4 +1,5 @@
 #include "liberafx/GeneratorPool.h"
+#include "liberafx/NamedIo.h"
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -35,6 +36,16 @@ auto signal(liberafx::CustomNodeInvocation& call) noexcept -> liberafx::Result
     call.selectedBranch = 0;
     return result;
 }
+struct IoSignalContext { liberafx::NamedIo* io = nullptr; unsigned calls = 0; };
+auto ioSignal(liberafx::CustomNodeInvocation& call) noexcept -> liberafx::Result
+{
+    auto& context = *static_cast<IoSignalContext*>(call.context);
+    ++context.calls;
+    auto event = liberafx::NamedIoEvent{};
+    if (context.io->popEvent(event)) return liberafx::Result::InvalidArgument;
+    call.selectedBranch = 0;
+    return context.io->emitSignal("Finished");
+}
 auto stateInitialize(void* state, std::size_t, void*) noexcept -> liberafx::Result
 {
     assert(reinterpret_cast<std::uintptr_t>(state) % 64 == 0);
@@ -48,10 +59,180 @@ auto stateEvaluate(liberafx::CustomNodeInvocation& call) noexcept -> liberafx::R
     call.outputs[0] = ++count + call.time;
     return liberafx::Result::Ok;
 }
+
+struct LifeContext {
+    liberafx::GeneratorPool* pool = nullptr;
+    liberafx::GeneratorInstanceId instance = 0;
+    unsigned calls = 0;
+    double observed[8]{};
+    bool enqueue = false;
+    bool fail = false;
+    liberafx::Result reentrantStop = liberafx::Result::Ok;
+    liberafx::Result reentrantStart = liberafx::Result::Ok;
+    liberafx::Result enqueueResult = liberafx::Result::Ok;
+    unsigned cleanupCalls = 0;
+    liberafx::Result cleanupEnqueue = liberafx::Result::Ok;
+};
+auto onStart(liberafx::CustomNodeInvocation& call) noexcept -> liberafx::Result
+{
+    auto& context = *static_cast<LifeContext*>(call.context);
+    if (context.calls >= 8) return liberafx::Result::InvalidArgument;
+    context.observed[context.calls++] = call.inputs[0];
+    context.reentrantStop = context.pool->stop(context.instance);
+    context.reentrantStart = context.pool->start(context.instance);
+    if (context.enqueue) context.enqueueResult = context.pool->enqueueSpawn(20, nullptr, 0);
+    call.selectedBranch = 0;
+    return context.fail ? liberafx::Result::QueueRejected : liberafx::Result::Ok;
+}
+void cleanupLife(void*, std::size_t, void* data) noexcept
+{
+    auto& context = *static_cast<LifeContext*>(data);
+    ++context.cleanupCalls;
+    context.cleanupEnqueue = context.pool->enqueueSpawn(0, nullptr, 0);
+}
+
+void lifecycleTests()
+{
+    using liberafx::Result;
+    auto bytes = std::vector<std::uint8_t>(16 + 3 * 256);
+    std::memcpy(bytes.data(), "LFXB", 4);
+    bytes[4] = 3; bytes[6] = 1; bytes[8] = 3; bytes[13] = 1;
+    for (auto index = 0u; index < 2; ++index) {
+        auto offset = 16 + index * 256;
+        bytes[offset + 15] = static_cast<std::uint8_t>(index + 1);
+        bytes[offset + 16] = 1; bytes[offset + 17] = 1;
+        write32(bytes, offset + 24, UINT32_MAX);
+        write32(bytes, offset + 28, UINT32_MAX);
+        auto value = index == 0 ? 7.0 : 3.0;
+        std::memcpy(bytes.data() + offset + 32, &value, sizeof(value));
+    }
+    auto signalOffset = std::size_t{16 + 2 * 256};
+    bytes[signalOffset + 15] = 3;
+    bytes[signalOffset + 16] = 41;
+    bytes[signalOffset + 18] = 1;
+    bytes[signalOffset + 19] = 1;
+    bytes[signalOffset + 39] = 77;
+    write32(bytes, signalOffset + 40, 1);
+    bytes[signalOffset + 52] = 1;
+    for (auto i = 1u; i < 4; ++i) write32(bytes, signalOffset + 48 + i * 8, UINT32_MAX);
+    for (auto i = 0u; i < 4; ++i) write32(bytes, signalOffset + 208 + i * 4, UINT32_MAX);
+    auto context = LifeContext{};
+    auto descriptor = liberafx::CustomNodeDescriptor{};
+    descriptor.typeId[15] = 77;
+    descriptor.abiVersion = 1;
+    descriptor.execution = liberafx::CustomExecution::Signal;
+    descriptor.inputCount = 1;
+    descriptor.inputWidths[0] = 1;
+    descriptor.branchCount = 1;
+    descriptor.function = onStart;
+    descriptor.cleanup = cleanupLife;
+    descriptor.context = &context;
+    auto bindings = std::array<liberafx::CustomNodeBinding, 3>{};
+    auto program = liberafx::Program{};
+    assert(liberafx::Program::load(bytes.data(), bytes.size(), &descriptor, 1,
+                                   bindings.data(), bindings.size(), program) == Result::Ok);
+    auto container = std::array<std::uint8_t, 16>{}; container[15] = 42;
+    auto pool = std::unique_ptr<liberafx::GeneratorPool>{};
+    assert(liberafx::GeneratorPool::create(program, container.data(), 3, 65536, 8, pool) == Result::Ok);
+    context.pool = pool.get();
+    auto config = liberafx::GeneratorLifecycle{};
+    config.hasOnStart = true; config.onStartNodeId[15] = 3; config.instructionBudget = 4;
+    config.hasLife = true; config.lifeNodeId[15] = 2;
+    assert(pool->configureLifecycle(config) == Result::Ok);
+    auto first = liberafx::GeneratorInstanceId{};
+    auto second = liberafx::GeneratorInstanceId{};
+    assert(pool->spawn(10, nullptr, 0, first) == Result::Ok);
+    assert(pool->spawn(12, nullptr, 0, second) == Result::Ok);
+    assert(pool->evaluate(first, 10) == Result::NotReady);
+    auto live = liberafx::GeneratorCapture{};
+    live.nodeId[15] = 1; live.value = 11;
+    assert(pool->setLive(first, &live, 1) == Result::Ok);
+    context.instance = first; context.enqueue = true;
+    assert(pool->start(first) == Result::Ok);
+    assert(context.calls == 1 && context.observed[0] == 11 &&
+           context.reentrantStop == Result::Busy && context.reentrantStart == Result::Busy &&
+           context.enqueueResult == Result::Ok);
+    assert(pool->start(first) == Result::Ok && context.calls == 1);
+    context.instance = second; context.enqueue = false;
+    assert(pool->start(second) == Result::Ok && context.calls == 2 && context.observed[1] == 7);
+    auto event = liberafx::GeneratorEvent{};
+    assert(pool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Spawn && event.instanceId == first);
+    assert(pool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Spawn && event.instanceId == second);
+    assert(pool->evaluate(first, 13) == Result::Ok);
+    assert(pool->evaluate(first, 13) == Result::NotReady);
+    assert(pool->finalize(first) == Result::NotReady);
+    assert(pool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Destroy && event.instanceId == first);
+    auto finalValue = std::array<double, 4>{}; auto finalWidth = std::uint8_t{};
+    assert(pool->value(first, bytes.data() + 16, finalValue.data(), finalWidth) == Result::Ok && finalValue[0] == 11);
+    assert(pool->finalize(first) == Result::Ok);
+    assert(context.cleanupCalls == 1 && context.cleanupEnqueue == Result::Busy);
+    assert(pool->evaluate(first, 13) == Result::InvalidHandle);
+    assert(pool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Stop && event.instanceId == first);
+    auto liveLife = liberafx::GeneratorCapture{}; liveLife.nodeId[15] = 2; liveLife.value = 4;
+    assert(pool->setLive(second, &liveLife, 1) == Result::Ok);
+    assert(pool->evaluate(second, 15) == Result::Ok);
+    assert(pool->stop(second) == Result::Ok);
+    assert(pool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Stop && event.instanceId == second);
+    assert(!pool->popEvent(event));
+    auto processed = std::size_t{};
+    assert(pool->processSpawns(1, processed) == Result::Ok && processed == 1);
+    assert(pool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Spawn);
+    assert(pool->reset() == Result::Ok);
+    assert(pool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Stop);
+    assert(!pool->popEvent(event));
+
+    auto pressure = std::unique_ptr<liberafx::GeneratorPool>{};
+    assert(liberafx::GeneratorPool::create(program, container.data(), 1, 65536, 1, pressure) == Result::Ok);
+    assert(pressure->configureLifecycle(config) == Result::Ok);
+    auto life = liberafx::GeneratorCapture{}; life.nodeId[15] = 2; life.value = 0;
+    auto zero = liberafx::GeneratorInstanceId{};
+    assert(pressure->spawn(0, &life, 1, zero) == Result::Ok);
+    context.pool = pressure.get(); context.instance = zero;
+    assert(pressure->start(zero) == Result::QueueRejected && context.calls == 3);
+    assert(pressure->start(zero) == Result::QueueRejected && context.calls == 3);
+    assert(pressure->evaluate(zero, 1) == Result::QueueRejected);
+    assert(pressure->stop(zero) == Result::Busy && pressure->reset() == Result::Busy);
+    assert(pressure->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Spawn);
+    assert(pressure->start(zero) == Result::Ok && context.calls == 3);
+    assert(pressure->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Destroy && event.instanceId == zero);
+    assert(pressure->finalize(zero) == Result::Ok);
+    assert(pressure->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Stop && event.instanceId == zero);
+    assert(!pressure->popEvent(event) && pressure->start(zero) == Result::InvalidHandle);
+
+    auto failed = std::unique_ptr<liberafx::GeneratorPool>{};
+    assert(liberafx::GeneratorPool::create(program, container.data(), 1, 65536, 2, failed) == Result::Ok);
+    assert(failed->configureLifecycle(config) == Result::Ok);
+    auto failedId = liberafx::GeneratorInstanceId{};
+    assert(failed->spawn(0, nullptr, 0, failedId) == Result::Ok);
+    context.pool = failed.get(); context.instance = failedId; context.fail = true;
+    assert(failed->start(failedId) == Result::QueueRejected && context.calls == 4);
+    assert(failed->start(failedId) == Result::QueueRejected && context.calls == 4);
+    assert(failed->evaluate(failedId, 5) == Result::QueueRejected);
+    assert(failed->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Spawn);
+    assert(failed->stop(failedId) == Result::Ok);
+    assert(failed->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Stop && !failed->popEvent(event));
+
+    auto extended = std::unique_ptr<liberafx::GeneratorPool>{};
+    assert(liberafx::GeneratorPool::createWithCaptureLimit(program, container.data(), 1, 65536, 2, 256, extended) == Result::Ok);
+    auto captures = std::array<liberafx::GeneratorCapture, 257>{};
+    for (auto i = 0u; i < captures.size(); ++i) { captures[i].nodeId[15] = 1; captures[i].value = i; }
+    assert(extended->enqueueSpawn(0, captures.data(), 257) == Result::InvalidArgument);
+    assert(extended->enqueueSpawn(0, captures.data(), 256) == Result::Ok);
+    assert(extended->processSpawns(1, processed) == Result::Ok && processed == 1);
+    assert(extended->popEvent(event));
+    assert(extended->evaluate(event.instanceId, 0) == Result::Ok);
+    auto value = std::array<double, 4>{}; auto width = std::uint8_t{};
+    assert(extended->value(event.instanceId, bytes.data() + 16, value.data(), width) == Result::Ok && value[0] == 255);
+    context.pool = extended.get();
+    auto beforeCleanup = context.cleanupCalls;
+    extended.reset();
+    assert(context.cleanupCalls == beforeCleanup + 1 && context.cleanupEnqueue == Result::Busy);
+}
 }
 
 int main()
 {
+    lifecycleTests();
     // Template: scalar + local Time. The same template node GUIDs are used in each instance.
     auto childBytes = std::vector<std::uint8_t>(12 + 44 * 3);
     std::memcpy(childBytes.data(), "LFXB", 4);
@@ -67,6 +248,32 @@ int main()
     write32(childBytes, 12 + 2 * 44 + 24, 1);
     auto child = liberafx::Program{};
     assert(liberafx::Program::load(childBytes.data(), childBytes.size(), child) == liberafx::Result::Ok);
+    {
+        alignas(16) auto ioWork = std::array<double, 3>{};
+        alignas(16) auto ioDefaults = std::array<double, 6>{};
+        auto instance = liberafx::Instance{};
+        assert(instance.initialize(child, ioWork.data(), ioWork.size(), ioDefaults.data(), ioDefaults.size()) == liberafx::Result::Ok);
+        auto ports = std::array<liberafx::NamedIoPort, 2>{};
+        ports[0].name = "Amount"; ports[0].kind = liberafx::NamedIoKind::InputProperty;
+        ports[0].nodeId[15] = 1; ports[0].width = 1;
+        ports[1].name = "Result"; ports[1].kind = liberafx::NamedIoKind::OutputProperty;
+        ports[1].nodeId[15] = 3; ports[1].width = 1;
+        auto io = std::unique_ptr<liberafx::NamedIo>{};
+        assert(liberafx::NamedIo::create(instance, ports.data(), ports.size(), 2, io) == liberafx::Result::Ok);
+        auto input = 7.0;
+        assert(io->setProperty("Amount", &input, 1) == liberafx::Result::Ok);
+        assert(io->start(0, nullptr, 0) == liberafx::Result::Ok);
+        auto event = liberafx::NamedIoEvent{};
+        assert(io->popEvent(event) && event.kind == liberafx::NamedIoKind::OutputProperty &&
+               event.values[0] == 7 && std::strcmp(io->portName(event.portIndex), "Result") == 0);
+        assert(io->start(0, nullptr, 0) == liberafx::Result::Ok);
+        assert(io->update(0) == liberafx::Result::Ok && !io->popEvent(event));
+        assert(io->update(1) == liberafx::Result::Ok);
+        assert(io->popEvent(event) && event.values[0] == 8);
+        ports[1].name = ports[0].name;
+        auto duplicate = std::unique_ptr<liberafx::NamedIo>{};
+        assert(liberafx::NamedIo::create(instance, ports.data(), ports.size(), 2, duplicate) == liberafx::Result::InvalidArgument);
+    }
     auto container = std::array<std::uint8_t, 16>{}; container[15] = 20;
     auto pool = std::unique_ptr<liberafx::GeneratorPool>{};
     assert(liberafx::GeneratorPool::create(child, container.data(), 2, 65536, 8, pool) == liberafx::Result::Ok);
@@ -99,6 +306,36 @@ int main()
     descriptor.branchCount = 1;
     descriptor.function = signal;
     descriptor.context = &context;
+    {
+        auto ioContext = IoSignalContext{};
+        auto ioDescriptor = descriptor;
+        ioDescriptor.function = ioSignal;
+        ioDescriptor.context = &ioContext;
+        auto ioBinding = liberafx::CustomNodeBinding{};
+        auto ioProgram = liberafx::Program{};
+        assert(liberafx::Program::load(signalBytes.data(), signalBytes.size(), &ioDescriptor, 1,
+                                       &ioBinding, 1, ioProgram) == liberafx::Result::Ok);
+        alignas(16) auto ioWork = std::array<double, 4>{};
+        auto instance = liberafx::Instance{};
+        assert(instance.initialize(ioProgram, ioWork.data(), ioWork.size()) == liberafx::Result::Ok);
+        auto ports = std::array<liberafx::NamedIoPort, 2>{};
+        ports[0].name = "Fire"; ports[0].kind = liberafx::NamedIoKind::InputSignal; ports[0].nodeId[15] = 10;
+        ports[1].name = "Finished"; ports[1].kind = liberafx::NamedIoKind::OutputSignal; ports[1].nodeId[15] = 10;
+        auto io = std::unique_ptr<liberafx::NamedIo>{};
+        auto identity = liberafx::NamedIoIdentity{};
+        identity.containerId[15] = 20;
+        identity.instanceId = 123;
+        assert(liberafx::NamedIo::create(instance, ports.data(), ports.size(), 4, io, identity) == liberafx::Result::Ok);
+        ioContext.io = io.get();
+        assert(io->start(0, ports[0].nodeId, 4) == liberafx::Result::Ok);
+        assert(io->start(1, ports[0].nodeId, 4) == liberafx::Result::Ok && ioContext.calls == 1);
+        assert(io->fireSignal("Fire", 1, 4) == liberafx::Result::Ok && ioContext.calls == 2);
+        auto event = liberafx::NamedIoEvent{};
+        assert(io->popEvent(event) && event.kind == liberafx::NamedIoKind::OutputSignal &&
+               event.identity.containerId[15] == 20 && event.identity.instanceId == 123 &&
+               std::strcmp(io->portName(event.portIndex), "Finished") == 0);
+        assert(io->popEvent(event) && !io->popEvent(event));
+    }
     auto binding = liberafx::CustomNodeBinding{};
     auto parent = liberafx::Program{};
     assert(liberafx::Program::load(signalBytes.data(), signalBytes.size(), &descriptor, 1, &binding, 1, parent) == liberafx::Result::Ok);
@@ -124,6 +361,19 @@ int main()
     assert(pool->evaluate(second.instanceId, 15) == liberafx::Result::Ok);
     assert(pool->value(first.instanceId, resultNode, values.data(), width) == liberafx::Result::Ok && values[0] == 12);
     assert(pool->value(second.instanceId, resultNode, values.data(), width) == liberafx::Result::Ok && values[0] == 10);
+    auto live = liberafx::GeneratorCapture{};
+    std::memcpy(live.nodeId, childBytes.data() + 12, 16);
+    live.value = 20;
+    assert(pool->setLive(first.instanceId, &live, 1) == liberafx::Result::Ok);
+    assert(pool->evaluate(first.instanceId, 15) == liberafx::Result::Ok);
+    assert(pool->value(first.instanceId, resultNode, values.data(), width) == liberafx::Result::Ok && values[0] == 25);
+    assert(pool->value(second.instanceId, resultNode, values.data(), width) == liberafx::Result::Ok && values[0] == 10);
+    auto invalidLive = std::array<liberafx::GeneratorCapture, 2>{live, live};
+    invalidLive[0].value = 30;
+    std::memcpy(invalidLive[1].nodeId, resultNode, 16);
+    assert(pool->setLive(first.instanceId, invalidLive.data(), invalidLive.size()) == liberafx::Result::InvalidValueType);
+    assert(pool->evaluate(first.instanceId, 15) == liberafx::Result::Ok);
+    assert(pool->value(first.instanceId, resultNode, values.data(), width) == liberafx::Result::Ok && values[0] == 25);
     auto invalidCapture = liberafx::GeneratorCapture{};
     std::memcpy(invalidCapture.nodeId, resultNode, 16);
     invalidCapture.value = 3;

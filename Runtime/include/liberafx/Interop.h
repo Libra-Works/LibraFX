@@ -41,6 +41,7 @@ enum {
     LIBRA_INVALID_HANDLE = 13, LIBRA_INSTRUCTION_BUDGET_EXCEEDED = 14,
     LIBRA_OUT_OF_MEMORY = 15, LIBRA_INTERNAL_ERROR = 16
 };
+enum { LIBRA_GENERATOR_SPAWN = 1, LIBRA_GENERATOR_STOP = 2, LIBRA_GENERATOR_DESTROY = 3 };
 
 /* These are host ABI records, not packed bytecode/wire overlays. Preserve the
    layout even when an includer's current packing differs. They are not SIMD
@@ -76,6 +77,11 @@ typedef struct LIBRA_INTEROP_ALIGN(8) LibraGeneratorEvent {
     double startTime;
     uint64_t seed;
 } LibraGeneratorEvent;
+
+typedef struct LIBRA_INTEROP_ALIGN(4) LibraGeneratorLifecycle {
+    uint8_t onStartNodeId[16], lifeNodeId[16];
+    uint32_t flags, instructionBudget;
+} LibraGeneratorLifecycle;
 
 typedef struct LIBRA_INTEROP_ALIGN(8) LibraSpawnableBinding {
     uint8_t containerId[16];
@@ -117,6 +123,9 @@ LIBRA_INTEROP_ASSERT(sizeof(LibraGeneratorEvent) == 48 && LIBRA_INTEROP_ALIGNOF(
 LIBRA_INTEROP_ASSERT(offsetof(LibraGeneratorEvent, containerId) == 8 &&
     offsetof(LibraGeneratorEvent, instanceId) == 24 && offsetof(LibraGeneratorEvent, startTime) == 32 &&
     offsetof(LibraGeneratorEvent, seed) == 40);
+LIBRA_INTEROP_ASSERT(sizeof(LibraGeneratorLifecycle) == 40 && LIBRA_INTEROP_ALIGNOF(LibraGeneratorLifecycle) == 4);
+LIBRA_INTEROP_ASSERT(offsetof(LibraGeneratorLifecycle, flags) == 32 &&
+    offsetof(LibraGeneratorLifecycle, instructionBudget) == 36);
 LIBRA_INTEROP_ASSERT(sizeof(LibraSpawnableBinding) == 120 && LIBRA_INTEROP_ALIGNOF(LibraSpawnableBinding) == 8);
 LIBRA_INTEROP_ASSERT(offsetof(LibraSpawnableBinding, containerId) == 0 &&
     offsetof(LibraSpawnableBinding, signalTypeId) == 16 && offsetof(LibraSpawnableBinding, pool) == 32 &&
@@ -168,11 +177,19 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_make_sprite_quad(
 /* Manual, synchronous runtime-only instance pool. The program is retained until
    pool release. Captures override template defaults at spawn, not live bindings.
    The event queue must be drained; full queues reject spawn/stop/reset. Event kind
-   1 is spawn and 2 is stop. All IDs are scoped to this pool and never reused.
+   1 is spawn and 2 is stop. Configured lifecycle pools additionally emit 3
+   (local Destroy) only on natural lifetime expiry. Drain and route Destroy
+   before finalize; the frozen instance remains readable until then.
+   All IDs are scoped to this pool and never reused.
    Evaluations use time minus spawn time, independent for each instance. */
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_pool_create(
     LibraProgram program, const uint8_t containerId[16], uint32_t maxActive,
     uint64_t memoryBudgetBytes, uint32_t eventCapacity, LibraGeneratorPool* outPool);
+/* Extended queue capture limit is 1..256 scalar lanes; legacy create uses 16. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_pool_create_ex(
+    LibraProgram program, const uint8_t containerId[16], uint32_t maxActive,
+    uint64_t memoryBudgetBytes, uint32_t eventCapacity, uint32_t maxCaptureLanes,
+    LibraGeneratorPool* outPool);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_pool_release(LibraGeneratorPool pool);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_spawn(
     LibraGeneratorPool pool, double time, const LibraGeneratorCapture* captures,
@@ -181,11 +198,26 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_spawn(
    process runs on the owner thread; failed commands remain queued for retry. */
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_enqueue_spawn(
     LibraGeneratorPool pool, double time, const LibraGeneratorCapture* captures, uint32_t count);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_enqueue_spawn_ex(
+    LibraGeneratorPool pool, double time, const LibraGeneratorCapture* captures, uint32_t count);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_process_spawns(
     LibraGeneratorPool pool, uint32_t maxCommands, uint32_t* processed);
+enum { LIBRA_LIFECYCLE_ON_START = 1, LIBRA_LIFECYCLE_LIFE = 2 };
+/* Configure an empty pool. After spawn, apply Live inputs, then start exactly
+   once. Life is a scalar duration in seconds; zero expires after OnStart. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_configure_lifecycle(
+    LibraGeneratorPool pool, const LibraGeneratorLifecycle* lifecycle);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_start(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_finalize(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_stop(
     LibraGeneratorPool pool, LibraGeneratorInstance instance);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_reset(LibraGeneratorPool pool);
+/* Host supplies only lanes configured Live; captured lanes are not changed. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_set_live(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance,
+    const LibraGeneratorCapture* values, uint32_t count);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_evaluate(
     LibraGeneratorPool pool, LibraGeneratorInstance instance, double time);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_value(

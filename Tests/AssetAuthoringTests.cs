@@ -9,8 +9,34 @@ internal static class AssetAuthoringTests
     public static void Run()
     {
         VerifyMaterialSchemaAndHistory();
+        VerifyMaterialAssociationDelivery();
         VerifySpriteModes();
         VerifyLocalMetadata();
+    }
+
+    private static void VerifyMaterialAssociationDelivery()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var asset = new EngineAsset("/Engine/BasicShapes/Cube.Cube", "Cube", "model", "Unreal",
+            Materials: [new(0, "/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial", "Basic", [
+                new("LegacyGlobal", "vector", JsonSerializer.SerializeToElement(new[] { 1d, 0d, 0d, 1d }), 0, -1),
+                new("Layer", "scalar", JsonSerializer.SerializeToElement(0.5), 0, 3)
+            ])]);
+        var node = RenderNodeAuthoring.CreateModel(graph, asset);
+        var legacyId = node.InputPorts.Single(port => port.Name == "LegacyGlobal").Id;
+        using var scene = JsonDocument.Parse(LiberaFx.Services.Compilation.RenderProgramBindings.CreateScene(graph.CreateSnapshot(), 1));
+        if (scene.RootElement.GetProperty("nodes")[0].GetProperty("materials")[0].GetProperty("path").GetString()
+            != asset.Materials![0].Path)
+            throw new InvalidOperationException("Declared material overrides did not reach the renderer.");
+        var inputs = scene.RootElement.GetProperty("nodes")[0].GetProperty("inputs").EnumerateArray()
+            .Where(input => input.TryGetProperty("materialParameter", out var parameter) &&
+                parameter.ValueKind == JsonValueKind.Object).ToArray();
+        var legacy = inputs.Single(input => input.GetProperty("id").GetString() == legacyId).GetProperty("materialParameter");
+        var layer = inputs.Single(input => input.GetProperty("materialParameter").GetProperty("name").GetString() == "Layer")
+            .GetProperty("materialParameter");
+        if (legacy.GetProperty("association").GetInt32() != 2 || layer.GetProperty("association").GetInt32() != 0 ||
+            layer.GetProperty("index").GetInt32() != 3)
+            throw new InvalidOperationException("Global material migration lost pin identity or changed valid layer bindings.");
     }
 
     private static void VerifyMaterialSchemaAndHistory()

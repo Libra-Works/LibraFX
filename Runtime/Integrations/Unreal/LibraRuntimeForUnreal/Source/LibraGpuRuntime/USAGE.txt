@@ -3,9 +3,11 @@ Libra GPU Unreal integration (experimental, requires UE 5.7 SM5).
 Import a .lfxgpu JSON bundle created by LibraGpu.UnrealExport or the frontend
 gpu_export_bundle tool (programSequence/nodeId/canonicalJson/metadata/shaderSource/
 registerKernels[{id,stage,base64}]/resourceAssetPaths). No packet re-lowering or
-external converter is required. Each texture path
-must resolve to UTexture2D at import; the resulting ULibraGpuEffectAsset holds
-hard UObject references for cooking. Invalid replacement packets and unresolved
+external converter is required. Each texture binding must explicitly select
+builtin:white or resolve to UTexture2D at import; the resulting
+ULibraGpuEffectAsset holds hard UObject references for real texture assets and
+a serialized discriminator for the engine's runtime white texture. Missing
+bindings never silently fall back to white. Invalid replacement packets and unresolved
 texture references leave an existing asset's program unchanged. Core's generated
 USF is retained as source export, not executed.
 
@@ -22,8 +24,72 @@ render-thread instance.
 
 Billboards are instanced directly from the particle GPU buffer in a post-tonemap
 view extension. This initial pass is unlit and does not depth-test, sort
-transparency, participate in shadows, or implement material bindings. Texture2D
-bindings are supported. It must not be presented as a production renderer.
+transparency, participate in shadows, or evaluate native UE material graphs.
+Texture2D bindings and actual alpha/additive fixed-shader presets are supported.
+It must not be presented as a production renderer.
+
+Additive renderer contract (root of either bundle/delivery JSON, ABI/version1 unchanged):
+  "rendererBindingsVersion": 1,
+  "rendererBindings": [
+    {"flowId":"renderStep","renderer":"builtin:billboard",
+     "material":"builtin:unlit-alpha","sizeScale":100}
+  ]
+When present, supply exactly one entry for each metadata.flow RenderBillboard
+id, and no unknown/duplicate flow entries. Only builtin:unlit-alpha and
+builtin:unlit-additive are supported; the latter actually changes GPU blend
+state. /Game material paths and unknown renderer/material tokens reject
+atomically. Legacy absent renderer fields retain alpha and sizeScale1.
+sizeScale is an optional finite float, 0<sizeScale<=10000, multiplying quad
+half-extents only. It is NOT simulation/position/velocity/physics-unit conversion.
+Rendering uses UE world centimeters and the component supplies native world XYZ
+to emitterPosition. Canonical CreateEmitter Size0.1 is therefore subpixel at
+ordinary UE camera distances without an explicit scale. A UE starter can
+explicitly choose sizeScale100 (10cm half-extents); its velocity3 remains
+3cm/second along UE Y, not a silently converted meters/Y-up simulation.
+
+Component GetPreviewBounds(FBox&) returns false when LocalPreviewBounds is
+invalid/unknown. An explicitly supplied conservative emitter-relative
+LocalPreviewBounds is shifted by component translation into world space;
+it is not readback, alive-particle bounds, or inferred arbitrary-IR bounds.
+For the canonical starter with sizeScale100, an explicitly selected
+[-100,+100]cm box covers its lifetime/gravity/quad extent. Preview owners must
+route Frame to this box only when their authored bounds/policy is known.
+Preview cache/reuse identity must include full rendererBindingsVersion and
+rendererBindings: changing alpha/additive/sizeScale must replace the snapshot.
+
+Focused new cases:
+  Libra.GPU.Assets.ExplicitBuiltinRendererBindings
+  Libra.GPU.Render.AuthoredDefaultEmitterBuiltinWhite
+The renderer case uses canonical exported CreateEmitter packets with unchanged
+Size0.1, actual component Spawn/Update/Pause/Resume, the production explicit
+builtin texture resolver, a 200cm perspective camera and framebuffer readback.
+It compares sizeScale100 vs1 and actual alpha vs additive framebuffer colors.
+Regenerate the canonical starter fixture with:
+  dotnet run --project Gpu\LibraGpu.UnrealExport.Tests\LibraGpu.UnrealExport.Tests.csproj
+    -- --white-fixture <plugin>\Source\LibraGpuRuntime\Private\Tests\Fixtures\white-emitter.lfxgpu
+Package-write test is opt-in for isolated projects ONLY:
+  -LibraGpuWriteBindingFixture
+  Automation RunTests Libra.GPU.Assets.SaveExplicitBuiltinPackage
+It refuses existing files and writes /Game/LibraGpuBindingValidation/FX_ExplicitWhite.
+Run NativePackageGameplayLifecycle in a fresh process with that object path
+to prove serialized builtin loading. Save alone does not prove reload/cook.
+For nondefault renderer reload assertions additionally pass:
+  -LibraGpuExpectedMaterial=builtin:unlit-additive -LibraGpuExpectedSizeScale=100
+Quote the full -LibraGpuAsset=/Game/...Asset.Asset argument in PowerShell.
+
+Local binding validation on 2026-11-15 (isolated source/project copies only):
+  .NET exporter tests and UE Editor/Development game builds passed.
+  An initially empty private filesystem DDC compiled engine/plugin shaders;
+  explicit builtin/native GPU cases passed. The canonical starter at Size0.1
+  produced 36 pixels at 200cm with sizeScale100, versus zero at legacy scale1.
+  Alpha/additive framebuffer differences and actual Spawn/Update/Pause/Resume
+  passed. Exact frontend shaderSource/registerKernels/resourceAssetPaths and
+  renderer bindings were accepted; rejected candidates retained working state.
+  A saved native white/additive/scale100 package reloaded in a fresh process
+  and passed hard/soft loading, GC and gameplay lifecycle checks.
+  Focused Windows cook completed: 435 cooked +7 platform-skipped packages,
+  zero warnings/errors. This follow-up does not claim staged standalone-game
+  framebuffer proof; the earlier standalone proof remains baseline-only.
 
 Tests requiring a real rendering RHI:
   Libra.GPU.Assets.TransactionalPacketValidation

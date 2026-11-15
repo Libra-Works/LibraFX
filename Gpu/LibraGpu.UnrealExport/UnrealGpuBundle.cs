@@ -18,10 +18,15 @@ public sealed record UnrealGpuBundle
     public required GpuExportMetadata Metadata { get; init; }
     public required IReadOnlyList<UnrealGpuKernelPacket> Kernels { get; init; }
     public required IReadOnlyList<UnrealGpuTextureBinding> Textures { get; init; }
+    public int RendererBindingsVersion { get; init; } = 1;
+    public IReadOnlyList<UnrealGpuRendererBinding> RendererBindings { get; init; } = [];
 }
 
 public sealed record UnrealGpuKernelPacket(string Id, KernelStage Stage, byte[] Packet);
 public sealed record UnrealGpuTextureBinding(string Id, string ObjectPath);
+public sealed record UnrealGpuRendererBinding(
+    string FlowId, string Renderer = "builtin:billboard",
+    string Material = "builtin:unlit-alpha", float SizeScale = 1);
 
 public static class UnrealGpuExporter
 {
@@ -32,10 +37,11 @@ public static class UnrealGpuExporter
     };
 
     /// <summary>
-    /// Compile validated IR and associate every declared texture with its Unreal object path.
+    /// Compile validated IR and explicitly bind each texture to an Unreal object path or builtin:white.
     /// This operation never resolves, loads, or checks the type of the referenced Unreal assets.
     /// </summary>
-    public static UnrealGpuBundle Compile(GpuProgram program, IReadOnlyDictionary<string, string> texturePaths)
+    public static UnrealGpuBundle Compile(GpuProgram program, IReadOnlyDictionary<string, string> texturePaths,
+        IReadOnlyList<UnrealGpuRendererBinding>? rendererBindings = null)
     {
         ArgumentNullException.ThrowIfNull(program);
         ArgumentNullException.ThrowIfNull(texturePaths);
@@ -49,28 +55,47 @@ public static class UnrealGpuExporter
             throw new NotSupportedException("Unreal GPU interpreter limits are 256 registers and 256 MiB per instance.");
         var resources = compiled.Resources;
         if (texturePaths.Count != resources.Count)
-            throw new ArgumentException("Supply exactly one object path for each declared texture.", nameof(texturePaths));
+            throw new ArgumentException("Supply exactly one explicit binding for each declared texture.", nameof(texturePaths));
 
         var textures = new List<UnrealGpuTextureBinding>(resources.Count);
         foreach (var resource in resources)
         {
             if (resource.Kind != ResourceKind.Texture2D)
                 throw new NotSupportedException($"Resource '{resource.Id}' is not a Texture2D.");
-            if (!texturePaths.TryGetValue(resource.Id, out var path) || !IsObjectPath(path))
-                throw new ArgumentException($"Texture '{resource.Id}' requires an absolute Unreal object path.", nameof(texturePaths));
+            if (!texturePaths.TryGetValue(resource.Id, out var path) || (path != "builtin:white" && !IsObjectPath(path)))
+                throw new ArgumentException($"Texture '{resource.Id}' requires an absolute Unreal object path or explicit builtin:white.", nameof(texturePaths));
             textures.Add(new(resource.Id, path));
         }
 
         var kernels = compiled.RegisterKernels
             .Select(kernel => new UnrealGpuKernelPacket(kernel.KernelId, kernel.Stage, kernel.SerializeLittleEndian()))
             .ToArray();
+        var renderFlowIds = compiled.Flow.Where(flow => flow.Kind == FlowKind.RenderBillboard)
+            .Select(flow => flow.Id).ToHashSet(StringComparer.Ordinal);
+        var renderers = rendererBindings?.ToArray() ??
+            compiled.Flow.Where(flow => flow.Kind == FlowKind.RenderBillboard)
+                .Select(flow => new UnrealGpuRendererBinding(flow.Id)).ToArray();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var binding in renderers)
+        {
+            if (binding is null || !renderFlowIds.Contains(binding.FlowId) || !seen.Add(binding.FlowId) ||
+                binding.Renderer != "builtin:billboard" ||
+                binding.Material is not ("builtin:unlit-alpha" or "builtin:unlit-additive") ||
+                !float.IsFinite(binding.SizeScale) || binding.SizeScale <= 0 || binding.SizeScale > 10000)
+                throw new ArgumentException("Exactly one renderer binding per RenderBillboard flow is required: " +
+                    "builtin:billboard, builtin:unlit-alpha/additive, finite 0<sizeScale<=10000. Native UE materials are not evaluated.",
+                    nameof(rendererBindings));
+        }
+        if (seen.Count != renderFlowIds.Count)
+            throw new ArgumentException("Missing RenderBillboard renderer binding.", nameof(rendererBindings));
         return new()
         {
             CanonicalJson = compiled.CanonicalJson,
             Usf = compiled.EmitUsf().Text,
             Metadata = compiled.GetExportMetadata(ShaderFormat.Usf),
             Kernels = Array.AsReadOnly(kernels),
-            Textures = textures.AsReadOnly()
+            Textures = textures.AsReadOnly(),
+            RendererBindings = Array.AsReadOnly(renderers)
         };
     }
 

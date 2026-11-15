@@ -31,6 +31,22 @@ Reject(() => UnrealGpuExporter.Compile(program, new Dictionary<string, string>()
 Reject(() => UnrealGpuExporter.Compile(program, new Dictionary<string, string> { ["wrong"] = paths["billboardTexture"] }));
 Reject(() => UnrealGpuExporter.Compile(program, new Dictionary<string, string> { ["billboardTexture"] = "not-a-path" }));
 Reject(() => UnrealGpuExporter.Compile(program, new Dictionary<string, string> { ["billboardTexture"] = "/Game/FX/T.T:Subobject" }));
+var whitePaths = new Dictionary<string, string> { ["billboardTexture"] = "builtin:white" };
+var renderId = compiled.Flow.Single(flow => flow.Kind == FlowKind.RenderBillboard).Id;
+var whiteBundle = UnrealGpuExporter.Compile(program, whitePaths,
+    [new(renderId, Material: "builtin:unlit-additive", SizeScale: 100)]);
+var whiteJson = JsonNode.Parse(UnrealGpuExporter.Serialize(whiteBundle))!;
+Check(whiteJson["textures"]![0]!["objectPath"]!.GetValue<string>() == "builtin:white", "explicit white token");
+Check(whiteJson["rendererBindings"]![0]!["material"]!.GetValue<string>() == "builtin:unlit-additive" &&
+    whiteJson["rendererBindings"]![0]!["sizeScale"]!.GetValue<float>() == 100, "actual draw presets");
+Reject(() => UnrealGpuExporter.Compile(program, new Dictionary<string, string> { ["billboardTexture"] = "builtin:unknown" }));
+Reject(() => UnrealGpuExporter.Compile(program, whitePaths, []));
+Reject(() => UnrealGpuExporter.Compile(program, whitePaths, [new("unknownFlow")]));
+Reject(() => UnrealGpuExporter.Compile(program, whitePaths, [new(renderId), new(renderId)]));
+Reject(() => UnrealGpuExporter.Compile(program, whitePaths, [new(renderId, Material: "/Game/FX/M_Spark.M_Spark")]));
+Reject(() => UnrealGpuExporter.Compile(program, whitePaths, [new(renderId, SizeScale: float.NaN)]));
+Reject(() => UnrealGpuExporter.Compile(program, whitePaths, [new(renderId, SizeScale: 0)]));
+Reject(() => UnrealGpuExporter.Compile(program, whitePaths, [new(renderId, SizeScale: 10001)]));
 var edited = program with { Capacity = program.Capacity / 2 };
 Check(UnrealGpuExporter.Compile(edited, paths).Metadata.ContentHash != bundle.Metadata.ContentHash, "edited IR hash");
 var tooManyRegisters = new GpuProgram
@@ -51,6 +67,12 @@ try
 }
 catch (NotSupportedException) { }
 Console.WriteLine("PASS Unreal source bundle");
+
+if (args.Length == 2 && args[0] == "--white-fixture")
+{
+    File.WriteAllText(args[1], UnrealGpuExporter.Serialize(whiteBundle), new System.Text.UTF8Encoding(false));
+    Console.WriteLine("PASS Exported explicit builtin white/additive fixture");
+}
 
 if (args.Length == 4 && args[0] == "--ue-fixtures")
 {

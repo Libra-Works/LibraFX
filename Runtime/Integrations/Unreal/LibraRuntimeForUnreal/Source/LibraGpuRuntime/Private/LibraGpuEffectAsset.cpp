@@ -240,7 +240,7 @@ bool ULibraGpuEffectAsset::ValidateProgram(FString& error) const
         if (!ValidatePacket(packet, Capacity, error)) return false;
     if (!LibraGpuBufferBudget(Kernels, Capacity, error)) return false;
     for (const auto& texture : Textures)
-        if (!texture.Texture)
+        if ((texture.bBuiltinWhite && texture.Texture) || (!texture.bBuiltinWhite && !texture.Texture))
         {
             error = TEXT("Missing GPU texture dependency.");
             return false;
@@ -263,9 +263,12 @@ bool ULibraGpuEffectAsset::ValidateProgram(FString& error) const
         }
         else if (step.Kind == TEXT("RenderBillboard"))
         {
-            if (!Textures.IsValidIndex(step.Index) || !Textures[step.Index].Texture)
+            if (!Textures.IsValidIndex(step.Index) ||
+                (!Textures[step.Index].bBuiltinWhite && !Textures[step.Index].Texture) ||
+                (step.BillboardBlend != ELibraGpuBillboardBlend::Alpha && step.BillboardBlend != ELibraGpuBillboardBlend::Additive) ||
+                !FMath::IsFinite(step.SizeScale) || step.SizeScale <= 0 || step.SizeScale > 10000)
             {
-                error = TEXT("Missing GPU billboard texture.");
+                error = TEXT("Invalid GPU billboard texture, blend mode, or sizeScale.");
                 return false;
             }
             seenRender = true;
@@ -398,7 +401,7 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
         for (const auto& id : declaredIds)
             if (!boundIds.Contains(id))
             {
-                error = FString::Printf(TEXT("Missing Texture2D binding for GPU resource '%s'. Supply its native texture object path in resourceAssetPaths (or textures)."), *id);
+                error = FString::Printf(TEXT("Missing Texture2D binding for GPU resource '%s'. Supply its native texture object path or explicit builtin:white in resourceAssetPaths (or textures)."), *id);
                 return false;
             }
         for (const auto& id : boundIds)
@@ -421,6 +424,53 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
     TArray<FLibraGpuTextureBinding> newTextures;
     TArray<FLibraGpuFlowStep> newFlow;
     TMap<FString, int32> kernelIndices, textureIndices;
+    TMap<FString, ELibraGpuBillboardBlend> rendererBindings;
+    TMap<FString, float> rendererSizeScales;
+    auto explicitRenderers = root->HasField(TEXT("rendererBindingsVersion")) || root->HasField(TEXT("rendererBindings"));
+    if (explicitRenderers)
+    {
+        const TArray<TSharedPtr<FJsonValue>>* renderers = nullptr;
+        double rendererVersion = 0;
+        if (!root->TryGetNumberField(TEXT("rendererBindingsVersion"), rendererVersion) || rendererVersion != 1 ||
+            !root->TryGetArrayField(TEXT("rendererBindings"), renderers) || renderers->Num() > 128)
+        {
+            error = TEXT("Invalid GPU renderer bindings: rendererBindingsVersion must be 1.");
+            return false;
+        }
+        for (const auto& value : *renderers)
+        {
+            auto object = value->AsObject();
+            FString flowId, renderer, material;
+            if (!object || !object->TryGetStringField(TEXT("flowId"), flowId) || !NameValid(flowId) ||
+                rendererBindings.Contains(flowId) || !object->TryGetStringField(TEXT("renderer"), renderer) ||
+                !object->TryGetStringField(TEXT("material"), material) || material.Len() > 1024)
+            {
+                error = TEXT("Invalid or duplicate GPU renderer binding.");
+                return false;
+            }
+            if (renderer != TEXT("builtin:billboard"))
+            {
+                error = TEXT("Unsupported GPU renderer. This backend supports only builtin:billboard.");
+                return false;
+            }
+            if (material != TEXT("builtin:unlit-alpha") && material != TEXT("builtin:unlit-additive"))
+            {
+                error = FString::Printf(TEXT("Unsupported GPU material '%s'. The builtin billboard shader supports only builtin:unlit-alpha or builtin:unlit-additive; native UE materials are not evaluated."), *material);
+                return false;
+            }
+            double sizeScale = 1;
+            if (object->HasField(TEXT("sizeScale")) &&
+                (!object->TryGetNumberField(TEXT("sizeScale"), sizeScale) || !FMath::IsFinite(sizeScale) ||
+                    sizeScale <= 0 || sizeScale > 10000 || float(sizeScale) <= 0))
+            {
+                error = TEXT("GPU billboard sizeScale must be finite and greater than 0, at most 10000.");
+                return false;
+            }
+            rendererSizeScales.Add(flowId, float(sizeScale));
+            rendererBindings.Add(flowId, material == TEXT("builtin:unlit-additive") ?
+                ELibraGpuBillboardBlend::Additive : ELibraGpuBillboardBlend::Alpha);
+        }
+    }
     for (const auto& value : *kernelJson)
     {
         auto object = value->AsObject();
@@ -446,16 +496,26 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
         auto object = value->AsObject();
         FString id, path;
         if (!object || !object->TryGetStringField(TEXT("id"), id) || !NameValid(id) || textureIndices.Contains(id) ||
-            !object->TryGetStringField(TEXT("objectPath"), path) || !FSoftObjectPath(path).IsValid())
+            !object->TryGetStringField(TEXT("objectPath"), path) || path.Len() > 1024)
         {
             error = TEXT("Invalid GPU texture binding.");
             return false;
         }
-        auto texture = LoadObject<UTexture2D>(nullptr, *path);
-        if (!texture) { error = FString::Printf(TEXT("GPU texture not found or wrong type: %s"), *path); return false; }
         FLibraGpuTextureBinding binding;
         binding.Id = id;
-        binding.Texture = texture;
+        if (path == TEXT("builtin:white")) binding.bBuiltinWhite = true;
+        else
+        {
+            if (path.StartsWith(TEXT("builtin:")))
+            {
+                error = FString::Printf(TEXT("Unknown builtin GPU texture '%s'. Supported token: builtin:white."), *path);
+                return false;
+            }
+            if (!FSoftObjectPath(path).IsValid()) { error = TEXT("Invalid GPU texture object path."); return false; }
+            auto texture = LoadObject<UTexture2D>(nullptr, *path);
+            if (!texture) { error = FString::Printf(TEXT("GPU texture not found or wrong type: %s"), *path); return false; }
+            binding.Texture = texture;
+        }
         textureIndices.Add(id, newTextures.Num());
         newTextures.Add(MoveTemp(binding));
     }
@@ -475,6 +535,7 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
     auto seenSpawn = false;
     auto seenUpdate = false;
     auto seenRender = false;
+    TSet<FString> usedRenderers;
     for (const auto& value : *flowJson)
     {
         auto object = value->AsObject();
@@ -482,6 +543,7 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
         FLibraGpuFlowStep step;
         if (!object || !object->TryGetStringField(TEXT("kind"), kind)) { error = TEXT("Invalid GPU flow."); return false; }
         step.Kind = kind;
+        object->TryGetStringField(TEXT("id"), step.Id);
         if (kind == TEXT("Spawn") || kind == TEXT("Update"))
         {
             auto update = kind == TEXT("Update");
@@ -497,10 +559,27 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
             if (!object->TryGetStringField(TEXT("resourceId"), id) || !textureIndices.Contains(id))
             { error = TEXT("Missing billboard texture."); return false; }
             step.Index = textureIndices[id];
+            if (explicitRenderers)
+            {
+                auto blend = rendererBindings.Find(step.Id);
+                if (!blend || usedRenderers.Contains(step.Id))
+                {
+                    error = TEXT("Every RenderBillboard flow requires exactly one matching rendererBindings entry.");
+                    return false;
+                }
+                step.BillboardBlend = *blend;
+                step.SizeScale = rendererSizeScales[step.Id];
+                usedRenderers.Add(step.Id);
+            }
             seenRender = true;
         }
         else { error = TEXT("Unsupported GPU flow step."); return false; }
         newFlow.Add(MoveTemp(step));
+    }
+    if (usedRenderers.Num() != rendererBindings.Num())
+    {
+        error = TEXT("GPU renderer binding targets an unknown or non-billboard flow.");
+        return false;
     }
     Capacity = newCapacity;
     CanonicalJson = MoveTemp(canonical);

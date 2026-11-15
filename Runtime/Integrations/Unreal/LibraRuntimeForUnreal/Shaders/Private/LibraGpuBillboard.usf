@@ -14,6 +14,7 @@ float4x4 ViewProjection;
 float3 PreViewTranslation;
 float3 CameraRight;
 float3 CameraUp;
+float SizeScale;
 Texture2D BillboardTexture;
 SamplerState BillboardSampler;
 
@@ -36,8 +37,8 @@ VertexOutput MainVS(uint vertexId : SV_VertexID, uint instanceId : SV_InstanceID
     float s = sin(angle), c = cos(angle);
     float2 rotated = float2(c * corner.x - s * corner.y, s * corner.x + c * corner.y);
     float3 world = particle.positionAge.xyz + PreViewTranslation +
-        CameraRight * rotated.x * particle.sizeRotation.x +
-        CameraUp * rotated.y * particle.sizeRotation.y;
+        CameraRight * rotated.x * particle.sizeRotation.x * SizeScale +
+        CameraUp * rotated.y * particle.sizeRotation.y * SizeScale;
     VertexOutput output;
     output.position = particle.seedAlive.y != 0 ? mul(float4(world, 1), ViewProjection) : float4(0, 0, 0, 0);
     output.uv = float2(corner.x * 0.5 + 0.5, 0.5 - corner.y * 0.5);

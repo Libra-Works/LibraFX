@@ -59,6 +59,27 @@ auto builtinFixture() -> std::vector<std::uint8_t>
     number(bytes, 96, -8);
     return bytes;
 }
+auto lifecycleFixture() -> std::vector<std::uint8_t>
+{
+    auto bytes = std::vector<std::uint8_t>(16 + 2 * 256);
+    std::memcpy(bytes.data(), "LFXB", 4);
+    bytes[4] = 3; bytes[6] = 1; bytes[8] = 2; bytes[13] = 1;
+    bytes[31] = 1; bytes[32] = 1; bytes[33] = 1;
+    write32(bytes, 16 + 24, UINT32_MAX);
+    write32(bytes, 16 + 28, UINT32_MAX);
+    number(bytes, 16 + 32, 3);
+    auto signal = std::size_t{16 + 256};
+    bytes[signal + 15] = 2; bytes[signal + 16] = 41; bytes[signal + 19] = 1;
+    const std::uint8_t type[] = {0x98, 0x9f, 0xa5, 0xb5, 0x48, 0x5f, 0x4e, 0x75,
+                                 0x85, 0x42, 0x9c, 0x55, 0, 0, 0, 1};
+    std::memcpy(bytes.data() + signal + 24, type, 16);
+    write32(bytes, signal + 40, 1);
+    for (auto i = 0u; i < 4; ++i) {
+        write32(bytes, signal + 48 + i * 8, UINT32_MAX);
+        write32(bytes, signal + 208 + i * 4, UINT32_MAX);
+    }
+    return bytes;
+}
 // Matches the Unity sample bytecode so its actual port/shape wiring is checked
 // by the native validator, not merely by a C# compiler.
 auto unityFixture() -> std::vector<std::uint8_t>
@@ -95,6 +116,42 @@ auto __cdecl allocationHook(int kind, void*, size_t, int, long, const unsigned c
 
 int main()
 {
+    {
+        auto bytes = lifecycleFixture();
+        auto program = LibraProgram{};
+        assert(libra_program_create_spawnable(bytes.data(), bytes.size(), nullptr, 0, &program) == LIBRA_OK);
+        auto container = std::array<std::uint8_t, 16>{}; container[15] = 90;
+        auto pool = LibraGeneratorPool{};
+        assert(libra_generator_pool_create_ex(program, container.data(), 1, 65536, 4, 256, &pool) == LIBRA_OK);
+        auto config = LibraGeneratorLifecycle{};
+        config.flags = LIBRA_LIFECYCLE_LIFE | LIBRA_LIFECYCLE_ON_START;
+        config.lifeNodeId[15] = 1;
+        config.onStartNodeId[15] = 2;
+        config.instructionBudget = 2;
+        assert(libra_generator_configure_lifecycle(pool, &config) == LIBRA_OK);
+        auto captures = std::array<LibraGeneratorCapture, 256>{};
+        for (auto& capture : captures) { capture.nodeId[15] = 1; capture.value = 3; }
+        assert(libra_generator_enqueue_spawn(pool, 10, captures.data(), 256) == LIBRA_INVALID_ARGUMENT);
+        assert(libra_generator_enqueue_spawn_ex(pool, 10, captures.data(), 257) == LIBRA_INVALID_ARGUMENT);
+        assert(libra_generator_enqueue_spawn_ex(pool, 10, captures.data(), 256) == LIBRA_OK);
+        auto count = std::uint32_t{};
+        assert(libra_generator_process_spawns(pool, 1, &count) == LIBRA_OK && count == 1);
+        auto event = LibraGeneratorEvent{};
+        auto has = std::uint32_t{};
+        assert(libra_generator_next_event(pool, &event, &has) == LIBRA_OK && has && event.kind == 1);
+        auto id = event.instanceId;
+        assert(libra_generator_evaluate(pool, id, 10) == LIBRA_NOT_READY);
+        assert(libra_generator_start(pool, id) == LIBRA_OK);
+        assert(libra_generator_start(pool, id) == LIBRA_OK);
+        assert(libra_generator_evaluate(pool, id, 13) == LIBRA_OK);
+        assert(libra_generator_finalize(pool, id) == LIBRA_NOT_READY);
+        assert(libra_generator_next_event(pool, &event, &has) == LIBRA_OK && has && event.kind == 3 && event.instanceId == id);
+        assert(libra_generator_finalize(pool, id) == LIBRA_OK);
+        assert(libra_generator_next_event(pool, &event, &has) == LIBRA_OK && has && event.kind == 2 && event.instanceId == id);
+        assert(libra_generator_next_event(pool, &event, &has) == LIBRA_OK && !has);
+        assert(libra_generator_pool_release(pool) == LIBRA_OK);
+        assert(libra_program_release(program) == LIBRA_OK);
+    }
     {
         auto templateBytes = scalarFixture();
         auto templateProgram = LibraProgram{};

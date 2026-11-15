@@ -31,7 +31,9 @@ public sealed class GpuParticleMcpTools
         resourceKinds = Enum.GetNames<ResourceKind>(),
         textGrammar = "Restricted original typed DSL: let, @Attribute assignment, param(\"deltaTime\"), float2/3/4 constructors, registered math. Not VEX/HLSL.",
         editActions = new[] { "add", "remove", "update", "move", "connect", "disconnect", "write", "write-remove",
-            "text", "draft", "discard-draft", "capacity", "flow-add", "flow-remove", "flow-move", "flow-update", "resource" },
+            "text", "draft", "discard-draft", "capacity", "flow-add", "flow-remove", "flow-move", "flow-update", "resource", "renderer" },
+        billboardMaterials = new[] { "builtin:unlit-alpha", "builtin:unlit-additive" },
+        builtinTextures = new[] { "builtin:white" },
         editSchema = new
         {
             action = "required string", kernelId = "kernel ID for node/text/write actions",
@@ -39,7 +41,8 @@ public sealed class GpuParticleMcpTools
             nodeId = "node / write / flow ID", sourceId = "connection source node ID", input = "zero-based input / flow index",
             position = "{x,y}", write = "{id,attribute,value}", text = "DSL",
             flow = "{id,kind,kernel?,resource?}", capacity = "uint",
-            resource = "{id,kind,width,height}", assetPath = "UI-only engine path, never portable IR"
+            resource = "{id,kind,width,height}", assetPath = "Engine asset object path or explicit builtin:white",
+            material = "Billboard material preset for renderer action", sizeScale = "Finite draw-size multiplier in (0,10000]"
         }
     });
 

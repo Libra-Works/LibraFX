@@ -19,6 +19,7 @@ public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
     private IReadOnlyList<GpuDiagnostic>? _diagnostics;
     private string? _text;
     private JsonElement? _stateValue;
+    private Dictionary<string, GpuPosition>? _defaultPositions;
     public IReadOnlyList<GpuDiagnostic> Diagnostics => _diagnostics ??= GpuParticleEditorService.Diagnostics(State);
     public string Status { get; private set; } = "Source export only · GPU runtime execution unavailable";
     public event EventHandler? Refreshed;
@@ -38,12 +39,14 @@ public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
         var value = StateValue(node);
         if (Same(_stateValue, value)) return;
         var layoutOnly = SameProperty(_stateValue, value, "program") &&
-            SameProperty(_stateValue, value, "drafts") && SameProperty(_stateValue, value, "resourceAssetPaths");
+            SameProperty(_stateValue, value, "drafts") && SameProperty(_stateValue, value, "resourceAssetPaths") &&
+            SameProperty(_stateValue, value, "rendererSettings");
         State = GpuParticleEditorService.ReadState(node);
         _stateValue = value;
         if (layoutOnly) LayoutChanged?.Invoke(this, EventArgs.Empty);
         else
         {
+            _defaultPositions = null;
             _diagnostics = null;
             _text = null;
             Refreshed?.Invoke(this, EventArgs.Empty);
@@ -60,7 +63,7 @@ public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
     public void EnterKernel(string id)
     {
         if (!State.Program.Kernels.Any(k => k.Id == id)) throw new ArgumentException("Kernel not found.");
-        KernelId = id; _text = null; Refreshed?.Invoke(this, EventArgs.Empty);
+        KernelId = id; _text = null; _defaultPositions = null; Refreshed?.Invoke(this, EventArgs.Empty);
     }
     public void Back() { KernelId = null; _text = null; Refreshed?.Invoke(this, EventArgs.Empty); }
     public void Edit(GpuEdit first, params GpuEdit[] remaining)
@@ -97,7 +100,8 @@ public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
             ComponentIndex = op == GpuOp.Component ? 0 : null,
             Inputs = defaults.Select(d => d.Id).ToList()
         };
-        position ??= new(30 + k.Nodes.Count % 4 * 280, 30 + k.Nodes.Count / 4 * 160);
+        position ??= new(350, k.Nodes.Select(node => GetPosition(node).Y + GpuGraphLayout.NodeHeight(node))
+            .DefaultIfEmpty(0).Max() + 60);
         var edits = new List<GpuEdit>();
         for (var i = 0; i < defaults.Length; i++)
         {
@@ -110,6 +114,22 @@ public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
         Edit(edits[0], edits.Skip(1).ToArray());
         return n;
     }
+    public GpuPosition GetPosition(GpuNode node)
+    {
+        if (Kernel is not { } kernel) throw new InvalidOperationException("Open a kernel.");
+        var key = GpuParticleEditorService.Key(kernel.Id, node.Id);
+        if (State.Positions.TryGetValue(key, out var saved)) return saved;
+        return (_defaultPositions ??= GpuGraphLayout.CreatePositions(kernel))[key];
+    }
+    public void ArrangeNodes()
+    {
+        if (Kernel is not { } kernel) throw new InvalidOperationException("Open a kernel.");
+        var positions = GpuGraphLayout.CreatePositions(kernel);
+        var edits = kernel.Nodes.Where(node => GetPosition(node) != positions[GpuParticleEditorService.Key(kernel.Id, node.Id)])
+            .Select(node => new GpuEdit { Action = "move", KernelId = kernel.Id, NodeId = node.Id,
+                Position = positions[GpuParticleEditorService.Key(kernel.Id, node.Id)] }).ToArray();
+        if (edits.Length > 0) Edit(edits[0], edits.Skip(1).ToArray());
+    }
     private const string ClipboardPrefix = "LIBERA-FX-GPU-GRAPH-1\n";
     private sealed record ClipboardNode(GpuNode Node, GpuPosition Position);
     public string CopyNodes(IEnumerable<string> selection)
@@ -118,8 +138,7 @@ public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
         var ids = selection.ToHashSet();
         var nodes = kernel.Nodes.Where(n => ids.Contains(n.Id)).Select(n => new ClipboardNode(
             n with { Inputs = n.Inputs.Select(input => ids.Contains(input) ? input : "").ToList(), SourceSpan = null },
-            State.Positions.GetValueOrDefault(GpuParticleEditorService.Key(kernel.Id, n.Id)) ??
-                new(30 + kernel.Nodes.IndexOf(n) % 4 * 280, 30 + kernel.Nodes.IndexOf(n) / 4 * 160))).ToArray();
+            GetPosition(n))).ToArray();
         var text = ClipboardPrefix + JsonSerializer.Serialize(nodes);
         if (nodes.Length == 0 || text.Length > 1_000_000) throw new ArgumentException("GPU clipboard selection is empty or too large.");
         return text;

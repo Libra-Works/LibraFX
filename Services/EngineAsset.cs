@@ -1,7 +1,7 @@
 namespace LiberaFx.Services;
 
 public sealed record EngineMaterialParameter(string Name, string Kind,
-    System.Text.Json.JsonElement Value, int Association = 0, int Index = -1);
+    System.Text.Json.JsonElement Value, int Association = 2, int Index = -1);
 public sealed record EngineMaterial(int Slot, string Path, string Name,
     IReadOnlyList<EngineMaterialParameter> Parameters);
 public sealed record EngineAsset(string Path, string Name, string AssetClass, string Engine,

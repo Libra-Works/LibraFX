@@ -1,0 +1,72 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:LiberaFx.ViewModels"
+        xmlns:services="using:LiberaFx.Services"
+        xmlns:views="using:LiberaFx.Views"
+        x:Class="LiberaFx.Views.SpriteEditorWindow" x:DataType="vm:SpriteEditorViewModel"
+        Title="{DynamicResource Text.Sprite.Title}" Width="1100" Height="760"
+        MinWidth="850" MinHeight="600" ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource EffectWindowBackgroundBrush}">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="14" RowSpacing="10">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="{DynamicResource Text.Asset.Peer}" VerticalAlignment="Center"/>
+            <ComboBox Width="230" ItemsSource="{Binding Catalog.Peers}" SelectedItem="{Binding Catalog.SelectedPeer}"/>
+            <TextBox Width="240" PlaceholderText="{DynamicResource Text.Asset.SearchHint}" Text="{Binding Catalog.Query}"/>
+            <Button Content="{DynamicResource Text.Asset.Search}" Command="{Binding Catalog.SearchCommand}"/>
+        </StackPanel>
+        <Grid Grid.Row="1" ColumnDefinitions="240,*,270" ColumnSpacing="10">
+            <Grid RowDefinitions="*,Auto">
+                <ListBox ItemsSource="{Binding Catalog.Assets}" SelectedItem="{Binding Catalog.SelectedAsset}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="services:EngineAsset">
+                            <StackPanel Margin="4">
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding Path}" TextWrapping="Wrap" FontSize="10"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="5">
+                    <Button Content="{DynamicResource Text.Asset.Previous}" Command="{Binding Catalog.PreviousCommand}"/>
+                    <Button Content="{DynamicResource Text.Asset.Next}" Command="{Binding Catalog.NextCommand}"/>
+                    <TextBlock Text="{Binding Catalog.Total}" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+            <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto,Auto" RowSpacing="6">
+                <TextBlock Text="{Binding Catalog.SelectedAsset.Path}" TextWrapping="Wrap"/>
+                <views:SpriteAtlasPreview x:Name="Atlas" Grid.Row="1" MinHeight="200"/>
+                <TextBlock Grid.Row="2" Text="{DynamicResource Text.Sprite.ThumbnailNotice}" TextWrapping="Wrap"/>
+                <TextBlock Grid.Row="3" Text="{Binding PreviewSource}" TextWrapping="Wrap"/>
+            </Grid>
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="{DynamicResource Text.Sprite.FramePreview}" FontWeight="Bold"/>
+                    <views:SpriteAtlasPreview x:Name="FramePreview" IsFramePreview="True" Height="200"/>
+                    <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+                        <TextBlock Text="{DynamicResource Text.Asset.Columns}" VerticalAlignment="Center"/>
+                        <TextBox Grid.Column="1" Text="{Binding Catalog.Columns, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Grid.Row="1" Text="{DynamicResource Text.Asset.Rows}" VerticalAlignment="Center"/>
+                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Catalog.Rows, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Grid.Row="2" Text="{DynamicResource Text.Asset.Fps}" VerticalAlignment="Center"/>
+                        <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Catalog.Fps, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Grid.Row="3" Text="{DynamicResource Text.Sprite.Frame}" VerticalAlignment="Center"/>
+                        <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding Frame, UpdateSourceTrigger=PropertyChanged}"/>
+                    </Grid>
+                    <CheckBox Content="{DynamicResource Text.Sprite.Playing}" IsChecked="{Binding Playing}"/>
+                    <TextBlock Text="{DynamicResource Text.Sprite.FrameBindingNotice}" TextWrapping="Wrap"/>
+                    <TextBlock Text="{DynamicResource Text.Sprite.MaterialNotice}" TextWrapping="Wrap"/>
+                    <Button Content="{DynamicResource Text.Sprite.OpenLocal}" Click="OnOpenLocal"/>
+                    <Button Content="{DynamicResource Text.Sprite.LoadSelected}" Click="OnLoadSelected"/>
+                    <Button Content="{DynamicResource Text.Asset.SaveMetadata}" Command="{Binding Catalog.SaveMetadataCommand}"/>
+                    <Button Content="{DynamicResource Text.Sprite.ApplySelected}" Click="OnApplySelected"/>
+                    <Button Content="{DynamicResource Text.Sprite.Create}" Click="OnCreate"/>
+                    <TextBlock Text="{Binding CatalogStatus}" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="{DynamicResource Text.Asset.Close}" Click="OnClose"/>
+        </StackPanel>
+    </Grid>
+</Window>

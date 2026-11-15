@@ -13,6 +13,13 @@ enum class ELibraGpuExecutionMode : uint8
     GpuRegisterInterpreter
 };
 
+UENUM(BlueprintType)
+enum class ELibraGpuBillboardBlend : uint8
+{
+    Alpha,
+    Additive
+};
+
 USTRUCT()
 struct FLibraGpuKernelPacket
 {
@@ -38,6 +45,9 @@ struct FLibraGpuTextureBinding
 
     UPROPERTY()
     TObjectPtr<UTexture2D> Texture;
+
+    UPROPERTY()
+    bool bBuiltinWhite = false;
 };
 
 USTRUCT()
@@ -50,6 +60,15 @@ struct FLibraGpuFlowStep
 
     UPROPERTY()
     int32 Index = INDEX_NONE;
+
+    UPROPERTY()
+    FString Id;
+
+    UPROPERTY()
+    ELibraGpuBillboardBlend BillboardBlend = ELibraGpuBillboardBlend::Alpha;
+
+    UPROPERTY()
+    float SizeScale = 1;
 };
 
 UCLASS(BlueprintType)

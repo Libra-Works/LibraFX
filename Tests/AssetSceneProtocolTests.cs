@@ -1,8 +1,10 @@
 using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
+using System.IO.Pipes;
 using LiberaFx.Services;
 using LiberaFx.Models.Graph;
+using LiberaFx.ViewModels;
 
 internal static class AssetSceneProtocolTests
 {
@@ -11,6 +13,73 @@ internal static class AssetSceneProtocolTests
         VerifyConnectionInvitation();
         VerifyGpuScenes();
         VerifyQueriesAsync().GetAwaiter().GetResult();
+        VerifyAssetWindowRequestLifetimeAsync().GetAwaiter().GetResult();
+        VerifyLocalDiscoveryAsync().GetAwaiter().GetResult();
+    }
+
+    private static async Task VerifyLocalDiscoveryAsync()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var name = PreviewDiscoveryPipe.Prefix + Environment.ProcessId + ".test." + Guid.NewGuid().ToString("N");
+        var token = new string('c', 64);
+        using var server = new PreviewDiscoveryPipe("wss://127.0.0.1:19427/preview",
+            token, new string('d', 64), name);
+        async Task<string> Exchange(string request)
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await using var client = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
+            await client.ConnectAsync(timeout.Token).ConfigureAwait(false);
+            await client.WriteAsync(Encoding.ASCII.GetBytes(request), timeout.Token).ConfigureAwait(false);
+            using var reader = new StreamReader(client, Encoding.UTF8, leaveOpen: true);
+            return await reader.ReadToEndAsync(timeout.Token).ConfigureAwait(false);
+        }
+        Require(await Exchange(new string('x', PreviewDiscoveryPipe.Request.Length)).ConfigureAwait(false) == "",
+            "Malformed discovery requests must not disclose preview credentials.");
+        for (var i = 0; i < 2; i++)
+        {
+            using var invitation = JsonDocument.Parse(await Exchange(PreviewDiscoveryPipe.Request).ConfigureAwait(false));
+            var root = invitation.RootElement;
+            Require(root.GetProperty("type").GetString() == "librafx_preview_connection" &&
+                root.GetProperty("port").GetInt32() == 19427 && root.GetProperty("accessToken").GetString() == token &&
+                !root.TryGetProperty("mcpToken", out _), "Local discovery must return preview-only invitations and remain reusable.");
+        }
+        server.Dispose();
+        server.Dispose();
+    }
+
+    private static async Task VerifyAssetWindowRequestLifetimeAsync()
+    {
+        var main = new MainViewModel();
+        var peer = Guid.NewGuid();
+        main.PreviewTelemetry.Connect(peer, 3, bytes =>
+        {
+            using var command = JsonDocument.Parse(bytes.AsMemory(CompiledPreviewProtocol.HeaderSize));
+            var request = command.RootElement.GetProperty("requestId").GetGuid();
+            Require(main.PreviewAssets.Receive(peer, JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                type = "asset_result", requestId = request, operation = "catalog",
+                total = 0, offset = 0, assets = Array.Empty<object>(), error = (string?)null
+            })), "Asset catalog test response must complete its matching request.");
+            return Task.CompletedTask;
+        });
+        Require(main.PreviewTelemetry.Receive(peer, Encoding.UTF8.GetBytes(
+            """{"type":"hello","engine":"Unreal","role":"editor","version":1,"capabilities":["assets"]}""")),
+            "Asset browser lifetime test must connect an asset-capable editor.");
+        try
+        {
+            using var browser = new EngineAssetsWindowViewModel(main);
+            await browser.SearchCommand.ExecuteAsync(null);
+            await browser.SearchCommand.ExecuteAsync(null);
+            browser.Dispose();
+            browser.Dispose();
+            await browser.SearchCommand.ExecuteAsync(null);
+        }
+        finally
+        {
+            main.PreviewTelemetry.Disconnect(peer);
+            main.PreviewAssets.Disconnect(peer);
+            main.DisposeStorageFiles();
+        }
     }
 
     private static void VerifyConnectionInvitation()

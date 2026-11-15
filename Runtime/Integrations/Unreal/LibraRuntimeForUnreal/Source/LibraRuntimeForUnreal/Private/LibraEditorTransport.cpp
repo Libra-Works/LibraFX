@@ -105,6 +105,7 @@ struct FLibraEditorTransport::FImpl
 	std::array<uint8, FingerprintBytes> ExpectedFingerprint{};
 	TArray<uint8> CurrentMessage;
 	bool CurrentMessageIsBinary = false;
+	bool ReceivePaused = false;
 
 	bool hasReceiveCapacity(size_t additionalBytes) const
 	{
@@ -117,13 +118,20 @@ struct FLibraEditorTransport::FImpl
 		auto lock = std::lock_guard<std::mutex>(Mutex);
 		if (!hasReceiveCapacity(static_cast<size_t>(message.Num())))
 		{
-			Status = TEXT("Receive queue limit exceeded");
-			Failed.store(true);
-			StateChanged.notify_all();
 			return false;
 		}
 		QueuedBytes += static_cast<size_t>(message.Num());
 		ReceiveQueue.emplace_back(MoveTemp(message));
+		return true;
+	}
+
+	bool updateReceivePaused()
+	{
+		auto lock = std::lock_guard<std::mutex>(Mutex);
+		// Reserve one complete, maximum-size message before permitting its first fragment.
+		auto pause = !StopRequested.load() && !hasReceiveCapacity(MaxMessageBytes);
+		if (pause == ReceivePaused) return false;
+		ReceivePaused = pause;
 		return true;
 	}
 
@@ -139,6 +147,17 @@ struct FLibraEditorTransport::FImpl
 	std::shared_ptr<FDnsQuery> DnsQuery;
 	std::atomic<lws_context*> Context{nullptr};
 	lws* WebSocket = nullptr;
+
+	void updateReceiveFlow(lws* socket, bool inReceiveCallback)
+	{
+		if (!socket || !Connected.load() || !updateReceivePaused()) return;
+		// Paused reads cannot consume PONGs; suspend only the established-socket heartbeat.
+		lws_set_timeout(socket, ReceivePaused ? NO_PENDING_TIMEOUT : PENDING_TIMEOUT_WS_PONG_CHECK_SEND_PING,
+			ReceivePaused ? 0 : 5);
+		auto enable = ReceivePaused ? 0 : 1;
+		if (!inReceiveCallback) enable |= LWS_RXFLOW_REASON_FLAG_PROCESS_NOW;
+		lws_rx_flow_control(socket, enable);
+	}
 #endif
 
 	void SetStatus(const TCHAR* NewStatus)
@@ -248,7 +267,8 @@ struct FLibraEditorTransport::FImpl
 		for (TCHAR Character : Value)
 		{
 			if (!((Character >= TEXT('0') && Character <= TEXT('9')) ||
-				(Character >= TEXT('A') && Character <= TEXT('F'))))
+				(Character >= TEXT('A') && Character <= TEXT('F')) ||
+				(Character >= TEXT('a') && Character <= TEXT('f'))))
 			{
 				return false;
 			}
@@ -437,6 +457,12 @@ struct FLibraEditorTransport::FImpl
 			return 0;
 		case LWS_CALLBACK_CLIENT_RECEIVE:
 		{
+			if (State->StopRequested.load())
+			{
+				lws_close_reason(Wsi, LWS_CLOSE_STATUS_NORMAL, nullptr, 0);
+				State->CloseSent.store(true);
+				return -1;
+			}
 			if (lws_is_first_fragment(Wsi))
 			{
 				State->CurrentMessage.Reset();
@@ -459,7 +485,7 @@ struct FLibraEditorTransport::FImpl
 				std::lock_guard<std::mutex> Lock(State->Mutex);
 				if (!State->hasReceiveCapacity(static_cast<size_t>(State->CurrentMessage.Num()) + Length))
 				{
-					State->Status = TEXT("Receive queue limit exceeded");
+					State->Status = TEXT("Receive flow-control budget exceeded");
 					State->Failed.store(true);
 					State->StateChanged.notify_all();
 					return -1;
@@ -474,8 +500,13 @@ struct FLibraEditorTransport::FImpl
 
 			if (lws_is_final_fragment(Wsi) && lws_remaining_packet_payload(Wsi) == 0)
 			{
-				if (!State->enqueueReceived(MoveTemp(State->CurrentMessage))) return -1;
+				if (!State->enqueueReceived(MoveTemp(State->CurrentMessage)))
+				{
+					State->SetFailure(TEXT("Receive flow-control budget exceeded"));
+					return -1;
+				}
 				State->CurrentMessage.Reset();
+				State->updateReceiveFlow(Wsi, true);
 			}
 			return 0;
 		}
@@ -618,6 +649,10 @@ struct FLibraEditorTransport::FImpl
 		auto CloseDeadline = (std::chrono::steady_clock::time_point::max)();
 		while (!Failed.load())
 		{
+			updateReceiveFlow(WebSocket, false);
+			// Receiving a frame may rearm LWS's heartbeat after its application callback.
+			if (ReceivePaused && Connected.load() && WebSocket)
+				lws_set_timeout(WebSocket, NO_PENDING_TIMEOUT, 0);
 			if (StopRequested.load())
 			{
 				if (CloseDeadline == (std::chrono::steady_clock::time_point::max)())
@@ -632,6 +667,8 @@ struct FLibraEditorTransport::FImpl
 				{
 					lws_callback_on_writable(WebSocket);
 				}
+				// Keep the existing bounded close deadline serviced even with RX suspended.
+				lws_set_timer_usecs(WebSocket, 100000);
 			}
 			else if ((ResyncRequested.load() || HasOutgoing()) && Connected.load() && WebSocket != nullptr)
 			{
@@ -723,6 +760,7 @@ bool FLibraEditorTransport::Start(const FLibraEditorTransportSettings& Settings,
 	Impl->CloseSent.store(false);
 	Impl->WebSocket = nullptr;
 	Impl->CurrentMessage.Reset();
+	Impl->ReceivePaused = false;
 	{
 		std::lock_guard<std::mutex> Lock(Impl->Mutex);
 		Impl->ReceiveQueue.clear();
@@ -795,14 +833,18 @@ bool FLibraEditorTransport::TryReceive(TArray<uint8>& OutMessage)
 	{
 		return false;
 	}
-	std::lock_guard<std::mutex> Lock(Impl->Mutex);
-	if (Impl->ReceiveQueue.empty())
 	{
-		return false;
+		std::lock_guard<std::mutex> Lock(Impl->Mutex);
+		if (Impl->ReceiveQueue.empty())
+		{
+			return false;
+		}
+		OutMessage = MoveTemp(Impl->ReceiveQueue.front());
+		Impl->QueuedBytes -= static_cast<size_t>(OutMessage.Num());
+		Impl->ReceiveQueue.pop_front();
 	}
-	OutMessage = MoveTemp(Impl->ReceiveQueue.front());
-	Impl->QueuedBytes -= static_cast<size_t>(OutMessage.Num());
-	Impl->ReceiveQueue.pop_front();
+	// Wake the socket worker; only that worker changes LWS read servicing.
+	Impl->CancelService();
 	return true;
 }
 
@@ -1001,13 +1043,44 @@ bool FLibraEditorTransportQueueTest::RunTest(const FString&)
 	}
 	auto overflow = TArray<uint8>{};
 	overflow.SetNumZeroed(48);
-	TestFalse(TEXT("A burst beyond the bounded completed-message queue is rejected"),
+	overflow[8] = 64;
+	TestTrue(TEXT("A full queue suspends further socket reads"), state.updateReceivePaused() && state.ReceivePaused);
+	TestFalse(TEXT("A full queue refuses an additional message without moving or dropping it"),
 		state.enqueueReceived(MoveTemp(overflow)));
-	for (auto sequence = 0; sequence < 64; ++sequence)
+	TestEqual(TEXT("A refused message remains available for its producer"), overflow.Num(), 48);
+	TestFalse(TEXT("Backpressure is not a connection failure"), state.Failed.load());
+	auto expectedSequence = 0;
+	for (auto sequence = 64; sequence < 256; ++sequence)
+	{
+		if (state.ReceivePaused)
+		{
+			for (auto drain = 0; drain < 8; ++drain)
+			{
+				auto message = TArray<uint8>{};
+				if (!TestTrue(TEXT("The game-thread drain never waits for the producer"), transport.TryReceive(message)))
+					return false;
+				TestEqual(TEXT("Repeated backpressure cycles preserve sequence-chain order"),
+					int32(message[8]), expectedSequence++);
+			}
+			TestTrue(TEXT("Draining resumes reads on the worker"), state.updateReceivePaused() && !state.ReceivePaused);
+		}
+		auto message = sequence == 64 ? MoveTemp(overflow) : TArray<uint8>{};
+		message.SetNumZeroed(48);
+		message[8] = static_cast<uint8>(sequence);
+		if (!TestTrue(TEXT("A resumed producer retains its next ordered message"), state.enqueueReceived(MoveTemp(message))))
+			return false;
+		state.updateReceivePaused();
+	}
+	TestTrue(TEXT("The extended burst ends at bounded backpressure"), state.ReceivePaused);
+	transport.Stop();
+	TestTrue(TEXT("Cancellation releases paused reads instead of waiting for a game-thread drain"),
+		state.updateReceivePaused() && !state.ReceivePaused);
+	for (; expectedSequence < 256; ++expectedSequence)
 	{
 		auto message = TArray<uint8>{};
-		if (!TestTrue(TEXT("Queued playback messages remain available"), transport.TryReceive(message))) return false;
-		TestEqual(TEXT("FIFO decoding never drops or coalesces sequence-chain entries"), int32(message[8]), sequence);
+		if (!TestTrue(TEXT("Cancellation preserves already queued messages"), transport.TryReceive(message))) return false;
+		TestEqual(TEXT("FIFO decoding never drops or coalesces sequence-chain entries"),
+			int32(message[8]), expectedSequence);
 	}
 	auto empty = TArray<uint8>{};
 	TestFalse(TEXT("The queue is empty after the complete ordered drain"), transport.TryReceive(empty));
@@ -1018,6 +1091,19 @@ bool FLibraEditorTransportQueueTest::RunTest(const FString&)
 		state.hasReceiveCapacity(256ull * 1024ull * 1024ull - 48));
 	TestFalse(TEXT("Byte budget still rejects an oversized incoming fragment"),
 		state.hasReceiveCapacity(256ull * 1024ull * 1024ull - 47));
+
+	auto budgetTransport = FLibraEditorTransport{};
+	auto& budgetState = *budgetTransport.Impl;
+	budgetState.QueuedBytes = FLibraEditorTransport::FImpl::MaxQueuedBytes - FLibraEditorTransport::FImpl::MaxMessageBytes;
+	TestFalse(TEXT("Reads remain enabled when a full incoming message still fits"), budgetState.updateReceivePaused());
+	++budgetState.QueuedBytes;
+	TestTrue(TEXT("Byte pressure pauses before accepting a first fragment"), budgetState.updateReceivePaused() && budgetState.ReceivePaused);
+	TestFalse(TEXT("The reserved maximum message cannot exceed the total byte cap"),
+		budgetState.hasReceiveCapacity(FLibraEditorTransport::FImpl::MaxMessageBytes));
+	--budgetState.QueuedBytes;
+	TestTrue(TEXT("Releasing byte pressure resumes reads without allocating a huge test payload"),
+		budgetState.updateReceivePaused() && !budgetState.ReceivePaused);
+	budgetState.QueuedBytes = 0;
 	return true;
 }
 #endif

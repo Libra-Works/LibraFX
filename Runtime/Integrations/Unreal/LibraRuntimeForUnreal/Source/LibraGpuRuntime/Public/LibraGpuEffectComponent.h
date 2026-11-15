@@ -39,6 +39,11 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "Libra GPU")
     FString LastError;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra GPU|Preview")
+    FBox LocalPreviewBounds = FBox(ForceInit);
+
+    bool GetPreviewBounds(FBox& outBounds) const;
+
     UFUNCTION(BlueprintCallable, Category = "Libra GPU")
     bool SetEffect(ULibraGpuEffectAsset* newEffect);
 
@@ -73,6 +78,9 @@ protected:
     virtual void EndPlay(const EEndPlayReason::Type endPlayReason) override;
 
 private:
+#if WITH_DEV_AUTOMATION_TESTS
+    friend class FLibraGpuDefaultEmitterRendererTest;
+#endif
     TSharedPtr<FLibraGpuState, ESPMode::ThreadSafe> State;
     TSharedPtr<FLibraGpuViewExtension, ESPMode::ThreadSafe> ViewExtension;
     TSharedPtr<FStreamableHandle> LoadHandle;

@@ -73,6 +73,8 @@
                 <MenuItem Header="{DynamicResource Text.Profiler.Title}" Click="OnProfilerClick" />
                 <MenuItem Header="{DynamicResource Text.Connections.Title}" Click="OnConnectionsClick" />
                 <MenuItem Header="{DynamicResource Text.Asset.Title}" Click="OnContentClick" />
+                <MenuItem Header="{DynamicResource Text.Sprite.Title}" Click="OnSpriteEditorClick" />
+                <MenuItem Header="{DynamicResource Text.Library.Title}" Click="OnLocalProjectsClick" />
             </MenuItem>
             <MenuItem x:Name="WindowMenu" Header="{DynamicResource Text.Layouts.Window}">
                 <MenuItem Header="{DynamicResource Text.Messages.Tool.Outliner}" Tag="Outliner" Click="OnDockPanelClick" />
@@ -89,6 +91,8 @@
                 <MenuItem Header="{DynamicResource Text.Profiler.Title}" Click="OnProfilerClick" />
                 <MenuItem Header="{DynamicResource Text.Connections.Title}" Click="OnConnectionsClick" />
                 <MenuItem Header="{DynamicResource Text.Asset.Title}" Click="OnContentClick" />
+                <MenuItem Header="{DynamicResource Text.Sprite.Title}" Click="OnSpriteEditorClick" />
+                <MenuItem Header="{DynamicResource Text.Library.Title}" Click="OnLocalProjectsClick" />
                 <MenuItem Header="{DynamicResource Text.Messages.GraphProblemsTitle}" Click="OnProblemsClick" />
                 <Separator />
                 <MenuItem Header="{DynamicResource Text.Layouts.Menu}">

@@ -16,11 +16,74 @@ namespace LiberaFx.Tests;
 internal static class GpuParticleEditorTests
 {
     private static void Check(bool value, string message) { if (!value) throw new Exception(message); }
+    private static void VerifyDefaultLayout(GraphNodeViewModel container)
+    {
+        var state = GpuParticleEditorService.ReadState(container);
+        foreach (var kernel in state.Program.Kernels)
+        {
+            foreach (var node in kernel.Nodes)
+            {
+                var position = state.Positions[GpuParticleEditorService.Key(kernel.Id, node.Id)];
+                foreach (var input in node.Inputs)
+                    Check(state.Positions[GpuParticleEditorService.Key(kernel.Id, input)].X + 230 < position.X,
+                        "Default GPU connections flow left to right with space for wires");
+                foreach (var other in kernel.Nodes.Where(other => other.Id != node.Id))
+                {
+                    var otherPosition = state.Positions[GpuParticleEditorService.Key(kernel.Id, other.Id)];
+                    Check(Math.Abs(position.X - otherPosition.X) >= 230 ||
+                        position.Y + GpuGraphLayout.NodeHeight(node) <= otherPosition.Y ||
+                        otherPosition.Y + GpuGraphLayout.NodeHeight(other) <= position.Y,
+                        "Default GPU layout separates nodes including tall multi-input operations");
+                }
+            }
+        }
+        var history = new UndoRedoManager();
+        var workspace = new GraphWorkspaceViewModel(history);
+        var saved = GpuParticleEditorService.Create(workspace);
+        using var vm = new GpuWorkspaceViewModel(workspace, saved.Id);
+        var update = vm.State.Program.Kernels.Single(k => k.Stage == KernelStage.Update);
+        vm.EnterKernel(update.Id);
+        var first = update.Nodes[0];
+        var key = GpuParticleEditorService.Key(update.Id, first.Id);
+        workspace.SetParameter(saved, GpuParticleEditorService.ParameterId,
+            JsonSerializer.SerializeToElement(vm.State with { Positions = [] }, GpuParticleEditorService.Json));
+        Check(vm.GetPosition(first) == GpuGraphLayout.CreatePositions(update)[key],
+            "Legacy GPU state without saved coordinates uses dependency layout");
+        vm.Edit(new() { Action = "move", KernelId = update.Id, NodeId = first.Id, Position = new(987, 654) });
+        var before = JsonSerializer.Serialize(vm.State.Positions, GpuParticleEditorService.Json);
+        using (var reopened = new GpuWorkspaceViewModel(workspace, saved.Id))
+        {
+            reopened.EnterKernel(update.Id);
+            Check(reopened.GetPosition(first) == new GpuPosition(987, 654),
+                "Opening a GPU workspace preserves manually saved coordinates");
+        }
+        var program = GpuCompiler.Serialize(vm.State.Program);
+        vm.ArrangeNodes();
+        var arranged = GpuGraphLayout.CreatePositions(update);
+        Check(update.Nodes.All(n => vm.GetPosition(n) == arranged[GpuParticleEditorService.Key(update.Id, n.Id)]) &&
+            GpuCompiler.Serialize(vm.State.Program) == program, "Explicit arrangement changes layout only");
+        history.Undo();
+        Check(JsonSerializer.Serialize(vm.State.Positions, GpuParticleEditorService.Json) == before,
+            "One undo restores the entire prior GPU arrangement");
+        history.Redo();
+        Check(update.Nodes.All(n => vm.GetPosition(n) == arranged[GpuParticleEditorService.Key(update.Id, n.Id)]),
+            "Redo restores the arranged GPU graph");
+        var draft = new KernelGraph { Id = "draft", Nodes =
+        [
+            new() { Id = "a", Op = GpuOp.Add, Inputs = ["b", "missing"] },
+            new() { Id = "b", Op = GpuOp.Add, Inputs = ["a"] },
+            new() { Id = "unused", Op = GpuOp.Constant }
+        ] };
+        var draftBefore = JsonSerializer.Serialize(draft);
+        Check(GpuGraphLayout.CreatePositions(draft).Count == 3 && JsonSerializer.Serialize(draft) == draftBefore,
+            "Cyclic, disconnected and missing-input drafts remain editable without IR mutation");
+    }
     public static void Run()
     {
         var history = new UndoRedoManager();
         var graph = new GraphWorkspaceViewModel(history);
         var container = GpuParticleEditorService.Create(graph);
+        VerifyDefaultLayout(container);
         Check(container.Parameters?.Any(p => p.Id == "gpuState") == true, "Creation persists actual IR, not transient registry/default");
         var other = GpuParticleEditorService.Create(graph, 400, 80);
         var notified = new HashSet<Guid>();
@@ -29,6 +92,22 @@ internal static class GpuParticleEditorTests
         using var vm = new GpuWorkspaceViewModel(graph, container.Id);
         Check(vm.Kernel is null && vm.State.Program.Flow.Count == 3, "GPU flow starter");
         var render = vm.State.Program.Flow.Single(f => f.Kind == FlowKind.RenderBillboard);
+        Check(vm.State.ResourceAssetPaths[render.Resource!] == "builtin:white" &&
+            vm.State.RendererSettings[render.Id].SizeScale == 100, "New GPU starter explicitly binds a visible builtin billboard");
+        vm.Edit(new() { Action = "renderer", NodeId = render.Id, Material = "builtin:unlit-additive", SizeScale = 120 });
+        var rendererDelivery = GpuProgramDeliveryService.Create(new([graph.CreateSnapshot().Nodes.Single(n => n.Id == container.Id)], []), 76).Single();
+        Check(rendererDelivery.RendererBindingsVersion == 1 &&
+            rendererDelivery.RendererBindings.Single() is { Renderer: "builtin:billboard", Material: "builtin:unlit-additive", SizeScale: 120 },
+            "Authored GPU material and draw size reach live/export renderer bindings");
+        history.Undo();
+        Check(vm.State.RendererSettings[render.Id] == new GpuRendererSettings(SizeScale: 100),
+            "GPU renderer configuration is undoable");
+        GpuParticleEditorService.AssignBillboardTexture(graph, graph.GetNode(container.Id),
+            new EngineAsset("/Game/Textures/T_Test.T_Test", "T_Test", "texture", "Unreal"));
+        Check(vm.State.ResourceAssetPaths[render.Resource!] == "/Game/Textures/T_Test.T_Test",
+            "Content texture assignment updates GPU billboard binding");
+        history.Undo();
+        Check(vm.State.ResourceAssetPaths[render.Resource!] == "builtin:white", "Undo restores the prior GPU texture");
         vm.Edit(new() { Action = "flow-remove", NodeId = render.Id });
         vm.AddFlow(FlowKind.RenderBillboard);
         Check(vm.TryCompile(out _), "Removed billboard can be re-added with valid texture binding");

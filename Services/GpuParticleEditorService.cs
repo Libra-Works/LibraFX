@@ -9,12 +9,14 @@ namespace LiberaFx.Services;
 
 public sealed record GpuPosition(double X, double Y);
 public sealed record GpuTextDraft(string Text, List<GpuDiagnostic> Diagnostics);
+public sealed record GpuRendererSettings(string Material = "builtin:unlit-alpha", double SizeScale = 1);
 public sealed record GpuEditorState
 {
     public GpuProgram Program { get; init; } = GpuSamples.CreateEmitter();
     public Dictionary<string, GpuPosition> Positions { get; init; } = [];
     public Dictionary<string, GpuTextDraft> Drafts { get; init; } = [];
     public Dictionary<string, string> ResourceAssetPaths { get; init; } = [];
+    public Dictionary<string, GpuRendererSettings> RendererSettings { get; init; } = [];
 }
 
 public sealed record GpuEdit
@@ -33,6 +35,8 @@ public sealed record GpuEdit
     public uint? Capacity { get; init; }
     public ResourceDeclaration? Resource { get; init; }
     public string? AssetPath { get; init; }
+    public string? Material { get; init; }
+    public double? SizeScale { get; init; }
 }
 
 /// <summary>Portable program plus non-portable authoring state, committed as one CPU undo command.</summary>
@@ -56,16 +60,22 @@ public static class GpuParticleEditorService
         ? ReadState(node.Parameters, node.Id) : throw new ArgumentException("Node is not a GPU Particle.");
     public static IReadOnlyList<NodeParameterSnapshot> InitialParameters(Guid id)
     {
-        var program = GpuSamples.CreateEmitter() with { Id = "gpu_" + id.ToString("N") };
-        var positions = program.Kernels.SelectMany(k => k.Nodes.Select((n, i) =>
-            new KeyValuePair<string, GpuPosition>(Key(k.Id, n.Id), new(30 + i % 4 * 280, 30 + i / 4 * 170)))).ToDictionary();
-        return [new(ParameterId, "gpuState", JsonSerializer.SerializeToElement(new GpuEditorState { Program = program, Positions = positions }, Json))];
+        var state = InitialState(id);
+        var program = state.Program;
+        var positions = program.Kernels.SelectMany(GpuGraphLayout.CreatePositions).ToDictionary();
+        return [new(ParameterId, "gpuState", JsonSerializer.SerializeToElement(state with { Positions = positions }, Json))];
     }
+    private static GpuEditorState InitialState(Guid id) => new()
+    {
+        Program = GpuSamples.CreateEmitter() with { Id = "gpu_" + id.ToString("N") },
+        ResourceAssetPaths = new() { ["billboardTexture"] = "builtin:white" },
+        RendererSettings = new() { ["renderStep"] = new(SizeScale: 100) }
+    };
     private static GpuEditorState ReadState(IReadOnlyList<NodeParameterSnapshot>? parameters, Guid id)
     {
         var value = parameters?.FirstOrDefault(p => p.Id == ParameterId)?.Value;
         if (value is null || value.Value.GetRawText() == "{}")
-            return new() { Program = GpuSamples.CreateEmitter() with { Id = "gpu_" + id.ToString("N") } };
+            return InitialState(id);
         if (!IsStateValue(value.Value)) throw new InvalidDataException("Invalid GPU workspace state.");
         return value.Value.Deserialize<GpuEditorState>(Json)!;
     }
@@ -81,7 +91,8 @@ public static class GpuParticleEditorService
             var state = value.Deserialize<GpuEditorState>(Json);
             if (state is null || state.Program is null || state.Program.Kernels is null ||
                 state.Program.Attributes is null || state.Program.Flow is null || state.Program.Resources is null ||
-                state.Positions is null || state.Drafts is null || state.ResourceAssetPaths is null)
+                state.Positions is null || state.Drafts is null || state.ResourceAssetPaths is null ||
+                state.RendererSettings is null)
                 return false;
             var p = state.Program;
             if (p.Id is not { Length: > 0 and <= 128 } || p.Capacity == 0 ||
@@ -109,7 +120,11 @@ public static class GpuParticleEditorService
                 state.Drafts.Count > 64 || state.Drafts.Any(d => d.Value is null ||
                     d.Value.Text is null || d.Value.Diagnostics is null || d.Value.Diagnostics.Any(d => d is null) ||
                     d.Value.Text.Length > 1024 * 1024) ||
-                state.ResourceAssetPaths.Count > 64 || state.ResourceAssetPaths.Any(r => r.Value is null || r.Value.Length > 4096))
+                state.ResourceAssetPaths.Count > 64 || state.ResourceAssetPaths.Any(r => r.Value is null || r.Value.Length > 4096) ||
+                state.RendererSettings.Count > 128 || state.RendererSettings.Any(r =>
+                    r.Value is null || r.Key.Length > 128 ||
+                    r.Value.Material is not ("builtin:unlit-alpha" or "builtin:unlit-additive") ||
+                    !double.IsFinite(r.Value.SizeScale) || r.Value.SizeScale is <= 0 or > 10000))
                 return false;
             return true;
         }
@@ -120,6 +135,22 @@ public static class GpuParticleEditorService
     {
         if (!double.IsFinite(x) || !double.IsFinite(y)) throw new ArgumentException("GPU node coordinates must be finite.");
         return graph.CreateNode(Kind, x, y);
+    }
+
+    public static IReadOnlyList<ResourceDeclaration> BillboardTextures(GpuEditorState state)
+    {
+        var ids = state.Program.Flow.Where(f => f.Kind == FlowKind.RenderBillboard)
+            .Select(f => f.Resource).ToHashSet();
+        return state.Program.Resources.Where(r => r.Kind == ResourceKind.Texture2D && ids.Contains(r.Id)).ToArray();
+    }
+
+    public static void AssignBillboardTexture(GraphWorkspaceViewModel graph, GraphNodeViewModel node, EngineAsset asset)
+    {
+        if (asset.AssetClass != "texture") throw new ArgumentException("Select a texture asset.");
+        PreviewAssetStore.ValidateAssetPath(asset.Path);
+        var resources = BillboardTextures(ReadState(node));
+        if (resources.Count != 1) throw new InvalidOperationException("Select the texture resource inside the GPU workspace.");
+        Apply(graph, node.Id, [new() { Action = "resource", Resource = resources[0], AssetPath = asset.Path }]);
     }
 
     public static IReadOnlyList<GpuDiagnostic> Diagnostics(GpuEditorState state) =>
@@ -145,6 +176,14 @@ public static class GpuParticleEditorService
     private static GpuEditorState Stage(GpuEditorState state, GpuEdit edit)
     {
         var p = state.Program;
+        if (edit.Action == "renderer")
+        {
+            var flow = p.Flow.SingleOrDefault(f => f.Id == edit.NodeId && f.Kind == FlowKind.RenderBillboard)
+                ?? throw new ArgumentException("Select a billboard render step.");
+            var current = state.RendererSettings.GetValueOrDefault(flow.Id) ?? new GpuRendererSettings();
+            state.RendererSettings[flow.Id] = new(edit.Material ?? current.Material, edit.SizeScale ?? current.SizeScale);
+            return state;
+        }
         if (edit.Action == "capacity")
             return state with { Program = p with { Capacity = edit.Capacity ?? throw new ArgumentException("Capacity required.") } };
         if (edit.Action == "flow-add")
@@ -158,6 +197,7 @@ public static class GpuParticleEditorService
         if (edit.Action == "flow-remove")
         {
             if (p.Flow.RemoveAll(f => f.Id == edit.NodeId) == 0) throw new ArgumentException("Flow not found.");
+            state.RendererSettings.Remove(edit.NodeId!);
             return state;
         }
         if (edit.Action == "flow-update")

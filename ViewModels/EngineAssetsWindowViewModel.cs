@@ -19,6 +19,7 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
 {
     private readonly MainViewModel _main;
     private CancellationTokenSource? _requests;
+    private bool _disposed;
     private Bitmap? _thumbnail;
     private EngineAsset? _selectedAsset;
     private string _query = string.Empty;
@@ -84,7 +85,9 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
               : "") +
           FormatMaterials(asset.Materials);
     public bool CanAssign => SelectedAsset is not null && _main.ActiveDocument is not null &&
-        _main.Graph.SelectedNode is { } node && RenderNodeSchema.IsRenderNode(node.Definition);
+        _main.Graph.SelectedNode is { } node && (RenderNodeSchema.IsRenderNode(node.Definition) ||
+            node.IsGpuParticle && SelectedAsset.AssetClass == "texture" &&
+            GpuParticleEditorService.BillboardTextures(GpuParticleEditorService.ReadState(node)).Count == 1);
     public bool CanGoPrevious => Offset > 0;
     public bool CanGoNext => Offset + Assets.Count < Total;
     public IAsyncRelayCommand SearchCommand { get; }
@@ -175,6 +178,7 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
 
     private async Task LoadPageAsync(int offset)
     {
+        if (_disposed) return;
         RefreshPeers();
         if (SelectedPeer is null)
         {
@@ -187,9 +191,11 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
         }
         try
         {
-            using var request = BeginRequest();
+            var request = BeginRequest();
+            var cancellation = request.Token;
             var page = await _main.PreviewAssets.CatalogAsync(Query.Trim(), AssetClass,
-                offset, 32, SelectedPeer.ClientId).WaitAsync(request.Token);
+                offset, 32, SelectedPeer.ClientId).WaitAsync(cancellation);
+            cancellation.ThrowIfCancellationRequested();
             Assets.Clear();
             foreach (var asset in page.Assets) Assets.Add(asset);
             Offset = page.Offset;
@@ -215,18 +221,22 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
 
     private async Task LoadDetailsAsync(EngineAsset selected)
     {
+        if (_disposed) return;
         ClearThumbnail();
         LoadMetadata(selected);
         if (SelectedPeer is null) return;
         try
         {
-            using var request = BeginRequest();
+            var request = BeginRequest();
+            var cancellation = request.Token;
             var detail = await _main.PreviewAssets.DetailsAsync(selected.Path, SelectedPeer.ClientId)
-                .WaitAsync(request.Token);
+                .WaitAsync(cancellation);
+            cancellation.ThrowIfCancellationRequested();
             if (SelectedAsset?.Path != selected.Path) return;
             SetSelectedAsset(detail, loadDetails: false);
             var thumbnail = await _main.PreviewAssets.ThumbnailAsync(selected.Path, 256, SelectedPeer.ClientId)
-                .WaitAsync(request.Token);
+                .WaitAsync(cancellation);
+            cancellation.ThrowIfCancellationRequested();
             if (SelectedAsset?.Path != selected.Path) return;
             using var stream = new MemoryStream(thumbnail.Image, writable: false);
             Thumbnail = new Bitmap(stream);
@@ -331,7 +341,10 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
         if (SelectedAsset is not { } asset || _main.Graph.SelectedNode is not { } node) return;
         try
         {
-            RenderNodeAuthoring.AssignAsset(_main.Graph, node, asset);
+            if (node.IsGpuParticle)
+                GpuParticleEditorService.AssignBillboardTexture(_main.Graph, node, asset);
+            else
+                RenderNodeAuthoring.AssignAsset(_main.Graph, node, asset);
             Status = LocalizationService.Shared.Get("Asset.Assigned");
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or InvalidDataException)
@@ -340,10 +353,17 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
 
     private CancellationTokenSource BeginRequest()
     {
-        _requests?.Cancel();
-        _requests?.Dispose();
+        CancelRequest();
         _requests = new CancellationTokenSource(TimeSpan.FromSeconds(25));
         return _requests;
+    }
+
+    private void CancelRequest()
+    {
+        var request = _requests;
+        _requests = null;
+        request?.Cancel();
+        request?.Dispose();
     }
 
     private void ClearThumbnail() => Thumbnail = null;
@@ -366,8 +386,9 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
-        _requests?.Cancel();
-        _requests?.Dispose();
+        if (_disposed) return;
+        _disposed = true;
+        CancelRequest();
         _main.PropertyChanged -= OnMainPropertyChanged;
         if (_observedGraph is not null) _observedGraph.PropertyChanged -= OnGraphPropertyChanged;
         ClearThumbnail();

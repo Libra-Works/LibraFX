@@ -36,7 +36,7 @@ public static class RenderNodeSchema
                 throw new InvalidDataException("A material descriptor is invalid.");
             if (material.Slot < 0 || material.Slot > 4096)
                 throw new InvalidDataException("A material slot is invalid.");
-            ValidateOptionalAssetPath(material.Path);
+            ValidateMaterialPath(material.Path);
             foreach (var parameter in material.Parameters)
             {
                 if (parameters.Count >= MaximumParameters)
@@ -223,6 +223,12 @@ public static class RenderNodeSchema
             throw new InvalidDataException("A material asset path is invalid.");
     }
 
+    private static void ValidateMaterialPath(string? path)
+    {
+        if (path == "builtin:unlit-color") return;
+        ValidateOptionalAssetPath(path);
+    }
+
     private static string NormalizeKind(string kind) =>
         (kind ?? string.Empty).Trim().ToLowerInvariant() switch
         {
@@ -278,7 +284,7 @@ public static class RenderNodeSchema
                         parameter.Kind, parameter.Association, parameter.Index), StringComparison.Ordinal) ||
                     !ids.Add(parameter.Id))
                     throw new InvalidDataException("The material schema contains duplicate or mismatched IDs.");
-                ValidateOptionalAssetPath(parameter.MaterialPath);
+                ValidateMaterialPath(parameter.MaterialPath);
                 var kind = parameter.Kind;
                 var expectedType = kind == "scalar" ? "float" : kind == "vector" ? "vector4" : "string";
                 if (!NodeParameter.IsValidValue(expectedType, parameter.Value))

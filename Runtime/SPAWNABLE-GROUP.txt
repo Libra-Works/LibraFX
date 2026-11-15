@@ -4,12 +4,16 @@ Runtime Spawnable Group contract
 each runtime instance owns its
 own aligned work, defaults, custom state and spawn time. IDs are nonzero and
 never reused within a pool. `evaluate` uses elapsed time, not global time.
-Instances live until explicit stop, reset or pool destruction; no automatic
-finish condition is inferred. The Program, its backing bytecode, descriptors
-and bindings must outlive the pool.
+Without an explicit lifecycle configuration, instances live until manual stop,
+reset or pool destruction; no automatic finish condition is inferred. The
+Program, its backing bytecode, descriptors and bindings must outlive the pool.
 
 An owner creates a pool with finite instance, memory and queue limits.
-`enqueueSpawn` snapshots up to 16 scalar parameter lanes without allocation and
+The legacy pool queues at most 16 scalar parameter lanes per spawn. The additive
+`createWithCaptureLimit` / `libra_generator_pool_create_ex` allow 1..256 lanes
+per command, charged to the finite memory budget. The legacy C enqueue remains
+limited to 16; `libra_generator_enqueue_spawn_ex` uses the configured bound.
+`enqueueSpawn` snapshots lanes without allocation and
 can be called concurrently, including from native signal callbacks. The owner
 calls `processSpawns` after callback dispatch; a failed command stays queued and
 the error is returned. `spawn` is the synchronous owner-thread alternative.
@@ -25,6 +29,44 @@ rejects if there is not enough event space for all stops, otherwise retires all
 instances and discards queued spawns. Before destroying a pool, reset and drain
 events if the host requires stop notifications. No callback creates engine
 objects. The C ABI exposes equivalent POD records and retains the program.
+
+Configured lifecycle (opt-in; old pools and C ABI calls are unchanged)
+
+Configure an empty pool with `GeneratorLifecycle` or the 40-byte,
+4-byte-aligned `LibraGeneratorLifecycle` (`onStartNodeId[16]`, `lifeNodeId[16]`,
+`flags` at byte 32, `instructionBudget` at byte 36). Flags 1 and 2 enable
+OnStart and Life respectively. The selected Life node must evaluate to a
+non-negative scalar duration in seconds; zero expires after OnStart. Signal
+traversal is limited to 1..10000 instructions. Node IDs are big-endian.
+
+Spawn initializes one independent instance and applies captured values. Drain
+its Spawn record, set its initial Live lanes, then call `GeneratorPool::start`
+or `libra_generator_start`. Start evaluates at local time zero and dispatches
+OnStart once after input setup; repeated calls do not refire it. If signal
+dispatch fails, the same error remains latched; stop or reset the instance.
+An instance cannot evaluate before start. For later frames, update Live lanes
+before evaluate; captured lanes are not automatically refreshed.
+
+When elapsed local time reaches the Life value, evaluation freezes the instance
+and emits one event kind 3, Destroy. This is a local group output, never a game
+callback. Route it only to its immediate parent; game output requires an
+explicit graph connection. Frozen values remain readable for that routing, but
+the instance cannot evaluate or accept Live updates. After draining and routing
+Destroy, call `GeneratorPool::finalize` / `libra_generator_finalize`; this emits
+the ordinary stop record and releases the frozen instance. Manual stop, reset,
+release and teardown never create Destroy. Stop/reset return Busy for a
+naturally expired instance until it is finalized.
+
+If event backpressure prevents Destroy from being queued, start/evaluate returns
+QueueRejected. Drain existing records and retry; no evaluation or OnStart is
+replayed. Once Destroy is queued, further evaluate/start returns NotReady.
+Finalize returns QueueRejected if the stop record cannot fit; drain and retry.
+Signal callbacks may enqueue future spawns, but may not reenter evaluation,
+start, stop, reset, delivery, or create/destroy engine objects. Cleanup cannot
+enqueue spawns. Core callbacks may call `GeneratorPool::enqueueSpawn` directly;
+they must not reenter any C ABI function (the C ABI serializes calls). The
+existing native spawn-signal bridge enqueues directly. No local Destroy is
+implicitly published to named game IO.
 
 Editor package and host bridge
 
@@ -58,3 +100,24 @@ load it with `libra_program_create` instead.
 UE/Unity adapters must consume the lifecycle and render/GPU payloads separately;
 this code does not instantiate engine objects. Diagnostics should identify the
 container GUID, template node GUID and pool-scoped instance ID together.
+
+Work in progress: explicit named game IO and live updates
+
+`NamedIo` is an owner-thread C++ primitive for explicitly game-facing ports,
+not group-local boundaries. It copies bounded descriptors, validates unique
+names and supported scalar/vector widths, evaluates before OnStart, and queues
+initial/change-only property records and explicit output signals. The caller
+drains records and invokes game delegates outside evaluation. Records carry a
+caller-supplied container/instance identity. A group output, including Destroy,
+must never be published to game IO without an explicit graph connection.
+`GeneratorPool::setLive` / `libra_generator_set_live` apply host-selected lanes
+to one instance before evaluation; CaptureAtSpawn values remain unchanged unless
+the host incorrectly includes them. The package/editor do not yet expose Live
+policy or drive these primitives automatically. Named IO node compilation, C ABI
+game IO, group routing and automatic editor/engine OnStart integration are not
+implemented by these primitives and must not be advertised as complete.
+Existing package-v1 spawn signal descriptors still carry at most four typed
+inputs (16 lanes), and their legacy `then` branch is selected immediately on
+spawn dispatch. Do not map that branch to lifetime Destroy: the compiler and
+host adapter must explicitly replace it with event-kind-3 local routing and
+extend the package/binding contract before exposing larger authoring ports.

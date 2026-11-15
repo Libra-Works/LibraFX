@@ -62,10 +62,14 @@ namespace
         }
         for (auto index = 0; index < left.GetFlow().Num(); ++index)
             if (left.GetFlow()[index].Kind != right.GetFlow()[index].Kind ||
-                left.GetFlow()[index].Index != right.GetFlow()[index].Index) return false;
+                left.GetFlow()[index].Index != right.GetFlow()[index].Index ||
+                left.GetFlow()[index].Id != right.GetFlow()[index].Id ||
+                left.GetFlow()[index].BillboardBlend != right.GetFlow()[index].BillboardBlend ||
+                left.GetFlow()[index].SizeScale != right.GetFlow()[index].SizeScale) return false;
         for (auto index = 0; index < left.GetTextures().Num(); ++index)
             if (left.GetTextures()[index].Id != right.GetTextures()[index].Id ||
-                left.GetTextures()[index].Texture != right.GetTextures()[index].Texture) return false;
+                left.GetTextures()[index].Texture != right.GetTextures()[index].Texture ||
+                left.GetTextures()[index].bBuiltinWhite != right.GetTextures()[index].bBuiltinWhite) return false;
         return true;
     }
 
@@ -127,14 +131,18 @@ bool FLibraEditorGpuPreview::Configure(const FString& json, int64 programSequenc
         ids.Add(id);
         auto candidate = FEmitter{};
         candidate.id = id;
+        auto rendererIdentity = MakeShared<FJsonObject>();
+        for (const auto& field : {TEXT("rendererBindingsVersion"), TEXT("rendererBindings")})
+            if (auto binding = object->TryGetField(field)) rendererIdentity->SetField(field, binding);
+        candidate.rendererIdentity = Encode(rendererIdentity);
         for (const auto& path : (*paths)->Values)
         {
             auto assetPath = FString{};
             if (!path.Value || !path.Value->TryGetString(assetPath) ||
                 assetPath.Len() > 1024 ||
-                !FPackageName::IsValidObjectPath(assetPath) ||
-                (!assetPath.StartsWith(TEXT("/Game/")) && !assetPath.StartsWith(TEXT("/Engine/"))))
-                return fail(TEXT("GPU textures require valid /Game or /Engine object paths."));
+                (assetPath != TEXT("builtin:white") && (!FPackageName::IsValidObjectPath(assetPath) ||
+                (!assetPath.StartsWith(TEXT("/Game/")) && !assetPath.StartsWith(TEXT("/Engine/"))))))
+                return fail(TEXT("GPU textures require explicit builtin:white or valid /Game or /Engine object paths."));
             candidate.resourcePaths.Add(path.Key, assetPath);
         }
         auto error = FString{};
@@ -159,7 +167,8 @@ bool FLibraEditorGpuPreview::Configure(const FString& json, int64 programSequenc
             for (const auto& path : candidate.resourcePaths)
                 if (auto oldPath = previous->resourcePaths.Find(path.Key); !oldPath || *oldPath != path.Value)
                     samePaths = false;
-        if (samePaths && previous->asset.IsValid() && previous->component.IsValid() &&
+        if (samePaths && previous->rendererIdentity == candidate.rendererIdentity &&
+            previous->asset.IsValid() && previous->component.IsValid() &&
             SameProgram(*previous->asset.Get(), *candidate.asset.Get()))
         {
             candidate.asset.Reset(previous->asset.Get());
@@ -294,6 +303,10 @@ FString FLibraEditorGpuPreview::Status(int64 programSequence) const
         auto item = MakeShared<FJsonObject>();
         item->SetStringField(TEXT("nodeId"), emitter.id.ToString(EGuidFormats::DigitsWithHyphensLower));
         item->SetStringField(TEXT("contentHash"), emitter.asset->GetContentHash());
+        auto bindingReader = TJsonReaderFactory<>::Create(emitter.rendererIdentity);
+        auto bindings = TSharedPtr<FJsonObject>{};
+        if (FJsonSerializer::Deserialize(bindingReader, bindings) && bindings.IsValid())
+            for (const auto& field : bindings->Values) item->SetField(field.Key, field.Value);
         item->SetNumberField(TEXT("capacity"), emitter.asset->GetCapacity());
         item->SetBoolField(TEXT("playing"), emitter.component->bIsPlaying);
         item->SetNumberField(TEXT("timeSeconds"), emitter.timeSeconds);
@@ -457,6 +470,49 @@ bool FLibraGpuPreviewTransactionTest::RunTest(const FString&)
     TestTrue(TEXT("Current empty replacement clears GPU components"), preview.Configure(PreviewConfig(3, {}), 3));
     TestTrue(TEXT("Successful empty replacement also clears configuration diagnostics"), preview.configurationError.IsEmpty());
     TestTrue(TEXT("GPU clearing preserves the shared CPU scene root"), cpuRoot->IsRegistered() && actor->GetRootComponent() == cpuRoot);
+    auto white = PreviewDelivery(3, firstId);
+    auto metadata = white->GetObjectField(TEXT("metadata"));
+    auto textureResource = MakeShared<FJsonObject>();
+    textureResource->SetStringField(TEXT("id"), TEXT("texture"));
+    textureResource->SetStringField(TEXT("kind"), TEXT("Texture2D"));
+    metadata->SetArrayField(TEXT("resources"), {MakeShared<FJsonValueObject>(textureResource)});
+    auto billboard = MakeShared<FJsonObject>();
+    billboard->SetStringField(TEXT("id"), TEXT("billboard"));
+    billboard->SetStringField(TEXT("kind"), TEXT("RenderBillboard"));
+    billboard->SetStringField(TEXT("resourceId"), TEXT("texture"));
+    auto flow = metadata->GetArrayField(TEXT("flow"));
+    flow.Add(MakeShared<FJsonValueObject>(billboard));
+    metadata->SetArrayField(TEXT("flow"), flow);
+    auto paths = MakeShared<FJsonObject>();
+    paths->SetStringField(TEXT("texture"), TEXT("builtin:white"));
+    white->SetObjectField(TEXT("resourceAssetPaths"), paths);
+    auto binding = MakeShared<FJsonObject>();
+    binding->SetStringField(TEXT("flowId"), TEXT("billboard"));
+    binding->SetStringField(TEXT("renderer"), TEXT("builtin:billboard"));
+    binding->SetStringField(TEXT("material"), TEXT("builtin:unlit-alpha"));
+    binding->SetNumberField(TEXT("sizeScale"), 100);
+    white->SetNumberField(TEXT("rendererBindingsVersion"), 1);
+    white->SetArrayField(TEXT("rendererBindings"), {MakeShared<FJsonValueObject>(binding)});
+    TestTrue(TEXT("Actual preview boundary accepts explicit builtin:white and frontend renderer bindings"),
+        preview.Configure(PreviewConfig(3, {MakeShared<FJsonValueObject>(white)}), 3));
+    if (preview.emitters.Num() != 1) return false;
+    auto whiteComponent = preview.emitters[0].component.Get();
+    TestTrue(TEXT("Native imported renderer state retains alpha and sizeScale100"),
+        preview.emitters[0].asset->GetTextures()[0].bBuiltinWhite &&
+        preview.emitters[0].asset->GetFlow().Last().SizeScale == 100 &&
+        preview.emitters[0].asset->GetFlow().Last().BillboardBlend == ELibraGpuBillboardBlend::Alpha);
+    paths->SetStringField(TEXT("texture"), TEXT("builtin:unknown"));
+    TestFalse(TEXT("Unknown builtin resources remain rejected transactionally"),
+        preview.Configure(PreviewConfig(3, {MakeShared<FJsonValueObject>(white)}), 3));
+    TestTrue(TEXT("Unknown builtin rejection preserves the previous real component"), preview.emitters[0].component.Get() == whiteComponent);
+    paths->SetStringField(TEXT("texture"), TEXT("builtin:white"));
+    binding->SetStringField(TEXT("material"), TEXT("builtin:unlit-additive"));
+    TestTrue(TEXT("Same-IR renderer material replacement is accepted"),
+        preview.Configure(PreviewConfig(3, {MakeShared<FJsonValueObject>(white)}), 3));
+    TestTrue(TEXT("Renderer material changes replace the component despite identical IR/source hashes"),
+        preview.emitters[0].component.Get() != whiteComponent &&
+        preview.emitters[0].asset->GetFlow().Last().BillboardBlend == ELibraGpuBillboardBlend::Additive &&
+        preview.Status(3).Contains(TEXT("builtin:unlit-additive")));
     preview.Reset();
     preview.SetPlayback(0, false, 0, true);
     TestTrue(TEXT("A new connection generation may restart sequence numbering"),

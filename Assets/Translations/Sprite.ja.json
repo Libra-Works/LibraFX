@@ -1,0 +1,22 @@
+{
+  "Sprite.Title": "スプライト / フリップブック",
+  "Sprite.FramePreview": "フレームプレビュー",
+  "Sprite.Frame": "フレーム",
+  "Sprite.Playing": "アニメーション（フレーム 0 から）",
+  "Sprite.ThumbnailNotice": "エンジン生成の 128 px サムネイル。余白などが元画像と異なる場合があります。セルをクリックして静止フレームを選択します。",
+  "Sprite.FrameBindingNotice": "フレーム入力が接続されている場合はその値が優先されます。ローカルファイルはエンジンに転送できないため、エンジンのテクスチャを選択してください。",
+  "Sprite.MaterialNotice": "Unreal のスプライトプレビューには自動生成マテリアルを使用します。カスタムスプライトマテリアルには対応していません。",
+  "Sprite.OpenLocal": "プレビュー用の画像を開く",
+  "Sprite.LocalPreview": "ローカル画像はプレビュー専用です。適用時には選択したエンジンのテクスチャを使用します。",
+  "Sprite.EnginePreview": "プレビュー元: エンジンのサムネイル。",
+  "Sprite.InvalidImage": "16 MiB 以下、8192 × 8192 ピクセル以下の PNG または JPEG を選択してください。",
+  "Sprite.LoadSelected": "選択中のスプライト設定を読み込む",
+  "Sprite.ApplySelected": "選択中のスプライトに適用",
+  "Sprite.Create": "スプライトノードを作成",
+  "Sprite.Loaded": "{0} の設定を読み込みました。適用する前にカタログでテクスチャを選択してください。",
+  "Sprite.NoDocument": "先にグラフを開いてください。",
+  "Sprite.SelectTexture": "エンジンのテクスチャを選択してください。",
+  "Sprite.SelectNode": "スプライトノードを選択してください。",
+  "Sprite.InvalidSettings": "有効な列数、行数、FPS、範囲内のフレームを入力してください。",
+  "Sprite.Applied": "スプライト設定を 1 回の編集として適用しました。"
+}

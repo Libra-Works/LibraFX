@@ -15,6 +15,7 @@
               HorizontalAlignment="Left" />
       <TextBlock x:Name="InvitationStatus" TextWrapping="Wrap"
                  Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+      <TextBlock x:Name="GpuFeedback" TextWrapping="Wrap" />
     </StackPanel>
     <ListBox Grid.Row="2" x:Name="Peers" SelectionChanged="OnSelectionChanged">
       <ListBox.ItemTemplate>

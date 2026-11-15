@@ -15,7 +15,8 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
-        var dataRoot = args is ["--window-layout"] or ["--gpu-editor"] or ["--runtime-integration"] or ["--spawnable-group"] or ["--graph-type-diagnostics"]
+        var dataRoot = args.Length > 0 && args[0] == "--solar-system" ||
+            args is ["--window-layout"] or ["--gpu-editor"] or ["--runtime-integration"] or ["--spawnable-group"] or ["--graph-type-diagnostics"]
             ? Path.Combine(Environment.CurrentDirectory, "build", "window-layout-data-" + Guid.NewGuid().ToString("N"))
             : Path.Combine(Path.GetTempPath(), "liberafx-comment-test-" + Guid.NewGuid().ToString("N"));
         Environment.SetEnvironmentVariable("LIBERAFX_DATA_ROOT", dataRoot);
@@ -45,6 +46,18 @@ internal static class Program
             else File.WriteAllText(Path.Combine(directory, "language.json"), languageFixture);
         }
         AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+        if (args.Length is 1 or 2 && args[0] == "--sprite-editor")
+        {
+            SpriteEditorTests.Run(args.Length == 2 ? args[1] : null);
+            Console.WriteLine("Sprite editor authoring, atlas preview and undo checks passed.");
+            return;
+        }
+        if (args.Length is 1 or 2 && args[0] == "--solar-system")
+        {
+            SolarSystemSampleTests.Run(args.Length == 2 ? args[1] : null);
+            Console.WriteLine("Solar-system matrix authoring, saved project and render binding checks passed.");
+            return;
+        }
         if (args is ["--unreal-gpu-preview"])
         {
             CompiledPreviewProtocolTests.RunUnrealGpuPreview();
@@ -77,9 +90,11 @@ internal static class Program
         }
         if (args is ["--asset-render"])
         {
+            LocalProjectCatalogTests.Run();
             LiberaFx.Tests.BuiltinMathCompilationTests.Run();
             AssetSceneProtocolTests.Run();
             AssetAuthoringTests.Run();
+            SpriteEditorTests.Run();
             EffectSampleAuthoringTests.Run();
             Console.WriteLine("Portable math, asset protocol and render sample authoring checks passed.");
             return;
