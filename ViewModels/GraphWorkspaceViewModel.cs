@@ -151,22 +151,26 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
     internal void RefreshTypeDiagnostics()
     {
+        var snapshot = CreateCurrentSnapshot();
+        var effective = GraphPolymorphism.Resolve(snapshot);
+        foreach (var node in Nodes)
+            node.ApplyResolvedDefinition(effective[node.Id]);
+        var byId = Nodes.ToDictionary(node => node.Id);
         var problems = new List<GraphProblemViewModel>();
-        foreach (var connection in Connections)
+        foreach (var diagnostic in GraphTypeDiagnostics.Analyze(snapshot))
         {
-            if (!Nodes.Contains(connection.Source) || !Nodes.Contains(connection.Target)) continue;
-            var source = connection.Source.Definition.GetOutputPortType(connection.SourcePortId);
-            var expected = connection.Target.Definition.GetInputPortType(connection.TargetPortId);
-            if (source is null || expected is null || source == expected) continue;
+            if (!byId.TryGetValue(diagnostic.NodeId, out var target) ||
+                !byId.TryGetValue(diagnostic.SourceNodeId, out var source)) continue;
             var text = LocalizationService.Shared.Get("Messages.GraphTypeMismatch",
-                connection.Target.Name, connection.Target.Id, connection.TargetPortId ?? "input",
-                connection.Source.Name, connection.Source.Id,
-                GraphNodeDefinition.DisplayPortType(source), GraphNodeDefinition.DisplayPortType(expected));
-            problems.Add(new GraphProblemViewModel(connection.Target, text));
+                target.Name, target.Id, diagnostic.InputPortId ?? "input",
+                source.Name, source.Id, GraphNodeDefinition.DisplayPortType(diagnostic.SourceType),
+                GraphNodeDefinition.DisplayPortType(diagnostic.ExpectedType));
+            problems.Add(new GraphProblemViewModel(target, text));
         }
+        var byTarget = problems.ToLookup(problem => problem.Node);
         foreach (var node in Nodes)
             node.SetDiagnostics(string.Join(Environment.NewLine,
-                problems.Where(problem => problem.Node == node).Select(problem => problem.Message)));
+                byTarget[node].Select(problem => problem.Message)));
         TypeProblems.Clear();
         foreach (var problem in problems) TypeProblems.Add(problem);
     }
@@ -273,7 +277,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             var definition = GraphNodeDefinition.All.Single(item => item.Kind == specification.Kind);
             var node = new GraphNodeViewModel(this, definition, specification.Name, newX, newY,
                 curve: specification.Curve, childGraph: specification.ChildGraph is null ? null : CloneGraph(specification.ChildGraph),
-                parameters: specification.Parameters, groupAsset: specification.GroupAsset);
+                parameters: specification.Parameters, groupAsset: specification.GroupAsset,
+                isPolymorphic: specification.IsPolymorphic);
             nodesByOldId.Add(specification.Id, node);
             commands.Add(new AddGraphNodeCommand(this, node, Nodes.Count + commands.Count));
         }
@@ -324,16 +329,17 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         var nodes = Nodes
             .Select(node => new GraphNodeSnapshot(
                 node.Id,
-                node.Definition.Kind,
+                node.BaseDefinition.Kind,
                 node.Name,
                 node.X,
                 node.Y,
-                node.Definition.PortType,
-                node.Definition.PortCategory,
+                node.BaseDefinition.PortType,
+                node.BaseDefinition.PortCategory,
                 node.Curve,
                 node.ChildGraph,
                 node.Parameters,
-                node.GroupAsset))
+                node.GroupAsset,
+                node.IsPolymorphic))
             .ToArray();
         var connections = Connections
             .Select(connection => new GraphConnectionSnapshot(
@@ -721,7 +727,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 specification.Curve,
                 specification.ChildGraph,
                 specification.Parameters,
-                specification.GroupAsset)
+                specification.GroupAsset,
+                specification.IsPolymorphic)
             {
                 IsDetailsExpanded = expandedNodes.Contains(specification.Id)
             };
@@ -849,7 +856,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 throw new ArgumentException("The source output port does not exist.", nameof(plan));
 
             if (source.Definition.GetOutputPortCategory(sourcePortId) != target.Definition.GetInputPortCategory(targetPortId) ||
-                source.Definition.GetOutputPortType(sourcePortId) != target.Definition.GetInputPortType(targetPortId))
+                (!source.IsPolymorphic && !target.IsPolymorphic &&
+                 source.Definition.GetOutputPortType(sourcePortId) != target.Definition.GetInputPortType(targetPortId)))
             {
                 throw new ArgumentException(
                     "Port categories and data types must match.",
@@ -882,16 +890,17 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         var current = CreateCurrentSnapshot();
         var plannedNodes = nodesByKey.Values.Select(node => new GraphNodeSnapshot(
             node.Id,
-            node.Definition.Kind,
+            node.BaseDefinition.Kind,
             node.Name,
             node.X,
             node.Y,
-            node.Definition.PortType,
-            node.Definition.PortCategory,
+            node.BaseDefinition.PortType,
+            node.BaseDefinition.PortCategory,
             node.Curve,
             node.ChildGraph,
             node.Parameters,
-            node.GroupAsset));
+            node.GroupAsset,
+            node.IsPolymorphic));
         GraphValidator.Validate(new GraphSnapshot(
             current.Nodes.Concat(plannedNodes).ToArray(),
             current.Connections.Concat(plannedConnections).ToArray()));
@@ -1025,7 +1034,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         }
 
         if (source.Definition.GetOutputPortCategory(sourcePortId) != target.Definition.GetInputPortCategory(targetPortId) ||
-            source.Definition.GetOutputPortType(sourcePortId) != target.Definition.GetInputPortType(targetPortId))
+            (!source.IsPolymorphic && !target.IsPolymorphic &&
+             source.Definition.GetOutputPortType(sourcePortId) != target.Definition.GetInputPortType(targetPortId)))
         {
             error = "Port categories and data types must match.";
             return false;
@@ -1289,19 +1299,23 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         _history.Execute(new SetNodeParametersCommand(node, node.Parameters, values.AsReadOnly(), LocalizationService.Shared.Get("Messages.History.CommentSize")));
     }
 
-    public GraphNodeViewModel CreateNode(GraphNodeKind kind, double? x = null, double? y = null)
+    public GraphNodeViewModel CreateNode(GraphNodeKind kind, double? x = null, double? y = null, bool isPolymorphic = false)
     {
         if (kind == GraphNodeKind.GraphGroup && _graphPath.Count >= MaxGraphDepth)
             throw new InvalidOperationException("The graph hierarchy has reached its maximum depth.");
         var definition = AvailableNodeDefinitions.FirstOrDefault(item => item.Kind == kind)
             ?? throw new ArgumentException(LocalizationService.Shared.Get("Editor.NodeNotInProject"));
+        var family = GraphPolymorphism.TryFamily(kind, out var selectedFamily) ? selectedFamily : null;
+        if (isPolymorphic && family is null)
+            throw new ArgumentException("The node has no polymorphic family.", nameof(kind));
         var index = _nextNodeIndex++;
         var node = new GraphNodeViewModel(
             this,
             definition,
-            definition.Name,
+            isPolymorphic ? LocalizationService.Shared.GetOrDefault(family?.DisplayNameKey ?? definition.DisplayNameKey, definition.Name) : definition.Name,
             x ?? 80 + (index % 4) * 280,
-            y ?? 80 + (index / 4) * 160);
+            y ?? 80 + (index / 4) * 160,
+            isPolymorphic: isPolymorphic);
         _history.Execute(new AddGraphNodeCommand(this, node, Nodes.Count));
         return node;
     }
@@ -1363,6 +1377,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             throw new ArgumentException("The graph hierarchy has reached its maximum depth.");
         var definition = AvailableNodeDefinitions.FirstOrDefault(item => item.Kind == specification.Kind)
             ?? throw new ArgumentException($"Unsupported node kind '{specification.Kind}'.");
+        if (specification.IsPolymorphic && !GraphPolymorphism.TryFamily(specification.Kind, out _))
+            throw new ArgumentException("The node has no polymorphic family.");
 
         if (string.IsNullOrWhiteSpace(specification.Name))
         {
@@ -1380,7 +1396,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             specification.Name,
             specification.X,
             specification.Y,
-            parameters: specification.Parameters);
+            parameters: specification.Parameters,
+            isPolymorphic: specification.IsPolymorphic);
     }
 
     private void DeleteSelectedNode()

@@ -13,7 +13,8 @@ public sealed record LiberaGraphNodeSpec(
     string Name,
     double X,
     double Y,
-    IReadOnlyList<NodeParameterSnapshot>? Parameters = null);
+    IReadOnlyList<NodeParameterSnapshot>? Parameters = null,
+    bool IsPolymorphic = false);
 
 /// <summary>Connects two node keys declared in the same graph plan.</summary>
 public sealed record LiberaGraphConnectionSpec(

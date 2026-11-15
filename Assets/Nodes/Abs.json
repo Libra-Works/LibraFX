@@ -4,6 +4,8 @@
   "namespace": "LiberaFx",
   "kind": "Abs",
   "name": "Abs",
+  "displayNameKey": "Editor.Node.Abs",
+  "groupNameKey": "Editor.NodeGroup.Math",
   "group": "Math",
   "portType": "Float",
   "portCategory": "Parameter",

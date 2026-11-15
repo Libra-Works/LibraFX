@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "typeId": "9499d50e-e3ec-46c9-b633-48038ff37ab1",
+  "namespace": "Tests",
+  "kind": "QuaternionFixture",
+  "name": "Quaternion Fixture",
+  "group": "Tests",
+  "portType": "Quaternion",
+  "portCategory": "Parameter",
+  "inputPorts": []
+}

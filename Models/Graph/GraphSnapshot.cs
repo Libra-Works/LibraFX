@@ -61,7 +61,8 @@ public sealed record GraphNodeSnapshot(
     FCurveSnapshot? Curve = null,
     GraphSnapshot? ChildGraph = null,
     IReadOnlyList<NodeParameterSnapshot>? Parameters = null,
-    GroupAssetReference? GroupAsset = null);
+    GroupAssetReference? GroupAsset = null,
+    bool IsPolymorphic = false);
 
 public sealed record GroupAssetReference(Guid Id, long Revision, bool Locked);
 

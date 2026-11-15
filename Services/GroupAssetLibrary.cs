@@ -9,7 +9,7 @@ public sealed record GroupAsset(int FormatVersion, Guid Id, string Name, long Re
 public sealed class GroupAssetLibrary
 {
     public const string FileExtension = ".lfxgroup";
-    private const int CurrentFormatVersion = 2;
+    private const int CurrentFormatVersion = 3;
     private const long MaxFileBytes = 16 * 1024 * 1024;
     private readonly string _directory;
     private static readonly JsonSerializerOptions Options = new()

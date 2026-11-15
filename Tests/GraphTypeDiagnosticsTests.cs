@@ -64,9 +64,13 @@ public static class GraphTypeDiagnosticsTests
                 workspace.TypeProblems.Count == 1, "Fixing a node must clear its red state.");
 
         var corrupt = graph with { Connections = [new(vec2.Id, add.Id, "a", "missing")] };
-        try { GraphValidator.Validate(corrupt); }
-        catch (InvalidDataException) { return; }
-        throw new InvalidOperationException("A nonexistent source port must remain structurally invalid.");
+        try
+        {
+            GraphValidator.Validate(corrupt);
+            throw new InvalidOperationException("A nonexistent source port must remain structurally invalid.");
+        }
+        catch (InvalidDataException) { }
+        PolymorphicMathTests.Run();
     }
 
     private static void Require(bool condition, string message)

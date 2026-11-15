@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "scalarType": "Float",
+  "broadcastConversions": {
+    "FloatX2": "ScalarToVector2",
+    "FloatX3": "ScalarToVector3",
+    "FloatX4": "ScalarToVector4"
+  },
+  "families": [
+    { "baseKind": "Add", "domainInputs": ["a", "b"], "broadcastInputs": ["a", "b"], "variants": { "Float": "Add", "FloatX2": "AddVector2", "FloatX3": "AddVector3", "FloatX4": "AddVector4" } },
+    { "baseKind": "Subtract", "domainInputs": ["a", "b"], "broadcastInputs": ["a", "b"], "variants": { "Float": "Subtract", "FloatX2": "SubtractVector2", "FloatX3": "SubtractVector3", "FloatX4": "SubtractVector4" } },
+    { "baseKind": "Multiply", "domainInputs": ["a", "b"], "broadcastInputs": ["a", "b"], "variants": { "Float": "Multiply", "FloatX2": "MultiplyVector2", "FloatX3": "MultiplyVector3", "FloatX4": "MultiplyVector4" } },
+    { "baseKind": "Divide", "domainInputs": ["a", "b"], "broadcastInputs": ["a", "b"], "variants": { "Float": "Divide", "FloatX2": "DivideVector2", "FloatX3": "DivideVector3", "FloatX4": "DivideVector4" } },
+    { "baseKind": "Abs", "domainInputs": ["a"], "broadcastInputs": ["a"], "variants": { "Float": "Abs", "FloatX2": "AbsVector2", "FloatX3": "AbsVector3", "FloatX4": "AbsVector4" } },
+    { "baseKind": "Min", "domainInputs": ["a", "b"], "broadcastInputs": ["a", "b"], "variants": { "Float": "Min", "FloatX2": "MinVector2", "FloatX3": "MinVector3", "FloatX4": "MinVector4" } },
+    { "baseKind": "Max", "domainInputs": ["a", "b"], "broadcastInputs": ["a", "b"], "variants": { "Float": "Max", "FloatX2": "MaxVector2", "FloatX3": "MaxVector3", "FloatX4": "MaxVector4" } },
+    { "baseKind": "Lerp", "domainInputs": ["a", "b"], "broadcastInputs": ["a", "b"], "variants": { "Float": "Lerp", "FloatX2": "LerpVector2", "FloatX3": "LerpVector3", "FloatX4": "LerpVector4" } },
+    { "baseKind": "LengthVector2", "displayNameKey": "Editor.Node.Length", "fallbackType": "FloatX2", "outputType": "Float", "defaultMigration": "resizeVector", "domainInputs": ["a"], "broadcastInputs": [], "variants": { "FloatX2": "LengthVector2", "FloatX3": "LengthVector3", "FloatX4": "LengthVector4" } },
+    { "baseKind": "DotVector2", "displayNameKey": "Editor.Node.Dot", "fallbackType": "FloatX2", "outputType": "Float", "defaultMigration": "resizeVector", "domainInputs": ["a", "b"], "broadcastInputs": [], "variants": { "FloatX2": "DotVector2", "FloatX3": "DotVector3", "FloatX4": "DotVector4" } },
+    { "baseKind": "NormalizeVector2", "displayNameKey": "Editor.Node.Normalize", "fallbackType": "FloatX2", "defaultMigration": "resizeVector", "domainInputs": ["a"], "broadcastInputs": [], "variants": { "FloatX2": "NormalizeVector2", "FloatX3": "NormalizeVector3", "FloatX4": "NormalizeVector4" } }
+  ]
+}

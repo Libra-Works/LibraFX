@@ -39,7 +39,8 @@ public sealed class ProjectFileService
                     node.Curve,
                     node.ChildGraph,
                     node.Parameters,
-                    node.GroupAsset))
+                    node.GroupAsset,
+                    node.IsPolymorphic))
                 .ToList(),
             Connections = snapshot.Connections
                 .Select(connection => new LiberaFxProjectConnection(

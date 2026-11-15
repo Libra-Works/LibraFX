@@ -52,6 +52,7 @@ public sealed class NodeCatalogViewModel : Tool
     private void RefreshEntries()
     {
         _entries = (_definitions?.AvailableDefinitions ?? GraphNodeDefinition.Core)
+            .Where(definition => !GraphPolymorphism.IsHiddenVariant(definition.Kind))
             .Select(definition => new NodeCatalogEntryViewModel(definition, ProjectName))
             .Concat((_groups?.Assets ?? []).Select(asset => new NodeCatalogEntryViewModel(asset)))
             .ToArray();
@@ -91,6 +92,7 @@ public sealed class NodeCatalogGroupViewModel(string name, IReadOnlyList<NodeCat
 public sealed class NodeCatalogEntryViewModel
 {
     public const string GroupPrefix = "liberafx-group:";
+    public const string PolymorphicPrefix = "liberafx-polymorphic:";
     public string Name { get; }
     public string OriginalName { get; }
 
@@ -101,10 +103,12 @@ public sealed class NodeCatalogEntryViewModel
     public string QualifiedName { get; }
     public string DragIdentifier { get; }
     public Guid? GroupAssetId { get; }
+    public bool IsPolymorphic { get; }
 
     public NodeCatalogEntryViewModel(GraphNodeDefinition definition, string? projectName = null)
     {
-        Name = LocalizationService.Shared.GetOrDefault(definition.DisplayNameKey, definition.Name);
+        IsPolymorphic = GraphPolymorphism.TryFamily(definition.Kind, out var family);
+        Name = LocalizationService.Shared.GetOrDefault(family?.DisplayNameKey ?? definition.DisplayNameKey, definition.Name);
         OriginalName = definition.Name;
         KindName = definition.Kind.ToString();
         Namespace = definition.Namespace;
@@ -112,7 +116,7 @@ public sealed class NodeCatalogEntryViewModel
         var source = GraphNodeDefinition.Core.Contains(definition)
             ? LocalizationService.Shared.Get("Editor.CoreNodes") : projectName ?? definition.Namespace;
         Group = $"{source} / {LocalizationService.Shared.GetOrDefault(definition.GroupNameKey, definition.Group)}";
-        DragIdentifier = definition.Kind.ToString();
+        DragIdentifier = (IsPolymorphic ? PolymorphicPrefix : "") + definition.Kind;
     }
 
     public NodeCatalogEntryViewModel(GroupAsset asset)

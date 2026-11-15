@@ -18,6 +18,7 @@ public static class GraphValidator
             if (node is null || node.Id == Guid.Empty || !allIds.Add(node.Id) ||
                 string.IsNullOrWhiteSpace(node.Name) || !double.IsFinite(node.X) || !double.IsFinite(node.Y) ||
                 !definitions.TryGetValue(node.Kind, out var definition) ||
+                (node.IsPolymorphic && !GraphPolymorphism.TryFamily(node.Kind, out _)) ||
                 node.PortType != definition.PortType || node.PortCategory != definition.PortCategory ||
                 (node.Kind == GraphNodeKind.FloatFCurve) != (node.Curve is not null) ||
                 (node.Kind == GraphNodeKind.GraphGroup) != (node.ChildGraph is not null) ||

@@ -4,6 +4,8 @@
   "namespace": "LiberaFx",
   "kind": "Lerp",
   "name": "Lerp",
+  "displayNameKey": "Editor.Node.Lerp",
+  "groupNameKey": "Editor.NodeGroup.Math",
   "group": "Math",
   "portType": "Float",
   "portCategory": "Parameter",

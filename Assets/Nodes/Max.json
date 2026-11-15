@@ -4,6 +4,8 @@
   "namespace": "LiberaFx",
   "kind": "Max",
   "name": "Max",
+  "displayNameKey": "Editor.Node.Max",
+  "groupNameKey": "Editor.NodeGroup.Math",
   "group": "Math",
   "portType": "Float",
   "portCategory": "Parameter",

@@ -4,6 +4,7 @@
   "namespace": "LiberaFx",
   "kind": "LengthVector2",
   "name": "LengthVector2",
+  "groupNameKey": "Vectors.Group",
   "group": "Vectors",
   "portType": "Float",
   "portCategory": "Parameter",

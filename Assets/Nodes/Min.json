@@ -4,6 +4,8 @@
   "namespace": "LiberaFx",
   "kind": "Min",
   "name": "Min",
+  "displayNameKey": "Editor.Node.Min",
+  "groupNameKey": "Editor.NodeGroup.Math",
   "group": "Math",
   "portType": "Float",
   "portCategory": "Parameter",

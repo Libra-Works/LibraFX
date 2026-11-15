@@ -10,7 +10,8 @@ using ModelContextProtocol.Server;
 
 namespace LiberaFx.Services;
 
-public sealed record LiberaFxMcpPlanNode(string Key, string Kind, string Name, double X, double Y);
+public sealed record LiberaFxMcpPlanNode(string Key, string Kind, string Name, double X, double Y,
+    bool? IsPolymorphic = null);
 public sealed record LiberaFxMcpPlanConnection(
     string SourceKey, string TargetKey, string? TargetPortId = null, string? SourcePortId = null);
 
@@ -109,17 +110,19 @@ public sealed class LiberaFxMcpTools
         await Dispatcher.UIThread.InvokeAsync(() => JsonSerializer.Serialize(activeGraph.Graph.AvailableNodeDefinitions, JsonOptions));
 
     [McpServerTool(Name = "libera_graph_create_node", Destructive = false, OpenWorld = false)]
-    [Description("Create one node in the active graph. Omit x and y to use automatic positions.")]
+    [Description("Create one node in the active graph. Family base kinds are polymorphic by default; set isPolymorphic false for an explicit legacy variant.")]
     public static async Task<string> CreateNode(
         ActiveGraphProvider activeGraph,
         [Description("Node kind from libera_graph_list_node_types, for example Float or Signal.")] string kind,
         [Description("Optional horizontal position.")] double? x = null,
-        [Description("Optional vertical position.")] double? y = null) =>
+        [Description("Optional vertical position.")] double? y = null,
+        [Description("Override the family default; false creates an explicitly typed legacy node.")] bool? isPolymorphic = null) =>
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
             ValidatePosition(x, y);
             var graph = activeGraph.Graph;
-            var node = graph.CreateNode(ParseKind(kind, graph), x, y);
+            var parsed = ParseKind(kind, graph);
+            var node = graph.CreateNode(parsed, x, y, isPolymorphic ?? GraphPolymorphism.TryFamily(parsed, out _));
             return SerializeNode(graph, node.Id);
         });
 
@@ -220,8 +223,12 @@ public sealed class LiberaFxMcpTools
                 throw new McpException("Plan arrays must not contain null entries.");
 
             var plan = new LiberaGraphEditPlan(
-                nodes.Select(node => new LiberaGraphNodeSpec(
-                    node.Key, ParseKind(node.Kind, activeGraph.Graph), node.Name, node.X, node.Y)).ToArray(),
+                nodes.Select(node =>
+                {
+                    var kind = ParseKind(node.Kind, activeGraph.Graph);
+                    return new LiberaGraphNodeSpec(node.Key, kind, node.Name, node.X, node.Y,
+                        IsPolymorphic: node.IsPolymorphic ?? GraphPolymorphism.TryFamily(kind, out _));
+                }).ToArray(),
                 connections.Select(connection => new LiberaGraphConnectionSpec(
                     connection.SourceKey, connection.TargetKey, connection.TargetPortId, connection.SourcePortId)).ToArray());
             try

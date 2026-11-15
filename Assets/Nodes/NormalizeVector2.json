@@ -4,6 +4,7 @@
   "namespace": "LiberaFx",
   "kind": "NormalizeVector2",
   "name": "NormalizeVector2",
+  "groupNameKey": "Vectors.Group",
   "group": "Vectors",
   "portType": "FloatX2",
   "portCategory": "Parameter",

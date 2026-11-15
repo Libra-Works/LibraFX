@@ -182,7 +182,8 @@ public partial class GraphEditorView : UserControl
         try
         {
             if (TryGetGroupId(e, out var assetId)) graph.CreateGroupAssetNode(assetId, position.X, position.Y);
-            else if (TryGetNodeKind(e, out var kind)) graph.CreateNode(kind, position.X, position.Y);
+            else if (TryGetNodeKind(e, out var kind)) graph.CreateNode(kind, position.X, position.Y,
+                e.DataTransfer.TryGetText()?.StartsWith(NodeCatalogEntryViewModel.PolymorphicPrefix, StringComparison.Ordinal) == true);
             else return;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
@@ -196,6 +197,8 @@ public partial class GraphEditorView : UserControl
     private bool TryGetNodeKind(DragEventArgs e, out GraphNodeKind kind)
     {
         var kindName = e.DataTransfer.TryGetText();
+        if (kindName?.StartsWith(NodeCatalogEntryViewModel.PolymorphicPrefix, StringComparison.Ordinal) == true)
+            kindName = kindName[NodeCatalogEntryViewModel.PolymorphicPrefix.Length..];
         if (GraphNodeDefinition.TryFind(kindName, out var definition,
             (DataContext as GraphWorkspaceViewModel)?.AvailableNodeDefinitions ?? GraphNodeDefinition.Core))
         {
@@ -401,6 +404,7 @@ public partial class GraphEditorView : UserControl
         var search = NodeSearchBox.Text?.Trim() ?? string.Empty;
         var workspace = DataContext as GraphWorkspaceViewModel;
         var entries = (workspace?.AvailableNodeDefinitions ?? GraphNodeDefinition.Core)
+            .Where(definition => !GraphPolymorphism.IsHiddenVariant(definition.Kind))
             .Select(definition => new NodeCatalogEntryViewModel(definition, workspace?.NodeDefinitions?.ProjectName))
             .Concat((DataContext as GraphWorkspaceViewModel)?.GroupAssets?.Assets
                 .Select(asset => new NodeCatalogEntryViewModel(asset)) ?? [])
@@ -443,7 +447,7 @@ public partial class GraphEditorView : UserControl
         {
             if (entry.GroupAssetId is { } id) graph.CreateGroupAssetNode(id, _nodeSearchPosition.X, _nodeSearchPosition.Y);
             else if (GraphNodeDefinition.TryFind(entry.KindName, out var definition, graph.AvailableNodeDefinitions))
-                graph.CreateNode(definition!.Kind, _nodeSearchPosition.X, _nodeSearchPosition.Y);
+                graph.CreateNode(definition!.Kind, _nodeSearchPosition.X, _nodeSearchPosition.Y, entry.IsPolymorphic);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
                                    InvalidOperationException or ArgumentException)

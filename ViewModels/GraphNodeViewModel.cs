@@ -34,6 +34,8 @@ public sealed class GraphNodeViewModel : ObservableObject
     internal GraphWorkspaceViewModel Workspace => _workspace;
 
     public GraphNodeDefinition Definition => _definition;
+    internal GraphNodeDefinition BaseDefinition => _baseDefinition;
+    public bool IsPolymorphic { get; }
 
     public FCurveSnapshot? Curve => _curve;
     public IReadOnlyList<NodeParameterSnapshot>? Parameters => _parameters;
@@ -137,10 +139,12 @@ public sealed class GraphNodeViewModel : ObservableObject
         FCurveSnapshot? curve = null,
         GraphSnapshot? childGraph = null,
         IReadOnlyList<NodeParameterSnapshot>? parameters = null,
-        GroupAssetReference? groupAsset = null)
+        GroupAssetReference? groupAsset = null,
+        bool isPolymorphic = false)
     {
         _workspace = workspace;
         _baseDefinition = definition;
+        IsPolymorphic = isPolymorphic;
         _definition = RenderNodeSchema.Effective(definition, parameters);
         Id = id ?? Guid.NewGuid();
         _name = name;
@@ -235,6 +239,21 @@ public sealed class GraphNodeViewModel : ObservableObject
         OnPropertyChanged(nameof(HasCustomInputs));
         OnPropertyChanged(nameof(HasLegacyInput));
         OnPropertyChanged(nameof(HasParameters));
+    }
+
+    internal void ApplyResolvedDefinition(GraphNodeDefinition definition)
+    {
+        if (definition == _definition) return;
+        _definition = definition;
+        OnPropertyChanged(nameof(Definition));
+        OnPropertyChanged(nameof(PortType));
+        OnPropertyChanged(nameof(DisplayPortType));
+        OnPropertyChanged(nameof(InputPorts));
+        OnPropertyChanged(nameof(OutputPorts));
+        OnPropertyChanged(nameof(HasCustomInputs));
+        OnPropertyChanged(nameof(HasCustomOutputs));
+        OnPropertyChanged(nameof(HasLegacyInput));
+        OnPropertyChanged(nameof(HasLegacyOutput));
     }
 
     private IReadOnlyList<NodeParameterDefinition> VisibleParameters(GraphNodeDefinition definition) =>

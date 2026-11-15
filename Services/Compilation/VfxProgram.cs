@@ -67,7 +67,13 @@ public sealed class VfxProgram
     public static VfxProgram Compile(GraphSnapshot graph)
     {
         GraphValidator.Validate(graph);
-        GraphTypeDiagnostics.Validate(graph);
+        var typeProblems = GraphTypeDiagnostics.Analyze(graph);
+        if (typeProblems.Count != 0)
+            throw new InvalidDataException(string.Join(Environment.NewLine, typeProblems.Select(problem =>
+                LocalizationService.Shared.Get("Messages.GraphCompileMismatch",
+                    problem.NodeId, problem.InputPortId ?? "input", problem.SourceNodeId,
+                    problem.SourceType, problem.ExpectedType))));
+        graph = GraphPolymorphism.Lower(graph);
         _ = RenderProgramBindings.CreateScene(graph, 0);
         var nodes = Flatten(graph)
             .Where(node => node.Kind != GraphNodeKind.Comment && node.Kind != GraphNodeKind.GraphGroup &&

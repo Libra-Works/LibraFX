@@ -8,17 +8,16 @@ public static class GraphTypeDiagnostics
     public static IReadOnlyList<GraphTypeDiagnostic> Analyze(GraphSnapshot graph)
     {
         var result = new List<GraphTypeDiagnostic>();
-        var definitions = GraphNodeDefinition.All.ToDictionary(item => item.Kind);
         void Visit(GraphSnapshot current)
         {
             var nodes = current.Nodes.ToDictionary(item => item.Id);
-            var effective = current.Nodes.ToDictionary(item => item.Id, item =>
-                RenderNodeSchema.Effective(definitions[item.Kind], item.Parameters));
+            var effective = GraphPolymorphism.Resolve(current);
             foreach (var connection in current.Connections)
             {
                 var source = effective[connection.SourceNodeId].GetOutputPortType(connection.SourcePortId);
                 var target = effective[connection.TargetNodeId].GetInputPortType(connection.TargetPortId);
-                if (source is not null && target is not null && source != target)
+                if (source is not null && target is not null && source != target &&
+                    !GraphPolymorphism.CanBroadcast(nodes[connection.TargetNodeId], connection.TargetPortId, source, target))
                     result.Add(new(connection.TargetNodeId, connection.TargetPortId,
                         connection.SourceNodeId, source, target));
             }

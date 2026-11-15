@@ -4,6 +4,7 @@
   "namespace": "LiberaFx",
   "kind": "DotVector2",
   "name": "DotVector2",
+  "groupNameKey": "Vectors.Group",
   "group": "Vectors",
   "portType": "Float",
   "portCategory": "Parameter",
