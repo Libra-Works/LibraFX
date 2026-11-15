@@ -1,0 +1,19 @@
+LibraGpu.UnrealExport: portable .NET 10 source interchange, not an Unreal asset.
+
+  using LibraGpu.UnrealExport;
+  var bundle = UnrealGpuExporter.Compile(program, textureObjectPaths);
+  var json = UnrealGpuExporter.Serialize(bundle);
+
+textureObjectPaths maps every declared Texture2D resource ID to an Unreal object
+path, for example /Game/FX/T_Spark.T_Spark. Export checks basic path syntax but
+does not load assets or validate their types; a UE importer must do so and store
+typed UObject references. Extra and missing mappings are rejected.
+
+Version 1 JSON has camelCase properties: version, purpose (SourceExport),
+runtimeExecuted (false), canonicalJson, usf, metadata, kernels, textures. Each
+kernel contains id, stage and packet (base64 LGPK v1 from Core); each texture
+contains id and objectPath. Metadata is Core's USF export metadata; its hashes
+identify canonical IR and exact source respectively. JSON and packets are
+untrusted input; a consumer must validate all instructions, indices, types,
+bounds, hashes and references before upload. This exporter neither installs
+shaders in UE nor implements an interpreter, GPU execution, rendering or cooking.
