@@ -323,6 +323,26 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
                 return Result::InvalidArgument;
     }
 
+    auto resolveDescriptor = [&](const std::uint8_t* typeId, std::uint32_t abiVersion,
+                                 bool& registeredType) noexcept -> const CustomNodeDescriptor* {
+        registeredType = false;
+        for (auto index = std::size_t{0}; index < registryCount; ++index)
+            if (std::memcmp(registry[index].typeId, typeId, 16) == 0)
+            {
+                registeredType = true;
+                if (registry[index].abiVersion == abiVersion) return &registry[index];
+            }
+        if (registeredType) return nullptr;
+        auto builtinCount = std::size_t{0};
+        auto builtins = builtinNodes(builtinCount);
+        for (auto index = std::size_t{0}; index < builtinCount; ++index)
+            if (std::memcmp(builtins[index].typeId, typeId, 16) == 0)
+            {
+                registeredType = true;
+                if (builtins[index].abiVersion == abiVersion) return &builtins[index];
+            }
+        return nullptr;
+    };
     auto totalStateBytes = std::size_t{0};
     for (auto index = std::uint32_t{0}; index < count; ++index)
     {
@@ -370,18 +390,8 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
         auto emptyTypeId = true;
         for (auto byte = 0u; byte < 16; ++byte) emptyTypeId = emptyTypeId && current[24 + byte] == 0;
         if (emptyTypeId) return Result::InvalidBinary;
-        auto descriptor = static_cast<const CustomNodeDescriptor*>(nullptr);
         auto registeredType = false;
-        for (auto registryIndex = std::size_t{0}; registryIndex < registryCount; ++registryIndex)
-            if (std::memcmp(registry[registryIndex].typeId, current + 24, 16) == 0)
-            {
-                registeredType = true;
-                if (registry[registryIndex].abiVersion == read32(current + 40))
-                {
-                    descriptor = &registry[registryIndex];
-                    break;
-                }
-            }
+        auto descriptor = resolveDescriptor(current + 24, read32(current + 40), registeredType);
         if (descriptor == nullptr)
             return registeredType ? Result::UnsupportedBinary : Result::UnknownCustomNode;
         if (descriptor->inputCount != inputCount ||
@@ -457,13 +467,10 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
         auto current = instruction(data, 3, index);
         auto descriptor = static_cast<const CustomNodeDescriptor*>(nullptr);
         if (current[16] == customParameterOpcode || current[16] == customSignalOpcode)
-            for (auto registryIndex = std::size_t{0}; registryIndex < registryCount; ++registryIndex)
-                if (std::memcmp(registry[registryIndex].typeId, current + 24, 16) == 0 &&
-                    registry[registryIndex].abiVersion == read32(current + 40))
-                {
-                    descriptor = &registry[registryIndex];
-                    break;
-                }
+        {
+            auto registeredType = false;
+            descriptor = resolveDescriptor(current + 24, read32(current + 40), registeredType);
+        }
         bindings[index].descriptor = descriptor;
         bindings[index].stateOffset = boundStateOffset;
         if (descriptor != nullptr) boundStateOffset += alignedStateSize(descriptor->stateBytes);

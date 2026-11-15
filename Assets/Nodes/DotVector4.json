@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "typeId": "74305ac1-91b2-4c33-8d44-000000000020",
+  "namespace": "LiberaFx",
+  "kind": "DotVector4",
+  "name": "DotVector4",
+  "group": "Vectors",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "runtime": {
+    "kind": "custom",
+    "abiVersion": 1,
+    "execution": "parameter"
+  },
+  "inputPorts": [
+    {
+      "id": "a",
+      "name": "A",
+      "portType": "FloatX4",
+      "category": "Parameter"
+    },
+    {
+      "id": "b",
+      "name": "B",
+      "portType": "FloatX4",
+      "category": "Parameter"
+    }
+  ],
+  "outputPorts": [
+    {
+      "id": "value",
+      "name": "Value",
+      "portType": "Float",
+      "category": "Parameter"
+    }
+  ],
+  "parameters": [
+    {
+      "id": "a",
+      "name": "A",
+      "type": "vector4",
+      "defaultValue": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "id": "b",
+      "name": "B",
+      "type": "vector4",
+      "defaultValue": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  ]
+}

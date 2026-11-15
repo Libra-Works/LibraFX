@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "typeId": "74305ac1-91b2-4c33-8d44-000000000018",
+  "namespace": "LiberaFx",
+  "kind": "TwoPI",
+  "name": "TwoPI",
+  "group": "Math",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "runtime": {
+    "kind": "custom",
+    "abiVersion": 1,
+    "execution": "parameter"
+  },
+  "inputPorts": [],
+  "outputPorts": [
+    {
+      "id": "value",
+      "name": "Value",
+      "portType": "Float",
+      "category": "Parameter"
+    }
+  ],
+  "parameters": []
+}

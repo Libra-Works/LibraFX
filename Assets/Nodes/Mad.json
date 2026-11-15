@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "typeId": "74305ac1-91b2-4c33-8d44-000000000016",
+  "namespace": "LiberaFx",
+  "kind": "Mad",
+  "name": "Mad",
+  "group": "Math",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "runtime": {
+    "kind": "custom",
+    "abiVersion": 1,
+    "execution": "parameter"
+  },
+  "inputPorts": [
+    {
+      "id": "a",
+      "name": "A",
+      "portType": "Float",
+      "category": "Parameter"
+    },
+    {
+      "id": "b",
+      "name": "B",
+      "portType": "Float",
+      "category": "Parameter"
+    },
+    {
+      "id": "c",
+      "name": "C",
+      "portType": "Float",
+      "category": "Parameter"
+    }
+  ],
+  "outputPorts": [
+    {
+      "id": "value",
+      "name": "Value",
+      "portType": "Float",
+      "category": "Parameter"
+    }
+  ],
+  "parameters": [
+    {
+      "id": "a",
+      "name": "A",
+      "type": "float",
+      "defaultValue": 0.0
+    },
+    {
+      "id": "b",
+      "name": "B",
+      "type": "float",
+      "defaultValue": 1.0
+    },
+    {
+      "id": "c",
+      "name": "C",
+      "type": "float",
+      "defaultValue": 0.0
+    }
+  ]
+}

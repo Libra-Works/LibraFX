@@ -322,14 +322,19 @@ public sealed class VfxProgram
                     var portType = definition.GetInputPortType(port.Id)!;
                     var width = Width(portType);
                     var defaults = new double[4];
-                    if (port.DefaultValue is { } portDefault)
+                    var parameterType = portType switch
                     {
-                        var parameterType = portType switch
-                        {
-                            "Float" => "float", "FloatX2" => "vector2", "FloatX3" => "vector3",
-                            "FloatX4" => "vector4", "Color" => "color",
-                            _ => throw new InvalidDataException($"Custom input '{port.Id}' is not numeric.")
-                        };
+                        "Float" => "float", "FloatX2" => "vector2", "FloatX3" => "vector3",
+                        "FloatX4" => "vector4", "Color" => "color",
+                        _ => throw new InvalidDataException($"Custom input '{port.Id}' is not numeric.")
+                    };
+                    var parameter = definition.Parameters.FirstOrDefault(item =>
+                        item.Id == port.Id && item.Type == parameterType);
+                    var value = parameter is null ? port.DefaultValue :
+                        node.Parameters?.FirstOrDefault(item => item.Id == port.Id && item.Type == parameterType)?.Value
+                        ?? parameter.DefaultValue;
+                    if (value is { } portDefault)
+                    {
                         if (!NodeParameter.IsValidValue(parameterType, portDefault))
                             throw new InvalidDataException($"Custom input '{port.Id}' has an invalid default.");
                         if (width == 1) defaults[0] = portDefault.GetDouble();

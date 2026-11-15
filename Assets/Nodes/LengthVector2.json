@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "typeId": "74305ac1-91b2-4c33-8d44-000000000019",
+  "namespace": "LiberaFx",
+  "kind": "LengthVector2",
+  "name": "LengthVector2",
+  "group": "Vectors",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "runtime": {
+    "kind": "custom",
+    "abiVersion": 1,
+    "execution": "parameter"
+  },
+  "inputPorts": [
+    {
+      "id": "a",
+      "name": "A",
+      "portType": "FloatX2",
+      "category": "Parameter"
+    }
+  ],
+  "outputPorts": [
+    {
+      "id": "value",
+      "name": "Value",
+      "portType": "Float",
+      "category": "Parameter"
+    }
+  ],
+  "parameters": [
+    {
+      "id": "a",
+      "name": "A",
+      "type": "vector2",
+      "defaultValue": [
+        0.0,
+        0.0
+      ]
+    }
+  ]
+}

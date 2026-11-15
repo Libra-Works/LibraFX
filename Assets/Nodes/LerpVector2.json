@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "typeId": "74305ac1-91b2-4c33-8d44-000000000026",
+  "namespace": "LiberaFx",
+  "kind": "LerpVector2",
+  "name": "LerpVector2",
+  "group": "Vectors",
+  "portType": "FloatX2",
+  "portCategory": "Parameter",
+  "runtime": {
+    "kind": "custom",
+    "abiVersion": 1,
+    "execution": "parameter"
+  },
+  "inputPorts": [
+    {
+      "id": "a",
+      "name": "A",
+      "portType": "FloatX2",
+      "category": "Parameter"
+    },
+    {
+      "id": "b",
+      "name": "B",
+      "portType": "FloatX2",
+      "category": "Parameter"
+    },
+    {
+      "id": "c",
+      "name": "T",
+      "portType": "Float",
+      "category": "Parameter"
+    }
+  ],
+  "outputPorts": [
+    {
+      "id": "value",
+      "name": "Value",
+      "portType": "FloatX2",
+      "category": "Parameter"
+    }
+  ],
+  "parameters": [
+    {
+      "id": "a",
+      "name": "A",
+      "type": "vector2",
+      "defaultValue": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "id": "b",
+      "name": "B",
+      "type": "vector2",
+      "defaultValue": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "id": "c",
+      "name": "T",
+      "type": "float",
+      "defaultValue": 0.5
+    }
+  ]
+}

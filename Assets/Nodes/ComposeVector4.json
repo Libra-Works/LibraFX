@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "typeId": "74305ac1-91b2-4c33-8d44-00000000002f",
+  "namespace": "LiberaFx",
+  "kind": "ComposeVector4",
+  "name": "Compose Vector4",
+  "group": "Vectors",
+  "portType": "FloatX4",
+  "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [
+    { "id": "r", "name": "R", "portType": "Float", "category": "Parameter" },
+    { "id": "g", "name": "G", "portType": "Float", "category": "Parameter" },
+    { "id": "b", "name": "B", "portType": "Float", "category": "Parameter" },
+    { "id": "a", "name": "A", "portType": "Float", "category": "Parameter" }
+  ],
+  "outputPorts": [
+    { "id": "value", "name": "Value", "portType": "FloatX4", "category": "Parameter" }
+  ],
+  "parameters": [
+    { "id": "r", "name": "R", "type": "float", "defaultValue": 0.0 },
+    { "id": "g", "name": "G", "type": "float", "defaultValue": 0.0 },
+    { "id": "b", "name": "B", "type": "float", "defaultValue": 0.0 },
+    { "id": "a", "name": "A", "type": "float", "defaultValue": 1.0 }
+  ]
+}

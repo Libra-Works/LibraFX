@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "typeId": "74305ac1-91b2-4c33-8d44-000000000015",
+  "namespace": "LiberaFx",
+  "kind": "Lerp",
+  "name": "Lerp",
+  "group": "Math",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "runtime": {
+    "kind": "custom",
+    "abiVersion": 1,
+    "execution": "parameter"
+  },
+  "inputPorts": [
+    {
+      "id": "a",
+      "name": "A",
+      "portType": "Float",
+      "category": "Parameter"
+    },
+    {
+      "id": "b",
+      "name": "B",
+      "portType": "Float",
+      "category": "Parameter"
+    },
+    {
+      "id": "c",
+      "name": "T",
+      "portType": "Float",
+      "category": "Parameter"
+    }
+  ],
+  "outputPorts": [
+    {
+      "id": "value",
+      "name": "Value",
+      "portType": "Float",
+      "category": "Parameter"
+    }
+  ],
+  "parameters": [
+    {
+      "id": "a",
+      "name": "A",
+      "type": "float",
+      "defaultValue": 0.0
+    },
+    {
+      "id": "b",
+      "name": "B",
+      "type": "float",
+      "defaultValue": 0.0
+    },
+    {
+      "id": "c",
+      "name": "T",
+      "type": "float",
+      "defaultValue": 0.5
+    }
+  ]
+}

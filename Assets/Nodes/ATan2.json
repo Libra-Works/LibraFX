@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "typeId": "74305ac1-91b2-4c33-8d44-00000000000d",
+  "namespace": "LiberaFx",
+  "kind": "ATan2",
+  "name": "ATan2",
+  "group": "Math",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "runtime": {
+    "kind": "custom",
+    "abiVersion": 1,
+    "execution": "parameter"
+  },
+  "inputPorts": [
+    {
+      "id": "a",
+      "name": "Y",
+      "portType": "Float",
+      "category": "Parameter"
+    },
+    {
+      "id": "b",
+      "name": "X",
+      "portType": "Float",
+      "category": "Parameter"
+    }
+  ],
+  "outputPorts": [
+    {
+      "id": "value",
+      "name": "Value",
+      "portType": "Float",
+      "category": "Parameter"
+    }
+  ],
+  "parameters": [
+    {
+      "id": "a",
+      "name": "Y",
+      "type": "float",
+      "defaultValue": 0.0
+    },
+    {
+      "id": "b",
+      "name": "X",
+      "type": "float",
+      "defaultValue": 0.0
+    }
+  ]
+}

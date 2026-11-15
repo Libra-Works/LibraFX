@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "typeId": "74305ac1-91b2-4c33-8d44-000000000014",
+  "namespace": "LiberaFx",
+  "kind": "Clamp",
+  "name": "Clamp",
+  "group": "Math",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "runtime": {
+    "kind": "custom",
+    "abiVersion": 1,
+    "execution": "parameter"
+  },
+  "inputPorts": [
+    {
+      "id": "a",
+      "name": "Value",
+      "portType": "Float",
+      "category": "Parameter"
+    },
+    {
+      "id": "b",
+      "name": "Min",
+      "portType": "Float",
+      "category": "Parameter"
+    },
+    {
+      "id": "c",
+      "name": "Max",
+      "portType": "Float",
+      "category": "Parameter"
+    }
+  ],
+  "outputPorts": [
+    {
+      "id": "value",
+      "name": "Value",
+      "portType": "Float",
+      "category": "Parameter"
+    }
+  ],
+  "parameters": [
+    {
+      "id": "a",
+      "name": "Value",
+      "type": "float",
+      "defaultValue": 0.0
+    },
+    {
+      "id": "b",
+      "name": "Min",
+      "type": "float",
+      "defaultValue": 0.0
+    },
+    {
+      "id": "c",
+      "name": "Max",
+      "type": "float",
+      "defaultValue": 1.0
+    }
+  ]
+}

@@ -76,6 +76,9 @@ struct CustomNodeBinding final {
     std::size_t stateOffset = 0;
 };
 
+// Immutable process-lifetime descriptors. IDs use Guid.TryWriteBytes(bigEndian: true).
+LIBRA_RUNTIME_CORE_API const CustomNodeDescriptor* builtinNodes(std::size_t& count) noexcept;
+
 struct ValueHandle final {
     const void* programIdentity = nullptr;
     std::uint64_t generation = 0;
@@ -105,7 +108,8 @@ public:
     // The program and its bytecode must remain immutable and alive while instances use them.
     static Result load(const void* bytes, std::size_t size, Program& out,
                        const ProfilingHooks& profiling = {}) noexcept;
-    // V3 requires caller-owned bindings (one entry per instruction) and a live registry.
+    // V3 requires caller-owned bindings (one entry per instruction). Built-ins are
+    // resolved automatically if their type is absent from the caller's registry.
     // The bytecode, descriptor array and binding storage must outlive this Program and its Instances.
     static Result load(const void* bytes, std::size_t size,
                        const CustomNodeDescriptor* registry, std::size_t registryCount,

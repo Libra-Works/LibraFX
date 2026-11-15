@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "typeId": "74305ac1-91b2-4c33-8d44-00000000001b",
+  "namespace": "LiberaFx",
+  "kind": "NormalizeVector2",
+  "name": "NormalizeVector2",
+  "group": "Vectors",
+  "portType": "FloatX2",
+  "portCategory": "Parameter",
+  "runtime": {
+    "kind": "custom",
+    "abiVersion": 1,
+    "execution": "parameter"
+  },
+  "inputPorts": [
+    {
+      "id": "a",
+      "name": "A",
+      "portType": "FloatX2",
+      "category": "Parameter"
+    }
+  ],
+  "outputPorts": [
+    {
+      "id": "value",
+      "name": "Value",
+      "portType": "FloatX2",
+      "category": "Parameter"
+    }
+  ],
+  "parameters": [
+    {
+      "id": "a",
+      "name": "A",
+      "type": "vector2",
+      "defaultValue": [
+        0.0,
+        0.0
+      ]
+    }
+  ]
+}
