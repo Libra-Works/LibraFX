@@ -113,7 +113,7 @@ namespace
 
         TSharedPtr<FExtender> GetExtenders() const override
         {
-            return nullptr;
+            return MakeShared<FExtender>();
         }
 
         void OnFloatingButtonClicked() override
