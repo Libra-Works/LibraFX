@@ -13,6 +13,8 @@
     <Border Width="240" IsVisible="{Binding !IsComment}"
             Background="{DynamicResource EffectSurfaceBrush}"
             BorderBrush="{Binding BorderBrush}"
+            ToolTip.Tip="{Binding DiagnosticText}"
+            AutomationProperties.HelpText="{Binding DiagnosticText}"
             BorderThickness="2"
             CornerRadius="4">
         <Grid RowDefinitions="Auto,Auto,Auto">

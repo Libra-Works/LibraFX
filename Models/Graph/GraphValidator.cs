@@ -50,8 +50,8 @@ public static class GraphValidator
                 source.Id == target.Id ||
                 source.Kind == GraphNodeKind.GraphGroup || target.Kind == GraphNodeKind.GraphGroup ||
                 source.Kind == GraphNodeKind.Comment || target.Kind == GraphNodeKind.Comment ||
-                effectiveDefinitions[source.Id].GetOutputPortType(connection.SourcePortId) !=
-                effectiveDefinitions[target.Id].GetInputPortType(connection.TargetPortId) ||
+                effectiveDefinitions[source.Id].GetOutputPortType(connection.SourcePortId) is null ||
+                effectiveDefinitions[target.Id].GetInputPortType(connection.TargetPortId) is null ||
                 effectiveDefinitions[source.Id].GetOutputPortCategory(connection.SourcePortId) !=
                 effectiveDefinitions[target.Id].GetInputPortCategory(connection.TargetPortId) ||
                 (effectiveDefinitions[target.Id].InputPorts is null

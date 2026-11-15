@@ -43,6 +43,12 @@ internal static class Program
             else File.WriteAllText(Path.Combine(directory, "language.json"), languageFixture);
         }
         AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+        if (args is ["--graph-type-diagnostics"])
+        {
+            LiberaFx.Tests.GraphTypeDiagnosticsTests.Run();
+            Console.WriteLine("Graph type diagnostics checks passed.");
+            return;
+        }
         if (args is ["--asset-render"])
         {
             LiberaFx.Tests.BuiltinMathCompilationTests.Run();

@@ -27,6 +27,7 @@ public sealed class GraphNodeViewModel : ObservableObject
     private bool _isDetailsExpanded;
     private FCurveSnapshot? _curve;
     private IReadOnlyList<NodeParameterSnapshot>? _parameters;
+    private string _diagnosticText = string.Empty;
 
     public Guid Id { get; }
 
@@ -102,7 +103,17 @@ public sealed class GraphNodeViewModel : ObservableObject
         }
     }
 
-    public IBrush BorderBrush => ThemeSettingsService.EditorBrush(IsSelected ? "NodeSelectedBorder" : "NodeBorder");
+    public bool HasDiagnostics => _diagnosticText.Length != 0;
+    public string DiagnosticText => _diagnosticText;
+    public IBrush BorderBrush => HasDiagnostics ? Brushes.Red :
+        ThemeSettingsService.EditorBrush(IsSelected ? "NodeSelectedBorder" : "NodeBorder");
+
+    internal void SetDiagnostics(string text)
+    {
+        if (!SetProperty(ref _diagnosticText, text, nameof(DiagnosticText))) return;
+        OnPropertyChanged(nameof(HasDiagnostics));
+        OnPropertyChanged(nameof(BorderBrush));
+    }
 
     public string PortType => Definition.PortType;
     public string DisplayPortType => GraphNodeDefinition.DisplayPortType(PortType);
@@ -171,7 +182,8 @@ public sealed class GraphNodeViewModel : ObservableObject
 
     internal void SetNameValue(string value)
     {
-        SetProperty(ref _name, value, nameof(Name));
+        if (SetProperty(ref _name, value, nameof(Name)))
+            _workspace.RefreshTypeDiagnostics();
     }
 
     internal void SetCurveValue(FCurveSnapshot value)
@@ -197,6 +209,7 @@ public sealed class GraphNodeViewModel : ObservableObject
             OnPropertyChanged(nameof(CommentWidth));
             OnPropertyChanged(nameof(CommentHeight));
             OnPropertyChanged(nameof(RenderedWidth));
+            _workspace.RefreshTypeDiagnostics();
         }
     }
 

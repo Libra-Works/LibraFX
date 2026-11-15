@@ -67,6 +67,7 @@ public sealed class VfxProgram
     public static VfxProgram Compile(GraphSnapshot graph)
     {
         GraphValidator.Validate(graph);
+        GraphTypeDiagnostics.Validate(graph);
         _ = RenderProgramBindings.CreateScene(graph, 0);
         var nodes = Flatten(graph)
             .Where(node => node.Kind != GraphNodeKind.Comment && node.Kind != GraphNodeKind.GraphGroup &&

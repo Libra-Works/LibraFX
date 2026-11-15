@@ -38,6 +38,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     public ObservableCollection<GraphConnectionViewModel> Connections { get; } = [];
 
     public ObservableCollection<GraphConnectionViewModel> SelectedConnections { get; } = [];
+    public ObservableCollection<GraphProblemViewModel> TypeProblems { get; } = [];
 
     public IReadOnlyList<GraphNodeViewModel> SelectedNodes => _selectedNodes;
 
@@ -107,6 +108,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     {
         RefreshBreadcrumbs();
         OnPropertyChanged(nameof(SelectedNodeType));
+        RefreshTypeDiagnostics();
         if (_connectionStatusKey is not { } key) return;
         IsRefreshingLocalizedText = true;
         try
@@ -138,9 +140,35 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         NodeDefinitions = nodeDefinitions;
         Nodes.CollectionChanged += OnNodesChanged;
         DeleteSelectedNodeCommand = new RelayCommand(DeleteSelectedNode, () => HasSelection);
-        Connections.CollectionChanged += (_, _) => RefreshSelectedConnections();
+        Connections.CollectionChanged += (_, _) =>
+        {
+            RefreshSelectedConnections();
+            RefreshTypeDiagnostics();
+        };
         _history.Configure(CreateSnapshot, RestoreFromHistory, ValidateSnapshot);
         MessageLocalization.Observe(this, static graph => graph.RefreshLocalizedText());
+    }
+
+    internal void RefreshTypeDiagnostics()
+    {
+        var problems = new List<GraphProblemViewModel>();
+        foreach (var connection in Connections)
+        {
+            if (!Nodes.Contains(connection.Source) || !Nodes.Contains(connection.Target)) continue;
+            var source = connection.Source.Definition.GetOutputPortType(connection.SourcePortId);
+            var expected = connection.Target.Definition.GetInputPortType(connection.TargetPortId);
+            if (source is null || expected is null || source == expected) continue;
+            var text = LocalizationService.Shared.Get("Messages.GraphTypeMismatch",
+                connection.Target.Name, connection.Target.Id, connection.TargetPortId ?? "input",
+                connection.Source.Name, connection.Source.Id,
+                GraphNodeDefinition.DisplayPortType(source), GraphNodeDefinition.DisplayPortType(expected));
+            problems.Add(new GraphProblemViewModel(connection.Target, text));
+        }
+        foreach (var node in Nodes)
+            node.SetDiagnostics(string.Join(Environment.NewLine,
+                problems.Where(problem => problem.Node == node).Select(problem => problem.Message)));
+        TypeProblems.Clear();
+        foreach (var problem in problems) TypeProblems.Add(problem);
     }
 
     private void OnNodesChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -1215,12 +1243,10 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             commands.Add(new SetNodeParametersCommand(node, node.Parameters, updated, "engine asset"));
         foreach (var connection in Connections.Where(connection => connection.Target == node).ToArray())
         {
-            var sourceType = connection.Source.Definition.GetOutputPortType(connection.SourcePortId);
-            var targetType = newDefinition.GetInputPortType(connection.TargetPortId);
             var sourceCategory = connection.Source.Definition.GetOutputPortCategory(connection.SourcePortId);
             var targetCategory = newDefinition.GetInputPortCategory(connection.TargetPortId);
             var validPort = newDefinition.InputPorts?.Any(port => port.Id == connection.TargetPortId) == true;
-            if (!validPort || sourceType is null || sourceType != targetType || sourceCategory != targetCategory)
+            if (!validPort || sourceCategory != targetCategory)
                 commands.Add(new RemoveGraphConnectionCommand(this, connection));
         }
         if (commands.Count != 0)

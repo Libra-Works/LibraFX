@@ -1,0 +1,25 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:LiberaFx.ViewModels"
+        x:Class="LiberaFx.Views.ProblemsWindow"
+        x:DataType="vm:GraphWorkspaceViewModel"
+        Title="{DynamicResource Text.Messages.GraphProblemsTitle}"
+        Width="800" Height="400" MinWidth="400" MinHeight="200"
+        Background="{DynamicResource EffectWindowBackgroundBrush}">
+    <Grid RowDefinitions="Auto,*" Margin="12" RowSpacing="8">
+        <TextBlock Text="{DynamicResource Text.Messages.GraphProblemsHelp}" TextWrapping="Wrap" />
+        <ScrollViewer Grid.Row="1">
+            <ItemsControl ItemsSource="{Binding TypeProblems}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:GraphProblemViewModel">
+                        <Button Command="{Binding SelectCommand}" HorizontalAlignment="Stretch"
+                                AutomationProperties.Name="{Binding Message}" ToolTip.Tip="{Binding Message}"
+                                Margin="0,2">
+                            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</Window>
