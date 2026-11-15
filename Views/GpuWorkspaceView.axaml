@@ -2,7 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="LiberaFx.Views.GpuWorkspaceView"
              Background="{DynamicResource EffectWindowBackgroundBrush}"
-             FontSize="12" KeyDown="OnKeyDown">
+             FontSize="12" Focusable="True" KeyDown="OnKeyDown">
   <UserControl.Styles>
     <Style Selector="Button"><Setter Property="FontSize" Value="12" /><Setter Property="Padding" Value="8,4" /></Style>
     <Style Selector="TextBox"><Setter Property="FontSize" Value="12" /><Setter Property="MinHeight" Value="26" /></Style>
@@ -44,9 +44,23 @@
         </ScrollViewer>
         <TabControl x:Name="KernelTabs" IsVisible="False">
           <TabItem Header="{DynamicResource Text.Gpu.Visual}">
-            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-              <Canvas x:Name="NodeCanvas" Width="2200" Height="1600" Background="Transparent" />
-            </ScrollViewer>
+            <Grid RowDefinitions="Auto,*">
+              <StackPanel Orientation="Horizontal" Spacing="6" Margin="6">
+                <Button Content="−" Click="OnZoomOut" />
+                <Button x:Name="ZoomLabel" Content="100%" Click="OnResetZoom" />
+                <Button Content="+" Click="OnZoomIn" />
+                <Button x:Name="FrameButton" Content="{DynamicResource Text.Gpu.Frame}" Click="OnFrame" IsEnabled="False" />
+                <TextBlock Text="{DynamicResource Text.Gpu.Gestures}" VerticalAlignment="Center"
+                           Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+              </StackPanel>
+              <ScrollViewer x:Name="GpuGraphScrollViewer" Grid.Row="1" Focusable="True"
+                            HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                <Grid x:Name="GpuZoomHost" HorizontalAlignment="Left" VerticalAlignment="Top">
+                  <Canvas x:Name="NodeCanvas" Width="2200" Height="1600" Background="Transparent"
+                          HorizontalAlignment="Left" VerticalAlignment="Top" RenderTransformOrigin="0%,0%" />
+                </Grid>
+              </ScrollViewer>
+            </Grid>
           </TabItem>
           <TabItem Header="{DynamicResource Text.Gpu.Text}">
             <Grid RowDefinitions="Auto,*,Auto" Margin="10">

@@ -6,7 +6,20 @@ The top-down ordered flow has Spawn, Update and RenderBillboard steps. Open a
 kernel by double-clicking its flow card or clicking Open kernel.
 
 Visual editing: choose an operation and result type in the GPU-only palette.
-Drag node titles to move. Click an output and then a target input to connect.
+Drag any noninteractive node body (including its title or blank space) to move.
+Inputs are on the left, outputs on the right: drag between pins, or click an
+output and then a target input. Pins have independent 24-DIP hit targets.
+The ordinary graph's grid, pan-button/zoom-modifier settings and anchored wheel
+zoom are reused. Free dragging supports negative coordinates; the grid is visual,
+not mandatory snapping. Right-click / Space opens GPU-only creation actions.
+Ctrl-click toggles selection; background drag selects a rectangle. The configured
+graph shortcuts select all, delete, copy/cut/paste, frame selection and zoom.
+Selected nodes drag together, with one undo step. A click or motion under 3 DIP
+does not move or create history. Escape cancels an active gesture first.
+Clipboard copies selected GPU value nodes and their internal connections, not
+attribute-write statements; pasted nodes receive fresh IDs in one undo step.
+Palette math/noise nodes use Core's typed default operands (editable Constant
+nodes); fixed-output operations such as Dot and Curl Noise infer the correct type.
 Select a node to edit constants/types/attribute reads/uniforms/components,
 disconnect inputs or delete. Attribute Writes selects the selected value node
 and its destination attribute. Type errors remain editable; red borders and

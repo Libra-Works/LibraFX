@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using LibraGpu.Core;
 using LiberaFx.Services;
+using System.Text.Json;
 
 namespace LiberaFx.ViewModels;
 
@@ -15,47 +16,78 @@ public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
     public string Breadcrumb => "CPU > " + Graph.Nodes.FirstOrDefault(n => n.Id == ContainerId)?.Name +
         (Kernel is { } k ? " > " + k.Id : "");
     public IReadOnlyList<GpuOperationDescriptor> Palette => GpuOperationRegistry.Operations.Values.ToArray();
-    public IReadOnlyList<GpuDiagnostic> Diagnostics => GpuParticleEditorService.Diagnostics(State);
+    private IReadOnlyList<GpuDiagnostic>? _diagnostics;
+    private string? _text;
+    private JsonElement? _stateValue;
+    public IReadOnlyList<GpuDiagnostic> Diagnostics => _diagnostics ??= GpuParticleEditorService.Diagnostics(State);
     public string Status { get; private set; } = "Source export only · GPU runtime execution unavailable";
     public event EventHandler? Refreshed;
+    public event EventHandler? LayoutChanged;
+    public event EventHandler? StatusChanged;
     public GpuWorkspaceViewModel(GraphWorkspaceViewModel graph, Guid container)
     {
         Graph = graph; ContainerId = container;
         State = GpuParticleEditorService.ReadState(graph.GetNode(container));
+        _stateValue = StateValue(graph.GetNode(container));
         graph.History.StateChanged += OnHistoryChanged;
     }
     private void OnHistoryChanged(object? sender, EventArgs e)
     {
         var node = Graph.Nodes.FirstOrDefault(n => n.Id == ContainerId);
         if (node is null) { Refreshed?.Invoke(this, EventArgs.Empty); return; }
+        var value = StateValue(node);
+        if (Same(_stateValue, value)) return;
+        var layoutOnly = SameProperty(_stateValue, value, "program") &&
+            SameProperty(_stateValue, value, "drafts") && SameProperty(_stateValue, value, "resourceAssetPaths");
         State = GpuParticleEditorService.ReadState(node);
-        Refreshed?.Invoke(this, EventArgs.Empty);
+        _stateValue = value;
+        if (layoutOnly) LayoutChanged?.Invoke(this, EventArgs.Empty);
+        else
+        {
+            _diagnostics = null;
+            _text = null;
+            Refreshed?.Invoke(this, EventArgs.Empty);
+        }
     }
+    private static JsonElement? StateValue(GraphNodeViewModel node) =>
+        node.Parameters?.FirstOrDefault(p => p.Id == GpuParticleEditorService.ParameterId)?.Value;
+    private static bool Same(JsonElement? left, JsonElement? right) =>
+        left is null && right is null || left is { } a && right is { } b && JsonElement.DeepEquals(a, b);
+    private static bool SameProperty(JsonElement? left, JsonElement? right, string property) =>
+        left is { ValueKind: JsonValueKind.Object } a && right is { ValueKind: JsonValueKind.Object } b &&
+        a.TryGetProperty(property, out var av) && b.TryGetProperty(property, out var bv) &&
+        JsonElement.DeepEquals(av, bv);
     public void EnterKernel(string id)
     {
         if (!State.Program.Kernels.Any(k => k.Id == id)) throw new ArgumentException("Kernel not found.");
-        KernelId = id; Refreshed?.Invoke(this, EventArgs.Empty);
+        KernelId = id; _text = null; Refreshed?.Invoke(this, EventArgs.Empty);
     }
-    public void Back() { KernelId = null; Refreshed?.Invoke(this, EventArgs.Empty); }
+    public void Back() { KernelId = null; _text = null; Refreshed?.Invoke(this, EventArgs.Empty); }
     public void Edit(GpuEdit first, params GpuEdit[] remaining)
     {
-        State = GpuParticleEditorService.Apply(Graph, ContainerId, [first, .. remaining]);
-        Refreshed?.Invoke(this, EventArgs.Empty);
+        GpuParticleEditorService.Apply(Graph, ContainerId, [first, .. remaining]);
     }
     public string Text
     {
         get
         {
+            if (_text is not null) return _text;
             if (Kernel is not { } k) return "";
-            if (State.Drafts.TryGetValue(k.Id, out var draft)) return draft.Text;
-            try { return GpuDsl.Emit(k).Text; }
+            if (State.Drafts.TryGetValue(k.Id, out var draft)) return _text = draft.Text;
+            try { return _text = GpuDsl.Emit(k).Text; }
             catch (GpuValidationException) { return ""; }
         }
     }
-    public GpuNode Add(GpuOp op, GpuType type)
+    public GpuNode Add(GpuOp op, GpuType type, GpuPosition? position = null)
     {
         if (Kernel is not { } k) throw new InvalidOperationException("Open a kernel.");
         var components = type switch { GpuType.Float2 => 2, GpuType.Float3 => 3, GpuType.Float4 => 4, _ => 1 };
+        var descriptors = GpuOperationRegistry.GetDefaultInputs(op, type);
+        if (op == GpuOp.Compose) descriptors = descriptors.Take(Math.Max(2, components)).ToArray();
+        if (GpuOperationRegistry.TryInferType(op, descriptors.Select(d => d.DefaultType).ToArray(), out var inferred))
+            type = inferred;
+        var defaults = descriptors.Select(d => new GpuNode { Id = "n_" + Guid.NewGuid().ToString("N"),
+            Op = GpuOp.Constant, Type = d.DefaultType, Value = d.DefaultValue.ToList() }).ToArray();
         var n = new GpuNode
         {
             Id = "n_" + Guid.NewGuid().ToString("N"), Op = op, Type = type,
@@ -63,10 +95,61 @@ public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
             Attribute = op == GpuOp.ReadAttribute ? ParticleAbi.Attributes.First(a => a.Type == type).Id : null,
             Uniform = op == GpuOp.ReadUniform ? ParticleAbi.Uniforms.First(u => u.Value == type).Key : null,
             ComponentIndex = op == GpuOp.Component ? 0 : null,
-            Inputs = Enumerable.Repeat("", GpuOperationRegistry.Operations[op].MinInputs).ToList()
+            Inputs = defaults.Select(d => d.Id).ToList()
         };
-        Edit(new() { Action = "add", KernelId = k.Id, Node = n });
+        position ??= new(30 + k.Nodes.Count % 4 * 280, 30 + k.Nodes.Count / 4 * 160);
+        var edits = new List<GpuEdit>();
+        for (var i = 0; i < defaults.Length; i++)
+        {
+            edits.Add(new() { Action = "add", KernelId = k.Id, Node = defaults[i] });
+            edits.Add(new() { Action = "move", KernelId = k.Id, NodeId = defaults[i].Id,
+                Position = new(position.X - 280, position.Y + i * 105) });
+        }
+        edits.Add(new() { Action = "add", KernelId = k.Id, Node = n });
+        edits.Add(new() { Action = "move", KernelId = k.Id, NodeId = n.Id, Position = position });
+        Edit(edits[0], edits.Skip(1).ToArray());
         return n;
+    }
+    private const string ClipboardPrefix = "LIBERA-FX-GPU-GRAPH-1\n";
+    private sealed record ClipboardNode(GpuNode Node, GpuPosition Position);
+    public string CopyNodes(IEnumerable<string> selection)
+    {
+        if (Kernel is not { } kernel) throw new InvalidOperationException("Open a kernel.");
+        var ids = selection.ToHashSet();
+        var nodes = kernel.Nodes.Where(n => ids.Contains(n.Id)).Select(n => new ClipboardNode(
+            n with { Inputs = n.Inputs.Select(input => ids.Contains(input) ? input : "").ToList(), SourceSpan = null },
+            State.Positions.GetValueOrDefault(GpuParticleEditorService.Key(kernel.Id, n.Id)) ??
+                new(30 + kernel.Nodes.IndexOf(n) % 4 * 280, 30 + kernel.Nodes.IndexOf(n) / 4 * 160))).ToArray();
+        var text = ClipboardPrefix + JsonSerializer.Serialize(nodes);
+        if (nodes.Length == 0 || text.Length > 1_000_000) throw new ArgumentException("GPU clipboard selection is empty or too large.");
+        return text;
+    }
+    public IReadOnlyList<string> PasteNodes(string text, GpuPosition position)
+    {
+        if (Kernel is not { } kernel) throw new InvalidOperationException("Open a kernel.");
+        if (text.Length > 1_000_000 || !text.StartsWith(ClipboardPrefix, StringComparison.Ordinal))
+            throw new ArgumentException("Clipboard does not contain GPU graph nodes.");
+        var nodes = JsonSerializer.Deserialize<ClipboardNode[]>(text[ClipboardPrefix.Length..]);
+        if (nodes is null || nodes.Length is 0 or > 4096 || nodes.Any(n => n is null || n.Node is null ||
+            n.Position is null || !double.IsFinite(n.Position.X) || !double.IsFinite(n.Position.Y) ||
+            string.IsNullOrEmpty(n.Node.Id) || n.Node.Inputs is null ||
+            !Enum.IsDefined(n.Node.Op) || !Enum.IsDefined(n.Node.Type)))
+            throw new ArgumentException("Invalid GPU clipboard nodes.");
+        if (nodes.Select(n => n.Node.Id).Distinct().Count() != nodes.Length)
+            throw new ArgumentException("Duplicate GPU clipboard node IDs.");
+        var ids = nodes.ToDictionary(n => n.Node.Id, _ => "n_" + Guid.NewGuid().ToString("N"));
+        var left = nodes.Min(n => n.Position.X); var top = nodes.Min(n => n.Position.Y);
+        var edits = new List<GpuEdit>();
+        foreach (var source in nodes)
+        {
+            var node = source.Node with { Id = ids[source.Node.Id],
+                Inputs = source.Node.Inputs.Select(input => ids.GetValueOrDefault(input) ?? "").ToList(), SourceSpan = null };
+            edits.Add(new() { Action = "add", KernelId = kernel.Id, Node = node });
+            edits.Add(new() { Action = "move", KernelId = kernel.Id, NodeId = node.Id,
+                Position = new(position.X + source.Position.X - left, position.Y + source.Position.Y - top) });
+        }
+        Edit(edits[0], edits.Skip(1).ToArray());
+        return ids.Values.ToArray();
     }
     public void AddFlow(FlowKind kind)
     {
@@ -85,13 +168,13 @@ public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
         {
             compiled = GpuParticleEditorService.Compile(State);
             Status = $"SourceExport · {compiled.ContentHash} · RuntimeExecuted=false";
-            Refreshed?.Invoke(this, EventArgs.Empty);
+            StatusChanged?.Invoke(this, EventArgs.Empty);
             return true;
         }
         catch (GpuValidationException e)
         {
             compiled = null; Status = string.Join("\n", e.Diagnostics.Select(d => d.Code + ": " + d.Message));
-            Refreshed?.Invoke(this, EventArgs.Empty); return false;
+            StatusChanged?.Invoke(this, EventArgs.Empty); return false;
         }
     }
     public void Dispose() => Graph.History.StateChanged -= OnHistoryChanged;

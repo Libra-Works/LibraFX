@@ -2,10 +2,12 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
-using Line = Avalonia.Controls.Shapes.Line;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using LibraGpu.Core;
 using LiberaFx.Services;
 using LiberaFx.ViewModels;
@@ -20,9 +22,86 @@ public partial class GpuWorkspaceView : UserControl
     private string? _wireSource;
     private bool _refreshing;
     private bool _drafting;
+    private string _displayedText = "";
+    private readonly Dictionary<string, NodeVisual> _nodeVisuals = [];
+    private readonly List<WireVisual> _wireVisuals = [];
+    private GraphSceneLayer? _grid;
+    private readonly GpuGraphViewport _viewport;
+    private readonly HashSet<string> _selectedNodes = [];
+    private (IPointer Pointer, Point Start, string[] Before, Border Box)? _marquee;
+    private Point _pastePosition = new(80, 80);
+    private string? _visualKernelId;
+    private NodeDrag? _drag;
+    private ConnectionDrag? _connectionDrag;
+    private bool _framePending;
+    private bool _anchorsDirty;
+    private readonly Action<TimeSpan> _renderFrame;
+
+    private sealed class NodeVisual(GpuNode model, Border border, TextBlock title, Button output, Button[] inputs,
+        TextBlock outputLabel, TextBlock[] inputLabels)
+    {
+        public GpuNode Model = model;
+        public readonly Border Border = border;
+        public readonly TextBlock Title = title;
+        public readonly Button Output = output;
+        public readonly Button[] Inputs = inputs;
+        public readonly TextBlock OutputLabel = outputLabel;
+        public readonly TextBlock[] InputLabels = inputLabels;
+        public readonly TranslateTransform Translation = new();
+        public readonly List<WireVisual> Wires = [];
+        public Point Position;
+        public Vector PreviewOffset;
+        public Vector CanvasOrigin;
+        public bool AnchorInitialized;
+        public bool IsHovered;
+        public Point OutputAnchor;
+        public readonly Point[] InputAnchors = new Point[inputs.Length];
+        public Point Origin => Position + PreviewOffset;
+        public Point CanvasPosition => Origin + CanvasOrigin;
+        public void SyncTransform()
+        {
+            if (Border.Bounds.Width == 0) return;
+            // Keep logical positions exact even when the layout anchor is rounded at fractional DPI.
+            Translation.X = CanvasPosition.X - Border.Bounds.X;
+            Translation.Y = CanvasPosition.Y - Border.Bounds.Y;
+        }
+    }
+    private sealed record WireVisual(NodeVisual Source, NodeVisual Target, int Input, GpuConnectionCurve Curve);
+    private sealed class NodeDrag(NodeVisual visual, IPointer pointer, Point start, Point startView)
+    {
+        public readonly NodeVisual Visual = visual;
+        public readonly IPointer Pointer = pointer;
+        public readonly Point Start = start;
+        public readonly Point StartView = startView;
+        public readonly Point Original = visual.Position;
+        public Point Latest = start;
+        public bool IsDragging;
+        public (NodeVisual Visual, Point Position)[] Members = [];
+    }
+    private sealed class ConnectionDrag(NodeVisual source, IPointer pointer, GpuConnectionCurve preview, Point latest)
+    {
+        public readonly NodeVisual Source = source;
+        public readonly IPointer Pointer = pointer;
+        public readonly GpuConnectionCurve Preview = preview;
+        public Point Latest = latest;
+        public readonly Point Start = latest;
+    }
     public GpuWorkspaceView()
     {
         InitializeComponent();
+        _viewport = new(GpuGraphScrollViewer, GpuZoomHost, NodeCanvas);
+        _viewport.Changed += OnViewportChanged;
+        _viewport.ContextRequested += OpenGraphContext;
+        NodeCanvas.PointerPressed += OnBackgroundPressed;
+        NodeCanvas.PointerMoved += OnBackgroundMoved;
+        NodeCanvas.PointerReleased += OnBackgroundReleased;
+        NodeCanvas.PointerCaptureLost += (_, _) => CancelMarquee();
+        _renderFrame = OnRenderFrame;
+        NodeCanvas.LayoutUpdated += (_, _) => { if (_anchorsDirty) UpdatePortAnchors(); };
+        NodeCanvas.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == Visual.RenderTransformProperty) _grid?.InvalidateVisual();
+        };
         TypeChoice.ItemsSource = Enum.GetValues<GpuType>().Where(t => t != GpuType.Quaternion).ToArray();
         TypeChoice.SelectedItem = GpuType.Float;
         ExportFormat.ItemsSource = new[] { "json", "usf", "hlsl", "compute" };
@@ -36,34 +115,70 @@ public partial class GpuWorkspaceView : UserControl
     }
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
+        FinishDrag(commit: false);
+        CancelConnectionDrag();
+        CancelMarquee();
         ThemeSettingsService.EditorColorsChanged -= OnAppearanceChanged;
         LocalizationService.Shared.LanguageChanged -= OnAppearanceChanged;
         base.OnDetachedFromVisualTree(e);
     }
-    private void OnAppearanceChanged(object? sender, EventArgs e) => Refresh();
+    private void OnAppearanceChanged(object? sender, EventArgs e)
+    {
+        _grid?.InvalidateVisual();
+        Refresh();
+    }
     public void Open(GraphWorkspaceViewModel graph, Guid container)
     {
         DisposeWorkspace();
         Workspace = new(graph, container);
         Workspace.Refreshed += OnRefreshed;
+        Workspace.LayoutChanged += OnLayoutChanged;
+        Workspace.StatusChanged += OnStatusChanged;
+        _visualKernelId = null;
         _selection = _wireSource = null;
+        _selectedNodes.Clear();
         IsVisible = true;
         Refresh();
         Focus();
     }
     public void CloseWorkspace()
     {
+        FinishDrag(commit: true);
+        CancelConnectionDrag();
+        CancelMarquee();
         DisposeWorkspace(); IsVisible = false;
         CloseRequested?.Invoke(this, EventArgs.Empty);
     }
     private void DisposeWorkspace()
     {
         if (Workspace is not { } vm) return;
-        vm.Refreshed -= OnRefreshed; vm.Dispose(); Workspace = null;
+        FinishDrag(commit: false);
+        CancelConnectionDrag();
+        CancelMarquee();
+        vm.Refreshed -= OnRefreshed;
+        vm.LayoutChanged -= OnLayoutChanged;
+        vm.StatusChanged -= OnStatusChanged;
+        vm.Dispose(); Workspace = null;
+    }
+    private void OnStatusChanged(object? sender, EventArgs e)
+    {
+        if (Workspace is { } vm) Status.Text = vm.Status;
+    }
+    private void OnLayoutChanged(object? sender, EventArgs e)
+    {
+        FinishDrag(commit: false);
+        CancelConnectionDrag();
+        ApplySavedPositions();
     }
     private void OnRefreshed(object? sender, EventArgs e)
     {
-        if (Workspace is { } vm && !vm.Graph.Nodes.Any(n => n.Id == vm.ContainerId)) { CloseWorkspace(); return; }
+        if (Workspace is { } vm && !vm.Graph.Nodes.Any(n => n.Id == vm.ContainerId))
+        {
+            FinishDrag(commit: false);
+            CancelConnectionDrag();
+            CloseWorkspace();
+            return;
+        }
         if (!_drafting) Refresh();
         else RefreshDiagnostics();
     }
@@ -98,21 +213,22 @@ public partial class GpuWorkspaceView : UserControl
             else
             {
                 foreach (var op in vm.Palette)
-                    Palette.Children.Add(Button("+ " + op.Op, () => Run(() =>
+                    Palette.Children.Add(Button("+ " + op.DisplayName, () => Run(() =>
                     {
                         var type = TypeChoice.SelectedItem is GpuType selected ? selected : GpuType.Float;
                         if (op.Op == GpuOp.ReadUniform && !ParticleAbi.Uniforms.Values.Contains(type))
                             throw new ArgumentException("Uniforms support Float and Float3.");
                         if (op.Op == GpuOp.ReadAttribute && !ParticleAbi.Attributes.Any(a => a.Type == type))
                             throw new ArgumentException("No ABI attribute has this type.");
-                        _selection = vm.Add(op.Op, type).Id; Refresh();
+                        SelectVisualNode(vm.Add(op.Op, type).Id);
                     })));
                 Palette.Children.Add(Button("+ Attribute write / 属性出力", () =>
                 {
                     Status.Text = "Select a value node, then choose an attribute under Writes / 値ノードを選択し、属性出力を指定";
                 }));
                 BuildGraph();
-                KernelText.Text = vm.Text;
+                _displayedText = vm.Text;
+                KernelText.Text = _displayedText;
             }
             BuildInspector();
             BuildWrites();
@@ -181,76 +297,493 @@ public partial class GpuWorkspaceView : UserControl
         ?? new(30 + index % 4 * 280, 30 + index / 4 * 160);
     private void BuildGraph()
     {
-        NodeCanvas.Children.Clear();
         var vm = Workspace!; var k = vm.Kernel!;
-        var positions = k.Nodes.Select((n, i) => (n.Id, P: Position(k, n, i))).ToDictionary(p => p.Id, p => p.P);
-        foreach (var n in k.Nodes)
-            for (var input = 0; input < n.Inputs.Count; input++)
-                if (positions.TryGetValue(n.Inputs[input], out var source))
+        if (_visualKernelId != k.Id) _selectedNodes.Clear();
+        _selectedNodes.IntersectWith(k.Nodes.Select(n => n.Id));
+        if (_selection is not null && !_selectedNodes.Contains(_selection)) _selection = _selectedNodes.LastOrDefault();
+        var sameTopology = _visualKernelId == k.Id && _nodeVisuals.Count == k.Nodes.Count &&
+            k.Nodes.All(n => _nodeVisuals.TryGetValue(n.Id, out var visual) &&
+                visual.Model.Op == n.Op && visual.Model.Inputs.SequenceEqual(n.Inputs));
+        if (!sameTopology)
+        {
+            FinishDrag(commit: false);
+            CancelConnectionDrag();
+            NodeCanvas.Children.Clear();
+            _grid = new GraphSceneLayer { GridOnly = true, DataContext = null, IsHitTestVisible = false };
+            NodeCanvas.Children.Add(_grid);
+            _viewport.SetGrid(_grid);
+            _nodeVisuals.Clear();
+            _wireVisuals.Clear();
+            _visualKernelId = k.Id;
+            foreach (var n in k.Nodes)
+            {
+                var panel = new StackPanel { Spacing = 3 };
+                var title = new TextBlock { Margin = new Thickness(4, 0), MinHeight = 26, Tag = n.Id };
+                panel.Children.Add(title);
+                var output = PortButton("gpu-output");
+                var outputLabel = PortLabel();
+                outputLabel.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right;
+                var outputRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+                outputRow.Children.Add(outputLabel);
+                Grid.SetColumn(output, 1);
+                outputRow.Children.Add(output);
+                panel.Children.Add(outputRow);
+                var inputs = new Button[GpuOperationRegistry.Operations[n.Op].MaxInputs];
+                var inputLabels = new TextBlock[inputs.Length];
+                for (var i = 0; i < inputs.Length; i++)
                 {
-                    var target = positions[n.Id];
-                    var line = new Line
+                    var input = i;
+                    inputs[i] = PortButton("gpu-input-" + i);
+                    inputs[i].Click += (_, _) => Run(() =>
                     {
-                        StartPoint = new(source.X + 230, source.Y + 45),
-                        EndPoint = new(target.X, target.Y + 70 + input * 27),
-                        Stroke = Brushes.CornflowerBlue, StrokeThickness = 2, IsHitTestVisible = false
-                    };
-                    NodeCanvas.Children.Add(line);
+                        if (_wireSource is null) { SelectVisualNode(n.Id); return; }
+                        vm.Edit(new() { Action = "connect", KernelId = k.Id, NodeId = n.Id, SourceId = _wireSource, Input = input });
+                        _wireSource = null;
+                    });
+                    inputLabels[i] = PortLabel();
+                    inputLabels[i].Margin = new Thickness(4, 0, 0, 0);
+                    var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+                    row.Children.Add(inputs[i]);
+                    Grid.SetColumn(inputLabels[i], 1);
+                    row.Children.Add(inputLabels[i]);
+                    panel.Children.Add(row);
                 }
+                var border = new Border
+                {
+                    Width = 230, Child = panel, Padding = new Thickness(6), CornerRadius = new CornerRadius(5),
+                    Background = this.FindResource("EffectSurfaceBrush") as IBrush ?? Brushes.DimGray,
+                    BorderThickness = new Thickness(1), Tag = n.Id, Cursor = new Cursor(StandardCursorType.SizeAll)
+                };
+                var visual = new NodeVisual(n, border, title, output, inputs, outputLabel, inputLabels)
+                { CanvasOrigin = _viewport.Origin };
+                border.RenderTransform = visual.Translation;
+                _nodeVisuals.Add(n.Id, visual);
+                border.PointerPressed += (_, e) => BeginDrag(visual, e);
+                border.PointerMoved += (_, e) => MoveDrag(visual, e);
+                border.PointerReleased += (_, e) => ReleaseDrag(visual, e);
+                border.PointerCaptureLost += (_, _) =>
+                {
+                    if (_drag?.Visual == visual) FinishDrag(commit: true);
+                };
+                output.AddHandler(InputElement.PointerPressedEvent, (_, e) => BeginConnectionDrag(visual, e),
+                    RoutingStrategies.Tunnel);
+                output.AddHandler(InputElement.PointerMovedEvent, (_, e) =>
+                {
+                    if (_connectionDrag is not { } connection || connection.Source != visual || connection.Pointer != e.Pointer) return;
+                    connection.Latest = e.GetPosition(NodeCanvas);
+                    ScheduleFrame();
+                    e.Handled = true;
+                }, RoutingStrategies.Tunnel);
+                output.AddHandler(InputElement.PointerReleasedEvent, (_, e) => ReleaseConnectionDrag(visual, e),
+                    RoutingStrategies.Tunnel);
+                output.PointerCaptureLost += (_, _) =>
+                {
+                    if (_connectionDrag?.Source == visual) CancelConnectionDrag();
+                };
+                border.PointerEntered += (_, _) => { visual.IsHovered = true; UpdateSelectionStyles(); };
+                border.PointerExited += (_, _) => { visual.IsHovered = false; UpdateSelectionStyles(); };
+                border.SizeChanged += (_, _) => { _anchorsDirty = true; ScheduleFrame(); };
+                NodeCanvas.Children.Add(border);
+            }
+            foreach (var n in k.Nodes)
+                for (var input = 0; input < n.Inputs.Count; input++)
+                    if (_nodeVisuals.TryGetValue(n.Inputs[input], out var source))
+                    {
+                        var target = _nodeVisuals[n.Id];
+                        var curve = new GpuConnectionCurve { Width = NodeCanvas.Width, Height = NodeCanvas.Height,
+                            StrokeThickness = 2, IsHitTestVisible = false };
+                        var wire = new WireVisual(source, target, input, curve);
+                        _wireVisuals.Add(wire);
+                        source.Wires.Add(wire);
+                        target.Wires.Add(wire);
+                        NodeCanvas.Children.Insert(1, curve);
+                    }
+            _anchorsDirty = true;
+        }
         foreach (var n in k.Nodes)
         {
-            var p = positions[n.Id];
-            var panel = new StackPanel { Spacing = 3 };
-            var title = new TextBlock { Text = $"{n.Op} : {n.Type}", Margin = new Thickness(4), Cursor = new Cursor(StandardCursorType.SizeAll) };
-            panel.Children.Add(title);
-            var output = Button("● output : " + n.Type, () => { _wireSource = n.Id; Status.Text = "Select a target input / 接続先を選択"; });
-            panel.Children.Add(output);
-            var maxInputs = GpuOperationRegistry.Operations[n.Op].MaxInputs;
-            for (var i = 0; i < maxInputs; i++)
+            var visual = _nodeVisuals[n.Id];
+            visual.Model = n;
+            visual.Title.Text = $"{GpuOperationRegistry.Operations[n.Op].DisplayName} : {n.Type}";
+            visual.OutputLabel.Text = "output : " + n.Type;
+            visual.Output.Foreground = TypeBrush(n.Type);
+            for (var i = 0; i < visual.Inputs.Length; i++)
             {
-                var input = i;
-                var sourceId = n.Inputs.ElementAtOrDefault(input);
-                var sourceNode = k.Nodes.FirstOrDefault(x => x.Id == sourceId);
-                panel.Children.Add(Button($"○ in {input}  [{sourceNode?.Type.ToString() ?? "unconnected"}]", () =>
-                {
-                    if (_wireSource is null) { _selection = n.Id; BuildInspector(); return; }
-                    vm.Edit(new() { Action = "connect", KernelId = k.Id, NodeId = n.Id, SourceId = _wireSource, Input = input });
-                    _wireSource = null;
-                }));
+                var source = k.Nodes.FirstOrDefault(x => x.Id == n.Inputs.ElementAtOrDefault(i));
+                var defaults = GpuOperationRegistry.GetDefaultInputs(n.Op, n.Type);
+                var descriptor = defaults.ElementAtOrDefault(i);
+                visual.InputLabels[i].Text = $"{descriptor?.Id ?? "in " + i} : {source?.Type ?? descriptor?.DefaultType ?? n.Type}";
+                visual.Inputs[i].Foreground = TypeBrush(source?.Type ?? descriptor?.DefaultType ?? n.Type);
             }
-            var error = vm.Diagnostics.Any(d => d.KernelId == k.Id && d.NodeId == n.Id);
-            var border = new Border
+        }
+        UpdateSelectionStyles();
+        if (_drag is null) ApplySavedPositions();
+        Dispatcher.UIThread.Post(_viewport.Initialize);
+        ScheduleFrame();
+    }
+    private static Button PortButton(string tag) => new()
+    {
+        Content = "●", Tag = tag, Width = 24, Height = 24, MinWidth = 24, MinHeight = 24,
+        Padding = new Thickness(0), Background = Brushes.Transparent, BorderThickness = new Thickness(0),
+        Cursor = new Cursor(StandardCursorType.Hand),
+        HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center
+    };
+    private static TextBlock PortLabel() => new()
+    {
+        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
+        IsHitTestVisible = false
+    };
+    private static IBrush TypeBrush(GpuType type) => ThemeSettingsService.EditorBrush(
+        type == GpuType.Bool ? "GraphSignal" : "GraphParameter");
+    private void SelectVisualNode(string id, bool preserveGroup = false)
+    {
+        if (!preserveGroup || !_selectedNodes.Contains(id)) { _selectedNodes.Clear(); _selectedNodes.Add(id); }
+        _selection = id;
+        UpdateSelectionStyles();
+        BuildInspector();
+    }
+    private void UpdateSelectionStyles()
+    {
+        FrameButton.IsEnabled = _selectedNodes.Count > 0;
+        var errors = Workspace!.Diagnostics.Where(d => d.KernelId == Workspace.KernelId && d.NodeId is not null)
+            .Select(d => d.NodeId!).ToHashSet();
+        foreach (var visual in _nodeVisuals.Values)
+            visual.Border.BorderBrush = errors.Contains(visual.Model.Id) ? Brushes.Red :
+                _selectedNodes.Contains(visual.Model.Id) ? ThemeSettingsService.EditorBrush("NodeSelectedBorder") :
+                ThemeSettingsService.EditorBrush(visual.IsHovered ? "CurveAxis" : "NodeBorder");
+        foreach (var wire in _wireVisuals)
+            wire.Curve.Stroke = errors.Contains(wire.Target.Model.Id) ? Brushes.Red : TypeBrush(wire.Source.Model.Type);
+    }
+    private void ApplySavedPositions()
+    {
+        if (Workspace?.Kernel is not { } k || _visualKernelId != k.Id) return;
+        for (var i = 0; i < k.Nodes.Count; i++)
+        {
+            var n = k.Nodes[i];
+            if (!_nodeVisuals.TryGetValue(n.Id, out var visual)) continue;
+            var p = Position(k, n, i);
+            visual.Position = new(p.X, p.Y);
+            visual.PreviewOffset = default;
+            if (!visual.AnchorInitialized)
             {
-                Width = 230, Child = panel, Padding = new Thickness(6), CornerRadius = new CornerRadius(5),
-                Background = this.FindResource("EffectSurfaceBrush") as IBrush ?? Brushes.DimGray,
-                BorderBrush = error ? Brushes.Red : _selection == n.Id ? Brushes.CornflowerBlue : ThemeSettingsService.EditorBrush("NodeBorder"),
-                BorderThickness = new Thickness(1)
-            };
-            Canvas.SetLeft(border, p.X); Canvas.SetTop(border, p.Y);
-            Point? start = null;
-            title.PointerPressed += (_, e) =>
-            {
-                _selection = n.Id; BuildInspector();
-                if (!e.GetCurrentPoint(title).Properties.IsLeftButtonPressed) return;
-                start = e.GetPosition(NodeCanvas); e.Pointer.Capture(title); e.Handled = true;
-            };
-            title.PointerMoved += (_, e) =>
-            {
-                if (start is not { } s) return;
-                var delta = e.GetPosition(NodeCanvas) - s;
-                Canvas.SetLeft(border, Math.Max(0, p.X + delta.X)); Canvas.SetTop(border, Math.Max(0, p.Y + delta.Y));
-            };
-            title.PointerReleased += (_, e) =>
-            {
-                if (start is null) return;
-                start = null; e.Pointer.Capture(null);
-                var position = new GpuPosition(Canvas.GetLeft(border), Canvas.GetTop(border));
-                Run(() => vm.Edit(new() { Action = "move", KernelId = k.Id, NodeId = n.Id, Position = position }));
-            };
-            border.PointerPressed += (_, _) => { _selection = n.Id; BuildInspector(); };
-            NodeCanvas.Children.Add(border);
+                Canvas.SetLeft(visual.Border, p.X + _viewport.Origin.X);
+                Canvas.SetTop(visual.Border, p.Y + _viewport.Origin.Y);
+                visual.AnchorInitialized = true;
+            }
+            visual.SyncTransform();
+        }
+        _viewport.EnsureWorldBounds(NodeBounds(_nodeVisuals.Values));
+        UpdateWireGeometry(_wireVisuals);
+    }
+    private void BeginDrag(NodeVisual visual, PointerPressedEventArgs e)
+    {
+        if (IsInteractiveSource(e.Source as Visual, visual.Border) ||
+            !e.GetCurrentPoint(visual.Border).Properties.IsLeftButtonPressed) return;
+        FinishDrag(commit: false);
+        CancelConnectionDrag();
+        Focus();
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            if (!_selectedNodes.Add(visual.Model.Id)) _selectedNodes.Remove(visual.Model.Id);
+            _selection = _selectedNodes.LastOrDefault();
+            UpdateSelectionStyles(); BuildInspector(); e.Handled = true; return;
+        }
+        SelectVisualNode(visual.Model.Id, preserveGroup: true);
+        // Coordinates belong to the stationary canvas, never the translating captured node.
+        _drag = new(visual, e.Pointer, _viewport.ToGraphPoint(e.GetPosition(NodeCanvas)), e.GetPosition(this))
+        { Members = _selectedNodes.Where(_nodeVisuals.ContainsKey)
+            .Select(id => (_nodeVisuals[id], _nodeVisuals[id].Position)).ToArray() };
+        e.Pointer.Capture(visual.Border);
+        e.Handled = true;
+    }
+    private void MoveDrag(NodeVisual visual, PointerEventArgs e)
+    {
+        if (_drag is not { } drag || drag.Visual != visual || drag.Pointer != e.Pointer) return;
+        UpdateDragPoint(drag, e);
+        if (drag.IsDragging) ScheduleFrame();
+        e.Handled = true;
+    }
+    private void ReleaseDrag(NodeVisual visual, PointerReleasedEventArgs e)
+    {
+        if (_drag is not { } drag || drag.Visual != visual || drag.Pointer != e.Pointer) return;
+        UpdateDragPoint(drag, e);
+        FinishDrag(commit: true);
+        e.Handled = true;
+    }
+    private static bool IsInteractiveSource(Visual? source, Border node)
+    {
+        for (var current = source; current is not null && current != node; current = current.GetVisualParent())
+            if (current is Avalonia.Controls.Button or TextBox or NumericUpDown or Slider or Avalonia.Controls.Primitives.SelectingItemsControl)
+                return true;
+        return false;
+    }
+    private void UpdateDragPoint(NodeDrag drag, PointerEventArgs e)
+    {
+        drag.Latest = _viewport.ToGraphPoint(e.GetPosition(NodeCanvas));
+        var cursor = e.GetPosition(this);
+        var dx = cursor.X - drag.StartView.X;
+        var dy = cursor.Y - drag.StartView.Y;
+        drag.IsDragging |= dx * dx + dy * dy >= 9;
+    }
+    private void ScheduleFrame()
+    {
+        if (_framePending) return;
+        var top = TopLevel.GetTopLevel(this);
+        if (top is null) { OnRenderFrame(default); return; }
+        _framePending = true;
+        top.RequestAnimationFrame(_renderFrame);
+    }
+    private void OnRenderFrame(TimeSpan time)
+    {
+        _framePending = false;
+        if (_anchorsDirty) UpdatePortAnchors();
+        if (_drag is { } drag) ApplyDrag(drag);
+        if (_connectionDrag is { } connection)
+            connection.Preview.SetEndpoints(connection.Source.CanvasPosition + (Vector)connection.Source.OutputAnchor, connection.Latest);
+    }
+    private void UpdatePortAnchors()
+    {
+        _anchorsDirty = false;
+        foreach (var visual in _nodeVisuals.Values)
+        {
+            visual.SyncTransform();
+            visual.OutputAnchor = visual.Output.TranslatePoint(
+                new Point(visual.Output.Bounds.Width / 2, visual.Output.Bounds.Height / 2), visual.Border) ?? new(230, 45);
+            for (var i = 0; i < visual.Inputs.Length; i++)
+                visual.InputAnchors[i] = visual.Inputs[i].TranslatePoint(
+                    new Point(visual.Inputs[i].Bounds.Width / 2, visual.Inputs[i].Bounds.Height / 2), visual.Border) ?? new(0, 70 + i * 27);
+        }
+        UpdateWireGeometry(_wireVisuals);
+    }
+    private static void UpdateWireGeometry(List<WireVisual> wires)
+    {
+        foreach (var wire in wires)
+        {
+            wire.Curve.SetEndpoints(wire.Source.CanvasPosition + (Vector)wire.Source.OutputAnchor,
+                wire.Target.CanvasPosition + (Vector)wire.Target.InputAnchors[wire.Input]);
         }
     }
+    private void ApplyDrag(NodeDrag drag)
+    {
+        if (!drag.IsDragging) return;
+        var delta = (Vector)(drag.Latest - drag.Start);
+        foreach (var (visual, _) in drag.Members)
+        {
+            visual.PreviewOffset = delta;
+            visual.SyncTransform();
+            UpdateWireGeometry(visual.Wires);
+        }
+        _viewport.EnsureWorldBounds(NodeBounds(drag.Members.Select(m => m.Visual)));
+    }
+    private void FinishDrag(bool commit)
+    {
+        if (_drag is not { } drag) return;
+        ApplyDrag(drag);
+        var position = drag.Visual.Origin;
+        _drag = null;
+        drag.Pointer.Capture(null);
+        if (commit && position != drag.Original && Workspace?.KernelId is { } kernel)
+        {
+            var edits = drag.Members.Select(m => new GpuEdit { Action = "move", KernelId = kernel,
+                NodeId = m.Visual.Model.Id, Position = new(m.Visual.Origin.X, m.Visual.Origin.Y) }).ToArray();
+            Run(() => Workspace.Edit(edits[0], edits[1..]));
+            ApplySavedPositions();
+        }
+        else
+        {
+            foreach (var (visual, _) in drag.Members)
+            {
+                visual.PreviewOffset = default;
+                visual.SyncTransform();
+                UpdateWireGeometry(visual.Wires);
+            }
+        }
+    }
+    private void BeginConnectionDrag(NodeVisual source, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(source.Output).Properties.IsLeftButtonPressed) return;
+        FinishDrag(commit: false);
+        CancelConnectionDrag();
+        SelectVisualNode(source.Model.Id);
+        _wireSource = null;
+        var preview = new GpuConnectionCurve
+        {
+            Width = NodeCanvas.Width, Height = NodeCanvas.Height,
+            Stroke = TypeBrush(source.Model.Type), StrokeThickness = 2, StrokeDashArray = new Avalonia.Collections.AvaloniaList<double> { 4, 4 },
+            IsHitTestVisible = false
+        };
+        _connectionDrag = new(source, e.Pointer, preview, e.GetPosition(NodeCanvas));
+        NodeCanvas.Children.Insert(1, preview);
+        e.Pointer.Capture(source.Output);
+        ScheduleFrame();
+        e.Handled = true;
+    }
+    private void ReleaseConnectionDrag(NodeVisual source, PointerReleasedEventArgs e)
+    {
+        if (_connectionDrag is not { } connection || connection.Source != source || connection.Pointer != e.Pointer) return;
+        var point = e.GetPosition(NodeCanvas);
+        NodeVisual? target = null;
+        var input = -1;
+        foreach (var candidate in _nodeVisuals.Values)
+            for (var i = 0; i < candidate.Inputs.Length; i++)
+            {
+                var pin = candidate.Inputs[i];
+                var local = NodeCanvas.TranslatePoint(point, pin);
+                if (local is { } p && new Rect(-3, -3, pin.Bounds.Width + 6, pin.Bounds.Height + 6).Contains(p))
+                { target = candidate; input = i; }
+            }
+        var clicked = Math.Abs(point.X - connection.Start.X) < 4 && Math.Abs(point.Y - connection.Start.Y) < 4;
+        CancelConnectionDrag();
+        if (target is { } targetNode && Workspace?.KernelId is { } kernel)
+        {
+            Run(() => Workspace.Edit(new() { Action = "connect", KernelId = kernel,
+                NodeId = targetNode.Model.Id, SourceId = source.Model.Id, Input = input }));
+            _wireSource = null;
+        }
+        else
+        {
+            _wireSource = clicked ? source.Model.Id : null;
+            if (clicked) Status.Text = "Select a target input / 接続先を選択";
+        }
+        e.Handled = true;
+    }
+    private void CancelConnectionDrag()
+    {
+        if (_connectionDrag is not { } connection) return;
+        _connectionDrag = null;
+        NodeCanvas.Children.Remove(connection.Preview);
+        connection.Pointer.Capture(null);
+    }
+    internal Point ToGraphPoint(Point point) => _viewport.ToGraphPoint(point);
+    internal double DebugZoom => _viewport.Zoom;
+    private static Rect NodeBounds(IEnumerable<NodeVisual> nodes)
+    {
+        var all = nodes.Select(n => new Rect(n.Origin,
+            new Size(n.Border.Bounds.Width > 0 ? n.Border.Bounds.Width : 230,
+                n.Border.Bounds.Height > 0 ? n.Border.Bounds.Height : 80))).ToArray();
+        if (all.Length == 0) return new Rect(0, 0, 1, 1);
+        var left = all.Min(r => r.Left); var top = all.Min(r => r.Top);
+        return new Rect(left, top, all.Max(r => r.Right) - left, all.Max(r => r.Bottom) - top);
+    }
+    private void OnViewportChanged()
+    {
+        foreach (var visual in _nodeVisuals.Values) { visual.CanvasOrigin = _viewport.Origin; visual.SyncTransform(); }
+        foreach (var wire in _wireVisuals) { wire.Curve.Width = NodeCanvas.Width; wire.Curve.Height = NodeCanvas.Height; }
+        if (_connectionDrag is { } connection)
+        { connection.Preview.Width = NodeCanvas.Width; connection.Preview.Height = NodeCanvas.Height; }
+        UpdateWireGeometry(_wireVisuals);
+        ZoomLabel.Content = $"{_viewport.Zoom:P0}";
+    }
+    private void OnZoomIn(object? sender, RoutedEventArgs e) => _viewport.SetZoom(_viewport.Zoom * 1.25);
+    private void OnZoomOut(object? sender, RoutedEventArgs e) => _viewport.SetZoom(_viewport.Zoom / 1.25);
+    private void OnResetZoom(object? sender, RoutedEventArgs e) => _viewport.SetZoom(1);
+    private void OnFrame(object? sender, RoutedEventArgs e)
+    {
+        if (_selectedNodes.Count > 0)
+            _viewport.Frame(NodeBounds(_selectedNodes.Where(_nodeVisuals.ContainsKey).Select(id => _nodeVisuals[id])));
+    }
+    private void OpenGraphContext(Point position)
+    {
+        if (Workspace is not { Kernel: not null } vm) return;
+        Focus(); _pastePosition = position;
+        var add = new MenuItem { Header = LocalizationService.Shared.Get("Gpu.AddNode") };
+        add.ItemsSource = vm.Palette.Select(op =>
+        {
+            var item = new MenuItem { Header = op.DisplayName };
+            item.Click += (_, _) => Run(() => SelectVisualNode(vm.Add(op.Op,
+                TypeChoice.SelectedItem is GpuType type ? type : GpuType.Float, new(position.X, position.Y)).Id));
+            return item;
+        }).ToArray();
+        var remove = new MenuItem { Header = LocalizationService.Shared.Get("Gpu.Delete"), IsEnabled = _selectedNodes.Count > 0 };
+        remove.Click += (_, _) => DeleteSelection();
+        var copy = new MenuItem { Header = LocalizationService.Shared.Get("Gpu.Copy"), IsEnabled = _selectedNodes.Count > 0 };
+        copy.Click += async (_, _) => await CopySelectionAsync(false);
+        var cut = new MenuItem { Header = LocalizationService.Shared.Get("Gpu.Cut"), IsEnabled = _selectedNodes.Count > 0 };
+        cut.Click += async (_, _) => await CopySelectionAsync(true);
+        var paste = new MenuItem { Header = LocalizationService.Shared.Get("Gpu.Paste") };
+        paste.Click += async (_, _) => await PasteAsync();
+        NodeCanvas.ContextMenu = new ContextMenu { ItemsSource = new Control[] { add, new Separator(), copy, cut, paste, remove } };
+        NodeCanvas.ContextMenu.Open(NodeCanvas);
+    }
+    private void DeleteSelection()
+    {
+        if (Workspace?.KernelId is not { } kernel || _selectedNodes.Count == 0) return;
+        var edits = _selectedNodes.Select(id => new GpuEdit { Action = "remove", KernelId = kernel, NodeId = id }).ToArray();
+        Run(() => Workspace.Edit(edits[0], edits[1..]));
+    }
+    private async Task CopySelectionAsync(bool cut)
+    {
+        if (Workspace is not { } vm || _selectedNodes.Count == 0) return;
+        try
+        {
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard ?? throw new InvalidOperationException("Clipboard unavailable.");
+            var text = vm.CopyNodes(_selectedNodes);
+            var revision = vm.Graph.History.CurrentNodeId;
+            var kernel = vm.KernelId;
+            var ids = _selectedNodes.ToArray();
+            await clipboard.SetTextAsync(text);
+            if (cut && Workspace == vm && vm.KernelId == kernel && vm.Graph.History.CurrentNodeId == revision)
+            {
+                var edits = ids.Select(id => new GpuEdit { Action = "remove", KernelId = vm.KernelId, NodeId = id }).ToArray();
+                Run(() => vm.Edit(edits[0], edits[1..]));
+            }
+        }
+        catch (Exception error) when (error is InvalidOperationException or IOException or ArgumentException)
+        { Status.Text = error.Message; }
+    }
+    private async Task PasteAsync()
+    {
+        if (Workspace is not { } vm) return;
+        var kernel = vm.KernelId;
+        try
+        {
+            var text = await (TopLevel.GetTopLevel(this)?.Clipboard?.TryGetTextAsync() ?? Task.FromResult<string?>(null));
+            if (Workspace != vm || vm.KernelId != kernel || text is null) return;
+            var ids = vm.PasteNodes(text, new(_pastePosition.X, _pastePosition.Y));
+            _selectedNodes.Clear(); _selectedNodes.UnionWith(ids); _selection = ids.FirstOrDefault();
+            UpdateSelectionStyles(); BuildInspector();
+            _pastePosition += new Vector(24, 24);
+        }
+        catch (Exception error) when (error is InvalidOperationException or IOException or ArgumentException or System.Text.Json.JsonException)
+        { Status.Text = error.Message; }
+    }
+    private void OnBackgroundPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.Source != NodeCanvas || !e.GetCurrentPoint(NodeCanvas).Properties.IsLeftButtonPressed) return;
+        Focus(); FinishDrag(false); CancelConnectionDrag(); CancelMarquee(); _wireSource = null;
+        var start = _viewport.ToGraphPoint(e.GetPosition(NodeCanvas)); _pastePosition = start;
+        var box = new Border { IsHitTestVisible = false, BorderThickness = new Thickness(1),
+            BorderBrush = ThemeSettingsService.EditorBrush("NodeSelectedBorder"),
+            Background = this.FindResource("EffectSelectionFillBrush") as IBrush };
+        NodeCanvas.Children.Add(box);
+        _marquee = (e.Pointer, start, e.KeyModifiers.HasFlag(KeyModifiers.Control) ? _selectedNodes.ToArray() : [], box);
+        e.Pointer.Capture(NodeCanvas); e.Handled = true;
+    }
+    private void OnBackgroundMoved(object? sender, PointerEventArgs e)
+    {
+        if (_marquee is not { } marquee || marquee.Pointer != e.Pointer) return;
+        var rect = SelectionRect(marquee.Start, _viewport.ToGraphPoint(e.GetPosition(NodeCanvas)));
+        Canvas.SetLeft(marquee.Box, rect.X + _viewport.Origin.X); Canvas.SetTop(marquee.Box, rect.Y + _viewport.Origin.Y);
+        marquee.Box.Width = rect.Width; marquee.Box.Height = rect.Height; e.Handled = true;
+    }
+    private void OnBackgroundReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (_marquee is not { } marquee || marquee.Pointer != e.Pointer) return;
+        var rect = SelectionRect(marquee.Start, _viewport.ToGraphPoint(e.GetPosition(NodeCanvas)));
+        _selectedNodes.Clear(); _selectedNodes.UnionWith(marquee.Before);
+        if (rect.Width >= 3 || rect.Height >= 3)
+            _selectedNodes.UnionWith(_nodeVisuals.Values.Where(n => rect.Intersects(NodeBounds([n]))).Select(n => n.Model.Id));
+        _selection = _selectedNodes.LastOrDefault();
+        CancelMarquee(); UpdateSelectionStyles(); BuildInspector(); e.Handled = true;
+    }
+    private void CancelMarquee()
+    {
+        if (_marquee is not { } marquee) return;
+        _marquee = null; NodeCanvas.Children.Remove(marquee.Box); marquee.Pointer.Capture(null);
+    }
+    private static Rect SelectionRect(Point a, Point b) =>
+        new(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y));
     private void BuildInspector()
     {
         NodeInspector.Children.Clear();
@@ -341,8 +874,12 @@ public partial class GpuWorkspaceView : UserControl
     private void OnTextChanged(object? sender, TextChangedEventArgs e)
     {
         if (_refreshing || Workspace is not { Kernel: { } k } vm) return;
+        var text = KernelText.Text ?? "";
+        // TextChanged can arrive after the refresh guard has ended.
+        if (text == _displayedText) return;
+        _displayedText = text;
         _drafting = true;
-        try { Run(() => vm.Edit(new() { Action = "draft", KernelId = k.Id, Text = KernelText.Text ?? "" })); }
+        try { Run(() => vm.Edit(new() { Action = "draft", KernelId = k.Id, Text = text })); }
         finally { _drafting = false; }
     }
     private void OnApplyText(object? sender, RoutedEventArgs e) => Run(() =>
@@ -357,17 +894,46 @@ public partial class GpuWorkspaceView : UserControl
     private void OnClose(object? sender, RoutedEventArgs e) => CloseWorkspace();
     private void OnBack(object? sender, RoutedEventArgs e)
     {
-        if (Workspace?.Kernel is null) CloseWorkspace(); else { _selection = _wireSource = null; Workspace.Back(); }
+        if (Workspace?.Kernel is null) CloseWorkspace();
+        else { _selection = _wireSource = null; _selectedNodes.Clear(); Workspace.Back(); }
     }
-    private void OnKeyDown(object? sender, KeyEventArgs e)
+    private async void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape) { OnBack(sender, new()); e.Handled = true; }
-        else if (e.Key == Key.Delete && KernelText.IsFocused == false && _selection is { } node && Workspace?.KernelId is { } kernel)
-        { Run(() => Workspace.Edit(new() { Action = "remove", KernelId = kernel, NodeId = node })); e.Handled = true; }
-        else if (e.Key == Key.Z && e.KeyModifiers.HasFlag(KeyModifiers.Control))
-        { Workspace?.Graph.History.Undo(); e.Handled = true; }
-        else if (e.Key == Key.Y && e.KeyModifiers.HasFlag(KeyModifiers.Control))
-        { Workspace?.Graph.History.Redo(); e.Handled = true; }
+        if (e.Key == Key.Escape)
+        {
+            if (_drag is not null) FinishDrag(commit: false);
+            else if (_connectionDrag is not null) CancelConnectionDrag();
+            else if (_marquee is not null) CancelMarquee();
+            else OnBack(sender, new());
+            e.Handled = true;
+        }
+        else if (!IsEditingSource(e.Source as Visual))
+        {
+            var shortcuts = ShortcutService.Shared;
+            if (shortcuts.Matches("undo", e)) Workspace?.Graph.History.Undo();
+            else if (shortcuts.Matches("redo", e)) Workspace?.Graph.History.Redo();
+            else if (shortcuts.Matches("graph.delete", e)) DeleteSelection();
+            else if (shortcuts.Matches("graph.copy", e)) await CopySelectionAsync(false);
+            else if (shortcuts.Matches("graph.cut", e)) await CopySelectionAsync(true);
+            else if (shortcuts.Matches("graph.paste", e)) await PasteAsync();
+            else if (shortcuts.Matches("graph.all", e))
+            {
+                _selectedNodes.UnionWith(_nodeVisuals.Keys); _selection = _selectedNodes.LastOrDefault();
+                UpdateSelectionStyles(); BuildInspector();
+            }
+            else if (shortcuts.Matches("graph.search", e)) OpenGraphContext(_viewport.LastPointer ?? _pastePosition);
+            else if (shortcuts.Matches("graph.frame", e)) OnFrame(sender, new());
+            else if (shortcuts.Matches("graph.zoomIn", e)) OnZoomIn(sender, new());
+            else if (shortcuts.Matches("graph.zoomOut", e)) OnZoomOut(sender, new());
+            else return;
+            e.Handled = true;
+        }
+    }
+    private static bool IsEditingSource(Visual? source)
+    {
+        for (var current = source; current is not null; current = current.GetVisualParent())
+            if (current is TextBox or NumericUpDown or ComboBox) return true;
+        return false;
     }
     private async void OnExport(object? sender, RoutedEventArgs e)
     {

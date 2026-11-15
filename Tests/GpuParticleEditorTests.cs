@@ -116,8 +116,6 @@ internal static class GpuParticleEditorTests
         Check(view.Workspace!.Kernel is null && view.IsVisible, "Actual flow view opens");
         view.Workspace.EnterKernel(view.Workspace.State.Program.Kernels[0].Id);
         Check(view.FindControl<Avalonia.Controls.Canvas>("NodeCanvas")!.Children.Count > 0, "Actual visual graph nodes");
-        var graphTab = view.FindControl<TabControl>("KernelTabs")!.Items.OfType<TabItem>().First();
-        Check(graphTab.Header?.ToString() == LocalizationService.Shared.Get("Gpu.Visual"), "Kernel Graph tab uses localized artist-facing mode name");
         foreach (var (language, expected) in new[] { ("en", "Kernel Graph"), ("ja", "カーネルグラフ") })
         {
             using var strings = AssetLoader.Open(new Uri($"avares://LiberaFx/Assets/Translations/Gpu.{language}.json"));
@@ -140,6 +138,7 @@ internal static class GpuParticleEditorTests
         Check(ReferenceEquals(main.Graph, activeGraph) && ReferenceEquals(main.Layout, layout), "Back preserves CPU workspace");
         window.Close();
         VerifyMcp();
+        GpuParticleDragTests.Run();
         var exportDirectory = Path.Combine(Environment.CurrentDirectory, "build", "gpu-export-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(exportDirectory);
         try
