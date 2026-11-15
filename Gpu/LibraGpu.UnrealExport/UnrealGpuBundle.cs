@@ -40,6 +40,11 @@ public static class UnrealGpuExporter
         ArgumentNullException.ThrowIfNull(program);
         ArgumentNullException.ThrowIfNull(texturePaths);
         var compiled = GpuCompiler.Compile(program);
+        var maximumRegisters = compiled.RegisterKernels.Count == 0 ? 0u :
+            compiled.RegisterKernels.Max(kernel => kernel.RegisterCount);
+        if (maximumRegisters > 256 ||
+            (ulong)compiled.Capacity * (80UL + maximumRegisters * 16UL) > 256UL * 1024 * 1024)
+            throw new NotSupportedException("Unreal GPU interpreter limits are 256 registers and 256 MiB per instance.");
         var resources = compiled.Resources;
         if (texturePaths.Count != resources.Count)
             throw new ArgumentException("Supply exactly one object path for each declared texture.", nameof(texturePaths));

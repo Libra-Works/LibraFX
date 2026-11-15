@@ -1,0 +1,68 @@
+Libra GPU Unreal integration (experimental, requires UE 5.7 SM5).
+
+Import a .lfxgpu JSON bundle created by LibraGpu.UnrealExport or the frontend
+gpu_export_bundle tool (programSequence/nodeId/canonicalJson/metadata/shaderSource/
+registerKernels[{id,stage,base64}]/resourceAssetPaths). No packet re-lowering or
+external converter is required. Each texture path
+must resolve to UTexture2D at import; the resulting ULibraGpuEffectAsset holds
+hard UObject references for cooking. Invalid replacement packets and unresolved
+texture references leave an existing asset's program unchanged. Core's generated
+USF is retained as source export, not executed.
+
+ULibraGpuEffectComponent supports SetEffect, Play, Pause, Stop, ResetEffect,
+ConfigureEmitter(emitterSpawnRate, seed) and LoadSoftEffect; SoftEffect is loaded
+with the engine streamable manager. Scene component translation supplies
+emitterPosition; the component supplies time and deltaTime uniforms. Each playing component holds separate
+GPU buffers. The execution mode is the fixed GpuRegisterInterpreter shader:
+it executes validated LGPK packets, not per-asset generated HLSL. Packet limits
+are 256 registers per kernel, 64 kernels, and 256 MiB total particle and
+per-particle register storage. Unsupported resource types and pass kinds fail
+import. Asset changes are snapshotted at ResetEffect and do not mutate a running
+render-thread instance.
+
+Billboards are instanced directly from the particle GPU buffer in a post-tonemap
+view extension. This initial pass is unlit and does not depth-test, sort
+transparency, participate in shadows, or implement material bindings. Texture2D
+bindings are supported. It must not be presented as a production renderer.
+
+Tests requiring a real rendering RHI:
+  Libra.GPU.Assets.TransactionalPacketValidation
+  Libra.GPU.Compute.SpawnUpdateReadback
+  Libra.GPU.Render.BillboardFramebuffer
+  Libra.GPU.Assets.NativePackageGameplayLifecycle
+For the last case, run in a NEW process with
+  -LibraGpuAsset=/Game/Folder/Effect.Effect
+  -LibraGpuTexture=/Game/Folder/Texture.Texture
+The asset argument is mandatory for package proof; without it that one case
+reports fixture not selected, not package validation. It loads without an
+importer, validates serialized packets/hashes/typed texture dependencies, creates
+a real isolated game world, and checks hard/soft binding, GC, async loading,
+Play/Pause/Reset/Stop and rejected asset replacement. It never rewrites the
+selected user package.
+
+Engine shader support: SM5 or later. Runtime modules have no UnrealEd dependency;
+global shaders are cooked by the engine shader pipeline, not generated on load.
+The runtime uses engine-bundled OpenSSL only for SHA256 integrity checks.
+Native asset data validation checks packet bounds, inactive fields, types, flow,
+hard dependencies, and exact SHA256 canonical-IR/source integrity.
+
+Example focused cook (engine command line, use your own project paths):
+  UnrealEditor-Cmd.exe Project.uproject -run=Cook -TargetPlatform=Windows
+    -Map=/Engine/Maps/Entry -CookDir="Project\Content\LibraFXSamples"
+    -unattended -stdout -FullStdOutLogOutput
+Cook the owning map or specify the effect's content directory; a loose soft
+reference is not automatically a primary asset cook rule. Hard texture
+dependencies are retained by UPROPERTY references. Gameplay may use cooked
+hard references or cooked soft references selected by game content/cook rules.
+GPU tests explicitly fail with NullRHI. They do not establish packaged-game,
+platform shader-cook proof. The parameterized case establishes reload/lifecycle
+only when a previously saved package is supplied in a fresh process. Shader source alone
+and standalone DXC compilation are not evidence of Unreal GPU execution.
+
+Local UE 5.7 validation on 2026-11-15:
+  All four Libra.GPU cases passed in a fresh graphics-enabled editor commandlet.
+  The frontend .lfxgpu delivery imported through UFactory, saved as a native
+  asset, and reloaded for hard/soft-reference gameplay tests.
+  Focused Windows cook: 534 packages, zero warnings/errors, exit 0.
+These observations do not establish packaged standalone-game execution or
+support for future IR operations beyond the current validated opcode set.

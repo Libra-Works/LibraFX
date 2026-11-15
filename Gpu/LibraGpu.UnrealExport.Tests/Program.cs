@@ -33,4 +33,21 @@ Reject(() => UnrealGpuExporter.Compile(program, new Dictionary<string, string> {
 Reject(() => UnrealGpuExporter.Compile(program, new Dictionary<string, string> { ["billboardTexture"] = "/Game/FX/T.T:Subobject" }));
 var edited = program with { Capacity = program.Capacity / 2 };
 Check(UnrealGpuExporter.Compile(edited, paths).Metadata.ContentHash != bundle.Metadata.ContentHash, "edited IR hash");
+var tooManyRegisters = new GpuProgram
+{
+    Id = "registerLimit",
+    Capacity = 1,
+    Kernels = [new() {
+        Id = "spawn", Stage = KernelStage.Spawn,
+        Nodes = Enumerable.Range(0, 257).Select(i => new GpuNode
+        { Id = $"n{i}", Op = GpuOp.Constant, Type = GpuType.Float, Value = [0] }).ToList()
+    }],
+    Flow = [new() { Id = "spawnStep", Kind = FlowKind.Spawn, Kernel = "spawn" }]
+};
+try
+{
+    UnrealGpuExporter.Compile(tooManyRegisters, new Dictionary<string, string>());
+    throw new Exception("Unreal register limit was not enforced.");
+}
+catch (NotSupportedException) { }
 Console.WriteLine("PASS Unreal source bundle");

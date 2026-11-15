@@ -8,6 +8,8 @@ textureObjectPaths maps every declared Texture2D resource ID to an Unreal object
 path, for example /Game/FX/T_Spark.T_Spark. Export checks basic path syntax but
 does not load assets or validate their types; a UE importer must do so and store
 typed UObject references. Extra and missing mappings are rejected.
+The current UE interpreter's 256-register and 256 MiB combined particle/register
+storage limits are checked during export, before the bundle reaches Unreal.
 
 Version 1 JSON has camelCase properties: version, purpose (SourceExport),
 runtimeExecuted (false), canonicalJson, usf, metadata, kernels, textures. Each

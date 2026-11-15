@@ -12,6 +12,8 @@
   "Modules": [
     { "Name": "LibraRuntimeCore", "Type": "Runtime", "LoadingPhase": "Default" },
     { "Name": "LibraRuntimeForUnreal", "Type": "Runtime", "LoadingPhase": "Default" },
-    { "Name": "LibraRuntimeForUnrealEditor", "Type": "Editor", "LoadingPhase": "Default" }
+    { "Name": "LibraRuntimeForUnrealEditor", "Type": "Editor", "LoadingPhase": "Default" },
+    { "Name": "LibraGpuRuntime", "Type": "Runtime", "LoadingPhase": "PostConfigInit" },
+    { "Name": "LibraGpuEditor", "Type": "Editor", "LoadingPhase": "Default" }
   ]
 }

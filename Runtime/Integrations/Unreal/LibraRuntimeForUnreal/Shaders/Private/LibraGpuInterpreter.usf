@@ -1,0 +1,213 @@
+#include "/Engine/Public/Platform.ush"
+
+struct LibraParticle
+{
+    float4 positionAge;
+    float4 velocityLifetime;
+    float4 color;
+    float4 sizeRotation;
+    uint4 seedAlive;
+};
+
+RWStructuredBuffer<LibraParticle> Particles;
+RWStructuredBuffer<uint4> Registers;
+StructuredBuffer<uint4> Instructions;
+uint Capacity;
+uint Count;
+uint SpawnStart;
+uint SpawnCount;
+float DeltaTime;
+float Time;
+uint EmitterSeed;
+uint FrameIndex;
+float3 EmitterPosition;
+uint RegisterCount;
+uint InstructionCount;
+uint Stage;
+uint DefaultAge;
+
+uint Hash(uint x)
+{
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    return x ^ (x >> 16);
+}
+
+bool Finite(float4 v)
+{
+    return all((asuint(v) & 0x7f800000u) != 0x7f800000u);
+}
+
+bool FiniteParticle(LibraParticle p)
+{
+    return Finite(p.positionAge) && Finite(p.velocityLifetime) &&
+        Finite(p.color) && Finite(p.sizeRotation);
+}
+
+uint4 Attribute(LibraParticle p, uint slot)
+{
+    if (slot == 0) return asuint(float4(p.positionAge.xyz, 0));
+    if (slot == 1) return asuint(float4(p.velocityLifetime.xyz, 0));
+    if (slot == 2) return asuint(p.color);
+    if (slot == 3) return asuint(float4(p.sizeRotation.xy, 0, 0));
+    if (slot == 4) return asuint(float4(p.sizeRotation.z, 0, 0, 0));
+    if (slot == 5) return asuint(float4(p.positionAge.w, 0, 0, 0));
+    if (slot == 6) return asuint(float4(p.velocityLifetime.w, 0, 0, 0));
+    if (slot == 7) return uint4(p.seedAlive.y != 0, 0, 0, 0);
+    return uint4(p.seedAlive.x, 0, 0, 0);
+}
+
+void StoreAttribute(inout LibraParticle p, uint slot, uint4 bits)
+{
+    float4 v = asfloat(bits);
+    if (slot == 0) p.positionAge.xyz = v.xyz;
+    else if (slot == 1) p.velocityLifetime.xyz = v.xyz;
+    else if (slot == 2) p.color = v;
+    else if (slot == 3) p.sizeRotation.xy = v.xy;
+    else if (slot == 4) p.sizeRotation.z = v.x;
+    else if (slot == 5) p.positionAge.w = v.x;
+    else if (slot == 6) p.velocityLifetime.w = v.x;
+    else if (slot == 7) p.seedAlive.y = bits.x != 0;
+    else p.seedAlive.x = bits.x;
+}
+
+uint4 LoadRegister(uint particle, uint index)
+{
+    if (index == 0xffffffffu) return 0;
+    return Registers[particle * RegisterCount + index];
+}
+
+float4 FloatInput(uint4 bits, uint index, uint resultType)
+{
+    float4 v = asfloat(bits);
+    uint inputType = Instructions[4 + index * 4 + 1].y;
+    return inputType == 0 && resultType >= 4 ? v.xxxx : v;
+}
+
+float SafeDiv(float a, float b) { return b == 0.0f ? 0.0f : a / b; }
+int SafeIntDiv(int a, int b)
+{
+    if (b == 0) return 0;
+    if (a == (-2147483647 - 1) && b == -1) return (-2147483647 - 1);
+    return a / b;
+}
+
+[numthreads(64, 1, 1)]
+void MainCS(uint3 threadId : SV_DispatchThreadID)
+{
+    uint i = threadId.x;
+    uint actualCapacity, particleStride;
+    Particles.GetDimensions(actualCapacity, particleStride);
+    if (i >= min(Capacity, actualCapacity) || particleStride != 80) return;
+    LibraParticle p = Particles[i];
+    if (Stage == 0)
+    {
+        if (i < SpawnStart || i - SpawnStart >= SpawnCount || p.seedAlive.y != 0) return;
+        p.positionAge = float4(EmitterPosition, 0);
+        p.velocityLifetime = float4(0, 0, 0, 1);
+        p.color = 1;
+        p.sizeRotation = float4(1, 1, 0, 0);
+        p.seedAlive = uint4(Hash(i ^ EmitterSeed ^ Hash(FrameIndex)), 1, 0, 0);
+    }
+    else
+    {
+        if (i >= Count || p.seedAlive.y == 0) return;
+        if (!FiniteParticle(p) || !(p.velocityLifetime.w > 0))
+        {
+            p.seedAlive.y = 0;
+            Particles[i] = p;
+            return;
+        }
+        if (DefaultAge != 0)
+            p.positionAge.w += (asuint(DeltaTime) & 0x7f800000u) != 0x7f800000u ? max(DeltaTime, 0) : 0;
+    }
+    for (uint n = 0; n < InstructionCount; ++n)
+    {
+        uint4 first = Instructions[4 + n * 4];
+        uint4 second = Instructions[5 + n * 4];
+        uint4 immediate = Instructions[6 + n * 4];
+        uint4 integer = Instructions[7 + n * 4];
+        uint op = first.x, dst = first.y, type = second.y, aux = second.z;
+        uint4 a = LoadRegister(i, first.z);
+        uint4 b = LoadRegister(i, first.w);
+        uint4 c = LoadRegister(i, second.x);
+        uint4 d = LoadRegister(i, second.w);
+        uint4 result = 0;
+        if (op == 0) result = (type == 1 || type == 2 || type == 3) ? integer : immediate;
+        else if (op == 1) result = Attribute(p, aux);
+        else if (op == 2)
+        {
+            if (aux == 0) result = asuint(float4(DeltaTime, 0, 0, 0));
+            else if (aux == 1) result = asuint(float4(Time, 0, 0, 0));
+            else result = asuint(float4(EmitterPosition, 0));
+        }
+        else if ((op >= 3 && op <= 6) || (op >= 9 && op <= 11))
+        {
+            if (type == 1 || type == 2)
+            {
+                uint x = a.x, y = b.x, z = c.x, r = 0;
+                if (op == 3) r = x + y;
+                else if (op == 4) r = x - y;
+                else if (op == 5) r = x * y;
+                else if (op == 6) r = type == 1 ? asuint(SafeIntDiv(asint(x), asint(y))) : (y == 0 ? 0 : x / y);
+                else if (type == 1)
+                {
+                    if (op == 9) r = asuint(min(max(asint(x), asint(y)), asint(z)));
+                    else if (op == 10) r = asuint(min(asint(x), asint(y)));
+                    else r = asuint(max(asint(x), asint(y)));
+                }
+                else if (op == 9) r = min(max(x, y), z);
+                else if (op == 10) r = min(x, y);
+                else r = max(x, y);
+                result.x = r;
+            }
+            else
+            {
+                float4 x = FloatInput(a, first.z, type), y = FloatInput(b, first.w, type), z = 0;
+                if (op == 9) z = FloatInput(c, second.x, type);
+                float4 r = 0;
+                if (op == 3) r = x + y;
+                else if (op == 4) r = x - y;
+                else if (op == 5) r = x * y;
+                else if (op == 6) r = float4(SafeDiv(x.x,y.x), SafeDiv(x.y,y.y), SafeDiv(x.z,y.z), SafeDiv(x.w,y.w));
+                else if (op == 9) r = min(max(x, y), z);
+                else if (op == 10) r = min(x, y);
+                else r = max(x, y);
+                result = asuint(r);
+            }
+        }
+        else if (op == 7) result = asuint(sin(asfloat(a)));
+        else if (op == 8) result = asuint(cos(asfloat(a)));
+        else if (op == 12 || op == 13)
+        {
+            float4 v = asfloat(a);
+            uint sourceType = Instructions[4 + first.z * 4 + 1].y;
+            uint components = sourceType - 2;
+            if (components < 4) v.w = 0;
+            if (components < 3) v.z = 0;
+            if (op == 13) result = asuint(float4(length(v), 0, 0, 0));
+            else if (Finite(v))
+            {
+                float m = max(max(abs(v.x), abs(v.y)), max(abs(v.z), abs(v.w)));
+                if (m > 0) { float4 scaled = v / m; result = asuint(scaled * rsqrt(dot(scaled, scaled))); }
+            }
+        }
+        else if (op == 14) result = uint4(a.x, b.x, c.x, d.x);
+        else if (op == 15) result = a.x != 0 ? b : c;
+        else if (op == 16) result.x = asuint(float(Hash(a.x) >> 8) * (1.0f / 16777216.0f));
+        else if (op == 17) result.x = a[aux];
+        else if (op == 18) StoreAttribute(p, aux, a);
+        if (op != 18)
+        {
+            Registers[i * RegisterCount + dst] = result;
+            DeviceMemoryBarrier();
+        }
+    }
+    p.positionAge.w = max(p.positionAge.w, 0);
+    if (!FiniteParticle(p) || !(p.velocityLifetime.w > 0) || p.positionAge.w >= p.velocityLifetime.w)
+        p.seedAlive.y = 0;
+    p.seedAlive.y = p.seedAlive.y != 0;
+    Particles[i] = p;
+}
