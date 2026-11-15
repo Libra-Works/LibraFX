@@ -11,7 +11,7 @@
   "Gpu.Export": "Save IR / Export shader…",
   "Gpu.FutureTexture": "RenderStartTexture (future)",
   "Gpu.FutureHint": "Texture simulation and compute passes are not implemented by the portable compiler.",
-  "Gpu.Visual": "Visual VOP",
+  "Gpu.Visual": "Kernel Graph",
   "Gpu.Text": "Typed DSL",
   "Gpu.Grammar": "Restricted original DSL, not VEX/HLSL: let, @attributes, param(), typed vectors and registered math; no loops or arbitrary code. Graph and text lower to the same typed IR.",
   "Gpu.ApplyText": "Apply text → IR",

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using Avalonia.Platform;
 using ModelContextProtocol;
 using LibraGpu.Core;
 using LiberaFx.Models.Commands;
@@ -115,6 +116,14 @@ internal static class GpuParticleEditorTests
         Check(view.Workspace!.Kernel is null && view.IsVisible, "Actual flow view opens");
         view.Workspace.EnterKernel(view.Workspace.State.Program.Kernels[0].Id);
         Check(view.FindControl<Avalonia.Controls.Canvas>("NodeCanvas")!.Children.Count > 0, "Actual visual graph nodes");
+        var graphTab = view.FindControl<TabControl>("KernelTabs")!.Items.OfType<TabItem>().First();
+        Check(graphTab.Header?.ToString() == LocalizationService.Shared.Get("Gpu.Visual"), "Kernel Graph tab uses localized artist-facing mode name");
+        foreach (var (language, expected) in new[] { ("en", "Kernel Graph"), ("ja", "カーネルグラフ") })
+        {
+            using var strings = AssetLoader.Open(new Uri($"avares://LiberaFx/Assets/Translations/Gpu.{language}.json"));
+            var labels = JsonSerializer.Deserialize<Dictionary<string, string>>(strings)!;
+            Check(labels["Gpu.Visual"] == expected, "Kernel Graph mode name: " + language);
+        }
         view.CloseWorkspace();
         Check(!view.IsVisible && graph.Nodes.Any(n => n.Id == other.Id), "Closing mode keeps CPU document");
         var main = new MainViewModel();
