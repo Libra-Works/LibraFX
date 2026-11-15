@@ -45,6 +45,11 @@ internal static class Program
             else File.WriteAllText(Path.Combine(directory, "language.json"), languageFixture);
         }
         AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+        if (args is ["--unreal-gpu-preview"])
+        {
+            CompiledPreviewProtocolTests.RunUnrealGpuPreview();
+            return;
+        }
         if (args is ["--spawnable-group"])
         {
             SpawnableGroupTests.Run();

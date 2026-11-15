@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
@@ -62,18 +63,122 @@ internal static class CompiledPreviewProtocolTests
         RunWithDispatcher(VerifyTransportAsync());
     }
 
-    private static void RunWithDispatcher(Task task)
+    public static void RunUnrealGpuPreview() => RunWithDispatcher(VerifyUnrealGpuPreviewAsync(), 150);
+
+    private static void RunWithDispatcher(Task task, int timeoutSeconds = 35)
     {
         if (!task.IsCompleted)
         {
             var frame = new DispatcherFrame();
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(35));
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
             using var registration = timeout.Token.Register(() => Dispatcher.UIThread.Post(() => frame.Continue = false));
             _ = task.ContinueWith(_ => Dispatcher.UIThread.Post(() => frame.Continue = false), TaskScheduler.Default);
             Dispatcher.UIThread.PushFrame(frame);
         }
         if (!task.IsCompleted) throw new TimeoutException("Compiled preview transport timed out.");
         task.GetAwaiter().GetResult();
+    }
+
+    private static async Task VerifyUnrealGpuPreviewAsync()
+    {
+        var executable = Environment.GetEnvironmentVariable("LIBERAFX_UNREAL_EDITOR")
+            ?? throw new InvalidOperationException("Set LIBERAFX_UNREAL_EDITOR to UnrealEditor-Cmd.exe.");
+        var project = Environment.GetEnvironmentVariable("LIBERAFX_UNREAL_PROJECT")
+            ?? throw new InvalidOperationException("Set LIBERAFX_UNREAL_PROJECT to the preview-enabled .uproject.");
+        var texture = Environment.GetEnvironmentVariable("LIBERAFX_UNREAL_TEXTURE")
+            ?? throw new InvalidOperationException("Set LIBERAFX_UNREAL_TEXTURE to a native billboard texture asset path.");
+        var probe = new TcpListener(IPAddress.Loopback, 0);
+        probe.Start();
+        var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+        probe.Stop();
+        using var host = new PreviewHost(port);
+        var model = new MainViewModel();
+        Process? native = null;
+        try
+        {
+            var node = model.Graph.CreateNode(GpuParticleEditorService.Kind);
+            GpuParticleEditorService.Apply(model.Graph, node.Id, [new GpuEdit
+            {
+                Action = "resource", Resource = GpuParticleEditorService.ReadProgram(node).Resources.Single(),
+                AssetPath = texture
+            }], requireValid: true);
+            model.Playback.Loop = false;
+            model.Playback.EndText = "6000";
+            await host.StartAsync(model);
+            var start = new ProcessStartInfo(executable) { UseShellExecute = false };
+            foreach (var argument in new[] { project, "/Engine/Maps/Entry", "-unattended", "-NoCrashDialog",
+                "-nosplash", "-LibraPreview", "-ExecCmds=Automation RunTests Libra.Editor.Preview.GpuSceneTransactions",
+                "-TestExit=Automation Test Queue Empty" })
+                start.ArgumentList.Add(argument);
+            if (Environment.GetEnvironmentVariable("LIBERAFX_UNREAL_LOG") is { Length: > 0 } log)
+                start.ArgumentList.Add("-AbsLog=" + log);
+            start.Environment["LIBRA_PREVIEW_PORT"] = port.ToString();
+            start.Environment["LIBRA_PREVIEW_TOKEN"] = host.AccessToken;
+            start.Environment["LIBRA_PREVIEW_FINGERPRINT"] = host.Fingerprint;
+            native = Process.Start(start) ?? throw new InvalidOperationException("Unreal failed to start.");
+            Guid? peer = null;
+            JsonElement? lastStatus = null;
+            var executed = false;
+            var startedPlayback = false;
+            var deadline = DateTime.UtcNow.AddSeconds(120);
+            while (!native.HasExited && DateTime.UtcNow < deadline)
+            {
+                peer ??= model.PreviewTelemetry.Clients().FirstOrDefault(client =>
+                    client.Engine == "Unreal" && client.Capabilities.Contains("gpuParticles"))?.ClientId;
+                if (peer is { } id)
+                {
+                    if (!model.PreviewAssets.Supports(id, "gpuParticles")) break;
+                    try { lastStatus = model.PreviewAssets.GpuStatus(id); }
+                    catch (InvalidOperationException) when (!model.PreviewAssets.Supports(id, "gpuParticles")) { break; }
+                    if (!startedPlayback && lastStatus is { } applied &&
+                        applied.GetProperty("programs").EnumerateArray().Any(program =>
+                            program.GetProperty("nodeId").GetGuid() == node.Id))
+                    {
+                        await Dispatcher.UIThread.InvokeAsync(() => model.Playback.Play());
+                        startedPlayback = true;
+                    }
+                    if (lastStatus is { } status && status.GetProperty("runtimeExecuted").GetBoolean() &&
+                        status.GetProperty("errors").GetArrayLength() == 0 &&
+                        status.GetProperty("programs").EnumerateArray().Any(program =>
+                            program.GetProperty("nodeId").GetGuid() == node.Id))
+                    {
+                        executed = true;
+                        break;
+                    }
+                }
+                await Task.Delay(50);
+            }
+            Require(executed, "Actual Root-to-Unreal GPU delivery failed: " + (lastStatus?.GetRawText() ?? "no GPU feedback"));
+            await Dispatcher.UIThread.InvokeAsync(() => model.Playback.Pause());
+            var paused = false;
+            deadline = DateTime.UtcNow.AddSeconds(3);
+            while (!native.HasExited && DateTime.UtcNow < deadline)
+            {
+                var status = model.PreviewAssets.GpuStatus(peer!.Value);
+                if (status is { } value && value.GetProperty("errors").GetArrayLength() == 0 &&
+                    value.GetProperty("programs").EnumerateArray().Any(program =>
+                        program.GetProperty("nodeId").GetGuid() == node.Id && !program.GetProperty("playing").GetBoolean()))
+                {
+                    paused = true;
+                    break;
+                }
+                await Task.Delay(50);
+            }
+            Require(paused, "Remote pause did not reach the actual GPU preview.");
+            await native.WaitForExitAsync();
+            Require(native.ExitCode == 0, "Unreal preview automation did not exit cleanly.");
+            Console.WriteLine("Actual Root-to-Unreal GPU publication, execution and feedback passed.");
+        }
+        finally
+        {
+            await host.StopAsync();
+            if (native is not null)
+            {
+                await native.WaitForExitAsync();
+                native.Dispose();
+            }
+            await Dispatcher.UIThread.InvokeAsync(model.DisposeStorageFiles);
+        }
     }
 
     private static async Task VerifyTransportAsync()

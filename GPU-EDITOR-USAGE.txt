@@ -73,11 +73,29 @@ Request a fresh ROOT snapshot and use its sequence; a missing GUID means removal
 It is not an automatic network send or runtime-status claim.
 GraphWorkspaceViewModel.GpuEditorRequested opens the overlay by node GUID.
 
+Live Unreal preview:
+PreviewHost publishes complete gpu_config scenes to protocol-3 editor peers
+that explicitly advertise gpuParticles. Scenes follow the matching numeric
+program, contain at most 16 containers/1 MiB and exclude unspawned Spawnable
+Group templates. Playback-only updates do not resend GPU programs.
+Declared texture resources require explicit resourceAssetPaths bindings to
+native Unreal texture assets. Missing bindings are rejected, not silently
+replaced with a white texture. The current starter declares billboardTexture.
+The isolated preview owns transient validated assets/components; user level
+actors and saved Content assets are not modified by live edits.
+gpu_runtime_status reads actual engine feedback for an explicitly selected
+client, including sequence, interpreter mode, capacity, playback and errors.
+Null means no feedback yet. Capacity is not a live particle count. Source
+export DTOs retain RuntimeExecuted=false even when a separate preview runs.
+Remote play/pause/rate are supported; arbitrary particle timeline scrubbing
+is not. Backward seeks reset simulation rather than inventing past state.
+
 MCP tools (active graph, UI dispatcher, DTO JSON):
   gpu_describe: operations/type policies/ABI/limits/edit schema/capabilities
   gpu_create_particle, gpu_read_program, gpu_apply_plan (one atomic undo step)
   gpu_compile (includeSource opt-in), gpu_export_source (explicit source request)
   gpu_export_bundle (explicit source/metadata/LGPK delivery), gpu_open_workspace
+  gpu_runtime_status (actual selected engine feedback, not source export)
 Apply-plan requireValid rejects the whole plan on diagnostics. Text parse failure
 with requireValid=false preserves original IR plus its persisted erroneous draft.
 No tool publishes files or sends unrecognized engine commands.
@@ -87,3 +105,11 @@ Validation:
 Includes typed graph/text editing, snapshot persistence, stable IDs, failed drafts,
 undo/redo, isolated containers, atomic plans, node-specific Problems, CPU exclusion,
 offline export status and actual visual controls, plus compact Inspector checks.
+Optional real Unreal transport regression:
+  Set LIBERAFX_UNREAL_EDITOR to UnrealEditor-Cmd.exe, LIBERAFX_UNREAL_PROJECT
+  to a preview-enabled .uproject, and LIBERAFX_UNREAL_TEXTURE to a native
+  Texture2D asset path matching the starter resource declaration.
+  LIBERAFX_UNREAL_LOG optionally selects a local engine log.
+  dotnet run --project Tests\CommentImageSmokeTests.csproj -- --unreal-gpu-preview
+This uses an ephemeral authenticated TLS host, memory-only credentials and
+bounded Unreal automation to verify actual GPU publication and feedback.
