@@ -1,0 +1,6 @@
+{
+  "name": "LiberaFx.Unity.Editor",
+  "rootNamespace": "LiberaFx.Unity.Editor",
+  "references": ["LiberaFx.Unity"],
+  "includePlatforms": ["Editor"]
+}

@@ -1,0 +1,140 @@
+LiberaFx native Runtime -> Unity adapter
+=====================================
+
+Separation (no Unity APIs in the C++ Core):
+  .lfxb -> owned native Program -> Instance evaluates numeric ports
+       -> one libra_evaluate P/Invoke fills cached POD arrays
+       -> MonoBehaviour.Update applies Mesh, renderer, texture and shader changes.
+The C++ work/default buffers are NOT Unity GPU buffers. The engine adapter owns
+Mesh allocation, capacity and upload on its main thread. Dynamic quad mode
+reuses a four-vertex array and Mesh vertex buffer, changing it through
+Mesh.SetVertexBufferData. Static atlas mode changes only MaterialPropertyBlock.
+No managed callbacks per node, engine pointers, per-frame material clones or
+native buffer pointers retained by C# are involved. Serialized Mesh, Material
+and Texture references are the engine asset handles in this sample.
+
+Build the native plugin
+-----------------------
+The parent Runtime CMake must include this hookup (paths relative to Runtime):
+
+  set_target_properties(liberafx_runtime PROPERTIES
+      POSITION_INDEPENDENT_CODE ON CXX_VISIBILITY_PRESET hidden
+      VISIBILITY_INLINES_HIDDEN ON)
+  find_package(Threads REQUIRED)
+  add_library(liberafx_native SHARED Core/Interop.cpp)
+  target_link_libraries(liberafx_native PRIVATE liberafx_runtime Threads::Threads)
+  target_include_directories(liberafx_native PUBLIC include)
+  target_compile_features(liberafx_native PRIVATE cxx_std_17)
+  target_compile_definitions(liberafx_native PRIVATE LIBRA_INTEROP_BUILD=1)
+  set_target_properties(liberafx_native PROPERTIES
+      CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
+
+Inside LIBERAFX_BUILD_TESTS:
+
+  add_executable(liberafx_interop_tests tests/InteropTests.cpp)
+  target_link_libraries(liberafx_interop_tests PRIVATE liberafx_native)
+  add_test(NAME liberafx_interop_tests COMMAND liberafx_interop_tests)
+
+Example Windows commands from the repository:
+  cmake -S Runtime -B build\native -DLIBERAFX_BUILD_TESTS=ON
+  cmake --build build\native --config Release --target liberafx_native liberafx_interop_tests
+  ctest --test-dir build\native -C Release -R liberafx_interop_tests --output-on-failure
+Use Debug for the test's MSVC shared-CRT allocation hook: it checks that 10,000
+scalar evaluate/default/read cycles allocate or reallocate no native heap.
+liberafx_runtime remains a static C++ library; only the bridge is a shared DLL.
+Unix visibility must also hide symbols compiled into the static runtime.
+
+Unity installation (Unity 2021.3+ APIs; verified against 6000.2.6f1 assemblies)
+----------------------------------------------------------------------------
+1. Copy Runtime and Editor folders from this directory into Assets\LiberaFx.
+   Keep both asmdef files: the runtime asmdef enables unsafe pointer pinning.
+   No packages, network service, scene synchronization or reverse P/Invoke needed.
+2. Copy the native artifact into the appropriate Assets\Plugins folder:
+     Windows x64: liberafx_native.dll (Release), e.g. Plugins\x86_64
+     macOS: libliberafx_native.dylib, built for the target architecture(s)
+     Linux: libliberafx_native.so, built for the target architecture
+   In Plugin Inspector disable Any Platform and select matching platform/CPU,
+   including Editor when desired. Do not import a Windows DLL as a macOS plugin.
+   Windows requires the matching Visual C++ Redistributable; do not deploy Debug.
+   Restart the Editor after replacing a loaded native plugin.
+3. Use the GameObject > LiberaFx menu to create a cube, animated 4x4 atlas or
+   dynamic quad sample. Editor code creates shared sample material/atlas assets
+   only once. Enter Play mode. Native time -> scalar gain/default -> splat/color
+   drives cube movement/color; the same time port drives sprite atlas frames.
+   Dynamic mode also uses the native scalar output to deform the cached quad.
+4. Or add LiberaFxRenderer to an object, assign your Mesh/shared Material or
+   sprite Texture, and assign compiled bytecode. Unity's binary TextAsset import
+   uses .bytes: copy/rename a compiled .lfxb to .bytes without altering contents,
+   then drag that TextAsset into Compiled Program. Do NOT convert binary to text.
+   An empty Compiled Program selects the bundled locally generated v2 fixture.
+5. Set node GUIDs to the compiled graph's output instruction IDs:
+     Position: scalar X or Vector2/3/4 (XYZ used)
+     Color: four components, already evaluated by native Core
+     Atlas Frame: scalar, multiplied by Frames Per Second in this example
+     Deformation: scalar height delta for the two top vertices (dynamic mode)
+   Set Default Node/Input Slot/Component to a disconnected numeric input. Leave
+   Default Node empty if unused. Sample gain is node ...0002, slot 1, lane 0.
+   SetDefaultGain mutates that bound native default without reloading the graph.
+   Numeric values applied to Unity floats must be representable as finite floats.
+
+The supplied Atlas Unlit shader is a built-in-pipeline example. For URP/HDRP use
+an appropriate unlit shader/Shader Graph with _Color, _MainTex and _AtlasRect:
+  textureUV = _AtlasRect.xy + meshUV * _AtlasRect.zw
+The adapter converts Core top-left-origin atlas rows to Unity bottom-left UVs.
+It assigns sharedMaterial and a cached MaterialPropertyBlock, never .material.
+Model meshes/materials are borrowed serialized Unity assets, not destroyed.
+Owned quad meshes are destroyed on disable; native instances are released on
+disable. Do not configure SetupCubeSample/SetupAtlasSample on an active object:
+create an inactive object, add/configure its component, then activate it.
+
+ABI and ownership
+-----------------
+Interop.h compiles as C or C++; cdecl exports use uint64 program/instance handles,
+uint32 instance-local binding tokens, int32 result codes and fixed-layout POD.
+LibraValue is 40 bytes; LibraAtlasFrame 20; LibraSpriteVertex 36.
+GUID bytes are compiler big-endian order, not Guid.ToByteArray() Windows layout.
+The C# binding code converts canonical GUID text once during initialization.
+Program creation COPIES bytecode and owns v3 builtin binding storage. v1/v2/v3
+load through the real Core validator; unknown non-builtin custom nodes fail.
+Instances own fixed-capacity work/default/handle vectors allocated only at create.
+Instances retain their Program after program handle release. Handles are never
+reused. Repeated release, null storage and unknown handles return errors.
+Bind once; tokens are local to their instance and value/parameter namespaces.
+Calls are globally serialized; evaluate is synchronous on the caller via the
+inline scheduler and reports completed evaluation errors. This prioritizes
+safety over parallel instance throughput. No engine/Unity calls run in Core.
+Output arrays and inputs are borrowed for one call only; no aliases allowed.
+On errors do not render output arrays; batch output may be partially written.
+All pointers must address valid storage of the declared size. A native ABI
+cannot validate arbitrary dangling pointers or detect a fabricated byte count.
+Bad bytecode, null pointers, nonfinite data and stale public handles are handled
+with result codes; allocation/other C++ exceptions never cross the ABI.
+Release instances before unloading the plugin. Managed wrappers are IDisposable;
+OnDisable is the normal release path, finalizers are only a fallback.
+
+iOS / IL2CPP
+------------
+For iOS link Core + Interop.cpp statically into the Xcode player (build for iOS,
+not a desktop dylib), keep cdecl exports visible, and ensure linker dead-strip
+does not remove exported libra_* functions. P/Invoke uses __Internal on iOS
+players and liberafx_native elsewhere. Android needs the target ABI's .so and
+matching Plugin Inspector selection. These platforms were not built here.
+Forward P/Invoke uses pinned blittable arrays, not Marshal.Copy or delegates.
+No MonoPInvokeCallback/AOT reverse-callback wrappers, delegate lifetime roots or
+worker->Unity callbacks are needed. If adding reverse callbacks later, explicitly
+root static delegates for the entire native registration and use the platform's
+AOT attributes; never call UnityEngine from a native worker callback.
+
+Verified locally / limits
+-------------------------
+MSVC x64 Debug/Release actual DLL + linked ABI tests: v1 scalar, v2 Unity fixture, v3
+builtin Abs, bind/default mutation, copied-bytecode and program retention,
+invalid handles/binary/grid, atlas wrapping/quad generation and allocation hook.
+C11 header compile smoke passed with MSVC and Clang; DLL exports only the C bridge API.
+Runtime + editor scripts compiled against installed Unity 6000.2.6f1 assemblies.
+Real .NET forward P/Invoke into the DLL exercised the C#-generated sample,
+GUID bindings, default mutation, atlas/quad and 10,000 no-GC evaluate calls.
+Unity Play Mode, actual GPU rendering, shader compilation, IL2CPP, non-Windows
+plugins and native engine-neutral draw-command streaming were not exercised.
+The sample pulls bound numeric outputs; it does not yet import engine asset
+catalogs or consume an entire graph's render-command stream.
