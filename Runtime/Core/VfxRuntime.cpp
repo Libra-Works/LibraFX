@@ -12,8 +12,14 @@ constexpr auto legacyHeaderSize = std::size_t{12};
 constexpr auto legacyInstructionSize = std::size_t{44};
 constexpr auto typedHeaderSize = std::size_t{16};
 constexpr auto typedInstructionSize = std::size_t{96};
+constexpr auto customInstructionSize = std::size_t{256};
 constexpr auto maxNodes = std::uint32_t{10000};
 constexpr auto noInput = std::uint32_t{0xffffffffu};
+constexpr auto customParameterOpcode = std::uint8_t{40};
+constexpr auto customSignalOpcode = std::uint8_t{41};
+constexpr auto customMaxPorts = std::uint8_t{4};
+std::atomic<std::uint64_t> nextProgramGeneration{1};
+std::atomic<std::uint64_t> nextInstanceGeneration{1};
 static_assert(sizeof(double) == 8 && std::numeric_limits<double>::is_iec559,
               "LIBERA FX requires IEEE-754 binary64.");
 
@@ -40,8 +46,19 @@ auto readDouble(const std::uint8_t* bytes) noexcept -> double
 
 auto instruction(const std::uint8_t* bytes, std::uint16_t version, std::size_t index) noexcept -> const std::uint8_t*
 {
-    return bytes + (version == 1 ? legacyHeaderSize + index * legacyInstructionSize :
-        typedHeaderSize + index * typedInstructionSize);
+    auto stride = version == 1 ? legacyInstructionSize :
+        version == 2 ? typedInstructionSize : customInstructionSize;
+    return bytes + (version == 1 ? legacyHeaderSize : typedHeaderSize) + index * stride;
+}
+
+auto alignedStateSize(std::size_t bytes) noexcept -> std::size_t
+{
+    return (bytes + 7u) & ~std::size_t{7u};
+}
+
+auto stateOffset(const CustomNodeBinding* bindings, std::size_t nodeIndex) noexcept -> std::size_t
+{
+    return bindings[nodeIndex].stateOffset;
 }
 
 auto validIndex(std::uint32_t input, std::uint32_t index) noexcept -> bool
@@ -175,11 +192,6 @@ auto validTypedInstruction(const std::uint8_t* current, std::uint32_t index) noe
     return true;
 }
 
-auto typedSourceWidth(const std::uint8_t* bytes, std::uint32_t input) noexcept -> std::uint8_t
-{
-    return input == noInput ? 0 : instruction(bytes, 2, input)[17];
-}
-
 auto rangesOverlap(const void* first, std::size_t firstSize, const void* second,
                    std::size_t secondSize) noexcept -> bool
 {
@@ -254,7 +266,220 @@ auto Program::load(const void* bytes, std::size_t size, Program& out) noexcept -
     out.bytes_ = data;
     out.nodeCount_ = count;
     out.version_ = version;
+    out.bindings_ = nullptr;
+    out.stateBytes_ = 0;
+    out.generation_ = nextProgramGeneration.fetch_add(1, std::memory_order_relaxed);
     return Result::Ok;
+}
+
+auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescriptor* registry,
+                   std::size_t registryCount, CustomNodeBinding* bindings,
+                   std::size_t bindingCount, Program& out) noexcept -> Result
+{
+    if (bytes == nullptr || size < legacyHeaderSize) return Result::InvalidArgument;
+    auto data = static_cast<const std::uint8_t*>(bytes);
+    if (std::memcmp(data, "LFXB", 4) != 0) return Result::InvalidBinary;
+    auto version = read16(data + 4);
+    if (version != 3) return load(bytes, size, out);
+    if (size < typedHeaderSize) return Result::InvalidBinary;
+    if (data[6] != 1) return Result::UnsupportedBinary;
+    if (data[7] != 0 || read16(data + 12) != customInstructionSize || read16(data + 14) != 0)
+        return Result::InvalidBinary;
+    auto count = read32(data + 8);
+    if (count > maxNodes || size != typedHeaderSize + std::size_t{count} * customInstructionSize)
+        return Result::InvalidBinary;
+    if ((count != 0 && (bindings == nullptr || bindingCount < count)) ||
+        (registryCount != 0 && registry == nullptr))
+        return Result::InvalidArgument;
+    for (auto index = std::size_t{0}; index < registryCount; ++index)
+    {
+        const auto& descriptor = registry[index];
+        if (descriptor.abiVersion == 0 || descriptor.function == nullptr ||
+            descriptor.inputCount > customMaxPorts || descriptor.stateBytes > (std::numeric_limits<std::size_t>::max() - 7u))
+            return Result::InvalidArgument;
+        if ((descriptor.execution == CustomExecution::Parameter &&
+             (descriptor.outputWidth < 1 || descriptor.outputWidth > 4 || descriptor.branchCount != 0)) ||
+            (descriptor.execution == CustomExecution::Signal &&
+             (descriptor.outputWidth != 0 || descriptor.outputIsColor ||
+              descriptor.branchCount < 1 || descriptor.branchCount > customMaxPorts)) ||
+            (descriptor.execution != CustomExecution::Parameter &&
+             descriptor.execution != CustomExecution::Signal) ||
+            (descriptor.outputIsColor && descriptor.outputWidth != 4))
+            return Result::InvalidArgument;
+        for (auto input = 0u; input < descriptor.inputCount; ++input)
+            if (descriptor.inputWidths[input] < 1 || descriptor.inputWidths[input] > 4 ||
+                descriptor.inputIsColor[input] > 1 ||
+                (descriptor.inputIsColor[input] != 0 && descriptor.inputWidths[input] != 4))
+                return Result::InvalidArgument;
+        for (auto other = std::size_t{0}; other < index; ++other)
+            if (std::memcmp(descriptor.typeId, registry[other].typeId, 16) == 0 &&
+                descriptor.abiVersion == registry[other].abiVersion)
+                return Result::InvalidArgument;
+    }
+
+    auto totalStateBytes = std::size_t{0};
+    for (auto index = std::uint32_t{0}; index < count; ++index)
+    {
+        auto current = instruction(data, 3, index);
+        auto emptyId = true;
+        for (auto byte = 0u; byte < 16; ++byte) emptyId = emptyId && current[byte] == 0;
+        if (emptyId) return Result::InvalidBinary;
+        for (auto other = std::uint32_t{0}; other < index; ++other)
+            if (std::memcmp(current, instruction(data, 3, other), 16) == 0) return Result::InvalidBinary;
+        auto opcode = current[16];
+        if (opcode >= 1 && opcode <= 39)
+        {
+            if (!validTypedInstruction(current, index)) return Result::InvalidBinary;
+            auto inputA = read32(current + 24);
+            auto inputB = read32(current + 28);
+            auto validSource = [&](auto sourceIndex, auto sourceWidth, auto selectedLane, auto colorFlag) noexcept {
+                if (sourceIndex == noInput) return sourceWidth == 0 && selectedLane == 0 && colorFlag == 0;
+                auto source = instruction(data, 3, sourceIndex);
+                auto sourceIsBreak = source[16] >= 26 && source[16] <= 28;
+                return sourceIsBreak ? sourceWidth == 1 && selectedLane < source[17] && colorFlag == 0 :
+                    sourceWidth == source[17] && selectedLane == 0 &&
+                    ((source[20] & 1) != 0) == (colorFlag != 0);
+            };
+            if (!validSource(inputA, current[18], current[21], current[20] & 2) ||
+                !validSource(inputB, current[19], current[22], current[20] & 4))
+                return Result::InvalidBinary;
+            for (auto byte = typedInstructionSize; byte < customInstructionSize; ++byte)
+                if (current[byte] != 0) return Result::InvalidBinary;
+            continue;
+        }
+        if (opcode != customParameterOpcode && opcode != customSignalOpcode)
+            return Result::UnsupportedBinary;
+        auto inputCount = current[18];
+        auto branchCount = current[19];
+        auto outputWidth = current[17];
+        if (inputCount > customMaxPorts || (current[20] & 0xfe) != 0 || current[21] != 0 ||
+            current[22] != 0 || current[23] != 0 || read32(current + 44) != 0 ||
+            read32(current + 40) == 0 ||
+            (opcode == customParameterOpcode && (outputWidth < 1 || outputWidth > 4 || branchCount != 0)) ||
+            (opcode == customSignalOpcode && (outputWidth != 0 || branchCount < 1 || branchCount > customMaxPorts ||
+                                               current[20] != 0)))
+            return Result::InvalidBinary;
+        for (auto byte = 224u; byte < customInstructionSize; ++byte)
+            if (current[byte] != 0) return Result::InvalidBinary;
+        auto emptyTypeId = true;
+        for (auto byte = 0u; byte < 16; ++byte) emptyTypeId = emptyTypeId && current[24 + byte] == 0;
+        if (emptyTypeId) return Result::InvalidBinary;
+        auto descriptor = static_cast<const CustomNodeDescriptor*>(nullptr);
+        auto registeredType = false;
+        for (auto registryIndex = std::size_t{0}; registryIndex < registryCount; ++registryIndex)
+            if (std::memcmp(registry[registryIndex].typeId, current + 24, 16) == 0)
+            {
+                registeredType = true;
+                if (registry[registryIndex].abiVersion == read32(current + 40))
+                {
+                    descriptor = &registry[registryIndex];
+                    break;
+                }
+            }
+        if (descriptor == nullptr)
+            return registeredType ? Result::UnsupportedBinary : Result::UnknownCustomNode;
+        if (descriptor->inputCount != inputCount ||
+            descriptor->execution != (opcode == customParameterOpcode ?
+                CustomExecution::Parameter : CustomExecution::Signal) ||
+            descriptor->outputWidth != outputWidth || descriptor->branchCount != branchCount ||
+            descriptor->outputIsColor != ((current[20] & 1) != 0))
+            return Result::UnsupportedBinary;
+        if (descriptor->stateBytes > std::numeric_limits<std::size_t>::max() - 7u ||
+            alignedStateSize(descriptor->stateBytes) >
+                std::numeric_limits<std::size_t>::max() - totalStateBytes)
+            return Result::InvalidBinary;
+        totalStateBytes += alignedStateSize(descriptor->stateBytes);
+
+        for (auto input = 0u; input < customMaxPorts; ++input)
+        {
+            auto inputRecord = current + 48 + input * 8;
+            auto sourceIndex = read32(inputRecord);
+            auto sourceWidth = inputRecord[4];
+            auto selectedLane = inputRecord[5];
+            if (input < inputCount)
+            {
+                if (!validIndex(sourceIndex, index) || inputRecord[6] > 1 || inputRecord[7] != 0 ||
+                    inputRecord[6] != descriptor->inputIsColor[input] ||
+                    (sourceIndex == noInput ? sourceWidth != 0 || selectedLane != 0 :
+                     sourceWidth != descriptor->inputWidths[input]))
+                    return Result::InvalidBinary;
+                if (sourceIndex != noInput)
+                {
+                    auto source = instruction(data, 3, sourceIndex);
+                    auto sourceWidthActual = source[16] == customParameterOpcode ? source[17] :
+                        source[16] >= 26 && source[16] <= 28 ? 1 : source[17];
+                    auto sourceColor = source[16] == customParameterOpcode ? (source[20] & 1) != 0 :
+                        source[16] >= 1 && source[16] <= 39 ? (source[20] & 1) != 0 : false;
+                    if (source[16] == customSignalOpcode || sourceWidth != sourceWidthActual ||
+                        (sourceColor != (inputRecord[6] != 0)) ||
+                        (source[16] >= 26 && source[16] <= 28 ?
+                            selectedLane >= source[17] : selectedLane != 0))
+                        return Result::InvalidBinary;
+                }
+            }
+            else if (sourceIndex != noInput || sourceWidth != 0 || selectedLane != 0 ||
+                     inputRecord[6] != 0 || inputRecord[7] != 0)
+                return Result::InvalidBinary;
+            for (auto lane = 0u; lane < 4; ++lane)
+            {
+                auto component = readDouble(current + 80 + input * 32 + lane * 8);
+                if (!std::isfinite(component) ||
+                    (input < inputCount && descriptor->inputIsColor[input] != 0 &&
+                     lane < 4 && (component < 0 || (lane == 3 && component > 1))))
+                    return Result::InvalidBinary;
+            }
+        }
+        for (auto branch = 0u; branch < customMaxPorts; ++branch)
+        {
+            auto target = read32(current + 208 + branch * 4);
+            if (branch < branchCount)
+            {
+                if (target != noInput &&
+                    (target <= index || target >= count ||
+                     instruction(data, 3, target)[16] != customSignalOpcode))
+                    return Result::InvalidBinary;
+            }
+            else if (target != noInput) return Result::InvalidBinary;
+        }
+    }
+    if (totalStateBytes > std::numeric_limits<std::size_t>::max() -
+        std::size_t{count} * 4 * sizeof(double))
+        return Result::InvalidBinary;
+    auto boundStateOffset = std::size_t{count} * 4 * sizeof(double);
+    for (auto index = std::uint32_t{0}; index < count; ++index)
+    {
+        auto current = instruction(data, 3, index);
+        auto descriptor = static_cast<const CustomNodeDescriptor*>(nullptr);
+        if (current[16] == customParameterOpcode || current[16] == customSignalOpcode)
+            for (auto registryIndex = std::size_t{0}; registryIndex < registryCount; ++registryIndex)
+                if (std::memcmp(registry[registryIndex].typeId, current + 24, 16) == 0 &&
+                    registry[registryIndex].abiVersion == read32(current + 40))
+                {
+                    descriptor = &registry[registryIndex];
+                    break;
+                }
+        bindings[index].descriptor = descriptor;
+        bindings[index].stateOffset = boundStateOffset;
+        if (descriptor != nullptr) boundStateOffset += alignedStateSize(descriptor->stateBytes);
+    }
+    out.bytes_ = data;
+    out.nodeCount_ = count;
+    out.version_ = version;
+    out.bindings_ = bindings;
+    out.stateBytes_ = totalStateBytes;
+    out.generation_ = nextProgramGeneration.fetch_add(1, std::memory_order_relaxed);
+    return Result::Ok;
+}
+
+auto Program::workBytes() const noexcept -> std::size_t
+{
+    auto values = std::size_t{nodeCount_} * (version_ == 1 ? sizeof(double) : 4 * sizeof(double));
+    return values + (version_ == 3 ? stateBytes_ : 0);
+}
+
+auto Program::parameterValueCount() const noexcept -> std::size_t
+{
+    return std::size_t{nodeCount_} * (version_ == 1 ? 2 : version_ == 2 ? 8 : 16);
 }
 
 auto Instance::initialize(const Program& program, double* work, std::size_t workCount) noexcept -> Result
@@ -265,9 +490,10 @@ auto Instance::initialize(const Program& program, double* work, std::size_t work
 auto Instance::initialize(const Program& program, double* work, std::size_t workCount,
                           double* defaults, std::size_t defaultsCount) noexcept -> Result
 {
+    if (dispatching_) return Result::Busy;
     if (phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
-    auto workRequiredCount = program.nodeCount_ * (program.version_ == 1 ? 1u : 4u);
-    auto defaultsRequiredCount = program.nodeCount_ * (program.version_ == 1 ? 2u : 8u);
+    auto workRequiredCount = (program.workBytes() + sizeof(double) - 1) / sizeof(double);
+    auto defaultsRequiredCount = program.parameterValueCount();
     if (program.bytes_ == nullptr || (workRequiredCount > 0 && work == nullptr))
         return Result::InvalidArgument;
     if (workCount < workRequiredCount || (defaults != nullptr && defaultsCount < defaultsRequiredCount))
@@ -285,20 +511,269 @@ auto Instance::initialize(const Program& program, double* work, std::size_t work
                 defaults[index * 2] = readDouble(current + 28);
                 defaults[index * 2 + 1] = readDouble(current + 36);
             }
-            else
+            else if (program.version_ == 2 || current[16] <= 39)
                 for (auto lane = 0u; lane < 8; ++lane)
-                    defaults[index * 8 + lane] = readDouble(current + (lane < 4 ? 32 + lane * 8 : 64 + (lane - 4) * 8));
+                    defaults[index * (program.version_ == 3 ? 16 : 8) + lane] =
+                        readDouble(current + (lane < 4 ? 32 + lane * 8 : 64 + (lane - 4) * 8));
+            else
+                for (auto input = 0u; input < customMaxPorts; ++input)
+                    for (auto lane = 0u; lane < 4; ++lane)
+                        defaults[index * 16 + input * 4 + lane] =
+                            readDouble(current + 80 + input * 32 + lane * 8);
         }
+    cleanupStates();
     program_ = &program;
     work_ = work;
     defaults_ = defaults;
+    stateWork_ = work == nullptr ? nullptr : reinterpret_cast<double*>(
+        reinterpret_cast<std::uint8_t*>(work) +
+        std::size_t{program.nodeCount_} * (program.version_ == 1 ? sizeof(double) : 4 * sizeof(double)));
+    if (program.version_ == 3 && program.stateBytes_ != 0)
+        std::memset(stateWork_, 0, program.stateBytes_);
+    initializedStateCount_ = 0;
+    if (program.version_ == 3)
+        for (auto index = std::size_t{0}; index < program.nodeCount_; ++index)
+        {
+            auto descriptor = program.bindings_[index].descriptor;
+            if (descriptor == nullptr) continue;
+            auto state = reinterpret_cast<std::uint8_t*>(work) + stateOffset(program.bindings_, index);
+            if (descriptor->initialize != nullptr)
+            {
+                auto status = descriptor->initialize(state, descriptor->stateBytes, descriptor->context);
+                if (status != Result::Ok)
+                {
+                    if (descriptor->cleanup != nullptr)
+                        descriptor->cleanup(state, descriptor->stateBytes, descriptor->context);
+                    cleanupStates();
+                    program_ = nullptr;
+                    work_ = nullptr;
+                    defaults_ = nullptr;
+                    stateWork_ = nullptr;
+                    result_ = Result::NotReady;
+                    phase_.store(Phase::Idle, std::memory_order_release);
+                    return status;
+                }
+            }
+            initializedStateCount_ = index + 1;
+        }
+    generation_ = nextInstanceGeneration.fetch_add(1, std::memory_order_relaxed);
     result_ = Result::NotReady;
     phase_.store(Phase::Idle, std::memory_order_release);
     return Result::Ok;
 }
 
+Instance::~Instance()
+{
+    cleanupStates();
+}
+
+void Instance::cleanupStates() noexcept
+{
+    if (program_ == nullptr || program_->version_ != 3 || work_ == nullptr) return;
+    for (auto index = initializedStateCount_; index > 0; --index)
+    {
+        auto nodeIndex = index - 1;
+        auto descriptor = program_->bindings_[nodeIndex].descriptor;
+        if (descriptor == nullptr || descriptor->cleanup == nullptr) continue;
+        auto state = reinterpret_cast<std::uint8_t*>(work_) +
+            stateOffset(program_->bindings_, nodeIndex);
+        descriptor->cleanup(state, descriptor->stateBytes, descriptor->context);
+    }
+    initializedStateCount_ = 0;
+}
+
+auto Instance::bindValue(const std::uint8_t nodeId[16], ValueHandle& out) const noexcept -> Result
+{
+    if (program_ == nullptr || nodeId == nullptr) return Result::InvalidArgument;
+    for (auto index = std::uint32_t{0}; index < program_->nodeCount_; ++index)
+        if (std::memcmp(instruction(program_->bytes_, program_->version_, index), nodeId, 16) == 0)
+        {
+            auto node = instruction(program_->bytes_, program_->version_, index);
+            auto width = program_->version_ == 1 ? 1 : node[17];
+            if (program_->version_ == 3 && node[16] == customSignalOpcode)
+                return Result::InvalidValueType;
+            out = {program_, generation_, program_->generation_, index, static_cast<std::uint8_t>(width)};
+            return Result::Ok;
+        }
+    return Result::NodeNotFound;
+}
+
+auto Instance::bindParameter(const std::uint8_t nodeId[16], std::uint8_t inputSlot,
+                             std::uint8_t component, ParameterHandle& out) const noexcept -> Result
+{
+    if (program_ == nullptr || nodeId == nullptr) return Result::InvalidArgument;
+    for (auto index = std::uint32_t{0}; index < program_->nodeCount_; ++index)
+        if (std::memcmp(instruction(program_->bytes_, program_->version_, index), nodeId, 16) == 0)
+        {
+            auto current = instruction(program_->bytes_, program_->version_, index);
+            auto laneCount = std::uint8_t{0};
+            if (program_->version_ == 3 && current[16] >= customParameterOpcode)
+                laneCount = inputSlot < current[18] ?
+                    program_->bindings_[index].descriptor->inputWidths[inputSlot] : 0;
+            else
+            {
+                auto opcode = current[16];
+                auto width = program_->version_ == 1 ? 1u : current[17];
+                if (program_->version_ == 1)
+                    laneCount = inputSlot == 0 && (opcode == 1 || (opcode >= 3 && opcode <= 6)) ||
+                        inputSlot == 1 && opcode >= 3 && opcode <= 6 ? 1 : 0;
+                else if (inputSlot == 0)
+                {
+                    if (opcode == 1 || (opcode >= 7 && opcode <= 10) ||
+                        (opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22)) laneCount = width;
+                    else if (opcode == 29 || opcode == 30 || opcode == 32) laneCount = 1;
+                    else if (opcode >= 35 && opcode <= 37) laneCount = width;
+                }
+                else if ((opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22)) laneCount = width;
+            }
+            if (component >= laneCount) return Result::InvalidValueType;
+            out = {program_, generation_, program_->generation_, index, inputSlot, component};
+            return Result::Ok;
+        }
+    return Result::NodeNotFound;
+}
+
+auto Instance::bindSignal(const std::uint8_t nodeId[16], SignalHandle& out) const noexcept -> Result
+{
+    if (program_ == nullptr || program_->version_ != 3 || nodeId == nullptr)
+        return Result::InvalidArgument;
+    for (auto index = std::uint32_t{0}; index < program_->nodeCount_; ++index)
+        if (std::memcmp(instruction(program_->bytes_, 3, index), nodeId, 16) == 0)
+        {
+            if (instruction(program_->bytes_, 3, index)[16] != customSignalOpcode)
+                return Result::InvalidValueType;
+            out = {program_, generation_, program_->generation_, index};
+            return Result::Ok;
+        }
+    return Result::NodeNotFound;
+}
+
+auto Instance::value(const ValueHandle& handle, double out[4]) const noexcept -> Result
+{
+    if (out == nullptr) return Result::InvalidArgument;
+    if (program_ == nullptr || handle.programIdentity != program_ || handle.generation != generation_ ||
+        handle.programGeneration != program_->generation_ ||
+        handle.nodeIndex >= program_->nodeCount_)
+        return Result::InvalidHandle;
+    if (handle.componentCount == 0 || handle.componentCount > 4)
+        return Result::InvalidHandle;
+    auto node = instruction(program_->bytes_, program_->version_, handle.nodeIndex);
+    if ((program_->version_ == 3 && node[16] == customSignalOpcode) ||
+        handle.componentCount != (program_->version_ == 1 ? 1 : node[17]))
+        return Result::InvalidHandle;
+    auto status = result();
+    if (status != Result::Ok) return status;
+    auto base = handle.nodeIndex * (program_->version_ == 1 ? 1 : 4);
+    for (auto lane = 0u; lane < handle.componentCount; ++lane) out[lane] = work_[base + lane];
+    for (auto lane = handle.componentCount; lane < 4; ++lane) out[lane] = 0;
+    return Result::Ok;
+}
+
+auto Instance::parameter(const ParameterHandle& handle, double& out) const noexcept -> Result
+{
+    if (phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
+    if (program_ == nullptr || handle.programIdentity != program_ || handle.generation != generation_ ||
+        handle.programGeneration != program_->generation_ || handle.nodeIndex >= program_->nodeCount_)
+        return Result::InvalidHandle;
+    auto node = instruction(program_->bytes_, program_->version_, handle.nodeIndex);
+    auto valid = false;
+    if (program_->version_ == 3 && node[16] >= customParameterOpcode)
+    {
+        auto descriptor = program_->bindings_[handle.nodeIndex].descriptor;
+        valid = descriptor != nullptr && handle.inputSlot < node[18] &&
+            handle.component < descriptor->inputWidths[handle.inputSlot];
+    }
+    else
+    {
+        auto opcode = node[16];
+        auto width = program_->version_ == 1 ? 1u : node[17];
+        auto laneCount = 0u;
+        if (program_->version_ == 1)
+        {
+            if ((handle.inputSlot == 0 && (opcode == 1 || (opcode >= 3 && opcode <= 6))) ||
+                (handle.inputSlot == 1 && opcode >= 3 && opcode <= 6)) laneCount = 1;
+        }
+        else if (handle.inputSlot == 0)
+        {
+            if (opcode == 1 || (opcode >= 7 && opcode <= 10) ||
+                (opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22)) laneCount = width;
+            else if (opcode == 29 || opcode == 30 || opcode == 32) laneCount = 1;
+            else if (opcode >= 35 && opcode <= 37) laneCount = width;
+        }
+        else if (handle.inputSlot == 1 &&
+                 ((opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22))) laneCount = width;
+        valid = handle.inputSlot <= 1 && handle.component < laneCount;
+    }
+    if (!valid) return Result::InvalidHandle;
+    if (program_->version_ == 1)
+        out = defaults_ == nullptr ?
+            readDouble(node + (handle.inputSlot == 0 ? 28 : 36)) :
+            defaults_[handle.nodeIndex * 2 + handle.inputSlot];
+    else if (program_->version_ == 3 && node[16] >= customParameterOpcode)
+        out = defaults_ == nullptr ?
+            readDouble(node + 80 + handle.inputSlot * 32 + handle.component * 8) :
+            defaults_[handle.nodeIndex * 16 + handle.inputSlot * 4 + handle.component];
+    else
+        out = defaults_ == nullptr ?
+            readDouble(node + (handle.inputSlot == 0 ? 32 : 64) + handle.component * 8) :
+            defaults_[handle.nodeIndex * (program_->version_ == 3 ? 16 : 8) +
+                handle.inputSlot * 4 + handle.component];
+    return Result::Ok;
+}
+
+auto Instance::setParameter(const ParameterHandle& handle, double value) noexcept -> Result
+{
+    if (dispatching_) return Result::Busy;
+    if (phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
+    if (program_ == nullptr || defaults_ == nullptr || handle.programIdentity != program_ ||
+        handle.generation != generation_ || handle.programGeneration != program_->generation_ ||
+        handle.nodeIndex >= program_->nodeCount_)
+        return Result::InvalidHandle;
+    if (!std::isfinite(value)) return Result::NonFinite;
+    auto node = instruction(program_->bytes_, program_->version_, handle.nodeIndex);
+    if (program_->version_ == 3 && node[16] >= customParameterOpcode)
+    {
+        auto descriptor = program_->bindings_[handle.nodeIndex].descriptor;
+        if (descriptor == nullptr || handle.inputSlot >= node[18] ||
+            handle.component >= descriptor->inputWidths[handle.inputSlot])
+            return Result::InvalidHandle;
+        if (descriptor->inputIsColor[handle.inputSlot] != 0 &&
+            (value < 0 || (handle.component == 3 && value > 1)))
+            return Result::InvalidValueType;
+        defaults_[handle.nodeIndex * 16 + handle.inputSlot * 4 + handle.component] = value;
+    }
+    else
+    {
+        auto opcode = node[16];
+        auto width = program_->version_ == 1 ? 1u : node[17];
+        auto laneCount = 0u;
+        if (program_->version_ == 1)
+        {
+            if ((handle.inputSlot == 0 && (opcode == 1 || (opcode >= 3 && opcode <= 6))) ||
+                (handle.inputSlot == 1 && opcode >= 3 && opcode <= 6)) laneCount = 1;
+        }
+        else if (handle.inputSlot == 0)
+        {
+            if (opcode == 1 || (opcode >= 7 && opcode <= 10) ||
+                (opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22)) laneCount = width;
+            else if (opcode == 29 || opcode == 30 || opcode == 32) laneCount = 1;
+            else if (opcode >= 35 && opcode <= 37) laneCount = width;
+        }
+        else if (handle.inputSlot == 1 &&
+                 ((opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22))) laneCount = width;
+        if (handle.inputSlot > 1 || handle.component >= laneCount) return Result::InvalidHandle;
+        if (program_->version_ == 1)
+            defaults_[handle.nodeIndex * 2 + handle.inputSlot] = value;
+        else
+            defaults_[handle.nodeIndex * (program_->version_ == 3 ? 16 : 8) +
+                handle.inputSlot * 4 + handle.component] = value;
+    }
+    return Result::Ok;
+}
+
 auto Instance::updateAsync(double time, Enqueue enqueue, void* queueContext) noexcept -> Result
 {
+    if (dispatching_) return Result::Busy;
     if (program_ == nullptr || enqueue == nullptr || !std::isfinite(time)) return Result::InvalidArgument;
     auto phase = phase_.load(std::memory_order_acquire);
     for (;;)
@@ -318,8 +793,10 @@ auto Instance::updateAsync(double time, Enqueue enqueue, void* queueContext) noe
 auto Instance::setParameter(const std::uint8_t nodeId[16], std::uint8_t inputSlot,
                             std::uint8_t component, double value) noexcept -> Result
 {
+    if (dispatching_) return Result::Busy;
     if (phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
-    if (program_ == nullptr || defaults_ == nullptr || nodeId == nullptr || inputSlot > 1)
+    if (program_ == nullptr || defaults_ == nullptr || nodeId == nullptr ||
+        inputSlot > (program_->version_ == 3 ? 3 : 1))
         return Result::InvalidArgument;
     if (!std::isfinite(value)) return Result::NonFinite;
     for (auto index = std::uint32_t{0}; index < program_->nodeCount_; ++index)
@@ -327,6 +804,18 @@ auto Instance::setParameter(const std::uint8_t nodeId[16], std::uint8_t inputSlo
         auto current = instruction(program_->bytes_, program_->version_, index);
         if (std::memcmp(current, nodeId, 16) != 0) continue;
         auto opcode = current[16];
+        if (program_->version_ == 3 && opcode >= customParameterOpcode)
+        {
+            if (inputSlot >= current[18] || component >= 4) return Result::InvalidValueType;
+            auto descriptor = program_->bindings_[index].descriptor;
+            if (descriptor == nullptr || component >= descriptor->inputWidths[inputSlot])
+                return Result::InvalidValueType;
+            if (descriptor->inputIsColor[inputSlot] != 0 &&
+                (value < 0 || (component == 3 && value > 1)))
+                return Result::InvalidValueType;
+            defaults_[index * 16 + inputSlot * 4 + component] = value;
+            return Result::Ok;
+        }
         auto width = program_->version_ == 1 ? 1u : current[17];
         auto laneCount = 0u;
         if (program_->version_ == 1)
@@ -358,6 +847,8 @@ auto Instance::setParameter(const std::uint8_t nodeId[16], std::uint8_t inputSlo
             return Result::InvalidValueType;
         if (program_->version_ == 1)
             defaults_[index * 2 + inputSlot] = value;
+        else if (program_->version_ == 3)
+            defaults_[index * 16 + inputSlot * 4 + component] = value;
         else
             defaults_[index * 8 + inputSlot * 4 + component] = value;
         return Result::Ok;
@@ -395,6 +886,8 @@ auto Instance::valueComponents(const std::uint8_t nodeId[16], double out[4],
         if (std::memcmp(current, nodeId, 16) == 0)
         {
             auto width = program_->version_ == 1 ? 1u : current[17];
+            if (program_->version_ == 3 && current[16] == customSignalOpcode)
+                return Result::InvalidValueType;
             for (auto lane = 0u; lane < width; ++lane)
                 out[lane] = work_[index * (program_->version_ == 1 ? 1u : 4u) + lane];
             for (auto lane = width; lane < 4; ++lane) out[lane] = 0;
@@ -403,6 +896,77 @@ auto Instance::valueComponents(const std::uint8_t nodeId[16], double out[4],
         }
     }
     return Result::NodeNotFound;
+}
+
+auto Instance::dispatchSignal(const std::uint8_t entryNodeId[16], double time,
+                              std::size_t maxInstructions) noexcept -> Result
+{
+    auto entry = SignalHandle{};
+    auto status = bindSignal(entryNodeId, entry);
+    if (status != Result::Ok) return status;
+    return dispatchSignal(entry, time, maxInstructions);
+}
+
+auto Instance::dispatchSignal(const SignalHandle& entry, double time,
+                              std::size_t maxInstructions) noexcept -> Result
+{
+    if (dispatching_) return Result::Busy;
+    if (program_ == nullptr || program_->version_ != 3 || !std::isfinite(time) || maxInstructions == 0)
+        return Result::InvalidArgument;
+    if (entry.programIdentity != program_ || entry.generation != generation_ ||
+        entry.programGeneration != program_->generation_ || entry.nodeIndex >= program_->nodeCount_)
+        return Result::InvalidHandle;
+    if (phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
+    auto status = result();
+    if (status != Result::Ok) return status;
+    auto index = entry.nodeIndex;
+    if (instruction(program_->bytes_, 3, index)[16] != customSignalOpcode)
+        return Result::InvalidValueType;
+
+    struct DispatchScope final {
+        bool& active;
+        ~DispatchScope() { active = false; }
+    };
+    auto scope = DispatchScope{dispatching_};
+    dispatching_ = true;
+    auto visited = std::size_t{0};
+    while (index != noInput)
+    {
+        if (++visited > maxInstructions) return Result::InstructionBudgetExceeded;
+        auto current = instruction(program_->bytes_, 3, index);
+        auto descriptor = program_->bindings_[index].descriptor;
+        if (descriptor == nullptr || descriptor->execution != CustomExecution::Signal)
+            return Result::UnknownCustomNode;
+        auto inputs = std::array<double, customMaxPorts * 4>{};
+        auto inputWidths = std::array<std::uint8_t, customMaxPorts>{};
+        auto constants = std::array<double, customMaxPorts * 4>{};
+        for (auto input = 0u; input < current[18]; ++input)
+        {
+            auto inputRecord = current + 48 + input * 8;
+            auto sourceIndex = read32(inputRecord);
+            inputWidths[input] = descriptor->inputWidths[input];
+            for (auto lane = 0u; lane < descriptor->inputWidths[input]; ++lane)
+            {
+                constants[input * 4 + lane] = defaults_ == nullptr ?
+                    readDouble(current + 80 + input * 32 + lane * 8) :
+                    defaults_[index * 16 + input * 4 + lane];
+                inputs[input * 4 + lane] = sourceIndex == noInput ? constants[input * 4 + lane] :
+                    work_[sourceIndex * 4 + inputRecord[5] + lane];
+            }
+        }
+        auto state = reinterpret_cast<std::uint8_t*>(work_) +
+            stateOffset(program_->bindings_, index);
+        for (auto lane = 0u; lane < current[17]; ++lane) work_[index * 4 + lane] = 0;
+        auto invocation = CustomNodeInvocation{
+            inputs.data(), current[18], inputWidths.data(), nullptr, 0,
+            constants.data(), std::size_t{current[18]} * 4,
+            state, descriptor->stateBytes, time, 0xff, descriptor->context};
+        status = descriptor->function(invocation);
+        if (status != Result::Ok) return status;
+        if (invocation.selectedBranch >= current[19]) return Result::InvalidValueType;
+        index = read32(current + 208 + invocation.selectedBranch * 4);
+    }
+    return Result::Ok;
 }
 
 void Instance::run(void* context) noexcept
@@ -446,20 +1010,56 @@ auto Instance::evaluate() noexcept -> Result
     }
     for (auto index = std::uint32_t{0}; index < program_->nodeCount_; ++index)
     {
-        auto current = instruction(program_->bytes_, 2, index);
+        auto current = instruction(program_->bytes_, program_->version_, index);
         auto opcode = current[16];
+        if (program_->version_ == 3 && opcode >= customParameterOpcode)
+        {
+            if (opcode == customSignalOpcode) continue;
+            auto descriptor = program_->bindings_[index].descriptor;
+            if (descriptor == nullptr) return Result::UnknownCustomNode;
+            auto inputs = std::array<double, customMaxPorts * 4>{};
+            auto inputWidths = std::array<std::uint8_t, customMaxPorts>{};
+            auto constants = std::array<double, customMaxPorts * 4>{};
+            for (auto input = 0u; input < current[18]; ++input)
+            {
+                auto inputRecord = current + 48 + input * 8;
+                auto sourceIndex = read32(inputRecord);
+                inputWidths[input] = descriptor->inputWidths[input];
+                for (auto lane = 0u; lane < descriptor->inputWidths[input]; ++lane)
+                {
+                    constants[input * 4 + lane] = defaults_ == nullptr ?
+                        readDouble(current + 80 + input * 32 + lane * 8) :
+                        defaults_[index * 16 + input * 4 + lane];
+                    inputs[input * 4 + lane] = sourceIndex == noInput ? constants[input * 4 + lane] :
+                        work_[sourceIndex * 4 + inputRecord[5] + lane];
+                }
+            }
+            auto state = reinterpret_cast<std::uint8_t*>(work_) +
+                stateOffset(program_->bindings_, index);
+            auto invocation = CustomNodeInvocation{
+                inputs.data(), current[18], inputWidths.data(), work_ + index * 4, current[17],
+                constants.data(), std::size_t{current[18]} * 4,
+                state, descriptor->stateBytes, time_, 0xff, descriptor->context};
+            auto status = descriptor->function(invocation);
+            if (status != Result::Ok) return status;
+            for (auto lane = 0u; lane < current[17]; ++lane)
+                if (!std::isfinite(work_[index * 4 + lane])) return Result::NonFinite;
+            continue;
+        }
         auto outputWidth = current[17];
         auto aIndex = read32(current + 24);
         auto bIndex = read32(current + 28);
         auto base = index * 4;
         auto valueA = [&](auto lane) noexcept {
             return aIndex == noInput ?
-                (defaults_ == nullptr ? readDouble(current + 32 + lane * 8) : defaults_[index * 8 + lane]) :
+                (defaults_ == nullptr ? readDouble(current + 32 + lane * 8) :
+                    defaults_[index * (program_->version_ == 3 ? 16 : 8) + lane]) :
                 work_[aIndex * 4 + current[21] + lane];
         };
         auto valueB = [&](auto lane) noexcept {
             return bIndex == noInput ?
-                (defaults_ == nullptr ? readDouble(current + 64 + lane * 8) : defaults_[index * 8 + 4 + lane]) :
+                (defaults_ == nullptr ? readDouble(current + 64 + lane * 8) :
+                    defaults_[index * (program_->version_ == 3 ? 16 : 8) + 4 + lane]) :
                 work_[bIndex * 4 + current[22] + lane];
         };
         if (opcode == 1 || opcode == 7 || opcode == 8 || opcode == 9 || opcode == 10)
@@ -506,13 +1106,15 @@ auto Instance::evaluate() noexcept -> Result
             auto copied = opcode == 29 || opcode == 30 ? 2u : opcode == 31 || opcode == 32 ? 3u : 4u;
             for (auto lane = 0u; lane < outputWidth; ++lane)
                 work_[base + lane] = lane < copied ? valueA(lane) :
-                    (defaults_ == nullptr ? readDouble(current + 32) : defaults_[index * 8]);
+                    (defaults_ == nullptr ? readDouble(current + 32) :
+                        defaults_[index * (program_->version_ == 3 ? 16 : 8)]);
         }
         else if (opcode >= 35 && opcode <= 37)
         {
             for (auto lane = 0u; lane < outputWidth; ++lane)
                 work_[base + lane] = valueA(static_cast<std::uint32_t>(
-                    defaults_ == nullptr ? readDouble(current + 32 + lane * 8) : defaults_[index * 8 + lane]));
+                    defaults_ == nullptr ? readDouble(current + 32 + lane * 8) :
+                        defaults_[index * (program_->version_ == 3 ? 16 : 8) + lane]));
         }
         else if (opcode == 38 || opcode == 39)
         {

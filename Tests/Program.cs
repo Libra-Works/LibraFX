@@ -154,10 +154,14 @@ internal static class Program
         Console.WriteLine("Latest/frozen group compilation and deterministic instance checks passed.");
         PreviewProtocolTests.Run();
         Console.WriteLine("Preview parameter deltas, slow-client baselines and TLS resynchronization checks passed.");
+        CompiledPreviewProtocolTests.Run();
+        Console.WriteLine("Compiled preview protocol, playback baselines and TLS transport checks passed.");
         TimelineTests.Run();
         Console.WriteLine("Timeline retiming, shared playhead and graph persistence checks passed.");
         LiberaFx.Tests.VectorArithmeticTests.Run();
         Console.WriteLine("Vector operations, explicit conversions and persistent multi-output Break pins passed.");
+        LiberaFx.Tests.CustomNodeCompilationTests.Run();
+        Console.WriteLine("Project-native parameter/signal node compilation and mixed port categories passed.");
     }
 
     private static byte[] CreateLargeImage(BitmapEncoderOptions options)

@@ -34,18 +34,27 @@ internal static class TimelineTests
         timeline.Retime(timeline.Tracks.Single(), 0, 0);
         if (!GraphSnapshot.ContentEquals(before, graph.CreateSnapshot()))
             throw new InvalidOperationException("An invalid timeline duration changed graph data.");
+        var publishedPlayback = new List<PreviewPlaybackState>();
+        playback.StateChanged += (_, _) => publishedPlayback.Add(playback.Snapshot);
         playback.Play();
         playback.Advance(1);
-        if (playback.Frame != 60 || curves.PlayheadFrame != 60)
+        if (playback.Frame != 60 || curves.PlayheadFrame != 60 ||
+            publishedPlayback.Count != 2 || publishedPlayback[^1].Frame != 60 || !publishedPlayback[^1].Playing)
             throw new InvalidOperationException("Timeline and curve editor do not share their playhead.");
+        playback.Advance(0);
+        if (publishedPlayback.Count != 2)
+            throw new InvalidOperationException("An unchanged playhead generated a playback update.");
         playback.FpsText = "30";
         playback.Advance(1);
         if (playback.Frame != 90) throw new InvalidOperationException("Playback did not use its selected FPS.");
         playback.Advance(2);
-        if (playback.Frame != 30) throw new InvalidOperationException("Playback did not wrap its loop range.");
+        if (playback.Frame != 30 || publishedPlayback[^1].Frame != 30 || !publishedPlayback[^1].Playing)
+            throw new InvalidOperationException("Playback did not publish its wrapped loop position.");
         playback.Loop = false;
+        var beforeStop = publishedPlayback.Count;
         playback.Advance(10);
-        if (playback.Frame != 120 || playback.IsPlaying)
+        if (playback.Frame != 120 || playback.IsPlaying || publishedPlayback.Count != beforeStop + 1 ||
+            publishedPlayback[^1].Frame != 120 || publishedPlayback[^1].Playing)
             throw new InvalidOperationException("Non-looping playback did not stop at the range end.");
         playback.StopCommand.Execute(null);
         if (playback.Frame != 0 || !GraphSnapshot.ContentEquals(before, graph.CreateSnapshot()))

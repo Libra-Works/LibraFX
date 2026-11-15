@@ -7,5 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\LiberaFx.csproj" />
+    <None Include="..\Runtime\examples\**\*.json"
+          Link="Runtime\examples\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

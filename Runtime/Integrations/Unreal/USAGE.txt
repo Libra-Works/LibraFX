@@ -1,0 +1,86 @@
+LIBRA RUNTIME FOR UNREAL - SOURCE INTEGRATION
+
+Scope
+  Engine-independent CPU bytecode evaluation, project-native nodes, bound values
+  and parameters, explicit game-thread signals, and live editor communication.
+  This is not a GPU particle renderer. Viewer/rendering integration is separate.
+  Source targets UE 5.7 and later; only the local 5.7.4 SDK was inspected.
+  No Unreal build, UHT run, or engine launch was performed during implementation.
+  The editor WebSocket transport currently supports Win64 x64 with SSL. Other
+  targets fail closed; this does not restrict the engine-independent Core codec.
+
+Install (PowerShell 7)
+  .\Install-LibraRuntimeForUnreal.ps1 -ProjectPath "C:\YourProject\YourProject.uproject"
+  Use -Update for a previous installer-managed installation. Modified and
+  conflicting unowned files are preserved; the update stops instead of replacing
+  them. Project files and Config are not edited. Build the project yourself.
+  Copying the source plugin folder alone is insufficient: the installer bundles
+  the native Core sources and generates a separate translation unit per source.
+
+Import and use
+  Convert an editor graph to .lfxb, then import that file into Unreal.
+  Add a Libra Effect component to an actor and set its Effect asset.
+  Play / Pause / Stop / EvaluateAtTime are available to both C++ and Blueprint.
+  Read results in OnEvaluationCompleted, before the next worker evaluation starts.
+  BindValue / BindParameter / BindSignal resolve UUIDs once. ReadBoundValue,
+  ReadBoundParameter, SetBoundParameter and DispatchSignal use those handles.
+  Rebind after changing an effect, reimporting, stopping/recreating its instance,
+  or registering new native node types. Cross-instance/stale handles are rejected.
+  Parameter overrides are per instance; asset bytecode is never modified.
+  Signals run synchronously on the game thread after a successful evaluation.
+  Their instruction budget bounds execution, not rollback of earlier side effects.
+
+Live editor connection
+  Start LIBERA FX and show its Preview panel. Use that session's access token
+  and SHA-256 certificate fingerprint; neither is written into level assets.
+  Add a Libra Editor Connection component to the same actor as Libra Effect.
+  Target defaults to the first Libra Effect component on that actor.
+  Set Host, Port (default 8766), AccessToken and CertificateFingerprint, then call
+  ConnectToEditor from Blueprint or C++. Use PIE or a running standalone game.
+  The client uses /preview?protocol=3 with certificate-pinned TLS, authenticates
+  before subscribing, and accepts compiled LFXB programs, playback, and bounded
+  compilation diagnostics. It never interprets the editable graph in the engine.
+  Graph edits replace the transient program; playback-only packets reuse it.
+  Rebind handles in OnPreviewProgramChanged. Continue reading completed values
+  in the target component's OnEvaluationCompleted, not OnPreviewUpdated.
+  Invalid programs/compilation errors leave the last accepted effect intact.
+  RequestSnapshot asks for a full resynchronization. DisconnectFromEditor closes
+  the transport and restores the original asset (its prior instance state is
+  not restored). Reconnect explicitly after a transport failure.
+  Editor restart changes the token/certificate. Pair the new values again.
+  The token and certificate fingerprint are transient component properties.
+  Do not put credentials in config files, source, logs, URLs, or cooked content.
+
+Project-native nodes
+  Add LibraRuntimeForUnreal to your module's Build.cs dependencies.
+  Register descriptors with FLibraNativeNodes::Register in your module startup.
+  Use the same type UUID, ABI version, numeric input order/widths, output width
+  and signal branch count in C++ and the project's JSON node definitions.
+  Parameter callbacks run on workers: do not touch UObject/actors there.
+  Signal callbacks run only through explicit owner-thread DispatchSignal.
+  State is caller-owned, zero-initialized and aligned for double; initialize and
+  cleanup callbacks handle per-instance resources, including failed initialization.
+  Descriptor contexts and callback code must outlive every program using them.
+  Registration is append-only and transactional; hot module unloading/reloading
+  is unsupported. Close the editor before rebuilding a node module.
+  Blueprint can call the runtime; Blueprint implementations of nodes are deferred.
+  Numeric input defaults are exposed to callbacks; arbitrary inspector property
+  serialization, cyclic signal graphs and multi-target signal outputs are not.
+
+Optional example project plugin
+  From this repository, copy Runtime\Integrations\Unreal\Examples\LibraProjectNodes
+  into your project's Plugins directory.
+  Its native parameter Scale and signal Route match
+  Runtime\examples\CustomNodes\CustomScale.json and CustomRoute.json in this repo.
+  Copy those JSON files into the editor project's configured NodeDirectory.
+  Runtime\examples\Graphs contains matching graph fixtures.
+  The example module registers its descriptors before default-phase asset loads;
+  it does not add project-specific types to the editor's always-visible Core list.
+
+Validation sources
+  Tests\Verify-UnrealPluginPackaging.ps1 exercises isolated source installation,
+  updates, local/unowned edit protection, obsolete cleanup and Core wrappers.
+  Native CMake has runtime, render-queue and live-preview codec test targets.
+  Managed smoke tests include custom-node compilation and protocol-v3 WSS cases.
+  UE automation includes asset ownership, GUID identity and transport checks.
+  Compiled tests and actual UE/editor interoperability still require your build.

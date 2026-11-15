@@ -27,6 +27,13 @@ public readonly record struct VfxTypedInstruction(
     int InputASourceComponent, int InputBSourceComponent, int InputA, int InputB,
     double[] DefaultA, double[] DefaultB);
 
+public readonly record struct VfxCustomInput(
+    int SourceIndex, int SourceWidth, int SourceComponent, bool IsColor, double[] Defaults);
+
+public readonly record struct VfxCustomInstruction(
+    Guid NodeId, byte Opcode, int OutputWidth, bool OutputIsColor, Guid TypeId, int AbiVersion,
+    int BranchCount, VfxCustomInput[] Inputs, int[] BranchTargets);
+
 public sealed class VfxProgram
 {
     private const int HeaderSize = 12;
@@ -36,20 +43,25 @@ public sealed class VfxProgram
     private const int MaxInstructions = 10000;
     private readonly VfxInstruction[] _instructions;
     private readonly VfxTypedInstruction[] _typedInstructions;
+    private readonly VfxCustomInstruction[] _customInstructions;
     private readonly ushort _version;
 
     public IReadOnlyList<VfxInstruction> Instructions { get; }
     public IReadOnlyList<VfxTypedInstruction> TypedInstructions { get; }
+    public IReadOnlyList<VfxCustomInstruction> CustomInstructions { get; }
     public ushort BinaryVersion => _version;
     public int WorkSizeBytes => checked(_instructions.Length * (_version == 1 ? sizeof(double) : 4 * sizeof(double)));
 
-    private VfxProgram(VfxInstruction[] instructions, VfxTypedInstruction[] typedInstructions, ushort version)
+    private VfxProgram(VfxInstruction[] instructions, VfxTypedInstruction[] typedInstructions,
+        VfxCustomInstruction[] customInstructions, ushort version)
     {
         _instructions = instructions;
         _typedInstructions = typedInstructions;
+        _customInstructions = customInstructions;
         _version = version;
         Instructions = Array.AsReadOnly(instructions);
         TypedInstructions = Array.AsReadOnly(typedInstructions);
+        CustomInstructions = Array.AsReadOnly(customInstructions);
     }
 
     public static VfxProgram Compile(GraphSnapshot graph)
@@ -61,6 +73,8 @@ public sealed class VfxProgram
         if (nodes.Length > MaxInstructions) throw new InvalidDataException("Too many runtime nodes.");
         var byId = nodes.ToDictionary(node => node.Id);
         var definitions = GraphNodeDefinition.All.ToDictionary(item => item.Kind);
+        if (nodes.Any(node => definitions[node.Kind].Runtime is not null))
+            return CompileWithCustomNodes(graph, nodes, definitions);
         foreach (var node in nodes)
             if (!TryOpcode(node.Kind.Value, out _))
                 throw new InvalidDataException($"Node '{node.Name}' ({node.Kind}) is not supported by the runtime.");
@@ -217,7 +231,239 @@ public sealed class VfxProgram
         var version = needsTyped ? (ushort)2 : (ushort)1;
         var legacy = typedCode.Select(item => new VfxInstruction(item.NodeId, item.Opcode, item.InputA, item.InputB,
             item.DefaultA[0], item.DefaultB[0])).ToArray();
-        return new VfxProgram(legacy, typedCode, version);
+        return new VfxProgram(legacy, typedCode, [], version);
+    }
+
+    private static VfxProgram CompileWithCustomNodes(
+        GraphSnapshot graph, GraphNodeSnapshot[] nodes,
+        IReadOnlyDictionary<GraphNodeKind, GraphNodeDefinition> definitions)
+    {
+        if (nodes.Length > MaxInstructions) throw new InvalidDataException("Too many runtime nodes.");
+        var byId = nodes.ToDictionary(node => node.Id);
+        var connections = graphConnections(graph, nodes).ToArray();
+        var incoming = connections.ToLookup(connection => connection.TargetNodeId);
+        var outgoing = connections.ToLookup(connection => connection.SourceNodeId);
+        var degree = nodes.ToDictionary(node => node.Id, node => incoming[node.Id].Count());
+        var queue = new Queue<GraphNodeSnapshot>(nodes.Where(node => degree[node.Id] == 0));
+        var order = new List<GraphNodeSnapshot>(nodes.Length);
+        while (queue.TryDequeue(out var node))
+        {
+            order.Add(node);
+            foreach (var connection in outgoing[node.Id])
+                if (--degree[connection.TargetNodeId] == 0) queue.Enqueue(byId[connection.TargetNodeId]);
+        }
+        if (order.Count != nodes.Length) throw new InvalidDataException("The graph contains a cycle.");
+        var indices = order.Select((node, index) => (node.Id, index))
+            .ToDictionary(item => item.Id, item => item.index);
+        var typedCode = new VfxTypedInstruction[order.Count];
+        var customCode = new List<VfxCustomInstruction>();
+
+        int Input(GraphNodeSnapshot node, GraphNodeDefinition definition, string? port, int expectedWidth,
+            out int sourceComponent, out bool sourceIsColor)
+        {
+            sourceComponent = 0;
+            sourceIsColor = false;
+            var matches = incoming[node.Id].Where(connection => connection.TargetPortId == port).ToArray();
+            if (matches.Length > 1)
+                throw new InvalidDataException($"Node '{node.Name}' has multiple connections to one input.");
+            if (matches.Length == 0) return -1;
+            var source = byId[matches[0].SourceNodeId];
+            var sourceDefinition = definitions[source.Kind];
+            var sourceType = sourceDefinition.GetOutputPortType(matches[0].SourcePortId);
+            if (sourceType is null)
+                throw new InvalidDataException($"Node '{node.Name}' is connected to an invalid source output.");
+            var sourceWidth = Width(sourceType);
+            if (sourceDefinition.OutputPorts is { } sourcePorts)
+            {
+                var portIndex = -1;
+                for (var index = 0; index < sourcePorts.Count; index++)
+                    if (sourcePorts[index].Id == matches[0].SourcePortId) portIndex = index;
+                if (portIndex < 0 || portIndex > 3)
+                    throw new InvalidDataException($"Node '{node.Name}' is connected to an invalid source output.");
+                if (source.Kind.Value.StartsWith("BreakVector", StringComparison.Ordinal))
+                {
+                    if (expectedWidth != 1) throw new InvalidDataException($"Node '{node.Name}' input width mismatch.");
+                    sourceComponent = portIndex;
+                }
+                else if (portIndex != 0)
+                    throw new InvalidDataException($"Node '{node.Name}' is connected to an unsupported source output.");
+            }
+            if (sourceWidth != expectedWidth)
+                throw new InvalidDataException($"Node '{node.Name}' input '{port}' expects {expectedWidth} components.");
+            sourceIsColor = sourceType == "Color";
+            return indices[source.Id];
+        }
+
+        for (var index = 0; index < order.Count; index++)
+        {
+            var node = order[index];
+            var definition = definitions[node.Kind];
+            if (definition.Runtime is { } runtime)
+            {
+                var isSignal = runtime.Execution == "signal";
+                var inputPorts = (definition.InputPorts ?? []).Where(port =>
+                    definition.GetInputPortCategory(port.Id) == GraphPortCategory.Parameter).ToArray();
+                var signalInputs = (definition.InputPorts ?? []).Where(port =>
+                    definition.GetInputPortCategory(port.Id) == GraphPortCategory.Signal).ToArray();
+                var parameterOutputs = (definition.OutputPorts ?? []).Where(port =>
+                    definition.GetOutputPortCategory(port.Id) == GraphPortCategory.Parameter).ToArray();
+                var signalOutputs = (definition.OutputPorts ?? []).Where(port =>
+                    definition.GetOutputPortCategory(port.Id) == GraphPortCategory.Signal).ToArray();
+                if (inputPorts.Length > 4 || signalInputs.Length > 1 ||
+                    (isSignal ? parameterOutputs.Length != 0 || signalOutputs.Length is < 1 or > 4 :
+                        signalInputs.Length != 0 || signalOutputs.Length != 0 || parameterOutputs.Length != 1))
+                    throw new InvalidDataException($"Custom node '{node.Name}' has unsupported port layout.");
+                var outputWidth = isSignal ? 0 : Width(definition.GetOutputPortType(parameterOutputs[0].Id)!);
+                var outputColor = !isSignal && definition.GetOutputPortType(parameterOutputs[0].Id) == "Color";
+                var customInputs = new VfxCustomInput[inputPorts.Length];
+                for (var inputIndex = 0; inputIndex < inputPorts.Length; inputIndex++)
+                {
+                    var port = inputPorts[inputIndex];
+                    var portType = definition.GetInputPortType(port.Id)!;
+                    var width = Width(portType);
+                    var defaults = new double[4];
+                    if (port.DefaultValue is { } portDefault)
+                    {
+                        var parameterType = portType switch
+                        {
+                            "Float" => "float", "FloatX2" => "vector2", "FloatX3" => "vector3",
+                            "FloatX4" => "vector4", "Color" => "color",
+                            _ => throw new InvalidDataException($"Custom input '{port.Id}' is not numeric.")
+                        };
+                        if (!NodeParameter.IsValidValue(parameterType, portDefault))
+                            throw new InvalidDataException($"Custom input '{port.Id}' has an invalid default.");
+                        if (width == 1) defaults[0] = portDefault.GetDouble();
+                        else
+                            for (var lane = 0; lane < width; lane++)
+                                defaults[lane] = portDefault[lane].GetDouble();
+                    }
+                    else if (portType == "Color") defaults[3] = 1;
+                    var source = Input(node, definition, port.Id, width, out var sourceComponent, out var sourceColor);
+                    var inputIsColor = portType == "Color";
+                    if (source >= 0 && sourceColor != inputIsColor)
+                        throw new InvalidDataException($"Custom input '{port.Id}' has incompatible Color identity.");
+                    customInputs[inputIndex] = new VfxCustomInput(source, source < 0 ? 0 : width,
+                        sourceComponent, inputIsColor, defaults);
+                }
+
+                var branchTargets = new int[signalOutputs.Length];
+                for (var branch = 0; branch < signalOutputs.Length; branch++)
+                {
+                    var targets = outgoing[node.Id].Where(connection =>
+                        connection.SourcePortId == signalOutputs[branch].Id).ToArray();
+                    if (targets.Length > 1)
+                        throw new InvalidDataException($"Custom signal output '{signalOutputs[branch].Id}' has multiple targets.");
+                    if (targets.Length == 0) { branchTargets[branch] = -1; continue; }
+                    var target = byId[targets[0].TargetNodeId];
+                    if (definitions[target.Kind].Runtime?.Execution != "signal")
+                        throw new InvalidDataException("Signal branches must target registered signal nodes.");
+                    branchTargets[branch] = indices[target.Id];
+                }
+                customCode.Add(new VfxCustomInstruction(node.Id,
+                    isSignal ? (byte)41 : (byte)40, outputWidth, outputColor, definition.TypeId,
+                    runtime.AbiVersion, signalOutputs.Length, customInputs, branchTargets));
+                typedCode[index] = new(node.Id, (VfxOpcode)(isSignal ? 41 : 40), outputWidth,
+                    0, 0, outputColor ? (byte)1 : (byte)0, 0, 0, -1, -1,
+                    new double[4], new double[4]);
+                continue;
+            }
+
+            if (!TryOpcode(node.Kind.Value, out var opcode))
+                throw new InvalidDataException($"Node '{node.Name}' ({node.Kind}) is not supported by the runtime.");
+            var typeWidth = Width(node.PortType);
+            if (node.PortCategory != GraphPortCategory.Parameter ||
+                (opcode == VfxOpcode.Time && incoming[node.Id].Any()) ||
+                (opcode == VfxOpcode.Scalar && incoming[node.Id].Any(connection => connection.TargetPortId is not null)) ||
+                (IsArithmetic(opcode) && incoming[node.Id].Any(connection => connection.TargetPortId is not ("a" or "b"))) ||
+                (IsSingleInput(opcode) && incoming[node.Id].Any(connection => connection.TargetPortId != "a")))
+                throw new InvalidDataException($"Node '{node.Name}' has unsupported runtime ports.");
+            var outputWidth = typeWidth;
+            var defaultA = new double[4];
+            var defaultB = new double[4];
+            var inputAWidth = 0;
+            var inputBWidth = 0;
+            var inputA = -1;
+            var inputB = -1;
+            var inputASourceComponent = 0;
+            var inputBSourceComponent = 0;
+            var inputAIsColor = false;
+            var inputBIsColor = false;
+            double Parameter(string id)
+            {
+                var parameter = definition.Parameters.FirstOrDefault(item => item.Id == id && item.Type == "float")
+                    ?? throw new InvalidDataException($"Node '{node.Name}' is missing float parameter '{id}'.");
+                var value = node.Parameters?.FirstOrDefault(item => item.Id == id && item.Type == "float")?.Value
+                    ?? parameter.DefaultValue;
+                if (!value.TryGetDouble(out var number) || !double.IsFinite(number))
+                    throw new InvalidDataException($"Node '{node.Name}' has invalid float parameter '{id}'.");
+                return number;
+            }
+            double[] VectorParameter(string id, int width)
+            {
+                var parameterType = $"vector{width}";
+                var parameter = definition.Parameters.FirstOrDefault(item => item.Id == id && item.Type == parameterType)
+                    ?? throw new InvalidDataException($"Node '{node.Name}' is missing {parameterType} parameter '{id}'.");
+                var value = node.Parameters?.FirstOrDefault(item => item.Id == id && item.Type == parameterType)?.Value
+                    ?? parameter.DefaultValue;
+                if (!NodeParameter.IsValidValue(parameterType, value))
+                    throw new InvalidDataException($"Node '{node.Name}' has an invalid vector parameter '{id}'.");
+                return value.EnumerateArray().Select(item => item.GetDouble()).ToArray();
+            }
+
+            if (opcode is VfxOpcode.Scalar or VfxOpcode.Vector2 or VfxOpcode.Vector3 or VfxOpcode.Vector4 or VfxOpcode.Color)
+            {
+                var width = outputWidth;
+                var values = node.PortType == "Float" ? [Parameter("value")] :
+                    node.PortType == "Color" ? ReadColor(node, definition) : VectorParameter("value", width);
+                Array.Copy(values, defaultA, values.Length);
+                var inputPort = definition.InputPorts is null ? null : "a";
+                inputA = Input(node, definition, inputPort, width, out inputASourceComponent, out inputAIsColor);
+                inputAWidth = inputA < 0 ? 0 : width;
+                if (node.PortType == "Float" &&
+                    incoming[node.Id].Any(connection => connection.TargetPortId is not null))
+                    throw new InvalidDataException($"Node '{node.Name}' has an unsupported runtime input.");
+            }
+            else if (opcode == VfxOpcode.Time) outputWidth = 1;
+            else if (IsArithmetic(opcode))
+            {
+                var width = outputWidth;
+                var defaultsA = width == 1 ? [Parameter("a")] : VectorParameter("a", width);
+                var defaultsB = width == 1 ? [Parameter("b")] : VectorParameter("b", width);
+                Array.Copy(defaultsA, defaultA, defaultsA.Length);
+                Array.Copy(defaultsB, defaultB, defaultsB.Length);
+                inputA = Input(node, definition, "a", width, out inputASourceComponent, out inputAIsColor);
+                inputB = Input(node, definition, "b", width, out inputBSourceComponent, out inputBIsColor);
+                inputAWidth = inputA < 0 ? 0 : width;
+                inputBWidth = inputB < 0 ? 0 : width;
+            }
+            else if (opcode is VfxOpcode.BreakVector2 or VfxOpcode.BreakVector3 or VfxOpcode.BreakVector4)
+            {
+                inputA = Input(node, definition, "a", outputWidth,
+                    out inputASourceComponent, out inputAIsColor);
+                if (inputA < 0) throw new InvalidDataException($"Node '{node.Name}' requires an input connection.");
+                inputAWidth = outputWidth;
+            }
+            else
+            {
+                var setup = Conversion(opcode, node, definition, incoming[node.Id].Any());
+                outputWidth = setup.OutputWidth;
+                inputA = Input(node, definition, "a", setup.InputWidth,
+                    out inputASourceComponent, out inputAIsColor);
+                inputAWidth = setup.InputWidth;
+                Array.Copy(setup.Parameters, defaultA, setup.Parameters.Length);
+            }
+            if (outputWidth != typeWidth)
+                throw new InvalidDataException($"Node '{node.Name}' declares an incompatible output type.");
+            var typeFlags = (byte)(node.PortType == "Color" ? 1 : 0);
+            if (inputAIsColor) typeFlags |= 2;
+            if (inputBIsColor) typeFlags |= 4;
+            typedCode[index] = new(node.Id, opcode, outputWidth, inputAWidth, inputBWidth,
+                typeFlags, inputASourceComponent, inputBSourceComponent,
+                inputA, inputB, defaultA, defaultB);
+        }
+        var legacy = typedCode.Select(item => new VfxInstruction(item.NodeId, item.Opcode, item.InputA, item.InputB,
+            item.DefaultA[0], item.DefaultB[0])).ToArray();
+        return new VfxProgram(legacy, typedCode, customCode.ToArray(), 3);
     }
 
     public byte[] ToBinary()
@@ -243,17 +489,47 @@ public sealed class VfxProgram
             return bytes;
         }
 
-        var typedBytes = new byte[checked(TypedHeaderSize + _typedInstructions.Length * TypedInstructionSize)];
+        var instructionSize = _version == 3 ? 256 : TypedInstructionSize;
+        var typedBytes = new byte[checked(TypedHeaderSize + _typedInstructions.Length * instructionSize)];
         "LFXB"u8.CopyTo(typedBytes);
-        BinaryPrimitives.WriteUInt16LittleEndian(typedBytes.AsSpan(4), 2);
+        BinaryPrimitives.WriteUInt16LittleEndian(typedBytes.AsSpan(4), _version);
         typedBytes[6] = 1;
         BinaryPrimitives.WriteInt32LittleEndian(typedBytes.AsSpan(8), _typedInstructions.Length);
-        BinaryPrimitives.WriteUInt16LittleEndian(typedBytes.AsSpan(12), TypedInstructionSize);
+        BinaryPrimitives.WriteUInt16LittleEndian(typedBytes.AsSpan(12), (ushort)instructionSize);
+        var customById = _customInstructions.ToDictionary(item => item.NodeId);
         for (var index = 0; index < _typedInstructions.Length; index++)
         {
-            var span = typedBytes.AsSpan(TypedHeaderSize + index * TypedInstructionSize, TypedInstructionSize);
+            var span = typedBytes.AsSpan(TypedHeaderSize + index * instructionSize, instructionSize);
             var instruction = _typedInstructions[index];
             instruction.NodeId.TryWriteBytes(span, bigEndian: true, out _);
+            if (_version == 3 && customById.TryGetValue(instruction.NodeId, out var custom))
+            {
+                span[16] = custom.Opcode;
+                span[17] = (byte)custom.OutputWidth;
+                span[18] = (byte)custom.Inputs.Length;
+                span[19] = (byte)custom.BranchCount;
+                span[20] = custom.OutputIsColor ? (byte)1 : (byte)0;
+                custom.TypeId.TryWriteBytes(span[24..], bigEndian: true, out _);
+                BinaryPrimitives.WriteUInt32LittleEndian(span[40..], (uint)custom.AbiVersion);
+                for (var input = 0; input < custom.Inputs.Length; input++)
+                {
+                    var item = custom.Inputs[input];
+                    var inputSpan = span[(48 + input * 8)..];
+                    BinaryPrimitives.WriteInt32LittleEndian(inputSpan, item.SourceIndex);
+                    inputSpan[4] = (byte)item.SourceWidth;
+                    inputSpan[5] = (byte)item.SourceComponent;
+                    inputSpan[6] = item.IsColor ? (byte)1 : (byte)0;
+                    for (var lane = 0; lane < 4; lane++)
+                        BinaryPrimitives.WriteDoubleLittleEndian(span[(80 + input * 32 + lane * 8)..],
+                            item.Defaults[lane]);
+                }
+                for (var input = custom.Inputs.Length; input < 4; input++)
+                    BinaryPrimitives.WriteInt32LittleEndian(span[(48 + input * 8)..], -1);
+                for (var branch = 0; branch < 4; branch++)
+                    BinaryPrimitives.WriteInt32LittleEndian(span[(208 + branch * 4)..],
+                        branch < custom.BranchCount ? custom.BranchTargets[branch] : -1);
+                continue;
+            }
             span[16] = (byte)instruction.Opcode;
             span[17] = (byte)instruction.OutputWidth;
             span[18] = (byte)instruction.InputAWidth;

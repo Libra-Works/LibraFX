@@ -171,14 +171,14 @@ public sealed class PreviewHost : IDisposable
         }
 
         var version = context.Request.Query["protocol"].ToString();
-        if (version is not ("" or "1" or "2"))
+        if (version is not ("" or "1" or "2" or "3"))
         {
             _clientSlots.Release();
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             return;
         }
         var id = Guid.NewGuid();
-        var client = new PreviewClient(version == "2");
+        var client = new PreviewClient(version == "3" ? 3 : version == "2" ? 2 : 1);
         try
         {
             using var socket = await context.WebSockets.AcceptWebSocketAsync();
@@ -190,7 +190,7 @@ public sealed class PreviewHost : IDisposable
             }
             UpdateClientCount();
             using var cancel = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
-            var sending = SendAsync(socket, client, cancel.Token);
+            var sending = Task.Run(() => SendAsync(socket, client, cancel.Token), cancel.Token);
             try
             {
                 var receiving = ReceiveAsync(socket, client, cancel.Token);
@@ -222,12 +222,20 @@ public sealed class PreviewHost : IDisposable
     private static async Task SendAsync(WebSocket socket, PreviewClient client, CancellationToken cancellation)
     {
         PreviewPublication? baseline = null;
+        var compiled = new CompiledPreviewSender();
         await foreach (var publication in client.Channel.Reader.ReadAllAsync(cancellation))
         {
             // Diff against the last message actually sent, never a dropped pending update.
-            var payload = client.Version2
-                ? PreviewProtocol.Encode(publication, baseline, Interlocked.Exchange(ref client.ForceSnapshot, 0) != 0)
-                : publication.LegacyPayload;
+            var force = Interlocked.Exchange(ref client.ForceSnapshot, 0) != 0;
+            if (client.Version == 3)
+            {
+                var message = compiled.Prepare(publication, force);
+                if (message is null) continue;
+                await socket.SendAsync(message.Bytes.AsMemory(), WebSocketMessageType.Binary, true, cancellation);
+                compiled.Sent(message);
+                continue;
+            }
+            var payload = client.Version == 2 ? PreviewProtocol.Encode(publication, baseline, force) : publication.LegacyPayload;
             await socket.SendAsync(payload.AsMemory(), WebSocketMessageType.Text, true, cancellation);
             baseline = publication;
         }
@@ -246,7 +254,7 @@ public sealed class PreviewHost : IDisposable
                 result = await socket.ReceiveAsync(buffer.AsMemory(count), cancellation);
                 if (result.MessageType == WebSocketMessageType.Close) return;
                 count += result.Count;
-                if (!client.Version2 || result.MessageType != WebSocketMessageType.Text ||
+                if (client.Version == 1 || result.MessageType != WebSocketMessageType.Text ||
                     count == buffer.Length || ++fragments > 16)
                     return;
             } while (!result.EndOfMessage);
@@ -255,6 +263,8 @@ public sealed class PreviewHost : IDisposable
                 using var request = JsonDocument.Parse(buffer.AsMemory(0, count));
                 if (!request.RootElement.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String ||
                     type.GetString() != "resync") return;
+                if (client.Version == 3 && (request.RootElement.ValueKind != JsonValueKind.Object ||
+                    request.RootElement.EnumerateObject().Count() != 1)) return;
             }
             catch (Exception ex) when (ex is JsonException or InvalidOperationException) { return; }
             lock (_sync)
@@ -265,9 +275,9 @@ public sealed class PreviewHost : IDisposable
         }
     }
 
-    private sealed class PreviewClient(bool version2)
+    private sealed class PreviewClient(int version)
     {
-        public bool Version2 { get; } = version2;
+        public int Version { get; } = version;
         public int ForceSnapshot;
         public Channel<PreviewPublication> Channel { get; } = System.Threading.Channels.Channel.CreateBounded<PreviewPublication>(
             new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });

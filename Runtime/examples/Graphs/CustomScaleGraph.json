@@ -1,0 +1,45 @@
+{
+  "nodes": [
+    {
+      "id": "10000000-0000-0000-0000-000000000001",
+      "kind": "Float",
+      "name": "Left",
+      "x": 0,
+      "y": 0,
+      "portType": "Float",
+      "portCategory": "Parameter",
+      "parameters": [{ "id": "value", "type": "float", "value": 2.0 }]
+    },
+    {
+      "id": "10000000-0000-0000-0000-000000000002",
+      "kind": "Float",
+      "name": "Right",
+      "x": 0,
+      "y": 100,
+      "portType": "Float",
+      "portCategory": "Parameter",
+      "parameters": [{ "id": "value", "type": "float", "value": 3.0 }]
+    },
+    {
+      "id": "10000000-0000-0000-0000-000000000003",
+      "kind": "c3de3377-59ae-4a2d-8991-7f38e5d82111",
+      "name": "Scale",
+      "x": 200,
+      "y": 50,
+      "portType": "Float",
+      "portCategory": "Parameter"
+    }
+  ],
+  "connections": [
+    {
+      "sourceNodeId": "10000000-0000-0000-0000-000000000001",
+      "targetNodeId": "10000000-0000-0000-0000-000000000003",
+      "targetPortId": "a"
+    },
+    {
+      "sourceNodeId": "10000000-0000-0000-0000-000000000002",
+      "targetNodeId": "10000000-0000-0000-0000-000000000003",
+      "targetPortId": "b"
+    }
+  ]
+}

@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 project(LiberaFxRuntime LANGUAGES CXX)
 
-add_library(liberafx_runtime STATIC Core/VfxRuntime.cpp)
+add_library(liberafx_runtime STATIC Core/VfxRuntime.cpp Core/LivePreview.cpp)
+add_library(LibraRuntimeCore ALIAS liberafx_runtime)
 target_include_directories(liberafx_runtime PUBLIC include)
 target_compile_features(liberafx_runtime PUBLIC cxx_std_17)
 
@@ -15,4 +16,7 @@ if(LIBERAFX_BUILD_TESTS)
     add_executable(liberafx_render_queue_tests tests/RenderQueueTests.cpp)
     target_link_libraries(liberafx_render_queue_tests PRIVATE liberafx_runtime Threads::Threads)
     add_test(NAME liberafx_render_queue_tests COMMAND liberafx_render_queue_tests)
+    add_executable(liberafx_live_preview_tests tests/LivePreviewTests.cpp)
+    target_link_libraries(liberafx_live_preview_tests PRIVATE liberafx_runtime)
+    add_test(NAME liberafx_live_preview_tests COMMAND liberafx_live_preview_tests)
 endif()

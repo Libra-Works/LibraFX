@@ -1,0 +1,12 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1.0",
+  "FriendlyName": "Libra Project Nodes Example",
+  "Description": "Optional project-owned native parameter and owner-thread signal nodes.",
+  "Category": "FX",
+  "EnabledByDefault": true,
+  "CanContainContent": false,
+  "Plugins": [{ "Name": "LibraRuntimeForUnreal", "Enabled": true }],
+  "Modules": [{ "Name": "LibraProjectNodes", "Type": "Runtime", "LoadingPhase": "PreDefault" }]
+}

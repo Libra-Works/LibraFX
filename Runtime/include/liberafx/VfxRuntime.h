@@ -5,6 +5,10 @@
 #include <cstdint>
 #include "liberafx/platform/JobScheduler.h"
 
+#ifndef LIBRA_RUNTIME_CORE_API
+#define LIBRA_RUNTIME_CORE_API
+#endif
+
 namespace liberafx {
 
 enum class Result : std::uint8_t {
@@ -19,16 +23,95 @@ enum class Result : std::uint8_t {
     NodeNotFound,
     DivideByZero,
     NonFinite,
-    InvalidValueType
+    InvalidValueType,
+    UnknownCustomNode,
+    InvalidHandle,
+    InstructionBudgetExceeded
 };
 
-class Program final {
+enum class CustomExecution : std::uint8_t { Parameter = 1, Signal = 2 };
+
+struct CustomNodeInvocation;
+// Parameter callbacks run on scheduler workers; signal callbacks run only from explicit
+// owner-thread dispatch. Callbacks may not traverse the graph or allocate during execution.
+using CustomNodeFunction = Result (*)(CustomNodeInvocation&) noexcept;
+using CustomNodeInitialize = Result (*)(void* state, std::size_t stateBytes, void* context) noexcept;
+using CustomNodeCleanup = void (*)(void* state, std::size_t stateBytes, void* context) noexcept;
+
+struct LIBRA_RUNTIME_CORE_API CustomNodeDescriptor final {
+    std::uint8_t typeId[16]{};
+    std::uint32_t abiVersion = 0;
+    CustomExecution execution = CustomExecution::Parameter;
+    std::uint8_t inputCount = 0;
+    std::uint8_t inputWidths[4]{};
+    std::uint8_t inputIsColor[4]{};
+    std::uint8_t outputWidth = 0;
+    bool outputIsColor = false;
+    std::uint8_t branchCount = 0;
+    std::size_t stateBytes = 0;
+    CustomNodeFunction function = nullptr;
+    CustomNodeInitialize initialize = nullptr;
+    CustomNodeCleanup cleanup = nullptr;
+    void* context = nullptr;
+};
+
+struct CustomNodeInvocation final {
+    const double* inputs = nullptr;
+    std::uint8_t inputCount = 0;
+    const std::uint8_t* inputWidths = nullptr;
+    double* outputs = nullptr;
+    std::uint8_t outputWidth = 0;
+    const double* constants = nullptr;
+    std::size_t constantCount = 0;
+    void* state = nullptr;
+    std::size_t stateBytes = 0;
+    double time = 0;
+    std::uint8_t selectedBranch = 0xff;
+    void* context = nullptr;
+};
+
+struct CustomNodeBinding final {
+    const CustomNodeDescriptor* descriptor = nullptr;
+    std::size_t stateOffset = 0;
+};
+
+struct ValueHandle final {
+    const void* programIdentity = nullptr;
+    std::uint64_t generation = 0;
+    std::uint64_t programGeneration = 0;
+    std::uint32_t nodeIndex = 0;
+    std::uint8_t componentCount = 0;
+};
+
+struct ParameterHandle final {
+    const void* programIdentity = nullptr;
+    std::uint64_t generation = 0;
+    std::uint64_t programGeneration = 0;
+    std::uint32_t nodeIndex = 0;
+    std::uint8_t inputSlot = 0;
+    std::uint8_t component = 0;
+};
+
+struct SignalHandle final {
+    const void* programIdentity = nullptr;
+    std::uint64_t generation = 0;
+    std::uint64_t programGeneration = 0;
+    std::uint32_t nodeIndex = 0;
+};
+
+class LIBRA_RUNTIME_CORE_API Program final {
 public:
     // The program and its bytecode must remain immutable and alive while instances use them.
     static Result load(const void* bytes, std::size_t size, Program& out) noexcept;
+    // V3 requires caller-owned bindings (one entry per instruction) and a live registry.
+    // The bytecode, descriptor array and binding storage must outlive this Program and its Instances.
+    static Result load(const void* bytes, std::size_t size,
+                       const CustomNodeDescriptor* registry, std::size_t registryCount,
+                       CustomNodeBinding* bindings, std::size_t bindingCount, Program& out) noexcept;
     std::size_t nodeCount() const noexcept { return nodeCount_; }
-    std::size_t workBytes() const noexcept { return nodeCount_ * (version_ == 1 ? sizeof(double) : 4 * sizeof(double)); }
-    std::size_t parameterValueCount() const noexcept { return nodeCount_ * (version_ == 1 ? 2 : 8); }
+    std::size_t workBytes() const noexcept;
+    std::size_t parameterValueCount() const noexcept;
+    std::size_t bindingCount() const noexcept { return version_ == 3 ? nodeCount_ : 0; }
     std::uint16_t version() const noexcept { return version_; }
 
 private:
@@ -36,34 +119,56 @@ private:
     const std::uint8_t* bytes_ = nullptr;
     std::uint32_t nodeCount_ = 0;
     std::uint16_t version_ = 0;
+    std::uint64_t generation_ = 0;
+    CustomNodeBinding* bindings_ = nullptr;
+    std::size_t stateBytes_ = 0;
 };
 
-class Instance final {
+class LIBRA_RUNTIME_CORE_API Instance final {
 public:
-    // Call control/read methods from one owner thread; the scheduler runs the job on a worker.
+    ~Instance();
+    // Call control/read methods from one owner thread; the scheduler runs parameter callbacks on a worker.
     // Work is owned by the caller and must remain alive until all jobs complete.
     Result initialize(const Program& program, double* work, std::size_t workCount) noexcept;
     // The optional defaults buffer is caller-owned, separate from work, and has parameterValueCount() lanes.
     Result initialize(const Program& program, double* work, std::size_t workCount,
                       double* defaults, std::size_t defaultsCount) noexcept;
+    Result bindValue(const std::uint8_t nodeId[16], ValueHandle& out) const noexcept;
+    Result bindParameter(const std::uint8_t nodeId[16], std::uint8_t inputSlot,
+                         std::uint8_t component, ParameterHandle& out) const noexcept;
+    Result bindSignal(const std::uint8_t nodeId[16], SignalHandle& out) const noexcept;
+    Result value(const ValueHandle& handle, double out[4]) const noexcept;
+    Result parameter(const ParameterHandle& handle, double& out) const noexcept;
+    Result setParameter(const ParameterHandle& handle, double value) noexcept;
     Result updateAsync(double time, Enqueue enqueue, void* queueContext) noexcept;
-    // inputSlot is 0 for A/defaultA or 1 for B/defaultB; only finite, valid lanes may be changed.
+    // Legacy slots are A/B (0/1); v3 custom slots index declared numeric input ports (0..3).
     Result setParameter(const std::uint8_t nodeId[16], std::uint8_t inputSlot,
                         std::uint8_t component, double value) noexcept;
     Result result() const noexcept;
     Result value(const std::uint8_t nodeId[16], double& out) const noexcept;
     Result valueComponents(const std::uint8_t nodeId[16], double out[4], std::uint8_t& componentCount) const noexcept;
+    // Synchronous, owner-thread-only execution after a successful update.
+    // maxInstructions bounds branch traversal; callbacks choose a precompiled output branch.
+    Result dispatchSignal(const std::uint8_t entryNodeId[16], double time,
+                         std::size_t maxInstructions) noexcept;
+    Result dispatchSignal(const SignalHandle& entry, double time,
+                          std::size_t maxInstructions) noexcept;
     std::size_t capacityGrowthCount() const noexcept { return 0; }
 
 private:
     enum class Phase : std::uint8_t { Idle, Running, Complete };
     static void run(void* context) noexcept;
     Result evaluate() noexcept;
+    void cleanupStates() noexcept;
 
     const Program* program_ = nullptr;
     double* work_ = nullptr;
     double* defaults_ = nullptr;
     double time_ = 0;
+    std::uint64_t generation_ = 0;
+    double* stateWork_ = nullptr;
+    std::size_t initializedStateCount_ = 0;
+    bool dispatching_ = false;
     Result result_ = Result::NotReady;
     std::atomic<Phase> phase_{Phase::Idle};
 };

@@ -1,0 +1,50 @@
+{
+  "nodes": [
+    {
+      "id": "20000000-0000-0000-0000-000000000001",
+      "kind": "Float",
+      "name": "Amount",
+      "x": 0,
+      "y": 0,
+      "portType": "Float",
+      "portCategory": "Parameter",
+      "parameters": [{ "id": "value", "type": "float", "value": 2.5 }]
+    },
+    {
+      "id": "20000000-0000-0000-0000-000000000002",
+      "kind": "c3de3377-59ae-4a2d-8991-7f38e5d82112",
+      "name": "Entry",
+      "x": 200,
+      "y": 0,
+      "portType": "Signal",
+      "portCategory": "Signal"
+    },
+    {
+      "id": "20000000-0000-0000-0000-000000000003",
+      "kind": "c3de3377-59ae-4a2d-8991-7f38e5d82112",
+      "name": "Next",
+      "x": 400,
+      "y": 0,
+      "portType": "Signal",
+      "portCategory": "Signal"
+    }
+  ],
+  "connections": [
+    {
+      "sourceNodeId": "20000000-0000-0000-0000-000000000001",
+      "targetNodeId": "20000000-0000-0000-0000-000000000002",
+      "targetPortId": "amount"
+    },
+    {
+      "sourceNodeId": "20000000-0000-0000-0000-000000000001",
+      "targetNodeId": "20000000-0000-0000-0000-000000000003",
+      "targetPortId": "amount"
+    },
+    {
+      "sourceNodeId": "20000000-0000-0000-0000-000000000002",
+      "sourcePortId": "next",
+      "targetNodeId": "20000000-0000-0000-0000-000000000003",
+      "targetPortId": "enter"
+    }
+  ]
+}

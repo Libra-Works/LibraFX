@@ -102,7 +102,8 @@ public sealed class GraphSceneLayer : Control
                 source.DisplayX + GraphNodeViewModel.NodeWidth - GraphNodeViewModel.PortHorizontalOffset + _graphOrigin.X,
                 source.DisplayY + GraphNodeViewModel.PortCenterOffset +
                 source.OutputPortOffset(_workspace.PendingOutputPortId) + _graphOrigin.Y);
-            DrawConnection(context, start, end + _graphOrigin, source.Definition.PortCategory);
+            DrawConnection(context, start, end + _graphOrigin,
+                source.Definition.GetOutputPortCategory(_workspace.PendingOutputPortId));
         }
     }
 
@@ -131,7 +132,8 @@ public sealed class GraphSceneLayer : Control
 
     private void DrawConnection(DrawingContext context, GraphConnectionViewModel connection)
     {
-        DrawConnection(context, connection.StartPoint + _graphOrigin, connection.EndPoint + _graphOrigin, connection.Source.Definition.PortCategory);
+        DrawConnection(context, connection.StartPoint + _graphOrigin, connection.EndPoint + _graphOrigin,
+            connection.Source.Definition.GetOutputPortCategory(connection.SourcePortId));
     }
 
     private static void DrawConnection(DrawingContext context, Point start, Point end, Models.Graph.GraphPortCategory category)

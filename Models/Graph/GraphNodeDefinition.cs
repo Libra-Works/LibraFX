@@ -79,6 +79,8 @@ public enum GraphPortCategory
     Signal
 }
 
+public sealed record GraphRuntimeDefinition(string Kind, int AbiVersion, string Execution);
+
 public sealed record GraphNodeDefinition(
     GraphNodeKind Kind,
     Guid TypeId,
@@ -149,6 +151,13 @@ public sealed record GraphNodeDefinition(
     public IReadOnlyList<NodeParameterDefinition> Parameters { get; init; } = [];
     public IReadOnlyList<GraphInputPortDefinition>? InputPorts { get; init; }
     public IReadOnlyList<GraphOutputPortDefinition>? OutputPorts { get; init; }
+    public GraphRuntimeDefinition? Runtime { get; init; }
+
+    public GraphPortCategory GetInputPortCategory(string? portId) =>
+        InputPorts?.FirstOrDefault(port => port.Id == portId)?.Category ?? PortCategory;
+
+    public GraphPortCategory GetOutputPortCategory(string? portId) =>
+        OutputPorts?.FirstOrDefault(port => port.Id == portId)?.Category ?? PortCategory;
 
     public string? GetInputPortType(string? portId)
     {
@@ -311,7 +320,20 @@ public sealed record GraphNodeDefinition(
                     (port.PortType is not null && (string.IsNullOrWhiteSpace(port.PortType) || port.PortType.Length > 128)) ||
                     inputs.Count >= 32)
                     throw new InvalidDataException("Invalid input port definition.");
-                inputs.Add(new GraphInputPortDefinition(port.Id!, port.Name, port.PortType));
+                if (!TryPortCategory(port.Category, category, out var portCategory))
+                    throw new InvalidDataException("Invalid input port category.");
+                var defaultValue = port.DefaultValue.ValueKind == JsonValueKind.Undefined
+                    ? null : port.DefaultValue.Clone();
+                var portType = port.PortType ?? node.PortType;
+                if (node.Runtime is not null && portCategory == GraphPortCategory.Parameter &&
+                    (portType is not ("Float" or "FloatX2" or "FloatX3" or "FloatX4" or "Color") ||
+                     defaultValue is { } numericDefault && !NodeParameter.IsValidValue(
+                         portType switch { "Float" => "float", "FloatX2" => "vector2", "FloatX3" => "vector3",
+                             "FloatX4" => "vector4", _ => "color" }, numericDefault)))
+                    throw new InvalidDataException("Custom parameter input ports require a numeric type and valid default.");
+                if (node.Runtime is not null && portCategory == GraphPortCategory.Signal && portType != "Signal")
+                    throw new InvalidDataException("Signal input ports must use the Signal type.");
+                inputs.Add(new GraphInputPortDefinition(port.Id!, port.Name, port.PortType, portCategory, defaultValue));
             }
         }
         List<GraphOutputPortDefinition>? outputs = null;
@@ -326,7 +348,12 @@ public sealed record GraphNodeDefinition(
                     (port.PortType is not null && (string.IsNullOrWhiteSpace(port.PortType) || port.PortType.Length > 128)) ||
                     outputs.Count >= 32)
                     throw new InvalidDataException("Invalid output port definition.");
-                outputs.Add(new GraphOutputPortDefinition(port.Id!, port.Name, port.PortType));
+                if (!TryPortCategory(port.Category, category, out var portCategory))
+                    throw new InvalidDataException("Invalid output port category.");
+                var portType = port.PortType ?? node.PortType;
+                if (node.Runtime is not null && portCategory == GraphPortCategory.Signal && portType != "Signal")
+                    throw new InvalidDataException("Signal output ports must use the Signal type.");
+                outputs.Add(new GraphOutputPortDefinition(port.Id!, port.Name, port.PortType, portCategory));
             }
             if (outputs.Count == 0) throw new InvalidDataException("Output port definitions must not be empty.");
         }
@@ -386,6 +413,30 @@ public sealed record GraphNodeDefinition(
              !parameters.Any(item => item.Id == "height" && item.Type == "float") ||
              !parameters.Any(item => item.Id == "image" && item.Type == "commentImage")))
             throw new InvalidDataException("Invalid built-in comment definition.");
+        GraphRuntimeDefinition? runtime = null;
+        if (node.Runtime is { } runtimeFile)
+        {
+            if (runtimeFile.Kind != "custom" || runtimeFile.AbiVersion < 1 ||
+                runtimeFile.Execution is not ("parameter" or "signal") ||
+                (runtimeFile.Execution == "parameter" &&
+                 (inputs?.Any(port => port.Category == GraphPortCategory.Signal) == true ||
+                  outputs?.Any(port => port.Category == GraphPortCategory.Signal) == true)) ||
+                (runtimeFile.Execution == "signal" &&
+                 outputs?.Any(port => port.Category == GraphPortCategory.Signal) != true))
+                throw new InvalidDataException("Invalid custom runtime declaration.");
+            var dataInputCount = inputs?.Count(port => port.Category == GraphPortCategory.Parameter) ?? 0;
+            var signalInputCount = inputs?.Count(port => port.Category == GraphPortCategory.Signal) ?? 0;
+            var dataOutputCount = outputs?.Count(port => port.Category == GraphPortCategory.Parameter) ?? 0;
+            var signalOutputCount = outputs?.Count(port => port.Category == GraphPortCategory.Signal) ?? 0;
+            if (dataInputCount > 4 || signalInputCount > 1 ||
+                (runtimeFile.Execution == "parameter" &&
+                 (dataOutputCount != 1 || signalOutputCount != 0 ||
+                  !IsRuntimeNumericType(outputs!.Single(port => port.Category == GraphPortCategory.Parameter).PortType ?? node.PortType))) ||
+                (runtimeFile.Execution == "signal" &&
+                 (dataOutputCount != 0 || signalOutputCount is < 1 or > 4)))
+                throw new InvalidDataException("Custom runtime ports do not match the execution declaration.");
+            runtime = new GraphRuntimeDefinition(runtimeFile.Kind, runtimeFile.AbiVersion, runtimeFile.Execution);
+        }
         ids.Add(node.TypeId);
         names.Add(qualifiedName);
         var kind = new GraphNodeKind(BuiltInIds.GetValueOrDefault(node.TypeId) ?? node.TypeId.ToString("D"));
@@ -396,9 +447,19 @@ public sealed record GraphNodeDefinition(
             GroupNameKey = node.GroupNameKey,
             Parameters = parameters.AsReadOnly(),
             InputPorts = inputs?.AsReadOnly(),
-            OutputPorts = outputs?.AsReadOnly()
+            OutputPorts = outputs?.AsReadOnly(),
+            Runtime = runtime
         });
     }
+
+    private static bool TryPortCategory(string? value, GraphPortCategory fallback, out GraphPortCategory category)
+    {
+        category = fallback;
+        return value is null || Enum.TryParse(value, ignoreCase: false, out category) && Enum.IsDefined(category);
+    }
+
+    private static bool IsRuntimeNumericType(string type) =>
+        type is "Float" or "FloatX2" or "FloatX3" or "FloatX4" or "Color";
 
     private static bool IsIdentifier(string? value) =>
         !string.IsNullOrEmpty(value) && (char.IsLetter(value[0]) || value[0] == '_') &&
@@ -419,6 +480,7 @@ public sealed record GraphNodeDefinition(
         public List<NodeParameterFile>? Parameters { get; set; }
         public List<InputPortFile>? InputPorts { get; set; }
         public List<OutputPortFile>? OutputPorts { get; set; }
+        public RuntimeFile? Runtime { get; set; }
     }
 
     private sealed class InputPortFile
@@ -426,6 +488,8 @@ public sealed record GraphNodeDefinition(
         public string? Id { get; set; }
         public string? Name { get; set; }
         public string? PortType { get; set; }
+        public string? Category { get; set; }
+        public JsonElement DefaultValue { get; set; }
     }
 
     private sealed class OutputPortFile
@@ -433,6 +497,14 @@ public sealed record GraphNodeDefinition(
         public string? Id { get; set; }
         public string? Name { get; set; }
         public string? PortType { get; set; }
+        public string? Category { get; set; }
+    }
+
+    private sealed class RuntimeFile
+    {
+        public string? Kind { get; set; }
+        public int AbiVersion { get; set; }
+        public string? Execution { get; set; }
     }
 
     private sealed class NodeParameterFile
@@ -462,5 +534,8 @@ public sealed record GraphNodeDefinition(
     }
 }
 
-public sealed record GraphInputPortDefinition(string Id, string Name, string? PortType = null);
-public sealed record GraphOutputPortDefinition(string Id, string Name, string? PortType = null);
+public sealed record GraphInputPortDefinition(
+    string Id, string Name, string? PortType = null, GraphPortCategory? Category = null,
+    JsonElement? DefaultValue = null);
+public sealed record GraphOutputPortDefinition(
+    string Id, string Name, string? PortType = null, GraphPortCategory? Category = null);

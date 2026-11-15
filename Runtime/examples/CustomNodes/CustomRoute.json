@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "typeId": "c3de3377-59ae-4a2d-8991-7f38e5d82112",
+  "namespace": "Project.Examples",
+  "kind": "CustomRoute",
+  "name": "Custom Route",
+  "group": "Project Examples",
+  "portType": "Signal",
+  "portCategory": "Signal",
+  "runtime": {
+    "kind": "custom",
+    "abiVersion": 1,
+    "execution": "signal"
+  },
+  "inputPorts": [
+    { "id": "enter", "name": "Enter", "portType": "Signal", "category": "Signal" },
+    { "id": "amount", "name": "Amount", "portType": "Float", "category": "Parameter", "defaultValue": 0.0 }
+  ],
+  "outputPorts": [
+    { "id": "next", "name": "Next", "portType": "Signal", "category": "Signal" },
+    { "id": "done", "name": "Done", "portType": "Signal", "category": "Signal" }
+  ],
+  "parameters": []
+}

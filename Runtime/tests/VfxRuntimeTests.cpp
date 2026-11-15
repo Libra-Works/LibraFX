@@ -168,6 +168,327 @@ auto typedFixture() -> std::vector<std::uint8_t>
     return bytes;
 }
 
+struct CustomCounters {
+    std::uint32_t calls = 0;
+    double observed = 0;
+};
+
+struct StateCounters {
+    std::uint32_t initializations = 0;
+    std::uint32_t cleanups = 0;
+    bool fail = false;
+};
+
+auto initializeCustomState(void* state, std::size_t stateBytes, void* context) noexcept -> liberafx::Result
+{
+    auto counters = static_cast<StateCounters*>(context);
+    ++counters->initializations;
+    if (stateBytes >= sizeof(std::uint64_t)) *static_cast<std::uint64_t*>(state) = 1;
+    return counters->fail ? liberafx::Result::InvalidArgument : liberafx::Result::Ok;
+}
+
+void cleanupCustomState(void*, std::size_t, void* context) noexcept
+{
+    ++static_cast<StateCounters*>(context)->cleanups;
+}
+
+auto customCopy(liberafx::CustomNodeInvocation& invocation) noexcept -> liberafx::Result
+{
+    auto counters = static_cast<CustomCounters*>(invocation.context);
+    ++counters->calls;
+    invocation.outputs[0] = invocation.inputs[0];
+    return liberafx::Result::Ok;
+}
+
+auto customIncrement(liberafx::CustomNodeInvocation& invocation) noexcept -> liberafx::Result
+{
+    auto counters = static_cast<CustomCounters*>(invocation.context);
+    ++counters->calls;
+    invocation.outputs[0] = invocation.inputs[0] + 1;
+    return liberafx::Result::Ok;
+}
+
+auto customBranch(liberafx::CustomNodeInvocation& invocation) noexcept -> liberafx::Result
+{
+    auto counters = static_cast<CustomCounters*>(invocation.context);
+    ++counters->calls;
+    counters->observed = invocation.inputs[0];
+    invocation.selectedBranch = invocation.inputs[0] == 0 ? 0 : 1;
+    return liberafx::Result::Ok;
+}
+
+auto customEnd(liberafx::CustomNodeInvocation& invocation) noexcept -> liberafx::Result
+{
+    auto counters = static_cast<CustomCounters*>(invocation.context);
+    ++counters->calls;
+    counters->observed = invocation.inputs[0];
+    invocation.selectedBranch = 0;
+    return liberafx::Result::Ok;
+}
+
+struct ReentrantSignalContext {
+    liberafx::Instance* instance = nullptr;
+    liberafx::SignalHandle entry{};
+    liberafx::ParameterHandle parameter{};
+    bool visited = false;
+};
+
+auto reentrantSignal(liberafx::CustomNodeInvocation& invocation) noexcept -> liberafx::Result
+{
+    auto context = static_cast<ReentrantSignalContext*>(invocation.context);
+    auto queue = Queue{};
+    assert(context->instance->dispatchSignal(context->entry, 0, 10) == liberafx::Result::Busy);
+    assert(context->instance->updateAsync(0, enqueue, &queue) == liberafx::Result::Busy);
+    assert(context->instance->setParameter(context->parameter, 2) == liberafx::Result::Busy);
+    context->visited = true;
+    invocation.selectedBranch = 0;
+    return liberafx::Result::Ok;
+}
+
+auto customFixture() -> std::vector<std::uint8_t>
+{
+    auto bytes = std::vector<std::uint8_t>(16 + 3 * 256);
+    std::memcpy(bytes.data(), "LFXB", 4);
+    write16(bytes, 4, 3);
+    bytes[6] = 1;
+    write32(bytes, 8, 3);
+    write16(bytes, 12, 256);
+    const auto typeIds = std::array<std::array<std::uint8_t, 16>, 3>{
+        std::array<std::uint8_t, 16>{0xa1}, std::array<std::uint8_t, 16>{0xa2},
+        std::array<std::uint8_t, 16>{0xa3}};
+    auto writeCustom = [&](std::size_t index, std::uint8_t opcode, std::uint8_t width,
+                           std::uint8_t inputCount, std::uint8_t branchCount, std::size_t type) {
+        auto offset = 16 + index * 256;
+        bytes[offset + 15] = static_cast<std::uint8_t>(index + 1);
+        bytes[offset + 16] = opcode;
+        bytes[offset + 17] = width;
+        bytes[offset + 18] = inputCount;
+        bytes[offset + 19] = branchCount;
+        std::memcpy(bytes.data() + offset + 24, typeIds[type].data(), 16);
+        write32(bytes, offset + 40, 1);
+        for (auto input = 0u; input < 4; ++input)
+            write32(bytes, offset + 48 + input * 8, 0xffffffffu);
+        for (auto branch = 0u; branch < 4; ++branch)
+            write32(bytes, offset + 208 + branch * 4, 0xffffffffu);
+    };
+    writeCustom(0, 40, 1, 1, 0, 0);
+    writeDouble(bytes, 16 + 80, 5);
+    writeCustom(1, 40, 1, 1, 0, 1);
+    write32(bytes, 16 + 256 + 48, 0);
+    bytes[16 + 256 + 48 + 4] = 1;
+    writeCustom(2, 40, 1, 1, 0, 2);
+    write32(bytes, 16 + 2 * 256 + 48, 0);
+    bytes[16 + 2 * 256 + 48 + 4] = 1;
+    return bytes;
+}
+
+void verifyCustom()
+{
+    auto bytes = customFixture();
+    auto sourceCounters = CustomCounters{};
+    auto firstCounters = CustomCounters{};
+    auto secondCounters = CustomCounters{};
+    auto descriptors = std::array<liberafx::CustomNodeDescriptor, 3>{};
+    const auto ids = std::array<std::array<std::uint8_t, 16>, 3>{
+        std::array<std::uint8_t, 16>{0xa1}, std::array<std::uint8_t, 16>{0xa2},
+        std::array<std::uint8_t, 16>{0xa3}};
+    for (auto index = 0u; index < descriptors.size(); ++index)
+    {
+        std::memcpy(descriptors[index].typeId, ids[index].data(), 16);
+        descriptors[index].abiVersion = 1;
+        descriptors[index].execution = liberafx::CustomExecution::Parameter;
+        descriptors[index].inputCount = 1;
+        descriptors[index].inputWidths[0] = 1;
+        descriptors[index].outputWidth = 1;
+        descriptors[index].function = index == 0 ? customCopy : customIncrement;
+        descriptors[index].context = index == 0 ? static_cast<void*>(&sourceCounters) :
+            index == 1 ? static_cast<void*>(&firstCounters) : static_cast<void*>(&secondCounters);
+    }
+    auto program = liberafx::Program{};
+    auto bindings = std::array<liberafx::CustomNodeBinding, 3>{};
+    assert(liberafx::Program::load(bytes.data(), bytes.size(), descriptors.data(), descriptors.size(),
+                                   bindings.data(), bindings.size(), program) == liberafx::Result::Ok);
+    assert(program.version() == 3 && program.workBytes() == 12 * sizeof(double));
+    auto work = std::array<double, 12>{};
+    auto otherWork = std::array<double, 12>{};
+    auto defaults = std::array<double, 48>{};
+    auto otherDefaults = std::array<double, 48>{};
+    {
+    auto instance = liberafx::Instance{};
+    auto other = liberafx::Instance{};
+    assert(instance.initialize(program, work.data(), work.size(), defaults.data(), defaults.size()) ==
+           liberafx::Result::Ok);
+    assert(other.initialize(program, otherWork.data(), otherWork.size(),
+                            otherDefaults.data(), otherDefaults.size()) == liberafx::Result::Ok);
+    auto sourceId = bytes.data() + 16;
+    auto handle = liberafx::ValueHandle{};
+    auto parameter = liberafx::ParameterHandle{};
+    assert(instance.bindValue(sourceId, handle) == liberafx::Result::Ok);
+    assert(instance.bindParameter(sourceId, 0, 0, parameter) == liberafx::Result::Ok);
+    auto queue = Queue{};
+    assert(instance.updateAsync(0, enqueue, &queue) == liberafx::Result::Ok);
+    run(queue);
+    assert(sourceCounters.calls == 1 && firstCounters.calls == 1 && secondCounters.calls == 1);
+    auto values = std::array<double, 4>{};
+    assert(instance.value(handle, values.data()) == liberafx::Result::Ok && values[0] == 5);
+    assert(instance.setParameter(parameter, 8) == liberafx::Result::Ok);
+    auto parameterValue = double{};
+    assert(instance.parameter(parameter, parameterValue) == liberafx::Result::Ok && parameterValue == 8);
+    assert(instance.updateAsync(0, enqueue, &queue) == liberafx::Result::Ok);
+    run(queue);
+    assert(instance.value(handle, values.data()) == liberafx::Result::Ok && values[0] == 8);
+    assert(other.updateAsync(0, enqueue, &queue) == liberafx::Result::Ok);
+    run(queue);
+    assert(other.value(sourceId, values[0]) == liberafx::Result::Ok && values[0] == 5);
+    assert(other.value(handle, values.data()) == liberafx::Result::InvalidHandle);
+    assert(other.setParameter(parameter, 99) == liberafx::Result::InvalidHandle);
+    assert(instance.initialize(program, work.data(), work.size(), defaults.data(), defaults.size()) ==
+           liberafx::Result::Ok);
+    assert(instance.value(handle, values.data()) == liberafx::Result::InvalidHandle);
+    assert(instance.parameter(parameter, parameterValue) == liberafx::Result::InvalidHandle);
+    }
+
+    auto unknown = descriptors;
+    unknown[1].abiVersion = 2;
+    assert(liberafx::Program::load(bytes.data(), bytes.size(), unknown.data(), unknown.size(),
+                                   bindings.data(), bindings.size(), program) ==
+           liberafx::Result::UnsupportedBinary);
+    auto unknownType = bytes;
+    unknownType[16 + 256 + 24] ^= 0x7f;
+    assert(liberafx::Program::load(unknownType.data(), unknownType.size(), descriptors.data(), descriptors.size(),
+                                   bindings.data(), bindings.size(), program) ==
+           liberafx::Result::UnknownCustomNode);
+    auto malformed = bytes;
+    malformed[16 + 256 + 23] = 1;
+    assert(liberafx::Program::load(malformed.data(), malformed.size(), descriptors.data(), descriptors.size(),
+                                   bindings.data(), bindings.size(), program) ==
+           liberafx::Result::InvalidBinary);
+
+    auto stateCounters = std::array<StateCounters, 3>{};
+    stateCounters[1].fail = true;
+    auto stateDescriptors = descriptors;
+    for (auto index = 0u; index < stateDescriptors.size(); ++index)
+    {
+        stateDescriptors[index].stateBytes = sizeof(std::uint64_t);
+        stateDescriptors[index].initialize = initializeCustomState;
+        stateDescriptors[index].cleanup = cleanupCustomState;
+        stateDescriptors[index].context = &stateCounters[index];
+    }
+    assert(liberafx::Program::load(bytes.data(), bytes.size(), stateDescriptors.data(), stateDescriptors.size(),
+                                   bindings.data(), bindings.size(), program) == liberafx::Result::Ok);
+    auto stateWork = std::array<double, 15>{};
+    auto stateDefaults = std::array<double, 48>{};
+    auto failedInstance = liberafx::Instance{};
+    assert(failedInstance.initialize(program, stateWork.data(), stateWork.size(),
+                                     stateDefaults.data(), stateDefaults.size()) ==
+           liberafx::Result::InvalidArgument);
+    assert(stateCounters[0].initializations == 1 && stateCounters[0].cleanups == 1 &&
+           stateCounters[1].initializations == 1 && stateCounters[1].cleanups == 1 &&
+           stateCounters[2].initializations == 0);
+}
+
+auto signalFixture() -> std::vector<std::uint8_t>
+{
+    auto bytes = std::vector<std::uint8_t>(16 + 3 * 256);
+    std::memcpy(bytes.data(), "LFXB", 4);
+    write16(bytes, 4, 3);
+    bytes[6] = 1;
+    write32(bytes, 8, 3);
+    write16(bytes, 12, 256);
+    const auto ids = std::array<std::array<std::uint8_t, 16>, 3>{
+        std::array<std::uint8_t, 16>{0xb1}, std::array<std::uint8_t, 16>{0xb2},
+        std::array<std::uint8_t, 16>{0xb3}};
+    auto initNode = [&](std::size_t index, std::uint8_t opcode, std::uint8_t width,
+                        std::uint8_t inputCount, std::uint8_t branchCount, std::size_t type) {
+        auto offset = 16 + index * 256;
+        bytes[offset + 15] = static_cast<std::uint8_t>(index + 1);
+        bytes[offset + 16] = opcode;
+        bytes[offset + 17] = width;
+        bytes[offset + 18] = inputCount;
+        bytes[offset + 19] = branchCount;
+        std::memcpy(bytes.data() + offset + 24, ids[type].data(), 16);
+        write32(bytes, offset + 40, 1);
+        for (auto input = 0u; input < 4; ++input)
+            write32(bytes, offset + 48 + input * 8, 0xffffffffu);
+        for (auto branch = 0u; branch < 4; ++branch)
+            write32(bytes, offset + 208 + branch * 4, 0xffffffffu);
+    };
+    initNode(0, 40, 1, 1, 0, 0);
+    writeDouble(bytes, 16 + 80, 1);
+    initNode(1, 41, 0, 1, 2, 1);
+    write32(bytes, 16 + 256 + 48, 0);
+    bytes[16 + 256 + 48 + 4] = 1;
+    write32(bytes, 16 + 256 + 208 + 4, 2);
+    initNode(2, 41, 0, 1, 1, 2);
+    write32(bytes, 16 + 2 * 256 + 48, 0);
+    bytes[16 + 2 * 256 + 48 + 4] = 1;
+    return bytes;
+}
+
+void verifyCustomSignal()
+{
+    auto bytes = signalFixture();
+    auto sourceCounters = CustomCounters{};
+    auto branchCounters = CustomCounters{};
+    auto endCounters = CustomCounters{};
+    auto descriptors = std::array<liberafx::CustomNodeDescriptor, 3>{};
+    const auto ids = std::array<std::array<std::uint8_t, 16>, 3>{
+        std::array<std::uint8_t, 16>{0xb1}, std::array<std::uint8_t, 16>{0xb2},
+        std::array<std::uint8_t, 16>{0xb3}};
+    for (auto index = 0u; index < 3; ++index)
+    {
+        std::memcpy(descriptors[index].typeId, ids[index].data(), 16);
+        descriptors[index].abiVersion = 1;
+        descriptors[index].inputCount = 1;
+        descriptors[index].inputWidths[0] = 1;
+        descriptors[index].execution = index == 0 ? liberafx::CustomExecution::Parameter :
+            liberafx::CustomExecution::Signal;
+        descriptors[index].outputWidth = index == 0 ? 1 : 0;
+        descriptors[index].branchCount = index == 1 ? 2 : index == 2 ? 1 : 0;
+        descriptors[index].function = index == 0 ? customCopy : index == 1 ? customBranch : customEnd;
+        descriptors[index].context = index == 0 ? static_cast<void*>(&sourceCounters) :
+            index == 1 ? static_cast<void*>(&branchCounters) : static_cast<void*>(&endCounters);
+    }
+    auto program = liberafx::Program{};
+    auto bindings = std::array<liberafx::CustomNodeBinding, 3>{};
+    assert(liberafx::Program::load(bytes.data(), bytes.size(), descriptors.data(), descriptors.size(),
+                                   bindings.data(), bindings.size(), program) == liberafx::Result::Ok);
+    auto work = std::array<double, 12>{};
+    auto defaults = std::array<double, 48>{};
+    auto instance = liberafx::Instance{};
+    assert(instance.initialize(program, work.data(), work.size(), defaults.data(), defaults.size()) ==
+           liberafx::Result::Ok);
+    auto queue = Queue{};
+    assert(instance.updateAsync(0, enqueue, &queue) == liberafx::Result::Ok);
+    run(queue);
+    auto entryId = bytes.data() + 16 + 256;
+    auto entryHandle = liberafx::SignalHandle{};
+    assert(instance.bindSignal(entryId, entryHandle) == liberafx::Result::Ok);
+    assert(instance.dispatchSignal(entryHandle, 0, 1) == liberafx::Result::InstructionBudgetExceeded);
+    assert(branchCounters.calls == 1 && endCounters.calls == 0);
+    assert(instance.dispatchSignal(entryHandle, 0, 2) == liberafx::Result::Ok);
+    assert(branchCounters.calls == 2 && endCounters.calls == 1 && endCounters.observed == 1);
+    auto context = ReentrantSignalContext{};
+    auto reentrantDescriptors = descriptors;
+    reentrantDescriptors[1].function = reentrantSignal;
+    reentrantDescriptors[1].context = &context;
+    auto reentrantBindings = std::array<liberafx::CustomNodeBinding, 3>{};
+    auto reentrantProgram = liberafx::Program{};
+    assert(liberafx::Program::load(bytes.data(), bytes.size(), reentrantDescriptors.data(),
+        reentrantDescriptors.size(), reentrantBindings.data(), reentrantBindings.size(), reentrantProgram) == liberafx::Result::Ok);
+    auto reentrantWork = std::array<double, 12>{};
+    auto reentrantDefaults = std::array<double, 48>{};
+    auto reentrantInstance = liberafx::Instance{};
+    context.instance = &reentrantInstance;
+    assert(reentrantInstance.initialize(reentrantProgram, reentrantWork.data(), reentrantWork.size(),
+        reentrantDefaults.data(), reentrantDefaults.size()) == liberafx::Result::Ok);
+    assert(reentrantInstance.bindSignal(entryId, context.entry) == liberafx::Result::Ok);
+    assert(reentrantInstance.bindParameter(bytes.data() + 16, 0, 0, context.parameter) == liberafx::Result::Ok);
+    assert(reentrantInstance.updateAsync(0, enqueue, &queue) == liberafx::Result::Ok);
+    run(queue);
+    assert(reentrantInstance.dispatchSignal(context.entry, 0, 2) == liberafx::Result::Ok && context.visited);
+}
+
 void verifyTyped(const std::vector<std::uint8_t>& bytes)
 {
     auto program = liberafx::Program{};
@@ -306,6 +627,8 @@ auto main(int argc, char** argv) -> int
     auto bytes = fixture();
     verify(bytes);
     verifyTyped(typedFixture());
+    verifyCustom();
+    verifyCustomSignal();
     auto corrupt = bytes;
     corrupt[6] = 2;
     auto program = liberafx::Program{};

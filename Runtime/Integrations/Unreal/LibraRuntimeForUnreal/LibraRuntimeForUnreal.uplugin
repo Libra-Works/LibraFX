@@ -1,0 +1,17 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1.0",
+  "FriendlyName": "Libra Runtime for Unreal",
+  "Description": "LIBERA FX bytecode execution through an engine-independent core. Source targets UE 5.7 and later.",
+  "Category": "FX",
+  "EnabledByDefault": true,
+  "CanContainContent": false,
+  "IsBetaVersion": true,
+  "Installed": false,
+  "Modules": [
+    { "Name": "LibraRuntimeCore", "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "LibraRuntimeForUnreal", "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "LibraRuntimeForUnrealEditor", "Type": "Editor", "LoadingPhase": "Default" }
+  ]
+}

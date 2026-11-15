@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "typeId": "c3de3377-59ae-4a2d-8991-7f38e5d82111",
+  "namespace": "Project.Examples",
+  "kind": "CustomScale",
+  "name": "Custom Scale",
+  "group": "Project Examples",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "runtime": {
+    "kind": "custom",
+    "abiVersion": 1,
+    "execution": "parameter"
+  },
+  "inputPorts": [
+    { "id": "a", "name": "A", "portType": "Float", "category": "Parameter", "defaultValue": 1.0 },
+    { "id": "b", "name": "B", "portType": "Float", "category": "Parameter", "defaultValue": 1.0 }
+  ],
+  "outputPorts": [
+    { "id": "value", "name": "Value", "portType": "Float", "category": "Parameter" }
+  ],
+  "parameters": []
+}

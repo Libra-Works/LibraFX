@@ -819,7 +819,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             else if (sourcePortId is not null)
                 throw new ArgumentException("The source output port does not exist.", nameof(plan));
 
-            if (source.Definition.PortCategory != target.Definition.PortCategory ||
+            if (source.Definition.GetOutputPortCategory(sourcePortId) != target.Definition.GetInputPortCategory(targetPortId) ||
                 source.Definition.GetOutputPortType(sourcePortId) != target.Definition.GetInputPortType(targetPortId))
             {
                 throw new ArgumentException(
@@ -977,7 +977,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             return false;
         }
 
-        if (source.Definition.PortCategory != target.Definition.PortCategory ||
+        if (source.Definition.GetOutputPortCategory(sourcePortId) != target.Definition.GetInputPortCategory(targetPortId) ||
             source.Definition.GetOutputPortType(sourcePortId) != target.Definition.GetInputPortType(targetPortId))
         {
             error = "Port categories and data types must match.";

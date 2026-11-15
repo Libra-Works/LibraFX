@@ -92,7 +92,9 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
             if (Loop) next = _start + (next - _start) % (_end - _start);
             else { SetFrame(_end); Pause(); return; }
         }
+        var previousFrame = Frame;
         SetFrame(next);
+        if (Frame != previousFrame) StateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnTick(object? sender, EventArgs e)
