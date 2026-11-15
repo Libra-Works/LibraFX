@@ -267,7 +267,7 @@ auto ULibraEditorConnectionComponent::ConnectToEditor() -> bool
     hello->SetStringField(TEXT("type"), TEXT("hello"));
     hello->SetStringField(TEXT("engine"), TEXT("Unreal"));
     hello->SetStringField(TEXT("role"), TEXT("editor"));
-    hello->SetNumberField(TEXT("version"), 3);
+    hello->SetNumberField(TEXT("version"), 1);
     auto capabilities = TArray<TSharedPtr<FJsonValue>>{};
     for (const auto& capability : {TEXT("profiling"), TEXT("values"), TEXT("assets"), TEXT("rendering"), TEXT("thumbnails")})
         capabilities.Add(MakeShared<FJsonValueString>(capability));
