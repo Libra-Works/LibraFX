@@ -9,6 +9,10 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "HAL/PlatformProperties.h"
+#include "Misc/App.h"
+#include "Misc/EngineVersion.h"
+#include "Containers/Ticker.h"
 
 struct FLibraEditorConnectionState final
 {
@@ -41,6 +45,8 @@ struct FLibraEditorConnectionState final
     bool originalNodes = false;
     bool originalAccessors = false;
     bool profilePending = false;
+    double nextRenderStatus = 0;
+    int64 sceneProgramSequence = 0;
 };
 
 namespace {
@@ -256,9 +262,28 @@ auto ULibraEditorConnectionComponent::ConnectToEditor() -> bool
     candidate->originalRecording = Target->bRecordProfiling;
     candidate->originalNodes = Target->bProfileNodes;
     candidate->originalAccessors = Target->bProfileAccessors;
+    auto hello = MakeShared<FJsonObject>();
+    hello->SetStringField(TEXT("type"), TEXT("hello"));
+    hello->SetStringField(TEXT("engine"), TEXT("Unreal"));
+    hello->SetStringField(TEXT("role"), TEXT("editor"));
+    hello->SetNumberField(TEXT("version"), 3);
+    auto capabilities = TArray<TSharedPtr<FJsonValue>>{};
+    for (const auto& capability : {TEXT("profiling"), TEXT("values"), TEXT("assets"), TEXT("rendering"), TEXT("thumbnails")})
+        capabilities.Add(MakeShared<FJsonValueString>(capability));
+    hello->SetArrayField(TEXT("capabilities"), MoveTemp(capabilities));
+    auto viewerName = FApp::GetProjectName();
+    if (GetOwner()) viewerName += TEXT(" / ") + GetOwner()->GetName();
+    hello->SetStringField(TEXT("viewerName"), viewerName);
+    hello->SetStringField(TEXT("viewerId"), ViewerId.ToString(EGuidFormats::DigitsWithHyphensLower));
+    hello->SetStringField(TEXT("engineVersion"), FEngineVersion::Current().ToString());
+    hello->SetStringField(TEXT("platform"), FPlatformProperties::PlatformName());
+    auto helloText = FString{};
+    auto helloWriter = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&helloText);
+    FJsonSerializer::Serialize(hello.ToSharedRef(), helloWriter);
+    helloWriter->Close();
     candidate->transport.QueueText(
 #if WITH_EDITOR
-        TEXT("{\"type\":\"hello\",\"engine\":\"Unreal\",\"role\":\"editor\",\"version\":1,\"capabilities\":[\"profiling\",\"values\"]}")
+        helloText
 #else
         TEXT("{\"type\":\"hello\",\"engine\":\"Unreal\",\"role\":\"runtime\",\"version\":1,\"capabilities\":[\"profiling\",\"values\"]}")
 #endif
@@ -323,6 +348,78 @@ auto ULibraEditorConnectionComponent::ApplyMessage(TConstArrayView<uint8> messag
         return false;
     }
     if (frame.kind == wire::Kind::Control) return ApplyControl(*state, frame);
+    if (static_cast<uint16>(frame.kind) == 5)
+    {
+        if (frame.payloadLength > 1024 * 1024)
+        {
+            QueueEditorMessage(TEXT("{\"type\":\"asset_result\",\"error\":\"Scene request exceeds the 1 MiB limit.\"}"));
+            return true;
+        }
+        auto utf8 = FUTF8ToTCHAR(reinterpret_cast<const ANSICHAR*>(frame.payload), static_cast<int32>(frame.payloadLength));
+        auto request = FString(utf8.Length(), utf8.Get());
+        auto reader = TJsonReaderFactory<>::Create(request);
+        auto object = TSharedPtr<FJsonObject>{};
+        auto type = FString{};
+        if (!FJsonSerializer::Deserialize(reader, object) || !object || !object->TryGetStringField(TEXT("type"), type))
+        {
+            QueueEditorMessage(TEXT("{\"type\":\"asset_result\",\"error\":\"Invalid scene request JSON.\"}"));
+            return true;
+        }
+        if (type == TEXT("asset_catalog") || type == TEXT("asset_details") || type == TEXT("asset_thumbnail"))
+        {
+            if (EditorAssetRequestHandler)
+            {
+                auto response = EditorAssetRequestHandler(request);
+                if (!response.IsEmpty()) QueueEditorMessage(response);
+            }
+            else QueueEditorMessage(TEXT("{\"type\":\"asset_result\",\"error\":\"Unreal asset discovery is unavailable.\"}"));
+        }
+        else if (type == TEXT("render_config"))
+        {
+            auto requestedSequenceNumber = double{0};
+            if (!object->TryGetNumberField(TEXT("programSequence"), requestedSequenceNumber) ||
+                !FMath::IsFinite(requestedSequenceNumber) || requestedSequenceNumber < 0 ||
+                requestedSequenceNumber >= static_cast<double>(MAX_int64) || FMath::FloorToDouble(requestedSequenceNumber) != requestedSequenceNumber ||
+                static_cast<int64>(requestedSequenceNumber) != state->programSequence)
+            {
+                QueueEditorMessage(TEXT("{\"type\":\"render_status\",\"errors\":[\"Render configuration does not match the active program.\"]}"));
+                return true;
+            }
+            auto requestedSequence = static_cast<int64>(requestedSequenceNumber);
+            state->sceneProgramSequence = requestedSequence;
+            state->nextRenderStatus = 0;
+            if (EditorSceneConfigHandler) EditorSceneConfigHandler(request, requestedSequence);
+        }
+        else if (type == TEXT("reconnect"))
+        {
+            auto requestId = FString{};
+            auto parsedId = FGuid{};
+            if (!object->TryGetStringField(TEXT("requestId"), requestId) ||
+                !FGuid::ParseExact(requestId, EGuidFormats::DigitsWithHyphens, parsedId) || !parsedId.IsValid())
+            {
+                QueueEditorMessage(TEXT("{\"type\":\"asset_result\",\"requestId\":\"\",\"operation\":\"reconnect\",\"error\":\"Invalid reconnect request UUID.\"}"));
+                return true;
+            }
+            auto reply = MakeShared<FJsonObject>();
+            reply->SetStringField(TEXT("type"), TEXT("asset_result"));
+            reply->SetStringField(TEXT("requestId"), requestId);
+            reply->SetStringField(TEXT("operation"), TEXT("reconnect"));
+            reply->SetField(TEXT("error"), MakeShared<FJsonValueNull>());
+            auto response = FString{};
+            auto writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&response);
+            FJsonSerializer::Serialize(reply.ToSharedRef(), writer);
+            writer->Close();
+            if (!QueueEditorMessage(response)) return true;
+            auto weakThis = TWeakObjectPtr<ULibraEditorConnectionComponent>(this);
+            FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([weakThis](float)
+            {
+                if (auto connection = weakThis.Get())
+                    connection->ConnectToEditor();
+                return false;
+            }), 0.1f);
+        }
+        return true;
+    }
     auto sequence = state->sequence.validate(frame);
     if (sequence == wire::SequenceResult::Stale) return true;
     if (sequence == wire::SequenceResult::Resync)
@@ -365,6 +462,8 @@ auto ULibraEditorConnectionComponent::ApplyMessage(TConstArrayView<uint8> messag
         }
         PreviewEffect = candidate;
         state->programSequence = static_cast<int64>(FMath::Min(frame.sequence, static_cast<uint64>(MAX_int64)));
+        state->sceneProgramSequence = 0;
+        if (EditorSceneConfigHandler) EditorSceneConfigHandler(FString{}, state->programSequence);
         BindWatched(*state);
         state->profileSnapshot.Reset();
         state->profilePending = false;
@@ -433,5 +532,21 @@ void ULibraEditorConnectionComponent::TickComponent(float deltaTime, ELevelTick 
             LastResult = result;
         }
     }
+    if (EditorRenderStatusHandler && state->sceneProgramSequence == state->programSequence &&
+        state->sequence.hasProgram() && !state->pendingEvaluation)
+    {
+        auto status = EditorRenderStatusHandler(state->programSequence, state->target->LastEvaluatedTimeSeconds);
+        auto now = FPlatformTime::Seconds();
+        if (now >= state->nextRenderStatus)
+        {
+            state->nextRenderStatus = now + 0.25;
+            if (!status.IsEmpty()) state->transport.QueueText(status);
+        }
+    }
     Status = state->diagnostic.IsEmpty() ? state->transport.GetStatus() : state->diagnostic;
+}
+
+bool ULibraEditorConnectionComponent::QueueEditorMessage(const FString& message)
+{
+    return State && State->transport.QueueText(message);
 }

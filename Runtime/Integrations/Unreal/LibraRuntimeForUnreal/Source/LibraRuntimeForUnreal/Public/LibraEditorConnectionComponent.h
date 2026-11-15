@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Templates/Function.h"
 #include "LibraRuntimeTypes.h"
 #include "LibraEditorConnectionComponent.generated.h"
 
@@ -54,6 +55,12 @@ public:
     UPROPERTY(BlueprintReadOnly, Transient, Category = "Libra Editor")
     FString Status;
 
+    TFunction<FString(const FString&)> EditorAssetRequestHandler;
+    TFunction<void(const FString&, int64)> EditorSceneConfigHandler;
+    TFunction<FString(int64, double)> EditorRenderStatusHandler;
+
+    bool QueueEditorMessage(const FString& message);
+
     UPROPERTY(BlueprintAssignable, Category = "Libra Editor")
     FOnLibraPreviewUpdated OnPreviewUpdated;
 
@@ -82,6 +89,7 @@ private:
     bool ApplyMessage(TConstArrayView<uint8> message);
     void CloseConnection(bool restoreEffect);
     TSharedPtr<FLibraEditorConnectionState, ESPMode::NotThreadSafe> State;
+    FGuid ViewerId = FGuid::NewGuid();
 
     UPROPERTY(Transient)
     TObjectPtr<ULibraEffectAsset> PreviewEffect;

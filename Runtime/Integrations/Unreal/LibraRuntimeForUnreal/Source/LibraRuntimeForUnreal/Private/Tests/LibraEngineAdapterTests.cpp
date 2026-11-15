@@ -6,7 +6,9 @@
 #include "HAL/Event.h"
 #include "HAL/PlatformProcess.h"
 #include "RenderingThread.h"
+#include "liberafx/SceneBindings.h"
 #include <array>
+#include <limits>
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraEngineTaskTest, "Libra.Runtime.Adapters.EngineTasks",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -104,6 +106,25 @@ bool FLibraIndependentProfilerTest::RunTest(const FString&)
     TestEqual(TEXT("One completed scope is recorded"), values.Num(), 1);
     TestEqual(TEXT("Exact call count"), values[0].Calls, uint64{1});
     TestTrue(TEXT("Exclusive time is bounded by inclusive time"), values[0].ExclusiveNs <= values[0].InclusiveNs);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraSpriteAtlasBindingTest, "Libra.Runtime.Scene.SpriteAtlasSampling",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraSpriteAtlasBindingTest::RunTest(const FString&)
+{
+    auto frame = liberafx::AtlasFrame{};
+    TestTrue(TEXT("Negative frame wraps around the atlas"),
+        liberafx::sampleSpriteAtlas(-1.0, 4, 2, frame));
+    TestEqual(TEXT("Frame index wraps to the final cell"), frame.frameIndex, uint32{7});
+    TestEqual(TEXT("Atlas frame starts at top-right cell U"), frame.uvRect[0], 0.75f);
+    TestEqual(TEXT("Atlas frame starts in the second row"), frame.uvRect[1], 0.5f);
+    TestEqual(TEXT("Atlas frame width is normalized"), frame.uvRect[2], 0.25f);
+    TestEqual(TEXT("Atlas frame height is normalized"), frame.uvRect[3], 0.5f);
+    TestFalse(TEXT("Zero-width atlases are rejected"), liberafx::sampleSpriteAtlas(0.0, 0, 2, frame));
+    TestFalse(TEXT("Non-finite frames are rejected"),
+        liberafx::sampleSpriteAtlas(std::numeric_limits<double>::infinity(), 2, 2, frame));
     return true;
 }
 #endif

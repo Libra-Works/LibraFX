@@ -137,6 +137,12 @@ bool ULibraEffectComponent::CaptureProfiling(TArray<FLibraProfileMeasurement>& m
     return NativeState && NativeState->profiler.Snapshot(measurements, dropped);
 }
 
+bool ULibraEffectComponent::IsEvaluationPending() const
+{
+    check(IsInGameThread());
+    return NativeState && NativeState->pending;
+}
+
 auto ULibraEffectComponent::Play(bool bRestart) -> ELibraRuntimeResult
 {
     if (!IsRegistered()) return LastResult = ELibraRuntimeResult::NotReady;

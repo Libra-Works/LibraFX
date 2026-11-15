@@ -809,10 +809,10 @@ bool FLibraEditorTransport::QueueText(const FString& Message)
 {
 	if (!Impl || !Impl->Connected.load()) return false;
 	auto encoded = FTCHARToUTF8(*Message);
-	if (encoded.Length() == 0 || encoded.Length() > 128 * 1024) return false;
+	if (encoded.Length() == 0 || encoded.Length() > 1024 * 1024) return false;
 	{
 		auto lock = std::lock_guard<std::mutex>(Impl->Mutex);
-		if (Impl->SendQueue.size() >= 32 || Impl->SendBytes + encoded.Length() > 2 * 1024 * 1024) return false;
+		if (Impl->SendQueue.size() >= 32 || Impl->SendBytes + encoded.Length() > 4 * 1024 * 1024) return false;
 		auto bytes = TArray<uint8>{};
 		bytes.Append(reinterpret_cast<const uint8*>(encoded.Get()), encoded.Length());
 		Impl->SendBytes += bytes.Num();

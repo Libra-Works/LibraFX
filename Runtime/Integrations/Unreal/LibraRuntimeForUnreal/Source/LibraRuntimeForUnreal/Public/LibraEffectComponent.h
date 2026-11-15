@@ -47,6 +47,7 @@ public:
     ELibraRuntimeResult ConfigureRecording(bool enabled, bool enableNodeScopes = true, bool enableAccessorScopes = false);
 
     bool CaptureProfiling(TArray<FLibraProfileMeasurement>& measurements, uint64& dropped) const;
+    bool IsEvaluationPending() const;
 
     UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime")
     double TimeSeconds = 0;

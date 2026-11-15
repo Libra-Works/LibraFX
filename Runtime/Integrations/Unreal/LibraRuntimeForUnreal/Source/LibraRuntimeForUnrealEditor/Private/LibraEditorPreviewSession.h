@@ -2,11 +2,20 @@
 
 #include "CoreMinimal.h"
 #include "Containers/Ticker.h"
+#include "LibraRuntimeHandles.h"
 #include "UObject/StrongObjectPtr.h"
 
 class UWorld;
+class AActor;
+class FPreviewScene;
+class FSceneViewport;
+class FEditorViewportClient;
+class SDockTab;
+class SViewport;
+class UMaterialInstanceDynamic;
 class ULibraEffectComponent;
 class ULibraEditorConnectionComponent;
+class UStaticMeshComponent;
 
 // Explicit opt-in automation preview, isolated from the user's edited level.
 class FLibraEditorPreviewSession final
@@ -17,9 +26,50 @@ public:
 
 private:
     bool Tick(float deltaTime);
+    void ConfigureScene(const FString& json, int64 programSequence);
+    FString UpdateScene(int64 programSequence, double timeSeconds);
+    TSharedRef<SDockTab> SpawnPreviewTab(const class FSpawnTabArgs& args);
+
+    struct FRenderInput
+    {
+        FString id;
+        FString parameterName;
+        FString parameterKind;
+        int32 materialSlot = 0;
+        int32 association = 0;
+        int32 index = -1;
+        int32 sourceComponent = 0;
+        FGuid sourceNodeId;
+        FLibraValueHandle handle;
+        bool hasBinding = false;
+        TArray<double> defaults;
+    };
+    struct FRenderNode
+    {
+        FGuid id;
+        FString kind;
+        FString assetPath;
+        bool billboard = false;
+        uint32 frame = 0;
+        FVector4 uvRect = FVector4(0, 0, 1, 1);
+        TStrongObjectPtr<UStaticMeshComponent> component;
+        TArray<TStrongObjectPtr<UMaterialInstanceDynamic>> materials;
+        TArray<FRenderInput> inputs;
+    };
+
     FTSTicker::FDelegateHandle ticker;
     FDelegateHandle preExit;
+    TUniquePtr<FPreviewScene> previewScene;
     TStrongObjectPtr<UWorld> world;
+    TStrongObjectPtr<AActor> previewActor;
     TStrongObjectPtr<ULibraEffectComponent> effect;
     TStrongObjectPtr<ULibraEditorConnectionComponent> connection;
+    TArray<FRenderNode> renderNodes;
+    TArray<FString> sceneErrors;
+    int64 renderProgramSequence = 0;
+    TSharedPtr<SViewport> viewportWidget;
+    TSharedPtr<FSceneViewport> sceneViewport;
+    TSharedPtr<FEditorViewportClient> viewportClient;
+    TSharedPtr<SDockTab> previewTab;
+    bool bTabRegistered = false;
 };
