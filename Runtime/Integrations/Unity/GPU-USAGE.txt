@@ -54,3 +54,14 @@ steps, render-target pixel checks, resource reconfiguration and error checks.
 Editor/Tests/LibraGpuPlayModeVerification.cs is a separate bounded batch
 executeMethod test for automatic component updates, camera rendering, hot
 reconfiguration, disable/reenable, destruction and deferred retirement.
+Editor/Tests/LibraGpuMathNoiseVerification.cs compares real GPU math and noise
+outputs with the Core reference fixtures, including finite guards and curl
+divergence. Generate those fixtures with:
+
+  dotnet run --project Gpu\LibraGpu.Core.Tests -- --export <output-directory>
+
+Copy noise.compute, noise.metadata.json, noise.reference.json,
+noiseguards.compute, noiseguards.metadata.json, math.compute,
+math.metadata.json and math.reference.json into
+Assets\LibraFXGPUValidation\Fixtures, then run the test's Run executeMethod.
+Its particle uploads and readbacks are test-only, not production simulation.
