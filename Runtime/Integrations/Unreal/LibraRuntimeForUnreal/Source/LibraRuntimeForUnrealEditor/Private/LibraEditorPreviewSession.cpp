@@ -29,6 +29,9 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "liberafx/SceneBindings.h"
+#if WITH_DEV_AUTOMATION_TESTS
+#include "Misc/AutomationTest.h"
+#endif
 
 namespace
 {
@@ -82,14 +85,16 @@ namespace
     {
         auto result = fallback;
         for (auto index = 0; index < values.Num() && index < 4; ++index)
-            result[index] = static_cast<float>(values[index]);
+            result[index] = values[index];
         return result;
     }
 
     bool IsFinite(const FVector4& value)
     {
-        return FMath::IsFinite(value.X) && FMath::IsFinite(value.Y) &&
-            FMath::IsFinite(value.Z) && FMath::IsFinite(value.W);
+        for (auto index = 0; index < 4; ++index)
+            if (!FMath::IsFinite(value[index]) || FMath::Abs(value[index]) > TNumericLimits<float>::Max())
+                return false;
+        return true;
     }
 
     UMaterial* CreateSpriteMaterial(UTexture2D* texture)
@@ -133,10 +138,11 @@ namespace
     FVector4 SetParameterValue(UMaterialInstanceDynamic* material, const FMaterialParameterInfo& info,
         const FString& kind, const FVector4& value)
     {
+        if (!IsFinite(value)) return value;
         if (kind == TEXT("scalar"))
         {
-            material->SetScalarParameterValueByInfo(info, value.X);
-            auto actual = float{value.X};
+            material->SetScalarParameterValueByInfo(info, static_cast<float>(value.X));
+            auto actual = static_cast<float>(value.X);
             if (material->GetScalarParameterValue(info, actual)) return FVector4(actual, 0, 0, 0);
         }
         else if (kind == TEXT("vector"))
@@ -275,7 +281,7 @@ void FLibraEditorPreviewSession::ConfigureScene(const FString& json, int64 progr
         if (!object.IsValid()) continue;
         auto idText = FString{};
         auto kind = FString{};
-        auto path = FString{};
+        auto texturePath = FString{};
         auto id = FGuid{};
         if (!object->TryGetStringField(TEXT("nodeId"), idText) || !FGuid::Parse(idText, id) || !id.IsValid() ||
             !object->TryGetStringField(TEXT("kind"), kind) ||
@@ -380,14 +386,14 @@ void FLibraEditorPreviewSession::ConfigureScene(const FString& json, int64 progr
                     auto association = 0;
                     auto index = -1;
                     if (!textureObject->TryGetStringField(TEXT("name"), name) ||
-                        !textureObject->TryGetStringField(TEXT("path"), path) || path.IsEmpty() ||
-                        !IsAllowedPreviewPath(path) ||
+                        !textureObject->TryGetStringField(TEXT("path"), texturePath) || texturePath.IsEmpty() ||
+                        !IsAllowedPreviewPath(texturePath) ||
                         !ReadInteger(textureObject, TEXT("slot"), slot) ||
                         slot < 0 || slot >= node.materials.Num() || !node.materials[slot].IsValid())
                         continue;
                     ReadInteger(textureObject, TEXT("association"), association);
                     ReadInteger(textureObject, TEXT("index"), index);
-                    if (auto texture = LoadObject<UTexture>(nullptr, *path))
+                    if (auto texture = LoadObject<UTexture>(nullptr, *texturePath))
                     {
                         auto info = FMaterialParameterInfo(FName(*name),
                             static_cast<EMaterialParameterAssociation>(FMath::Clamp(association, 0, 2)), index);
@@ -488,7 +494,7 @@ FString FLibraEditorPreviewSession::UpdateScene(int64 programSequence, double ti
             }
             if (!IsFinite(value))
             {
-                addError(TEXT("Non-finite render input was ignored."));
+                addError(TEXT("Non-finite or float-range-exceeding render input was ignored."));
                 continue;
             }
             values.Add(input.id, value);
@@ -660,3 +666,18 @@ void FLibraEditorPreviewSession::Stop()
     world.Reset();
     previewScene.Reset();
 }
+
+#if WITH_DEV_AUTOMATION_TESTS
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraShaderInputRangeTest, "Libra.Editor.Rendering.ShaderInputRange",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraShaderInputRangeTest::RunTest(const FString&)
+{
+    TestTrue(TEXT("HDR components remain valid"), IsFinite(FVector4(2, 4, -2, 1)));
+    TestFalse(TEXT("Finite doubles outside shader float range are rejected"),
+        IsFinite(FVector4(1e300, 1, 1, 1)));
+    auto defaults = TArray<double>{1e300, 1, 1, 1};
+    TestFalse(TEXT("Defaults are checked before narrowing to shader floats"), IsFinite(ToVector4(defaults)));
+    return true;
+}
+#endif
