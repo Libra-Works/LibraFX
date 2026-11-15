@@ -8,8 +8,8 @@
 struct FLibraEffectState final
 {
     TSharedPtr<const FCompiledLibraProgram, ESPMode::ThreadSafe> compiled;
-    TArray<double> work;
-    TArray<double> defaults;
+    TArray<double, TAlignedHeapAllocator<64>> work;
+    TArray<double, TAlignedHeapAllocator<64>> defaults;
     FLibraCpuProfiler profiler;
     liberafx::Instance instance;
     FLibraTaskScheduler scheduler;
@@ -33,6 +33,10 @@ auto CreateLibraState(TSharedPtr<const FCompiledLibraProgram, ESPMode::ThreadSaf
     if (compiled->result != liberafx::Result::Ok) return ToLibraResult(compiled->result);
     auto workBytes = compiled->program.workBytes();
     auto defaultsCount = compiled->program.parameterValueCount();
+    auto workAlignment = compiled->program.workAlignment();
+    auto defaultsAlignment = compiled->program.defaultsAlignment();
+    if (workAlignment == 0 || workAlignment > 64 || defaultsAlignment == 0 || defaultsAlignment > 64)
+        return ELibraRuntimeResult::InvalidArgument;
     if (maximumWorkingBytes <= 0 || workBytes > static_cast<uint64>(maximumWorkingBytes) ||
         defaultsCount > (static_cast<uint64>(maximumWorkingBytes) - workBytes) / sizeof(double) ||
         workBytes / sizeof(double) > MAX_int32 || defaultsCount > MAX_int32)
@@ -41,6 +45,9 @@ auto CreateLibraState(TSharedPtr<const FCompiledLibraProgram, ESPMode::ThreadSaf
     state->compiled = MoveTemp(compiled);
     state->work.SetNumZeroed(static_cast<int32>(workBytes / sizeof(double)));
     state->defaults.SetNumZeroed(static_cast<int32>(defaultsCount));
+    if ((state->work.Num() != 0 && reinterpret_cast<UPTRINT>(state->work.GetData()) % workAlignment != 0) ||
+        (state->defaults.Num() != 0 && reinterpret_cast<UPTRINT>(state->defaults.GetData()) % defaultsAlignment != 0))
+        return ELibraRuntimeResult::InvalidArgument;
     state->profiler.Initialize(state->compiled->bytecode, static_cast<uint32>(state->compiled->program.nodeCount()),
         profileNodes, recordProfiling);
     state->instance.setProfiling(state->profiler.GetHooks(profileNodes, profileAccessors));
