@@ -20,6 +20,8 @@
     <Compile Include="..\..\Models\Commands\UndoRedoManager.cs" Link="Models\UndoRedoManager.cs" />
     <Compile Include="..\..\Models\Project\LiberaFxProjectDocument.cs" Link="Models\LiberaFxProjectDocument.cs" />
     <Compile Include="..\..\Services\ProjectDocumentReader.cs" Link="Services\ProjectDocumentReader.cs" />
+    <Compile Include="..\..\Services\GroupAssetLibrary.cs" Link="Services\GroupAssetLibrary.cs" />
+    <Compile Include="..\..\Services\GroupCompilationResolver.cs" Link="Services\GroupCompilationResolver.cs" />
     <Compile Include="..\..\Services\Compilation\VfxProgram.cs" Link="Services\VfxProgram.cs" />
     <EmbeddedResource Include="..\..\Assets\Nodes\*.json" LogicalName="LiberaFx.Assets.Nodes.%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\Assets\Enums\*.json" LogicalName="LiberaFx.Assets.Enums.%(Filename)%(Extension)" />

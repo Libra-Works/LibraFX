@@ -1,5 +1,6 @@
 using LiberaFx.Services;
 using LiberaFx.Services.Compilation;
+using LiberaFx.Models.Graph;
 
 return await Converter.RunAsync(args);
 
@@ -9,15 +10,12 @@ internal static class Converter
     {
         if (args is ["--help"] or ["-h"])
         {
-            Console.WriteLine("Usage: LiberaFxConverter convert <input.lfxproj> <output.lfxb> [--force]");
-            Console.WriteLine("       LiberaFxConverter batch <input-directory> <output-directory> [--force]");
+            Usage(Console.Out);
             return 0;
         }
-        if (args.Length is < 3 or > 4 || (args.Length == 4 && args[3] != "--force") ||
-            args[0] is not ("convert" or "batch"))
+        if (args.Length < 3 || args[0] is not ("convert" or "batch"))
         {
-            Console.Error.WriteLine("Usage: LiberaFxConverter convert <input.lfxproj> <output.lfxb> [--force]");
-            Console.Error.WriteLine("       LiberaFxConverter batch <input-directory> <output-directory> [--force]");
+            Usage(Console.Error);
             return 2;
         }
 
@@ -25,9 +23,28 @@ internal static class Converter
         {
             var input = Path.GetFullPath(args[1]);
             var output = Path.GetFullPath(args[2]);
-            var force = args.Length == 4;
+            var force = false;
+            var embedded = false;
+            var libraries = new List<GroupAssetLibrary>();
+            for (var index = 3; index < args.Length; index++)
+            {
+                switch (args[index])
+                {
+                    case "--force": force = true; break;
+                    case "--embedded-groups": embedded = true; break;
+                    case "--groups" when index + 1 < args.Length && !args[index + 1].StartsWith("--", StringComparison.Ordinal):
+                        libraries.Add(new GroupAssetLibrary(Path.GetFullPath(args[++index])));
+                        break;
+                    case "--nodes" when index + 1 < args.Length && !args[index + 1].StartsWith("--", StringComparison.Ordinal):
+                        GraphNodeDefinition.LoadDirectory(Path.GetFullPath(args[++index]), out var warnings);
+                        if (warnings.Count != 0) throw new InvalidDataException(string.Join(Environment.NewLine, warnings));
+                        break;
+                    default: Usage(Console.Error); return 2;
+                }
+            }
+            var resolver = new GroupCompilationResolver(libraries, embedded);
             if (args[0] == "convert")
-                return await ConvertAsync(input, output, force) ? 0 : 1;
+                return await ConvertAsync(input, output, force, resolver) ? 0 : 1;
             if (!Directory.Exists(input))
             {
                 Console.Error.WriteLine($"Input directory not found: {input}");
@@ -50,18 +67,27 @@ internal static class Converter
             foreach (var file in files)
             {
                 var target = Path.ChangeExtension(Path.Combine(output, Path.GetRelativePath(input, file)), ".lfxb");
-                if (!await ConvertAsync(file, target, force)) failed = true;
+                if (!await ConvertAsync(file, target, force, resolver)) failed = true;
             }
             return failed ? 1 : 0;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or InvalidDataException)
         {
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
     }
 
-    private static async Task<bool> ConvertAsync(string input, string output, bool force)
+    private static void Usage(TextWriter writer)
+    {
+        writer.WriteLine("Usage: LiberaFxConverter convert <input.lfxproj> <output.lfxb> [options]");
+        writer.WriteLine("       LiberaFxConverter batch <input-directory> <output-directory> [options]");
+        writer.WriteLine("Options: --force  --groups <directory> (repeatable)  --nodes <directory> (repeatable)  --embedded-groups");
+        writer.WriteLine("Linked groups use the latest library versions by default. --embedded-groups explicitly uses frozen embedded versions.");
+        writer.WriteLine("Source projects and group libraries are never modified.");
+    }
+
+    private static async Task<bool> ConvertAsync(string input, string output, bool force, GroupCompilationResolver resolver)
     {
         string? temporary = null;
         try
@@ -71,7 +97,7 @@ internal static class Converter
                 throw new IOException("Input and output must be different files.");
             await using var stream = File.OpenRead(input);
             var project = await ProjectDocumentReader.LoadAsync(stream);
-            var bytes = VfxProgram.Compile(project.Graph).ToBinary();
+            var bytes = VfxProgram.Compile(resolver.Resolve(project.Graph)).ToBinary();
             var directory = Path.GetDirectoryName(output)!;
             Directory.CreateDirectory(directory);
             if (!force && File.Exists(output)) throw new IOException($"Output already exists: {output}");
