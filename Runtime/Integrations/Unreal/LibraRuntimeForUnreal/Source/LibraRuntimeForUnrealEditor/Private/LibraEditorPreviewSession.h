@@ -28,7 +28,10 @@ public:
     void Stop();
 
 private:
+    friend class FLibraPreviewDeferredTabTest;
     bool Tick(float deltaTime);
+    void HandlePostEngineInit();
+    TSharedRef<SWidget> BuildPreviewContent();
     void ConfigureScene(const FString& json, int64 programSequence);
     FString UpdateScene(int64 programSequence, double timeSeconds);
     TSharedRef<SDockTab> SpawnPreviewTab(const class FSpawnTabArgs& args);
@@ -63,6 +66,7 @@ private:
 
     FTSTicker::FDelegateHandle ticker;
     FDelegateHandle preExit;
+    FDelegateHandle postEngineInit;
     TSharedPtr<FAdvancedPreviewScene> previewScene;
     TStrongObjectPtr<UWorld> world;
     TStrongObjectPtr<AActor> previewActor;
@@ -79,6 +83,9 @@ private:
     TSharedPtr<SWidget> previewSettings;
     bool bTabRegistered = false;
     bool bSettingsVisible = true;
+    bool bEngineReady = false;
+    bool bPreviewRequested = false;
+    bool bTransportRequested = false;
     int32 previousPreviewProfileIndex = INDEX_NONE;
     FString previousPreviewProfileName;
 };

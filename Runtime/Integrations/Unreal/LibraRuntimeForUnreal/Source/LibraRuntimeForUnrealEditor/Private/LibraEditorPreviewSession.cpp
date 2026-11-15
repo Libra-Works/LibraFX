@@ -234,7 +234,10 @@ void FLibraEditorPreviewSession::Start()
     auto enabled = FPlatformMisc::GetEnvironmentVariable(TEXT("LIBRA_AUTOMATION_PREVIEW")) == TEXT("1") ||
         FParse::Param(FCommandLine::Get(), TEXT("LibraPreview"));
     UE_LOG(LogTemp, Display, TEXT("LIBERA FX preview bootstrap: %s."), enabled ? TEXT("enabled") : TEXT("disabled"));
-    if (!enabled) return;
+    bTransportRequested = enabled;
+    bPreviewRequested = enabled;
+    bEngineReady = GIsRunning;
+    postEngineInit = FCoreDelegates::OnPostEngineInit.AddRaw(this, &FLibraEditorPreviewSession::HandlePostEngineInit);
     preExit = FCoreDelegates::OnPreExit.AddRaw(this, &FLibraEditorPreviewSession::Stop);
     FGlobalTabmanager::Get()->RegisterNomadTabSpawner(PreviewTabId,
         FOnSpawnTab::CreateRaw(this, &FLibraEditorPreviewSession::SpawnPreviewTab))
@@ -246,6 +249,23 @@ void FLibraEditorPreviewSession::Start()
 TSharedRef<SDockTab> FLibraEditorPreviewSession::SpawnPreviewTab(const FSpawnTabArgs& args)
 {
     (void)args;
+    bPreviewRequested = true;
+    auto tab = SNew(SDockTab).TabRole(ETabRole::NomadTab);
+    previewTab = tab;
+    tab->SetContent(BuildPreviewContent());
+    return tab;
+}
+
+void FLibraEditorPreviewSession::HandlePostEngineInit()
+{
+    bEngineReady = true;
+}
+
+TSharedRef<SWidget> FLibraEditorPreviewSession::BuildPreviewContent()
+{
+    if (!previewScene.IsValid() || !viewportWidget.IsValid() || !previewSettings.IsValid())
+        return SNew(STextBlock)
+            .Text(FText::FromString(TEXT("LIBERA FX Preview will initialize when the editor is ready.")));
     auto makeToggle = [this](const TCHAR* label, bool (FAdvancedPreviewScene::*query)() const,
         void (FAdvancedPreviewScene::*toggle)()) -> TSharedRef<SWidget>
     {
@@ -267,10 +287,7 @@ TSharedRef<SDockTab> FLibraEditorPreviewSession::SpawnPreviewTab(const FSpawnTab
                 SNew(STextBlock).Text(FText::FromString(label))
             ];
     };
-    return SNew(SDockTab)
-        .TabRole(ETabRole::NomadTab)
-        [
-            SNew(SVerticalBox)
+    return SNew(SVerticalBox)
             + SVerticalBox::Slot().AutoHeight().Padding(8, 6)
             [
                 SNew(SHorizontalBox)
@@ -340,8 +357,7 @@ TSharedRef<SDockTab> FLibraEditorPreviewSession::SpawnPreviewTab(const FSpawnTab
                         previewSettings.ToSharedRef()
                     ]
                 ]
-            ]
-        ];
+            ];
 }
 
 void FLibraEditorPreviewSession::SavePreviewProfile()
@@ -358,6 +374,7 @@ void FLibraEditorPreviewSession::SavePreviewProfile()
 
 bool FLibraEditorPreviewSession::Tick(float deltaTime)
 {
+    if (!bEngineReady || !bPreviewRequested) return true;
     if (!world.IsValid())
     {
         if (!GEngine) return true;
@@ -444,13 +461,12 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
         };
         actor->AddInstanceComponent(connection.Get());
         connection->RegisterComponent();
-        if (!connection->ConnectToEditor())
+        if (bTransportRequested && !connection->ConnectToEditor())
         {
             UE_LOG(LogTemp, Warning, TEXT("LIBERA FX preview could not connect: %s"), *connection->Status);
-            Stop();
-            return false;
         }
-        UE_LOG(LogTemp, Display, TEXT("LIBERA FX preview: transport connected and hello queued."));
+        else if (bTransportRequested)
+            UE_LOG(LogTemp, Display, TEXT("LIBERA FX preview: transport connected and hello queued."));
         viewportWidget = SNew(SViewport).EnableGammaCorrection(false);
         viewportClient = MakeShared<FLibraPreviewViewportClient>(previewScene.Get());
         auto cameraPosition = FVector(350, -450, 320);
@@ -462,7 +478,10 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
         viewportWidget->SetViewportInterface(sceneViewport.ToSharedRef());
         auto& previewModule = FModuleManager::LoadModuleChecked<FAdvancedPreviewSceneModule>(TEXT("AdvancedPreviewScene"));
         previewSettings = previewModule.CreateAdvancedPreviewSceneSettingsWidget(previewScene.ToSharedRef());
-        previewTab = FGlobalTabmanager::Get()->TryInvokeTab(PreviewTabId);
+        if (previewTab.IsValid())
+            previewTab->SetContent(BuildPreviewContent());
+        else
+            FGlobalTabmanager::Get()->TryInvokeTab(PreviewTabId);
     }
     if (viewportClient.IsValid() && previewScene.IsValid())
         if (auto profile = previewScene->GetCurrentProfile())
@@ -855,6 +874,10 @@ void FLibraEditorPreviewSession::Stop()
 {
     if (preExit.IsValid()) FCoreDelegates::OnPreExit.Remove(preExit);
     preExit.Reset();
+    if (postEngineInit.IsValid()) FCoreDelegates::OnPostEngineInit.Remove(postEngineInit);
+    postEngineInit.Reset();
+    bPreviewRequested = false;
+    bTransportRequested = false;
     if (ticker.IsValid()) FTSTicker::GetCoreTicker().RemoveTicker(ticker);
     ticker.Reset();
     SavePreviewProfile();
@@ -906,6 +929,22 @@ void FLibraEditorPreviewSession::Stop()
 }
 
 #if WITH_DEV_AUTOMATION_TESTS
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraPreviewDeferredTabTest, "Libra.Editor.Preview.DeferredTabRestoration",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraPreviewDeferredTabTest::RunTest(const FString&)
+{
+    auto session = FLibraEditorPreviewSession{};
+    auto args = FSpawnTabArgs(TSharedPtr<SWindow>{}, FTabId(PreviewTabId));
+    auto tab = session.SpawnPreviewTab(args);
+    TestEqual(TEXT("Early layout restoration creates a placeholder without dereferencing scene resources"),
+        tab->GetContent()->GetType(), FName(TEXT("STextBlock")));
+    TestTrue(TEXT("A pre-initialization ticker remains registered"), session.Tick(0));
+    TestFalse(TEXT("Restoration does not create a world before engine initialization"), session.world.IsValid());
+    session.Stop();
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraShaderInputRangeTest, "Libra.Editor.Rendering.ShaderInputRange",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
