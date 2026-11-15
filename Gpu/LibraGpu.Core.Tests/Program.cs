@@ -144,6 +144,8 @@ internal static class Program
                 Check(spawn.Contains("p.velocityLifetime = float4(0.0f, 0.0f, 0.0f, 1.0f)"), "Spawn lifetime default");
                 Check(spawn.Contains("p.positionAge.w >= p.velocityLifetime.w"), "Safe death");
                 Check(spawn.Contains("GetDimensions(actualCapacity, actualStride)"), "Runtime buffer capacity bounds");
+                Check(!spawn.Contains("isfinite(") && spawn.Contains("asuint(a)"), "Finite guards survive fast-math shader compiler assumptions");
+                Check(spawn.Contains("LibraGpuIsFinite(LibraGpuDeltaTime)"), "Default age uses the portable finite guard");
             });
             Run("resources flow limits and overflow", () =>
             {

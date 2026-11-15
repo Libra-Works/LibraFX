@@ -52,16 +52,19 @@ internal static partial class ShaderEmitter
         foreach (var t in new[] { GpuType.Float, GpuType.Float2, GpuType.Float3, GpuType.Float4 })
         {
             var name = HlslType(t);
+            // Unity's fast math may fold isfinite(); integer IEEE exponent tests remain observable.
+            var finiteBits = "(asuint(a) & 0x7f800000u) != 0x7f800000u";
+            Write($"bool LibraGpuIsFinite({name} a) {{ return {(t == GpuType.Float ? finiteBits : $"all({finiteBits})")}; }}");
             if (t == GpuType.Float)
                 Write("float LibraGpuDiv(float a, float b) { return b == 0.0f ? 0.0f : a / b; }");
             else
             {
                 var components = Enumerable.Range(0, GpuOperationRegistry.Components(t)).Select(i => "xyzw"[i]);
                 Write($"{name} LibraGpuDiv({name} a, {name} b) {{ return {name}({string.Join(", ", components.Select(c => $"LibraGpuDiv(a.{c}, b.{c})"))}); }}");
-                Write($"{name} LibraGpuNormalize({name} a) {{ if (!all(isfinite(a))) return ({name})0; float m = {Enumerable.Range(0, GpuOperationRegistry.Components(t)).Select(i => $"abs(a.{"xyzw"[i]})").Aggregate((a, b) => $"max({a}, {b})")}; if (!(m > 0.0f)) return ({name})0; {name} scaled = a / m; return scaled * rsqrt(dot(scaled, scaled)); }}");
+                Write($"{name} LibraGpuNormalize({name} a) {{ if (!LibraGpuIsFinite(a)) return ({name})0; float m = {Enumerable.Range(0, GpuOperationRegistry.Components(t)).Select(i => $"abs(a.{"xyzw"[i]})").Aggregate((a, b) => $"max({a}, {b})")}; if (!(m > 0.0f)) return ({name})0; {name} scaled = a / m; return scaled * rsqrt(dot(scaled, scaled)); }}");
             }
         }
-        Write("bool LibraGpuFinite(LibraGpuParticle p) { return all(isfinite(p.positionAge)) && all(isfinite(p.velocityLifetime)) && all(isfinite(p.color)) && all(isfinite(p.sizeRotation)); }");
+        Write("bool LibraGpuFinite(LibraGpuParticle p) { return LibraGpuIsFinite(p.positionAge) && LibraGpuIsFinite(p.velocityLifetime) && LibraGpuIsFinite(p.color) && LibraGpuIsFinite(p.sizeRotation); }");
         for (int kernelIndex = 0; kernelIndex < p.Kernels.Count; kernelIndex++)
         {
             var k = p.Kernels[kernelIndex];
@@ -107,7 +110,7 @@ internal static partial class ShaderEmitter
                 Write("    if (!LibraGpuFinite(p) || !(p.velocityLifetime.w > 0.0f)) { p.seedAlive.y = 0u;");
                 Write($"        {b.ParticleBuffer}[i] = p; return; }}");
                 if (!k.Writes.Any(w => w.Attribute == "Age"))
-                    Write("    p.positionAge.w += isfinite(LibraGpuDeltaTime) ? max(LibraGpuDeltaTime, 0.0f) : 0.0f;");
+                    Write("    p.positionAge.w += LibraGpuIsFinite(LibraGpuDeltaTime) ? max(LibraGpuDeltaTime, 0.0f) : 0.0f;");
             }
             Write($"    LibraGpuEvaluate_{kernelIndex:D4}(p);");
             Write("    p.positionAge.w = max(p.positionAge.w, 0.0f);");

@@ -62,6 +62,8 @@ Scalar broadcast: float -> float2/3/4 only, and only supported math ops; integer
 bool and vector dimension conversions are never implicit.
 Division-by-zero returns zero; int MIN/-1 returns MIN. Normalize zero/nonfinite
 vectors returns zero. Random hashes its explicit uint seed (not hidden host RNG).
+Finite shader guards use IEEE754 exponent-bit classification, not the isfinite
+intrinsic (which Unity fast-math compilation can fold without a /Gis flag).
 
 Safe independent text frontend, same typed IR:
   GpuDsl.Parse -> GpuDslAst -> GpuDsl.Lower -> KernelGraph.
