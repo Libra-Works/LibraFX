@@ -65,6 +65,13 @@ bool FLibraGpuAssetImportTest::RunTest(const FString& parameters)
     TestNotNull(TEXT("Validated frontend bundle can create an in-memory asset without editor factory"), memoryAsset);
     TestNull(TEXT("Invalid in-memory replacement produces no playable asset"),
         ULibraGpuEffectAsset::CreateInMemory(GetTransientPackage(), Bundle(true), error));
+    auto missingBinding = Bundle(false).Replace(TEXT("\"resources\":[]"),
+        TEXT("\"resources\":[{\"id\":\"billboardTexture\",\"kind\":\"Texture2D\"}]"));
+    TestFalse(TEXT("Missing declared texture binding is rejected"), asset->ImportBundle(missingBinding, error));
+    TestTrue(TEXT("Missing binding diagnostic identifies the resource and required mapping"),
+        error.Contains(TEXT("Missing Texture2D binding")) && error.Contains(TEXT("billboardTexture")) &&
+        error.Contains(TEXT("resourceAssetPaths")));
+    TestTrue(TEXT("Missing binding rejection preserves the working program"), asset->GetKernels()[0].Bytes == original);
     return true;
 }
 

@@ -376,9 +376,39 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
         !(*metadata)->TryGetArrayField(TEXT("flow"), flowJson) ||
         !(*metadata)->TryGetArrayField(TEXT("resources"), resourcesJson) ||
         kernelJson->Num() > 64 || textureJson->Num() > 64 || flowJson->Num() > 128 ||
-        resourcesJson->Num() != textureJson->Num())
+        resourcesJson->Num() > 64)
     {
         error = TEXT("Invalid GPU bundle metadata.");
+        return false;
+    }
+    if (resourcesJson->Num() != textureJson->Num())
+    {
+        TSet<FString> declaredIds, boundIds;
+        auto collectIds = [](const TArray<TSharedPtr<FJsonValue>>& values, TSet<FString>& ids)
+        {
+            for (const auto& value : values)
+            {
+                auto object = value->AsObject();
+                FString id;
+                if (object && object->TryGetStringField(TEXT("id"), id) && NameValid(id)) ids.Add(id);
+            }
+        };
+        collectIds(*resourcesJson, declaredIds);
+        collectIds(*textureJson, boundIds);
+        for (const auto& id : declaredIds)
+            if (!boundIds.Contains(id))
+            {
+                error = FString::Printf(TEXT("Missing Texture2D binding for GPU resource '%s'. Supply its native texture object path in resourceAssetPaths (or textures)."), *id);
+                return false;
+            }
+        for (const auto& id : boundIds)
+            if (!declaredIds.Contains(id))
+            {
+                error = FString::Printf(TEXT("Extra texture binding for undeclared GPU resource '%s'. Remove it from resourceAssetPaths (or textures)."), *id);
+                return false;
+            }
+        error = FString::Printf(TEXT("GPU texture binding count mismatch: %d resource declarations, %d bindings. Supply exactly one native Texture2D binding per resource."),
+            resourcesJson->Num(), textureJson->Num());
         return false;
     }
     if (hash != LibraGpuSha256(canonical) || sourceHash != LibraGpuSha256(source))
