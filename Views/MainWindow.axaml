@@ -73,6 +73,29 @@
                 <MenuItem Header="{DynamicResource Text.Connections.Title}" Click="OnConnectionsClick" />
                 <MenuItem Header="{DynamicResource Text.Asset.Title}" Click="OnContentClick" />
             </MenuItem>
+            <MenuItem x:Name="WindowMenu" Header="{DynamicResource Text.Layouts.Window}">
+                <MenuItem Header="{DynamicResource Text.Messages.Tool.Outliner}" Tag="Outliner" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Messages.Tool.NodeList}" Tag="NodeList" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Messages.Tool.Resources}" Tag="Resources" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Messages.Tool.Properties}" Tag="Properties" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Messages.Tool.EngineConnection}" Tag="EngineConnection" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Messages.Tool.History}" Tag="History" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Messages.Tool.Timeline}" Tag="Timeline" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Messages.Tool.Curves}" Tag="Curves" Click="OnDockPanelClick" />
+                <Separator />
+                <MenuItem Header="{DynamicResource Text.Editor.Log}" Click="OnLogClick" />
+                <MenuItem Header="{DynamicResource Text.Editor.Mcp}" Click="OnMcpClick" />
+                <MenuItem Header="{DynamicResource Text.Profiler.Title}" Click="OnProfilerClick" />
+                <MenuItem Header="{DynamicResource Text.Connections.Title}" Click="OnConnectionsClick" />
+                <MenuItem Header="{DynamicResource Text.Asset.Title}" Click="OnContentClick" />
+                <MenuItem Header="{DynamicResource Text.Messages.GraphProblemsTitle}" Click="OnProblemsClick" />
+                <Separator />
+                <MenuItem Header="{DynamicResource Text.Layouts.Menu}">
+                    <MenuItem Header="{DynamicResource Text.Layouts.RestoreDefault}" Click="OnRestoreDefaultLayoutClick" />
+                    <MenuItem Header="{DynamicResource Text.Layouts.Save}" Click="OnWindowLayoutsClick" />
+                    <MenuItem Header="{DynamicResource Text.Layouts.Manage}" Click="OnWindowLayoutsClick" />
+                </MenuItem>
+            </MenuItem>
             <MenuItem Header="{DynamicResource Text.Editor.Help}">
                 <MenuItem Header="{DynamicResource Text.Editor.GettingStarted}" Click="OnHelpClick">
                     <MenuItem.Icon><views:EditorIconView Icon="Help" /></MenuItem.Icon>
@@ -100,6 +123,8 @@
                     HorizontalAlignment="Left" Padding="4,2" />
             <TextBlock Text="{Binding FileStatus}"
                        TextWrapping="Wrap"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <TextBlock Text="{Binding WindowLayouts.Status}" TextWrapping="Wrap"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
         </StackPanel>
     </Grid>

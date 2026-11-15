@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Threading;
 using LiberaFx.ViewModels;
 using LiberaFx.Services;
+using LiberaFx.Models;
 
 namespace LiberaFx.Views;
 
@@ -15,6 +16,9 @@ public partial class MainWindow : Window
     private PreviewProfilerWindow? _profilerWindow;
     private PreviewConnectionsWindow? _connectionsWindow;
     private EngineAssetsWindow? _contentWindow;
+    private ProblemsWindow? _problemsWindow;
+    private WindowLayoutsWindow? _windowLayoutsWindow;
+    private LayoutWindowBounds? _normalLayoutBounds;
     private MainViewModel? _groupModel;
     private bool _checkingGroupUpdates;
     private bool _pendingGroupCheck;
@@ -24,7 +28,91 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContextChanged += OnGroupDataContextChanged;
         Opened += (_, _) => QueueGroupUpdateCheck();
+        Opened += (_, _) => RestoreWindowWorkspace();
+        Closing += (_, _) =>
+        {
+            if (DataContext is MainViewModel model) model.WindowLayouts.SaveWorkspace();
+        };
         Closed += (_, _) => DetachGroupEvents();
+        PositionChanged += (_, _) => RememberNormalWindowBounds();
+        SizeChanged += (_, _) => RememberNormalWindowBounds();
+    }
+
+    private void RememberNormalWindowBounds()
+    {
+        if (WindowState != WindowState.Normal || !IsVisible || Bounds.Width < 100 || Bounds.Height < 100) return;
+        _normalLayoutBounds = new()
+        {
+            X = Position.X, Y = Position.Y, Width = Bounds.Width, Height = Bounds.Height
+        };
+    }
+
+    private LayoutWindowBounds CaptureWindowBounds()
+    {
+        var bounds = _normalLayoutBounds;
+        return new()
+        {
+            X = bounds?.X ?? Position.X,
+            Y = bounds?.Y ?? Position.Y,
+            Width = bounds?.Width ?? Math.Max(400, Bounds.Width),
+            Height = bounds?.Height ?? Math.Max(300, Bounds.Height),
+            Maximized = WindowState == WindowState.Maximized
+        };
+    }
+
+    private LayoutWindowBounds ClampLayoutBounds(LayoutWindowBounds bounds)
+    {
+        var point = new PixelPoint((int)bounds.X, (int)bounds.Y);
+        var scaling = Screens.All.FirstOrDefault(s => s.WorkingArea.Contains(point))?.Scaling ??
+            Screens.Primary?.Scaling ?? RenderScaling;
+        return WindowLayoutGeometry.Clamp(bounds, Screens.All.Select(s => s.WorkingArea), scaling);
+    }
+
+    private void RestoreWindowWorkspace()
+    {
+        if (DataContext is not MainViewModel model) return;
+        model.EnableDockWindows();
+        RememberNormalWindowBounds();
+        model.WindowLayouts.CaptureMainWindow = CaptureWindowBounds;
+        model.WindowLayouts.ClampFloatingWindow = ClampLayoutBounds;
+        model.WindowLayouts.RestoreMainWindow = bounds =>
+        {
+            bounds = ClampLayoutBounds(bounds);
+            WindowState = WindowState.Normal;
+            Width = bounds.Width;
+            Height = bounds.Height;
+            Position = new PixelPoint((int)bounds.X, (int)bounds.Y);
+            if (bounds.Maximized) WindowState = WindowState.Maximized;
+        };
+        model.WindowLayouts.RestoreWorkspace();
+    }
+
+    private void OnDockPanelClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel model && sender is MenuItem { Tag: string id }) model.ShowDockPanel(id);
+    }
+
+    private void OnProblemsClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model) return;
+        if (_problemsWindow is not null) { _problemsWindow.Activate(); return; }
+        _problemsWindow = new ProblemsWindow(model);
+        _problemsWindow.Closed += (_, _) => _problemsWindow = null;
+        _problemsWindow.Show(this);
+    }
+
+    private void OnWindowLayoutsClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model) return;
+        if (_windowLayoutsWindow is not null) { _windowLayoutsWindow.Activate(); return; }
+        _windowLayoutsWindow = new WindowLayoutsWindow(model.WindowLayouts);
+        _windowLayoutsWindow.Closed += (_, _) => _windowLayoutsWindow = null;
+        _windowLayoutsWindow.Show(this);
+    }
+
+    private void OnRestoreDefaultLayoutClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel model) model.WindowLayouts.Apply("Default");
     }
 
     private void OnMainKeyDown(object? sender, KeyEventArgs e)

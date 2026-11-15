@@ -15,7 +15,9 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
-        var dataRoot = Path.Combine(Path.GetTempPath(), "liberafx-comment-test-" + Guid.NewGuid().ToString("N"));
+        var dataRoot = args is ["--window-layout"]
+            ? Path.Combine(Environment.CurrentDirectory, "build", "window-layout-data-" + Guid.NewGuid().ToString("N"))
+            : Path.Combine(Path.GetTempPath(), "liberafx-comment-test-" + Guid.NewGuid().ToString("N"));
         Environment.SetEnvironmentVariable("LIBERAFX_DATA_ROOT", dataRoot);
         try { Run(args); }
         finally
@@ -43,6 +45,12 @@ internal static class Program
             else File.WriteAllText(Path.Combine(directory, "language.json"), languageFixture);
         }
         AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+        if (args is ["--window-layout"])
+        {
+            LiberaFx.Tests.DockLayoutTests.Run();
+            Console.WriteLine("Window menu, dock reopening, layout topology and preset persistence checks passed.");
+            return;
+        }
         if (args is ["--graph-type-diagnostics"])
         {
             LiberaFx.Tests.GraphTypeDiagnosticsTests.Run();

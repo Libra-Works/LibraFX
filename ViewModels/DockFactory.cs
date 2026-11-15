@@ -6,7 +6,7 @@ using LiberaFx.Services;
 
 namespace LiberaFx.ViewModels;
 
-public sealed class DockFactory : Factory
+public sealed partial class DockFactory : Factory
 {
     private readonly ActiveGraphProvider _activeGraph;
     private readonly MainViewModel _main;
@@ -149,6 +149,7 @@ public sealed class DockFactory : Factory
         rootDock.IsCollapsable = false;
         rootDock.ActiveDockable = mainLayout;
         rootDock.VisibleDockables = CreateList<IDockable>(mainLayout);
+        RememberLayout(rootDock);
         return rootDock;
     }
 

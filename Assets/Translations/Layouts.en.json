@@ -1,0 +1,23 @@
+{
+  "Layouts.Window": "_Window",
+  "Layouts.Title": "Window layouts",
+  "Layouts.Menu": "_Layouts",
+  "Layouts.Default": "Default",
+  "Layouts.RestoreDefault": "Restore default layout",
+  "Layouts.Manage": "Choose / manage presets...",
+  "Layouts.Save": "Save layout as...",
+  "Layouts.Hint": "Layouts save panel arrangements and window positions, not graph contents. Open documents and their undo history stay intact. The last workspace is restored on startup.",
+  "Layouts.Apply": "Apply",
+  "Layouts.Update": "Update selected",
+  "Layouts.Delete": "Delete",
+  "Layouts.Name": "New preset name (1–64 characters)",
+  "Layouts.Create": "Create from current layout",
+  "Layouts.Close": "Close",
+  "Layouts.NameExists": "A preset with this name already exists. Select it and use Update selected.",
+  "Layouts.LoadFailed": "Could not restore window layouts from {0}: {1} Default layout is active. The original file is preserved; repair it or explicitly create/save a preset to replace it.",
+  "Layouts.SaveFailed": "Could not save window layouts to {0}: {1} Check the name and folder permissions. The previous saved settings are unchanged.",
+  "Layouts.ApplyFailed": "Could not apply window layout ({0}): {1} Restore Default or choose another preset.",
+  "Layouts.Saved": "Saved window layout: {0}",
+  "Layouts.Applied": "Applied window layout: {0}",
+  "Layouts.Deleted": "Deleted window layout: {0}"
+}

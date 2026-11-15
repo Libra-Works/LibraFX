@@ -1,0 +1,23 @@
+{
+  "Layouts.Window": "ウィンドウ(_W)",
+  "Layouts.Title": "ウィンドウレイアウト",
+  "Layouts.Menu": "レイアウト(_L)",
+  "Layouts.Default": "既定",
+  "Layouts.RestoreDefault": "既定のレイアウトに戻す",
+  "Layouts.Manage": "プリセットを選択・管理...",
+  "Layouts.Save": "名前を付けてレイアウトを保存...",
+  "Layouts.Hint": "パネルの配置とウィンドウ位置を保存します。グラフの内容は保存しません。開いているドキュメントと操作履歴は維持され、終了時の配置は次回起動時に復元されます。",
+  "Layouts.Apply": "適用",
+  "Layouts.Update": "選択したプリセットを更新",
+  "Layouts.Delete": "削除",
+  "Layouts.Name": "新しいプリセット名（1～64文字）",
+  "Layouts.Create": "現在の配置から作成",
+  "Layouts.Close": "閉じる",
+  "Layouts.NameExists": "同じ名前のプリセットがあります。選択して「更新」を使用してください。",
+  "Layouts.LoadFailed": "{0} からレイアウトを復元できませんでした: {1} 既定の配置を使用します。元のファイルは保持されます。修復するか、明示的にプリセットを作成・保存して置き換えてください。",
+  "Layouts.SaveFailed": "{0} にレイアウトを保存できませんでした: {1} 名前とフォルダーの書き込み権限を確認してください。以前の保存設定は変更されていません。",
+  "Layouts.ApplyFailed": "レイアウトを適用できませんでした（{0}）: {1} 既定に戻すか別のプリセットを選択してください。",
+  "Layouts.Saved": "レイアウトを保存しました: {0}",
+  "Layouts.Applied": "レイアウトを適用しました: {0}",
+  "Layouts.Deleted": "レイアウトを削除しました: {0}"
+}
