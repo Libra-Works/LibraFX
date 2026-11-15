@@ -31,7 +31,7 @@ public static class CompiledPreviewProtocol
             using var json = JsonDocument.Parse(utf8Json.ToArray(), new JsonDocumentOptions { MaxDepth = 32 });
             if (json.RootElement.ValueKind != JsonValueKind.Object ||
                 !json.RootElement.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String ||
-                type.GetString() is not ("asset_catalog" or "asset_details" or "asset_thumbnail" or "render_config" or "reconnect"))
+                type.GetString() is not ("asset_catalog" or "asset_details" or "asset_thumbnail" or "render_config" or "gpu_config" or "reconnect"))
                 throw new ArgumentException("Unknown scene command.");
             ValidateUniqueProperties(json.RootElement);
         }
@@ -88,6 +88,7 @@ public static class CompiledPreviewProtocol
     {
         try
         {
+            GpuPreviewScene.Validate(graph);
             var bytes = VfxProgram.Compile(graph).ToBinary();
             if (bytes.Length == 0 || bytes.Length > MaxProgramBytes)
                 throw new InvalidDataException("Compiled program exceeds the live preview size limit.");

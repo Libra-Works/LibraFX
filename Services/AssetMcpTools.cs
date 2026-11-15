@@ -137,6 +137,11 @@ public sealed class AssetMcpTools
     public static string RenderStatus(PreviewAssetStore assets, string? clientId = null) =>
         Json(assets.RenderStatus(Peer(clientId)));
 
+    [McpServerTool(Name = "gpu_runtime_status", ReadOnly = true, OpenWorld = false)]
+    [Description("Read the selected GPU-capable editor's last actual GPU preview feedback, interpreter mode, program sequence, container capacity, playback state and errors. Null means no feedback yet; capacity is not a live particle count. Source-export runtimeExecuted remains false.")]
+    public static string GpuRuntimeStatus(PreviewAssetStore assets, string? clientId = null) =>
+        Json(assets.GpuStatus(Peer(clientId)));
+
     [McpServerTool(Name = "libera_preview_reconnect", Destructive = false, OpenWorld = false)]
     [Description("Ask exactly the selected editor to reconnect its preview transport. Acknowledgement means the request was received; verify a new peer in libera_preview_clients. Never restarts the entire engine.")]
     public static async Task<string> Reconnect(PreviewAssetStore assets, string clientId)

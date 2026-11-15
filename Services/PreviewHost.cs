@@ -248,6 +248,12 @@ public sealed class PreviewHost : IDisposable
                     await SendSerializedAsync(socket, client, CompiledPreviewProtocol.CreateScene(scene),
                         WebSocketMessageType.Binary, cancellation);
                 }
+                if (message.Kind == CompiledPreviewKind.Program && _assets?.Supports(id, "gpuParticles") == true)
+                {
+                    var scene = GpuPreviewScene.CreateScene(publication.Graph, publication.Sequence);
+                    await SendSerializedAsync(socket, client, CompiledPreviewProtocol.CreateScene(scene),
+                        WebSocketMessageType.Binary, cancellation);
+                }
                 compiled.Sent(message);
                 continue;
             }
@@ -309,7 +315,8 @@ public sealed class PreviewHost : IDisposable
                         (_telemetry?.Receive(id, buffer.AsMemory(0, count)) != true &&
                          _assets?.Receive(id, buffer.AsMemory(0, count)) != true)) return;
                     UpdateClientCount();
-                    if (type.GetString() == "hello" && _assets?.Supports(id, "rendering") == true)
+                    if (type.GetString() == "hello" &&
+                        (_assets?.Supports(id, "rendering") == true || _assets?.Supports(id, "gpuParticles") == true))
                     {
                         lock (_sync)
                         {

@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Avalonia.Threading;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
@@ -139,6 +140,36 @@ internal static class CompiledPreviewProtocolTests
             await Dispatcher.UIThread.InvokeAsync(() => model.NewDocumentCommand.Execute(null));
             var switched = await ReceiveAsync(socket, token);
             Require(U16(switched, 6) == 1, "Switching documents must send a program.");
+            using var gpuSocket = new ClientWebSocket();
+            gpuSocket.Options.SetRequestHeader("X-LiberaFx-Preview-Token", host.AccessToken);
+            gpuSocket.Options.RemoteCertificateValidationCallback = (_, certificate, _, _) =>
+                certificate is not null && CryptographicOperations.FixedTimeEquals(
+                    SHA256.HashData(certificate.GetRawCertData()), fingerprint);
+            await gpuSocket.ConnectAsync(new Uri($"wss://localhost:{port}/preview?protocol=3"), token);
+            Require(U16(await ReceiveAsync(gpuSocket, token), 6) == 1,
+                "A newly connected GPU viewer must first receive the current parent program.");
+            await gpuSocket.SendAsync(Encoding.UTF8.GetBytes(
+                """{"type":"hello","engine":"Unreal","role":"editor","version":1,"capabilities":["assets","rendering","gpuParticles"]}"""),
+                WebSocketMessageType.Text, true, token);
+            Require(U16(await ReceiveAsync(gpuSocket, token), 6) == 1,
+                "Negotiating GPU preview must resend the parent program before scene configuration.");
+            Require(U16(await ReceiveAsync(gpuSocket, token), 6) == 5, "CPU render bindings must remain available.");
+            using (var emptyGpu = JsonDocument.Parse((await ReceiveAsync(gpuSocket, token)).AsMemory(48)))
+                Require(emptyGpu.RootElement.GetProperty("type").GetString() == "gpu_config" &&
+                    emptyGpu.RootElement.GetProperty("programs").GetArrayLength() == 0,
+                    "A GPU-capable viewer must receive an empty replacement for an empty document.");
+            await Dispatcher.UIThread.InvokeAsync(() => model.Graph.CreateNode(GpuParticleEditorService.Kind));
+            var gpuProgram = await ReceiveAsync(gpuSocket, token);
+            Require(U16(gpuProgram, 6) == 1 && U16(await ReceiveAsync(gpuSocket, token), 6) == 5,
+                "GPU authoring must preserve compiled numeric program and CPU scene ordering.");
+            using (var gpuScene = JsonDocument.Parse((await ReceiveAsync(gpuSocket, token)).AsMemory(48)))
+                Require(gpuScene.RootElement.GetProperty("programSequence").GetUInt64() == U64(gpuProgram, 8) &&
+                    gpuScene.RootElement.GetProperty("programs").GetArrayLength() == 1,
+                    "Actual WebSocket GPU delivery must match the accepted parent program sequence.");
+            await Dispatcher.UIThread.InvokeAsync(() => model.Playback.Frame = 2);
+            Require(U16(await ReceiveAsync(gpuSocket, token), 6) == 2,
+                "Playback must not resend or reset GPU programs.");
+            gpuSocket.Abort();
             try
             {
                 await socket.SendAsync(new byte[PreviewTelemetryStore.MaxFrameBytes + 1], WebSocketMessageType.Text, true, token);

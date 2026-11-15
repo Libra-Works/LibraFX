@@ -17,7 +17,7 @@ public static class GpuProgramDeliveryService
         foreach (var node in graph.Nodes)
         {
             if (node.KindDomain == "GpuParticle") yield return node;
-            else if (node.ChildGraph is { } child)
+            else if (node.Kind != GraphNodeKind.SpawnableGroup && node.ChildGraph is { } child)
                 foreach (var nested in Containers(child)) yield return nested;
         }
     }

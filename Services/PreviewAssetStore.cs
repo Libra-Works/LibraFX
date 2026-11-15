@@ -9,18 +9,19 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
     private readonly object _sync = new();
     private readonly Dictionary<Guid, PendingRequest> _pending = [];
     private readonly Dictionary<Guid, JsonElement> _renderStatus = [];
+    private readonly Dictionary<Guid, JsonElement> _gpuStatus = [];
     private sealed record PendingRequest(Guid Peer, string Operation, TaskCompletionSource<JsonElement> Completion);
 
     public bool Supports(Guid id, string capability = "assets") => telemetry.Clients().Any(peer =>
         peer.ClientId == id && peer.Protocol == 3 && peer.Role == "editor" && peer.Capabilities.Contains(capability));
 
-    public Guid SelectPeer(Guid? id = null)
+    public Guid SelectPeer(Guid? id = null, string capability = "assets")
     {
-        var peers = telemetry.Clients().Where(peer => Supports(peer.ClientId)).ToArray();
+        var peers = telemetry.Clients().Where(peer => Supports(peer.ClientId, capability)).ToArray();
         if (id is { } selected && peers.Any(peer => peer.ClientId == selected)) return selected;
         if (id is null && peers.Length == 1) return peers[0].ClientId;
-        throw new InvalidOperationException(id.HasValue ? "Selected asset editor is disconnected or unsupported." :
-            "Select one asset editor explicitly when multiple editors are connected.");
+        throw new InvalidOperationException(id.HasValue ? "Selected editor is disconnected or unsupported." :
+            "Select one editor explicitly when multiple editors are connected.");
     }
 
     public async Task<EngineAssetPage> CatalogAsync(string query = "", string assetClass = "", int offset = 0,
@@ -98,7 +99,8 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
 
     public bool Receive(Guid peer, ReadOnlyMemory<byte> json)
     {
-        if (json.Length is 0 or > CompiledPreviewProtocol.MaxSceneBytes || !Supports(peer)) return false;
+        if (json.Length is 0 or > CompiledPreviewProtocol.MaxSceneBytes ||
+            !Supports(peer) && !Supports(peer, "gpuParticles")) return false;
         try
         {
             _ = new System.Text.UTF8Encoding(false, true).GetString(json.Span);
@@ -106,6 +108,34 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
             var root = document.RootElement;
             CompiledPreviewProtocol.ValidateUniqueProperties(root);
             var type = root.GetProperty("type").GetString();
+            if (type == "gpu_status")
+            {
+                if (!Supports(peer, "gpuParticles") || root.GetProperty("version").GetInt32() != 1 ||
+                    root.GetProperty("programSequence").GetInt64() < 0 ||
+                    root.GetProperty("runtimeExecuted").ValueKind is not (JsonValueKind.True or JsonValueKind.False) ||
+                    root.GetProperty("mode").GetString() != "GpuRegisterInterpreter" ||
+                    root.GetProperty("programs").GetArrayLength() > GpuPreviewScene.MaxPrograms ||
+                    root.GetProperty("errors").GetArrayLength() > 128) return false;
+                var ids = new HashSet<Guid>();
+                foreach (var program in root.GetProperty("programs").EnumerateArray())
+                {
+                    if (!program.GetProperty("nodeId").TryGetGuid(out var nodeId) || nodeId == Guid.Empty ||
+                        !ids.Add(nodeId) || program.GetProperty("capacity").GetUInt32() == 0 ||
+                        program.GetProperty("contentHash").GetString() is not { Length: <= 128 } ||
+                        program.GetProperty("playing").ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                        return false;
+                }
+                foreach (var error in root.GetProperty("errors").EnumerateArray())
+                    if (error.GetString() is not { Length: <= 4096 }) return false;
+                lock (_sync)
+                {
+                    if (!_gpuStatus.TryGetValue(peer, out var previous) ||
+                        root.GetProperty("programSequence").GetInt64() >= previous.GetProperty("programSequence").GetInt64())
+                        _gpuStatus[peer] = root.Clone();
+                }
+                return true;
+            }
+            if (!Supports(peer)) return false;
             if (type == "render_status")
             {
                 if (!Supports(peer, "rendering") || root.GetProperty("programSequence").GetInt64() < 0 ||
@@ -135,11 +165,18 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
         lock (_sync) return _renderStatus.TryGetValue(peer, out var result) ? result : null;
     }
 
+    public JsonElement? GpuStatus(Guid? clientId = null)
+    {
+        var peer = SelectPeer(clientId, "gpuParticles");
+        lock (_sync) return _gpuStatus.TryGetValue(peer, out var result) ? result : null;
+    }
+
     public void Disconnect(Guid peer)
     {
         lock (_sync)
         {
             _renderStatus.Remove(peer);
+            _gpuStatus.Remove(peer);
             foreach (var pending in _pending.Values.Where(request => request.Peer == peer))
                 pending.Completion.TrySetException(new InvalidOperationException("Asset editor disconnected."));
         }
