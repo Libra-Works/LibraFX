@@ -15,6 +15,7 @@
     <Compile Remove="Tools\**\*.cs" />
     <Compile Remove="Tests\**\*.cs" />
     <Compile Remove="Runtime\**\*.cs" />
+    <Compile Remove="Gpu\**\*.cs" />
     <Folder Include="Models\" />
     <AvaloniaResource Include="Assets\**" Exclude="Assets\Inspectors\**" />
     <None Update="Assets\Nodes\*.json" CopyToOutputDirectory="PreserveNewest" />
