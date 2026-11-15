@@ -128,3 +128,21 @@ references, 16 noise references, parameter guards, seed variation, analytic
 curl divergence, helper identity, baseline compute/framebuffer and native
 package lifecycle. The staged standalone-game proof above predates this
 extension and does not establish packaged-game execution of noise opcodes.
+
+Live-preview owner integration (game thread, module dependency LibraGpuRuntime):
+  auto candidate = ULibraGpuEffectAsset::CreateInMemory(owner, compiledBundleJson, error);
+  if (!candidate) return; // Keep the previous effect/component unchanged.
+  if (!component->SetEffect(candidate)) return;
+  component->ConfigureEmitter(100, 1);
+  component->Play();
+CreateInMemory accepts the exact gpu_export_bundle frontend DTO or .lfxgpu
+exporter envelope. It validates packets/source hashes/resources atomically,
+loads only typed texture dependencies on the game thread, and needs neither
+UFactory nor disk package creation. Component Effect holds the candidate as a
+hard reference. ValidateProgram(error), GetCapacity, GetKernels/GetFlow/
+GetTextures and GetContentHash/GetSourceHash are public. Engine frame/tick
+ordering dispatches plain snapshots only; no UObject traversal occurs on RT.
+Changing an existing asset does not mutate the running snapshot: call
+ResetEffect or SetEffect+Play after an accepted update. The transport owner
+must reject stale programSequence messages and route container IDs; this
+module does not flatten graph children or own the existing editor transport.

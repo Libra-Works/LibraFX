@@ -292,6 +292,22 @@ EDataValidationResult ULibraGpuEffectAsset::IsDataValid(FDataValidationContext& 
 }
 #endif
 
+ULibraGpuEffectAsset* ULibraGpuEffectAsset::CreateInMemory(UObject* outer, const FString& bundleJson, FString& error)
+{
+    if (!IsInGameThread() || (outer && !IsValid(outer)))
+    {
+        error = TEXT("GPU asset creation requires a valid outer on the game thread.");
+        return nullptr;
+    }
+    auto asset = NewObject<ULibraGpuEffectAsset>(outer ? outer : GetTransientPackage());
+    if (!asset->ImportBundle(bundleJson, error))
+    {
+        asset->MarkAsGarbage();
+        return nullptr;
+    }
+    return asset;
+}
+
 bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
 {
     if (!IsInGameThread() || json.Len() > MaximumBundleBytes || !BoundedJsonDepth(json))

@@ -61,6 +61,10 @@ bool FLibraGpuAssetImportTest::RunTest(const FString& parameters)
     TestFalse(TEXT("Unknown opcode is rejected"), asset->ImportBundle(Bundle(true), error));
     TestTrue(TEXT("Rejected reimport retains old packet"), asset->GetKernels()[0].Bytes == original);
     TestTrue(TEXT("Old program remains valid"), asset->ValidateProgram(error));
+    auto memoryAsset = ULibraGpuEffectAsset::CreateInMemory(GetTransientPackage(), Bundle(false), error);
+    TestNotNull(TEXT("Validated frontend bundle can create an in-memory asset without editor factory"), memoryAsset);
+    TestNull(TEXT("Invalid in-memory replacement produces no playable asset"),
+        ULibraGpuEffectAsset::CreateInMemory(GetTransientPackage(), Bundle(true), error));
     return true;
 }
 

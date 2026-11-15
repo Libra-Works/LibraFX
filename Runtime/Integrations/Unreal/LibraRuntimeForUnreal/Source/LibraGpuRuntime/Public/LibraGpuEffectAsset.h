@@ -65,6 +65,7 @@ public:
     // Import is transactional: no field changes unless the whole bundle validates.
     bool ImportBundle(const FString& json, FString& error);
     bool ValidateProgram(FString& error) const;
+    static ULibraGpuEffectAsset* CreateInMemory(UObject* outer, const FString& bundleJson, FString& error);
 #if WITH_EDITOR
     virtual EDataValidationResult IsDataValid(FDataValidationContext& context) const override;
 #endif
@@ -78,6 +79,8 @@ public:
     const TArray<FLibraGpuKernelPacket>& GetKernels() const { return Kernels; }
     const TArray<FLibraGpuFlowStep>& GetFlow() const { return Flow; }
     const TArray<FLibraGpuTextureBinding>& GetTextures() const { return Textures; }
+    const FString& GetContentHash() const { return ContentHash; }
+    const FString& GetSourceHash() const { return SourceHash; }
 
 #if WITH_EDITORONLY_DATA
     UPROPERTY(VisibleAnywhere, Instanced, Category = "Import Settings")
