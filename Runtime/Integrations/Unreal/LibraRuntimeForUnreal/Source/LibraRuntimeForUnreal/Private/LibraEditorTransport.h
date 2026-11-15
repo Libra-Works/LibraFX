@@ -29,6 +29,7 @@ public:
 	FString GetStatus() const;
 
 private:
+	friend class FLibraEditorTransportQueueTest;
 	struct FImpl;
 	TUniquePtr<FImpl> Impl;
 };

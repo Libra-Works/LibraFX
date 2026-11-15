@@ -24,10 +24,19 @@ component ticking is disabled. Remote play, pause and playback rate drive it.
 Forward seeking is unsupported and pauses GPU simulation with a diagnostic.
 Backward seeking resets simulation to zero rather than claiming reconstruction
 at the requested time; returning to zero clears the seek block.
+Configuration-rejection diagnostics are independent of seek warnings and remain
+until the next successful configuration or connection-generation reset. A scene
+without GPU emitters does not generate GPU seek warnings.
+
+Startup transport retains up to 64 complete messages in FIFO order, subject to
+the unchanged 256 MiB receive byte budget and per-message limits. The game-thread
+connection tick drains at most eight messages; playback is not dropped/coalesced
+because each packet's base sequence depends on its predecessor.
 
 gpu_status reports the last accepted GPU configuration sequence, with optional
 requestedProgramSequence for a rejected replacement, at most four times/second.
 runtimeExecuted becomes true only after native interpreter work is submitted.
 Capacity is not an alive-particle count. Source text is export metadata; the
 existing fixed-USF interpreter executes validated LGPK instructions, not incoming
-HLSL. Automation: Libra.Editor.Preview.GpuSceneTransactions.
+HLSL. Automation: Libra.Editor.Preview.GpuSceneTransactions and
+Libra.Runtime.EditorTransport.ReceiveQueueBurst.

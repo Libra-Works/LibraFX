@@ -91,7 +91,7 @@ bool FLibraEditorGpuPreview::Configure(const FString& json, int64 programSequenc
     const TArray<TSharedPtr<FJsonValue>>* programs = nullptr;
     auto fail = [this](const FString& message)
     {
-        errors = {message.Left(4096)};
+        configurationError = message.Left(4096);
         return false;
     };
     if (FTCHARToUTF8(*json).Length() > 1024 * 1024 || !FJsonSerializer::Deserialize(reader, root) ||
@@ -189,6 +189,7 @@ bool FLibraEditorGpuPreview::Configure(const FString& json, int64 programSequenc
     for (auto component : staged) actor->AddInstanceComponent(component);
     emitters = MoveTemp(candidates);
     appliedSequence = sequence;
+    configurationError.Reset();
     errors.Reset();
     if (emitters.IsEmpty()) seekBlocked = false;
     if (seekBlocked)
@@ -206,7 +207,7 @@ void FLibraEditorGpuPreview::SetPlayback(int64 programSequence, bool playing, do
     if (programSequence < rootSequence) return;
     auto now = FPlatformTime::Seconds();
     rootSequence = programSequence;
-    if (hasRemoteTime && !programChanged)
+    if (hasRemoteTime && !programChanged && !emitters.IsEmpty())
     {
         auto delta = timeSeconds - lastRemoteTime;
         auto expected = remotePlaying ? FMath::Max(0.0, now - lastRemoteArrival) * playbackRate : 0.0;
@@ -269,6 +270,7 @@ void FLibraEditorGpuPreview::Reset()
     for (auto& emitter : emitters) Dispose(emitter.component.Get());
     emitters.Reset();
     errors.Reset();
+    configurationError.Reset();
     rootSequence = 0;
     appliedSequence = -1;
     hasRemoteTime = remotePlaying = seekBlocked = false;
@@ -305,6 +307,7 @@ FString FLibraEditorGpuPreview::Status(int64 programSequence) const
     status->SetBoolField(TEXT("runtimeExecuted"), executed);
     status->SetArrayField(TEXT("programs"), MoveTemp(programs));
     auto errorValues = TArray<TSharedPtr<FJsonValue>>{};
+    if (!configurationError.IsEmpty()) errorValues.Add(MakeShared<FJsonValueString>(configurationError));
     for (const auto& error : errors) errorValues.Add(MakeShared<FJsonValueString>(error));
     status->SetArrayField(TEXT("errors"), MoveTemp(errorValues));
     return Encode(status);
@@ -398,8 +401,20 @@ bool FLibraGpuPreviewTransactionTest::RunTest(const FString&)
     auto firstId = FGuid::NewGuid();
     auto secondId = FGuid::NewGuid();
     preview.SetPlayback(1, false, 0, true);
+    auto rejected = PreviewDelivery(1, firstId);
+    rejected->SetStringField(TEXT("shaderSource"), TEXT("incorrect source hash"));
+    TestFalse(TEXT("Initial invalid delivery is rejected without creating GPU emitters"),
+        preview.Configure(PreviewConfig(1, {MakeShared<FJsonValueObject>(rejected)}), 1));
+    auto rejectionError = preview.configurationError;
+    preview.SetPlayback(1, false, 1, false);
+    preview.SetPlayback(1, false, 0.1, false);
+    preview.SetPlayback(1, false, 0, false);
+    TestTrue(TEXT("Zero-emitter looping preserves configuration rejection rather than emitting seek warnings"),
+        !rejectionError.IsEmpty() && preview.configurationError == rejectionError && preview.errors.IsEmpty() &&
+        preview.Status(1).Contains(rejectionError));
     TestTrue(TEXT("Real GPU component creation accepts a validated frontend delivery"),
         preview.Configure(PreviewConfig(1, {MakeShared<FJsonValueObject>(PreviewDelivery(1, firstId))}), 1));
+    TestTrue(TEXT("A successful GPU configuration clears the previous rejection"), preview.configurationError.IsEmpty());
     if (preview.emitters.Num() != 1) return false;
     auto firstComponent = preview.emitters[0].component.Get();
     TestFalse(TEXT("Editor GPU automatic ticking is disabled"), firstComponent->IsComponentTickEnabled());
@@ -427,6 +442,11 @@ bool FLibraGpuPreviewTransactionTest::RunTest(const FString&)
             MakeShared<FJsonValueObject>(invalid)}), 3));
     TestTrue(TEXT("Invalid transaction retains every previous component"),
         preview.emitters.Num() == 1 && preview.emitters[0].component.Get() == firstComponent && preview.appliedSequence == 2);
+    rejectionError = preview.configurationError;
+    preview.SetPlayback(3, false, 1, false);
+    preview.SetPlayback(3, false, 0, false);
+    TestTrue(TEXT("Active-emitter seek/reset diagnostics cannot erase a rejected replacement"),
+        preview.configurationError == rejectionError && preview.Status(3).Contains(rejectionError));
     TestFalse(TEXT("Duplicate GPU node IDs are rejected"),
         preview.Configure(PreviewConfig(3, {MakeShared<FJsonValueObject>(PreviewDelivery(3, firstId)),
             MakeShared<FJsonValueObject>(PreviewDelivery(3, firstId))}), 3));
@@ -435,6 +455,7 @@ bool FLibraGpuPreviewTransactionTest::RunTest(const FString&)
             MakeShared<FJsonValueObject>(PreviewDelivery(3, secondId, 2000000))}), 3));
     TestFalse(TEXT("Stale configuration cannot clear current GPU components"), preview.Configure(PreviewConfig(2, {}), 3));
     TestTrue(TEXT("Current empty replacement clears GPU components"), preview.Configure(PreviewConfig(3, {}), 3));
+    TestTrue(TEXT("Successful empty replacement also clears configuration diagnostics"), preview.configurationError.IsEmpty());
     TestTrue(TEXT("GPU clearing preserves the shared CPU scene root"), cpuRoot->IsRegistered() && actor->GetRootComponent() == cpuRoot);
     preview.Reset();
     preview.SetPlayback(0, false, 0, true);

@@ -77,7 +77,7 @@ struct FLibraEditorTransport::FImpl
 {
 	static constexpr size_t FingerprintBytes = 32;
 	static constexpr size_t MaxMessageBytes = 128ull * 1024ull * 1024ull + 48ull;
-	static constexpr size_t MaxQueuedMessages = 8;
+	static constexpr size_t MaxQueuedMessages = 64;
 	static constexpr size_t MaxQueuedBytes = 256ull * 1024ull * 1024ull;
 	static constexpr unsigned int DnsTimeoutSeconds = 5;
 	static constexpr unsigned int ConnectTimeoutSeconds = 10;
@@ -105,6 +105,27 @@ struct FLibraEditorTransport::FImpl
 	std::array<uint8, FingerprintBytes> ExpectedFingerprint{};
 	TArray<uint8> CurrentMessage;
 	bool CurrentMessageIsBinary = false;
+
+	bool hasReceiveCapacity(size_t additionalBytes) const
+	{
+		return ReceiveQueue.size() < MaxQueuedMessages && QueuedBytes <= MaxQueuedBytes &&
+			additionalBytes <= MaxQueuedBytes - QueuedBytes;
+	}
+
+	bool enqueueReceived(TArray<uint8>&& message)
+	{
+		auto lock = std::lock_guard<std::mutex>(Mutex);
+		if (!hasReceiveCapacity(static_cast<size_t>(message.Num())))
+		{
+			Status = TEXT("Receive queue limit exceeded");
+			Failed.store(true);
+			StateChanged.notify_all();
+			return false;
+		}
+		QueuedBytes += static_cast<size_t>(message.Num());
+		ReceiveQueue.emplace_back(MoveTemp(message));
+		return true;
+	}
 
 #if LIBRA_WITH_EDITOR_TRANSPORT && WITH_SSL
 	struct FDnsQuery
@@ -436,8 +457,7 @@ struct FLibraEditorTransport::FImpl
 
 			{
 				std::lock_guard<std::mutex> Lock(State->Mutex);
-				if (State->ReceiveQueue.size() >= MaxQueuedMessages ||
-					State->QueuedBytes + static_cast<size_t>(State->CurrentMessage.Num()) + Length > MaxQueuedBytes)
+				if (!State->hasReceiveCapacity(static_cast<size_t>(State->CurrentMessage.Num()) + Length))
 				{
 					State->Status = TEXT("Receive queue limit exceeded");
 					State->Failed.store(true);
@@ -454,17 +474,7 @@ struct FLibraEditorTransport::FImpl
 
 			if (lws_is_final_fragment(Wsi) && lws_remaining_packet_payload(Wsi) == 0)
 			{
-				std::lock_guard<std::mutex> Lock(State->Mutex);
-				if (State->ReceiveQueue.size() >= MaxQueuedMessages ||
-					State->QueuedBytes + State->CurrentMessage.Num() > MaxQueuedBytes)
-				{
-					State->Status = TEXT("Receive queue limit exceeded");
-					State->Failed.store(true);
-					State->StateChanged.notify_all();
-					return -1;
-				}
-				State->QueuedBytes += static_cast<size_t>(State->CurrentMessage.Num());
-				State->ReceiveQueue.emplace_back(MoveTemp(State->CurrentMessage));
+				if (!State->enqueueReceived(MoveTemp(State->CurrentMessage))) return -1;
 				State->CurrentMessage.Reset();
 			}
 			return 0;
@@ -970,6 +980,44 @@ bool FLibraEditorTransportValidationTest::RunTest(const FString& Parameters)
 	CorrectFingerprint[0] ^= 0x80;
 	TestFalse(TEXT("Reject a different certificate pin"),
 		IsCertificatePinMatch(Certificate.get(), CorrectFingerprint));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraEditorTransportQueueTest,
+	"Libra.Runtime.EditorTransport.ReceiveQueueBurst",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraEditorTransportQueueTest::RunTest(const FString&)
+{
+	auto transport = FLibraEditorTransport{};
+	auto& state = *transport.Impl;
+	for (auto sequence = 0; sequence < 64; ++sequence)
+	{
+		auto message = TArray<uint8>{};
+		message.SetNumZeroed(48);
+		message[8] = static_cast<uint8>(sequence);
+		if (!TestTrue(TEXT("A bounded startup/playback burst is retained"), state.enqueueReceived(MoveTemp(message))))
+			return false;
+	}
+	auto overflow = TArray<uint8>{};
+	overflow.SetNumZeroed(48);
+	TestFalse(TEXT("A burst beyond the bounded completed-message queue is rejected"),
+		state.enqueueReceived(MoveTemp(overflow)));
+	for (auto sequence = 0; sequence < 64; ++sequence)
+	{
+		auto message = TArray<uint8>{};
+		if (!TestTrue(TEXT("Queued playback messages remain available"), transport.TryReceive(message))) return false;
+		TestEqual(TEXT("FIFO decoding never drops or coalesces sequence-chain entries"), int32(message[8]), sequence);
+	}
+	auto empty = TArray<uint8>{};
+	TestFalse(TEXT("The queue is empty after the complete ordered drain"), transport.TryReceive(empty));
+	auto message = TArray<uint8>{};
+	message.SetNumZeroed(48);
+	TestTrue(TEXT("Draining releases capacity for another message"), state.enqueueReceived(MoveTemp(message)));
+	TestTrue(TEXT("Remaining byte budget includes the occupied message"),
+		state.hasReceiveCapacity(256ull * 1024ull * 1024ull - 48));
+	TestFalse(TEXT("Byte budget still rejects an oversized incoming fragment"),
+		state.hasReceiveCapacity(256ull * 1024ull * 1024ull - 47));
 	return true;
 }
 #endif

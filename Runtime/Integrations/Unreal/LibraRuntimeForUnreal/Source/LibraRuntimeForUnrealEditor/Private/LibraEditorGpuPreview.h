@@ -32,6 +32,7 @@ private:
     TWeakObjectPtr<AActor> owner;
     TArray<FEmitter> emitters;
     TArray<FString> errors;
+    FString configurationError;
     int64 rootSequence = 0;
     int64 appliedSequence = -1;
     double lastRemoteTime = 0;
