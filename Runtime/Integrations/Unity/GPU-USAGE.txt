@@ -1,4 +1,4 @@
-Libra GPU particle adapter (Unity built-in render pipeline)
+Libra GPU particle adapter
 
 Export both CompiledGpuProgram.EmitUnityCompute().Text as a .compute asset and
 ExportMetadataJson() as a .json asset. Import both together. The adapter does
@@ -38,12 +38,16 @@ them if particles travel outside the default region.
 
 The supplied billboard shader is unlit, alpha blended, supports HDR tint,
 texture, per-particle size, rotation and color, and uses camera-facing quads.
-It targets the built-in pipeline; SRP-specific passes require a compatible
-material/shader using the same _LibraParticles 80-byte layout. Rendering is
-queued per camera by Unity, not a headless or CPU renderer.
+It works with the built-in pipeline and was also exercised with Unity 7 alpha's
+URP 17.7. Other render pipelines may require a compatible material/shader using
+the same _LibraParticles 80-byte layout. Rendering is queued per camera by
+Unity, not a headless or CPU renderer.
 
 Tools/GpuFixtureGenerator is an isolated .NET 10 fixture exporter referencing
-Gpu/LibraGpu.Core. It emits two separately compiled shader/metadata pairs.
+Gpu/LibraGpu.Core. It emits two separately compiled shader/metadata pairs. An
+optional second argument accepts a frontend delivery bundle: its canonical IR
+hash is checked, then recompiled into a UnityCompute shader and metadata pair.
+Do not import a USF bundle's shader or metadata directly as UnityCompute.
 Editor/Tests/LibraGpuVerification.cs contains a graphics-enabled executeMethod
 test. It performs explicit diagnostic GPU readback, 1000 zero-managed-allocation
 steps, render-target pixel checks, resource reconfiguration and error checks.

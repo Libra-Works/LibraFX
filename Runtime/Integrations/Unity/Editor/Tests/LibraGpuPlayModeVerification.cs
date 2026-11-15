@@ -21,6 +21,16 @@ namespace LiberaFx.Unity.Editor
         static int phase, afterFrame;
         static double deadline;
 
+        static string Fixture(string file)
+        {
+            string path = "Assets/LibraFXGPUValidation/Fixtures/" + file;
+            return File.Exists(path) ? path : "Assets/Fixtures/" + file;
+        }
+        static string Output(string file)
+        {
+            string directory = Environment.GetEnvironmentVariable("LIBRA_GPU_VERIFICATION_DIR");
+            return string.IsNullOrEmpty(directory) ? Path.GetFullPath(file) : Path.Combine(directory, file);
+        }
         static LibraGpuPlayModeVerification()
         {
             EditorApplication.playModeStateChanged += OnPlayModeChanged;
@@ -28,7 +38,7 @@ namespace LiberaFx.Unity.Editor
 
         public static void Run()
         {
-            File.WriteAllText("playmode-verification.txt", "STARTED\n");
+            File.WriteAllText(Output("playmode-verification.txt"), "STARTED\n");
             SessionState.SetBool(SessionKey, true);
             EditorApplication.isPlaying = true;
         }
@@ -39,10 +49,10 @@ namespace LiberaFx.Unity.Editor
             try
             {
                 Require(SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11, "D3D11 required");
-                orangeCompute = AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Fixtures/Emitter.compute");
-                orangeMetadata = AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Fixtures/Emitter.json");
-                blueCompute = AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Fixtures/BlueEmitter.compute");
-                blueMetadata = AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Fixtures/BlueEmitter.json");
+                orangeCompute = AssetDatabase.LoadAssetAtPath<ComputeShader>(Fixture("Emitter.compute"));
+                orangeMetadata = AssetDatabase.LoadAssetAtPath<TextAsset>(Fixture("Emitter.json"));
+                blueCompute = AssetDatabase.LoadAssetAtPath<ComputeShader>(Fixture("BlueEmitter.compute"));
+                blueMetadata = AssetDatabase.LoadAssetAtPath<TextAsset>(Fixture("BlueEmitter.json"));
                 Require(orangeCompute != null && orangeMetadata != null && blueCompute != null && blueMetadata != null, "Missing generated assets");
                 var shader = Shader.Find("Libra/GPU Particle Billboard");
                 Require(shader != null && shader.isSupported, "Missing billboard shader");
@@ -54,6 +64,7 @@ namespace LiberaFx.Unity.Editor
                 camera.backgroundColor = Color.black;
                 camera.orthographic = true;
                 camera.orthographicSize = 2;
+                camera.cullingMask = 1 << 8;
                 camera.transform.position = new Vector3(0, 0, -5);
                 target = new RenderTexture(128, 128, 24, RenderTextureFormat.ARGB32);
                 camera.targetTexture = target;
@@ -71,6 +82,7 @@ namespace LiberaFx.Unity.Editor
         static void NewEmitter(ComputeShader compute, TextAsset metadata)
         {
             emitter = new GameObject("GPU PlayMode emitter");
+            emitter.layer = 8;
             runtime = emitter.AddComponent<LibraGpuParticleRuntime>();
             typeof(LibraGpuParticleRuntime).GetField("spawnRate", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
                 .SetValue(runtime, 1000f);
@@ -89,6 +101,13 @@ namespace LiberaFx.Unity.Editor
                 {
                     case 0:
                         Require(runtime.IsRunning && runtime.RuntimeExecuted && runtime.DispatchCount > 0 && runtime.DrawCount > 0, "Component Update did not execute");
+                        var particles = new LibraGpuParticle[runtime.Capacity];
+                        runtime.ReadbackForDiagnostics(particles);
+                        bool updated = false;
+                        foreach (var particle in particles)
+                            if (particle.alive != 0 && particle.positionAge.w > 0 && particle.positionAge.y > 0 &&
+                                particle.velocityLifetime.y < 3f) { updated = true; break; }
+                        Require(updated, "Automatic GPU spawn/update did not advance particles");
                         Capture(true, "playmode-blue.png");
                         string oldHash = runtime.SourceContentHash;
                         runtime.Configure(orangeCompute, orangeMetadata, material, bindings);
@@ -122,6 +141,9 @@ namespace LiberaFx.Unity.Editor
                         break;
                     case 5:
                         Require(runtime.RuntimeExecuted, "Replacement component did not update");
+                        runtime.Dispose();
+                        Require(!runtime.IsConfigured && !runtime.IsRunning && LibraGpuParticleRuntime.PendingRetirements > 0, "Dispose did not retire GPU buffers");
+                        runtime.Dispose();
                         UnityEngine.Object.Destroy(emitter);
                         phase = 6; afterFrame = Time.frameCount + 5;
                         break;
@@ -145,15 +167,17 @@ namespace LiberaFx.Unity.Editor
                 if (blue ? pixel.b > 100 && pixel.r < 50 : pixel.r > 100 && pixel.g > 50 && pixel.b < pixel.r)
                 { found = true; break; }
             Require(found, "Automatic camera did not render " + file);
-            File.WriteAllBytes(file, image.EncodeToPNG());
+            File.WriteAllBytes(Output(file), image.EncodeToPNG());
         }
 
         static void Require(bool value, string message) { if (!value) throw new Exception(message); }
 
         static void Finish()
         {
-            File.WriteAllText("playmode-verification.txt", "PASS\nDevice: " + SystemInfo.graphicsDeviceName +
-                "\nAPI: " + SystemInfo.graphicsDeviceType + "\nAutomatic Update, camera framebuffer, reconfigure, disable, reenable and destroy: passed\nPending retirements: " +
+            File.WriteAllText(Output("playmode-verification.txt"), "PASS\nUnity: " + Application.unityVersion + "\nDevice: " + SystemInfo.graphicsDeviceName +
+                "\nAPI: " + SystemInfo.graphicsDeviceType + "\nPipeline: " +
+                (GraphicsSettings.currentRenderPipeline == null ? "Built-in" : GraphicsSettings.currentRenderPipeline.GetType().FullName) +
+                "\nAutomatic GPU spawn/update, camera framebuffer, reconfigure, disable, reenable, disposal and destroy: passed\nPending retirements: " +
                 LibraGpuParticleRuntime.PendingRetirements + "\nAsync compute: " + SystemInfo.supportsAsyncCompute + "\n");
             Cleanup();
             EditorApplication.Exit(0);
@@ -161,7 +185,7 @@ namespace LiberaFx.Unity.Editor
 
         static void Fail(Exception e)
         {
-            File.WriteAllText("playmode-verification.txt", "FAIL\n" + e);
+            File.WriteAllText(Output("playmode-verification.txt"), "FAIL\n" + e);
             Debug.LogException(e);
             Cleanup();
             EditorApplication.Exit(1);

@@ -8,6 +8,16 @@ namespace LiberaFx.Unity.Editor
 {
     public static class LibraGpuVerification
     {
+        static string Fixture(string file)
+        {
+            string path = "Assets/LibraFXGPUValidation/Fixtures/" + file;
+            return File.Exists(path) ? path : "Assets/Fixtures/" + file;
+        }
+        static string Output(string file)
+        {
+            string directory = Environment.GetEnvironmentVariable("LIBRA_GPU_VERIFICATION_DIR");
+            return string.IsNullOrEmpty(directory) ? Path.GetFullPath(file) : Path.Combine(directory, file);
+        }
         static void Require(bool value, string message) { if (!value) throw new Exception(message); }
         static void Near(float actual, float expected, string message)
         {
@@ -15,7 +25,7 @@ namespace LiberaFx.Unity.Editor
         }
         public static void Run()
         {
-            string output = Path.GetFullPath("verificationresult.txt");
+            string output = Output("verificationresult.txt");
             GameObject emitter = null, cameraObject = null;
             Material material = null;
             RenderTexture rt = null;
@@ -23,10 +33,10 @@ namespace LiberaFx.Unity.Editor
             try
             {
                 Require(SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11, "D3D11 graphics required: " + SystemInfo.graphicsDeviceType);
-                var compute = AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Fixtures/Emitter.compute");
-                var metadata = AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Fixtures/Emitter.json");
-                var blue = AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Fixtures/BlueEmitter.compute");
-                var blueMetadata = AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Fixtures/BlueEmitter.json");
+                var compute = AssetDatabase.LoadAssetAtPath<ComputeShader>(Fixture("Emitter.compute"));
+                var metadata = AssetDatabase.LoadAssetAtPath<TextAsset>(Fixture("Emitter.json"));
+                var blue = AssetDatabase.LoadAssetAtPath<ComputeShader>(Fixture("BlueEmitter.compute"));
+                var blueMetadata = AssetDatabase.LoadAssetAtPath<TextAsset>(Fixture("BlueEmitter.json"));
                 Require(compute != null && metadata != null && blue != null && blueMetadata != null, "Missing generated assets");
                 foreach (var message in ShaderUtil.GetComputeShaderMessages(compute))
                     Require(message.severity.ToString() != "Error", "Compute shader import error: " + message.message);
@@ -95,6 +105,7 @@ namespace LiberaFx.Unity.Editor
                 var camera = cameraObject.AddComponent<Camera>();
                 camera.enabled = false; camera.clearFlags = CameraClearFlags.SolidColor; camera.backgroundColor = Color.black;
                 camera.orthographic = true; camera.orthographicSize = 1; camera.transform.position = new Vector3(0, 0, -5);
+                emitter.layer = 8; camera.cullingMask = 1 << 8;
                 rt = new RenderTexture(128, 128, 24, RenderTextureFormat.ARGB32);
                 camera.targetTexture = rt;
                 image = new Texture2D(128, 128, TextureFormat.RGBA32, false);
@@ -103,16 +114,17 @@ namespace LiberaFx.Unity.Editor
                 camera.Render();
                 RenderTexture.active = rt; image.ReadPixels(new Rect(0, 0, 128, 128), 0, 0); image.Apply();
                 var orange = image.GetPixel(64, 64);
-                File.WriteAllBytes("orange.png", image.EncodeToPNG());
+                File.WriteAllBytes(Output("orange.png"), image.EncodeToPNG());
                 Require(orange.r > .4f && orange.g > .2f && orange.b < orange.r, "Orange GPU framebuffer " + orange);
                 string hash = runtime.SourceContentHash;
                 runtime.Configure(blue, blueMetadata, material, bindings);
                 Require(hash != runtime.SourceContentHash && !runtime.RuntimeExecuted, "Hot reload metadata");
+                emitter.layer = 9; camera.cullingMask = 1 << 9;
                 runtime.Step(0, 0, 64, Vector3.zero, camera);
                 camera.Render();
                 RenderTexture.active = rt; image.ReadPixels(new Rect(0, 0, 128, 128), 0, 0); image.Apply();
                 var bluePixel = image.GetPixel(64, 64);
-                File.WriteAllBytes("blue.png", image.EncodeToPNG());
+                File.WriteAllBytes(Output("blue.png"), image.EncodeToPNG());
                 Require(bluePixel.b > .4f && bluePixel.r < .1f, "Blue GPU framebuffer " + bluePixel);
                 rejected = false;
                 try { LibraGpuMetadata.Parse("{\"version\":2}"); } catch (ArgumentException) { rejected = true; }
@@ -129,10 +141,28 @@ namespace LiberaFx.Unity.Editor
                 rejected = false;
                 try { runtime.Configure(compute, blueMetadata, material, bindings); } catch (ArgumentException) { rejected = true; }
                 Require(rejected && runtime.IsConfigured, "Mismatched shader source must be rejected");
+                string frontendResult = "not supplied";
+                var frontendCompute = AssetDatabase.LoadAssetAtPath<ComputeShader>(Fixture("Frontend.compute"));
+                var frontendMetadata = AssetDatabase.LoadAssetAtPath<TextAsset>(Fixture("Frontend.json"));
+                if (frontendCompute != null && frontendMetadata != null)
+                {
+                    foreach (var message in ShaderUtil.GetComputeShaderMessages(frontendCompute))
+                        Require(message.severity.ToString() != "Error", "Frontend shader import error: " + message.message);
+                    var frontendProgram = LibraGpuMetadata.Parse(frontendMetadata.text);
+                    var frontendBindings = new LibraGpuTextureBinding[frontendProgram.resources.Length];
+                    for (int i = 0; i < frontendBindings.Length; i++)
+                        frontendBindings[i] = new LibraGpuTextureBinding { resourceId = frontendProgram.resources[i].id, texture = Texture2D.whiteTexture };
+                    runtime.Configure(frontendCompute, frontendMetadata, material, frontendBindings);
+                    runtime.Step(.1f, 0, 64, Vector3.zero);
+                    var frontendParticles = new LibraGpuParticle[runtime.Capacity];
+                    runtime.ReadbackForDiagnostics(frontendParticles);
+                    Require(frontendParticles[0].alive == 1, "Frontend IR did not spawn a GPU particle");
+                    frontendResult = runtime.SourceContentHash;
+                }
                 runtime.Dispose(); runtime.Dispose();
                 Require(!runtime.IsConfigured, "Dispose");
                 Require(LibraGpuParticleRuntime.PendingRetirements > 0, "Submitted buffers must await retirement");
-                File.WriteAllText(output, "PASS\nDevice: " + SystemInfo.graphicsDeviceName + "\nAPI: " + SystemInfo.graphicsDeviceType + "\n1000 steps managed bytes: " + allocated + "\nOrange: " + orange + "\nBlue: " + bluePixel + "\nAsync compute: " + SystemInfo.supportsAsyncCompute + "\n");
+                File.WriteAllText(output, "PASS\nUnity: " + Application.unityVersion + "\nDevice: " + SystemInfo.graphicsDeviceName + "\nAPI: " + SystemInfo.graphicsDeviceType + "\nPipeline: " + (GraphicsSettings.currentRenderPipeline == null ? "Built-in" : GraphicsSettings.currentRenderPipeline.GetType().FullName) + "\n1000 steps managed bytes: " + allocated + "\nOrange: " + orange + "\nBlue: " + bluePixel + "\nFrontend IR hash: " + frontendResult + "\nAsync compute: " + SystemInfo.supportsAsyncCompute + "\n");
                 EditorApplication.Exit(0);
             }
             catch (Exception e)
