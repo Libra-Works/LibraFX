@@ -10,6 +10,7 @@
 #include "GameFramework/Actor.h"
 #include "InputKeyEventArgs.h"
 #include "LibraEditorAssetAdapter.h"
+#include "LibraEditorGpuPreview.h"
 #include "LibraEffectComponent.h"
 #include "LibraEditorConnectionComponent.h"
 #include "Materials/Material.h"
@@ -509,6 +510,7 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
         actor->AddInstanceComponent(effect.Get());
         effect->RegisterComponent();
         connection.Reset(NewObject<ULibraEditorConnectionComponent>(actor));
+        gpuPreview = MakeUnique<FLibraEditorGpuPreview>(actor);
         connection->Target = effect.Get();
         connection->Host = TEXT("127.0.0.1");
         auto port = int32{8766};
@@ -531,6 +533,19 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
         connection->EditorRenderStatusHandler = [this](int64 sequence, double time)
         {
             return UpdateScene(sequence, time);
+        };
+        connection->EditorGpuConfigHandler = [this](const FString& request, int64 sequence)
+        {
+            if (gpuPreview) gpuPreview->Configure(request, sequence);
+        };
+        connection->EditorGpuPlaybackHandler = [this](int64 sequence, bool playing, double time, bool programChanged, double rate)
+        {
+            if (gpuPreview) gpuPreview->SetPlayback(sequence, playing, time, programChanged, rate);
+        };
+        connection->EditorGpuResetHandler = [this] { if (gpuPreview) gpuPreview->Reset(); };
+        connection->EditorGpuStatusHandler = [this](int64 sequence)
+        {
+            return gpuPreview ? gpuPreview->Status(sequence) : FString{};
         };
         actor->AddInstanceComponent(connection.Get());
         connection->RegisterComponent();
@@ -555,6 +570,7 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
     if (effect->IsComponentTickEnabled())
         effect->TickComponent(deltaTime, LEVELTICK_All, &effect->PrimaryComponentTick);
     connection->TickComponent(deltaTime, LEVELTICK_All, &connection->PrimaryComponentTick);
+    if (gpuPreview) gpuPreview->Tick(deltaTime, connection->bIsConnected);
     return true;
 }
 
@@ -947,6 +963,7 @@ void FLibraEditorPreviewSession::Stop()
     if (ticker.IsValid()) FTSTicker::GetCoreTicker().RemoveTicker(ticker);
     ticker.Reset();
     SavePreviewProfile();
+    gpuPreview.Reset();
     renderNodes.Reset();
     sceneErrors.Reset();
     if (previewTab.IsValid())
@@ -976,6 +993,10 @@ void FLibraEditorPreviewSession::Stop()
         connection->EditorAssetRequestHandler = {};
         connection->EditorSceneConfigHandler = {};
         connection->EditorRenderStatusHandler = {};
+        connection->EditorGpuConfigHandler = {};
+        connection->EditorGpuPlaybackHandler = {};
+        connection->EditorGpuResetHandler = {};
+        connection->EditorGpuStatusHandler = {};
         connection->DisconnectFromEditor();
         connection->UnregisterComponent();
     }

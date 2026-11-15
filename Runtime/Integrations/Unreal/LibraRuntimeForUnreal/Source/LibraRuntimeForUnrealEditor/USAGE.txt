@@ -1,0 +1,33 @@
+LIBERA FX isolated editor GPU preview
+
+The editor preview advertises gpuParticles only when its isolated GPU adapter is
+installed. LFXP query protocol 3 and telemetry JSON version 1 remain unchanged.
+gpu_config is a Kind 5 Scene command, following an accepted numeric root Program.
+Its version-1 envelope contains programSequence and replacement programs, using
+the same frontend delivery fields accepted by ULibraGpuEffectAsset::CreateInMemory.
+Only root GPU containers are delivered; spawnable templates require an instance
+bridge and must not be included.
+
+All candidates validate on the game thread before replacing any previous GPU
+component. Limits: 16 emitters, 1 MiB scene JSON, 256 MiB aggregate particle,
+register scratch and instruction buffers. Textures must be Texture2D assets with
+valid /Game or /Engine object paths. An empty replacement removes GPU components
+only, leaving CPU rendering, camera and the user's edited level unchanged.
+
+Identical node IDs, IR/source hashes, packet bytes, ordered flow, capacity and
+resource mappings reuse simulation state. Texture objects remain strongly
+referenced by the native GPU asset; no per-texture source hash is available.
+Reconnect resets the preview generation and permits sequence numbering to restart.
+
+The isolated scene owns one manual GPU component tick per preview tick; automatic
+component ticking is disabled. Remote play, pause and playback rate drive it.
+Forward seeking is unsupported and pauses GPU simulation with a diagnostic.
+Backward seeking resets simulation to zero rather than claiming reconstruction
+at the requested time; returning to zero clears the seek block.
+
+gpu_status reports the last accepted GPU configuration sequence, with optional
+requestedProgramSequence for a rejected replacement, at most four times/second.
+runtimeExecuted becomes true only after native interpreter work is submitted.
+Capacity is not an alive-particle count. Source text is export metadata; the
+existing fixed-USF interpreter executes validated LGPK instructions, not incoming
+HLSL. Automation: Libra.Editor.Preview.GpuSceneTransactions.

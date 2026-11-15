@@ -9,7 +9,7 @@ public class LibraRuntimeForUnrealEditor : ModuleRules
             "Core", "CoreUObject", "Engine", "UnrealEd", "AssetRegistry", "Json",
             "Slate", "SlateCore", "InputCore", "EditorStyle", "EditorFramework",
             "AdvancedPreviewScene",
-            "LibraRuntimeCore", "LibraRuntimeForUnreal"
+            "LibraRuntimeCore", "LibraRuntimeForUnreal", "LibraGpuRuntime"
         });
     }
 }

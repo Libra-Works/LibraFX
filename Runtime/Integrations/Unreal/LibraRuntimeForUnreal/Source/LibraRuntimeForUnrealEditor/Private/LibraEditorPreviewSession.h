@@ -12,6 +12,7 @@ class FEditorViewportClient;
 class SDockTab;
 class SEditorViewport;
 class SWidget;
+class FLibraEditorGpuPreview;
 class UMaterialInstanceDynamic;
 class ULibraEffectComponent;
 class ULibraEditorConnectionComponent;
@@ -72,6 +73,7 @@ private:
     TStrongObjectPtr<UStaticMeshComponent> placeholderCube;
     TStrongObjectPtr<ULibraEffectComponent> effect;
     TStrongObjectPtr<ULibraEditorConnectionComponent> connection;
+    TUniquePtr<FLibraEditorGpuPreview> gpuPreview;
     TArray<FRenderNode> renderNodes;
     TArray<FString> sceneErrors;
     int64 renderProgramSequence = 0;

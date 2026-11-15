@@ -46,6 +46,7 @@ struct FLibraEditorConnectionState final
     bool originalAccessors = false;
     bool profilePending = false;
     double nextRenderStatus = 0;
+    double nextGpuStatus = 0;
     int64 sceneProgramSequence = 0;
     FString lastTransportStatus;
 };
@@ -271,6 +272,9 @@ auto ULibraEditorConnectionComponent::ConnectToEditor() -> bool
     auto capabilities = TArray<TSharedPtr<FJsonValue>>{};
     for (const auto& capability : {TEXT("profiling"), TEXT("values"), TEXT("assets"), TEXT("rendering"), TEXT("thumbnails")})
         capabilities.Add(MakeShared<FJsonValueString>(capability));
+#if WITH_EDITOR
+    if (EditorGpuConfigHandler) capabilities.Add(MakeShared<FJsonValueString>(TEXT("gpuParticles")));
+#endif
     hello->SetArrayField(TEXT("capabilities"), MoveTemp(capabilities));
     auto viewerName = FString(FApp::GetProjectName());
     if (GetOwner()) viewerName += TEXT(" / ") + GetOwner()->GetName();
@@ -311,6 +315,7 @@ void ULibraEditorConnectionComponent::CloseConnection(bool restoreEffect)
     auto previous = MoveTemp(State);
     if (previous)
     {
+        if (EditorGpuResetHandler) EditorGpuResetHandler();
         if (auto target = previous->target.Get()) RemoveTickPrerequisiteComponent(target);
         previous->transport.Stop();
         if (restoreEffect)
@@ -396,6 +401,19 @@ auto ULibraEditorConnectionComponent::ApplyMessage(TConstArrayView<uint8> messag
             state->sceneProgramSequence = requestedSequence;
             state->nextRenderStatus = 0;
             if (EditorSceneConfigHandler) EditorSceneConfigHandler(request, requestedSequence);
+        }
+        else if (type == TEXT("gpu_config"))
+        {
+#if WITH_EDITOR
+            if (EditorGpuConfigHandler && state->sequence.hasProgram())
+            {
+                EditorGpuConfigHandler(request, state->programSequence);
+                state->nextGpuStatus = 0;
+            }
+            else QueueEditorMessage(TEXT("{\"type\":\"gpu_status\",\"version\":1,\"programSequence\":0,"
+                "\"runtimeExecuted\":false,\"mode\":\"GpuRegisterInterpreter\",\"programs\":[],"
+                "\"errors\":[\"GPU preview requires an accepted root program and an editor GPU adapter.\"]}"));
+#endif
         }
         else if (type == TEXT("reconnect"))
         {
@@ -485,6 +503,9 @@ auto ULibraEditorConnectionComponent::ApplyMessage(TConstArrayView<uint8> messag
     state->pendingTime = frame.timeSeconds;
     state->pendingEvaluation = true;
     bEditorPlaying = (frame.flags & 1u) != 0;
+    if (EditorGpuPlaybackHandler)
+        EditorGpuPlaybackHandler(state->programSequence, bEditorPlaying, frame.timeSeconds,
+            frame.kind == wire::Kind::Program, frame.playbackRate);
     LastAppliedSequence = static_cast<int64>(FMath::Min(frame.sequence, static_cast<uint64>(MAX_int64)));
     LastResult = ELibraRuntimeResult::Ok;
     if (frame.kind == wire::Kind::Program)
@@ -528,6 +549,12 @@ void ULibraEditorConnectionComponent::TickComponent(float deltaTime, ELevelTick 
         }
     }
     SendFeedback(*state, state->programSequence);
+    if (EditorGpuStatusHandler && state->sequence.hasProgram() && FPlatformTime::Seconds() >= state->nextGpuStatus)
+    {
+        auto status = EditorGpuStatusHandler(state->programSequence);
+        if (!status.IsEmpty() && state->transport.QueueText(status))
+            state->nextGpuStatus = FPlatformTime::Seconds() + 0.25;
+    }
     if (EditorRenderStatusHandler && state->sceneProgramSequence == state->programSequence &&
         state->sequence.hasProgram())
     {
