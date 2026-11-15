@@ -24,7 +24,10 @@ try {
     & dotnet run --project (Join-Path $PSScriptRoot 'LibraGpu.Core.Tests.csproj') -- --export $output
     if ($LASTEXITCODE -ne 0) { throw 'Focused GPU tests failed.' }
     $count = 0
-    foreach ($name in @('sample', 'allops')) {
+    $owned.Add((Join-Path $output 'noise.reference.json'))
+    $owned.Add((Join-Path $output 'math.reference.json'))
+    $owned.Add((Join-Path $output 'LibraGpuSupport.hlsl'))
+    foreach ($name in @('sample', 'allops', 'noise', 'noiseguards', 'math')) {
         foreach ($extension in @('hlsl', 'usf', 'compute', 'json', 'metadata.json', 'entries')) {
             $owned.Add((Join-Path $output "$name.$extension"))
         }

@@ -323,22 +323,13 @@ public static class GpuDsl
                 return New(new() { Op = GpuOp.ReadUniform, Type = t, Uniform = c.Parameter }, c.Span);
             }
             if (c.Parameter is not null) throw Error("Unexpected function parameter payload.", c.Span, id);
-            GpuOp op = c.Name switch
-            {
-                "sin" => GpuOp.Sin,
-                "cos" => GpuOp.Cos,
-                "clamp" => GpuOp.Clamp,
-                "min" => GpuOp.Min,
-                "max" => GpuOp.Max,
-                "normalize" => GpuOp.Normalize,
-                "length" => GpuOp.Length,
-                "select" => GpuOp.Select,
-                "random" => GpuOp.Random,
-                "float2" or "float3" or "float4" => GpuOp.Compose,
-                _ => throw Error($"Unknown safe function '{c.Name}'.", c.Span, id)
-            };
+            GpuOp op;
+            if (c.Name is "float2" or "float3" or "float4") op = GpuOp.Compose;
+            else if (!GpuOperationRegistry.TryGetDslOperation(c.Name, out op))
+                throw Error($"Unknown safe function '{c.Name}'.", c.Span, id);
             var descriptor = GpuOperationRegistry.Operations[op];
-            if (c.Arguments.Count < descriptor.MinInputs || c.Arguments.Count > descriptor.MaxInputs) throw Error("Function arity mismatch.", c.Span, id);
+            bool noise = descriptor.Policy is TypePolicy.GradientNoise or TypePolicy.FractalNoise;
+            if (c.Arguments.Count < (noise ? 1 : descriptor.MinInputs) || c.Arguments.Count > descriptor.MaxInputs) throw Error("Function arity mismatch.", c.Span, id);
             var constructorType = c.Name == "float2" ? GpuType.Float2 : c.Name == "float3" ? GpuType.Float3 : GpuType.Float4;
             if (op == GpuOp.Compose && c.Arguments.Count == GpuOperationRegistry.Components(constructorType) &&
                 c.Arguments.All(a => a is DslLiteral { Type: GpuType.Float } or DslUnary { Operator: "+" or "-", Value: DslLiteral { Type: GpuType.Float } }))
@@ -347,14 +338,17 @@ public static class GpuDsl
                     a is DslUnary { Value: DslLiteral l } unary ? (unary.Operator == "-" ? -l.Value : l.Value) : throw new InvalidOperationException()).ToList();
                 return New(new() { Op = GpuOp.Constant, Type = constructorType, Value = values }, c.Span);
             }
-            var args = c.Arguments.Select(Expression).ToArray();
-            GpuType type = op switch
-            {
-                GpuOp.Compose => constructorType,
-                GpuOp.Length or GpuOp.Random => GpuType.Float,
-                GpuOp.Select => args[1].Type,
-                _ => args.Select(a => a.Type).OrderByDescending(GpuOperationRegistry.Components).First()
-            };
+            var args = c.Arguments.Select(Expression).ToList();
+            if (noise)
+                while (args.Count < descriptor.MaxInputs)
+                {
+                    var input = descriptor.Inputs[args.Count];
+                    args.Add(New(new() { Op = GpuOp.Constant, Type = input.DefaultType, Value = input.DefaultValue.ToList() }, c.Span, false));
+                }
+            if (!GpuOperationRegistry.TryInferType(op, args.Select(a => a.Type).ToArray(), out var type))
+                throw Error("Function operand types do not match the GPU policy.", c.Span, id);
+            if (op == GpuOp.Compose && c.Name != "compose" && type != constructorType)
+                throw Error("Vector constructor component count mismatch.", c.Span, id);
             return New(new() { Op = op, Type = type, Inputs = args.Select(a => a.Id).ToList() }, c.Span);
         }
         public KernelGraph Run(GpuDslAst ast)
@@ -430,7 +424,7 @@ public static class GpuDsl
                 GpuOp.Mul => $"{args[0]} * {args[1]}",
                 GpuOp.Div => $"{args[0]} / {args[1]}",
                 GpuOp.Component => $"{args[0]}.{"xyzw"[n.ComponentIndex!.Value]}",
-                _ => $"{(n.Op == GpuOp.Compose ? ShaderEmitter.HlslType(n.Type) : n.Op.ToString().ToLowerInvariant())}({string.Join(", ", args)})"
+                _ => $"{(n.Op == GpuOp.Compose ? ShaderEmitter.HlslType(n.Type) : GpuOperationRegistry.Operations[n.Op].DslName)}({string.Join(", ", args)})"
             };
             text.Append("let ").Append(names[n.Id]).Append(" = ");
             nodeMap.Add(new(text.Length, expression.Length), n.Id);

@@ -3,7 +3,7 @@ using System.Buffers.Binary;
 using System.Text.Json.Nodes;
 using LibraGpu.Core;
 
-internal static class Program
+internal static partial class Program
 {
     private static int passed;
     private static void Check(bool value, string message)
@@ -265,10 +265,12 @@ internal static class Program
                 Check(c.SerializeLittleEndian()[0] == 'L', "Packet arrays are independent");
             });
             Run("all safe operations shader fixture", () => Check(GpuCompiler.Validate(AllOps()).Count == 0, "Fixture validates"));
+            RunExtensionTests();
             if (args.Length == 2 && args[0] == "--export")
             {
                 Directory.CreateDirectory(args[1]);
-                foreach (var (name, p) in new[] { ("sample", GpuSamples.CreateEmitter()), ("allops", AllOps()) })
+                foreach (var (name, p) in new[] { ("sample", GpuSamples.CreateEmitter()), ("allops", AllOps()),
+                    ("noise",GpuSamples.CreateNoiseProbe()),("noiseguards",GpuSamples.CreateNoiseGuardProbe()),("math",GpuSamples.CreateMathProbe()) })
                 {
                     var c = GpuCompiler.Compile(p);
                     File.WriteAllText(Path.Combine(args[1], name + ".hlsl"), c.EmitHlslInclude().Text);
@@ -278,6 +280,8 @@ internal static class Program
                     File.WriteAllText(Path.Combine(args[1], name + ".metadata.json"), c.ExportMetadataJson());
                     File.WriteAllLines(Path.Combine(args[1], name + ".entries"), c.Kernels.Select(k => k.EntryPoint));
                 }
+                ExportReferenceCases(args[1]);
+                File.WriteAllText(Path.Combine(args[1], "LibraGpuSupport.hlsl"), GpuShaderSupport.EmitHlslInclude());
             }
             Console.WriteLine($"{passed} focused GPU tests passed; shaders exported, not GPU-executed.");
             return 0;

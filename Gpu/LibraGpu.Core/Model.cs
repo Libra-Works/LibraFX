@@ -4,7 +4,17 @@ using System.Runtime.InteropServices;
 namespace LibraGpu.Core;
 
 public enum GpuType { Float = 0, Int = 1, UInt = 2, Bool = 3, Float2 = 4, Float3 = 5, Float4 = 6, Quaternion = 7 }
-public enum GpuOp { Constant = 0, ReadAttribute = 1, ReadUniform = 2, Add = 3, Sub = 4, Mul = 5, Div = 6, Sin = 7, Cos = 8, Clamp = 9, Min = 10, Max = 11, Normalize = 12, Length = 13, Compose = 14, Select = 15, Random = 16, Component = 17 }
+public enum GpuOp
+{
+    Constant = 0, ReadAttribute = 1, ReadUniform = 2, Add = 3, Sub = 4, Mul = 5, Div = 6,
+    Sin = 7, Cos = 8, Clamp = 9, Min = 10, Max = 11, Normalize = 12, Length = 13,
+    Compose = 14, Select = 15, Random = 16, Component = 17,
+    // 18 remains the version-1 packet WriteAttribute opcode.
+    Abs = 19, Floor = 20, Ceil = 21, Round = 22, Frac = 23, Mod = 24, Sign = 25,
+    Pow = 26, Sqrt = 27, Exp = 28, Log = 29, Lerp = 30, Smoothstep = 31, Remap = 32,
+    Dot = 33, Cross = 34, Distance = 35, Saturate = 36,
+    GradientNoise3D = 37, Fbm = 38, Turbulence = 39, CurlNoise = 40
+}
 public enum KernelStage { Spawn, Update }
 public enum FlowKind { Spawn, Update, RenderBillboard, RenderStartTexture, ComputePass }
 public enum ResourceKind { Texture2D, StorageTexture2D, Buffer }
@@ -116,27 +126,4 @@ public static class ParticleAbi
     public static IReadOnlyDictionary<string, GpuType> Uniforms { get; } =
         new ReadOnlyDictionary<string, GpuType>(new Dictionary<string, GpuType>
         { ["deltaTime"] = GpuType.Float, ["time"] = GpuType.Float, ["emitterPosition"] = GpuType.Float3 });
-}
-
-public enum TypePolicy { Literal, Attribute, Uniform, ArithmeticBroadcast, FloatUnary, VectorUnary, Length, Compose, Select, Random, Component }
-public sealed record GpuOperationDescriptor(GpuOp Op, int MinInputs, int MaxInputs, TypePolicy Policy);
-public static class GpuOperationRegistry
-{
-    public static IReadOnlyDictionary<GpuOp, GpuOperationDescriptor> Operations { get; } =
-        new ReadOnlyDictionary<GpuOp, GpuOperationDescriptor>(new[]
-        {
-            new GpuOperationDescriptor(GpuOp.Constant,0,0,TypePolicy.Literal),
-            new(GpuOp.ReadAttribute,0,0,TypePolicy.Attribute), new(GpuOp.ReadUniform,0,0,TypePolicy.Uniform),
-            new(GpuOp.Add,2,2,TypePolicy.ArithmeticBroadcast), new(GpuOp.Sub,2,2,TypePolicy.ArithmeticBroadcast),
-            new(GpuOp.Mul,2,2,TypePolicy.ArithmeticBroadcast), new(GpuOp.Div,2,2,TypePolicy.ArithmeticBroadcast),
-            new(GpuOp.Min,2,2,TypePolicy.ArithmeticBroadcast), new(GpuOp.Max,2,2,TypePolicy.ArithmeticBroadcast),
-            new(GpuOp.Clamp,3,3,TypePolicy.ArithmeticBroadcast),
-            new(GpuOp.Sin,1,1,TypePolicy.FloatUnary), new(GpuOp.Cos,1,1,TypePolicy.FloatUnary),
-            new(GpuOp.Normalize,1,1,TypePolicy.VectorUnary), new(GpuOp.Length,1,1,TypePolicy.Length),
-            new(GpuOp.Compose,2,4,TypePolicy.Compose), new(GpuOp.Select,3,3,TypePolicy.Select),
-            new(GpuOp.Random,1,1,TypePolicy.Random), new(GpuOp.Component,1,1,TypePolicy.Component)
-        }.ToDictionary(x => x.Op));
-    internal static int Components(GpuType t) => t switch { GpuType.Float2 => 2, GpuType.Float3 => 3, GpuType.Float4 => 4, _ => 1 };
-    internal static bool Float(GpuType t) => t is GpuType.Float or GpuType.Float2 or GpuType.Float3 or GpuType.Float4;
-    internal static bool Broadcast(GpuType a, GpuType result) => a == result || a == GpuType.Float && Float(result);
 }

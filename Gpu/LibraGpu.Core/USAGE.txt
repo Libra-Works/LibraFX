@@ -106,3 +106,106 @@ Local focused validation from repository root:
     for both fixtures/all three formats, then removes its known output files.
     -DxcPath selects a compiler; -KeepArtifacts retains shader/DXIL fixtures.
   No external uploads or GPU execution are part of these tests.
+
+Common math/noise extension (append-only opcodes, version1 packet unchanged):
+  Opcode18 remains WriteAttribute and is NOT a GpuOp.
+  19 Abs, 20 Floor, 21 Ceil, 22 Round, 23 Frac, 24 Mod, 25 Sign,
+  26 Pow, 27 Sqrt, 28 Exp, 29 Log, 30 Lerp, 31 Smoothstep, 32 Remap,
+  33 Dot, 34 Cross, 35 Distance, 36 Saturate,
+  37 GradientNoise3D, 38 Fbm, 39 Turbulence, 40 CurlNoise.
+  All new ops use aux0, destination typed as below, and no immediate payload.
+  Unary uses a; binary a/b; ternary a/b/c; fractal noise a/b/c/d.
+  None use casts or packed float encodings for UInt seeds / Int octaves.
+  Old opcode/type values, particle/uniform/packet layout and lifecycle unchanged.
+  Backends MUST reject new opcodes until implemented, not silently treat as old.
+
+Typing / operand order:
+  Abs/Sign: input/result matching numeric Float/Float2/3/4/Int/UInt.
+  Floor/Ceil/Round/Frac/Sqrt/Exp/Log/Saturate: input/result matching Float*.
+  Mod: numeric arithmetic-broadcast rules (same as old Add/Div).
+  Pow(a,b), Lerp(a,b,amount), Smoothstep(edge0,edge1,value): Float* scalar
+    broadcast, all vector dimensions must match, result same widest Float*.
+  Dot: matching Float2/3/4 a,b -> Float (no broadcasting).
+  Cross: Float3 a,b -> Float3, right-handed.
+  Distance: matching Float/Float2/3/4 a,b -> Float (no broadcasting).
+  Remap: a=value Float*, b=sourceRange Float2, c=targetRange Float2;
+    source/target x,y mean min/max. Same scalar ranges apply to every value lane.
+    This is an UNCLAMPED remap, not a five-operand instruction.
+  GradientNoise3D: a=position Float3, b=seed UInt -> Float.
+  Fbm/Turbulence/CurlNoise: a=position Float3, b=seed UInt,
+    c=octaves Int1..8, d=gain Float0..1.
+    Fbm/Turbulence -> Float; CurlNoise -> Float3.
+
+New math policies:
+  New Float math guards return zero per lane for nonfinite input/result.
+  Dot/Cross/Distance reject the entire nonfinite input vector, return zero.
+  Abs(Int MIN)=MIN (wrapping), Sign(Int/Float)=-1/0/1, Sign(UInt)=0/1.
+  Round is nearest, ties-to-even. Frac(a)=a-floor(a), including negative inputs.
+  Mod is remainder with dividend sign (not positive modulo); divisor0 ->0,
+    Int MIN%-1 ->0. UInt values remain exact 32-bit integers.
+  Pow negative base requires exact integer exponent, otherwise0; 0^0=1,
+    0 to a negative exponent=0. Nonfinite/overflow results ->0.
+  Sqrt nonpositive ->0; Log nonpositive ->0; Exp is natural exponential.
+  Lerp is not clamped. Smoothstep equal edges ->0, otherwise clamped
+    normalized value then t*t*(3-2*t); reversed edges invert the transition.
+  Saturate clamps to0..1. Remap equal source endpoints ->0.
+  Existing operations0..17 retain existing math policies.
+
+Original deterministic 3D noise (no external/proprietary implementation):
+  Gradient lattice hashes integer xyz and explicit UInt seed. Six unit-axis
+    gradients, quintic interpolation, exact analytic spatial derivatives.
+  GradientNoise3D output [-1,1]; integer lattice points have scalar value0.
+  Fbm uses frequency2^octave, amplitude gain^octave and hashed per-octave seeds.
+    Weighted sum normalized by amplitude sum, output [-1,1].
+  Turbulence is normalized weighted ABSOLUTE gradient noise, output [0,1].
+  CurlNoise computes analytic curl of three independently seeded FBM scalar
+    potentials. It is NOT normalized random vectors or a finite-difference hack.
+    Constant-per-parameters scale weightSum/(16*frequencyWeightSum) preserves
+    divergence-free behavior in the finite interior. Components lie [-1,1];
+    vector magnitude is NOT normalized to1 (conservative bound sqrt(3)).
+    The divergence-free guarantee holds for fixed spatial seed/octaves/gain;
+    varying those parameters with position is not the curl of one fixed field.
+  Domain: every coordinate finite, |coordinate| <= 1048576 for base noise.
+    Fractals require |coordinate| <=1048576/2^(octaves-1), so all octave
+    lattice conversions remain bounded/exact enough for float32 arithmetic.
+    Out-of-domain, invalid octaves/gain, or nonfinite inputs ->zero.
+    Domain cutoffs are guards, not a claimed divergence-free boundary condition.
+  Octaves are statically unrolled1..8 only; dynamic invalid counts return0.
+    Literal out-of-range octaves/gain are compile diagnostics with input spans.
+  Frequency/amplitude are composable external math; default space frequency1,
+    amplitude1, seed0, octaves4, gain0.5. Use scalar spatial frequency for
+    divergence-free uniform scaling; arbitrary anisotropic warps need care.
+
+Shared frontends / support / verification:
+  Descriptor DisplayName, DslName, Inputs (Id,DefaultType,DefaultValue,
+    OptionalInDsl,Minimum,Maximum) are immutable machine-readable palette data.
+  GpuOperationRegistry.TryInferType/TypesMatch share compiler shape rules.
+  GetDefaultInputs(op, preferredResult=Float) returns valid typed defaults.
+  Safe DSL uses lowercase names, including gradientnoise3d/fbm/turbulence/
+    curlnoise; noise optional arguments materialize as ordinary constant nodes.
+    E.g. curlnoise(@Position) -> position3, seed0u, octaves4i, gain0.5.
+  Graph -> generated DSL -> typed IR preserves mapped node IDs for new ops too.
+  Shaders\LibraGpuSupport.hlsl is the original shared portable helper include;
+    GpuShaderSupport.EmitHlslInclude() returns identical embedded source.
+    Interpreters may include/copy it, but remove duplicate old helper definitions.
+    All kernels exported by ShaderEmitter embed this support automatically.
+  GpuNoise/GpuMath are CPU numerical references for validation, NOT a CPU
+    particle runtime or automatic engine fallback.
+  CreateNoiseProbe/CreateNoiseGuardProbe/CreateMathProbe produce validation IR.
+    MathProbe has18 separate kernels; default flow references abs only. A harness
+    can select each kernel by metadata ID and reset inputs before dispatch.
+  Test --export also writes noise.reference.json/math.reference.json expected
+    buffer data, six curl-neighbor samples, tolerance/epsilon, and shared include.
+  Tests check analytic derivatives, seed variation, lattice continuity, ranges,
+    finite/domain/parameter guards and div(curl) using central differences h.001.
+    Measured CPU reference max divergence: ~4.1e-5 across25 probes.
+  Strict installed-DXC checks now cover69 entries (all formats, old+new fixtures).
+  Separate backend verification: Unity7000.0.0a16 / D3D11 / RX6700 XT passed16
+    noise cases and54 math cases across18 kernels, guard/seed/range checks and
+    curl central-difference divergence -1.0e-5. The library remains source-export;
+    runtime execution belongs to that backend, not CompiledGpuProgram itself.
+
+Implemented: all common math and four noise ops listed above; graph/DSL/packet
+  lowering, metadata and shader source. Future: clamped five-bound Fit convenience,
+  editable frequency/lacunarity inside noise op, quaternion algebra, texture
+  simulation passes. Engine runtime support/verification belongs to each backend.

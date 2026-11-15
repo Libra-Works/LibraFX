@@ -257,21 +257,17 @@ public static class GpuCompiler
                 TypePolicy.Literal => true,
                 TypePolicy.Attribute => n.Attribute is not null && attrs.TryGetValue(n.Attribute, out var t) && t == n.Type,
                 TypePolicy.Uniform => n.Uniform is not null && ParticleAbi.Uniforms.TryGetValue(n.Uniform, out var t) && t == n.Type,
-                TypePolicy.ArithmeticBroadcast => (GpuOperationRegistry.Float(n.Type) || n.Type is GpuType.Int or GpuType.UInt)
-                    && input.All(t => GpuOperationRegistry.Broadcast(t, n.Type))
-                    && input.Any(t => t == n.Type),
-                TypePolicy.FloatUnary => GpuOperationRegistry.Float(n.Type) && input[0] == n.Type,
-                TypePolicy.VectorUnary => GpuOperationRegistry.Float(n.Type) && GpuOperationRegistry.Components(n.Type) > 1 && input[0] == n.Type,
-                TypePolicy.Length => n.Type == GpuType.Float && GpuOperationRegistry.Float(input[0]) && GpuOperationRegistry.Components(input[0]) > 1,
-                TypePolicy.Compose => GpuOperationRegistry.Float(n.Type) && GpuOperationRegistry.Components(n.Type) == input.Count && input.All(t => t == GpuType.Float),
-                TypePolicy.Select => input[0] == GpuType.Bool && input[1] == n.Type && input[2] == n.Type && n.Type != GpuType.Quaternion,
-                TypePolicy.Random => input[0] == GpuType.UInt && n.Type == GpuType.Float,
                 TypePolicy.Component => n.Type == GpuType.Float && GpuOperationRegistry.Float(input[0]) &&
                     GpuOperationRegistry.Components(input[0]) > 1 && n.ComponentIndex is >= 0 &&
                     n.ComponentIndex < GpuOperationRegistry.Components(input[0]),
-                _ => false
+                _ => GpuOperationRegistry.TypesMatch(n.Op, n.Type, input)
             };
             if (!validType) Add("TypeMismatch", "Operation types or declared attribute/uniform do not match.", n.Id, "out");
+            if (op.Policy == TypePolicy.FractalNoise)
+                for (int i = 2; i < 4; i++)
+                    if (nodes.TryGetValue(n.Inputs[i], out var parameter) && parameter.Op == GpuOp.Constant && parameter.Value?.Count == 1 &&
+                        (parameter.Value[0] < op.Inputs[i].Minimum || parameter.Value[0] > op.Inputs[i].Maximum))
+                        Add("NoiseParameter", "Noise octaves must be 1–8 and gain must be 0–1.", n.Id, $"in{i}");
         }
         var written = new HashSet<string>(StringComparer.Ordinal);
         foreach (var w in k.Writes)

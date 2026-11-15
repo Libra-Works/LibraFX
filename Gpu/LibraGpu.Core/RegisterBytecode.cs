@@ -10,7 +10,11 @@ public enum GpuInstructionOpcode : uint
 {
     Constant = 0, ReadAttribute = 1, ReadUniform = 2, Add = 3, Sub = 4, Mul = 5, Div = 6,
     Sin = 7, Cos = 8, Clamp = 9, Min = 10, Max = 11, Normalize = 12, Length = 13,
-    Compose = 14, Select = 15, Random = 16, Component = 17, WriteAttribute = 18
+    Compose = 14, Select = 15, Random = 16, Component = 17, WriteAttribute = 18,
+    Abs = 19, Floor = 20, Ceil = 21, Round = 22, Frac = 23, Mod = 24, Sign = 25,
+    Pow = 26, Sqrt = 27, Exp = 28, Log = 29, Lerp = 30, Smoothstep = 31, Remap = 32,
+    Dot = 33, Cross = 34, Distance = 35, Saturate = 36,
+    GradientNoise3D = 37, Fbm = 38, Turbulence = 39, CurlNoise = 40
 }
 public enum GpuAttributeSlot : uint { Position = 0, Velocity = 1, Color = 2, Size = 3, Rotation = 4, Age = 5, Lifetime = 6, Alive = 7, Seed = 8 }
 public enum GpuUniformSlot : uint { DeltaTime = 0, Time = 1, EmitterPosition = 2 }

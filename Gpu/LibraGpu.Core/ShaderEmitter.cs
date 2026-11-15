@@ -45,25 +45,7 @@ internal static partial class ShaderEmitter
             Write($"Texture2D<float4> LibraGpuTexture_{i:D4} : register(t{b.TextureRegisterBase + i});");
         }
         if (p.Resources.Count > 0) Write($"SamplerState LibraGpuSampler : register(s{b.SamplerRegisterBase});");
-        Write("uint LibraGpuHash(uint x) { x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; return x ^ (x >> 16); }");
-        Write("float LibraGpuRandom(uint x) { return float(LibraGpuHash(x) >> 8) * (1.0f / 16777216.0f); }");
-        Write("int LibraGpuDiv(int a, int b) { if (b == 0) return 0; if (a == (-2147483647 - 1) && b == -1) return (-2147483647 - 1); return a / b; }");
-        Write("uint LibraGpuDiv(uint a, uint b) { return b == 0u ? 0u : a / b; }");
-        foreach (var t in new[] { GpuType.Float, GpuType.Float2, GpuType.Float3, GpuType.Float4 })
-        {
-            var name = HlslType(t);
-            // Unity's fast math may fold isfinite(); integer IEEE exponent tests remain observable.
-            var finiteBits = "(asuint(a) & 0x7f800000u) != 0x7f800000u";
-            Write($"bool LibraGpuIsFinite({name} a) {{ return {(t == GpuType.Float ? finiteBits : $"all({finiteBits})")}; }}");
-            if (t == GpuType.Float)
-                Write("float LibraGpuDiv(float a, float b) { return b == 0.0f ? 0.0f : a / b; }");
-            else
-            {
-                var components = Enumerable.Range(0, GpuOperationRegistry.Components(t)).Select(i => "xyzw"[i]);
-                Write($"{name} LibraGpuDiv({name} a, {name} b) {{ return {name}({string.Join(", ", components.Select(c => $"LibraGpuDiv(a.{c}, b.{c})"))}); }}");
-                Write($"{name} LibraGpuNormalize({name} a) {{ if (!LibraGpuIsFinite(a)) return ({name})0; float m = {Enumerable.Range(0, GpuOperationRegistry.Components(t)).Select(i => $"abs(a.{"xyzw"[i]})").Aggregate((a, b) => $"max({a}, {b})")}; if (!(m > 0.0f)) return ({name})0; {name} scaled = a / m; return scaled * rsqrt(dot(scaled, scaled)); }}");
-            }
-        }
+        foreach (var supportLine in GpuShaderSupport.EmitHlslInclude().Split('\n')) Write(supportLine);
         Write("bool LibraGpuFinite(LibraGpuParticle p) { return LibraGpuIsFinite(p.positionAge) && LibraGpuIsFinite(p.velocityLifetime) && LibraGpuIsFinite(p.color) && LibraGpuIsFinite(p.sizeRotation); }");
         for (int kernelIndex = 0; kernelIndex < p.Kernels.Count; kernelIndex++)
         {
@@ -143,6 +125,18 @@ internal static partial class ShaderEmitter
         string Cast(int i) => types[i] == n.Type ? a[i] :
             $"{HlslType(n.Type)}({string.Join(", ", Enumerable.Repeat(a[i], GpuOperationRegistry.Components(n.Type)))})";
         string Call(string f) => $"{f}({string.Join(", ", Enumerable.Range(0, a.Length).Select(Cast))})";
+        string RawCall(string f) => $"{f}({string.Join(", ", a)})";
+        string PerLane(string f, bool ranges = false)
+        {
+            string Scalar(char? component)
+            {
+                var args = Enumerable.Range(0, a.Length).Select(i =>
+                    component is not null && !(ranges && i > 0) && GpuOperationRegistry.Components(types[i]) > 1 ? $"{a[i]}.{component}" : a[i]);
+                return $"{f}({string.Join(", ", args)})";
+            }
+            return GpuOperationRegistry.Components(n.Type) == 1 ? Scalar(null) :
+                $"{HlslType(n.Type)}({string.Join(", ", Enumerable.Range(0, GpuOperationRegistry.Components(n.Type)).Select(i => Scalar("xyzw"[i])))})";
+        }
         return n.Op switch
         {
             GpuOp.Constant => Literal(n),
@@ -163,6 +157,28 @@ internal static partial class ShaderEmitter
             GpuOp.Select => $"({a[0]} ? {a[1]} : {a[2]})",
             GpuOp.Random => $"LibraGpuRandom({a[0]})",
             GpuOp.Component => $"{a[0]}.{"xyzw"[n.ComponentIndex!.Value]}",
+            GpuOp.Abs => PerLane("LibraGpuAbs"),
+            GpuOp.Floor => PerLane("LibraGpuFloor"),
+            GpuOp.Ceil => PerLane("LibraGpuCeil"),
+            GpuOp.Round => PerLane("LibraGpuRound"),
+            GpuOp.Frac => PerLane("LibraGpuFrac"),
+            GpuOp.Mod => PerLane("LibraGpuMod"),
+            GpuOp.Sign => PerLane("LibraGpuSign"),
+            GpuOp.Pow => PerLane("LibraGpuPow"),
+            GpuOp.Sqrt => PerLane("LibraGpuSqrt"),
+            GpuOp.Exp => PerLane("LibraGpuExp"),
+            GpuOp.Log => PerLane("LibraGpuLog"),
+            GpuOp.Lerp => PerLane("LibraGpuLerp"),
+            GpuOp.Smoothstep => PerLane("LibraGpuSmoothstep"),
+            GpuOp.Saturate => PerLane("LibraGpuSaturate"),
+            GpuOp.Remap => PerLane("LibraGpuRemap", true),
+            GpuOp.Dot => RawCall("LibraGpuDot"),
+            GpuOp.Cross => RawCall("LibraGpuCross"),
+            GpuOp.Distance => RawCall("LibraGpuDistance"),
+            GpuOp.GradientNoise3D => RawCall("LibraGpuGradientNoise3D"),
+            GpuOp.Fbm => RawCall("LibraGpuFbm"),
+            GpuOp.Turbulence => RawCall("LibraGpuTurbulence"),
+            GpuOp.CurlNoise => RawCall("LibraGpuCurlNoise"),
             _ => throw new InvalidOperationException()
         };
     }
