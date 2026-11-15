@@ -1,0 +1,49 @@
+Libra GPU particle adapter (Unity built-in render pipeline)
+
+Export both CompiledGpuProgram.EmitUnityCompute().Text as a .compute asset and
+ExportMetadataJson() as a .json asset. Import both together. The adapter does
+not load or require the .NET 10 compiler in Unity. The built-in Unity
+jsonserialize module, compute shaders and GPU instancing are required.
+
+Create a material using Libra/GPU Particle Billboard and enable GPU instancing.
+Add LibraGpuParticleRuntime and assign the compute shader, metadata, material,
+and one Texture2D binding for every exported resource ID. A null texture in a
+binding means white. Play On Enable configures and starts automatically.
+Assets/Libra GPU/Reimport generated shaders and metadata reimports selected
+assets after editing. In the Editor Configure checks the actual compute source
+SHA-256 against sourceHash; deployed builds cannot inspect source and must
+ship matching generated assets together.
+
+Code can call Configure(shader, metadata, material, bindings), StartSimulation,
+StopSimulation, ResetSimulation, Step(deltaTime, start, count, position, camera)
+or StepCircular for a wrapping spawn range. Reconfigure creates and clears new
+storage and stops automatic simulation; call StartSimulation explicitly to
+resume. A failed configuration leaves the prior program intact. Reset is the
+only in-place clear. Dispose/OnDisable release ownership. Previously submitted
+draws retain their buffers until the frame ends; on platforms supporting
+pollable async GPU fences retirement also waits for the fence. Otherwise Unity
+owns native GPU command/resource lifetime after frame submission. A pending
+retirement count is exposed for diagnostics.
+
+Particles are simulated on the GPU only. ReadbackForDiagnostics is explicit,
+synchronous and must not be used in a normal frame loop. The status
+RuntimeExecuted and dispatch/draw counts describe this runtime, not source
+export. Capacity is fixed by the export; all particles are Update candidates,
+and generated kernels skip dead particles. Flow compute dispatch order is
+preserved. Unity's queued billboard draws must be terminal: metadata placing a
+compute step after a render step is rejected. RenderStartTexture, ComputePass,
+non-Texture2D resources, other ABI versions/strides, and non-64-thread kernels
+are rejected, not silently approximated. Draw bounds are configurable; enlarge
+them if particles travel outside the default region.
+
+The supplied billboard shader is unlit, alpha blended, supports HDR tint,
+texture, per-particle size, rotation and color, and uses camera-facing quads.
+It targets the built-in pipeline; SRP-specific passes require a compatible
+material/shader using the same _LibraParticles 80-byte layout. Rendering is
+queued per camera by Unity, not a headless or CPU renderer.
+
+Tools/GpuFixtureGenerator is an isolated .NET 10 fixture exporter referencing
+Gpu/LibraGpu.Core. It emits two separately compiled shader/metadata pairs.
+Editor/Tests/LibraGpuVerification.cs contains a graphics-enabled executeMethod
+test. It performs explicit diagnostic GPU readback, 1000 zero-managed-allocation
+steps, render-target pixel checks, resource reconfiguration and error checks.
