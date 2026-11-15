@@ -62,6 +62,21 @@ int main()
     cursor.reset();
     require(!cursor.hasProgram() && cursor.validate(playback) == SequenceResult::Resync);
 
+    auto control = std::array<std::uint8_t, headerBytes + 2>{};
+    std::memcpy(control.data(), "LFXP", 4);
+    put(control.data() + 4, 1, 2);
+    put(control.data() + 6, 4, 2);
+    put(control.data() + 44, 2, 4);
+    std::memcpy(control.data() + headerBytes, "{}", 2);
+    require(decodeFrame(control.data(), control.size(), frame) == DecodeResult::Ok);
+    require(frame.kind == Kind::Control && cursor.commit(frame) == SequenceResult::Resync &&
+            !cursor.hasProgram());
+    put(control.data() + 8, 1, 8);
+    require(decodeFrame(control.data(), control.size(), frame) == DecodeResult::InvalidFrame);
+    put(control.data() + 8, 0, 8);
+    control[headerBytes] = 0xff;
+    require(decodeFrame(control.data(), control.size(), frame) == DecodeResult::InvalidFrame);
+
     require(decodeFrame(nullptr, bytes.size(), frame) == DecodeResult::InvalidFrame);
     require(decodeFrame(bytes.data(), 47, frame) == DecodeResult::InvalidFrame);
     require(decodeFrame(bytes.data(), 51, frame) == DecodeResult::InvalidFrame);

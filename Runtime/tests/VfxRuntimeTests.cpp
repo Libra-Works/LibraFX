@@ -1,4 +1,5 @@
 #include "liberafx/VfxRuntime.h"
+#include "liberafx/platform/ProfileRecorder.h"
 
 #ifdef NDEBUG
 #undef NDEBUG
@@ -82,6 +83,24 @@ auto fixture() -> std::vector<std::uint8_t>
 
 void verify(const std::vector<std::uint8_t>& bytes)
 {
+    auto profileCounters = std::array<liberafx::ProfileCounter, 16>{};
+    auto recorder = liberafx::ProfileRecorder{};
+    recorder.initialize(profileCounters.data(), profileCounters.size());
+    auto profiledProgram = liberafx::Program{};
+    assert(liberafx::Program::load(bytes.data(), bytes.size(), profiledProgram, recorder.hooks()) == liberafx::Result::Ok);
+    auto profiledWork = std::array<double, 3>{};
+    auto profiled = liberafx::Instance{};
+    assert(profiled.setProfiling(recorder.hooks(true, true)) == liberafx::Result::Ok);
+    assert(profiled.initialize(profiledProgram, profiledWork.data(), profiledWork.size()) == liberafx::Result::Ok);
+    auto profiledQueue = Queue{};
+    assert(profiled.updateAsync(7, liberafx::JobScheduler{enqueue, &profiledQueue}) == liberafx::Result::Ok);
+    assert(profiled.setProfiling({}) == liberafx::Result::Busy);
+    run(profiledQueue);
+    auto profile = liberafx::ProfileMeasurement{};
+    assert(profiled.result() == liberafx::Result::Ok);
+    assert(recorder.read(static_cast<size_t>(liberafx::ProfileEvent::Evaluate), profile) && profile.calls == 1);
+    assert(profile.exclusiveNs <= profile.inclusiveNs);
+    assert(recorder.read(static_cast<size_t>(liberafx::ProfileEvent::Count) + 2, profile) && profile.calls == 1);
     auto program = liberafx::Program{};
     assert(liberafx::Program::load(bytes.data(), bytes.size(), program) == liberafx::Result::Ok);
     assert(program.nodeCount() == 3 && program.workBytes() == 3 * sizeof(double));

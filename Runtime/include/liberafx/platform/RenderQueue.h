@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include "liberafx/platform/Profiler.h"
 
 namespace liberafx {
 
@@ -51,6 +52,13 @@ using SubmitRenderBatch = bool (*)(void* context, RenderBatch batch) noexcept;
 
 class RenderQueue final {
 public:
+    RenderResult setProfiling(const ProfilingHooks& profiling) noexcept
+    {
+        if (phase_.load(std::memory_order_acquire) != Phase::Empty) return RenderResult::Busy;
+        if (!profiling.valid()) return RenderResult::InvalidArgument;
+        profiling_ = profiling;
+        return RenderResult::Ok;
+    }
     RenderResult initialize(DrawCommand* storage, std::size_t capacity) noexcept
     {
         if (phase_.load(std::memory_order_acquire) != Phase::Empty) return RenderResult::Busy;
@@ -89,7 +97,8 @@ public:
             ? RenderResult::Ok : RenderResult::NotReady;
     }
 
-    // Invoke on the host's render thread. Borrowed buffers must be consumed/copied before the callback returns.
+    // The host consumes on its render thread, or snapshots here before enqueueing
+    // engine-owned render work. Borrowed buffers must be consumed/copied before return.
     // A rejection retains the batch for retry; no buffers may be reused until a submission succeeds.
     RenderResult submit(SubmitRenderBatch submitBatch, void* context) noexcept
     {
@@ -97,7 +106,11 @@ public:
         auto expected = Phase::Ready;
         if (!phase_.compare_exchange_strong(expected, Phase::Submitting, std::memory_order_acquire))
             return RenderResult::NotReady;
-        auto accepted = submitBatch(context, {storage_, count_});
+        auto accepted = false;
+        {
+            auto profileScope = ProfileScope(profiling_, ProfileEvent::RenderSubmit);
+            accepted = submitBatch(context, {storage_, count_});
+        }
         phase_.store(accepted ? Phase::Empty : Phase::Ready, std::memory_order_release);
         return accepted ? RenderResult::Ok : RenderResult::Rejected;
     }
@@ -132,6 +145,7 @@ private:
     std::size_t capacity_ = 0;
     std::size_t count_ = 0;
     bool initialized_ = false;
+    ProfilingHooks profiling_;
     std::atomic<Phase> phase_{Phase::Empty};
 };
 

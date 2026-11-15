@@ -2,37 +2,33 @@
 
 #include "LibraEffectAsset.h"
 #include "LibraNativeState.h"
-#include "Tasks/Task.h"
+#include "LibraTaskScheduler.h"
+#include "LibraCpuProfiler.h"
 
 struct FLibraEffectState final
 {
     TSharedPtr<const FCompiledLibraProgram, ESPMode::ThreadSafe> compiled;
     TArray<double> work;
     TArray<double> defaults;
+    FLibraCpuProfiler profiler;
     liberafx::Instance instance;
-    UE::Tasks::FTask task;
+    FLibraTaskScheduler scheduler;
     double requestedTime = 0;
     bool pending = false;
 
     ~FLibraEffectState() { Wait(); }
     void Wait()
     {
-        if (task.IsValid()) task.Wait();
-        task = UE::Tasks::FTask{};
+        scheduler.Wait();
         pending = false;
     }
 
-    static auto Enqueue(void* context, liberafx::Job job, void* data) noexcept -> bool
-    {
-        auto state = static_cast<FLibraEffectState*>(context);
-        state->task = UE::Tasks::Launch(UE_SOURCE_LOCATION, [job, data] { job(data); });
-        return true;
-    }
 };
 
 namespace {
 auto CreateLibraState(TSharedPtr<const FCompiledLibraProgram, ESPMode::ThreadSafe> compiled,
-    int64 maximumWorkingBytes, TSharedPtr<FLibraEffectState, ESPMode::NotThreadSafe>& out) -> ELibraRuntimeResult
+    int64 maximumWorkingBytes, bool profileNodes, bool profileAccessors, bool recordProfiling,
+    TSharedPtr<FLibraEffectState, ESPMode::NotThreadSafe>& out) -> ELibraRuntimeResult
 {
     if (compiled->result != liberafx::Result::Ok) return ToLibraResult(compiled->result);
     auto workBytes = compiled->program.workBytes();
@@ -45,6 +41,9 @@ auto CreateLibraState(TSharedPtr<const FCompiledLibraProgram, ESPMode::ThreadSaf
     state->compiled = MoveTemp(compiled);
     state->work.SetNumZeroed(static_cast<int32>(workBytes / sizeof(double)));
     state->defaults.SetNumZeroed(static_cast<int32>(defaultsCount));
+    state->profiler.Initialize(state->compiled->bytecode, static_cast<uint32>(state->compiled->program.nodeCount()),
+        profileNodes, recordProfiling);
+    state->instance.setProfiling(state->profiler.GetHooks(profileNodes, profileAccessors));
     auto result = state->instance.initialize(state->compiled->program, state->work.GetData(), state->work.Num(),
         state->defaults.GetData(), state->defaults.Num());
     if (result != liberafx::Result::Ok) return ToLibraResult(result);
@@ -88,7 +87,7 @@ auto ULibraEffectComponent::EnsureState() -> ELibraRuntimeResult
     if (compiled->result != liberafx::Result::Ok) return ToLibraResult(compiled->result);
     if (NativeState && NativeState->compiled == compiled) return ELibraRuntimeResult::Ok;
     if (NativeState && NativeState->pending) return ELibraRuntimeResult::Busy;
-    return CreateLibraState(MoveTemp(compiled), MaximumWorkingBytes, NativeState);
+    return CreateLibraState(MoveTemp(compiled), MaximumWorkingBytes, bProfileNodes, bProfileAccessors, bRecordProfiling, NativeState);
 }
 
 auto ULibraEffectComponent::SetEffect(ULibraEffectAsset* newEffect) -> ELibraRuntimeResult
@@ -97,7 +96,8 @@ auto ULibraEffectComponent::SetEffect(ULibraEffectAsset* newEffect) -> ELibraRun
     TSharedPtr<FLibraEffectState, ESPMode::NotThreadSafe> candidate;
     if (newEffect)
     {
-        auto result = CreateLibraState(newEffect->GetCompiledProgram(), MaximumWorkingBytes, candidate);
+        auto result = CreateLibraState(newEffect->GetCompiledProgram(), MaximumWorkingBytes,
+            bProfileNodes, bProfileAccessors, bRecordProfiling, candidate);
         if (result != ELibraRuntimeResult::Ok) return result;
     }
     Stop();
@@ -105,6 +105,36 @@ auto ULibraEffectComponent::SetEffect(ULibraEffectAsset* newEffect) -> ELibraRun
     NativeState = MoveTemp(candidate);
     LastResult = newEffect ? ELibraRuntimeResult::Ok : ELibraRuntimeResult::InvalidArgument;
     return LastResult;
+}
+
+auto ULibraEffectComponent::ConfigureProfiling(bool enableNodeScopes, bool enableAccessorScopes) -> ELibraRuntimeResult
+{
+    return ConfigureRecording(bRecordProfiling, enableNodeScopes, enableAccessorScopes);
+}
+
+auto ULibraEffectComponent::ConfigureRecording(bool enabled, bool enableNodeScopes, bool enableAccessorScopes) -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    if (NativeState)
+    {
+        if (NativeState->pending) return ELibraRuntimeResult::Busy;
+        auto result = NativeState->instance.setProfiling(NativeState->profiler.GetHooks(enableNodeScopes, enableAccessorScopes));
+        if (result != liberafx::Result::Ok) return ToLibraResult(result);
+        NativeState->profiler.Initialize(NativeState->compiled->bytecode,
+            static_cast<uint32>(NativeState->compiled->program.nodeCount()), enableNodeScopes, enabled);
+    }
+    bProfileNodes = enableNodeScopes;
+    bProfileAccessors = enableAccessorScopes;
+    bRecordProfiling = enabled;
+    return ELibraRuntimeResult::Ok;
+}
+
+bool ULibraEffectComponent::CaptureProfiling(TArray<FLibraProfileMeasurement>& measurements, uint64& dropped) const
+{
+    check(IsInGameThread());
+    measurements.Reset();
+    dropped = 0;
+    return NativeState && NativeState->profiler.Snapshot(measurements, dropped);
 }
 
 auto ULibraEffectComponent::Play(bool bRestart) -> ELibraRuntimeResult
@@ -161,7 +191,7 @@ auto ULibraEffectComponent::QueueEvaluation(double timeSeconds) -> ELibraRuntime
     auto& state = *NativeState;
     if (state.pending) return LastResult = ELibraRuntimeResult::Busy;
     state.requestedTime = timeSeconds;
-    auto nativeResult = state.instance.updateAsync(timeSeconds, &FLibraEffectState::Enqueue, &state);
+    auto nativeResult = state.instance.updateAsync(timeSeconds, state.scheduler.GetScheduler());
     LastResult = ToLibraResult(nativeResult);
     if (nativeResult == liberafx::Result::Ok)
     {
@@ -191,7 +221,7 @@ void ULibraEffectComponent::TickComponent(float deltaTime, ELevelTick tickType, 
     }
     if (NativeState && NativeState->pending)
     {
-        if (!NativeState->task.IsCompleted()) return;
+        if (!NativeState->scheduler.IsCompleted()) return;
         auto result = ToLibraResult(NativeState->instance.result());
         auto completedTime = NativeState->requestedTime;
         NativeState->Wait();

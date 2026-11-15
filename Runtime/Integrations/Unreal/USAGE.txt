@@ -6,7 +6,9 @@ Scope
   This is not a GPU particle renderer. Viewer/rendering integration is separate.
   Source targets UE 5.7 and later. UHT and the Win64 Development Editor build
   succeeded using the local UE 5.7.4 SDK and MyProject28 linked installation.
-  UE automation and live editor interoperability have not been run.
+  Engine task/render snapshot and independent recorder automation passed locally.
+  Live MCP-to-UE scalar (20) and Vector4 ([11,22,33,44]) results, profile reception,
+  and the editor profiler's live rows, native values and start/stop were verified.
   The editor WebSocket transport targets Win64, Linux (including ARM64), and
   macOS with UE's libWebSockets/OpenSSL/SSL libraries. Other targets fail closed.
   DNS uses UE's platform socket subsystem; TLS pinning remains connection-local.
@@ -93,6 +95,49 @@ Project-native nodes
   Numeric input defaults are exposed to callbacks; arbitrary inspector property
   serialization, cyclic signal graphs and multi-target signal outputs are not.
 
+Profiling and native feedback
+  Core ProfilingHooks are optional. Empty hooks perform no clock reads or
+  per-scope allocations. ProfileRecorder provides engine-independent cumulative
+  call counts, inclusive/exclusive time and minimum/maximum in nanoseconds.
+  ConfigureRecording enables UE's independent recorder; ConfigureProfiling
+  controls optional node/accessor detail. Reconfigure only while evaluation and
+  signal dispatch are idle. UE Insights is an optional parallel sink, not required.
+  Connected peers explicitly advertise engine, role and capabilities. Editor,
+  runtime and viewer roles do not imply asset catalog or profiling support.
+  Protocol 3 peers advertising profiling/values accept bounded LFXP Control frames
+  and send complete paged profile snapshots and bound native values back to the
+  editor. No recursive graph walking is used to retrieve watched values.
+  View > Native preview profiler displays complete snapshots and native returned
+  values, with explicit ns-to-ms conversion. Partial pages are not complete data.
+  MCP exposes libera_preview_clients, libera_preview_telemetry,
+  libera_preview_profile_control, libera_preview_watch_values and the undoable
+  libera_graph_set_parameter. Controls being sent is not an engine acknowledgement.
+  Capture intervals are 100..5000 ms. Up to 64 node UUIDs may be watched.
+  Asset catalog/metadata exchange is not implemented by these capabilities.
+
+Engine task and rendering boundaries
+  FLibraTaskScheduler owns UE Tasks, prevents replacing running jobs and joins
+  before Core instance storage is released. Submit/wait belong to one owner thread.
+  FLibraRenderDispatcher snapshots borrowed command/vertex/index buffers on GT,
+  then calls ILibraRenderBackend on UE's render thread. Oversized snapshots leave
+  Core buffers intact. Completion means backend submission, not GPU completion.
+  The default snapshot budget is 16 MiB. Mesh/material resolution and a concrete
+  GPU particle backend remain separate work; this interface is not a renderer.
+  Vector arithmetic uses double-precision SSE2 on x86/x64, NEON on ARM64 and a
+  scalar fallback, preserving active lanes and interpreter error/write order.
+  MSVC and ClangCL native tests passed. ARM64 execution remains unverified.
+  Native CMake LIBERAFX_MATH_FORCE_SCALAR disables SIMD for fallback validation.
+
+Explicit local automation (disabled by default)
+  LIBERAFX_MCP_DEBUG=1 enables the editor's current-user-only named pipe
+  LiberaFx.Editor.Debug.<PID> for local credential bootstrap. Credentials remain
+  in process memory; never persist them in scripts, logs, source or config.
+  LIBRA_AUTOMATION_PREVIEW=1 enables an independent transient EditorPreview world
+  in the UE editor module, without modifying the user's level or requiring PIE.
+  Set LIBRA_PREVIEW_PORT, LIBRA_PREVIEW_TOKEN and LIBRA_PREVIEW_FINGERPRINT in the
+  launched UE child's environment using the paired editor session. Host is local.
+  These opt-ins are for local validation, not production asset discovery.
+
 Optional example project plugin
   From this repository, copy Runtime\Integrations\Unreal\Examples\LibraProjectNodes
   into your project's Plugins directory.
@@ -106,9 +151,11 @@ Optional example project plugin
 Validation sources
   Tests\Verify-UnrealPluginPackaging.ps1 exercises isolated source installation,
   updates, local/unowned edit protection, obsolete cleanup and Core wrappers.
-  Native CMake has runtime, render-queue and live-preview codec test targets.
+  Native CMake has runtime, render-queue, live-preview codec, SIMD and recorder tests.
   Managed smoke tests include custom-node compilation and protocol-v3 WSS cases.
   UE automation includes asset ownership, GUID identity and transport checks.
-  UE automation sources compile in the Win64 Editor build; execution remains
-  pending. Standalone native/managed tests and actual UE/editor interoperability
-  still require separate validation.
+  Tests\CommentImageSmokeTests.csproj --runtime-integration selects focused managed
+  protocol, telemetry UI and MCP parameter checks. These passed locally.
+  Libra.Runtime.Adapters and Libra.Runtime.Profiling.IndependentRecording passed
+  in UE 5.7.4 Win64. Other automation cases and Linux/macOS execution remain
+  separate validation requirements.

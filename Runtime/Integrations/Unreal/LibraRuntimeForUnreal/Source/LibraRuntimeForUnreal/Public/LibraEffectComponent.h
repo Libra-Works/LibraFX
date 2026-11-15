@@ -4,6 +4,7 @@
 #include "Components/ActorComponent.h"
 #include "LibraRuntimeTypes.h"
 #include "LibraRuntimeHandles.h"
+#include "LibraProfileMeasurement.h"
 #include "LibraEffectComponent.generated.h"
 
 class ULibraEffectAsset;
@@ -29,6 +30,23 @@ public:
 
     UPROPERTY(EditAnywhere, Category = "Libra Runtime", meta = (ClampMin = "1024"))
     int64 MaximumWorkingBytes = 16 * 1024 * 1024;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Profiling")
+    bool bProfileNodes = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Profiling")
+    bool bProfileAccessors = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Profiling")
+    bool bRecordProfiling = false;
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Profiling")
+    ELibraRuntimeResult ConfigureProfiling(bool enableNodeScopes, bool enableAccessorScopes);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Profiling")
+    ELibraRuntimeResult ConfigureRecording(bool enabled, bool enableNodeScopes = true, bool enableAccessorScopes = false);
+
+    bool CaptureProfiling(TArray<FLibraProfileMeasurement>& measurements, uint64& dropped) const;
 
     UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime")
     double TimeSeconds = 0;

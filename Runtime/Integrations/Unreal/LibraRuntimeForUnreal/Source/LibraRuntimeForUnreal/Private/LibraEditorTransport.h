@@ -25,6 +25,7 @@ public:
 	bool IsConnected() const;
 	bool TryReceive(TArray<uint8>& OutMessage);
 	void RequestResync();
+	bool QueueText(const FString& Message);
 	FString GetStatus() const;
 
 private:

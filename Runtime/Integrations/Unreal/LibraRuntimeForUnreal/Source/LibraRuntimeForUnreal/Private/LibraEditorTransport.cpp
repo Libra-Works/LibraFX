@@ -85,6 +85,8 @@ struct FLibraEditorTransport::FImpl
 	mutable std::mutex Mutex;
 	std::condition_variable StateChanged;
 	std::deque<TArray<uint8>> ReceiveQueue;
+	std::deque<TArray<uint8>> SendQueue;
+	size_t SendBytes = 0;
 	size_t QueuedBytes = 0;
 	FString Status = TEXT("Stopped");
 	std::atomic<bool> StopRequested{false};
@@ -149,6 +151,12 @@ struct FLibraEditorTransport::FImpl
 			lws_cancel_service(ActiveContext);
 		}
 #endif
+	}
+
+	bool HasOutgoing()
+	{
+		auto lock = std::lock_guard<std::mutex>(Mutex);
+		return !SendQueue.empty();
 	}
 
 	static bool IsHex(TCHAR Character)
@@ -470,20 +478,27 @@ struct FLibraEditorTransport::FImpl
 				return -1;
 			}
 
-			if (!State->ResyncRequested.exchange(false))
-			{
-				return 0;
-			}
-
 			static constexpr char ResyncMessage[] = "{\"type\":\"resync\"}";
-			alignas(std::max_align_t) std::array<unsigned char, LWS_PRE + sizeof(ResyncMessage) - 1> Buffer{};
-			std::memcpy(Buffer.data() + LWS_PRE, ResyncMessage, sizeof(ResyncMessage) - 1);
-			const int Written = lws_write(Wsi, Buffer.data() + LWS_PRE, sizeof(ResyncMessage) - 1, LWS_WRITE_TEXT);
-			if (Written != static_cast<int>(sizeof(ResyncMessage) - 1))
+			auto message = TArray<uint8>{};
+			if (State->ResyncRequested.exchange(false))
+				message.Append(reinterpret_cast<const uint8*>(ResyncMessage), sizeof(ResyncMessage) - 1);
+			else
 			{
-				State->SetFailure(TEXT("Could not send resync request"));
+				auto lock = std::lock_guard<std::mutex>(State->Mutex);
+				if (State->SendQueue.empty()) return 0;
+				message = MoveTemp(State->SendQueue.front());
+				State->SendBytes -= message.Num();
+				State->SendQueue.pop_front();
+			}
+			auto buffer = std::vector<unsigned char>(LWS_PRE + message.Num());
+			std::memcpy(buffer.data() + LWS_PRE, message.GetData(), message.Num());
+			auto written = lws_write(Wsi, buffer.data() + LWS_PRE, message.Num(), LWS_WRITE_TEXT);
+			if (written != message.Num())
+			{
+				State->SetFailure(TEXT("Could not send preview feedback"));
 				return -1;
 			}
+			if (State->HasOutgoing()) lws_callback_on_writable(Wsi);
 			return 0;
 		}
 		case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
@@ -608,7 +623,7 @@ struct FLibraEditorTransport::FImpl
 					lws_callback_on_writable(WebSocket);
 				}
 			}
-			else if (ResyncRequested.load() && Connected.load() && WebSocket != nullptr)
+			else if ((ResyncRequested.load() || HasOutgoing()) && Connected.load() && WebSocket != nullptr)
 			{
 				lws_callback_on_writable(WebSocket);
 			}
@@ -701,6 +716,8 @@ bool FLibraEditorTransport::Start(const FLibraEditorTransportSettings& Settings,
 	{
 		std::lock_guard<std::mutex> Lock(Impl->Mutex);
 		Impl->ReceiveQueue.clear();
+		Impl->SendQueue.clear();
+		Impl->SendBytes = 0;
 		Impl->QueuedBytes = 0;
 		Impl->Status = TEXT("Connecting");
 	}
@@ -786,6 +803,23 @@ void FLibraEditorTransport::RequestResync()
 		Impl->ResyncRequested.store(true);
 		Impl->CancelService();
 	}
+}
+
+bool FLibraEditorTransport::QueueText(const FString& Message)
+{
+	if (!Impl || !Impl->Connected.load()) return false;
+	auto encoded = FTCHARToUTF8(*Message);
+	if (encoded.Length() == 0 || encoded.Length() > 128 * 1024) return false;
+	{
+		auto lock = std::lock_guard<std::mutex>(Impl->Mutex);
+		if (Impl->SendQueue.size() >= 32 || Impl->SendBytes + encoded.Length() > 2 * 1024 * 1024) return false;
+		auto bytes = TArray<uint8>{};
+		bytes.Append(reinterpret_cast<const uint8*>(encoded.Get()), encoded.Length());
+		Impl->SendBytes += bytes.Num();
+		Impl->SendQueue.emplace_back(MoveTemp(bytes));
+	}
+	Impl->CancelService();
+	return true;
 }
 
 FString FLibraEditorTransport::GetStatus() const

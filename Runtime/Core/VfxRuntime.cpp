@@ -1,4 +1,5 @@
 #include "liberafx/VfxRuntime.h"
+#include "liberafx/math/VectorMath.h"
 
 #include <array>
 #include <cmath>
@@ -206,8 +207,11 @@ auto rangesOverlap(const void* first, std::size_t firstSize, const void* second,
 
 }
 
-auto Program::load(const void* bytes, std::size_t size, Program& out) noexcept -> Result
+auto Program::load(const void* bytes, std::size_t size, Program& out,
+                   const ProfilingHooks& profiling) noexcept -> Result
 {
+    if (!profiling.valid()) return Result::InvalidArgument;
+    auto profileScope = ProfileScope(profiling, ProfileEvent::Load);
     if (bytes == nullptr || size < legacyHeaderSize) return Result::InvalidArgument;
     auto data = static_cast<const std::uint8_t*>(bytes);
     if (std::memcmp(data, "LFXB", 4) != 0) return Result::InvalidBinary;
@@ -274,13 +278,15 @@ auto Program::load(const void* bytes, std::size_t size, Program& out) noexcept -
 
 auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescriptor* registry,
                    std::size_t registryCount, CustomNodeBinding* bindings,
-                   std::size_t bindingCount, Program& out) noexcept -> Result
+                   std::size_t bindingCount, Program& out, const ProfilingHooks& profiling) noexcept -> Result
 {
+    if (!profiling.valid()) return Result::InvalidArgument;
     if (bytes == nullptr || size < legacyHeaderSize) return Result::InvalidArgument;
     auto data = static_cast<const std::uint8_t*>(bytes);
     if (std::memcmp(data, "LFXB", 4) != 0) return Result::InvalidBinary;
     auto version = read16(data + 4);
-    if (version != 3) return load(bytes, size, out);
+    if (version != 3) return load(bytes, size, out, profiling);
+    auto profileScope = ProfileScope(profiling, ProfileEvent::Load);
     if (size < typedHeaderSize) return Result::InvalidBinary;
     if (data[6] != 1) return Result::UnsupportedBinary;
     if (data[7] != 0 || read16(data + 12) != customInstructionSize || read16(data + 14) != 0)
@@ -492,6 +498,7 @@ auto Instance::initialize(const Program& program, double* work, std::size_t work
 {
     if (dispatching_) return Result::Busy;
     if (phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
+    auto profileScope = ProfileScope(profiling_, ProfileEvent::Initialize);
     auto workRequiredCount = (program.workBytes() + sizeof(double) - 1) / sizeof(double);
     auto defaultsRequiredCount = program.parameterValueCount();
     if (program.bytes_ == nullptr || (workRequiredCount > 0 && work == nullptr))
@@ -567,9 +574,18 @@ Instance::~Instance()
     cleanupStates();
 }
 
+auto Instance::setProfiling(const ProfilingHooks& profiling) noexcept -> Result
+{
+    if (dispatching_ || phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
+    if (!profiling.valid()) return Result::InvalidArgument;
+    profiling_ = profiling;
+    return Result::Ok;
+}
+
 void Instance::cleanupStates() noexcept
 {
     if (program_ == nullptr || program_->version_ != 3 || work_ == nullptr) return;
+    auto profileScope = ProfileScope(profiling_, ProfileEvent::Cleanup);
     for (auto index = initializedStateCount_; index > 0; --index)
     {
         auto nodeIndex = index - 1;
@@ -584,6 +600,7 @@ void Instance::cleanupStates() noexcept
 
 auto Instance::bindValue(const std::uint8_t nodeId[16], ValueHandle& out) const noexcept -> Result
 {
+    auto profileScope = ProfileScope(profiling_, ProfileEvent::Bind, noProfileNode, profiling_.accessors);
     if (program_ == nullptr || nodeId == nullptr) return Result::InvalidArgument;
     for (auto index = std::uint32_t{0}; index < program_->nodeCount_; ++index)
         if (std::memcmp(instruction(program_->bytes_, program_->version_, index), nodeId, 16) == 0)
@@ -601,6 +618,7 @@ auto Instance::bindValue(const std::uint8_t nodeId[16], ValueHandle& out) const 
 auto Instance::bindParameter(const std::uint8_t nodeId[16], std::uint8_t inputSlot,
                              std::uint8_t component, ParameterHandle& out) const noexcept -> Result
 {
+    auto profileScope = ProfileScope(profiling_, ProfileEvent::Bind, noProfileNode, profiling_.accessors);
     if (program_ == nullptr || nodeId == nullptr) return Result::InvalidArgument;
     for (auto index = std::uint32_t{0}; index < program_->nodeCount_; ++index)
         if (std::memcmp(instruction(program_->bytes_, program_->version_, index), nodeId, 16) == 0)
@@ -615,8 +633,8 @@ auto Instance::bindParameter(const std::uint8_t nodeId[16], std::uint8_t inputSl
                 auto opcode = current[16];
                 auto width = program_->version_ == 1 ? 1u : current[17];
                 if (program_->version_ == 1)
-                    laneCount = inputSlot == 0 && (opcode == 1 || (opcode >= 3 && opcode <= 6)) ||
-                        inputSlot == 1 && opcode >= 3 && opcode <= 6 ? 1 : 0;
+                    laneCount = (inputSlot == 0 && (opcode == 1 || (opcode >= 3 && opcode <= 6))) ||
+                        (inputSlot == 1 && opcode >= 3 && opcode <= 6) ? 1 : 0;
                 else if (inputSlot == 0)
                 {
                     if (opcode == 1 || (opcode >= 7 && opcode <= 10) ||
@@ -635,6 +653,7 @@ auto Instance::bindParameter(const std::uint8_t nodeId[16], std::uint8_t inputSl
 
 auto Instance::bindSignal(const std::uint8_t nodeId[16], SignalHandle& out) const noexcept -> Result
 {
+    auto profileScope = ProfileScope(profiling_, ProfileEvent::Bind, noProfileNode, profiling_.accessors);
     if (program_ == nullptr || program_->version_ != 3 || nodeId == nullptr)
         return Result::InvalidArgument;
     for (auto index = std::uint32_t{0}; index < program_->nodeCount_; ++index)
@@ -650,6 +669,7 @@ auto Instance::bindSignal(const std::uint8_t nodeId[16], SignalHandle& out) cons
 
 auto Instance::value(const ValueHandle& handle, double out[4]) const noexcept -> Result
 {
+    auto profileScope = ProfileScope(profiling_, ProfileEvent::ReadValue, handle.nodeIndex, profiling_.accessors);
     if (out == nullptr) return Result::InvalidArgument;
     if (program_ == nullptr || handle.programIdentity != program_ || handle.generation != generation_ ||
         handle.programGeneration != program_->generation_ ||
@@ -671,6 +691,7 @@ auto Instance::value(const ValueHandle& handle, double out[4]) const noexcept ->
 
 auto Instance::parameter(const ParameterHandle& handle, double& out) const noexcept -> Result
 {
+    auto profileScope = ProfileScope(profiling_, ProfileEvent::ReadParameter, handle.nodeIndex, profiling_.accessors);
     if (phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
     if (program_ == nullptr || handle.programIdentity != program_ || handle.generation != generation_ ||
         handle.programGeneration != program_->generation_ || handle.nodeIndex >= program_->nodeCount_)
@@ -723,6 +744,7 @@ auto Instance::parameter(const ParameterHandle& handle, double& out) const noexc
 
 auto Instance::setParameter(const ParameterHandle& handle, double value) noexcept -> Result
 {
+    auto profileScope = ProfileScope(profiling_, ProfileEvent::WriteParameter, handle.nodeIndex, profiling_.accessors);
     if (dispatching_) return Result::Busy;
     if (phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
     if (program_ == nullptr || defaults_ == nullptr || handle.programIdentity != program_ ||
@@ -775,6 +797,7 @@ auto Instance::updateAsync(double time, Enqueue enqueue, void* queueContext) noe
 {
     if (dispatching_) return Result::Busy;
     if (program_ == nullptr || enqueue == nullptr || !std::isfinite(time)) return Result::InvalidArgument;
+    auto profileScope = ProfileScope(profiling_, ProfileEvent::Schedule);
     auto phase = phase_.load(std::memory_order_acquire);
     for (;;)
     {
@@ -793,6 +816,7 @@ auto Instance::updateAsync(double time, Enqueue enqueue, void* queueContext) noe
 auto Instance::setParameter(const std::uint8_t nodeId[16], std::uint8_t inputSlot,
                             std::uint8_t component, double value) noexcept -> Result
 {
+    auto profileScope = ProfileScope(profiling_, ProfileEvent::WriteParameter, noProfileNode, profiling_.accessors);
     if (dispatching_) return Result::Busy;
     if (phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
     if (program_ == nullptr || defaults_ == nullptr || nodeId == nullptr ||
@@ -877,6 +901,7 @@ auto Instance::value(const std::uint8_t nodeId[16], double& out) const noexcept 
 auto Instance::valueComponents(const std::uint8_t nodeId[16], double out[4],
                               std::uint8_t& componentCount) const noexcept -> Result
 {
+    auto profileScope = ProfileScope(profiling_, ProfileEvent::ReadValue, noProfileNode, profiling_.accessors);
     if (nodeId == nullptr || out == nullptr) return Result::InvalidArgument;
     auto status = result();
     if (status != Result::Ok) return status;
@@ -922,6 +947,7 @@ auto Instance::dispatchSignal(const SignalHandle& entry, double time,
     auto index = entry.nodeIndex;
     if (instruction(program_->bytes_, 3, index)[16] != customSignalOpcode)
         return Result::InvalidValueType;
+    auto profileScope = ProfileScope(profiling_, ProfileEvent::Signal);
 
     struct DispatchScope final {
         bool& active;
@@ -934,6 +960,7 @@ auto Instance::dispatchSignal(const SignalHandle& entry, double time,
     {
         if (++visited > maxInstructions) return Result::InstructionBudgetExceeded;
         auto current = instruction(program_->bytes_, 3, index);
+        auto nodeScope = ProfileScope(profiling_, ProfileEvent::Node, index, profiling_.nodes);
         auto descriptor = program_->bindings_[index].descriptor;
         if (descriptor == nullptr || descriptor->execution != CustomExecution::Signal)
             return Result::UnknownCustomNode;
@@ -978,11 +1005,13 @@ void Instance::run(void* context) noexcept
 
 auto Instance::evaluate() noexcept -> Result
 {
+    auto profileScope = ProfileScope(profiling_, ProfileEvent::Evaluate);
     if (program_->version_ == 1)
     {
         for (auto index = std::uint32_t{0}; index < program_->nodeCount_; ++index)
         {
             auto current = instruction(program_->bytes_, 1, index);
+            auto nodeScope = ProfileScope(profiling_, ProfileEvent::Node, index, profiling_.nodes);
             auto aIndex = read32(current + 20);
             auto bIndex = read32(current + 24);
             auto a = aIndex == noInput ?
@@ -1012,6 +1041,8 @@ auto Instance::evaluate() noexcept -> Result
     {
         auto current = instruction(program_->bytes_, program_->version_, index);
         auto opcode = current[16];
+        auto nodeScope = ProfileScope(profiling_, ProfileEvent::Node, index,
+            profiling_.nodes && opcode != customSignalOpcode);
         if (program_->version_ == 3 && opcode >= customParameterOpcode)
         {
             if (opcode == customSignalOpcode) continue;
@@ -1072,6 +1103,32 @@ auto Instance::evaluate() noexcept -> Result
         }
         else if (opcode >= 3 && opcode <= 22)
         {
+            if (outputWidth > 1)
+            {
+                auto aValues = std::array<double, 4>{};
+                auto bValues = std::array<double, 4>{};
+                auto parameterStride = program_->version_ == 3 ? 16u : 8u;
+                auto a = aIndex != noInput ? work_ + aIndex * 4 + current[21] :
+                    defaults_ != nullptr ? defaults_ + index * parameterStride : nullptr;
+                auto b = bIndex != noInput ? work_ + bIndex * 4 + current[22] :
+                    defaults_ != nullptr ? defaults_ + index * parameterStride + 4 : nullptr;
+                if (a == nullptr)
+                {
+                    for (auto lane = 0u; lane < outputWidth; ++lane) aValues[lane] = valueA(lane);
+                    a = aValues.data();
+                }
+                if (b == nullptr)
+                {
+                    for (auto lane = 0u; lane < outputWidth; ++lane) bValues[lane] = valueB(lane);
+                    b = bValues.data();
+                }
+                auto status = math::arithmetic(work_ + base, a, b, outputWidth,
+                    static_cast<math::Arithmetic>((opcode - 3) % 4));
+                if (status == math::ArithmeticResult::DivideByZero) return Result::DivideByZero;
+                if (status == math::ArithmeticResult::NonFinite) return Result::NonFinite;
+                if (status != math::ArithmeticResult::Ok) return Result::InvalidArgument;
+                continue;
+            }
             for (auto lane = 0u; lane < outputWidth; ++lane)
             {
                 auto a = valueA(lane);

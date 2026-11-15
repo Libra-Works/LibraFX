@@ -58,11 +58,13 @@ auto decodeFrame(const void* data, std::size_t size, FrameView& out) noexcept ->
     auto rate = readDouble(p + 32);
     auto flags = read32(p + 40);
     auto base = read64(p + 16);
-    if (kind < 1 || kind > 3 || length != size - headerBytes || (flags & ~3u) != 0 ||
+    if (kind < 1 || kind > 4 || length != size - headerBytes || (flags & ~3u) != 0 ||
         !std::isfinite(time) || !std::isfinite(rate) || rate < 0) return DecodeResult::InvalidFrame;
     if ((kind == 1 && (base != 0 || length == 0 || length > maxProgramBytes)) ||
         (kind == 2 && length != 0) ||
-        (kind == 3 && (base != 0 || length > maxErrorBytes || !validUtf8(p + headerBytes, length))))
+        (kind == 3 && (base != 0 || length > maxErrorBytes || !validUtf8(p + headerBytes, length))) ||
+        (kind == 4 && (read64(p + 8) != 0 || base != 0 || time != 0 || rate != 0 ||
+            flags != 0 || length == 0 || length > maxErrorBytes || !validUtf8(p + headerBytes, length))))
         return DecodeResult::InvalidFrame;
     out = {static_cast<Kind>(kind), read64(p + 8), base, time, rate, flags, p + headerBytes, length};
     return DecodeResult::Ok;
@@ -70,6 +72,7 @@ auto decodeFrame(const void* data, std::size_t size, FrameView& out) noexcept ->
 
 auto SequenceCursor::validate(const FrameView& frame) const noexcept -> SequenceResult
 {
+    if (frame.kind == Kind::Control) return SequenceResult::Resync;
     if (hasSequence_ && frame.sequence < sequence_) return SequenceResult::Stale;
     if (frame.kind == Kind::Playback) {
         if (!hasProgram_ || !hasSequence_ || frame.baseSequence != sequence_ ||

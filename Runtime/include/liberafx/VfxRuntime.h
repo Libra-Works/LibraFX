@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include "liberafx/platform/JobScheduler.h"
+#include "liberafx/platform/Profiler.h"
 
 #ifndef LIBRA_RUNTIME_CORE_API
 #define LIBRA_RUNTIME_CORE_API
@@ -102,12 +103,14 @@ struct SignalHandle final {
 class LIBRA_RUNTIME_CORE_API Program final {
 public:
     // The program and its bytecode must remain immutable and alive while instances use them.
-    static Result load(const void* bytes, std::size_t size, Program& out) noexcept;
+    static Result load(const void* bytes, std::size_t size, Program& out,
+                       const ProfilingHooks& profiling = {}) noexcept;
     // V3 requires caller-owned bindings (one entry per instruction) and a live registry.
     // The bytecode, descriptor array and binding storage must outlive this Program and its Instances.
     static Result load(const void* bytes, std::size_t size,
                        const CustomNodeDescriptor* registry, std::size_t registryCount,
-                       CustomNodeBinding* bindings, std::size_t bindingCount, Program& out) noexcept;
+                       CustomNodeBinding* bindings, std::size_t bindingCount, Program& out,
+                       const ProfilingHooks& profiling = {}) noexcept;
     std::size_t nodeCount() const noexcept { return nodeCount_; }
     std::size_t workBytes() const noexcept;
     std::size_t parameterValueCount() const noexcept;
@@ -127,6 +130,9 @@ private:
 class LIBRA_RUNTIME_CORE_API Instance final {
 public:
     ~Instance();
+    // Owner thread only, not during evaluation/signal dispatch. Context and
+    // callback code must outlive this Instance, including native state cleanup.
+    Result setProfiling(const ProfilingHooks& profiling) noexcept;
     // Call control/read methods from one owner thread; the scheduler runs parameter callbacks on a worker.
     // Work is owned by the caller and must remain alive until all jobs complete.
     Result initialize(const Program& program, double* work, std::size_t workCount) noexcept;
@@ -141,6 +147,10 @@ public:
     Result parameter(const ParameterHandle& handle, double& out) const noexcept;
     Result setParameter(const ParameterHandle& handle, double value) noexcept;
     Result updateAsync(double time, Enqueue enqueue, void* queueContext) noexcept;
+    Result updateAsync(double time, const JobScheduler& scheduler) noexcept
+    {
+        return updateAsync(time, scheduler.enqueue, scheduler.context);
+    }
     // Legacy slots are A/B (0/1); v3 custom slots index declared numeric input ports (0..3).
     Result setParameter(const std::uint8_t nodeId[16], std::uint8_t inputSlot,
                         std::uint8_t component, double value) noexcept;
@@ -170,6 +180,7 @@ private:
     std::size_t initializedStateCount_ = 0;
     bool dispatching_ = false;
     Result result_ = Result::NotReady;
+    ProfilingHooks profiling_;
     std::atomic<Phase> phase_{Phase::Idle};
 };
 

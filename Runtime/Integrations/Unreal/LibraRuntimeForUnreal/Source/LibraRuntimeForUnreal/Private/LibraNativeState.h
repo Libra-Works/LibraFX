@@ -6,6 +6,7 @@
 #include "LibraRuntimeTypes.h"
 #include "LibraNativeNodesInternal.h"
 #include "liberafx/VfxRuntime.h"
+#include "LibraCpuProfiler.h"
 
 inline auto ToLibraResult(liberafx::Result result) -> ELibraRuntimeResult
 {
@@ -36,13 +37,14 @@ public:
     explicit FCompiledLibraProgram(TConstArrayView<uint8> bytes)
         : registry(LibraNativeNodeSnapshot())
     {
+        auto loadProfiler = FLibraCpuProfiler{};
         if (bytes.Num() <= 0 || bytes.Num() > ULibraEffectAsset::MaximumBytecodeBytes)
         {
             result = liberafx::Result::InvalidBinary;
             return;
         }
         bytecode.Append(bytes.GetData(), bytes.Num());
-        result = liberafx::Program::load(bytecode.GetData(), bytecode.Num(), program);
+        result = liberafx::Program::load(bytecode.GetData(), bytecode.Num(), program, loadProfiler.GetHooks());
         if (bytecode.Num() >= 16 && bytecode[4] == 3 && bytecode[5] == 0)
         {
             auto count = uint32{bytecode[8]} | (uint32{bytecode[9]} << 8) |
@@ -55,7 +57,7 @@ public:
             bindings.SetNum(static_cast<int32>(count));
             result = liberafx::Program::load(bytecode.GetData(), bytecode.Num(),
                 registry->descriptors.GetData(), registry->descriptors.Num(),
-                bindings.GetData(), bindings.Num(), program);
+                bindings.GetData(), bindings.Num(), program, loadProfiler.GetHooks());
         }
     }
 
