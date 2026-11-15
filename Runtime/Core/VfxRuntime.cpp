@@ -978,6 +978,22 @@ auto Instance::valueComponents(const std::uint8_t nodeId[16], double out[4],
     return Result::NodeNotFound;
 }
 
+auto Instance::setUnconnectedParameter(const std::uint8_t nodeId[16], std::uint8_t inputSlot,
+                                       std::uint8_t component, double value) noexcept -> Result
+{
+    if (program_ == nullptr || inputSlot > (program_->version_ == 3 ? 3 : 1))
+        return Result::InvalidArgument;
+    auto handle = ParameterHandle{};
+    auto status = bindParameter(nodeId, inputSlot, component, handle);
+    if (status != Result::Ok) return status;
+    auto current = instruction(program_->bytes_, program_->version_, handle.nodeIndex);
+    auto offset = program_->version_ == 1 ? 20 + inputSlot * 4 :
+        program_->version_ == 3 && current[16] >= customParameterOpcode ?
+            48 + inputSlot * 8 : 24 + inputSlot * 4;
+    if (read32(current + offset) != noInput) return Result::InvalidValueType;
+    return setParameter(handle, value);
+}
+
 auto Instance::dispatchSignal(const std::uint8_t entryNodeId[16], double time,
                               std::size_t maxInstructions) noexcept -> Result
 {

@@ -4,7 +4,10 @@ public static class GraphValidator
 {
     public static void Validate(GraphSnapshot snapshot) => Validate(snapshot, new HashSet<Guid>(), 0);
 
-    public static void Validate(GraphSnapshot snapshot, HashSet<Guid> allIds, int depth)
+    public static void Validate(GraphSnapshot snapshot, HashSet<Guid> allIds, int depth) =>
+        Validate(snapshot, allIds, depth, false);
+
+    private static void Validate(GraphSnapshot snapshot, HashSet<Guid> allIds, int depth, bool insideSpawnable)
     {
         if (depth > 12) throw new InvalidDataException("The graph hierarchy is too deep.");
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -15,15 +18,17 @@ public static class GraphValidator
         var effectiveDefinitions = new Dictionary<Guid, GraphNodeDefinition>();
         foreach (var node in snapshot.Nodes)
         {
+            if (insideSpawnable && node is not null && node.Kind == GraphNodeKind.SpawnableGroup)
+                throw new InvalidDataException("Nested Spawnable Groups are not supported.");
             if (node is null || node.Id == Guid.Empty || !allIds.Add(node.Id) ||
                 string.IsNullOrWhiteSpace(node.Name) || !double.IsFinite(node.X) || !double.IsFinite(node.Y) ||
                 !definitions.TryGetValue(node.Kind, out var definition) ||
                 (node.IsPolymorphic && !GraphPolymorphism.TryFamily(node.Kind, out _)) ||
                 node.PortType != definition.PortType || node.PortCategory != definition.PortCategory ||
                 (node.Kind == GraphNodeKind.FloatFCurve) != (node.Curve is not null) ||
-                (node.Kind == GraphNodeKind.GraphGroup) != (node.ChildGraph is not null) ||
+                (node.Kind == GraphNodeKind.GraphGroup || node.Kind == GraphNodeKind.SpawnableGroup) != (node.ChildGraph is not null) ||
                 (node.GroupAsset is not null &&
-                 (node.Kind != GraphNodeKind.GraphGroup || node.GroupAsset.Id == Guid.Empty || node.GroupAsset.Revision < 1)) ||
+                 (node.Kind != GraphNodeKind.GraphGroup && node.Kind != GraphNodeKind.SpawnableGroup || node.GroupAsset.Id == Guid.Empty || node.GroupAsset.Revision < 1)) ||
                 !nodes.TryAdd(node.Id, node))
                 throw new InvalidDataException("The project contains an invalid graph node.");
             if (node.Curve is not null) FCurve.Validate(node.Curve);
@@ -40,9 +45,14 @@ public static class GraphValidator
                         parameter.Type.Length > 128 || !RenderNodeSchema.IsValidParameterValue(definition, parameter)))
                     throw new InvalidDataException("The project contains invalid node parameters.");
             }
-            effectiveDefinitions.Add(node.Id, RenderNodeSchema.Effective(definition, node.Parameters));
+            if (node.Kind == GraphNodeKind.SpawnableGroup &&
+                node.ChildGraph!.Nodes.Count(child => SpawnableGroupSchema.IsInput(child.Kind)) > SpawnableGroupSchema.MaxInputs)
+                throw new InvalidDataException("A Spawnable Group supports at most four input ports.");
+            effectiveDefinitions.Add(node.Id, SpawnableGroupSchema.Effective(
+                RenderNodeSchema.Effective(definition, node.Parameters), node.ChildGraph));
             RenderNodeSchema.ValidateNodeParameters(definition, node.Parameters);
-            if (node.ChildGraph is not null) Validate(node.ChildGraph, allIds, depth + 1);
+            if (node.ChildGraph is not null)
+                Validate(node.ChildGraph, allIds, depth + 1, insideSpawnable || node.Kind == GraphNodeKind.SpawnableGroup);
         }
 
         var connections = new HashSet<(Guid SourceId, string? SourcePortId, Guid TargetId, string? TargetPortId)>();

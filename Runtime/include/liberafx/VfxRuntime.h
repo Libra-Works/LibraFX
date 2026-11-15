@@ -170,6 +170,10 @@ public:
     // Legacy slots are A/B (0/1); v3 custom slots index declared numeric input ports (0..3).
     Result setParameter(const std::uint8_t nodeId[16], std::uint8_t inputSlot,
                         std::uint8_t component, double value) noexcept;
+    // Capture targets must not have a connected producer, which would mask
+    // their default. This is separate from the legacy setParameter behavior.
+    Result setUnconnectedParameter(const std::uint8_t nodeId[16], std::uint8_t inputSlot,
+                                   std::uint8_t component, double value) noexcept;
     Result result() const noexcept;
     Result value(const std::uint8_t nodeId[16], double& out) const noexcept;
     Result valueComponents(const std::uint8_t nodeId[16], double out[4], std::uint8_t& componentCount) const noexcept;

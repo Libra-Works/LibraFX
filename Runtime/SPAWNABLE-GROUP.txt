@@ -1,0 +1,60 @@
+Runtime Spawnable Group contract
+
+`GeneratorPool` is engine-neutral. One immutable template `Program` is shared;
+each runtime instance owns its
+own aligned work, defaults, custom state and spawn time. IDs are nonzero and
+never reused within a pool. `evaluate` uses elapsed time, not global time.
+Instances live until explicit stop, reset or pool destruction; no automatic
+finish condition is inferred. The Program, its backing bytecode, descriptors
+and bindings must outlive the pool.
+
+An owner creates a pool with finite instance, memory and queue limits.
+`enqueueSpawn` snapshots up to 16 scalar parameter lanes without allocation and
+can be called concurrently, including from native signal callbacks. The owner
+calls `processSpawns` after callback dispatch; a failed command stays queued and
+the error is returned. `spawn` is the synchronous owner-thread alternative.
+Each captured lane identifies a template node GUID, input slot and component.
+The target must be an unconnected default; connected targets are rejected.
+Capture is at spawn, not a live parent binding. All pool operations except
+enqueue must run on one owner thread.
+
+Spawn and stop events contain the container GUID, pool-scoped instance ID and
+start time and deterministic instance seed. Drain the bounded event queue on the engine's owner thread; a full
+queue rejects operations rather than losing notifications. `reset` atomically
+rejects if there is not enough event space for all stops, otherwise retires all
+instances and discards queued spawns. Before destroying a pool, reset and drain
+events if the host requires stop notifications. No callback creates engine
+objects. The C ABI exposes equivalent POD records and retains the program.
+
+Editor package and host bridge
+
+The Spawnable Group context action creates one editable child graph. Add up to
+four typed Spawn Input nodes directly inside it; their GUIDs become parent
+parameter-port IDs and template capture targets. A signal enqueues one runtime
+instance, never another graph node. Nested Spawnable Groups are rejected.
+`SpawnableGroupPackage.Compile` emits the parent LFXB, separate template LFXBs,
+capture maps, per-template render configuration and GPU container snapshots.
+MCP `libera_graph_compile_spawnable` exposes this as JSON package version 1.
+Template GUIDs remain unchanged between runtime instances. GPU containers are
+host payloads and are not flattened into CPU numeric instructions.
+
+For each template, load its LFXB once, create a bounded pool using its container
+GUID, then populate `LibraSpawnableBinding` from the package's signalTypeId,
+input widths, Color flags and templateNodeIds. Load the parent with
+`libra_program_create_spawnable`; evaluate its instance and dispatch its signal
+entry with `libra_dispatch_signal`. Evaluate the parent at the signal's time
+before dispatch, since capture reads the most recent evaluated parent values;
+multiple signals in that frame may reuse that evaluation. The callback only queues captures. Call
+`libra_generator_process_spawns` and drain lifecycle events outside the callback.
+The loader registers the package's signal passthrough type
+989fa5b5-485f-4e75-8542-9c5500000001. A template containing Signal nodes can
+also be loaded with `libra_program_create_spawnable` and zero bindings. These
+are host ABI records and handles, not wire overlays or engine pointers. A pool
+cannot be released while a loaded parent program retains it; release parent
+instances and programs first.
+If a package has no Spawnable Groups and its parent bytecode is v1 or v2,
+load it with `libra_program_create` instead.
+
+UE/Unity adapters must consume the lifecycle and render/GPU payloads separately;
+this code does not instantiate engine objects. Diagnostics should identify the
+container GUID, template node GUID and pool-scoped instance ID together.

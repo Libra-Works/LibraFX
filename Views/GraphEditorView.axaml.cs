@@ -297,6 +297,9 @@ public partial class GraphEditorView : UserControl
         }
 
         _pastePosition = ToGraphPoint(e.GetPosition(GraphCanvas));
+        var onNode = e.Source is Visual sourceVisual &&
+            sourceVisual.GetSelfAndVisualAncestors().OfType<GraphNodeView>().Any();
+        NewSpawnableGroupMenu.IsVisible = !onNode;
         if (e.Source is Visual visual &&
             visual.GetSelfAndVisualAncestors().OfType<GraphNodeView>().FirstOrDefault()?.DataContext
                 is GraphNodeViewModel node && !node.IsSelected)
@@ -316,6 +319,13 @@ public partial class GraphEditorView : UserControl
         if (DataContext is not GraphWorkspaceViewModel graph) return;
         var node = graph.CreateNode(GraphNodeKind.Comment, _pastePosition.X, _pastePosition.Y);
         graph.SelectNode(node);
+    }
+
+    private void OnAddSpawnableGroupClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not GraphWorkspaceViewModel graph) return;
+        try { graph.CreateNode(GraphNodeKind.SpawnableGroup, _pastePosition.X, _pastePosition.Y); }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException) { graph.ReportStatus(ex.Message); }
     }
 
     private void OnBreadcrumbClick(object? sender, RoutedEventArgs e)

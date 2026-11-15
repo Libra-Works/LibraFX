@@ -15,6 +15,7 @@ public readonly record struct GraphNodeKind(string Value)
     public static GraphNodeKind Signal => new("Signal");
     public static GraphNodeKind FloatFCurve => new("FloatFCurve");
     public static GraphNodeKind GraphGroup => new("GraphGroup");
+    public static GraphNodeKind SpawnableGroup => new("SpawnableGroup");
     public static GraphNodeKind Comment => new("Comment");
     public static GraphNodeKind Time => new("Time");
     public static GraphNodeKind Add => new("Add");
@@ -105,6 +106,12 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("a40e6f94-c2c1-48ed-9a7b-2087c422ad5a")] = "Signal",
         [Guid.Parse("f54171ee-4aa3-498b-b2ff-8c9983fc1501")] = "FloatFCurve",
         [Guid.Parse("149e6e41-9976-4b69-a74c-3f6e6b254e5a")] = "GraphGroup",
+        [Guid.Parse("c0bc50ea-c514-41a2-9b28-9c2c931d2821")] = "SpawnableGroup",
+        [Guid.Parse("fb8c8a83-0c9d-4870-98a1-08c0ee800001")] = "SpawnInputFloat",
+        [Guid.Parse("fb8c8a83-0c9d-4870-98a1-08c0ee800002")] = "SpawnInputVector2",
+        [Guid.Parse("fb8c8a83-0c9d-4870-98a1-08c0ee800003")] = "SpawnInputVector3",
+        [Guid.Parse("fb8c8a83-0c9d-4870-98a1-08c0ee800004")] = "SpawnInputVector4",
+        [Guid.Parse("fb8c8a83-0c9d-4870-98a1-08c0ee800005")] = "SpawnInputColor",
         [Guid.Parse("8f4bc759-b775-41ab-a7da-2ac5c17e29ed")] = "Comment",
         [Guid.Parse("e97a5832-31c5-461c-b7bb-c176c804c115")] = "Time",
         [Guid.Parse("c6de2a2a-a44b-41cb-8173-3c417a92bca5")] = "Add",

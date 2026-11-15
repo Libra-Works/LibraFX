@@ -95,6 +95,38 @@ auto __cdecl allocationHook(int kind, void*, size_t, int, long, const unsigned c
 
 int main()
 {
+    {
+        auto templateBytes = scalarFixture();
+        auto templateProgram = LibraProgram{};
+        assert(libra_program_create(templateBytes.data(), templateBytes.size(), &templateProgram) == LIBRA_OK);
+        auto container = std::array<std::uint8_t, 16>{}; container[15] = 77;
+        auto pool = LibraGeneratorPool{};
+        assert(libra_generator_pool_create(templateProgram, container.data(), 2, 65536, 4, &pool) == LIBRA_OK);
+        assert(libra_program_release(templateProgram) == LIBRA_OK);
+        auto capture = LibraGeneratorCapture{};
+        capture.nodeId[15] = 1; capture.value = 9;
+        assert(libra_generator_enqueue_spawn(pool, 2, &capture, 1) == LIBRA_OK);
+        assert(libra_generator_enqueue_spawn(pool, 4, &capture, 1) == LIBRA_OK);
+        auto processed = std::uint32_t{};
+        assert(libra_generator_process_spawns(pool, 2, &processed) == LIBRA_OK && processed == 2);
+        auto event1 = LibraGeneratorEvent{};
+        auto event2 = LibraGeneratorEvent{};
+        auto hasEvent = std::uint32_t{};
+        assert(libra_generator_next_event(pool, &event1, &hasEvent) == LIBRA_OK && hasEvent && event1.kind == 1);
+        assert(libra_generator_next_event(pool, &event2, &hasEvent) == LIBRA_OK && hasEvent && event2.kind == 1);
+        assert(event1.instanceId != event2.instanceId && event1.containerId[15] == 77);
+        assert(libra_generator_evaluate(pool, event1.instanceId, 6) == LIBRA_OK);
+        assert(libra_generator_evaluate(pool, event2.instanceId, 6) == LIBRA_OK);
+        auto node = std::array<std::uint8_t, 16>{}; node[15] = 3;
+        auto value = LibraValue{};
+        assert(libra_generator_value(pool, event1.instanceId, node.data(), &value) == LIBRA_OK && value.x == 13);
+        assert(libra_generator_value(pool, event2.instanceId, node.data(), &value) == LIBRA_OK && value.x == 11);
+        assert(libra_generator_stop(pool, event1.instanceId) == LIBRA_OK);
+        assert(libra_generator_evaluate(pool, event1.instanceId, 6) == LIBRA_INVALID_HANDLE);
+        assert(libra_generator_reset(pool) == LIBRA_OK);
+        assert(libra_generator_pool_release(pool) == LIBRA_OK);
+        assert(libra_generator_pool_release(pool) == LIBRA_INVALID_HANDLE);
+    }
     auto bytes = scalarFixture();
     auto program = LibraProgram{};
     auto unalignedWire = std::vector<std::uint8_t>(bytes.size() + 1);

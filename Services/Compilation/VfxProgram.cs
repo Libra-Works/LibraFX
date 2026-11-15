@@ -66,6 +66,15 @@ public sealed class VfxProgram
 
     public static VfxProgram Compile(GraphSnapshot graph)
     {
+        if (ContainsSpawnable(graph))
+            throw new InvalidDataException("Compile Spawnable Groups with SpawnableGroupPackage so templates are not discarded.");
+        if (Flatten(graph).Any(node => node.Kind == GraphNodeKind.Signal || SpawnableGroupSchema.IsInput(node.Kind)))
+            throw new InvalidDataException("Signal and Spawn Input nodes require a Spawnable Group package.");
+        return CompileForPackage(graph);
+    }
+
+    internal static VfxProgram CompileForPackage(GraphSnapshot graph)
+    {
         GraphValidator.Validate(graph);
         var typeProblems = GraphTypeDiagnostics.Analyze(graph);
         if (typeProblems.Count != 0)
@@ -83,7 +92,8 @@ public sealed class VfxProgram
         if (nodes.Length > MaxInstructions) throw new InvalidDataException("Too many runtime nodes.");
         var byId = nodes.ToDictionary(node => node.Id);
         var definitions = GraphNodeDefinition.All.ToDictionary(item => item.Kind);
-        if (nodes.Any(node => definitions[node.Kind].Runtime is not null))
+        if (nodes.Any(node => definitions[node.Kind].Runtime is not null ||
+                              node.Kind == GraphNodeKind.SpawnableGroup || node.Kind == GraphNodeKind.Signal))
             return CompileWithCustomNodes(graph, nodes, definitions);
         foreach (var node in nodes)
             if (!TryOpcode(node.Kind.Value, out _))
@@ -267,6 +277,19 @@ public sealed class VfxProgram
             .ToDictionary(item => item.Id, item => item.index);
         var typedCode = new VfxTypedInstruction[order.Count];
         var customCode = new List<VfxCustomInstruction>();
+        var effective = nodes.ToDictionary(node => node.Id, node =>
+        {
+            var definition = SpawnableGroupSchema.Effective(definitions[node.Kind], node.ChildGraph);
+            if (node.Kind == GraphNodeKind.SpawnableGroup)
+                return definition with { TypeId = SpawnableGroupPackage.SignalTypeId(node.Id, node.ChildGraph!),
+                    Runtime = new GraphRuntimeDefinition("custom", 1, "signal") };
+            if (node.Kind == GraphNodeKind.Signal)
+                return definition with { TypeId = SpawnableGroupPackage.SignalPassthroughTypeId,
+                    Runtime = new GraphRuntimeDefinition("custom", 1, "signal"),
+                    InputPorts = [new GraphInputPortDefinition("signal", "Signal", "Signal", GraphPortCategory.Signal)],
+                    OutputPorts = [new GraphOutputPortDefinition("then", "Then", "Signal", GraphPortCategory.Signal)] };
+            return definition;
+        });
 
         int Input(GraphNodeSnapshot node, GraphNodeDefinition definition, string? port, int expectedWidth,
             out int sourceComponent, out bool sourceIsColor)
@@ -278,7 +301,7 @@ public sealed class VfxProgram
                 throw new InvalidDataException($"Node '{node.Name}' has multiple connections to one input.");
             if (matches.Length == 0) return -1;
             var source = byId[matches[0].SourceNodeId];
-            var sourceDefinition = definitions[source.Kind];
+            var sourceDefinition = effective[source.Id];
             var sourceType = sourceDefinition.GetOutputPortType(matches[0].SourcePortId);
             if (sourceType is null)
                 throw new InvalidDataException($"Node '{node.Name}' is connected to an invalid source output.");
@@ -307,7 +330,7 @@ public sealed class VfxProgram
         for (var index = 0; index < order.Count; index++)
         {
             var node = order[index];
-            var definition = definitions[node.Kind];
+            var definition = effective[node.Id];
             if (definition.Runtime is { } runtime)
             {
                 var isSignal = runtime.Execution == "signal";
@@ -365,12 +388,12 @@ public sealed class VfxProgram
                 for (var branch = 0; branch < signalOutputs.Length; branch++)
                 {
                     var targets = outgoing[node.Id].Where(connection =>
-                        connection.SourcePortId == signalOutputs[branch].Id).ToArray();
+                        connection.SourcePortId == (node.Kind == GraphNodeKind.Signal ? null : signalOutputs[branch].Id)).ToArray();
                     if (targets.Length > 1)
                         throw new InvalidDataException($"Custom signal output '{signalOutputs[branch].Id}' has multiple targets.");
                     if (targets.Length == 0) { branchTargets[branch] = -1; continue; }
                     var target = byId[targets[0].TargetNodeId];
-                    if (definitions[target.Kind].Runtime?.Execution != "signal")
+                    if (effective[target.Id].Runtime?.Execution != "signal")
                         throw new InvalidDataException("Signal branches must target registered signal nodes.");
                     branchTargets[branch] = indices[target.Id];
                 }
@@ -626,16 +649,21 @@ public sealed class VfxProgram
         foreach (var node in graph.Nodes)
         {
             yield return node;
-            if (node.ChildGraph is not null && !GpuParticleEditorService.IsGpu(node.Kind))
+            if (node.ChildGraph is not null && !GpuParticleEditorService.IsGpu(node.Kind) &&
+                node.Kind != GraphNodeKind.SpawnableGroup)
                 foreach (var child in Flatten(node.ChildGraph))
                     yield return child;
         }
     }
 
+    private static bool ContainsSpawnable(GraphSnapshot graph) => graph.Nodes.Any(node =>
+        node.Kind == GraphNodeKind.SpawnableGroup ||
+        node.ChildGraph is { } child && !GpuParticleEditorService.IsGpu(node.Kind) && ContainsSpawnable(child));
+
     private static IEnumerable<GraphConnectionSnapshot> graphConnections(GraphSnapshot graph, IReadOnlyList<GraphNodeSnapshot> nodes)
     {
         var ids = nodes.Select(node => node.Id).ToHashSet();
-        return graph.Connections.Concat(graph.Nodes.Where(node => node.ChildGraph is not null)
+        return graph.Connections.Concat(graph.Nodes.Where(node => node.ChildGraph is not null && node.Kind != GraphNodeKind.SpawnableGroup)
             .SelectMany(node => graphConnections(node.ChildGraph!, nodes)))
             .Where(connection => ids.Contains(connection.SourceNodeId) && ids.Contains(connection.TargetNodeId));
     }
@@ -657,11 +685,11 @@ public sealed class VfxProgram
     {
         opcode = kind switch
         {
-            "Float" => VfxOpcode.Scalar, "Time" => VfxOpcode.Time,
+            "Float" or "SpawnInputFloat" => VfxOpcode.Scalar, "Time" => VfxOpcode.Time,
             "Add" => VfxOpcode.Add, "Subtract" => VfxOpcode.Subtract,
             "Multiply" => VfxOpcode.Multiply, "Divide" => VfxOpcode.Divide,
-            "FloatX2" => VfxOpcode.Vector2, "FloatX3" => VfxOpcode.Vector3,
-            "FloatX4" => VfxOpcode.Vector4, "Color" => VfxOpcode.Color,
+            "FloatX2" or "SpawnInputVector2" => VfxOpcode.Vector2, "FloatX3" or "SpawnInputVector3" => VfxOpcode.Vector3,
+            "FloatX4" or "SpawnInputVector4" => VfxOpcode.Vector4, "Color" or "SpawnInputColor" => VfxOpcode.Color,
             "AddVector2" => VfxOpcode.AddVector2, "SubtractVector2" => VfxOpcode.SubtractVector2,
             "MultiplyVector2" => VfxOpcode.MultiplyVector2, "DivideVector2" => VfxOpcode.DivideVector2,
             "AddVector3" => VfxOpcode.AddVector3, "SubtractVector3" => VfxOpcode.SubtractVector3,

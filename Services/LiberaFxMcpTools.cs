@@ -87,8 +87,30 @@ public sealed class LiberaFxMcpTools
         await Dispatcher.UIThread.InvokeAsync(
             () => JsonSerializer.Serialize(activeGraph.Graph.CreateCurrentSnapshot(), JsonOptions));
 
+    [McpServerTool(Name = "libera_graph_enter", Destructive = false, OpenWorld = false)]
+    [Description("Navigate into an existing editable Graph Group or Spawnable Group child graph. This changes editor navigation only; it creates no runtime instance.")]
+    public static async Task<string> EnterGraph(ActiveGraphProvider activeGraph, string nodeId) =>
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var graph = activeGraph.Graph;
+            if (!graph.EnterGraph(FindNode(graph, nodeId)))
+                throw new McpException("The selected child graph cannot be entered.");
+            return JsonSerializer.Serialize(graph.CreateCurrentSnapshot(), JsonOptions);
+        });
+
+    [McpServerTool(Name = "libera_graph_up", Destructive = false, OpenWorld = false)]
+    [Description("Navigate to the parent editable graph without creating or changing runtime instances.")]
+    public static async Task<string> ParentGraph(ActiveGraphProvider activeGraph) =>
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var graph = activeGraph.Graph;
+            if (graph.Breadcrumbs.Count < 2) throw new McpException("Already at the root graph.");
+            graph.NavigateToGraph(graph.Breadcrumbs.Count - 2);
+            return JsonSerializer.Serialize(graph.CreateCurrentSnapshot(), JsonOptions);
+        });
+
     [McpServerTool(Name = "libera_graph_compile", ReadOnly = true, OpenWorld = false)]
-    [Description("Compile supported scalar, vector, conversion, and arithmetic nodes to versioned little-endian VFX bytecode.")]
+    [Description("Compile a numeric graph to VFX bytecode. Graphs containing Spawnable Group must use libera_graph_compile_spawnable so child templates are retained.")]
     public static async Task<string> CompileGraph(ActiveGraphProvider activeGraph)
     {
         var snapshot = await Dispatcher.UIThread.InvokeAsync(() => activeGraph.Graph.CreateCurrentSnapshot());
@@ -105,12 +127,12 @@ public sealed class LiberaFxMcpTools
     }
 
     [McpServerTool(Name = "libera_graph_list_node_types", ReadOnly = true, OpenWorld = false)]
-    [Description("List node types and their compatible port types and categories.")]
+    [Description("List authoring node types and ports. Spawnable Group is one editable child template; receiving a signal creates runtime instances, never editor nodes. Add Spawn Input nodes directly inside its child graph.")]
     public static async Task<string> ListNodeTypes(ActiveGraphProvider activeGraph) =>
         await Dispatcher.UIThread.InvokeAsync(() => JsonSerializer.Serialize(activeGraph.Graph.AvailableNodeDefinitions, JsonOptions));
 
     [McpServerTool(Name = "libera_graph_create_node", Destructive = false, OpenWorld = false)]
-    [Description("Create one node in the active graph. Family base kinds are polymorphic by default; set isPolymorphic false for an explicit legacy variant.")]
+    [Description("Create one editable node in the active graph, including one Spawnable Group container. This never creates a runtime instance. Family base kinds are polymorphic by default.")]
     public static async Task<string> CreateNode(
         ActiveGraphProvider activeGraph,
         [Description("Node kind from libera_graph_list_node_types, for example Float or Signal.")] string kind,
@@ -126,6 +148,68 @@ public sealed class LiberaFxMcpTools
             return SerializeNode(graph, node.Id);
         });
 
+    [McpServerTool(Name = "libera_graph_compile_spawnable", ReadOnly = true, OpenWorld = false)]
+    [Description("Compile an immutable parent LFXB program and separate Spawnable Group template programs, capture-at-spawn input mappings, render configurations and GPU container snapshots. Runtime signals enqueue instances, not editor graph copies. Engine adapters are responsible for consuming lifecycle events; no engine objects are created by this tool.")]
+    public static async Task<string> CompileSpawnable(ActiveGraphProvider activeGraph)
+    {
+        var snapshot = await Dispatcher.UIThread.InvokeAsync(() => activeGraph.Graph.CreateCurrentSnapshot());
+        try
+        {
+            var package = SpawnableGroupPackage.Compile(snapshot);
+            return JsonSerializer.Serialize(new
+            {
+                format = "LiberaFxSpawnablePackage",
+                version = SpawnableGroupPackage.FormatVersion,
+                bytecodeFormat = "LFXB",
+                signalPassthroughTypeId = SpawnableGroupPackage.SignalPassthroughTypeId,
+                parentBytecodeBase64 = Convert.ToBase64String(package.ParentBytecode),
+                templates = package.Templates.Select(template => new
+                {
+                    template.ContainerId,
+                    template.SignalTypeId,
+                    bytecodeBase64 = Convert.ToBase64String(template.Bytecode),
+                    capturePolicy = "CaptureAtSpawn",
+                    template.Inputs,
+                    renderConfigurationBase64 = Convert.ToBase64String(template.RenderConfiguration),
+                    template.GpuContainers
+                }),
+                lifecycle = new { stop = "manual", reset = "manual", instanceIdScope = "pool" }
+            }, JsonOptions);
+        }
+        catch (InvalidDataException ex) { throw new McpException(ex.Message); }
+    }
+
+    [McpServerTool(Name = "libera_spawnable_runtime_capabilities", ReadOnly = true, OpenWorld = false)]
+    [Description("Describe Spawnable Group runtime identity and capture semantics. Runtime instance value telemetry is not yet exposed to MCP; unscoped preview watches must not be interpreted as instance values.")]
+    public static string SpawnableRuntimeCapabilities() => JsonSerializer.Serialize(new
+    {
+        instanceIdentity = new[] { "containerId", "instanceId" },
+        valueIdentity = new[] { "containerId", "templateNodeId", "instanceId" },
+        capturePolicy = "CaptureAtSpawn",
+        lifecycle = new[] { "spawn", "manualStop", "reset" },
+        runtimeValueTelemetryAvailable = false,
+        editorNodesAreRuntimeInstances = false
+    }, JsonOptions);
+
+    [McpServerTool(Name = "libera_graph_describe_spawnable", ReadOnly = true, OpenWorld = false)]
+    [Description("Describe an editable Spawnable Group's synchronized signal and typed capture-at-spawn ports and child template. No runtime instance is created.")]
+    public static async Task<string> DescribeSpawnable(ActiveGraphProvider activeGraph, string nodeId) =>
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var group = FindNode(activeGraph.Graph, nodeId);
+            if (!group.IsSpawnableGroup || group.ChildGraph is null) throw new McpException("Node is not a Spawnable Group.");
+            return JsonSerializer.Serialize(new
+            {
+                containerId = group.Id,
+                capturePolicy = "CaptureAtSpawn",
+                signalInput = "spawn",
+                ports = group.ChildGraph.Nodes.Where(node => SpawnableGroupSchema.IsInput(node.Kind))
+                    .Select(node => new { portId = SpawnableGroupSchema.PortId(node.Id), templateNodeId = node.Id,
+                        node.Name, node.PortType }),
+                maxInputs = SpawnableGroupSchema.MaxInputs,
+                childGraph = group.ChildGraph
+            }, JsonOptions);
+        });
     [McpServerTool(Name = "libera_graph_connect_nodes", Destructive = false, OpenWorld = false)]
     [Description("Connect the output of the source node to the input of the target node.")]
     public static async Task<string> ConnectNodes(

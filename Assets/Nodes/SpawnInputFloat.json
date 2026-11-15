@@ -1,0 +1,1 @@
+{"schemaVersion":1,"typeId":"fb8c8a83-0c9d-4870-98a1-08c0ee800001","namespace":"LiberaFx","kind":"SpawnInputFloat","name":"Spawn Input (Float)","displayNameKey":"Editor.Node.SpawnInputFloat","group":"Spawnable Group","portType":"Float","portCategory":"Parameter","inputPorts":[],"parameters":[{"id":"value","name":"Default","type":"float","defaultValue":0}]}

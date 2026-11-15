@@ -272,6 +272,9 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     public void PasteSnapshot(GraphSnapshot snapshot, double x, double y)
     {
         ValidateSnapshot(snapshot, new HashSet<Guid>(), _graphPath.Count);
+        ValidateSpawnPlacement(snapshot.Nodes.Select(node => node.Kind));
+        if (InsideSpawnable() && ContainsSpawnable(snapshot))
+            throw new InvalidOperationException("Nested Spawnable Groups are not supported.");
         if (snapshot.Nodes.Count == 0 || !double.IsFinite(x) || !double.IsFinite(y))
         {
             throw new ArgumentException("Pasted nodes and a finite paste position are required.");
@@ -301,9 +304,12 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
         foreach (var connection in snapshot.Connections)
         {
+            var oldTarget = snapshot.Nodes.Single(node => node.Id == connection.TargetNodeId);
+            var newTarget = nodesByOldId[connection.TargetNodeId];
             commands.Add(new AddGraphConnectionCommand(
-                this, nodesByOldId[connection.SourceNodeId], nodesByOldId[connection.TargetNodeId],
-                targetPortId: connection.TargetPortId, sourcePortId: connection.SourcePortId));
+                this, nodesByOldId[connection.SourceNodeId], newTarget,
+                targetPortId: RemapSpawnPort(oldTarget, newTarget.ChildGraph, connection.TargetPortId),
+                sourcePortId: connection.SourcePortId));
         }
 
         _history.Execute(new CompositeUndoableCommand(LocalizationService.Shared.Get("Messages.History.PasteNodes"), commands));
@@ -379,21 +385,43 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             return node with { ChildGraph = ReplaceGraph(node.ChildGraph, path, depth + 1, replacement) };
         }).ToArray();
         if (!found) throw new InvalidOperationException("The graph hierarchy no longer exists.");
-        return root with { Nodes = nodes };
+        var changed = nodes.Single(node => node.Id == path[depth]);
+        var connections = root.Connections;
+        if (changed.Kind == GraphNodeKind.SpawnableGroup)
+        {
+            var valid = changed.ChildGraph!.Nodes.Where(node => SpawnableGroupSchema.IsInput(node.Kind))
+                .Select(node => SpawnableGroupSchema.PortId(node.Id)).Append("spawn").ToHashSet(StringComparer.Ordinal);
+            connections = root.Connections.Where(edge => edge.TargetNodeId != changed.Id ||
+                edge.TargetPortId is not null && valid.Contains(edge.TargetPortId)).ToArray();
+        }
+        return root with { Nodes = nodes, Connections = connections };
     }
 
     private static GraphSnapshot CloneGraph(GraphSnapshot source)
     {
         var ids = source.Nodes.ToDictionary(node => node.Id, _ => Guid.NewGuid());
-        return new GraphSnapshot(
-            source.Nodes.Select(node => node with
+        var nodes = source.Nodes.Select(node => node with
             {
                 Id = ids[node.Id],
                 ChildGraph = node.ChildGraph is null ? null : CloneGraph(node.ChildGraph)
-            }).ToArray(),
+            }).ToArray();
+        return new GraphSnapshot(
+            nodes,
             source.Connections.Select(connection => new GraphConnectionSnapshot(
                 ids[connection.SourceNodeId], ids[connection.TargetNodeId],
-                connection.TargetPortId, connection.SourcePortId)).ToArray());
+                RemapSpawnPort(source.Nodes.Single(node => node.Id == connection.TargetNodeId),
+                    nodes.Single(node => node.Id == ids[connection.TargetNodeId]).ChildGraph, connection.TargetPortId),
+                connection.SourcePortId)).ToArray());
+    }
+
+    private static string? RemapSpawnPort(GraphNodeSnapshot original, GraphSnapshot? clone, string? port)
+    {
+        if (original.Kind != GraphNodeKind.SpawnableGroup || original.ChildGraph is null || clone is null) return port;
+        for (var i = 0; i < original.ChildGraph.Nodes.Count; ++i)
+            if (SpawnableGroupSchema.IsInput(original.ChildGraph.Nodes[i].Kind) &&
+                SpawnableGroupSchema.PortId(original.ChildGraph.Nodes[i].Id) == port)
+                return SpawnableGroupSchema.PortId(clone.Nodes[i].Id);
+        return port;
     }
 
     public bool EnterGraph(GraphNodeViewModel node)
@@ -520,8 +548,39 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         var approved = requested.Values.Select(item => (item.AssetId, item.CurrentRevision, item.LatestRevision)).ToHashSet();
         var before = CreateSnapshot();
         var count = 0;
+        static Dictionary<string, string?> PortMap(GraphSnapshot baseline, GraphSnapshot oldChild,
+            GraphSnapshot latest, GraphSnapshot newChild)
+        {
+            var map = new Dictionary<string, string?>(StringComparer.Ordinal);
+            for (var i = 0; i < baseline.Nodes.Count; ++i)
+            {
+                var old = oldChild.Nodes[i];
+                if (!SpawnableGroupSchema.IsInput(old.Kind)) continue;
+                var latestIndex = latest.Nodes.ToList().FindIndex(node => node.Id == baseline.Nodes[i].Id &&
+                    SpawnableGroupSchema.IsInput(node.Kind));
+                map[SpawnableGroupSchema.PortId(old.Id)] = latestIndex < 0 ? null :
+                    SpawnableGroupSchema.PortId(newChild.Nodes[latestIndex].Id);
+            }
+            return map;
+        }
+        static GraphSnapshot WithMappedConnections(GraphSnapshot graph, GraphNodeSnapshot[] nodes,
+            Dictionary<Guid, Dictionary<string, string?>> maps)
+        {
+            var edges = new List<GraphConnectionSnapshot>();
+            foreach (var edge in graph.Connections)
+            {
+                if (edge.TargetPortId is { } port && maps.TryGetValue(edge.TargetNodeId, out var map) &&
+                    map.TryGetValue(port, out var newPort))
+                {
+                    if (newPort is not null) edges.Add(edge with { TargetPortId = newPort });
+                }
+                else edges.Add(edge);
+            }
+            return graph with { Nodes = nodes, Connections = edges };
+        }
         GraphSnapshot RewriteNewChildren(GraphSnapshot graph, HashSet<Guid> ancestors)
         {
+            var maps = new Dictionary<Guid, Dictionary<string, string?>>();
             var nodes = graph.Nodes.Select(node =>
             {
                 if (node.ChildGraph is not { } child) return node;
@@ -540,7 +599,10 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                             throw new InvalidOperationException($"Group '{node.Name}' changed again; check for updates again.");
                         if (GraphSnapshot.EquivalentIgnoringIds(baseline.Graph, child))
                         {
-                            child = CloneGraph(current.Graph);
+                            var replacement = CloneGraph(current.Graph);
+                            if (node.Kind == GraphNodeKind.SpawnableGroup)
+                                maps[node.Id] = PortMap(baseline.Graph, child, current.Graph, replacement);
+                            child = replacement;
                             reference = new GroupAssetReference(current.Id, current.Revision, current.Locked);
                             count++;
                         }
@@ -549,10 +611,11 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 }
                 finally { ancestors.Remove(reference.Id); }
             }).ToArray();
-            return graph with { Nodes = nodes };
+            return WithMappedConnections(graph, nodes, maps);
         }
         GraphSnapshot Rewrite(GraphSnapshot graph)
         {
+            var maps = new Dictionary<Guid, Dictionary<string, string?>>();
             var nodes = graph.Nodes.Select(node =>
             {
                 if (node.GroupAsset is { } reference && node.ChildGraph is { } child &&
@@ -566,15 +629,18 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                     if (!GraphSnapshot.EquivalentIgnoringIds(baseline.Graph, child))
                         throw new InvalidOperationException($"Group '{node.Name}' has local changes.");
                     count++;
+                    var replacement = RewriteNewChildren(CloneGraph(current.Graph), [current.Id]);
+                    if (node.Kind == GraphNodeKind.SpawnableGroup)
+                        maps[node.Id] = PortMap(baseline.Graph, child, current.Graph, replacement);
                     return node with
                     {
-                        ChildGraph = RewriteNewChildren(CloneGraph(current.Graph), [current.Id]),
+                        ChildGraph = replacement,
                         GroupAsset = new GroupAssetReference(current.Id, current.Revision, current.Locked)
                     };
                 }
                 return node.ChildGraph is null ? node : node with { ChildGraph = Rewrite(node.ChildGraph) };
             }).ToArray();
-            return graph with { Nodes = nodes };
+            return WithMappedConnections(graph, nodes, maps);
         }
         var after = Rewrite(before);
         if (count == 0) return null;
@@ -807,6 +873,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         {
             throw new ArgumentException("A graph plan must contain at least one node.", nameof(plan));
         }
+        ValidateSpawnPlacement(plan.Nodes.Where(node => node is not null).Select(node => node.Kind));
 
         var commands = new List<IUndoableCommand>();
         var nodesByKey = new Dictionary<string, GraphNodeViewModel>(StringComparer.Ordinal);
@@ -855,7 +922,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 throw new ArgumentException("A node cannot connect to itself.", nameof(plan));
             }
 
-            if (source.IsGraphGroup || target.IsGraphGroup)
+            if (source.Definition.Kind == GraphNodeKind.GraphGroup || target.Definition.Kind == GraphNodeKind.GraphGroup)
                 throw new ArgumentException("Group boundary ports are not implemented yet.", nameof(plan));
             if (source.IsComment || target.IsComment)
                 throw new ArgumentException("Comment nodes do not have ports.", nameof(plan));
@@ -1015,7 +1082,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             return false;
         }
 
-        if (source.IsGraphGroup || target.IsGraphGroup)
+        if (source.Definition.Kind == GraphNodeKind.GraphGroup || target.Definition.Kind == GraphNodeKind.GraphGroup)
         {
             error = "Group boundary ports are not implemented yet.";
             return false;
@@ -1327,8 +1394,9 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
     public GraphNodeViewModel CreateNode(GraphNodeKind kind, double? x = null, double? y = null, bool isPolymorphic = false)
     {
-        if (kind == GraphNodeKind.GraphGroup && _graphPath.Count >= MaxGraphDepth)
+        if ((kind == GraphNodeKind.GraphGroup || kind == GraphNodeKind.SpawnableGroup) && _graphPath.Count >= MaxGraphDepth)
             throw new InvalidOperationException("The graph hierarchy has reached its maximum depth.");
+        ValidateSpawnPlacement([kind]);
         var definition = AvailableNodeDefinitions.FirstOrDefault(item => item.Kind == kind)
             ?? throw new ArgumentException(LocalizationService.Shared.Get("Editor.NodeNotInProject"));
         var family = GraphPolymorphism.TryFamily(kind, out var selectedFamily) ? selectedFamily : null;
@@ -1348,6 +1416,47 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         _history.Execute(new AddGraphNodeCommand(this, node, Nodes.Count));
         return node;
     }
+
+    private void ValidateSpawnPlacement(IEnumerable<GraphNodeKind> kinds)
+    {
+        var additions = kinds.ToArray();
+        var parent = _rootSnapshot;
+        GraphNodeSnapshot? owner = null;
+        var insideSpawnable = false;
+        foreach (var id in _graphPath)
+        {
+            owner = parent.Nodes.First(node => node.Id == id);
+            insideSpawnable |= owner.Kind == GraphNodeKind.SpawnableGroup;
+            parent = owner.ChildGraph!;
+        }
+
+        if (insideSpawnable && additions.Any(kind => kind == GraphNodeKind.SpawnableGroup))
+            throw new InvalidOperationException("Nested Spawnable Groups are not supported.");
+        var newInputs = additions.Count(SpawnableGroupSchema.IsInput);
+        if (newInputs != 0)
+        {
+            if (owner?.Kind != GraphNodeKind.SpawnableGroup)
+                throw new InvalidOperationException("Spawn inputs must be placed directly inside a Spawnable Group.");
+            if (Nodes.Count(node => SpawnableGroupSchema.IsInput(node.Definition.Kind)) + newInputs > SpawnableGroupSchema.MaxInputs)
+                throw new InvalidOperationException("A Spawnable Group supports at most four input ports.");
+        }
+    }
+
+    private bool InsideSpawnable()
+    {
+        var graph = _rootSnapshot;
+        foreach (var id in _graphPath)
+        {
+            var node = graph.Nodes.First(item => item.Id == id);
+            if (node.Kind == GraphNodeKind.SpawnableGroup) return true;
+            graph = node.ChildGraph!;
+        }
+        return false;
+    }
+
+    private static bool ContainsSpawnable(GraphSnapshot graph) => graph.Nodes.Any(node =>
+        node.Kind == GraphNodeKind.SpawnableGroup ||
+        node.ChildGraph is { } child && ContainsSpawnable(child));
 
     public void DeleteNode(GraphNodeViewModel node)
     {
@@ -1402,7 +1511,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
     private GraphNodeViewModel CreatePlannedNode(LiberaGraphNodeSpec specification)
     {
-        if (specification.Kind == GraphNodeKind.GraphGroup && _graphPath.Count >= MaxGraphDepth)
+        if ((specification.Kind == GraphNodeKind.GraphGroup || specification.Kind == GraphNodeKind.SpawnableGroup) && _graphPath.Count >= MaxGraphDepth)
             throw new ArgumentException("The graph hierarchy has reached its maximum depth.");
         var definition = AvailableNodeDefinitions.FirstOrDefault(item => item.Kind == specification.Kind)
             ?? throw new ArgumentException($"Unsupported node kind '{specification.Kind}'.");

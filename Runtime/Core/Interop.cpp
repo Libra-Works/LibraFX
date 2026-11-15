@@ -1,6 +1,7 @@
 #include "liberafx/Interop.h"
 #include "liberafx/VfxRuntime.h"
 #include "liberafx/SceneBindings.h"
+#include "liberafx/GeneratorPool.h"
 
 #include <cstring>
 #include <array>
@@ -48,9 +49,16 @@ struct AlignedAllocator {
         return !(*this == other);
     }
 };
+struct NativeGeneratorPool;
+struct SpawnContext {
+    std::shared_ptr<NativeGeneratorPool> owner;
+    LibraSpawnableBinding binding{};
+};
 struct NativeProgram {
     std::vector<std::uint8_t> bytes;
     std::vector<liberafx::CustomNodeBinding> bindings;
+    std::vector<SpawnContext> spawnContexts;
+    std::vector<liberafx::CustomNodeDescriptor> descriptors;
     liberafx::Program program;
 };
 struct NativeInstance {
@@ -62,9 +70,15 @@ struct NativeInstance {
     // Destroy core state before its backing buffers and program.
     liberafx::Instance instance;
 };
+struct NativeGeneratorPool {
+    std::shared_ptr<NativeProgram> owner;
+    std::unique_ptr<liberafx::GeneratorPool> pool;
+    std::array<std::uint8_t, 16> containerId{};
+};
 auto registryMutex = std::mutex{};
 auto programs = std::unordered_map<LibraProgram, std::shared_ptr<NativeProgram>>{};
 auto instances = std::unordered_map<LibraInstance, std::unique_ptr<NativeInstance>>{};
+auto generatorPools = std::unordered_map<LibraGeneratorPool, std::shared_ptr<NativeGeneratorPool>>{};
 auto nextHandle = std::uint64_t{1};
 
 template<class Function>
@@ -85,6 +99,27 @@ auto inlineEnqueue(void*, liberafx::Job job, void* data) noexcept -> bool
 {
     job(data);
     return true;
+}
+auto passthroughSignal(liberafx::CustomNodeInvocation& call) noexcept -> liberafx::Result
+{
+    call.selectedBranch = 0;
+    return liberafx::Result::Ok;
+}
+auto spawnSignal(liberafx::CustomNodeInvocation& call) noexcept -> liberafx::Result
+{
+    auto& context = *static_cast<SpawnContext*>(call.context);
+    auto captures = std::array<liberafx::GeneratorCapture, 16>{};
+    auto count = std::size_t{};
+    for (auto input = 0u; input < context.binding.inputCount; ++input) {
+        for (auto lane = 0u; lane < context.binding.widths[input]; ++lane) {
+            auto& capture = captures[count++];
+            std::memcpy(capture.nodeId, context.binding.templateNodeIds[input], 16);
+            capture.component = static_cast<std::uint8_t>(lane);
+            capture.value = call.inputs[input * 4 + lane];
+        }
+    }
+    call.selectedBranch = 0;
+    return context.owner->pool->enqueueSpawn(call.time, captures.data(), count);
 }
 auto checkValues(NativeInstance& native, const LibraBinding* bindings,
                  std::uint32_t count, LibraValue* out) -> LibraResult
@@ -140,6 +175,86 @@ LibraResult LIBRA_INTEROP_CALL libra_program_release(LibraProgram program)
 {
     return guarded([&]() -> LibraResult {
         return programs.erase(program) ? LIBRA_OK : LIBRA_INVALID_HANDLE;
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_program_create_spawnable(
+    const uint8_t* bytes, uint64_t byteCount, const LibraSpawnableBinding* bindings,
+    uint32_t bindingCount, LibraProgram* outProgram)
+{
+    if (!outProgram || !bytes || (bindingCount && !bindings) || bindingCount > 4096)
+        return LIBRA_INVALID_ARGUMENT;
+    *outProgram = 0;
+    return guarded([&]() -> LibraResult {
+        if (byteCount < 16 || byteCount > 256ull * 1024 * 1024 ||
+            std::memcmp(bytes, "LFXB", 4) != 0 || bytes[4] != 3 || bytes[5] != 0 ||
+            bytes[12] != 0 || bytes[13] != 1) return LIBRA_INVALID_BINARY;
+        auto count = std::uint32_t{};
+        for (auto i = 0u; i < 4; ++i) count |= std::uint32_t{bytes[8 + i]} << (i * 8);
+        if (count > 10000 || byteCount != 16ull + 256ull * count || bindingCount > count)
+            return LIBRA_INVALID_BINARY;
+        auto native = std::make_shared<NativeProgram>();
+        native->bytes.assign(bytes, bytes + static_cast<std::size_t>(byteCount));
+        native->bindings.resize(count);
+        native->spawnContexts.resize(bindingCount);
+        native->descriptors.resize(static_cast<std::size_t>(bindingCount) + 1);
+        const auto passthroughId = std::array<std::uint8_t, 16>{
+            0x98, 0x9f, 0xa5, 0xb5, 0x48, 0x5f, 0x4e, 0x75, 0x85, 0x42, 0x9c, 0x55, 0, 0, 0, 1};
+        auto& pass = native->descriptors.back();
+        std::memcpy(pass.typeId, passthroughId.data(), 16);
+        pass.abiVersion = 1;
+        pass.execution = liberafx::CustomExecution::Signal;
+        pass.branchCount = 1;
+        pass.function = passthroughSignal;
+        for (auto i = 0u; i < bindingCount; ++i) {
+            const auto& binding = bindings[i];
+            if (binding.inputCount > 4 || binding.reserved ||
+                std::memcmp(binding.signalTypeId, passthroughId.data(), 16) == 0)
+                return LIBRA_INVALID_ARGUMENT;
+            auto pool = generatorPools.find(binding.pool);
+            if (pool == generatorPools.end()) return LIBRA_INVALID_HANDLE;
+            if (std::memcmp(pool->second->containerId.data(), binding.containerId, 16) != 0)
+                return LIBRA_INVALID_ARGUMENT;
+            auto matches = 0u;
+            for (auto index = 0u; index < count; ++index) {
+                auto record = bytes + 16 + std::size_t{index} * 256;
+                if (record[16] == 41 && std::memcmp(record + 24, binding.signalTypeId, 16) == 0) {
+                    if (std::memcmp(record, binding.containerId, 16) != 0) return LIBRA_INVALID_BINARY;
+                    ++matches;
+                }
+            }
+            if (matches != 1) return LIBRA_INVALID_BINARY;
+            for (auto j = 0u; j < i; ++j)
+                if (std::memcmp(bindings[j].signalTypeId, binding.signalTypeId, 16) == 0 ||
+                    std::memcmp(bindings[j].containerId, binding.containerId, 16) == 0)
+                    return LIBRA_INVALID_ARGUMENT;
+            auto& context = native->spawnContexts[i];
+            context.owner = pool->second;
+            context.binding = binding;
+            auto& descriptor = native->descriptors[i];
+            std::memcpy(descriptor.typeId, binding.signalTypeId, 16);
+            descriptor.abiVersion = 1;
+            descriptor.execution = liberafx::CustomExecution::Signal;
+            descriptor.inputCount = static_cast<std::uint8_t>(binding.inputCount);
+            descriptor.branchCount = 1;
+            descriptor.function = spawnSignal;
+            descriptor.context = &context;
+            for (auto j = 0u; j < binding.inputCount; ++j) {
+                if (binding.widths[j] < 1 || binding.widths[j] > 4 || binding.colors[j] > 1 ||
+                    (binding.colors[j] && binding.widths[j] != 4))
+                    return LIBRA_INVALID_ARGUMENT;
+                descriptor.inputWidths[j] = binding.widths[j];
+                descriptor.inputIsColor[j] = binding.colors[j];
+            }
+        }
+        auto result = liberafx::Program::load(native->bytes.data(), native->bytes.size(),
+            native->descriptors.data(), native->descriptors.size(), native->bindings.data(),
+            native->bindings.size(), native->program);
+        if (result != liberafx::Result::Ok) return static_cast<LibraResult>(result);
+        if (!nextHandle) return LIBRA_INSUFFICIENT_WORK;
+        auto handle = nextHandle++;
+        programs.emplace(handle, std::move(native));
+        *outProgram = handle;
+        return LIBRA_OK;
     });
 }
 LibraResult LIBRA_INTEROP_CALL libra_instance_create(LibraProgram program, LibraInstance* outInstance)
@@ -270,6 +385,16 @@ LibraResult LIBRA_INTEROP_CALL libra_evaluate(
                                              : static_cast<LibraResult>(update);
     });
 }
+LibraResult LIBRA_INTEROP_CALL libra_dispatch_signal(
+    LibraInstance instance, const uint8_t nodeId[16], double time, uint32_t instructionBudget)
+{
+    if (!nodeId || !instructionBudget) return LIBRA_INVALID_ARGUMENT;
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        return native ? static_cast<LibraResult>(
+            native->instance.dispatchSignal(nodeId, time, instructionBudget)) : LIBRA_INVALID_HANDLE;
+    });
+}
 LibraResult LIBRA_INTEROP_CALL libra_sample_sprite_atlas(
     double frame, uint32_t columns, uint32_t rows, LibraAtlasFrame* outFrame)
 {
@@ -294,4 +419,151 @@ LibraResult LIBRA_INTEROP_CALL libra_make_sprite_quad(
             vertex.uv[0], vertex.uv[1], vertex.color[0], vertex.color[1], vertex.color[2], vertex.color[3]};
     }
     return LIBRA_OK;
+}
+
+LibraResult LIBRA_INTEROP_CALL libra_generator_pool_create(
+    LibraProgram program, const uint8_t containerId[16], uint32_t maxActive,
+    uint64_t memoryBudgetBytes, uint32_t eventCapacity, LibraGeneratorPool* outPool)
+{
+    if (!outPool || !containerId || memoryBudgetBytes > std::numeric_limits<std::size_t>::max())
+        return LIBRA_INVALID_ARGUMENT;
+    *outPool = 0;
+    return guarded([&]() -> LibraResult {
+        auto found = programs.find(program);
+        if (found == programs.end()) return LIBRA_INVALID_HANDLE;
+        auto native = std::make_shared<NativeGeneratorPool>();
+        native->owner = found->second;
+        std::memcpy(native->containerId.data(), containerId, 16);
+        auto result = liberafx::GeneratorPool::create(native->owner->program, containerId,
+            maxActive, static_cast<std::size_t>(memoryBudgetBytes), eventCapacity, native->pool);
+        if (result != liberafx::Result::Ok) return static_cast<LibraResult>(result);
+        if (!nextHandle) return LIBRA_INSUFFICIENT_WORK;
+        auto handle = nextHandle++;
+        generatorPools.emplace(handle, std::move(native));
+        *outPool = handle;
+        return LIBRA_OK;
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_pool_release(LibraGeneratorPool pool)
+{
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        if (found == generatorPools.end()) return LIBRA_INVALID_HANDLE;
+        if (found->second.use_count() != 1) return LIBRA_BUSY;
+        generatorPools.erase(found);
+        return LIBRA_OK;
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_spawn(LibraGeneratorPool pool, double time,
+    const LibraGeneratorCapture* captures, uint32_t count, LibraGeneratorInstance* outInstance)
+{
+    if (!outInstance || count > 256 || (count && !captures)) return LIBRA_INVALID_ARGUMENT;
+    *outInstance = 0;
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        if (found == generatorPools.end()) return LIBRA_INVALID_HANDLE;
+        auto converted = std::array<liberafx::GeneratorCapture, 256>{};
+        for (auto i = 0u; i < count; ++i) {
+            if (captures[i].inputSlot > 3 || captures[i].component > 3) return LIBRA_INVALID_ARGUMENT;
+            std::memcpy(converted[i].nodeId, captures[i].nodeId, 16);
+            converted[i].inputSlot = static_cast<std::uint8_t>(captures[i].inputSlot);
+            converted[i].component = static_cast<std::uint8_t>(captures[i].component);
+            converted[i].value = captures[i].value;
+        }
+        return static_cast<LibraResult>(found->second->pool->spawn(time, converted.data(), count, *outInstance));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_stop(LibraGeneratorPool pool, LibraGeneratorInstance instance)
+{
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        return found == generatorPools.end() ? LIBRA_INVALID_HANDLE :
+            static_cast<LibraResult>(found->second->pool->stop(instance));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_enqueue_spawn(LibraGeneratorPool pool, double time,
+    const LibraGeneratorCapture* captures, uint32_t count)
+{
+    if (count > 16 || (count && !captures)) return LIBRA_INVALID_ARGUMENT;
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        if (found == generatorPools.end()) return LIBRA_INVALID_HANDLE;
+        auto converted = std::array<liberafx::GeneratorCapture, 16>{};
+        for (auto i = 0u; i < count; ++i) {
+            if (captures[i].inputSlot > 3 || captures[i].component > 3) return LIBRA_INVALID_ARGUMENT;
+            std::memcpy(converted[i].nodeId, captures[i].nodeId, 16);
+            converted[i].inputSlot = static_cast<std::uint8_t>(captures[i].inputSlot);
+            converted[i].component = static_cast<std::uint8_t>(captures[i].component);
+            converted[i].value = captures[i].value;
+        }
+        return static_cast<LibraResult>(found->second->pool->enqueueSpawn(time, converted.data(), count));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_process_spawns(
+    LibraGeneratorPool pool, uint32_t maxCommands, uint32_t* processed)
+{
+    if (!processed) return LIBRA_INVALID_ARGUMENT;
+    *processed = 0;
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        if (found == generatorPools.end()) return LIBRA_INVALID_HANDLE;
+        auto completed = std::size_t{};
+        auto result = found->second->pool->processSpawns(maxCommands, completed);
+        *processed = static_cast<uint32_t>(completed);
+        return static_cast<LibraResult>(result);
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_reset(LibraGeneratorPool pool)
+{
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        return found == generatorPools.end() ? LIBRA_INVALID_HANDLE :
+            static_cast<LibraResult>(found->second->pool->reset());
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_evaluate(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance, double time)
+{
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        return found == generatorPools.end() ? LIBRA_INVALID_HANDLE :
+            static_cast<LibraResult>(found->second->pool->evaluate(instance, time));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_value(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance, const uint8_t nodeId[16], LibraValue* outValue)
+{
+    if (!nodeId || !outValue) return LIBRA_INVALID_ARGUMENT;
+    *outValue = {};
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        if (found == generatorPools.end()) return LIBRA_INVALID_HANDLE;
+        auto lanes = std::array<double, 4>{};
+        auto width = std::uint8_t{};
+        auto result = found->second->pool->value(instance, nodeId, lanes.data(), width);
+        if (result == liberafx::Result::Ok)
+            *outValue = {lanes[0], lanes[1], lanes[2], lanes[3], width, 0};
+        return static_cast<LibraResult>(result);
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_next_event(
+    LibraGeneratorPool pool, LibraGeneratorEvent* outEvent, uint32_t* hasEvent)
+{
+    if (!outEvent || !hasEvent) return LIBRA_INVALID_ARGUMENT;
+    *outEvent = {};
+    *hasEvent = 0;
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        if (found == generatorPools.end()) return LIBRA_INVALID_HANDLE;
+        auto event = liberafx::GeneratorEvent{};
+        if (found->second->pool->popEvent(event)) {
+            outEvent->kind = static_cast<uint32_t>(event.kind);
+            std::memcpy(outEvent->containerId, event.containerId, 16);
+            outEvent->instanceId = event.instanceId;
+            outEvent->startTime = event.startTime;
+            outEvent->seed = event.seed;
+            *hasEvent = 1;
+        }
+        return LIBRA_OK;
+    });
 }

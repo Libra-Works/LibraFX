@@ -42,9 +42,11 @@ public sealed class GraphNodeViewModel : ObservableObject
     public GraphSnapshot? ChildGraph { get; }
     public GroupAssetReference? GroupAsset { get; private set; }
     public bool IsGraphGroup => ChildGraph is not null;
+    public bool IsSpawnableGroup => Definition.Kind == GraphNodeKind.SpawnableGroup;
+    public bool ShowGroupHint => IsGraphGroup && !IsSpawnableGroup;
     public bool IsGpuParticle => GpuParticleEditorService.IsGpu(Definition.Kind);
     public bool IsComment => Definition.Kind == GraphNodeKind.Comment;
-    public bool HasPorts => !IsGraphGroup && !IsComment;
+    public bool HasPorts => !IsGpuParticle && (!IsGraphGroup || IsSpawnableGroup) && !IsComment;
     public bool HasLegacyInput => HasPorts && Definition.InputPorts is null;
     public bool HasCustomInputs => HasPorts && Definition.InputPorts is { Count: > 0 };
     public IReadOnlyList<GraphInputPortDefinition> InputPorts => Definition.InputPorts ?? [];
@@ -146,14 +148,15 @@ public sealed class GraphNodeViewModel : ObservableObject
         _workspace = workspace;
         _baseDefinition = definition;
         IsPolymorphic = isPolymorphic;
-        _definition = RenderNodeSchema.Effective(definition, parameters);
+        _definition = SpawnableGroupSchema.Effective(RenderNodeSchema.Effective(definition, parameters), childGraph);
         Id = id ?? Guid.NewGuid();
         _name = name;
         _x = x;
         _y = y;
         _curve = definition.Kind == GraphNodeKind.FloatFCurve ? curve ?? FCurve.CreateDefault() : null;
-        ChildGraph = definition.Kind == GraphNodeKind.GraphGroup ? childGraph ?? new GraphSnapshot([], []) : null;
-        GroupAsset = definition.Kind == GraphNodeKind.GraphGroup ? groupAsset : null;
+        ChildGraph = definition.Kind == GraphNodeKind.GraphGroup || definition.Kind == GraphNodeKind.SpawnableGroup
+            ? childGraph ?? new GraphSnapshot([], []) : null;
+        GroupAsset = ChildGraph is not null ? groupAsset : null;
         _parameters = parameters;
         InlineParameters = VisibleParameters(_definition)
             .Select(parameter => new NodeParameterEditorViewModel(workspace, this, parameter)).ToArray();

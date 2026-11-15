@@ -89,9 +89,9 @@ public static class RenderProgramBindings
     }
 
     private static IEnumerable<GraphNodeSnapshot> Flatten(GraphSnapshot graph) => graph.Nodes.SelectMany(node =>
-        node.KindDomain == "GpuParticle" ? Array.Empty<GraphNodeSnapshot>() :
+        node.KindDomain == "GpuParticle" || node.Kind == GraphNodeKind.SpawnableGroup ? Array.Empty<GraphNodeSnapshot>() :
         node.ChildGraph is { } child ? Flatten(child) : new[] { node });
     private static IEnumerable<GraphConnectionSnapshot> Connections(GraphSnapshot graph) =>
         graph.Connections.Concat(graph.Nodes.Where(node => node.ChildGraph is not null &&
-            !GpuParticleEditorService.IsGpu(node.Kind)).SelectMany(node => Connections(node.ChildGraph!)));
+            !GpuParticleEditorService.IsGpu(node.Kind) && node.Kind != GraphNodeKind.SpawnableGroup).SelectMany(node => Connections(node.ChildGraph!)));
 }

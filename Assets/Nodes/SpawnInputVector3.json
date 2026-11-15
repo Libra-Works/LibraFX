@@ -1,0 +1,1 @@
+{"schemaVersion":1,"typeId":"fb8c8a83-0c9d-4870-98a1-08c0ee800003","namespace":"LiberaFx","kind":"SpawnInputVector3","name":"Spawn Input (Vector3)","displayNameKey":"Editor.Node.SpawnInputVector3","group":"Spawnable Group","portType":"FloatX3","portCategory":"Parameter","inputPorts":[],"parameters":[{"id":"value","name":"Default","type":"vector3","defaultValue":[0,0,0]}]}

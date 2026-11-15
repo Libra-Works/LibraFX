@@ -86,7 +86,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Grid.Column="1"
+                <TextBlock x:Name="PortTypeLabel" Grid.Column="1"
                            Text="{Binding DisplayPortType}"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
@@ -138,8 +138,10 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </Grid>
-            <TextBlock Grid.Row="1" Margin="8" IsVisible="{Binding IsGraphGroup}"
+            <TextBlock x:Name="GroupHintLabel" Grid.Row="1" Margin="8" IsVisible="{Binding ShowGroupHint}"
                        Text="{DynamicResource Text.Panels.DoubleClickToOpen}" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <TextBlock x:Name="GpuProgramLabel" Grid.Row="1" Margin="8" IsVisible="{Binding IsGpuParticle}"
+                       Text="{DynamicResource Text.Gpu.ContainerHint}" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <Border Grid.Row="2" IsVisible="{Binding IsDetailsExpanded}" Padding="8,5"
                     BorderThickness="0,1,0,0" BorderBrush="{DynamicResource EffectBorderBrush}">
                 <ItemsControl ItemsSource="{Binding InlineParameters}">

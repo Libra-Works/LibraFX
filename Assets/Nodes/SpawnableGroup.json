@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "typeId": "c0bc50ea-c514-41a2-9b28-9c2c931d2821",
+  "namespace": "LiberaFx",
+  "kind": "SpawnableGroup",
+  "name": "Spawnable Group",
+  "displayNameKey": "Editor.Node.SpawnableGroup",
+  "groupNameKey": "Editor.NodeGroup.Graphs",
+  "group": "Graph nodes",
+  "portType": "Signal",
+  "portCategory": "Signal",
+  "inputPorts": [
+    { "id": "spawn", "name": "Spawn", "portType": "Signal", "category": "Signal" }
+  ],
+  "outputPorts": [
+    { "id": "then", "name": "Then", "portType": "Signal", "category": "Signal" }
+  ]
+}

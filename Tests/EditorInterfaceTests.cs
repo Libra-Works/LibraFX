@@ -17,6 +17,7 @@ internal static class EditorInterfaceTests
     public static void Run()
     {
         VerifyParameterRows();
+        VerifyContainerPresentation();
         VerifyCatalogs();
         var text = LocalizationService.Shared;
         var originalLanguage = text.SelectedLanguage;
@@ -120,6 +121,44 @@ internal static class EditorInterfaceTests
             if (Directory.Exists(root)) Directory.Delete(root);
         }
         VerifySettingsBindingLifetime();
+    }
+
+    public static void VerifyContainerPresentation()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var scalar = graph.CreateNode(GraphNodeKind.Float);
+        var gpu = graph.CreateNode(new GraphNodeKind("GpuParticle"));
+        var spawnable = graph.CreateNode(GraphNodeKind.SpawnableGroup);
+        var target = graph.CreateNode(GraphNodeKind.Multiply);
+        var before = graph.CreateSnapshot();
+        var scalarView = new GraphNodeView { DataContext = scalar };
+        var gpuView = new GraphNodeView { DataContext = gpu };
+        var spawnView = new GraphNodeView { DataContext = spawnable };
+        var window = new Window { Content = new StackPanel { Children = { scalarView, gpuView, spawnView } } };
+        var localization = LocalizationService.Shared;
+        var language = localization.SelectedLanguage;
+        localization.SelectedLanguage = localization.Languages.Single(item => item.Id == "en");
+        window.Show();
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            if (!scalarView.FindControl<TextBlock>("PortTypeLabel")!.IsEffectivelyVisible ||
+                scalar.DisplayPortType != "Scalar" ||
+                gpuView.FindControl<TextBlock>("PortTypeLabel")!.IsEffectivelyVisible ||
+                !gpuView.FindControl<TextBlock>("GpuProgramLabel")!.IsEffectivelyVisible ||
+                gpuView.FindControl<TextBlock>("GpuProgramLabel")!.Text != localization.Get("Gpu.ContainerHint") ||
+                !spawnView.FindControl<TextBlock>("PortTypeLabel")!.IsEffectivelyVisible ||
+                spawnView.FindControl<TextBlock>("GroupHintLabel")!.IsEffectivelyVisible ||
+                gpu.HasLegacyInput || gpu.HasLegacyOutput ||
+                graph.TryConnectNodes(gpu, target, out _, "a"))
+                throw new InvalidOperationException("GPU containers must not present or expose scalar ports.");
+            localization.SelectedLanguage = localization.Languages.Single(item => item.Id == "ja");
+            Dispatcher.UIThread.RunJobs();
+            if (gpuView.FindControl<TextBlock>("GpuProgramLabel")!.Text != localization.Get("Gpu.ContainerHint") ||
+                !GraphSnapshot.ContentEquals(before, graph.CreateSnapshot()))
+                throw new InvalidOperationException("GPU container label localization changed graph data.");
+        }
+        finally { localization.SelectedLanguage = language; window.Close(); }
     }
 
     public static void VerifyParameterRows()

@@ -1,4 +1,5 @@
 {
+  "Gpu.ContainerHint": "GPU Program — double-click to edit",
   "Gpu.Node": "GPU Particle",
   "Gpu.Group": "GPU",
   "Gpu.Back": "Back",

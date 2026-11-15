@@ -69,7 +69,7 @@ int main(int argc, char** argv)
         auto compiledBinding = CustomNodeBinding{};
         auto compiledProgram = Program{};
         assert(Program::load(compiled.data(), compiled.size(), nullptr, 0, &compiledBinding, 1, compiledProgram) == Result::Ok);
-        auto compiledWork = std::array<double, 4>{};
+        alignas(16) auto compiledWork = std::array<double, 4>{};
         auto compiledInstance = Instance{};
         assert(compiledInstance.initialize(compiledProgram, compiledWork.data(), compiledWork.size()) == Result::Ok);
         assert(compiledInstance.updateAsync(0, enqueue, nullptr) == Result::Ok);
@@ -82,7 +82,7 @@ int main(int argc, char** argv)
         auto bindings = std::array<CustomNodeBinding, 3>{};
         auto program = Program{};
         assert(Program::load(compiled.data(), compiled.size(), nullptr, 0, bindings.data(), bindings.size(), program) == Result::Ok);
-        auto work = std::array<double, 12>{};
+        alignas(16) auto work = std::array<double, 12>{};
         auto instance = Instance{};
         assert(instance.initialize(program, work.data(), work.size()) == Result::Ok);
         assert(instance.updateAsync(1.5707963267948966, enqueue, nullptr) == Result::Ok);
@@ -96,7 +96,7 @@ int main(int argc, char** argv)
         auto program = Program{};
         assert(Program::load(bytes.data(), bytes.size(), nullptr, 0, &binding, 1, program) == Result::Ok);
         assert(binding.descriptor == &registry[i]);
-        auto work = std::array<double, 4>{};
+        alignas(16) auto work = std::array<double, 4>{};
         auto instance = Instance{};
         assert(instance.initialize(program, work.data(), work.size()) == Result::Ok);
         assert(instance.updateAsync(0, enqueue, nullptr) == Result::Ok);
@@ -108,7 +108,7 @@ int main(int argc, char** argv)
     auto binding = CustomNodeBinding{};
     auto program = Program{};
     assert(Program::load(bytes.data(), bytes.size(), nullptr, 0, &binding, 1, program) == Result::Ok);
-    auto work = std::array<double, 4>{};
+    alignas(16) auto work = std::array<double, 4>{};
     auto defaults = std::array<double, 16>{};
     auto instance = Instance{};
     assert(instance.initialize(program, work.data(), work.size(), defaults.data(), defaults.size()) == Result::Ok);

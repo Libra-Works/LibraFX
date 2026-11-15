@@ -1,4 +1,5 @@
 {
+  "Gpu.ContainerHint": "GPU プログラム — ダブルクリックして編集",
   "Gpu.Node": "GPU パーティクル",
   "Gpu.Group": "GPU",
   "Gpu.Back": "戻る",
