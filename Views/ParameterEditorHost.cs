@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Automation;
 using Avalonia.Controls.Primitives;
 using Avalonia.Data;
+using Avalonia.Data.Converters;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
@@ -41,8 +42,9 @@ public sealed class ParameterEditorHost : ContentControl
         var editor = custom ?? (editorKind == "slider" ? CreateSlider(parameter) : CreateStandard(parameter));
         editor.Bind(IsEnabledProperty, new Binding(nameof(parameter.IsEnabled)));
         editor.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.Name)));
-        var status = new TextBlock { Foreground = Brushes.OrangeRed, TextWrapping = TextWrapping.Wrap };
+        var status = new TextBlock { Name = "ParameterStatus", Foreground = Brushes.OrangeRed, TextWrapping = TextWrapping.Wrap };
         status.Bind(TextBlock.TextProperty, new Binding(nameof(parameter.Status)));
+        status.Bind(IsVisibleProperty, new Binding(nameof(parameter.Status)) { Converter = StringConverters.IsNotNullOrEmpty });
         _missingEditorMessage = new TextBlock
         {
             IsVisible = custom is null && editorKind is not (null or "slider" or "text" or "radio" or "multiline"),
@@ -51,40 +53,65 @@ public sealed class ParameterEditorHost : ContentControl
         };
         var missing = _missingEditorMessage;
         missing.IsVisible = custom is null && editorKind is not (null or "slider" or "text" or "radio" or "multiline");
-        var label = new TextBlock { FontWeight = FontWeight.SemiBold };
+        var label = new TextBlock { FontWeight = FontWeight.Normal };
         label.Bind(TextBlock.TextProperty, new Binding(nameof(parameter.Name)));
         label.TextTrimming = TextTrimming.CharacterEllipsis;
         label.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
         label.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.Name)));
         if (parameter.Type is "float" or "int" && editor is TextBox scalar)
             EnableScrubbing(label, scalar, parameter, nameof(parameter.ValueText));
-        var disconnect = new IconButton { Name = "DisconnectParameterButton", Icon = EditorIcon.Disconnect };
+        var disconnect = CreateActionButton("DisconnectParameterButton", EditorIcon.Disconnect);
         disconnect.Bind(Button.CommandProperty, new Binding(nameof(parameter.DisconnectCommand)));
         disconnect.Bind(IsVisibleProperty, new Binding(nameof(parameter.HasConnection)));
         disconnect.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.DisconnectHint)));
         disconnect.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.DisconnectHint)));
-        var reset = new IconButton { Name = "ResetParameterButton", Icon = EditorIcon.Reset };
+        var reset = CreateActionButton("ResetParameterButton", EditorIcon.Reset);
         reset.Bind(Button.CommandProperty, new Binding(nameof(parameter.ResetCommand)));
         reset.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.ResetHint)));
         reset.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.ResetHint)));
-        var linkSlot = new Border { Width = 32, Child = disconnect };
+        var actions = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 2,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Children = { disconnect, reset }
+        };
         var row = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("32,110,*,32"),
+            ColumnDefinitions = new ColumnDefinitions("124,*,Auto"),
             RowDefinitions = new RowDefinitions("Auto,Auto,Auto"),
             ColumnSpacing = 6,
             RowSpacing = 2,
-            Children = { linkSlot, label, editor, reset, status, missing }
+            MinHeight = 28,
+            Children = { label, editor, actions, status, missing }
         };
-        Grid.SetColumn(label, 1);
-        Grid.SetColumn(editor, 2);
-        Grid.SetColumn(reset, 3);
-        Grid.SetColumn(status, 2);
+        Grid.SetColumn(editor, 1);
+        Grid.SetColumn(actions, 2);
+        Grid.SetColumn(status, 1);
         Grid.SetRow(status, 1);
-        Grid.SetColumn(missing, 2);
+        Grid.SetColumn(missing, 1);
         Grid.SetRow(missing, 2);
         Content = row;
         RefreshLocalizedLabels(editorKind);
+    }
+
+    private static IconButton CreateActionButton(string name, EditorIcon icon)
+    {
+        var button = new IconButton
+        {
+            Name = name, Icon = icon,
+            Width = 24, Height = 24, MinWidth = 24, MinHeight = 24,
+            Padding = new Thickness(3),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0)
+        };
+        button.Bind(ForegroundProperty, new DynamicResourceExtension("EffectMutedForegroundBrush"));
+        if (button.Content is Control glyph)
+        {
+            glyph.Width = 14;
+            glyph.Height = 14;
+        }
+        return button;
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -362,7 +389,13 @@ public sealed class ParameterEditorHost : ContentControl
 
     private static TextBox CreateTextBox(string property)
     {
-        var box = new TextBox { MinWidth = 0 };
+        var box = new TextBox
+        {
+            MinWidth = 0, MinHeight = 26,
+            Padding = new Thickness(6, 3),
+            CornerRadius = new CornerRadius(2),
+            VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center
+        };
         box.Bind(TextBox.TextProperty, new Binding(property)
         {
             Mode = BindingMode.TwoWay,

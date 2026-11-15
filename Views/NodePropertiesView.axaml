@@ -3,9 +3,25 @@
              xmlns:vm="using:LiberaFx.ViewModels"
              xmlns:views="using:LiberaFx.Views"
              x:Class="LiberaFx.Views.NodePropertiesView"
+             FontSize="12"
              x:DataType="vm:NodePropertiesPaneViewModel">
+    <UserControl.Styles>
+        <Style Selector="TextBox">
+            <Setter Property="MinHeight" Value="26" />
+            <Setter Property="Padding" Value="6,3" />
+            <Setter Property="CornerRadius" Value="2" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="MinHeight" Value="26" />
+            <Setter Property="Padding" Value="6,3" />
+        </Style>
+        <Style Selector="CheckBox">
+            <Setter Property="MinHeight" Value="26" />
+        </Style>
+    </UserControl.Styles>
     <ScrollViewer HorizontalScrollBarVisibility="Auto">
-    <StackPanel Margin="12" Spacing="8">
+    <StackPanel Margin="8" Spacing="6">
         <TextBlock Text="{DynamicResource Text.Editor.SelectedNode}"
                    FontWeight="SemiBold"
                    Foreground="{DynamicResource EffectForegroundBrush}" />
@@ -13,7 +29,7 @@
                    IsVisible="{Binding Graph.HasNoSelection}"
                    TextWrapping="Wrap"
                    Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-        <StackPanel IsVisible="{Binding Graph.HasSelection}" Spacing="6">
+        <StackPanel IsVisible="{Binding Graph.HasSelection}" Spacing="4">
             <TextBlock Text="{DynamicResource Text.Editor.Type}"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <TextBlock Text="{Binding Graph.SelectedNodeType}"
@@ -43,7 +59,7 @@
             <ItemsControl ItemsSource="{Binding Parameters}" Margin="0,8,0,0">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="vm:NodeParameterEditorViewModel">
-                        <views:ParameterEditorHost Margin="0,0,0,3" />
+                        <views:ParameterEditorHost Margin="0,0,0,2" />
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>

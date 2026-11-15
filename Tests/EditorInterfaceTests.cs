@@ -143,13 +143,16 @@ internal static class EditorInterfaceTests
         {
             Dispatcher.UIThread.RunJobs();
             var row = (Grid)host.Content!;
-            var disconnect = (IconButton)row.Children.OfType<Border>().Single().Child!;
-            var reset = row.Children.OfType<IconButton>().Single(button => button.Icon == EditorIcon.Reset);
+            var actions = row.Children.OfType<StackPanel>().Single();
+            var disconnect = actions.Children.OfType<IconButton>().Single(button => button.Icon == EditorIcon.Disconnect);
+            var reset = actions.Children.OfType<IconButton>().Single(button => button.Icon == EditorIcon.Reset);
             var label = row.Children.OfType<TextBlock>().First();
             var editor = row.Children.OfType<TextBox>().Single();
-            if (!disconnect.IsVisible || disconnect.Bounds.Right > label.Bounds.Left ||
-                editor.Bounds.Left < label.Bounds.Right || reset.Bounds.Left < editor.Bounds.Right)
-                throw new InvalidOperationException("Parameter row must align unlink, label, field and reset horizontally.");
+            if (!disconnect.IsVisible || editor.Bounds.Left < label.Bounds.Right ||
+                actions.Bounds.Left < editor.Bounds.Right || disconnect.Bounds.Right > reset.Bounds.Left)
+                throw new InvalidOperationException("Parameter row must align label, field and trailing unlink/reset actions.");
+            if (row.Children.OfType<TextBlock>().Single(block => block.Name == "ParameterStatus").IsVisible)
+                throw new InvalidOperationException("Empty parameter status must not reserve an extra inspector row.");
             reset.Command!.Execute(null);
             if (parameter.NumericValue != 1 || graph.Connections.Count != 2 || parameter.ResetCommand.CanExecute(null))
                 throw new InvalidOperationException("Reset must restore the declared default without breaking links.");
