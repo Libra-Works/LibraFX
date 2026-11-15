@@ -77,6 +77,7 @@ public sealed class VfxProgram
         _ = RenderProgramBindings.CreateScene(graph, 0);
         var nodes = Flatten(graph)
             .Where(node => node.Kind != GraphNodeKind.Comment && node.Kind != GraphNodeKind.GraphGroup &&
+                !GpuParticleEditorService.IsGpu(node.Kind) &&
                 !RenderProgramBindings.IsRenderNode(node.Kind))
             .ToArray();
         if (nodes.Length > MaxInstructions) throw new InvalidDataException("Too many runtime nodes.");
@@ -625,7 +626,7 @@ public sealed class VfxProgram
         foreach (var node in graph.Nodes)
         {
             yield return node;
-            if (node.ChildGraph is not null)
+            if (node.ChildGraph is not null && !GpuParticleEditorService.IsGpu(node.Kind))
                 foreach (var child in Flatten(node.ChildGraph))
                     yield return child;
         }

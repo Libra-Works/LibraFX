@@ -62,7 +62,10 @@ public sealed record GraphNodeSnapshot(
     GraphSnapshot? ChildGraph = null,
     IReadOnlyList<NodeParameterSnapshot>? Parameters = null,
     GroupAssetReference? GroupAsset = null,
-    bool IsPolymorphic = false);
+    bool IsPolymorphic = false)
+{
+    public string KindDomain => Services.GpuParticleEditorService.IsGpu(Kind) ? "GpuParticle" : "Cpu";
+}
 
 public sealed record GroupAssetReference(Guid Id, long Revision, bool Locked);
 

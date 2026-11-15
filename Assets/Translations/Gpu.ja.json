@@ -1,0 +1,22 @@
+{
+  "Gpu.Node": "GPU パーティクル",
+  "Gpu.Group": "GPU",
+  "Gpu.Back": "戻る",
+  "Gpu.Close": "CPU / 閉じる",
+  "Gpu.Compile": "コンパイル",
+  "Gpu.Status": "GPU パーティクル · ソース出力のみ · GPU 実行は未対応",
+  "Gpu.Palette": "GPU ノード",
+  "Gpu.Capacity": "最大粒子数",
+  "Gpu.ApplyCapacity": "最大粒子数を適用",
+  "Gpu.Export": "IR を保存 / シェーダーを出力…",
+  "Gpu.FutureTexture": "RenderStartTexture（将来対応）",
+  "Gpu.FutureHint": "テクスチャシミュレーションと Compute パスはポータブルコンパイラで未対応です。",
+  "Gpu.Visual": "ビジュアル VOP",
+  "Gpu.Text": "型付き DSL",
+  "Gpu.Grammar": "VEX/HLSL ではない独自の制限付き DSL：let、@属性、param()、型付きベクトル、登録済み数学演算。ループや任意コードは非対応。グラフとテキストは同じ型付き IR を編集します。",
+  "Gpu.ApplyText": "テキスト → IR を適用",
+  "Gpu.EmitText": "グラフ → テキスト",
+  "Gpu.Properties": "GPU プロパティ",
+  "Gpu.Writes": "属性出力",
+  "Gpu.Diagnostics": "診断"
+}

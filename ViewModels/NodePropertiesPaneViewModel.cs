@@ -130,7 +130,8 @@ public sealed class NodePropertiesPaneViewModel : Tool
         if (_node is null) return;
         _node.PropertyChanged += OnNodeChanged;
         foreach (var definition in _node.Definition.Parameters.Where(parameter =>
-                     !RenderNodeSchema.IsRenderNode(_node.Definition) || parameter.Id != "materialSchema"))
+                     !_node.IsGpuParticle &&
+                     (!RenderNodeSchema.IsRenderNode(_node.Definition) || parameter.Id != "materialSchema")))
             Parameters.Add(new NodeParameterEditorViewModel(_graph, _node, definition));
     }
 }

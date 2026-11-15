@@ -117,6 +117,7 @@
 
         <dock:DockControl Grid.Row="1"
                           Layout="{Binding Layout}" />
+        <views:GpuWorkspaceView x:Name="GpuWorkspace" Grid.Row="1" IsVisible="False" />
 
         <StackPanel Grid.Row="2" Margin="8,4" Spacing="2">
             <Button Content="{Binding PreviewConnectionSummary}" Click="OnConnectionsClick"

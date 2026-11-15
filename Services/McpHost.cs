@@ -46,6 +46,7 @@ public sealed class McpHost
             .WithHttpTransport(options => options.Stateless = true)
             .WithTools<LiberaFxMcpTools>()
             .WithTools<AssetMcpTools>()
+            .WithTools<GpuParticleMcpTools>()
             .WithTools<GraphDebugTools>();
 
         var app = builder.Build();

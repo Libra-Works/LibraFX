@@ -1,0 +1,82 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="LiberaFx.Views.GpuWorkspaceView"
+             Background="{DynamicResource EffectWindowBackgroundBrush}"
+             FontSize="12" KeyDown="OnKeyDown">
+  <UserControl.Styles>
+    <Style Selector="Button"><Setter Property="FontSize" Value="12" /><Setter Property="Padding" Value="8,4" /></Style>
+    <Style Selector="TextBox"><Setter Property="FontSize" Value="12" /><Setter Property="MinHeight" Value="26" /></Style>
+    <Style Selector="ComboBox"><Setter Property="FontSize" Value="12" /><Setter Property="MinHeight" Value="26" /></Style>
+  </UserControl.Styles>
+  <Grid RowDefinitions="Auto,Auto,*,Auto">
+    <Border Padding="10,8" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource EffectBorderBrush}">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
+        <Button x:Name="BackButton" Click="OnBack" Content="{DynamicResource Text.Gpu.Back}" />
+        <TextBlock x:Name="Breadcrumb" Grid.Column="1" Margin="12,0" VerticalAlignment="Center" />
+        <Button Grid.Column="2" Click="OnUndo" Content="Undo" />
+        <Button Grid.Column="3" Click="OnRedo" Content="Redo" />
+        <Button Grid.Column="4" Click="OnCompile" Content="{DynamicResource Text.Gpu.Compile}" />
+        <Button Grid.Column="5" Click="OnClose" Content="{DynamicResource Text.Gpu.Close}" />
+      </Grid>
+    </Border>
+    <TextBlock Grid.Row="1" Margin="12,6" Text="{DynamicResource Text.Gpu.Status}"
+               Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+    <Grid Grid.Row="2" ColumnDefinitions="190,*,250">
+      <Border BorderThickness="0,0,1,0" BorderBrush="{DynamicResource EffectBorderBrush}" Padding="8">
+        <ScrollViewer><StackPanel Spacing="6">
+          <TextBlock Text="{DynamicResource Text.Gpu.Palette}" />
+          <ComboBox x:Name="TypeChoice" />
+          <StackPanel x:Name="Palette" Spacing="3" />
+          <Separator />
+          <TextBlock Text="{DynamicResource Text.Gpu.Capacity}" />
+          <TextBox x:Name="Capacity" />
+          <Button Click="OnCapacity" Content="{DynamicResource Text.Gpu.ApplyCapacity}" />
+          <Separator />
+          <ComboBox x:Name="ExportFormat" />
+          <Button Click="OnExport" Content="{DynamicResource Text.Gpu.Export}" />
+          <Button IsEnabled="False" Content="{DynamicResource Text.Gpu.FutureTexture}"
+                  ToolTip.Tip="{DynamicResource Text.Gpu.FutureHint}" />
+        </StackPanel></ScrollViewer>
+      </Border>
+      <Grid Grid.Column="1">
+        <ScrollViewer x:Name="FlowScroll">
+          <StackPanel x:Name="FlowPanel" Margin="40,20" Spacing="6" HorizontalAlignment="Center" MinWidth="300" />
+        </ScrollViewer>
+        <TabControl x:Name="KernelTabs" IsVisible="False">
+          <TabItem Header="{DynamicResource Text.Gpu.Visual}">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+              <Canvas x:Name="NodeCanvas" Width="2200" Height="1600" Background="Transparent" />
+            </ScrollViewer>
+          </TabItem>
+          <TabItem Header="{DynamicResource Text.Gpu.Text}">
+            <Grid RowDefinitions="Auto,*,Auto" Margin="10">
+              <TextBlock TextWrapping="Wrap" Margin="0,0,0,6"
+                         Text="{DynamicResource Text.Gpu.Grammar}" />
+              <TextBox x:Name="KernelText" Grid.Row="1" AcceptsReturn="True" TextWrapping="NoWrap"
+                       FontFamily="Consolas" TextChanged="OnTextChanged" />
+              <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
+                <Button Click="OnApplyText" Content="{DynamicResource Text.Gpu.ApplyText}" />
+                <Button Click="OnEmitText" Content="{DynamicResource Text.Gpu.EmitText}" />
+              </StackPanel>
+            </Grid>
+          </TabItem>
+        </TabControl>
+      </Grid>
+      <Border Grid.Column="2" Padding="8" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource EffectBorderBrush}">
+        <ScrollViewer><StackPanel Spacing="6">
+          <TextBlock Text="{DynamicResource Text.Gpu.Properties}" />
+          <TextBlock x:Name="SelectionLabel" TextWrapping="Wrap" />
+          <StackPanel x:Name="NodeInspector" Spacing="5" />
+          <Separator />
+          <TextBlock Text="{DynamicResource Text.Gpu.Writes}" />
+          <StackPanel x:Name="WritesPanel" Spacing="4" />
+          <StackPanel x:Name="BindingsPanel" Spacing="4" />
+          <Separator />
+          <TextBlock Text="{DynamicResource Text.Gpu.Diagnostics}" />
+          <TextBlock x:Name="DiagnosticText" TextWrapping="Wrap" Foreground="#ef7474" />
+        </StackPanel></ScrollViewer>
+      </Border>
+    </Grid>
+    <TextBlock x:Name="Status" Grid.Row="3" Margin="12,6" TextWrapping="Wrap" />
+  </Grid>
+</UserControl>

@@ -277,6 +277,12 @@ public partial class GraphNodeView : UserControl
             return;
         }
 
+        if (e.ClickCount >= 2 && node.IsGpuParticle)
+        {
+            node.Workspace.OpenGpuEditor(node);
+            e.Handled = true;
+            return;
+        }
         if (e.ClickCount >= 2 && node.IsGraphGroup)
         {
             node.Workspace.EnterGraph(node);
@@ -320,6 +326,12 @@ public partial class GraphNodeView : UserControl
         }
 
         this.FindAncestorOfType<GraphEditorView>()?.Focus();
+        if (e.ClickCount >= 2 && node.IsGpuParticle)
+        {
+            node.Workspace.OpenGpuEditor(node);
+            e.Handled = true;
+            return;
+        }
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
             node.Workspace.ToggleSelection(node);

@@ -15,7 +15,7 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
-        var dataRoot = args is ["--window-layout"]
+        var dataRoot = args is ["--window-layout"] or ["--gpu-editor"] or ["--runtime-integration"]
             ? Path.Combine(Environment.CurrentDirectory, "build", "window-layout-data-" + Guid.NewGuid().ToString("N"))
             : Path.Combine(Path.GetTempPath(), "liberafx-comment-test-" + Guid.NewGuid().ToString("N"));
         Environment.SetEnvironmentVariable("LIBERAFX_DATA_ROOT", dataRoot);
@@ -45,6 +45,12 @@ internal static class Program
             else File.WriteAllText(Path.Combine(directory, "language.json"), languageFixture);
         }
         AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+        if (args is ["--gpu-editor"])
+        {
+            LiberaFx.Tests.GpuParticleEditorTests.Run();
+            EditorInterfaceTests.VerifyParameterRows();
+            return;
+        }
         if (args is ["--window-layout"])
         {
             LiberaFx.Tests.DockLayoutTests.Run();

@@ -27,6 +27,10 @@ public static class GraphValidator
                 !nodes.TryAdd(node.Id, node))
                 throw new InvalidDataException("The project contains an invalid graph node.");
             if (node.Curve is not null) FCurve.Validate(node.Curve);
+            if (node.KindDomain == "GpuParticle" && node.Parameters?.Any(p =>
+                    p is not null && p.Id == Services.GpuParticleEditorService.ParameterId &&
+                    (p.Type != "gpuState" || !Services.GpuParticleEditorService.IsStateValue(p.Value))) == true)
+                throw new InvalidDataException("The GPU workspace parameter has an invalid type or authoring shape.");
             if (node.Parameters is { } parameters)
             {
                 var ids = new HashSet<string>(StringComparer.Ordinal);

@@ -12,6 +12,14 @@ namespace LiberaFx.ViewModels;
 
 public sealed class GraphWorkspaceViewModel : ObservableObject
 {
+    public event EventHandler<Guid>? GpuEditorRequested;
+    public event EventHandler<Guid>? GpuProgramChanged;
+    private Dictionary<Guid, string> _publishedGpuStates = [];
+    public void OpenGpuEditor(GraphNodeViewModel node)
+    {
+        if (Nodes.Contains(node) && node.IsGpuParticle) GpuEditorRequested?.Invoke(this, node.Id);
+    }
+    internal void NotifyGpuProgramChanged(Guid nodeId) => GpuProgramChanged?.Invoke(this, nodeId);
     private const int MaxGraphDepth = 12;
     private readonly UndoRedoManager _history;
     public GroupAssetCatalog? GroupAssets { get; }
@@ -136,6 +144,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         NodeDefinitionCatalog? nodeDefinitions = null)
     {
         _history = history;
+        _history.StateChanged += (_, _) => PublishGpuChanges();
         GroupAssets = groupAssets;
         NodeDefinitions = nodeDefinitions;
         Nodes.CollectionChanged += OnNodesChanged;
@@ -168,6 +177,13 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             problems.Add(new GraphProblemViewModel(target, text));
         }
         var byTarget = problems.ToLookup(problem => problem.Node);
+        foreach (var node in Nodes.Where(n => GpuParticleEditorService.IsGpu(n.Definition.Kind)))
+            foreach (var diagnostic in GpuParticleEditorService.Diagnostics(GpuParticleEditorService.ReadState(node)))
+                problems.Add(new GraphProblemViewModel(node,
+                    $"GPU {node.Id} / {diagnostic.KernelId} / {diagnostic.NodeId} / {diagnostic.PinId}: " +
+                    $"{diagnostic.Code}: {diagnostic.Message}" +
+                    (diagnostic.Span is { } span ? $" [text {span.Start}:{span.Length}]" : "")));
+        byTarget = problems.ToLookup(problem => problem.Node);
         foreach (var node in Nodes)
             node.SetDiagnostics(string.Join(Environment.NewLine,
                 byTarget[node].Select(problem => problem.Message)));
@@ -680,6 +696,16 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     }
 
     public static void ValidateSnapshot(GraphSnapshot snapshot) => GraphValidator.Validate(snapshot);
+
+    private void PublishGpuChanges()
+    {
+        var current = GpuProgramDeliveryService.Containers(CreateSnapshot()).ToDictionary(n => n.Id,
+            n => n.Parameters?.FirstOrDefault(p => p.Id == GpuParticleEditorService.ParameterId)?.Value.GetRawText() ?? "{}");
+        var changed = _publishedGpuStates.Keys.Concat(current.Keys).Distinct().Where(id =>
+            _publishedGpuStates.GetValueOrDefault(id) != current.GetValueOrDefault(id)).ToArray();
+        _publishedGpuStates = current;
+        foreach (var id in changed) NotifyGpuProgramChanged(id);
+    }
 
     private static void ValidateSnapshot(GraphSnapshot snapshot, HashSet<Guid> allIds, int depth)
     {
@@ -1309,12 +1335,15 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         if (isPolymorphic && family is null)
             throw new ArgumentException("The node has no polymorphic family.", nameof(kind));
         var index = _nextNodeIndex++;
+        var nodeId = Guid.NewGuid();
         var node = new GraphNodeViewModel(
             this,
             definition,
             isPolymorphic ? LocalizationService.Shared.GetOrDefault(family?.DisplayNameKey ?? definition.DisplayNameKey, definition.Name) : definition.Name,
             x ?? 80 + (index % 4) * 280,
             y ?? 80 + (index / 4) * 160,
+            id: nodeId,
+            parameters: GpuParticleEditorService.IsGpu(kind) ? GpuParticleEditorService.InitialParameters(nodeId) : null,
             isPolymorphic: isPolymorphic);
         _history.Execute(new AddGraphNodeCommand(this, node, Nodes.Count));
         return node;
@@ -1390,13 +1419,18 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             throw new ArgumentException("Node positions must be finite numbers.");
         }
 
+        var plannedId = Guid.NewGuid();
         return new GraphNodeViewModel(
             this,
             definition,
             specification.Name,
             specification.X,
             specification.Y,
-            parameters: specification.Parameters,
+            id: plannedId,
+            parameters: GpuParticleEditorService.IsGpu(specification.Kind) &&
+                specification.Parameters?.Any(p => p.Id == GpuParticleEditorService.ParameterId) != true
+                ? [.. specification.Parameters ?? [], .. GpuParticleEditorService.InitialParameters(plannedId)]
+                : specification.Parameters,
             isPolymorphic: specification.IsPolymorphic);
     }
 

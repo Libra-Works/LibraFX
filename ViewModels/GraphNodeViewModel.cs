@@ -42,6 +42,7 @@ public sealed class GraphNodeViewModel : ObservableObject
     public GraphSnapshot? ChildGraph { get; }
     public GroupAssetReference? GroupAsset { get; private set; }
     public bool IsGraphGroup => ChildGraph is not null;
+    public bool IsGpuParticle => GpuParticleEditorService.IsGpu(Definition.Kind);
     public bool IsComment => Definition.Kind == GraphNodeKind.Comment;
     public bool HasPorts => !IsGraphGroup && !IsComment;
     public bool HasLegacyInput => HasPorts && Definition.InputPorts is null;
@@ -258,6 +259,7 @@ public sealed class GraphNodeViewModel : ObservableObject
 
     private IReadOnlyList<NodeParameterDefinition> VisibleParameters(GraphNodeDefinition definition) =>
         definition.Parameters.Where(parameter =>
+            !IsGpuParticle &&
             (!IsComment || parameter.Id != "image") &&
             (!RenderNodeSchema.IsRenderNode(definition) ||
              parameter.Id != "materialSchema" && !parameter.Id.StartsWith("material_", StringComparison.Ordinal))).ToArray();

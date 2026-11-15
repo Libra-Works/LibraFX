@@ -93,6 +93,7 @@ public sealed record GraphNodeDefinition(
     private static readonly JsonSerializerOptions SerializerOptions = new() { PropertyNameCaseInsensitive = true };
     private static readonly Dictionary<Guid, string> BuiltInIds = new()
     {
+        [Guid.Parse("57980d8e-701f-443c-91f6-8db56a09d2fc")] = "GpuParticle",
         [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700001")] = "ModelDraw",
         [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700002")] = "SpriteDraw",
         [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700003")] = "SpriteAnimation",
@@ -202,6 +203,7 @@ public sealed record GraphNodeDefinition(
     public IReadOnlyList<GraphInputPortDefinition>? InputPorts { get; init; }
     public IReadOnlyList<GraphOutputPortDefinition>? OutputPorts { get; init; }
     public GraphRuntimeDefinition? Runtime { get; init; }
+    public string KindDomain => Services.GpuParticleEditorService.IsGpu(Kind) ? "GpuParticle" : "Cpu";
 
     public GraphPortCategory GetInputPortCategory(string? portId) =>
         InputPorts?.FirstOrDefault(port => port.Id == portId)?.Category ?? PortCategory;
@@ -405,7 +407,8 @@ public sealed record GraphNodeDefinition(
                     throw new InvalidDataException("Signal output ports must use the Signal type.");
                 outputs.Add(new GraphOutputPortDefinition(port.Id!, port.Name, port.PortType, portCategory));
             }
-            if (outputs.Count == 0) throw new InvalidDataException("Output port definitions must not be empty.");
+            if (outputs.Count == 0 && node.TypeId != Guid.Parse("57980d8e-701f-443c-91f6-8db56a09d2fc"))
+                throw new InvalidDataException("Output port definitions must not be empty.");
         }
         var parameterIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var parameter in node.Parameters ?? [])

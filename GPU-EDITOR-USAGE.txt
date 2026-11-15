@@ -1,0 +1,76 @@
+GPU Particle authoring workspace
+===============================
+Add GPU Particle from the CPU graph palette. Double-click its header/body to
+open the dedicated mode without replacing dock layouts, documents or history.
+The top-down ordered flow has Spawn, Update and RenderBillboard steps. Open a
+kernel by double-clicking its flow card or clicking Open kernel.
+
+Visual editing: choose an operation and result type in the GPU-only palette.
+Drag node titles to move. Click an output and then a target input to connect.
+Select a node to edit constants/types/attribute reads/uniforms/components,
+disconnect inputs or delete. Attribute Writes selects the selected value node
+and its destination attribute. Type errors remain editable; red borders and
+Problems identify the container, kernel, node/pin and optional DSL span.
+
+Text editing uses LibraGpu.Core's original restricted typed DSL, NOT VEX/HLSL:
+let bindings, @Attribute assignments, param(), float2/3/4 and registered math.
+Apply Text compiles into the SAME typed kernel IR. Failed text retains the prior
+IR/wires and a separate persisted draft plus diagnostics. Graph-to-text emits
+only that grammar, not arbitrary source/layout round-tripping. Generated
+unchanged text reuses the Core source-span/ID maps. Manually rewritten DSL may
+create new operation IDs; existing matching IDs keep their saved positions.
+Graph-to-text explicitly discards a text draft. Moving nodes does not discard it.
+Back/Escape returns to flow/CPU; edits are already in CPU project history.
+
+CPU node kind GpuParticle has stable built-in type GUID
+57980d8e-701f-443c-91f6-8db56a09d2fc, no numeric ports, KindDomain=GpuParticle.
+Its node parameter gpuState (type gpuState) stores:
+  { program, positions:{"kernelId/nodeId":{x,y}}, drafts,
+    resourceAssetPaths:{"resourceId":"engine asset object path"} }
+The program is portable LibraGpu.Core.GpuProgram. Asset paths are UI metadata,
+never portable IR. Node GUID, IR, layout and failed drafts participate in
+save/load/copy/paste and CPU Undo/Redo. Multiple containers are independently
+edited by GUID, not a global editor registry. New nodes persist actual starter IR.
+Authoring state is bounded to 8 MiB; Core program/DSL limits also apply.
+Invalid semantic graphs can be saved, but compilation/export is blocked.
+
+Save IR / Export opens a user destination picker and atomically writes UTF-8
+without BOM. json is validated canonical IR. usf/hlsl/compute includes matching
+.metadata.json beside the source. This is SourceExport, RuntimeExecuted=false.
+These APIs alone do NOT execute GPU particles or prove engine/cooked gameplay.
+Quaternion, RenderStartTexture/ComputePass and texture simulation are unsupported.
+Existing declared texture resources have minimal engine-path binding fields;
+there is no general asset browser or unsupported simulation pretending to work.
+
+Parent/backend integration APIs (LiberaFx.Services):
+  GpuParticleEditorService.ReadProgram(GraphNodeSnapshot or GraphNodeViewModel)
+  GpuParticleEditorService.ReadState(node), Compile(state), Export(state,format)
+  GpuProgramDeliveryService.Containers(GraphSnapshot)
+  GpuProgramDeliveryService.Validate(GraphSnapshot) -> container+Core diagnostics
+  GpuProgramDeliveryService.Create(graph,programSequence,ShaderFormat.Usf)
+    -> deliveries {programSequence,nodeId,canonicalJson,metadata,shaderSource,
+                   registerKernels:[{id,stage,base64}],resourceAssetPaths}
+Metadata is Core GpuExportMetadata, including canonical contentHash, sourceHash,
+flow/kernel entrypoints and 80-byte particle/48-byte uniform ABI. LGPK packets
+come unmodified from Core SerializeLittleEndian. This delivery is still a
+SourceExport DTO; engine adapters must explicitly implement/verify execution.
+GraphWorkspaceViewModel.GpuProgramChanged(sender,nodeGuid) fires only for changed
+GPU containers after committed history changes (including undo/redo/deletion).
+Request a fresh ROOT snapshot and use its sequence; a missing GUID means removal.
+It is not an automatic network send or runtime-status claim.
+GraphWorkspaceViewModel.GpuEditorRequested opens the overlay by node GUID.
+
+MCP tools (active graph, UI dispatcher, DTO JSON):
+  gpu_describe: operations/type policies/ABI/limits/edit schema/capabilities
+  gpu_create_particle, gpu_read_program, gpu_apply_plan (one atomic undo step)
+  gpu_compile (includeSource opt-in), gpu_export_source (explicit source request)
+  gpu_export_bundle (explicit source/metadata/LGPK delivery), gpu_open_workspace
+Apply-plan requireValid rejects the whole plan on diagnostics. Text parse failure
+with requireValid=false preserves original IR plus its persisted erroneous draft.
+No tool publishes files or sends unrecognized engine commands.
+
+Validation:
+  dotnet run --project Tests\CommentImageSmokeTests.csproj -- --gpu-editor
+Includes typed graph/text editing, snapshot persistence, stable IDs, failed drafts,
+undo/redo, isolated containers, atomic plans, node-specific Problems, CPU exclusion,
+offline export status and actual visual controls, plus compact Inspector checks.

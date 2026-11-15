@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "typeId": "57980d8e-701f-443c-91f6-8db56a09d2fc",
+  "namespace": "LiberaFx.Gpu",
+  "kind": "GpuParticle",
+  "name": "GPU Particle",
+  "displayNameKey": "Gpu.Node",
+  "groupNameKey": "Gpu.Group",
+  "group": "GPU",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "inputPorts": [],
+  "outputPorts": [],
+  "parameters": [
+    { "id": "gpuState", "name": "GPU workspace", "type": "gpuState", "defaultValue": {} }
+  ]
+}

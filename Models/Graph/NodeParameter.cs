@@ -16,6 +16,7 @@ public static class NodeParameter
 {
     public static bool IsValidValue(string type, JsonElement value)
     {
+        if (type == "gpuState") return Services.GpuParticleEditorService.IsStateValue(value);
         if (type == "commentImage")
         {
             if (value.ValueKind != JsonValueKind.String) return false;
