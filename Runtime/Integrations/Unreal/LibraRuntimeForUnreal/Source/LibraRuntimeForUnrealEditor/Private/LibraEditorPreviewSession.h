@@ -8,10 +8,9 @@
 class UWorld;
 class AActor;
 class FAdvancedPreviewScene;
-class FSceneViewport;
 class FEditorViewportClient;
 class SDockTab;
-class SViewport;
+class SEditorViewport;
 class SWidget;
 class UMaterialInstanceDynamic;
 class ULibraEffectComponent;
@@ -76,8 +75,7 @@ private:
     TArray<FRenderNode> renderNodes;
     TArray<FString> sceneErrors;
     int64 renderProgramSequence = 0;
-    TSharedPtr<SViewport> viewportWidget;
-    TSharedPtr<FSceneViewport> sceneViewport;
+    TSharedPtr<SEditorViewport> viewportWidget;
     TSharedPtr<FEditorViewportClient> viewportClient;
     TSharedPtr<SDockTab> previewTab;
     TSharedPtr<SWidget> previewSettings;

@@ -24,7 +24,10 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "EditorViewportClient.h"
+#include "SEditorViewport.h"
+#include "SCommonEditorViewportToolbarBase.h"
 #include "Editor/EditorPerProjectUserSettings.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Framework/Docking/TabManager.h"
 #include "Misc/CoreDelegates.h"
 #include "Misc/CommandLine.h"
@@ -33,7 +36,6 @@
 #include "Misc/Parse.h"
 #include "Modules/ModuleManager.h"
 #include "PreviewScene.h"
-#include "Slate/SceneViewport.h"
 #include "Widgets/Docking/SDockTab.h"
 #include "Widgets/Input/SCheckBox.h"
 #include "Widgets/Input/SButton.h"
@@ -41,7 +43,6 @@
 #include "Widgets/Layout/SSplitter.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SNullWidget.h"
-#include "Widgets/SViewport.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -59,8 +60,8 @@ namespace
     class FLibraPreviewViewportClient final : public FEditorViewportClient
     {
     public:
-        explicit FLibraPreviewViewportClient(FAdvancedPreviewScene* scene)
-            : FEditorViewportClient(nullptr, scene), advancedScene(scene)
+        FLibraPreviewViewportClient(FAdvancedPreviewScene* scene, const TSharedRef<SEditorViewport>& widget)
+            : FEditorViewportClient(nullptr, scene, widget), advancedScene(scene)
         {
         }
 
@@ -83,6 +84,78 @@ namespace
 
     private:
         FAdvancedPreviewScene* advancedScene;
+    };
+
+    class SLibraPreviewViewport final : public SEditorViewport, public ICommonEditorViewportToolbarInfoProvider
+    {
+    public:
+        SLATE_BEGIN_ARGS(SLibraPreviewViewport) {}
+        SLATE_END_ARGS()
+
+        ~SLibraPreviewViewport() override
+        {
+            // Release the raw-scene client before the derived widget's scene ownership.
+            if (Client.IsValid()) Client->Viewport = nullptr;
+            Client.Reset();
+        }
+
+        void Construct(const FArguments&, const TSharedRef<FAdvancedPreviewScene>& scene, AActor* actor)
+        {
+            previewScene = scene;
+            previewActor = actor;
+            SEditorViewport::Construct(SEditorViewport::FArguments{});
+        }
+
+        TSharedRef<SEditorViewport> GetViewportWidget() override
+        {
+            return SharedThis(this);
+        }
+
+        TSharedPtr<FExtender> GetExtenders() const override
+        {
+            return nullptr;
+        }
+
+        void OnFloatingButtonClicked() override
+        {
+            FSlateApplication::Get().SetKeyboardFocus(SharedThis(this), EFocusCause::SetDirectly);
+        }
+
+    protected:
+        TSharedRef<FEditorViewportClient> MakeEditorViewportClient() override
+        {
+            auto client = MakeShared<FLibraPreviewViewportClient>(previewScene.Get(), SharedThis(this));
+            auto cameraPosition = FVector(350, -450, 320);
+            client->SetViewLocation(cameraPosition);
+            client->SetViewRotation((FVector(0, 0, 50) - cameraPosition).Rotation());
+            client->SetLookAtLocation(FVector(0, 0, 50));
+            client->SetViewMode(VMI_Lit);
+            client->SetRealtime(true);
+            return client;
+        }
+
+        TSharedPtr<SWidget> BuildViewportToolbar() override
+        {
+            return SNew(SCommonEditorViewportToolbarBase, SharedThis(this)).AddRealtimeButton(true);
+        }
+
+        void OnFocusViewportToSelection() override
+        {
+            auto bounds = FBox(ForceInit);
+            if (auto actor = previewActor.Get())
+            {
+                auto components = TArray<UStaticMeshComponent*>{};
+                actor->GetComponents(components);
+                for (auto component : components)
+                    if (component->IsRegistered() && component->IsVisible())
+                        bounds += component->Bounds.GetBox();
+            }
+            if (bounds.IsValid) GetViewportClient()->FocusViewportOnBox(bounds);
+        }
+
+    private:
+        TSharedPtr<FAdvancedPreviewScene> previewScene;
+        TWeakObjectPtr<AActor> previewActor;
     };
 
     TSharedPtr<FJsonObject> ParseJson(const FString& text)
@@ -467,16 +540,8 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
         }
         else if (bTransportRequested)
             UE_LOG(LogTemp, Display, TEXT("LIBERA FX preview: transport connected and hello queued."));
-        viewportWidget = SNew(SViewport).EnableGammaCorrection(false);
-        viewportClient = MakeShared<FLibraPreviewViewportClient>(previewScene.Get());
-        auto cameraPosition = FVector(350, -450, 320);
-        viewportClient->SetViewLocation(cameraPosition);
-        viewportClient->SetViewRotation((FVector(0, 0, 50) - cameraPosition).Rotation());
-        viewportClient->SetViewMode(VMI_Lit);
-        viewportClient->SetRealtime(true);
-        sceneViewport = MakeShareable(new FSceneViewport(viewportClient.Get(), viewportWidget));
-        viewportClient->Viewport = sceneViewport.Get();
-        viewportWidget->SetViewportInterface(sceneViewport.ToSharedRef());
+        viewportWidget = SNew(SLibraPreviewViewport, previewScene.ToSharedRef(), actor);
+        viewportClient = viewportWidget->GetViewportClient();
         auto& previewModule = FModuleManager::LoadModuleChecked<FAdvancedPreviewSceneModule>(TEXT("AdvancedPreviewScene"));
         previewSettings = previewModule.CreateAdvancedPreviewSceneSettingsWidget(previewScene.ToSharedRef());
         if (previewTab.IsValid())
@@ -904,8 +969,6 @@ void FLibraEditorPreviewSession::Stop()
         FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(PreviewTabId);
         bTabRegistered = false;
     }
-    if (viewportClient.IsValid()) viewportClient->Viewport = nullptr;
-    sceneViewport.Reset();
     viewportClient.Reset();
     viewportWidget.Reset();
     if (connection.IsValid())
@@ -944,6 +1007,49 @@ bool FLibraPreviewDeferredTabTest::RunTest(const FString&)
     TestTrue(TEXT("A pre-initialization ticker remains registered"), session.Tick(0));
     TestFalse(TEXT("Restoration does not create a world before engine initialization"), session.world.IsValid());
     session.Stop();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraPreviewCameraTest, "Libra.Editor.Preview.NativeCameraNavigation",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraPreviewCameraTest::RunTest(const FString&)
+{
+    auto construction = FPreviewScene::ConstructionValues{};
+    construction.SetTransactional(false).SetCreatePhysicsScene(false).AllowAudioPlayback(false);
+    auto scene = MakeShared<FAdvancedPreviewScene>(construction);
+    auto parameters = FActorSpawnParameters{};
+    parameters.ObjectFlags = RF_Transient;
+    auto actor = scene->GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity, parameters);
+    if (!TestNotNull(TEXT("Navigation fixture uses an isolated preview actor"), actor)) return false;
+    auto mesh = NewObject<UStaticMeshComponent>(actor, NAME_None, RF_Transient);
+    mesh->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube")));
+    actor->SetRootComponent(mesh);
+    actor->AddInstanceComponent(mesh);
+    mesh->RegisterComponent();
+    auto widget = SNew(SLibraPreviewViewport, scene, actor);
+    auto client = widget->GetViewportClient();
+    auto wheel = FInputKeyEventArgs(client->Viewport, FInputDeviceId::CreateFromInternalId(0),
+        EKeys::MouseScrollUp, IE_Pressed, uint64{0});
+    auto initialLocation = client->GetViewLocation();
+    TestTrue(TEXT("Mouse wheel is forwarded to native camera handling"), client->InputKey(wheel));
+    TestFalse(TEXT("Native mouse-wheel dolly moves the camera"), client->GetViewLocation().Equals(initialLocation));
+
+    auto navigationLocation = client->GetViewLocation();
+    auto navigationRotation = client->GetViewRotation();
+    mesh->SetWorldLocation(FVector(400, 250, 150));
+    widget->Tick(FGeometry{}, FPlatformTime::Seconds(), 0);
+    TestTrue(TEXT("Visible preview participates in native editor camera ticks"), client->IsVisible());
+    TestTrue(TEXT("Preview content updates do not reset camera position"),
+        client->GetViewLocation().Equals(navigationLocation));
+    TestTrue(TEXT("Preview content updates do not reset camera orientation"),
+        client->GetViewRotation().Equals(navigationRotation));
+
+    auto frameKey = FKeyEvent(EKeys::F, FModifierKeysState{}, uint32{0}, false, uint32{0}, uint32{0});
+    TestTrue(TEXT("Standard viewport command routing handles F"),
+        widget->OnKeyDown(FGeometry{}, frameKey).IsEventHandled());
+    TestTrue(TEXT("Framing updates the orbit pivot to the visible preview, not the user's level"),
+        client->GetLookAtLocation().Equals(mesh->Bounds.GetBox().GetCenter()));
     return true;
 }
 
