@@ -20,7 +20,9 @@
 #include "EditorViewportClient.h"
 #include "Framework/Docking/TabManager.h"
 #include "Misc/CoreDelegates.h"
+#include "Misc/CommandLine.h"
 #include "Misc/PackageName.h"
+#include "Misc/Parse.h"
 #include "PreviewScene.h"
 #include "Slate/SceneViewport.h"
 #include "Widgets/Docking/SDockTab.h"
@@ -161,7 +163,10 @@ FLibraEditorPreviewSession::~FLibraEditorPreviewSession() = default;
 
 void FLibraEditorPreviewSession::Start()
 {
-    if (FPlatformMisc::GetEnvironmentVariable(TEXT("LIBRA_AUTOMATION_PREVIEW")) != TEXT("1")) return;
+    auto enabled = FPlatformMisc::GetEnvironmentVariable(TEXT("LIBRA_AUTOMATION_PREVIEW")) == TEXT("1") ||
+        FParse::Param(FCommandLine::Get(), TEXT("LibraPreview"));
+    UE_LOG(LogTemp, Display, TEXT("LIBERA FX preview bootstrap: %s."), enabled ? TEXT("enabled") : TEXT("disabled"));
+    if (!enabled) return;
     preExit = FCoreDelegates::OnPreExit.AddRaw(this, &FLibraEditorPreviewSession::Stop);
     FGlobalTabmanager::Get()->RegisterNomadTabSpawner(PreviewTabId,
         FOnSpawnTab::CreateRaw(this, &FLibraEditorPreviewSession::SpawnPreviewTab))
@@ -185,9 +190,15 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
     if (!world.IsValid())
     {
         if (!GEngine) return true;
+        UE_LOG(LogTemp, Display, TEXT("LIBERA FX preview: creating isolated scene."));
         previewScene = MakeUnique<FPreviewScene>();
         world.Reset(previewScene->GetWorld());
-        if (!world.IsValid()) return false;
+        if (!world.IsValid())
+        {
+            UE_LOG(LogTemp, Error, TEXT("LIBERA FX preview: isolated world creation failed."));
+            Stop();
+            return false;
+        }
         auto parameters = FActorSpawnParameters{};
         parameters.ObjectFlags = RF_Transient;
         parameters.Name = FName(TEXT("LibraFxPreview"));
@@ -215,6 +226,9 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
         connection->Port = port;
         connection->AccessToken = FPlatformMisc::GetEnvironmentVariable(TEXT("LIBRA_PREVIEW_TOKEN"));
         connection->CertificateFingerprint = FPlatformMisc::GetEnvironmentVariable(TEXT("LIBRA_PREVIEW_FINGERPRINT"));
+        UE_LOG(LogTemp, Display, TEXT("LIBERA FX preview: endpoint port %d, credential fields %s."),
+            port, !connection->AccessToken.IsEmpty() && !connection->CertificateFingerprint.IsEmpty()
+                ? TEXT("present") : TEXT("missing"));
         connection->EditorAssetRequestHandler = [](const FString& request)
         {
             return FLibraEditorAssetAdapter::ProcessRequest(request);
@@ -231,10 +245,11 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
         connection->RegisterComponent();
         if (!connection->ConnectToEditor())
         {
-            UE_LOG(LogTemp, Warning, TEXT("Libra automation preview could not connect; check the paired editor session."));
+            UE_LOG(LogTemp, Warning, TEXT("LIBERA FX preview could not connect: %s"), *connection->Status);
             Stop();
             return false;
         }
+        UE_LOG(LogTemp, Display, TEXT("LIBERA FX preview: transport connected and hello queued."));
         viewportWidget = SNew(SViewport).EnableGammaCorrection(false);
         viewportClient = MakeShared<FEditorViewportClient>(nullptr, previewScene.Get(), nullptr);
         viewportClient->SetViewLocation(FVector(350, -450, 320));

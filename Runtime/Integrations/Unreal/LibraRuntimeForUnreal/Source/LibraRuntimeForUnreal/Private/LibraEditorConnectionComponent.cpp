@@ -281,13 +281,19 @@ auto ULibraEditorConnectionComponent::ConnectToEditor() -> bool
     auto helloWriter = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&helloText);
     FJsonSerializer::Serialize(hello, helloWriter);
     helloWriter->Close();
-    candidate->transport.QueueText(
+    auto helloQueued = candidate->transport.QueueText(
 #if WITH_EDITOR
         helloText
 #else
         TEXT("{\"type\":\"hello\",\"engine\":\"Unreal\",\"role\":\"runtime\",\"version\":1,\"capabilities\":[\"profiling\",\"values\"]}")
 #endif
     );
+    if (!helloQueued)
+    {
+        candidate->transport.Stop();
+        Status = TEXT("The preview transport could not queue its viewer hello.");
+        return false;
+    }
     OriginalEffect = Target->Effect;
     State = MoveTemp(candidate);
     AddTickPrerequisiteComponent(Target);
