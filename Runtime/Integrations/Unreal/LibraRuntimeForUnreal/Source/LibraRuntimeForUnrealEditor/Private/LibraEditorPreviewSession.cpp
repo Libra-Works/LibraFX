@@ -1,32 +1,47 @@
 #include "LibraEditorPreviewSession.h"
 
+#include "AdvancedPreviewScene.h"
+#include "AdvancedPreviewSceneModule.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetViewerSettings.h"
 #include "Engine/DirectionalLight.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
 #include "GameFramework/Actor.h"
+#include "InputKeyEventArgs.h"
 #include "LibraEditorAssetAdapter.h"
 #include "LibraEffectComponent.h"
 #include "LibraEditorConnectionComponent.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialExpressionAdd.h"
+#include "Materials/MaterialExpressionComponentMask.h"
 #include "Materials/MaterialExpressionMultiply.h"
 #include "Materials/MaterialExpressionTextureCoordinate.h"
 #include "Materials/MaterialExpressionTextureSample.h"
 #include "Materials/MaterialExpressionTextureSampleParameter2D.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/SceneComponent.h"
 #include "EditorViewportClient.h"
 #include "Framework/Docking/TabManager.h"
 #include "Misc/CoreDelegates.h"
 #include "Misc/CommandLine.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Misc/PackageName.h"
 #include "Misc/Parse.h"
+#include "Modules/ModuleManager.h"
 #include "PreviewScene.h"
 #include "Slate/SceneViewport.h"
 #include "Widgets/Docking/SDockTab.h"
+#include "Widgets/Input/SCheckBox.h"
+#include "Widgets/Input/SButton.h"
+#include "Widgets/Layout/SBox.h"
+#include "Widgets/Layout/SSplitter.h"
+#include "Widgets/SBoxPanel.h"
+#include "Widgets/SNullWidget.h"
 #include "Widgets/SViewport.h"
+#include "Widgets/Text/STextBlock.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -38,6 +53,36 @@
 namespace
 {
     const FName PreviewTabId(TEXT("LibraFxPreview"));
+    const TCHAR* PreviewSettingsSection = TEXT("LibraFxPreview");
+
+    class FLibraPreviewViewportClient final : public FEditorViewportClient
+    {
+    public:
+        explicit FLibraPreviewViewportClient(FAdvancedPreviewScene* scene)
+            : FEditorViewportClient(nullptr, scene), advancedScene(scene)
+        {
+        }
+
+        bool InputKey(const FInputKeyEventArgs& args) override
+        {
+            return advancedScene->HandleInputKey(args) || FEditorViewportClient::InputKey(args);
+        }
+
+        bool InputAxis(const FInputKeyEventArgs& args) override
+        {
+            return advancedScene->HandleViewportInput(args.Viewport, args.InputDevice, args.Key,
+                args.AmountDepressed, args.DeltaTime, args.NumSamples, args.IsGamepad()) ||
+                FEditorViewportClient::InputAxis(args);
+        }
+
+        FLinearColor GetBackgroundColor() const override
+        {
+            return advancedScene->GetBackgroundColor();
+        }
+
+    private:
+        FAdvancedPreviewScene* advancedScene;
+    };
 
     TSharedPtr<FJsonObject> ParseJson(const FString& text)
     {
@@ -117,22 +162,44 @@ namespace
         auto offsetParameter = NewObject<UMaterialExpressionVectorParameter>(material);
         offsetParameter->ParameterName = TEXT("AtlasOffset");
         offsetParameter->DefaultValue = FLinearColor::Transparent;
+        auto scaleMask = NewObject<UMaterialExpressionComponentMask>(material);
+        scaleMask->R = true;
+        scaleMask->G = true;
+        scaleMask->Input.Connect(0, scaleParameter);
+        auto offsetMask = NewObject<UMaterialExpressionComponentMask>(material);
+        offsetMask->R = true;
+        offsetMask->G = true;
+        offsetMask->Input.Connect(0, offsetParameter);
         auto multiply = NewObject<UMaterialExpressionMultiply>(material);
         multiply->A.Connect(0, coordinates);
-        multiply->B.Connect(0, scaleParameter);
+        multiply->B.Connect(0, scaleMask);
         auto add = NewObject<UMaterialExpressionAdd>(material);
         add->A.Connect(0, multiply);
-        add->B.Connect(0, offsetParameter);
+        add->B.Connect(0, offsetMask);
         textureSample->Coordinates.Connect(0, add);
+        auto tintParameter = NewObject<UMaterialExpressionVectorParameter>(material);
+        tintParameter->ParameterName = TEXT("Tint");
+        tintParameter->DefaultValue = FLinearColor::White;
+        auto tintedColor = NewObject<UMaterialExpressionMultiply>(material);
+        tintedColor->A.Connect(0, textureSample);
+        tintedColor->B.Connect(0, tintParameter);
+        auto tintedAlpha = NewObject<UMaterialExpressionMultiply>(material);
+        tintedAlpha->A.Connect(4, textureSample);
+        tintedAlpha->B.Connect(4, tintParameter);
         auto& expressions = material->GetExpressionCollection();
         expressions.AddExpression(textureSample);
         expressions.AddExpression(coordinates);
         expressions.AddExpression(scaleParameter);
         expressions.AddExpression(offsetParameter);
+        expressions.AddExpression(scaleMask);
+        expressions.AddExpression(offsetMask);
         expressions.AddExpression(multiply);
         expressions.AddExpression(add);
-        material->GetEditorOnlyData()->BaseColor.Connect(0, textureSample);
-        material->GetEditorOnlyData()->Opacity.Connect(4, textureSample);
+        expressions.AddExpression(tintParameter);
+        expressions.AddExpression(tintedColor);
+        expressions.AddExpression(tintedAlpha);
+        material->GetEditorOnlyData()->EmissiveColor.Connect(0, tintedColor);
+        material->GetEditorOnlyData()->Opacity.Connect(0, tintedAlpha);
         material->PostEditChange();
         return material;
     }
@@ -178,11 +245,114 @@ void FLibraEditorPreviewSession::Start()
 TSharedRef<SDockTab> FLibraEditorPreviewSession::SpawnPreviewTab(const FSpawnTabArgs& args)
 {
     (void)args;
+    auto makeToggle = [this](const TCHAR* label, bool (FAdvancedPreviewScene::*query)() const,
+        void (FAdvancedPreviewScene::*toggle)()) -> TSharedRef<SWidget>
+    {
+        return SNew(SCheckBox)
+            .IsChecked_Lambda([this, query]
+            {
+                return previewScene.IsValid() && (previewScene.Get()->*query)()
+                    ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+            })
+            .OnCheckStateChanged_Lambda([this, toggle](ECheckBoxState)
+            {
+                if (previewScene.IsValid())
+                {
+                    (previewScene.Get()->*toggle)();
+                    SavePreviewProfile();
+                }
+            })
+            [
+                SNew(STextBlock).Text(FText::FromString(label))
+            ];
+    };
     return SNew(SDockTab)
         .TabRole(ETabRole::NomadTab)
         [
-            viewportWidget.ToSharedRef()
+            SNew(SVerticalBox)
+            + SVerticalBox::Slot().AutoHeight().Padding(8, 6)
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 16, 0)
+                [
+                    SNew(SCheckBox)
+                    .IsChecked_Lambda([this]
+                    {
+                        return bSettingsVisible ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+                    })
+                    .OnCheckStateChanged_Lambda([this](ECheckBoxState state)
+                    {
+                        bSettingsVisible = state == ECheckBoxState::Checked;
+                        SavePreviewProfile();
+                    })
+                    [
+                        SNew(STextBlock).Text(FText::FromString(TEXT("Settings")))
+                    ]
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 16, 0)
+                [
+                    makeToggle(TEXT("Grid"), &FAdvancedPreviewScene::IsGridEnabled,
+                        &FAdvancedPreviewScene::HandleToggleGrid)
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 16, 0)
+                [
+                    makeToggle(TEXT("Floor"), &FAdvancedPreviewScene::IsFloorEnabled,
+                        &FAdvancedPreviewScene::HandleToggleFloor)
+                ]
+                + SHorizontalBox::Slot().AutoWidth()
+                [
+                    makeToggle(TEXT("Environment"), &FAdvancedPreviewScene::IsEnvironmentEnabled,
+                        &FAdvancedPreviewScene::HandleToggleEnvironment)
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(16, 0, 0, 0)
+                [
+                    SNew(SButton)
+                    .Text(FText::FromString(TEXT("Frame")))
+                    .OnClicked_Lambda([this]
+                    {
+                        auto bounds = FBox(ForceInit);
+                        for (const auto& node : renderNodes)
+                            if (node.component.IsValid()) bounds += node.component->Bounds.GetBox();
+                        if (!bounds.IsValid && placeholderCube.IsValid())
+                            bounds = placeholderCube->Bounds.GetBox();
+                        if (viewportClient.IsValid() && bounds.IsValid)
+                            viewportClient->FocusViewportOnBox(bounds);
+                        return FReply::Handled();
+                    })
+                ]
+            ]
+            + SVerticalBox::Slot().FillHeight(1)
+            [
+                SNew(SSplitter)
+                + SSplitter::Slot().Value(0.68f)
+                [
+                    viewportWidget.ToSharedRef()
+                ]
+                + SSplitter::Slot().Value(0.32f)
+                [
+                    SNew(SBox)
+                    .Visibility_Lambda([this]
+                    {
+                        return bSettingsVisible ? EVisibility::Visible : EVisibility::Collapsed;
+                    })
+                    [
+                        previewSettings.ToSharedRef()
+                    ]
+                ]
+            ]
         ];
+}
+
+void FLibraEditorPreviewSession::SavePreviewProfile()
+{
+    if (!previewScene.IsValid()) return;
+    if (auto profile = previewScene->GetCurrentProfile())
+    {
+        GConfig->SetString(PreviewSettingsSection, TEXT("ProfileName"), *profile->ProfileName, GEditorPerProjectIni);
+        GConfig->SetBool(PreviewSettingsSection, TEXT("SettingsVisible"), bSettingsVisible, GEditorPerProjectIni);
+        GConfig->Flush(false, GEditorPerProjectIni);
+        UAssetViewerSettings::Get()->Save();
+    }
 }
 
 bool FLibraEditorPreviewSession::Tick(float deltaTime)
@@ -191,7 +361,28 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
     {
         if (!GEngine) return true;
         UE_LOG(LogTemp, Display, TEXT("LIBERA FX preview: creating isolated scene."));
-        previewScene = MakeUnique<FPreviewScene>();
+        auto construction = FPreviewScene::ConstructionValues{};
+        construction.SetTransactional(false).SetCreatePhysicsScene(false).AllowAudioPlayback(false);
+        previewScene = MakeShared<FAdvancedPreviewScene>(construction);
+        auto settings = UAssetViewerSettings::Get();
+        auto profileName = FString(TEXT("LIBERA FX"));
+        GConfig->GetString(PreviewSettingsSection, TEXT("ProfileName"), profileName, GEditorPerProjectIni);
+        GConfig->GetBool(PreviewSettingsSection, TEXT("SettingsVisible"), bSettingsVisible, GEditorPerProjectIni);
+        auto profileIndex = settings->Profiles.IndexOfByPredicate([&profileName](const FPreviewSceneProfile& profile)
+        {
+            return profile.ProfileName == profileName;
+        });
+        if (profileIndex == INDEX_NONE)
+        {
+            auto profile = FPreviewSceneProfile{};
+            profile.ProfileName = TEXT("LIBERA FX");
+            profile.bSharedProfile = false;
+            profile.bIsEngineDefaultProfile = false;
+            profileIndex = settings->Profiles.Add(profile);
+            settings->PostEditChange();
+            settings->Save();
+        }
+        previewScene->SetProfileIndex(profileIndex);
         world.Reset(previewScene->GetWorld());
         if (!world.IsValid())
         {
@@ -206,9 +397,14 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
         if (!actor) { Stop(); return false; }
         previewActor.Reset(actor);
 
+        auto rootComponent = NewObject<USceneComponent>(actor, NAME_None, RF_Transient);
+        actor->SetRootComponent(rootComponent);
+        actor->AddInstanceComponent(rootComponent);
+        rootComponent->RegisterComponent();
         auto cube = NewObject<UStaticMeshComponent>(actor, NAME_None, RF_Transient);
         cube->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube")));
-        actor->SetRootComponent(cube);
+        cube->SetupAttachment(rootComponent);
+        placeholderCube.Reset(cube);
         actor->AddInstanceComponent(cube);
         cube->SetRelativeLocation(FVector(0, 0, 50));
         cube->RegisterComponent();
@@ -251,15 +447,21 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
         }
         UE_LOG(LogTemp, Display, TEXT("LIBERA FX preview: transport connected and hello queued."));
         viewportWidget = SNew(SViewport).EnableGammaCorrection(false);
-        viewportClient = MakeShared<FEditorViewportClient>(nullptr, previewScene.Get(), nullptr);
-        viewportClient->SetViewLocation(FVector(350, -450, 320));
-        viewportClient->SetViewRotation(FRotator(-22, 38, 0));
+        viewportClient = MakeShared<FLibraPreviewViewportClient>(previewScene.Get());
+        auto cameraPosition = FVector(350, -450, 320);
+        viewportClient->SetViewLocation(cameraPosition);
+        viewportClient->SetViewRotation((FVector(0, 0, 50) - cameraPosition).Rotation());
         viewportClient->SetViewMode(VMI_Lit);
         viewportClient->SetRealtime(true);
         sceneViewport = MakeShareable(new FSceneViewport(viewportClient.Get(), viewportWidget));
         viewportWidget->SetViewportInterface(sceneViewport.ToSharedRef());
+        auto& previewModule = FModuleManager::LoadModuleChecked<FAdvancedPreviewSceneModule>(TEXT("AdvancedPreviewScene"));
+        previewSettings = previewModule.CreateAdvancedPreviewSceneSettingsWidget(previewScene.ToSharedRef());
         previewTab = FGlobalTabmanager::Get()->TryInvokeTab(PreviewTabId);
     }
+    if (viewportClient.IsValid() && previewScene.IsValid())
+        if (auto profile = previewScene->GetCurrentProfile())
+            profile->SetShowFlags(viewportClient->EngineShowFlags);
     if (effect->IsComponentTickEnabled())
         effect->TickComponent(deltaTime, LEVELTICK_All, &effect->PrimaryComponentTick);
     connection->TickComponent(deltaTime, LEVELTICK_All, &connection->PrimaryComponentTick);
@@ -269,6 +471,7 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
 void FLibraEditorPreviewSession::ConfigureScene(const FString& json, int64 programSequence)
 {
     check(IsInGameThread());
+    if (placeholderCube.IsValid()) placeholderCube->SetVisibility(false);
     for (auto& node : renderNodes)
         if (node.component.IsValid()) node.component->DestroyComponent();
     renderNodes.Reset();
@@ -649,10 +852,16 @@ void FLibraEditorPreviewSession::Stop()
     preExit.Reset();
     if (ticker.IsValid()) FTSTicker::GetCoreTicker().RemoveTicker(ticker);
     ticker.Reset();
+    SavePreviewProfile();
     renderNodes.Reset();
     sceneErrors.Reset();
-    if (previewTab.IsValid()) previewTab->RequestCloseTab();
+    if (previewTab.IsValid())
+    {
+        previewTab->SetContent(SNullWidget::NullWidget);
+        previewTab->RequestCloseTab();
+    }
     previewTab.Reset();
+    previewSettings.Reset();
     if (bTabRegistered)
     {
         FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(PreviewTabId);
@@ -678,6 +887,7 @@ void FLibraEditorPreviewSession::Stop()
     connection.Reset();
     effect.Reset();
     previewActor.Reset();
+    placeholderCube.Reset();
     world.Reset();
     previewScene.Reset();
 }

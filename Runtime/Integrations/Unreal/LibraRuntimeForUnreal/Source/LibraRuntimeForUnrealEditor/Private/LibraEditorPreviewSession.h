@@ -7,11 +7,12 @@
 
 class UWorld;
 class AActor;
-class FPreviewScene;
+class FAdvancedPreviewScene;
 class FSceneViewport;
 class FEditorViewportClient;
 class SDockTab;
 class SViewport;
+class SWidget;
 class UMaterialInstanceDynamic;
 class ULibraEffectComponent;
 class ULibraEditorConnectionComponent;
@@ -31,6 +32,7 @@ private:
     void ConfigureScene(const FString& json, int64 programSequence);
     FString UpdateScene(int64 programSequence, double timeSeconds);
     TSharedRef<SDockTab> SpawnPreviewTab(const class FSpawnTabArgs& args);
+    void SavePreviewProfile();
 
     struct FRenderInput
     {
@@ -61,9 +63,10 @@ private:
 
     FTSTicker::FDelegateHandle ticker;
     FDelegateHandle preExit;
-    TUniquePtr<FPreviewScene> previewScene;
+    TSharedPtr<FAdvancedPreviewScene> previewScene;
     TStrongObjectPtr<UWorld> world;
     TStrongObjectPtr<AActor> previewActor;
+    TStrongObjectPtr<UStaticMeshComponent> placeholderCube;
     TStrongObjectPtr<ULibraEffectComponent> effect;
     TStrongObjectPtr<ULibraEditorConnectionComponent> connection;
     TArray<FRenderNode> renderNodes;
@@ -73,5 +76,7 @@ private:
     TSharedPtr<FSceneViewport> sceneViewport;
     TSharedPtr<FEditorViewportClient> viewportClient;
     TSharedPtr<SDockTab> previewTab;
+    TSharedPtr<SWidget> previewSettings;
     bool bTabRegistered = false;
+    bool bSettingsVisible = true;
 };
