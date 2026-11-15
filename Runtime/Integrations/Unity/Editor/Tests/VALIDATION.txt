@@ -1,0 +1,42 @@
+Real Unity Editor verification
+==============================
+
+LiberaFxEditorVerification.RunBatch is a synchronous executeMethod test for a
+DEDICATED project, not a user's normal scene/project. It creates and cleans up
+its own temporary Unity objects, uses the bundled v2 native bytecode fixture,
+and writes verification-result.txt and three framebuffer PNGs to that project's
+root. It invokes the actual MonoBehaviour lifecycle/update methods through
+cached delegates in the Editor; it does not enter Play Mode.
+
+Copy LiberaFx Runtime/Editor directories and the matching native plugin into
+Assets\LiberaFx and Assets\Plugins\x86_64 of a dedicated project. No packages are
+needed (Packages\manifest.json can contain {"dependencies":{}}).
+Windows command, using your own dedicated project and log paths:
+
+  "C:\Program Files\Unity\Hub\Editor\6000.2.6f1\Editor\Unity.exe" -batchmode -quit -noUpm -disable-assembly-updater -force-d3d11 -projectPath "<dedicated project>" -executeMethod LiberaFx.Unity.Editor.LiberaFxEditorVerification.RunBatch -logFile "<dedicated project>\unity-editor.log"
+
+Use a bounded process timeout and stop only that process if it hangs. Do not
+add -nographics when checking GPU output: a Null graphics device skips shader
+compilation, vertex GPU-buffer identity and framebuffer checks explicitly.
+Normal completion exits through -quit; a test failure requests exit code 2.
+
+Checks:
+  Actual native DLL P/Invoke evaluates the C#-generated .lfxb fixture.
+  C/C# POD contracts, native default mutation, cube position/color updates.
+  Shared Mesh/Material handles and MaterialPropertyBlock (no material clones).
+  Native atlas frames 0/8 change Unity UV offset/scale with correct row flip.
+  Dynamic Mesh vertex values, 20-byte stream stride and four-vertex capacity.
+  Cached managed arrays, stable Mesh ID and stable native GPU buffer pointer.
+  300 warmup + 1000 Update calls per atlas mode: zero managed allocations.
+  Synchronous shader compile and actual Camera.Render/ReadPixels readback.
+  Framebuffer RGB differs from black background; PNGs preserve local proof.
+  Cleanup releases native instances and destroys only verification-owned meshes.
+
+Local proof project:
+  C:\Users\taku3\.copilot\session-state\2122b19b-84fc-4304-ab9b-66ba26ad42bf\files\unity-interop-validation
+Verified with Unity 6000.2.6f1, Direct3D11, AMD Radeon RX 6700 XT.
+The Editor process exited 0; native, cube, static atlas, dynamic quad, shader,
+buffer reuse, zero-GC and all three framebuffer checks passed.
+Logs/results/images remain local; no package installation or sharing is needed.
+This proves real Editor/Unity API and GPU behavior, not player builds, Play Mode
+automatic scheduling/domain reload, console hardware or IL2CPP.
