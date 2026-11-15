@@ -22,6 +22,63 @@ public sealed class LiberaFxMcpTools
         Converters = { new JsonStringEnumConverter() }
     };
 
+    [McpServerTool(Name = "libera_preview_clients", ReadOnly = true, OpenWorld = false)]
+    [Description("List connected preview peers, protocol, explicit engine/role/capabilities and latest telemetry metadata. A role does not imply capabilities. Read full samples with libera_preview_telemetry.")]
+    public static string PreviewClients(PreviewTelemetryStore telemetry) =>
+        JsonSerializer.Serialize(telemetry.Clients().Select(peer => new
+        {
+            peer.ClientId, peer.Protocol, peer.Engine, peer.Role, helloVersion = peer.Engine is null ? (int?)null : 1,
+            peer.Capabilities, peer.ProfilePending, peer.RequestedProfile, peer.WatchedNodes,
+            profile = peer.Profile is { } profile ? new
+            { profile.ProgramSequence, profile.SnapshotId, profile.Dropped, metricCount = profile.Metrics.Count } : null,
+            values = peer.Values is { } values ? new
+            { values.ProgramSequence, values.EvaluationTime, valueCount = values.Values.Count } : null
+        }), JsonOptions);
+
+    [McpServerTool(Name = "libera_preview_telemetry", ReadOnly = true, OpenWorld = false)]
+    [Description("Read complete profile snapshots and latest native values with exact program sequence/evaluation time. Ns and explicitly converted Ms are included. ProfilePending never marks a partial snapshot complete.")]
+    public static string PreviewTelemetry(PreviewTelemetryStore telemetry, string? clientId = null)
+    {
+        try { return JsonSerializer.Serialize(telemetry.Clients(PreviewClientId(clientId)), JsonOptions); }
+        catch (InvalidOperationException ex) { throw new McpException(ex.Message); }
+    }
+
+    [McpServerTool(Name = "libera_preview_profile_control", Destructive = false, OpenWorld = false)]
+    [Description("Send native profile capture control to a peer advertising profiling. intervalMs is 100..5000. Omit clientId only when exactly one peer is connected. Success means sent, not acknowledged or a completed capture.")]
+    public static async Task<string> PreviewProfileControl(PreviewTelemetryStore telemetry, bool enabled,
+        bool nodes = true, bool accessors = false, int intervalMs = 500, string? clientId = null)
+    {
+        try
+        {
+            await telemetry.ProfileControlAsync(enabled, nodes, accessors, intervalMs, PreviewClientId(clientId));
+            return """{"sent":true}""";
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or
+            OperationCanceledException or System.Net.WebSockets.WebSocketException)
+        { throw new McpException(ex is ArgumentException or InvalidOperationException ? ex.Message : "Preview control delivery failed."); }
+    }
+
+    [McpServerTool(Name = "libera_preview_watch_values", Destructive = false, OpenWorld = false)]
+    [Description("Watch up to 64 distinct node GUIDs on a peer advertising values; an empty list clears watches. Omit clientId only with exactly one connected peer. Success means sent, not acknowledged.")]
+    public static async Task<string> PreviewWatchValues(PreviewTelemetryStore telemetry, string[] nodeIds, string? clientId = null)
+    {
+        try
+        {
+            if (nodeIds is null || nodeIds.Length > 64) throw new ArgumentException("Watch at most 64 nodes.");
+            var ids = nodeIds.Select(value =>
+                Guid.TryParseExact(value, "D", out var id) && id != Guid.Empty ? id :
+                    throw new ArgumentException("Invalid node GUID.")).ToArray();
+            await telemetry.WatchValuesAsync(ids, PreviewClientId(clientId));
+            return """{"sent":true}""";
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or
+            OperationCanceledException or System.Net.WebSockets.WebSocketException)
+        { throw new McpException(ex is ArgumentException or InvalidOperationException ? ex.Message : "Preview control delivery failed."); }
+    }
+
+    private static Guid? PreviewClientId(string? value) => value is null ? null :
+        Guid.TryParseExact(value, "D", out var id) ? id : throw new McpException("Invalid clientId GUID.");
+
     [McpServerTool(Name = "libera_graph_read", ReadOnly = true, OpenWorld = false)]
     [Description("Read the active graph, including stable node IDs, positions, types, ports, and connections.")]
     public static async Task<string> GetGraph(ActiveGraphProvider activeGraph) =>
@@ -114,6 +171,23 @@ public sealed class LiberaFxMcpTools
             var graph = activeGraph.Graph;
             var node = FindNode(graph, nodeId);
             graph.MoveNode(node, x, y);
+            return SerializeNode(graph, node.Id);
+        });
+
+    [McpServerTool(Name = "libera_graph_set_parameter", Destructive = false, OpenWorld = false)]
+    [Description("Set one existing node parameter as a JSON value using the editor's type validation and undo history. Does not replace the graph or change other nodes. Read parameter IDs/types/defaults with libera_graph_list_node_types. For Float, parameterId is value and value can be 7.")]
+    public static async Task<string> SetParameter(
+        ActiveGraphProvider activeGraph,
+        [Description("Existing node GUID.")] string nodeId,
+        [Description("Parameter ID from the node definition, for example value.")] string parameterId,
+        [Description("Actual JSON value, not JSON encoded as a string: a number, boolean, string, or component array matching the parameter type.")] JsonElement value) =>
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var graph = activeGraph.Graph;
+            var node = FindNode(graph, nodeId);
+            try { graph.SetParameter(node, parameterId, value); }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            { throw new McpException(ex.Message); }
             return SerializeNode(graph, node.Id);
         });
 

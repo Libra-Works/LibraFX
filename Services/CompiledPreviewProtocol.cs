@@ -1,12 +1,13 @@
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services.Compilation;
 
 namespace LiberaFx.Services;
 
-public enum CompiledPreviewKind : ushort { Program = 1, Playback = 2, CompileError = 3 }
+public enum CompiledPreviewKind : ushort { Program = 1, Playback = 2, CompileError = 3, Control = 4 }
 
 public sealed record CompiledPreviewMessage(byte[] Bytes, CompiledPreviewKind Kind, PreviewPublication Publication);
 
@@ -15,9 +16,33 @@ public static class CompiledPreviewProtocol
     public const int HeaderSize = 48;
     public const int MaxProgramBytes = 128 * 1024 * 1024;
     public const int MaxErrorBytes = 4096;
+    public const int MaxControlBytes = 4096;
     private static readonly ConditionalWeakTable<GraphSnapshot, Lazy<Compilation>> Cache = new();
 
     private sealed record Compilation(byte[]? Bytes, byte[]? Error);
+
+    public static byte[] CreateControl(ReadOnlySpan<byte> utf8Json)
+    {
+        if (utf8Json.Length is 0 or > MaxControlBytes) throw new ArgumentException("Invalid control payload size.");
+        try
+        {
+            _ = new UTF8Encoding(false, true).GetString(utf8Json);
+            using var json = JsonDocument.Parse(utf8Json.ToArray(), new JsonDocumentOptions { MaxDepth = 8 });
+            PreviewTelemetryStore.ValidateControl(json.RootElement);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException or
+            KeyNotFoundException or DecoderFallbackException or OverflowException)
+        {
+            throw new ArgumentException("Invalid preview control JSON.", nameof(utf8Json), ex);
+        }
+        var bytes = new byte[HeaderSize + utf8Json.Length];
+        "LFXP"u8.CopyTo(bytes);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(4), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(6), (ushort)CompiledPreviewKind.Control);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(44), (uint)utf8Json.Length);
+        utf8Json.CopyTo(bytes.AsSpan(HeaderSize));
+        return bytes;
+    }
 
     private static Compilation Compile(GraphSnapshot graph)
     {

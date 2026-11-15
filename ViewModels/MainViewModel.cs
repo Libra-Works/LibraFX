@@ -35,6 +35,7 @@ public partial class MainViewModel : ViewModelBase
     private object?[] _appearanceStatusArgs = [];
 
     public EditorLog Log { get; } = new();
+    public PreviewTelemetryStore PreviewTelemetry { get; } = new();
     public string McpEndpoint { get; }
     public string PreviewEndpoint { get; }
     public string PreviewAccessToken { get; }

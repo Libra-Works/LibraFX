@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Automation;
 using Avalonia.Controls.Primitives;
 using Avalonia.Data;
 using Avalonia.Input;
@@ -9,6 +10,8 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using System.Globalization;
 using LiberaFx.Models.Graph;
+using LiberaFx.Models.Appearance;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using LiberaFx.Services;
 using LiberaFx.ViewModels;
 
@@ -36,7 +39,8 @@ public sealed class ParameterEditorHost : ContentControl
             ? InspectorEditors.CreateEditor(parameter)
             : InspectorEditors.CreateNamedEditor(parameter, editorKind);
         var editor = custom ?? (editorKind == "slider" ? CreateSlider(parameter) : CreateStandard(parameter));
-        Bind(IsEnabledProperty, new Binding(nameof(parameter.IsEnabled)));
+        editor.Bind(IsEnabledProperty, new Binding(nameof(parameter.IsEnabled)));
+        editor.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.Name)));
         var status = new TextBlock { Foreground = Brushes.OrangeRed, TextWrapping = TextWrapping.Wrap };
         status.Bind(TextBlock.TextProperty, new Binding(nameof(parameter.Status)));
         _missingEditorMessage = new TextBlock
@@ -49,19 +53,37 @@ public sealed class ParameterEditorHost : ContentControl
         missing.IsVisible = custom is null && editorKind is not (null or "slider" or "text" or "radio" or "multiline");
         var label = new TextBlock { FontWeight = FontWeight.SemiBold };
         label.Bind(TextBlock.TextProperty, new Binding(nameof(parameter.Name)));
+        label.TextTrimming = TextTrimming.CharacterEllipsis;
+        label.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
+        label.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.Name)));
         if (parameter.Type is "float" or "int" && editor is TextBox scalar)
             EnableScrubbing(label, scalar, parameter, nameof(parameter.ValueText));
-        Content = new StackPanel
+        var disconnect = new IconButton { Name = "DisconnectParameterButton", Icon = EditorIcon.Disconnect };
+        disconnect.Bind(Button.CommandProperty, new Binding(nameof(parameter.DisconnectCommand)));
+        disconnect.Bind(IsVisibleProperty, new Binding(nameof(parameter.HasConnection)));
+        disconnect.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.DisconnectHint)));
+        disconnect.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.DisconnectHint)));
+        var reset = new IconButton { Name = "ResetParameterButton", Icon = EditorIcon.Reset };
+        reset.Bind(Button.CommandProperty, new Binding(nameof(parameter.ResetCommand)));
+        reset.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.ResetHint)));
+        reset.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.ResetHint)));
+        var linkSlot = new Border { Width = 32, Child = disconnect };
+        var row = new Grid
         {
-            Spacing = 4,
-            Children =
-            {
-                label,
-                editor,
-                status,
-                missing
-            }
+            ColumnDefinitions = new ColumnDefinitions("32,110,*,32"),
+            RowDefinitions = new RowDefinitions("Auto,Auto,Auto"),
+            ColumnSpacing = 6,
+            RowSpacing = 2,
+            Children = { linkSlot, label, editor, reset, status, missing }
         };
+        Grid.SetColumn(label, 1);
+        Grid.SetColumn(editor, 2);
+        Grid.SetColumn(reset, 3);
+        Grid.SetColumn(status, 2);
+        Grid.SetRow(status, 1);
+        Grid.SetColumn(missing, 2);
+        Grid.SetRow(missing, 2);
+        Content = row;
         RefreshLocalizedLabels(editorKind);
     }
 
@@ -108,18 +130,23 @@ public sealed class ParameterEditorHost : ContentControl
         if (parameter.Type is "vector2" or "vector3" or "vector4")
         {
             var count = parameter.Type == "vector2" ? 2 : parameter.Type == "vector3" ? 3 : 4;
-            var panel = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 4 };
+            var panel = new Grid { ColumnDefinitions = new ColumnDefinitions(string.Join(",", Enumerable.Repeat("*", count))), ColumnSpacing = 4 };
+            var index = 0;
             foreach (var component in new[] { "X", "Y", "Z", "W" }.Take(count))
             {
                 var box = CreateTextBox(component);
-                box.Width = 65;
-                var label = new TextBlock { Text = component };
+                box.MinWidth = 35;
+                var label = new TextBlock { Text = component, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
                 EnableScrubbing(label, box, parameter, component);
-                panel.Children.Add(new StackPanel
+                var cell = new Grid
                 {
-                    Spacing = 2,
+                    ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+                    ColumnSpacing = 3,
                     Children = { label, box }
-                });
+                };
+                Grid.SetColumn(box, 1);
+                Grid.SetColumn(cell, index++);
+                panel.Children.Add(cell);
             }
             return panel;
         }
@@ -263,7 +290,9 @@ public sealed class ParameterEditorHost : ContentControl
             dragging = false;
             parameter.Refresh();
         });
-        return new StackPanel { Spacing = 4, Children = { slider, box } };
+        var panel = new Grid { ColumnDefinitions = new ColumnDefinitions("80,*"), ColumnSpacing = 8, Children = { box, slider } };
+        Grid.SetColumn(slider, 1);
+        return panel;
     }
 
     private void EnableScrubbing(TextBlock label, TextBox box, NodeParameterEditorViewModel parameter, string property)

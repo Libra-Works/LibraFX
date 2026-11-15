@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Dock.Model.Mvvm.Controls;
@@ -46,6 +47,7 @@ public sealed class NodePropertiesPaneViewModel : Tool
             () => IsLinkedGroup && CurrentAsset is not null);
         _activeGraph.PropertyChanged += OnActiveGraphChanged;
         _graph.PropertyChanged += OnGraphChanged;
+        _graph.Connections.CollectionChanged += OnConnectionsChanged;
         if (_graph.GroupAssets is { } catalog) catalog.Changed += OnGroupAssetsChanged;
         RefreshNode();
     }
@@ -54,9 +56,11 @@ public sealed class NodePropertiesPaneViewModel : Tool
     {
         if (e.PropertyName != nameof(ActiveGraphProvider.Graph)) return;
         _graph.PropertyChanged -= OnGraphChanged;
+        _graph.Connections.CollectionChanged -= OnConnectionsChanged;
         if (_graph.GroupAssets is { } previous) previous.Changed -= OnGroupAssetsChanged;
         _graph = _activeGraph.Graph;
         _graph.PropertyChanged += OnGraphChanged;
+        _graph.Connections.CollectionChanged += OnConnectionsChanged;
         if (_graph.GroupAssets is { } current) current.Changed += OnGroupAssetsChanged;
         OnPropertyChanged(nameof(Graph));
         RefreshNode();
@@ -72,6 +76,11 @@ public sealed class NodePropertiesPaneViewModel : Tool
         if (e.PropertyName == nameof(GraphNodeViewModel.Parameters))
             foreach (var parameter in Parameters) parameter.Refresh();
         if (e.PropertyName == nameof(GraphNodeViewModel.GroupAsset)) RefreshGroupState();
+    }
+
+    private void OnConnectionsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        foreach (var parameter in Parameters) parameter.Refresh();
     }
 
     private void OnGroupAssetsChanged(object? sender, EventArgs e) => RefreshGroupState();

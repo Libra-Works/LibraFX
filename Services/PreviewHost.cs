@@ -33,6 +33,7 @@ public sealed class PreviewHost : IDisposable
     private GraphWorkspaceViewModel? _graph;
     private PreviewPublication? _latest;
     private long _sequence;
+    private PreviewTelemetryStore? _telemetry;
 
     public string AccessToken { get; } = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
     public string Fingerprint => Convert.ToHexString(SHA256.HashData(_certificate.RawData));
@@ -65,6 +66,7 @@ public sealed class PreviewHost : IDisposable
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 _model = model;
+                _telemetry = model.PreviewTelemetry;
                 model.ActiveGraphProvider.PropertyChanged += OnActiveGraphChanged;
                 model.Playback.StateChanged += OnPlaybackChanged;
                 AttachGraph(model.ActiveGraphProvider.Graph);
@@ -190,10 +192,12 @@ public sealed class PreviewHost : IDisposable
             }
             UpdateClientCount();
             using var cancel = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
+            var clientCancellation = cancel.Token;
+            _telemetry?.Connect(id, client.Version, bytes => SendControlAsync(socket, client, bytes, clientCancellation));
             var sending = Task.Run(() => SendAsync(socket, client, cancel.Token), cancel.Token);
             try
             {
-                var receiving = ReceiveAsync(socket, client, cancel.Token);
+                var receiving = ReceiveAsync(socket, id, client, cancel.Token);
                 await Task.WhenAny(sending, receiving);
                 cancel.Cancel();
                 socket.Abort();
@@ -212,6 +216,7 @@ public sealed class PreviewHost : IDisposable
         finally
         {
             lock (_sync) _clients.Remove(id);
+            _telemetry?.Disconnect(id);
             _sockets.TryRemove(id, out _);
             client.Channel.Writer.TryComplete();
             _clientSlots.Release();
@@ -231,19 +236,43 @@ public sealed class PreviewHost : IDisposable
             {
                 var message = compiled.Prepare(publication, force);
                 if (message is null) continue;
-                await socket.SendAsync(message.Bytes.AsMemory(), WebSocketMessageType.Binary, true, cancellation);
+                await SendSerializedAsync(socket, client, message.Bytes, WebSocketMessageType.Binary, cancellation);
                 compiled.Sent(message);
                 continue;
             }
             var payload = client.Version == 2 ? PreviewProtocol.Encode(publication, baseline, force) : publication.LegacyPayload;
-            await socket.SendAsync(payload.AsMemory(), WebSocketMessageType.Text, true, cancellation);
+            await SendSerializedAsync(socket, client, payload, WebSocketMessageType.Text, cancellation);
             baseline = publication;
         }
     }
 
-    private async Task ReceiveAsync(WebSocket socket, PreviewClient client, CancellationToken cancellation)
+    private static async Task SendSerializedAsync(WebSocket socket, PreviewClient client, byte[] bytes,
+        WebSocketMessageType type, CancellationToken cancellation)
     {
-        var buffer = new byte[256];
+        await client.SendGate.WaitAsync(cancellation);
+        try { await socket.SendAsync(bytes.AsMemory(), type, true, cancellation); }
+        finally { client.SendGate.Release(); }
+    }
+
+    private static async Task SendControlAsync(WebSocket socket, PreviewClient client, byte[] bytes,
+        CancellationToken cancellation)
+    {
+        // Controls never enter the drop-oldest publication channel. Bound concurrent control writers.
+        if (!await client.ControlSlots.WaitAsync(0, cancellation))
+            throw new InvalidOperationException("Preview control queue is full.");
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+            timeout.CancelAfter(TimeSpan.FromSeconds(10));
+            await SendSerializedAsync(socket, client, bytes, WebSocketMessageType.Binary, timeout.Token);
+        }
+        finally { client.ControlSlots.Release(); }
+    }
+
+    private async Task ReceiveAsync(WebSocket socket, Guid id, PreviewClient client, CancellationToken cancellation)
+    {
+        var limit = client.Version == 3 ? PreviewTelemetryStore.MaxFrameBytes : 255;
+        var buffer = new byte[limit + 1];
         while (!cancellation.IsCancellationRequested)
         {
             var count = 0;
@@ -255,16 +284,20 @@ public sealed class PreviewHost : IDisposable
                 if (result.MessageType == WebSocketMessageType.Close) return;
                 count += result.Count;
                 if (client.Version == 1 || result.MessageType != WebSocketMessageType.Text ||
-                    count == buffer.Length || ++fragments > 16)
+                    count > limit || ++fragments > (client.Version == 3 ? 1024 : 16))
                     return;
             } while (!result.EndOfMessage);
             try
             {
                 using var request = JsonDocument.Parse(buffer.AsMemory(0, count));
-                if (!request.RootElement.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String ||
-                    type.GetString() != "resync") return;
-                if (client.Version == 3 && (request.RootElement.ValueKind != JsonValueKind.Object ||
-                    request.RootElement.EnumerateObject().Count() != 1)) return;
+                if (request.RootElement.ValueKind != JsonValueKind.Object ||
+                    !request.RootElement.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String) return;
+                if (type.GetString() != "resync")
+                {
+                    if (client.Version != 3 || _telemetry?.Receive(id, buffer.AsMemory(0, count)) != true) return;
+                    continue;
+                }
+                if (client.Version == 3 && request.RootElement.EnumerateObject().Count() != 1) return;
             }
             catch (Exception ex) when (ex is JsonException or InvalidOperationException) { return; }
             lock (_sync)
@@ -279,6 +312,8 @@ public sealed class PreviewHost : IDisposable
     {
         public int Version { get; } = version;
         public int ForceSnapshot;
+        public SemaphoreSlim SendGate { get; } = new(1, 1);
+        public SemaphoreSlim ControlSlots { get; } = new(16, 16);
         public Channel<PreviewPublication> Channel { get; } = System.Threading.Channels.Channel.CreateBounded<PreviewPublication>(
             new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
     }

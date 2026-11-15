@@ -23,7 +23,7 @@ public sealed class McpHost
 
     public McpHost(int port = Port) => _port = port;
 
-    public async Task StartAsync(ActiveGraphProvider activeGraph)
+    public async Task StartAsync(ActiveGraphProvider activeGraph, PreviewTelemetryStore? previewTelemetry = null)
     {
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
         {
@@ -35,6 +35,7 @@ public sealed class McpHost
         builder.Configuration.Sources.Clear();
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, _port));
         builder.Services.AddSingleton(activeGraph);
+        builder.Services.AddSingleton(previewTelemetry ?? new PreviewTelemetryStore());
         builder.Services.AddMcpServer()
             .WithHttpTransport(options => options.Stateless = true)
             .WithTools<LiberaFxMcpTools>()

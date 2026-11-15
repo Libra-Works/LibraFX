@@ -12,6 +12,7 @@ public partial class MainWindow : Window
 {
     private LogWindow? _logWindow;
     private McpWindow? _mcpWindow;
+    private PreviewProfilerWindow? _profilerWindow;
     private MainViewModel? _groupModel;
     private bool _checkingGroupUpdates;
     private bool _pendingGroupCheck;
@@ -79,6 +80,14 @@ public partial class MainWindow : Window
         _mcpWindow = new McpWindow { DataContext = DataContext };
         _mcpWindow.Closed += (_, _) => _mcpWindow = null;
         _mcpWindow.Show(this);
+    }
+
+    private void OnProfilerClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_profilerWindow is not null) { _profilerWindow.Activate(); return; }
+        _profilerWindow = new PreviewProfilerWindow { DataContext = DataContext };
+        _profilerWindow.Closed += (_, _) => _profilerWindow = null;
+        _profilerWindow.Show(this);
     }
 
     private async void OnCloseDocumentClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

@@ -98,6 +98,23 @@ internal static class CompiledPreviewProtocolTests
             var first = await ReceiveAsync(socket, token);
             Require(U16(first, 6) == 1 && first.AsSpan(48, 4).SequenceEqual("LFXB"u8),
                 "Initial transport message must be a compiled program.");
+            await socket.SendAsync(Encoding.UTF8.GetBytes(
+                """{"type":"hello","engine":"Unreal","role":"runtime","version":1,"capabilities":["profiling","values"]}"""),
+                WebSocketMessageType.Text, true, token);
+            while (model.PreviewTelemetry.Clients().SingleOrDefault()?.Engine is null) await Task.Delay(10, token);
+            await model.PreviewTelemetry.ProfileControlAsync(true, true, false, 500);
+            var control = await ReceiveAsync(socket, token);
+            Require(U16(control, 6) == 4 && U64(control, 8) == 0 && U64(control, 16) == 0,
+                "A negotiated control must bypass the compiled sequence cursor.");
+            // A real fragmented telemetry frame exceeds the old resync-only 256-byte buffer.
+            var feedback = Encoding.UTF8.GetBytes(
+                $$"""{"type":"values","programSequence":{{U64(first, 8)}},"evaluationTime":0.125,"values":[{"nodeId":"8e7416b4-1a9c-4ab1-aabe-409e4cf19d3f","components":[3.5]}],"padding":"{{new string('x', 600)}}"}""");
+            await socket.SendAsync(feedback.AsMemory(0, 200), WebSocketMessageType.Text, false, token);
+            await socket.SendAsync(feedback.AsMemory(200), WebSocketMessageType.Text, true, token);
+            while (model.PreviewTelemetry.Clients().Single().Values is null) await Task.Delay(10, token);
+            Require(model.PreviewTelemetry.Clients().Single().Values is { EvaluationTime: 0.125 } values &&
+                values.ProgramSequence == (long)U64(first, 8) && values.Values.Single().Components.Single() == 3.5,
+                "Fragmented native value feedback must retain exact metadata.");
             await Dispatcher.UIThread.InvokeAsync(() => model.Playback.Frame = 1);
             var tick = await ReceiveAsync(socket, token);
             Require(U16(tick, 6) == 2 && U64(tick, 16) == U64(first, 8),
@@ -122,6 +139,13 @@ internal static class CompiledPreviewProtocolTests
             await Dispatcher.UIThread.InvokeAsync(() => model.NewDocumentCommand.Execute(null));
             var switched = await ReceiveAsync(socket, token);
             Require(U16(switched, 6) == 1, "Switching documents must send a program.");
+            try
+            {
+                await socket.SendAsync(new byte[PreviewTelemetryStore.MaxFrameBytes + 1], WebSocketMessageType.Text, true, token);
+            }
+            catch (WebSocketException) { /* The receiver may abort before this oversized send finishes. */ }
+            while (model.PreviewTelemetry.Clients().Count != 0) await Task.Delay(10, token);
+            Require(model.PreviewTelemetry.Clients().Count == 0, "Oversized incoming frames must disconnect and remove feedback.");
             socket.Abort();
         }
         finally

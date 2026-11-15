@@ -43,7 +43,7 @@
             <ItemsControl ItemsSource="{Binding Parameters}" Margin="0,8,0,0">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="vm:NodeParameterEditorViewModel">
-                        <views:ParameterEditorHost Margin="0,0,0,10" />
+                        <views:ParameterEditorHost Margin="0,0,0,3" />
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>

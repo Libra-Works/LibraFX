@@ -16,6 +16,7 @@ internal static class EditorInterfaceTests
 {
     public static void Run()
     {
+        VerifyParameterRows();
         VerifyCatalogs();
         var text = LocalizationService.Shared;
         var originalLanguage = text.SelectedLanguage;
@@ -119,6 +120,60 @@ internal static class EditorInterfaceTests
             if (Directory.Exists(root)) Directory.Delete(root);
         }
         VerifySettingsBindingLifetime();
+    }
+
+    public static void VerifyParameterRows()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var sourceA = graph.CreateNode(GraphNodeKind.Float);
+        var sourceB = graph.CreateNode(GraphNodeKind.Float);
+        var target = graph.CreateNode(GraphNodeKind.Multiply);
+        var targetId = target.Id;
+        graph.SetParameter(target, "a", JsonSerializer.SerializeToElement(7));
+        graph.SetParameter(target, "b", JsonSerializer.SerializeToElement(8));
+        if (!graph.TryConnectNodes(sourceA, target, out _, "a") || !graph.TryConnectNodes(sourceB, target, out _, "b"))
+            throw new InvalidOperationException("Parameter-row connection fixtures failed.");
+        graph.SelectNode(target);
+        var pane = new NodePropertiesPaneViewModel(new ActiveGraphProvider(graph));
+        var parameter = pane.Parameters.Single(p => p.Id == "a");
+        var host = new ParameterEditorHost { DataContext = parameter };
+        var window = new Window { Width = 540, Height = 140, Content = host };
+        window.Show();
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            var row = (Grid)host.Content!;
+            var disconnect = (IconButton)row.Children.OfType<Border>().Single().Child!;
+            var reset = row.Children.OfType<IconButton>().Single(button => button.Icon == EditorIcon.Reset);
+            var label = row.Children.OfType<TextBlock>().First();
+            var editor = row.Children.OfType<TextBox>().Single();
+            if (!disconnect.IsVisible || disconnect.Bounds.Right > label.Bounds.Left ||
+                editor.Bounds.Left < label.Bounds.Right || reset.Bounds.Left < editor.Bounds.Right)
+                throw new InvalidOperationException("Parameter row must align unlink, label, field and reset horizontally.");
+            reset.Command!.Execute(null);
+            if (parameter.NumericValue != 1 || graph.Connections.Count != 2 || parameter.ResetCommand.CanExecute(null))
+                throw new InvalidOperationException("Reset must restore the declared default without breaking links.");
+            graph.History.Undo();
+            if (graph.Nodes.Single(node => node.Id == targetId).Parameters!.Single(p => p.Id == "a").Value.GetDouble() != 7)
+                throw new InvalidOperationException("Parameter reset must use one undoable graph edit.");
+            graph.History.Redo();
+            pane.Parameters.Single(p => p.Id == "a").DisconnectCommand.Execute(null);
+            if (graph.Connections.Count != 1 || graph.Connections.Single().TargetPortId != "b" ||
+                pane.Parameters.Single(p => p.Id == "a").HasConnection)
+                throw new InvalidOperationException("Row unlink must remove only the matching input pin.");
+            graph.History.Undo();
+            if (graph.Connections.Count != 2 || !pane.Parameters.Single(p => p.Id == "a").HasConnection)
+                throw new InvalidOperationException("Undo must restore the row link state.");
+            var vector = graph.CreateNode(GraphNodeKind.FloatX4);
+            graph.SetParameter(vector, "value", JsonSerializer.SerializeToElement(new[] { 2, 3, 4, 5 }));
+            graph.SelectNode(vector);
+            pane.Parameters.Single().ResetCommand.Execute(null);
+            using var resetVector = JsonDocument.Parse(pane.Parameters.Single().JsonValue);
+            if (resetVector.RootElement.GetArrayLength() != 4 ||
+                resetVector.RootElement.EnumerateArray().Any(component => component.GetDouble() != 0))
+                throw new InvalidOperationException("Vector reset must restore all components from the declared default.");
+        }
+        finally { window.Close(); }
     }
 
     private static void VerifySettingsBindingLifetime()

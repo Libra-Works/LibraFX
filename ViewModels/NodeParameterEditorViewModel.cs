@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services;
 
@@ -17,6 +18,15 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     public string Name => LocalizationService.Shared.GetOrDefault(_definition.DisplayNameKey, _definition.Name);
     public string Type => _definition.Type;
     public string Id => _definition.Id;
+    private GraphConnectionViewModel? InputConnection => _graph.Connections.FirstOrDefault(connection =>
+        connection.Target == _node && (connection.TargetPortId == Id ||
+        connection.TargetPortId is null && _node.HasLegacyInput && _node.Definition.Parameters.Count == 1));
+    public bool HasConnection => InputConnection is not null;
+    public bool CanReset => _graph.Nodes.Contains(_node) && !NodeParameter.ValuesEqual(Value, _definition.DefaultValue);
+    public IRelayCommand DisconnectCommand { get; }
+    public IRelayCommand ResetCommand { get; }
+    public string DisconnectHint => LocalizationService.Shared.Get("Panels.DisconnectParameter", Name);
+    public string ResetHint => LocalizationService.Shared.Get("Panels.ResetParameter", Name);
     public NodeParameterEditorDefinition? Editor => _definition.Editor;
     public bool IsEnabled
     {
@@ -86,6 +96,12 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         _graph = graph;
         _node = node;
         _definition = definition;
+        DisconnectCommand = new RelayCommand(() =>
+        {
+            if (InputConnection is { } connection) _graph.DisconnectConnection(connection);
+            Refresh();
+        }, () => HasConnection);
+        ResetCommand = new RelayCommand(() => SetValue(_definition.DefaultValue), () => CanReset);
         MessageLocalization.Observe(this, static editor => editor.Refresh());
     }
 
@@ -159,6 +175,12 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(ValueText));
         OnPropertyChanged(nameof(DisplayValue));
         OnPropertyChanged(nameof(IsEnabled));
+        OnPropertyChanged(nameof(HasConnection));
+        OnPropertyChanged(nameof(CanReset));
+        OnPropertyChanged(nameof(DisconnectHint));
+        OnPropertyChanged(nameof(ResetHint));
+        DisconnectCommand.NotifyCanExecuteChanged();
+        ResetCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(EnumValues));
         OnPropertyChanged(nameof(EnumValue));
         OnPropertyChanged(nameof(NumericValue));

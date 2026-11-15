@@ -1,0 +1,150 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:services="using:LiberaFx.Services"
+        xmlns:views="using:LiberaFx.Views"
+        x:Class="LiberaFx.Views.PreviewProfilerWindow"
+        Title="{DynamicResource Text.Profiler.Title}" Width="1380" Height="880"
+        MinWidth="700" MinHeight="460" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource EffectWindowBackgroundBrush}">
+    <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="8">
+        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="5">
+            <ComboBox x:Name="PeerSelector" SelectionChanged="OnPeerChanged"
+                      AutomationProperties.Name="{DynamicResource Text.Profiler.Peer}" />
+            <TextBlock x:Name="PeerStatus" Grid.Column="1" VerticalAlignment="Center" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{DynamicResource Text.Profiler.CapabilityNotice}" TextWrapping="Wrap"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" FontSize="11" />
+        </Grid>
+        <WrapPanel Grid.Row="1">
+            <Button x:Name="StartButton" Content="{DynamicResource Text.Profiler.Start}" Click="OnStart" Margin="0,0,8,0" />
+            <Button x:Name="StopButton" Content="{DynamicResource Text.Profiler.Stop}" Click="OnStop" Margin="0,0,12,0" />
+            <CheckBox x:Name="NodesCheck" Content="{DynamicResource Text.Profiler.Nodes}" IsChecked="True" Margin="0,0,12,0" />
+            <CheckBox x:Name="AccessorsCheck" Content="{DynamicResource Text.Profiler.Accessors}" Margin="0,0,12,0" />
+            <TextBlock Text="{DynamicResource Text.Profiler.Interval}" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <NumericUpDown x:Name="IntervalInput" Minimum="100" Maximum="5000" Value="500" Increment="100" Width="120"
+                           AutomationProperties.Name="{DynamicResource Text.Profiler.Interval}" />
+        </WrapPanel>
+        <TextBlock x:Name="CaptureStatus" Grid.Row="2" TextWrapping="Wrap" />
+        <TabControl Grid.Row="3">
+            <TabItem Header="{DynamicResource Text.Profiler.Overview}">
+                <Grid RowDefinitions="Auto,Auto,2*,Auto,3*" RowSpacing="10">
+                    <UniformGrid Columns="4">
+                        <Border Margin="0,0,8,0" Padding="12" BorderThickness="0,0,0,3" BorderBrush="#62ADE9">
+                            <StackPanel><TextBlock Text="{DynamicResource Text.Profiler.TotalWork}" />
+                                <TextBlock x:Name="TotalWork" FontSize="24" FontWeight="SemiBold" /></StackPanel>
+                        </Border>
+                        <Border Margin="0,0,8,0" Padding="12" BorderThickness="0,0,0,3" BorderBrush="#D9BA58">
+                            <StackPanel><TextBlock Text="{DynamicResource Text.Profiler.RecordedCalls}" />
+                                <TextBlock x:Name="RecordedCalls" FontSize="24" FontWeight="SemiBold" /></StackPanel>
+                        </Border>
+                        <Border Margin="0,0,8,0" Padding="12" BorderThickness="0,0,0,3" BorderBrush="#AB8BE2">
+                            <StackPanel><TextBlock Text="{DynamicResource Text.Profiler.PeakInterval}" />
+                                <TextBlock x:Name="PeakInterval" FontSize="24" FontWeight="SemiBold" /></StackPanel>
+                        </Border>
+                        <Border Padding="12" BorderThickness="0,0,0,3" BorderBrush="#6DC991">
+                            <StackPanel><TextBlock Text="{DynamicResource Text.Profiler.HistoryCount}" />
+                                <TextBlock x:Name="HistoryCount" FontSize="24" FontWeight="SemiBold" /></StackPanel>
+                        </Border>
+                    </UniformGrid>
+                    <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+                        <StackPanel><TextBlock Text="{DynamicResource Text.Profiler.HistoryTitle}" FontWeight="SemiBold" />
+                            <TextBlock Text="{DynamicResource Text.Profiler.HistoryHelp}" FontSize="11"
+                                       Foreground="{DynamicResource EffectMutedForegroundBrush}" TextWrapping="Wrap" /></StackPanel>
+                        <CheckBox x:Name="LiveCheck" Grid.Column="1" Content="{DynamicResource Text.Profiler.Live}" IsChecked="True"
+                                  IsCheckedChanged="OnHistoryModeChanged" />
+                        <Button Grid.Column="2" Content="{DynamicResource Text.Profiler.ClearHistory}" Click="OnClearHistory" />
+                    </Grid>
+                    <Grid Grid.Row="2" ColumnDefinitions="150,*" ColumnSpacing="12">
+                        <StackPanel Spacing="10" Margin="4,16,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><Border Width="10" Height="10" Background="#D9BA58" /><TextBlock Text="{DynamicResource Text.Profiler.CategoryNodes}" /></StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8"><Border Width="10" Height="10" Background="#62ADE9" /><TextBlock Text="{DynamicResource Text.Profiler.CategoryEvaluate}" /></StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8"><Border Width="10" Height="10" Background="#AB8BE2" /><TextBlock Text="{DynamicResource Text.Profiler.CategorySchedule}" /></StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8"><Border Width="10" Height="10" Background="#6DC991" /><TextBlock Text="{DynamicResource Text.Profiler.CategorySignals}" /></StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8"><Border Width="10" Height="10" Background="#49BFC2" /><TextBlock Text="{DynamicResource Text.Profiler.CategoryAccessors}" /></StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8"><Border Width="10" Height="10" Background="#8895A7" /><TextBlock Text="{DynamicResource Text.Profiler.CategoryOther}" /></StackPanel>
+                        </StackPanel>
+                        <Border Grid.Column="1" BorderBrush="{DynamicResource EffectMutedForegroundBrush}" BorderThickness="1" CornerRadius="4">
+                            <views:ProfilerHistoryChart x:Name="HistoryChart" MinHeight="150"
+                                AutomationProperties.Name="{DynamicResource Text.Profiler.HistoryTitle}" />
+                        </Border>
+                    </Grid>
+                    <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                        <StackPanel><TextBlock x:Name="SelectedSampleStatus" FontWeight="SemiBold" />
+                            <TextBlock Text="{DynamicResource Text.Profiler.CostHelp}" TextWrapping="Wrap" FontSize="11"
+                                       Foreground="{DynamicResource EffectMutedForegroundBrush}" /></StackPanel>
+                        <ComboBox x:Name="CostMode" Grid.Column="1" SelectedIndex="1" SelectionChanged="OnCostModeChanged">
+                            <ComboBoxItem Content="{DynamicResource Text.Profiler.IntervalCosts}" />
+                            <ComboBoxItem Content="{DynamicResource Text.Profiler.CumulativeCosts}" />
+                        </ComboBox>
+                    </Grid>
+                    <Grid Grid.Row="4" ColumnDefinitions="*,320" ColumnSpacing="14">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <views:ProfilerCostChart x:Name="CostChart"
+                                AutomationProperties.Name="{DynamicResource Text.Profiler.CostTitle}" />
+                        </ScrollViewer>
+                        <Border Grid.Column="1" BorderBrush="{DynamicResource EffectMutedForegroundBrush}"
+                                BorderThickness="1" CornerRadius="4" Padding="14">
+                            <ScrollViewer>
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="{DynamicResource Text.Profiler.DetailTitle}" FontSize="16" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="CostDetail" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+            <TabItem Header="{DynamicResource Text.Profiler.Metrics}">
+                <Grid RowDefinitions="Auto,Auto,*" RowSpacing="5">
+                    <TextBlock x:Name="ProfileStatus" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="1" Text="{DynamicResource Text.Profiler.Units}" />
+                    <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <Grid MinWidth="1160" RowDefinitions="Auto,*">
+                            <Grid ColumnDefinitions="160,290,90,150,150,150,150" Margin="8,4">
+                                <TextBlock Text="{DynamicResource Text.Profiler.Event}" />
+                                <TextBlock Grid.Column="1" Text="{DynamicResource Text.Profiler.Node}" />
+                                <TextBlock Grid.Column="2" Text="{DynamicResource Text.Profiler.Calls}" />
+                                <TextBlock Grid.Column="3" Text="{DynamicResource Text.Profiler.Exclusive}" />
+                                <TextBlock Grid.Column="4" Text="{DynamicResource Text.Profiler.Inclusive}" />
+                                <TextBlock Grid.Column="5" Text="{DynamicResource Text.Profiler.Minimum}" />
+                                <TextBlock Grid.Column="6" Text="{DynamicResource Text.Profiler.Maximum}" />
+                            </Grid>
+                            <ListBox x:Name="MetricList" Grid.Row="1"
+                                     AutomationProperties.Name="{DynamicResource Text.Profiler.Metrics}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="services:PreviewMetric">
+                                        <Grid ColumnDefinitions="160,290,90,150,150,150,150">
+                                            <TextBlock Text="{Binding Event}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding NodeId}" />
+                                            <TextBlock Grid.Column="2" Text="{Binding Calls}" />
+                                            <TextBlock Grid.Column="3" Text="{Binding ExclusiveMs}" />
+                                            <TextBlock Grid.Column="4" Text="{Binding InclusiveMs}" />
+                                            <TextBlock Grid.Column="5" Text="{Binding MinMs}" />
+                                            <TextBlock Grid.Column="6" Text="{Binding MaxMs}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+            <TabItem Header="{DynamicResource Text.Profiler.Values}">
+                <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="8">
+                    <TextBlock Text="{DynamicResource Text.Profiler.WatchHelp}" TextWrapping="Wrap" />
+                    <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                        <TextBox x:Name="WatchInput" PlaceholderText="{DynamicResource Text.Profiler.NodeIds}"
+                                 AutomationProperties.Name="{DynamicResource Text.Profiler.NodeIds}" />
+                        <Button x:Name="SelectionButton" Grid.Column="1" Content="{DynamicResource Text.Profiler.UseSelection}" Click="OnUseSelection" />
+                        <Button x:Name="WatchButton" Grid.Column="2" Content="{DynamicResource Text.Profiler.Watch}" Click="OnWatch" />
+                    </Grid>
+                    <TextBlock x:Name="ValuesStatus" Grid.Row="2" TextWrapping="Wrap" />
+                    <TextBox x:Name="ValuesText" Grid.Row="3" IsReadOnly="True" AcceptsReturn="True"
+                             FontFamily="Cascadia Mono,Consolas,monospace"
+                             ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             AutomationProperties.Name="{DynamicResource Text.Profiler.Values}" />
+                </Grid>
+            </TabItem>
+        </TabControl>
+        <TextBlock x:Name="ControlStatus" Grid.Row="4" TextWrapping="Wrap" />
+    </Grid>
+</Window>

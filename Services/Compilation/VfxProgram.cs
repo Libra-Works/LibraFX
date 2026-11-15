@@ -313,7 +313,7 @@ public sealed class VfxProgram
                     (isSignal ? parameterOutputs.Length != 0 || signalOutputs.Length is < 1 or > 4 :
                         signalInputs.Length != 0 || signalOutputs.Length != 0 || parameterOutputs.Length != 1))
                     throw new InvalidDataException($"Custom node '{node.Name}' has unsupported port layout.");
-                var outputWidth = isSignal ? 0 : Width(definition.GetOutputPortType(parameterOutputs[0].Id)!);
+                var customOutputWidth = isSignal ? 0 : Width(definition.GetOutputPortType(parameterOutputs[0].Id)!);
                 var outputColor = !isSignal && definition.GetOutputPortType(parameterOutputs[0].Id) == "Color";
                 var customInputs = new VfxCustomInput[inputPorts.Length];
                 for (var inputIndex = 0; inputIndex < inputPorts.Length; inputIndex++)
@@ -360,9 +360,9 @@ public sealed class VfxProgram
                     branchTargets[branch] = indices[target.Id];
                 }
                 customCode.Add(new VfxCustomInstruction(node.Id,
-                    isSignal ? (byte)41 : (byte)40, outputWidth, outputColor, definition.TypeId,
+                    isSignal ? (byte)41 : (byte)40, customOutputWidth, outputColor, definition.TypeId,
                     runtime.AbiVersion, signalOutputs.Length, customInputs, branchTargets));
-                typedCode[index] = new(node.Id, (VfxOpcode)(isSignal ? 41 : 40), outputWidth,
+                typedCode[index] = new(node.Id, (VfxOpcode)(isSignal ? 41 : 40), customOutputWidth,
                     0, 0, outputColor ? (byte)1 : (byte)0, 0, 0, -1, -1,
                     new double[4], new double[4]);
                 continue;

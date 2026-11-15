@@ -43,6 +43,15 @@ internal static class Program
             else File.WriteAllText(Path.Combine(directory, "language.json"), languageFixture);
         }
         AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+        if (args is ["--runtime-integration"])
+        {
+            CompiledPreviewProtocolTests.Run();
+            PreviewTelemetryTests.Run();
+            McpParameterTests.Run();
+            EditorInterfaceTests.VerifyParameterRows();
+            Console.WriteLine("Preview protocol, native telemetry UI and MCP parameter checks passed.");
+            return;
+        }
         if (languageFixture is not null)
         {
             var localization = LiberaFx.Services.LocalizationService.Shared;
@@ -155,6 +164,8 @@ internal static class Program
         PreviewProtocolTests.Run();
         Console.WriteLine("Preview parameter deltas, slow-client baselines and TLS resynchronization checks passed.");
         CompiledPreviewProtocolTests.Run();
+        PreviewTelemetryTests.Run();
+        McpParameterTests.Run();
         Console.WriteLine("Compiled preview protocol, playback baselines and TLS transport checks passed.");
         TimelineTests.Run();
         Console.WriteLine("Timeline retiming, shared playhead and graph persistence checks passed.");

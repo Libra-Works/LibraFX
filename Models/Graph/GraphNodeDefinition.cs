@@ -322,7 +322,7 @@ public sealed record GraphNodeDefinition(
                     throw new InvalidDataException("Invalid input port definition.");
                 if (!TryPortCategory(port.Category, category, out var portCategory))
                     throw new InvalidDataException("Invalid input port category.");
-                var defaultValue = port.DefaultValue.ValueKind == JsonValueKind.Undefined
+                JsonElement? defaultValue = port.DefaultValue.ValueKind == JsonValueKind.Undefined
                     ? null : port.DefaultValue.Clone();
                 var portType = port.PortType ?? node.PortType;
                 if (node.Runtime is not null && portCategory == GraphPortCategory.Parameter &&
