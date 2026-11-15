@@ -35,7 +35,9 @@ namespace LiberaFx.Unity
 
         IEnumerator RetireAfterFrame(ComputeBuffer particles, ComputeBuffer args, Mesh mesh)
         {
-            yield return new WaitForEndOfFrame();
+            // Resume on the next frame, after queued camera draws have been submitted.
+            // WaitForEndOfFrame does not resume in the Editor's batch mode.
+            yield return null;
             if (SystemInfo.supportsGraphicsFence && SystemInfo.supportsAsyncCompute)
             {
                 var fence = Graphics.CreateGraphicsFence(GraphicsFenceType.AsyncQueueSynchronisation, SynchronisationStageFlags.AllGPUOperations);

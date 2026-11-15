@@ -20,7 +20,7 @@ or StepCircular for a wrapping spawn range. Reconfigure creates and clears new
 storage and stops automatic simulation; call StartSimulation explicitly to
 resume. A failed configuration leaves the prior program intact. Reset is the
 only in-place clear. Dispose/OnDisable release ownership. Previously submitted
-draws retain their buffers until the frame ends; on platforms supporting
+draws retain their buffers through the next frame; on platforms supporting
 pollable async GPU fences retirement also waits for the fence. Otherwise Unity
 owns native GPU command/resource lifetime after frame submission. A pending
 retirement count is exposed for diagnostics.
@@ -47,3 +47,6 @@ Gpu/LibraGpu.Core. It emits two separately compiled shader/metadata pairs.
 Editor/Tests/LibraGpuVerification.cs contains a graphics-enabled executeMethod
 test. It performs explicit diagnostic GPU readback, 1000 zero-managed-allocation
 steps, render-target pixel checks, resource reconfiguration and error checks.
+Editor/Tests/LibraGpuPlayModeVerification.cs is a separate bounded batch
+executeMethod test for automatic component updates, camera rendering, hot
+reconfiguration, disable/reenable, destruction and deferred retirement.
