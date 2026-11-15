@@ -66,3 +66,26 @@ Local UE 5.7 validation on 2026-11-15:
   Focused Windows cook: 534 packages, zero warnings/errors, exit 0.
 These observations do not establish packaged standalone-game execution or
 support for future IR operations beyond the current validated opcode set.
+
+Development game smoke command (excluded from Shipping):
+  Libra.GPU.Smoke /Game/Folder/Effect.Effect
+It loads a native asset in the current game world, creates a gameplay component,
+dispatches its actual packets, reads at most 32 particles for this explicit
+diagnostic, requires finite live GPU results, and destroys the actor safely.
+Success logs LIBRA_GPU_GAME_SMOKE_PASSED. This does not itself establish
+framebuffer pixels or async soft loading; those have separate automation cases.
+An effect intentionally producing no live particles does not pass this smoke.
+
+Build a Development game target with normal UBT:
+  Build.bat MyProject28 Win64 Development -Project="...\MyProject28.uproject" -WaitMutex
+Run the staged/cooked game (not UnrealEditor) with a graphics RHI:
+  MyProject28.exe /Engine/Maps/Entry
+    -ExecCmds="Libra.GPU.Smoke /Game/Folder/Effect.Effect,Quit" -log -stdout
+The game needs staged engine content, shader libraries and cooked assets;
+copying a single .uasset beside an executable is not a valid package test.
+
+Local standalone proof on 2026-11-15: Development game UBT and UAT stage/pak
+succeeded. The staged cooked MyProject28.exe ran without UnrealEditor or MCP,
+loaded the native GPU asset, and logged LIBRA_GPU_GAME_SMOKE_PASSED:
+capacity=4096, sampled=32, alive=1, nativeTextures=1; exit 0.
+This validates the baseline interpreter only, not future appended opcodes.

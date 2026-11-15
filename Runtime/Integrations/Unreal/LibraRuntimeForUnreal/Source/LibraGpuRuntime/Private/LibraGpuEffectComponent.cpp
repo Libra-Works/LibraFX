@@ -14,6 +14,7 @@
 #include "RenderGraphUtils.h"
 #include "RenderingThread.h"
 #include "RHITextureReference.h"
+#include "RHIGPUReadback.h"
 #include "SceneView.h"
 #include "SceneViewExtension.h"
 #include "ScreenPass.h"
@@ -420,9 +421,68 @@ void ULibraGpuEffectComponent::BeginDestroy()
     Super::BeginDestroy();
 }
 
+#if !UE_BUILD_SHIPPING
+bool ULibraGpuEffectComponent::VerifyGpuSmoke(FString& report)
+{
+    if (!State || GUsingNullRHI || GMaxRHIFeatureLevel < ERHIFeatureLevel::SM5)
+    {
+        report = TEXT("No playing SM5 GPU instance.");
+        return false;
+    }
+    auto state = State;
+    auto sampleCount = FMath::Min(state->Capacity, 32);
+    TArray<uint8> bytes;
+    bytes.SetNumZeroed(sampleCount * 80);
+    auto copied = false;
+    ENQUEUE_RENDER_COMMAND(LibraGpuDevelopmentReadback)([state, &bytes, &copied](FRHICommandListImmediate& commandList)
+    {
+        if (!state->Particles) return;
+        FRHIGPUBufferReadback readback(TEXT("LibraGpu.DevelopmentSmoke"));
+        FRDGBuilder graph(commandList);
+        AddEnqueueCopyPass(graph, &readback, graph.RegisterExternalBuffer(state->Particles), bytes.Num());
+        graph.Execute();
+        commandList.SubmitAndBlockUntilGPUIdle();
+        if (!readback.IsReady()) return;
+        auto data = readback.Lock(bytes.Num());
+        if (data)
+        {
+            FMemory::Memcpy(bytes.GetData(), data, bytes.Num());
+            copied = true;
+        }
+        readback.Unlock();
+    });
+    FlushRenderingCommands();
+    if (!copied)
+    {
+        report = TEXT("GPU readback was not available.");
+        return false;
+    }
+    auto alive = 0;
+    for (auto i = 0; i < sampleCount; ++i)
+    {
+        uint32 live = 0;
+        FMemory::Memcpy(&live, bytes.GetData() + i * 80 + 68, sizeof(live));
+        if (live == 0) continue;
+        ++alive;
+        for (auto offset = 0; offset < 64; offset += 4)
+        {
+            uint32 bits = 0;
+            FMemory::Memcpy(&bits, bytes.GetData() + i * 80 + offset, sizeof(bits));
+            if ((bits & 0x7f800000u) == 0x7f800000u)
+            {
+                report = TEXT("GPU readback contained a nonfinite live particle.");
+                return false;
+            }
+        }
+    }
+    report = FString::Printf(TEXT("GpuRegisterInterpreter capacity=%d sampled=%d alive=%d nativeTextures=%d"),
+        state->Capacity, sampleCount, alive, state->Textures.Num());
+    return alive > 0;
+}
+#endif
+
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
-#include "RHIGPUReadback.h"
 
 namespace
 {

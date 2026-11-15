@@ -60,6 +60,11 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Libra GPU")
     bool ResetEffect();
 
+#if !UE_BUILD_SHIPPING
+    // Explicit development-only diagnostic; never used by gameplay rendering.
+    bool VerifyGpuSmoke(FString& report);
+#endif
+
     virtual void TickComponent(float deltaTime, ELevelTick tickType, FActorComponentTickFunction* tickFunction) override;
     virtual void BeginDestroy() override;
 
