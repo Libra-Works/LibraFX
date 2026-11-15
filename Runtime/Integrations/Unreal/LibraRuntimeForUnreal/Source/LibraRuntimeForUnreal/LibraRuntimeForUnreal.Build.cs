@@ -7,7 +7,12 @@ public class LibraRuntimeForUnreal : ModuleRules
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         CppStandard = CppStandardVersion.Cpp20;
         PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "LibraRuntimeCore" });
-        if (Target.Platform == UnrealTargetPlatform.Win64 && Target.Architecture != UnrealArch.Arm64)
+        var supportsEditorTransport =
+            Target.Platform == UnrealTargetPlatform.Win64 ||
+            Target.Platform == UnrealTargetPlatform.Mac ||
+            Target.IsInPlatformGroup(UnrealPlatformGroup.Unix);
+        PrivateDefinitions.Add("LIBRA_WITH_EDITOR_TRANSPORT=" + (supportsEditorTransport ? "1" : "0"));
+        if (supportsEditorTransport)
             PrivateDependencyModuleNames.AddRange(new[] { "libWebSockets", "OpenSSL", "SSL", "Sockets" });
     }
 }

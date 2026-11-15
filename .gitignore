@@ -14,3 +14,6 @@ TestResults/
 .mcp.json
 .vscode/mcp.json
 Assets/Inspectors/
+/Runtime/Integrations/Unreal/LibraRuntimeForUnreal/.libra-core-source-path
+/Runtime/Integrations/Unreal/LibraRuntimeForUnreal/Binaries/
+/Runtime/Integrations/Unreal/LibraRuntimeForUnreal/Intermediate/

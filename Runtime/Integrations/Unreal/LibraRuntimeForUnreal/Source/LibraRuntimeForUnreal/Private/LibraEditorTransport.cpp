@@ -14,14 +14,12 @@
 #include <thread>
 #include <vector>
 
-#if WITH_DEV_AUTOMATION_TESTS && PLATFORM_WINDOWS && PLATFORM_64BITS && !PLATFORM_ARM64 && WITH_SSL
+#if WITH_DEV_AUTOMATION_TESTS && LIBRA_WITH_EDITOR_TRANSPORT && WITH_SSL
 #include "Misc/AutomationTest.h"
 #endif
 
-#if PLATFORM_WINDOWS && PLATFORM_64BITS && !PLATFORM_ARM64 && WITH_SSL
-#include <winsock2.h>
-#include <ws2tcpip.h>
-
+#if LIBRA_WITH_EDITOR_TRANSPORT && WITH_SSL
+#include "SocketSubsystem.h"
 #include <libwebsockets.h>
 #include <openssl/crypto.h>
 #include <openssl/ec.h>
@@ -31,7 +29,7 @@
 #include <openssl/sha.h>
 #endif
 
-#if PLATFORM_WINDOWS && PLATFORM_64BITS && !PLATFORM_ARM64 && WITH_SSL
+#if LIBRA_WITH_EDITOR_TRANSPORT && WITH_SSL
 namespace
 {
 	bool IsCertificatePinMatch(X509* Certificate, const std::array<uint8, 32>& ExpectedFingerprint)
@@ -95,9 +93,17 @@ struct FLibraEditorTransport::FImpl
 	TArray<uint8> CurrentMessage;
 	bool CurrentMessageIsBinary = false;
 
-#if PLATFORM_WINDOWS && PLATFORM_64BITS && !PLATFORM_ARM64 && WITH_SSL
+#if LIBRA_WITH_EDITOR_TRANSPORT && WITH_SSL
+	struct FDnsQuery
+	{
+		std::mutex Mutex;
+		std::condition_variable Changed;
+		bool Complete = false;
+		FString Address;
+	};
+	ISocketSubsystem* SocketSubsystem = nullptr;
+	std::shared_ptr<FDnsQuery> DnsQuery;
 	std::atomic<lws_context*> Context{nullptr};
-	HANDLE DnsCancelHandle = nullptr;
 	lws* WebSocket = nullptr;
 #endif
 
@@ -121,11 +127,11 @@ struct FLibraEditorTransport::FImpl
 
 	void CancelService()
 	{
-#if PLATFORM_WINDOWS && PLATFORM_64BITS && !PLATFORM_ARM64 && WITH_SSL
+#if LIBRA_WITH_EDITOR_TRANSPORT && WITH_SSL
 		std::lock_guard<std::mutex> Lock(ContextMutex);
-		if (DnsCancelHandle != nullptr)
+		if (DnsQuery)
 		{
-			GetAddrInfoExCancel(&DnsCancelHandle);
+			DnsQuery->Changed.notify_all();
 		}
 		if (lws_context* ActiveContext = Context.load())
 		{
@@ -210,7 +216,7 @@ struct FLibraEditorTransport::FImpl
 		return true;
 	}
 
-#if PLATFORM_WINDOWS && PLATFORM_64BITS && !PLATFORM_ARM64 && WITH_SSL
+#if LIBRA_WITH_EDITOR_TRANSPORT && WITH_SSL
 	bool ResolveHost(std::string& OutAddress)
 	{
 		FString ResolveName = Host;
@@ -218,113 +224,61 @@ struct FLibraEditorTransport::FImpl
 		{
 			ResolveName = ResolveName.Mid(1, ResolveName.Len() - 2);
 		}
-		const FString Service = FString::FromInt(Port);
-		ADDRINFOEXW Hints{};
-		Hints.ai_family = AF_UNSPEC;
-		Hints.ai_socktype = SOCK_STREAM;
-		Hints.ai_protocol = IPPROTO_TCP;
-
-		OVERLAPPED Overlapped{};
-		Overlapped.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-		if (Overlapped.hEvent == nullptr)
+		if (auto numeric = SocketSubsystem->GetAddressFromString(ResolveName))
 		{
-			SetFailure(TEXT("Could not initialize DNS resolution"));
-			return false;
+			auto address = numeric->ToString(false).Replace(TEXT("["), TEXT("")).Replace(TEXT("]"), TEXT(""));
+			auto encoded = FTCHARToUTF8(*address);
+			OutAddress.assign(encoded.Get(), encoded.Length());
+			return true;
 		}
 
-		PADDRINFOEXW Addresses = nullptr;
-		HANDLE QueryHandle = nullptr;
-		timeval Timeout{DnsTimeoutSeconds, 0};
-		int Result = GetAddrInfoExW(
-			*ResolveName,
-			*Service,
-			NS_DNS,
-			nullptr,
-			&Hints,
-			&Addresses,
-			&Timeout,
-			&Overlapped,
-			nullptr,
-			&QueryHandle);
-
-		bool bTimedOut = false;
-		if (Result == WSA_IO_PENDING)
+		auto query = std::make_shared<FDnsQuery>();
 		{
+			auto lock = std::lock_guard<std::mutex>(ContextMutex);
+			if (DnsQuery)
 			{
-				std::lock_guard<std::mutex> Lock(ContextMutex);
-				DnsCancelHandle = QueryHandle;
-			}
-
-			const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(DnsTimeoutSeconds);
-			bool bCompleted = false;
-			while (!StopRequested.load() && std::chrono::steady_clock::now() < Deadline)
-			{
-				const DWORD WaitResult = WaitForSingleObject(Overlapped.hEvent, 50);
-				if (WaitResult == WAIT_OBJECT_0)
+				auto queryLock = std::lock_guard<std::mutex>(DnsQuery->Mutex);
+				if (!DnsQuery->Complete)
 				{
-					bCompleted = true;
-					break;
-				}
-				if (WaitResult != WAIT_TIMEOUT)
-				{
-					break;
+					SetFailure(TEXT("A previous DNS query is still pending"));
+					return false;
 				}
 			}
-
-			if (!bCompleted)
+			DnsQuery = query;
+		}
+		const auto service = FString::FromInt(Port);
+		// UE owns the resolver task; its callback never captures the transport.
+		SocketSubsystem->GetAddressInfoAsync([query](FAddressInfoResult result)
+		{
+			auto lock = std::lock_guard<std::mutex>(query->Mutex);
+			if (result.ReturnCode == SE_NO_ERROR)
 			{
-				bTimedOut = !StopRequested.load();
+				for (const auto& entry : result.Results)
 				{
-					std::lock_guard<std::mutex> Lock(ContextMutex);
-					if (DnsCancelHandle != nullptr)
+					auto address = entry.Address->ToString(false).Replace(TEXT("["), TEXT("")).Replace(TEXT("]"), TEXT(""));
+					if (query->Address.IsEmpty() || !address.Contains(TEXT(":")))
 					{
-						GetAddrInfoExCancel(&DnsCancelHandle);
+						query->Address = MoveTemp(address);
+						if (!query->Address.Contains(TEXT(":"))) { break; }
 					}
 				}
-				WaitForSingleObject(Overlapped.hEvent, INFINITE);
 			}
-
-			Result = GetAddrInfoExOverlappedResult(&Overlapped);
-			{
-				std::lock_guard<std::mutex> Lock(ContextMutex);
-				DnsCancelHandle = nullptr;
-			}
-		}
-
-		CloseHandle(Overlapped.hEvent);
-		if (Result == 0 && !StopRequested.load())
+			query->Complete = true;
+			query->Changed.notify_all();
+		}, *ResolveName, *service, EAddressInfoFlags::Default, NAME_None, ESocketType::SOCKTYPE_Streaming);
+		auto lock = std::unique_lock<std::mutex>(query->Mutex);
+		const auto ready = query->Changed.wait_for(lock, std::chrono::seconds(DnsTimeoutSeconds), [this, query]
 		{
-			for (PADDRINFOEXW Address = Addresses; Address != nullptr; Address = Address->ai_next)
-			{
-				WCHAR NumericAddress[NI_MAXHOST]{};
-				if (GetNameInfoW(
-					Address->ai_addr,
-					static_cast<socklen_t>(Address->ai_addrlen),
-					NumericAddress,
-					NI_MAXHOST,
-					nullptr,
-					0,
-					NI_NUMERICHOST) == 0)
-				{
-					const FTCHARToUTF8 Utf8Address(NumericAddress);
-					OutAddress.assign(Utf8Address.Get(), Utf8Address.Length());
-					break;
-				}
-			}
-		}
-
-		if (Addresses != nullptr)
+			return query->Complete || StopRequested.load();
+		});
+		if (StopRequested.load()) { return false; }
+		if (!ready || query->Address.IsEmpty())
 		{
-			FreeAddrInfoExW(Addresses);
-		}
-		if (Result != 0 || OutAddress.empty())
-		{
-			if (!StopRequested.load())
-			{
-				SetFailure(bTimedOut ? TEXT("DNS resolution timed out") : TEXT("DNS resolution failed"));
-			}
+			SetFailure(ready ? TEXT("DNS resolution failed") : TEXT("DNS resolution timed out"));
 			return false;
 		}
+		const auto encoded = FTCHARToUTF8(*query->Address);
+		OutAddress.assign(encoded.Get(), encoded.Length());
 		return true;
 	}
 
@@ -542,20 +496,6 @@ struct FLibraEditorTransport::FImpl
 
 	void Run()
 	{
-		WSADATA WinsockData{};
-		if (WSAStartup(MAKEWORD(2, 2), &WinsockData) != 0)
-		{
-			SetFailure(TEXT("Could not initialize network transport"));
-			return;
-		}
-		struct FWinsockCleanup
-		{
-			~FWinsockCleanup()
-			{
-				WSACleanup();
-			}
-		} WinsockCleanup;
-
 		FTCHARToUTF8 HostUtf8(*Host);
 		const std::string HostName(HostUtf8.Get(), HostUtf8.Length());
 		std::string NumericAddress;
@@ -709,7 +649,7 @@ FLibraEditorTransport::~FLibraEditorTransport()
 
 bool FLibraEditorTransport::Start(const FLibraEditorTransportSettings& Settings, FString& OutError)
 {
-#if !PLATFORM_WINDOWS || !PLATFORM_64BITS || PLATFORM_ARM64 || !WITH_SSL
+#if !LIBRA_WITH_EDITOR_TRANSPORT || !WITH_SSL
 	(void)Settings;
 	OutError = TEXT("Secure Editor transport is unavailable on this platform.");
 	Impl->SetStatus(TEXT("Unavailable"));
@@ -717,6 +657,14 @@ bool FLibraEditorTransport::Start(const FLibraEditorTransportSettings& Settings,
 #else
 	Stop();
 	OutError.Reset();
+
+	Impl->SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
+	if (Impl->SocketSubsystem == nullptr)
+	{
+		OutError = TEXT("Platform socket subsystem is unavailable.");
+		Impl->SetStatus(TEXT("Unavailable"));
+		return false;
+	}
 
 	if (!FImpl::IsValidHost(Settings.Host) || Settings.Port == 0 ||
 		!FImpl::IsValidToken(Settings.AccessToken) ||
@@ -839,7 +787,7 @@ FString FLibraEditorTransport::GetStatus() const
 	return Impl->Status;
 }
 
-#if WITH_DEV_AUTOMATION_TESTS && PLATFORM_WINDOWS && PLATFORM_64BITS && !PLATFORM_ARM64 && WITH_SSL
+#if WITH_DEV_AUTOMATION_TESTS && LIBRA_WITH_EDITOR_TRANSPORT && WITH_SSL
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FLibraEditorTransportValidationTest,
 	"Libra.Runtime.EditorTransport.Validation",

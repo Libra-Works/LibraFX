@@ -17,8 +17,11 @@ public class LibraRuntimeCore : ModuleRules
 
         var pluginRoot = Path.GetFullPath(Path.Combine(ModuleDirectory, "..", ".."));
         var coreRoot = Path.Combine(pluginRoot, "Source", "ThirdParty", "LibraRuntimeCore");
+        var developmentPath = Path.Combine(pluginRoot, ".libra-core-source-path");
+        if (!Directory.Exists(coreRoot) && File.Exists(developmentPath))
+            coreRoot = Path.GetFullPath(File.ReadAllText(developmentPath).Trim());
         if (!File.Exists(Path.Combine(coreRoot, "Core", "VfxRuntime.cpp")))
-            throw new BuildException("LibraRuntimeCore sources are missing. Install the plugin using Install-LibraRuntimeForUnreal.ps1.");
+            throw new BuildException("LibraRuntimeCore sources are missing. Use Install-LibraRuntimeForUnreal.ps1 (copy or -Link).");
 
         PublicIncludePaths.Add(Path.Combine(coreRoot, "include"));
         PrivateIncludePaths.Add(coreRoot);

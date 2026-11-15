@@ -3,13 +3,15 @@
 param(
     [Parameter(Mandatory = $true)]
     [string] $ProjectPath,
-    [switch] $Update
+    [switch] $Update,
+    [switch] $Link
 )
 
 $ErrorActionPreference = 'Stop'
 $pluginName = 'LibraRuntimeForUnreal'
 $sourceRoot = Join-Path $PSScriptRoot $pluginName
-$coreRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+$coreRoot = [IO.Path]::GetFullPath([IO.Path]::Combine($PSScriptRoot, '..', '..'))
+$pathComparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
 $projectFile = [IO.Path]::GetFullPath($ProjectPath)
 if (Test-Path -LiteralPath $projectFile -PathType Container) {
     $projects = @(Get-ChildItem -LiteralPath $projectFile -Filter '*.uproject' -File)
@@ -33,7 +35,7 @@ function Get-ChildPath([string] $Root, [string] $Relative) {
     if ([IO.Path]::IsPathRooted($Relative)) { throw "Absolute manifest path rejected: $Relative" }
     $rootPath = [IO.Path]::GetFullPath($Root).TrimEnd([IO.Path]::DirectorySeparatorChar)
     $child = [IO.Path]::GetFullPath((Join-Path $rootPath $Relative))
-    if (-not $child.StartsWith($rootPath + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    if (-not $child.StartsWith($rootPath + [IO.Path]::DirectorySeparatorChar, $pathComparison)) {
         throw "Path outside plugin rejected: $Relative"
     }
     return $child
@@ -42,17 +44,81 @@ function Get-ChildPath([string] $Root, [string] $Relative) {
 function Assert-NoLinks([string] $Path, [string] $Boundary) {
     $current = [IO.Path]::GetFullPath($Path)
     $limit = [IO.Path]::GetFullPath($Boundary)
-    while ($current.StartsWith($limit, [StringComparison]::OrdinalIgnoreCase)) {
+    while ($current.StartsWith($limit, $pathComparison)) {
         if (Test-Path -LiteralPath $current) {
             if ((Get-Item -LiteralPath $current -Force).Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) {
                 throw "Installing through a link is not supported: $current"
             }
         }
-        if ($current -eq $limit) { break }
+        if ([string]::Equals($current, $limit, $pathComparison)) { break }
         $parent = [IO.Path]::GetDirectoryName($current)
         if ($parent -eq $current -or [string]::IsNullOrEmpty($parent)) { break }
         $current = $parent
     }
+}
+
+if ($Link) {
+    $marker = Join-Path $sourceRoot '.libra-core-source-path'
+    Assert-NoLinks $pluginsRoot $projectRoot
+    Assert-NoLinks $sourceRoot $coreRoot
+    if (Test-Path -LiteralPath $marker) {
+        Assert-NoLinks $marker $coreRoot
+        if (-not [string]::Equals([IO.File]::ReadAllText($marker).Trim(), $coreRoot, $pathComparison)) {
+            throw 'Development Core path already points elsewhere; refusing to replace it.'
+        }
+    }
+    $existing = Get-Item -LiteralPath $targetRoot -Force -ErrorAction SilentlyContinue
+    if ($existing -and $existing.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) {
+        $destination = [IO.Path]::GetFullPath($existing.ResolvedTarget).TrimEnd([IO.Path]::DirectorySeparatorChar)
+        if (-not [string]::Equals($destination, $sourceRoot, $pathComparison)) {
+            throw 'Existing plugin link points elsewhere; refusing to replace it.'
+        }
+        [IO.File]::WriteAllText($marker, $coreRoot, [Text.UTF8Encoding]::new($false))
+        Write-Output "Development plugin already linked: $targetRoot -> $sourceRoot"
+        return
+    }
+    $backup = $null
+    if ($existing) {
+        if (-not $Update) { throw 'Use -Link -Update to replace an installer-managed copy with a link.' }
+        Assert-NoLinks $targetRoot $projectRoot
+        if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+            throw 'Existing plugin has no installation manifest; refusing to replace it.'
+        }
+        Assert-NoLinks $manifestPath $projectRoot
+        $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json
+        if ($manifest.Version -ne 1 -or $manifest.Plugin -ne $pluginName) { throw 'Unsupported installation manifest.' }
+        $owned = @{}
+        foreach ($entry in $manifest.Files) {
+            $path = Get-ChildPath $targetRoot $entry.Path
+            Assert-NoLinks $path $projectRoot
+            if ($owned.ContainsKey($entry.Path)) { throw 'Duplicate installation manifest path.' }
+            $owned[$entry.Path] = $true
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Hash $path) -ne $entry.Hash) {
+                throw "Locally modified plugin file preserved; link conversion stopped: $($entry.Path)"
+            }
+        }
+        foreach ($file in Get-ChildItem -LiteralPath (Join-Path $targetRoot 'Source') -File -Recurse) {
+            Assert-NoLinks $file.FullName $projectRoot
+            $relative = [IO.Path]::GetRelativePath($targetRoot, $file.FullName)
+            if (-not $owned.ContainsKey($relative)) { throw "Unowned plugin source preserved; link conversion stopped: $relative" }
+        }
+        $backup = Join-Path $projectRoot ('.libra-plugin-backup-' + [Guid]::NewGuid().ToString('N'))
+    }
+    [IO.Directory]::CreateDirectory($pluginsRoot) | Out-Null
+    [IO.File]::WriteAllText($marker, $coreRoot, [Text.UTF8Encoding]::new($false))
+    if ($backup) { [IO.Directory]::Move($targetRoot, $backup) }
+    try {
+        $linkType = if ($IsWindows) { 'Junction' } else { 'SymbolicLink' }
+        $null = New-Item -ItemType $linkType -Path $targetRoot -Target $sourceRoot
+    }
+    catch {
+        if ($backup) { [IO.Directory]::Move($backup, $targetRoot) }
+        throw
+    }
+    Write-Output "Development plugin linked: $targetRoot -> $sourceRoot"
+    if ($backup) { Write-Output "Previous copy retained outside Plugins: $backup" }
+    Write-Output 'Core and plugin sources are live references. No build or project/configuration edit was performed.'
+    return
 }
 
 Assert-NoLinks $targetRoot $projectRoot
@@ -94,7 +160,7 @@ try {
             [IO.File]::Copy($file.FullName, $destination)
         }
     }
-    $bundle = Join-Path $stage 'Source\ThirdParty\LibraRuntimeCore'
+    $bundle = Join-Path $stage ([IO.Path]::Combine('Source', 'ThirdParty', 'LibraRuntimeCore'))
     foreach ($folder in 'Core', 'include') {
         $source = Join-Path $coreRoot $folder
         foreach ($file in Get-ChildItem -LiteralPath $source -File -Recurse) {
@@ -106,13 +172,13 @@ try {
         }
     }
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $coreRoot 'Core') -Filter '*.cpp' -File -Recurse) {
-        if ($file.Name -eq 'VfxRuntime.cpp' -and $file.DirectoryName -eq (Join-Path $coreRoot 'Core')) { continue }
+        if ($file.Name -in @('VfxRuntime.cpp', 'LivePreview.cpp') -and $file.DirectoryName -eq (Join-Path $coreRoot 'Core')) { continue }
         $relative = [IO.Path]::GetRelativePath($coreRoot, $file.FullName).Replace('\', '/')
         $sha = [Security.Cryptography.SHA256]::Create()
         try { $digest = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($relative)) }
         finally { $sha.Dispose() }
         $suffix = [BitConverter]::ToString($digest).Replace('-', '').Substring(0, 12)
-        $wrapper = Join-Path $stage "Source\LibraRuntimeCore\Private\Generated\LibraNative_$suffix.cpp"
+        $wrapper = Join-Path $stage ([IO.Path]::Combine('Source', 'LibraRuntimeCore', 'Private', 'Generated', "LibraNative_$suffix.cpp"))
         [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($wrapper)) | Out-Null
         [IO.File]::WriteAllText($wrapper, "#include `"HAL/Platform.h`"`n#include `"$relative`"`n", [Text.UTF8Encoding]::new($false))
     }

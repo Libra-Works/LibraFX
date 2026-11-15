@@ -6,8 +6,10 @@ Scope
   This is not a GPU particle renderer. Viewer/rendering integration is separate.
   Source targets UE 5.7 and later; only the local 5.7.4 SDK was inspected.
   No Unreal build, UHT run, or engine launch was performed during implementation.
-  The editor WebSocket transport currently supports Win64 x64 with SSL. Other
-  targets fail closed; this does not restrict the engine-independent Core codec.
+  The editor WebSocket transport targets Win64, Linux (including ARM64), and
+  macOS with UE's libWebSockets/OpenSSL/SSL libraries. Other targets fail closed.
+  DNS uses UE's platform socket subsystem; TLS pinning remains connection-local.
+  Linux/macOS builds and cross-platform live connections have not been verified.
 
 Install (PowerShell 7)
   .\Install-LibraRuntimeForUnreal.ps1 -ProjectPath "C:\YourProject\YourProject.uproject"
@@ -16,6 +18,26 @@ Install (PowerShell 7)
   them. Project files and Config are not edited. Build the project yourself.
   Copying the source plugin folder alone is insufficient: the installer bundles
   the native Core sources and generates a separate translation unit per source.
+
+Linked development installation (no source copying)
+  .\Install-LibraRuntimeForUnreal.ps1 -ProjectPath "C:\YourProject\YourProject.uproject" -Link
+  Add -Update to convert an installer-managed copy. Changed/unowned source stops
+  conversion. The previous directory, including build output, is retained in a
+  unique .libra-plugin-backup-* directory outside Plugins. Close UE before switching.
+  Windows uses a directory junction (works across drives, no symlink privilege);
+  PowerShell on Linux/macOS uses a directory symbolic link. Hard links are not
+  suitable for folders and do not follow editor save-by-replacement operations.
+  The plugin link points directly to this repository's plugin sources. An ignored
+  .libra-core-source-path file points UBT at the live native Core/include directories.
+  Source edits are immediately visible; recompilation is still your responsibility.
+  Core runtime and live-preview translation units are included explicitly. If a
+  new Core .cpp is added, add a matching module wrapper for linked development.
+  Binaries/Intermediate in the linked source plugin are ignored by Git. Projects
+  sharing this link also share plugin build output; avoid simultaneous/different
+  engine builds of that shared directory. Use copy installs for isolated builds.
+  Run -Link again safely to check/reuse the link. Copy -Update refuses links.
+  For packaging/distribution, install a fresh copy into a separate project: the
+  copy installer still bundles Core and does not ship the machine-local marker.
 
 Import and use
   Convert an editor graph to .lfxb, then import that file into Unreal.
@@ -48,6 +70,9 @@ Live editor connection
   the transport and restores the original asset (its prior instance state is
   not restored). Reconnect explicitly after a transport failure.
   Editor restart changes the token/certificate. Pair the new values again.
+  For UE on another machine/OS, set Host to the editor machine's reachable IPv4
+  address and allow its Preview port through the firewall. Use the same session
+  token/pin, not a different certificate or an insecure fallback.
   The token and certificate fingerprint are transient component properties.
   Do not put credentials in config files, source, logs, URLs, or cooked content.
 

@@ -94,7 +94,16 @@ try {
     [IO.Directory]::CreateDirectory($fixtureIntegration) | Out-Null
     $fixtureInstaller = Join-Path $fixtureIntegration 'Install-LibraRuntimeForUnreal.ps1'
     [IO.File]::Copy($installer, $fixtureInstaller)
-    Copy-Item -LiteralPath (Join-Path ([IO.Path]::GetDirectoryName($installer)) 'LibraRuntimeForUnreal') -Destination $fixtureIntegration -Recurse
+    $fixturePlugin = Join-Path $fixtureIntegration 'LibraRuntimeForUnreal'
+    $sourcePlugin = Join-Path ([IO.Path]::GetDirectoryName($installer)) 'LibraRuntimeForUnreal'
+    [IO.Directory]::CreateDirectory($fixturePlugin) | Out-Null
+    [IO.File]::Copy((Join-Path $sourcePlugin 'LibraRuntimeForUnreal.uplugin'), (Join-Path $fixturePlugin 'LibraRuntimeForUnreal.uplugin'))
+    foreach ($directory in 'Source', 'Resources') {
+        $sourceDirectory = Join-Path $sourcePlugin $directory
+        if (Test-Path -LiteralPath $sourceDirectory) {
+            Copy-Item -LiteralPath $sourceDirectory -Destination $fixturePlugin -Recurse
+        }
+    }
     foreach ($directory in 'Core', 'include') {
         Copy-Item -LiteralPath (Join-Path $plugin "Source\ThirdParty\LibraRuntimeCore\$directory") -Destination $fixtureRuntime -Recurse
     }
@@ -107,6 +116,56 @@ try {
     if ($wrappers.Count -ne 1 -or -not [IO.File]::ReadAllText($wrappers[0].FullName).Contains('#include "HAL/Platform.h"')) {
         throw 'Additional native sources did not receive separate UE translation-unit wrappers with export macro definitions.'
     }
+    $linkProjectRoot = Join-Path $root 'LinkedProject'
+    [IO.Directory]::CreateDirectory($linkProjectRoot) | Out-Null
+    $linkProject = Join-Path $linkProjectRoot 'Linked.uproject'
+    [IO.File]::WriteAllText($linkProject, '{"FileVersion":3}')
+    $linkProjectHash = (Get-FileHash -LiteralPath $linkProject).Hash
+    & $fixtureInstaller -ProjectPath $linkProject
+    $linkedPlugin = Join-Path $linkProjectRoot 'Plugins\LibraRuntimeForUnreal'
+    $linkedSource = Join-Path $linkedPlugin 'Source\LibraRuntimeCore\Private\LibraRuntimeCoreNative.cpp'
+    [IO.File]::AppendAllText($linkedSource, "`n// User edit")
+    $refused = $false
+    try { & $fixtureInstaller -ProjectPath $linkProject -Link -Update }
+    catch {
+        if ($_.Exception.Message -notlike '*Locally modified plugin file preserved*') { throw }
+        $refused = $true
+    }
+    if (-not $refused) { throw 'Link conversion ignored a user edit.' }
+    [IO.File]::Copy((Join-Path $fixtureIntegration 'LibraRuntimeForUnreal\Source\LibraRuntimeCore\Private\LibraRuntimeCoreNative.cpp'), $linkedSource, $true)
+    $unownedSource = Join-Path $linkedPlugin 'Source\ProjectLocal.cpp'
+    [IO.File]::WriteAllText($unownedSource, '// Unowned source')
+    $refused = $false
+    try { & $fixtureInstaller -ProjectPath $linkProject -Link -Update }
+    catch {
+        if ($_.Exception.Message -notlike '*Unowned plugin source preserved*') { throw }
+        $refused = $true
+    }
+    if (-not $refused -or -not (Test-Path -LiteralPath $unownedSource)) { throw 'Link conversion ignored an unowned source.' }
+    [IO.File]::Delete($unownedSource)
+    & $fixtureInstaller -ProjectPath $linkProject -Link -Update
+    $link = Get-Item -LiteralPath $linkedPlugin -Force
+    if (-not $link.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) { throw 'Development installation is not a directory link.' }
+    & $fixtureInstaller -ProjectPath $linkProject -Link
+    $fixtureSource = Join-Path $fixtureIntegration 'LibraRuntimeForUnreal'
+    if ([IO.File]::ReadAllText((Join-Path $fixtureSource '.libra-core-source-path')) -ne $fixtureRuntime) {
+        throw 'Linked native Core does not reference the live source tree.'
+    }
+    $linkedOriginal = [IO.File]::ReadAllText($linkedSource)
+    [IO.File]::AppendAllText((Join-Path $fixtureSource 'Source\LibraRuntimeCore\Private\LibraRuntimeCoreNative.cpp'), "`n// Live fixture edit")
+    if ([IO.File]::ReadAllText($linkedSource) -eq $linkedOriginal) { throw 'Source edits did not propagate through the development link.' }
+    if (@(Get-ChildItem -LiteralPath $linkProjectRoot -Directory -Force | Where-Object Name -Like '.libra-plugin-backup-*').Count -ne 1) {
+        throw 'Previous installation was not retained outside Plugins.'
+    }
+    $refused = $false
+    try { & $fixtureInstaller -ProjectPath $linkProject -Update }
+    catch {
+        if ($_.Exception.Message -notlike '*Installing through a link is not supported*') { throw }
+        $refused = $true
+    }
+    if (-not $refused) { throw 'Copy update followed a development link.' }
+    if ((Get-FileHash -LiteralPath $linkProject).Hash -ne $linkProjectHash) { throw 'Link conversion changed the project descriptor.' }
+    [IO.Directory]::Delete($linkedPlugin)
     Write-Output 'Unreal source packaging, owned-file updates, local-edit protection and manifest boundary checks passed.'
 }
 finally {
