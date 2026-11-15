@@ -281,28 +281,28 @@ void FLibraEditorPreviewSession::ConfigureScene(const FString& json, int64 progr
         if (!object.IsValid()) continue;
         auto idText = FString{};
         auto kind = FString{};
-        auto texturePath = FString{};
+        auto assetPath = FString{};
         auto id = FGuid{};
         if (!object->TryGetStringField(TEXT("nodeId"), idText) || !FGuid::Parse(idText, id) || !id.IsValid() ||
             !object->TryGetStringField(TEXT("kind"), kind) ||
             (kind != TEXT("model") && kind != TEXT("sprite")) ||
-            !object->TryGetStringField(TEXT("assetPath"), path) || !IsAllowedPreviewPath(path))
+            !object->TryGetStringField(TEXT("assetPath"), assetPath) || !IsAllowedPreviewPath(assetPath))
         {
             sceneErrors.Add(TEXT("Render node has an invalid ID, kind, or Unreal asset path."));
             continue;
         }
-        auto meshPath = kind == TEXT("sprite") ? TEXT("/Engine/BasicShapes/Plane.Plane") : *path;
+        auto meshPath = kind == TEXT("sprite") ? TEXT("/Engine/BasicShapes/Plane.Plane") : *assetPath;
         auto mesh = LoadObject<UStaticMesh>(nullptr, meshPath);
         if (!mesh)
         {
-            sceneErrors.Add(TEXT("Render mesh is unsupported or could not be loaded: ") + path);
+            sceneErrors.Add(TEXT("Render mesh is unsupported or could not be loaded: ") + assetPath);
             continue;
         }
 
         auto node = FRenderNode{};
         node.id = id;
         node.kind = kind;
-        node.assetPath = path;
+        node.assetPath = assetPath;
         object->TryGetBoolField(TEXT("billboard"), node.billboard);
         auto component = NewObject<UStaticMeshComponent>(previewActor.Get(), NAME_None, RF_Transient);
         component->SetStaticMesh(mesh);
@@ -333,7 +333,7 @@ void FLibraEditorPreviewSession::ConfigureScene(const FString& json, int64 progr
                         parentMaterial = loaded;
             }
             if (kind == TEXT("sprite") && slot == 0)
-                if (auto texture = LoadObject<UTexture2D>(nullptr, *path))
+                if (auto texture = LoadObject<UTexture2D>(nullptr, *assetPath))
                     parentMaterial = CreateSpriteMaterial(texture);
             if (!parentMaterial) continue;
             auto dynamic = UMaterialInstanceDynamic::Create(parentMaterial, previewActor.Get());
@@ -372,7 +372,7 @@ void FLibraEditorPreviewSession::ConfigureScene(const FString& json, int64 progr
         {
             auto spriteMaterial = node.materials.IsEmpty() ? nullptr : node.materials[0].Get();
             if (spriteMaterial)
-                if (auto texture = LoadObject<UTexture2D>(nullptr, *path))
+                if (auto texture = LoadObject<UTexture2D>(nullptr, *assetPath))
                     spriteMaterial->SetTextureParameterValue(TEXT("SpriteTexture"), texture);
         }
         const TArray<TSharedPtr<FJsonValue>>* textureOverrides = nullptr;
@@ -381,7 +381,7 @@ void FLibraEditorPreviewSession::ConfigureScene(const FString& json, int64 progr
                 if (auto textureObject = textureValue.IsValid() ? textureValue->AsObject() : nullptr)
                 {
                     auto name = FString{};
-                    auto path = FString{};
+                    auto texturePath = FString{};
                     auto slot = 0;
                     auto association = 0;
                     auto index = -1;
