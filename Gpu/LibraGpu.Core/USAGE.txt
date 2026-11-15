@@ -1,0 +1,106 @@
+LibraGpu.Core - standalone .NET 10, no engine or package dependencies.
+
+Public frontend contract (namespace LibraGpu.Core):
+  GpuProgram: Version (1), Id, Capacity, Attributes, Resources, Kernels, Flow.
+  KernelGraph: Id, Stage (Spawn/Update), Nodes, Writes.
+  GpuNode: Id, Op, Type, Inputs (node IDs), Value (literal components),
+    Attribute, Uniform, ComponentIndex, SourceSpan (optional UTF-16 offset/length).
+  Each node has one typed output. Writes require exact attribute types.
+  Graph reads evaluate against the incoming particle snapshot; stores occur last.
+  IDs are descriptive strings (1..128 characters), never shader identifiers.
+  Inputs/write IDs are kernel-local; kernel/resource/flow IDs are program-global.
+
+  GpuCompiler.Parse(string, GpuLimits?) -> validated GpuProgram.
+  GpuCompiler.Serialize(GpuProgram, GpuLimits?) -> canonical versioned JSON.
+  GpuCompiler.Validate(GpuProgram, GpuLimits?) -> diagnostics.
+  GpuCompiler.Compile(program or JSON, GpuLimits?) -> immutable CompiledGpuProgram.
+  CompiledGpuProgram.EmitUsf/EmitUnityCompute/EmitHlslInclude(ShaderBindings?)
+    -> ShaderSource: Text, Format, ContentHash, LineMappings, Bindings, Resources.
+  CompiledGpuProgram exposes kernels, uniform/resource/flow metadata, canonical
+    document SHA256, buffer bytes and optional register packets.
+  Shader names are deterministic generated identifiers; metadata maps back to IDs.
+  Shader export is NOT runtime execution. No engine preview is provided here.
+  GetExportMetadata(format=UnityCompute, bindings?) returns backend export DTO;
+    ExportMetadataJson(format=UnityCompute, bindings?) uses camelCase and enum names.
+    contentHash identifies canonical IR; sourceHash identifies this exact source.
+
+Particle ABI: stride80, five16-byte slots (LibraGpuParticle):
+  0 float4 positionAge: Position.xyz, Age.w
+ 16 float4 velocityLifetime: Velocity.xyz, Lifetime.w
+ 32 float4 color: Color.rgba
+ 48 float4 sizeRotation: Size.xy, Rotation.z, spare.w
+ 64 uint4 seedAlive: Seed.x, Alive.y (0/1), spare.zw
+Only these fixed attributes are supported; Quaternion is semantic and unsupported,
+not an alias for float4. No host pointers, CPU Signal ops or engine objects.
+
+Uniform ABI: constant buffer48 (LibraGpuUniforms; metadata includes shader names):
+  0 capacity uint; 4 count uint; 8 spawnStart uint; 12 spawnCount uint
+ 16 deltaTime float; 20 time float; 24 emitterSeed uint; 28 frameIndex uint
+ 32 emitterPosition float3; 44 padding uint
+Editable ReadUniform ops: deltaTime, time, emitterPosition.
+Host must initially zero particle storage, supply finite uniforms, bind the actual
+80-byte StructuredBuffer, and dispatch ordered flow with required UAV barriers.
+numthreads(64,1,1), capacity-based ceil(capacity/64) dispatch-group metadata.
+Spawn bounds by actual/capacity and spawnStart/spawnCount (overflow-safe).
+Spawn touches only dead slots and initializes Position=emitterPosition, Age=0,
+Velocity=0, Lifetime=1, Color=1, Size=1, Rotation=0, Alive=1, deterministic Seed.
+Update bounds by actual/capacity/count and ignores dead slots. It advances Age
+before the editable kernel unless that kernel explicitly writes Age. It does not
+implicitly integrate Position; the user kernel owns motion. Invalid/nonpositive
+Lifetime, nonfinite attributes, or Age >= Lifetime force Alive=0 after evaluation.
+Stores preserve other attributes and spare slots during Update.
+
+Flow v1: at most one Spawn, at most one Update, then RenderBillboard step(s).
+RenderBillboard binds a declared Texture2D; an engine backend consumes the GPU
+buffer directly. Compute code does not render or perform CPU per-particle work.
+RenderStartTexture, ComputePass, storage textures and arbitrary buffers are
+reserved with explicit unsupported diagnostics. Texture2D dimensions 0,0 mean
+external; otherwise both dimensions must be positive and bounded.
+Default limits: JSON4MiB/depth32/properties32, kernels64, nodes4096/kernel,
+resources64, steps128, particle memory256MiB, texture texels64Mi.
+Scalar broadcast: float -> float2/3/4 only, and only supported math ops; integer,
+bool and vector dimension conversions are never implicit.
+Division-by-zero returns zero; int MIN/-1 returns MIN. Normalize zero/nonfinite
+vectors returns zero. Random hashes its explicit uint seed (not hidden host RNG).
+
+Safe independent text frontend, same typed IR:
+  GpuDsl.Parse -> GpuDslAst -> GpuDsl.Lower -> KernelGraph.
+  GpuDsl.Compile(text, kernelId, stage, limits?, options?) is the shorthand.
+  Grammar: immutable "let name = expression;" and sequential "@Attribute = ...;",
+    +=, -=, *=, /=; xyzw/rgba component reads/writes; + - * /, unary + -,
+    parentheses; float literals, signed-i/unsigned-u literals, true/false.
+  dt/time/emitterPosition or param("deltaTime")/param("time")/
+    param("emitterPosition"); float2/3/4 constructors, sin/cos/min/max/clamp,
+    normalize/length/select/random. Select takes bool, value, value.
+  No loops, arbitrary calls, declarations, shader injection or native code.
+  Sequential component writes lower to Compose/Component nodes and final stores.
+  GpuDsl.Emit(kernel) returns generated text plus NodeIdsBySpan/WriteIdsBySpan.
+  Pass those to DslLoweringOptions when reparsing that generated limited grammar
+    to retain expression IDs. This is not arbitrary text-to-visual-layout reversal.
+  Node diagnostics and emitted shader line maps retain original text spans.
+  GpuSamples.CreateEmitter() includes spawn, gravity, motion and lifetime fade.
+
+Optional future fixed-interpreter export:
+  RegisterKernels contain immutable typed SSA instructions; no interpreter ships.
+  CompiledRegisterKernel.SerializeLittleEndian() exports bounded POD packets.
+  Header64: LGPK@0, version1@4, instructionStride64@8, count@12,
+    registers@16, stage@20, particleStride80@24, uniformSize48@28,
+    kernelKey GUID big-endian@32, defaultAgeFlag@48, zeros@52..63.
+  KernelKey preserves GUID IDs, otherwise SHA256(UTF8 ID) first16 canonical bytes.
+  Instruction64: uint opcode@0,dst@4,a@8,b@12,c@16,type@20,aux@24,d@28;
+    float4 immediate@32; uint4 exact integer/bool payload@48.
+  Missing registers=UINT_MAX; aux is attribute/uniform slot or component index.
+  Compose uses a/b/c/d. Stores use a and aux with no destination. Constants use
+    float or integer payload according to Type, never lossy packed float casts.
+  No separate constant table is needed: constants are embedded instructions.
+  Opcode/type enums have stable explicit numeric values. An interpreter backend
+    must implement the same typed broadcast/math and host lifecycle as HLSL.
+
+Local focused validation from repository root:
+  dotnet run --project Gpu\LibraGpu.Core.Tests\LibraGpu.Core.Tests.csproj
+  Optional "-- --export Gpu\LibraGpu.Core.Tests\shader-validation" writes fixtures
+    for installed DXC compilation (-T cs_6_0 -E metadata.EntryPoint -Ges -WX).
+  Gpu\LibraGpu.Core.Tests\ValidateShaders.ps1 runs all tests and installed DXC
+    for both fixtures/all three formats, then removes its known output files.
+    -DxcPath selects a compiler; -KeepArtifacts retains shader/DXIL fixtures.
+  No external uploads or GPU execution are part of these tests.
