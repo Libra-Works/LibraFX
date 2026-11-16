@@ -99,6 +99,11 @@ internal static class FireworksLifecycleTests
             var expiries = infiniteOrder.Events.Where(item => item.Kind == 3).Select(item => item.Time).ToArray();
             Require(expiries.SequenceEqual([1d, 2d]),
                 "An infinite parent must process skipped child expiries in chronological order.");
+            infiniteOrder.Advance(4);
+            Require(infiniteOrder.RootVisible && infiniteOrder.ActiveCount == 0 &&
+                    infiniteOrder.Events.Where(item => item.Kind == 3).Select(item => item.Time)
+                        .SequenceEqual([1d, 2d, 3.5d]),
+                "A sibling spawned by Destroy must also expire in order while the infinite parent remains alive.");
         }
         var rootWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
         var createRootLife = LiberaFxMcpTools.CreateNode(new ActiveGraphProvider(rootWorkspace), "LifeTime");

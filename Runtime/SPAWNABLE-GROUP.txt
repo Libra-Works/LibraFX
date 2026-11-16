@@ -189,7 +189,7 @@ frames execute missing steps. Requested time is sampled down to the 60Hz grid.
 Replay is capped at 120 seconds, scene renderers at 128 and bytes at 1MiB.
 Graph/document changes and disconnect dispose the owner session. Native core
 callbacks still perform no engine SDK operations. Broader authored lifetime
-policies beyond one captured positive scalar node remain outside this contract.
+policies beyond one captured nonnegative scalar node remain outside this contract.
 Existing package-v1 spawn signal descriptors still carry at most four typed
 inputs (16 lanes), and their legacy `then` branch is selected immediately on
 spawn dispatch. Do not map that branch to lifetime Destroy: the compiler and
@@ -216,7 +216,8 @@ fresh instance, optionally with game IO configured before start. Managed game
 signals use the last evaluated age; raw evaluation and independent game IO
 start/update are disabled. Failed evaluation, publication or OnStart is
 terminal rather than replaying partially executed nodes. The editor-native
-host uses it for root Life Time; Unity/Unreal integrations do not yet use it.
+host uses it for root Life Time. Unity exposes low-level lifetime calls but does
+not yet host package lifecycle; Unreal does not yet use this lifecycle API.
 libra_effect_start_captured obtains a finite scalar duration from the initial
 evaluation, before publishing game properties or invoking OnStart. Later input
 changes do not change the captured duration; invalid values fail before OnStart.
