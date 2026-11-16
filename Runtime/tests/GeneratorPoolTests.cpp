@@ -170,8 +170,12 @@ void lifecycleTests()
     assert(pool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Stop && event.instanceId == first);
     auto liveLife = liberafx::GeneratorCapture{}; liveLife.nodeId[15] = 2; liveLife.value = 4;
     assert(pool->setLive(second, &liveLife, 1) == Result::Ok);
+    assert(pool->evaluate(second, 14) == Result::Ok);
     assert(pool->evaluate(second, 15) == Result::Ok);
-    assert(pool->stop(second) == Result::Ok);
+    // Changing the Life lane after start must not extend captured duration 3.
+    assert(pool->stop(second) == Result::Busy);
+    assert(pool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Destroy && event.instanceId == second);
+    assert(pool->finalize(second) == Result::Ok);
     assert(pool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Stop && event.instanceId == second);
     assert(!pool->popEvent(event));
     auto processed = std::size_t{};
@@ -232,6 +236,11 @@ void lifecycleTests()
 
 int main()
 {
+#if defined(_MSC_VER) && defined(_DEBUG)
+    // A failing isolated test must report to CTest, not wait on a CRT dialog.
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+#endif
     lifecycleTests();
     // Template: scalar + local Time. The same template node GUIDs are used in each instance.
     auto childBytes = std::vector<std::uint8_t>(12 + 44 * 3);

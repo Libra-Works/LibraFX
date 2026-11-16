@@ -35,6 +35,7 @@ struct Slot final {
     std::optional<Instance> instance;
     GeneratorInstanceId id = 0;
     double start = 0;
+    double capturedLife = std::numeric_limits<double>::infinity();
     std::uint64_t seed = 0;
     bool started = false;
     bool expiring = false;
@@ -196,6 +197,7 @@ auto GeneratorPool::spawn(double time, const GeneratorCapture* captures, std::si
         if (result != Result::Ok) return result;
         slot->id = impl_->nextId++;
         slot->start = time;
+        slot->capturedLife = std::numeric_limits<double>::infinity();
         slot->started = !impl_->lifecycleConfigured;
         slot->expiring = false;
         slot->destroyPublished = false;
@@ -337,6 +339,7 @@ auto GeneratorPool::start(GeneratorInstanceId id) noexcept -> Result
     if (dispatched) {
         slot->started = true;
         slot->startResult = status;
+        if (impl_->lifecycle.hasLife) slot->capturedLife = duration[0];
     }
     if (status != Result::Ok) return status;
     if (impl_->lifecycle.hasLife && duration[0] == 0) {
@@ -439,26 +442,18 @@ auto GeneratorPool::evaluate(GeneratorInstanceId id, double time) noexcept -> Re
     if (slot->startResult != Result::Ok) return slot->startResult;
     auto elapsed = time - slot->start;
     if (!std::isfinite(elapsed) || elapsed < 0) return Result::InvalidArgument;
-    auto life = ValueHandle{};
-    if (impl_->lifecycleConfigured && impl_->lifecycle.hasLife) {
-        auto status = slot->instance->bindValue(impl_->lifecycle.lifeNodeId, life);
-        if (status != Result::Ok) return status;
-        if (life.componentCount != 1) return Result::InvalidValueType;
-    }
+    // Life is captured once by start, never inferred from Busy/FCurve or
+    // refreshed by Live inputs. Clamp an overshooting frame to the expiry
+    // boundary so Destroy consumers receive the actual final value.
+    auto sampleTime = elapsed < slot->capturedLife ? elapsed : slot->capturedLife;
     impl_->executing = true;
     lock.unlock();
-    auto result = slot->instance->updateAsync(elapsed, inlineEnqueue, nullptr);
+    auto result = slot->instance->updateAsync(sampleTime, inlineEnqueue, nullptr);
     if (result == Result::Ok) result = slot->instance->result();
-    auto duration = std::array<double, 4>{};
-    if (result == Result::Ok && impl_->lifecycleConfigured && impl_->lifecycle.hasLife) {
-        result = slot->instance->value(life, duration.data());
-        if (result == Result::Ok && (!std::isfinite(duration[0]) || duration[0] < 0))
-            result = Result::InvalidValueType;
-    }
     lock.lock();
     impl_->executing = false;
     if (result == Result::Ok && impl_->lifecycleConfigured && impl_->lifecycle.hasLife &&
-        elapsed >= duration[0]) {
+        elapsed >= slot->capturedLife) {
         slot->expiring = true;
         return impl_->publishDestroy(*slot);
     }
