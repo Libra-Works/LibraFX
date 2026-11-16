@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "typeId": "b0af61d2-29f6-4cc9-a71e-00000000010a",
+  "namespace": "LiberaFx", "kind": "TranslatePoint", "name": "Translate Point",
+  "displayNameKey": "Matrix.Node.TranslatePoint", "group": "Matrices", "groupNameKey": "Matrix.Group",
+  "portType": "FloatX3", "portCategory": "Parameter",
+  "inputPorts": [
+    { "id": "point", "name": "Point", "portType": "FloatX3" },
+    { "id": "translation", "name": "Offset", "portType": "FloatX3" }
+  ],
+  "outputPorts": [{ "id": "value", "name": "Point", "portType": "FloatX3" }],
+  "parameters": [
+    { "id": "point", "name": "Point", "displayNameKey": "Matrix.Parameter.Point", "type": "vector3", "defaultValue": [0,0,0] },
+    { "id": "translation", "name": "Translation", "displayNameKey": "Matrix.Parameter.Translation", "type": "vector3", "defaultValue": [0,0,0] }
+  ]
+}

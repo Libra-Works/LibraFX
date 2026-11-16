@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "typeId": "b0af61d2-29f6-4cc9-a71e-000000000109",
+  "namespace": "LiberaFx", "kind": "RotatePoint", "name": "Rotate Point",
+  "displayNameKey": "Matrix.Node.RotatePoint", "group": "Matrices", "groupNameKey": "Matrix.Group",
+  "portType": "FloatX3", "portCategory": "Parameter",
+  "inputPorts": [
+    { "id": "point", "name": "Point", "portType": "FloatX3" },
+    { "id": "rotation", "name": "Rotation", "portType": "FloatX3" }
+  ],
+  "outputPorts": [{ "id": "value", "name": "Point", "portType": "FloatX3" }],
+  "parameters": [
+    { "id": "point", "name": "Point", "displayNameKey": "Matrix.Parameter.Point", "type": "vector3", "defaultValue": [0,0,0] },
+    { "id": "rotation", "name": "Rotation (degrees: X roll, Y pitch, Z yaw)", "displayNameKey": "Matrix.Parameter.Rotation", "type": "vector3", "defaultValue": [0,0,0] }
+  ]
+}

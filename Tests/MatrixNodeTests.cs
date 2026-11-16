@@ -14,6 +14,7 @@ internal static class MatrixNodeTests
         VerifyAuthoring();
         VerifyLowering(fixtureDirectory);
         VerifyDefaultsAndFailures(fixtureDirectory);
+        VerifyPointOperations(fixtureDirectory);
         var dedicated = SolarSystemSample.CreateDedicated();
         Require(dedicated.Nodes.Count < SolarSystemSample.Create().Nodes.Count / 2,
             "The dedicated Matrix sample must substantially reduce authoring graph complexity.");
@@ -26,6 +27,68 @@ internal static class MatrixNodeTests
         Require(bundled.Nodes.Count == dedicated.Nodes.Count, "The delivered compact sample must match the dedicated graph.");
         _ = VfxProgram.Compile(bundled);
         VerifySolarFixtures(bundled, fixtureDirectory);
+    }
+
+    private static void VerifyPointOperations(string? directory)
+    {
+        var workspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var rotate = workspace.CreateNode(new("RotatePoint"));
+        var translate = workspace.CreateNode(new("TranslatePoint"));
+        workspace.SetParameter(rotate, "point", JsonSerializer.SerializeToElement(new[] { 1d, 0, 0 }));
+        workspace.SetParameter(rotate, "rotation", JsonSerializer.SerializeToElement(new[] { 0d, 0, 90 }));
+        workspace.SetParameter(translate, "translation", JsonSerializer.SerializeToElement(new[] { 10d, 20, 30 }));
+        Require(workspace.TryConnectNodes(rotate, translate, out _, "point", "value"),
+            "Rotate Point must connect directly to Translate Point.");
+        Require(workspace.History.Undo() && workspace.Connections.Count == 0 &&
+            workspace.History.Redo() && workspace.Connections.Count == 1,
+            "Point operation connections must support undo and redo.");
+        var graph = workspace.CreateSnapshot();
+        using var stream = new MemoryStream();
+        new ProjectFileService().SaveAsync(stream, workspace).GetAwaiter().GetResult();
+        stream.Position = 0;
+        var loaded = ProjectDocumentReader.LoadAsync(stream).GetAwaiter().GetResult().Graph;
+        Require(GraphSnapshot.ContentEquals(graph, loaded),
+            "Point operations and their named wiring must survive project save/load.");
+
+        var defaultRotation = Node("RotatePoint", "default rotation", ("point", "vector3", new[] { 2d, 3, 4 }));
+        var defaultTranslation = Node("TranslatePoint", "default translation", ("point", "vector3", new[] { -2d, 3, 4 }));
+        var angles = Node("FloatX3", "connected angles", ("value", "vector3", new[] { 0d, 0, -90 }));
+        var connectedRotation = Node("RotatePoint", "connected rotation", ("point", "vector3", new[] { 1d, 0, 0 }));
+        graph = new GraphSnapshot([.. graph.Nodes, defaultRotation, defaultTranslation, angles, connectedRotation],
+            [.. graph.Connections, new(angles.Id, connectedRotation.Id, "rotation")]);
+        GraphValidator.Validate(graph);
+        Require(GraphTypeDiagnostics.Analyze(graph).Count == 0, "Point operations must retain typed connections.");
+        var lowered = GraphPolymorphism.LowerWithOutputs(graph);
+        GraphValidator.Validate(lowered.Graph);
+        Require(GraphSnapshot.ContentEquals(lowered.Graph, GraphPolymorphism.Lower(lowered.Graph)),
+            "Point operation lowering must be idempotent.");
+        Export(directory, "point-operations", graph, [
+            (rotate.Id, "value", new[] { 0d, 1, 0 }),
+            (translate.Id, "value", new[] { 10d, 21, 30 }),
+            (defaultRotation.Id, "value", new[] { 2d, 3, 4 }),
+            (defaultTranslation.Id, "value", new[] { -2d, 3, 4 }),
+            (connectedRotation.Id, "value", new[] { 0d, -1, 0 })
+        ]);
+        _ = VfxProgram.Compile(graph);
+        if (directory is null) return;
+        var asset = new EngineAsset(SolarSystemSample.SphereAsset, "Point operation target", "model", "Unreal");
+        var draw = RenderNodeAuthoring.CreateModel(workspace, asset);
+        translate = workspace.GetNode(translate.Id);
+        Require(workspace.TryConnectNodes(translate, draw, out _, "position", "value"),
+            "The point operation result must drive a rendered position.");
+        var renderGraph = workspace.CreateSnapshot();
+        var fixture = Path.Combine(directory, "point-operations-unreal");
+        Directory.CreateDirectory(fixture);
+        File.WriteAllBytes(Path.Combine(fixture, "program.lfxb"), VfxProgram.Compile(renderGraph).ToBinary());
+        File.WriteAllBytes(Path.Combine(fixture, "render-config.json"), RenderProgramBindings.CreateScene(renderGraph, 1));
+        File.WriteAllText(Path.Combine(fixture, "expected.json"), JsonSerializer.Serialize(new
+        {
+            frames = new[] { new { timeSeconds = 0d, nodes = new[] { new
+            {
+                nodeId = draw.Id, position = new[] { 10d, 21d, 30d },
+                scale = new[] { 1d, 1d, 1d }, rotation = new[] { 0d, 0d, 0d }
+            } } } }
+        }));
     }
 
     private static void VerifySolarFixtures(GraphSnapshot graph, string? directory)

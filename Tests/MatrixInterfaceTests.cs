@@ -120,6 +120,22 @@ internal static class MatrixInterfaceTests
                     visibleOutputPins = split.OutputPorts.Select(port => port.Id).ToArray(),
                     matrixPins = transform.OutputPorts.Select(port => port.PortType).ToArray()
                 }));
+            workspace.DeleteNodes(workspace.Nodes.ToArray());
+            var rotatePoint = workspace.CreateNode(new GraphNodeKind("RotatePoint"), 40, 100);
+            var translatePoint = workspace.CreateNode(new GraphNodeKind("TranslatePoint"), 430, 100);
+            Pump();
+            Connect(rotatePoint, "value", translatePoint, "point");
+            workspace.SelectNode(rotatePoint);
+            Pump();
+            Require(workspace.Connections.Count == 1 && workspace.TypeProblems.Count == 0,
+                "The point operation pins must connect through real pointer input.");
+            var pointCatalog = new NodeCatalogViewModel(new(workspace)) { SearchText = "Rotate Point" };
+            Require(pointCatalog.Groups.SelectMany(group => group.Nodes).Any(node => node.KindName == "RotatePoint"),
+                "Rotate Point must be searchable by its English name in Japanese.");
+            Require(inspector.GetVisualDescendants().OfType<TextBlock>().Any(block =>
+                ToolTip.GetTip(block)?.ToString() == text.Get("Matrix.Parameter.Rotation")),
+                "Rotate Point must expose the full localized rotation convention.");
+            Capture("point-operations-ja.png");
         }
         finally
         {

@@ -219,6 +219,8 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000106")] = "TransformDirection",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000107")] = "MatrixInverse",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000108")] = "DecomposeTransform",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000109")] = "RotatePoint",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000010a")] = "TranslatePoint",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000001")] = "MatrixRuntimeTransformRow0",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000002")] = "MatrixRuntimeTransformRow1",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000003")] = "MatrixRuntimeTransformRow2",

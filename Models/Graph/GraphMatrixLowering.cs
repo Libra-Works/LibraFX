@@ -12,7 +12,8 @@ public static class GraphMatrixLowering
 {
     private static readonly HashSet<string> Kinds =
         ["MatrixCompose", "MatrixBreak", "Transform", "MatrixMultiply", "TransformPoint",
-            "TransformDirection", "MatrixInverse", "DecomposeTransform", "MatrixRuntimeBoundary"];
+            "TransformDirection", "MatrixInverse", "DecomposeTransform", "MatrixRuntimeBoundary",
+            "RotatePoint", "TranslatePoint"];
 
     public static bool IsMatrixNode(GraphNodeKind kind) => Kinds.Contains(kind.Value);
 
@@ -179,6 +180,24 @@ public static class GraphMatrixLowering
                                 Output("w", components[3]);
                                 break;
                             }
+                        case "RotatePoint":
+                            {
+                                var rotation = Numeric("rotation", 3);
+                                var vector = Numeric("point", 3);
+                                var homogeneous = Emit("Vector3ToVector4", "homogeneous",
+                                    [("fill", "float", 1d)], [("a", vector)]);
+                                var rows = Enumerable.Range(0, 4).Select(row =>
+                                    Emit($"MatrixRuntimeTransformRow{row}", $"row{row}", inputs: [("rotation", rotation)])).ToArray();
+                                var components = rows.Select((row, index) =>
+                                    Emit("DotVector4", $"component{index}", inputs: [("a", row), ("b", homogeneous)])).ToArray();
+                                Output("value", Emit("Vector4ToVector3", "point-result",
+                                    inputs: [("a", Compose(components, "packed"))], keepId: true));
+                                break;
+                            }
+                        case "TranslatePoint":
+                            Output("value", Emit("AddVector3", "point-result",
+                                inputs: [("a", Numeric("point", 3)), ("b", Numeric("translation", 3))], keepId: true));
+                            break;
                         case "MatrixInverse":
                             {
                                 var inputs = RowInputs(Matrix("matrix"));
