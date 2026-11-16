@@ -81,6 +81,25 @@ internal static class FireworksLifecycleTests
         Reject(() => SpawnableGroupPackage.Compile(ChangeLife(graph, launch.Id, -1)), "negative Life Time");
         var library = Environment.GetEnvironmentVariable("LIBERAFX_NATIVE_TEST_LIBRARY")
             ?? throw new InvalidOperationException("Actual Fireworks execution requires LIBERAFX_NATIVE_TEST_LIBRARY.");
+        var infiniteOrderWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+        infiniteOrderWorkspace.InitializeFromSnapshot(graph);
+        var earlyGroup = infiniteOrderWorkspace.CreateNode(GraphNodeKind.SpawnableGroup);
+        var earlyGroupId = earlyGroup.Id;
+        Require(infiniteOrderWorkspace.EnterGraph(earlyGroup), "Cannot edit early-expiring sibling.");
+        infiniteOrderWorkspace.CreateNode(new GraphNodeKind("LifeTime"));
+        infiniteOrderWorkspace.NavigateToGraph(0);
+        var startId = graph.Nodes.Single(node => node.Kind.Value == "OnStart").Id;
+        Require(infiniteOrderWorkspace.TryConnectNodes(infiniteOrderWorkspace.GetNode(startId),
+            infiniteOrderWorkspace.GetNode(earlyGroupId), out _, "spawn", "then"),
+            "Cannot connect the early-expiring sibling.");
+        var infiniteOrderGraph = ChangeLife(infiniteOrderWorkspace.CreateSnapshot(), earlyGroupId, 1);
+        using (var infiniteOrder = new NativeSpawnableSession(SpawnableGroupPackage.Compile(infiniteOrderGraph), library))
+        {
+            infiniteOrder.Advance(3);
+            var expiries = infiniteOrder.Events.Where(item => item.Kind == 3).Select(item => item.Time).ToArray();
+            Require(expiries.SequenceEqual([1d, 2d]),
+                "An infinite parent must process skipped child expiries in chronological order.");
+        }
         var rootWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
         var createRootLife = LiberaFxMcpTools.CreateNode(new ActiveGraphProvider(rootWorkspace), "LifeTime");
         Dispatcher.UIThread.RunJobs();

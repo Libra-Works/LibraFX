@@ -32,7 +32,6 @@ public sealed class NativeSpawnableSession : IDisposable
     private bool _counted;
     private bool _failed;
     private ulong _nextScheduledToken = 1;
-    private bool UsesManaged => _package.LifeNodeId is not null || _package.DestroyRoutes.Any(route => route.DelayNodeId is not null);
     private sealed class TemplateState(SpawnableTemplate template)
     {
         public SpawnableTemplate Template { get; } = template;
@@ -101,38 +100,9 @@ public sealed class NativeSpawnableSession : IDisposable
         if (_failed) throw new InvalidOperationException("Recreate the session after a failed lifecycle operation.");
         try
         {
-            AdvanceCore(time);
+            AdvanceManaged(time, _package.LifeNodeId);
         }
         catch { _failed = true; throw; }
-    }
-
-    private void AdvanceCore(double time)
-    {
-        if (UsesManaged) { AdvanceManaged(time, _package.LifeNodeId); return; }
-        if (_time < 0)
-        {
-            Check(Fn<EvaluateParent>("libra_evaluate")(_parentInstance, 0, [], 0, []));
-            if (_package.OnStartNodeId is { } start)
-                Check(Fn<Dispatch>("libra_dispatch_signal")(_parentInstance, Id(start), 0, 10000));
-        }
-        Pump(0);
-        Check(Fn<EvaluateParent>("libra_evaluate")(_parentInstance, time, [], 0, []));
-        // Each routed spawn is evaluated this frame, including a skipped-over
-        // expiry. No flattening or Time substitution is performed.
-        var evaluated = new HashSet<(Guid, ulong)>();
-        for (var round = 0; round < 128; ++round)
-        {
-            var pending = ActiveInstances.Where(key => !evaluated.Contains(key)).ToArray();
-            if (pending.Length == 0) { _time = time; return; }
-            foreach (var key in pending)
-            {
-                evaluated.Add(key);
-                var state = _templates[key.Container];
-                Check(Fn<EvaluateChild>("libra_generator_evaluate")(state.Pool, key.Instance, time), key.Container, key.Instance);
-                Pump(time);
-            }
-        }
-        throw new InvalidOperationException("Spawnable routing exceeded the bounded per-frame work limit.");
     }
 
     private void AdvanceManaged(double time, Guid? life)
@@ -318,8 +288,7 @@ public sealed class NativeSpawnableSession : IDisposable
                         var timing = state.Instances[value.Instance];
                         var expiry = timing.Start + timing.Life;
                         _events.Add(new(container, value.Instance, 3, expiry, value.Seed));
-                        if (UsesManaged) EvaluateManagedParent(expiry);
-                        else Check(Fn<EvaluateParent>("libra_evaluate")(_parentInstance, expiry, [], 0, []));
+                        EvaluateManagedParent(expiry);
                         foreach (var route in _package.DestroyRoutes.Where(route => route.SourceContainerId == container))
                         {
                             var captures = new List<NativeCapture>();
@@ -340,8 +309,7 @@ public sealed class NativeSpawnableSession : IDisposable
                         }
                         // Reading/routing happens before retirement.
                         Check(Fn<InstanceAction>("libra_generator_finalize")(state.Pool, value.Instance), container, value.Instance);
-                        if (UsesManaged) EvaluateManagedParent(time);
-                        else Check(Fn<EvaluateParent>("libra_evaluate")(_parentInstance, time, [], 0, []));
+                        EvaluateManagedParent(time);
                     }
                     else if (value.Kind == 2)
                     {
@@ -386,22 +354,14 @@ public sealed class NativeSpawnableSession : IDisposable
     public void Stop()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (UsesManaged)
-        {
-            foreach (var state in _templates.Values)
-                Check(Fn<PoolAction>("libra_generator_reset")(state.Pool), state.Template.ContainerId);
-            Pump(_time < 0 ? 0 : _rootAge);
-            if (_time >= 0 && !_rootFinished && !_rootStopped)
-            {
-                Check(Fn<Release>("libra_effect_stop")(_parentInstance));
-                _scheduledRoutes.Clear();
-            }
-            _rootStopped = true;
-            return;
-        }
         foreach (var state in _templates.Values) Check(Fn<PoolAction>("libra_generator_reset")(state.Pool), state.Template.ContainerId);
-        // Reset records are drained without executing OnStart or any Destroy.
-        Pump(_time < 0 ? 0 : _time);
+        Pump(_time < 0 ? 0 : _rootAge);
+        if (_time >= 0 && !_rootFinished && !_rootStopped)
+        {
+            Check(Fn<Release>("libra_effect_stop")(_parentInstance));
+            _scheduledRoutes.Clear();
+        }
+        _rootStopped = true;
     }
     public void Dispose()
     {
@@ -484,8 +444,6 @@ public sealed class NativeSpawnableSession : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreatePool(ulong program, byte[] container, uint max, ulong budget, uint events, out ulong pool);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreateInstance(ulong program, out ulong instance);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Release(ulong handle);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int EvaluateParent(ulong instance, double time, uint[] bindings, uint count, NativeValue[] values);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Dispatch(ulong instance, byte[] node, double time, uint budget);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int StartCaptured(ulong instance, byte[] lifeNode, byte[]? onStart, uint budget, out NativeLifetimeSample sample);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int StartInfinite(ulong instance, double duration, uint infinite, byte[]? onStart, uint budget, out NativeLifetimeSample sample);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int AdvanceEffect(ulong instance, double time, out NativeLifetimeSample sample);
