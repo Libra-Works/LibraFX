@@ -27,8 +27,12 @@ int main(int argc, char** argv)
         (std::uint32_t{bytes[10]} << 16) | (std::uint32_t{bytes[11]} << 24);
     auto bindings = std::vector<liberafx::CustomNodeBinding>(count);
     auto program = liberafx::Program{};
-    if (liberafx::Program::load(bytes.data(), bytes.size(), nullptr, 0, bindings.data(), bindings.size(), program)
-        != liberafx::Result::Ok) return 3;
+    auto loaded = liberafx::Program::load(bytes.data(), bytes.size(), nullptr, 0, bindings.data(), bindings.size(), program);
+    if (loaded != liberafx::Result::Ok)
+    {
+        std::cerr << "Matrix fixture load failed: " << static_cast<unsigned>(loaded) << '\n';
+        return 3;
+    }
     auto alignment = std::align_val_t{program.workAlignment()};
     auto work = static_cast<double*>(::operator new(program.workBytes(), alignment));
     auto passed = true;

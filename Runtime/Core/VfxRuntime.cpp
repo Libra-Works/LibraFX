@@ -131,8 +131,8 @@ auto requiredInputWidths(std::uint8_t opcode, std::uint8_t outputWidth,
     {
         requiresA = true;
         auto expectedInput = opcode <= 30 ? 2 : opcode <= 32 ? 3 : 4;
-        auto expectedOutput = opcode == 29 || opcode == 32 || opcode == 34 ? 3 :
-                              opcode == 30 || opcode == 33 ? 4 : 2;
+        auto expectedOutput = opcode == 29 || opcode == 34 ? 3 :
+                              opcode == 30 || opcode == 32 ? 4 : 2;
         return outputWidth == expectedOutput && inputAWidth == expectedInput && inputBWidth == 0;
     }
     if (opcode >= 35 && opcode <= 37)

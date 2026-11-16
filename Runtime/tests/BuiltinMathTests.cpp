@@ -1,4 +1,5 @@
 #include "liberafx/VfxRuntime.h"
+#include "liberafx/math/MatrixMath.h"
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -7,10 +8,14 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include <fstream>
 #include <iterator>
 #include <limits>
 #include <vector>
+#if defined(_MSC_VER) && defined(_DEBUG)
+#include <crtdbg.h>
+#endif
 
 namespace {
 using namespace liberafx;
@@ -57,9 +62,16 @@ auto evaluate(const CustomNodeDescriptor& descriptor, const std::array<double, 1
 
 int main(int argc, char** argv)
 {
+#if defined(_WIN32)
+    _set_error_mode(_OUT_TO_STDERR);
+#endif
+#if defined(_MSC_VER) && defined(_DEBUG)
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+#endif
     auto count = std::size_t{};
     auto registry = builtinNodes(count);
-    assert(registry != nullptr && count == 47);
+    assert(registry != nullptr && count == 60);
     const std::uint8_t expectedPrefix[] = {0x74, 0x30, 0x5a, 0xc1, 0x91, 0xb2, 0x4c, 0x33, 0x8d, 0x44};
     assert(std::memcmp(registry[0].typeId, expectedPrefix, sizeof(expectedPrefix)) == 0);
     if (argc >= 2)
@@ -152,4 +164,179 @@ int main(int argc, char** argv)
     input = {}; input[0] = 0.25; input[4] = 0.5; input[8] = 0.75; input[12] = 1;
     assert(evaluate(registry[46], input, output) == Result::Ok &&
            output[0] == 0.25 && output[1] == 0.5 && output[2] == 0.75 && output[3] == 1);
+
+    const std::uint8_t matrixPrefix[] = {0xb0, 0xaf, 0x61, 0xd2, 0x29, 0xf6, 0x4c, 0xc9, 0xa7, 0x1e};
+    for (auto id = 1u; id <= 13; ++id)
+    {
+        auto descriptor = &registry[46 + id];
+        assert(std::memcmp(descriptor->typeId, matrixPrefix, sizeof(matrixPrefix)) == 0);
+        assert(descriptor->typeId[10] == 0 && descriptor->typeId[11] == 0 &&
+               descriptor->typeId[12] == 0 && descriptor->typeId[13] == 0 &&
+               descriptor->typeId[14] == 0 &&
+               descriptor->typeId[15] == id && descriptor->abiVersion == 1 &&
+               descriptor->execution == CustomExecution::Parameter && !descriptor->outputIsColor);
+        assert(descriptor->inputCount == (id <= 4 ? 3 : 4));
+        for (auto inputIndex = 0u; inputIndex < descriptor->inputCount; ++inputIndex)
+            assert(descriptor->inputIsColor[inputIndex] == 0 &&
+                   descriptor->inputWidths[inputIndex] == (id <= 4 ? 3 : 4));
+        assert(descriptor->outputWidth == (id <= 8 ? 4 : id == 9 || id == 13 ? 1 :
+                                             id <= 12 ? 3 : 0));
+    }
+
+    auto transformInput = std::array<double, 16>{};
+    transformInput[0] = 5; transformInput[1] = 6; transformInput[2] = 7;
+    transformInput[4] = 90; transformInput[5] = 30; transformInput[6] = 90;
+    transformInput[8] = 2; transformInput[9] = 3; transformInput[10] = 4;
+    auto transformMatrix = std::array<double, 16>{};
+    for (auto row = 0u; row < 4; ++row)
+    {
+        auto rowOutput = std::array<double, 4>{};
+        assert(evaluate(registry[47 + row], transformInput, rowOutput) == Result::Ok);
+        for (auto column = 0u; column < 4; ++column)
+            transformMatrix[row * 4 + column] = rowOutput[column];
+    }
+    assert(std::abs(transformMatrix[0]) < 1e-14 && std::abs(transformMatrix[1]) < 1e-14 &&
+           transformMatrix[2] == -4 && transformMatrix[3] == 5);
+    assert(std::abs(transformMatrix[4] - 1.7320508075688772) < 1e-14 && std::abs(transformMatrix[5] - 1.5) < 1e-14 &&
+           std::abs(transformMatrix[6]) < 1e-14 && transformMatrix[7] == 6);
+    assert(std::abs(transformMatrix[8] - 1) < 1e-14 && std::abs(transformMatrix[9] + 2.598076211353316) < 1e-14 &&
+           std::abs(transformMatrix[10]) < 1e-14 && transformMatrix[11] == 7);
+    assert(transformMatrix[12] == 0 && transformMatrix[13] == 0 &&
+           transformMatrix[14] == 0 && transformMatrix[15] == 1);
+
+    auto matrixInput = transformMatrix;
+    auto decompositionValid = std::array<double, 4>{};
+    assert(evaluate(registry[59], matrixInput, decompositionValid) == Result::Ok &&
+           decompositionValid[0] == 1);
+    auto position = std::array<double, 4>{};
+    auto rotation = std::array<double, 4>{};
+    auto scale = std::array<double, 4>{};
+    assert(evaluate(registry[56], matrixInput, position) == Result::Ok);
+    assert(evaluate(registry[57], matrixInput, rotation) == Result::Ok);
+    assert(evaluate(registry[58], matrixInput, scale) == Result::Ok);
+    assert(position[0] == 5 && position[1] == 6 && position[2] == 7);
+    assert(std::abs(rotation[0] - 90) < 1e-10 && std::abs(rotation[1] - 30) < 1e-10 &&
+           std::abs(rotation[2] - 90) < 1e-10);
+    assert(std::abs(scale[0] - 2) < 1e-14 && std::abs(scale[1] - 3) < 1e-14 &&
+           std::abs(scale[2] - 4) < 1e-14);
+
+    auto reflectedTransformInput = transformInput;
+    reflectedTransformInput[8] = -2;
+    auto reflectedMatrix = math::makeTransform(
+        {transformInput[0], transformInput[1], transformInput[2]},
+        {transformInput[4], transformInput[5], transformInput[6]},
+        {reflectedTransformInput[8], reflectedTransformInput[9], reflectedTransformInput[10]});
+    assert(evaluate(registry[59], reflectedMatrix, decompositionValid) == Result::Ok &&
+           decompositionValid[0] == 1);
+    assert(evaluate(registry[58], reflectedMatrix, scale) == Result::Ok &&
+           std::abs(scale[0] + 2) < 1e-14 && std::abs(scale[1] - 3) < 1e-14 &&
+           std::abs(scale[2] - 4) < 1e-14);
+    assert(evaluate(registry[57], reflectedMatrix, rotation) == Result::Ok &&
+           std::abs(rotation[0] - 90) < 1e-10 && std::abs(rotation[1] - 30) < 1e-10 &&
+           std::abs(rotation[2] - 90) < 1e-10);
+
+    auto generalMatrix = std::array<double, 16>{
+        2, 1, 0, 3,
+        0, 3, 1, 2,
+        0, 0, 4, 1,
+        0, 0, 0, 2
+    };
+    auto expectedInverse = std::array<double, 16>{
+        0.5, -1.0 / 6, 1.0 / 24, -29.0 / 48,
+        0, 1.0 / 3, -1.0 / 12, -7.0 / 24,
+        0, 0, 0.25, -0.125,
+        0, 0, 0, 0.5
+    };
+    auto inverseMatrix = std::array<double, 16>{};
+    for (auto row = 0u; row < 4; ++row)
+    {
+        auto rowOutput = std::array<double, 4>{};
+        assert(evaluate(registry[51 + row], generalMatrix, rowOutput) == Result::Ok);
+        for (auto column = 0u; column < 4; ++column)
+            inverseMatrix[row * 4 + column] = rowOutput[column];
+    }
+    auto inverseValid = std::array<double, 4>{};
+    assert(evaluate(registry[55], generalMatrix, inverseValid) == Result::Ok && inverseValid[0] == 1);
+    for (auto index = 0u; index < 16; ++index)
+        assert(std::abs(inverseMatrix[index] - expectedInverse[index]) < 1e-14);
+    for (auto row = 0u; row < 4; ++row)
+        for (auto column = 0u; column < 4; ++column)
+        {
+            auto product = 0.0;
+            for (auto inner = 0u; inner < 4; ++inner)
+                product += generalMatrix[row * 4 + inner] * inverseMatrix[inner * 4 + column];
+            assert(std::abs(product - (row == column ? 1.0 : 0.0)) < 1e-14);
+        }
+
+    auto largeTranslation = std::array<double, 16>{
+        1, 0, 0, 1e15, 0, 1, 0, -2e15, 0, 0, 1, 3e15, 0, 0, 0, 1
+    };
+    for (auto row = 0u; row < 4; ++row)
+    {
+        auto rowOutput = std::array<double, 4>{};
+        assert(evaluate(registry[51 + row], largeTranslation, rowOutput) == Result::Ok);
+        assert(rowOutput[row] == 1);
+        for (auto column = 0u; column < 4; ++column)
+            if (column != row)
+                assert(rowOutput[column] == ((row == 0 && column == 3) ? -1e15 :
+                    (row == 1 && column == 3) ? 2e15 : (row == 2 && column == 3) ? -3e15 : 0));
+    }
+    assert(evaluate(registry[55], largeTranslation, inverseValid) == Result::Ok && inverseValid[0] == 1);
+
+    auto singular = std::array<double, 16>{};
+    singular[0] = singular[5] = singular[10] = 1;
+    auto zeroRow = std::array<double, 4>{};
+    assert(evaluate(registry[55], singular, inverseValid) == Result::Ok && inverseValid[0] == 0);
+    for (auto row = 0u; row < 4; ++row)
+    {
+        assert(evaluate(registry[51 + row], singular, zeroRow) == Result::Ok);
+        for (auto value : zeroRow) assert(value == 0);
+    }
+    auto nearlySingular = singular;
+    nearlySingular[15] = 1e-13;
+    assert(evaluate(registry[55], nearlySingular, inverseValid) == Result::Ok && inverseValid[0] == 0);
+
+    auto sheared = transformMatrix;
+    sheared[1] += 0.25;
+    assert(evaluate(registry[59], sheared, decompositionValid) == Result::Ok &&
+           decompositionValid[0] == 0);
+    assert(evaluate(registry[56], sheared, position) == Result::Ok &&
+           evaluate(registry[57], sheared, rotation) == Result::Ok &&
+           evaluate(registry[58], sheared, scale) == Result::Ok);
+    for (auto value : position) assert(value == 0);
+    for (auto value : rotation) assert(value == 0);
+    for (auto value : scale) assert(value == 0);
+    auto perspective = transformMatrix;
+    perspective[12] = 0.01;
+    assert(evaluate(registry[59], perspective, decompositionValid) == Result::Ok &&
+           decompositionValid[0] == 0);
+    auto zeroScale = std::array<double, 16>{};
+    zeroScale[3] = 1; zeroScale[7] = 2; zeroScale[11] = 3; zeroScale[15] = 1;
+    assert(evaluate(registry[59], zeroScale, decompositionValid) == Result::Ok &&
+           decompositionValid[0] == 0);
+
+    auto gimbalInput = transformInput;
+    gimbalInput[4] = 23; gimbalInput[5] = 90; gimbalInput[6] = -49;
+    auto gimbalMatrix = math::makeTransform(
+        {gimbalInput[0], gimbalInput[1], gimbalInput[2]},
+        {gimbalInput[4], gimbalInput[5], gimbalInput[6]},
+        {gimbalInput[8], gimbalInput[9], gimbalInput[10]});
+    assert(evaluate(registry[59], gimbalMatrix, decompositionValid) == Result::Ok &&
+           decompositionValid[0] == 1);
+    assert(evaluate(registry[57], gimbalMatrix, rotation) == Result::Ok && rotation[0] == 0 &&
+           std::abs(rotation[1] - 90) < 1e-10);
+    auto nearGimbalInput = gimbalInput;
+    nearGimbalInput[5] = 89.999999999;
+    auto nearGimbalMatrix = math::makeTransform(
+        {nearGimbalInput[0], nearGimbalInput[1], nearGimbalInput[2]},
+        {nearGimbalInput[4], nearGimbalInput[5], nearGimbalInput[6]},
+        {nearGimbalInput[8], nearGimbalInput[9], nearGimbalInput[10]});
+    assert(evaluate(registry[59], nearGimbalMatrix, decompositionValid) == Result::Ok &&
+           decompositionValid[0] == 1);
+    assert(evaluate(registry[57], nearGimbalMatrix, rotation) == Result::Ok && rotation[0] == 0);
+
+    auto nonfiniteMatrix = generalMatrix;
+    nonfiniteMatrix[0] = std::numeric_limits<double>::infinity();
+    assert(evaluate(registry[55], nonfiniteMatrix, inverseValid) == Result::NonFinite &&
+           inverseValid[0] == 0);
 }
