@@ -136,6 +136,27 @@ internal static class MatrixInterfaceTests
                 ToolTip.GetTip(block)?.ToString() == text.Get("Matrix.Parameter.Rotation")),
                 "Rotate Point must expose the full localized rotation convention.");
             Capture("point-operations-ja.png");
+            workspace.DeleteNodes(workspace.Nodes.ToArray());
+            var signalGroup = workspace.CreateNode(GraphNodeKind.GraphGroup, 40, 180);
+            workspace.EnterGraph(signalGroup);
+            var signalOutput = workspace.CreateNode(new GraphNodeKind("GroupOutputSignal"));
+            workspace.NavigateToGraph(0);
+            signalGroup = workspace.GetNode(signalGroup.Id);
+            var firstTarget = workspace.CreateNode(GraphNodeKind.SpawnableGroup, 430, 40);
+            var secondTarget = workspace.CreateNode(GraphNodeKind.SpawnableGroup, 430, 310);
+            Pump();
+            var outputPort = GroupBoundarySchema.OutputPortId(signalOutput.Id);
+            Connect(signalGroup, outputPort, firstTarget, "spawn");
+            Connect(signalGroup, outputPort, secondTarget, "spawn");
+            workspace.SelectNode(signalGroup);
+            Pump();
+            Require(workspace.Connections.Select(connection => connection.SignalOrder).SequenceEqual([1, 2]) &&
+                workspace.SelectedConnections.All(connection => connection.Description.Contains("Signal実行順", StringComparison.Ordinal)),
+                "Signal fan-out order must be visible and localized in the real inspector.");
+            Capture("signal-fanout-ja.png");
+            Require(workspace.History.Undo() && workspace.Connections.Single().SignalOrder == 0 &&
+                workspace.History.Redo() && workspace.Connections.Select(connection => connection.SignalOrder).SequenceEqual([1, 2]),
+                "Signal order badges must update after undo and redo.");
         }
         finally
         {

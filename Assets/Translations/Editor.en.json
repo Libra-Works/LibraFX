@@ -189,6 +189,7 @@
   "Matrix.Parameter.Scale": "Scale",
   "Matrix.Parameter.Point": "Point",
   "Matrix.Parameter.Translation": "Translation",
+  "Editor.SignalExecutionOrder": "Signal order {0}/{1} (depth first)",
   "Matrix.Parameter.Direction": "Direction",
   "Matrix.Parameter.Row0": "Row 0",
   "Matrix.Parameter.Row1": "Row 1",

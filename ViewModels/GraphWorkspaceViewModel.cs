@@ -117,6 +117,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         RefreshBreadcrumbs();
         OnPropertyChanged(nameof(SelectedNodeType));
         RefreshTypeDiagnostics();
+        foreach (var connection in Connections) connection.RefreshLocalizedText();
         if (_connectionStatusKey is not { } key) return;
         IsRefreshingLocalizedText = true;
         try
@@ -153,9 +154,22 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         {
             RefreshSelectedConnections();
             RefreshTypeDiagnostics();
+            RefreshSignalOrder();
         };
         _history.Configure(CreateSnapshot, RestoreFromHistory, ValidateSnapshot);
         MessageLocalization.Observe(this, static graph => graph.RefreshLocalizedText());
+    }
+
+    private void RefreshSignalOrder()
+    {
+        foreach (var group in Connections.GroupBy(connection => (connection.Source.Id, connection.SourcePortId)))
+        {
+            var connections = group.ToArray();
+            var fanout = connections.Length > 1 &&
+                connections[0].Source.Definition.GetOutputPortCategory(connections[0].SourcePortId) == GraphPortCategory.Signal;
+            for (var index = 0; index < connections.Length; index++)
+                connections[index].SetSignalOrder(fanout ? index + 1 : 0, fanout ? connections.Length : 0);
+        }
     }
 
     internal void RefreshTypeDiagnostics()

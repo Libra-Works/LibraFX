@@ -82,7 +82,7 @@ public sealed class LiberaFxMcpTools
         Guid.TryParseExact(value, "D", out var id) ? id : throw new McpException("Invalid clientId GUID.");
 
     [McpServerTool(Name = "libera_graph_read", ReadOnly = true, OpenWorld = false)]
-    [Description("Read the active graph, including stable node IDs, positions, types, ports, and connections.")]
+    [Description("Read the active graph, including stable node IDs, positions, types, ports, and ordered connections. Multiple connections from one Signal output execute in connection order, depth first.")]
     public static async Task<string> GetGraph(ActiveGraphProvider activeGraph) =>
         await Dispatcher.UIThread.InvokeAsync(
             () => JsonSerializer.Serialize(activeGraph.Graph.CreateCurrentSnapshot(), JsonOptions));

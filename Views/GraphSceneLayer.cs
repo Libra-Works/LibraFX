@@ -1,5 +1,6 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -17,6 +18,9 @@ public sealed class GraphSceneLayer : Control
     private static readonly Pen MajorGridPen = new(ThemeSettingsService.EditorBrush("GraphMajorGrid"), 1);
     private static readonly Pen ParameterConnectionPen = new(ThemeSettingsService.EditorBrush("GraphParameter"), 2);
     private static readonly Pen SignalConnectionPen = new(ThemeSettingsService.EditorBrush("GraphSignal"), 2);
+    private static readonly Pen SignalOrderPen = new(ThemeSettingsService.EditorBrush("GraphSignal"), 1);
+    private static readonly IBrush SignalOrderBackground = ThemeSettingsService.EditorBrush("CurveBackground");
+    private static readonly IBrush SignalOrderForeground = ThemeSettingsService.EditorBrush("GraphSignal");
 
     private readonly HashSet<GraphConnectionViewModel> _observedConnections = [];
     private GraphWorkspaceViewModel? _workspace;
@@ -95,6 +99,8 @@ public sealed class GraphSceneLayer : Control
         {
             DrawConnection(context, connection);
         }
+        foreach (var connection in _workspace.Connections.Where(item => item.SignalOrder > 0))
+            DrawSignalOrder(context, connection);
 
         if (_workspace.PendingOutputNode is { } source && _workspace.ConnectionPreviewPoint is { } end)
         {
@@ -134,6 +140,24 @@ public sealed class GraphSceneLayer : Control
     {
         DrawConnection(context, connection.StartPoint + _graphOrigin, connection.EndPoint + _graphOrigin,
             connection.Source.Definition.GetOutputPortCategory(connection.SourcePortId));
+    }
+
+    private void DrawSignalOrder(DrawingContext context, GraphConnectionViewModel connection)
+    {
+        var start = connection.StartPoint + _graphOrigin;
+        var end = connection.EndPoint + _graphOrigin;
+        var offset = Math.Max(48, Math.Abs(end.X - start.X) * 0.5);
+        const double t = 0.72;
+        var u = 1 - t;
+        var point = new Point(
+            u * u * u * start.X + 3 * u * u * t * (start.X + offset) +
+            3 * u * t * t * (end.X - offset) + t * t * t * end.X,
+            (u * u * u + 3 * u * u * t) * start.Y +
+            (3 * u * t * t + t * t * t) * end.Y);
+        var text = new FormattedText(connection.SignalOrder.ToString(CultureInfo.InvariantCulture),
+            CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface("Arial"), 10, SignalOrderForeground);
+        context.DrawEllipse(SignalOrderBackground, SignalOrderPen, point, Math.Max(8, text.Width / 2 + 4), 8);
+        context.DrawText(text, new Point(point.X - text.Width / 2, point.Y - text.Height / 2));
     }
 
     private static void DrawConnection(DrawingContext context, Point start, Point end, Models.Graph.GraphPortCategory category)
@@ -192,7 +216,7 @@ public sealed class GraphSceneLayer : Control
     private void OnConnectionPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(GraphConnectionViewModel.StartPoint) or
-            nameof(GraphConnectionViewModel.EndPoint))
+            nameof(GraphConnectionViewModel.EndPoint) or nameof(GraphConnectionViewModel.SignalOrder))
         {
             InvalidateVisual();
         }

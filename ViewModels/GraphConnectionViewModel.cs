@@ -2,6 +2,7 @@ using Avalonia;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LiberaFx.Models.Graph;
+using LiberaFx.Services;
 
 namespace LiberaFx.ViewModels;
 
@@ -12,6 +13,8 @@ public sealed class GraphConnectionViewModel : ObservableObject
     public GraphNodeViewModel Target { get; }
     public string? TargetPortId { get; }
     public string? SourcePortId { get; }
+    public int SignalOrder { get; private set; }
+    public int SignalOrderCount { get; private set; }
 
     public double StartX => Source.DisplayX + GraphNodeViewModel.NodeWidth - GraphNodeViewModel.PortHorizontalOffset;
 
@@ -35,9 +38,23 @@ public sealed class GraphConnectionViewModel : ObservableObject
             var sourceLabel = SourcePortId is null ? "" : $" [{sourcePort?.Name ?? SourcePortId}]";
             var targetLabel = TargetPortId is null ? "" : $" [{targetPort?.Name ?? TargetPortId}]";
             var type = sourcePort?.PortType ?? Source.Definition.GetOutputPortType(SourcePortId) ?? Source.PortType;
-            return $"{Source.Name}{sourceLabel} → {Target.Name}{targetLabel} ({GraphNodeDefinition.DisplayPortType(type)})";
+            var description = $"{Source.Name}{sourceLabel} → {Target.Name}{targetLabel} ({GraphNodeDefinition.DisplayPortType(type)})";
+            return SignalOrder == 0 ? description :
+                LocalizationService.Shared.Get("Editor.SignalExecutionOrder", SignalOrder, SignalOrderCount) + " — " + description;
         }
     }
+
+    internal void SetSignalOrder(int order, int count)
+    {
+        if (SignalOrder == order && SignalOrderCount == count) return;
+        SignalOrder = order;
+        SignalOrderCount = count;
+        OnPropertyChanged(nameof(SignalOrder));
+        OnPropertyChanged(nameof(SignalOrderCount));
+        OnPropertyChanged(nameof(Description));
+    }
+
+    internal void RefreshLocalizedText() => OnPropertyChanged(nameof(Description));
 
     public GraphConnectionViewModel(GraphNodeViewModel source, GraphNodeViewModel target,
         string? targetPortId = null, string? sourcePortId = null)

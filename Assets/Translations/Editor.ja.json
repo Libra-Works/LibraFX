@@ -189,6 +189,7 @@
   "Matrix.Parameter.Scale": "スケール",
   "Matrix.Parameter.Point": "座標",
   "Matrix.Parameter.Translation": "移動量",
+  "Editor.SignalExecutionOrder": "Signal実行順 {0}/{1}（各枝を最後まで）",
   "Matrix.Parameter.Direction": "方向",
   "Matrix.Parameter.Row0": "行 0",
   "Matrix.Parameter.Row1": "行 1",
