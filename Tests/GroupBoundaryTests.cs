@@ -18,6 +18,7 @@ internal static class GroupBoundaryTests
         VerifyNumericBoundary();
         VerifySignalBoundary();
         VerifyTypedDefaults();
+        VerifyTypedRuntimeRouting();
         VerifyNestedScopes();
         VerifyNestedSignalBoundary();
         VerifyBoundaryScopeValidation();
@@ -159,6 +160,40 @@ internal static class GroupBoundaryTests
             if (!code.Single(item => item.NodeId == input.Id).DefaultA.Take(expected.Length).SequenceEqual(expected) ||
                 !code.Single(item => item.NodeId == output.Id).DefaultA.Take(expected.Length).SequenceEqual(expected))
                 throw new InvalidOperationException($"{suffix} boundary defaults did not survive compilation.");
+        }
+    }
+
+    private static void VerifyTypedRuntimeRouting()
+    {
+        foreach (var (suffix, kind, expected) in new[]
+        {
+            ("Vector2", "FloatX2", new[] { -2d, 3d }),
+            ("Vector3", "FloatX3", new[] { -2d, 3d, 5d }),
+            ("Vector4", "FloatX4", new[] { -2d, 3d, 5d, 7d }),
+            ("Color", "Color", new[] { 0.125d, 0.25d, 0.5d, 0.75d })
+        })
+        {
+            var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+            var group = graph.CreateNode(GraphNodeKind.GraphGroup);
+            graph.EnterGraph(group);
+            var input = graph.CreateNode(new GraphNodeKind("GroupInput" + suffix));
+            var output = graph.CreateNode(new GraphNodeKind("GroupOutput" + suffix));
+            if (!graph.TryConnectNodes(input, output, out _))
+                throw new InvalidOperationException($"Cannot connect {suffix} boundaries inside the group.");
+            graph.NavigateToGraph(0);
+            group = graph.GetNode(group.Id);
+            var valueKind = GraphNodeDefinition.All.Single(item =>
+                item.Namespace == "LiberaFx" && item.TypeName == kind).Kind;
+            var source = graph.CreateNode(valueKind);
+            var target = graph.CreateNode(valueKind);
+            graph.SetParameter(source, "value", JsonSerializer.SerializeToElement(expected));
+            if (!graph.TryConnectNodes(source, group, out _, GroupBoundarySchema.InputPortId(input.Id)) ||
+                !graph.TryConnectNodes(group, target, out _, sourcePortId: GroupBoundarySchema.OutputPortId(output.Id)))
+                throw new InvalidOperationException($"Cannot route {suffix} through the group.");
+            var snapshot = graph.CreateSnapshot();
+            GraphValidator.Validate(snapshot);
+            var program = VfxProgram.Compile(snapshot);
+            VerifyNativeNumeric(program.ToBinary(), target.Id, expected);
         }
     }
 
