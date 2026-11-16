@@ -19,6 +19,7 @@ constexpr auto curveKeySize = std::size_t{40};
 constexpr auto maxNodes = std::uint32_t{10000};
 constexpr auto maxCurveKeysPerInstruction = std::uint32_t{10000};
 constexpr auto maxCurveKeysTotal = std::uint32_t{100000};
+constexpr auto maxSignalRoutes = std::size_t{1000000};
 constexpr auto noInput = std::uint32_t{0xffffffffu};
 constexpr auto customParameterOpcode = std::uint8_t{40};
 constexpr auto customSignalOpcode = std::uint8_t{41};
@@ -309,7 +310,7 @@ auto Program::load(const void* bytes, std::size_t size, Program& out,
     auto data = static_cast<const std::uint8_t*>(bytes);
     if (std::memcmp(data, "LFXB", 4) != 0) return Result::InvalidBinary;
     auto version = read16(data + 4);
-    if (version == 4) return load(bytes, size, nullptr, 0, nullptr, 0, out, profiling);
+    if (version == 4 || version == 5) return load(bytes, size, nullptr, 0, nullptr, 0, out, profiling);
     if (version != 1 && version != 2) return Result::UnsupportedBinary;
     if (data[6] != 1) return Result::UnsupportedBinary;
     if (data[7] != 0) return Result::InvalidBinary;
@@ -366,6 +367,9 @@ auto Program::load(const void* bytes, std::size_t size, Program& out,
     out.version_ = version;
     out.bindings_ = nullptr;
     out.stateBytes_ = 0;
+    out.signalRoutesOffset_ = 0;
+    out.signalStackOffset_ = 0;
+    out.signalStackCapacity_ = 0;
     out.generation_ = nextProgramGeneration.fetch_add(1, std::memory_order_relaxed);
     return Result::Ok;
 }
@@ -379,7 +383,7 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
     auto data = static_cast<const std::uint8_t*>(bytes);
     if (std::memcmp(data, "LFXB", 4) != 0) return Result::InvalidBinary;
     auto version = read16(data + 4);
-    if (version != 3 && version != 4) return load(bytes, size, out, profiling);
+    if (version != 3 && version != 4 && version != 5) return load(bytes, size, out, profiling);
     auto profileScope = ProfileScope(profiling, ProfileEvent::Load);
     if (size < typedHeaderSize) return Result::InvalidBinary;
     if (data[6] != 1) return Result::UnsupportedBinary;
@@ -464,7 +468,7 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
         auto opcode = current[16];
         if (opcode == curveOpcode)
         {
-            if (version != 4 || !validCurveInstruction(current)) return Result::InvalidBinary;
+            if (version < 4 || !validCurveInstruction(current)) return Result::InvalidBinary;
             auto curveOffset = read32(current + 224);
             auto curveKeyCount = read32(current + 228);
             if (curveOffset != expectedCurveOffset || curveKeyCount > maxCurveKeysPerInstruction ||
@@ -518,8 +522,9 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
             (opcode == customSignalOpcode && (outputWidth != 0 || branchCount < 1 || branchCount > customMaxPorts ||
                                                current[20] != 0)))
             return Result::InvalidBinary;
-        for (auto byte = 224u; byte < customInstructionSize; ++byte)
-            if (current[byte] != 0) return Result::InvalidBinary;
+        if (version < 5 || opcode != customSignalOpcode)
+            for (auto byte = 224u; byte < customInstructionSize; ++byte)
+                if (current[byte] != 0) return Result::InvalidBinary;
         auto emptyTypeId = true;
         for (auto byte = 0u; byte < 16; ++byte) emptyTypeId = emptyTypeId && current[24 + byte] == 0;
         if (emptyTypeId) return Result::InvalidBinary;
@@ -593,6 +598,47 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
         }
     }
     if (version == 4 && expectedCurveOffset != curveDataBytes) return Result::InvalidBinary;
+    auto routeDataOffset = instructionBytes + expectedCurveOffset;
+    auto routeBytes = std::size_t{0};
+    if (version == 5)
+    {
+        for (auto index = std::uint32_t{0}; index < count; ++index)
+        {
+            auto current = instruction(data, version, index);
+            if (current[16] != customSignalOpcode) continue;
+            for (auto branch = 0u; branch < customMaxPorts; ++branch)
+            {
+                auto offset = read32(current + 224 + branch * 8);
+                auto extraCount = read32(current + 228 + branch * 8);
+                if (extraCount == 0)
+                {
+                    if (offset != 0) return Result::InvalidBinary;
+                    continue;
+                }
+                if (branch >= current[19] || read32(current + 208 + branch * 4) == noInput ||
+                    offset != routeBytes || extraCount > maxSignalRoutes - routeBytes / 4 ||
+                    extraCount > (size - routeDataOffset - routeBytes) / 4)
+                    return Result::InvalidBinary;
+                for (auto entry = 0u; entry < extraCount; ++entry)
+                {
+                    auto target = read32(data + routeDataOffset + routeBytes + std::size_t{entry} * 4);
+                    if (target <= index || target >= count ||
+                        instruction(data, version, target)[16] != customSignalOpcode)
+                        return Result::InvalidBinary;
+                }
+                routeBytes += std::size_t{extraCount} * 4;
+            }
+        }
+        if (routeBytes != size - routeDataOffset) return Result::InvalidBinary;
+    }
+    auto stackOffset = totalWorkBytes;
+    if (routeBytes != 0)
+    {
+        if (!alignUp(totalWorkBytes, alignof(double), stackOffset) ||
+            routeBytes > std::numeric_limits<std::size_t>::max() - stackOffset)
+            return Result::InvalidBinary;
+        totalWorkBytes = stackOffset + routeBytes;
+    }
     auto boundStateOffset = valuesSize;
     for (auto index = std::uint32_t{0}; index < count; ++index)
     {
@@ -622,6 +668,9 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
     out.version_ = version;
     out.bindings_ = bindings;
     out.stateBytes_ = totalWorkBytes - valuesSize;
+    out.signalRoutesOffset_ = routeDataOffset;
+    out.signalStackOffset_ = stackOffset;
+    out.signalStackCapacity_ = routeBytes / 4;
     out.generation_ = nextProgramGeneration.fetch_add(1, std::memory_order_relaxed);
     return Result::Ok;
 }
@@ -1148,8 +1197,15 @@ auto Instance::dispatchSignal(const SignalHandle& entry, double time,
     auto scope = DispatchScope{dispatching_};
     dispatching_ = true;
     auto visited = std::size_t{0};
-    while (index != noInput)
+    auto pending = std::size_t{0};
+    auto stack = reinterpret_cast<std::uint8_t*>(work_) + program_->signalStackOffset_;
+    while (index != noInput || pending != 0)
     {
+        if (index == noInput)
+        {
+            std::memcpy(&index, stack + --pending * sizeof(index), sizeof(index));
+            continue;
+        }
         if (++visited > maxInstructions) return Result::InstructionBudgetExceeded;
         auto current = instruction(program_->bytes_, 3, index);
         auto nodeScope = ProfileScope(profiling_, ProfileEvent::Node, index, profiling_.nodes);
@@ -1183,6 +1239,18 @@ auto Instance::dispatchSignal(const SignalHandle& entry, double time,
         status = descriptor->function(invocation);
         if (status != Result::Ok) return status;
         if (invocation.selectedBranch >= current[19]) return Result::InvalidValueType;
+        if (program_->version_ >= 5)
+        {
+            auto offset = read32(current + 224 + invocation.selectedBranch * 8);
+            auto extraCount = read32(current + 228 + invocation.selectedBranch * 8);
+            if (extraCount > program_->signalStackCapacity_ - pending) return Result::InvalidBinary;
+            for (auto extra = extraCount; extra > 0; --extra)
+            {
+                auto target = read32(program_->bytes_ + program_->signalRoutesOffset_ +
+                    offset + std::size_t{extra - 1} * 4);
+                std::memcpy(stack + pending++ * sizeof(target), &target, sizeof(target));
+            }
+        }
         index = read32(current + 208 + invocation.selectedBranch * 4);
     }
     return Result::Ok;

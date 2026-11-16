@@ -182,7 +182,7 @@ LibraResult LIBRA_INTEROP_CALL libra_program_create_spawnable(
     *outProgram = 0;
     return guarded([&]() -> LibraResult {
         if (byteCount < 16 || byteCount > 256ull * 1024 * 1024 ||
-            std::memcmp(bytes, "LFXB", 4) != 0 || (bytes[4] != 3 && bytes[4] != 4) || bytes[5] != 0 ||
+            std::memcmp(bytes, "LFXB", 4) != 0 || (bytes[4] != 3 && bytes[4] != 4 && bytes[4] != 5) || bytes[5] != 0 ||
             bytes[12] != 0 || bytes[13] != 1) return LIBRA_INVALID_BINARY;
         auto count = std::uint32_t{};
         for (auto i = 0u; i < 4; ++i) count |= std::uint32_t{bytes[8 + i]} << (i * 8);

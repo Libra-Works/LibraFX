@@ -139,6 +139,9 @@ private:
     std::uint64_t generation_ = 0;
     CustomNodeBinding* bindings_ = nullptr;
     std::size_t stateBytes_ = 0;
+    std::size_t signalRoutesOffset_ = 0;
+    std::size_t signalStackOffset_ = 0;
+    std::size_t signalStackCapacity_ = 0;
 };
 
 class LIBRA_RUNTIME_CORE_API Instance final {
@@ -178,7 +181,8 @@ public:
     Result value(const std::uint8_t nodeId[16], double& out) const noexcept;
     Result valueComponents(const std::uint8_t nodeId[16], double out[4], std::uint8_t& componentCount) const noexcept;
     // Synchronous, owner-thread-only execution after a successful update.
-    // maxInstructions bounds branch traversal; callbacks choose a precompiled output branch.
+    // maxInstructions bounds all callbacks across the depth-first traversal. An error
+    // stops the remaining branches without rolling back callbacks already executed.
     Result dispatchSignal(const std::uint8_t entryNodeId[16], double time,
                          std::size_t maxInstructions) noexcept;
     Result dispatchSignal(const SignalHandle& entry, double time,

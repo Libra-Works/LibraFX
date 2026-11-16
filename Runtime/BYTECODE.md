@@ -84,3 +84,11 @@ For v3, `Program::workBytes()` includes four result doubles per instruction plus
 ### JSON node metadata
 
 Project node definitions opt in with `runtime: { "kind": "custom", "abiVersion": 1, "execution": "parameter" }` or `"signal"`. The definition's stable `typeId` is the native registration key. Per-port `category` may override legacy `portCategory`; data ports use Float/FloatX2/FloatX3/FloatX4/Color and signal execution ports use type `Signal`. A custom signal node may therefore declare both parameter inputs and exec pins. The compiler emits `40`/`41` only for these declarations; ordinary project-defined nodes remain editor-only and built-in v1/v2 output remains unchanged.
+
+## Versions 4 and 5: curves and Signal fan-out
+
+Version 4 retains the v3 instruction layout and adds opcode `42` for a scalar FCurve. Its record stores a byte offset and key count at offsets 224 and 228. Key records follow all instructions in instruction order; each 40-byte record contains four binary64 values (time in seconds, value, incoming slope, outgoing slope), an interpolation byte (0 step, 1 linear, 2 cubic), and seven zero bytes. Times must increase strictly. The loader bounds keys to 10,000 per curve and 100,000 per program.
+
+Version 5 extends v4 for ordered Signal fan-out. For signal records only, bytes 224–255 contain four pairs of little-endian uint32 values: byte offset and count of extra targets for each branch. The first target remains at offset 208 as in v3. Extra targets are uint32 instruction indices in a contiguous table after all curve keys, ordered by instruction and branch; an empty list has both fields zero. Every target must be a forward reference to a Signal instruction, and the total extra target count is limited to 1,000,000. Other reserved fields remain zero. Older runtimes reject version 5 rather than silently dropping connections.
+
+Dispatch visits the first target and each additional target in connection order, executing each branch depth-first. The instruction budget is shared across the whole dispatch. On error or budget exhaustion, remaining branches do not run and prior callbacks are not rolled back. `Program::workBytes()` includes the aligned caller-owned pending-target stack; no dispatch allocation is performed. Hosts must use the runtime-reported work size rather than deriving it from the node count.

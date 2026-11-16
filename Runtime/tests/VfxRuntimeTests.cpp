@@ -400,6 +400,100 @@ auto customFixture() -> std::vector<std::uint8_t>
     return bytes;
 }
 
+struct FanoutLog {
+    std::array<unsigned, 16> nodes{};
+    std::size_t count = 0;
+    unsigned failNode = 99;
+};
+
+struct FanoutContext {
+    FanoutLog* log = nullptr;
+    unsigned node = 0;
+};
+
+auto recordFanout(liberafx::CustomNodeInvocation& invocation) noexcept -> liberafx::Result
+{
+    auto context = static_cast<FanoutContext*>(invocation.context);
+    context->log->nodes[context->log->count++] = context->node;
+    if (context->node == context->log->failNode) return liberafx::Result::InvalidArgument;
+    invocation.selectedBranch = 0;
+    return liberafx::Result::Ok;
+}
+
+void verifySignalFanout()
+{
+    auto bytes = std::vector<std::uint8_t>(16 + 5 * 256 + 8);
+    std::memcpy(bytes.data(), "LFXB", 4);
+    write16(bytes, 4, 5);
+    bytes[6] = 1;
+    write32(bytes, 8, 5);
+    write16(bytes, 12, 256);
+    auto log = FanoutLog{};
+    auto contexts = std::array<FanoutContext, 5>{};
+    auto descriptors = std::array<liberafx::CustomNodeDescriptor, 5>{};
+    for (auto index = 0u; index < 5; ++index)
+    {
+        auto offset = 16 + index * 256;
+        bytes[offset + 15] = static_cast<std::uint8_t>(index + 1);
+        bytes[offset + 16] = 41;
+        bytes[offset + 19] = 1;
+        bytes[offset + 24] = static_cast<std::uint8_t>(0x80 + index);
+        write32(bytes, offset + 40, 1);
+        for (auto input = 0u; input < 4; ++input)
+            write32(bytes, offset + 48 + input * 8, 0xffffffffu);
+        for (auto branch = 0u; branch < 4; ++branch)
+            write32(bytes, offset + 208 + branch * 4, 0xffffffffu);
+        contexts[index] = {&log, index};
+        descriptors[index].typeId[0] = static_cast<std::uint8_t>(0x80 + index);
+        descriptors[index].abiVersion = 1;
+        descriptors[index].execution = liberafx::CustomExecution::Signal;
+        descriptors[index].branchCount = 1;
+        descriptors[index].function = recordFanout;
+        descriptors[index].context = &contexts[index];
+    }
+    write32(bytes, 16 + 208, 1);
+    write32(bytes, 16 + 228, 2);
+    write32(bytes, 16 + 256 + 208, 2);
+    write32(bytes, 16 + 3 * 256 + 208, 4);
+    write32(bytes, 16 + 5 * 256, 3);
+    write32(bytes, 16 + 5 * 256 + 4, 4);
+    auto bindings = std::array<liberafx::CustomNodeBinding, 5>{};
+    auto program = liberafx::Program{};
+    auto load = [&](const auto& data) {
+        return liberafx::Program::load(data.data(), data.size(), descriptors.data(),
+            descriptors.size(), bindings.data(), bindings.size(), program);
+    };
+    assert(load(bytes) == liberafx::Result::Ok && program.workBytes() == 168);
+    alignas(16) auto work = std::array<double, 21>{};
+    auto instance = liberafx::Instance{};
+    auto queue = Queue{};
+    assert(instance.initialize(program, work.data(), work.size()) == liberafx::Result::Ok);
+    assert(instance.updateAsync(0, enqueue, &queue) == liberafx::Result::Ok);
+    run(queue);
+    assert(instance.dispatchSignal(bytes.data() + 16, 0, 6) == liberafx::Result::Ok);
+    assert(log.count == 6 && (log.nodes == std::array<unsigned, 16>{0, 1, 2, 3, 4, 4}));
+    log.count = 0;
+    assert(instance.dispatchSignal(bytes.data() + 16, 0, 3) == liberafx::Result::InstructionBudgetExceeded);
+    assert(log.count == 3 && log.nodes[0] == 0 && log.nodes[1] == 1 && log.nodes[2] == 2);
+    log.count = 0;
+    log.failNode = 2;
+    assert(instance.dispatchSignal(bytes.data() + 16, 0, 10) == liberafx::Result::InvalidArgument);
+    assert(log.count == 3);
+
+    auto malformed = bytes;
+    write32(malformed, 16 + 224, 4);
+    assert(load(malformed) == liberafx::Result::InvalidBinary);
+    malformed = bytes;
+    write32(malformed, 16 + 5 * 256, 0);
+    assert(load(malformed) == liberafx::Result::InvalidBinary);
+    malformed = bytes;
+    malformed.pop_back();
+    assert(load(malformed) == liberafx::Result::InvalidBinary);
+    malformed = bytes;
+    write16(malformed, 4, 4);
+    assert(load(malformed) == liberafx::Result::InvalidBinary);
+}
+
 void verifyCustom()
 {
     auto bytes = customFixture();
@@ -836,6 +930,7 @@ auto main(int argc, char** argv) -> int
     verifyTyped(typedFixture());
     verifyCustom();
     verifyCustomSignal();
+    verifySignalFanout();
     auto corrupt = bytes;
     corrupt[6] = 2;
     auto program = liberafx::Program{};
