@@ -36,11 +36,17 @@ public sealed record GraphSnapshot(
                 (a.ChildGraph is not null && !EquivalentIgnoringIds(a.ChildGraph, b.ChildGraph!)))
                 return false;
         }
+        var leftNodes = left.Nodes.ToDictionary(node => node.Id);
+        var rightNodes = new Dictionary<Guid, GraphNodeSnapshot>();
+        foreach (var node in right.Nodes)
+            if (!rightNodes.TryAdd(node.Id, node)) return false;
         return left.Connections.Zip(right.Connections).All(pair =>
             ids.TryGetValue(pair.First.SourceNodeId, out var source) && source == pair.Second.SourceNodeId &&
             ids.TryGetValue(pair.First.TargetNodeId, out var target) && target == pair.Second.TargetNodeId &&
-            pair.First.TargetPortId == pair.Second.TargetPortId &&
-            pair.First.SourcePortId == pair.Second.SourcePortId);
+            SpawnableGroupSchema.RemapPort(leftNodes[pair.First.TargetNodeId], rightNodes[target].ChildGraph,
+                pair.First.TargetPortId) == pair.Second.TargetPortId &&
+            SpawnableGroupSchema.RemapPort(leftNodes[pair.First.SourceNodeId], rightNodes[source].ChildGraph,
+                pair.First.SourcePortId) == pair.Second.SourcePortId);
     }
 
     private static bool ParametersEqual(IReadOnlyList<NodeParameterSnapshot>? left, IReadOnlyList<NodeParameterSnapshot>? right) =>

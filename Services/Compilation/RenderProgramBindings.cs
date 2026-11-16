@@ -11,7 +11,7 @@ public static class RenderProgramBindings
 
     public static byte[] CreateScene(GraphSnapshot graph, long programSequence)
     {
-        graph = GraphPolymorphism.Lower(graph);
+        graph = GraphPolymorphism.Lower(GroupBoundaryLowering.Lower(graph));
         var nodes = Flatten(graph).ToDictionary(node => node.Id);
         var connections = Connections(graph).ToLookup(connection => connection.TargetNodeId);
         var renderNodes = new List<object>();

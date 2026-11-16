@@ -320,6 +320,7 @@ internal static class Program
         CommentMarkupTests.Run();
         Console.WriteLine("Comment text/Markdown/HTML and undoable task-list checks passed.");
         GroupCompilationTests.Run();
+        GroupBoundaryTests.Run();
         Console.WriteLine("Latest/frozen group compilation and deterministic instance checks passed.");
         PreviewProtocolTests.Run();
         Console.WriteLine("Preview parameter deltas, slow-client baselines and TLS resynchronization checks passed.");

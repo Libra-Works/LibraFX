@@ -9,6 +9,26 @@ public static class SpawnableGroupSchema
     public static bool IsOutput(GraphNodeKind kind) => kind.Value == "SpawnOutputVector3";
     public static string OutputPortId(Guid id) => "o_" + id.ToString("N");
 
+    public static string? RemapPort(GraphNodeSnapshot original, GraphSnapshot? clone, string? port)
+    {
+        if (original.Kind == GraphNodeKind.GraphGroup)
+            return GroupBoundarySchema.RemapPort(original, clone, port);
+        if (original.Kind != GraphNodeKind.SpawnableGroup || original.ChildGraph is null || clone is null || port is null)
+            return port;
+        if (original.ChildGraph.Nodes.Count != clone.Nodes.Count)
+            throw new InvalidDataException("A cloned group must preserve its boundary node order.");
+        for (var index = 0; index < original.ChildGraph.Nodes.Count; index++)
+        {
+            var oldNode = original.ChildGraph.Nodes[index];
+            var newNode = clone.Nodes[index];
+            if (IsInput(oldNode.Kind) && PortId(oldNode.Id) == port)
+                return PortId(newNode.Id);
+            if (IsOutput(oldNode.Kind) && OutputPortId(oldNode.Id) == port)
+                return OutputPortId(newNode.Id);
+        }
+        return port;
+    }
+
     public static GraphNodeDefinition Effective(GraphNodeDefinition definition, GraphSnapshot? child)
     {
         if (definition.Kind != GraphNodeKind.SpawnableGroup || child is null) return definition;

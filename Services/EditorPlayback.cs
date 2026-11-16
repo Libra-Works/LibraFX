@@ -20,6 +20,7 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
     private double _fps = 60;
     private bool _loop = true;
     private bool _playing;
+    private bool _showSeconds;
     private string? _statusKey;
 
     public event EventHandler? StateChanged;
@@ -30,6 +31,16 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
     public bool IsPlaying => _playing;
     public EditorIcon PlayIcon => _playing ? EditorIcon.Pause : EditorIcon.Play;
     public string Status => _statusKey is null ? "" : LocalizationService.Shared.Get(_statusKey);
+    public double FramesPerSecond => _fps;
+    public double TimeSeconds
+    {
+        get => _frame / _fps;
+        set
+        {
+            if (!double.IsFinite(value)) return;
+            Frame = value * _fps;
+        }
+    }
     public double Frame
     {
         get => _frame;
@@ -41,11 +52,26 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
             StateChanged?.Invoke(this, EventArgs.Empty);
         }
     }
+    public bool ShowSeconds
+    {
+        get => _showSeconds;
+        set
+        {
+            if (!SetProperty(ref _showSeconds, value)) return;
+            OnPropertyChanged(nameof(TimeUnitLabel));
+            OnPropertyChanged(nameof(FrameText));
+            OnPropertyChanged(nameof(StartText));
+            OnPropertyChanged(nameof(EndText));
+        }
+    }
+    public string TimeUnitLabel => LocalizationService.Shared.Get(_showSeconds ? "Timeline.Seconds" : "Timeline.Frames");
     public double RangeStart => _start;
     public double RangeEnd => _end;
-    public string FrameText { get => Number(Frame); set => Parse(value, frame => Frame = frame); }
-    public string StartText { get => Number(_start); set => Parse(value, start => SetRange(start, _end)); }
-    public string EndText { get => Number(_end); set => Parse(value, end => SetRange(_start, end)); }
+    public double RangeStartSeconds => _start / _fps;
+    public double RangeEndSeconds => _end / _fps;
+    public string FrameText { get => FormatTime(TimeSeconds); set => ParseTime(value, time => TimeSeconds = time); }
+    public string StartText { get => FormatTime(_start / _fps); set => ParseTime(value, start => SetRange(start * _fps, _end)); }
+    public string EndText { get => FormatTime(_end / _fps); set => ParseTime(value, end => SetRange(_start, end * _fps)); }
     public string FpsText { get => Number(_fps); set => Parse(value, SetFps); }
     public bool Loop
     {
@@ -54,6 +80,25 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
     }
     public PreviewPlaybackState Snapshot => new(IsPlaying, Frame, _fps, _start, _end, Loop);
 
+    public double DisplayUnits(double timeSeconds) => _showSeconds ? timeSeconds : timeSeconds * _fps;
+    public double TimeSecondsFromDisplay(double value) => _showSeconds ? value : value / _fps;
+    public double SecondsFromDisplayDelta(double delta) => _showSeconds ? delta : delta / _fps;
+    public double DisplaySlope(double slopePerSecond) => _showSeconds ? slopePerSecond : slopePerSecond / _fps;
+    public double SlopePerSecond(double displayedSlope) => _showSeconds ? displayedSlope : displayedSlope * _fps;
+
+    public bool TryParseTime(string text, out double timeSeconds)
+    {
+        if (double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value) && double.IsFinite(value))
+        {
+            timeSeconds = TimeSecondsFromDisplay(value);
+            return double.IsFinite(timeSeconds);
+        }
+        timeSeconds = 0;
+        return false;
+    }
+
+    public string FormatTime(double timeSeconds) => Number(DisplayUnits(timeSeconds));
+
     public EditorPlayback()
     {
         PlayPauseCommand = new RelayCommand(() => { if (_playing) Pause(); else Play(); });
@@ -61,7 +106,11 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
         StepBackCommand = new RelayCommand(() => { Pause(); Frame = Math.Ceiling(Frame) - 1; });
         StepForwardCommand = new RelayCommand(() => { Pause(); Frame = Math.Floor(Frame) + 1; });
         _timer.Tick += OnTick;
-        MessageLocalization.Observe(this, static playback => playback.OnPropertyChanged(nameof(Status)));
+        MessageLocalization.Observe(this, static playback =>
+        {
+            playback.OnPropertyChanged(nameof(Status));
+            playback.OnPropertyChanged(nameof(TimeUnitLabel));
+        });
     }
 
     public void Play()
@@ -117,6 +166,8 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
         SetFrame(Math.Clamp(Frame, start, end));
         OnPropertyChanged(nameof(RangeStart));
         OnPropertyChanged(nameof(RangeEnd));
+        OnPropertyChanged(nameof(RangeStartSeconds));
+        OnPropertyChanged(nameof(RangeEndSeconds));
         OnPropertyChanged(nameof(StartText));
         OnPropertyChanged(nameof(EndText));
         _lastTick = Stopwatch.GetTimestamp();
@@ -127,8 +178,17 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
     private void SetFps(double fps)
     {
         if (fps is < 1 or > 240) { SetStatus("Timeline.InvalidFps"); return; }
+        if (_fps == fps) return;
         _fps = fps;
         _lastTick = Stopwatch.GetTimestamp();
+        OnPropertyChanged(nameof(FramesPerSecond));
+        OnPropertyChanged(nameof(TimeSeconds));
+        OnPropertyChanged(nameof(Frame));
+        OnPropertyChanged(nameof(FrameText));
+        OnPropertyChanged(nameof(StartText));
+        OnPropertyChanged(nameof(EndText));
+        OnPropertyChanged(nameof(RangeStartSeconds));
+        OnPropertyChanged(nameof(RangeEndSeconds));
         OnPropertyChanged(nameof(FpsText));
         SetStatus(null);
         StateChanged?.Invoke(this, EventArgs.Empty);
@@ -136,7 +196,11 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
 
     private void SetFrame(double frame)
     {
-        if (SetProperty(ref _frame, frame, nameof(Frame))) OnPropertyChanged(nameof(FrameText));
+        if (SetProperty(ref _frame, frame, nameof(Frame)))
+        {
+            OnPropertyChanged(nameof(TimeSeconds));
+            OnPropertyChanged(nameof(FrameText));
+        }
     }
 
     private void NotifyPlaying()
@@ -144,6 +208,16 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsPlaying));
         OnPropertyChanged(nameof(PlayIcon));
         StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ParseTime(string text, Action<double> apply)
+    {
+        if (TryParseTime(text, out var timeSeconds))
+        {
+            SetStatus(null);
+            apply(timeSeconds);
+        }
+        else SetStatus("Timeline.InvalidNumber");
     }
 
     private void Parse(string text, Action<double> apply)

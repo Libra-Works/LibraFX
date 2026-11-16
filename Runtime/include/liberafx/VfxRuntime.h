@@ -128,7 +128,7 @@ public:
     std::size_t parameterValueCount() const noexcept;
     // Defaults contain doubles and need at least defaultsAlignment() alignment.
     std::size_t defaultsAlignment() const noexcept;
-    std::size_t bindingCount() const noexcept { return version_ == 3 ? nodeCount_ : 0; }
+    std::size_t bindingCount() const noexcept { return version_ >= 3 && bindings_ != nullptr ? nodeCount_ : 0; }
     std::uint16_t version() const noexcept { return version_; }
 
 private:

@@ -4,6 +4,9 @@
 #include "LibraEffectComponent.h"
 #include "LibraNativeState.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/CommandLine.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Parse.h"
 
 namespace {
 auto ScalarBytecode(double value) -> TArray<uint8>
@@ -41,6 +44,60 @@ bool FLibraAssetBytecodeTest::RunTest(const FString& parameters)
     TestTrue(TEXT("Failed replacement preserves the previous asset"),
         FMemory::Memcmp(asset->GetBytecode().GetData(), original.GetData(), original.Num()) == 0);
     TestEqual(TEXT("Previous asset stays valid"), asset->ValidateBytecode(), ELibraRuntimeResult::Ok);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraGroupSignalFixtureTest,
+    "Libra.Runtime.Binding.GroupSignalFixture",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraGroupSignalFixtureTest::RunTest(const FString&)
+{
+    auto directory = FString{};
+    if (!FParse::Value(FCommandLine::Get(), TEXT("LibraGroupSignalFixture="), directory) || directory.IsEmpty())
+    {
+        AddInfo(TEXT("GroupSignalFixture requires an explicit isolated fixture directory."));
+        return true;
+    }
+    auto bytes = TArray<uint8>{};
+    auto entryText = FString{};
+    if (!TestTrue(TEXT("Fixture bytecode and entry ID load"),
+        FFileHelper::LoadFileToArray(bytes, *(directory / TEXT("signal-program.lfxb"))) &&
+        FFileHelper::LoadFileToString(entryText, *(directory / TEXT("signal-entry.txt"))))) return false;
+    auto entry = FGuid{};
+    if (!TestTrue(TEXT("Fixture entry ID is valid"), FGuid::Parse(entryText, entry)) ||
+        !TestTrue(TEXT("Fixture includes v4 FCurve bytecode"), bytes.Num() >= 16 && bytes[4] == 4)) return false;
+    auto asset = NewObject<ULibraEffectAsset>();
+    if (!TestEqual(TEXT("Unreal effect asset accepts Group Signal with FCurve"),
+        asset->SetBytecode(bytes), ELibraRuntimeResult::Ok)) return false;
+    auto component = NewObject<ULibraEffectComponent>();
+    auto handle = FLibraSignalHandle{};
+    TestEqual(TEXT("Unreal effect component accepts the compiled asset"),
+        component->SetEffect(asset), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Unreal effect component binds the authored Signal"),
+        component->BindSignal(entry, handle), ELibraRuntimeResult::Ok);
+    component->Stop();
+    auto compiled = FCompiledLibraProgram(bytes);
+    if (!TestTrue(TEXT("Unreal registry resolves the builtin Signal nodes"), compiled.result == liberafx::Result::Ok))
+        return false;
+    auto workBytes = compiled.program.workBytes();
+    auto work = static_cast<double*>(FMemory::Malloc(workBytes, compiled.program.workAlignment()));
+    if (!TestNotNull(TEXT("Caller-owned work memory"), work)) return false;
+    auto instance = liberafx::Instance{};
+    auto initialized = instance.initialize(compiled.program, work, workBytes / sizeof(double));
+    if (TestTrue(TEXT("Fixture instance initializes"), initialized == liberafx::Result::Ok))
+    {
+        auto enqueue = [](void*, liberafx::Job job, void* context) noexcept -> bool { job(context); return true; };
+        auto evaluated = instance.updateAsync(0, enqueue, nullptr);
+        TestTrue(TEXT("Fixture evaluates"), evaluated == liberafx::Result::Ok && instance.result() == liberafx::Result::Ok);
+        uint8 entryBytes[16]{};
+        LibraNodeIdBytes(entry, entryBytes);
+        TestTrue(TEXT("Three instructions cannot traverse all four Signal nodes"),
+            instance.dispatchSignal(entryBytes, 0, 3) == liberafx::Result::InstructionBudgetExceeded);
+        TestTrue(TEXT("Four instructions traverse the explicit Group Signal chain"),
+            instance.dispatchSignal(entryBytes, 0, 4) == liberafx::Result::Ok);
+    }
+    FMemory::Free(work);
     return true;
 }
 

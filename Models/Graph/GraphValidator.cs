@@ -4,10 +4,14 @@ public static class GraphValidator
 {
     public static void Validate(GraphSnapshot snapshot) => Validate(snapshot, new HashSet<Guid>(), 0);
 
-    public static void Validate(GraphSnapshot snapshot, HashSet<Guid> allIds, int depth) =>
-        Validate(snapshot, allIds, depth, false);
+    public static void ValidateDocument(GraphSnapshot snapshot) =>
+        Validate(snapshot, new HashSet<Guid>(), 0, false, null, true);
 
-    private static void Validate(GraphSnapshot snapshot, HashSet<Guid> allIds, int depth, bool insideSpawnable)
+    public static void Validate(GraphSnapshot snapshot, HashSet<Guid> allIds, int depth) =>
+        Validate(snapshot, allIds, depth, false, null, false);
+
+    private static void Validate(GraphSnapshot snapshot, HashSet<Guid> allIds, int depth, bool insideSpawnable,
+        GraphNodeKind? parentKind, bool isDocumentRoot)
     {
         if (depth > 12) throw new InvalidDataException("The graph hierarchy is too deep.");
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -20,6 +24,9 @@ public static class GraphValidator
         {
             if (insideSpawnable && node is not null && node.Kind == GraphNodeKind.SpawnableGroup)
                 throw new InvalidDataException("Nested Spawnable Groups are not supported.");
+            if (node is not null && (isDocumentRoot || parentKind is not null && parentKind != GraphNodeKind.GraphGroup) &&
+                (GroupBoundarySchema.IsInput(node.Kind) || GroupBoundarySchema.IsOutput(node.Kind)))
+                throw new InvalidDataException("Group boundary nodes must be directly inside a Graph Group.");
             if (node is null || node.Id == Guid.Empty || !allIds.Add(node.Id) ||
                 string.IsNullOrWhiteSpace(node.Name) || !double.IsFinite(node.X) || !double.IsFinite(node.Y) ||
                 !definitions.TryGetValue(node.Kind, out var definition) ||
@@ -45,14 +52,15 @@ public static class GraphValidator
                         parameter.Type.Length > 128 || !RenderNodeSchema.IsValidParameterValue(definition, parameter)))
                     throw new InvalidDataException("The project contains invalid node parameters.");
             }
+            RenderNodeSchema.ValidateNodeParameters(definition, node.Parameters);
+            if (node.ChildGraph is not null)
+                Validate(node.ChildGraph, allIds, depth + 1,
+                    insideSpawnable || node.Kind == GraphNodeKind.SpawnableGroup, node.Kind, false);
             if (node.Kind == GraphNodeKind.SpawnableGroup &&
                 node.ChildGraph!.Nodes.Count(child => SpawnableGroupSchema.IsInput(child.Kind)) > SpawnableGroupSchema.MaxInputs)
                 throw new InvalidDataException("A Spawnable Group supports at most four input ports.");
-            effectiveDefinitions.Add(node.Id, SpawnableGroupSchema.Effective(
-                RenderNodeSchema.Effective(definition, node.Parameters), node.ChildGraph));
-            RenderNodeSchema.ValidateNodeParameters(definition, node.Parameters);
-            if (node.ChildGraph is not null)
-                Validate(node.ChildGraph, allIds, depth + 1, insideSpawnable || node.Kind == GraphNodeKind.SpawnableGroup);
+            effectiveDefinitions.Add(node.Id, GroupBoundarySchema.Effective(SpawnableGroupSchema.Effective(
+                RenderNodeSchema.Effective(definition, node.Parameters), node.ChildGraph), node.ChildGraph));
         }
 
         var connections = new HashSet<(Guid SourceId, string? SourcePortId, Guid TargetId, string? TargetPortId)>();
@@ -63,7 +71,6 @@ public static class GraphValidator
                 !nodes.TryGetValue(connection.SourceNodeId, out var source) ||
                 !nodes.TryGetValue(connection.TargetNodeId, out var target) ||
                 source.Id == target.Id ||
-                source.Kind == GraphNodeKind.GraphGroup || target.Kind == GraphNodeKind.GraphGroup ||
                 source.Kind == GraphNodeKind.Comment || target.Kind == GraphNodeKind.Comment ||
                 effectiveDefinitions[source.Id].GetOutputPortType(connection.SourcePortId) is null ||
                 effectiveDefinitions[target.Id].GetInputPortType(connection.TargetPortId) is null ||

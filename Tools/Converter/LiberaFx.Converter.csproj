@@ -17,6 +17,8 @@
     <Compile Include="..\..\Models\Graph\GraphPolymorphism.cs" Link="Models\GraphPolymorphism.cs" />
     <Compile Include="..\..\Models\Graph\GraphTypeDiagnostics.cs" Link="Models\GraphTypeDiagnostics.cs" />
     <Compile Include="..\..\Models\Graph\SpawnableGroupSchema.cs" Link="Models\SpawnableGroupSchema.cs" />
+    <Compile Include="..\..\Models\Graph\GroupBoundarySchema.cs" Link="Models\GroupBoundarySchema.cs" />
+    <Compile Include="..\..\Models\Graph\GroupBoundaryLowering.cs" Link="Models\GroupBoundaryLowering.cs" />
     <Compile Include="..\..\Models\Graph\RenderNodeSchema.cs" Link="Models\RenderNodeSchema.cs" />
     <Compile Include="..\..\Models\Graph\GraphSnapshot.cs" Link="Models\GraphSnapshot.cs" />
     <Compile Include="..\..\Models\Graph\GraphValidator.cs" Link="Models\GraphValidator.cs" />

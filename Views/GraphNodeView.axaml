@@ -89,6 +89,7 @@
                 </ItemsControl>
                 <TextBlock x:Name="PortTypeLabel" Grid.Column="1"
                            Text="{Binding DisplayPortType}"
+                           IsVisible="{Binding ShowPortType}"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource EffectMutedForegroundBrush}" />

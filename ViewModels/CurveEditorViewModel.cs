@@ -50,17 +50,42 @@ public sealed class CurveEditorViewModel : Tool
     public bool HasKey => SelectedKey is not null;
     public IReadOnlyList<FCurveKey> SelectedKeys => Curve?.Keys.Where(key => _selectedKeyIds.Contains(key.Id)).ToArray() ?? [];
     public bool HasSelectedKeys => SelectedKeys.Count > 0;
+    public double SnapDisplayTime(double displayTime)
+    {
+        if (!SnapToFrames) return displayTime;
+        var framesPerUnit = Playback?.ShowSeconds == true ? Playback.FramesPerSecond : 1;
+        return Math.Round(displayTime * framesPerUnit) / framesPerUnit;
+    }
     public FCurveKey? SelectedKey => SelectedKeys.Count == 1 ? SelectedKeys[0] : null;
     public IReadOnlyList<CurveInterpolation> Interpolations { get; } = Enum.GetValues<CurveInterpolation>();
     public string Status { get => LocalizationService.Shared.Get(_status); private set => SetProperty(ref _status, value); }
     public bool SnapToFrames { get => _snapToFrames; set => SetProperty(ref _snapToFrames, value); }
+    public string TimeUnitLabel => Playback?.TimeUnitLabel ?? "Timeline.Seconds";
     public IRelayCommand AddKeyCommand { get; }
     public IRelayCommand DeleteKeyCommand { get; }
 
-    public string FrameText { get => Format(SelectedKey?.Frame); set => ChangeNumeric(value, (k, n) => k with { Frame = n }); }
+    public string FrameText
+    {
+        get => SelectedKey is { } key ? Playback?.FormatTime(key.TimeSeconds) ?? Format(key.TimeSeconds) : "";
+        set
+        {
+            if (Playback is null) ChangeNumeric(value, (k, n) => k with { TimeSeconds = n });
+            else if (Playback.TryParseTime(value, out var timeSeconds))
+                ChangeValue(timeSeconds, (k, n) => k with { TimeSeconds = n });
+            else RejectNumber();
+        }
+    }
     public string ValueText { get => Format(SelectedKey?.Value); set => ChangeNumeric(value, (k, n) => k with { Value = n }); }
-    public string InSlopeText { get => Format(SelectedKey?.InSlope); set => ChangeNumeric(value, (k, n) => k with { InSlope = n }); }
-    public string OutSlopeText { get => Format(SelectedKey?.OutSlope); set => ChangeNumeric(value, (k, n) => k with { OutSlope = n }); }
+    public string InSlopeText
+    {
+        get => Format(SelectedKey is { } key ? Playback?.DisplaySlope(key.InSlope) ?? key.InSlope : null);
+        set => ChangeSlope(value, incoming: true);
+    }
+    public string OutSlopeText
+    {
+        get => Format(SelectedKey is { } key ? Playback?.DisplaySlope(key.OutSlope) ?? key.OutSlope : null);
+        set => ChangeSlope(value, incoming: false);
+    }
 
     public CurveInterpolation SelectedInterpolation
     {
@@ -78,6 +103,13 @@ public sealed class CurveEditorViewModel : Tool
         if (playback is not null) playback.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(EditorPlayback.Frame)) OnPropertyChanged(nameof(PlayheadFrame));
+            if (e.PropertyName is nameof(EditorPlayback.FramesPerSecond) or nameof(EditorPlayback.ShowSeconds))
+            {
+                OnPropertyChanged(nameof(TimeUnitLabel));
+                OnPropertyChanged(nameof(FrameText));
+                OnPropertyChanged(nameof(InSlopeText));
+                OnPropertyChanged(nameof(OutSlopeText));
+            }
         };
         _activeGraph = activeGraph;
         _graph = activeGraph.Graph;
@@ -147,13 +179,13 @@ public sealed class CurveEditorViewModel : Tool
         NotifyCurve();
     }
 
-    public void AddKey(double frame, double value)
+    public void AddKey(double timeSeconds, double value)
     {
-        if (_node?.Curve is not { } curve || !double.IsFinite(frame) || !double.IsFinite(value)) return;
-        var key = new FCurveKey(Guid.NewGuid(), frame, value, 0, 0, CurveInterpolation.Linear);
+        if (_node?.Curve is not { } curve || !double.IsFinite(timeSeconds) || !double.IsFinite(value)) return;
+        var key = new FCurveKey(Guid.NewGuid(), timeSeconds, value, 0, 0, CurveInterpolation.Linear);
         try
         {
-            var updated = new FCurveSnapshot(curve.Keys.Append(key).OrderBy(item => item.Frame).ToArray());
+            var updated = new FCurveSnapshot(curve.Keys.Append(key).OrderBy(item => item.TimeSeconds).ToArray());
             _graph.SetCurve(_node, updated, LocalizationService.Shared.Get("Messages.History.AddCurveKey"));
             _selectedKeyIds.Clear();
             _selectedKeyIds.Add(key.Id);
@@ -166,7 +198,7 @@ public sealed class CurveEditorViewModel : Tool
     public void PreviewKey(FCurveKey key)
     {
         if (_node?.Curve is not { } curve) return;
-        var keys = curve.Keys.Select(item => item.Id == key.Id ? key : item).OrderBy(item => item.Frame).ToArray();
+        var keys = curve.Keys.Select(item => item.Id == key.Id ? key : item).OrderBy(item => item.TimeSeconds).ToArray();
         try
         {
             var preview = new FCurveSnapshot(keys);
@@ -179,15 +211,15 @@ public sealed class CurveEditorViewModel : Tool
         catch (InvalidDataException) { _preview = null; NotifyCurve(); }
     }
 
-    public void PreviewKeys(IReadOnlyList<FCurveKey> selected, double frameDelta, double valueDelta)
+    public void PreviewKeys(IReadOnlyList<FCurveKey> selected, double timeDeltaSeconds, double valueDelta)
     {
         if (_node?.Curve is not { } curve || selected.Count == 0) return;
         var changed = selected.ToDictionary(key => key.Id,
-            key => key with { Frame = key.Frame + frameDelta, Value = key.Value + valueDelta });
+            key => key with { TimeSeconds = key.TimeSeconds + timeDeltaSeconds, Value = key.Value + valueDelta });
         try
         {
             var preview = new FCurveSnapshot(curve.Keys.Select(key => changed.GetValueOrDefault(key.Id, key))
-                .OrderBy(key => key.Frame).ToArray());
+                .OrderBy(key => key.TimeSeconds).ToArray());
             FCurve.Validate(preview);
             _previewRevision ??= _graph.History.CurrentNodeId;
             _preview = preview;
@@ -218,7 +250,7 @@ public sealed class CurveEditorViewModel : Tool
     {
         if (Curve is not { } curve) return;
         var last = curve.Keys.LastOrDefault();
-        AddKey(last is null ? 0 : last.Frame + 10, last?.Value ?? 0);
+        AddKey(last is null ? 0 : last.TimeSeconds + 10 / (Playback?.FramesPerSecond ?? 60), last?.Value ?? 0);
     }
 
     private void DeleteSelectedKeys()
@@ -235,12 +267,35 @@ public sealed class CurveEditorViewModel : Tool
         if (SelectedKey is { } key &&
             double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value) &&
             double.IsFinite(value))
-            CommitKey(change(key, value), LocalizationService.Shared.Get("Messages.History.EditCurveKey"));
+            ChangeValue(value, change);
         else
+            RejectNumber();
+    }
+
+    private void ChangeSlope(string? text, bool incoming)
+    {
+        if (SelectedKey is not { } key ||
+            !double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value) ||
+            !double.IsFinite(value))
         {
-            Status = "Messages.EnterFiniteNumber";
-            NotifyCurve();
+            RejectNumber();
+            return;
         }
+        var slopePerSecond = Playback?.SlopePerSecond(value) ?? value;
+        ChangeValue(slopePerSecond, (current, slope) => incoming
+            ? current with { InSlope = slope } : current with { OutSlope = slope });
+    }
+
+    private void ChangeValue(double value, Func<FCurveKey, double, FCurveKey> change)
+    {
+        if (SelectedKey is { } key)
+            CommitKey(change(key, value), LocalizationService.Shared.Get("Messages.History.EditCurveKey"));
+    }
+
+    private void RejectNumber()
+    {
+        Status = "Messages.EnterFiniteNumber";
+        NotifyCurve();
     }
 
     private void CommitKey(FCurveKey key, string description)
@@ -249,7 +304,7 @@ public sealed class CurveEditorViewModel : Tool
         try
         {
             var updated = new FCurveSnapshot(curve.Keys.Select(item => item.Id == key.Id ? key : item)
-                .OrderBy(item => item.Frame).ToArray());
+                .OrderBy(item => item.TimeSeconds).ToArray());
             _graph.SetCurve(_node, updated, description);
             Status = "Messages.CurveKeyUpdated";
         }

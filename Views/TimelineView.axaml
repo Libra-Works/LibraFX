@@ -15,7 +15,9 @@
                               ToolTip.Tip="{DynamicResource Text.Timeline.StepForward}" AutomationProperties.Name="{DynamicResource Text.Timeline.StepForward}" />
             <views:IconButton Icon="Frame" Click="OnFrameAllClick"
                               ToolTip.Tip="{DynamicResource Text.Panels.FrameAll}" AutomationProperties.Name="{DynamicResource Text.Panels.FrameAll}" />
-            <TextBlock Text="{DynamicResource Text.Panels.Frame}" VerticalAlignment="Center" />
+            <CheckBox Content="{DynamicResource Text.Timeline.UseSeconds}" IsChecked="{Binding Playback.ShowSeconds}"
+                      VerticalAlignment="Center" />
+            <TextBlock Text="{Binding Playback.TimeUnitLabel}" VerticalAlignment="Center" />
             <TextBox Width="80" Text="{Binding Playback.FrameText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
             <TextBlock Text="{DynamicResource Text.Timeline.Range}" VerticalAlignment="Center" />
             <TextBox Width="70" Text="{Binding Playback.StartText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />

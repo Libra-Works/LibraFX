@@ -1,11 +1,22 @@
 #include "LibraNativeNodes.h"
 #include "LibraNativeNodesInternal.h"
+#include "liberafx/BuiltinSignals.h"
 
 namespace {
 auto CurrentRegistry() -> TSharedRef<const FLibraNodeRegistrySnapshot, ESPMode::ThreadSafe>&
 {
-    static auto snapshot = TSharedRef<const FLibraNodeRegistrySnapshot, ESPMode::ThreadSafe>(
-        MakeShared<FLibraNodeRegistrySnapshot, ESPMode::ThreadSafe>());
+    static auto snapshot = [] {
+        auto initial = MakeShared<FLibraNodeRegistrySnapshot, ESPMode::ThreadSafe>();
+        auto descriptor = liberafx::CustomNodeDescriptor{};
+        const auto& typeId = liberafx::signalPassthroughTypeId;
+        FMemory::Memcpy(descriptor.typeId, typeId.data(), typeId.size());
+        descriptor.abiVersion = 1;
+        descriptor.execution = liberafx::CustomExecution::Signal;
+        descriptor.branchCount = 1;
+        descriptor.function = liberafx::signalPassthrough;
+        initial->descriptors.Add(descriptor);
+        return TSharedRef<const FLibraNodeRegistrySnapshot, ESPMode::ThreadSafe>(initial);
+    }();
     return snapshot;
 }
 

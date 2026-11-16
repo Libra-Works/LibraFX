@@ -1,0 +1,1 @@
+{"schemaVersion":1,"typeId":"1774de17-a97b-4e31-b200-000000000015","namespace":"LiberaFx","kind":"GroupOutputColor","name":"Group Output (Color)","displayNameKey":"Editor.Node.GroupOutputColor","group":"Group boundary","portType":"Color","portCategory":"Parameter","outputPorts":[],"parameters":[{"id":"value","name":"Default","type":"color","defaultValue":[0,0,0,1]}]}

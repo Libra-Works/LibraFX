@@ -110,7 +110,7 @@ public sealed class LiberaFxMcpTools
         });
 
     [McpServerTool(Name = "libera_graph_compile", ReadOnly = true, OpenWorld = false)]
-    [Description("Compile a numeric graph to VFX bytecode. Graphs containing Spawnable Group must use libera_graph_compile_spawnable so child templates are retained.")]
+    [Description("Compile a numeric graph to VFX bytecode. Graphs containing Signal, lifecycle, Spawn boundaries, or Spawnable Group must use libera_graph_compile_spawnable.")]
     public static async Task<string> CompileGraph(ActiveGraphProvider activeGraph)
     {
         var snapshot = await Dispatcher.UIThread.InvokeAsync(() => activeGraph.Graph.CreateCurrentSnapshot());
@@ -149,7 +149,7 @@ public sealed class LiberaFxMcpTools
         });
 
     [McpServerTool(Name = "libera_graph_compile_spawnable", ReadOnly = true, OpenWorld = false)]
-    [Description("Compile an immutable parent LFXB program and separate Spawnable Group template programs, capture-at-spawn input mappings, render configurations and GPU container snapshots. Runtime signals enqueue instances, not editor graph copies. Engine adapters are responsible for consuming lifecycle events; no engine objects are created by this tool.")]
+    [Description("Compile Signal or Spawnable graphs to an immutable parent LFXB program and any separate Spawnable template programs, capture-at-spawn mappings, render configurations and GPU snapshots. This also supports Signal graphs without Spawnable Groups. Signals connected to a Spawnable enqueue runtime instances, not editor graph copies. Engine adapters consume lifecycle events; no engine objects are created by this tool.")]
     public static async Task<string> CompileSpawnable(ActiveGraphProvider activeGraph)
     {
         var snapshot = await Dispatcher.UIThread.InvokeAsync(() => activeGraph.Graph.CreateCurrentSnapshot());
@@ -212,12 +212,34 @@ public sealed class LiberaFxMcpTools
             GraphValidator.Validate(snapshot);
             var problems = GraphTypeDiagnostics.Analyze(snapshot);
             if (problems.Count != 0) throw new McpException("Fix graph type mismatches before resolving runtime outputs.");
-            var result = GraphPolymorphism.LowerWithOutputs(snapshot);
+            if (node.Definition.Kind == GraphNodeKind.GraphGroup && node.ChildGraph is { } child)
+            {
+                var outputs = child.Nodes.Where(item => GroupBoundarySchema.IsOutput(item.Kind) &&
+                    item.PortCategory == GraphPortCategory.Parameter).ToArray();
+                if (outputs.Length == 0) throw new McpException("This group has no numeric output pins.");
+                var matrixOutputs = outputs.Any(item => item.PortType == "Matrix")
+                    ? GraphPolymorphism.LowerWithOutputs(GroupBoundaryLowering.LowerGroupContents(snapshot)) : null;
+                return JsonSerializer.Serialize(new
+                {
+                    authoringNodeId = node.Id,
+                    outputs = outputs.Select(item => new
+                    {
+                        portId = GroupBoundarySchema.OutputPortId(item.Id),
+                        type = item.PortType,
+                        bindings = item.PortType == "Matrix"
+                            ? matrixOutputs!.Outputs[(item.Id, "value")].Select((binding, index) =>
+                                new { row = (int?)index, runtimeNodeId = binding.NodeId,
+                                    runtimePortId = binding.PortId, sourceComponent = 0 }).ToArray()
+                            : new[] { new { row = (int?)null, runtimeNodeId = item.Id,
+                                runtimePortId = (string?)null, sourceComponent = 0 } }
+                    })
+                }, JsonOptions);
+            }
+            var result = GraphPolymorphism.LowerWithOutputs(GroupBoundaryLowering.LowerGroupContents(snapshot));
             var lowered = result.Graph.Nodes.ToDictionary(item => item.Id);
             var definition = GraphPolymorphism.Resolve(snapshot)[node.Id];
             var ports = definition.OutputPorts?.Select(port => (string?)port.Id).ToArray() ?? [null];
-            if (definition.Kind == GraphNodeKind.GraphGroup ||
-                ports.Any(port => definition.GetOutputPortType(port) is not ("Float" or "FloatX2" or "FloatX3" or "FloatX4" or "Color" or "Matrix")))
+            if (ports.Any(port => definition.GetOutputPortType(port) is not ("Float" or "FloatX2" or "FloatX3" or "FloatX4" or "Color" or "Matrix")))
                 throw new McpException("Runtime value bindings are available only for numeric and Matrix output pins.");
             return JsonSerializer.Serialize(new
             {
@@ -226,7 +248,8 @@ public sealed class LiberaFxMcpTools
                 {
                     portId = port,
                     type = definition.GetOutputPortType(port),
-                    bindings = result.Outputs[(node.Id, port)].Select((binding, index) =>
+                    bindings = result.Outputs[(node.Id,
+                        GroupBoundarySchema.IsInput(node.Definition.Kind) && node.PortType == "Matrix" ? "value" : port)].Select((binding, index) =>
                     {
                         var runtime = GraphNodeDefinition.All.Single(item => item.Kind == lowered[binding.NodeId].Kind);
                         var component = runtime.TypeName.StartsWith("BreakVector", StringComparison.Ordinal)
@@ -257,6 +280,31 @@ public sealed class LiberaFxMcpTools
                 childGraph = group.ChildGraph
             }, JsonOptions);
         });
+
+    [McpServerTool(Name = "libera_graph_describe_group", ReadOnly = true, OpenWorld = false)]
+    [Description("Describe an ordinary Group's scoped Property and Signal pins. Port IDs are stable within this instance and are used by libera_graph_connect_nodes. Name is the boundary node's authored name; displayName is the label shown on the group pin.")]
+    public static async Task<string> DescribeGroup(ActiveGraphProvider activeGraph, string nodeId) =>
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var group = FindNode(activeGraph.Graph, nodeId);
+            if (group.Definition.Kind != GraphNodeKind.GraphGroup || group.ChildGraph is null)
+                throw new McpException("Node is not an ordinary Graph Group.");
+            return JsonSerializer.Serialize(new
+            {
+                containerId = group.Id,
+                inputs = group.ChildGraph.Nodes.Where(node => GroupBoundarySchema.IsInput(node.Kind))
+                    .Select(node => new { portId = GroupBoundarySchema.InputPortId(node.Id),
+                        boundaryNodeId = node.Id, node.Name,
+                        displayName = group.InputPorts.Single(port => port.Id == GroupBoundarySchema.InputPortId(node.Id)).Name,
+                        node.PortType, node.PortCategory }),
+                outputs = group.ChildGraph.Nodes.Where(node => GroupBoundarySchema.IsOutput(node.Kind))
+                    .Select(node => new { portId = GroupBoundarySchema.OutputPortId(node.Id),
+                        boundaryNodeId = node.Id, node.Name,
+                        displayName = group.OutputPorts.Single(port => port.Id == GroupBoundarySchema.OutputPortId(node.Id)).Name,
+                        node.PortType, node.PortCategory })
+            }, JsonOptions);
+        });
+
     [McpServerTool(Name = "libera_graph_connect_nodes", Destructive = false, OpenWorld = false)]
     [Description("Connect the output of the source node to the input of the target node.")]
     public static async Task<string> ConnectNodes(

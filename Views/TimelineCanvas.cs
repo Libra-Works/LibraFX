@@ -45,13 +45,19 @@ public sealed class TimelineCanvas : Control
     }
     private void Changed(object? sender, PropertyChangedEventArgs e) => InvalidateVisual();
     private double Scale => Math.Max(1, Bounds.Width - NameWidth) / Math.Max(1, _end - _start);
-    private double X(double frame) => NameWidth + (frame - _start) * Scale;
-    private double Frame(double x) => _start + (x - NameWidth) / Scale;
+    private double X(double displayTime) => NameWidth + (displayTime - _start) * Scale;
+    private double DisplayTime(double timeSeconds) => _model?.Playback.DisplayUnits(timeSeconds) ?? timeSeconds;
+    private double TimeSeconds(double displayTime) => _model?.Playback.TimeSecondsFromDisplay(displayTime) ?? displayTime;
+    private double DisplayPosition(double x) => _start + (x - NameWidth) / Scale;
+    private double SnapDisplayTime(double displayTime) =>
+        _model?.Playback.ShowSeconds == true ? displayTime : Math.Round(displayTime);
 
     public void FrameAll()
     {
-        _start = Math.Min(_model?.Playback.RangeStart ?? 0, _model?.Tracks.Select(track => track.Start).DefaultIfEmpty(0).Min() ?? 0);
-        _end = Math.Max(_model?.Playback.RangeEnd ?? 120, _model?.Tracks.Select(track => track.Start + track.Duration).DefaultIfEmpty(120).Max() ?? 120);
+        _start = Math.Min(_model is null ? 0 : DisplayTime(_model.Playback.RangeStartSeconds),
+            _model?.Tracks.Select(track => DisplayTime(track.Start)).DefaultIfEmpty(0).Min() ?? 0);
+        _end = Math.Max(_model is null ? 2 : DisplayTime(_model.Playback.RangeEndSeconds),
+            _model?.Tracks.Select(track => DisplayTime(track.Start + track.Duration)).DefaultIfEmpty(2).Max() ?? 2);
         if (_end <= _start) _end = _start + 1;
         InvalidateVisual();
     }
@@ -78,14 +84,16 @@ public sealed class TimelineCanvas : Control
             context.DrawLine(grid, new(0, y + 31), new(Bounds.Width, y + 31));
             using (context.PushClip(new Rect(4, y, NameWidth - 8, 31)))
                 DrawText(context, track.Name, new(6, y + 8), label);
-            var start = track.Start + (ReferenceEquals(track, _drag) && !_stretching ? _previewDelta : 0);
-            var duration = track.Duration + (ReferenceEquals(track, _drag) && _stretching ? _previewDelta : 0);
+            var start = DisplayTime(track.Start) +
+                (ReferenceEquals(track, _drag) && !_stretching ? _previewDelta : 0);
+            var end = DisplayTime(track.Start + track.Duration) +
+                (ReferenceEquals(track, _drag) && _stretching ? _previewDelta : 0);
             using (context.PushClip(new Rect(NameWidth, Header, Math.Max(0, Bounds.Width - NameWidth), Math.Max(0, Bounds.Height - Header))))
                 context.DrawRectangle(ThemeSettingsService.EditorBrush("CurveLine"),
                     new Pen(ThemeSettingsService.EditorBrush(track == _model.SelectedTrack ? "CurveSelected" : "CurveHandle")),
-                    new Rect(X(start), y + 5, Math.Max(6, duration * Scale), 21), 3, 3);
+                    new Rect(X(start), y + 5, Math.Max(6, (end - start) * Scale), 21), 3, 3);
         }
-        var playhead = X(_model.Playback.Frame);
+        var playhead = X(DisplayTime(_model.Playback.TimeSeconds));
         if (playhead >= NameWidth)
             context.DrawLine(new Pen(ThemeSettingsService.EditorBrush("CurveSelected"), 2), new(playhead, 0), new(playhead, Bounds.Height));
     }
@@ -107,15 +115,17 @@ public sealed class TimelineCanvas : Control
             var track = _model.Tracks[index];
             _model.Select(track);
             if (position.X < NameWidth || track.Node.Curve?.Keys.Count == 0) return;
-            if (position.X < X(track.Start) - 4 || position.X > X(track.Start + track.Duration) + 7) return;
+            if (position.X < X(DisplayTime(track.Start)) - 4 ||
+                position.X > X(DisplayTime(track.Start + track.Duration)) + 7) return;
             _drag = track;
-            _stretching = track.CanStretch && Math.Abs(position.X - X(track.Start + track.Duration)) <= 7;
+            _stretching = track.CanStretch &&
+                Math.Abs(position.X - X(DisplayTime(track.Start + track.Duration))) <= 7;
             _revision = _model.Revision;
         }
         _pointerStart = position;
         _previewDelta = 0;
         e.Pointer.Capture(this);
-        if (_scrubbing) _model.Playback.Frame = Math.Round(Frame(position.X));
+        if (_scrubbing) _model.Playback.TimeSeconds = TimeSeconds(SnapDisplayTime(DisplayPosition(position.X)));
         e.Handled = true;
     }
 
@@ -123,8 +133,13 @@ public sealed class TimelineCanvas : Control
     {
         base.OnPointerMoved(e);
         if (_model is null) return;
-        if (_scrubbing) _model.Playback.Frame = Math.Round(Frame(e.GetPosition(this).X));
-        else if (_drag is not null) _previewDelta = Math.Round((e.GetPosition(this).X - _pointerStart.X) / Scale);
+        if (_scrubbing)
+            _model.Playback.TimeSeconds = TimeSeconds(SnapDisplayTime(DisplayPosition(e.GetPosition(this).X)));
+        else if (_drag is not null)
+        {
+            _previewDelta = (e.GetPosition(this).X - _pointerStart.X) / Scale;
+            if (_model.Playback.ShowSeconds == false) _previewDelta = Math.Round(_previewDelta);
+        }
         InvalidateVisual();
     }
 
@@ -132,8 +147,11 @@ public sealed class TimelineCanvas : Control
     {
         base.OnPointerReleased(e);
         if (_drag is { } track && _model?.Revision == _revision)
-            _model.Retime(track, track.Start + (_stretching ? 0 : _previewDelta),
-                track.Duration + (_stretching ? _previewDelta : 0));
+        {
+            var deltaSeconds = _model.Playback.SecondsFromDisplayDelta(_previewDelta);
+            _model.Retime(track, track.Start + (_stretching ? 0 : deltaSeconds),
+                track.Duration + (_stretching ? deltaSeconds : 0));
+        }
         _drag = null;
         _scrubbing = false;
         _previewDelta = 0;
@@ -155,7 +173,7 @@ public sealed class TimelineCanvas : Control
         base.OnPointerWheelChanged(e);
         var point = e.GetPosition(this);
         if (point.X < NameWidth) return;
-        var anchor = Frame(point.X);
+        var anchor = DisplayPosition(point.X);
         var ratio = (anchor - _start) / (_end - _start);
         var duration = Math.Clamp((_end - _start) / Math.Pow(1.15, e.Delta.Y), 1, 2_000_000);
         _start = Math.Clamp(anchor - duration * ratio, -1_000_000, 1_000_000 - duration);

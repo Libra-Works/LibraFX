@@ -86,14 +86,14 @@ public sealed class TimelineViewModel : Tool
             SetStatus("Timeline.InvalidClip");
             return;
         }
-        var oldStart = curve.Keys[0].Frame;
-        var oldDuration = curve.Keys[^1].Frame - oldStart;
+        var oldStart = curve.Keys[0].TimeSeconds;
+        var oldDuration = curve.Keys[^1].TimeSeconds - oldStart;
         var scale = oldDuration == 0 ? 1 : duration / oldDuration;
         try
         {
             var updated = new FCurveSnapshot(curve.Keys.Select(key => key with
             {
-                Frame = start + (key.Frame - oldStart) * scale,
+                TimeSeconds = start + (key.TimeSeconds - oldStart) * scale,
                 InSlope = key.InSlope / scale,
                 OutSlope = key.OutSlope / scale
             }).ToArray());
@@ -112,15 +112,14 @@ public sealed class TimelineTrackViewModel(TimelineViewModel owner, GraphNodeVie
 {
     public GraphNodeViewModel Node { get; } = node;
     public string Name => Node.Name;
-    public double Start => Node.Curve?.Keys.FirstOrDefault()?.Frame ?? 0;
-    public double Duration => (Node.Curve?.Keys.LastOrDefault()?.Frame ?? Start) - Start;
+    public double Start => Node.Curve?.Keys.FirstOrDefault()?.TimeSeconds ?? 0;
+    public double Duration => (Node.Curve?.Keys.LastOrDefault()?.TimeSeconds ?? Start) - Start;
     public bool CanStretch => Node.Curve?.Keys.Count > 1;
-    public string StartText { get => Format(Start); set => Parse(value, start => owner.Retime(this, start, Duration)); }
-    public string DurationText { get => Format(Duration); set => Parse(value, duration => owner.Retime(this, Start, duration)); }
+    public string StartText { get => owner.Playback.FormatTime(Start); set => Parse(value, start => owner.Retime(this, start, Duration)); }
+    public string DurationText { get => owner.Playback.FormatTime(Duration); set => Parse(value, duration => owner.Retime(this, Start, duration)); }
     private void Parse(string text, Action<double> apply)
     {
-        if (double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value) && double.IsFinite(value)) apply(value);
+        if (owner.Playback.TryParseTime(text, out var value)) apply(value);
         else owner.RejectNumber();
     }
-    private static string Format(double value) => value.ToString("0.###", CultureInfo.CurrentCulture);
 }

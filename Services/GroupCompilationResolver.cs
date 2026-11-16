@@ -45,10 +45,16 @@ public sealed class GroupCompilationResolver(IReadOnlyList<GroupAssetLibrary> li
         {
             if (useEmbedded || port is null or "spawn" or "then" or "destroy") return port;
             var original = graph.Nodes.First(node => node.Id == nodeId);
-            if (original.Kind != GraphNodeKind.SpawnableGroup || original.GroupAsset is null || original.ChildGraph is null)
+            var kind = original.Kind;
+            if ((kind != GraphNodeKind.SpawnableGroup && kind != GraphNodeKind.GraphGroup) ||
+                original.GroupAsset is null || original.ChildGraph is null)
                 return port;
-            bool IsBoundary(GraphNodeSnapshot node) => output ? SpawnableGroupSchema.IsOutput(node.Kind) : SpawnableGroupSchema.IsInput(node.Kind);
-            string Port(Guid id) => output ? SpawnableGroupSchema.OutputPortId(id) : SpawnableGroupSchema.PortId(id);
+            bool IsBoundary(GraphNodeSnapshot node) => kind == GraphNodeKind.GraphGroup
+                ? output ? GroupBoundarySchema.IsOutput(node.Kind) : GroupBoundarySchema.IsInput(node.Kind)
+                : output ? SpawnableGroupSchema.IsOutput(node.Kind) : SpawnableGroupSchema.IsInput(node.Kind);
+            string Port(Guid id) => kind == GraphNodeKind.GraphGroup
+                ? output ? GroupBoundarySchema.OutputPortId(id) : GroupBoundarySchema.InputPortId(id)
+                : output ? SpawnableGroupSchema.OutputPortId(id) : SpawnableGroupSchema.PortId(id);
             var input = original.ChildGraph.Nodes.FirstOrDefault(node =>
                 IsBoundary(node) && Port(node.Id) == port);
             if (input is null) return port;
@@ -60,11 +66,11 @@ public sealed class GroupCompilationResolver(IReadOnlyList<GroupAssetLibrary> li
                 if (index >= 0) source = baseline.Nodes[index];
             }
             if (source is null || !IsBoundary(source))
-                throw new InvalidDataException($"Linked Spawnable Group boundary '{input.Name}' cannot be matched to its saved revision.");
+                throw new InvalidDataException($"Linked group boundary '{input.Name}' cannot be matched to its saved revision.");
             var resolved = nodes.First(node => node.Id == original.Id);
             var derived = DeriveId(original.Id, source.Id);
             if (!resolved.ChildGraph!.Nodes.Any(node => node.Id == derived && IsBoundary(node)))
-                throw new InvalidDataException($"Linked Spawnable Group boundary '{input.Name}' no longer exists.");
+                throw new InvalidDataException($"Linked group boundary '{input.Name}' no longer exists.");
             return Port(derived);
         }
         var connections = graph.Connections.Select(connection => connection with
@@ -119,26 +125,11 @@ public sealed class GroupCompilationResolver(IReadOnlyList<GroupAssetLibrary> li
         {
             SourceNodeId = ids[connection.SourceNodeId],
             TargetNodeId = ids[connection.TargetNodeId],
-            SourcePortId = RemapPort(graph.Nodes.Single(node => node.Id == connection.SourceNodeId),
+            SourcePortId = SpawnableGroupSchema.RemapPort(graph.Nodes.Single(node => node.Id == connection.SourceNodeId),
                 nodes.Single(node => node.Id == ids[connection.SourceNodeId]).ChildGraph, connection.SourcePortId),
-            TargetPortId = RemapPort(graph.Nodes.Single(node => node.Id == connection.TargetNodeId),
+            TargetPortId = SpawnableGroupSchema.RemapPort(graph.Nodes.Single(node => node.Id == connection.TargetNodeId),
                 nodes.Single(node => node.Id == ids[connection.TargetNodeId]).ChildGraph, connection.TargetPortId)
         }).ToArray());
-    }
-
-    private static string? RemapPort(GraphNodeSnapshot original, GraphSnapshot? clone, string? port)
-    {
-        if (original.Kind != GraphNodeKind.SpawnableGroup || original.ChildGraph is null || clone is null) return port;
-        for (var i = 0; i < original.ChildGraph.Nodes.Count; ++i)
-        {
-            if (SpawnableGroupSchema.IsInput(original.ChildGraph.Nodes[i].Kind) &&
-                SpawnableGroupSchema.PortId(original.ChildGraph.Nodes[i].Id) == port)
-                return SpawnableGroupSchema.PortId(clone.Nodes[i].Id);
-            if (SpawnableGroupSchema.IsOutput(original.ChildGraph.Nodes[i].Kind) &&
-                SpawnableGroupSchema.OutputPortId(original.ChildGraph.Nodes[i].Id) == port)
-                return SpawnableGroupSchema.OutputPortId(clone.Nodes[i].Id);
-        }
-        return port;
     }
 
     private static Guid DeriveId(Guid scope, Guid source)

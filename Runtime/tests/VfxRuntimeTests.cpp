@@ -14,6 +14,9 @@
 #include <limits>
 #include <thread>
 #include <vector>
+#ifdef _MSC_VER
+#include <crtdbg.h>
+#endif
 
 namespace {
 
@@ -58,6 +61,77 @@ void writeDouble(std::vector<std::uint8_t>& bytes, std::size_t offset, double va
     std::memcpy(&bits, &value, sizeof(value));
     for (auto index = 0u; index < 8; ++index)
         bytes[offset + index] = static_cast<std::uint8_t>(bits >> (index * 8));
+}
+
+auto curveFixture(std::uint8_t interpolation) -> std::vector<std::uint8_t>
+{
+    auto bytes = std::vector<std::uint8_t>(16 + 256 + 2 * 40);
+    std::memcpy(bytes.data(), "LFXB", 4);
+    write16(bytes, 4, 4);
+    bytes[6] = 1;
+    write32(bytes, 8, 1);
+    write16(bytes, 12, 256);
+    auto instruction = std::size_t{16};
+    bytes[instruction + 15] = 1;
+    bytes[instruction + 16] = 42;
+    bytes[instruction + 17] = 1;
+    write32(bytes, instruction + 24, 0xffffffffu);
+    write32(bytes, instruction + 28, 0xffffffffu);
+    write32(bytes, instruction + 224, 0);
+    write32(bytes, instruction + 228, 2);
+    auto first = std::size_t{272};
+    writeDouble(bytes, first, 0);
+    writeDouble(bytes, first + 8, 0);
+    writeDouble(bytes, first + 24, 2);
+    bytes[first + 32] = interpolation;
+    auto second = first + 40;
+    writeDouble(bytes, second, 1);
+    writeDouble(bytes, second + 8, 1);
+    return bytes;
+}
+
+void verifyCurve(std::uint8_t interpolation, double time, double expected)
+{
+    auto bytes = curveFixture(interpolation);
+    auto program = liberafx::Program{};
+    assert(liberafx::Program::load(bytes.data(), bytes.size(), program) == liberafx::Result::Ok);
+    assert(program.version() == 4 && program.nodeCount() == 1 &&
+           program.workBytes() == 4 * sizeof(double) && program.workAlignment() == 16);
+    alignas(16) auto work = std::array<double, 4>{};
+    auto defaults = std::array<double, 16>{};
+    auto instance = liberafx::Instance{};
+    auto queue = Queue{};
+    assert(instance.initialize(program, work.data(), work.size(), defaults.data(), defaults.size()) ==
+           liberafx::Result::Ok);
+    assert(instance.updateAsync(time, enqueue, &queue) == liberafx::Result::Ok);
+    run(queue);
+    auto value = double{};
+    assert(instance.value(bytes.data() + 16, value) == liberafx::Result::Ok);
+    assert(std::abs(value - expected) < 1e-12);
+}
+
+void verifyCurveBytecode()
+{
+    verifyCurve(0, 0.5, 0);
+    verifyCurve(1, 0.25, 0.25);
+    verifyCurve(2, 0.5, 0.75);
+    verifyCurve(1, -1, 0);
+    verifyCurve(1, 2, 1);
+
+    auto bytes = curveFixture(1);
+    auto program = liberafx::Program{};
+    auto malformed = bytes;
+    write32(malformed, 16 + 224, 81);
+    assert(liberafx::Program::load(malformed.data(), malformed.size(), program) ==
+           liberafx::Result::InvalidBinary);
+    malformed = bytes;
+    writeDouble(malformed, 312, -1);
+    assert(liberafx::Program::load(malformed.data(), malformed.size(), program) ==
+           liberafx::Result::InvalidBinary);
+    malformed = bytes;
+    malformed[272 + 32] = 3;
+    assert(liberafx::Program::load(malformed.data(), malformed.size(), program) ==
+           liberafx::Result::InvalidBinary);
 }
 
 auto fixture() -> std::vector<std::uint8_t>
@@ -408,6 +482,48 @@ void verifyCustom()
     assert(liberafx::Program::load(malformed.data(), malformed.size(), descriptors.data(), descriptors.size(),
                                    bindings.data(), bindings.size(), program) ==
            liberafx::Result::InvalidBinary);
+
+    auto mixed = customFixture();
+    auto customVersionFour = mixed;
+    write16(customVersionFour, 4, 4);
+    auto customVersionFourBindings = std::array<liberafx::CustomNodeBinding, 3>{};
+    auto customVersionFourProgram = liberafx::Program{};
+    assert(liberafx::Program::load(customVersionFour.data(), customVersionFour.size(),
+        descriptors.data(), descriptors.size(), customVersionFourBindings.data(),
+        customVersionFourBindings.size(), customVersionFourProgram) == liberafx::Result::Ok);
+    mixed.resize(16 + 4 * 256 + 2 * 40);
+    write16(mixed, 4, 4);
+    write32(mixed, 8, 4);
+    auto curveInstruction = std::size_t{16 + 3 * 256};
+    mixed[curveInstruction + 15] = 4;
+    mixed[curveInstruction + 16] = 42;
+    mixed[curveInstruction + 17] = 1;
+    write32(mixed, curveInstruction + 24, 0xffffffffu);
+    write32(mixed, curveInstruction + 28, 0xffffffffu);
+    write32(mixed, curveInstruction + 224, 0);
+    write32(mixed, curveInstruction + 228, 2);
+    auto curveKeys = 16 + 4 * 256;
+    writeDouble(mixed, curveKeys, 0);
+    writeDouble(mixed, curveKeys + 8, 3);
+    mixed[curveKeys + 32] = 1;
+    writeDouble(mixed, curveKeys + 40, 1);
+    writeDouble(mixed, curveKeys + 48, 5);
+    auto mixedProgram = liberafx::Program{};
+    auto mixedBindings = std::array<liberafx::CustomNodeBinding, 4>{};
+    assert(liberafx::Program::load(mixed.data(), mixed.size(), descriptors.data(), descriptors.size(),
+                                   mixedBindings.data(), mixedBindings.size(), mixedProgram) ==
+           liberafx::Result::Ok);
+    alignas(16) auto mixedWork = std::array<double, 16>{};
+    auto mixedDefaults = std::array<double, 64>{};
+    auto mixedInstance = liberafx::Instance{};
+    auto mixedQueue = Queue{};
+    assert(mixedInstance.initialize(mixedProgram, mixedWork.data(), mixedWork.size(),
+                                    mixedDefaults.data(), mixedDefaults.size()) == liberafx::Result::Ok);
+    assert(mixedInstance.updateAsync(0.5, enqueue, &mixedQueue) == liberafx::Result::Ok);
+    run(mixedQueue);
+    auto mixedCurveValue = double{};
+    assert(mixedInstance.value(mixed.data() + curveInstruction, mixedCurveValue) == liberafx::Result::Ok &&
+           mixedCurveValue == 4);
     alignas(16) auto misalignedBindingsStorage =
         std::array<std::uint8_t, sizeof(liberafx::CustomNodeBinding) * 3 + 1>{};
     auto misalignedBindings = reinterpret_cast<liberafx::CustomNodeBinding*>(
@@ -682,10 +798,41 @@ void verifyGeneratedBreak(const std::vector<std::uint8_t>& bytes)
     assert(width == 2 && values[0] == 4 && values[1] == 4);
 }
 
+void verifyGeneratedCurve(const std::vector<std::uint8_t>& bytes)
+{
+    auto program = liberafx::Program{};
+    assert(liberafx::Program::load(bytes.data(), bytes.size(), program) == liberafx::Result::Ok);
+    assert(program.version() == 4 && program.nodeCount() == 1);
+    alignas(16) auto work = std::array<double, 4>{};
+    auto defaults = std::array<double, 16>{};
+    auto instance = liberafx::Instance{};
+    auto queue = Queue{};
+    assert(instance.initialize(program, work.data(), work.size(), defaults.data(), defaults.size()) ==
+           liberafx::Result::Ok);
+    assert(instance.updateAsync(0.5, enqueue, &queue) == liberafx::Result::Ok);
+    run(queue);
+    auto value = double{};
+    assert(instance.value(bytes.data() + 16, value) == liberafx::Result::Ok);
+    assert(std::abs(value - 0.50125) < 1e-12);
+}
+
 auto main(int argc, char** argv) -> int
 {
+#ifdef _MSC_VER
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+#endif
+    if (argc == 3 && std::strcmp(argv[1], "--curve") == 0)
+    {
+        auto input = std::ifstream(argv[2], std::ios::binary);
+        assert(input);
+        auto generated = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(input), {});
+        verifyGeneratedCurve(generated);
+        return 0;
+    }
     auto bytes = fixture();
     verify(bytes);
+    verifyCurveBytecode();
     verifyTyped(typedFixture());
     verifyCustom();
     verifyCustomSignal();
@@ -723,6 +870,13 @@ auto main(int argc, char** argv) -> int
         assert(input);
         auto generated = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(input), {});
         verifyGeneratedBreak(generated);
+    }
+    if (argc > 3)
+    {
+        auto input = std::ifstream(argv[3], std::ios::binary);
+        assert(input);
+        auto generated = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(input), {});
+        verifyGeneratedCurve(generated);
     }
     return 0;
 }

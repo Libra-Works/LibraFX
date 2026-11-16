@@ -13,7 +13,14 @@ sealed class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        using var mutex = new Mutex(false, "LiberaFx.Editor.Singleton");
+        var debugPort = Environment.GetEnvironmentVariable("LIBERAFX_MCP_DEBUG_PORT");
+        var port = 0;
+        var isolatedDebug = Environment.GetEnvironmentVariable("LIBERAFX_MCP_DEBUG") == "1" &&
+            Environment.GetEnvironmentVariable("LIBERAFX_DEBUG_ISOLATED_INSTANCE") == "1" &&
+            int.TryParse(debugPort, out port) && port is >= 1024 and <= 65535 &&
+            Path.IsPathFullyQualified(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT") ?? "");
+        using var mutex = new Mutex(false, isolatedDebug
+            ? $"LiberaFx.Editor.Debug.{port}" : "LiberaFx.Editor.Singleton");
         var acquired = false;
         try
         {

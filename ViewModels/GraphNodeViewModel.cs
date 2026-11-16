@@ -43,10 +43,12 @@ public sealed class GraphNodeViewModel : ObservableObject
     public GroupAssetReference? GroupAsset { get; private set; }
     public bool IsGraphGroup => ChildGraph is not null;
     public bool IsSpawnableGroup => Definition.Kind == GraphNodeKind.SpawnableGroup;
-    public bool ShowGroupHint => IsGraphGroup && !IsSpawnableGroup;
+    public bool ShowGroupHint => IsGraphGroup && !IsSpawnableGroup && !HasCustomInputs && !HasCustomOutputs;
     public bool IsGpuParticle => GpuParticleEditorService.IsGpu(Definition.Kind);
     public bool IsComment => Definition.Kind == GraphNodeKind.Comment;
-    public bool HasPorts => !IsGpuParticle && (!IsGraphGroup || IsSpawnableGroup) && !IsComment;
+    public bool HasPorts => !IsGpuParticle && !IsComment && (!IsGraphGroup ||
+        IsSpawnableGroup || Definition.InputPorts is { Count: > 0 } || Definition.OutputPorts is { Count: > 0 });
+    public bool ShowPortType => Definition.Kind != GraphNodeKind.GraphGroup;
     public bool HasLegacyInput => HasPorts && Definition.InputPorts is null;
     public bool HasCustomInputs => HasPorts && Definition.InputPorts is { Count: > 0 };
     public IReadOnlyList<GraphInputPortDefinition> InputPorts => Definition.InputPorts ?? [];
@@ -148,7 +150,8 @@ public sealed class GraphNodeViewModel : ObservableObject
         _workspace = workspace;
         _baseDefinition = definition;
         IsPolymorphic = isPolymorphic;
-        _definition = SpawnableGroupSchema.Effective(RenderNodeSchema.Effective(definition, parameters), childGraph);
+        _definition = GroupBoundarySchema.Effective(
+            SpawnableGroupSchema.Effective(RenderNodeSchema.Effective(definition, parameters), childGraph), childGraph);
         Id = id ?? Guid.NewGuid();
         _name = name;
         _x = x;

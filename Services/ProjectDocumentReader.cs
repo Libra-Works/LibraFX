@@ -62,7 +62,7 @@ public static class ProjectDocumentReader
 
     private static void ValidateGraph(GraphSnapshot snapshot)
     {
-        try { GraphValidator.Validate(snapshot); }
+        try { GraphValidator.ValidateDocument(snapshot); }
         catch (ArgumentNullException ex)
         {
             throw new InvalidDataException("The project contains an incomplete graph snapshot.", ex);

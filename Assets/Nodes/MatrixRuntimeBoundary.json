@@ -1,0 +1,1 @@
+{"schemaVersion":1,"typeId":"b0af61d2-29f6-4cc9-a71e-00000000000e","namespace":"LiberaFx","kind":"MatrixRuntimeBoundary","name":"Internal Matrix Boundary","group":"Matrices","portType":"Matrix","portCategory":"Parameter","inputPorts":[{"id":"matrix","name":"Matrix","portType":"Matrix"}],"outputPorts":[{"id":"value","name":"Matrix","portType":"Matrix"}]}

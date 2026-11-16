@@ -107,6 +107,20 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("f54171ee-4aa3-498b-b2ff-8c9983fc1501")] = "FloatFCurve",
         [Guid.Parse("149e6e41-9976-4b69-a74c-3f6e6b254e5a")] = "GraphGroup",
         [Guid.Parse("c0bc50ea-c514-41a2-9b28-9c2c931d2821")] = "SpawnableGroup",
+        [Guid.Parse("1774de17-a97b-4e31-b200-000000000001")] = "GroupInputFloat",
+        [Guid.Parse("1774de17-a97b-4e31-b200-000000000002")] = "GroupInputVector2",
+        [Guid.Parse("1774de17-a97b-4e31-b200-000000000003")] = "GroupInputVector3",
+        [Guid.Parse("1774de17-a97b-4e31-b200-000000000004")] = "GroupInputVector4",
+        [Guid.Parse("1774de17-a97b-4e31-b200-000000000005")] = "GroupInputColor",
+        [Guid.Parse("1774de17-a97b-4e31-b200-000000000006")] = "GroupInputSignal",
+        [Guid.Parse("1774de17-a97b-4e31-b200-000000000007")] = "GroupInputMatrix",
+        [Guid.Parse("1774de17-a97b-4e31-b200-000000000011")] = "GroupOutputFloat",
+        [Guid.Parse("1774de17-a97b-4e31-b200-000000000012")] = "GroupOutputVector2",
+        [Guid.Parse("1774de17-a97b-4e31-b200-000000000013")] = "GroupOutputVector3",
+        [Guid.Parse("1774de17-a97b-4e31-b200-000000000014")] = "GroupOutputVector4",
+        [Guid.Parse("1774de17-a97b-4e31-b200-000000000015")] = "GroupOutputColor",
+        [Guid.Parse("1774de17-a97b-4e31-b200-000000000016")] = "GroupOutputSignal",
+        [Guid.Parse("1774de17-a97b-4e31-b200-000000000017")] = "GroupOutputMatrix",
         [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000001")] = "LifeTime",
         [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000002")] = "OnStart",
         [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000003")] = "SpawnOutputVector3",
@@ -217,7 +231,8 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000000a")] = "MatrixRuntimeDecomposePosition",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000000b")] = "MatrixRuntimeDecomposeRotation",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000000c")] = "MatrixRuntimeDecomposeScale",
-        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000000d")] = "MatrixRuntimeDecomposeValid"
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000000d")] = "MatrixRuntimeDecomposeValid",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000000e")] = "MatrixRuntimeBoundary"
     };
 
     private static readonly List<string> Warnings = [];
@@ -442,7 +457,9 @@ public sealed record GraphNodeDefinition(
                     throw new InvalidDataException("Signal output ports must use the Signal type.");
                 outputs.Add(new GraphOutputPortDefinition(port.Id!, port.Name, port.PortType, portCategory));
             }
-            if (outputs.Count == 0 && node.TypeId != Guid.Parse("57980d8e-701f-443c-91f6-8db56a09d2fc"))
+            if (outputs.Count == 0 && node.TypeId != Guid.Parse("57980d8e-701f-443c-91f6-8db56a09d2fc") &&
+                !(BuiltInIds.TryGetValue(node.TypeId, out var builtInKind) &&
+                  GroupBoundarySchema.IsOutput(new GraphNodeKind(builtInKind))))
                 throw new InvalidDataException("Output port definitions must not be empty.");
         }
         var parameterIds = new HashSet<string>(StringComparer.Ordinal);

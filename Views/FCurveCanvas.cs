@@ -81,7 +81,8 @@ public sealed class FCurveCanvas : Control
             DrawKeys(context, curve);
         if (_model.PlayheadFrame is { } frame)
         {
-            var x = _origin.X + frame * _scaleX;
+            var displayTime = _model.Playback?.DisplayUnits(_model.Playback.TimeSeconds) ?? frame;
+            var x = _origin.X + displayTime * _scaleX;
             context.DrawLine(new Pen(SelectedBrush, 1.5), new Point(x, 0), new Point(x, Bounds.Height));
         }
         if (_dragMode == DragMode.Select)
@@ -115,8 +116,8 @@ public sealed class FCurveCanvas : Control
             return;
         }
 
-        var minX = keys.Min(key => key.Frame);
-        var maxX = keys.Max(key => key.Frame);
+        var minX = keys.Min(key => DisplayTime(key.TimeSeconds));
+        var maxX = keys.Max(key => DisplayTime(key.TimeSeconds));
         var minY = keys.Min(key => key.Value);
         var maxY = keys.Max(key => key.Value);
         var width = Math.Max(10, maxX - minX);
@@ -168,44 +169,48 @@ public sealed class FCurveCanvas : Control
     {
         var keys = curve.Keys;
         if (keys.Count == 0) return;
-        var leftFrame = -_origin.X / _scaleX;
-        var rightFrame = (Bounds.Width - _origin.X) / _scaleX;
-        if (leftFrame < keys[0].Frame)
-            context.DrawLine(curvePen, ToPoint(leftFrame, keys[0].Value), ToPoint(Math.Min(rightFrame, keys[0].Frame), keys[0].Value));
+        var leftTime = -_origin.X / _scaleX;
+        var rightTime = (Bounds.Width - _origin.X) / _scaleX;
+        var firstKeyTime = DisplayTime(keys[0].TimeSeconds);
+        if (leftTime < firstKeyTime)
+            context.DrawLine(curvePen, ToPoint(leftTime, keys[0].Value), ToPoint(Math.Min(rightTime, firstKeyTime), keys[0].Value));
         for (var i = 0; i < keys.Count - 1; i++)
         {
             var left = keys[i];
             var right = keys[i + 1];
-            if (right.Frame < leftFrame || left.Frame > rightFrame) continue;
+            var leftDisplayTime = DisplayTime(left.TimeSeconds);
+            var rightDisplayTime = DisplayTime(right.TimeSeconds);
+            if (rightDisplayTime < leftTime || leftDisplayTime > rightTime) continue;
             if (left.Interpolation == CurveInterpolation.Constant)
             {
-                context.DrawLine(curvePen, ToPoint(left.Frame, left.Value), ToPoint(right.Frame, left.Value));
-                context.DrawLine(curvePen, ToPoint(right.Frame, left.Value), ToPoint(right.Frame, right.Value));
+                context.DrawLine(curvePen, ToPoint(leftDisplayTime, left.Value), ToPoint(rightDisplayTime, left.Value));
+                context.DrawLine(curvePen, ToPoint(rightDisplayTime, left.Value), ToPoint(rightDisplayTime, right.Value));
                 continue;
             }
 
-            var start = Math.Max(left.Frame, leftFrame);
-            var end = Math.Min(right.Frame, rightFrame);
+            var start = Math.Max(leftDisplayTime, leftTime);
+            var end = Math.Min(rightDisplayTime, rightTime);
             var count = left.Interpolation == CurveInterpolation.Linear ? 1 :
                 Math.Clamp((int)Math.Ceiling((end - start) * _scaleX / 4), 1, 2000);
-            var last = ToPoint(start, FCurve.Evaluate(curve, start));
+            var last = ToPoint(start, FCurve.Evaluate(curve, TimeSeconds(start)));
             for (var sample = 1; sample <= count; sample++)
             {
-                var frame = start + (end - start) * sample / count;
-                var next = ToPoint(frame, FCurve.Evaluate(curve, frame));
+                var displayTime = start + (end - start) * sample / count;
+                var next = ToPoint(displayTime, FCurve.Evaluate(curve, TimeSeconds(displayTime)));
                 context.DrawLine(curvePen, last, next);
                 last = next;
             }
         }
-        if (rightFrame > keys[^1].Frame)
-            context.DrawLine(curvePen, ToPoint(Math.Max(leftFrame, keys[^1].Frame), keys[^1].Value), ToPoint(rightFrame, keys[^1].Value));
+        var lastKeyTime = DisplayTime(keys[^1].TimeSeconds);
+        if (rightTime > lastKeyTime)
+            context.DrawLine(curvePen, ToPoint(Math.Max(leftTime, lastKeyTime), keys[^1].Value), ToPoint(rightTime, keys[^1].Value));
     }
 
     private void DrawKeys(DrawingContext context, FCurveSnapshot curve)
     {
         foreach (var key in curve.Keys)
         {
-            var point = ToPoint(key.Frame, key.Value);
+            var point = ToPoint(DisplayTime(key.TimeSeconds), key.Value);
             if (point.X < -150 || point.X > Bounds.Width + 150) continue;
             if (_model?.SelectedKey?.Id == key.Id)
             {
@@ -225,14 +230,16 @@ public sealed class FCurveCanvas : Control
         context.DrawEllipse(SelectedBrush, null, handle, 4, 4);
     }
 
-    private Point ToPoint(double frame, double value) =>
-        new(Math.Clamp(_origin.X + frame * _scaleX, -1_000_000, 1_000_000),
+    private Point ToPoint(double displayTime, double value) =>
+        new(Math.Clamp(_origin.X + displayTime * _scaleX, -1_000_000, 1_000_000),
             Math.Clamp(_origin.Y - value * _scaleY, -1_000_000, 1_000_000));
 
     private Point HandlePoint(FCurveKey key, bool incoming)
     {
         var delta = (incoming ? -40 : 40) / _scaleX;
-        return ToPoint(key.Frame + delta, key.Value + delta * (incoming ? key.InSlope : key.OutSlope));
+        var slope = incoming ? key.InSlope : key.OutSlope;
+        return ToPoint(DisplayTime(key.TimeSeconds) + delta,
+            key.Value + delta * (_model?.Playback?.DisplaySlope(slope) ?? slope));
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
@@ -256,9 +263,9 @@ public sealed class FCurveCanvas : Control
         Focus();
         if (e.ClickCount >= 2)
         {
-            var frame = (point.X - _origin.X) / _scaleX;
-            if (_model.SnapToFrames) frame = Math.Round(frame);
-            _model.AddKey(frame, (_origin.Y - point.Y) / _scaleY);
+            var displayTime = (point.X - _origin.X) / _scaleX;
+            displayTime = _model.SnapDisplayTime(displayTime);
+            _model.AddKey(TimeSeconds(displayTime), (_origin.Y - point.Y) / _scaleY);
             e.Handled = true;
             return;
         }
@@ -277,7 +284,7 @@ public sealed class FCurveCanvas : Control
         }
         if (_dragMode == DragMode.None)
         {
-            _dragKey = curve.Keys.Reverse().FirstOrDefault(key => Near(point, ToPoint(key.Frame, key.Value)));
+            _dragKey = curve.Keys.Reverse().FirstOrDefault(key => Near(point, ToPoint(DisplayTime(key.TimeSeconds), key.Value)));
             var additive = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Shift);
             if (_dragKey is not null)
             {
@@ -321,15 +328,17 @@ public sealed class FCurveCanvas : Control
         {
             if (_dragMode == DragMode.Key)
             {
-                var frame = key.Frame + (point.X - _pointerStart.X) / _scaleX;
-                if (_model.SnapToFrames) frame = Math.Round(frame);
-                _model.PreviewKeys(_dragKeys, frame - key.Frame, -(point.Y - _pointerStart.Y) / _scaleY);
+                var displayTime = DisplayTime(key.TimeSeconds) + (point.X - _pointerStart.X) / _scaleX;
+                displayTime = _model.SnapDisplayTime(displayTime);
+                _model.PreviewKeys(_dragKeys, TimeSeconds(displayTime) - key.TimeSeconds,
+                    -(point.Y - _pointerStart.Y) / _scaleY);
             }
             else
             {
-                var origin = ToPoint(key.Frame, key.Value);
+                var origin = ToPoint(DisplayTime(key.TimeSeconds), key.Value);
                 var delta = (_dragMode == DragMode.InSlope ? -40 : 40) / _scaleX;
                 var slope = Math.Clamp((origin.Y - point.Y) / _scaleY / delta, -1_000_000, 1_000_000);
+                slope = _model.Playback?.SlopePerSecond(slope) ?? slope;
                 _model.PreviewKey(_dragMode == DragMode.InSlope ? key with { InSlope = slope } : key with { OutSlope = slope });
             }
         }
@@ -344,7 +353,7 @@ public sealed class FCurveCanvas : Control
         if (mode == DragMode.Select && _model?.Curve is { } curve)
         {
             var rect = SelectionRect(_pointerStart, e.GetPosition(this)).Inflate(2);
-            _model.SelectKeys(curve.Keys.Where(key => rect.Contains(ToPoint(key.Frame, key.Value)))
+            _model.SelectKeys(curve.Keys.Where(key => rect.Contains(ToPoint(DisplayTime(key.TimeSeconds), key.Value)))
                 .Select(key => key.Id), _selectionAdditive);
         }
         _dragMode = DragMode.None;
@@ -386,6 +395,9 @@ public sealed class FCurveCanvas : Control
         _origin = new Point(point.X - frame * _scaleX, point.Y + value * _scaleY);
         InvalidateVisual();
     }
+
+    private double DisplayTime(double timeSeconds) => _model?.Playback?.DisplayUnits(timeSeconds) ?? timeSeconds;
+    private double TimeSeconds(double displayTime) => _model?.Playback?.TimeSecondsFromDisplay(displayTime) ?? displayTime;
 
     protected override void OnKeyDown(KeyEventArgs e)
     {

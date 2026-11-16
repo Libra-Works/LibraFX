@@ -12,7 +12,7 @@ public static class GraphMatrixLowering
 {
     private static readonly HashSet<string> Kinds =
         ["MatrixCompose", "MatrixBreak", "Transform", "MatrixMultiply", "TransformPoint",
-            "TransformDirection", "MatrixInverse", "DecomposeTransform"];
+            "TransformDirection", "MatrixInverse", "DecomposeTransform", "MatrixRuntimeBoundary"];
 
     public static bool IsMatrixNode(GraphNodeKind kind) => Kinds.Contains(kind.Value);
 
@@ -131,6 +131,9 @@ public static class GraphMatrixLowering
 
                     switch (node.Kind.Value)
                     {
+                        case "MatrixRuntimeBoundary":
+                            Output("value", Matrix("matrix"));
+                            break;
                         case "MatrixCompose":
                             Output("value", Enumerable.Range(0, 4).Select(row => Numeric($"row{row}", 4)).ToArray());
                             break;

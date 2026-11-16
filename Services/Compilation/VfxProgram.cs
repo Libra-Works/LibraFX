@@ -16,7 +16,7 @@ public enum VfxOpcode : byte
     Vector2ToVector3 = 29, Vector2ToVector4 = 30, Vector3ToVector2 = 31,
     Vector3ToVector4 = 32, Vector4ToVector2 = 33, Vector4ToVector3 = 34,
     MaskVector2 = 35, MaskVector3 = 36, MaskVector4 = 37,
-    ColorToVector4 = 38, Vector4ToColor = 39
+    ColorToVector4 = 38, Vector4ToColor = 39, FCurve = 42
 }
 
 public readonly record struct VfxInstruction(
@@ -34,6 +34,8 @@ public readonly record struct VfxCustomInstruction(
     Guid NodeId, byte Opcode, int OutputWidth, bool OutputIsColor, Guid TypeId, int AbiVersion,
     int BranchCount, VfxCustomInput[] Inputs, int[] BranchTargets);
 
+public readonly record struct VfxCurveInstruction(Guid NodeId, FCurveKey[] Keys);
+
 public sealed class VfxProgram
 {
     private const int HeaderSize = 12;
@@ -41,27 +43,34 @@ public sealed class VfxProgram
     private const int TypedHeaderSize = 16;
     private const int TypedInstructionSize = 96;
     private const int MaxInstructions = 10000;
+    private const int CurveInstructionSize = 256;
+    private const int CurveKeySize = 40;
+    private const int MaxCurveKeysTotal = 100000;
     private readonly VfxInstruction[] _instructions;
     private readonly VfxTypedInstruction[] _typedInstructions;
     private readonly VfxCustomInstruction[] _customInstructions;
+    private readonly VfxCurveInstruction[] _curveInstructions;
     private readonly ushort _version;
 
     public IReadOnlyList<VfxInstruction> Instructions { get; }
     public IReadOnlyList<VfxTypedInstruction> TypedInstructions { get; }
     public IReadOnlyList<VfxCustomInstruction> CustomInstructions { get; }
+    public IReadOnlyList<VfxCurveInstruction> CurveInstructions { get; }
     public ushort BinaryVersion => _version;
     public int WorkSizeBytes => checked(_instructions.Length * (_version == 1 ? sizeof(double) : 4 * sizeof(double)));
 
     private VfxProgram(VfxInstruction[] instructions, VfxTypedInstruction[] typedInstructions,
-        VfxCustomInstruction[] customInstructions, ushort version)
+        VfxCustomInstruction[] customInstructions, VfxCurveInstruction[] curveInstructions, ushort version)
     {
         _instructions = instructions;
         _typedInstructions = typedInstructions;
         _customInstructions = customInstructions;
+        _curveInstructions = curveInstructions;
         _version = version;
         Instructions = Array.AsReadOnly(instructions);
         TypedInstructions = Array.AsReadOnly(typedInstructions);
         CustomInstructions = Array.AsReadOnly(customInstructions);
+        CurveInstructions = Array.AsReadOnly(curveInstructions);
     }
 
     public static VfxProgram Compile(GraphSnapshot graph)
@@ -69,7 +78,8 @@ public sealed class VfxProgram
         ValidateForCompilation(graph);
         if (ContainsSpawnable(graph))
             throw new InvalidDataException("Compile Spawnable Groups with SpawnableGroupPackage so templates are not discarded.");
-        if (Flatten(graph).Any(node => node.Kind == GraphNodeKind.Signal || SpawnableGroupSchema.IsInput(node.Kind) ||
+        if (Flatten(graph).Any(node => node.Kind == GraphNodeKind.Signal ||
+            node.Kind.Value is "GroupInputSignal" or "GroupOutputSignal" || SpawnableGroupSchema.IsInput(node.Kind) ||
             SpawnableGroupSchema.IsOutput(node.Kind) || node.Kind.Value is "LifeTime" or "OnStart"))
             throw new InvalidDataException("Signal, lifecycle and Spawn boundary nodes require a Spawnable Group package.");
         return CompileForPackage(graph);
@@ -89,6 +99,7 @@ public sealed class VfxProgram
                     problem.NodeId, problem.InputPortId ?? "input", problem.SourceNodeId,
                     problem.SourceType, problem.ExpectedType))));
 #endif
+        graph = GroupBoundaryLowering.Lower(graph);
         graph = GraphPolymorphism.Lower(graph);
         _ = RenderProgramBindings.CreateScene(graph, 0);
         var nodes = Flatten(graph)
@@ -119,6 +130,7 @@ public sealed class VfxProgram
         if (order.Count != nodes.Length) throw new InvalidDataException("The graph contains a cycle.");
         var indices = order.Select((node, index) => (node.Id, index)).ToDictionary(item => item.Id, item => item.index);
         var typedCode = new VfxTypedInstruction[order.Count];
+        var curveCode = new List<VfxCurveInstruction>();
         var needsTyped = false;
         for (var index = 0; index < order.Count; index++)
         {
@@ -199,7 +211,12 @@ public sealed class VfxProgram
                 return indices[source.Id];
             }
 
-            if (opcode is VfxOpcode.Scalar or VfxOpcode.Vector2 or VfxOpcode.Vector3 or VfxOpcode.Vector4 or VfxOpcode.Color)
+            if (opcode == VfxOpcode.FCurve)
+            {
+                if (node.Curve is null) throw new InvalidDataException($"Node '{node.Name}' has no F-Curve data.");
+                curveCode.Add(new VfxCurveInstruction(node.Id, node.Curve.Keys.ToArray()));
+            }
+            else if (opcode is VfxOpcode.Scalar or VfxOpcode.Vector2 or VfxOpcode.Vector3 or VfxOpcode.Vector4 or VfxOpcode.Color)
             {
                 var width = outputWidth;
                 double[] values = node.PortType == "Float" ? [Parameter("value")] :
@@ -255,10 +272,11 @@ public sealed class VfxProgram
                 inputA, inputB, defaultA, defaultB);
         }
 
-        var version = needsTyped ? (ushort)2 : (ushort)1;
+        ValidateCurveBudget(curveCode);
+        var version = curveCode.Count != 0 ? (ushort)4 : needsTyped ? (ushort)2 : (ushort)1;
         var legacy = typedCode.Select(item => new VfxInstruction(item.NodeId, item.Opcode, item.InputA, item.InputB,
             item.DefaultA[0], item.DefaultB[0])).ToArray();
-        return new VfxProgram(legacy, typedCode, [], version);
+        return new VfxProgram(legacy, typedCode, [], curveCode.ToArray(), version);
     }
 
     private static VfxProgram CompileWithCustomNodes(
@@ -284,6 +302,7 @@ public sealed class VfxProgram
             .ToDictionary(item => item.Id, item => item.index);
         var typedCode = new VfxTypedInstruction[order.Count];
         var customCode = new List<VfxCustomInstruction>();
+        var curveCode = new List<VfxCurveInstruction>();
         var effective = nodes.ToDictionary(node => node.Id, node =>
         {
             var definition = SpawnableGroupSchema.Effective(definitions[node.Kind], node.ChildGraph);
@@ -456,7 +475,12 @@ public sealed class VfxProgram
                 return value.EnumerateArray().Select(item => item.GetDouble()).ToArray();
             }
 
-            if (opcode is VfxOpcode.Scalar or VfxOpcode.Vector2 or VfxOpcode.Vector3 or VfxOpcode.Vector4 or VfxOpcode.Color)
+            if (opcode == VfxOpcode.FCurve)
+            {
+                if (node.Curve is null) throw new InvalidDataException($"Node '{node.Name}' has no F-Curve data.");
+                curveCode.Add(new VfxCurveInstruction(node.Id, node.Curve.Keys.ToArray()));
+            }
+            else if (opcode is VfxOpcode.Scalar or VfxOpcode.Vector2 or VfxOpcode.Vector3 or VfxOpcode.Vector4 or VfxOpcode.Color)
             {
                 var width = outputWidth;
                 var values = node.PortType == "Float" ? [Parameter("value")] :
@@ -509,7 +533,9 @@ public sealed class VfxProgram
         }
         var legacy = typedCode.Select(item => new VfxInstruction(item.NodeId, item.Opcode, item.InputA, item.InputB,
             item.DefaultA[0], item.DefaultB[0])).ToArray();
-        return new VfxProgram(legacy, typedCode, customCode.ToArray(), 3);
+        ValidateCurveBudget(curveCode);
+        return new VfxProgram(legacy, typedCode, customCode.ToArray(), curveCode.ToArray(),
+            curveCode.Count != 0 ? (ushort)4 : (ushort)3);
     }
 
     public byte[] ToBinary()
@@ -535,20 +561,24 @@ public sealed class VfxProgram
             return bytes;
         }
 
-        var instructionSize = _version == 3 ? 256 : TypedInstructionSize;
-        var typedBytes = new byte[checked(TypedHeaderSize + _typedInstructions.Length * instructionSize)];
+        var instructionSize = _version >= 3 ? CurveInstructionSize : TypedInstructionSize;
+        var instructionBytes = checked(TypedHeaderSize + _typedInstructions.Length * instructionSize);
+        var curveBytes = checked(_curveInstructions.Sum(item => item.Keys.Length) * CurveKeySize);
+        var typedBytes = new byte[checked(instructionBytes + curveBytes)];
         "LFXB"u8.CopyTo(typedBytes);
         BinaryPrimitives.WriteUInt16LittleEndian(typedBytes.AsSpan(4), _version);
         typedBytes[6] = 1;
         BinaryPrimitives.WriteInt32LittleEndian(typedBytes.AsSpan(8), _typedInstructions.Length);
         BinaryPrimitives.WriteUInt16LittleEndian(typedBytes.AsSpan(12), (ushort)instructionSize);
         var customById = _customInstructions.ToDictionary(item => item.NodeId);
+        var curvesById = _curveInstructions.ToDictionary(item => item.NodeId);
+        var curveOffset = 0;
         for (var index = 0; index < _typedInstructions.Length; index++)
         {
             var span = typedBytes.AsSpan(TypedHeaderSize + index * instructionSize, instructionSize);
             var instruction = _typedInstructions[index];
             instruction.NodeId.TryWriteBytes(span, bigEndian: true, out _);
-            if (_version == 3 && customById.TryGetValue(instruction.NodeId, out var custom))
+            if (_version >= 3 && customById.TryGetValue(instruction.NodeId, out var custom))
             {
                 span[16] = custom.Opcode;
                 span[17] = (byte)custom.OutputWidth;
@@ -590,8 +620,30 @@ public sealed class VfxProgram
                 BinaryPrimitives.WriteDoubleLittleEndian(span[(32 + component * 8)..], instruction.DefaultA[component]);
                 BinaryPrimitives.WriteDoubleLittleEndian(span[(64 + component * 8)..], instruction.DefaultB[component]);
             }
+            if (instruction.Opcode == VfxOpcode.FCurve)
+            {
+                var curve = curvesById[instruction.NodeId];
+                BinaryPrimitives.WriteInt32LittleEndian(span[224..], curveOffset);
+                BinaryPrimitives.WriteInt32LittleEndian(span[228..], curve.Keys.Length);
+                foreach (var key in curve.Keys)
+                {
+                    var keySpan = typedBytes.AsSpan(instructionBytes + curveOffset, CurveKeySize);
+                    BinaryPrimitives.WriteDoubleLittleEndian(keySpan, key.TimeSeconds);
+                    BinaryPrimitives.WriteDoubleLittleEndian(keySpan[8..], key.Value);
+                    BinaryPrimitives.WriteDoubleLittleEndian(keySpan[16..], key.InSlope);
+                    BinaryPrimitives.WriteDoubleLittleEndian(keySpan[24..], key.OutSlope);
+                    keySpan[32] = (byte)key.Interpolation;
+                    curveOffset += CurveKeySize;
+                }
+            }
         }
         return typedBytes;
+    }
+
+    private static void ValidateCurveBudget(IReadOnlyCollection<VfxCurveInstruction> curves)
+    {
+        if (curves.Sum(curve => curve.Keys.Length) > MaxCurveKeysTotal)
+            throw new InvalidDataException("The graph contains too many F-Curve keyframes.");
     }
 
     private static double[] ReadColor(GraphNodeSnapshot node, GraphNodeDefinition definition)
@@ -742,7 +794,8 @@ public sealed class VfxProgram
             "Add" => VfxOpcode.Add, "Subtract" => VfxOpcode.Subtract,
             "Multiply" => VfxOpcode.Multiply, "Divide" => VfxOpcode.Divide,
             "FloatX2" or "SpawnInputVector2" => VfxOpcode.Vector2, "FloatX3" or "SpawnInputVector3" => VfxOpcode.Vector3,
-            "FloatX4" or "SpawnInputVector4" => VfxOpcode.Vector4, "Color" or "SpawnInputColor" => VfxOpcode.Color,
+            "FloatX4" or "SpawnInputVector4" => VfxOpcode.Vector4,
+            "Color" or "SpawnInputColor" or "554aaa8a-74a0-4620-9e28-d1e7bd20ffda" => VfxOpcode.Color,
             "AddVector2" => VfxOpcode.AddVector2, "SubtractVector2" => VfxOpcode.SubtractVector2,
             "MultiplyVector2" => VfxOpcode.MultiplyVector2, "DivideVector2" => VfxOpcode.DivideVector2,
             "AddVector3" => VfxOpcode.AddVector3, "SubtractVector3" => VfxOpcode.SubtractVector3,
@@ -759,6 +812,7 @@ public sealed class VfxProgram
             "MaskVector2" => VfxOpcode.MaskVector2, "MaskVector3" => VfxOpcode.MaskVector3,
             "MaskVector4" => VfxOpcode.MaskVector4, "ColorToVector4" => VfxOpcode.ColorToVector4,
             "Vector4ToColor" => VfxOpcode.Vector4ToColor,
+            "FloatFCurve" => VfxOpcode.FCurve,
             _ => 0
         };
         return opcode != 0;

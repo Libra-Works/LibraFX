@@ -1,0 +1,1 @@
+{"schemaVersion":1,"typeId":"1774de17-a97b-4e31-b200-000000000002","namespace":"LiberaFx","kind":"GroupInputVector2","name":"Group Input (Vector2)","displayNameKey":"Editor.Node.GroupInputVector2","group":"Group boundary","portType":"FloatX2","portCategory":"Parameter","inputPorts":[],"parameters":[{"id":"value","name":"Default","type":"vector2","defaultValue":[0,0]}]}

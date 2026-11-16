@@ -25,6 +25,7 @@
                               ToolTip.Tip="{DynamicResource Text.Panels.ZoomIn}"
                               AutomationProperties.Name="{DynamicResource Text.Panels.ZoomIn}" />
             <CheckBox Content="{DynamicResource Text.Panels.SnapFrames}" IsChecked="{Binding SnapToFrames}" VerticalAlignment="Center" />
+            <CheckBox Content="{DynamicResource Text.Timeline.UseSeconds}" IsChecked="{Binding Playback.ShowSeconds}" VerticalAlignment="Center" />
             <TextBlock Text="{Binding Node.Name}" VerticalAlignment="Center" FontWeight="SemiBold" />
         </StackPanel>
         <Grid Grid.Row="1" ColumnDefinitions="190,*,210">
@@ -58,7 +59,7 @@
                 <StackPanel Margin="8,0" Spacing="4" IsEnabled="{Binding HasKey}">
                     <TextBlock Text="{DynamicResource Text.Panels.SelectedKey}" FontWeight="SemiBold" />
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                        <TextBlock Text="{DynamicResource Text.Panels.Frame}" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding TimeUnitLabel}" VerticalAlignment="Center" />
                         <TextBox Grid.Column="1" Text="{Binding FrameText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
                     </Grid>
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">

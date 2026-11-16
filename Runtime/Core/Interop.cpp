@@ -2,6 +2,7 @@
 #include "liberafx/VfxRuntime.h"
 #include "liberafx/SceneBindings.h"
 #include "liberafx/GeneratorPool.h"
+#include "liberafx/BuiltinSignals.h"
 
 #include <cstring>
 #include <array>
@@ -100,11 +101,6 @@ auto inlineEnqueue(void*, liberafx::Job job, void* data) noexcept -> bool
     job(data);
     return true;
 }
-auto passthroughSignal(liberafx::CustomNodeInvocation& call) noexcept -> liberafx::Result
-{
-    call.selectedBranch = 0;
-    return liberafx::Result::Ok;
-}
 auto spawnSignal(liberafx::CustomNodeInvocation& call) noexcept -> liberafx::Result
 {
     auto& context = *static_cast<SpawnContext*>(call.context);
@@ -186,25 +182,26 @@ LibraResult LIBRA_INTEROP_CALL libra_program_create_spawnable(
     *outProgram = 0;
     return guarded([&]() -> LibraResult {
         if (byteCount < 16 || byteCount > 256ull * 1024 * 1024 ||
-            std::memcmp(bytes, "LFXB", 4) != 0 || bytes[4] != 3 || bytes[5] != 0 ||
+            std::memcmp(bytes, "LFXB", 4) != 0 || (bytes[4] != 3 && bytes[4] != 4) || bytes[5] != 0 ||
             bytes[12] != 0 || bytes[13] != 1) return LIBRA_INVALID_BINARY;
         auto count = std::uint32_t{};
         for (auto i = 0u; i < 4; ++i) count |= std::uint32_t{bytes[8 + i]} << (i * 8);
-        if (count > 10000 || byteCount != 16ull + 256ull * count || bindingCount > count)
+        const auto instructionBytes = 16ull + 256ull * count;
+        if (count > 10000 || byteCount < instructionBytes ||
+            (bytes[4] == 3 && byteCount != instructionBytes) || bindingCount > count)
             return LIBRA_INVALID_BINARY;
         auto native = std::make_shared<NativeProgram>();
         native->bytes.assign(bytes, bytes + static_cast<std::size_t>(byteCount));
         native->bindings.resize(count);
         native->spawnContexts.resize(bindingCount);
         native->descriptors.resize(static_cast<std::size_t>(bindingCount) + 1);
-        const auto passthroughId = std::array<std::uint8_t, 16>{
-            0x98, 0x9f, 0xa5, 0xb5, 0x48, 0x5f, 0x4e, 0x75, 0x85, 0x42, 0x9c, 0x55, 0, 0, 0, 1};
+        const auto& passthroughId = liberafx::signalPassthroughTypeId;
         auto& pass = native->descriptors.back();
         std::memcpy(pass.typeId, passthroughId.data(), 16);
         pass.abiVersion = 1;
         pass.execution = liberafx::CustomExecution::Signal;
         pass.branchCount = 1;
-        pass.function = passthroughSignal;
+        pass.function = liberafx::signalPassthrough;
         for (auto i = 0u; i < bindingCount; ++i) {
             const auto& binding = bindings[i];
             if (binding.inputCount > 4 || binding.reserved ||

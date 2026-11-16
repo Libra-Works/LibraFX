@@ -88,10 +88,30 @@ internal static class MatrixInterfaceTests
             Require(inspector.GetVisualDescendants().OfType<TextBlock>().Any(block =>
                 ToolTip.GetTip(block)?.ToString() == text.Get("Matrix.Parameter.Rotation")),
                 "The compact rotation label must expose its complete axis convention as a localized tooltip.");
+            var group = workspace.CreateNode(GraphNodeKind.GraphGroup, 40, 540);
+            workspace.EnterGraph(group);
+            var groupInput = workspace.CreateNode(new GraphNodeKind("GroupInputMatrix"));
+            var groupOutput = workspace.CreateNode(new GraphNodeKind("GroupOutputMatrix"));
+            Require(workspace.TryConnectNodes(groupInput, groupOutput, out _),
+                "The Group Matrix boundaries must connect internally.");
+            workspace.NavigateToGraph(0);
+            group = workspace.GetNode(group.Id);
+            transform = workspace.GetNode(transform.Id);
+            var direction = workspace.CreateNode(new GraphNodeKind("TransformDirection"), 430, 540);
+            Pump();
+            Connect(transform, "value", group, GroupBoundarySchema.InputPortId(groupInput.Id));
+            Connect(group, GroupBoundarySchema.OutputPortId(groupOutput.Id), direction, "matrix");
+            Require(workspace.Connections.Count == 6 && workspace.TypeProblems.Count == 0,
+                "Real pin clicks must connect both sides of the Group Matrix boundary.");
+            Require(workspace.History.Undo() && workspace.Connections.Count == 5 &&
+                workspace.History.Redo() && workspace.Connections.Count == 6,
+                "A Group Matrix connection must undo and redo.");
+            Pump();
+            Capture("matrix-group-boundary-ja.png");
             File.WriteAllText(Path.Combine(directory, "matrix-ui-observations.json"),
                 JsonSerializer.Serialize(new
                 {
-                    actualNativePointerClicks = 8,
+                    actualNativePointerClicks = 12,
                     nativeWindowInput = true,
                     connections = workspace.Connections.Count,
                     undoRedo = true,

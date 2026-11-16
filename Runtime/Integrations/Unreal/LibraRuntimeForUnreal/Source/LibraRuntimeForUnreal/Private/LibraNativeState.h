@@ -45,11 +45,14 @@ public:
         }
         bytecode.Append(bytes.GetData(), bytes.Num());
         result = liberafx::Program::load(bytecode.GetData(), bytecode.Num(), program, loadProfiler.GetHooks());
-        if (bytecode.Num() >= 16 && bytecode[4] == 3 && bytecode[5] == 0)
+        if (bytecode.Num() >= 16 &&
+            (bytecode[4] == 3 || bytecode[4] == 4) && bytecode[5] == 0)
         {
             auto count = uint32{bytecode[8]} | (uint32{bytecode[9]} << 8) |
                 (uint32{bytecode[10]} << 16) | (uint32{bytecode[11]} << 24);
-            if (count > 10000 || static_cast<uint64>(bytecode.Num()) != 16 + static_cast<uint64>(count) * 256)
+            auto instructionBytes = 16 + static_cast<uint64>(count) * 256;
+            if (count > 10000 || static_cast<uint64>(bytecode.Num()) < instructionBytes ||
+                (bytecode[4] == 3 && static_cast<uint64>(bytecode.Num()) != instructionBytes))
             {
                 result = liberafx::Result::InvalidBinary;
                 return;
