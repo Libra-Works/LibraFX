@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "typeId": "b0af61d2-29f6-4cc9-a71e-000000000101",
+  "namespace": "LiberaFx", "kind": "MatrixCompose", "name": "Compose Matrix",
+  "displayNameKey": "Matrix.Node.Compose", "group": "Matrices", "groupNameKey": "Matrix.Group",
+  "portType": "Matrix", "portCategory": "Parameter",
+  "inputPorts": [
+    { "id": "row0", "name": "Row 0", "portType": "FloatX4" },
+    { "id": "row1", "name": "Row 1", "portType": "FloatX4" },
+    { "id": "row2", "name": "Row 2", "portType": "FloatX4" },
+    { "id": "row3", "name": "Row 3", "portType": "FloatX4" }
+  ],
+  "outputPorts": [{ "id": "value", "name": "Matrix", "portType": "Matrix" }],
+  "parameters": [
+    { "id": "row0", "name": "Row 0", "displayNameKey": "Matrix.Parameter.Row0", "type": "vector4", "defaultValue": [1,0,0,0] },
+    { "id": "row1", "name": "Row 1", "displayNameKey": "Matrix.Parameter.Row1", "type": "vector4", "defaultValue": [0,1,0,0] },
+    { "id": "row2", "name": "Row 2", "displayNameKey": "Matrix.Parameter.Row2", "type": "vector4", "defaultValue": [0,0,1,0] },
+    { "id": "row3", "name": "Row 3", "displayNameKey": "Matrix.Parameter.Row3", "type": "vector4", "defaultValue": [0,0,0,1] }
+  ]
+}

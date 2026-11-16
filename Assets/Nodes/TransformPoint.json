@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "typeId": "b0af61d2-29f6-4cc9-a71e-000000000105",
+  "namespace": "LiberaFx", "kind": "TransformPoint", "name": "Transform Point",
+  "displayNameKey": "Matrix.Node.Point", "group": "Matrices", "groupNameKey": "Matrix.Group",
+  "portType": "FloatX3", "portCategory": "Parameter",
+  "inputPorts": [
+    { "id": "matrix", "name": "Matrix", "portType": "Matrix" },
+    { "id": "point", "name": "Point (W=1)", "portType": "FloatX3" }
+  ],
+  "outputPorts": [
+    { "id": "value", "name": "Point", "portType": "FloatX3" },
+    { "id": "w", "name": "W", "portType": "Float" }
+  ],
+  "parameters": [{ "id": "point", "name": "Point", "displayNameKey": "Matrix.Parameter.Point", "type": "vector3", "defaultValue": [0,0,0] }]
+}

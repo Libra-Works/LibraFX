@@ -6,6 +6,8 @@ public static class SpawnableGroupSchema
     public static bool IsInput(GraphNodeKind kind) => kind.Value is
         "SpawnInputFloat" or "SpawnInputVector2" or "SpawnInputVector3" or "SpawnInputVector4" or "SpawnInputColor";
     public static string PortId(Guid id) => "p_" + id.ToString("N");
+    public static bool IsOutput(GraphNodeKind kind) => kind.Value == "SpawnOutputVector3";
+    public static string OutputPortId(Guid id) => "o_" + id.ToString("N");
 
     public static GraphNodeDefinition Effective(GraphNodeDefinition definition, GraphSnapshot? child)
     {
@@ -19,6 +21,10 @@ public static class SpawnableGroupSchema
             inputs.Add(new GraphInputPortDefinition(PortId(node.Id), node.Name, node.PortType,
                 GraphPortCategory.Parameter, value));
         }
-        return definition with { InputPorts = inputs.AsReadOnly() };
+        var outputs = new List<GraphOutputPortDefinition>(definition.OutputPorts ?? []);
+        foreach (var node in child.Nodes.Where(node => IsOutput(node.Kind)))
+            outputs.Add(new GraphOutputPortDefinition(OutputPortId(node.Id), node.Name,
+                node.PortType, GraphPortCategory.Parameter));
+        return definition with { InputPorts = inputs.AsReadOnly(), OutputPorts = outputs.AsReadOnly() };
     }
 }

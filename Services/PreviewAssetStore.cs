@@ -182,13 +182,7 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
         }
     }
 
-    public static void ValidateAssetPath(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path) || path.Length > 1024 ||
-            !(path.StartsWith("/Game/", StringComparison.Ordinal) || path.StartsWith("/Engine/", StringComparison.Ordinal)) ||
-            path.Contains("..", StringComparison.Ordinal) || path.IndexOfAny(['\\', ':']) >= 0 || path.Any(char.IsControl))
-            throw new ArgumentException("Use an Unreal /Game/ or /Engine/ object path.");
-    }
+    public static void ValidateAssetPath(string path) => EngineAssetPath.Validate(path);
 
     private static EngineAsset ParseAsset(JsonElement value)
     {

@@ -11,6 +11,7 @@ public static class RenderProgramBindings
 
     public static byte[] CreateScene(GraphSnapshot graph, long programSequence)
     {
+        graph = GraphPolymorphism.Lower(graph);
         var nodes = Flatten(graph).ToDictionary(node => node.Id);
         var connections = Connections(graph).ToLookup(connection => connection.TargetNodeId);
         var renderNodes = new List<object>();
@@ -26,7 +27,7 @@ public static class RenderProgramBindings
             }
             var path = Parameter("assetPath").GetString() ?? "";
             if (path.Length == 0) continue;
-            PreviewAssetStore.ValidateAssetPath(path);
+            EngineAssetPath.Validate(path);
             var materialEntries = RenderNodeSchema.Read(definition, node.Parameters);
             object? MaterialParameter(string id)
             {

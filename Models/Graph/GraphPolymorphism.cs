@@ -154,7 +154,9 @@ public static class GraphPolymorphism
         return result;
     }
 
-    public static GraphSnapshot Lower(GraphSnapshot graph)
+    public static GraphSnapshot Lower(GraphSnapshot graph) => LowerWithOutputs(graph).Graph;
+
+    public static MatrixLoweringResult LowerWithOutputs(GraphSnapshot graph)
     {
         var ids = new HashSet<Guid>();
         void Collect(GraphSnapshot current)
@@ -237,6 +239,6 @@ public static class GraphPolymorphism
             }
             return new(lowered, edges);
         }
-        return Rewrite(graph);
+        return GraphMatrixLowering.Lower(Rewrite(graph));
     }
 }

@@ -25,7 +25,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     public GroupAssetCatalog? GroupAssets { get; }
     public NodeDefinitionCatalog? NodeDefinitions { get; }
     public IReadOnlyList<GraphNodeDefinition> AvailableNodeDefinitions =>
-        NodeDefinitions?.AvailableDefinitions ?? GraphNodeDefinition.Core;
+        NodeDefinitions?.AvailableDefinitions ?? GraphNodeDefinition.AuthoringCore;
     private int _nextNodeIndex;
     private GraphNodeViewModel? _selectedNode;
     private readonly List<GraphNodeViewModel> _selectedNodes = [];
@@ -309,7 +309,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             commands.Add(new AddGraphConnectionCommand(
                 this, nodesByOldId[connection.SourceNodeId], newTarget,
                 targetPortId: RemapSpawnPort(oldTarget, newTarget.ChildGraph, connection.TargetPortId),
-                sourcePortId: connection.SourcePortId));
+                sourcePortId: RemapSpawnPort(snapshot.Nodes.Single(node => node.Id == connection.SourceNodeId),
+                    nodesByOldId[connection.SourceNodeId].ChildGraph, connection.SourcePortId)));
         }
 
         _history.Execute(new CompositeUndoableCommand(LocalizationService.Shared.Get("Messages.History.PasteNodes"), commands));
@@ -393,6 +394,10 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 .Select(node => SpawnableGroupSchema.PortId(node.Id)).Append("spawn").ToHashSet(StringComparer.Ordinal);
             connections = root.Connections.Where(edge => edge.TargetNodeId != changed.Id ||
                 edge.TargetPortId is not null && valid.Contains(edge.TargetPortId)).ToArray();
+            var validOutputs = changed.ChildGraph.Nodes.Where(node => SpawnableGroupSchema.IsOutput(node.Kind))
+                .Select(node => SpawnableGroupSchema.OutputPortId(node.Id)).Concat(["then", "destroy"]).ToHashSet();
+            connections = connections.Where(edge => edge.SourceNodeId != changed.Id ||
+                edge.SourcePortId is not null && validOutputs.Contains(edge.SourcePortId)).ToArray();
         }
         return root with { Nodes = nodes, Connections = connections };
     }
@@ -411,16 +416,22 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 ids[connection.SourceNodeId], ids[connection.TargetNodeId],
                 RemapSpawnPort(source.Nodes.Single(node => node.Id == connection.TargetNodeId),
                     nodes.Single(node => node.Id == ids[connection.TargetNodeId]).ChildGraph, connection.TargetPortId),
-                connection.SourcePortId)).ToArray());
+                RemapSpawnPort(source.Nodes.Single(node => node.Id == connection.SourceNodeId),
+                    nodes.Single(node => node.Id == ids[connection.SourceNodeId]).ChildGraph, connection.SourcePortId))).ToArray());
     }
 
     private static string? RemapSpawnPort(GraphNodeSnapshot original, GraphSnapshot? clone, string? port)
     {
         if (original.Kind != GraphNodeKind.SpawnableGroup || original.ChildGraph is null || clone is null) return port;
         for (var i = 0; i < original.ChildGraph.Nodes.Count; ++i)
+        {
             if (SpawnableGroupSchema.IsInput(original.ChildGraph.Nodes[i].Kind) &&
                 SpawnableGroupSchema.PortId(original.ChildGraph.Nodes[i].Id) == port)
                 return SpawnableGroupSchema.PortId(clone.Nodes[i].Id);
+            if (SpawnableGroupSchema.IsOutput(original.ChildGraph.Nodes[i].Kind) &&
+                SpawnableGroupSchema.OutputPortId(original.ChildGraph.Nodes[i].Id) == port)
+                return SpawnableGroupSchema.OutputPortId(clone.Nodes[i].Id);
+        }
         return port;
     }
 
@@ -555,10 +566,13 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             for (var i = 0; i < baseline.Nodes.Count; ++i)
             {
                 var old = oldChild.Nodes[i];
-                if (!SpawnableGroupSchema.IsInput(old.Kind)) continue;
+                var isOutput = SpawnableGroupSchema.IsOutput(old.Kind);
+                if (!SpawnableGroupSchema.IsInput(old.Kind) && !isOutput) continue;
                 var latestIndex = latest.Nodes.ToList().FindIndex(node => node.Id == baseline.Nodes[i].Id &&
-                    SpawnableGroupSchema.IsInput(node.Kind));
-                map[SpawnableGroupSchema.PortId(old.Id)] = latestIndex < 0 ? null :
+                    node.Kind == old.Kind);
+                var oldPort = isOutput ? SpawnableGroupSchema.OutputPortId(old.Id) : SpawnableGroupSchema.PortId(old.Id);
+                map[oldPort] = latestIndex < 0 ? null : isOutput ?
+                    SpawnableGroupSchema.OutputPortId(newChild.Nodes[latestIndex].Id) :
                     SpawnableGroupSchema.PortId(newChild.Nodes[latestIndex].Id);
             }
             return map;
@@ -569,12 +583,20 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             var edges = new List<GraphConnectionSnapshot>();
             foreach (var edge in graph.Connections)
             {
+                var mapped = edge;
                 if (edge.TargetPortId is { } port && maps.TryGetValue(edge.TargetNodeId, out var map) &&
                     map.TryGetValue(port, out var newPort))
                 {
-                    if (newPort is not null) edges.Add(edge with { TargetPortId = newPort });
+                    if (newPort is null) continue;
+                    mapped = mapped with { TargetPortId = newPort };
                 }
-                else edges.Add(edge);
+                if (edge.SourcePortId is { } sourcePort && maps.TryGetValue(edge.SourceNodeId, out var sourceMap) &&
+                    sourceMap.TryGetValue(sourcePort, out var newSource))
+                {
+                    if (newSource is null) continue;
+                    mapped = mapped with { SourcePortId = newSource };
+                }
+                edges.Add(mapped);
             }
             return graph with { Nodes = nodes, Connections = edges };
         }

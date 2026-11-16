@@ -41,29 +41,36 @@ public sealed class GroupCompilationResolver(IReadOnlyList<GroupAssetLibrary> li
             }
             else nodes.Add(node with { ChildGraph = ResolveGraph(node.ChildGraph, ancestors, depth + 1) });
         }
-        var connections = graph.Connections.Select(connection =>
+        string? MapBoundary(Guid nodeId, string? port, bool output)
         {
-            if (useEmbedded || connection.TargetPortId is null or "spawn") return connection;
-            var original = graph.Nodes.First(node => node.Id == connection.TargetNodeId);
+            if (useEmbedded || port is null or "spawn" or "then" or "destroy") return port;
+            var original = graph.Nodes.First(node => node.Id == nodeId);
             if (original.Kind != GraphNodeKind.SpawnableGroup || original.GroupAsset is null || original.ChildGraph is null)
-                return connection;
+                return port;
+            bool IsBoundary(GraphNodeSnapshot node) => output ? SpawnableGroupSchema.IsOutput(node.Kind) : SpawnableGroupSchema.IsInput(node.Kind);
+            string Port(Guid id) => output ? SpawnableGroupSchema.OutputPortId(id) : SpawnableGroupSchema.PortId(id);
             var input = original.ChildGraph.Nodes.FirstOrDefault(node =>
-                SpawnableGroupSchema.IsInput(node.Kind) && SpawnableGroupSchema.PortId(node.Id) == connection.TargetPortId);
-            if (input is null) return connection;
+                IsBoundary(node) && Port(node.Id) == port);
+            if (input is null) return port;
             var baseline = LoadRevision(original.GroupAsset.Id, original.GroupAsset.Revision).Graph;
-            var source = baseline.Nodes.FirstOrDefault(node => node.Id == input.Id && SpawnableGroupSchema.IsInput(node.Kind));
+            var source = baseline.Nodes.FirstOrDefault(node => node.Id == input.Id && IsBoundary(node));
             if (source is null && GraphSnapshot.EquivalentIgnoringIds(baseline, original.ChildGraph))
             {
                 var index = original.ChildGraph.Nodes.ToList().FindIndex(node => node.Id == input.Id);
                 if (index >= 0) source = baseline.Nodes[index];
             }
-            if (source is null || !SpawnableGroupSchema.IsInput(source.Kind))
-                throw new InvalidDataException($"Linked Spawnable Group input '{input.Name}' cannot be matched to its saved revision.");
+            if (source is null || !IsBoundary(source))
+                throw new InvalidDataException($"Linked Spawnable Group boundary '{input.Name}' cannot be matched to its saved revision.");
             var resolved = nodes.First(node => node.Id == original.Id);
             var derived = DeriveId(original.Id, source.Id);
-            if (!resolved.ChildGraph!.Nodes.Any(node => node.Id == derived && SpawnableGroupSchema.IsInput(node.Kind)))
-                throw new InvalidDataException($"Linked Spawnable Group input '{input.Name}' no longer exists.");
-            return connection with { TargetPortId = SpawnableGroupSchema.PortId(derived) };
+            if (!resolved.ChildGraph!.Nodes.Any(node => node.Id == derived && IsBoundary(node)))
+                throw new InvalidDataException($"Linked Spawnable Group boundary '{input.Name}' no longer exists.");
+            return Port(derived);
+        }
+        var connections = graph.Connections.Select(connection => connection with
+        {
+            TargetPortId = MapBoundary(connection.TargetNodeId, connection.TargetPortId, false),
+            SourcePortId = MapBoundary(connection.SourceNodeId, connection.SourcePortId, true)
         }).ToArray();
         return graph with { Nodes = nodes.AsReadOnly(), Connections = connections };
     }
@@ -112,6 +119,8 @@ public sealed class GroupCompilationResolver(IReadOnlyList<GroupAssetLibrary> li
         {
             SourceNodeId = ids[connection.SourceNodeId],
             TargetNodeId = ids[connection.TargetNodeId],
+            SourcePortId = RemapPort(graph.Nodes.Single(node => node.Id == connection.SourceNodeId),
+                nodes.Single(node => node.Id == ids[connection.SourceNodeId]).ChildGraph, connection.SourcePortId),
             TargetPortId = RemapPort(graph.Nodes.Single(node => node.Id == connection.TargetNodeId),
                 nodes.Single(node => node.Id == ids[connection.TargetNodeId]).ChildGraph, connection.TargetPortId)
         }).ToArray());
@@ -121,9 +130,14 @@ public sealed class GroupCompilationResolver(IReadOnlyList<GroupAssetLibrary> li
     {
         if (original.Kind != GraphNodeKind.SpawnableGroup || original.ChildGraph is null || clone is null) return port;
         for (var i = 0; i < original.ChildGraph.Nodes.Count; ++i)
+        {
             if (SpawnableGroupSchema.IsInput(original.ChildGraph.Nodes[i].Kind) &&
                 SpawnableGroupSchema.PortId(original.ChildGraph.Nodes[i].Id) == port)
                 return SpawnableGroupSchema.PortId(clone.Nodes[i].Id);
+            if (SpawnableGroupSchema.IsOutput(original.ChildGraph.Nodes[i].Kind) &&
+                SpawnableGroupSchema.OutputPortId(original.ChildGraph.Nodes[i].Id) == port)
+                return SpawnableGroupSchema.OutputPortId(clone.Nodes[i].Id);
+        }
         return port;
     }
 

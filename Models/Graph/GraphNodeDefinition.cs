@@ -107,6 +107,9 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("f54171ee-4aa3-498b-b2ff-8c9983fc1501")] = "FloatFCurve",
         [Guid.Parse("149e6e41-9976-4b69-a74c-3f6e6b254e5a")] = "GraphGroup",
         [Guid.Parse("c0bc50ea-c514-41a2-9b28-9c2c931d2821")] = "SpawnableGroup",
+        [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000001")] = "LifeTime",
+        [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000002")] = "OnStart",
+        [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000003")] = "SpawnOutputVector3",
         [Guid.Parse("fb8c8a83-0c9d-4870-98a1-08c0ee800001")] = "SpawnInputFloat",
         [Guid.Parse("fb8c8a83-0c9d-4870-98a1-08c0ee800002")] = "SpawnInputVector2",
         [Guid.Parse("fb8c8a83-0c9d-4870-98a1-08c0ee800003")] = "SpawnInputVector3",
@@ -193,7 +196,28 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("74305ac1-91b2-4c33-8d44-00000000002c")] = "MinVector4",
         [Guid.Parse("74305ac1-91b2-4c33-8d44-00000000002d")] = "MaxVector4",
         [Guid.Parse("74305ac1-91b2-4c33-8d44-00000000002e")] = "LerpVector4",
-        [Guid.Parse("74305ac1-91b2-4c33-8d44-00000000002f")] = "ComposeVector4"
+        [Guid.Parse("74305ac1-91b2-4c33-8d44-00000000002f")] = "ComposeVector4",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000101")] = "MatrixCompose",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000102")] = "MatrixBreak",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000103")] = "Transform",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000104")] = "MatrixMultiply",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000105")] = "TransformPoint",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000106")] = "TransformDirection",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000107")] = "MatrixInverse",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000108")] = "DecomposeTransform",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000001")] = "MatrixRuntimeTransformRow0",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000002")] = "MatrixRuntimeTransformRow1",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000003")] = "MatrixRuntimeTransformRow2",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000004")] = "MatrixRuntimeTransformRow3",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000005")] = "MatrixRuntimeInverseRow0",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000006")] = "MatrixRuntimeInverseRow1",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000007")] = "MatrixRuntimeInverseRow2",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000008")] = "MatrixRuntimeInverseRow3",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000009")] = "MatrixRuntimeInverseValid",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000000a")] = "MatrixRuntimeDecomposePosition",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000000b")] = "MatrixRuntimeDecomposeRotation",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000000c")] = "MatrixRuntimeDecomposeScale",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000000d")] = "MatrixRuntimeDecomposeValid"
     };
 
     private static readonly List<string> Warnings = [];
@@ -201,9 +225,13 @@ public sealed record GraphNodeDefinition(
     private static IReadOnlyList<GraphNodeDefinition> _all = LoadAll();
     public static IReadOnlyList<GraphNodeDefinition> All => Volatile.Read(ref _all);
     public static IReadOnlyList<GraphNodeDefinition> Core { get; } = _all;
+    public static IReadOnlyList<GraphNodeDefinition> AuthoringCore { get; } =
+        Array.AsReadOnly(Core.Where(item => !item.IsInternalRuntime).ToArray());
     public static IReadOnlyList<string> LoadWarnings => Warnings;
     public string QualifiedName => $"{Namespace}.{TypeName}";
     public string TypeName { get; init; } = string.Empty;
+    public bool IsInternalRuntime => Namespace == "LiberaFx" &&
+        TypeName.StartsWith("MatrixRuntime", StringComparison.Ordinal);
     public string? DisplayNameKey { get; init; }
     public string? GroupNameKey { get; init; }
     public IReadOnlyList<NodeParameterDefinition> Parameters { get; init; } = [];

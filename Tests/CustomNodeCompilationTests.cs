@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Commands;
+using LiberaFx.Services;
 using LiberaFx.Services.Compilation;
 using LiberaFx.ViewModels;
 
@@ -18,6 +19,7 @@ public static class CustomNodeCompilationTests
 
         var options = new JsonSerializerOptions
         {
+            PropertyNameCaseInsensitive = true,
             Converters = { new JsonStringEnumConverter() }
         };
         var scaleGraph = JsonSerializer.Deserialize<GraphSnapshot>(
@@ -41,7 +43,10 @@ public static class CustomNodeCompilationTests
                 route.Inputs.Length == 1 && route.Inputs[0].SourceIndex >= 0 &&
                 route.BranchTargets.Any(target => target >= 0),
             "Signal nodes must preserve parameter inputs and indexed branches.");
-        var workspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var profiles = new TeamProfilesService(Path.Combine(AppDataDirectory.Root, "custom-node-compiler-profiles.json"));
+        Require(profiles.Save(profiles.Active.Id, "Custom compiler fixtures", "", exampleDirectory), profiles.Status);
+        using var catalog = new NodeDefinitionCatalog(profiles);
+        var workspace = new GraphWorkspaceViewModel(new UndoRedoManager(), nodeDefinitions: catalog);
         var scalar = workspace.CreateNode(GraphNodeKind.Float);
         var routeDefinition = definitions.Single(definition => definition.Runtime?.Execution == "signal");
         var firstRoute = workspace.CreateNode(routeDefinition.Kind);

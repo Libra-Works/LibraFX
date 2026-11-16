@@ -1,0 +1,1 @@
+{"schemaVersion":1,"typeId":"eb710a39-f520-4c02-9140-ec1100000002","namespace":"LiberaFx","kind":"OnStart","name":"On Start","displayNameKey":"Editor.Node.OnStart","group":"Spawnable Group","portType":"Signal","portCategory":"Signal","inputPorts":[],"outputPorts":[{"id":"then","name":"Then","portType":"Signal","category":"Signal"}]}

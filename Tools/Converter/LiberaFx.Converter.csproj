@@ -13,6 +13,11 @@
     <Compile Include="..\..\Models\Graph\FCurve.cs" Link="Models\FCurve.cs" />
     <Compile Include="..\..\Models\Graph\GraphEnumDefinition.cs" Link="Models\GraphEnumDefinition.cs" />
     <Compile Include="..\..\Models\Graph\GraphNodeDefinition.cs" Link="Models\GraphNodeDefinition.cs" />
+    <Compile Include="..\..\Models\Graph\GraphMatrixLowering.cs" Link="Models\GraphMatrixLowering.cs" />
+    <Compile Include="..\..\Models\Graph\GraphPolymorphism.cs" Link="Models\GraphPolymorphism.cs" />
+    <Compile Include="..\..\Models\Graph\GraphTypeDiagnostics.cs" Link="Models\GraphTypeDiagnostics.cs" />
+    <Compile Include="..\..\Models\Graph\SpawnableGroupSchema.cs" Link="Models\SpawnableGroupSchema.cs" />
+    <Compile Include="..\..\Models\Graph\RenderNodeSchema.cs" Link="Models\RenderNodeSchema.cs" />
     <Compile Include="..\..\Models\Graph\GraphSnapshot.cs" Link="Models\GraphSnapshot.cs" />
     <Compile Include="..\..\Models\Graph\GraphValidator.cs" Link="Models\GraphValidator.cs" />
     <Compile Include="..\..\Models\Graph\NodeParameter.cs" Link="Models\NodeParameter.cs" />
@@ -23,9 +28,15 @@
     <Compile Include="..\..\Services\GroupAssetLibrary.cs" Link="Services\GroupAssetLibrary.cs" />
     <Compile Include="..\..\Services\GroupCompilationResolver.cs" Link="Services\GroupCompilationResolver.cs" />
     <Compile Include="..\..\Services\Compilation\VfxProgram.cs" Link="Services\VfxProgram.cs" />
+    <Compile Include="..\..\Services\Compilation\SpawnableGroupPackage.cs" Link="Services\SpawnableGroupPackage.cs" />
+    <Compile Include="..\..\Services\Compilation\RenderProgramBindings.cs" Link="Services\RenderProgramBindings.cs" />
+    <Compile Include="..\..\Services\EngineAsset.cs" Link="Services\EngineAsset.cs" />
+    <Compile Include="..\..\Services\EngineAssetPath.cs" Link="Services\EngineAssetPath.cs" />
     <EmbeddedResource Include="..\..\Assets\Nodes\*.json" LogicalName="LiberaFx.Assets.Nodes.%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\Assets\Enums\*.json" LogicalName="LiberaFx.Assets.Enums.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\Assets\Polymorphism\*.json" LogicalName="LiberaFx.Assets.Polymorphism.%(Filename)%(Extension)" />
     <None Include="..\..\Assets\Nodes\*.json" Link="Assets\Nodes\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\Assets\Enums\*.json" Link="Assets\Enums\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Assets\Polymorphism\*.json" Link="Assets\Polymorphism\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

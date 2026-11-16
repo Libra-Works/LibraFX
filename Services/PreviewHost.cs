@@ -232,7 +232,7 @@ public sealed class PreviewHost : IDisposable
     private async Task SendAsync(WebSocket socket, Guid id, PreviewClient client, CancellationToken cancellation)
     {
         PreviewPublication? baseline = null;
-        var compiled = new CompiledPreviewSender();
+        using var compiled = new CompiledPreviewSender();
         await foreach (var publication in client.Channel.Reader.ReadAllAsync(cancellation))
         {
             // Diff against the last message actually sent, never a dropped pending update.
@@ -242,15 +242,20 @@ public sealed class PreviewHost : IDisposable
                 var message = compiled.Prepare(publication, force);
                 if (message is null) continue;
                 await SendSerializedAsync(socket, client, message.Bytes, WebSocketMessageType.Binary, cancellation);
-                if (message.Kind == CompiledPreviewKind.Program && _assets?.Supports(id, "rendering") == true)
+                if ((message.Kind == CompiledPreviewKind.Program || message.EvaluatedRenderScene is not null) &&
+                    _assets?.Supports(id, "rendering") == true)
                 {
-                    var scene = RenderProgramBindings.CreateScene(publication.Graph, publication.Sequence);
+                    var scene = message.EvaluatedRenderScene ?? RenderProgramBindings.CreateScene(publication.Graph, publication.Sequence);
                     await SendSerializedAsync(socket, client, CompiledPreviewProtocol.CreateScene(scene),
                         WebSocketMessageType.Binary, cancellation);
                 }
                 if (message.Kind == CompiledPreviewKind.Program && _assets?.Supports(id, "gpuParticles") == true)
                 {
-                    var scene = GpuPreviewScene.CreateScene(publication.Graph, publication.Sequence);
+                    // Native lifecycle graphs reject GPU mixtures, but must
+                    // still explicitly retire the previous document's GPU
+                    // scene rather than leave unrelated particles visible.
+                    var scene = GpuPreviewScene.CreateScene(message.EditorNativeExecution ?
+                        new GraphSnapshot([], []) : publication.Graph, publication.Sequence);
                     await SendSerializedAsync(socket, client, CompiledPreviewProtocol.CreateScene(scene),
                         WebSocketMessageType.Binary, cancellation);
                 }

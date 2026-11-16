@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "typeId": "b0af61d2-29f6-4cc9-a71e-000000000104",
+  "namespace": "LiberaFx", "kind": "MatrixMultiply", "name": "Matrix Multiply (Parent x Local)",
+  "displayNameKey": "Matrix.Node.Multiply", "group": "Matrices", "groupNameKey": "Matrix.Group",
+  "portType": "Matrix", "portCategory": "Parameter",
+  "inputPorts": [
+    { "id": "parent", "name": "Parent", "portType": "Matrix" },
+    { "id": "local", "name": "Local", "portType": "Matrix" }
+  ],
+  "outputPorts": [{ "id": "value", "name": "Matrix", "portType": "Matrix" }]
+}

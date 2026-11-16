@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "typeId": "b0af61d2-29f6-4cc9-a71e-000000000108",
+  "namespace": "LiberaFx", "kind": "DecomposeTransform", "name": "Decompose Transform",
+  "displayNameKey": "Matrix.Node.Decompose", "group": "Matrices", "groupNameKey": "Matrix.Group",
+  "portType": "FloatX3", "portCategory": "Parameter",
+  "inputPorts": [{ "id": "matrix", "name": "Matrix", "portType": "Matrix" }],
+  "outputPorts": [
+    { "id": "position", "name": "Position", "portType": "FloatX3" },
+    { "id": "rotation", "name": "Rotation (degrees: X roll, Y pitch, Z yaw)", "portType": "FloatX3" },
+    { "id": "scale", "name": "Scale (reflection sign on X)", "portType": "FloatX3" },
+    { "id": "valid", "name": "Valid (1=TRS, 0=failure; outputs zero)", "portType": "Float" }
+  ]
+}

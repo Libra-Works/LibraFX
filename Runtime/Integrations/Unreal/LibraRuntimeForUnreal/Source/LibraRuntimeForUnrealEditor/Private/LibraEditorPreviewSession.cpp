@@ -1563,6 +1563,9 @@ namespace
         capture->bCaptureEveryFrame = false;
         capture->bCaptureOnMovement = false;
         capture->FOVAngle = 45;
+        // The bounds-fitted camera can be closer than the editor's global near plane.
+        capture->bOverride_CustomNearClippingPlane = true;
+        capture->CustomNearClippingPlane = 0.1f;
         capture->ShowFlags.SetTemporalAA(false);
         capture->ShowFlags.SetFog(false);
         capture->ShowFlags.SetAtmosphere(false);

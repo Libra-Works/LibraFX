@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1, "typeId": "b0af61d2-29f6-4cc9-a71e-000000000007",
+  "namespace": "LiberaFx", "kind": "MatrixRuntimeInverseRow2", "name": "Internal Inverse Row 2",
+  "group": "Matrix Runtime", "portType": "FloatX4", "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [
+    { "id": "row0", "name": "Row 0", "portType": "FloatX4", "defaultValue": [1,0,0,0] },
+    { "id": "row1", "name": "Row 1", "portType": "FloatX4", "defaultValue": [0,1,0,0] },
+    { "id": "row2", "name": "Row 2", "portType": "FloatX4", "defaultValue": [0,0,1,0] },
+    { "id": "row3", "name": "Row 3", "portType": "FloatX4", "defaultValue": [0,0,0,1] }
+  ],
+  "outputPorts": [{ "id": "value", "name": "Row", "portType": "FloatX4" }]
+}

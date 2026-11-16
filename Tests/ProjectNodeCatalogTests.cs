@@ -60,7 +60,7 @@ internal static class ProjectNodeCatalogTests
         if (catalog.AvailableDefinitions.Any(item => item.Kind == firstKind) ||
             !catalog.AvailableDefinitions.Any(item => item.Kind == secondKind) ||
             !GraphNodeDefinition.All.Any(item => item.Kind == firstKind) ||
-            !GraphNodeDefinition.Core.All(catalog.AvailableDefinitions.Contains))
+            !GraphNodeDefinition.AuthoringCore.All(catalog.AvailableDefinitions.Contains))
             throw new InvalidOperationException("The catalog did not separate Core, active and retained project definitions.");
         var originalNode = graph.CreateNode(secondKind);
         var original = graph.CreateSnapshot();

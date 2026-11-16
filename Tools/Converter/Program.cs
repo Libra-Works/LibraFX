@@ -97,6 +97,7 @@ internal static class Converter
                 throw new IOException("Input and output must be different files.");
             await using var stream = File.OpenRead(input);
             var project = await ProjectDocumentReader.LoadAsync(stream);
+            GpuParticleEditorService.RejectGpu(project.Graph);
             var bytes = VfxProgram.Compile(resolver.Resolve(project.Graph)).ToBinary();
             var directory = Path.GetDirectoryName(output)!;
             Directory.CreateDirectory(directory);

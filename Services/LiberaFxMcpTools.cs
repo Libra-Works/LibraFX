@@ -163,6 +163,8 @@ public sealed class LiberaFxMcpTools
                 bytecodeFormat = "LFXB",
                 signalPassthroughTypeId = SpawnableGroupPackage.SignalPassthroughTypeId,
                 parentBytecodeBase64 = Convert.ToBase64String(package.ParentBytecode),
+                package.OnStartNodeId,
+                package.DestroyRoutes,
                 templates = package.Templates.Select(template => new
                 {
                     template.ContainerId,
@@ -170,10 +172,14 @@ public sealed class LiberaFxMcpTools
                     bytecodeBase64 = Convert.ToBase64String(template.Bytecode),
                     capturePolicy = "CaptureAtSpawn",
                     template.Inputs,
+                    template.Outputs,
+                    template.Lifecycle,
                     renderConfigurationBase64 = Convert.ToBase64String(template.RenderConfiguration),
                     template.GpuContainers
                 }),
-                lifecycle = new { stop = "manual", reset = "manual", instanceIdScope = "pool" }
+                lifecycle = new { life = "positive seconds captured at start; absent means infinity",
+                    destroy = "natural expiry only; frozen outputs routed before finalize",
+                    stop = "no Destroy", reset = "no Destroy", instanceIdScope = "pool" }
             }, JsonOptions);
         }
         catch (InvalidDataException ex) { throw new McpException(ex.Message); }
@@ -186,10 +192,51 @@ public sealed class LiberaFxMcpTools
         instanceIdentity = new[] { "containerId", "instanceId" },
         valueIdentity = new[] { "containerId", "templateNodeId", "instanceId" },
         capturePolicy = "CaptureAtSpawn",
-        lifecycle = new[] { "spawn", "manualStop", "reset" },
+        lifecycle = new[] { "onStartOnce", "spawn", "capturedLifeTime", "naturalDestroy", "manualStop", "reset" },
+        localDestroyRouting = "package v2, direct root sibling Spawnables; frozen Vector3 outputs captured before finalize",
+        engineLifecyclePreviewAvailable = false,
+        editorNativeLifecyclePreviewAvailable = true,
+        previewExecutionOwner = "editor-native (requires matching LIBERAFX_PREVIEW_NATIVE_LIBRARY); UE renders evaluated defaults only",
         runtimeValueTelemetryAvailable = false,
         editorNodesAreRuntimeInstances = false
     }, JsonOptions);
+
+    [McpServerTool(Name = "libera_graph_describe_runtime_outputs", ReadOnly = true, OpenWorld = false)]
+    [Description("Describe deterministic runtime value bindings for an authoring node's output pins. A Matrix maps to four FloatX4 rows, never one four-component value. Use runtimeNodeId with value watching and sourceComponent for scalar Break outputs. This does not evaluate the graph or create runtime instances.")]
+    public static async Task<string> DescribeRuntimeOutputs(ActiveGraphProvider activeGraph, string nodeId) =>
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var workspace = activeGraph.Graph;
+            var node = FindNode(workspace, nodeId);
+            var snapshot = workspace.CreateCurrentSnapshot();
+            GraphValidator.Validate(snapshot);
+            var problems = GraphTypeDiagnostics.Analyze(snapshot);
+            if (problems.Count != 0) throw new McpException("Fix graph type mismatches before resolving runtime outputs.");
+            var result = GraphPolymorphism.LowerWithOutputs(snapshot);
+            var lowered = result.Graph.Nodes.ToDictionary(item => item.Id);
+            var definition = GraphPolymorphism.Resolve(snapshot)[node.Id];
+            var ports = definition.OutputPorts?.Select(port => (string?)port.Id).ToArray() ?? [null];
+            if (definition.Kind == GraphNodeKind.GraphGroup ||
+                ports.Any(port => definition.GetOutputPortType(port) is not ("Float" or "FloatX2" or "FloatX3" or "FloatX4" or "Color" or "Matrix")))
+                throw new McpException("Runtime value bindings are available only for numeric and Matrix output pins.");
+            return JsonSerializer.Serialize(new
+            {
+                authoringNodeId = node.Id,
+                outputs = ports.Select(port => new
+                {
+                    portId = port,
+                    type = definition.GetOutputPortType(port),
+                    bindings = result.Outputs[(node.Id, port)].Select((binding, index) =>
+                    {
+                        var runtime = GraphNodeDefinition.All.Single(item => item.Kind == lowered[binding.NodeId].Kind);
+                        var component = runtime.TypeName.StartsWith("BreakVector", StringComparison.Ordinal)
+                            ? runtime.OutputPorts!.ToList().FindIndex(output => output.Id == binding.PortId) : 0;
+                        return new { row = definition.GetOutputPortType(port) == "Matrix" ? (int?)index : null,
+                            runtimeNodeId = binding.NodeId, runtimePortId = binding.PortId, sourceComponent = component };
+                    })
+                })
+            }, JsonOptions);
+        });
 
     [McpServerTool(Name = "libera_graph_describe_spawnable", ReadOnly = true, OpenWorld = false)]
     [Description("Describe an editable Spawnable Group's synchronized signal and typed capture-at-spawn ports and child template. No runtime instance is created.")]

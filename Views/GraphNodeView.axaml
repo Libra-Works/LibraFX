@@ -50,7 +50,7 @@
             <Grid Grid.Row="1"
                   Margin="8"
                   IsVisible="{Binding HasPorts}"
-                  ColumnDefinitions="Auto,*,Auto">
+                  ColumnDefinitions="*,Auto,*">
                 <StackPanel Orientation="Horizontal"
                             Spacing="4"
                             IsVisible="{Binding HasLegacyInput}"
@@ -68,10 +68,10 @@
                                Foreground="{DynamicResource EffectForegroundBrush}" />
                 </StackPanel>
                 <ItemsControl ItemsSource="{Binding InputPorts}" IsVisible="{Binding HasCustomInputs}"
-                              HorizontalAlignment="Left" VerticalAlignment="Top">
+                              HorizontalAlignment="Stretch" VerticalAlignment="Top">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="graph:GraphInputPortDefinition">
-                            <StackPanel Orientation="Horizontal" Spacing="4" Height="24">
+                            <Grid ColumnDefinitions="18,*" ColumnSpacing="4" Height="24">
                                 <Button Width="18" Height="18" Padding="0" Tag="{Binding}"
                                         Content="●" Background="Transparent" Click="OnCustomInputClick">
                                     <Button.Foreground>
@@ -81,8 +81,9 @@
                                         </MultiBinding>
                                     </Button.Foreground>
                                 </Button>
-                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
-                            </StackPanel>
+                                <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                            </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -95,6 +96,7 @@
                             Orientation="Horizontal"
                             Spacing="4"
                             IsVisible="{Binding HasLegacyOutput}"
+                            HorizontalAlignment="Right"
                             VerticalAlignment="Top">
                     <TextBlock Text="{DynamicResource Text.Panels.Output}"
                                VerticalAlignment="Center"
@@ -114,12 +116,13 @@
                 </StackPanel>
                 <ItemsControl Grid.Column="2" ItemsSource="{Binding OutputPorts}"
                               IsVisible="{Binding HasCustomOutputs}"
-                              HorizontalAlignment="Right" VerticalAlignment="Top">
+                              HorizontalAlignment="Stretch" VerticalAlignment="Top">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="graph:GraphOutputPortDefinition">
-                            <StackPanel Orientation="Horizontal" Spacing="4" Height="24">
-                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
-                                <Border Width="18" Height="18" Background="Transparent" Tag="{Binding}"
+                            <Grid ColumnDefinitions="*,18" ColumnSpacing="4" Height="24">
+                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                                <Border Grid.Column="1" Width="18" Height="18" Background="Transparent" Tag="{Binding}"
                                         PointerPressed="OnOutputPointerPressed"
                                         PointerMoved="OnOutputPointerMoved"
                                         PointerReleased="OnOutputPointerReleased"
@@ -133,7 +136,7 @@
                                         </TextBlock.Foreground>
                                     </TextBlock>
                                 </Border>
-                            </StackPanel>
+                            </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

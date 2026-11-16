@@ -26,10 +26,18 @@ public sealed class GraphConnectionViewModel : ObservableObject
 
     public Point EndPoint => new(EndX, EndY);
 
-    public string Description =>
-        $"{Source.Name}{(SourcePortId is null ? "" : $" [{SourcePortId}]")} → {Target.Name}" +
-        $"{(TargetPortId is null ? "" : $" [{TargetPortId}]")} " +
-        $"({GraphNodeDefinition.DisplayPortType(Source.Definition.GetOutputPortType(SourcePortId) ?? Source.PortType)})";
+    public string Description
+    {
+        get
+        {
+            var sourcePort = Source.OutputPorts.FirstOrDefault(port => port.Id == SourcePortId);
+            var targetPort = Target.InputPorts.FirstOrDefault(port => port.Id == TargetPortId);
+            var sourceLabel = SourcePortId is null ? "" : $" [{sourcePort?.Name ?? SourcePortId}]";
+            var targetLabel = TargetPortId is null ? "" : $" [{targetPort?.Name ?? TargetPortId}]";
+            var type = sourcePort?.PortType ?? Source.Definition.GetOutputPortType(SourcePortId) ?? Source.PortType;
+            return $"{Source.Name}{sourceLabel} → {Target.Name}{targetLabel} ({GraphNodeDefinition.DisplayPortType(type)})";
+        }
+    }
 
     public GraphConnectionViewModel(GraphNodeViewModel source, GraphNodeViewModel target,
         string? targetPortId = null, string? sourcePortId = null)
@@ -44,7 +52,8 @@ public sealed class GraphConnectionViewModel : ObservableObject
 
     private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(GraphNodeViewModel.Name))
+        if (e.PropertyName is nameof(GraphNodeViewModel.Name) or nameof(GraphNodeViewModel.InputPorts) or
+            nameof(GraphNodeViewModel.OutputPorts) or nameof(GraphNodeViewModel.PortType))
         {
             OnPropertyChanged(nameof(Description));
         }

@@ -1,0 +1,4551 @@
+{
+  "FormatVersion": 9,
+  "Nodes": [
+    {
+      "Id": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+      "Name": "Solar clock",
+      "Kind": "Time",
+      "X": 0,
+      "Y": 0,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "97c924f0-9e80-4964-b770-5e3ef3585e40",
+      "Name": "Root radians",
+      "Kind": "Float",
+      "X": 300,
+      "Y": 0,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "value",
+          "Type": "float",
+          "Value": 0.25
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "34965bfa-960d-4ab6-a0b0-048333880a68",
+      "Name": "Root degrees",
+      "Kind": "RadToDeg",
+      "X": 600,
+      "Y": 0,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "eaed6d3d-451c-464a-9762-9fd70c738d4c",
+      "Name": "Root Z rotation",
+      "Kind": "ComposeVector4",
+      "X": 900,
+      "Y": 0,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "017ee2af-24a4-4ec9-b605-4307bc42bd3b",
+      "Name": "Root Euler rotation",
+      "Kind": "Vector4ToVector3",
+      "X": 1200,
+      "Y": 0,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "464d5835-b0ba-443e-99ee-3cf223857a4d",
+      "Name": "Sun root",
+      "Kind": "Transform",
+      "X": 1500,
+      "Y": 0,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "position",
+          "Type": "vector3",
+          "Value": [
+            80,
+            -40,
+            30
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "d2b78dd4-080e-406c-ae35-c4cd44cd9dd8",
+      "Name": "Sun mesh",
+      "Kind": "ModelDraw",
+      "X": 0,
+      "Y": 180,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "assetPath",
+          "Type": "string",
+          "Value": "/Engine/BasicShapes/Sphere.Sphere"
+        },
+        {
+          "Id": "materialSchema",
+          "Type": "string",
+          "Value": "[{\u0022id\u0022:\u0022material_9d43bfbbceae0703fb401eed\u0022,\u0022name\u0022:\u0022Color\u0022,\u0022kind\u0022:\u0022vector\u0022,\u0022slot\u0022:0,\u0022materialPath\u0022:\u0022builtin:unlit-color\u0022,\u0022materialName\u0022:\u0022Unlit color\u0022,\u0022association\u0022:2,\u0022index\u0022:-1,\u0022value\u0022:[1,0.65,0.08,1]}]"
+        },
+        {
+          "Id": "material_9d43bfbbceae0703fb401eed",
+          "Type": "vector4",
+          "Value": [
+            1,
+            0.65,
+            0.08,
+            1
+          ]
+        },
+        {
+          "Id": "scale",
+          "Type": "vector3",
+          "Value": [
+            0.75,
+            0.75,
+            0.75
+          ]
+        },
+        {
+          "Id": "tint",
+          "Type": "vector4",
+          "Value": [
+            1,
+            0.65,
+            0.08,
+            1
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "ad2ecd73-92a2-4762-a7cb-0ef59ec42a60",
+      "Name": "Sun draw transform",
+      "Kind": "DecomposeTransform",
+      "X": 300,
+      "Y": 180,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "d72b2011-5532-43f6-a107-2a57789c52b6",
+      "Name": "Mercury orbit radians",
+      "Kind": "Multiply",
+      "X": 600,
+      "Y": 180,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "b",
+          "Type": "float",
+          "Value": 1.6
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "a9e734e1-41da-4f37-b6e7-f095ca343e80",
+      "Name": "Mercury degrees",
+      "Kind": "RadToDeg",
+      "X": 900,
+      "Y": 180,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "f6d7588e-004f-4c36-af26-6104caa5e2b8",
+      "Name": "Mercury Z rotation",
+      "Kind": "ComposeVector4",
+      "X": 1200,
+      "Y": 180,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "3880d792-717d-4309-b0ed-b05ae599d7fa",
+      "Name": "Mercury Euler rotation",
+      "Kind": "Vector4ToVector3",
+      "X": 1500,
+      "Y": 180,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "13d14853-d5d5-4f50-a03e-7f00f69681ae",
+      "Name": "Mercury orbit",
+      "Kind": "Transform",
+      "X": 0,
+      "Y": 360,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "position",
+          "Type": "vector3",
+          "Value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "2574ac9b-c39b-4701-b174-a7639bee0bde",
+      "Name": "Mercury orbit world",
+      "Kind": "MatrixMultiply",
+      "X": 300,
+      "Y": 360,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "99249b9d-bfbc-405c-8fc8-3f039c931ec4",
+      "Name": "Mercury offset",
+      "Kind": "Transform",
+      "X": 600,
+      "Y": 360,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "position",
+          "Type": "vector3",
+          "Value": [
+            170,
+            0,
+            0
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "18598e32-5000-4ff8-891b-8059029464f5",
+      "Name": "Mercury frame",
+      "Kind": "MatrixMultiply",
+      "X": 900,
+      "Y": 360,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "a30ac7b0-bf1e-432b-8909-d0d7b53e67e5",
+      "Name": "Mercury spin radians",
+      "Kind": "Multiply",
+      "X": 1200,
+      "Y": 360,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "b",
+          "Type": "float",
+          "Value": 1.1
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "47b63478-4313-4fea-a8c4-6adb5f0cef4f",
+      "Name": "Mercury spin degrees",
+      "Kind": "RadToDeg",
+      "X": 1500,
+      "Y": 360,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "e4216f4b-c0f1-4b5b-94e5-9146a00a6dbf",
+      "Name": "Mercury spin Z rotation",
+      "Kind": "ComposeVector4",
+      "X": 0,
+      "Y": 540,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "9a46b91d-e2c3-4e87-84ab-c910ed640e48",
+      "Name": "Mercury spin Euler rotation",
+      "Kind": "Vector4ToVector3",
+      "X": 300,
+      "Y": 540,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "9028e18d-7647-40de-85df-f937754b88bf",
+      "Name": "Mercury spin",
+      "Kind": "Transform",
+      "X": 600,
+      "Y": 540,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "position",
+          "Type": "vector3",
+          "Value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "e5a21726-8409-490a-996c-10c4c432b357",
+      "Name": "Mercury display",
+      "Kind": "MatrixMultiply",
+      "X": 900,
+      "Y": 540,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "c7fa4c34-93e3-46f1-a8eb-04c809a0978d",
+      "Name": "Mercury mesh",
+      "Kind": "ModelDraw",
+      "X": 1200,
+      "Y": 540,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "assetPath",
+          "Type": "string",
+          "Value": "/Engine/BasicShapes/Sphere.Sphere"
+        },
+        {
+          "Id": "materialSchema",
+          "Type": "string",
+          "Value": "[{\u0022id\u0022:\u0022material_9d43bfbbceae0703fb401eed\u0022,\u0022name\u0022:\u0022Color\u0022,\u0022kind\u0022:\u0022vector\u0022,\u0022slot\u0022:0,\u0022materialPath\u0022:\u0022builtin:unlit-color\u0022,\u0022materialName\u0022:\u0022Unlit color\u0022,\u0022association\u0022:2,\u0022index\u0022:-1,\u0022value\u0022:[0.6,0.5,0.4,1]}]"
+        },
+        {
+          "Id": "material_9d43bfbbceae0703fb401eed",
+          "Type": "vector4",
+          "Value": [
+            0.6,
+            0.5,
+            0.4,
+            1
+          ]
+        },
+        {
+          "Id": "scale",
+          "Type": "vector3",
+          "Value": [
+            0.18,
+            0.18,
+            0.18
+          ]
+        },
+        {
+          "Id": "tint",
+          "Type": "vector4",
+          "Value": [
+            0.6,
+            0.5,
+            0.4,
+            1
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "6d94e425-8ac8-473a-a804-23f24e41db44",
+      "Name": "Mercury draw transform",
+      "Kind": "DecomposeTransform",
+      "X": 1500,
+      "Y": 540,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "391551e0-f14f-46b8-aeff-1eaab8292ca3",
+      "Name": "Venus orbit radians",
+      "Kind": "Multiply",
+      "X": 0,
+      "Y": 720,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "b",
+          "Type": "float",
+          "Value": 1.05
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "4d2c30a9-9730-4a78-a95e-f2c69de1e6a6",
+      "Name": "Venus degrees",
+      "Kind": "RadToDeg",
+      "X": 300,
+      "Y": 720,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "33940ec9-0d00-44c2-be9c-723d86f9167b",
+      "Name": "Venus Z rotation",
+      "Kind": "ComposeVector4",
+      "X": 600,
+      "Y": 720,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "198ba267-d692-41d8-82a3-55a58ea5a5b2",
+      "Name": "Venus Euler rotation",
+      "Kind": "Vector4ToVector3",
+      "X": 900,
+      "Y": 720,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "16978164-c010-4cee-8889-a5cd5b55bb2b",
+      "Name": "Venus orbit",
+      "Kind": "Transform",
+      "X": 1200,
+      "Y": 720,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "position",
+          "Type": "vector3",
+          "Value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "73efe244-d236-483d-9b97-44963c9568cf",
+      "Name": "Venus orbit world",
+      "Kind": "MatrixMultiply",
+      "X": 1500,
+      "Y": 720,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "094d0500-dc87-48a0-a11a-71d0fe23ae34",
+      "Name": "Venus offset",
+      "Kind": "Transform",
+      "X": 0,
+      "Y": 900,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "position",
+          "Type": "vector3",
+          "Value": [
+            270,
+            0,
+            0
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "a2ca3e53-d489-466e-bde5-1149258535c2",
+      "Name": "Venus frame",
+      "Kind": "MatrixMultiply",
+      "X": 300,
+      "Y": 900,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "4cbf490d-0cc1-4319-9fcb-380819d0dbc8",
+      "Name": "Venus spin radians",
+      "Kind": "Multiply",
+      "X": 600,
+      "Y": 900,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "b",
+          "Type": "float",
+          "Value": -0.35
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "afc8bfe6-be70-4170-8862-1e747e8aae30",
+      "Name": "Venus spin degrees",
+      "Kind": "RadToDeg",
+      "X": 900,
+      "Y": 900,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "1adeb668-c591-4adc-8482-3164a8446a1e",
+      "Name": "Venus spin Z rotation",
+      "Kind": "ComposeVector4",
+      "X": 1200,
+      "Y": 900,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "3f756115-7ef8-4367-9995-2f816b4a8bbe",
+      "Name": "Venus spin Euler rotation",
+      "Kind": "Vector4ToVector3",
+      "X": 1500,
+      "Y": 900,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "ed1065bb-9f8b-4559-9f0a-bd15cd605d8f",
+      "Name": "Venus spin",
+      "Kind": "Transform",
+      "X": 0,
+      "Y": 1080,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "position",
+          "Type": "vector3",
+          "Value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "8a39f4c0-d63b-4b5b-90e3-bc7a8eef710f",
+      "Name": "Venus display",
+      "Kind": "MatrixMultiply",
+      "X": 300,
+      "Y": 1080,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "05ebf910-3297-4a20-85ab-6ffa38bf90aa",
+      "Name": "Venus mesh",
+      "Kind": "ModelDraw",
+      "X": 600,
+      "Y": 1080,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "assetPath",
+          "Type": "string",
+          "Value": "/Engine/BasicShapes/Sphere.Sphere"
+        },
+        {
+          "Id": "materialSchema",
+          "Type": "string",
+          "Value": "[{\u0022id\u0022:\u0022material_9d43bfbbceae0703fb401eed\u0022,\u0022name\u0022:\u0022Color\u0022,\u0022kind\u0022:\u0022vector\u0022,\u0022slot\u0022:0,\u0022materialPath\u0022:\u0022builtin:unlit-color\u0022,\u0022materialName\u0022:\u0022Unlit color\u0022,\u0022association\u0022:2,\u0022index\u0022:-1,\u0022value\u0022:[1,0.8,0.35,1]}]"
+        },
+        {
+          "Id": "material_9d43bfbbceae0703fb401eed",
+          "Type": "vector4",
+          "Value": [
+            1,
+            0.8,
+            0.35,
+            1
+          ]
+        },
+        {
+          "Id": "scale",
+          "Type": "vector3",
+          "Value": [
+            0.28,
+            0.28,
+            0.28
+          ]
+        },
+        {
+          "Id": "tint",
+          "Type": "vector4",
+          "Value": [
+            1,
+            0.8,
+            0.35,
+            1
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "ab3005ad-c21c-4d91-b728-91ee2fc491ae",
+      "Name": "Venus draw transform",
+      "Kind": "DecomposeTransform",
+      "X": 900,
+      "Y": 1080,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "c514346d-428a-4af2-b368-8acb3e2b4cfa",
+      "Name": "Earth orbit radians",
+      "Kind": "Multiply",
+      "X": 1200,
+      "Y": 1080,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "b",
+          "Type": "float",
+          "Value": 0.65
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "9dde6aa7-e812-4856-a271-ca4d6ced069c",
+      "Name": "Earth degrees",
+      "Kind": "RadToDeg",
+      "X": 1500,
+      "Y": 1080,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "ae93b742-d9a0-4f57-9884-bb37a9528bb3",
+      "Name": "Earth Z rotation",
+      "Kind": "ComposeVector4",
+      "X": 0,
+      "Y": 1260,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "1e4bf9b3-962b-4c27-b997-1e2b0b540e05",
+      "Name": "Earth Euler rotation",
+      "Kind": "Vector4ToVector3",
+      "X": 300,
+      "Y": 1260,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "14e5bb28-affb-47df-ba38-3a68e69c9f71",
+      "Name": "Earth orbit",
+      "Kind": "Transform",
+      "X": 600,
+      "Y": 1260,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "position",
+          "Type": "vector3",
+          "Value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "c213f94b-0b9b-4a74-85b9-f57d8efd8a30",
+      "Name": "Earth orbit world",
+      "Kind": "MatrixMultiply",
+      "X": 900,
+      "Y": 1260,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "504f129a-9385-4a94-b13f-4e021fd79d0f",
+      "Name": "Earth offset",
+      "Kind": "Transform",
+      "X": 1200,
+      "Y": 1260,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "position",
+          "Type": "vector3",
+          "Value": [
+            400,
+            0,
+            0
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "226271b8-dd88-4ce5-8d36-f7f0b5ec7d90",
+      "Name": "Earth frame",
+      "Kind": "MatrixMultiply",
+      "X": 1500,
+      "Y": 1260,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "14dfba9a-d724-4139-8ce8-475f0d7fa814",
+      "Name": "Earth spin radians",
+      "Kind": "Multiply",
+      "X": 0,
+      "Y": 1440,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "b",
+          "Type": "float",
+          "Value": 2.4
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "df2337c9-9cc2-4e75-bf56-bc99d683bf0f",
+      "Name": "Earth spin degrees",
+      "Kind": "RadToDeg",
+      "X": 300,
+      "Y": 1440,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "cf92e76d-7b1d-4b9c-bece-bec0e7d19f83",
+      "Name": "Earth spin Z rotation",
+      "Kind": "ComposeVector4",
+      "X": 600,
+      "Y": 1440,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "3f7fe2e6-164a-4e13-a3a8-595d9db7358e",
+      "Name": "Earth spin Euler rotation",
+      "Kind": "Vector4ToVector3",
+      "X": 900,
+      "Y": 1440,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "c7b745ff-f2f7-4723-b0d2-596cb0dae9f7",
+      "Name": "Earth spin",
+      "Kind": "Transform",
+      "X": 1200,
+      "Y": 1440,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "position",
+          "Type": "vector3",
+          "Value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "1b5180a6-597b-4641-ad76-dcceafc6fd82",
+      "Name": "Earth display",
+      "Kind": "MatrixMultiply",
+      "X": 1500,
+      "Y": 1440,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "ac8833e7-9a23-478e-b430-a5174d4fff92",
+      "Name": "Earth mesh",
+      "Kind": "ModelDraw",
+      "X": 0,
+      "Y": 1620,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "assetPath",
+          "Type": "string",
+          "Value": "/Engine/BasicShapes/Sphere.Sphere"
+        },
+        {
+          "Id": "materialSchema",
+          "Type": "string",
+          "Value": "[{\u0022id\u0022:\u0022material_9d43bfbbceae0703fb401eed\u0022,\u0022name\u0022:\u0022Color\u0022,\u0022kind\u0022:\u0022vector\u0022,\u0022slot\u0022:0,\u0022materialPath\u0022:\u0022builtin:unlit-color\u0022,\u0022materialName\u0022:\u0022Unlit color\u0022,\u0022association\u0022:2,\u0022index\u0022:-1,\u0022value\u0022:[0.1,0.4,1,1]}]"
+        },
+        {
+          "Id": "material_9d43bfbbceae0703fb401eed",
+          "Type": "vector4",
+          "Value": [
+            0.1,
+            0.4,
+            1,
+            1
+          ]
+        },
+        {
+          "Id": "scale",
+          "Type": "vector3",
+          "Value": [
+            0.35,
+            0.35,
+            0.35
+          ]
+        },
+        {
+          "Id": "tint",
+          "Type": "vector4",
+          "Value": [
+            0.1,
+            0.4,
+            1,
+            1
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "47584f89-72d2-4a65-9fbd-9eedaec80b7f",
+      "Name": "Earth draw transform",
+      "Kind": "DecomposeTransform",
+      "X": 300,
+      "Y": 1620,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "8ddcdb47-b445-4d46-ab60-79df1ff9099e",
+      "Name": "Marker offset",
+      "Kind": "Transform",
+      "X": 600,
+      "Y": 1620,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "position",
+          "Type": "vector3",
+          "Value": [
+            28,
+            0,
+            12
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "0bc105ef-e62b-4608-89a7-c267319f3fa5",
+      "Name": "Marker world",
+      "Kind": "MatrixMultiply",
+      "X": 900,
+      "Y": 1620,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "236b1612-815b-4114-ba32-9b29fcd8abf2",
+      "Name": "Earth spin marker mesh",
+      "Kind": "ModelDraw",
+      "X": 1200,
+      "Y": 1620,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "assetPath",
+          "Type": "string",
+          "Value": "/Engine/BasicShapes/Cube.Cube"
+        },
+        {
+          "Id": "materialSchema",
+          "Type": "string",
+          "Value": "[{\u0022id\u0022:\u0022material_9d43bfbbceae0703fb401eed\u0022,\u0022name\u0022:\u0022Color\u0022,\u0022kind\u0022:\u0022vector\u0022,\u0022slot\u0022:0,\u0022materialPath\u0022:\u0022builtin:unlit-color\u0022,\u0022materialName\u0022:\u0022Unlit color\u0022,\u0022association\u0022:2,\u0022index\u0022:-1,\u0022value\u0022:[1,1,0.1,1]}]"
+        },
+        {
+          "Id": "material_9d43bfbbceae0703fb401eed",
+          "Type": "vector4",
+          "Value": [
+            1,
+            1,
+            0.1,
+            1
+          ]
+        },
+        {
+          "Id": "scale",
+          "Type": "vector3",
+          "Value": [
+            0.12,
+            0.06,
+            0.08
+          ]
+        },
+        {
+          "Id": "tint",
+          "Type": "vector4",
+          "Value": [
+            1,
+            1,
+            0.1,
+            1
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "8144e03e-5c7f-44e7-96f2-7883fdb9cdb1",
+      "Name": "Earth spin marker draw transform",
+      "Kind": "DecomposeTransform",
+      "X": 1500,
+      "Y": 1620,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "a61ac45f-009b-4c9b-b8cf-2156b3042db4",
+      "Name": "Mars orbit radians",
+      "Kind": "Multiply",
+      "X": 0,
+      "Y": 1800,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "b",
+          "Type": "float",
+          "Value": 0.4
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "42380842-8573-4c57-ab33-d5818ebd1da0",
+      "Name": "Mars degrees",
+      "Kind": "RadToDeg",
+      "X": 300,
+      "Y": 1800,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "1238419e-1bbc-4719-8954-51713bf2b7b1",
+      "Name": "Mars Z rotation",
+      "Kind": "ComposeVector4",
+      "X": 600,
+      "Y": 1800,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "eb56b024-f873-462e-8bce-9a6470133f6a",
+      "Name": "Mars Euler rotation",
+      "Kind": "Vector4ToVector3",
+      "X": 900,
+      "Y": 1800,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "c4eeea84-a6f2-4b39-ad05-07c0c170e971",
+      "Name": "Mars orbit",
+      "Kind": "Transform",
+      "X": 1200,
+      "Y": 1800,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "position",
+          "Type": "vector3",
+          "Value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "932975c5-e879-43b2-87db-ee6e0e35d93d",
+      "Name": "Mars orbit world",
+      "Kind": "MatrixMultiply",
+      "X": 1500,
+      "Y": 1800,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "baa2c3de-ea93-4463-9278-098c9861b9b4",
+      "Name": "Mars offset",
+      "Kind": "Transform",
+      "X": 0,
+      "Y": 1980,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "position",
+          "Type": "vector3",
+          "Value": [
+            600,
+            0,
+            0
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "a154f959-af58-44b4-8e82-2b7a1c2d032d",
+      "Name": "Mars frame",
+      "Kind": "MatrixMultiply",
+      "X": 300,
+      "Y": 1980,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "c7b5e67f-5094-402c-bd40-98a7dfac31bd",
+      "Name": "Mars spin radians",
+      "Kind": "Multiply",
+      "X": 600,
+      "Y": 1980,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "b",
+          "Type": "float",
+          "Value": 1.8
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "f862960f-b5f7-4c9a-90b8-5bc8bd5687d7",
+      "Name": "Mars spin degrees",
+      "Kind": "RadToDeg",
+      "X": 900,
+      "Y": 1980,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "bc451733-9422-47f3-a7a5-b74094dccb36",
+      "Name": "Mars spin Z rotation",
+      "Kind": "ComposeVector4",
+      "X": 1200,
+      "Y": 1980,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "876bb411-3bb5-481c-80cd-ed9a2f3c03b5",
+      "Name": "Mars spin Euler rotation",
+      "Kind": "Vector4ToVector3",
+      "X": 1500,
+      "Y": 1980,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "c1d780b4-b800-46d3-b52c-bfb2e4298f04",
+      "Name": "Mars spin",
+      "Kind": "Transform",
+      "X": 0,
+      "Y": 2160,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "position",
+          "Type": "vector3",
+          "Value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "4b0a045b-508c-4c21-b22c-85e04823cd83",
+      "Name": "Mars display",
+      "Kind": "MatrixMultiply",
+      "X": 300,
+      "Y": 2160,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "9aa6d2fe-93a9-4efa-a85f-d6e42c669d5d",
+      "Name": "Mars mesh",
+      "Kind": "ModelDraw",
+      "X": 600,
+      "Y": 2160,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "assetPath",
+          "Type": "string",
+          "Value": "/Engine/BasicShapes/Sphere.Sphere"
+        },
+        {
+          "Id": "materialSchema",
+          "Type": "string",
+          "Value": "[{\u0022id\u0022:\u0022material_9d43bfbbceae0703fb401eed\u0022,\u0022name\u0022:\u0022Color\u0022,\u0022kind\u0022:\u0022vector\u0022,\u0022slot\u0022:0,\u0022materialPath\u0022:\u0022builtin:unlit-color\u0022,\u0022materialName\u0022:\u0022Unlit color\u0022,\u0022association\u0022:2,\u0022index\u0022:-1,\u0022value\u0022:[1,0.15,0.06,1]}]"
+        },
+        {
+          "Id": "material_9d43bfbbceae0703fb401eed",
+          "Type": "vector4",
+          "Value": [
+            1,
+            0.15,
+            0.06,
+            1
+          ]
+        },
+        {
+          "Id": "scale",
+          "Type": "vector3",
+          "Value": [
+            0.28,
+            0.28,
+            0.28
+          ]
+        },
+        {
+          "Id": "tint",
+          "Type": "vector4",
+          "Value": [
+            1,
+            0.15,
+            0.06,
+            1
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "30aa1d5a-4e1c-44a2-9055-0395a800c35a",
+      "Name": "Mars draw transform",
+      "Kind": "DecomposeTransform",
+      "X": 900,
+      "Y": 2160,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "b47fcd14-024a-4dab-a723-9569dce6bb7e",
+      "Name": "Moon orbit radians",
+      "Kind": "Multiply",
+      "X": 1200,
+      "Y": 2160,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "b",
+          "Type": "float",
+          "Value": 2
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "a2d75871-146d-4f1b-b486-732694b9ea4a",
+      "Name": "Moon degrees",
+      "Kind": "RadToDeg",
+      "X": 1500,
+      "Y": 2160,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "355803d7-1ec3-44f0-8cb5-9bf5ef7fc99c",
+      "Name": "Moon Z rotation",
+      "Kind": "ComposeVector4",
+      "X": 0,
+      "Y": 2340,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "20557228-7bf2-40fc-b88b-d3760fa7d5c6",
+      "Name": "Moon Euler rotation",
+      "Kind": "Vector4ToVector3",
+      "X": 300,
+      "Y": 2340,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "d3fb0482-91e2-4082-a914-e080c3c96394",
+      "Name": "Moon local orbit",
+      "Kind": "Transform",
+      "X": 600,
+      "Y": 2340,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "position",
+          "Type": "vector3",
+          "Value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "552994ed-6428-408a-83a8-3c467836046c",
+      "Name": "Moon orbit world",
+      "Kind": "MatrixMultiply",
+      "X": 900,
+      "Y": 2340,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "6c390696-a5f4-4387-aebe-53fa5b3dcc8a",
+      "Name": "Moon offset",
+      "Kind": "Transform",
+      "X": 1200,
+      "Y": 2340,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "position",
+          "Type": "vector3",
+          "Value": [
+            100,
+            0,
+            0
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "55cd48ca-594a-4c6d-a819-9dd1c15c2a69",
+      "Name": "Moon world",
+      "Kind": "MatrixMultiply",
+      "X": 1500,
+      "Y": 2340,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "f1a61245-ad68-4b97-9383-4c7158145073",
+      "Name": "Moon mesh",
+      "Kind": "ModelDraw",
+      "X": 0,
+      "Y": 2520,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "assetPath",
+          "Type": "string",
+          "Value": "/Engine/BasicShapes/Sphere.Sphere"
+        },
+        {
+          "Id": "materialSchema",
+          "Type": "string",
+          "Value": "[{\u0022id\u0022:\u0022material_9d43bfbbceae0703fb401eed\u0022,\u0022name\u0022:\u0022Color\u0022,\u0022kind\u0022:\u0022vector\u0022,\u0022slot\u0022:0,\u0022materialPath\u0022:\u0022builtin:unlit-color\u0022,\u0022materialName\u0022:\u0022Unlit color\u0022,\u0022association\u0022:2,\u0022index\u0022:-1,\u0022value\u0022:[0.8,0.85,0.9,1]}]"
+        },
+        {
+          "Id": "material_9d43bfbbceae0703fb401eed",
+          "Type": "vector4",
+          "Value": [
+            0.8,
+            0.85,
+            0.9,
+            1
+          ]
+        },
+        {
+          "Id": "scale",
+          "Type": "vector3",
+          "Value": [
+            0.13,
+            0.13,
+            0.13
+          ]
+        },
+        {
+          "Id": "tint",
+          "Type": "vector4",
+          "Value": [
+            0.8,
+            0.85,
+            0.9,
+            1
+          ]
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    },
+    {
+      "Id": "ee2e3017-5949-40fe-92b5-7300c6d9f13d",
+      "Name": "Moon draw transform",
+      "Kind": "DecomposeTransform",
+      "X": 300,
+      "Y": 2520,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false
+    }
+  ],
+  "Connections": [
+    {
+      "SourceNodeId": "97c924f0-9e80-4964-b770-5e3ef3585e40",
+      "TargetNodeId": "34965bfa-960d-4ab6-a0b0-048333880a68",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "34965bfa-960d-4ab6-a0b0-048333880a68",
+      "TargetNodeId": "eaed6d3d-451c-464a-9762-9fd70c738d4c",
+      "TargetPortId": "b",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "eaed6d3d-451c-464a-9762-9fd70c738d4c",
+      "TargetNodeId": "017ee2af-24a4-4ec9-b605-4307bc42bd3b",
+      "TargetPortId": "a",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "017ee2af-24a4-4ec9-b605-4307bc42bd3b",
+      "TargetNodeId": "464d5835-b0ba-443e-99ee-3cf223857a4d",
+      "TargetPortId": "rotation",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "464d5835-b0ba-443e-99ee-3cf223857a4d",
+      "TargetNodeId": "ad2ecd73-92a2-4762-a7cb-0ef59ec42a60",
+      "TargetPortId": "matrix",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "ad2ecd73-92a2-4762-a7cb-0ef59ec42a60",
+      "TargetNodeId": "d2b78dd4-080e-406c-ae35-c4cd44cd9dd8",
+      "TargetPortId": "position",
+      "SourcePortId": "position"
+    },
+    {
+      "SourceNodeId": "ad2ecd73-92a2-4762-a7cb-0ef59ec42a60",
+      "TargetNodeId": "d2b78dd4-080e-406c-ae35-c4cd44cd9dd8",
+      "TargetPortId": "rotation",
+      "SourcePortId": "rotation"
+    },
+    {
+      "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+      "TargetNodeId": "d72b2011-5532-43f6-a107-2a57789c52b6",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "d72b2011-5532-43f6-a107-2a57789c52b6",
+      "TargetNodeId": "a9e734e1-41da-4f37-b6e7-f095ca343e80",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "a9e734e1-41da-4f37-b6e7-f095ca343e80",
+      "TargetNodeId": "f6d7588e-004f-4c36-af26-6104caa5e2b8",
+      "TargetPortId": "b",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "f6d7588e-004f-4c36-af26-6104caa5e2b8",
+      "TargetNodeId": "3880d792-717d-4309-b0ed-b05ae599d7fa",
+      "TargetPortId": "a",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "3880d792-717d-4309-b0ed-b05ae599d7fa",
+      "TargetNodeId": "13d14853-d5d5-4f50-a03e-7f00f69681ae",
+      "TargetPortId": "rotation",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "464d5835-b0ba-443e-99ee-3cf223857a4d",
+      "TargetNodeId": "2574ac9b-c39b-4701-b174-a7639bee0bde",
+      "TargetPortId": "parent",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "13d14853-d5d5-4f50-a03e-7f00f69681ae",
+      "TargetNodeId": "2574ac9b-c39b-4701-b174-a7639bee0bde",
+      "TargetPortId": "local",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "2574ac9b-c39b-4701-b174-a7639bee0bde",
+      "TargetNodeId": "18598e32-5000-4ff8-891b-8059029464f5",
+      "TargetPortId": "parent",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "99249b9d-bfbc-405c-8fc8-3f039c931ec4",
+      "TargetNodeId": "18598e32-5000-4ff8-891b-8059029464f5",
+      "TargetPortId": "local",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+      "TargetNodeId": "a30ac7b0-bf1e-432b-8909-d0d7b53e67e5",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "a30ac7b0-bf1e-432b-8909-d0d7b53e67e5",
+      "TargetNodeId": "47b63478-4313-4fea-a8c4-6adb5f0cef4f",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "47b63478-4313-4fea-a8c4-6adb5f0cef4f",
+      "TargetNodeId": "e4216f4b-c0f1-4b5b-94e5-9146a00a6dbf",
+      "TargetPortId": "b",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "e4216f4b-c0f1-4b5b-94e5-9146a00a6dbf",
+      "TargetNodeId": "9a46b91d-e2c3-4e87-84ab-c910ed640e48",
+      "TargetPortId": "a",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "9a46b91d-e2c3-4e87-84ab-c910ed640e48",
+      "TargetNodeId": "9028e18d-7647-40de-85df-f937754b88bf",
+      "TargetPortId": "rotation",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "18598e32-5000-4ff8-891b-8059029464f5",
+      "TargetNodeId": "e5a21726-8409-490a-996c-10c4c432b357",
+      "TargetPortId": "parent",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "9028e18d-7647-40de-85df-f937754b88bf",
+      "TargetNodeId": "e5a21726-8409-490a-996c-10c4c432b357",
+      "TargetPortId": "local",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "e5a21726-8409-490a-996c-10c4c432b357",
+      "TargetNodeId": "6d94e425-8ac8-473a-a804-23f24e41db44",
+      "TargetPortId": "matrix",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "6d94e425-8ac8-473a-a804-23f24e41db44",
+      "TargetNodeId": "c7fa4c34-93e3-46f1-a8eb-04c809a0978d",
+      "TargetPortId": "position",
+      "SourcePortId": "position"
+    },
+    {
+      "SourceNodeId": "6d94e425-8ac8-473a-a804-23f24e41db44",
+      "TargetNodeId": "c7fa4c34-93e3-46f1-a8eb-04c809a0978d",
+      "TargetPortId": "rotation",
+      "SourcePortId": "rotation"
+    },
+    {
+      "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+      "TargetNodeId": "391551e0-f14f-46b8-aeff-1eaab8292ca3",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "391551e0-f14f-46b8-aeff-1eaab8292ca3",
+      "TargetNodeId": "4d2c30a9-9730-4a78-a95e-f2c69de1e6a6",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "4d2c30a9-9730-4a78-a95e-f2c69de1e6a6",
+      "TargetNodeId": "33940ec9-0d00-44c2-be9c-723d86f9167b",
+      "TargetPortId": "b",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "33940ec9-0d00-44c2-be9c-723d86f9167b",
+      "TargetNodeId": "198ba267-d692-41d8-82a3-55a58ea5a5b2",
+      "TargetPortId": "a",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "198ba267-d692-41d8-82a3-55a58ea5a5b2",
+      "TargetNodeId": "16978164-c010-4cee-8889-a5cd5b55bb2b",
+      "TargetPortId": "rotation",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "464d5835-b0ba-443e-99ee-3cf223857a4d",
+      "TargetNodeId": "73efe244-d236-483d-9b97-44963c9568cf",
+      "TargetPortId": "parent",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "16978164-c010-4cee-8889-a5cd5b55bb2b",
+      "TargetNodeId": "73efe244-d236-483d-9b97-44963c9568cf",
+      "TargetPortId": "local",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "73efe244-d236-483d-9b97-44963c9568cf",
+      "TargetNodeId": "a2ca3e53-d489-466e-bde5-1149258535c2",
+      "TargetPortId": "parent",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "094d0500-dc87-48a0-a11a-71d0fe23ae34",
+      "TargetNodeId": "a2ca3e53-d489-466e-bde5-1149258535c2",
+      "TargetPortId": "local",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+      "TargetNodeId": "4cbf490d-0cc1-4319-9fcb-380819d0dbc8",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "4cbf490d-0cc1-4319-9fcb-380819d0dbc8",
+      "TargetNodeId": "afc8bfe6-be70-4170-8862-1e747e8aae30",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "afc8bfe6-be70-4170-8862-1e747e8aae30",
+      "TargetNodeId": "1adeb668-c591-4adc-8482-3164a8446a1e",
+      "TargetPortId": "b",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "1adeb668-c591-4adc-8482-3164a8446a1e",
+      "TargetNodeId": "3f756115-7ef8-4367-9995-2f816b4a8bbe",
+      "TargetPortId": "a",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "3f756115-7ef8-4367-9995-2f816b4a8bbe",
+      "TargetNodeId": "ed1065bb-9f8b-4559-9f0a-bd15cd605d8f",
+      "TargetPortId": "rotation",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "a2ca3e53-d489-466e-bde5-1149258535c2",
+      "TargetNodeId": "8a39f4c0-d63b-4b5b-90e3-bc7a8eef710f",
+      "TargetPortId": "parent",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "ed1065bb-9f8b-4559-9f0a-bd15cd605d8f",
+      "TargetNodeId": "8a39f4c0-d63b-4b5b-90e3-bc7a8eef710f",
+      "TargetPortId": "local",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "8a39f4c0-d63b-4b5b-90e3-bc7a8eef710f",
+      "TargetNodeId": "ab3005ad-c21c-4d91-b728-91ee2fc491ae",
+      "TargetPortId": "matrix",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "ab3005ad-c21c-4d91-b728-91ee2fc491ae",
+      "TargetNodeId": "05ebf910-3297-4a20-85ab-6ffa38bf90aa",
+      "TargetPortId": "position",
+      "SourcePortId": "position"
+    },
+    {
+      "SourceNodeId": "ab3005ad-c21c-4d91-b728-91ee2fc491ae",
+      "TargetNodeId": "05ebf910-3297-4a20-85ab-6ffa38bf90aa",
+      "TargetPortId": "rotation",
+      "SourcePortId": "rotation"
+    },
+    {
+      "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+      "TargetNodeId": "c514346d-428a-4af2-b368-8acb3e2b4cfa",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "c514346d-428a-4af2-b368-8acb3e2b4cfa",
+      "TargetNodeId": "9dde6aa7-e812-4856-a271-ca4d6ced069c",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "9dde6aa7-e812-4856-a271-ca4d6ced069c",
+      "TargetNodeId": "ae93b742-d9a0-4f57-9884-bb37a9528bb3",
+      "TargetPortId": "b",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "ae93b742-d9a0-4f57-9884-bb37a9528bb3",
+      "TargetNodeId": "1e4bf9b3-962b-4c27-b997-1e2b0b540e05",
+      "TargetPortId": "a",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "1e4bf9b3-962b-4c27-b997-1e2b0b540e05",
+      "TargetNodeId": "14e5bb28-affb-47df-ba38-3a68e69c9f71",
+      "TargetPortId": "rotation",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "464d5835-b0ba-443e-99ee-3cf223857a4d",
+      "TargetNodeId": "c213f94b-0b9b-4a74-85b9-f57d8efd8a30",
+      "TargetPortId": "parent",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "14e5bb28-affb-47df-ba38-3a68e69c9f71",
+      "TargetNodeId": "c213f94b-0b9b-4a74-85b9-f57d8efd8a30",
+      "TargetPortId": "local",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "c213f94b-0b9b-4a74-85b9-f57d8efd8a30",
+      "TargetNodeId": "226271b8-dd88-4ce5-8d36-f7f0b5ec7d90",
+      "TargetPortId": "parent",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "504f129a-9385-4a94-b13f-4e021fd79d0f",
+      "TargetNodeId": "226271b8-dd88-4ce5-8d36-f7f0b5ec7d90",
+      "TargetPortId": "local",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+      "TargetNodeId": "14dfba9a-d724-4139-8ce8-475f0d7fa814",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "14dfba9a-d724-4139-8ce8-475f0d7fa814",
+      "TargetNodeId": "df2337c9-9cc2-4e75-bf56-bc99d683bf0f",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "df2337c9-9cc2-4e75-bf56-bc99d683bf0f",
+      "TargetNodeId": "cf92e76d-7b1d-4b9c-bece-bec0e7d19f83",
+      "TargetPortId": "b",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "cf92e76d-7b1d-4b9c-bece-bec0e7d19f83",
+      "TargetNodeId": "3f7fe2e6-164a-4e13-a3a8-595d9db7358e",
+      "TargetPortId": "a",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "3f7fe2e6-164a-4e13-a3a8-595d9db7358e",
+      "TargetNodeId": "c7b745ff-f2f7-4723-b0d2-596cb0dae9f7",
+      "TargetPortId": "rotation",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "226271b8-dd88-4ce5-8d36-f7f0b5ec7d90",
+      "TargetNodeId": "1b5180a6-597b-4641-ad76-dcceafc6fd82",
+      "TargetPortId": "parent",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "c7b745ff-f2f7-4723-b0d2-596cb0dae9f7",
+      "TargetNodeId": "1b5180a6-597b-4641-ad76-dcceafc6fd82",
+      "TargetPortId": "local",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "1b5180a6-597b-4641-ad76-dcceafc6fd82",
+      "TargetNodeId": "47584f89-72d2-4a65-9fbd-9eedaec80b7f",
+      "TargetPortId": "matrix",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "47584f89-72d2-4a65-9fbd-9eedaec80b7f",
+      "TargetNodeId": "ac8833e7-9a23-478e-b430-a5174d4fff92",
+      "TargetPortId": "position",
+      "SourcePortId": "position"
+    },
+    {
+      "SourceNodeId": "47584f89-72d2-4a65-9fbd-9eedaec80b7f",
+      "TargetNodeId": "ac8833e7-9a23-478e-b430-a5174d4fff92",
+      "TargetPortId": "rotation",
+      "SourcePortId": "rotation"
+    },
+    {
+      "SourceNodeId": "1b5180a6-597b-4641-ad76-dcceafc6fd82",
+      "TargetNodeId": "0bc105ef-e62b-4608-89a7-c267319f3fa5",
+      "TargetPortId": "parent",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "8ddcdb47-b445-4d46-ab60-79df1ff9099e",
+      "TargetNodeId": "0bc105ef-e62b-4608-89a7-c267319f3fa5",
+      "TargetPortId": "local",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "0bc105ef-e62b-4608-89a7-c267319f3fa5",
+      "TargetNodeId": "8144e03e-5c7f-44e7-96f2-7883fdb9cdb1",
+      "TargetPortId": "matrix",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "8144e03e-5c7f-44e7-96f2-7883fdb9cdb1",
+      "TargetNodeId": "236b1612-815b-4114-ba32-9b29fcd8abf2",
+      "TargetPortId": "position",
+      "SourcePortId": "position"
+    },
+    {
+      "SourceNodeId": "8144e03e-5c7f-44e7-96f2-7883fdb9cdb1",
+      "TargetNodeId": "236b1612-815b-4114-ba32-9b29fcd8abf2",
+      "TargetPortId": "rotation",
+      "SourcePortId": "rotation"
+    },
+    {
+      "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+      "TargetNodeId": "a61ac45f-009b-4c9b-b8cf-2156b3042db4",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "a61ac45f-009b-4c9b-b8cf-2156b3042db4",
+      "TargetNodeId": "42380842-8573-4c57-ab33-d5818ebd1da0",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "42380842-8573-4c57-ab33-d5818ebd1da0",
+      "TargetNodeId": "1238419e-1bbc-4719-8954-51713bf2b7b1",
+      "TargetPortId": "b",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "1238419e-1bbc-4719-8954-51713bf2b7b1",
+      "TargetNodeId": "eb56b024-f873-462e-8bce-9a6470133f6a",
+      "TargetPortId": "a",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "eb56b024-f873-462e-8bce-9a6470133f6a",
+      "TargetNodeId": "c4eeea84-a6f2-4b39-ad05-07c0c170e971",
+      "TargetPortId": "rotation",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "464d5835-b0ba-443e-99ee-3cf223857a4d",
+      "TargetNodeId": "932975c5-e879-43b2-87db-ee6e0e35d93d",
+      "TargetPortId": "parent",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "c4eeea84-a6f2-4b39-ad05-07c0c170e971",
+      "TargetNodeId": "932975c5-e879-43b2-87db-ee6e0e35d93d",
+      "TargetPortId": "local",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "932975c5-e879-43b2-87db-ee6e0e35d93d",
+      "TargetNodeId": "a154f959-af58-44b4-8e82-2b7a1c2d032d",
+      "TargetPortId": "parent",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "baa2c3de-ea93-4463-9278-098c9861b9b4",
+      "TargetNodeId": "a154f959-af58-44b4-8e82-2b7a1c2d032d",
+      "TargetPortId": "local",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+      "TargetNodeId": "c7b5e67f-5094-402c-bd40-98a7dfac31bd",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "c7b5e67f-5094-402c-bd40-98a7dfac31bd",
+      "TargetNodeId": "f862960f-b5f7-4c9a-90b8-5bc8bd5687d7",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "f862960f-b5f7-4c9a-90b8-5bc8bd5687d7",
+      "TargetNodeId": "bc451733-9422-47f3-a7a5-b74094dccb36",
+      "TargetPortId": "b",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "bc451733-9422-47f3-a7a5-b74094dccb36",
+      "TargetNodeId": "876bb411-3bb5-481c-80cd-ed9a2f3c03b5",
+      "TargetPortId": "a",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "876bb411-3bb5-481c-80cd-ed9a2f3c03b5",
+      "TargetNodeId": "c1d780b4-b800-46d3-b52c-bfb2e4298f04",
+      "TargetPortId": "rotation",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "a154f959-af58-44b4-8e82-2b7a1c2d032d",
+      "TargetNodeId": "4b0a045b-508c-4c21-b22c-85e04823cd83",
+      "TargetPortId": "parent",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "c1d780b4-b800-46d3-b52c-bfb2e4298f04",
+      "TargetNodeId": "4b0a045b-508c-4c21-b22c-85e04823cd83",
+      "TargetPortId": "local",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "4b0a045b-508c-4c21-b22c-85e04823cd83",
+      "TargetNodeId": "30aa1d5a-4e1c-44a2-9055-0395a800c35a",
+      "TargetPortId": "matrix",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "30aa1d5a-4e1c-44a2-9055-0395a800c35a",
+      "TargetNodeId": "9aa6d2fe-93a9-4efa-a85f-d6e42c669d5d",
+      "TargetPortId": "position",
+      "SourcePortId": "position"
+    },
+    {
+      "SourceNodeId": "30aa1d5a-4e1c-44a2-9055-0395a800c35a",
+      "TargetNodeId": "9aa6d2fe-93a9-4efa-a85f-d6e42c669d5d",
+      "TargetPortId": "rotation",
+      "SourcePortId": "rotation"
+    },
+    {
+      "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+      "TargetNodeId": "b47fcd14-024a-4dab-a723-9569dce6bb7e",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "b47fcd14-024a-4dab-a723-9569dce6bb7e",
+      "TargetNodeId": "a2d75871-146d-4f1b-b486-732694b9ea4a",
+      "TargetPortId": "a",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "a2d75871-146d-4f1b-b486-732694b9ea4a",
+      "TargetNodeId": "355803d7-1ec3-44f0-8cb5-9bf5ef7fc99c",
+      "TargetPortId": "b",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "355803d7-1ec3-44f0-8cb5-9bf5ef7fc99c",
+      "TargetNodeId": "20557228-7bf2-40fc-b88b-d3760fa7d5c6",
+      "TargetPortId": "a",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "20557228-7bf2-40fc-b88b-d3760fa7d5c6",
+      "TargetNodeId": "d3fb0482-91e2-4082-a914-e080c3c96394",
+      "TargetPortId": "rotation",
+      "SourcePortId": null
+    },
+    {
+      "SourceNodeId": "226271b8-dd88-4ce5-8d36-f7f0b5ec7d90",
+      "TargetNodeId": "552994ed-6428-408a-83a8-3c467836046c",
+      "TargetPortId": "parent",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "d3fb0482-91e2-4082-a914-e080c3c96394",
+      "TargetNodeId": "552994ed-6428-408a-83a8-3c467836046c",
+      "TargetPortId": "local",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "552994ed-6428-408a-83a8-3c467836046c",
+      "TargetNodeId": "55cd48ca-594a-4c6d-a819-9dd1c15c2a69",
+      "TargetPortId": "parent",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "6c390696-a5f4-4387-aebe-53fa5b3dcc8a",
+      "TargetNodeId": "55cd48ca-594a-4c6d-a819-9dd1c15c2a69",
+      "TargetPortId": "local",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "55cd48ca-594a-4c6d-a819-9dd1c15c2a69",
+      "TargetNodeId": "ee2e3017-5949-40fe-92b5-7300c6d9f13d",
+      "TargetPortId": "matrix",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "ee2e3017-5949-40fe-92b5-7300c6d9f13d",
+      "TargetNodeId": "f1a61245-ad68-4b97-9383-4c7158145073",
+      "TargetPortId": "position",
+      "SourcePortId": "position"
+    },
+    {
+      "SourceNodeId": "ee2e3017-5949-40fe-92b5-7300c6d9f13d",
+      "TargetNodeId": "f1a61245-ad68-4b97-9383-4c7158145073",
+      "TargetPortId": "rotation",
+      "SourcePortId": "rotation"
+    }
+  ],
+  "History": {
+    "RootId": "a7554c21-5762-49f1-88d7-422d5cf716b6",
+    "CurrentNodeId": "a7554c21-5762-49f1-88d7-422d5cf716b6",
+    "TimelineRevisionId": "057fe645-99bb-4783-b8a7-7f561679fa26",
+    "NextBranchNumber": 1,
+    "Entries": [
+      {
+        "Id": "a7554c21-5762-49f1-88d7-422d5cf716b6",
+        "ParentId": null,
+        "PreferredChildId": null,
+        "Description": "Dedicated Matrix solar-system hierarchy",
+        "BranchName": "Main",
+        "IsPinned": false,
+        "State": {
+          "Nodes": [
+            {
+              "Id": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+              "Kind": "Time",
+              "Name": "Solar clock",
+              "X": 0,
+              "Y": 0,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "97c924f0-9e80-4964-b770-5e3ef3585e40",
+              "Kind": "Float",
+              "Name": "Root radians",
+              "X": 300,
+              "Y": 0,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "value",
+                  "Type": "float",
+                  "Value": 0.25
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "34965bfa-960d-4ab6-a0b0-048333880a68",
+              "Kind": "RadToDeg",
+              "Name": "Root degrees",
+              "X": 600,
+              "Y": 0,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "eaed6d3d-451c-464a-9762-9fd70c738d4c",
+              "Kind": "ComposeVector4",
+              "Name": "Root Z rotation",
+              "X": 900,
+              "Y": 0,
+              "PortType": "FloatX4",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "017ee2af-24a4-4ec9-b605-4307bc42bd3b",
+              "Kind": "Vector4ToVector3",
+              "Name": "Root Euler rotation",
+              "X": 1200,
+              "Y": 0,
+              "PortType": "FloatX3",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "464d5835-b0ba-443e-99ee-3cf223857a4d",
+              "Kind": "Transform",
+              "Name": "Sun root",
+              "X": 1500,
+              "Y": 0,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "position",
+                  "Type": "vector3",
+                  "Value": [
+                    80,
+                    -40,
+                    30
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "d2b78dd4-080e-406c-ae35-c4cd44cd9dd8",
+              "Kind": "ModelDraw",
+              "Name": "Sun mesh",
+              "X": 0,
+              "Y": 180,
+              "PortType": "RenderInstance",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "assetPath",
+                  "Type": "string",
+                  "Value": "/Engine/BasicShapes/Sphere.Sphere"
+                },
+                {
+                  "Id": "materialSchema",
+                  "Type": "string",
+                  "Value": "[{\u0022id\u0022:\u0022material_9d43bfbbceae0703fb401eed\u0022,\u0022name\u0022:\u0022Color\u0022,\u0022kind\u0022:\u0022vector\u0022,\u0022slot\u0022:0,\u0022materialPath\u0022:\u0022builtin:unlit-color\u0022,\u0022materialName\u0022:\u0022Unlit color\u0022,\u0022association\u0022:2,\u0022index\u0022:-1,\u0022value\u0022:[1,0.65,0.08,1]}]"
+                },
+                {
+                  "Id": "material_9d43bfbbceae0703fb401eed",
+                  "Type": "vector4",
+                  "Value": [
+                    1,
+                    0.65,
+                    0.08,
+                    1
+                  ]
+                },
+                {
+                  "Id": "scale",
+                  "Type": "vector3",
+                  "Value": [
+                    0.75,
+                    0.75,
+                    0.75
+                  ]
+                },
+                {
+                  "Id": "tint",
+                  "Type": "vector4",
+                  "Value": [
+                    1,
+                    0.65,
+                    0.08,
+                    1
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "ad2ecd73-92a2-4762-a7cb-0ef59ec42a60",
+              "Kind": "DecomposeTransform",
+              "Name": "Sun draw transform",
+              "X": 300,
+              "Y": 180,
+              "PortType": "FloatX3",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "d72b2011-5532-43f6-a107-2a57789c52b6",
+              "Kind": "Multiply",
+              "Name": "Mercury orbit radians",
+              "X": 600,
+              "Y": 180,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "b",
+                  "Type": "float",
+                  "Value": 1.6
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "a9e734e1-41da-4f37-b6e7-f095ca343e80",
+              "Kind": "RadToDeg",
+              "Name": "Mercury degrees",
+              "X": 900,
+              "Y": 180,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "f6d7588e-004f-4c36-af26-6104caa5e2b8",
+              "Kind": "ComposeVector4",
+              "Name": "Mercury Z rotation",
+              "X": 1200,
+              "Y": 180,
+              "PortType": "FloatX4",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "3880d792-717d-4309-b0ed-b05ae599d7fa",
+              "Kind": "Vector4ToVector3",
+              "Name": "Mercury Euler rotation",
+              "X": 1500,
+              "Y": 180,
+              "PortType": "FloatX3",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "13d14853-d5d5-4f50-a03e-7f00f69681ae",
+              "Kind": "Transform",
+              "Name": "Mercury orbit",
+              "X": 0,
+              "Y": 360,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "position",
+                  "Type": "vector3",
+                  "Value": [
+                    0,
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "2574ac9b-c39b-4701-b174-a7639bee0bde",
+              "Kind": "MatrixMultiply",
+              "Name": "Mercury orbit world",
+              "X": 300,
+              "Y": 360,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "99249b9d-bfbc-405c-8fc8-3f039c931ec4",
+              "Kind": "Transform",
+              "Name": "Mercury offset",
+              "X": 600,
+              "Y": 360,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "position",
+                  "Type": "vector3",
+                  "Value": [
+                    170,
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "18598e32-5000-4ff8-891b-8059029464f5",
+              "Kind": "MatrixMultiply",
+              "Name": "Mercury frame",
+              "X": 900,
+              "Y": 360,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "a30ac7b0-bf1e-432b-8909-d0d7b53e67e5",
+              "Kind": "Multiply",
+              "Name": "Mercury spin radians",
+              "X": 1200,
+              "Y": 360,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "b",
+                  "Type": "float",
+                  "Value": 1.1
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "47b63478-4313-4fea-a8c4-6adb5f0cef4f",
+              "Kind": "RadToDeg",
+              "Name": "Mercury spin degrees",
+              "X": 1500,
+              "Y": 360,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "e4216f4b-c0f1-4b5b-94e5-9146a00a6dbf",
+              "Kind": "ComposeVector4",
+              "Name": "Mercury spin Z rotation",
+              "X": 0,
+              "Y": 540,
+              "PortType": "FloatX4",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "9a46b91d-e2c3-4e87-84ab-c910ed640e48",
+              "Kind": "Vector4ToVector3",
+              "Name": "Mercury spin Euler rotation",
+              "X": 300,
+              "Y": 540,
+              "PortType": "FloatX3",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "9028e18d-7647-40de-85df-f937754b88bf",
+              "Kind": "Transform",
+              "Name": "Mercury spin",
+              "X": 600,
+              "Y": 540,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "position",
+                  "Type": "vector3",
+                  "Value": [
+                    0,
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "e5a21726-8409-490a-996c-10c4c432b357",
+              "Kind": "MatrixMultiply",
+              "Name": "Mercury display",
+              "X": 900,
+              "Y": 540,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "c7fa4c34-93e3-46f1-a8eb-04c809a0978d",
+              "Kind": "ModelDraw",
+              "Name": "Mercury mesh",
+              "X": 1200,
+              "Y": 540,
+              "PortType": "RenderInstance",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "assetPath",
+                  "Type": "string",
+                  "Value": "/Engine/BasicShapes/Sphere.Sphere"
+                },
+                {
+                  "Id": "materialSchema",
+                  "Type": "string",
+                  "Value": "[{\u0022id\u0022:\u0022material_9d43bfbbceae0703fb401eed\u0022,\u0022name\u0022:\u0022Color\u0022,\u0022kind\u0022:\u0022vector\u0022,\u0022slot\u0022:0,\u0022materialPath\u0022:\u0022builtin:unlit-color\u0022,\u0022materialName\u0022:\u0022Unlit color\u0022,\u0022association\u0022:2,\u0022index\u0022:-1,\u0022value\u0022:[0.6,0.5,0.4,1]}]"
+                },
+                {
+                  "Id": "material_9d43bfbbceae0703fb401eed",
+                  "Type": "vector4",
+                  "Value": [
+                    0.6,
+                    0.5,
+                    0.4,
+                    1
+                  ]
+                },
+                {
+                  "Id": "scale",
+                  "Type": "vector3",
+                  "Value": [
+                    0.18,
+                    0.18,
+                    0.18
+                  ]
+                },
+                {
+                  "Id": "tint",
+                  "Type": "vector4",
+                  "Value": [
+                    0.6,
+                    0.5,
+                    0.4,
+                    1
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "6d94e425-8ac8-473a-a804-23f24e41db44",
+              "Kind": "DecomposeTransform",
+              "Name": "Mercury draw transform",
+              "X": 1500,
+              "Y": 540,
+              "PortType": "FloatX3",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "391551e0-f14f-46b8-aeff-1eaab8292ca3",
+              "Kind": "Multiply",
+              "Name": "Venus orbit radians",
+              "X": 0,
+              "Y": 720,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "b",
+                  "Type": "float",
+                  "Value": 1.05
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "4d2c30a9-9730-4a78-a95e-f2c69de1e6a6",
+              "Kind": "RadToDeg",
+              "Name": "Venus degrees",
+              "X": 300,
+              "Y": 720,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "33940ec9-0d00-44c2-be9c-723d86f9167b",
+              "Kind": "ComposeVector4",
+              "Name": "Venus Z rotation",
+              "X": 600,
+              "Y": 720,
+              "PortType": "FloatX4",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "198ba267-d692-41d8-82a3-55a58ea5a5b2",
+              "Kind": "Vector4ToVector3",
+              "Name": "Venus Euler rotation",
+              "X": 900,
+              "Y": 720,
+              "PortType": "FloatX3",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "16978164-c010-4cee-8889-a5cd5b55bb2b",
+              "Kind": "Transform",
+              "Name": "Venus orbit",
+              "X": 1200,
+              "Y": 720,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "position",
+                  "Type": "vector3",
+                  "Value": [
+                    0,
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "73efe244-d236-483d-9b97-44963c9568cf",
+              "Kind": "MatrixMultiply",
+              "Name": "Venus orbit world",
+              "X": 1500,
+              "Y": 720,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "094d0500-dc87-48a0-a11a-71d0fe23ae34",
+              "Kind": "Transform",
+              "Name": "Venus offset",
+              "X": 0,
+              "Y": 900,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "position",
+                  "Type": "vector3",
+                  "Value": [
+                    270,
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "a2ca3e53-d489-466e-bde5-1149258535c2",
+              "Kind": "MatrixMultiply",
+              "Name": "Venus frame",
+              "X": 300,
+              "Y": 900,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "4cbf490d-0cc1-4319-9fcb-380819d0dbc8",
+              "Kind": "Multiply",
+              "Name": "Venus spin radians",
+              "X": 600,
+              "Y": 900,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "b",
+                  "Type": "float",
+                  "Value": -0.35
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "afc8bfe6-be70-4170-8862-1e747e8aae30",
+              "Kind": "RadToDeg",
+              "Name": "Venus spin degrees",
+              "X": 900,
+              "Y": 900,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "1adeb668-c591-4adc-8482-3164a8446a1e",
+              "Kind": "ComposeVector4",
+              "Name": "Venus spin Z rotation",
+              "X": 1200,
+              "Y": 900,
+              "PortType": "FloatX4",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "3f756115-7ef8-4367-9995-2f816b4a8bbe",
+              "Kind": "Vector4ToVector3",
+              "Name": "Venus spin Euler rotation",
+              "X": 1500,
+              "Y": 900,
+              "PortType": "FloatX3",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "ed1065bb-9f8b-4559-9f0a-bd15cd605d8f",
+              "Kind": "Transform",
+              "Name": "Venus spin",
+              "X": 0,
+              "Y": 1080,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "position",
+                  "Type": "vector3",
+                  "Value": [
+                    0,
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "8a39f4c0-d63b-4b5b-90e3-bc7a8eef710f",
+              "Kind": "MatrixMultiply",
+              "Name": "Venus display",
+              "X": 300,
+              "Y": 1080,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "05ebf910-3297-4a20-85ab-6ffa38bf90aa",
+              "Kind": "ModelDraw",
+              "Name": "Venus mesh",
+              "X": 600,
+              "Y": 1080,
+              "PortType": "RenderInstance",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "assetPath",
+                  "Type": "string",
+                  "Value": "/Engine/BasicShapes/Sphere.Sphere"
+                },
+                {
+                  "Id": "materialSchema",
+                  "Type": "string",
+                  "Value": "[{\u0022id\u0022:\u0022material_9d43bfbbceae0703fb401eed\u0022,\u0022name\u0022:\u0022Color\u0022,\u0022kind\u0022:\u0022vector\u0022,\u0022slot\u0022:0,\u0022materialPath\u0022:\u0022builtin:unlit-color\u0022,\u0022materialName\u0022:\u0022Unlit color\u0022,\u0022association\u0022:2,\u0022index\u0022:-1,\u0022value\u0022:[1,0.8,0.35,1]}]"
+                },
+                {
+                  "Id": "material_9d43bfbbceae0703fb401eed",
+                  "Type": "vector4",
+                  "Value": [
+                    1,
+                    0.8,
+                    0.35,
+                    1
+                  ]
+                },
+                {
+                  "Id": "scale",
+                  "Type": "vector3",
+                  "Value": [
+                    0.28,
+                    0.28,
+                    0.28
+                  ]
+                },
+                {
+                  "Id": "tint",
+                  "Type": "vector4",
+                  "Value": [
+                    1,
+                    0.8,
+                    0.35,
+                    1
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "ab3005ad-c21c-4d91-b728-91ee2fc491ae",
+              "Kind": "DecomposeTransform",
+              "Name": "Venus draw transform",
+              "X": 900,
+              "Y": 1080,
+              "PortType": "FloatX3",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "c514346d-428a-4af2-b368-8acb3e2b4cfa",
+              "Kind": "Multiply",
+              "Name": "Earth orbit radians",
+              "X": 1200,
+              "Y": 1080,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "b",
+                  "Type": "float",
+                  "Value": 0.65
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "9dde6aa7-e812-4856-a271-ca4d6ced069c",
+              "Kind": "RadToDeg",
+              "Name": "Earth degrees",
+              "X": 1500,
+              "Y": 1080,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "ae93b742-d9a0-4f57-9884-bb37a9528bb3",
+              "Kind": "ComposeVector4",
+              "Name": "Earth Z rotation",
+              "X": 0,
+              "Y": 1260,
+              "PortType": "FloatX4",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "1e4bf9b3-962b-4c27-b997-1e2b0b540e05",
+              "Kind": "Vector4ToVector3",
+              "Name": "Earth Euler rotation",
+              "X": 300,
+              "Y": 1260,
+              "PortType": "FloatX3",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "14e5bb28-affb-47df-ba38-3a68e69c9f71",
+              "Kind": "Transform",
+              "Name": "Earth orbit",
+              "X": 600,
+              "Y": 1260,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "position",
+                  "Type": "vector3",
+                  "Value": [
+                    0,
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "c213f94b-0b9b-4a74-85b9-f57d8efd8a30",
+              "Kind": "MatrixMultiply",
+              "Name": "Earth orbit world",
+              "X": 900,
+              "Y": 1260,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "504f129a-9385-4a94-b13f-4e021fd79d0f",
+              "Kind": "Transform",
+              "Name": "Earth offset",
+              "X": 1200,
+              "Y": 1260,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "position",
+                  "Type": "vector3",
+                  "Value": [
+                    400,
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "226271b8-dd88-4ce5-8d36-f7f0b5ec7d90",
+              "Kind": "MatrixMultiply",
+              "Name": "Earth frame",
+              "X": 1500,
+              "Y": 1260,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "14dfba9a-d724-4139-8ce8-475f0d7fa814",
+              "Kind": "Multiply",
+              "Name": "Earth spin radians",
+              "X": 0,
+              "Y": 1440,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "b",
+                  "Type": "float",
+                  "Value": 2.4
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "df2337c9-9cc2-4e75-bf56-bc99d683bf0f",
+              "Kind": "RadToDeg",
+              "Name": "Earth spin degrees",
+              "X": 300,
+              "Y": 1440,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "cf92e76d-7b1d-4b9c-bece-bec0e7d19f83",
+              "Kind": "ComposeVector4",
+              "Name": "Earth spin Z rotation",
+              "X": 600,
+              "Y": 1440,
+              "PortType": "FloatX4",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "3f7fe2e6-164a-4e13-a3a8-595d9db7358e",
+              "Kind": "Vector4ToVector3",
+              "Name": "Earth spin Euler rotation",
+              "X": 900,
+              "Y": 1440,
+              "PortType": "FloatX3",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "c7b745ff-f2f7-4723-b0d2-596cb0dae9f7",
+              "Kind": "Transform",
+              "Name": "Earth spin",
+              "X": 1200,
+              "Y": 1440,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "position",
+                  "Type": "vector3",
+                  "Value": [
+                    0,
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "1b5180a6-597b-4641-ad76-dcceafc6fd82",
+              "Kind": "MatrixMultiply",
+              "Name": "Earth display",
+              "X": 1500,
+              "Y": 1440,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "ac8833e7-9a23-478e-b430-a5174d4fff92",
+              "Kind": "ModelDraw",
+              "Name": "Earth mesh",
+              "X": 0,
+              "Y": 1620,
+              "PortType": "RenderInstance",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "assetPath",
+                  "Type": "string",
+                  "Value": "/Engine/BasicShapes/Sphere.Sphere"
+                },
+                {
+                  "Id": "materialSchema",
+                  "Type": "string",
+                  "Value": "[{\u0022id\u0022:\u0022material_9d43bfbbceae0703fb401eed\u0022,\u0022name\u0022:\u0022Color\u0022,\u0022kind\u0022:\u0022vector\u0022,\u0022slot\u0022:0,\u0022materialPath\u0022:\u0022builtin:unlit-color\u0022,\u0022materialName\u0022:\u0022Unlit color\u0022,\u0022association\u0022:2,\u0022index\u0022:-1,\u0022value\u0022:[0.1,0.4,1,1]}]"
+                },
+                {
+                  "Id": "material_9d43bfbbceae0703fb401eed",
+                  "Type": "vector4",
+                  "Value": [
+                    0.1,
+                    0.4,
+                    1,
+                    1
+                  ]
+                },
+                {
+                  "Id": "scale",
+                  "Type": "vector3",
+                  "Value": [
+                    0.35,
+                    0.35,
+                    0.35
+                  ]
+                },
+                {
+                  "Id": "tint",
+                  "Type": "vector4",
+                  "Value": [
+                    0.1,
+                    0.4,
+                    1,
+                    1
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "47584f89-72d2-4a65-9fbd-9eedaec80b7f",
+              "Kind": "DecomposeTransform",
+              "Name": "Earth draw transform",
+              "X": 300,
+              "Y": 1620,
+              "PortType": "FloatX3",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "8ddcdb47-b445-4d46-ab60-79df1ff9099e",
+              "Kind": "Transform",
+              "Name": "Marker offset",
+              "X": 600,
+              "Y": 1620,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "position",
+                  "Type": "vector3",
+                  "Value": [
+                    28,
+                    0,
+                    12
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "0bc105ef-e62b-4608-89a7-c267319f3fa5",
+              "Kind": "MatrixMultiply",
+              "Name": "Marker world",
+              "X": 900,
+              "Y": 1620,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "236b1612-815b-4114-ba32-9b29fcd8abf2",
+              "Kind": "ModelDraw",
+              "Name": "Earth spin marker mesh",
+              "X": 1200,
+              "Y": 1620,
+              "PortType": "RenderInstance",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "assetPath",
+                  "Type": "string",
+                  "Value": "/Engine/BasicShapes/Cube.Cube"
+                },
+                {
+                  "Id": "materialSchema",
+                  "Type": "string",
+                  "Value": "[{\u0022id\u0022:\u0022material_9d43bfbbceae0703fb401eed\u0022,\u0022name\u0022:\u0022Color\u0022,\u0022kind\u0022:\u0022vector\u0022,\u0022slot\u0022:0,\u0022materialPath\u0022:\u0022builtin:unlit-color\u0022,\u0022materialName\u0022:\u0022Unlit color\u0022,\u0022association\u0022:2,\u0022index\u0022:-1,\u0022value\u0022:[1,1,0.1,1]}]"
+                },
+                {
+                  "Id": "material_9d43bfbbceae0703fb401eed",
+                  "Type": "vector4",
+                  "Value": [
+                    1,
+                    1,
+                    0.1,
+                    1
+                  ]
+                },
+                {
+                  "Id": "scale",
+                  "Type": "vector3",
+                  "Value": [
+                    0.12,
+                    0.06,
+                    0.08
+                  ]
+                },
+                {
+                  "Id": "tint",
+                  "Type": "vector4",
+                  "Value": [
+                    1,
+                    1,
+                    0.1,
+                    1
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "8144e03e-5c7f-44e7-96f2-7883fdb9cdb1",
+              "Kind": "DecomposeTransform",
+              "Name": "Earth spin marker draw transform",
+              "X": 1500,
+              "Y": 1620,
+              "PortType": "FloatX3",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "a61ac45f-009b-4c9b-b8cf-2156b3042db4",
+              "Kind": "Multiply",
+              "Name": "Mars orbit radians",
+              "X": 0,
+              "Y": 1800,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "b",
+                  "Type": "float",
+                  "Value": 0.4
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "42380842-8573-4c57-ab33-d5818ebd1da0",
+              "Kind": "RadToDeg",
+              "Name": "Mars degrees",
+              "X": 300,
+              "Y": 1800,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "1238419e-1bbc-4719-8954-51713bf2b7b1",
+              "Kind": "ComposeVector4",
+              "Name": "Mars Z rotation",
+              "X": 600,
+              "Y": 1800,
+              "PortType": "FloatX4",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "eb56b024-f873-462e-8bce-9a6470133f6a",
+              "Kind": "Vector4ToVector3",
+              "Name": "Mars Euler rotation",
+              "X": 900,
+              "Y": 1800,
+              "PortType": "FloatX3",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "c4eeea84-a6f2-4b39-ad05-07c0c170e971",
+              "Kind": "Transform",
+              "Name": "Mars orbit",
+              "X": 1200,
+              "Y": 1800,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "position",
+                  "Type": "vector3",
+                  "Value": [
+                    0,
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "932975c5-e879-43b2-87db-ee6e0e35d93d",
+              "Kind": "MatrixMultiply",
+              "Name": "Mars orbit world",
+              "X": 1500,
+              "Y": 1800,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "baa2c3de-ea93-4463-9278-098c9861b9b4",
+              "Kind": "Transform",
+              "Name": "Mars offset",
+              "X": 0,
+              "Y": 1980,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "position",
+                  "Type": "vector3",
+                  "Value": [
+                    600,
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "a154f959-af58-44b4-8e82-2b7a1c2d032d",
+              "Kind": "MatrixMultiply",
+              "Name": "Mars frame",
+              "X": 300,
+              "Y": 1980,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "c7b5e67f-5094-402c-bd40-98a7dfac31bd",
+              "Kind": "Multiply",
+              "Name": "Mars spin radians",
+              "X": 600,
+              "Y": 1980,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "b",
+                  "Type": "float",
+                  "Value": 1.8
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "f862960f-b5f7-4c9a-90b8-5bc8bd5687d7",
+              "Kind": "RadToDeg",
+              "Name": "Mars spin degrees",
+              "X": 900,
+              "Y": 1980,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "bc451733-9422-47f3-a7a5-b74094dccb36",
+              "Kind": "ComposeVector4",
+              "Name": "Mars spin Z rotation",
+              "X": 1200,
+              "Y": 1980,
+              "PortType": "FloatX4",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "876bb411-3bb5-481c-80cd-ed9a2f3c03b5",
+              "Kind": "Vector4ToVector3",
+              "Name": "Mars spin Euler rotation",
+              "X": 1500,
+              "Y": 1980,
+              "PortType": "FloatX3",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "c1d780b4-b800-46d3-b52c-bfb2e4298f04",
+              "Kind": "Transform",
+              "Name": "Mars spin",
+              "X": 0,
+              "Y": 2160,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "position",
+                  "Type": "vector3",
+                  "Value": [
+                    0,
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "4b0a045b-508c-4c21-b22c-85e04823cd83",
+              "Kind": "MatrixMultiply",
+              "Name": "Mars display",
+              "X": 300,
+              "Y": 2160,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "9aa6d2fe-93a9-4efa-a85f-d6e42c669d5d",
+              "Kind": "ModelDraw",
+              "Name": "Mars mesh",
+              "X": 600,
+              "Y": 2160,
+              "PortType": "RenderInstance",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "assetPath",
+                  "Type": "string",
+                  "Value": "/Engine/BasicShapes/Sphere.Sphere"
+                },
+                {
+                  "Id": "materialSchema",
+                  "Type": "string",
+                  "Value": "[{\u0022id\u0022:\u0022material_9d43bfbbceae0703fb401eed\u0022,\u0022name\u0022:\u0022Color\u0022,\u0022kind\u0022:\u0022vector\u0022,\u0022slot\u0022:0,\u0022materialPath\u0022:\u0022builtin:unlit-color\u0022,\u0022materialName\u0022:\u0022Unlit color\u0022,\u0022association\u0022:2,\u0022index\u0022:-1,\u0022value\u0022:[1,0.15,0.06,1]}]"
+                },
+                {
+                  "Id": "material_9d43bfbbceae0703fb401eed",
+                  "Type": "vector4",
+                  "Value": [
+                    1,
+                    0.15,
+                    0.06,
+                    1
+                  ]
+                },
+                {
+                  "Id": "scale",
+                  "Type": "vector3",
+                  "Value": [
+                    0.28,
+                    0.28,
+                    0.28
+                  ]
+                },
+                {
+                  "Id": "tint",
+                  "Type": "vector4",
+                  "Value": [
+                    1,
+                    0.15,
+                    0.06,
+                    1
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "30aa1d5a-4e1c-44a2-9055-0395a800c35a",
+              "Kind": "DecomposeTransform",
+              "Name": "Mars draw transform",
+              "X": 900,
+              "Y": 2160,
+              "PortType": "FloatX3",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "b47fcd14-024a-4dab-a723-9569dce6bb7e",
+              "Kind": "Multiply",
+              "Name": "Moon orbit radians",
+              "X": 1200,
+              "Y": 2160,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "b",
+                  "Type": "float",
+                  "Value": 2
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "a2d75871-146d-4f1b-b486-732694b9ea4a",
+              "Kind": "RadToDeg",
+              "Name": "Moon degrees",
+              "X": 1500,
+              "Y": 2160,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "355803d7-1ec3-44f0-8cb5-9bf5ef7fc99c",
+              "Kind": "ComposeVector4",
+              "Name": "Moon Z rotation",
+              "X": 0,
+              "Y": 2340,
+              "PortType": "FloatX4",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "20557228-7bf2-40fc-b88b-d3760fa7d5c6",
+              "Kind": "Vector4ToVector3",
+              "Name": "Moon Euler rotation",
+              "X": 300,
+              "Y": 2340,
+              "PortType": "FloatX3",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "d3fb0482-91e2-4082-a914-e080c3c96394",
+              "Kind": "Transform",
+              "Name": "Moon local orbit",
+              "X": 600,
+              "Y": 2340,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "position",
+                  "Type": "vector3",
+                  "Value": [
+                    0,
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "552994ed-6428-408a-83a8-3c467836046c",
+              "Kind": "MatrixMultiply",
+              "Name": "Moon orbit world",
+              "X": 900,
+              "Y": 2340,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "6c390696-a5f4-4387-aebe-53fa5b3dcc8a",
+              "Kind": "Transform",
+              "Name": "Moon offset",
+              "X": 1200,
+              "Y": 2340,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "position",
+                  "Type": "vector3",
+                  "Value": [
+                    100,
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "55cd48ca-594a-4c6d-a819-9dd1c15c2a69",
+              "Kind": "MatrixMultiply",
+              "Name": "Moon world",
+              "X": 1500,
+              "Y": 2340,
+              "PortType": "Matrix",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "f1a61245-ad68-4b97-9383-4c7158145073",
+              "Kind": "ModelDraw",
+              "Name": "Moon mesh",
+              "X": 0,
+              "Y": 2520,
+              "PortType": "RenderInstance",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "assetPath",
+                  "Type": "string",
+                  "Value": "/Engine/BasicShapes/Sphere.Sphere"
+                },
+                {
+                  "Id": "materialSchema",
+                  "Type": "string",
+                  "Value": "[{\u0022id\u0022:\u0022material_9d43bfbbceae0703fb401eed\u0022,\u0022name\u0022:\u0022Color\u0022,\u0022kind\u0022:\u0022vector\u0022,\u0022slot\u0022:0,\u0022materialPath\u0022:\u0022builtin:unlit-color\u0022,\u0022materialName\u0022:\u0022Unlit color\u0022,\u0022association\u0022:2,\u0022index\u0022:-1,\u0022value\u0022:[0.8,0.85,0.9,1]}]"
+                },
+                {
+                  "Id": "material_9d43bfbbceae0703fb401eed",
+                  "Type": "vector4",
+                  "Value": [
+                    0.8,
+                    0.85,
+                    0.9,
+                    1
+                  ]
+                },
+                {
+                  "Id": "scale",
+                  "Type": "vector3",
+                  "Value": [
+                    0.13,
+                    0.13,
+                    0.13
+                  ]
+                },
+                {
+                  "Id": "tint",
+                  "Type": "vector4",
+                  "Value": [
+                    0.8,
+                    0.85,
+                    0.9,
+                    1
+                  ]
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "ee2e3017-5949-40fe-92b5-7300c6d9f13d",
+              "Kind": "DecomposeTransform",
+              "Name": "Moon draw transform",
+              "X": 300,
+              "Y": 2520,
+              "PortType": "FloatX3",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "KindDomain": "Cpu"
+            }
+          ],
+          "Connections": [
+            {
+              "SourceNodeId": "97c924f0-9e80-4964-b770-5e3ef3585e40",
+              "TargetNodeId": "34965bfa-960d-4ab6-a0b0-048333880a68",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "34965bfa-960d-4ab6-a0b0-048333880a68",
+              "TargetNodeId": "eaed6d3d-451c-464a-9762-9fd70c738d4c",
+              "TargetPortId": "b",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "eaed6d3d-451c-464a-9762-9fd70c738d4c",
+              "TargetNodeId": "017ee2af-24a4-4ec9-b605-4307bc42bd3b",
+              "TargetPortId": "a",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "017ee2af-24a4-4ec9-b605-4307bc42bd3b",
+              "TargetNodeId": "464d5835-b0ba-443e-99ee-3cf223857a4d",
+              "TargetPortId": "rotation",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "464d5835-b0ba-443e-99ee-3cf223857a4d",
+              "TargetNodeId": "ad2ecd73-92a2-4762-a7cb-0ef59ec42a60",
+              "TargetPortId": "matrix",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "ad2ecd73-92a2-4762-a7cb-0ef59ec42a60",
+              "TargetNodeId": "d2b78dd4-080e-406c-ae35-c4cd44cd9dd8",
+              "TargetPortId": "position",
+              "SourcePortId": "position"
+            },
+            {
+              "SourceNodeId": "ad2ecd73-92a2-4762-a7cb-0ef59ec42a60",
+              "TargetNodeId": "d2b78dd4-080e-406c-ae35-c4cd44cd9dd8",
+              "TargetPortId": "rotation",
+              "SourcePortId": "rotation"
+            },
+            {
+              "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+              "TargetNodeId": "d72b2011-5532-43f6-a107-2a57789c52b6",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "d72b2011-5532-43f6-a107-2a57789c52b6",
+              "TargetNodeId": "a9e734e1-41da-4f37-b6e7-f095ca343e80",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "a9e734e1-41da-4f37-b6e7-f095ca343e80",
+              "TargetNodeId": "f6d7588e-004f-4c36-af26-6104caa5e2b8",
+              "TargetPortId": "b",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "f6d7588e-004f-4c36-af26-6104caa5e2b8",
+              "TargetNodeId": "3880d792-717d-4309-b0ed-b05ae599d7fa",
+              "TargetPortId": "a",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "3880d792-717d-4309-b0ed-b05ae599d7fa",
+              "TargetNodeId": "13d14853-d5d5-4f50-a03e-7f00f69681ae",
+              "TargetPortId": "rotation",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "464d5835-b0ba-443e-99ee-3cf223857a4d",
+              "TargetNodeId": "2574ac9b-c39b-4701-b174-a7639bee0bde",
+              "TargetPortId": "parent",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "13d14853-d5d5-4f50-a03e-7f00f69681ae",
+              "TargetNodeId": "2574ac9b-c39b-4701-b174-a7639bee0bde",
+              "TargetPortId": "local",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "2574ac9b-c39b-4701-b174-a7639bee0bde",
+              "TargetNodeId": "18598e32-5000-4ff8-891b-8059029464f5",
+              "TargetPortId": "parent",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "99249b9d-bfbc-405c-8fc8-3f039c931ec4",
+              "TargetNodeId": "18598e32-5000-4ff8-891b-8059029464f5",
+              "TargetPortId": "local",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+              "TargetNodeId": "a30ac7b0-bf1e-432b-8909-d0d7b53e67e5",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "a30ac7b0-bf1e-432b-8909-d0d7b53e67e5",
+              "TargetNodeId": "47b63478-4313-4fea-a8c4-6adb5f0cef4f",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "47b63478-4313-4fea-a8c4-6adb5f0cef4f",
+              "TargetNodeId": "e4216f4b-c0f1-4b5b-94e5-9146a00a6dbf",
+              "TargetPortId": "b",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "e4216f4b-c0f1-4b5b-94e5-9146a00a6dbf",
+              "TargetNodeId": "9a46b91d-e2c3-4e87-84ab-c910ed640e48",
+              "TargetPortId": "a",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "9a46b91d-e2c3-4e87-84ab-c910ed640e48",
+              "TargetNodeId": "9028e18d-7647-40de-85df-f937754b88bf",
+              "TargetPortId": "rotation",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "18598e32-5000-4ff8-891b-8059029464f5",
+              "TargetNodeId": "e5a21726-8409-490a-996c-10c4c432b357",
+              "TargetPortId": "parent",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "9028e18d-7647-40de-85df-f937754b88bf",
+              "TargetNodeId": "e5a21726-8409-490a-996c-10c4c432b357",
+              "TargetPortId": "local",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "e5a21726-8409-490a-996c-10c4c432b357",
+              "TargetNodeId": "6d94e425-8ac8-473a-a804-23f24e41db44",
+              "TargetPortId": "matrix",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "6d94e425-8ac8-473a-a804-23f24e41db44",
+              "TargetNodeId": "c7fa4c34-93e3-46f1-a8eb-04c809a0978d",
+              "TargetPortId": "position",
+              "SourcePortId": "position"
+            },
+            {
+              "SourceNodeId": "6d94e425-8ac8-473a-a804-23f24e41db44",
+              "TargetNodeId": "c7fa4c34-93e3-46f1-a8eb-04c809a0978d",
+              "TargetPortId": "rotation",
+              "SourcePortId": "rotation"
+            },
+            {
+              "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+              "TargetNodeId": "391551e0-f14f-46b8-aeff-1eaab8292ca3",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "391551e0-f14f-46b8-aeff-1eaab8292ca3",
+              "TargetNodeId": "4d2c30a9-9730-4a78-a95e-f2c69de1e6a6",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "4d2c30a9-9730-4a78-a95e-f2c69de1e6a6",
+              "TargetNodeId": "33940ec9-0d00-44c2-be9c-723d86f9167b",
+              "TargetPortId": "b",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "33940ec9-0d00-44c2-be9c-723d86f9167b",
+              "TargetNodeId": "198ba267-d692-41d8-82a3-55a58ea5a5b2",
+              "TargetPortId": "a",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "198ba267-d692-41d8-82a3-55a58ea5a5b2",
+              "TargetNodeId": "16978164-c010-4cee-8889-a5cd5b55bb2b",
+              "TargetPortId": "rotation",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "464d5835-b0ba-443e-99ee-3cf223857a4d",
+              "TargetNodeId": "73efe244-d236-483d-9b97-44963c9568cf",
+              "TargetPortId": "parent",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "16978164-c010-4cee-8889-a5cd5b55bb2b",
+              "TargetNodeId": "73efe244-d236-483d-9b97-44963c9568cf",
+              "TargetPortId": "local",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "73efe244-d236-483d-9b97-44963c9568cf",
+              "TargetNodeId": "a2ca3e53-d489-466e-bde5-1149258535c2",
+              "TargetPortId": "parent",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "094d0500-dc87-48a0-a11a-71d0fe23ae34",
+              "TargetNodeId": "a2ca3e53-d489-466e-bde5-1149258535c2",
+              "TargetPortId": "local",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+              "TargetNodeId": "4cbf490d-0cc1-4319-9fcb-380819d0dbc8",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "4cbf490d-0cc1-4319-9fcb-380819d0dbc8",
+              "TargetNodeId": "afc8bfe6-be70-4170-8862-1e747e8aae30",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "afc8bfe6-be70-4170-8862-1e747e8aae30",
+              "TargetNodeId": "1adeb668-c591-4adc-8482-3164a8446a1e",
+              "TargetPortId": "b",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "1adeb668-c591-4adc-8482-3164a8446a1e",
+              "TargetNodeId": "3f756115-7ef8-4367-9995-2f816b4a8bbe",
+              "TargetPortId": "a",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "3f756115-7ef8-4367-9995-2f816b4a8bbe",
+              "TargetNodeId": "ed1065bb-9f8b-4559-9f0a-bd15cd605d8f",
+              "TargetPortId": "rotation",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "a2ca3e53-d489-466e-bde5-1149258535c2",
+              "TargetNodeId": "8a39f4c0-d63b-4b5b-90e3-bc7a8eef710f",
+              "TargetPortId": "parent",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "ed1065bb-9f8b-4559-9f0a-bd15cd605d8f",
+              "TargetNodeId": "8a39f4c0-d63b-4b5b-90e3-bc7a8eef710f",
+              "TargetPortId": "local",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "8a39f4c0-d63b-4b5b-90e3-bc7a8eef710f",
+              "TargetNodeId": "ab3005ad-c21c-4d91-b728-91ee2fc491ae",
+              "TargetPortId": "matrix",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "ab3005ad-c21c-4d91-b728-91ee2fc491ae",
+              "TargetNodeId": "05ebf910-3297-4a20-85ab-6ffa38bf90aa",
+              "TargetPortId": "position",
+              "SourcePortId": "position"
+            },
+            {
+              "SourceNodeId": "ab3005ad-c21c-4d91-b728-91ee2fc491ae",
+              "TargetNodeId": "05ebf910-3297-4a20-85ab-6ffa38bf90aa",
+              "TargetPortId": "rotation",
+              "SourcePortId": "rotation"
+            },
+            {
+              "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+              "TargetNodeId": "c514346d-428a-4af2-b368-8acb3e2b4cfa",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "c514346d-428a-4af2-b368-8acb3e2b4cfa",
+              "TargetNodeId": "9dde6aa7-e812-4856-a271-ca4d6ced069c",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "9dde6aa7-e812-4856-a271-ca4d6ced069c",
+              "TargetNodeId": "ae93b742-d9a0-4f57-9884-bb37a9528bb3",
+              "TargetPortId": "b",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "ae93b742-d9a0-4f57-9884-bb37a9528bb3",
+              "TargetNodeId": "1e4bf9b3-962b-4c27-b997-1e2b0b540e05",
+              "TargetPortId": "a",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "1e4bf9b3-962b-4c27-b997-1e2b0b540e05",
+              "TargetNodeId": "14e5bb28-affb-47df-ba38-3a68e69c9f71",
+              "TargetPortId": "rotation",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "464d5835-b0ba-443e-99ee-3cf223857a4d",
+              "TargetNodeId": "c213f94b-0b9b-4a74-85b9-f57d8efd8a30",
+              "TargetPortId": "parent",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "14e5bb28-affb-47df-ba38-3a68e69c9f71",
+              "TargetNodeId": "c213f94b-0b9b-4a74-85b9-f57d8efd8a30",
+              "TargetPortId": "local",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "c213f94b-0b9b-4a74-85b9-f57d8efd8a30",
+              "TargetNodeId": "226271b8-dd88-4ce5-8d36-f7f0b5ec7d90",
+              "TargetPortId": "parent",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "504f129a-9385-4a94-b13f-4e021fd79d0f",
+              "TargetNodeId": "226271b8-dd88-4ce5-8d36-f7f0b5ec7d90",
+              "TargetPortId": "local",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+              "TargetNodeId": "14dfba9a-d724-4139-8ce8-475f0d7fa814",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "14dfba9a-d724-4139-8ce8-475f0d7fa814",
+              "TargetNodeId": "df2337c9-9cc2-4e75-bf56-bc99d683bf0f",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "df2337c9-9cc2-4e75-bf56-bc99d683bf0f",
+              "TargetNodeId": "cf92e76d-7b1d-4b9c-bece-bec0e7d19f83",
+              "TargetPortId": "b",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "cf92e76d-7b1d-4b9c-bece-bec0e7d19f83",
+              "TargetNodeId": "3f7fe2e6-164a-4e13-a3a8-595d9db7358e",
+              "TargetPortId": "a",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "3f7fe2e6-164a-4e13-a3a8-595d9db7358e",
+              "TargetNodeId": "c7b745ff-f2f7-4723-b0d2-596cb0dae9f7",
+              "TargetPortId": "rotation",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "226271b8-dd88-4ce5-8d36-f7f0b5ec7d90",
+              "TargetNodeId": "1b5180a6-597b-4641-ad76-dcceafc6fd82",
+              "TargetPortId": "parent",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "c7b745ff-f2f7-4723-b0d2-596cb0dae9f7",
+              "TargetNodeId": "1b5180a6-597b-4641-ad76-dcceafc6fd82",
+              "TargetPortId": "local",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "1b5180a6-597b-4641-ad76-dcceafc6fd82",
+              "TargetNodeId": "47584f89-72d2-4a65-9fbd-9eedaec80b7f",
+              "TargetPortId": "matrix",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "47584f89-72d2-4a65-9fbd-9eedaec80b7f",
+              "TargetNodeId": "ac8833e7-9a23-478e-b430-a5174d4fff92",
+              "TargetPortId": "position",
+              "SourcePortId": "position"
+            },
+            {
+              "SourceNodeId": "47584f89-72d2-4a65-9fbd-9eedaec80b7f",
+              "TargetNodeId": "ac8833e7-9a23-478e-b430-a5174d4fff92",
+              "TargetPortId": "rotation",
+              "SourcePortId": "rotation"
+            },
+            {
+              "SourceNodeId": "1b5180a6-597b-4641-ad76-dcceafc6fd82",
+              "TargetNodeId": "0bc105ef-e62b-4608-89a7-c267319f3fa5",
+              "TargetPortId": "parent",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "8ddcdb47-b445-4d46-ab60-79df1ff9099e",
+              "TargetNodeId": "0bc105ef-e62b-4608-89a7-c267319f3fa5",
+              "TargetPortId": "local",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "0bc105ef-e62b-4608-89a7-c267319f3fa5",
+              "TargetNodeId": "8144e03e-5c7f-44e7-96f2-7883fdb9cdb1",
+              "TargetPortId": "matrix",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "8144e03e-5c7f-44e7-96f2-7883fdb9cdb1",
+              "TargetNodeId": "236b1612-815b-4114-ba32-9b29fcd8abf2",
+              "TargetPortId": "position",
+              "SourcePortId": "position"
+            },
+            {
+              "SourceNodeId": "8144e03e-5c7f-44e7-96f2-7883fdb9cdb1",
+              "TargetNodeId": "236b1612-815b-4114-ba32-9b29fcd8abf2",
+              "TargetPortId": "rotation",
+              "SourcePortId": "rotation"
+            },
+            {
+              "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+              "TargetNodeId": "a61ac45f-009b-4c9b-b8cf-2156b3042db4",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "a61ac45f-009b-4c9b-b8cf-2156b3042db4",
+              "TargetNodeId": "42380842-8573-4c57-ab33-d5818ebd1da0",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "42380842-8573-4c57-ab33-d5818ebd1da0",
+              "TargetNodeId": "1238419e-1bbc-4719-8954-51713bf2b7b1",
+              "TargetPortId": "b",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "1238419e-1bbc-4719-8954-51713bf2b7b1",
+              "TargetNodeId": "eb56b024-f873-462e-8bce-9a6470133f6a",
+              "TargetPortId": "a",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "eb56b024-f873-462e-8bce-9a6470133f6a",
+              "TargetNodeId": "c4eeea84-a6f2-4b39-ad05-07c0c170e971",
+              "TargetPortId": "rotation",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "464d5835-b0ba-443e-99ee-3cf223857a4d",
+              "TargetNodeId": "932975c5-e879-43b2-87db-ee6e0e35d93d",
+              "TargetPortId": "parent",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "c4eeea84-a6f2-4b39-ad05-07c0c170e971",
+              "TargetNodeId": "932975c5-e879-43b2-87db-ee6e0e35d93d",
+              "TargetPortId": "local",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "932975c5-e879-43b2-87db-ee6e0e35d93d",
+              "TargetNodeId": "a154f959-af58-44b4-8e82-2b7a1c2d032d",
+              "TargetPortId": "parent",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "baa2c3de-ea93-4463-9278-098c9861b9b4",
+              "TargetNodeId": "a154f959-af58-44b4-8e82-2b7a1c2d032d",
+              "TargetPortId": "local",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+              "TargetNodeId": "c7b5e67f-5094-402c-bd40-98a7dfac31bd",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "c7b5e67f-5094-402c-bd40-98a7dfac31bd",
+              "TargetNodeId": "f862960f-b5f7-4c9a-90b8-5bc8bd5687d7",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "f862960f-b5f7-4c9a-90b8-5bc8bd5687d7",
+              "TargetNodeId": "bc451733-9422-47f3-a7a5-b74094dccb36",
+              "TargetPortId": "b",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "bc451733-9422-47f3-a7a5-b74094dccb36",
+              "TargetNodeId": "876bb411-3bb5-481c-80cd-ed9a2f3c03b5",
+              "TargetPortId": "a",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "876bb411-3bb5-481c-80cd-ed9a2f3c03b5",
+              "TargetNodeId": "c1d780b4-b800-46d3-b52c-bfb2e4298f04",
+              "TargetPortId": "rotation",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "a154f959-af58-44b4-8e82-2b7a1c2d032d",
+              "TargetNodeId": "4b0a045b-508c-4c21-b22c-85e04823cd83",
+              "TargetPortId": "parent",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "c1d780b4-b800-46d3-b52c-bfb2e4298f04",
+              "TargetNodeId": "4b0a045b-508c-4c21-b22c-85e04823cd83",
+              "TargetPortId": "local",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "4b0a045b-508c-4c21-b22c-85e04823cd83",
+              "TargetNodeId": "30aa1d5a-4e1c-44a2-9055-0395a800c35a",
+              "TargetPortId": "matrix",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "30aa1d5a-4e1c-44a2-9055-0395a800c35a",
+              "TargetNodeId": "9aa6d2fe-93a9-4efa-a85f-d6e42c669d5d",
+              "TargetPortId": "position",
+              "SourcePortId": "position"
+            },
+            {
+              "SourceNodeId": "30aa1d5a-4e1c-44a2-9055-0395a800c35a",
+              "TargetNodeId": "9aa6d2fe-93a9-4efa-a85f-d6e42c669d5d",
+              "TargetPortId": "rotation",
+              "SourcePortId": "rotation"
+            },
+            {
+              "SourceNodeId": "ab6c0683-539a-4e66-bd2d-c265a3d7759c",
+              "TargetNodeId": "b47fcd14-024a-4dab-a723-9569dce6bb7e",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "b47fcd14-024a-4dab-a723-9569dce6bb7e",
+              "TargetNodeId": "a2d75871-146d-4f1b-b486-732694b9ea4a",
+              "TargetPortId": "a",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "a2d75871-146d-4f1b-b486-732694b9ea4a",
+              "TargetNodeId": "355803d7-1ec3-44f0-8cb5-9bf5ef7fc99c",
+              "TargetPortId": "b",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "355803d7-1ec3-44f0-8cb5-9bf5ef7fc99c",
+              "TargetNodeId": "20557228-7bf2-40fc-b88b-d3760fa7d5c6",
+              "TargetPortId": "a",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "20557228-7bf2-40fc-b88b-d3760fa7d5c6",
+              "TargetNodeId": "d3fb0482-91e2-4082-a914-e080c3c96394",
+              "TargetPortId": "rotation",
+              "SourcePortId": null
+            },
+            {
+              "SourceNodeId": "226271b8-dd88-4ce5-8d36-f7f0b5ec7d90",
+              "TargetNodeId": "552994ed-6428-408a-83a8-3c467836046c",
+              "TargetPortId": "parent",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "d3fb0482-91e2-4082-a914-e080c3c96394",
+              "TargetNodeId": "552994ed-6428-408a-83a8-3c467836046c",
+              "TargetPortId": "local",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "552994ed-6428-408a-83a8-3c467836046c",
+              "TargetNodeId": "55cd48ca-594a-4c6d-a819-9dd1c15c2a69",
+              "TargetPortId": "parent",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "6c390696-a5f4-4387-aebe-53fa5b3dcc8a",
+              "TargetNodeId": "55cd48ca-594a-4c6d-a819-9dd1c15c2a69",
+              "TargetPortId": "local",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "55cd48ca-594a-4c6d-a819-9dd1c15c2a69",
+              "TargetNodeId": "ee2e3017-5949-40fe-92b5-7300c6d9f13d",
+              "TargetPortId": "matrix",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "ee2e3017-5949-40fe-92b5-7300c6d9f13d",
+              "TargetNodeId": "f1a61245-ad68-4b97-9383-4c7158145073",
+              "TargetPortId": "position",
+              "SourcePortId": "position"
+            },
+            {
+              "SourceNodeId": "ee2e3017-5949-40fe-92b5-7300c6d9f13d",
+              "TargetNodeId": "f1a61245-ad68-4b97-9383-4c7158145073",
+              "TargetPortId": "rotation",
+              "SourcePortId": "rotation"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

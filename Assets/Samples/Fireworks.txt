@@ -1,0 +1,50 @@
+Fireworks lifecycle sample (CPU / portable native execution)
+
+FireworksSample.Create() creates a separate document with root sibling Launch
+and Burst Spawnable Groups. On Start fires Launch once. Launch captures its
+initial position, rises along +Z for 2 seconds and naturally emits local Destroy.
+Its frozen final position (0,0,260) is captured as Burst center before Launch is
+finalized. Burst has 12 expanding particles and expires after 1.5 seconds.
+Stop/Reset do not emit Destroy. Recreating NativeSpawnableSession resets IDs,
+seed sequence, local clocks and captured input values deterministically.
+
+The --fireworks-lifecycle selector in CommentImageSmokeTests exports
+Fireworks.lfxproj (including editable child graphs and project history),
+Fireworks.package.json, actual compiled LFXB templates and a native test fixture.
+Use an absolute isolated output folder and LIBERAFX_DATA_ROOT; set
+LIBERAFX_NATIVE_TEST_LIBRARY to the native C ABI DLL. The standalone
+liberafx_fireworks_lifecycle_tests executable consumes that same output folder.
+
+This is NOT a flattened Time graph. One direct Life Time per Spawnable captures
+positive seconds at start; absent means infinity. Multiple Life Times, nested
+Spawnables and unsupported boundary routes are rejected explicitly.
+
+Editor-native preview:
+BEFORE PLAY: set Timeline End = 240 (4 seconds), FPS = 60.
+再生前：Timeline 終了 = 240（4秒）、FPS = 60 に設定してください。
+The editor's existing default end frame 120 is only 2 seconds; playback range
+is not stored in the project and this sample does not overwrite user settings.
+Set LIBERAFX_PREVIEW_NATIVE_LIBRARY to an absolute matching liberafx_native.dll,
+or place that DLL beside the editor. Missing/incompatible native runtime fails
+with an actionable CompileError; there is no Time-only replacement.
+Root runs actual C++ pools at 60Hz and publishes per-instance render_config
+defaults from evaluated native values. UE receives one inert Scalar transport
+shell, not the Spawnable package. executionOwner is "editor-native"; UE owns
+rendering only and cannot free-run the shell.
+Pause/Resume at the same sampled time retains state without re-evaluation.
+Backward seek/Stop/Loop recreates pools and deterministically replays from zero,
+including captured inputs, IDs and seeds. Forward skipped frames run all missing
+60Hz steps. Sampling is floor(requestedSeconds * 60) / 60. Replay is bounded to
+0..120 seconds and each scene to 128 renderers / 1MiB. Graph/document changes
+and connection teardown dispose native programs/pools; reset does not emit Destroy.
+
+The same instructions are visible as a prominent graph Comment in the sample.
+Tests --fireworks-native-preview <absolute isolated folder> exports individual
+frame-000 .. frame-004 UE CpuRootFixture directories with program.lfxb,
+render-config.json and expected.json. Their actual native lifecycles yield
+1/1/12/12/0 renderers at 0/1/2/2.5/3.5 seconds. UE-owned standalone package,
+life and generator execution remain unsupported; this does not settle broader
+Life Time policies beyond the documented single-positive captured node contract.
+The exporter reads the delivered Assets/Samples/Fireworks.lfxproj; use the
+absolute LIBERAFX_FIREWORKS_SAMPLE variable to select that file explicitly.
+Mixed GPU/lifecycle graphs fail explicitly; ordinary GPU preview remains separate.

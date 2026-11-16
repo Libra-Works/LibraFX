@@ -15,6 +15,90 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--custom-node-compilation"])
+        {
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")))
+                throw new ArgumentException("Set isolated LIBERAFX_DATA_ROOT for custom compiler regression.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            LiberaFx.Tests.CustomNodeCompilationTests.Run();
+            Console.WriteLine("Custom node compilation regression passed (no windows).");
+            return;
+        }
+        if (args is ["--compiled-preview-protocol"])
+        {
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")))
+                throw new ArgumentException("Set isolated LIBERAFX_DATA_ROOT for preview transport regression.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            CompiledPreviewProtocolTests.Run();
+            Console.WriteLine("Compiled preview protocol regression passed (no windows).");
+            return;
+        }
+        if (args is ["--fireworks-save-sample", var fireworksSamplePath])
+        {
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")) ||
+                !Path.IsPathFullyQualified(fireworksSamplePath))
+                throw new ArgumentException("Use isolated LIBERAFX_DATA_ROOT and an absolute sample output path.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            using var memory = new MemoryStream();
+            byte[]? previousPackage = null;
+            if (File.Exists(fireworksSamplePath))
+            {
+                using var existing = new MemoryStream(File.ReadAllBytes(fireworksSamplePath));
+                var project = new LiberaFx.Services.ProjectFileService().LoadAsync(existing).GetAwaiter().GetResult();
+                if (!project.Graph.Nodes.Any(node => node.Kind == GraphNodeKind.SpawnableGroup && node.Name == "Launch") ||
+                    !project.Graph.Nodes.Any(node => node.Kind == GraphNodeKind.SpawnableGroup && node.Name == "Burst"))
+                    throw new InvalidOperationException("Refusing to overwrite an unrelated project with Fireworks instructions.");
+                previousPackage = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
+                    LiberaFx.Services.Compilation.SpawnableGroupPackage.Compile(project.Graph));
+                var workspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+                workspace.InitializeFromSnapshot(project.Graph);
+                if (project.History is not null) workspace.History.LoadSnapshot(project.History);
+                var comment = workspace.Nodes.FirstOrDefault(node => node.Definition.Kind == GraphNodeKind.Comment &&
+                    node.Name == LiberaFx.Services.FireworksSample.PreviewSetupTitle)
+                    ?? workspace.CreateNode(GraphNodeKind.Comment, 0, 220);
+                workspace.RenameNode(comment, LiberaFx.Services.FireworksSample.PreviewSetupTitle);
+                workspace.SetParameter(comment, "text", System.Text.Json.JsonSerializer.SerializeToElement(LiberaFx.Services.FireworksSample.PreviewSetupText));
+                workspace.SetParameter(comment, "width", System.Text.Json.JsonSerializer.SerializeToElement(LiberaFx.Services.FireworksSample.PreviewSetupWidth));
+                workspace.SetParameter(comment, "height", System.Text.Json.JsonSerializer.SerializeToElement(LiberaFx.Services.FireworksSample.PreviewSetupHeight));
+                workspace.MoveNodes(workspace.Nodes.Where(node => LiberaFx.Services.FireworksSample.RootPosition(node.Name) is not null)
+                    .Select(node =>
+                    {
+                        var position = LiberaFx.Services.FireworksSample.RootPosition(node.Name)!.Value;
+                        return (node, position.X, position.Y);
+                    }));
+                new LiberaFx.Services.ProjectFileService().SaveAsync(memory, workspace).GetAwaiter().GetResult();
+            }
+            else LiberaFx.Services.FireworksSample.SaveAsync(memory).GetAwaiter().GetResult();
+            File.WriteAllBytes(fireworksSamplePath, memory.ToArray());
+            memory.Position = 0;
+            var saved = new LiberaFx.Services.ProjectFileService().LoadAsync(memory).GetAwaiter().GetResult();
+            if (saved.History is null) throw new InvalidOperationException("Fireworks sample lacks project history.");
+            if (previousPackage is not null && !previousPackage.AsSpan().SequenceEqual(
+                System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(LiberaFx.Services.Compilation.SpawnableGroupPackage.Compile(saved.Graph))))
+                throw new InvalidOperationException("Layout update changed compiled Fireworks IDs, values or lifecycle metadata.");
+            foreach (var node in saved.Graph.Nodes)
+                if (LiberaFx.Services.FireworksSample.RootPosition(node.Name) is { } placement &&
+                    (node.X != placement.X || node.Y != placement.Y))
+                    throw new InvalidOperationException("Saved Fireworks root layout does not match the compact factory layout.");
+            Console.WriteLine("History-bearing Fireworks sample saved with End=240 instructions (existing node UUIDs preserved): " + fireworksSamplePath);
+            return;
+        }
+        if (args is ["--fireworks-native-preview", var fireworksPreviewOutput])
+        {
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")))
+                throw new ArgumentException("Set an isolated absolute LIBERAFX_DATA_ROOT for native preview verification.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            EditorNativePreviewTests.Run(fireworksPreviewOutput);
+            return;
+        }
+        if (args is ["--fireworks-lifecycle", var fireworksOutput])
+        {
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")))
+                throw new ArgumentException("Set an isolated absolute LIBERAFX_DATA_ROOT for Fireworks verification.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            FireworksLifecycleTests.Run(fireworksOutput);
+            return;
+        }
         var dataRoot = args.Length > 0 && args[0] == "--solar-system" ||
             args is ["--window-layout"] or ["--gpu-editor"] or ["--runtime-integration"] or ["--spawnable-group"] or ["--graph-type-diagnostics"]
             ? Path.Combine(Environment.CurrentDirectory, "build", "window-layout-data-" + Guid.NewGuid().ToString("N"))
@@ -46,6 +130,25 @@ internal static class Program
             else File.WriteAllText(Path.Combine(directory, "language.json"), languageFixture);
         }
         AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+        if (args is ["--matrix-ui-review", var reviewDirectory])
+        {
+            MatrixInterfaceTests.Run(reviewDirectory);
+            Console.WriteLine("Actual Matrix pin click, undo/redo and localized inspector UI checks passed.");
+            return;
+        }
+        if (args is ["--matrix-save-sample", var samplePath])
+        {
+            using var stream = File.Create(samplePath);
+            Task.Run(() => LiberaFx.Services.SolarSystemSample.SaveDedicatedAsync(stream)).GetAwaiter().GetResult();
+            Console.WriteLine("Saved dedicated Matrix sample with its project history.");
+            return;
+        }
+        if (args.Length is 1 or 2 && args[0] == "--matrix-nodes")
+        {
+            MatrixNodeTests.Run(args.Length == 2 ? args[1] : null);
+            Console.WriteLine("Matrix node authoring, persistence, compilation and fixture export checks passed.");
+            return;
+        }
         if (args.Length is 1 or 2 && args[0] == "--sprite-editor")
         {
             SpriteEditorTests.Run(args.Length == 2 ? args[1] : null);

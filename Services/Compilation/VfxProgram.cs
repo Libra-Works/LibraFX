@@ -66,22 +66,29 @@ public sealed class VfxProgram
 
     public static VfxProgram Compile(GraphSnapshot graph)
     {
+        ValidateForCompilation(graph);
         if (ContainsSpawnable(graph))
             throw new InvalidDataException("Compile Spawnable Groups with SpawnableGroupPackage so templates are not discarded.");
-        if (Flatten(graph).Any(node => node.Kind == GraphNodeKind.Signal || SpawnableGroupSchema.IsInput(node.Kind)))
-            throw new InvalidDataException("Signal and Spawn Input nodes require a Spawnable Group package.");
+        if (Flatten(graph).Any(node => node.Kind == GraphNodeKind.Signal || SpawnableGroupSchema.IsInput(node.Kind) ||
+            SpawnableGroupSchema.IsOutput(node.Kind) || node.Kind.Value is "LifeTime" or "OnStart"))
+            throw new InvalidDataException("Signal, lifecycle and Spawn boundary nodes require a Spawnable Group package.");
         return CompileForPackage(graph);
     }
 
     internal static VfxProgram CompileForPackage(GraphSnapshot graph)
     {
-        GraphValidator.Validate(graph);
+        ValidateForCompilation(graph);
+        graph = LowerLifecycle(graph);
+#if LIBERAFX_CONVERTER
+        GraphTypeDiagnostics.Validate(graph);
+#else
         var typeProblems = GraphTypeDiagnostics.Analyze(graph);
         if (typeProblems.Count != 0)
             throw new InvalidDataException(string.Join(Environment.NewLine, typeProblems.Select(problem =>
                 LocalizationService.Shared.Get("Messages.GraphCompileMismatch",
                     problem.NodeId, problem.InputPortId ?? "input", problem.SourceNodeId,
                     problem.SourceType, problem.ExpectedType))));
+#endif
         graph = GraphPolymorphism.Lower(graph);
         _ = RenderProgramBindings.CreateScene(graph, 0);
         var nodes = Flatten(graph)
@@ -282,6 +289,7 @@ public sealed class VfxProgram
             var definition = SpawnableGroupSchema.Effective(definitions[node.Kind], node.ChildGraph);
             if (node.Kind == GraphNodeKind.SpawnableGroup)
                 return definition with { TypeId = SpawnableGroupPackage.SignalTypeId(node.Id, node.ChildGraph!),
+                    OutputPorts = [new GraphOutputPortDefinition("then", "Then", "Signal", GraphPortCategory.Signal)],
                     Runtime = new GraphRuntimeDefinition("custom", 1, "signal") };
             if (node.Kind == GraphNodeKind.Signal)
                 return definition with { TypeId = SpawnableGroupPackage.SignalPassthroughTypeId,
@@ -654,6 +662,51 @@ public sealed class VfxProgram
                 foreach (var child in Flatten(node.ChildGraph))
                     yield return child;
         }
+    }
+
+    internal static void ValidateForCompilation(GraphSnapshot graph)
+    {
+        // Validate shape before any schema/pin lookup can enumerate a malformed
+        // Spawnable child. Do not turn null/missing collections into an empty,
+        // successfully compiled effect.
+        static void Shape(GraphSnapshot? current, int depth)
+        {
+            if (current is null || current.Nodes is null || current.Connections is null)
+                throw new InvalidDataException("A graph requires non-null nodes and connections collections.");
+            if (depth > 12) throw new InvalidDataException("The graph hierarchy is too deep.");
+            foreach (var node in current.Nodes)
+            {
+                if (node is null) throw new InvalidDataException("The graph contains a null node.");
+                if (node.ChildGraph is { } child) Shape(child, depth + 1);
+            }
+        }
+        Shape(graph, 0);
+        GraphValidator.Validate(graph);
+    }
+
+    private static GraphSnapshot LowerLifecycle(GraphSnapshot graph)
+    {
+        var starts = graph.Nodes.Where(node => node.Kind.Value == "OnStart").Select(node => node.Id).ToHashSet();
+        var lives = graph.Nodes.Where(node => node.Kind.Value == "LifeTime").Select(node => node.Id).ToHashSet();
+        var outputs = graph.Nodes.Where(node => SpawnableGroupSchema.IsOutput(node.Kind)).Select(node => node.Id).ToHashSet();
+        return graph with
+        {
+            Nodes = graph.Nodes.Select(node => node.Kind.Value switch
+            {
+                "OnStart" => node with { Kind = GraphNodeKind.Signal },
+                "LifeTime" => node with { Kind = GraphNodeKind.Float, Parameters =
+                    [new NodeParameterSnapshot("value", "float", node.Parameters?.SingleOrDefault(p => p.Id == "seconds")?.Value
+                        ?? JsonSerializer.SerializeToElement(2d))] },
+                "SpawnOutputVector3" => node with { Kind = GraphNodeKind.FloatX3 },
+                _ => node.ChildGraph is { } child && node.Kind != GraphNodeKind.SpawnableGroup &&
+                    !GpuParticleEditorService.IsGpu(node.Kind) ? node with { ChildGraph = LowerLifecycle(child) } : node
+            }).ToArray(),
+            Connections = graph.Connections.Select(edge => edge with
+            {
+                SourcePortId = starts.Contains(edge.SourceNodeId) ? null : edge.SourcePortId,
+                TargetPortId = lives.Contains(edge.TargetNodeId) || outputs.Contains(edge.TargetNodeId) ? null : edge.TargetPortId
+            }).ToArray()
+        };
     }
 
     private static bool ContainsSpawnable(GraphSnapshot graph) => graph.Nodes.Any(node =>

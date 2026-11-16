@@ -13,6 +13,7 @@
     { "id": "spawn", "name": "Spawn", "portType": "Signal", "category": "Signal" }
   ],
   "outputPorts": [
-    { "id": "then", "name": "Then", "portType": "Signal", "category": "Signal" }
+    { "id": "then", "name": "Then (immediate)", "portType": "Signal", "category": "Signal" },
+    { "id": "destroy", "name": "Destroy (natural)", "portType": "Signal", "category": "Signal" }
   ]
 }

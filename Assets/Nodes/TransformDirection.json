@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "typeId": "b0af61d2-29f6-4cc9-a71e-000000000106",
+  "namespace": "LiberaFx", "kind": "TransformDirection", "name": "Transform Direction",
+  "displayNameKey": "Matrix.Node.Direction", "group": "Matrices", "groupNameKey": "Matrix.Group",
+  "portType": "FloatX3", "portCategory": "Parameter",
+  "inputPorts": [
+    { "id": "matrix", "name": "Matrix", "portType": "Matrix" },
+    { "id": "direction", "name": "Direction", "portType": "FloatX3" }
+  ],
+  "outputPorts": [
+    { "id": "value", "name": "Direction", "portType": "FloatX3" },
+    { "id": "w", "name": "W", "portType": "Float" }
+  ],
+  "parameters": [{ "id": "direction", "name": "Direction", "displayNameKey": "Matrix.Parameter.Direction", "type": "vector3", "defaultValue": [0,0,1] }]
+}

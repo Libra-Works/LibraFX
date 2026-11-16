@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "typeId": "b0af61d2-29f6-4cc9-a71e-000000000107",
+  "namespace": "LiberaFx", "kind": "MatrixInverse", "name": "Inverse Matrix",
+  "displayNameKey": "Matrix.Node.Inverse", "group": "Matrices", "groupNameKey": "Matrix.Group",
+  "portType": "Matrix", "portCategory": "Parameter",
+  "inputPorts": [{ "id": "matrix", "name": "Matrix", "portType": "Matrix" }],
+  "outputPorts": [
+    { "id": "value", "name": "Inverse (zero on failure)", "portType": "Matrix" },
+    { "id": "valid", "name": "Valid (1=success, 0=failure)", "portType": "Float" }
+  ]
+}

@@ -11,7 +11,7 @@ public sealed class NodeDefinitionCatalog : IDisposable
     private int _refreshScheduled;
     private bool _disposed;
 
-    public IReadOnlyList<GraphNodeDefinition> AvailableDefinitions { get; private set; } = GraphNodeDefinition.Core;
+    public IReadOnlyList<GraphNodeDefinition> AvailableDefinitions { get; private set; } = GraphNodeDefinition.AuthoringCore;
     public string ProjectName => _profiles.Active.Name;
     public string Warnings { get; private set; } = string.Empty;
     public event EventHandler? Changed;
@@ -42,7 +42,7 @@ public sealed class NodeDefinitionCatalog : IDisposable
                 warnings.Add($"{profile.Name}: {ex.Message}");
             }
         }
-        AvailableDefinitions = Array.AsReadOnly<GraphNodeDefinition>([.. GraphNodeDefinition.Core, .. active]);
+        AvailableDefinitions = Array.AsReadOnly<GraphNodeDefinition>([.. GraphNodeDefinition.AuthoringCore, .. active]);
         try { UpdateWatcher(); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {

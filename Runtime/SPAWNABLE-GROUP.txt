@@ -35,8 +35,10 @@ Configured lifecycle (opt-in; old pools and C ABI calls are unchanged)
 Configure an empty pool with `GeneratorLifecycle` or the 40-byte,
 4-byte-aligned `LibraGeneratorLifecycle` (`onStartNodeId[16]`, `lifeNodeId[16]`,
 `flags` at byte 32, `instructionBudget` at byte 36). Flags 1 and 2 enable
-OnStart and Life respectively. The selected Life node must evaluate to a
-non-negative scalar duration in seconds; zero expires after OnStart. Signal
+OnStart and Life respectively. Life is sampled and captured once by start;
+later Live changes never extend or shorten it. The legacy core API accepts a
+non-negative scalar duration in seconds; zero expires after OnStart. Authored
+package-v2 Life Time requires strictly positive finite seconds. Signal
 traversal is limited to 1..10000 instructions. Node IDs are big-endian.
 
 Spawn initializes one independent instance and applies captured values. Drain
@@ -47,7 +49,8 @@ dispatch fails, the same error remains latched; stop or reset the instance.
 An instance cannot evaluate before start. For later frames, update Live lanes
 before evaluate; captured lanes are not automatically refreshed.
 
-When elapsed local time reaches the Life value, evaluation freezes the instance
+When elapsed local time reaches the captured Life value, evaluation samples at
+the exact expiry boundary (clamping overshooting frames), freezes the instance
 and emits one event kind 3, Destroy. This is a local group output, never a game
 callback. Route it only to its immediate parent; game output requires an
 explicit graph connection. Frozen values remain readable for that routing, but
@@ -68,7 +71,7 @@ they must not reenter any C ABI function (the C ABI serializes calls). The
 existing native spawn-signal bridge enqueues directly. No local Destroy is
 implicitly published to named game IO.
 
-Editor package and host bridge
+Editor package and host bridge (v2)
 
 The Spawnable Group context action creates one editable child graph. Add up to
 four typed Spawn Input nodes directly inside it; their GUIDs become parent
@@ -76,7 +79,21 @@ parameter-port IDs and template capture targets. A signal enqueues one runtime
 instance, never another graph node. Nested Spawnable Groups are rejected.
 `SpawnableGroupPackage.Compile` emits the parent LFXB, separate template LFXBs,
 capture maps, per-template render configuration and GPU container snapshots.
-MCP `libera_graph_compile_spawnable` exposes this as JSON package version 1.
+MCP `libera_graph_compile_spawnable` exposes this as JSON package version 2.
+It adds a direct root On Start identity, per-template On Start/Life Time
+identities, Group Output (Vector3) mappings and explicit Destroy routes.
+Exactly one direct Life Time per template is supported; none means infinity.
+Multiple Life Times and nested Spawnables are rejected. Busy/FCurve are never
+implicit lifetime participants. The existing `then` pin remains immediate for
+old projects; `destroy` is a separate natural-expiry-only local event pin.
+Local outputs can currently route only from the expiring instance directly to
+the capture inputs of the sibling Spawnable selected by that Destroy route.
+Unsupported cross-instance or nested boundary routing fails compilation.
+`NativeSpawnableSession` is a .NET owner-thread host adapter using the C ABI:
+it drives native start/evaluate, reads frozen outputs, captures the target
+defaults, starts the sibling at the expiry timestamp, then finalizes the source.
+Recreate the session for deterministic reset. Its CPU support is not UE preview
+support, and GPU containers fail explicitly.
 Template GUIDs remain unchanged between runtime instances. GPU containers are
 host payloads and are not flattened into CPU numeric instructions.
 
@@ -114,8 +131,27 @@ must never be published to game IO without an explicit graph connection.
 to one instance before evaluation; CaptureAtSpawn values remain unchanged unless
 the host incorrectly includes them. The package/editor do not yet expose Live
 policy or drive these primitives automatically. Named IO node compilation, C ABI
-game IO, group routing and automatic editor/engine OnStart integration are not
+game IO, general group routing and automatic engine OnStart integration are not
 implemented by these primitives and must not be advertised as complete.
+Editor-native preview (Root execution ownership):
+CompiledPreviewSender now owns a NativeSpawnableSession through
+EditorNativePreviewSession for lifecycle graphs. Configure the matching native
+library with an absolute LIBERAFX_PREVIEW_NATIVE_LIBRARY, or place the DLL beside
+the editor. Missing native/ABI produces CompileError, never simulated lifetime.
+Root drives actual bounded C++ pools, captures frozen Destroy outputs before
+finalize, and sends evaluated per-instance render defaults. Renderer UUID hashes
+include container, pool-scoped instance ID and template draw node ID.
+UE still receives one inert Scalar LFXB transport shell and render_config;
+its wire Play/Loop flags are zero to prevent engine-owned free-running.
+Scene metadata explicitly says executionOwner=editor-native and
+standaloneEngineLifecycle=false. UE does not load the v2 package or run its pools.
+Pause/resume/equal-time resync retain state without evaluation. Backward seek,
+Stop-to-zero and Loop recreate pools and replay fixed 60Hz steps; forward dropped
+frames execute missing steps. Requested time is sampled down to the 60Hz grid.
+Replay is capped at 120 seconds, scene renderers at 128 and bytes at 1MiB.
+Graph/document changes and disconnect dispose the owner session. Native core
+callbacks still perform no engine SDK operations. Broader authored lifetime
+policies beyond one captured positive scalar node remain outside this contract.
 Existing package-v1 spawn signal descriptors still carry at most four typed
 inputs (16 lanes), and their legacy `then` branch is selected immediately on
 spawn dispatch. Do not map that branch to lifetime Destroy: the compiler and

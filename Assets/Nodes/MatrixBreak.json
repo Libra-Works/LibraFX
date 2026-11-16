@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "typeId": "b0af61d2-29f6-4cc9-a71e-000000000102",
+  "namespace": "LiberaFx", "kind": "MatrixBreak", "name": "Break Matrix",
+  "displayNameKey": "Matrix.Node.Break", "group": "Matrices", "groupNameKey": "Matrix.Group",
+  "portType": "FloatX4", "portCategory": "Parameter",
+  "inputPorts": [{ "id": "matrix", "name": "Matrix", "portType": "Matrix" }],
+  "outputPorts": [
+    { "id": "row0", "name": "Row 0", "portType": "FloatX4" },
+    { "id": "row1", "name": "Row 1", "portType": "FloatX4" },
+    { "id": "row2", "name": "Row 2", "portType": "FloatX4" },
+    { "id": "row3", "name": "Row 3", "portType": "FloatX4" }
+  ]
+}

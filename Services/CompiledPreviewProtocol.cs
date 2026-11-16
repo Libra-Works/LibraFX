@@ -9,7 +9,11 @@ namespace LiberaFx.Services;
 
 public enum CompiledPreviewKind : ushort { Program = 1, Playback = 2, CompileError = 3, Control = 4, Scene = 5 }
 
-public sealed record CompiledPreviewMessage(byte[] Bytes, CompiledPreviewKind Kind, PreviewPublication Publication);
+public sealed record CompiledPreviewMessage(byte[] Bytes, CompiledPreviewKind Kind, PreviewPublication Publication)
+{
+    public byte[]? EvaluatedRenderScene { get; init; }
+    public bool EditorNativeExecution { get; init; }
+}
 
 public static class CompiledPreviewProtocol
 {
@@ -109,6 +113,13 @@ public static class CompiledPreviewProtocol
         var kind = playback ? CompiledPreviewKind.Playback :
             result!.Bytes is not null ? CompiledPreviewKind.Program : CompiledPreviewKind.CompileError;
         var payload = result?.Bytes ?? result?.Error ?? [];
+        return CreatePayload(publication, kind, payload, baseSequence);
+    }
+
+    internal static CompiledPreviewMessage CreatePayload(PreviewPublication publication, CompiledPreviewKind kind,
+        byte[] payload, ulong baseSequence, bool editorNative = false)
+    {
+        var playback = kind == CompiledPreviewKind.Playback;
         var bytes = new byte[checked(HeaderSize + payload.Length)];
         "LFXP"u8.CopyTo(bytes);
         BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(4), 1);
@@ -117,30 +128,77 @@ public static class CompiledPreviewProtocol
         BinaryPrimitives.WriteUInt64LittleEndian(bytes.AsSpan(16), playback ? baseSequence : 0);
         var state = publication.Playback;
         var time = state is null ? 0 : state.Frame / state.FramesPerSecond;
-        if (!double.IsFinite(time)) throw new InvalidDataException("Invalid preview playback time.");
+        if (!double.IsFinite(time))
+        {
+            if (kind != CompiledPreviewKind.CompileError) throw new InvalidDataException("Invalid preview playback time.");
+            time = 0;
+        }
         BinaryPrimitives.WriteInt64LittleEndian(bytes.AsSpan(24), BitConverter.DoubleToInt64Bits(time));
         BinaryPrimitives.WriteInt64LittleEndian(bytes.AsSpan(32), BitConverter.DoubleToInt64Bits(1));
-        var flags = (state?.Playing == true ? 1u : 0u) | (state?.Loop == true ? 2u : 0u);
+        // Root native drives evaluated scene snapshots. UE must not free-run
+        // this shell or interpret the editor's Play flag as engine ownership.
+        var flags = editorNative ? 0u : (state?.Playing == true ? 1u : 0u) | (state?.Loop == true ? 2u : 0u);
         BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(40), flags);
         BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(44), (uint)payload.Length);
         payload.CopyTo(bytes, HeaderSize);
-        return new(bytes, kind, publication);
+        return new(bytes, kind, publication) { EditorNativeExecution = editorNative };
     }
 }
 
 // One instance per client. Call Sent only after the WebSocket send succeeds.
-public sealed class CompiledPreviewSender
+public sealed class CompiledPreviewSender : IDisposable
 {
     private PreviewPublication? _good;
     private PreviewPublication? _failed;
     private long _lastSent;
+    private EditorNativePreviewSession? _native;
+    private GraphSnapshot? _nativeGraph;
+    private string? _nativeDocument;
+    private readonly string? _nativeLibraryPath;
+    private bool _disposed;
+
+    public CompiledPreviewSender(string? nativeLibraryPath = null) => _nativeLibraryPath = nativeLibraryPath;
 
     public CompiledPreviewMessage? Prepare(PreviewPublication publication, bool forceSnapshot = false)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_native is not null && (_nativeDocument != publication.DocumentId ||
+            !ReferenceEquals(_nativeGraph, publication.Graph))) ReleaseNative();
         if (!forceSnapshot && _failed is not null && _failed.DocumentId == publication.DocumentId &&
             ReferenceEquals(_failed.Graph, publication.Graph)) return null;
         var playback = !forceSnapshot && _good is not null && _lastSent < publication.Sequence &&
             _good.DocumentId == publication.DocumentId && ReferenceEquals(_good.Graph, publication.Graph);
+        if (EditorNativePreviewSession.RequiresNative(publication.Graph))
+        {
+            try
+            {
+                if (_native is null)
+                {
+                    _native = new EditorNativePreviewSession(publication.Graph, _nativeLibraryPath);
+                    _nativeGraph = publication.Graph;
+                    _nativeDocument = publication.DocumentId;
+                }
+                var state = publication.Playback;
+                if (state is not null && (!double.IsFinite(state.FramesPerSecond) || state.FramesPerSecond <= 0))
+                    throw new InvalidDataException("Editor-native preview needs a positive finite frame rate.");
+                var time = state is null ? 0 : state.Frame / state.FramesPerSecond;
+                var scene = _native.EvaluateScene(time, playback ? _good!.Sequence : publication.Sequence);
+                var kind = playback ? CompiledPreviewKind.Playback : CompiledPreviewKind.Program;
+                return CompiledPreviewProtocol.CreatePayload(publication, kind,
+                    playback ? [] : EditorNativePreviewSession.TransportShell, checked((ulong)_lastSent), true)
+                    with { EvaluatedRenderScene = scene };
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+            {
+                var diagnostic = ex.Message;
+                try { ReleaseNative(); }
+                catch (Exception cleanup) { diagnostic += " Native cleanup failed: " + cleanup.Message; }
+                var error = new byte[CompiledPreviewProtocol.MaxErrorBytes];
+                Encoding.UTF8.GetEncoder().Convert(diagnostic.AsSpan(), error, true, out _, out var written, out _);
+                return CompiledPreviewProtocol.CreatePayload(publication, CompiledPreviewKind.CompileError,
+                    error[..written], 0);
+            }
+        }
         return CompiledPreviewProtocol.Create(publication, playback, checked((ulong)_lastSent));
     }
 
@@ -150,5 +208,19 @@ public sealed class CompiledPreviewSender
         if (message.Kind == CompiledPreviewKind.Program) { _good = message.Publication; _failed = null; }
         else if (message.Kind == CompiledPreviewKind.CompileError) _failed = message.Publication;
         else _failed = null;
+    }
+    private void ReleaseNative()
+    {
+        var native = _native;
+        _native = null;
+        _nativeGraph = null;
+        _nativeDocument = null;
+        native?.Dispose();
+    }
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        ReleaseNative();
     }
 }

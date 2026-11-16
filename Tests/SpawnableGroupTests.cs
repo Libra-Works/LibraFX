@@ -125,7 +125,7 @@ internal static class SpawnableGroupTests
         Dispatcher.UIThread.RunJobs();
         var mcp = compileTask.GetAwaiter().GetResult();
         using var json = JsonDocument.Parse(mcp);
-        if (json.RootElement.GetProperty("version").GetInt32() != 1 ||
+        if (json.RootElement.GetProperty("version").GetInt32() != SpawnableGroupPackage.FormatVersion ||
             json.RootElement.GetProperty("templates")[0].GetProperty("containerId").GetGuid() != group.Id)
             throw new InvalidOperationException("MCP did not expose the same compiled template.");
         var library = new GroupAssetLibrary(Path.Combine(AppDataDirectory.Root, "spawnable-groups"));

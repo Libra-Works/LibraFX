@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1, "typeId": "b0af61d2-29f6-4cc9-a71e-000000000001",
+  "namespace": "LiberaFx", "kind": "MatrixRuntimeTransformRow0", "name": "Internal TRS Row 0",
+  "group": "Matrix Runtime", "portType": "FloatX4", "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [
+    { "id": "position", "name": "Position", "portType": "FloatX3", "defaultValue": [0,0,0] },
+    { "id": "rotation", "name": "Rotation", "portType": "FloatX3", "defaultValue": [0,0,0] },
+    { "id": "scale", "name": "Scale", "portType": "FloatX3", "defaultValue": [1,1,1] }
+  ],
+  "outputPorts": [{ "id": "value", "name": "Row", "portType": "FloatX4" }]
+}
