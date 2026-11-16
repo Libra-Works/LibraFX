@@ -109,6 +109,27 @@ Branches execute in connection order, depth-first; an error or budget exhaustion
 stops the remaining branches without rolling back effects already performed.
 Check the returned NativeResult. Spawnable packages require a separate host
 adapter and are not supported by this wrapper.
+
+Low-level lifetime API
+----------------------
+NativeInstance.StartLifetime starts a root with an explicit duration or an
+infinite lifetime; StartCapturedLifetime instead reads a Life Time node at
+initial evaluation. An optional cached NativeSignal selects On Start; pass null
+if absent. AdvanceLifetime takes absolute elapsed seconds and returns a
+NativeLifetimeSample. Expired means the root reached its deadline, not that
+children or delayed work are finished. ReadValues obtains the last evaluation
+without evaluating again. FCurves do not extend the lifetime.
+
+The host must track children and pending work, process their events in time
+order, and call DrainLifetime as needed after the root expires. Only after that
+work is complete should it call DispatchNaturalDestroy (if an On Destroy
+signal exists), wait for any work it creates, and call FinishLifetime.
+StopLifetime is an explicit interruption and does not fire natural Destroy.
+Check every NativeResult, and dispose the instance when no longer needed.
+These are low-level calls only: this Unity adapter does not host Spawnable
+packages, schedule Delay or Owner Destroy, or automatically drive renderer
+lifetime. Do not treat this API as a complete engine lifecycle implementation.
+
 Program creation COPIES bytecode and owns v3 builtin binding storage. v1/v2/v3
 and supported v4/v5 load through the real Core validator; unknown non-builtin custom nodes fail.
 Instances own fixed-capacity work/default/handle vectors allocated only at create.

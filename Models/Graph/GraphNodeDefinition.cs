@@ -132,6 +132,13 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("7ff078d2-dce1-42b0-93fb-b40200000001")] = "GameIoRuntimeOutputSignal",
         [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000001")] = "LifeTime",
         [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e0")] = "InstanceAge",
+        [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e1")] = "InstanceRemaining",
+        [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e2")] = "InstanceNormalizedAge",
+        [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e3")] = "OwnerDestroy",
+        [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e4")] = "Delay",
+        [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e5")] = "OnDestroy",
+        [Guid.Parse("4a94e882-39e8-4efb-92c7-180000000001")] = "LifecycleRuntimeRemaining",
+        [Guid.Parse("4a94e882-39e8-4efb-92c7-180000000002")] = "LifecycleRuntimeNormalizedAge",
         [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000002")] = "OnStart",
         [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000003")] = "SpawnOutputVector3",
         [Guid.Parse("fb8c8a83-0c9d-4870-98a1-08c0ee800001")] = "SpawnInputFloat",
@@ -260,6 +267,7 @@ public sealed record GraphNodeDefinition(
     public string TypeName { get; init; } = string.Empty;
     public bool IsInternalRuntime => Namespace == "LiberaFx" &&
         (TypeName.StartsWith("MatrixRuntime", StringComparison.Ordinal) ||
+         TypeName.StartsWith("LifecycleRuntime", StringComparison.Ordinal) ||
          TypeName.StartsWith("GameIoRuntime", StringComparison.Ordinal));
     public string? DisplayNameKey { get; init; }
     public string? GroupNameKey { get; init; }

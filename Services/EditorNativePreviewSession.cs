@@ -27,7 +27,8 @@ public sealed class EditorNativePreviewSession : IDisposable
     public static readonly byte[] TransportShell = CreateTransportShell();
 
     public static bool RequiresNative(GraphSnapshot graph) => graph.Nodes.Any(node =>
-        node.Kind == GraphNodeKind.SpawnableGroup || node.Kind.Value is "OnStart" or "LifeTime" ||
+        node.Kind == GraphNodeKind.SpawnableGroup || node.Kind.Value is "OnStart" or "OnDestroy" or "LifeTime" or
+            "InstanceAge" or "InstanceRemaining" or "InstanceNormalizedAge" ||
         SpawnableGroupSchema.IsOutput(node.Kind) ||
         node.ChildGraph is { } child && !GpuParticleEditorService.IsGpu(node.Kind) && RequiresNative(child));
 
@@ -98,7 +99,7 @@ public sealed class EditorNativePreviewSession : IDisposable
         }
         // Equal sampled time (pause/resume/resync) does not evaluate again.
         var nodes = new JsonArray();
-        Append(_rootRender, Guid.Empty, 0, 0, nodes);
+        if (_native!.RootVisible) Append(_rootRender, Guid.Empty, 0, 0, nodes);
         foreach (var instance in _native!.ActiveInstances)
         {
             var template = _package.Templates.Single(item => item.ContainerId == instance.Container);

@@ -68,10 +68,11 @@ int main(int argc, char** argv)
 #if defined(_MSC_VER) && defined(_DEBUG)
     _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
     auto count = std::size_t{};
     auto registry = builtinNodes(count);
-    assert(registry != nullptr && count == 62);
+    assert(registry != nullptr && count == 64);
     const std::uint8_t expectedPrefix[] = {0x74, 0x30, 0x5a, 0xc1, 0x91, 0xb2, 0x4c, 0x33, 0x8d, 0x44};
     assert(std::memcmp(registry[0].typeId, expectedPrefix, sizeof(expectedPrefix)) == 0);
     if (argc >= 2)
@@ -109,11 +110,41 @@ int main(int argc, char** argv)
         auto program = Program{};
         assert(Program::load(bytes.data(), bytes.size(), nullptr, 0, &binding, 1, program) == Result::Ok);
         assert(binding.descriptor == &registry[i]);
-        alignas(16) auto work = std::array<double, 4>{};
+        alignas(16) auto work = std::array<double, 16>{};
         auto instance = Instance{};
         assert(instance.initialize(program, work.data(), work.size()) == Result::Ok);
         assert(instance.updateAsync(0, enqueue, nullptr) == Result::Ok);
         assert(instance.result() == Result::Ok);
+    }
+
+    for (auto index = std::size_t{62}; index < 64; ++index)
+    {
+        auto bytes = fixture(registry[index]);
+        writeDouble(bytes, 96, 2);
+        auto binding = CustomNodeBinding{};
+        auto program = Program{};
+        assert(Program::load(bytes.data(), bytes.size(), nullptr, 0, &binding, 1, program) == Result::Ok);
+        alignas(16) auto work = std::array<double, 16>{};
+        auto defaults = std::array<double, 16>{};
+        auto instance = Instance{};
+        assert(instance.initialize(program, work.data(), work.size(), defaults.data(), defaults.size()) == Result::Ok);
+        assert(instance.updateAsync(0, enqueue, nullptr) == Result::Ok && instance.result() == Result::Ok);
+        assert(work[0] == (index == 62 ? 2 : 0));
+        assert(instance.setParameter(bytes.data() + 16, 0, 0, 10) == Result::Ok);
+        assert(instance.updateAsync(1, enqueue, nullptr) == Result::Ok && instance.result() == Result::Ok);
+        assert(work[0] == (index == 62 ? 1 : 0.5));
+        assert(instance.updateAsync(3, enqueue, nullptr) == Result::Ok && instance.result() == Result::Ok);
+        assert(work[0] == (index == 62 ? 0 : 1));
+        auto zeroBytes = bytes;
+        writeDouble(zeroBytes, 96, 0);
+        auto zeroProgram = Program{};
+        auto zeroBinding = CustomNodeBinding{};
+        assert(Program::load(zeroBytes.data(), zeroBytes.size(), nullptr, 0, &zeroBinding, 1, zeroProgram) == Result::Ok);
+        alignas(16) auto zeroWork = std::array<double, 16>{};
+        auto zero = Instance{};
+        assert(zero.initialize(zeroProgram, zeroWork.data(), zeroWork.size()) == Result::Ok);
+        assert(zero.updateAsync(0, enqueue, nullptr) == Result::Ok && zero.result() == Result::Ok);
+        assert(zeroWork[0] == (index == 62 ? 0 : 1));
     }
 
     auto bytes = fixture(registry[0]);

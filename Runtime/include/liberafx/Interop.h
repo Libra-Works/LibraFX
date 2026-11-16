@@ -88,6 +88,11 @@ typedef struct LIBRA_INTEROP_ALIGN(8) LibraLifetimeSample {
     uint32_t expired, infinite;
 } LibraLifetimeSample;
 
+typedef struct LIBRA_INTEROP_ALIGN(8) LibraScheduledEvent {
+    double time;
+    uint64_t token;
+} LibraScheduledEvent;
+
 typedef struct LIBRA_INTEROP_ALIGN(8) LibraSpawnableBinding {
     uint8_t containerId[16];
     uint8_t signalTypeId[16];
@@ -197,17 +202,42 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_evaluate(
     uint32_t count, LibraValue* outValues);
 /* Opt-in root lifetime. infinite must be 0 or 1; duration is ignored if 1.
    elapsed is scaled seconds since start. OnStart is optional. Output is valid
-   only on success; expiry is reported once after the clamped final evaluation.
+   only on success; the deadline is reported once after the clamped evaluation.
    Stop never reports expiry. Restart requires a new instance.
-   This primitive does not stop child pools or dispatch Destroy automatically.
-   It cannot be combined with game IO or a prior raw evaluation on the same
-   instance. Once start is attempted, use these lifetime calls instead of raw
-   evaluate/signal dispatch; values_read remains available. */
+   A host must keep the parent alive until children and queued continuations
+   complete; use drain for subsequent updates and finish only when quiescent.
+   These primitives do not manage child pools or dispatch Destroy automatically.
+   Configure game IO before this call, if needed. A previous raw evaluation or
+   game_io_start prevents managed playback. Once start is attempted, use these
+   lifetime calls instead of raw evaluate, game_io_start/update, or raw signal
+   dispatch. Managed game input signals use the last successfully evaluated age.
+   values_read and game IO event draining remain available. A failed evaluation,
+   property publication or OnStart is terminal; create a fresh instance. */
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_start(
     LibraInstance instance, double duration, uint32_t infinite,
     const uint8_t onStartNodeId[16], uint32_t instructionBudget, LibraLifetimeSample* outSample);
+/* Capture a finite scalar duration from the initial evaluation, before OnStart.
+   The captured value is not affected by subsequent property changes. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_start_captured(
+    LibraInstance instance, const uint8_t lifeNodeId[16],
+    const uint8_t onStartNodeId[16], uint32_t instructionBudget, LibraLifetimeSample* outSample);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_advance(
     LibraInstance instance, double elapsed, LibraLifetimeSample* outSample);
+/* After deadline, keep the parent active while owned work completes. Do not
+   report final destruction until all children and continuations have finished. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_drain(LibraInstance instance, double elapsed);
+/* Bounded owner-thread continuation queue. Advance/drain must not skip the
+   next scheduled time; take consumes a due event before the host delivers it. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_schedule(
+    LibraInstance instance, double time, uint64_t token);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_next_scheduled(
+    LibraInstance instance, LibraScheduledEvent* outEvent, uint32_t* hasEvent);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_take_scheduled(
+    LibraInstance instance, LibraScheduledEvent* outEvent, uint32_t* hasEvent);
+/* Dispatch natural root Destroy at most once after owned work is quiescent. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_destroy(
+    LibraInstance instance, const uint8_t nodeId[16], uint32_t instructionBudget);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_finish(LibraInstance instance);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_stop(LibraInstance instance);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_sample_sprite_atlas(
     double frame, uint32_t columns, uint32_t rows, LibraAtlasFrame* outFrame);
@@ -261,6 +291,10 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_set_live(
     const LibraGeneratorCapture* values, uint32_t count);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_evaluate(
     LibraGeneratorPool pool, LibraGeneratorInstance instance, double time);
+/* At-most-once natural owner end request at the instance's last evaluated global time. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_owner_destroy(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance, const uint8_t nodeId[16],
+    double time, uint32_t instructionBudget);
 /* Last successful sample; infinite lifetimes report infinite remaining and normalizedAge 0. */
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_lifetime(
     LibraGeneratorPool pool, LibraGeneratorInstance instance, LibraLifetimeSample* outSample);

@@ -20,13 +20,18 @@ add -nographics when checking GPU output: a Null graphics device skips shader
 compilation, vertex GPU-buffer identity and framebuffer checks explicitly.
 Normal completion exits through -quit; a test failure requests exit code 2.
 
+For the focused native lifetime check without framebuffer rendering, use
+LiberaFx.Unity.Editor.LiberaFxEditorVerification.RunLifetime instead. It writes
+lifetime-verification.txt and covers explicit and captured lifetimes, expiry,
+drain, finish and stop. This does not verify a Spawnable package or Play Mode.
+
 Checks:
   Actual native DLL P/Invoke evaluates the C#-generated .lfxb fixture.
   C/C# POD contracts, native default mutation, cube position/color updates.
   Shared Mesh/Material handles and MaterialPropertyBlock (no material clones).
   Native atlas frames 0/8 change Unity UV offset/scale with correct row flip.
   Dynamic Mesh vertex values, 20-byte stream stride and four-vertex capacity.
-  Cached managed arrays, stable Mesh ID and stable native GPU buffer pointer.
+  Cached managed arrays, stable Mesh object and stable native GPU buffer pointer.
   300 warmup + 1000 Update calls per atlas mode: zero managed allocations.
   Synchronous shader compile and actual Camera.Render/ReadPixels readback.
   Framebuffer RGB differs from black background; PNGs preserve local proof.

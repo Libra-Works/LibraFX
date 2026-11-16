@@ -187,11 +187,28 @@ void verifyEffectLifetime()
     auto value = LibraValue{};
     assert(libra_values_read(instance, &binding, 1, &value) == LIBRA_OK && value.x == 2);
     assert(libra_effect_advance(instance, 3, &sample) == LIBRA_NOT_READY);
-    assert(libra_effect_stop(instance) == LIBRA_NOT_READY);
+    assert(libra_effect_stop(instance) == LIBRA_OK);
+    assert(libra_effect_finish(instance) == LIBRA_NOT_READY);
     assert(libra_instance_release(instance) == LIBRA_OK);
 
     assert(libra_instance_create(program, &instance) == LIBRA_OK);
     assert(libra_effect_start(instance, 0, 0, nullptr, 0, &sample) == LIBRA_OK && sample.expired);
+    assert(libra_instance_release(instance) == LIBRA_OK);
+    assert(libra_instance_create(program, &instance) == LIBRA_OK);
+    assert(libra_effect_start(instance, 1, 0, nullptr, 0, &sample) == LIBRA_OK);
+    assert(libra_effect_schedule(instance, 2, 42) == LIBRA_OK);
+    assert(libra_effect_advance(instance, 3, &sample) == LIBRA_OK && sample.expired);
+    assert(libra_effect_finish(instance) == LIBRA_NOT_READY);
+    auto scheduled = LibraScheduledEvent{};
+    auto hasScheduled = std::uint32_t{};
+    assert(libra_effect_next_scheduled(instance, &scheduled, &hasScheduled) == LIBRA_OK &&
+           hasScheduled && scheduled.time == 2 && scheduled.token == 42);
+    assert(libra_effect_drain(instance, 3) == LIBRA_NOT_READY);
+    assert(libra_effect_take_scheduled(instance, &scheduled, &hasScheduled) == LIBRA_OK && !hasScheduled);
+    assert(libra_effect_drain(instance, 2) == LIBRA_OK);
+    assert(libra_effect_take_scheduled(instance, &scheduled, &hasScheduled) == LIBRA_OK &&
+           hasScheduled && scheduled.time == 2 && scheduled.token == 42);
+    assert(libra_effect_finish(instance) == LIBRA_OK);
     assert(libra_instance_release(instance) == LIBRA_OK);
     assert(libra_instance_create(program, &instance) == LIBRA_OK);
     assert(libra_effect_start(instance, 0, 1, nullptr, 0, &sample) == LIBRA_OK && sample.infinite);
@@ -209,11 +226,105 @@ void verifyEffectLifetime()
     assert(libra_program_create(bytes.data(), bytes.size(), &program) == LIBRA_OK);
     assert(libra_instance_create(program, &instance) == LIBRA_OK);
     assert(libra_game_io_configure(instance, 8, nullptr, 0) == LIBRA_OK);
-    assert(libra_effect_start(instance, 2, 0, nullptr, 0, &sample) == LIBRA_INVALID_VALUE_TYPE);
+    auto speed = 3.0;
+    assert(libra_game_io_set_property(instance, "speed", &speed, 1) == LIBRA_OK);
+    auto startId = std::array<std::uint8_t, 16>{}; startId[15] = 3;
+    assert(libra_effect_start(instance, 2, 0, startId.data(), 8, &sample) == LIBRA_OK);
+    auto event = LibraGameIoEvent{};
+    auto hasEvent = std::uint32_t{};
+    assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent &&
+           event.portIndex == 1 && event.values[0] == 3);
+    assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent &&
+           event.portIndex == 3 && event.kind == 3);
+    assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && !hasEvent);
+    assert(libra_game_io_start(instance, 0, startId.data(), 8) == LIBRA_NOT_READY);
+    assert(libra_game_io_update(instance, 1) == LIBRA_NOT_READY);
+    assert(libra_game_io_fire_signal(instance, "enter", 1, 8) == LIBRA_INVALID_ARGUMENT);
+    assert(libra_game_io_fire_signal(instance, "enter", 0, 8) == LIBRA_OK);
+    assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent &&
+           event.portIndex == 3 && event.kind == 3);
+    speed = 7;
+    assert(libra_game_io_set_property(instance, "speed", &speed, 1) == LIBRA_OK);
+    assert(libra_effect_advance(instance, 1, &sample) == LIBRA_OK && sample.age == 1);
+    assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent &&
+           event.portIndex == 1 && event.values[0] == 7);
+    assert(libra_effect_advance(instance, 3, &sample) == LIBRA_OK && sample.age == 2 && sample.expired);
+    assert(libra_game_io_fire_signal(instance, "enter", 2, 8) == LIBRA_NOT_READY);
+    assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && !hasEvent);
+    assert(libra_effect_destroy(instance, startId.data(), 8) == LIBRA_OK);
+    assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent &&
+           event.portIndex == 3 && event.kind == 3);
+    assert(libra_effect_destroy(instance, startId.data(), 8) == LIBRA_OK);
+    assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && !hasEvent);
+    assert(libra_effect_finish(instance) == LIBRA_OK);
     assert(libra_instance_release(instance) == LIBRA_OK);
     assert(libra_instance_create(program, &instance) == LIBRA_OK);
     assert(libra_effect_start(instance, 2, 0, nullptr, 0, &sample) == LIBRA_OK);
     assert(libra_game_io_configure(instance, 8, nullptr, 0) == LIBRA_INVALID_VALUE_TYPE);
+    assert(libra_instance_release(instance) == LIBRA_OK);
+
+    assert(libra_instance_create(program, &instance) == LIBRA_OK);
+    assert(libra_game_io_configure(instance, 1, nullptr, 0) == LIBRA_OK);
+    assert(libra_effect_start(instance, 2, 0, startId.data(), 8, &sample) == LIBRA_QUEUE_REJECTED);
+    assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent &&
+           event.portIndex == 1);
+    assert(libra_effect_start(instance, 2, 0, startId.data(), 8, &sample) == LIBRA_QUEUE_REJECTED);
+    assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && !hasEvent);
+    assert(libra_effect_stop(instance) == LIBRA_OK);
+    assert(libra_instance_release(instance) == LIBRA_OK);
+
+    assert(libra_instance_create(program, &instance) == LIBRA_OK);
+    assert(libra_game_io_configure(instance, 8, nullptr, 0) == LIBRA_OK);
+    speed = 3;
+    assert(libra_game_io_set_property(instance, "speed", &speed, 1) == LIBRA_OK);
+    auto lifeId = std::array<std::uint8_t, 16>{}; lifeId[15] = 2;
+    assert(libra_effect_start_captured(instance, lifeId.data(), startId.data(), 8, &sample) == LIBRA_OK &&
+           sample.remaining == 3);
+    assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent);
+    assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent && event.kind == 3);
+    speed = 1;
+    assert(libra_game_io_set_property(instance, "speed", &speed, 1) == LIBRA_OK);
+    assert(libra_effect_advance(instance, 2, &sample) == LIBRA_OK && !sample.expired &&
+           sample.remaining == 1 && std::abs(sample.normalizedAge - 2.0 / 3.0) < 1e-12);
+    assert(libra_effect_advance(instance, 4, &sample) == LIBRA_OK && sample.expired && sample.age == 3);
+    assert(libra_instance_release(instance) == LIBRA_OK);
+
+    assert(libra_instance_create(program, &instance) == LIBRA_OK);
+    assert(libra_game_io_configure(instance, 8, nullptr, 0) == LIBRA_OK);
+    speed = -1;
+    assert(libra_game_io_set_property(instance, "speed", &speed, 1) == LIBRA_OK);
+    assert(libra_effect_start_captured(instance, lifeId.data(), startId.data(), 8, &sample) == LIBRA_INVALID_ARGUMENT);
+    assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && !hasEvent);
+    assert(libra_effect_start_captured(instance, lifeId.data(), startId.data(), 8, &sample) == LIBRA_INVALID_ARGUMENT);
+    assert(libra_effect_stop(instance) == LIBRA_OK);
+    assert(libra_instance_release(instance) == LIBRA_OK);
+
+    assert(libra_instance_create(program, &instance) == LIBRA_OK);
+    assert(libra_game_io_configure(instance, 8, nullptr, 0) == LIBRA_OK);
+    assert(libra_effect_start(instance, 0, 0, startId.data(), 8, &sample) == LIBRA_OK && sample.expired);
+    assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent &&
+           event.portIndex == 1);
+    assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent &&
+           event.portIndex == 3);
+    assert(libra_effect_advance(instance, 0, &sample) == LIBRA_NOT_READY);
+    assert(libra_game_io_fire_signal(instance, "enter", 0, 8) == LIBRA_NOT_READY);
+    assert(libra_instance_release(instance) == LIBRA_OK);
+
+    assert(libra_instance_create(program, &instance) == LIBRA_OK);
+    assert(libra_game_io_configure(instance, 1, nullptr, 0) == LIBRA_OK);
+    assert(libra_effect_start(instance, 2, 0, nullptr, 0, &sample) == LIBRA_OK);
+    speed = 5;
+    assert(libra_game_io_set_property(instance, "speed", &speed, 1) == LIBRA_OK);
+    assert(libra_effect_advance(instance, 1, &sample) == LIBRA_QUEUE_REJECTED);
+    assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent);
+    assert(libra_effect_advance(instance, 1, &sample) == LIBRA_NOT_READY);
+    assert(libra_effect_stop(instance) == LIBRA_OK);
+    assert(libra_instance_release(instance) == LIBRA_OK);
+
+    assert(libra_instance_create(program, &instance) == LIBRA_OK);
+    assert(libra_game_io_configure(instance, 8, nullptr, 0) == LIBRA_OK);
+    assert(libra_game_io_start(instance, 0, nullptr, 0) == LIBRA_OK);
+    assert(libra_effect_start(instance, 2, 0, nullptr, 0, &sample) == LIBRA_NOT_READY);
     assert(libra_instance_release(instance) == LIBRA_OK);
     assert(libra_program_release(program) == LIBRA_OK);
 }
@@ -229,6 +340,11 @@ auto __cdecl allocationHook(int kind, void*, size_t, int, long, const unsigned c
 
 int main()
 {
+#if defined(_MSC_VER) && defined(_DEBUG)
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#endif
     verifyEffectLifetime();
     if (auto bytecodePath = std::getenv("LIBERAFX_GAMEIO_MATRIX_BYTECODE")) {
         auto stream = std::ifstream{bytecodePath, std::ios::binary};
@@ -265,6 +381,21 @@ int main()
         assert(libra_game_io_next_event_v2(instance, &newEvent, &hasEvent) == LIBRA_OK && hasEvent &&
                newEvent.values[3] == 19);
         assert(libra_instance_release(instance) == LIBRA_OK);
+        assert(libra_instance_create(program, &instance) == LIBRA_OK);
+        assert(libra_game_io_configure(instance, 8, nullptr, 92) == LIBRA_OK);
+        assert(libra_game_io_set_owner_matrix(instance, owner.data()) == LIBRA_OK);
+        assert(libra_game_io_set_property(instance, "local", local.data(), 16) == LIBRA_OK);
+        auto lifetime = LibraLifetimeSample{};
+        assert(libra_effect_start(instance, 2, 0, nullptr, 0, &lifetime) == LIBRA_OK);
+        assert(libra_game_io_next_event_v2(instance, &newEvent, &hasEvent) == LIBRA_OK && hasEvent &&
+               newEvent.values[3] == 19);
+        owner[3] = 20;
+        assert(libra_game_io_set_owner_matrix(instance, owner.data()) == LIBRA_OK);
+        assert(libra_effect_advance(instance, 5, &lifetime) == LIBRA_OK &&
+               lifetime.expired && lifetime.age == 2);
+        assert(libra_game_io_next_event_v2(instance, &newEvent, &hasEvent) == LIBRA_OK && hasEvent &&
+               newEvent.values[3] == 24);
+        assert(libra_instance_release(instance) == LIBRA_OK);
         assert(libra_program_release(program) == LIBRA_OK);
     }
     if (auto bytecodePath = std::getenv("LIBERAFX_GAMEIO_BYTECODE")) {
@@ -291,6 +422,20 @@ int main()
         assert(libra_game_io_fire_signal(instance, "trigger", 1, 8) == LIBRA_OK);
         assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent &&
                event.portIndex == 3 && event.kind == 3);
+        assert(libra_instance_release(instance) == LIBRA_OK);
+        assert(libra_instance_create(program, &instance) == LIBRA_OK);
+        assert(libra_game_io_configure(instance, 4, containerId.data(), 91) == LIBRA_OK);
+        assert(libra_game_io_set_property(instance, "position", position.data(), position.size()) == LIBRA_OK);
+        auto lifetime = LibraLifetimeSample{};
+        assert(libra_effect_start(instance, 2, 0, nullptr, 0, &lifetime) == LIBRA_OK);
+        assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent &&
+               event.portIndex == 2 && event.kind == 2);
+        assert(libra_effect_advance(instance, 1, &lifetime) == LIBRA_OK);
+        assert(libra_game_io_fire_signal(instance, "trigger", 1, 8) == LIBRA_OK);
+        assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent &&
+               event.portIndex == 3 && event.kind == 3);
+        assert(libra_effect_advance(instance, 3, &lifetime) == LIBRA_OK && lifetime.expired);
+        assert(libra_game_io_fire_signal(instance, "trigger", 2, 8) == LIBRA_NOT_READY);
         assert(libra_instance_release(instance) == LIBRA_OK);
         assert(libra_program_release(program) == LIBRA_OK);
     }

@@ -1634,6 +1634,16 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
         if (insideSpawnable && additions.Any(kind => kind == GraphNodeKind.SpawnableGroup))
             throw new InvalidOperationException("Nested Spawnable Groups are not supported.");
+        var ownerDestroyCount = additions.Count(kind => kind.Value == "OwnerDestroy");
+        if (ownerDestroyCount != 0 && (owner?.Kind != GraphNodeKind.SpawnableGroup ||
+            Nodes.Count(node => node.Definition.Kind.Value == "OwnerDestroy") + ownerDestroyCount > 1))
+            throw new InvalidOperationException(LocalizationService.Shared.Get("Messages.OwnerDestroyPlacement"));
+        var rootDestroyCount = additions.Count(kind => kind.Value == "OnDestroy");
+        if (rootDestroyCount != 0 && (owner is not null ||
+            Nodes.Count(node => node.Definition.Kind.Value == "OnDestroy") + rootDestroyCount > 1))
+            throw new InvalidOperationException(LocalizationService.Shared.Get("Messages.OnDestroyPlacement"));
+        if (owner is not null && additions.Any(kind => kind.Value == "Delay"))
+            throw new InvalidOperationException(LocalizationService.Shared.Get("Messages.DelayPlacement"));
         if (additions.Any(GameIoSchema.IsNode) && owner is not null)
             throw new InvalidOperationException("Game I/O nodes must be placed directly in the root graph.");
         if (additions.Any(kind => GroupBoundarySchema.IsInput(kind) || GroupBoundarySchema.IsOutput(kind)) &&

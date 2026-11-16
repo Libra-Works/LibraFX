@@ -57,6 +57,8 @@ namespace LiberaFx.Unity.Editor
                         "Native P/Invoke evaluated POD result mismatch.");
                 }
                 proof.Add("native_pinvoke_and_marshal_contracts=PASS");
+                VerifyLifetime();
+                proof.Add("native_effect_lifetime_start_advance_drain_finish_stop=PASS");
                 var shader = Shader.Find("LiberaFx/Atlas Unlit");
                 Assert(shader, "LiberaFx shader was not imported.");
                 AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(shader), ImportAssetOptions.ForceSynchronousImport);
@@ -101,6 +103,59 @@ namespace LiberaFx.Unity.Editor
                 EditorApplication.Exit(2);
             }
             finally { Application.logMessageReceived -= Log; }
+        }
+        public static void RunLifetime()
+        {
+            try
+            {
+                NativeAbi.ValidateLayout();
+                VerifyLifetime();
+                File.WriteAllText(Path.Combine(Project, "lifetime-verification.txt"), "PASS");
+            }
+            catch (Exception error)
+            {
+                File.WriteAllText(Path.Combine(Project, "lifetime-verification.txt"), error.ToString());
+                Debug.LogException(error);
+                EditorApplication.Exit(2);
+            }
+        }
+        private static void VerifyLifetime()
+        {
+            using (var program = new NativeProgram(LiberaFxSampleProgram.Create()))
+            using (var instance = program.CreateInstance())
+            {
+                var bindings = new[] { instance.BindValue(LiberaFxSampleProgram.TimeId) };
+                var values = new NativeValue[1];
+                Assert(instance.StartLifetime(2, false, null, 0, out var initial) == NativeResult.Ok &&
+                    initial.Age == 0 && initial.Remaining == 2 && initial.Expired == 0,
+                    "Unity lifetime did not start at zero.");
+                Assert(instance.AdvanceLifetime(3, out var expired) == NativeResult.Ok &&
+                    expired.Age == 2 && expired.Expired == 1 &&
+                    instance.ReadValues(bindings, values) == NativeResult.Ok && values[0].X == 2,
+                    "Unity lifetime did not clamp at expiry.");
+                Assert(instance.DrainLifetime(4) == NativeResult.Ok &&
+                    instance.ReadValues(bindings, values) == NativeResult.Ok && values[0].X == 4,
+                    "Unity lifetime did not continue while draining.");
+                Assert(instance.FinishLifetime() == NativeResult.Ok, "Unity lifetime did not finish.");
+            }
+            using (var program = new NativeProgram(LiberaFxSampleProgram.Create()))
+            using (var instance = program.CreateInstance())
+            {
+                Assert(instance.StartLifetime(0, false, null, 0, out var initial) == NativeResult.Ok &&
+                    initial.Expired == 1 && instance.StopLifetime() == NativeResult.Ok,
+                    "Unity explicit stop after immediate expiry failed.");
+            }
+            using (var program = new NativeProgram(LiberaFxSampleProgram.Create()))
+            using (var instance = program.CreateInstance())
+            {
+                var life = new NativeSignal("00000000-0000-0000-0000-000000000003");
+                Assert(instance.StartCapturedLifetime(life, null, 0, out var initial) == NativeResult.Ok &&
+                    initial.Remaining == 0.2 &&
+                    instance.AdvanceLifetime(1, out var expired) == NativeResult.Ok &&
+                    expired.Age == 0.2 && expired.Expired == 1 &&
+                    instance.StopLifetime() == NativeResult.Ok,
+                    "Unity captured lifetime did not expire at the captured value.");
+            }
         }
         private static void Initialize(GameObject target, LiberaFxRenderer owner)
         {
@@ -184,7 +239,6 @@ namespace LiberaFx.Unity.Editor
                     "Native deformation did not update the actual Unity vertex buffer.");
                 var workArray = Field("vertices").GetValue(owner);
                 var outputArray = Field("values").GetValue(owner);
-                var meshId = mesh.GetInstanceID();
                 IntPtr bufferPointer = IntPtr.Zero;
                 if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Null)
                     using (var buffer = mesh.GetVertexBuffer(0)) bufferPointer = buffer.GetNativeBufferPtr();
@@ -192,7 +246,7 @@ namespace LiberaFx.Unity.Editor
                 var allocated = GC.GetAllocatedBytesForCurrentThread();
                 for (var i = 0; i < 1000; ++i) update();
                 allocated = GC.GetAllocatedBytesForCurrentThread() - allocated;
-                Assert(meshId == mesh.GetInstanceID() && mesh.vertexCount == 4 &&
+                Assert(target.GetComponent<MeshFilter>().sharedMesh == mesh && mesh.vertexCount == 4 &&
                     ReferenceEquals(workArray, Field("vertices").GetValue(owner)) &&
                     ReferenceEquals(outputArray, Field("values").GetValue(owner)), "Per-frame storage was replaced.");
                 if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Null)

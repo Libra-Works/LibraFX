@@ -1,6 +1,12 @@
 {
   "Editor.Node.LifeTime": "寿命",
   "Editor.Node.InstanceAge": "インスタンス経過時間",
+  "Editor.Node.InstanceRemaining": "インスタンス残り寿命",
+  "Editor.Node.InstanceNormalizedAge": "インスタンス正規化経過時間",
+  "Editor.Node.OwnerDestroy": "親の終了要求",
+  "Editor.Node.OnDestroy": "自然終了時",
+  "Editor.Node.Delay": "遅延（Destroy から Spawn）",
+  "Editor.NodeGroup.Lifecycle": "ライフサイクル",
   "Editor.Parameter.Seconds": "秒",
   "Editor.Node.OnStart": "開始時",
   "Editor.Node.SpawnOutputVector3": "グループ出力 (Vector3)",

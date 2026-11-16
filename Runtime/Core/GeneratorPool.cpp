@@ -42,8 +42,10 @@ struct Slot final {
     bool destroyPublished = false;
     bool destroyDelivered = false;
     bool sampleReady = false;
+    bool ownerDestroySent = false;
     double sampledAge = 0;
     Result startResult = Result::Ok;
+    Result ownerDestroyResult = Result::Ok;
 };
 struct SpawnCommand final {
     double time = 0;
@@ -205,8 +207,10 @@ auto GeneratorPool::spawn(double time, const GeneratorCapture* captures, std::si
         slot->destroyPublished = false;
         slot->destroyDelivered = false;
         slot->sampleReady = false;
+        slot->ownerDestroySent = false;
         slot->sampledAge = 0;
         slot->startResult = Result::Ok;
+        slot->ownerDestroyResult = Result::Ok;
         auto seed = slot->id;
         for (auto byte : impl_->containerId) seed = (seed ^ byte) * UINT64_C(1099511628211);
         seed += UINT64_C(0x9e3779b97f4a7c15);
@@ -327,6 +331,7 @@ auto GeneratorPool::start(GeneratorInstanceId id) noexcept -> Result
     impl_->executing = true;
     lock.unlock();
     status = slot->instance->updateAsync(0, inlineEnqueue, nullptr);
+    auto evaluated = status == Result::Ok;
     if (status == Result::Ok) status = slot->instance->result();
     auto duration = std::array<double, 4>{};
     if (status == Result::Ok && impl_->lifecycle.hasLife) {
@@ -340,10 +345,10 @@ auto GeneratorPool::start(GeneratorInstanceId id) noexcept -> Result
         status = slot->instance->dispatchSignal(signal, 0, impl_->lifecycle.instructionBudget);
     lock.lock();
     impl_->executing = false;
-    if (dispatched) {
+    if (evaluated) {
         slot->started = true;
         slot->startResult = status;
-        if (impl_->lifecycle.hasLife)
+        if (dispatched && impl_->lifecycle.hasLife)
             (void)Lifetime::finite(duration[0], slot->lifetime);
     }
     if (status != Result::Ok) return status;
@@ -468,6 +473,33 @@ auto GeneratorPool::evaluate(GeneratorInstanceId id, double time) noexcept -> Re
         slot->expiring = true;
         return impl_->publishDestroy(*slot);
     }
+    return result;
+}
+
+auto GeneratorPool::ownerDestroy(GeneratorInstanceId id, const std::uint8_t nodeId[16],
+                                 double time, std::size_t instructionBudget) noexcept -> Result
+{
+    if (!nodeId || !std::isfinite(time) || !instructionBudget || instructionBudget > 10000)
+        return Result::InvalidArgument;
+    auto lock = std::unique_lock<std::mutex>(impl_->mutex);
+    if (impl_->executing) return Result::Busy;
+    auto slot = impl_->find(id);
+    if (!slot) return Result::InvalidHandle;
+    if (slot->ownerDestroySent) return slot->ownerDestroyResult;
+    if (!slot->started || !slot->sampleReady || slot->expiring) return Result::NotReady;
+    if (slot->startResult != Result::Ok) return slot->startResult;
+    auto elapsed = time - slot->start;
+    if (elapsed != slot->sampledAge) return Result::InvalidArgument;
+    auto signal = SignalHandle{};
+    auto result = slot->instance->bindSignal(nodeId, signal);
+    if (result != Result::Ok) return result;
+    slot->ownerDestroySent = true;
+    impl_->executing = true;
+    lock.unlock();
+    result = slot->instance->dispatchSignal(signal, elapsed, instructionBudget);
+    lock.lock();
+    slot->ownerDestroyResult = result;
+    impl_->executing = false;
     return result;
 }
 

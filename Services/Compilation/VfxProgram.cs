@@ -89,7 +89,8 @@ public sealed class VfxProgram
         if (ContainsSpawnable(graph))
             throw new InvalidDataException("Compile Spawnable Groups with SpawnableGroupPackage so templates are not discarded.");
         if (Flatten(graph).Any(node => SpawnableGroupSchema.IsInput(node.Kind) ||
-            SpawnableGroupSchema.IsOutput(node.Kind) || node.Kind.Value is "LifeTime" or "OnStart" or "InstanceAge"))
+            SpawnableGroupSchema.IsOutput(node.Kind) || node.Kind.Value is "LifeTime" or "OnStart" or
+                "InstanceAge" or "InstanceRemaining" or "InstanceNormalizedAge" or "OwnerDestroy" or "OnDestroy" or "Delay"))
             throw new InvalidDataException("Lifecycle and Spawn boundary nodes require a Spawnable Group package.");
         return CompileForPackage(graph);
     }
@@ -99,8 +100,9 @@ public sealed class VfxProgram
         ValidateForCompilation(graph);
         graph = GroupExposedItems.Materialize(graph);
         ValidateForCompilation(graph);
+        var lifeNodeId = graph.Nodes.SingleOrDefault(node => node.Kind.Value == "LifeTime")?.Id;
         var (loweredGameIo, gameIoPorts) = GameIoSchema.Lower(graph);
-        graph = LowerLifecycle(loweredGameIo);
+        graph = LowerLifecycle(loweredGameIo, lifeNodeId is not null);
 #if LIBERAFX_CONVERTER
         GraphTypeDiagnostics.Validate(graph);
 #else
@@ -112,6 +114,10 @@ public sealed class VfxProgram
                     problem.SourceType, problem.ExpectedType))));
 #endif
         graph = GroupBoundaryLowering.Lower(graph);
+        if (lifeNodeId is { } lifeId)
+            graph = graph with { Connections = graph.Connections.Concat(graph.Nodes
+                .Where(node => node.Kind.Value is "LifecycleRuntimeRemaining" or "LifecycleRuntimeNormalizedAge")
+                .Select(node => new GraphConnectionSnapshot(lifeId, node.Id, "duration"))).ToArray() };
         var matrixLowering = GraphPolymorphism.LowerWithOutputs(graph);
         graph = matrixLowering.Graph;
         gameIoPorts = gameIoPorts.Select(port =>
@@ -812,27 +818,38 @@ public sealed class VfxProgram
         GraphValidator.Validate(graph);
     }
 
-    private static GraphSnapshot LowerLifecycle(GraphSnapshot graph)
+    private static GraphSnapshot LowerLifecycle(GraphSnapshot graph, bool hasLife)
     {
-        var starts = graph.Nodes.Where(node => node.Kind.Value == "OnStart").Select(node => node.Id).ToHashSet();
+        var starts = graph.Nodes.Where(node => node.Kind.Value is "OnStart" or "OwnerDestroy" or "OnDestroy").Select(node => node.Id).ToHashSet();
         var lives = graph.Nodes.Where(node => node.Kind.Value == "LifeTime").Select(node => node.Id).ToHashSet();
         var outputs = graph.Nodes.Where(node => SpawnableGroupSchema.IsOutput(node.Kind)).Select(node => node.Id).ToHashSet();
+        var lifetimeReads = graph.Nodes.Where(node => node.Kind.Value is "InstanceRemaining" or "InstanceNormalizedAge")
+            .Select(node => node.Id).ToHashSet();
+        if (!hasLife && graph.Nodes.Any(node => node.Kind.Value == "InstanceRemaining"))
+            throw new InvalidDataException("Instance Remaining requires a finite Life Time; infinite remaining cannot be represented by runtime numeric nodes.");
         return graph with
         {
             Nodes = graph.Nodes.Select(node => node.Kind.Value switch
             {
                 "OnStart" => node with { Kind = GraphNodeKind.Signal },
+                "OwnerDestroy" => node with { Kind = GraphNodeKind.Signal },
+                "OnDestroy" => node with { Kind = GraphNodeKind.Signal },
                 "InstanceAge" => node with { Kind = GraphNodeKind.Time },
+                "InstanceRemaining" => node with { Kind = new GraphNodeKind("LifecycleRuntimeRemaining") },
+                "InstanceNormalizedAge" when hasLife => node with { Kind = new GraphNodeKind("LifecycleRuntimeNormalizedAge") },
+                "InstanceNormalizedAge" => node with { Kind = GraphNodeKind.Float, Parameters =
+                    [new NodeParameterSnapshot("value", "float", JsonSerializer.SerializeToElement(0d))] },
                 "LifeTime" => node with { Kind = GraphNodeKind.Float, Parameters =
                     [new NodeParameterSnapshot("value", "float", node.Parameters?.SingleOrDefault(p => p.Id == "seconds")?.Value
                         ?? JsonSerializer.SerializeToElement(2d))] },
                 "SpawnOutputVector3" => node with { Kind = GraphNodeKind.FloatX3 },
                 _ => node.ChildGraph is { } child && node.Kind != GraphNodeKind.SpawnableGroup &&
-                    !GpuParticleEditorService.IsGpu(node.Kind) ? node with { ChildGraph = LowerLifecycle(child) } : node
+                    !GpuParticleEditorService.IsGpu(node.Kind) ? node with { ChildGraph = LowerLifecycle(child, hasLife) } : node
             }).ToArray(),
             Connections = graph.Connections.Select(edge => edge with
             {
-                SourcePortId = starts.Contains(edge.SourceNodeId) ? null : edge.SourcePortId,
+                SourcePortId = starts.Contains(edge.SourceNodeId) ? null :
+                    hasLife && lifetimeReads.Contains(edge.SourceNodeId) ? "value" : edge.SourcePortId,
                 TargetPortId = lives.Contains(edge.TargetNodeId) || outputs.Contains(edge.TargetNodeId) ? null : edge.TargetPortId
             }).ToArray()
         };

@@ -160,12 +160,14 @@ public sealed class LiberaFxMcpTools
             return JsonSerializer.Serialize(new
             {
                 format = "LiberaFxSpawnablePackage",
-                version = SpawnableGroupPackage.FormatVersion,
+                version = package.Version,
                 bytecodeFormat = "LFXB",
                 signalPassthroughTypeId = SpawnableGroupPackage.SignalPassthroughTypeId,
                 gameIoPorts = package.GameIoPorts,
                 parentBytecodeBase64 = Convert.ToBase64String(package.ParentBytecode),
                 package.OnStartNodeId,
+                package.OnDestroyNodeId,
+                package.LifeNodeId,
                 package.DestroyRoutes,
                 templates = package.Templates.Select(template => new
                 {
@@ -195,7 +197,7 @@ public sealed class LiberaFxMcpTools
         valueIdentity = new[] { "containerId", "templateNodeId", "instanceId" },
         capturePolicy = "CaptureAtSpawn",
         lifecycle = new[] { "onStartOnce", "spawn", "capturedLifeTime", "naturalDestroy", "manualStop", "reset" },
-        localDestroyRouting = "package v2, direct root sibling Spawnables; frozen Vector3 outputs captured before finalize",
+        localDestroyRouting = "root sibling Spawnables directly or via one Delay; frozen child outputs captured before finalize",
         engineLifecyclePreviewAvailable = false,
         editorNativeLifecyclePreviewAvailable = true,
         previewExecutionOwner = "editor-native (requires matching LIBERAFX_PREVIEW_NATIVE_LIBRARY); UE renders evaluated defaults only",

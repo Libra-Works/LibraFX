@@ -79,6 +79,7 @@ struct NativeInstance {
     std::unique_ptr<liberafx::NamedIo> gameIo;
     std::optional<liberafx::EffectLifecycle> lifecycle;
     bool rawStarted = false;
+    bool gameIoStarted = false;
 };
 struct NativeGeneratorPool {
     std::shared_ptr<NativeProgram> owner;
@@ -406,11 +407,36 @@ LibraResult LIBRA_INTEROP_CALL libra_effect_start(
     return guarded([&]() -> LibraResult {
         auto native = findInstance(instance);
         if (!native) return LIBRA_INVALID_HANDLE;
-        if (native->gameIo) return LIBRA_INVALID_VALUE_TYPE;
-        if (native->rawStarted) return LIBRA_NOT_READY;
-        if (!native->lifecycle) native->lifecycle.emplace(native->instance);
+        if (native->rawStarted || native->gameIoStarted) return LIBRA_NOT_READY;
+        if (!native->lifecycle) {
+            if (native->gameIo) native->lifecycle.emplace(native->instance, *native->gameIo);
+            else native->lifecycle.emplace(native->instance);
+        }
         auto sample = liberafx::LifetimeSample{};
         auto result = native->lifecycle->start(lifetime, onStartNodeId, instructionBudget, sample);
+        if (result == liberafx::Result::Ok)
+            *outSample = {sample.age, sample.remaining, sample.normalizedAge,
+                          sample.expired ? 1u : 0u, std::isinf(sample.remaining) ? 1u : 0u};
+        return static_cast<LibraResult>(result);
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_effect_start_captured(
+    LibraInstance instance, const uint8_t lifeNodeId[16],
+    const uint8_t onStartNodeId[16], uint32_t instructionBudget, LibraLifetimeSample* outSample)
+{
+    if (!outSample || !lifeNodeId || (onStartNodeId && !instructionBudget))
+        return LIBRA_INVALID_ARGUMENT;
+    *outSample = {};
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        if (native->rawStarted || native->gameIoStarted) return LIBRA_NOT_READY;
+        if (!native->lifecycle) {
+            if (native->gameIo) native->lifecycle.emplace(native->instance, *native->gameIo);
+            else native->lifecycle.emplace(native->instance);
+        }
+        auto sample = liberafx::LifetimeSample{};
+        auto result = native->lifecycle->startCaptured(lifeNodeId, onStartNodeId, instructionBudget, sample);
         if (result == liberafx::Result::Ok)
             *outSample = {sample.age, sample.remaining, sample.normalizedAge,
                           sample.expired ? 1u : 0u, std::isinf(sample.remaining) ? 1u : 0u};
@@ -432,6 +458,75 @@ LibraResult LIBRA_INTEROP_CALL libra_effect_advance(
             *outSample = {sample.age, sample.remaining, sample.normalizedAge,
                           sample.expired ? 1u : 0u, std::isinf(sample.remaining) ? 1u : 0u};
         return static_cast<LibraResult>(result);
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_effect_drain(LibraInstance instance, double elapsed)
+{
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        return native->lifecycle ? static_cast<LibraResult>(native->lifecycle->drain(elapsed)) : LIBRA_NOT_READY;
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_effect_schedule(LibraInstance instance, double time, uint64_t token)
+{
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        return native->lifecycle ? static_cast<LibraResult>(native->lifecycle->schedule(time, token)) : LIBRA_NOT_READY;
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_effect_next_scheduled(
+    LibraInstance instance, LibraScheduledEvent* outEvent, uint32_t* hasEvent)
+{
+    if (!outEvent || !hasEvent) return LIBRA_INVALID_ARGUMENT;
+    *outEvent = {}; *hasEvent = 0;
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        if (!native->lifecycle) return LIBRA_NOT_READY;
+        auto event = liberafx::ScheduledEvent{};
+        auto has = false;
+        auto result = native->lifecycle->nextScheduled(event, has);
+        if (result == liberafx::Result::Ok && has) {
+            *outEvent = {event.time, event.token}; *hasEvent = 1;
+        }
+        return static_cast<LibraResult>(result);
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_effect_take_scheduled(
+    LibraInstance instance, LibraScheduledEvent* outEvent, uint32_t* hasEvent)
+{
+    if (!outEvent || !hasEvent) return LIBRA_INVALID_ARGUMENT;
+    *outEvent = {}; *hasEvent = 0;
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        if (!native->lifecycle) return LIBRA_NOT_READY;
+        auto event = liberafx::ScheduledEvent{};
+        auto has = false;
+        auto result = native->lifecycle->takeScheduled(event, has);
+        if (result == liberafx::Result::Ok && has) {
+            *outEvent = {event.time, event.token}; *hasEvent = 1;
+        }
+        return static_cast<LibraResult>(result);
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_effect_destroy(
+    LibraInstance instance, const uint8_t nodeId[16], uint32_t instructionBudget)
+{
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        return native->lifecycle ? static_cast<LibraResult>(native->lifecycle->destroy(nodeId, instructionBudget)) : LIBRA_NOT_READY;
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_effect_finish(LibraInstance instance)
+{
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        return native->lifecycle ? static_cast<LibraResult>(native->lifecycle->finish()) : LIBRA_NOT_READY;
     });
 }
 LibraResult LIBRA_INTEROP_CALL libra_effect_stop(LibraInstance instance)
@@ -516,6 +611,8 @@ LibraResult LIBRA_INTEROP_CALL libra_game_io_start(
         auto native = findInstance(instance);
         if (!native) return LIBRA_INVALID_HANDLE;
         if (!native->gameIo) return LIBRA_NOT_READY;
+        if (native->lifecycle) return LIBRA_NOT_READY;
+        native->gameIoStarted = true;
         return static_cast<LibraResult>(
             native->gameIo->start(time, onStartNodeId, instructionBudget));
     });
@@ -526,6 +623,7 @@ LibraResult LIBRA_INTEROP_CALL libra_game_io_update(LibraInstance instance, doub
         auto native = findInstance(instance);
         if (!native) return LIBRA_INVALID_HANDLE;
         if (!native->gameIo) return LIBRA_NOT_READY;
+        if (native->lifecycle) return LIBRA_NOT_READY;
         return static_cast<LibraResult>(native->gameIo->update(time));
     });
 }
@@ -536,6 +634,10 @@ LibraResult LIBRA_INTEROP_CALL libra_game_io_fire_signal(
         auto native = findInstance(instance);
         if (!native) return LIBRA_INVALID_HANDLE;
         if (!native->gameIo) return LIBRA_NOT_READY;
+        if (native->lifecycle) {
+            auto status = native->lifecycle->validateSignalTime(time);
+            if (status != liberafx::Result::Ok) return static_cast<LibraResult>(status);
+        }
         return static_cast<LibraResult>(
             native->gameIo->fireSignal(name, time, instructionBudget));
     });
@@ -796,6 +898,16 @@ LibraResult LIBRA_INTEROP_CALL libra_generator_evaluate(
         auto found = generatorPools.find(pool);
         return found == generatorPools.end() ? LIBRA_INVALID_HANDLE :
             static_cast<LibraResult>(found->second->pool->evaluate(instance, time));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_owner_destroy(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance, const uint8_t nodeId[16],
+    double time, uint32_t instructionBudget)
+{
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        return found == generatorPools.end() ? LIBRA_INVALID_HANDLE :
+            static_cast<LibraResult>(found->second->pool->ownerDestroy(instance, nodeId, time, instructionBudget));
     });
 }
 LibraResult LIBRA_INTEROP_CALL libra_generator_lifetime(

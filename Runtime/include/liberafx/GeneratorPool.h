@@ -73,6 +73,10 @@ public:
     Result setLive(GeneratorInstanceId id, const GeneratorCapture* values,
                    std::size_t count) noexcept;
     Result evaluate(GeneratorInstanceId id, double time) noexcept;
+    // Send the owner's natural end request at the last evaluated global time.
+    // Each instance receives it at most once, even if a callback fails.
+    Result ownerDestroy(GeneratorInstanceId id, const std::uint8_t nodeId[16],
+                        double time, std::size_t instructionBudget) noexcept;
     // Last successful update, including the frozen expiry boundary.
     Result lifetime(GeneratorInstanceId id, LifetimeSample& out) noexcept;
     Result value(GeneratorInstanceId id, const std::uint8_t nodeId[16],

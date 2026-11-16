@@ -302,6 +302,21 @@ auto NamedIo::publishProperties() noexcept -> Result
 auto NamedIo::start(double time, const std::uint8_t* onStartNodeId,
                     std::size_t instructionBudget) noexcept -> Result
 {
+    return startInternal(time, onStartNodeId, instructionBudget, nullptr, nullptr);
+}
+
+auto NamedIo::startCaptured(double time, const std::uint8_t* onStartNodeId,
+                            std::size_t instructionBudget, const std::uint8_t lifeNodeId[16],
+                            Lifetime& lifetime) noexcept -> Result
+{
+    if (!lifeNodeId || impl_->started) return Result::InvalidArgument;
+    return startInternal(time, onStartNodeId, instructionBudget, lifeNodeId, &lifetime);
+}
+
+auto NamedIo::startInternal(double time, const std::uint8_t* onStartNodeId,
+                            std::size_t instructionBudget, const std::uint8_t* lifeNodeId,
+                            Lifetime* lifetime) noexcept -> Result
+{
     if (impl_->executing) return Result::Busy;
     if (impl_->started) return Result::Ok;
     if (onStartNodeId && !instructionBudget) return Result::InvalidArgument;
@@ -310,11 +325,24 @@ auto NamedIo::start(double time, const std::uint8_t* onStartNodeId,
         auto status = impl_->instance.bindSignal(onStartNodeId, entry);
         if (status != Result::Ok) return status;
     }
+    auto life = ValueHandle{};
+    if (lifeNodeId) {
+        auto status = impl_->instance.bindValue(lifeNodeId, life);
+        if (status != Result::Ok) return status;
+        if (life.componentCount != 1) return Result::InvalidValueType;
+    }
     auto scope = ExecutionScope{impl_->executing};
     auto status = impl_->instance.updateAsync(time, inlineJob, nullptr);
     if (status != Result::Ok) return status;
     status = impl_->instance.result();
     if (status != Result::Ok) return status;
+    if (lifeNodeId) {
+        auto value = std::array<double, 4>{};
+        status = impl_->instance.value(life, value.data());
+        if (status != Result::Ok) return status;
+        status = Lifetime::finite(value[0], *lifetime);
+        if (status != Result::Ok) return status;
+    }
     status = impl_->publishProperties();
     if (status != Result::Ok) return status;
     // A partially traversed signal must not be replayed after an error.
@@ -344,6 +372,15 @@ auto NamedIo::fireSignal(const char* name, double time, std::size_t instructionB
     auto scope = ExecutionScope{impl_->executing};
     auto dispatch = ExecutionScope{impl_->dispatching};
     return impl_->instance.dispatchSignal(port->signal, time, instructionBudget);
+}
+
+auto NamedIo::fireLifecycleSignal(const SignalHandle& signal, double time, std::size_t instructionBudget) noexcept -> Result
+{
+    if (impl_->executing) return Result::Busy;
+    if (!impl_->started) return Result::NotReady;
+    auto scope = ExecutionScope{impl_->executing};
+    auto dispatch = ExecutionScope{impl_->dispatching};
+    return impl_->instance.dispatchSignal(signal, time, instructionBudget);
 }
 
 auto NamedIo::emitSignal(const char* name) noexcept -> Result

@@ -44,7 +44,7 @@ auto failEvaluation(liberafx::CustomNodeInvocation& call) noexcept -> liberafx::
     auto& context = *static_cast<EvaluationContext*>(call.context);
     ++context.calls;
     if (context.calls == context.failAt) return liberafx::Result::QueueRejected;
-    call.outputs[0] = 0;
+    call.outputs[0] = 3;
     return liberafx::Result::Ok;
 }
 
@@ -146,6 +146,12 @@ int main(int argc, char** argv)
     auto width = std::uint8_t{};
     assert(instance.valueComponents(timeId.data(), time.data(), width) == Result::Ok && time[0] == 2);
     assert(lifecycle.advance(3, sample) == Result::NotReady && context.calls == 1);
+    assert(lifecycle.drain(2) == Result::Ok);
+    assert(lifecycle.drain(4) == Result::Ok);
+    assert(instance.valueComponents(timeId.data(), time.data(), width) == Result::Ok && time[0] == 4);
+    assert(lifecycle.drain(3) == Result::InvalidArgument);
+    assert(lifecycle.finish() == Result::Ok);
+    assert(lifecycle.drain(5) == Result::NotReady && lifecycle.finish() == Result::NotReady);
 
     alignas(16) auto zeroWork = std::array<double, 16>{};
     alignas(16) auto zeroDefaults = std::array<double, 32>{};
@@ -156,6 +162,8 @@ int main(int argc, char** argv)
     assert(liberafx::Lifetime::finite(0, duration) == Result::Ok);
     assert(zero.start(duration, signalId.data(), 3, sample) == Result::Ok && sample.expired && context.calls == 2);
     assert(zero.advance(0, sample) == Result::NotReady);
+    assert(zero.stop() == Result::Ok);
+    assert(zero.finish() == Result::NotReady && zero.drain(0) == Result::NotReady);
 
     alignas(16) auto stopWork = std::array<double, 16>{};
     alignas(16) auto stopDefaults = std::array<double, 32>{};
@@ -167,6 +175,47 @@ int main(int argc, char** argv)
            std::isinf(sample.remaining) && sample.normalizedAge == 0 && !sample.expired);
     assert(stopped.stop() == Result::Ok && stopped.advance(10, sample) == Result::NotReady);
 
+    alignas(16) auto scheduledWork = std::array<double, 16>{};
+    auto scheduledInstance = liberafx::Instance{};
+    assert(scheduledInstance.initialize(program, scheduledWork.data(), scheduledWork.size()) == Result::Ok);
+    auto scheduled = liberafx::EffectLifecycle(scheduledInstance);
+    assert(liberafx::Lifetime::finite(1, duration) == Result::Ok);
+    assert(scheduled.start(duration, nullptr, 0, sample) == Result::Ok);
+    assert(scheduled.schedule(2, 1) == Result::Ok);
+    assert(scheduled.schedule(1.5, 2) == Result::Ok);
+    assert(scheduled.schedule(1.5, 3) == Result::Ok);
+    assert(scheduled.schedule(1, 0) == Result::InvalidArgument);
+    assert(scheduled.advance(10, sample) == Result::Ok && sample.expired && sample.age == 1);
+    assert(scheduled.finish() == Result::NotReady);
+    assert(scheduled.destroy(signalId.data(), 3) == Result::NotReady);
+    assert(scheduled.drain(2) == Result::NotReady);
+    assert(scheduled.drain(1.5) == Result::Ok);
+    auto scheduledEvent = liberafx::ScheduledEvent{};
+    auto hasScheduled = false;
+    assert(scheduled.takeScheduled(scheduledEvent, hasScheduled) == Result::Ok &&
+           hasScheduled && scheduledEvent.token == 2 && scheduledEvent.time == 1.5);
+    assert(scheduled.takeScheduled(scheduledEvent, hasScheduled) == Result::Ok &&
+           hasScheduled && scheduledEvent.token == 3);
+    assert(scheduled.takeScheduled(scheduledEvent, hasScheduled) == Result::Ok && !hasScheduled);
+    assert(scheduled.schedule(1.4, 4) == Result::InvalidArgument);
+    assert(scheduled.drain(2) == Result::Ok);
+    assert(scheduled.takeScheduled(scheduledEvent, hasScheduled) == Result::Ok &&
+           hasScheduled && scheduledEvent.token == 1);
+    context.lifecycle = &scheduled;
+    assert(scheduled.destroy(signalId.data(), 3) == Result::Ok &&
+           context.calls == 3 && context.reentrant == Result::Busy);
+    assert(scheduled.destroy(signalId.data(), 3) == Result::Ok && context.calls == 3);
+    assert(scheduled.finish() == Result::Ok);
+
+    alignas(16) auto queueWork = std::array<double, 16>{};
+    auto queueInstance = liberafx::Instance{};
+    assert(queueInstance.initialize(program, queueWork.data(), queueWork.size()) == Result::Ok);
+    auto queue = liberafx::EffectLifecycle(queueInstance);
+    assert(queue.start(liberafx::Lifetime::infinite(), nullptr, 0, sample) == Result::Ok);
+    for (auto i = 0u; i < 128; ++i) assert(queue.schedule(1, i + 1) == Result::Ok);
+    assert(queue.schedule(1, 129) == Result::QueueRejected);
+    assert(queue.stop() == Result::Ok && queue.nextScheduled(scheduledEvent, hasScheduled) == Result::NotReady);
+
     alignas(16) auto failedWork = std::array<double, 16>{};
     alignas(16) auto failedDefaults = std::array<double, 32>{};
     auto failedInstance = liberafx::Instance{};
@@ -175,8 +224,19 @@ int main(int argc, char** argv)
     context.lifecycle = &failed;
     context.fail = true;
     assert(failed.start(duration, signalId.data(), 3, sample) == Result::QueueRejected);
-    assert(failed.start(duration, signalId.data(), 3, sample) == Result::QueueRejected && context.calls == 3);
+    assert(failed.start(duration, signalId.data(), 3, sample) == Result::QueueRejected && context.calls == 4);
     assert(failed.stop() == Result::Ok);
+
+    alignas(16) auto destroyFailureWork = std::array<double, 16>{};
+    auto destroyFailureInstance = liberafx::Instance{};
+    assert(destroyFailureInstance.initialize(program, destroyFailureWork.data(), destroyFailureWork.size()) == Result::Ok);
+    auto destroyFailure = liberafx::EffectLifecycle(destroyFailureInstance);
+    context.lifecycle = &destroyFailure;
+    assert(liberafx::Lifetime::finite(0, duration) == Result::Ok);
+    assert(destroyFailure.start(duration, nullptr, 0, sample) == Result::Ok && sample.expired);
+    assert(destroyFailure.destroy(signalId.data(), 3) == Result::QueueRejected);
+    assert(destroyFailure.destroy(signalId.data(), 3) == Result::QueueRejected && context.calls == 5);
+    assert(destroyFailure.stop() == Result::Ok);
 
     auto failureBytes = bytes;
     std::fill(failureBytes.begin() + 16, failureBytes.begin() + 16 + 256, 0);
@@ -217,5 +277,17 @@ int main(int argc, char** argv)
     assert(later.advance(1, sample) == Result::QueueRejected);
     assert(later.advance(1, sample) == Result::NotReady && evaluationContext.calls == 2);
     assert(later.stop() == Result::Ok);
+
+    alignas(16) auto capturedWork = std::array<double, 16>{};
+    auto capturedInstance = liberafx::Instance{};
+    assert(capturedInstance.initialize(failureProgram, capturedWork.data(), capturedWork.size()) == Result::Ok);
+    auto captured = liberafx::EffectLifecycle(capturedInstance);
+    context.lifecycle = &captured;
+    context.fail = false;
+    evaluationContext = {0, 0};
+    assert(captured.startCaptured(timeId.data(), signalId.data(), 3, sample) == Result::Ok);
+    assert(evaluationContext.calls == 1 && sample.remaining == 3 && !sample.expired);
+    assert(captured.advance(5, sample) == Result::Ok && sample.age == 3 && sample.expired);
+    assert(evaluationContext.calls == 2);
     if (argc == 2) compiledFixture(argv[1]);
 }

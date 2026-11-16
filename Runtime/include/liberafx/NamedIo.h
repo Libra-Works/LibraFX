@@ -1,6 +1,6 @@
 #pragma once
 
-#include "liberafx/VfxRuntime.h"
+#include "liberafx/Lifetime.h"
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -55,8 +55,14 @@ public:
     // idempotent; an explicit restart uses a newly initialized instance/facade.
     Result start(double time, const std::uint8_t* onStartNodeId,
                  std::size_t instructionBudget) noexcept;
+    // Capture a finite duration from the initial evaluation before publishing
+    // properties or dispatching OnStart. Requires a fresh facade.
+    Result startCaptured(double time, const std::uint8_t* onStartNodeId,
+                         std::size_t instructionBudget, const std::uint8_t lifeNodeId[16],
+                         Lifetime& lifetime) noexcept;
     Result update(double time) noexcept;
     Result fireSignal(const char* name, double time, std::size_t instructionBudget) noexcept;
+    Result fireLifecycleSignal(const SignalHandle& signal, double time, std::size_t instructionBudget) noexcept;
     // Intended for a compiled output-signal callback. Only queues a record.
     Result emitSignal(const char* name) noexcept;
     // Retry this after draining if update reported QueueRejected.
@@ -68,6 +74,9 @@ public:
 private:
     struct Impl;
     static Result observeSignal(void* context, const std::uint8_t nodeId[16]) noexcept;
+    Result startInternal(double time, const std::uint8_t* onStartNodeId,
+                         std::size_t instructionBudget, const std::uint8_t* lifeNodeId,
+                         Lifetime* lifetime) noexcept;
     explicit NamedIo(std::unique_ptr<Impl> impl) noexcept;
     std::unique_ptr<Impl> impl_;
 };

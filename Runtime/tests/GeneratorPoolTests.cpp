@@ -3,6 +3,7 @@
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstring>
@@ -58,6 +59,11 @@ auto stateEvaluate(liberafx::CustomNodeInvocation& call) noexcept -> liberafx::R
     auto& count = *static_cast<double*>(call.state);
     call.outputs[0] = ++count + call.time;
     return liberafx::Result::Ok;
+}
+auto failStartEvaluation(liberafx::CustomNodeInvocation& call) noexcept -> liberafx::Result
+{
+    ++*static_cast<unsigned*>(call.context);
+    return liberafx::Result::QueueRejected;
 }
 
 struct LifeContext {
@@ -224,6 +230,67 @@ void lifecycleTests()
     assert(failed->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Spawn);
     assert(failed->stop(failedId) == Result::Ok);
     assert(failed->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Stop && !failed->popEvent(event));
+
+    auto ownerPool = std::unique_ptr<liberafx::GeneratorPool>{};
+    assert(liberafx::GeneratorPool::create(program, container.data(), 1, 65536, 4, ownerPool) == Result::Ok);
+    auto ownerConfig = config;
+    ownerConfig.hasOnStart = false;
+    assert(ownerPool->configureLifecycle(ownerConfig) == Result::Ok);
+    auto ownerChild = liberafx::GeneratorInstanceId{};
+    assert(ownerPool->spawn(10, nullptr, 0, ownerChild) == Result::Ok);
+    context.pool = ownerPool.get(); context.instance = ownerChild; context.fail = false;
+    assert(ownerPool->ownerDestroy(ownerChild, bytes.data() + signalOffset, 10, 4) == Result::NotReady);
+    assert(ownerPool->start(ownerChild) == Result::Ok);
+    assert(ownerPool->evaluate(ownerChild, 11) == Result::Ok);
+    assert(ownerPool->ownerDestroy(ownerChild, bytes.data() + signalOffset, 12, 4) == Result::InvalidArgument);
+    auto callsBeforeOwner = context.calls;
+    assert(ownerPool->ownerDestroy(ownerChild, bytes.data() + signalOffset, 11, 4) == Result::Ok);
+    assert(context.calls == callsBeforeOwner + 1 && context.reentrantStop == Result::Busy &&
+           context.reentrantStart == Result::Busy);
+    assert(ownerPool->ownerDestroy(ownerChild, bytes.data() + signalOffset, 11, 4) == Result::Ok &&
+           context.calls == callsBeforeOwner + 1);
+    assert(ownerPool->stop(ownerChild) == Result::Ok);
+    assert(ownerPool->ownerDestroy(ownerChild, bytes.data() + signalOffset, 11, 4) == Result::InvalidHandle);
+    assert(ownerPool->spawn(20, nullptr, 0, ownerChild) == Result::Ok);
+    context.instance = ownerChild; context.fail = true;
+    assert(ownerPool->start(ownerChild) == Result::Ok);
+    assert(ownerPool->ownerDestroy(ownerChild, bytes.data() + signalOffset, 20, 4) == Result::QueueRejected);
+    assert(ownerPool->ownerDestroy(ownerChild, bytes.data() + signalOffset, 20, 4) == Result::QueueRejected &&
+           context.calls == callsBeforeOwner + 2);
+    assert(ownerPool->stop(ownerChild) == Result::Ok);
+    context.fail = false;
+
+    auto failureBytes = bytes;
+    std::fill(failureBytes.begin() + 16, failureBytes.begin() + 16 + 256, 0);
+    failureBytes[16 + 15] = 1;
+    failureBytes[16 + 16] = 40;
+    failureBytes[16 + 17] = 1;
+    failureBytes[16 + 39] = 78;
+    write32(failureBytes, 16 + 40, 1);
+    for (auto i = 0u; i < 4; ++i) write32(failureBytes, 16 + 48 + i * 8, UINT32_MAX);
+    for (auto i = 0u; i < 4; ++i) write32(failureBytes, 16 + 208 + i * 4, UINT32_MAX);
+    auto failedEvaluations = 0u;
+    auto failureDescriptors = std::array<liberafx::CustomNodeDescriptor, 2>{descriptor, {}};
+    failureDescriptors[1].typeId[15] = 78;
+    failureDescriptors[1].abiVersion = 1;
+    failureDescriptors[1].execution = liberafx::CustomExecution::Parameter;
+    failureDescriptors[1].outputWidth = 1;
+    failureDescriptors[1].function = failStartEvaluation;
+    failureDescriptors[1].context = &failedEvaluations;
+    auto failureBindings = std::array<liberafx::CustomNodeBinding, 3>{};
+    auto failureProgram = liberafx::Program{};
+    assert(liberafx::Program::load(failureBytes.data(), failureBytes.size(), failureDescriptors.data(),
+        failureDescriptors.size(), failureBindings.data(), failureBindings.size(), failureProgram) == Result::Ok);
+    auto failurePool = std::unique_ptr<liberafx::GeneratorPool>{};
+    assert(liberafx::GeneratorPool::create(failureProgram, container.data(), 1, 65536, 2, failurePool) == Result::Ok);
+    assert(failurePool->configureLifecycle({}) == Result::Ok);
+    auto evaluationFailure = liberafx::GeneratorInstanceId{};
+    assert(failurePool->spawn(0, nullptr, 0, evaluationFailure) == Result::Ok);
+    context.pool = failurePool.get();
+    assert(failurePool->start(evaluationFailure) == Result::QueueRejected);
+    assert(failurePool->start(evaluationFailure) == Result::QueueRejected && failedEvaluations == 1);
+    assert(failurePool->evaluate(evaluationFailure, 1) == Result::QueueRejected);
+    assert(failurePool->stop(evaluationFailure) == Result::Ok);
 
     auto extended = std::unique_ptr<liberafx::GeneratorPool>{};
     assert(liberafx::GeneratorPool::createWithCaptureLimit(program, container.data(), 1, 65536, 2, 256, extended) == Result::Ok);

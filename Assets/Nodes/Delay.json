@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "typeId": "c982e1be-8f78-4d28-9a65-4f4aa45249e4",
+  "namespace": "LiberaFx",
+  "kind": "Delay",
+  "name": "Delay",
+  "displayNameKey": "Editor.Node.Delay",
+  "group": "Lifecycle",
+  "groupNameKey": "Editor.NodeGroup.Lifecycle",
+  "portType": "Signal",
+  "portCategory": "Signal",
+  "inputPorts": [
+    { "id": "signal", "name": "Signal", "portType": "Signal", "category": "Signal" },
+    { "id": "seconds", "name": "Seconds", "portType": "Float", "category": "Parameter", "defaultValue": 1 }
+  ],
+  "outputPorts": [{ "id": "then", "name": "Then", "portType": "Signal", "category": "Signal" }],
+  "parameters": [{ "id": "seconds", "name": "Seconds", "displayNameKey": "Editor.Parameter.Seconds", "type": "float", "defaultValue": 1 }]
+}

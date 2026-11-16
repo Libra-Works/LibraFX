@@ -23,6 +23,16 @@ namespace LiberaFx.Unity
         [FieldOffset(36)] public uint Reserved;
     }
 
+    [StructLayout(LayoutKind.Explicit, Pack = 8, Size = 32)]
+    public struct NativeLifetimeSample
+    {
+        [FieldOffset(0)] public double Age;
+        [FieldOffset(8)] public double Remaining;
+        [FieldOffset(16)] public double NormalizedAge;
+        [FieldOffset(24)] public uint Expired;
+        [FieldOffset(28)] public uint Infinite;
+    }
+
     [StructLayout(LayoutKind.Explicit, Pack = 4, Size = 20)]
     public struct AtlasFrame
     {
@@ -52,7 +62,13 @@ namespace LiberaFx.Unity
         // Initialization-time contract test, never called by the frame loop.
         public static void ValidateLayout()
         {
-            if (Marshal.SizeOf<NativeValue>() != 40 || Marshal.SizeOf<AtlasFrame>() != 20 ||
+            if (Marshal.SizeOf<NativeValue>() != 40 || Marshal.SizeOf<NativeLifetimeSample>() != 32 ||
+                Marshal.OffsetOf<NativeLifetimeSample>(nameof(NativeLifetimeSample.Age)).ToInt32() != 0 ||
+                Marshal.OffsetOf<NativeLifetimeSample>(nameof(NativeLifetimeSample.Remaining)).ToInt32() != 8 ||
+                Marshal.OffsetOf<NativeLifetimeSample>(nameof(NativeLifetimeSample.NormalizedAge)).ToInt32() != 16 ||
+                Marshal.OffsetOf<NativeLifetimeSample>(nameof(NativeLifetimeSample.Expired)).ToInt32() != 24 ||
+                Marshal.OffsetOf<NativeLifetimeSample>(nameof(NativeLifetimeSample.Infinite)).ToInt32() != 28 ||
+                Marshal.SizeOf<AtlasFrame>() != 20 ||
                 Marshal.SizeOf<SpriteVertex>() != 36 ||
                 Marshal.OffsetOf<NativeValue>(nameof(NativeValue.X)).ToInt32() != 0 ||
                 Marshal.OffsetOf<NativeValue>(nameof(NativeValue.Y)).ToInt32() != 8 ||
@@ -107,6 +123,25 @@ namespace LiberaFx.Unity
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_evaluate(
             ulong instance, double time, uint* bindings, uint count, NativeValue* values);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_values_read(
+            ulong instance, uint* bindings, uint count, NativeValue* values);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_effect_start(
+            ulong instance, double duration, uint infinite, byte* onStart, uint budget, out NativeLifetimeSample sample);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_effect_start_captured(
+            ulong instance, byte* lifeNode, byte* onStart, uint budget, out NativeLifetimeSample sample);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_effect_advance(ulong instance, double elapsed, out NativeLifetimeSample sample);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_effect_drain(ulong instance, double elapsed);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_effect_destroy(ulong instance, byte* node, uint budget);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_effect_finish(ulong instance);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_effect_stop(ulong instance);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_dispatch_signal(
             ulong instance, byte* id, double time, uint instructionBudget);
@@ -215,6 +250,39 @@ namespace LiberaFx.Unity
             fixed (NativeValue* output = values)
                 return Native.libra_evaluate(Alive, time, input, (uint)bindings.Length, output);
         }
+        public NativeResult ReadValues(uint[] bindings, NativeValue[] values)
+        {
+            if (bindings == null || values == null || values.Length < bindings.Length)
+                return NativeResult.InvalidArgument;
+            fixed (uint* input = bindings)
+            fixed (NativeValue* output = values)
+                return Native.libra_values_read(Alive, input, (uint)bindings.Length, output);
+        }
+        public NativeResult StartLifetime(double duration, bool infinite, NativeSignal onStart,
+            uint instructionBudget, out NativeLifetimeSample sample)
+        {
+            fixed (byte* signal = onStart == null ? null : onStart.Id)
+                return Native.libra_effect_start(Alive, duration, infinite ? 1u : 0u, signal, instructionBudget, out sample);
+        }
+        public NativeResult StartCapturedLifetime(NativeSignal lifeNode, NativeSignal onStart,
+            uint instructionBudget, out NativeLifetimeSample sample)
+        {
+            if (lifeNode == null) { sample = default; return NativeResult.InvalidArgument; }
+            fixed (byte* life = lifeNode.Id)
+            fixed (byte* signal = onStart == null ? null : onStart.Id)
+                return Native.libra_effect_start_captured(Alive, life, signal, instructionBudget, out sample);
+        }
+        public NativeResult AdvanceLifetime(double elapsed, out NativeLifetimeSample sample) =>
+            Native.libra_effect_advance(Alive, elapsed, out sample);
+        public NativeResult DrainLifetime(double elapsed) => Native.libra_effect_drain(Alive, elapsed);
+        public NativeResult DispatchNaturalDestroy(NativeSignal signal, uint instructionBudget)
+        {
+            if (signal == null) return NativeResult.InvalidArgument;
+            fixed (byte* id = signal.Id)
+                return Native.libra_effect_destroy(Alive, id, instructionBudget);
+        }
+        public NativeResult FinishLifetime() => Native.libra_effect_finish(Alive);
+        public NativeResult StopLifetime() => Native.libra_effect_stop(Alive);
         public NativeResult DispatchSignal(NativeSignal signal, double time, uint instructionBudget)
         {
             if (signal == null) return NativeResult.InvalidArgument;

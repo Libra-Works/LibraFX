@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "typeId": "c982e1be-8f78-4d28-9a65-4f4aa45249e1",
+  "namespace": "LiberaFx",
+  "kind": "InstanceRemaining",
+  "name": "Instance Remaining",
+  "displayNameKey": "Editor.Node.InstanceRemaining",
+  "group": "Lifecycle",
+  "groupNameKey": "Editor.NodeGroup.Lifecycle",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "inputPorts": []
+}

@@ -49,6 +49,18 @@ dispatch fails, the same error remains latched; stop or reset the instance.
 An instance cannot evaluate before start. For later frames, update Live lanes
 before evaluate; captured lanes are not automatically refreshed.
 
+`Owner Destroy` is a natural owner end request, not destruction of the child.
+The host processes children reaching their own expiry at that timestamp first,
+then sends the request once to every surviving child, including children
+created later during draining. The child may ignore it and continue until its
+own natural expiry; the parent must not force-stop it. After evaluating the
+child at the request time, call `GeneratorPool::ownerDestroy` or
+`libra_generator_owner_destroy` with the template's ownerDestroyNodeId.
+Duplicate calls do not dispatch again, and a dispatch failure is latched so
+partial signal execution cannot be replayed. Explicit stop/reset is separate.
+The editor-native host implements this for root Life Time; engine hosts must
+implement it explicitly.
+
 When elapsed local time reaches the captured Life value, evaluation samples at
 the exact expiry boundary (clamping overshooting frames), freezes the instance
 and emits one event kind 3, Destroy. This is a local group output, never a game
@@ -66,11 +78,12 @@ expiry state, including the frozen expiry boundary. Before the first successful
 start/evaluation they return NotReady; after finalization or stop the handle is
 invalid. A zero-duration lifetime reports normalized age 1 at expiry. Infinite
 lifetime reports infinite remaining and normalized age 0. Failed updates leave
-the previous sample intact. Remaining and normalized age are not yet exposed
-as graph nodes, and effect-level lifecycle is not implemented in engine adapters.
-The `Instance Age` graph node reads the Spawnable's local elapsed seconds using
-the same clamped sample time as native evaluation. It may be used inside a
-Spawnable or its ordinary nested groups, but not at the effect root.
+the previous sample intact. Instance Remaining and Instance Normalized Age
+are available as graph nodes;
+infinite remaining cannot be represented and is rejected at compile time.
+Effect-level lifecycle is not implemented in engine adapters.
+The `Instance Age` graph node reads local elapsed seconds for the effect or
+Spawnable, using the same sample time as native evaluation.
 
 If event backpressure prevents Destroy from being queued, start/evaluate returns
 QueueRejected. Drain existing records and retry; no evaluation or OnStart is
@@ -83,7 +96,7 @@ they must not reenter any C ABI function (the C ABI serializes calls). The
 existing native spawn-signal bridge enqueues directly. No local Destroy is
 implicitly published to named game IO.
 
-Editor package and host bridge (v2)
+Editor package and host bridge (v2/v3)
 
 The Spawnable Group context action creates one editable child graph. Add up to
 four typed Spawn Input nodes directly inside it; their GUIDs become parent
@@ -91,19 +104,32 @@ parameter-port IDs and template capture targets. A signal enqueues one runtime
 instance, never another graph node. Nested Spawnable Groups are rejected.
 `SpawnableGroupPackage.Compile` emits the parent LFXB, separate template LFXBs,
 capture maps, per-template render configuration and GPU container snapshots.
-MCP `libera_graph_compile_spawnable` exposes this as JSON package version 2.
-It adds a direct root On Start identity, per-template On Start/Life Time
-identities, Group Output (Vector3) mappings and explicit Destroy routes.
+MCP `libera_graph_compile_spawnable` exposes JSON package version 2, or version
+3 when On Destroy, Owner Destroy or a delayed route is present. Older hosts must reject
+unknown versions rather than silently ignoring these semantics.
+It adds direct root On Start/On Destroy/Life Time identities, per-template On Start,
+Life Time and Owner Destroy identities, Group Output (Vector3) mappings and
+explicit Destroy routes.
 Exactly one direct Life Time per template is supported; none means infinity.
 Multiple Life Times and nested Spawnables are rejected. Busy/FCurve are never
 implicit lifetime participants. The existing `then` pin remains immediate for
 old projects; `destroy` is a separate natural-expiry-only local event pin.
-Local outputs can currently route only from the expiring instance directly to
-the capture inputs of the sibling Spawnable selected by that Destroy route.
-Unsupported cross-instance or nested boundary routing fails compilation.
+Local outputs can currently route only from the expiring instance to the capture
+inputs of a sibling Spawnable selected by that Destroy route. A single Delay can
+be inserted between root sibling Destroy and Spawn. Its finite nonnegative
+seconds are sampled at Destroy; zero fires at the same timestamp. The expired
+child's outputs are captured then, while ordinary parent inputs are captured at
+the delayed Spawn time. The pending event keeps the parent alive. Delay on other Signal paths and nested boundary routing fail compilation.
+One delayed Destroy can fan out to multiple sibling Spawn targets; each branch
+retains the parent until its scheduled spawn and resulting child finish.
+The root On Destroy signal runs once after the root deadline and existing
+children and scheduled events have drained. If that signal starts new children,
+the root waits for them too; it does not dispatch On Destroy again. Explicit
+Stop and reset do not dispatch it. This is a local graph entry and does not
+implicitly create a game-facing Output Signal.
 `NativeSpawnableSession` is a .NET owner-thread host adapter using the C ABI:
-it drives native start/evaluate, reads frozen outputs, captures the target
-defaults, starts the sibling at the expiry timestamp, then finalizes the source.
+it drives native start/evaluate, reads frozen outputs and finalizes the source,
+then starts the sibling immediately or at its scheduled time.
 Recreate the session for deterministic reset. Its CPU support is not UE preview
 support, and GPU containers fail explicitly.
 Template GUIDs remain unchanged between runtime instances. GPU containers are
@@ -175,7 +201,22 @@ effect instance. Its caller supplies scaled elapsed seconds and owns the instanc
 and memory. It evaluates at zero before an optional OnStart signal and clamps
 the final evaluation to finite expiry. Equal elapsed times do not reevaluate.
 Stop does not report expiry; failed evaluation or signal dispatch is not retried.
-It reports expiry to the caller but does not dispatch Destroy or stop children.
+It reports the deadline without stopping children. Once the host has drained
+owned work, `destroy` / `libra_effect_destroy` dispatches a supplied root signal
+at most once; `finish` is separate and the host must wait for any new children.
+Its caller-owned lifecycle also contains a bounded 128-entry continuation
+queue. `schedule`, `nextScheduled` and `takeScheduled` (and the corresponding
+`libra_effect_*` C ABI calls) preserve FIFO order for equal timestamps. The
+host must advance/drain to each due time before taking and executing the event;
+skipping a pending timestamp and finishing with pending events are rejected.
+Taking consumes the event before execution, and explicit Stop cancels pending
+events. This queue alone does not implement a general Delay Signal node.
 The opt-in libra_effect_start/advance/stop C ABI exposes this primitive for a
-fresh non-game-IO instance. It cannot be combined with raw evaluation or game
-IO; the editor and Unity/Unreal integrations do not yet use it.
+fresh instance, optionally with game IO configured before start. Managed game
+signals use the last evaluated age; raw evaluation and independent game IO
+start/update are disabled. Failed evaluation, publication or OnStart is
+terminal rather than replaying partially executed nodes. The editor-native
+host uses it for root Life Time; Unity/Unreal integrations do not yet use it.
+libra_effect_start_captured obtains a finite scalar duration from the initial
+evaluation, before publishing game properties or invoking OnStart. Later input
+changes do not change the captured duration; invalid values fail before OnStart.

@@ -53,6 +53,30 @@ namespace LiberaFx.Unity.Tests
                     Assert(instance.Evaluate(frame, bindings, values) == NativeResult.Ok);
                 Assert(GC.GetAllocatedBytesForCurrentThread() == allocated);
             }
+            using (var program = new NativeProgram(LiberaFxSampleProgram.Create()))
+            using (var instance = program.CreateInstance())
+            {
+                var bindings = new[] { instance.BindValue(LiberaFxSampleProgram.TimeId) };
+                var values = new NativeValue[1];
+                Assert(instance.StartLifetime(2, false, null, 0, out var initial) == NativeResult.Ok &&
+                    initial.Age == 0 && initial.Remaining == 2 && initial.Expired == 0);
+                Assert(instance.AdvanceLifetime(3, out var expired) == NativeResult.Ok &&
+                    expired.Age == 2 && expired.Expired == 1 &&
+                    instance.ReadValues(bindings, values) == NativeResult.Ok && values[0].X == 2);
+                Assert(instance.DrainLifetime(4) == NativeResult.Ok &&
+                    instance.ReadValues(bindings, values) == NativeResult.Ok && values[0].X == 4);
+                Assert(instance.FinishLifetime() == NativeResult.Ok);
+            }
+            using (var program = new NativeProgram(LiberaFxSampleProgram.Create()))
+            using (var instance = program.CreateInstance())
+            {
+                var life = new NativeSignal("00000000-0000-0000-0000-000000000003");
+                Assert(instance.StartCapturedLifetime(life, null, 0, out var initial) == NativeResult.Ok &&
+                    initial.Remaining == 0.2);
+                Assert(instance.AdvanceLifetime(1, out var expired) == NativeResult.Ok &&
+                    expired.Age == 0.2 && expired.Expired == 1);
+                Assert(instance.StopLifetime() == NativeResult.Ok);
+            }
             var fixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_SIGNAL_FIXTURE");
             if (!string.IsNullOrEmpty(fixture))
             {

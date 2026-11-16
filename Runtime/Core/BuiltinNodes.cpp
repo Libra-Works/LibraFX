@@ -5,6 +5,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 
 namespace liberafx {
 namespace {
@@ -20,6 +21,46 @@ enum class Op {
 // from zero; angles wrap to [-pi, pi) or [-180, 180). Zero vectors normalize to zero.
 enum class MatrixOp { TransformRow, InverseRow, InverseValid, DecomposePosition,
                       DecomposeRotation, DecomposeScale, DecomposeValid };
+
+struct CapturedLifetime final {
+    double duration;
+    bool captured;
+};
+
+template<bool normalized>
+auto evaluateLifetime(CustomNodeInvocation& call) noexcept -> Result
+{
+    auto state = CapturedLifetime{};
+    std::memcpy(&state, call.state, sizeof(state));
+    if (!state.captured) {
+        if (!std::isfinite(call.inputs[0]) || call.inputs[0] < 0) return Result::InvalidValueType;
+        state.duration = call.inputs[0];
+        state.captured = true;
+        std::memcpy(call.state, &state, sizeof(state));
+    }
+    if (!std::isfinite(call.time) || call.time < 0) return Result::InvalidArgument;
+    auto age = std::min(call.time, state.duration);
+    call.outputs[0] = normalized ? (state.duration == 0 ? 1 : age / state.duration) :
+                                   state.duration - age;
+    return Result::Ok;
+}
+
+template<bool normalized>
+auto makeLifetimeDescriptor() noexcept -> CustomNodeDescriptor
+{
+    auto descriptor = CustomNodeDescriptor{};
+    const auto id = std::array<std::uint8_t, 16>{
+        0x4a, 0x94, 0xe8, 0x82, 0x39, 0xe8, 0x4e, 0xfb,
+        0x92, 0xc7, 0x18, 0, 0, 0, 0, normalized ? std::uint8_t{2} : std::uint8_t{1}};
+    std::copy(id.begin(), id.end(), descriptor.typeId);
+    descriptor.abiVersion = 1;
+    descriptor.inputCount = 1;
+    descriptor.inputWidths[0] = 1;
+    descriptor.outputWidth = 1;
+    descriptor.stateBytes = sizeof(CapturedLifetime);
+    descriptor.function = evaluateLifetime<normalized>;
+    return descriptor;
+}
 
 template<MatrixOp op, unsigned selectedRow = 0>
 auto evaluateMatrix(CustomNodeInvocation& call) noexcept -> Result
@@ -228,7 +269,7 @@ auto makeGameIoOutputSignalDescriptor() noexcept -> CustomNodeDescriptor
     return descriptor;
 }
 
-const std::array<CustomNodeDescriptor, 62> descriptors = {
+const std::array<CustomNodeDescriptor, 64> descriptors = {
     makeDescriptor<Op::Abs, 1>(1, 1, 1), makeDescriptor<Op::Floor, 1>(2, 2, 1),
     makeDescriptor<Op::Round, 1>(3, 1, 1), makeDescriptor<Op::Sign, 1>(4, 1, 1),
     makeDescriptor<Op::Sqrt, 1>(5, 1, 1), makeDescriptor<Op::Pow, 1>(6, 2, 1),
@@ -267,7 +308,8 @@ const std::array<CustomNodeDescriptor, 62> descriptors = {
     makeMatrixDescriptor<MatrixOp::DecomposeRotation, 3>(11, 4, 4),
     makeMatrixDescriptor<MatrixOp::DecomposeScale, 3>(12, 4, 4),
     makeMatrixDescriptor<MatrixOp::DecomposeValid, 1>(13, 4, 4),
-    makeSignalPassthroughDescriptor(), makeGameIoOutputSignalDescriptor()
+    makeSignalPassthroughDescriptor(), makeGameIoOutputSignalDescriptor(),
+    makeLifetimeDescriptor<false>(), makeLifetimeDescriptor<true>()
 };
 }
 

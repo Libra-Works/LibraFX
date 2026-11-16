@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "typeId": "c982e1be-8f78-4d28-9a65-4f4aa45249e3",
+  "namespace": "LiberaFx",
+  "kind": "OwnerDestroy",
+  "name": "Owner Destroy",
+  "displayNameKey": "Editor.Node.OwnerDestroy",
+  "group": "Spawnable Group",
+  "portType": "Signal",
+  "portCategory": "Signal",
+  "inputPorts": [],
+  "outputPorts": [{ "id": "then", "name": "Then", "portType": "Signal", "category": "Signal" }]
+}

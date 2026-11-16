@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "typeId": "c982e1be-8f78-4d28-9a65-4f4aa45249e5",
+  "namespace": "LiberaFx",
+  "kind": "OnDestroy",
+  "name": "On Destroy",
+  "displayNameKey": "Editor.Node.OnDestroy",
+  "group": "Lifecycle",
+  "groupNameKey": "Editor.NodeGroup.Lifecycle",
+  "portType": "Signal",
+  "portCategory": "Signal",
+  "inputPorts": [],
+  "outputPorts": [{ "id": "then", "name": "Then", "portType": "Signal", "category": "Signal" }]
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "typeId": "4a94e882-39e8-4efb-92c7-180000000001",
+  "namespace": "LiberaFx",
+  "kind": "LifecycleRuntimeRemaining",
+  "name": "Lifecycle Runtime Remaining",
+  "group": "Internal runtime",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [{ "id": "duration", "name": "Duration", "portType": "Float", "category": "Parameter" }],
+  "outputPorts": [{ "id": "value", "name": "Value", "portType": "Float", "category": "Parameter" }],
+  "parameters": [{ "id": "duration", "name": "Duration", "type": "float", "defaultValue": 0.0 }]
+}
