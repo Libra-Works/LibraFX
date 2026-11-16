@@ -101,6 +101,38 @@ internal static class GroupBoundaryTests
             !package.ParentBytecode.SequenceEqual(SpawnableGroupPackage.Compile(snapshot).ParentBytecode))
             throw new InvalidOperationException("Signal fan-out and FCurve must compile deterministically to v5.");
         VerifyNativeFanout(package, source.Id, first.Id, second.Id);
+        var plain = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var plainSource = plain.CreateNode(GraphNodeKind.Signal);
+        var a = plain.CreateNode(GraphNodeKind.Signal);
+        var b = plain.CreateNode(GraphNodeKind.Signal);
+        if (!plain.TryConnectNodes(plainSource, a, out _) || !plain.TryConnectNodes(plainSource, b, out _))
+            throw new InvalidOperationException("Cannot connect plain Signal fan-out.");
+        VerifyNativeBuiltinFanout(SpawnableGroupPackage.Compile(plain.CreateSnapshot()).ParentBytecode, plainSource.Id);
+    }
+
+    private static void VerifyNativeBuiltinFanout(byte[] bytes, Guid source)
+    {
+        var path = Environment.GetEnvironmentVariable("LIBERAFX_NATIVE_TEST_LIBRARY");
+        if (string.IsNullOrEmpty(path)) return;
+        var library = NativeLibrary.Load(path);
+        T Fn<T>(string name) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(library, name));
+        static void Check(int result) { if (result != 0) throw new InvalidOperationException($"Builtin Signal runtime error {result}."); }
+        ulong program = 0, instance = 0;
+        try
+        {
+            Check(Fn<CreateProgram>("libra_program_create")(bytes, (ulong)bytes.Length, out program));
+            Check(Fn<CreateInstance>("libra_instance_create")(program, out instance));
+            Check(Fn<Evaluate>("libra_evaluate")(instance, 0, IntPtr.Zero, 0, IntPtr.Zero));
+            if (Fn<Dispatch>("libra_dispatch_signal")(instance, source.ToByteArray(true), 0, 2) != 14)
+                throw new InvalidOperationException("Builtin Signal fan-out must use a shared budget.");
+            Check(Fn<Dispatch>("libra_dispatch_signal")(instance, source.ToByteArray(true), 0, 3));
+        }
+        finally
+        {
+            if (instance != 0) Fn<Release>("libra_instance_release")(instance);
+            if (program != 0) Fn<Release>("libra_program_release")(program);
+            NativeLibrary.Free(library);
+        }
     }
 
     private static void VerifyNativeFanout(SpawnableGroupPackage package, Guid source, Guid first, Guid second)

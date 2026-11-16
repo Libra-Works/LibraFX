@@ -1,4 +1,5 @@
 #include "liberafx/VfxRuntime.h"
+#include "liberafx/BuiltinSignals.h"
 #include "liberafx/math/MatrixMath.h"
 #include <algorithm>
 #include <array>
@@ -202,7 +203,18 @@ auto makeMatrixDescriptor(unsigned id, unsigned inputCount, unsigned inputWidth)
     return descriptor;
 }
 
-const std::array<CustomNodeDescriptor, 60> descriptors = {
+auto makeSignalPassthroughDescriptor() noexcept -> CustomNodeDescriptor
+{
+    auto descriptor = CustomNodeDescriptor{};
+    std::copy(signalPassthroughTypeId.begin(), signalPassthroughTypeId.end(), descriptor.typeId);
+    descriptor.abiVersion = 1;
+    descriptor.execution = CustomExecution::Signal;
+    descriptor.branchCount = 1;
+    descriptor.function = signalPassthrough;
+    return descriptor;
+}
+
+const std::array<CustomNodeDescriptor, 61> descriptors = {
     makeDescriptor<Op::Abs, 1>(1, 1, 1), makeDescriptor<Op::Floor, 1>(2, 2, 1),
     makeDescriptor<Op::Round, 1>(3, 1, 1), makeDescriptor<Op::Sign, 1>(4, 1, 1),
     makeDescriptor<Op::Sqrt, 1>(5, 1, 1), makeDescriptor<Op::Pow, 1>(6, 2, 1),
@@ -240,7 +252,8 @@ const std::array<CustomNodeDescriptor, 60> descriptors = {
     makeMatrixDescriptor<MatrixOp::DecomposePosition, 3>(10, 4, 4),
     makeMatrixDescriptor<MatrixOp::DecomposeRotation, 3>(11, 4, 4),
     makeMatrixDescriptor<MatrixOp::DecomposeScale, 3>(12, 4, 4),
-    makeMatrixDescriptor<MatrixOp::DecomposeValid, 1>(13, 4, 4)
+    makeMatrixDescriptor<MatrixOp::DecomposeValid, 1>(13, 4, 4),
+    makeSignalPassthroughDescriptor()
 };
 }
 
