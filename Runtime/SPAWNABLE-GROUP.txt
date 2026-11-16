@@ -60,6 +60,15 @@ the ordinary stop record and releases the frozen instance. Manual stop, reset,
 release and teardown never create Destroy. Stop/reset return Busy for a
 naturally expired instance until it is finalized.
 
+`GeneratorPool::lifetime` / `libra_generator_lifetime` report the last
+successfully evaluated local age, remaining duration, normalized age and
+expiry state, including the frozen expiry boundary. Before the first successful
+start/evaluation they return NotReady; after finalization or stop the handle is
+invalid. A zero-duration lifetime reports normalized age 1 at expiry. Infinite
+lifetime reports infinite remaining and normalized age 0. Failed updates leave
+the previous sample intact. These host APIs do not yet expose lifetime values
+as graph nodes or implement effect-level lifecycle in engine adapters.
+
 If event backpressure prevents Destroy from being queued, start/evaluate returns
 QueueRejected. Drain existing records and retry; no evaluation or OnStart is
 replayed. Once Destroy is queued, further evaluate/start returns NotReady.

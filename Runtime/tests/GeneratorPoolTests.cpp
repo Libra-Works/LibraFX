@@ -155,6 +155,9 @@ void lifecycleTests()
     assert(pool->start(first) == Result::Ok && context.calls == 1);
     context.instance = second; context.enqueue = false;
     assert(pool->start(second) == Result::Ok && context.calls == 2 && context.observed[1] == 7);
+    auto lifetimeSample = liberafx::LifetimeSample{};
+    assert(pool->lifetime(second, lifetimeSample) == Result::Ok &&
+           lifetimeSample.age == 0 && lifetimeSample.remaining == 3 && !lifetimeSample.expired);
     auto event = liberafx::GeneratorEvent{};
     assert(pool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Spawn && event.instanceId == first);
     assert(pool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Spawn && event.instanceId == second);
@@ -171,6 +174,9 @@ void lifecycleTests()
     auto liveLife = liberafx::GeneratorCapture{}; liveLife.nodeId[15] = 2; liveLife.value = 4;
     assert(pool->setLive(second, &liveLife, 1) == Result::Ok);
     assert(pool->evaluate(second, 14) == Result::Ok);
+    assert(pool->lifetime(second, lifetimeSample) == Result::Ok &&
+           lifetimeSample.age == 2 && lifetimeSample.remaining == 1 &&
+           lifetimeSample.normalizedAge == 2.0 / 3 && !lifetimeSample.expired);
     assert(pool->evaluate(second, 15) == Result::Ok);
     // Changing the Life lane after start must not extend captured duration 3.
     assert(pool->stop(second) == Result::Busy);
@@ -193,6 +199,9 @@ void lifecycleTests()
     assert(pressure->spawn(0, &life, 1, zero) == Result::Ok);
     context.pool = pressure.get(); context.instance = zero;
     assert(pressure->start(zero) == Result::QueueRejected && context.calls == 3);
+    assert(pressure->lifetime(zero, lifetimeSample) == Result::Ok &&
+           lifetimeSample.age == 0 && lifetimeSample.remaining == 0 &&
+           lifetimeSample.normalizedAge == 1 && lifetimeSample.expired);
     assert(pressure->start(zero) == Result::QueueRejected && context.calls == 3);
     assert(pressure->evaluate(zero, 1) == Result::QueueRejected);
     assert(pressure->stop(zero) == Result::Busy && pressure->reset() == Result::Busy);

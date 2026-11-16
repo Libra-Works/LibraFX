@@ -83,6 +83,11 @@ typedef struct LIBRA_INTEROP_ALIGN(4) LibraGeneratorLifecycle {
     uint32_t flags, instructionBudget;
 } LibraGeneratorLifecycle;
 
+typedef struct LIBRA_INTEROP_ALIGN(8) LibraLifetimeSample {
+    double age, remaining, normalizedAge;
+    uint32_t expired, infinite;
+} LibraLifetimeSample;
+
 typedef struct LIBRA_INTEROP_ALIGN(8) LibraSpawnableBinding {
     uint8_t containerId[16];
     uint8_t signalTypeId[16];
@@ -142,6 +147,10 @@ LIBRA_INTEROP_ASSERT(offsetof(LibraGeneratorEvent, containerId) == 8 &&
 LIBRA_INTEROP_ASSERT(sizeof(LibraGeneratorLifecycle) == 40 && LIBRA_INTEROP_ALIGNOF(LibraGeneratorLifecycle) == 4);
 LIBRA_INTEROP_ASSERT(offsetof(LibraGeneratorLifecycle, flags) == 32 &&
     offsetof(LibraGeneratorLifecycle, instructionBudget) == 36);
+LIBRA_INTEROP_ASSERT(sizeof(LibraLifetimeSample) == 32 && LIBRA_INTEROP_ALIGNOF(LibraLifetimeSample) == 8);
+LIBRA_INTEROP_ASSERT(offsetof(LibraLifetimeSample, age) == 0 &&
+    offsetof(LibraLifetimeSample, remaining) == 8 && offsetof(LibraLifetimeSample, normalizedAge) == 16 &&
+    offsetof(LibraLifetimeSample, expired) == 24 && offsetof(LibraLifetimeSample, infinite) == 28);
 LIBRA_INTEROP_ASSERT(sizeof(LibraSpawnableBinding) == 120 && LIBRA_INTEROP_ALIGNOF(LibraSpawnableBinding) == 8);
 LIBRA_INTEROP_ASSERT(offsetof(LibraSpawnableBinding, containerId) == 0 &&
     offsetof(LibraSpawnableBinding, signalTypeId) == 16 && offsetof(LibraSpawnableBinding, pool) == 32 &&
@@ -238,6 +247,9 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_set_live(
     const LibraGeneratorCapture* values, uint32_t count);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_evaluate(
     LibraGeneratorPool pool, LibraGeneratorInstance instance, double time);
+/* Last successful sample; infinite lifetimes report infinite remaining and normalizedAge 0. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_lifetime(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance, LibraLifetimeSample* outSample);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_value(
     LibraGeneratorPool pool, LibraGeneratorInstance instance, const uint8_t nodeId[16],
     LibraValue* outValue);

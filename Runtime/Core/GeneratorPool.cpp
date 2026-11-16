@@ -35,12 +35,14 @@ struct Slot final {
     std::optional<Instance> instance;
     GeneratorInstanceId id = 0;
     double start = 0;
-    double capturedLife = std::numeric_limits<double>::infinity();
+    Lifetime lifetime = Lifetime::infinite();
     std::uint64_t seed = 0;
     bool started = false;
     bool expiring = false;
     bool destroyPublished = false;
     bool destroyDelivered = false;
+    bool sampleReady = false;
+    double sampledAge = 0;
     Result startResult = Result::Ok;
 };
 struct SpawnCommand final {
@@ -197,11 +199,13 @@ auto GeneratorPool::spawn(double time, const GeneratorCapture* captures, std::si
         if (result != Result::Ok) return result;
         slot->id = impl_->nextId++;
         slot->start = time;
-        slot->capturedLife = std::numeric_limits<double>::infinity();
+        slot->lifetime = Lifetime::infinite();
         slot->started = !impl_->lifecycleConfigured;
         slot->expiring = false;
         slot->destroyPublished = false;
         slot->destroyDelivered = false;
+        slot->sampleReady = false;
+        slot->sampledAge = 0;
         slot->startResult = Result::Ok;
         auto seed = slot->id;
         for (auto byte : impl_->containerId) seed = (seed ^ byte) * UINT64_C(1099511628211);
@@ -339,9 +343,12 @@ auto GeneratorPool::start(GeneratorInstanceId id) noexcept -> Result
     if (dispatched) {
         slot->started = true;
         slot->startResult = status;
-        if (impl_->lifecycle.hasLife) slot->capturedLife = duration[0];
+        if (impl_->lifecycle.hasLife)
+            (void)Lifetime::finite(duration[0], slot->lifetime);
     }
     if (status != Result::Ok) return status;
+    slot->sampleReady = true;
+    slot->sampledAge = 0;
     if (impl_->lifecycle.hasLife && duration[0] == 0) {
         slot->expiring = true;
         return impl_->publishDestroy(*slot);
@@ -441,23 +448,37 @@ auto GeneratorPool::evaluate(GeneratorInstanceId id, double time) noexcept -> Re
     if (!slot->started) return Result::NotReady;
     if (slot->startResult != Result::Ok) return slot->startResult;
     auto elapsed = time - slot->start;
-    if (!std::isfinite(elapsed) || elapsed < 0) return Result::InvalidArgument;
+    auto sample = LifetimeSample{};
+    if (slot->lifetime.sample(elapsed, sample) != Result::Ok) return Result::InvalidArgument;
     // Life is captured once by start, never inferred from Busy/FCurve or
     // refreshed by Live inputs. Clamp an overshooting frame to the expiry
     // boundary so Destroy consumers receive the actual final value.
-    auto sampleTime = elapsed < slot->capturedLife ? elapsed : slot->capturedLife;
     impl_->executing = true;
     lock.unlock();
-    auto result = slot->instance->updateAsync(sampleTime, inlineEnqueue, nullptr);
+    auto result = slot->instance->updateAsync(sample.age, inlineEnqueue, nullptr);
     if (result == Result::Ok) result = slot->instance->result();
     lock.lock();
     impl_->executing = false;
+    if (result == Result::Ok) {
+        slot->sampledAge = sample.age;
+        slot->sampleReady = true;
+    }
     if (result == Result::Ok && impl_->lifecycleConfigured && impl_->lifecycle.hasLife &&
-        elapsed >= slot->capturedLife) {
+        sample.expired) {
         slot->expiring = true;
         return impl_->publishDestroy(*slot);
     }
     return result;
+}
+
+auto GeneratorPool::lifetime(GeneratorInstanceId id, LifetimeSample& out) noexcept -> Result
+{
+    auto lock = std::lock_guard<std::mutex>(impl_->mutex);
+    if (impl_->executing) return Result::Busy;
+    auto slot = impl_->find(id);
+    if (!slot) return Result::InvalidHandle;
+    if (!slot->sampleReady) return Result::NotReady;
+    return slot->lifetime.sample(slot->sampledAge, out);
 }
 
 auto GeneratorPool::value(GeneratorInstanceId id, const std::uint8_t nodeId[16],

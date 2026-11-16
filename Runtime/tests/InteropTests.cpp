@@ -300,12 +300,24 @@ int main()
         assert(libra_generator_next_event(pool, &event, &has) == LIBRA_OK && has && event.kind == 1);
         auto id = event.instanceId;
         assert(libra_generator_evaluate(pool, id, 10) == LIBRA_NOT_READY);
+        auto lifetime = LibraLifetimeSample{};
+        assert(libra_generator_lifetime(pool, id, &lifetime) == LIBRA_NOT_READY);
+        assert(libra_generator_lifetime(pool, id, nullptr) == LIBRA_INVALID_ARGUMENT);
         assert(libra_generator_start(pool, id) == LIBRA_OK);
+        assert(libra_generator_lifetime(pool, id, &lifetime) == LIBRA_OK &&
+               lifetime.age == 0 && lifetime.remaining == 3 && lifetime.normalizedAge == 0 &&
+               !lifetime.expired && !lifetime.infinite);
         assert(libra_generator_start(pool, id) == LIBRA_OK);
+        assert(libra_generator_evaluate(pool, id, 11) == LIBRA_OK);
+        assert(libra_generator_lifetime(pool, id, &lifetime) == LIBRA_OK &&
+               lifetime.age == 1 && lifetime.remaining == 2 && lifetime.normalizedAge == 1.0 / 3);
         assert(libra_generator_evaluate(pool, id, 13) == LIBRA_OK);
+        assert(libra_generator_lifetime(pool, id, &lifetime) == LIBRA_OK &&
+               lifetime.age == 3 && lifetime.remaining == 0 && lifetime.normalizedAge == 1 && lifetime.expired);
         assert(libra_generator_finalize(pool, id) == LIBRA_NOT_READY);
         assert(libra_generator_next_event(pool, &event, &has) == LIBRA_OK && has && event.kind == 3 && event.instanceId == id);
         assert(libra_generator_finalize(pool, id) == LIBRA_OK);
+        assert(libra_generator_lifetime(pool, id, &lifetime) == LIBRA_INVALID_HANDLE);
         assert(libra_generator_next_event(pool, &event, &has) == LIBRA_OK && has && event.kind == 2 && event.instanceId == id);
         assert(libra_generator_next_event(pool, &event, &has) == LIBRA_OK && !has);
         assert(libra_generator_pool_release(pool) == LIBRA_OK);
@@ -332,6 +344,10 @@ int main()
         assert(libra_generator_next_event(pool, &event2, &hasEvent) == LIBRA_OK && hasEvent && event2.kind == 1);
         assert(event1.instanceId != event2.instanceId && event1.containerId[15] == 77);
         assert(libra_generator_evaluate(pool, event1.instanceId, 6) == LIBRA_OK);
+        auto infiniteLifetime = LibraLifetimeSample{};
+        assert(libra_generator_lifetime(pool, event1.instanceId, &infiniteLifetime) == LIBRA_OK &&
+               infiniteLifetime.age == 4 && std::isinf(infiniteLifetime.remaining) &&
+               infiniteLifetime.normalizedAge == 0 && infiniteLifetime.infinite && !infiniteLifetime.expired);
         assert(libra_generator_evaluate(pool, event2.instanceId, 6) == LIBRA_OK);
         auto node = std::array<std::uint8_t, 16>{}; node[15] = 3;
         auto value = LibraValue{};

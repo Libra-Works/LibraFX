@@ -1,6 +1,7 @@
 #pragma once
 
 #include "liberafx/VfxRuntime.h"
+#include "liberafx/Lifetime.h"
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -72,6 +73,8 @@ public:
     Result setLive(GeneratorInstanceId id, const GeneratorCapture* values,
                    std::size_t count) noexcept;
     Result evaluate(GeneratorInstanceId id, double time) noexcept;
+    // Last successful update, including the frozen expiry boundary.
+    Result lifetime(GeneratorInstanceId id, LifetimeSample& out) noexcept;
     Result value(GeneratorInstanceId id, const std::uint8_t nodeId[16],
                  double out[4], std::uint8_t& width) noexcept;
     bool popEvent(GeneratorEvent& out) noexcept;

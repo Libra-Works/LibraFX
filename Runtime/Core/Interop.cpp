@@ -2,6 +2,7 @@
 #include "liberafx/VfxRuntime.h"
 #include "liberafx/SceneBindings.h"
 #include "liberafx/GeneratorPool.h"
+#include <cmath>
 #include "liberafx/BuiltinSignals.h"
 #include "liberafx/NamedIo.h"
 
@@ -739,6 +740,22 @@ LibraResult LIBRA_INTEROP_CALL libra_generator_evaluate(
         auto found = generatorPools.find(pool);
         return found == generatorPools.end() ? LIBRA_INVALID_HANDLE :
             static_cast<LibraResult>(found->second->pool->evaluate(instance, time));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_lifetime(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance, LibraLifetimeSample* outSample)
+{
+    if (!outSample) return LIBRA_INVALID_ARGUMENT;
+    *outSample = {};
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        if (found == generatorPools.end()) return LIBRA_INVALID_HANDLE;
+        auto sample = liberafx::LifetimeSample{};
+        auto result = found->second->pool->lifetime(instance, sample);
+        if (result == liberafx::Result::Ok)
+            *outSample = {sample.age, sample.remaining, sample.normalizedAge,
+                          sample.expired ? 1u : 0u, std::isinf(sample.remaining) ? 1u : 0u};
+        return static_cast<LibraResult>(result);
     });
 }
 LibraResult LIBRA_INTEROP_CALL libra_generator_value(
