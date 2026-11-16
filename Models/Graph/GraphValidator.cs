@@ -17,11 +17,16 @@ public static class GraphValidator
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(snapshot.Nodes);
         ArgumentNullException.ThrowIfNull(snapshot.Connections);
+        GroupExposedItems.Validate(snapshot.ExposedItems);
+        if (isDocumentRoot && snapshot.ExposedItems is { Count: > 0 })
+            throw new InvalidDataException("Exposed items must belong to a group.");
         var definitions = GraphNodeDefinition.All.ToDictionary(definition => definition.Kind);
         var nodes = new Dictionary<Guid, GraphNodeSnapshot>();
         var effectiveDefinitions = new Dictionary<Guid, GraphNodeDefinition>();
         foreach (var node in snapshot.Nodes)
         {
+            if (node is not null && GameIoSchema.IsNode(node.Kind) && depth != 0)
+                throw new InvalidDataException("Game I/O nodes must be directly in the root graph.");
             if (insideSpawnable && node is not null && node.Kind == GraphNodeKind.SpawnableGroup)
                 throw new InvalidDataException("Nested Spawnable Groups are not supported.");
             if (node is not null && (isDocumentRoot || parentKind is not null && parentKind != GraphNodeKind.GraphGroup) &&
@@ -39,6 +44,9 @@ public static class GraphValidator
                 !nodes.TryAdd(node.Id, node))
                 throw new InvalidDataException("The project contains an invalid graph node.");
             if (node.Curve is not null) FCurve.Validate(node.Curve);
+            if (node.GroupOverrides is not null && node.ChildGraph is null)
+                throw new InvalidDataException("Only a group can have instance values.");
+            GroupExposedItems.ValidateOverrides(node.GroupOverrides);
             if (node.KindDomain == "GpuParticle" && node.Parameters?.Any(p =>
                     p is not null && p.Id == Services.GpuParticleEditorService.ParameterId &&
                     (p.Type != "gpuState" || !Services.GpuParticleEditorService.IsStateValue(p.Value))) == true)
@@ -53,6 +61,7 @@ public static class GraphValidator
                     throw new InvalidDataException("The project contains invalid node parameters.");
             }
             RenderNodeSchema.ValidateNodeParameters(definition, node.Parameters);
+            GameIoSchema.ValidateNodeParameters(definition, node.Parameters);
             if (node.ChildGraph is not null)
                 Validate(node.ChildGraph, allIds, depth + 1,
                     insideSpawnable || node.Kind == GraphNodeKind.SpawnableGroup, node.Kind, false);
@@ -60,7 +69,8 @@ public static class GraphValidator
                 node.ChildGraph!.Nodes.Count(child => SpawnableGroupSchema.IsInput(child.Kind)) > SpawnableGroupSchema.MaxInputs)
                 throw new InvalidDataException("A Spawnable Group supports at most four input ports.");
             effectiveDefinitions.Add(node.Id, GroupBoundarySchema.Effective(SpawnableGroupSchema.Effective(
-                RenderNodeSchema.Effective(definition, node.Parameters), node.ChildGraph), node.ChildGraph));
+                GameIoSchema.Effective(RenderNodeSchema.Effective(definition, node.Parameters), node.Parameters),
+                node.ChildGraph), node.ChildGraph));
         }
 
         var connections = new HashSet<(Guid SourceId, string? SourcePortId, Guid TargetId, string? TargetPortId)>();

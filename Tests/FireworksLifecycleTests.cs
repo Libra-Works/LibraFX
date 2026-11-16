@@ -77,10 +77,22 @@ internal static class FireworksLifecycleTests
                 burst with { Id = Guid.NewGuid(), ChildGraph = new GraphSnapshot([], []) }]).ToArray() }
         } : node).ToArray() };
         Reject(() => SpawnableGroupPackage.Compile(nested), "nested Spawnable");
-        foreach (var seconds in new[] { 0d, -1d })
-            Reject(() => SpawnableGroupPackage.Compile(ChangeLife(graph, launch.Id, seconds)), "nonpositive Life Time");
+        Reject(() => SpawnableGroupPackage.Compile(ChangeLife(graph, launch.Id, -1)), "negative Life Time");
         var library = Environment.GetEnvironmentVariable("LIBERAFX_NATIVE_TEST_LIBRARY")
             ?? throw new InvalidOperationException("Actual Fireworks execution requires LIBERAFX_NATIVE_TEST_LIBRARY.");
+        using (var immediate = new NativeSpawnableSession(
+            SpawnableGroupPackage.Compile(ChangeLife(graph, launch.Id, 0)), library))
+        {
+            immediate.Advance(0);
+            Require(immediate.Events.Count(value => value.ContainerId == launch.Id && value.Kind == 3 && value.Time == 0) == 1,
+                "Zero Life Time must produce one natural Destroy immediately after start.");
+            var active = immediate.ActiveInstances.Single();
+            Require(active.Container == burst.Id, "Zero Life Time did not route Destroy to the sibling.");
+            Near(immediate.Read(burst.Id, active.Instance, burstInput.Id).Lanes, [0, 0, 20], "Zero Life Time final capture");
+            immediate.Advance(1);
+            Require(immediate.Events.Count(value => value.ContainerId == launch.Id && value.Kind == 3) == 1,
+                "Zero Life Time emitted Destroy more than once.");
+        }
         var groups = new GroupAssetLibrary(Path.Combine(output, "group-library"));
         var asset = groups.Create("Fireworks launch template", launch.ChildGraph);
         var linkedGraph = graph with { Nodes = graph.Nodes.Select(node => node.Id == launch.Id ?

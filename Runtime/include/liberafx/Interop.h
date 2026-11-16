@@ -91,6 +91,22 @@ typedef struct LIBRA_INTEROP_ALIGN(8) LibraSpawnableBinding {
     uint8_t widths[4], colors[4];
     uint8_t templateNodeIds[4][16];
 } LibraSpawnableBinding;
+
+typedef struct LIBRA_INTEROP_ALIGN(8) LibraGameIoEvent {
+    uint8_t containerId[16];
+    uint64_t instanceId;
+    uint32_t portIndex;
+    uint8_t kind, width, isColor, reserved;
+    double values[4];
+} LibraGameIoEvent;
+
+typedef struct LIBRA_INTEROP_ALIGN(8) LibraGameIoEventV2 {
+    uint8_t containerId[16];
+    uint64_t instanceId;
+    uint32_t portIndex;
+    uint8_t kind, width, isColor, reserved;
+    double values[16];
+} LibraGameIoEventV2;
 #pragma pack(pop)
 
 #if defined(__cplusplus)
@@ -131,6 +147,8 @@ LIBRA_INTEROP_ASSERT(offsetof(LibraSpawnableBinding, containerId) == 0 &&
     offsetof(LibraSpawnableBinding, signalTypeId) == 16 && offsetof(LibraSpawnableBinding, pool) == 32 &&
     offsetof(LibraSpawnableBinding, inputCount) == 40 && offsetof(LibraSpawnableBinding, widths) == 48 &&
     offsetof(LibraSpawnableBinding, colors) == 52 && offsetof(LibraSpawnableBinding, templateNodeIds) == 56);
+LIBRA_INTEROP_ASSERT(sizeof(LibraGameIoEvent) == 64 && sizeof(LibraGameIoEventV2) == 160 &&
+    LIBRA_INTEROP_ALIGNOF(LibraGameIoEventV2) == 8);
 #undef LIBRA_INTEROP_ASSERT
 #undef LIBRA_INTEROP_ALIGNOF
 #endif
@@ -233,6 +251,30 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_program_create_spawnable(
     uint32_t bindingCount, LibraProgram* outProgram);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_dispatch_signal(
     LibraInstance instance, const uint8_t nodeId[16], double time, uint32_t instructionBudget);
+/* Configure Game I/O once after instance creation; port descriptors are read
+   from the validated bytecode and copied into the owner-thread facade. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_game_io_configure(
+    LibraInstance instance, uint32_t eventCapacity,
+    const uint8_t containerId[16], uint64_t instanceId);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_game_io_set_property(
+    LibraInstance instance, const char* name, const double* values, uint32_t width);
+/* Matrix values are 16 row-major doubles, matching Matrix Compose row order.
+   Set Owner Matrix after configure and before start; it may be updated between frames. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_game_io_set_owner_matrix(
+    LibraInstance instance, const double values[16]);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_game_io_start(
+    LibraInstance instance, double time, const uint8_t onStartNodeId[16], uint32_t instructionBudget);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_game_io_update(
+    LibraInstance instance, double time);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_game_io_fire_signal(
+    LibraInstance instance, const char* name, double time, uint32_t instructionBudget);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_game_io_publish_properties(LibraInstance instance);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_game_io_next_event(
+    LibraInstance instance, LibraGameIoEvent* outEvent, uint32_t* hasEvent);
+/* Matrix output events require this larger record. The legacy event function
+   reports LIBRA_INVALID_VALUE_TYPE and leaves a matrix event queued. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_game_io_next_event_v2(
+    LibraInstance instance, LibraGameIoEventV2* outEvent, uint32_t* hasEvent);
 
 #ifdef __cplusplus
 }

@@ -44,7 +44,7 @@ public sealed partial class DockFactory : Factory
             Title = LocalizationService.Shared.Get("Messages.Tool.Resources"),
             DescriptionKey = "Messages.ResourcesUnavailable"
         };
-        var properties = new NodePropertiesPaneViewModel(_activeGraph)
+        var properties = new NodePropertiesPaneViewModel(_activeGraph, _main.Playback)
         {
             Id = "Properties",
             Title = LocalizationService.Shared.Get("Messages.Tool.Properties")

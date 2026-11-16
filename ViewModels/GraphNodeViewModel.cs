@@ -40,6 +40,7 @@ public sealed class GraphNodeViewModel : ObservableObject
     public FCurveSnapshot? Curve => _curve;
     public IReadOnlyList<NodeParameterSnapshot>? Parameters => _parameters;
     public GraphSnapshot? ChildGraph { get; }
+    public IReadOnlyList<GroupInstanceValue>? GroupOverrides { get; private set; }
     public GroupAssetReference? GroupAsset { get; private set; }
     public bool IsGraphGroup => ChildGraph is not null;
     public bool IsSpawnableGroup => Definition.Kind == GraphNodeKind.SpawnableGroup;
@@ -145,13 +146,13 @@ public sealed class GraphNodeViewModel : ObservableObject
         GraphSnapshot? childGraph = null,
         IReadOnlyList<NodeParameterSnapshot>? parameters = null,
         GroupAssetReference? groupAsset = null,
-        bool isPolymorphic = false)
+        bool isPolymorphic = false,
+        IReadOnlyList<GroupInstanceValue>? groupOverrides = null)
     {
         _workspace = workspace;
         _baseDefinition = definition;
         IsPolymorphic = isPolymorphic;
-        _definition = GroupBoundarySchema.Effective(
-            SpawnableGroupSchema.Effective(RenderNodeSchema.Effective(definition, parameters), childGraph), childGraph);
+        _definition = EffectiveDefinition(definition, parameters, childGraph);
         Id = id ?? Guid.NewGuid();
         _name = name;
         _x = x;
@@ -160,6 +161,7 @@ public sealed class GraphNodeViewModel : ObservableObject
         ChildGraph = definition.Kind == GraphNodeKind.GraphGroup || definition.Kind == GraphNodeKind.SpawnableGroup
             ? childGraph ?? new GraphSnapshot([], []) : null;
         GroupAsset = ChildGraph is not null ? groupAsset : null;
+        GroupOverrides = ChildGraph is not null ? groupOverrides : null;
         _parameters = parameters;
         InlineParameters = VisibleParameters(_definition)
             .Select(parameter => new NodeParameterEditorViewModel(workspace, this, parameter)).ToArray();
@@ -224,19 +226,27 @@ public sealed class GraphNodeViewModel : ObservableObject
         }
     }
 
-    private JsonElement? SchemaValue(IReadOnlyList<NodeParameterSnapshot>? parameters) =>
-        _baseDefinition.Parameters.FirstOrDefault(parameter => parameter.Id == "materialSchema") is { } schema
-            ? parameters?.FirstOrDefault(parameter => parameter.Id == schema.Id && parameter.Type == schema.Type)?.Value
-              ?? schema.DefaultValue
-            : null;
+    private (JsonElement? Render, JsonElement? GameIo) SchemaValue(IReadOnlyList<NodeParameterSnapshot>? parameters)
+    {
+        var schema = _baseDefinition.Parameters.FirstOrDefault(parameter => parameter.Id == "materialSchema");
+        JsonElement? render = schema is null ? null :
+            parameters?.FirstOrDefault(parameter => parameter.Id == schema.Id && parameter.Type == schema.Type)?.Value
+            ?? schema.DefaultValue;
+        return (render, GameIoSchema.ValueTypeValue(_baseDefinition, parameters));
+    }
 
-    private static bool SchemaValuesEqual(JsonElement? left, JsonElement? right) =>
+    private static bool SchemaValuesEqual(
+        (JsonElement? Render, JsonElement? GameIo) left,
+        (JsonElement? Render, JsonElement? GameIo) right) =>
+        JsonValuesEqual(left.Render, right.Render) && JsonValuesEqual(left.GameIo, right.GameIo);
+
+    private static bool JsonValuesEqual(JsonElement? left, JsonElement? right) =>
         left is null && right is null ||
         left is { } a && right is { } b && JsonElement.DeepEquals(a, b);
 
     private void RefreshEffectiveDefinition()
     {
-        var effective = RenderNodeSchema.Effective(_baseDefinition, _parameters);
+        var effective = EffectiveDefinition(_baseDefinition, _parameters, ChildGraph);
         if (ReferenceEquals(effective, _definition)) return;
         if (!SetProperty(ref _definition, effective, nameof(Definition))) return;
         InlineParameters = VisibleParameters(effective)
@@ -263,6 +273,11 @@ public sealed class GraphNodeViewModel : ObservableObject
         OnPropertyChanged(nameof(HasLegacyOutput));
     }
 
+    private static GraphNodeDefinition EffectiveDefinition(GraphNodeDefinition definition,
+        IReadOnlyList<NodeParameterSnapshot>? parameters, GraphSnapshot? childGraph) =>
+        GroupBoundarySchema.Effective(SpawnableGroupSchema.Effective(
+            GameIoSchema.Effective(RenderNodeSchema.Effective(definition, parameters), parameters), childGraph), childGraph);
+
     private IReadOnlyList<NodeParameterDefinition> VisibleParameters(GraphNodeDefinition definition) =>
         definition.Parameters.Where(parameter =>
             !IsGpuParticle &&
@@ -274,6 +289,12 @@ public sealed class GraphNodeViewModel : ObservableObject
     {
         GroupAsset = value;
         OnPropertyChanged(nameof(GroupAsset));
+    }
+
+    internal void SetGroupOverridesValue(IReadOnlyList<GroupInstanceValue>? value)
+    {
+        GroupOverrides = value;
+        OnPropertyChanged(nameof(GroupOverrides));
     }
 
     internal void PreviewCommentSize(double width, double height)

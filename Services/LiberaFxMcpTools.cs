@@ -120,6 +120,7 @@ public sealed class LiberaFxMcpTools
             return JsonSerializer.Serialize(new
             {
                 format = "LFXB", version = program.BinaryVersion, byteOrder = "little-endian",
+                gameIoPorts = program.GameIoPorts,
                 workBytes = program.WorkSizeBytes, bytecodeBase64 = Convert.ToBase64String(program.ToBinary())
             }, JsonOptions);
         }
@@ -162,6 +163,7 @@ public sealed class LiberaFxMcpTools
                 version = SpawnableGroupPackage.FormatVersion,
                 bytecodeFormat = "LFXB",
                 signalPassthroughTypeId = SpawnableGroupPackage.SignalPassthroughTypeId,
+                gameIoPorts = package.GameIoPorts,
                 parentBytecodeBase64 = Convert.ToBase64String(package.ParentBytecode),
                 package.OnStartNodeId,
                 package.DestroyRoutes,
@@ -177,7 +179,7 @@ public sealed class LiberaFxMcpTools
                     renderConfigurationBase64 = Convert.ToBase64String(template.RenderConfiguration),
                     template.GpuContainers
                 }),
-                lifecycle = new { life = "positive seconds captured at start; absent means infinity",
+                lifecycle = new { life = "nonnegative finite seconds captured at start; absent means infinity",
                     destroy = "natural expiry only; frozen outputs routed before finalize",
                     stop = "no Destroy", reset = "no Destroy", instanceIdScope = "pool" }
             }, JsonOptions);
@@ -371,6 +373,100 @@ public sealed class LiberaFxMcpTools
             try { graph.SetParameter(node, parameterId, value); }
             catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
             { throw new McpException(ex.Message); }
+            return SerializeNode(graph, node.Id);
+        });
+
+    [McpServerTool(Name = "libera_graph_expose_parameter", Destructive = false, OpenWorld = false)]
+    [Description("Expose a direct child node parameter on its containing group. The active graph must be inside an editable group. Uses the same validation and undo history as the inspector.")]
+    public static async Task<string> ExposeParameter(ActiveGraphProvider activeGraph, string nodeId, string parameterId) =>
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var graph = activeGraph.Graph;
+            try
+            {
+                var id = graph.PublishGroupParameter(FindNode(graph, nodeId), parameterId);
+                return JsonSerializer.Serialize(new { exposedItemId = id }, JsonOptions);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
+                                       InvalidOperationException or ArgumentException)
+            { throw new McpException(ex.Message); }
+        });
+
+    [McpServerTool(Name = "libera_graph_expose_curves", Destructive = false, OpenWorld = false)]
+    [Description("Expose one Float F-Curve or three Float F-Curves in X/Y/Z order on the containing group. The active graph must be inside an editable group.")]
+    public static async Task<string> ExposeCurves(ActiveGraphProvider activeGraph, string[] nodeIds) =>
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var graph = activeGraph.Graph;
+            try
+            {
+                if (nodeIds is null || nodeIds.Length is not (1 or 3))
+                    throw new ArgumentException("Supply one or three curve node IDs.");
+                var id = graph.PublishGroupCurves(nodeIds.Select(nodeId => FindNode(graph, nodeId)).ToArray());
+                return JsonSerializer.Serialize(new { exposedItemId = id }, JsonOptions);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
+                                       InvalidOperationException or ArgumentException)
+            { throw new McpException(ex.Message); }
+        });
+
+    [McpServerTool(Name = "libera_graph_set_group_instance_value", Destructive = false, OpenWorld = false)]
+    [Description("Set an exposed group item on this instance without changing the shared group. Pass the item GUID and a JSON parameter value, one F-Curve object, or an array of three F-Curve objects for vector3Curve.")]
+    public static async Task<string> SetGroupInstanceValue(
+        ActiveGraphProvider activeGraph, string nodeId, string exposedItemId, JsonElement value) =>
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var graph = activeGraph.Graph;
+            var node = FindNode(graph, nodeId);
+            try
+            {
+                if (!Guid.TryParse(exposedItemId, out var itemId) || itemId == Guid.Empty)
+                    throw new ArgumentException("Invalid exposed item GUID.");
+                var item = node.ChildGraph?.ExposedItems?.SingleOrDefault(candidate => candidate.Id == itemId)
+                    ?? throw new InvalidOperationException("The exposed item no longer exists.");
+                GroupInstanceComponent[] components = item.Editor switch
+                {
+                    "parameter" => [new(value.Clone())],
+                    "curve" => [new(Curve: JsonSerializer.Deserialize<FCurveSnapshot>(value.GetRawText(), JsonOptions)
+                        ?? throw new ArgumentException("An F-Curve is required."))],
+                    "vector3Curve" => (JsonSerializer.Deserialize<FCurveSnapshot[]>(value.GetRawText(), JsonOptions)
+                        ?? throw new ArgumentException("Three F-Curves are required."))
+                        .Select(curve => new GroupInstanceComponent(Curve: curve)).ToArray(),
+                    _ => throw new InvalidOperationException("The exposed editor type is unsupported.")
+                };
+                graph.SetGroupInstanceValue(node, new(itemId, components));
+                return SerializeNode(graph, node.Id);
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidDataException or InvalidOperationException or ArgumentException)
+            { throw new McpException(ex.Message); }
+        });
+
+    [McpServerTool(Name = "libera_graph_configure_group_item", Destructive = false, OpenWorld = false)]
+    [Description("Configure an exposed item on an editable group. Supply the complete item from the graph snapshot; its ID, editor type and targets cannot be changed. Uses the same validation, asset lock and undo history as the inspector.")]
+    public static async Task<string> ConfigureGroupItem(
+        ActiveGraphProvider activeGraph, string nodeId, GroupExposedItem item) =>
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var graph = activeGraph.Graph;
+            var node = FindNode(graph, nodeId);
+            try { graph.UpdateGroupExposedItem(node, item); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
+                                       InvalidOperationException or ArgumentException)
+            { throw new McpException(ex.Message); }
+            return SerializeNode(graph, node.Id);
+        });
+
+    [McpServerTool(Name = "libera_graph_reset_group_instance_value", Destructive = false, OpenWorld = false)]
+    [Description("Remove one exposed-item instance override, restoring the shared group default. Uses the editor's undo history.")]
+    public static async Task<string> ResetGroupInstanceValue(ActiveGraphProvider activeGraph, string nodeId, string exposedItemId) =>
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var graph = activeGraph.Graph;
+            var node = FindNode(graph, nodeId);
+            if (!Guid.TryParse(exposedItemId, out var itemId) || itemId == Guid.Empty)
+                throw new McpException("Invalid exposed item GUID.");
+            try { graph.ResetGroupInstanceValue(node, itemId); }
+            catch (InvalidOperationException ex) { throw new McpException(ex.Message); }
             return SerializeNode(graph, node.Id);
         });
 

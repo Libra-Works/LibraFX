@@ -13,20 +13,29 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     private readonly GraphWorkspaceViewModel _graph;
     private readonly GraphNodeViewModel _node;
     private readonly NodeParameterDefinition _definition;
+    private readonly GroupExposedItem? _exposed;
     private string _status = string.Empty;
 
-    public string Name => LocalizationService.Shared.GetOrDefault(_definition.DisplayNameKey, _definition.Name);
+    public string Name => _exposed is { Category.Length: > 0 } item
+        ? $"{item.Category} / {_definition.Name}"
+        : LocalizationService.Shared.GetOrDefault(_definition.DisplayNameKey, _definition.Name);
+    public string Description => _exposed is { Description.Length: > 0 } item ? item.Description : Name;
     public string Type => _definition.Type;
     public string Id => _definition.Id;
-    private GraphConnectionViewModel? InputConnection => _graph.Connections.FirstOrDefault(connection =>
+    private GraphConnectionViewModel? InputConnection => _exposed is not null ? null : _graph.Connections.FirstOrDefault(connection =>
         connection.Target == _node && (connection.TargetPortId == Id ||
         connection.TargetPortId is null && _node.HasLegacyInput && _node.Definition.Parameters.Count == 1));
     public bool HasConnection => InputConnection is not null;
-    public bool CanReset => _graph.Nodes.Contains(_node) && !NodeParameter.ValuesEqual(Value, _definition.DefaultValue);
+    public bool CanReset => _graph.Nodes.Contains(_node) && (_exposed is { } item
+        ? _node.GroupOverrides?.Any(value => value.ItemId == item.Id) == true
+        : !NodeParameter.ValuesEqual(Value, _definition.DefaultValue));
     public IRelayCommand DisconnectCommand { get; }
     public IRelayCommand ResetCommand { get; }
+    public IRelayCommand PublishCommand { get; }
+    public bool ShowPublish => _exposed is null && _graph.CanPublishGroupParameter(_node, Id);
     public string DisconnectHint => LocalizationService.Shared.Get("Panels.DisconnectParameter", Name);
     public string ResetHint => LocalizationService.Shared.Get("Panels.ResetParameter", Name);
+    public string PublishHint => LocalizationService.Shared.Get("Panels.PublishGroupParameter", Name);
     public NodeParameterEditorDefinition? Editor => _definition.Editor;
     public bool IsEnabled
     {
@@ -73,7 +82,9 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
             EnumValues.FirstOrDefault(item => item.Value == EnumValue)?.Name ?? ValueText,
         _ => ValueText
     };
-    private JsonElement Value => _node.GetParameterValue(_definition);
+    private JsonElement Value => _exposed is { } item
+        ? _node.GroupOverrides?.FirstOrDefault(value => value.ItemId == item.Id)?.Components[0].Value ?? _definition.DefaultValue
+        : _node.GetParameterValue(_definition);
 
     public double NumericValue
     {
@@ -91,17 +102,31 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         }
     }
 
-    public NodeParameterEditorViewModel(GraphWorkspaceViewModel graph, GraphNodeViewModel node, NodeParameterDefinition definition)
+    public NodeParameterEditorViewModel(GraphWorkspaceViewModel graph, GraphNodeViewModel node,
+        NodeParameterDefinition definition, GroupExposedItem? exposed = null)
     {
         _graph = graph;
         _node = node;
         _definition = definition;
+        _exposed = exposed;
         DisconnectCommand = new RelayCommand(() =>
         {
             if (InputConnection is { } connection) _graph.DisconnectConnection(connection);
             Refresh();
         }, () => HasConnection);
-        ResetCommand = new RelayCommand(() => SetValue(_definition.DefaultValue), () => CanReset);
+        ResetCommand = new RelayCommand(() =>
+        {
+            if (_exposed is { } item) _graph.ResetGroupInstanceValue(_node, item.Id);
+            else SetValue(_definition.DefaultValue);
+            Refresh();
+        }, () => CanReset);
+        PublishCommand = new RelayCommand(() =>
+        {
+            try { _graph.PublishGroupParameter(_node, Id); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
+                                       InvalidOperationException or ArgumentException)
+            { Reject(MessageLocalization.Error(ex.Message)); }
+        }, () => ShowPublish);
         MessageLocalization.Observe(this, static editor => editor.Refresh());
     }
 
@@ -172,6 +197,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     public void Refresh()
     {
         OnPropertyChanged(nameof(Name));
+        OnPropertyChanged(nameof(Description));
         OnPropertyChanged(nameof(ValueText));
         OnPropertyChanged(nameof(DisplayValue));
         OnPropertyChanged(nameof(IsEnabled));
@@ -179,8 +205,11 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(CanReset));
         OnPropertyChanged(nameof(DisconnectHint));
         OnPropertyChanged(nameof(ResetHint));
+        OnPropertyChanged(nameof(PublishHint));
+        OnPropertyChanged(nameof(ShowPublish));
         DisconnectCommand.NotifyCanExecuteChanged();
         ResetCommand.NotifyCanExecuteChanged();
+        PublishCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(EnumValues));
         OnPropertyChanged(nameof(EnumValue));
         OnPropertyChanged(nameof(NumericValue));
@@ -218,12 +247,14 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     {
         try
         {
-            _graph.SetParameter(_node, Id, value);
+            if (_exposed is { } item)
+                _graph.SetGroupInstanceValue(_node, new(item.Id, [new(value.Clone())]));
+            else _graph.SetParameter(_node, Id, value);
             Status = string.Empty;
             Refresh();
             return true;
         }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or InvalidDataException)
         {
             Reject(MessageLocalization.Error(ex.Message));
             return false;

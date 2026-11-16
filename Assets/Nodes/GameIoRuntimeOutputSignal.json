@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "typeId": "7ff078d2-dce1-42b0-93fb-b40200000001",
+  "namespace": "LiberaFx",
+  "kind": "GameIoRuntimeOutputSignal",
+  "name": "Game I/O Output Signal Runtime",
+  "group": "Internal runtime",
+  "portType": "Signal",
+  "portCategory": "Signal",
+  "inputPorts": [
+    { "id": "signal", "name": "Signal", "portType": "Signal", "category": "Signal" }
+  ],
+  "outputPorts": [
+    { "id": "then", "name": "Then", "portType": "Signal", "category": "Signal" }
+  ],
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "signal" }
+}

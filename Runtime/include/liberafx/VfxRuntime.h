@@ -38,6 +38,7 @@ struct CustomNodeInvocation;
 using CustomNodeFunction = Result (*)(CustomNodeInvocation&) noexcept;
 using CustomNodeInitialize = Result (*)(void* state, std::size_t stateBytes, void* context) noexcept;
 using CustomNodeCleanup = void (*)(void* state, std::size_t stateBytes, void* context) noexcept;
+using SignalObserver = Result (*)(void* context, const std::uint8_t nodeId[16]) noexcept;
 
 struct LIBRA_RUNTIME_CORE_API CustomNodeDescriptor final {
     std::uint8_t typeId[16]{};
@@ -80,6 +81,14 @@ struct CustomNodeInvocation final {
 struct CustomNodeBinding final {
     const CustomNodeDescriptor* descriptor = nullptr;
     std::size_t stateOffset = 0;
+};
+
+struct ProgramGameIoPort final {
+    const char* name = nullptr;
+    std::uint8_t nodeId[16]{};
+    std::uint8_t additionalNodeIds[3][16]{};
+    std::uint8_t kind = 0, width = 0, isColor = 0;
+    std::uint8_t nodeCount = 0;
 };
 
 // Immutable process-lifetime descriptors. IDs use Guid.TryWriteBytes(bigEndian: true).
@@ -130,6 +139,8 @@ public:
     std::size_t defaultsAlignment() const noexcept;
     std::size_t bindingCount() const noexcept { return version_ >= 3 && bindings_ != nullptr ? nodeCount_ : 0; }
     std::uint16_t version() const noexcept { return version_; }
+    std::size_t gameIoPortCount() const noexcept { return gameIoPortCount_; }
+    bool gameIoPort(std::size_t index, ProgramGameIoPort& out) const noexcept;
 
 private:
     friend class Instance;
@@ -142,6 +153,8 @@ private:
     std::size_t signalRoutesOffset_ = 0;
     std::size_t signalStackOffset_ = 0;
     std::size_t signalStackCapacity_ = 0;
+    std::size_t gameIoMetadataOffset_ = 0;
+    std::uint16_t gameIoPortCount_ = 0;
 };
 
 class LIBRA_RUNTIME_CORE_API Instance final {
@@ -178,6 +191,7 @@ public:
     Result setUnconnectedParameter(const std::uint8_t nodeId[16], std::uint8_t inputSlot,
                                    std::uint8_t component, double value) noexcept;
     Result result() const noexcept;
+    Result setSignalObserver(SignalObserver observer, void* context) noexcept;
     Result value(const std::uint8_t nodeId[16], double& out) const noexcept;
     Result valueComponents(const std::uint8_t nodeId[16], double out[4], std::uint8_t& componentCount) const noexcept;
     // Synchronous, owner-thread-only execution after a successful update.
@@ -203,6 +217,8 @@ private:
     double* stateWork_ = nullptr;
     std::size_t initializedStateCount_ = 0;
     bool dispatching_ = false;
+    SignalObserver signalObserver_ = nullptr;
+    void* signalObserverContext_ = nullptr;
     Result result_ = Result::NotReady;
     ProfilingHooks profiling_;
     std::atomic<Phase> phase_{Phase::Idle};

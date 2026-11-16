@@ -2,14 +2,17 @@ namespace LiberaFx.Models.Graph;
 
 public sealed record GraphSnapshot(
     IReadOnlyList<GraphNodeSnapshot> Nodes,
-    IReadOnlyList<GraphConnectionSnapshot> Connections)
+    IReadOnlyList<GraphConnectionSnapshot> Connections,
+    IReadOnlyList<GroupExposedItem>? ExposedItems = null)
 {
     public static bool ContentEquals(GraphSnapshot left, GraphSnapshot right) =>
+        GroupExposedItems.Equal(left.ExposedItems, right.ExposedItems) &&
         left.Nodes.Count == right.Nodes.Count &&
         left.Nodes.Zip(right.Nodes).All(pair =>
-            pair.First with { Curve = null, ChildGraph = null, Parameters = null } ==
-                pair.Second with { Curve = null, ChildGraph = null, Parameters = null } &&
+            pair.First with { Curve = null, ChildGraph = null, Parameters = null, GroupOverrides = null } ==
+                pair.Second with { Curve = null, ChildGraph = null, Parameters = null, GroupOverrides = null } &&
             ParametersEqual(pair.First.Parameters, pair.Second.Parameters) &&
+            GroupExposedItems.OverridesEqual(pair.First.GroupOverrides, pair.Second.GroupOverrides) &&
             (pair.First.Curve is null && pair.Second.Curve is null ||
              pair.First.Curve is not null && pair.Second.Curve is not null &&
              pair.First.Curve.Keys.SequenceEqual(pair.Second.Curve.Keys)) &&
@@ -27,15 +30,17 @@ public sealed record GraphSnapshot(
             var a = left.Nodes[index];
             var b = right.Nodes[index];
             if (!ids.TryAdd(a.Id, b.Id) ||
-                a with { Id = Guid.Empty, Curve = null, ChildGraph = null, Parameters = null } !=
-                b with { Id = Guid.Empty, Curve = null, ChildGraph = null, Parameters = null } ||
+                a with { Id = Guid.Empty, Curve = null, ChildGraph = null, Parameters = null, GroupOverrides = null } !=
+                b with { Id = Guid.Empty, Curve = null, ChildGraph = null, Parameters = null, GroupOverrides = null } ||
                 !ParametersEqual(a.Parameters, b.Parameters) ||
+                !GroupExposedItems.OverridesEqual(a.GroupOverrides, b.GroupOverrides) ||
                 (a.Curve is null) != (b.Curve is null) ||
                 (a.Curve is not null && !a.Curve.Keys.SequenceEqual(b.Curve!.Keys)) ||
                 (a.ChildGraph is null) != (b.ChildGraph is null) ||
                 (a.ChildGraph is not null && !EquivalentIgnoringIds(a.ChildGraph, b.ChildGraph!)))
                 return false;
         }
+        if (!GroupExposedItems.Equal(left.ExposedItems, right.ExposedItems, ids)) return false;
         var leftNodes = left.Nodes.ToDictionary(node => node.Id);
         var rightNodes = new Dictionary<Guid, GraphNodeSnapshot>();
         foreach (var node in right.Nodes)
@@ -68,7 +73,8 @@ public sealed record GraphNodeSnapshot(
     GraphSnapshot? ChildGraph = null,
     IReadOnlyList<NodeParameterSnapshot>? Parameters = null,
     GroupAssetReference? GroupAsset = null,
-    bool IsPolymorphic = false)
+    bool IsPolymorphic = false,
+    IReadOnlyList<GroupInstanceValue>? GroupOverrides = null)
 {
     public string KindDomain => Services.GpuParticleEditorService.IsGpu(Kind) ? "GpuParticle" : "Cpu";
 }

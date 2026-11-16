@@ -1,0 +1,44 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="LiberaFx.Views.GroupExposedEditorWindow"
+        Title="{DynamicResource Text.Panels.ConfigureGroupItems}"
+        Width="520" Height="650" MinWidth="420" MinHeight="480"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource EffectWindowBackgroundBrush}">
+    <Grid RowDefinitions="*,Auto" Margin="16">
+        <ScrollViewer>
+            <StackPanel Spacing="6">
+                <ComboBox x:Name="ItemSelector" HorizontalAlignment="Stretch" SelectionChanged="OnItemChanged">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate><TextBlock Text="{ReflectionBinding Name}" /></DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <TextBlock Text="{DynamicResource Text.Panels.ExposedName}" />
+                <TextBox x:Name="NameField" MaxLength="200" />
+                <TextBlock Text="{DynamicResource Text.Panels.ExposedDescription}" />
+                <TextBox x:Name="DescriptionField" MaxLength="4096" AcceptsReturn="True" Height="80" TextWrapping="Wrap" />
+                <TextBlock Text="{DynamicResource Text.Panels.ExposedCategory}" />
+                <TextBox x:Name="CategoryField" MaxLength="200" />
+                <TextBlock Text="{DynamicResource Text.Panels.ExposedOrder}" />
+                <TextBox x:Name="OrderField" />
+                <TextBlock Text="{DynamicResource Text.Panels.ExposedPresentation}" />
+                <ComboBox x:Name="PresentationField" HorizontalAlignment="Stretch">
+                    <ComboBoxItem Content="{DynamicResource Text.Panels.ExposedDefault}" />
+                    <ComboBoxItem Content="{DynamicResource Text.Panels.ExposedText}" />
+                    <ComboBoxItem Content="{DynamicResource Text.Panels.ExposedSlider}" />
+                </ComboBox>
+                <TextBlock Text="{DynamicResource Text.Panels.ExposedMinimum}" />
+                <TextBox x:Name="MinimumField" />
+                <TextBlock Text="{DynamicResource Text.Panels.ExposedMaximum}" />
+                <TextBox x:Name="MaximumField" />
+                <TextBlock Text="{DynamicResource Text.Panels.ExposedStep}" />
+                <TextBox x:Name="StepField" />
+                <TextBlock x:Name="ErrorText" TextWrapping="Wrap" Foreground="{DynamicResource EffectForegroundBrush}" />
+            </StackPanel>
+        </ScrollViewer>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,10,0,0">
+            <Button Content="{DynamicResource Text.Panels.ExposedCancel}" Click="OnCancel" />
+            <Button x:Name="ApplyButton" Content="{DynamicResource Text.Panels.ExposedSave}" Click="OnApply" />
+        </StackPanel>
+    </Grid>
+</Window>

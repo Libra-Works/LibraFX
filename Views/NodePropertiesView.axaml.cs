@@ -34,4 +34,26 @@ public partial class NodePropertiesView : UserControl
             pane.Graph.DisconnectConnection(connection);
         }
     }
+
+    private async void OnEditGroupCurvesClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not NodePropertiesPaneViewModel pane ||
+            TopLevel.GetTopLevel(this) is not Window owner) return;
+        using var editor = pane.CreateGroupCurveEditor();
+        var window = new Window
+        {
+            Title = LocalizationService.Shared.Get("Panels.EditGroupCurves"),
+            Width = 1100, Height = 650, MinWidth = 650, MinHeight = 350,
+            Content = new CurveEditorView { DataContext = editor }
+        };
+        await window.ShowDialog(owner);
+    }
+
+    private async void OnConfigureGroupItemsClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not NodePropertiesPaneViewModel pane ||
+            pane.Graph.SelectedNode is not { IsGraphGroup: true } group ||
+            TopLevel.GetTopLevel(this) is not Window owner) return;
+        await new GroupExposedEditorWindow(pane.Graph, group.Id).ShowDialog(owner);
+    }
 }

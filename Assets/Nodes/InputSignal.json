@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "typeId": "f43ba0db-ea8c-4c27-93ec-2da000000002",
+  "namespace": "LiberaFx",
+  "kind": "InputSignal",
+  "name": "Input Signal",
+  "displayNameKey": "Editor.Node.InputSignal",
+  "groupNameKey": "Editor.NodeGroup.GameIO",
+  "group": "Game I/O",
+  "portType": "Signal",
+  "portCategory": "Signal",
+  "outputPorts": [
+    { "id": "then", "name": "Then", "portType": "Signal", "category": "Signal" }
+  ],
+  "parameters": [
+    { "id": "name", "name": "Name", "displayNameKey": "Editor.Parameter.Name", "type": "string", "defaultValue": "" }
+  ]
+}

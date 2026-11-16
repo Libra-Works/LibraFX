@@ -12,6 +12,8 @@
     <Compile Include="..\..\Models\Graph\CommentImage.cs" Link="Models\CommentImage.cs" />
     <Compile Include="..\..\Models\Graph\FCurve.cs" Link="Models\FCurve.cs" />
     <Compile Include="..\..\Models\Graph\GraphEnumDefinition.cs" Link="Models\GraphEnumDefinition.cs" />
+    <Compile Include="..\..\Models\Graph\GameIoSchema.cs" Link="Models\GameIoSchema.cs" />
+    <Compile Include="..\..\Models\Graph\GroupExposedItem.cs" Link="Models\GroupExposedItem.cs" />
     <Compile Include="..\..\Models\Graph\GraphNodeDefinition.cs" Link="Models\GraphNodeDefinition.cs" />
     <Compile Include="..\..\Models\Graph\GraphMatrixLowering.cs" Link="Models\GraphMatrixLowering.cs" />
     <Compile Include="..\..\Models\Graph\GraphPolymorphism.cs" Link="Models\GraphPolymorphism.cs" />

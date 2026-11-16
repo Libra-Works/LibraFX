@@ -20,6 +20,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
     public int Version => FormatVersion;
     public Guid? OnStartNodeId { get; init; }
     public IReadOnlyList<SpawnableDestroyRoute> DestroyRoutes { get; init; } = [];
+    public IReadOnlyList<GameIoPort> GameIoPorts { get; init; } = [];
     public static readonly Guid SignalPassthroughTypeId = Guid.Parse("989fa5b5-485f-4e75-8542-9c5500000001");
 
     public static Guid SignalTypeId(Guid containerId, GraphSnapshot child)
@@ -32,6 +33,8 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
 
     public static SpawnableGroupPackage Compile(GraphSnapshot graph)
     {
+        VfxProgram.ValidateForCompilation(graph);
+        graph = GroupExposedItems.Materialize(graph);
         VfxProgram.ValidateForCompilation(graph);
         GraphTypeDiagnostics.Validate(graph);
         var starts = graph.Nodes.Where(node => node.Kind.Value == "OnStart").ToArray();
@@ -67,8 +70,8 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
                     if (life.Length == 1 && !child.Connections.Any(edge => edge.TargetNodeId == life[0].Id))
                     {
                         var seconds = life[0].Parameters?.SingleOrDefault(parameter => parameter.Id == "seconds")?.Value.GetDouble() ?? 2;
-                        if (!double.IsFinite(seconds) || seconds <= 0)
-                            throw new InvalidDataException($"Spawnable '{node.Name}' Life Time must be positive seconds.");
+                        if (!double.IsFinite(seconds) || seconds < 0)
+                            throw new InvalidDataException($"Spawnable '{node.Name}' Life Time must be nonnegative finite seconds.");
                     }
                     var bytecode = VfxProgram.CompileForPackage(child).ToBinary();
                     var render = RenderProgramBindings.CreateScene(child, 0);
@@ -83,8 +86,13 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
             }
         }
         Visit(graph, false, false);
-        var parent = VfxProgram.CompileForPackage(RemoveLocalRoutes(graph)).ToBinary();
-        return new(parent, templates.AsReadOnly()) { OnStartNodeId = starts.SingleOrDefault()?.Id, DestroyRoutes = routes };
+        var parentProgram = VfxProgram.CompileForPackage(RemoveLocalRoutes(graph));
+        return new(parentProgram.ToBinary(), templates.AsReadOnly())
+        {
+            OnStartNodeId = starts.SingleOrDefault()?.Id,
+            DestroyRoutes = routes,
+            GameIoPorts = parentProgram.GameIoPorts
+        };
     }
 
     // Local Destroy is not a signal branch evaluated at spawn. Remove only

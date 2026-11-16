@@ -7,9 +7,13 @@
 #include <array>
 #include <cassert>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
+#include <iterator>
 #include <limits>
+#include <string>
 #include <vector>
 #if defined(_MSC_VER) && defined(_DEBUG)
 #include <crtdbg.h>
@@ -80,6 +84,64 @@ auto lifecycleFixture() -> std::vector<std::uint8_t>
     }
     return bytes;
 }
+auto gameIoFixture() -> std::vector<std::uint8_t>
+{
+    const auto names = std::array<std::string, 4>{"speed", "result", "enter", "done"};
+    auto metadataSize = std::size_t{8};
+    for (const auto& name : names) metadataSize += 24 + name.size() + 1;
+    auto bytes = std::vector<std::uint8_t>(16 + 4 * 256 + metadataSize);
+    std::memcpy(bytes.data(), "LFXB", 4);
+    bytes[4] = 6; bytes[6] = 1; bytes[8] = 4; bytes[13] = 1;
+    auto writeScalar = [&](std::size_t offset, std::uint8_t nodeId, std::uint32_t source) {
+        bytes[offset + 15] = nodeId;
+        bytes[offset + 16] = 1;
+        bytes[offset + 17] = 1;
+        bytes[offset + 18] = source == UINT32_MAX ? 0 : 1;
+        write32(bytes, offset + 24, source);
+        write32(bytes, offset + 28, UINT32_MAX);
+    };
+    writeScalar(16, 1, UINT32_MAX);
+    writeScalar(16 + 256, 2, 0);
+    auto first = bytes.data() + 16 + 2 * 256;
+    first[15] = 3; first[16] = 41; first[19] = 1;
+    const std::uint8_t passthrough[] = {0x98, 0x9f, 0xa5, 0xb5, 0x48, 0x5f, 0x4e, 0x75,
+                                        0x85, 0x42, 0x9c, 0x55, 0, 0, 0, 1};
+    std::memcpy(first + 24, passthrough, 16);
+    write32(bytes, 16 + 2 * 256 + 40, 1);
+    for (auto input = 0u; input < 4; ++input)
+        write32(bytes, 16 + 2 * 256 + 48 + input * 8, UINT32_MAX);
+    for (auto branch = 0u; branch < 4; ++branch)
+        write32(bytes, 16 + 2 * 256 + 208 + branch * 4, branch == 0 ? 3 : UINT32_MAX);
+    auto second = bytes.data() + 16 + 3 * 256;
+    second[15] = 4; second[16] = 41; second[19] = 1;
+    const std::uint8_t outputSignal[] = {0x7f, 0xf0, 0x78, 0xd2, 0xdc, 0xe1, 0x42, 0xb0,
+                                         0x93, 0xfb, 0xb4, 0x02, 0, 0, 0, 1};
+    std::memcpy(second + 24, outputSignal, 16);
+    write32(bytes, 16 + 3 * 256 + 40, 1);
+    for (auto input = 0u; input < 4; ++input)
+        write32(bytes, 16 + 3 * 256 + 48 + input * 8, UINT32_MAX);
+    for (auto branch = 0u; branch < 4; ++branch)
+        write32(bytes, 16 + 3 * 256 + 208 + branch * 4, UINT32_MAX);
+    auto metadata = bytes.data() + 16 + 4 * 256;
+    std::memcpy(metadata, "LFIO", 4);
+    metadata[4] = 4;
+    auto writePort = [&](std::size_t offset, std::uint8_t nodeId, std::uint8_t kind,
+                         std::uint8_t width,
+                         const std::string& name) {
+        metadata[offset + 15] = nodeId;
+        metadata[offset + 16] = kind;
+        metadata[offset + 17] = width;
+        auto nameOffset = offset + 24;
+        metadata[offset + 20] = static_cast<std::uint8_t>(name.size());
+        std::memcpy(metadata + nameOffset, name.data(), name.size());
+    };
+    auto offset = std::size_t{8};
+    writePort(offset, 1, 0, 1, names[0]); offset += 24 + names[0].size() + 1;
+    writePort(offset, 2, 2, 1, names[1]); offset += 24 + names[1].size() + 1;
+    writePort(offset, 3, 1, 0, names[2]); offset += 24 + names[2].size() + 1;
+    writePort(offset, 4, 3, 0, names[3]);
+    return bytes;
+}
 // Matches the Unity sample bytecode so its actual port/shape wiring is checked
 // by the native validator, not merely by a C# compiler.
 auto unityFixture() -> std::vector<std::uint8_t>
@@ -116,6 +178,103 @@ auto __cdecl allocationHook(int kind, void*, size_t, int, long, const unsigned c
 
 int main()
 {
+    if (auto bytecodePath = std::getenv("LIBERAFX_GAMEIO_MATRIX_BYTECODE")) {
+        auto stream = std::ifstream{bytecodePath, std::ios::binary};
+        auto bytes = std::vector<std::uint8_t>(
+            std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{});
+        assert(stream.good() || stream.eof());
+        auto program = LibraProgram{};
+        assert(libra_program_create(bytes.data(), bytes.size(), &program) == LIBRA_OK);
+        auto instance = LibraInstance{};
+        assert(libra_instance_create(program, &instance) == LIBRA_OK);
+        assert(libra_game_io_configure(instance, 8, nullptr, 92) == LIBRA_OK);
+        auto owner = std::array<double, 16>{
+            2, 0, 0, 10, 0, 2, 0, 20, 0, 0, 2, 30, 0, 0, 0, 1};
+        auto local = std::array<double, 16>{
+            1, 0, 0, 2, 0, 1, 0, 3, 0, 0, 1, 4, 0, 0, 0, 1};
+        assert(libra_game_io_set_owner_matrix(instance, owner.data()) == LIBRA_OK);
+        assert(libra_game_io_set_property(instance, "local", local.data(), 16) == LIBRA_OK);
+        assert(libra_game_io_set_property(instance, "local", local.data(), 4) == LIBRA_INVALID_VALUE_TYPE);
+        assert(libra_game_io_start(instance, 0, nullptr, 0) == LIBRA_OK);
+        auto oldEvent = LibraGameIoEvent{};
+        auto newEvent = LibraGameIoEventV2{};
+        auto hasEvent = std::uint32_t{};
+        assert(libra_game_io_next_event(instance, &oldEvent, &hasEvent) == LIBRA_INVALID_VALUE_TYPE &&
+               !hasEvent);
+        assert(libra_game_io_next_event_v2(instance, &newEvent, &hasEvent) == LIBRA_OK && hasEvent &&
+               newEvent.instanceId == 92 && newEvent.portIndex == 2 &&
+               newEvent.kind == 2 && newEvent.width == 16 &&
+               newEvent.values[0] == 2 && newEvent.values[3] == 14 &&
+               newEvent.values[7] == 26 && newEvent.values[11] == 38 &&
+               newEvent.values[15] == 1);
+        owner[3] = 15;
+        assert(libra_game_io_set_owner_matrix(instance, owner.data()) == LIBRA_OK);
+        assert(libra_game_io_update(instance, 1) == LIBRA_OK);
+        assert(libra_game_io_next_event_v2(instance, &newEvent, &hasEvent) == LIBRA_OK && hasEvent &&
+               newEvent.values[3] == 19);
+        assert(libra_instance_release(instance) == LIBRA_OK);
+        assert(libra_program_release(program) == LIBRA_OK);
+    }
+    if (auto bytecodePath = std::getenv("LIBERAFX_GAMEIO_BYTECODE")) {
+        auto stream = std::ifstream{bytecodePath, std::ios::binary};
+        auto bytes = std::vector<std::uint8_t>(
+            std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{});
+        assert(stream.good() || stream.eof());
+        auto program = LibraProgram{};
+        assert(libra_program_create(bytes.data(), bytes.size(), &program) == LIBRA_OK);
+        auto instance = LibraInstance{};
+        assert(libra_instance_create(program, &instance) == LIBRA_OK);
+        auto containerId = std::array<std::uint8_t, 16>{};
+        containerId[15] = 77;
+        assert(libra_game_io_configure(instance, 4, containerId.data(), 91) == LIBRA_OK);
+        auto position = std::array<double, 3>{4, 5, 6};
+        assert(libra_game_io_set_property(instance, "position", position.data(), position.size()) == LIBRA_OK);
+        assert(libra_game_io_start(instance, 0, nullptr, 0) == LIBRA_OK);
+        auto event = LibraGameIoEvent{};
+        auto hasEvent = std::uint32_t{};
+        assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent &&
+               event.containerId[15] == 77 && event.instanceId == 91 &&
+               event.portIndex == 2 && event.kind == 2 && event.width == 4 && event.isColor &&
+               event.values[0] == 1 && event.values[3] == 1);
+        assert(libra_game_io_fire_signal(instance, "trigger", 1, 8) == LIBRA_OK);
+        assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent &&
+               event.portIndex == 3 && event.kind == 3);
+        assert(libra_instance_release(instance) == LIBRA_OK);
+        assert(libra_program_release(program) == LIBRA_OK);
+    }
+    {
+        auto bytes = gameIoFixture();
+        auto program = LibraProgram{};
+        assert(libra_program_create(bytes.data(), bytes.size(), &program) == LIBRA_OK);
+        auto instance = LibraInstance{};
+        assert(libra_instance_create(program, &instance) == LIBRA_OK);
+        assert(libra_game_io_configure(instance, 1, nullptr, 42) == LIBRA_OK);
+        auto inputValue = std::array<double, 1>{2};
+        assert(libra_game_io_set_property(instance, "speed", inputValue.data(), 1) == LIBRA_OK);
+        assert(libra_game_io_set_property(instance, "speed", inputValue.data(), 2) == LIBRA_INVALID_VALUE_TYPE);
+        assert(libra_game_io_fire_signal(instance, "enter", 0, 4) == LIBRA_NOT_READY);
+        assert(libra_game_io_start(instance, 0, nullptr, 0) == LIBRA_OK);
+        auto event = LibraGameIoEvent{};
+        auto hasEvent = std::uint32_t{};
+        assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent &&
+               event.instanceId == 42 && event.portIndex == 1 && event.kind == 2 && event.values[0] == 2);
+        inputValue[0] = 5;
+        assert(libra_game_io_set_property(instance, "speed", inputValue.data(), 1) == LIBRA_OK);
+        assert(libra_game_io_update(instance, 1) == LIBRA_OK);
+        assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent &&
+               event.portIndex == 1 && event.values[0] == 5);
+        assert(libra_game_io_fire_signal(instance, "enter", 2, 4) == LIBRA_OK);
+        assert(libra_game_io_fire_signal(instance, "enter", 3, 4) == LIBRA_QUEUE_REJECTED);
+        assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent &&
+               event.portIndex == 3 && event.kind == 3);
+        assert(libra_game_io_fire_signal(instance, "enter", 4, 4) == LIBRA_OK);
+        assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && hasEvent);
+        assert(libra_game_io_next_event(instance, &event, &hasEvent) == LIBRA_OK && !hasEvent);
+        assert(libra_instance_release(instance) == LIBRA_OK);
+        assert(libra_program_release(program) == LIBRA_OK);
+        bytes.back() = 0xff;
+        assert(libra_program_create(bytes.data(), bytes.size(), &program) == LIBRA_INVALID_BINARY);
+    }
     {
         auto bytes = lifecycleFixture();
         auto program = LibraProgram{};

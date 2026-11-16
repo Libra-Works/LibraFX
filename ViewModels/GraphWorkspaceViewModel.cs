@@ -313,7 +313,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             var node = new GraphNodeViewModel(this, definition, specification.Name, newX, newY,
                 curve: specification.Curve, childGraph: specification.ChildGraph is null ? null : CloneGraph(specification.ChildGraph),
                 parameters: specification.Parameters, groupAsset: specification.GroupAsset,
-                isPolymorphic: specification.IsPolymorphic);
+                isPolymorphic: specification.IsPolymorphic, groupOverrides: specification.GroupOverrides);
             nodesByOldId.Add(specification.Id, node);
             commands.Add(new AddGraphNodeCommand(this, node, Nodes.Count + commands.Count));
         }
@@ -379,7 +379,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 node.ChildGraph,
                 node.Parameters,
                 node.GroupAsset,
-                node.IsPolymorphic))
+                node.IsPolymorphic,
+                node.GroupOverrides))
             .ToArray();
         var connections = Connections
             .Select(connection => new GraphConnectionSnapshot(
@@ -389,7 +390,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 connection.SourcePortId))
             .ToArray();
 
-        return new GraphSnapshot(nodes, connections);
+        return new GraphSnapshot(nodes, connections, GetCurrentGraph().ExposedItems);
     }
 
     private static GraphSnapshot ReplaceGraph(GraphSnapshot root, IReadOnlyList<Guid> path, int depth, GraphSnapshot replacement)
@@ -437,14 +438,17 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 Id = ids[node.Id],
                 ChildGraph = node.ChildGraph is null ? null : CloneGraph(node.ChildGraph)
             }).ToArray();
-        return new GraphSnapshot(
-            nodes,
-            source.Connections.Select(connection => new GraphConnectionSnapshot(
+        return source with
+        {
+            Nodes = nodes,
+            ExposedItems = GroupExposedItems.Remap(source.ExposedItems, ids),
+            Connections = source.Connections.Select(connection => new GraphConnectionSnapshot(
                 ids[connection.SourceNodeId], ids[connection.TargetNodeId],
                 SpawnableGroupSchema.RemapPort(source.Nodes.Single(node => node.Id == connection.TargetNodeId),
                     nodes.Single(node => node.Id == ids[connection.TargetNodeId]).ChildGraph, connection.TargetPortId),
                 SpawnableGroupSchema.RemapPort(source.Nodes.Single(node => node.Id == connection.SourceNodeId),
-                    nodes.Single(node => node.Id == ids[connection.SourceNodeId]).ChildGraph, connection.SourcePortId))).ToArray());
+                    nodes.Single(node => node.Id == ids[connection.SourceNodeId]).ChildGraph, connection.SourcePortId))).ToArray()
+        };
     }
 
     public bool EnterGraph(GraphNodeViewModel node)
@@ -546,7 +550,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
                     {
                     }
-                    changed |= childConflict;
+                    changed |= childConflict || node.GroupOverrides is { Count: > 0 };
                     results.Add(new GroupUpdateCandidate(node.Id, reference.Id, node.Name,
                         reference.Revision, asset.Revision, changed));
                     anyConflict |= changed;
@@ -633,7 +637,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                         var current = library.Load(reference.Id);
                         if (current.Revision != approvedUpdate.LatestRevision)
                             throw new InvalidOperationException($"Group '{node.Name}' changed again; check for updates again.");
-                        if (GraphSnapshot.EquivalentIgnoringIds(baseline.Graph, child))
+                        if (node.GroupOverrides is not { Count: > 0 } &&
+                            GraphSnapshot.EquivalentIgnoringIds(baseline.Graph, child))
                         {
                             var replacement = CloneGraph(current.Graph);
                             if (node.Kind == GraphNodeKind.SpawnableGroup || node.Kind == GraphNodeKind.GraphGroup)
@@ -856,7 +861,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 specification.ChildGraph,
                 specification.Parameters,
                 specification.GroupAsset,
-                specification.IsPolymorphic)
+                specification.IsPolymorphic,
+                specification.GroupOverrides)
             {
                 IsDetailsExpanded = expandedNodes.Contains(specification.Id)
             };
@@ -1027,7 +1033,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             node.ChildGraph,
             node.Parameters,
             node.GroupAsset,
-            node.IsPolymorphic));
+            node.IsPolymorphic,
+            node.GroupOverrides));
         GraphValidator.Validate(new GraphSnapshot(
             current.Nodes.Concat(plannedNodes).ToArray(),
             current.Connections.Concat(plannedConnections).ToArray()));
@@ -1313,6 +1320,172 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         _history.Execute(new SetFCurveCommand(node, node.Curve, curve, description));
     }
 
+    public bool CanPublishGroupParameter(GraphNodeViewModel node, string parameterId)
+    {
+        if (_graphPath.Count == 0 || !Nodes.Contains(node)) return false;
+        var definition = node.Definition.Parameters.FirstOrDefault(parameter => parameter.Id == parameterId);
+        if (definition is null || !GroupExposedItems.SupportsParameter(node.Definition, definition))
+            return false;
+        return GetCurrentGraph().ExposedItems?.Any(item => item.Editor == "parameter" &&
+            item.Targets[0].NodeId == node.Id && item.Targets[0].ParameterId == parameterId) != true;
+    }
+
+    public Guid PublishGroupParameter(GraphNodeViewModel node, string parameterId)
+    {
+        if (!CanPublishGroupParameter(node, parameterId))
+            throw new InvalidOperationException("The selected parameter cannot be exposed here.");
+        var definition = node.Definition.Parameters.Single(parameter => parameter.Id == parameterId);
+        var item = new GroupExposedItem(Guid.NewGuid(), $"{node.Name}: {definition.Name}", "", "",
+            GetCurrentGraph().ExposedItems?.Count ?? 0, "parameter", [new(node.Id, parameterId)]);
+        return PublishGroupItem(item);
+    }
+
+    public bool CanPublishGroupCurves() => CanPublishGroupCurves(_selectedNodes);
+
+    public bool CanPublishGroupCurves(IReadOnlyList<GraphNodeViewModel> nodes)
+    {
+        if (_graphPath.Count == 0 || nodes.Count is not (1 or 3) || nodes.Distinct().Count() != nodes.Count ||
+            nodes.Any(node => !Nodes.Contains(node) || node.Curve is null)) return false;
+        var existing = (GetCurrentGraph().ExposedItems ?? []).Where(item => item.Editor is "curve" or "vector3Curve")
+            .SelectMany(item => item.Targets).Select(target => target.NodeId).ToHashSet();
+        return nodes.All(node => !existing.Contains(node.Id));
+    }
+
+    public Guid PublishGroupCurves() => PublishGroupCurves(_selectedNodes);
+
+    public Guid PublishGroupCurves(IReadOnlyList<GraphNodeViewModel> nodes)
+    {
+        if (!CanPublishGroupCurves(nodes))
+            throw new InvalidOperationException("Select one or three unexposed F-Curve nodes inside a group.");
+        var item = new GroupExposedItem(Guid.NewGuid(),
+            nodes.Count == 1 ? nodes[0].Name : "Vector3 Curve", "", "",
+            GetCurrentGraph().ExposedItems?.Count ?? 0,
+            nodes.Count == 1 ? "curve" : "vector3Curve",
+            nodes.Select(node => new GroupExposedTarget(node.Id, null)).ToArray());
+        return PublishGroupItem(item);
+    }
+
+    private Guid PublishGroupItem(GroupExposedItem item)
+    {
+        var before = CreateSnapshot();
+        var parent = before;
+        foreach (var id in _graphPath)
+        {
+            var owner = parent.Nodes.Single(candidate => candidate.Id == id);
+            if (owner.GroupAsset is { } reference)
+            {
+                var asset = GroupAssets?.Library().Load(reference.Id)
+                    ?? throw new InvalidOperationException("The group library is unavailable.");
+                if (asset.Locked) throw new InvalidOperationException("The group asset is locked.");
+            }
+            parent = owner.ChildGraph!;
+        }
+        var items = (parent.ExposedItems ?? []).Append(item).ToArray();
+        GroupExposedItems.Validate(items);
+        var after = ReplaceGraph(before, _graphPath, 0, parent with { ExposedItems = items });
+        ValidateSnapshot(after);
+        _history.Execute(new ReplaceGraphSnapshotCommand(this, before, after,
+            LocalizationService.Shared.Get("Messages.History.PublishGroupParameter")));
+        return item.Id;
+    }
+
+    public void UpdateGroupExposedItem(GraphNodeViewModel group, GroupExposedItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        GroupExposedItems.Validate([item]);
+        if (!Nodes.Contains(group) || group.ChildGraph is null)
+            throw new InvalidOperationException("Select a group in this graph.");
+        var before = CreateSnapshot();
+        var current = before;
+        foreach (var id in _graphPath)
+        {
+            var owner = current.Nodes.Single(candidate => candidate.Id == id);
+            EnsureAssetUnlocked(owner.GroupAsset);
+            current = owner.ChildGraph!;
+        }
+        var original = current.Nodes.Single(candidate => candidate.Id == group.Id);
+        EnsureAssetUnlocked(original.GroupAsset);
+        var child = original.ChildGraph!;
+        var items = child.ExposedItems?.ToArray() ?? [];
+        var index = Array.FindIndex(items, candidate => candidate.Id == item.Id);
+        if (index < 0) throw new InvalidOperationException("The exposed item no longer exists.");
+        var previous = items[index];
+        if (previous.Editor != item.Editor || !previous.Targets.SequenceEqual(item.Targets))
+            throw new InvalidOperationException("An exposed item's targets cannot be changed here.");
+        if (item.Presentation == "slider" || item.Minimum is not null || item.Maximum is not null || item.Step is not null)
+        {
+            var target = item.Targets.SingleOrDefault();
+            var node = target is null ? null : child.Nodes.FirstOrDefault(candidate => candidate.Id == target.NodeId);
+            var definition = node is null ? null : GraphNodeDefinition.All.FirstOrDefault(candidate => candidate.Kind == node.Kind);
+            var parameter = definition is null ? null :
+                GameIoSchema.Effective(RenderNodeSchema.Effective(definition, node!.Parameters), node.Parameters)
+                    .Parameters.FirstOrDefault(candidate => candidate.Id == target!.ParameterId);
+            if (item.Editor != "parameter" || parameter?.Type is not ("float" or "int"))
+                throw new InvalidOperationException("Ranges and sliders require a numeric parameter.");
+            var initial = node!.Parameters?.FirstOrDefault(candidate =>
+                candidate.Id == parameter.Id && candidate.Type == parameter.Type)?.Value ?? parameter.DefaultValue;
+            if (item.Minimum is { } minimum && initial.GetDouble() < minimum ||
+                item.Maximum is { } maximum && initial.GetDouble() > maximum)
+                throw new InvalidOperationException("The group default is outside the requested range.");
+        }
+        items[index] = item;
+        GroupExposedItems.Validate(items);
+        var changedGroup = original with { ChildGraph = child with { ExposedItems = items } };
+        var candidateGraph = current with
+        {
+            Nodes = current.Nodes.Select(node => node.Id == group.Id ? changedGroup : node).ToArray()
+        };
+        var materialized = GroupExposedItems.Materialize(candidateGraph);
+        GraphValidator.Validate(materialized);
+        var after = ReplaceGraph(before, _graphPath, 0, candidateGraph);
+        ValidateSnapshot(after);
+        if (GraphSnapshot.ContentEquals(before, after)) return;
+        _history.Execute(new ReplaceGraphSnapshotCommand(this, before, after,
+            LocalizationService.Shared.Get("Messages.History.ConfigureGroupParameter")));
+    }
+
+    private void EnsureAssetUnlocked(GroupAssetReference? reference)
+    {
+        if (reference is null) return;
+        var asset = GroupAssets?.Library().Load(reference.Id)
+            ?? throw new InvalidOperationException("The group library is unavailable.");
+        if (asset.Locked) throw new InvalidOperationException("The group asset is locked.");
+    }
+
+    public void SetGroupInstanceValue(GraphNodeViewModel node, GroupInstanceValue value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if (!Nodes.Contains(node) || node.ChildGraph is null)
+            throw new InvalidOperationException("Select a group in this graph.");
+        GroupExposedItems.ValidateOverrides([value]);
+        var values = node.GroupOverrides?.ToList() ?? [];
+        var item = new GroupInstanceValue(value.ItemId, value.Components.Select(component =>
+            new GroupInstanceComponent(component.Value?.Clone(),
+                component.Curve is { } curve ? new FCurveSnapshot(curve.Keys.ToArray()) : null)).ToArray());
+        var index = values.FindIndex(existing => existing.ItemId == item.ItemId);
+        if (index < 0) values.Add(item);
+        else values[index] = item;
+        var result = values.AsReadOnly();
+        GroupExposedItems.ValidateOverrides(result);
+        if (GroupExposedItems.OverridesEqual(node.GroupOverrides, result)) return;
+        var snapshot = CreateCurrentSnapshot().Nodes.Single(candidate => candidate.Id == node.Id) with
+        {
+            GroupOverrides = result
+        };
+        var materialized = GroupExposedItems.Materialize(new GraphSnapshot([snapshot], []));
+        GraphValidator.Validate(materialized);
+        _history.Execute(new SetGroupOverridesCommand(node, node.GroupOverrides, result));
+    }
+
+    public void ResetGroupInstanceValue(GraphNodeViewModel node, Guid itemId)
+    {
+        if (!Nodes.Contains(node) || node.ChildGraph is null)
+            throw new InvalidOperationException("Select a group in this graph.");
+        if (node.GroupOverrides?.Any(value => value.ItemId == itemId) != true) return;
+        var remaining = node.GroupOverrides.Where(value => value.ItemId != itemId).ToArray();
+        _history.Execute(new SetGroupOverridesCommand(node, node.GroupOverrides, remaining.Length == 0 ? null : remaining));
+    }
+
     public void SetParameter(GraphNodeViewModel node, string id, JsonElement value)
     {
         if (!Nodes.Contains(node)) throw new InvalidOperationException("The node is not in this graph.");
@@ -1461,6 +1634,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
         if (insideSpawnable && additions.Any(kind => kind == GraphNodeKind.SpawnableGroup))
             throw new InvalidOperationException("Nested Spawnable Groups are not supported.");
+        if (additions.Any(GameIoSchema.IsNode) && owner is not null)
+            throw new InvalidOperationException("Game I/O nodes must be placed directly in the root graph.");
         if (additions.Any(kind => GroupBoundarySchema.IsInput(kind) || GroupBoundarySchema.IsOutput(kind)) &&
             owner?.Kind != GraphNodeKind.GraphGroup)
             throw new InvalidOperationException("Group boundary nodes must be placed directly inside a Graph Group.");

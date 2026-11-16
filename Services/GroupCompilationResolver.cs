@@ -30,6 +30,8 @@ public sealed class GroupCompilationResolver(IReadOnlyList<GroupAssetLibrary> li
                 try
                 {
                     var asset = Load(reference.Id);
+                    if (node.GroupOverrides is { Count: > 0 } && asset.Revision != reference.Revision)
+                        throw new InvalidDataException($"Linked group '{node.Name}' has instance values and a newer revision; review the update before compiling.");
                     var child = ResolveGraph(Clone(asset.Graph, node.Id), ancestors, depth + 1);
                     nodes.Add(node with
                     {
@@ -121,15 +123,20 @@ public sealed class GroupCompilationResolver(IReadOnlyList<GroupAssetLibrary> li
             Id = ids[node.Id],
             ChildGraph = node.ChildGraph is null ? null : Clone(node.ChildGraph, ids[node.Id])
         }).ToArray();
-        return new GraphSnapshot(nodes, graph.Connections.Select(connection => connection with
+        return graph with
         {
-            SourceNodeId = ids[connection.SourceNodeId],
-            TargetNodeId = ids[connection.TargetNodeId],
-            SourcePortId = SpawnableGroupSchema.RemapPort(graph.Nodes.Single(node => node.Id == connection.SourceNodeId),
-                nodes.Single(node => node.Id == ids[connection.SourceNodeId]).ChildGraph, connection.SourcePortId),
-            TargetPortId = SpawnableGroupSchema.RemapPort(graph.Nodes.Single(node => node.Id == connection.TargetNodeId),
-                nodes.Single(node => node.Id == ids[connection.TargetNodeId]).ChildGraph, connection.TargetPortId)
-        }).ToArray());
+            Nodes = nodes,
+            ExposedItems = GroupExposedItems.Remap(graph.ExposedItems, ids),
+            Connections = graph.Connections.Select(connection => connection with
+            {
+                SourceNodeId = ids[connection.SourceNodeId],
+                TargetNodeId = ids[connection.TargetNodeId],
+                SourcePortId = SpawnableGroupSchema.RemapPort(graph.Nodes.Single(node => node.Id == connection.SourceNodeId),
+                    nodes.Single(node => node.Id == ids[connection.SourceNodeId]).ChildGraph, connection.SourcePortId),
+                TargetPortId = SpawnableGroupSchema.RemapPort(graph.Nodes.Single(node => node.Id == connection.TargetNodeId),
+                    nodes.Single(node => node.Id == ids[connection.TargetNodeId]).ChildGraph, connection.TargetPortId)
+            }).ToArray()
+        };
     }
 
     private static Guid DeriveId(Guid scope, Guid source)

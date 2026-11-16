@@ -38,7 +38,7 @@ Configure an empty pool with `GeneratorLifecycle` or the 40-byte,
 OnStart and Life respectively. Life is sampled and captured once by start;
 later Live changes never extend or shorten it. The legacy core API accepts a
 non-negative scalar duration in seconds; zero expires after OnStart. Authored
-package-v2 Life Time requires strictly positive finite seconds. Signal
+package-v2 Life Time also accepts non-negative finite seconds. Signal
 traversal is limited to 1..10000 instructions. Node IDs are big-endian.
 
 Spawn initializes one independent instance and applies captured values. Drain

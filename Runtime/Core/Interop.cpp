@@ -3,7 +3,9 @@
 #include "liberafx/SceneBindings.h"
 #include "liberafx/GeneratorPool.h"
 #include "liberafx/BuiltinSignals.h"
+#include "liberafx/NamedIo.h"
 
+#include <algorithm>
 #include <cstring>
 #include <array>
 #include <limits>
@@ -17,6 +19,7 @@
 namespace {
 static_assert(static_cast<int>(liberafx::Result::InstructionBudgetExceeded) == LIBRA_INSTRUCTION_BUDGET_EXCEEDED);
 static_assert(sizeof(LibraValue) == 40 && sizeof(LibraAtlasFrame) == 20 && sizeof(LibraSpriteVertex) == 36);
+static_assert(sizeof(LibraGameIoEvent) == 64 && sizeof(LibraGameIoEventV2) == 160);
 static_assert(std::is_standard_layout<LibraValue>::value && std::is_trivially_copyable<LibraValue>::value);
 static_assert(std::is_standard_layout<LibraAtlasFrame>::value && std::is_trivially_copyable<LibraAtlasFrame>::value);
 static_assert(std::is_standard_layout<LibraSpriteVertex>::value && std::is_trivially_copyable<LibraSpriteVertex>::value);
@@ -70,6 +73,7 @@ struct NativeInstance {
     std::size_t valueCount = 0, parameterCount = 0;
     // Destroy core state before its backing buffers and program.
     liberafx::Instance instance;
+    std::unique_ptr<liberafx::NamedIo> gameIo;
 };
 struct NativeGeneratorPool {
     std::shared_ptr<NativeProgram> owner;
@@ -182,7 +186,7 @@ LibraResult LIBRA_INTEROP_CALL libra_program_create_spawnable(
     *outProgram = 0;
     return guarded([&]() -> LibraResult {
         if (byteCount < 16 || byteCount > 256ull * 1024 * 1024 ||
-            std::memcmp(bytes, "LFXB", 4) != 0 || (bytes[4] != 3 && bytes[4] != 4 && bytes[4] != 5) || bytes[5] != 0 ||
+            std::memcmp(bytes, "LFXB", 4) != 0 || bytes[4] < 3 || bytes[4] > 7 || bytes[5] != 0 ||
             bytes[12] != 0 || bytes[13] != 1) return LIBRA_INVALID_BINARY;
         auto count = std::uint32_t{};
         for (auto i = 0u; i < 4; ++i) count |= std::uint32_t{bytes[8 + i]} << (i * 8);
@@ -390,6 +394,150 @@ LibraResult LIBRA_INTEROP_CALL libra_dispatch_signal(
         auto native = findInstance(instance);
         return native ? static_cast<LibraResult>(
             native->instance.dispatchSignal(nodeId, time, instructionBudget)) : LIBRA_INVALID_HANDLE;
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_game_io_configure(
+    LibraInstance instance, uint32_t eventCapacity,
+    const uint8_t containerId[16], uint64_t instanceId)
+{
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        if (native->gameIo || native->owner->program.version() < 6 ||
+            native->owner->program.version() > 7)
+            return LIBRA_INVALID_VALUE_TYPE;
+        auto converted = std::vector<liberafx::NamedIoPort>{};
+        auto count = native->owner->program.gameIoPortCount();
+        converted.reserve(count);
+        for (auto index = std::size_t{}; index < count; ++index) {
+            auto port = liberafx::ProgramGameIoPort{};
+            if (!native->owner->program.gameIoPort(index, port) || port.kind > 4)
+                return LIBRA_INVALID_BINARY;
+            auto item = liberafx::NamedIoPort{};
+            item.name = port.name;
+            item.kind = static_cast<liberafx::NamedIoKind>(port.kind);
+            std::memcpy(item.nodeId, port.nodeId, 16);
+            std::memcpy(item.additionalNodeIds, port.additionalNodeIds, sizeof(item.additionalNodeIds));
+            item.width = port.width;
+            item.isColor = port.isColor != 0;
+            item.nodeCount = port.nodeCount;
+            converted.push_back(item);
+        }
+        auto identity = liberafx::NamedIoIdentity{};
+        if (containerId) std::memcpy(identity.containerId, containerId, 16);
+        identity.instanceId = instanceId;
+        auto result = liberafx::NamedIo::create(native->instance, converted.data(), converted.size(),
+            eventCapacity, native->gameIo, identity);
+        return static_cast<LibraResult>(result);
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_game_io_set_property(
+    LibraInstance instance, const char* name, const double* values, uint32_t width)
+{
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        if (!native->gameIo) return LIBRA_NOT_READY;
+        return static_cast<LibraResult>(native->gameIo->setProperty(name, values, width));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_game_io_set_owner_matrix(
+    LibraInstance instance, const double values[16])
+{
+    if (!values) return LIBRA_INVALID_ARGUMENT;
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        if (!native->gameIo) return LIBRA_NOT_READY;
+        return static_cast<LibraResult>(native->gameIo->setOwnerMatrix(values, 16));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_game_io_start(
+    LibraInstance instance, double time, const uint8_t onStartNodeId[16], uint32_t instructionBudget)
+{
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        if (!native->gameIo) return LIBRA_NOT_READY;
+        return static_cast<LibraResult>(
+            native->gameIo->start(time, onStartNodeId, instructionBudget));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_game_io_update(LibraInstance instance, double time)
+{
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        if (!native->gameIo) return LIBRA_NOT_READY;
+        return static_cast<LibraResult>(native->gameIo->update(time));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_game_io_fire_signal(
+    LibraInstance instance, const char* name, double time, uint32_t instructionBudget)
+{
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        if (!native->gameIo) return LIBRA_NOT_READY;
+        return static_cast<LibraResult>(
+            native->gameIo->fireSignal(name, time, instructionBudget));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_game_io_publish_properties(LibraInstance instance)
+{
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        if (!native->gameIo) return LIBRA_NOT_READY;
+        return static_cast<LibraResult>(native->gameIo->publishProperties());
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_game_io_next_event(
+    LibraInstance instance, LibraGameIoEvent* outEvent, uint32_t* hasEvent)
+{
+    if (!outEvent || !hasEvent) return LIBRA_INVALID_ARGUMENT;
+    *outEvent = {};
+    *hasEvent = 0;
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        if (!native->gameIo) return LIBRA_NOT_READY;
+        auto event = liberafx::NamedIoEvent{};
+        if (!native->gameIo->peekEvent(event)) return LIBRA_OK;
+        if (event.width > 4) return LIBRA_INVALID_VALUE_TYPE;
+        if (!native->gameIo->popEvent(event)) return LIBRA_INTERNAL_ERROR;
+        std::memcpy(outEvent->containerId, event.identity.containerId, 16);
+        outEvent->instanceId = event.identity.instanceId;
+        outEvent->portIndex = event.portIndex;
+        outEvent->kind = static_cast<uint8_t>(event.kind);
+        outEvent->width = event.width;
+        outEvent->isColor = event.isColor ? 1 : 0;
+        std::copy_n(std::begin(event.values), event.width, outEvent->values);
+        *hasEvent = 1;
+        return LIBRA_OK;
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_game_io_next_event_v2(
+    LibraInstance instance, LibraGameIoEventV2* outEvent, uint32_t* hasEvent)
+{
+    if (!outEvent || !hasEvent) return LIBRA_INVALID_ARGUMENT;
+    *outEvent = {};
+    *hasEvent = 0;
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        if (!native->gameIo) return LIBRA_NOT_READY;
+        auto event = liberafx::NamedIoEvent{};
+        if (!native->gameIo->popEvent(event)) return LIBRA_OK;
+        std::memcpy(outEvent->containerId, event.identity.containerId, 16);
+        outEvent->instanceId = event.identity.instanceId;
+        outEvent->portIndex = event.portIndex;
+        outEvent->kind = static_cast<uint8_t>(event.kind);
+        outEvent->width = event.width;
+        outEvent->isColor = event.isColor ? 1 : 0;
+        std::copy(std::begin(event.values), std::end(event.values), outEvent->values);
+        *hasEvent = 1;
+        return LIBRA_OK;
     });
 }
 LibraResult LIBRA_INTEROP_CALL libra_sample_sprite_atlas(

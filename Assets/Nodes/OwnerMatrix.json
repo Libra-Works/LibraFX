@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "typeId": "b0af61d2-29f6-4cc9-a71e-00000000010b",
+  "namespace": "LiberaFx",
+  "kind": "OwnerMatrix",
+  "name": "Owner Matrix",
+  "displayNameKey": "Matrix.Node.Owner",
+  "groupNameKey": "Matrix.Group",
+  "group": "Matrices / Transforms",
+  "portType": "Matrix",
+  "portCategory": "Parameter",
+  "outputPorts": [
+    { "id": "value", "name": "Matrix", "portType": "Matrix", "category": "Parameter" }
+  ]
+}

@@ -57,7 +57,7 @@ public sealed class ParameterEditorHost : ContentControl
         label.Bind(TextBlock.TextProperty, new Binding(nameof(parameter.Name)));
         label.TextTrimming = TextTrimming.CharacterEllipsis;
         label.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
-        label.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.Name)));
+        label.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.Description)));
         if (parameter.Type is "float" or "int" && editor is TextBox scalar)
             EnableScrubbing(label, scalar, parameter, nameof(parameter.ValueText));
         var disconnect = CreateActionButton("DisconnectParameterButton", EditorIcon.Disconnect);
@@ -69,12 +69,17 @@ public sealed class ParameterEditorHost : ContentControl
         reset.Bind(Button.CommandProperty, new Binding(nameof(parameter.ResetCommand)));
         reset.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.ResetHint)));
         reset.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.ResetHint)));
+        var publish = CreateActionButton("PublishGroupParameterButton", EditorIcon.Pin);
+        publish.Bind(Button.CommandProperty, new Binding(nameof(parameter.PublishCommand)));
+        publish.Bind(IsVisibleProperty, new Binding(nameof(parameter.ShowPublish)));
+        publish.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.PublishHint)));
+        publish.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.PublishHint)));
         var actions = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
             Spacing = 2,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Children = { disconnect, reset }
+            Children = { publish, disconnect, reset }
         };
         var row = new Grid
         {

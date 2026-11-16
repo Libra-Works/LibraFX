@@ -13,6 +13,10 @@ public readonly record struct GraphNodeKind(string Value)
     public static GraphNodeKind FloatX4 => new("FloatX4");
     public static GraphNodeKind Int32 => new("Int32");
     public static GraphNodeKind Signal => new("Signal");
+    public static GraphNodeKind InputProperty => new("InputProperty");
+    public static GraphNodeKind InputSignal => new("InputSignal");
+    public static GraphNodeKind OutputProperty => new("OutputProperty");
+    public static GraphNodeKind OutputSignal => new("OutputSignal");
     public static GraphNodeKind FloatFCurve => new("FloatFCurve");
     public static GraphNodeKind GraphGroup => new("GraphGroup");
     public static GraphNodeKind SpawnableGroup => new("SpawnableGroup");
@@ -121,6 +125,11 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("1774de17-a97b-4e31-b200-000000000015")] = "GroupOutputColor",
         [Guid.Parse("1774de17-a97b-4e31-b200-000000000016")] = "GroupOutputSignal",
         [Guid.Parse("1774de17-a97b-4e31-b200-000000000017")] = "GroupOutputMatrix",
+        [Guid.Parse("f43ba0db-ea8c-4c27-93ec-2da000000001")] = "InputProperty",
+        [Guid.Parse("f43ba0db-ea8c-4c27-93ec-2da000000002")] = "InputSignal",
+        [Guid.Parse("f43ba0db-ea8c-4c27-93ec-2da000000003")] = "OutputProperty",
+        [Guid.Parse("f43ba0db-ea8c-4c27-93ec-2da000000004")] = "OutputSignal",
+        [Guid.Parse("7ff078d2-dce1-42b0-93fb-b40200000001")] = "GameIoRuntimeOutputSignal",
         [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000001")] = "LifeTime",
         [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000002")] = "OnStart",
         [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000003")] = "SpawnOutputVector3",
@@ -221,6 +230,7 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000108")] = "DecomposeTransform",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000109")] = "RotatePoint",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000010a")] = "TranslatePoint",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000010b")] = "OwnerMatrix",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000001")] = "MatrixRuntimeTransformRow0",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000002")] = "MatrixRuntimeTransformRow1",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000003")] = "MatrixRuntimeTransformRow2",
@@ -248,7 +258,8 @@ public sealed record GraphNodeDefinition(
     public string QualifiedName => $"{Namespace}.{TypeName}";
     public string TypeName { get; init; } = string.Empty;
     public bool IsInternalRuntime => Namespace == "LiberaFx" &&
-        TypeName.StartsWith("MatrixRuntime", StringComparison.Ordinal);
+        (TypeName.StartsWith("MatrixRuntime", StringComparison.Ordinal) ||
+         TypeName.StartsWith("GameIoRuntime", StringComparison.Ordinal));
     public string? DisplayNameKey { get; init; }
     public string? GroupNameKey { get; init; }
     public IReadOnlyList<NodeParameterDefinition> Parameters { get; init; } = [];
@@ -461,7 +472,8 @@ public sealed record GraphNodeDefinition(
             }
             if (outputs.Count == 0 && node.TypeId != Guid.Parse("57980d8e-701f-443c-91f6-8db56a09d2fc") &&
                 !(BuiltInIds.TryGetValue(node.TypeId, out var builtInKind) &&
-                  GroupBoundarySchema.IsOutput(new GraphNodeKind(builtInKind))))
+                  (GroupBoundarySchema.IsOutput(new GraphNodeKind(builtInKind)) ||
+                   builtInKind is "OutputProperty" or "OutputSignal")))
                 throw new InvalidDataException("Output port definitions must not be empty.");
         }
         var parameterIds = new HashSet<string>(StringComparer.Ordinal);

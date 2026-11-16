@@ -63,6 +63,16 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+            <Button Content="{DynamicResource Text.Panels.PublishGroupCurves}"
+                    IsVisible="{Binding CanPublishCurves}"
+                    Command="{Binding PublishCurvesCommand}"
+                    ToolTip.Tip="{DynamicResource Text.Panels.PublishGroupCurvesHelp}" />
+            <Button Content="{DynamicResource Text.Panels.EditGroupCurves}"
+                    IsVisible="{Binding HasExposedCurves}" Click="OnEditGroupCurvesClick" />
+            <Button Content="{DynamicResource Text.Panels.ConfigureGroupItems}"
+                    IsVisible="{Binding HasExposedItems}" Click="OnConfigureGroupItemsClick" />
+            <TextBlock Text="{Binding GroupExposedDiagnostics}" TextWrapping="Wrap" FontSize="11"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <TextBlock Text="{Binding PluginStatus}" TextWrapping="Wrap" FontSize="11"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <TextBlock Text="{DynamicResource Text.Editor.Connections}" Margin="0,10,0,0"

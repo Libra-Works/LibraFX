@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Text;
 using System.Text.Json;
 using LiberaFx.Models.Graph;
 
@@ -47,32 +48,39 @@ public sealed class VfxProgram
     private const int CurveKeySize = 40;
     private const int MaxCurveKeysTotal = 100000;
     private const int MaxSignalRoutes = 1000000;
+    private const int GameIoHeaderSize = 8;
+    private const int GameIoPortRecordSize = 72;
     private readonly VfxInstruction[] _instructions;
     private readonly VfxTypedInstruction[] _typedInstructions;
     private readonly VfxCustomInstruction[] _customInstructions;
     private readonly VfxCurveInstruction[] _curveInstructions;
+    private readonly GameIoPort[] _gameIoPorts;
     private readonly ushort _version;
 
     public IReadOnlyList<VfxInstruction> Instructions { get; }
     public IReadOnlyList<VfxTypedInstruction> TypedInstructions { get; }
     public IReadOnlyList<VfxCustomInstruction> CustomInstructions { get; }
     public IReadOnlyList<VfxCurveInstruction> CurveInstructions { get; }
+    public IReadOnlyList<GameIoPort> GameIoPorts { get; }
     public ushort BinaryVersion => _version;
     public int WorkSizeBytes => checked(_instructions.Length * (_version == 1 ? sizeof(double) : 4 * sizeof(double)) +
         ((_customInstructions.Sum(item => item.BranchAdditionalTargets.Sum(targets => targets.Length)) + 1) / 2) * sizeof(double));
 
     private VfxProgram(VfxInstruction[] instructions, VfxTypedInstruction[] typedInstructions,
-        VfxCustomInstruction[] customInstructions, VfxCurveInstruction[] curveInstructions, ushort version)
+        VfxCustomInstruction[] customInstructions, VfxCurveInstruction[] curveInstructions, ushort version,
+        IReadOnlyList<GameIoPort>? gameIoPorts = null)
     {
         _instructions = instructions;
         _typedInstructions = typedInstructions;
         _customInstructions = customInstructions;
         _curveInstructions = curveInstructions;
+        _gameIoPorts = gameIoPorts?.ToArray() ?? [];
         _version = version;
         Instructions = Array.AsReadOnly(instructions);
         TypedInstructions = Array.AsReadOnly(typedInstructions);
         CustomInstructions = Array.AsReadOnly(customInstructions);
         CurveInstructions = Array.AsReadOnly(curveInstructions);
+        GameIoPorts = Array.AsReadOnly(_gameIoPorts);
     }
 
     public static VfxProgram Compile(GraphSnapshot graph)
@@ -89,7 +97,10 @@ public sealed class VfxProgram
     internal static VfxProgram CompileForPackage(GraphSnapshot graph)
     {
         ValidateForCompilation(graph);
-        graph = LowerLifecycle(graph);
+        graph = GroupExposedItems.Materialize(graph);
+        ValidateForCompilation(graph);
+        var (loweredGameIo, gameIoPorts) = GameIoSchema.Lower(graph);
+        graph = LowerLifecycle(loweredGameIo);
 #if LIBERAFX_CONVERTER
         GraphTypeDiagnostics.Validate(graph);
 #else
@@ -101,7 +112,16 @@ public sealed class VfxProgram
                     problem.SourceType, problem.ExpectedType))));
 #endif
         graph = GroupBoundaryLowering.Lower(graph);
-        graph = GraphPolymorphism.Lower(graph);
+        var matrixLowering = GraphPolymorphism.LowerWithOutputs(graph);
+        graph = matrixLowering.Graph;
+        gameIoPorts = gameIoPorts.Select(port =>
+        {
+            if (port.Width != 16) return port with { RuntimeNodeIds = [port.NodeId] };
+            if (!matrixLowering.Outputs.TryGetValue((port.NodeId, "value"), out var outputs) ||
+                outputs.Count != 4)
+                throw new InvalidDataException($"Matrix Game I/O port '{port.Name}' did not lower to four rows.");
+            return port with { RuntimeNodeIds = outputs.Select(output => output.NodeId).ToArray() };
+        }).ToArray();
         _ = RenderProgramBindings.CreateScene(graph, 0);
         var nodes = Flatten(graph)
             .Where(node => node.Kind != GraphNodeKind.Comment && node.Kind != GraphNodeKind.GraphGroup &&
@@ -113,7 +133,7 @@ public sealed class VfxProgram
         var definitions = GraphNodeDefinition.All.ToDictionary(item => item.Kind);
         if (nodes.Any(node => definitions[node.Kind].Runtime is not null ||
                               node.Kind == GraphNodeKind.SpawnableGroup || node.Kind == GraphNodeKind.Signal))
-            return CompileWithCustomNodes(graph, nodes, definitions);
+            return CompileWithCustomNodes(graph, nodes, definitions, gameIoPorts);
         foreach (var node in nodes)
             if (!TryOpcode(node.Kind.Value, out _))
                 throw new InvalidDataException($"Node '{node.Name}' ({node.Kind}) is not supported by the runtime.");
@@ -274,15 +294,17 @@ public sealed class VfxProgram
         }
 
         ValidateCurveBudget(curveCode);
-        var version = curveCode.Count != 0 ? (ushort)4 : needsTyped ? (ushort)2 : (ushort)1;
+        var version = gameIoPorts.Count != 0 ? (ushort)7 :
+            curveCode.Count != 0 ? (ushort)4 : needsTyped ? (ushort)2 : (ushort)1;
         var legacy = typedCode.Select(item => new VfxInstruction(item.NodeId, item.Opcode, item.InputA, item.InputB,
             item.DefaultA[0], item.DefaultB[0])).ToArray();
-        return new VfxProgram(legacy, typedCode, [], curveCode.ToArray(), version);
+        return new VfxProgram(legacy, typedCode, [], curveCode.ToArray(), version, gameIoPorts);
     }
 
     private static VfxProgram CompileWithCustomNodes(
         GraphSnapshot graph, GraphNodeSnapshot[] nodes,
-        IReadOnlyDictionary<GraphNodeKind, GraphNodeDefinition> definitions)
+        IReadOnlyDictionary<GraphNodeKind, GraphNodeDefinition> definitions,
+        IReadOnlyList<GameIoPort> gameIoPorts)
     {
         if (nodes.Length > MaxInstructions) throw new InvalidDataException("Too many runtime nodes.");
         var byId = nodes.ToDictionary(node => node.Id);
@@ -541,7 +563,8 @@ public sealed class VfxProgram
         var extraRoutes = customCode.Sum(item => item.BranchAdditionalTargets.Sum(targets => (long)targets.Length));
         if (extraRoutes > MaxSignalRoutes) throw new InvalidDataException("The graph contains too many Signal routes.");
         return new VfxProgram(legacy, typedCode, customCode.ToArray(), curveCode.ToArray(),
-            extraRoutes != 0 ? (ushort)5 : curveCode.Count != 0 ? (ushort)4 : (ushort)3);
+            gameIoPorts.Count != 0 ? (ushort)7 : extraRoutes != 0 ? (ushort)5 : curveCode.Count != 0 ? (ushort)4 : (ushort)3,
+            gameIoPorts);
     }
 
     public byte[] ToBinary()
@@ -572,7 +595,8 @@ public sealed class VfxProgram
         var curveBytes = checked(_curveInstructions.Sum(item => item.Keys.Length) * CurveKeySize);
         var routeBytes = checked(_customInstructions.Sum(item =>
             item.BranchAdditionalTargets.Sum(targets => targets.Length)) * sizeof(int));
-        var typedBytes = new byte[checked(instructionBytes + curveBytes + routeBytes)];
+        var gameIoBytes = _version >= 6 ? CreateGameIoMetadata(_gameIoPorts) : [];
+        var typedBytes = new byte[checked(instructionBytes + curveBytes + routeBytes + gameIoBytes.Length)];
         "LFXB"u8.CopyTo(typedBytes);
         BinaryPrimitives.WriteUInt16LittleEndian(typedBytes.AsSpan(4), _version);
         typedBytes[6] = 1;
@@ -658,7 +682,38 @@ public sealed class VfxProgram
                 }
             }
         }
+        gameIoBytes.CopyTo(typedBytes, instructionBytes + curveBytes + routeBytes);
         return typedBytes;
+    }
+
+    private static byte[] CreateGameIoMetadata(IReadOnlyList<GameIoPort> ports)
+    {
+        if (ports.Count == 0) return [];
+        var encodedNames = ports.Select(port => Encoding.UTF8.GetBytes(port.Name)).ToArray();
+        var size = checked(GameIoHeaderSize + encodedNames.Sum(name => GameIoPortRecordSize + name.Length + 1));
+        var bytes = new byte[size];
+        "LFIO"u8.CopyTo(bytes);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(4), checked((ushort)ports.Count));
+        var offset = GameIoHeaderSize;
+        for (var index = 0; index < ports.Count; index++)
+        {
+            var port = ports[index];
+            var name = encodedNames[index];
+            var runtimeNodeIds = port.RuntimeNodeIds ?? [port.NodeId];
+            if (runtimeNodeIds.Count is not (1 or 4) || name.Length is 0 or > 128 ||
+                (port.Width == 16) != (runtimeNodeIds.Count == 4))
+                throw new InvalidDataException($"Game I/O port '{port.Name}' has invalid runtime bindings.");
+            for (var row = 0; row < runtimeNodeIds.Count; row++)
+                runtimeNodeIds[row].TryWriteBytes(bytes.AsSpan(offset + row * 16), bigEndian: true, out _);
+            bytes[offset + 64] = (byte)port.Kind;
+            bytes[offset + 65] = checked((byte)port.Width);
+            bytes[offset + 66] = port.IsColor ? (byte)1 : (byte)0;
+            bytes[offset + 67] = checked((byte)runtimeNodeIds.Count);
+            BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(offset + 68), checked((ushort)name.Length));
+            name.CopyTo(bytes, offset + GameIoPortRecordSize);
+            offset += GameIoPortRecordSize + name.Length + 1;
+        }
+        return bytes;
     }
 
     private static void ValidateCurveBudget(IReadOnlyCollection<VfxCurveInstruction> curves)

@@ -133,8 +133,8 @@ public sealed class NativeSpawnableSession : IDisposable
                     {
                         Check(Fn<InstanceAction>("libra_generator_start")(state.Pool, value.Instance), container, value.Instance);
                         var life = state.Template.Lifecycle?.LifeNodeId is { } lifeId ? Read(container, value.Instance, lifeId).Lanes[0] : double.PositiveInfinity;
-                        if (life <= 0 || double.IsNaN(life) || (state.Template.Lifecycle?.LifeNodeId is not null && !double.IsFinite(life)))
-                            throw new InvalidDataException($"Spawnable {container} instance {value.Instance}: Life Time must be positive finite seconds.");
+                        if (life < 0 || double.IsNaN(life) || (state.Template.Lifecycle?.LifeNodeId is not null && !double.IsFinite(life)))
+                            throw new InvalidDataException($"Spawnable {container} instance {value.Instance}: Life Time must be nonnegative finite seconds.");
                         state.Instances.Add(value.Instance, (value.Start, life));
                         _events.Add(new(container, value.Instance, 1, value.Start, value.Seed));
                     }

@@ -25,6 +25,7 @@ public sealed class ProjectFileService
         ArgumentNullException.ThrowIfNull(workspace);
 
         var snapshot = workspace.CreateSnapshot();
+        GraphValidator.ValidateDocument(snapshot);
         var history = workspace.History.CreateSnapshot();
         var document = new LiberaFxProjectDocument
         {
@@ -40,7 +41,8 @@ public sealed class ProjectFileService
                     node.ChildGraph,
                     node.Parameters,
                     node.GroupAsset,
-                    node.IsPolymorphic))
+                    node.IsPolymorphic,
+                    node.GroupOverrides))
                 .ToList(),
             Connections = snapshot.Connections
                 .Select(connection => new LiberaFxProjectConnection(

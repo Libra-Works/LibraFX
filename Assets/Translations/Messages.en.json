@@ -130,6 +130,8 @@
   "Messages.Error.GraphChanged": "The graph changed; check for updates again.",
   "Messages.ProjectGroups": "Project / Groups",
   "Messages.History.PasteNodes": "Paste nodes",
+  "Messages.History.PublishGroupParameter": "Expose group parameter",
+  "Messages.History.ConfigureGroupParameter": "Configure group parameter",
   "Messages.History.DeleteNodes": "Delete nodes",
   "Messages.History.GroupNodes": "Group nodes",
   "Messages.History.MoveNodes": "Move nodes",

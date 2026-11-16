@@ -8,7 +8,7 @@ namespace LiberaFx.Services;
 
 public static class ProjectDocumentReader
 {
-    public const int CurrentFormatVersion = 9;
+    public const int CurrentFormatVersion = 10;
     private static readonly JsonSerializerOptions Options = new()
     {
         Converters = { new JsonStringEnumConverter() }
@@ -31,7 +31,7 @@ public static class ProjectDocumentReader
                 throw new InvalidDataException("The project contains an unknown node type.");
             nodes.Add(new GraphNodeSnapshot(node.Id, definition!.Kind, node.Name, node.X, node.Y,
                 definition.PortType, definition.PortCategory, node.Curve, node.ChildGraph, node.Parameters,
-                node.GroupAsset, node.IsPolymorphic));
+                node.GroupAsset, node.IsPolymorphic, node.GroupOverrides));
         }
         var connections = document.Connections.Select(connection => connection is null
             ? throw new InvalidDataException("The project contains an empty connection.")
@@ -42,6 +42,10 @@ public static class ProjectDocumentReader
         if (document.FormatVersion >= 2 && document.History is null)
             throw new InvalidDataException("The project file is missing its history timeline.");
         if (document.History is { } history) ValidateHistory(history, graph);
+        if (document.FormatVersion < 10 &&
+            (GroupExposedItems.ContainsMetadata(graph) ||
+             document.History?.Entries?.Any(entry => GroupExposedItems.ContainsMetadata(entry.State)) == true))
+            throw new InvalidDataException("This project uses group exposed items with an older format version.");
         return new LoadedLiberaFxProject(graph, document.History);
     }
 

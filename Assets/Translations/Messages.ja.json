@@ -130,6 +130,8 @@
   "Messages.Error.GraphChanged": "グラフが変更されました。もう一度更新を確認してください。",
   "Messages.ProjectGroups": "プロジェクト / グループ",
   "Messages.History.PasteNodes": "ノードを貼り付け",
+  "Messages.History.PublishGroupParameter": "グループパラメーターを公開",
+  "Messages.History.ConfigureGroupParameter": "グループパラメーターを設定",
   "Messages.History.DeleteNodes": "ノードを削除",
   "Messages.History.GroupNodes": "ノードをグループ化",
   "Messages.History.MoveNodes": "ノードを移動",

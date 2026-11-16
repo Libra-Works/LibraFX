@@ -9,7 +9,7 @@ public sealed record GroupAsset(int FormatVersion, Guid Id, string Name, long Re
 public sealed class GroupAssetLibrary
 {
     public const string FileExtension = ".lfxgroup";
-    private const int CurrentFormatVersion = 3;
+    private const int CurrentFormatVersion = 4;
     private const long MaxFileBytes = 16 * 1024 * 1024;
     private readonly string _directory;
     private static readonly JsonSerializerOptions Options = new()
@@ -130,6 +130,8 @@ public sealed class GroupAssetLibrary
             throw new InvalidDataException("Invalid group asset metadata.");
         try { GraphValidator.Validate(asset.Graph); }
         catch (ArgumentNullException ex) { throw new InvalidDataException("Incomplete group graph.", ex); }
+        if (asset.FormatVersion < 4 && GroupExposedItems.ContainsMetadata(asset.Graph))
+            throw new InvalidDataException("This group uses exposed items with an older format version.");
     }
 
     private void Write(GroupAsset asset, bool overwrite)

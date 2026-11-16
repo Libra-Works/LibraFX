@@ -53,6 +53,132 @@ auto readDouble(const std::uint8_t* bytes) noexcept -> double
     return value;
 }
 
+auto instruction(const std::uint8_t* bytes, std::uint16_t version,
+                 std::size_t index) noexcept -> const std::uint8_t*;
+
+auto validUtf8(const std::uint8_t* text, std::size_t length) noexcept -> bool
+{
+    for (auto index = std::size_t{}; index < length;)
+    {
+        auto first = text[index++];
+        auto codePoint = std::uint32_t{};
+        auto continuationCount = 0u;
+        if (first < 0x80) codePoint = first;
+        else if (first >= 0xc2 && first <= 0xdf)
+        {
+            codePoint = first & 0x1f;
+            continuationCount = 1;
+        }
+        else if (first >= 0xe0 && first <= 0xef)
+        {
+            codePoint = first & 0x0f;
+            continuationCount = 2;
+        }
+        else if (first >= 0xf0 && first <= 0xf4)
+        {
+            codePoint = first & 0x07;
+            continuationCount = 3;
+        }
+        else return false;
+        if (continuationCount > length - index) return false;
+        for (auto count = 0u; count < continuationCount; ++count)
+        {
+            auto next = text[index++];
+            if ((next & 0xc0) != 0x80) return false;
+            codePoint = (codePoint << 6) | (next & 0x3f);
+        }
+        if ((continuationCount == 1 && codePoint < 0x80) ||
+            (continuationCount == 2 && codePoint < 0x800) ||
+            (continuationCount == 3 && codePoint < 0x10000) ||
+            codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff) ||
+            codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f))
+            return false;
+    }
+    return true;
+}
+
+auto validGameIoMetadata(const std::uint8_t* data, std::size_t size,
+                         std::size_t offset, std::uint32_t instructionCount,
+                         std::uint16_t version) noexcept -> bool
+{
+    constexpr auto headerSize = std::size_t{8};
+    constexpr auto legacyRecordSize = std::size_t{24};
+    constexpr auto recordSize = std::size_t{72};
+    auto currentRecordSize = version == 6 ? legacyRecordSize : recordSize;
+    if (offset > size || size - offset < headerSize ||
+        std::memcmp(data + offset, "LFIO", 4) != 0 || read16(data + offset + 6) != 0)
+        return false;
+    auto portCount = read16(data + offset + 4);
+    if (portCount == 0 || portCount > 256) return false;
+    auto cursor = offset + headerSize;
+    for (auto port = std::uint16_t{}; port < portCount; ++port)
+    {
+        if (cursor > size || size - cursor < currentRecordSize) return false;
+        auto record = data + cursor;
+        auto kind = version == 6 ? record[16] : record[64];
+        auto width = version == 6 ? record[17] : record[65];
+        auto isColor = version == 6 ? record[18] : record[66];
+        auto bindingCount = version == 6 ? std::uint8_t{1} : record[67];
+        auto nameLength = read16(record + (version == 6 ? 20 : 68));
+        auto matrix = width == 16;
+        if (kind > (version == 6 ? 3 : 4) || isColor > 1 || nameLength == 0 || nameLength > 128 ||
+            (version == 6 && (record[19] != 0 || read16(record + 22) != 0)) ||
+            (version >= 7 && (read16(record + 70) != 0 || bindingCount != (matrix ? 4 : 1))) ||
+            (kind == 1 || kind == 3 ? width != 0 || isColor != 0 || bindingCount != 1 :
+                (matrix ? kind == 1 || kind == 3 || isColor != 0 :
+                    width < 1 || width > 4 || (isColor && width != 4)) ||
+                (kind == 4 && !matrix)))
+            return false;
+        auto nameOffset = cursor + currentRecordSize;
+        if (nameOffset > size || size - nameOffset < std::size_t{nameLength} + 1 ||
+            data[nameOffset + nameLength] != 0 || data[nameOffset] == ' ' ||
+            data[nameOffset + nameLength - 1] == ' ' ||
+            !validUtf8(data + nameOffset, nameLength))
+            return false;
+        for (auto row = 0u; row < bindingCount; ++row)
+        {
+            auto nodeId = version == 6 ? record : record + row * 16;
+            auto emptyId = true;
+            for (auto byte = 0u; byte < 16; ++byte) emptyId = emptyId && nodeId[byte] == 0;
+            if (emptyId) return false;
+            auto foundNode = false;
+            for (auto index = 0u; index < instructionCount; ++index)
+            {
+                auto current = instruction(data, 3, index);
+                if (std::memcmp(current, nodeId, 16) != 0) continue;
+                auto rowWidth = matrix ? std::uint8_t{4} : width;
+                if ((kind == 1 || kind == 3) ? current[16] != customSignalOpcode :
+                    current[17] != rowWidth || ((current[20] & 1) != 0) != (isColor != 0))
+                    return false;
+                foundNode = true;
+                break;
+            }
+            if (!foundNode) return false;
+            for (auto earlierRow = 0u; earlierRow < row; ++earlierRow)
+                if (std::memcmp(nodeId, record + earlierRow * 16, 16) == 0) return false;
+        }
+        for (auto previous = offset + headerSize; previous < cursor;)
+        {
+            auto previousRecord = data + previous;
+            auto previousKind = version == 6 ? previousRecord[16] : previousRecord[64];
+            auto previousBindingCount = version == 6 ? std::uint8_t{1} : previousRecord[67];
+            auto previousNameLength = read16(previousRecord + (version == 6 ? 20 : 68));
+            auto duplicateName = previousNameLength == nameLength &&
+                std::memcmp(data + previous + currentRecordSize, data + nameOffset, nameLength) == 0;
+            if (duplicateName && kind != 4 && previousKind != 4) return false;
+            for (auto row = 0u; row < bindingCount; ++row)
+            for (auto previousRow = 0u; previousRow < previousBindingCount; ++previousRow)
+                if (std::memcmp(version == 6 ? record : record + row * 16,
+                    version == 6 ? previousRecord : previousRecord + previousRow * 16, 16) == 0 &&
+                    kind != 2 && previousKind != 2)
+                return false;
+            previous += currentRecordSize + previousNameLength + 1;
+        }
+        cursor = nameOffset + nameLength + 1;
+    }
+    return cursor == size;
+}
+
 auto instruction(const std::uint8_t* bytes, std::uint16_t version, std::size_t index) noexcept -> const std::uint8_t*
 {
     auto stride = version == 1 ? legacyInstructionSize :
@@ -310,7 +436,8 @@ auto Program::load(const void* bytes, std::size_t size, Program& out,
     auto data = static_cast<const std::uint8_t*>(bytes);
     if (std::memcmp(data, "LFXB", 4) != 0) return Result::InvalidBinary;
     auto version = read16(data + 4);
-    if (version == 4 || version == 5) return load(bytes, size, nullptr, 0, nullptr, 0, out, profiling);
+    if (version >= 4 && version <= 7)
+        return load(bytes, size, nullptr, 0, nullptr, 0, out, profiling);
     if (version != 1 && version != 2) return Result::UnsupportedBinary;
     if (data[6] != 1) return Result::UnsupportedBinary;
     if (data[7] != 0) return Result::InvalidBinary;
@@ -370,6 +497,8 @@ auto Program::load(const void* bytes, std::size_t size, Program& out,
     out.signalRoutesOffset_ = 0;
     out.signalStackOffset_ = 0;
     out.signalStackCapacity_ = 0;
+    out.gameIoMetadataOffset_ = 0;
+    out.gameIoPortCount_ = 0;
     out.generation_ = nextProgramGeneration.fetch_add(1, std::memory_order_relaxed);
     return Result::Ok;
 }
@@ -383,7 +512,7 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
     auto data = static_cast<const std::uint8_t*>(bytes);
     if (std::memcmp(data, "LFXB", 4) != 0) return Result::InvalidBinary;
     auto version = read16(data + 4);
-    if (version != 3 && version != 4 && version != 5) return load(bytes, size, out, profiling);
+    if (version < 3 || version > 7) return load(bytes, size, out, profiling);
     auto profileScope = ProfileScope(profiling, ProfileEvent::Load);
     if (size < typedHeaderSize) return Result::InvalidBinary;
     if (data[6] != 1) return Result::UnsupportedBinary;
@@ -600,7 +729,7 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
     if (version == 4 && expectedCurveOffset != curveDataBytes) return Result::InvalidBinary;
     auto routeDataOffset = instructionBytes + expectedCurveOffset;
     auto routeBytes = std::size_t{0};
-    if (version == 5)
+    if (version >= 5)
     {
         for (auto index = std::uint32_t{0}; index < count; ++index)
         {
@@ -616,8 +745,9 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
                     continue;
                 }
                 if (branch >= current[19] || read32(current + 208 + branch * 4) == noInput ||
-                    offset != routeBytes || extraCount > maxSignalRoutes - routeBytes / 4 ||
-                    extraCount > (size - routeDataOffset - routeBytes) / 4)
+                        offset != routeBytes || extraCount > maxSignalRoutes - routeBytes / 4 ||
+                        routeBytes > size - routeDataOffset ||
+                        extraCount > (size - routeDataOffset - routeBytes) / 4)
                     return Result::InvalidBinary;
                 for (auto entry = 0u; entry < extraCount; ++entry)
                 {
@@ -629,7 +759,10 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
                 routeBytes += std::size_t{extraCount} * 4;
             }
         }
-        if (routeBytes != size - routeDataOffset) return Result::InvalidBinary;
+        if (version == 5 && routeBytes != size - routeDataOffset) return Result::InvalidBinary;
+        if (version >= 6 &&
+            !validGameIoMetadata(data, size, routeDataOffset + routeBytes, count, version))
+            return Result::InvalidBinary;
     }
     auto stackOffset = totalWorkBytes;
     if (routeBytes != 0)
@@ -672,8 +805,33 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
     out.signalRoutesOffset_ = routeDataOffset;
     out.signalStackOffset_ = stackOffset;
     out.signalStackCapacity_ = routeBytes / 4;
+    out.gameIoMetadataOffset_ = version >= 6 ? routeDataOffset + routeBytes : 0;
+    out.gameIoPortCount_ = version >= 6 ?
+        read16(data + out.gameIoMetadataOffset_ + 4) : 0;
     out.generation_ = nextProgramGeneration.fetch_add(1, std::memory_order_relaxed);
     return Result::Ok;
+}
+
+auto Program::gameIoPort(std::size_t index, ProgramGameIoPort& out) const noexcept -> bool
+{
+    out = {};
+    if (index >= gameIoPortCount_ || gameIoMetadataOffset_ == 0) return false;
+    auto cursor = gameIoMetadataOffset_ + 8;
+    auto recordSize = version_ == 6 ? std::size_t{24} : std::size_t{72};
+    for (auto current = std::size_t{}; current < index; ++current)
+        cursor += recordSize + read16(bytes_ + cursor + (version_ == 6 ? 20 : 68)) + 1;
+    auto record = bytes_ + cursor;
+    auto nameLength = read16(record + (version_ == 6 ? 20 : 68));
+    out.name = reinterpret_cast<const char*>(record + recordSize);
+    std::memcpy(out.nodeId, record, 16);
+    out.kind = version_ == 6 ? record[16] : record[64];
+    out.width = version_ == 6 ? record[17] : record[65];
+    out.isColor = version_ == 6 ? record[18] : record[66];
+    out.nodeCount = version_ == 6 ? 1 : record[67];
+    if (version_ >= 7)
+        for (auto row = 1u; row < out.nodeCount; ++row)
+            std::memcpy(out.additionalNodeIds[row - 1], record + row * 16, 16);
+    return nameLength != 0;
 }
 
 auto Program::workBytes() const noexcept -> std::size_t
@@ -1110,6 +1268,16 @@ auto Instance::result() const noexcept -> Result
     return phase_.load(std::memory_order_acquire) == Phase::Complete ? result_ : Result::NotReady;
 }
 
+auto Instance::setSignalObserver(SignalObserver observer, void* context) noexcept -> Result
+{
+    if (dispatching_ || phase_.load(std::memory_order_acquire) == Phase::Running)
+        return Result::Busy;
+    if (observer != nullptr && context == nullptr) return Result::InvalidArgument;
+    signalObserver_ = observer;
+    signalObserverContext_ = context;
+    return Result::Ok;
+}
+
 auto Instance::value(const std::uint8_t nodeId[16], double& out) const noexcept -> Result
 {
     auto components = std::array<double, 4>{};
@@ -1213,6 +1381,11 @@ auto Instance::dispatchSignal(const SignalHandle& entry, double time,
         auto descriptor = program_->bindings_[index].descriptor;
         if (descriptor == nullptr || descriptor->execution != CustomExecution::Signal)
             return Result::UnknownCustomNode;
+        if (signalObserver_ != nullptr)
+        {
+            status = signalObserver_(signalObserverContext_, current);
+            if (status != Result::Ok) return status;
+        }
         alignas(customWorkAlignment) auto inputs = std::array<double, customMaxPorts * 4>{};
         auto inputWidths = std::array<std::uint8_t, customMaxPorts>{};
         alignas(customWorkAlignment) auto constants = std::array<double, customMaxPorts * 4>{};

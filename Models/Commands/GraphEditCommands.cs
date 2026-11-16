@@ -35,12 +35,23 @@ public sealed class SetGroupAssetCommand(
     public void Undo() => node.SetGroupAssetValue(previous);
 }
 
+public sealed class SetGroupOverridesCommand(
+    GraphNodeViewModel node,
+    IReadOnlyList<GroupInstanceValue>? previous,
+    IReadOnlyList<GroupInstanceValue>? current) : IUndoableCommand
+{
+    public string Description => $"Edit {node.Name}: group instance value";
+    public void Execute() => node.SetGroupOverridesValue(current);
+    public void Undo() => node.SetGroupOverridesValue(previous);
+}
+
 public sealed class ReplaceGraphSnapshotCommand(
     GraphWorkspaceViewModel graph,
     GraphSnapshot before,
-    GraphSnapshot after) : IUndoableCommand
+    GraphSnapshot after,
+    string? description = null) : IUndoableCommand
 {
-    public string Description => "Update linked groups";
+    public string Description => description ?? "Update linked groups";
     public void Execute() => graph.RestoreSnapshotForCommand(after);
     public void Undo() => graph.RestoreSnapshotForCommand(before);
 }

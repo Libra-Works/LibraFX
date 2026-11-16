@@ -10,11 +10,14 @@ using LiberaFx.Services;
 
 namespace LiberaFx.ViewModels;
 
-public sealed class CurveEditorViewModel : Tool
+public sealed class CurveEditorViewModel : Tool, IDisposable
 {
     private readonly ActiveGraphProvider _activeGraph;
     private GraphWorkspaceViewModel _graph;
     private GraphNodeViewModel? _node;
+    private GraphNodeViewModel? _group;
+    private readonly Dictionary<Guid, (GroupExposedItem Item, int Index)> _groupChannels = [];
+    private readonly List<GraphNodeViewModel> _groupNodes = [];
     private FCurveSnapshot? _preview;
     private readonly HashSet<Guid> _selectedKeyIds = [];
     private Guid? _selectionNodeId;
@@ -60,7 +63,7 @@ public sealed class CurveEditorViewModel : Tool
     public IReadOnlyList<CurveInterpolation> Interpolations { get; } = Enum.GetValues<CurveInterpolation>();
     public string Status { get => LocalizationService.Shared.Get(_status); private set => SetProperty(ref _status, value); }
     public bool SnapToFrames { get => _snapToFrames; set => SetProperty(ref _snapToFrames, value); }
-    public string TimeUnitLabel => Playback?.TimeUnitLabel ?? "Timeline.Seconds";
+    public string TimeUnitLabel => Playback?.TimeUnitLabel ?? LocalizationService.Shared.Get("Timeline.Seconds");
     public IRelayCommand AddKeyCommand { get; }
     public IRelayCommand DeleteKeyCommand { get; }
 
@@ -100,17 +103,7 @@ public sealed class CurveEditorViewModel : Tool
     public CurveEditorViewModel(ActiveGraphProvider activeGraph, EditorPlayback? playback = null)
     {
         Playback = playback;
-        if (playback is not null) playback.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(EditorPlayback.Frame)) OnPropertyChanged(nameof(PlayheadFrame));
-            if (e.PropertyName is nameof(EditorPlayback.FramesPerSecond) or nameof(EditorPlayback.ShowSeconds))
-            {
-                OnPropertyChanged(nameof(TimeUnitLabel));
-                OnPropertyChanged(nameof(FrameText));
-                OnPropertyChanged(nameof(InSlopeText));
-                OnPropertyChanged(nameof(OutSlopeText));
-            }
-        };
+        if (playback is not null) playback.PropertyChanged += OnPlaybackChanged;
         _activeGraph = activeGraph;
         _graph = activeGraph.Graph;
         _activeGraph.PropertyChanged += OnActiveGraphChanged;
@@ -126,13 +119,28 @@ public sealed class CurveEditorViewModel : Tool
     public void SelectChannel(CurveChannelViewModel channel)
     {
         if (_graph.Nodes.Contains(channel.Node)) _graph.SelectNode(channel.Node);
+        else if (_groupChannels.ContainsKey(channel.Node.Id))
+            SetNode(channel.Node);
+    }
+
+    private void OnPlaybackChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(EditorPlayback.Frame)) OnPropertyChanged(nameof(PlayheadFrame));
+        if (e.PropertyName is nameof(EditorPlayback.FramesPerSecond) or nameof(EditorPlayback.ShowSeconds))
+        {
+            OnPropertyChanged(nameof(TimeUnitLabel));
+            OnPropertyChanged(nameof(FrameText));
+            OnPropertyChanged(nameof(InSlopeText));
+            OnPropertyChanged(nameof(OutSlopeText));
+        }
     }
 
     private void OnNodesChanged(object? sender, NotifyCollectionChangedEventArgs e) => SynchronizeChannels();
 
     private void SynchronizeChannels()
     {
-        var current = _graph.Nodes.Where(node => node.Curve is not null).ToHashSet();
+        var channelNodes = _group is null ? _graph.Nodes.Where(node => node.Curve is not null).ToArray() : _groupNodes.ToArray();
+        var current = channelNodes.ToHashSet();
         foreach (var node in _observedNodes.Except(current).ToArray())
         {
             node.PropertyChanged -= OnNodeChanged;
@@ -144,7 +152,7 @@ public sealed class CurveEditorViewModel : Tool
             _observedNodes.Add(node);
         }
         Channels.Clear();
-        foreach (var node in _graph.Nodes.Where(node => node.Curve is not null))
+        foreach (var node in channelNodes)
         {
             var brush = ThemeSettingsService.EditorBrush(ChannelColors[Channels.Count % ChannelColors.Length]);
             Channels.Add(new CurveChannelViewModel(node, brush, _channelVisibility.GetValueOrDefault(node.Id, true), visible =>
@@ -186,7 +194,7 @@ public sealed class CurveEditorViewModel : Tool
         try
         {
             var updated = new FCurveSnapshot(curve.Keys.Append(key).OrderBy(item => item.TimeSeconds).ToArray());
-            _graph.SetCurve(_node, updated, LocalizationService.Shared.Get("Messages.History.AddCurveKey"));
+            SetCurve(_node, updated, LocalizationService.Shared.Get("Messages.History.AddCurveKey"));
             _selectedKeyIds.Clear();
             _selectedKeyIds.Add(key.Id);
             Status = "Messages.CurveKeyAdded";
@@ -233,7 +241,7 @@ public sealed class CurveEditorViewModel : Tool
         var preview = _preview;
         _preview = null;
         if (preview is not null && _node is not null && _previewRevision == _graph.History.CurrentNodeId)
-            _graph.SetCurve(_node, preview, LocalizationService.Shared.Get(
+            SetCurve(_node, preview, LocalizationService.Shared.Get(
                 SelectedKeys.Count > 1 ? "Messages.History.MoveCurveKeys" : "Messages.History.MoveCurveKey"));
         _previewRevision = null;
         NotifyCurve();
@@ -256,7 +264,7 @@ public sealed class CurveEditorViewModel : Tool
     private void DeleteSelectedKeys()
     {
         if (_node?.Curve is not { } curve || _selectedKeyIds.Count == 0) return;
-        _graph.SetCurve(_node, new FCurveSnapshot(curve.Keys.Where(key => !_selectedKeyIds.Contains(key.Id)).ToArray()),
+        SetCurve(_node, new FCurveSnapshot(curve.Keys.Where(key => !_selectedKeyIds.Contains(key.Id)).ToArray()),
             LocalizationService.Shared.Get(_selectedKeyIds.Count > 1 ? "Messages.History.DeleteCurveKeys" : "Messages.History.DeleteCurveKey"));
         _selectedKeyIds.Clear();
         NotifyCurve();
@@ -305,7 +313,7 @@ public sealed class CurveEditorViewModel : Tool
         {
             var updated = new FCurveSnapshot(curve.Keys.Select(item => item.Id == key.Id ? key : item)
                 .OrderBy(item => item.TimeSeconds).ToArray());
-            _graph.SetCurve(_node, updated, description);
+            SetCurve(_node, updated, description);
             Status = "Messages.CurveKeyUpdated";
         }
         catch (InvalidDataException ex) { Status = ex.Message; }
@@ -317,6 +325,10 @@ public sealed class CurveEditorViewModel : Tool
         if (e.PropertyName != nameof(ActiveGraphProvider.Graph)) return;
         _graph.PropertyChanged -= OnGraphChanged;
         _graph.Nodes.CollectionChanged -= OnNodesChanged;
+        if (_group is not null) _group.PropertyChanged -= OnGroupChanged;
+        _group = null;
+        _groupNodes.Clear();
+        _groupChannels.Clear();
         foreach (var node in _observedNodes) node.PropertyChanged -= OnNodeChanged;
         _observedNodes.Clear();
         _graph = _activeGraph.Graph;
@@ -350,7 +362,28 @@ public sealed class CurveEditorViewModel : Tool
 
     private void RefreshNode()
     {
-        var node = _graph.SelectedNode?.Curve is not null ? _graph.SelectedNode : null;
+        var group = _graph.SelectedNode is { ChildGraph: not null } selected ? selected : null;
+        if (!ReferenceEquals(group, _group))
+        {
+            if (_group is not null) _group.PropertyChanged -= OnGroupChanged;
+            _group = group;
+            _groupNodes.Clear();
+            _groupChannels.Clear();
+            if (group is not null)
+            {
+                group.PropertyChanged += OnGroupChanged;
+                BuildGroupChannels(group);
+            }
+            SynchronizeChannels();
+        }
+        var node = group is null
+            ? _graph.SelectedNode?.Curve is not null ? _graph.SelectedNode : null
+            : _groupNodes.FirstOrDefault();
+        SetNode(node);
+    }
+
+    private void SetNode(GraphNodeViewModel? node)
+    {
         if (ReferenceEquals(node, _node)) return;
         _node = node;
         _preview = null;
@@ -364,6 +397,73 @@ public sealed class CurveEditorViewModel : Tool
         Status = _node is null ? "Messages.SelectCurveNode" : "Messages.CurveEditingHint";
         OnPropertyChanged(nameof(Node));
         NotifyCurve();
+    }
+
+    private void BuildGroupChannels(GraphNodeViewModel group)
+    {
+        var child = group.ChildGraph!;
+        foreach (var item in (child.ExposedItems ?? []).Where(item => item.Editor is "curve" or "vector3Curve")
+                     .OrderBy(item => item.Order))
+        {
+            var targets = item.Targets.Select(target => child.Nodes.FirstOrDefault(node =>
+                node.Id == target.NodeId && node.Kind == GraphNodeKind.FloatFCurve && node.Curve is not null)).ToArray();
+            var value = group.GroupOverrides?.FirstOrDefault(candidate => candidate.ItemId == item.Id);
+            if (targets.Any(node => node is null) || value is not null &&
+                (value.Components.Count != targets.Length || value.Components.Any(component => component.Curve is null)))
+                continue;
+            for (var index = 0; index < targets.Length; index++)
+            {
+                var target = targets[index]!;
+                if (_groupChannels.ContainsKey(target.Id)) continue;
+                var name = item.Editor == "vector3Curve" ? $"{item.Name} / {"XYZ"[index]}" : item.Name;
+                var definition = GraphNodeDefinition.All.Single(candidate => candidate.Kind == target.Kind);
+                var curve = value?.Components[index].Curve ?? target.Curve!;
+                var node = new GraphNodeViewModel(_graph, definition, name, 0, 0, target.Id, curve);
+                _groupNodes.Add(node);
+                _groupChannels.Add(node.Id, (item, index));
+            }
+        }
+    }
+
+    private void OnGroupChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(GraphNodeViewModel.GroupOverrides) || _group is null) return;
+        foreach (var node in _groupNodes)
+        {
+            var (item, index) = _groupChannels[node.Id];
+            var value = _group.GroupOverrides?.FirstOrDefault(candidate => candidate.ItemId == item.Id);
+            var curve = value?.Components[index].Curve ??
+                _group.ChildGraph!.Nodes.Single(target => target.Id == node.Id).Curve!;
+            node.SetCurveValue(curve);
+        }
+    }
+
+    private void SetCurve(GraphNodeViewModel node, FCurveSnapshot curve, string description)
+    {
+        if (_group is null || !_groupChannels.TryGetValue(node.Id, out var channel))
+        {
+            _graph.SetCurve(node, curve, description);
+            return;
+        }
+        var previous = _group.GroupOverrides?.FirstOrDefault(value => value.ItemId == channel.Item.Id);
+        var components = channel.Item.Targets.Select((target, index) =>
+        {
+            var current = previous?.Components[index].Curve ??
+                _group.ChildGraph!.Nodes.Single(candidate => candidate.Id == target.NodeId).Curve!;
+            return new GroupInstanceComponent(Curve: index == channel.Index ? curve : current);
+        }).ToArray();
+        _graph.SetGroupInstanceValue(_group, new(channel.Item.Id, components));
+    }
+
+    public void Dispose()
+    {
+        if (Playback is not null) Playback.PropertyChanged -= OnPlaybackChanged;
+        _activeGraph.PropertyChanged -= OnActiveGraphChanged;
+        _graph.PropertyChanged -= OnGraphChanged;
+        _graph.Nodes.CollectionChanged -= OnNodesChanged;
+        if (_group is not null) _group.PropertyChanged -= OnGroupChanged;
+        foreach (var node in _observedNodes) node.PropertyChanged -= OnNodeChanged;
+        _observedNodes.Clear();
     }
 
     private void NotifyCurve()

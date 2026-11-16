@@ -15,6 +15,16 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--group-exposed-schema"])
+        {
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")))
+                throw new ArgumentException("Set isolated LIBERAFX_DATA_ROOT for group exposed metadata regression.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            GroupExposedSchemaTests.Run();
+            GroupExposedInterfaceTests.Run();
+            Console.WriteLine("Group exposed metadata persistence, cloning and history checks passed.");
+            return;
+        }
         if (args is ["--custom-node-compilation"])
         {
             if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")))
@@ -22,6 +32,15 @@ internal static class Program
             AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
             LiberaFx.Tests.CustomNodeCompilationTests.Run();
             Console.WriteLine("Custom node compilation regression passed (no windows).");
+            return;
+        }
+        if (args is ["--game-io"])
+        {
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")))
+                throw new ArgumentException("Set isolated LIBERAFX_DATA_ROOT for Game I/O regression.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            LiberaFx.Tests.GameIoCompilationTests.Run();
+            Console.WriteLine("Game I/O graph, metadata, signal lowering and package regressions passed.");
             return;
         }
         if (args is ["--compiled-preview-protocol"])
@@ -334,6 +353,8 @@ internal static class Program
         Console.WriteLine("Vector operations, explicit conversions and persistent multi-output Break pins passed.");
         LiberaFx.Tests.CustomNodeCompilationTests.Run();
         Console.WriteLine("Project-native parameter/signal node compilation and mixed port categories passed.");
+        LiberaFx.Tests.GameIoCompilationTests.Run();
+        Console.WriteLine("Root Game I/O compilation and metadata regressions passed.");
     }
 
     private static byte[] CreateLargeImage(BitmapEncoderOptions options)

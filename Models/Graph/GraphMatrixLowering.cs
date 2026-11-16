@@ -13,14 +13,20 @@ public static class GraphMatrixLowering
     private static readonly HashSet<string> Kinds =
         ["MatrixCompose", "MatrixBreak", "Transform", "MatrixMultiply", "TransformPoint",
             "TransformDirection", "MatrixInverse", "DecomposeTransform", "MatrixRuntimeBoundary",
-            "RotatePoint", "TranslatePoint"];
+            "RotatePoint", "TranslatePoint", "OwnerMatrix"];
 
     public static bool IsMatrixNode(GraphNodeKind kind) => Kinds.Contains(kind.Value);
+    private static bool IsMatrixNode(GraphNodeSnapshot node) => IsMatrixNode(node.Kind) ||
+        (node.Kind == GraphNodeKind.InputProperty || node.Kind == GraphNodeKind.OutputProperty) &&
+        GameIoSchema.Effective(GraphNodeDefinition.All.Single(item => item.Kind == node.Kind),
+            node.Parameters).PortType == "Matrix";
 
     public static MatrixLoweringResult Lower(GraphSnapshot graph)
     {
         var definitions = GraphNodeDefinition.All.ToDictionary(item => item.Kind);
         var byName = GraphNodeDefinition.All.ToDictionary(item => item.QualifiedName);
+        GraphNodeDefinition Definition(GraphNodeSnapshot node) =>
+            GameIoSchema.Effective(definitions[node.Kind], node.Parameters);
         var occupied = new HashSet<Guid>();
         var outputs = new Dictionary<(Guid, string?), IReadOnlyList<GraphRuntimeOutput>>();
         void Collect(GraphSnapshot current)
@@ -46,8 +52,8 @@ public static class GraphMatrixLowering
             {
                 if (built.Contains(node.Id)) return;
                 if (!visiting.Add(node.Id)) throw new InvalidDataException("The graph contains a cycle.");
-                var definition = definitions[node.Kind];
-                if (!IsMatrixNode(node.Kind))
+                var definition = Definition(node);
+                if (!IsMatrixNode(node))
                 {
                     lowered.Add(node with { ChildGraph = node.ChildGraph is null ? null : Rewrite(node.ChildGraph) });
                     if (definition.OutputPorts is null)
@@ -84,7 +90,7 @@ public static class GraphMatrixLowering
                         if (matches.Length == 0) return null;
                         var edge = matches[0];
                         var source = original[edge.SourceNodeId];
-                        if (definitions[source.Kind].GetOutputPortType(edge.SourcePortId) != expectedType)
+                        if (Definition(source).GetOutputPortType(edge.SourcePortId) != expectedType)
                             throw new InvalidDataException($"Matrix input '{port}' expects {expectedType}.");
                         Build(source);
                         return outputs[(source.Id, edge.SourcePortId)];
@@ -134,6 +140,16 @@ public static class GraphMatrixLowering
                     {
                         case "MatrixRuntimeBoundary":
                             Output("value", Matrix("matrix"));
+                            break;
+                        case "OwnerMatrix":
+                        case "InputProperty":
+                            Output("value", Enumerable.Range(0, 4).Select(row =>
+                                Emit("FloatX4", $"input-row{row}",
+                                    [("value", "vector4", Enumerable.Range(0, 4)
+                                        .Select(column => row == column ? 1d : 0d).ToArray())])).ToArray());
+                            break;
+                        case "OutputProperty":
+                            Output("value", Matrix("value"));
                             break;
                         case "MatrixCompose":
                             Output("value", Enumerable.Range(0, 4).Select(row => Numeric($"row{row}", 4)).ToArray());
@@ -222,7 +238,7 @@ public static class GraphMatrixLowering
             foreach (var node in current.Nodes) Build(node);
             foreach (var edge in current.Connections)
             {
-                if (IsMatrixNode(original[edge.TargetNodeId].Kind)) continue;
+                if (IsMatrixNode(original[edge.TargetNodeId])) continue;
                 var source = outputs[(edge.SourceNodeId, edge.SourcePortId)];
                 if (source.Count != 1)
                     throw new InvalidDataException("A Matrix output requires a Matrix-aware input.");

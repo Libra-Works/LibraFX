@@ -6,13 +6,13 @@
              x:DataType="vm:CurveEditorViewModel">
     <Grid RowDefinitions="Auto,*,Auto">
         <StackPanel Orientation="Horizontal" Spacing="8" Margin="6,4">
-            <views:IconButton Icon="Add" Command="{Binding AddKeyCommand}"
+            <views:IconButton x:Name="CurveAddKeyButton" Icon="Add" Command="{Binding AddKeyCommand}"
                               ToolTip.Tip="{DynamicResource Text.Panels.AddKey}"
                               AutomationProperties.Name="{DynamicResource Text.Panels.AddKey}" />
             <views:IconButton Icon="Delete" Command="{Binding DeleteKeyCommand}"
                               ToolTip.Tip="{DynamicResource Text.Panels.DeleteKey}"
                               AutomationProperties.Name="{DynamicResource Text.Panels.DeleteKey}" />
-            <views:IconButton Icon="Frame" Click="OnFrameAllClick"
+            <views:IconButton x:Name="CurveFrameAllButton" Icon="Frame" Click="OnFrameAllClick"
                               ToolTip.Tip="{DynamicResource Text.Panels.FrameAll}"
                               AutomationProperties.Name="{DynamicResource Text.Panels.FrameAll}" />
             <views:IconButton Icon="Frame" Click="OnFrameSelectedClick" IsEnabled="{Binding HasSelectedKeys}"
@@ -64,7 +64,7 @@
                     </Grid>
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                         <TextBlock Text="{DynamicResource Text.Panels.Value}" VerticalAlignment="Center" />
-                        <TextBox Grid.Column="1" Text="{Binding ValueText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                        <TextBox x:Name="CurveValueBox" Grid.Column="1" Text="{Binding ValueText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
                     </Grid>
                     <ComboBox ItemsSource="{Binding Interpolations}"
                               SelectedItem="{Binding SelectedInterpolation, Mode=TwoWay}">

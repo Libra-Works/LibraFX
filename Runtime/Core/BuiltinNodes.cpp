@@ -214,7 +214,21 @@ auto makeSignalPassthroughDescriptor() noexcept -> CustomNodeDescriptor
     return descriptor;
 }
 
-const std::array<CustomNodeDescriptor, 61> descriptors = {
+auto makeGameIoOutputSignalDescriptor() noexcept -> CustomNodeDescriptor
+{
+    auto descriptor = CustomNodeDescriptor{};
+    const auto typeId = std::array<std::uint8_t, 16>{
+        0x7f, 0xf0, 0x78, 0xd2, 0xdc, 0xe1, 0x42, 0xb0,
+        0x93, 0xfb, 0xb4, 0x02, 0x00, 0x00, 0x00, 0x01};
+    std::copy(typeId.begin(), typeId.end(), descriptor.typeId);
+    descriptor.abiVersion = 1;
+    descriptor.execution = CustomExecution::Signal;
+    descriptor.branchCount = 1;
+    descriptor.function = signalPassthrough;
+    return descriptor;
+}
+
+const std::array<CustomNodeDescriptor, 62> descriptors = {
     makeDescriptor<Op::Abs, 1>(1, 1, 1), makeDescriptor<Op::Floor, 1>(2, 2, 1),
     makeDescriptor<Op::Round, 1>(3, 1, 1), makeDescriptor<Op::Sign, 1>(4, 1, 1),
     makeDescriptor<Op::Sqrt, 1>(5, 1, 1), makeDescriptor<Op::Pow, 1>(6, 2, 1),
@@ -253,7 +267,7 @@ const std::array<CustomNodeDescriptor, 61> descriptors = {
     makeMatrixDescriptor<MatrixOp::DecomposeRotation, 3>(11, 4, 4),
     makeMatrixDescriptor<MatrixOp::DecomposeScale, 3>(12, 4, 4),
     makeMatrixDescriptor<MatrixOp::DecomposeValid, 1>(13, 4, 4),
-    makeSignalPassthroughDescriptor()
+    makeSignalPassthroughDescriptor(), makeGameIoOutputSignalDescriptor()
 };
 }
 

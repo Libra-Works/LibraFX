@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "typeId": "1e309707-1fa0-4d38-aed9-42d000000001",
+  "namespace": "LiberaFx",
+  "name": "PropertyValueType",
+  "values": [
+    { "value": 0, "name": "Float", "displayNameKey": "Editor.Option.PropertyFloat" },
+    { "value": 1, "name": "Vector2", "displayNameKey": "Editor.Option.PropertyVector2" },
+    { "value": 2, "name": "Vector3", "displayNameKey": "Editor.Option.PropertyVector3" },
+    { "value": 3, "name": "Vector4", "displayNameKey": "Editor.Option.PropertyVector4" },
+    { "value": 4, "name": "Color", "displayNameKey": "Editor.Option.PropertyColor" },
+    { "value": 5, "name": "Matrix", "displayNameKey": "Editor.Option.PropertyMatrix" }
+  ]
+}

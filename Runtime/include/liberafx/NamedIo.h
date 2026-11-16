@@ -8,15 +8,17 @@
 namespace liberafx {
 
 enum class NamedIoKind : std::uint8_t {
-    InputProperty, InputSignal, OutputProperty, OutputSignal
+    InputProperty, InputSignal, OutputProperty, OutputSignal, OwnerMatrix
 };
 
 struct NamedIoPort final {
     const char* name = nullptr;
     NamedIoKind kind{};
     std::uint8_t nodeId[16]{};
+    std::uint8_t additionalNodeIds[3][16]{};
     std::uint8_t width = 0;
     bool isColor = false;
+    std::uint8_t nodeCount = 0;
 };
 
 struct NamedIoIdentity final {
@@ -30,7 +32,7 @@ struct NamedIoEvent final {
     NamedIoKind kind{};
     std::uint8_t width = 0;
     bool isColor = false;
-    double values[4]{};
+    double values[16]{};
 };
 
 // Explicit game-facing ports only, not group-local boundary ports. An
@@ -48,6 +50,7 @@ public:
     NamedIo& operator=(const NamedIo&) = delete;
 
     Result setProperty(const char* name, const double* values, std::size_t width) noexcept;
+    Result setOwnerMatrix(const double* values, std::size_t width) noexcept;
     // Must be called after initial input/binding setup. Calling it again is
     // idempotent; an explicit restart uses a newly initialized instance/facade.
     Result start(double time, const std::uint8_t* onStartNodeId,
@@ -59,10 +62,12 @@ public:
     // Retry this after draining if update reported QueueRejected.
     Result publishProperties() noexcept;
     bool popEvent(NamedIoEvent& out) noexcept;
+    bool peekEvent(NamedIoEvent& out) const noexcept;
     const char* portName(std::size_t index) const noexcept;
 
 private:
     struct Impl;
+    static Result observeSignal(void* context, const std::uint8_t nodeId[16]) noexcept;
     explicit NamedIo(std::unique_ptr<Impl> impl) noexcept;
     std::unique_ptr<Impl> impl_;
 };
