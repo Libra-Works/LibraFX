@@ -688,6 +688,11 @@ internal static class GroupBoundaryTests
         File.WriteAllBytes(Path.Combine(directory, "signal-program.lfxb"),
             SpawnableGroupPackage.Compile(signalGraph.CreateSnapshot()).ParentBytecode);
         File.WriteAllText(Path.Combine(directory, "signal-entry.txt"), signalSource.Id.ToString("D"));
+        var secondTarget = signalGraph.CreateNode(GraphNodeKind.Signal);
+        if (!signalGraph.TryConnectNodes(signalSource, secondTarget, out _))
+            throw new InvalidOperationException("Cannot connect fixture Signal fan-out.");
+        File.WriteAllBytes(Path.Combine(directory, "signal-fanout.lfxb"),
+            SpawnableGroupPackage.Compile(signalGraph.CreateSnapshot()).ParentBytecode);
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 8)]

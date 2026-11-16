@@ -480,6 +480,15 @@ void verifySignalFanout()
     assert(instance.dispatchSignal(bytes.data() + 16, 0, 10) == liberafx::Result::InvalidArgument);
     assert(log.count == 3);
 
+    auto oneExtra = bytes;
+    write32(oneExtra, 16 + 228, 1);
+    oneExtra.resize(oneExtra.size() - 4);
+    auto alignedProgram = liberafx::Program{};
+    auto alignedBindings = std::array<liberafx::CustomNodeBinding, 5>{};
+    assert(liberafx::Program::load(oneExtra.data(), oneExtra.size(), descriptors.data(),
+        descriptors.size(), alignedBindings.data(), alignedBindings.size(), alignedProgram) == liberafx::Result::Ok);
+    assert(alignedProgram.workBytes() == 168);
+
     auto malformed = bytes;
     write32(malformed, 16 + 224, 4);
     assert(load(malformed) == liberafx::Result::InvalidBinary);

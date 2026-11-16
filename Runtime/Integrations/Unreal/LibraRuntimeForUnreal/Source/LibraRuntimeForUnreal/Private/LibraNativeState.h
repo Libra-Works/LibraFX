@@ -46,7 +46,7 @@ public:
         bytecode.Append(bytes.GetData(), bytes.Num());
         result = liberafx::Program::load(bytecode.GetData(), bytecode.Num(), program, loadProfiler.GetHooks());
         if (bytecode.Num() >= 16 &&
-            (bytecode[4] == 3 || bytecode[4] == 4) && bytecode[5] == 0)
+            (bytecode[4] == 3 || bytecode[4] == 4 || bytecode[4] == 5) && bytecode[5] == 0)
         {
             auto count = uint32{bytecode[8]} | (uint32{bytecode[9]} << 8) |
                 (uint32{bytecode[10]} << 16) | (uint32{bytecode[11]} << 24);

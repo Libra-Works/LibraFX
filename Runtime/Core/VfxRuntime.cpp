@@ -637,7 +637,8 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
         if (!alignUp(totalWorkBytes, alignof(double), stackOffset) ||
             routeBytes > std::numeric_limits<std::size_t>::max() - stackOffset)
             return Result::InvalidBinary;
-        totalWorkBytes = stackOffset + routeBytes;
+        if (!alignUp(stackOffset + routeBytes, alignof(double), totalWorkBytes))
+            return Result::InvalidBinary;
     }
     auto boundStateOffset = valuesSize;
     for (auto index = std::uint32_t{0}; index < count; ++index)

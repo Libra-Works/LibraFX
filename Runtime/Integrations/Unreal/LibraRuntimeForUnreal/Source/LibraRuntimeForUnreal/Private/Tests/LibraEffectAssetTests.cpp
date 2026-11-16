@@ -101,6 +101,59 @@ bool FLibraGroupSignalFixtureTest::RunTest(const FString&)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraSignalFanoutFixtureTest,
+    "Libra.Runtime.Binding.SignalFanoutFixture",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraSignalFanoutFixtureTest::RunTest(const FString&)
+{
+    auto directory = FString{};
+    if (!FParse::Value(FCommandLine::Get(), TEXT("LibraGroupSignalFixture="), directory) || directory.IsEmpty())
+    {
+        AddInfo(TEXT("SignalFanoutFixture requires an explicit isolated fixture directory."));
+        return true;
+    }
+    auto bytes = TArray<uint8>{};
+    auto entryText = FString{};
+    auto entry = FGuid{};
+    if (!TestTrue(TEXT("Compiler-generated v5 fan-out fixture loads"),
+        FFileHelper::LoadFileToArray(bytes, *(directory / TEXT("signal-fanout.lfxb"))) &&
+        FFileHelper::LoadFileToString(entryText, *(directory / TEXT("signal-entry.txt"))) &&
+        FGuid::Parse(entryText, entry) && bytes.Num() >= 16 && bytes[4] == 5)) return false;
+    auto asset = NewObject<ULibraEffectAsset>();
+    if (!TestEqual(TEXT("Effect asset accepts v5 fan-out"), asset->SetBytecode(bytes), ELibraRuntimeResult::Ok))
+        return false;
+    auto component = NewObject<ULibraEffectComponent>();
+    auto handle = FLibraSignalHandle{};
+    TestEqual(TEXT("Effect component initializes v5 fan-out"), component->SetEffect(asset), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Effect component binds fan-out entry"), component->BindSignal(entry, handle), ELibraRuntimeResult::Ok);
+    component->Stop();
+    auto compiled = FCompiledLibraProgram(bytes);
+    if (!TestTrue(TEXT("Unreal registry resolves fan-out"), compiled.result == liberafx::Result::Ok)) return false;
+    auto workBytes = compiled.program.workBytes();
+    auto work = static_cast<double*>(FMemory::Malloc(workBytes, compiled.program.workAlignment()));
+    if (!TestNotNull(TEXT("Caller-owned work memory"), work)) return false;
+    {
+        auto instance = liberafx::Instance{};
+        if (TestTrue(TEXT("Fan-out instance initializes"),
+            instance.initialize(compiled.program, work, workBytes / sizeof(double)) == liberafx::Result::Ok))
+        {
+            auto enqueue = [](void*, liberafx::Job job, void* context) noexcept -> bool { job(context); return true; };
+            auto evaluated = instance.updateAsync(0, enqueue, nullptr);
+            TestTrue(TEXT("Fan-out fixture evaluates"), evaluated == liberafx::Result::Ok &&
+                instance.result() == liberafx::Result::Ok);
+            uint8 entryBytes[16]{};
+            LibraNodeIdBytes(entry, entryBytes);
+            TestTrue(TEXT("Budget is shared by both branches"),
+                instance.dispatchSignal(entryBytes, 0, 4) == liberafx::Result::InstructionBudgetExceeded);
+            TestTrue(TEXT("Both branches execute through Unreal's runtime"),
+                instance.dispatchSignal(entryBytes, 0, 5) == liberafx::Result::Ok);
+        }
+    }
+    FMemory::Free(work);
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraNodeIdentityTest,
     "Libra.Runtime.Binding.NodeIdentity", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 

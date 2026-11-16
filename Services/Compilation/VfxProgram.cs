@@ -59,7 +59,7 @@ public sealed class VfxProgram
     public IReadOnlyList<VfxCurveInstruction> CurveInstructions { get; }
     public ushort BinaryVersion => _version;
     public int WorkSizeBytes => checked(_instructions.Length * (_version == 1 ? sizeof(double) : 4 * sizeof(double)) +
-        _customInstructions.Sum(item => item.BranchAdditionalTargets.Sum(targets => targets.Length)) * sizeof(int));
+        ((_customInstructions.Sum(item => item.BranchAdditionalTargets.Sum(targets => targets.Length)) + 1) / 2) * sizeof(double));
 
     private VfxProgram(VfxInstruction[] instructions, VfxTypedInstruction[] typedInstructions,
         VfxCustomInstruction[] customInstructions, VfxCurveInstruction[] curveInstructions, ushort version)
