@@ -166,7 +166,9 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         {
             var connections = group.ToArray();
             var fanout = connections.Length > 1 &&
-                connections[0].Source.Definition.GetOutputPortCategory(connections[0].SourcePortId) == GraphPortCategory.Signal;
+                connections[0].Source.Definition.GetOutputPortCategory(connections[0].SourcePortId) == GraphPortCategory.Signal &&
+                !(connections[0].Source.Definition.Kind == GraphNodeKind.SpawnableGroup &&
+                    connections[0].SourcePortId == "destroy");
             for (var index = 0; index < connections.Length; index++)
                 connections[index].SetSignalOrder(fanout ? index + 1 : 0, fanout ? connections.Length : 0);
         }

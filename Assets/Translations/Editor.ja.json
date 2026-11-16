@@ -190,6 +190,7 @@
   "Matrix.Parameter.Point": "座標",
   "Matrix.Parameter.Translation": "移動量",
   "Editor.SignalExecutionOrder": "Signal実行順 {0}/{1}（各枝を最後まで）",
+  "Editor.SignalExecutionOrderHelp": "接続順に各枝を最後まで実行します。順番を最後に移すには、その接続を解除してつなぎ直してください。",
   "Matrix.Parameter.Direction": "方向",
   "Matrix.Parameter.Row0": "行 0",
   "Matrix.Parameter.Row1": "行 1",

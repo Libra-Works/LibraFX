@@ -151,7 +151,9 @@ internal static class MatrixInterfaceTests
             workspace.SelectNode(signalGroup);
             Pump();
             Require(workspace.Connections.Select(connection => connection.SignalOrder).SequenceEqual([1, 2]) &&
-                workspace.SelectedConnections.All(connection => connection.Description.Contains("Signal実行順", StringComparison.Ordinal)),
+                workspace.SelectedConnections.All(connection => connection.Description.Contains("Signal実行順", StringComparison.Ordinal)) &&
+                inspector.GetVisualDescendants().OfType<TextBlock>().Any(block =>
+                    ToolTip.GetTip(block)?.ToString() == text.Get("Editor.SignalExecutionOrderHelp")),
                 "Signal fan-out order must be visible and localized in the real inspector.");
             Capture("signal-fanout-ja.png");
             Require(workspace.History.Undo() && workspace.Connections.Single().SignalOrder == 0 &&

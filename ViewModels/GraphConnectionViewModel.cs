@@ -15,6 +15,8 @@ public sealed class GraphConnectionViewModel : ObservableObject
     public string? SourcePortId { get; }
     public int SignalOrder { get; private set; }
     public int SignalOrderCount { get; private set; }
+    public string? SignalOrderHelp => SignalOrder == 0 ? null :
+        LocalizationService.Shared.Get("Editor.SignalExecutionOrderHelp");
 
     public double StartX => Source.DisplayX + GraphNodeViewModel.NodeWidth - GraphNodeViewModel.PortHorizontalOffset;
 
@@ -51,10 +53,15 @@ public sealed class GraphConnectionViewModel : ObservableObject
         SignalOrderCount = count;
         OnPropertyChanged(nameof(SignalOrder));
         OnPropertyChanged(nameof(SignalOrderCount));
+        OnPropertyChanged(nameof(SignalOrderHelp));
         OnPropertyChanged(nameof(Description));
     }
 
-    internal void RefreshLocalizedText() => OnPropertyChanged(nameof(Description));
+    internal void RefreshLocalizedText()
+    {
+        OnPropertyChanged(nameof(Description));
+        OnPropertyChanged(nameof(SignalOrderHelp));
+    }
 
     public GraphConnectionViewModel(GraphNodeViewModel source, GraphNodeViewModel target,
         string? targetPortId = null, string? sourcePortId = null)

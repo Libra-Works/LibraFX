@@ -66,6 +66,14 @@ internal static class GroupBoundaryTests
         var loaded = ProjectDocumentReader.LoadAsync(stream).GetAwaiter().GetResult().Graph;
         if (!GraphSnapshot.ContentEquals(graph.CreateSnapshot(), loaded))
             throw new InvalidOperationException("Saving changed the Signal connection order.");
+        var destroyGraph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var parent = destroyGraph.CreateNode(GraphNodeKind.SpawnableGroup);
+        var firstChild = destroyGraph.CreateNode(GraphNodeKind.SpawnableGroup);
+        var secondChild = destroyGraph.CreateNode(GraphNodeKind.SpawnableGroup);
+        if (!destroyGraph.TryConnectNodes(parent, firstChild, out _, "spawn", "destroy") ||
+            !destroyGraph.TryConnectNodes(parent, secondChild, out _, "spawn", "destroy") ||
+            destroyGraph.Connections.Any(connection => connection.SignalOrder != 0))
+            throw new InvalidOperationException("Host-routed Destroy must not be labeled as depth-first Signal dispatch.");
     }
 
     private static void VerifySignalFanout()

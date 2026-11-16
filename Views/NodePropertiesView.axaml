@@ -71,7 +71,8 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="vm:GraphConnectionViewModel">
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4" Margin="0,2">
-                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap" VerticalAlignment="Center"
+                                       ToolTip.Tip="{Binding SignalOrderHelp}" />
                             <views:IconButton Grid.Column="1" Icon="Disconnect" Tag="{Binding}"
                                     ToolTip.Tip="{DynamicResource Text.Editor.Disconnect}"
                                     AutomationProperties.Name="{DynamicResource Text.Editor.Disconnect}"

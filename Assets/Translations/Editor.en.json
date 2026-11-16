@@ -190,6 +190,7 @@
   "Matrix.Parameter.Point": "Point",
   "Matrix.Parameter.Translation": "Translation",
   "Editor.SignalExecutionOrder": "Signal order {0}/{1} (depth first)",
+  "Editor.SignalExecutionOrderHelp": "Each connection runs in order, including its downstream branches. Disconnect and reconnect a branch to move it to the end.",
   "Matrix.Parameter.Direction": "Direction",
   "Matrix.Parameter.Row0": "Row 0",
   "Matrix.Parameter.Row1": "Row 1",
