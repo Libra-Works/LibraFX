@@ -75,6 +75,9 @@ namespace LiberaFx.Unity.Tests
                         Assert(instance.DispatchSignal(signal, 0, 3) == NativeResult.Ok);
                     Assert(GC.GetAllocatedBytesForCurrentThread() == allocated);
                 }
+#if UNITY_EDITOR
+                UnityEngine.Debug.Log("LiberaFx compiler-generated Signal interop contract passed.");
+#endif
             }
         }
     }
