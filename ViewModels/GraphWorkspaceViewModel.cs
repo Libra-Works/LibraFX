@@ -302,12 +302,13 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             commands.Add(new AddGraphNodeCommand(this, node, Nodes.Count + commands.Count));
         }
 
+        var connectionIndex = Connections.Count;
         foreach (var connection in snapshot.Connections)
         {
             var oldTarget = snapshot.Nodes.Single(node => node.Id == connection.TargetNodeId);
             var newTarget = nodesByOldId[connection.TargetNodeId];
             commands.Add(new AddGraphConnectionCommand(
-                this, nodesByOldId[connection.SourceNodeId], newTarget,
+                this, nodesByOldId[connection.SourceNodeId], newTarget, connectionIndex++,
                 targetPortId: SpawnableGroupSchema.RemapPort(oldTarget, newTarget.ChildGraph, connection.TargetPortId),
                 sourcePortId: SpawnableGroupSchema.RemapPort(snapshot.Nodes.Single(node => node.Id == connection.SourceNodeId),
                     nodesByOldId[connection.SourceNodeId].ChildGraph, connection.SourcePortId)));

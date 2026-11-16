@@ -21,6 +21,7 @@ internal static class GroupBoundaryTests
         VerifyTypedRuntimeRouting();
         VerifyNestedScopes();
         VerifyNestedSignalBoundary();
+        VerifySignalConnectionOrder();
         VerifyBoundaryScopeValidation();
         VerifyDefaultLabels();
         VerifyMatrixBoundary();
@@ -28,6 +29,42 @@ internal static class GroupBoundaryTests
         VerifyAssetUpdate();
         if (Environment.GetEnvironmentVariable("LIBERAFX_UNREAL_GROUP_FIXTURE") is { Length: > 0 } directory)
             ExportUnrealFixture(directory);
+    }
+
+    private static void VerifySignalConnectionOrder()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var source = graph.CreateNode(GraphNodeKind.Signal);
+        var targets = Enumerable.Range(1, 3).Select(index =>
+        {
+            var target = graph.CreateNode(GraphNodeKind.Signal);
+            graph.RenameNode(target, $"Target {index}");
+            if (!graph.TryConnectNodes(source, target, out _))
+                throw new InvalidOperationException("Cannot create Signal fan-out.");
+            return target;
+        }).ToArray();
+        graph.SetSelection([source, .. targets]);
+        var selection = graph.CreateSelectionSnapshot();
+        graph.PasteSnapshot(selection, 200, 200);
+        var pastedSource = graph.CreateSelectionSnapshot().Nodes.Single(node => node.Name == source.Name).Id;
+        void Check()
+        {
+            var snapshot = graph.CreateSnapshot();
+            var names = snapshot.Connections.Where(edge => edge.SourceNodeId == pastedSource).Select(edge =>
+                snapshot.Nodes.Single(node => node.Id == edge.TargetNodeId).Name).ToArray();
+            if (!names.SequenceEqual(new[] { "Target 1", "Target 2", "Target 3" }))
+                throw new InvalidOperationException("Pasting changed the Signal connection order.");
+        }
+        Check();
+        if (!graph.History.Undo() || !graph.History.Redo())
+            throw new InvalidOperationException("Signal fan-out paste must support undo and redo.");
+        Check();
+        using var stream = new MemoryStream();
+        new ProjectFileService().SaveAsync(stream, graph).GetAwaiter().GetResult();
+        stream.Position = 0;
+        var loaded = ProjectDocumentReader.LoadAsync(stream).GetAwaiter().GetResult().Graph;
+        if (!GraphSnapshot.ContentEquals(graph.CreateSnapshot(), loaded))
+            throw new InvalidOperationException("Saving changed the Signal connection order.");
     }
 
     private static void VerifyNumericBoundary()
