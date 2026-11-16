@@ -166,6 +166,57 @@ auto unityFixture() -> std::vector<std::uint8_t>
     number(bytes, 16 + 2 * 96 + 64, 0.2);
     return bytes;
 }
+void verifyEffectLifetime()
+{
+    auto bytes = scalarFixture();
+    auto program = LibraProgram{};
+    assert(libra_program_create(bytes.data(), bytes.size(), &program) == LIBRA_OK);
+    auto instance = LibraInstance{};
+    assert(libra_instance_create(program, &instance) == LIBRA_OK);
+    auto timeId = std::array<std::uint8_t, 16>{}; timeId[15] = 2;
+    auto binding = LibraBinding{};
+    assert(libra_bind_value(instance, timeId.data(), &binding) == LIBRA_OK);
+    auto sample = LibraLifetimeSample{};
+    assert(libra_effect_advance(instance, 0, &sample) == LIBRA_NOT_READY);
+    assert(libra_effect_start(instance, -1, 0, nullptr, 0, &sample) == LIBRA_INVALID_ARGUMENT);
+    assert(libra_effect_start(instance, 2, 0, nullptr, 0, &sample) == LIBRA_OK);
+    assert(sample.age == 0 && sample.remaining == 2 && !sample.expired);
+    assert(libra_evaluate(instance, 1, nullptr, 0, nullptr) == LIBRA_NOT_READY);
+    assert(libra_effect_advance(instance, 3, &sample) == LIBRA_OK);
+    assert(sample.age == 2 && sample.remaining == 0 && sample.normalizedAge == 1 && sample.expired);
+    auto value = LibraValue{};
+    assert(libra_values_read(instance, &binding, 1, &value) == LIBRA_OK && value.x == 2);
+    assert(libra_effect_advance(instance, 3, &sample) == LIBRA_NOT_READY);
+    assert(libra_effect_stop(instance) == LIBRA_NOT_READY);
+    assert(libra_instance_release(instance) == LIBRA_OK);
+
+    assert(libra_instance_create(program, &instance) == LIBRA_OK);
+    assert(libra_effect_start(instance, 0, 0, nullptr, 0, &sample) == LIBRA_OK && sample.expired);
+    assert(libra_instance_release(instance) == LIBRA_OK);
+    assert(libra_instance_create(program, &instance) == LIBRA_OK);
+    assert(libra_effect_start(instance, 0, 1, nullptr, 0, &sample) == LIBRA_OK && sample.infinite);
+    assert(libra_effect_advance(instance, 3, &sample) == LIBRA_OK && sample.age == 3 && !sample.expired);
+    assert(libra_effect_stop(instance) == LIBRA_OK);
+    assert(libra_effect_advance(instance, 4, &sample) == LIBRA_NOT_READY);
+    assert(libra_instance_release(instance) == LIBRA_OK);
+    assert(libra_instance_create(program, &instance) == LIBRA_OK);
+    assert(libra_evaluate(instance, 0, nullptr, 0, nullptr) == LIBRA_OK);
+    assert(libra_effect_start(instance, 2, 0, nullptr, 0, &sample) == LIBRA_NOT_READY);
+    assert(libra_instance_release(instance) == LIBRA_OK);
+    assert(libra_program_release(program) == LIBRA_OK);
+
+    bytes = gameIoFixture();
+    assert(libra_program_create(bytes.data(), bytes.size(), &program) == LIBRA_OK);
+    assert(libra_instance_create(program, &instance) == LIBRA_OK);
+    assert(libra_game_io_configure(instance, 8, nullptr, 0) == LIBRA_OK);
+    assert(libra_effect_start(instance, 2, 0, nullptr, 0, &sample) == LIBRA_INVALID_VALUE_TYPE);
+    assert(libra_instance_release(instance) == LIBRA_OK);
+    assert(libra_instance_create(program, &instance) == LIBRA_OK);
+    assert(libra_effect_start(instance, 2, 0, nullptr, 0, &sample) == LIBRA_OK);
+    assert(libra_game_io_configure(instance, 8, nullptr, 0) == LIBRA_INVALID_VALUE_TYPE);
+    assert(libra_instance_release(instance) == LIBRA_OK);
+    assert(libra_program_release(program) == LIBRA_OK);
+}
 #if defined(_MSC_VER) && defined(_DEBUG)
 auto frameAllocations = 0u;
 auto __cdecl allocationHook(int kind, void*, size_t, int, long, const unsigned char*, int) -> int
@@ -178,6 +229,7 @@ auto __cdecl allocationHook(int kind, void*, size_t, int, long, const unsigned c
 
 int main()
 {
+    verifyEffectLifetime();
     if (auto bytecodePath = std::getenv("LIBERAFX_GAMEIO_MATRIX_BYTECODE")) {
         auto stream = std::ifstream{bytecodePath, std::ios::binary};
         auto bytes = std::vector<std::uint8_t>(

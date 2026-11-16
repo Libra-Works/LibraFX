@@ -5,6 +5,7 @@
 #include <cmath>
 #include "liberafx/BuiltinSignals.h"
 #include "liberafx/NamedIo.h"
+#include "liberafx/EffectLifecycle.h"
 
 #include <algorithm>
 #include <cstring>
@@ -13,6 +14,7 @@
 #include <memory>
 #include <mutex>
 #include <new>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 #include <type_traits>
@@ -75,6 +77,8 @@ struct NativeInstance {
     // Destroy core state before its backing buffers and program.
     liberafx::Instance instance;
     std::unique_ptr<liberafx::NamedIo> gameIo;
+    std::optional<liberafx::EffectLifecycle> lifecycle;
+    bool rawStarted = false;
 };
 struct NativeGeneratorPool {
     std::shared_ptr<NativeProgram> owner;
@@ -378,13 +382,64 @@ LibraResult LIBRA_INTEROP_CALL libra_evaluate(
     return guarded([&]() -> LibraResult {
         auto native = findInstance(instance);
         if (!native) return LIBRA_INVALID_HANDLE;
+        if (native->lifecycle) return LIBRA_NOT_READY;
         auto result = checkValues(*native, bindings, count, outValues);
         if (result != LIBRA_OK) return result;
         auto update = native->instance.updateAsync(time, inlineEnqueue, nullptr);
         if (update != liberafx::Result::Ok) return static_cast<LibraResult>(update);
+        native->rawStarted = true;
         update = native->instance.result();
         return update == liberafx::Result::Ok ? readValues(*native, bindings, count, outValues)
                                              : static_cast<LibraResult>(update);
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_effect_start(
+    LibraInstance instance, double duration, uint32_t infinite,
+    const uint8_t onStartNodeId[16], uint32_t instructionBudget, LibraLifetimeSample* outSample)
+{
+    if (!outSample || infinite > 1 || (onStartNodeId && !instructionBudget))
+        return LIBRA_INVALID_ARGUMENT;
+    auto lifetime = liberafx::Lifetime::infinite();
+    if (!infinite && liberafx::Lifetime::finite(duration, lifetime) != liberafx::Result::Ok)
+        return LIBRA_INVALID_ARGUMENT;
+    *outSample = {};
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        if (native->gameIo) return LIBRA_INVALID_VALUE_TYPE;
+        if (native->rawStarted) return LIBRA_NOT_READY;
+        if (!native->lifecycle) native->lifecycle.emplace(native->instance);
+        auto sample = liberafx::LifetimeSample{};
+        auto result = native->lifecycle->start(lifetime, onStartNodeId, instructionBudget, sample);
+        if (result == liberafx::Result::Ok)
+            *outSample = {sample.age, sample.remaining, sample.normalizedAge,
+                          sample.expired ? 1u : 0u, std::isinf(sample.remaining) ? 1u : 0u};
+        return static_cast<LibraResult>(result);
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_effect_advance(
+    LibraInstance instance, double elapsed, LibraLifetimeSample* outSample)
+{
+    if (!outSample) return LIBRA_INVALID_ARGUMENT;
+    *outSample = {};
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        if (!native->lifecycle) return LIBRA_NOT_READY;
+        auto sample = liberafx::LifetimeSample{};
+        auto result = native->lifecycle->advance(elapsed, sample);
+        if (result == liberafx::Result::Ok)
+            *outSample = {sample.age, sample.remaining, sample.normalizedAge,
+                          sample.expired ? 1u : 0u, std::isinf(sample.remaining) ? 1u : 0u};
+        return static_cast<LibraResult>(result);
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_effect_stop(LibraInstance instance)
+{
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        return native->lifecycle ? static_cast<LibraResult>(native->lifecycle->stop()) : LIBRA_NOT_READY;
     });
 }
 LibraResult LIBRA_INTEROP_CALL libra_dispatch_signal(
@@ -393,6 +448,7 @@ LibraResult LIBRA_INTEROP_CALL libra_dispatch_signal(
     if (!nodeId || !instructionBudget) return LIBRA_INVALID_ARGUMENT;
     return guarded([&]() -> LibraResult {
         auto native = findInstance(instance);
+        if (native && native->lifecycle) return LIBRA_NOT_READY;
         return native ? static_cast<LibraResult>(
             native->instance.dispatchSignal(nodeId, time, instructionBudget)) : LIBRA_INVALID_HANDLE;
     });
@@ -404,7 +460,7 @@ LibraResult LIBRA_INTEROP_CALL libra_game_io_configure(
     return guarded([&]() -> LibraResult {
         auto native = findInstance(instance);
         if (!native) return LIBRA_INVALID_HANDLE;
-        if (native->gameIo || native->owner->program.version() < 6 ||
+        if (native->lifecycle || native->gameIo || native->owner->program.version() < 6 ||
             native->owner->program.version() > 7)
             return LIBRA_INVALID_VALUE_TYPE;
         auto converted = std::vector<liberafx::NamedIoPort>{};

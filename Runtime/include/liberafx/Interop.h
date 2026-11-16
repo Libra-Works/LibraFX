@@ -195,6 +195,20 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_values_read(
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_evaluate(
     LibraInstance instance, double time, const LibraBinding* bindings,
     uint32_t count, LibraValue* outValues);
+/* Opt-in root lifetime. infinite must be 0 or 1; duration is ignored if 1.
+   elapsed is scaled seconds since start. OnStart is optional. Output is valid
+   only on success; expiry is reported once after the clamped final evaluation.
+   Stop never reports expiry. Restart requires a new instance.
+   This primitive does not stop child pools or dispatch Destroy automatically.
+   It cannot be combined with game IO or a prior raw evaluation on the same
+   instance. Once start is attempted, use these lifetime calls instead of raw
+   evaluate/signal dispatch; values_read remains available. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_start(
+    LibraInstance instance, double duration, uint32_t infinite,
+    const uint8_t onStartNodeId[16], uint32_t instructionBudget, LibraLifetimeSample* outSample);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_advance(
+    LibraInstance instance, double elapsed, LibraLifetimeSample* outSample);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_stop(LibraInstance instance);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_sample_sprite_atlas(
     double frame, uint32_t columns, uint32_t rows, LibraAtlasFrame* outFrame);
 /* Top-left-origin UVs; four vertices in TL, TR, BR, BL order. */

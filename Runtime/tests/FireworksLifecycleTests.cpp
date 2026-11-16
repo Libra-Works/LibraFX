@@ -144,6 +144,25 @@ int main(int argc, char** argv)
         check(libra_generator_start(launch, launchSpawn.instanceId));
         check(libra_generator_reset(launch));
         event(launch, 2); empty(launch);
+
+        auto managedParent = LibraInstance{};
+        check(libra_instance_create(parentProgram, &managedParent));
+        auto rootLifetime = LibraLifetimeSample{};
+        check(libra_effect_start(managedParent, 1, 0, ids[0].data(), 10000, &rootLifetime));
+        require(rootLifetime.age == 0 && !rootLifetime.expired, "Incorrect initial root lifetime.");
+        require(libra_effect_start(managedParent, 1, 0, ids[0].data(), 10000, &rootLifetime) == LIBRA_NOT_READY,
+            "Root OnStart must not execute twice.");
+        check(libra_generator_process_spawns(launch, 16, &processed));
+        require(processed == 1, "Managed root OnStart did not enqueue exactly one Launch.");
+        auto managedSpawn = event(launch, 1);
+        check(libra_generator_start(launch, managedSpawn.instanceId));
+        check(libra_effect_advance(managedParent, 2, &rootLifetime));
+        require(rootLifetime.age == 1 && rootLifetime.expired, "Root final evaluation must clamp to expiry.");
+        require(libra_effect_advance(managedParent, 2, &rootLifetime) == LIBRA_NOT_READY,
+            "Root expiry must only be reported once.");
+        check(libra_generator_stop(launch, managedSpawn.instanceId));
+        event(launch, 2); empty(launch);
+        check(libra_instance_release(managedParent));
         check(libra_instance_release(parent));
         check(libra_program_release(parentProgram));
         check(libra_generator_pool_release(launch));

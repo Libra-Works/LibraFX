@@ -176,4 +176,6 @@ and memory. It evaluates at zero before an optional OnStart signal and clamps
 the final evaluation to finite expiry. Equal elapsed times do not reevaluate.
 Stop does not report expiry; failed evaluation or signal dispatch is not retried.
 It reports expiry to the caller but does not dispatch Destroy or stop children.
-It is not yet connected to the C ABI, editor, or Unity/Unreal integrations.
+The opt-in libra_effect_start/advance/stop C ABI exposes this primitive for a
+fresh non-game-IO instance. It cannot be combined with raw evaluation or game
+IO; the editor and Unity/Unreal integrations do not yet use it.
