@@ -32,7 +32,7 @@ public readonly record struct VfxCustomInput(
 
 public readonly record struct VfxCustomInstruction(
     Guid NodeId, byte Opcode, int OutputWidth, bool OutputIsColor, Guid TypeId, int AbiVersion,
-    int BranchCount, VfxCustomInput[] Inputs, int[] BranchTargets);
+    int BranchCount, VfxCustomInput[] Inputs, int[] BranchTargets, int[][] BranchAdditionalTargets);
 
 public readonly record struct VfxCurveInstruction(Guid NodeId, FCurveKey[] Keys);
 
@@ -46,6 +46,7 @@ public sealed class VfxProgram
     private const int CurveInstructionSize = 256;
     private const int CurveKeySize = 40;
     private const int MaxCurveKeysTotal = 100000;
+    private const int MaxSignalRoutes = 1000000;
     private readonly VfxInstruction[] _instructions;
     private readonly VfxTypedInstruction[] _typedInstructions;
     private readonly VfxCustomInstruction[] _customInstructions;
@@ -57,7 +58,8 @@ public sealed class VfxProgram
     public IReadOnlyList<VfxCustomInstruction> CustomInstructions { get; }
     public IReadOnlyList<VfxCurveInstruction> CurveInstructions { get; }
     public ushort BinaryVersion => _version;
-    public int WorkSizeBytes => checked(_instructions.Length * (_version == 1 ? sizeof(double) : 4 * sizeof(double)));
+    public int WorkSizeBytes => checked(_instructions.Length * (_version == 1 ? sizeof(double) : 4 * sizeof(double)) +
+        _customInstructions.Sum(item => item.BranchAdditionalTargets.Sum(targets => targets.Length)) * sizeof(int));
 
     private VfxProgram(VfxInstruction[] instructions, VfxTypedInstruction[] typedInstructions,
         VfxCustomInstruction[] customInstructions, VfxCurveInstruction[] curveInstructions, ushort version)
@@ -412,21 +414,24 @@ public sealed class VfxProgram
                 }
 
                 var branchTargets = new int[signalOutputs.Length];
+                var additionalTargets = new int[signalOutputs.Length][];
                 for (var branch = 0; branch < signalOutputs.Length; branch++)
                 {
                     var targets = outgoing[node.Id].Where(connection =>
                         connection.SourcePortId == (node.Kind == GraphNodeKind.Signal ? null : signalOutputs[branch].Id)).ToArray();
-                    if (targets.Length > 1)
-                        throw new InvalidDataException($"Custom signal output '{signalOutputs[branch].Id}' has multiple targets.");
-                    if (targets.Length == 0) { branchTargets[branch] = -1; continue; }
-                    var target = byId[targets[0].TargetNodeId];
-                    if (effective[target.Id].Runtime?.Execution != "signal")
-                        throw new InvalidDataException("Signal branches must target registered signal nodes.");
-                    branchTargets[branch] = indices[target.Id];
+                    var targetIndices = targets.Select(edge =>
+                    {
+                        var target = byId[edge.TargetNodeId];
+                        if (effective[target.Id].Runtime?.Execution != "signal")
+                            throw new InvalidDataException("Signal branches must target registered signal nodes.");
+                        return indices[target.Id];
+                    }).ToArray();
+                    branchTargets[branch] = targetIndices.Length == 0 ? -1 : targetIndices[0];
+                    additionalTargets[branch] = targetIndices.Skip(1).ToArray();
                 }
                 customCode.Add(new VfxCustomInstruction(node.Id,
                     isSignal ? (byte)41 : (byte)40, customOutputWidth, outputColor, definition.TypeId,
-                    runtime.AbiVersion, signalOutputs.Length, customInputs, branchTargets));
+                    runtime.AbiVersion, signalOutputs.Length, customInputs, branchTargets, additionalTargets));
                 typedCode[index] = new(node.Id, (VfxOpcode)(isSignal ? 41 : 40), customOutputWidth,
                     0, 0, outputColor ? (byte)1 : (byte)0, 0, 0, -1, -1,
                     new double[4], new double[4]);
@@ -534,8 +539,10 @@ public sealed class VfxProgram
         var legacy = typedCode.Select(item => new VfxInstruction(item.NodeId, item.Opcode, item.InputA, item.InputB,
             item.DefaultA[0], item.DefaultB[0])).ToArray();
         ValidateCurveBudget(curveCode);
+        var extraRoutes = customCode.Sum(item => item.BranchAdditionalTargets.Sum(targets => (long)targets.Length));
+        if (extraRoutes > MaxSignalRoutes) throw new InvalidDataException("The graph contains too many Signal routes.");
         return new VfxProgram(legacy, typedCode, customCode.ToArray(), curveCode.ToArray(),
-            curveCode.Count != 0 ? (ushort)4 : (ushort)3);
+            extraRoutes != 0 ? (ushort)5 : curveCode.Count != 0 ? (ushort)4 : (ushort)3);
     }
 
     public byte[] ToBinary()
@@ -564,7 +571,9 @@ public sealed class VfxProgram
         var instructionSize = _version >= 3 ? CurveInstructionSize : TypedInstructionSize;
         var instructionBytes = checked(TypedHeaderSize + _typedInstructions.Length * instructionSize);
         var curveBytes = checked(_curveInstructions.Sum(item => item.Keys.Length) * CurveKeySize);
-        var typedBytes = new byte[checked(instructionBytes + curveBytes)];
+        var routeBytes = checked(_customInstructions.Sum(item =>
+            item.BranchAdditionalTargets.Sum(targets => targets.Length)) * sizeof(int));
+        var typedBytes = new byte[checked(instructionBytes + curveBytes + routeBytes)];
         "LFXB"u8.CopyTo(typedBytes);
         BinaryPrimitives.WriteUInt16LittleEndian(typedBytes.AsSpan(4), _version);
         typedBytes[6] = 1;
@@ -573,6 +582,7 @@ public sealed class VfxProgram
         var customById = _customInstructions.ToDictionary(item => item.NodeId);
         var curvesById = _curveInstructions.ToDictionary(item => item.NodeId);
         var curveOffset = 0;
+        var routeOffset = 0;
         for (var index = 0; index < _typedInstructions.Length; index++)
         {
             var span = typedBytes.AsSpan(TypedHeaderSize + index * instructionSize, instructionSize);
@@ -602,8 +612,20 @@ public sealed class VfxProgram
                 for (var input = custom.Inputs.Length; input < 4; input++)
                     BinaryPrimitives.WriteInt32LittleEndian(span[(48 + input * 8)..], -1);
                 for (var branch = 0; branch < 4; branch++)
+                {
                     BinaryPrimitives.WriteInt32LittleEndian(span[(208 + branch * 4)..],
                         branch < custom.BranchCount ? custom.BranchTargets[branch] : -1);
+                    if (_version < 5 || branch >= custom.BranchCount) continue;
+                    var extra = custom.BranchAdditionalTargets[branch];
+                    if (extra.Length == 0) continue;
+                    BinaryPrimitives.WriteInt32LittleEndian(span[(224 + branch * 8)..], routeOffset);
+                    BinaryPrimitives.WriteInt32LittleEndian(span[(228 + branch * 8)..], extra.Length);
+                    foreach (var target in extra)
+                    {
+                        BinaryPrimitives.WriteInt32LittleEndian(typedBytes.AsSpan(instructionBytes + curveBytes + routeOffset), target);
+                        routeOffset += sizeof(int);
+                    }
+                }
                 continue;
             }
             span[16] = (byte)instruction.Opcode;

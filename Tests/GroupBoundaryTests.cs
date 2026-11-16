@@ -22,6 +22,7 @@ internal static class GroupBoundaryTests
         VerifyNestedScopes();
         VerifyNestedSignalBoundary();
         VerifySignalConnectionOrder();
+        VerifySignalFanout();
         VerifyBoundaryScopeValidation();
         VerifyDefaultLabels();
         VerifyMatrixBoundary();
@@ -65,6 +66,84 @@ internal static class GroupBoundaryTests
         var loaded = ProjectDocumentReader.LoadAsync(stream).GetAwaiter().GetResult().Graph;
         if (!GraphSnapshot.ContentEquals(graph.CreateSnapshot(), loaded))
             throw new InvalidOperationException("Saving changed the Signal connection order.");
+    }
+
+    private static void VerifySignalFanout()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var group = graph.CreateNode(GraphNodeKind.GraphGroup);
+        graph.EnterGraph(group);
+        var input = graph.CreateNode(new GraphNodeKind("GroupInputSignal"));
+        var output = graph.CreateNode(new GraphNodeKind("GroupOutputSignal"));
+        if (!graph.TryConnectNodes(input, output, out _))
+            throw new InvalidOperationException("Cannot connect Signal fan-out Group boundaries.");
+        graph.NavigateToGraph(0);
+        group = graph.GetNode(group.Id);
+        var source = graph.CreateNode(GraphNodeKind.Signal);
+        var first = graph.CreateNode(GraphNodeKind.SpawnableGroup);
+        var second = graph.CreateNode(GraphNodeKind.SpawnableGroup);
+        if (!graph.TryConnectNodes(source, group, out _, GroupBoundarySchema.InputPortId(input.Id)) ||
+            !graph.TryConnectNodes(group, first, out _, "spawn", GroupBoundarySchema.OutputPortId(output.Id)) ||
+            !graph.TryConnectNodes(source, second, out _, "spawn"))
+            throw new InvalidOperationException("Cannot connect Signal fan-out.");
+        graph.CreateNode(GraphNodeKind.FloatFCurve);
+        var snapshot = graph.CreateSnapshot();
+        var package = SpawnableGroupPackage.Compile(snapshot);
+        if (package.ParentBytecode[4] != 5 ||
+            !package.ParentBytecode.SequenceEqual(SpawnableGroupPackage.Compile(snapshot).ParentBytecode))
+            throw new InvalidOperationException("Signal fan-out and FCurve must compile deterministically to v5.");
+        VerifyNativeFanout(package, source.Id, first.Id, second.Id);
+    }
+
+    private static void VerifyNativeFanout(SpawnableGroupPackage package, Guid source, Guid first, Guid second)
+    {
+        var path = Environment.GetEnvironmentVariable("LIBERAFX_NATIVE_TEST_LIBRARY");
+        if (string.IsNullOrEmpty(path)) return;
+        var library = NativeLibrary.Load(path);
+        T Fn<T>(string name) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(library, name));
+        static void Check(int result) { if (result != 0) throw new InvalidOperationException($"Native fan-out runtime error {result}."); }
+        var programs = new List<ulong>();
+        var pools = new List<ulong>();
+        ulong parent = 0, instance = 0;
+        try
+        {
+            var bindings = new List<NativeBinding>();
+            foreach (var template in package.Templates)
+            {
+                Check(Fn<CreateProgram>("libra_program_create")(template.Bytecode, (ulong)template.Bytecode.Length, out var child));
+                programs.Add(child);
+                Check(Fn<CreatePool>("libra_generator_pool_create")(child, template.ContainerId.ToByteArray(true), 4, 65536, 8, out var pool));
+                pools.Add(pool);
+                bindings.Add(new NativeBinding { Container = template.ContainerId.ToByteArray(true),
+                    Type = template.SignalTypeId.ToByteArray(true), Pool = pool,
+                    Widths = new byte[4], Colors = new byte[4], Nodes = new byte[64] });
+            }
+            Check(Fn<CreateParent>("libra_program_create_spawnable")(package.ParentBytecode,
+                (ulong)package.ParentBytecode.Length, bindings.ToArray(), (uint)bindings.Count, out parent));
+            Check(Fn<CreateInstance>("libra_instance_create")(parent, out instance));
+            Check(Fn<Evaluate>("libra_evaluate")(instance, 0, IntPtr.Zero, 0, IntPtr.Zero));
+            var firstPool = pools[package.Templates.ToList().FindIndex(item => item.ContainerId == first)];
+            var secondPool = pools[package.Templates.ToList().FindIndex(item => item.ContainerId == second)];
+            if (Fn<Dispatch>("libra_dispatch_signal")(instance, source.ToByteArray(true), 0, 4) != 14)
+                throw new InvalidOperationException("Fan-out must share its instruction budget across branches.");
+            Check(Fn<ProcessPool>("libra_generator_process_spawns")(firstPool, 4, out var firstCount));
+            Check(Fn<ProcessPool>("libra_generator_process_spawns")(secondPool, 4, out var secondCount));
+            if (firstCount != 1 || secondCount != 0)
+                throw new InvalidOperationException("Fan-out must finish its first branch before executing the second.");
+            Check(Fn<Dispatch>("libra_dispatch_signal")(instance, source.ToByteArray(true), 0, 5));
+            Check(Fn<ProcessPool>("libra_generator_process_spawns")(firstPool, 4, out firstCount));
+            Check(Fn<ProcessPool>("libra_generator_process_spawns")(secondPool, 4, out secondCount));
+            if (firstCount != 1 || secondCount != 1)
+                throw new InvalidOperationException("Signal fan-out did not execute all connected branches.");
+        }
+        finally
+        {
+            if (instance != 0) Fn<Release>("libra_instance_release")(instance);
+            if (parent != 0) Fn<Release>("libra_program_release")(parent);
+            foreach (var pool in pools) Fn<Release>("libra_generator_pool_release")(pool);
+            foreach (var program in programs) Fn<Release>("libra_program_release")(program);
+            NativeLibrary.Free(library);
+        }
     }
 
     private static void VerifyNumericBoundary()

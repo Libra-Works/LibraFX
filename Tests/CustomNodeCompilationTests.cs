@@ -57,6 +57,23 @@ public static class CustomNodeCompilationTests
             "The editor must connect actual signal pins, not the node's other input categories.");
         Require(!workspace.TryConnectNodes(firstRoute, secondRoute, out _, "amount", "done"),
             "The editor must reject signal-to-parameter pin connections.");
+        var thirdRoute = workspace.CreateNode(routeDefinition.Kind);
+        var fourthRoute = workspace.CreateNode(routeDefinition.Kind);
+        Require(workspace.TryConnectNodes(firstRoute, thirdRoute, out _, "enter", "next") &&
+                workspace.TryConnectNodes(firstRoute, fourthRoute, out _, "enter", "done"),
+            "Each custom Signal output must accept its own ordered targets.");
+        var fanout = VfxProgram.Compile(workspace.CreateSnapshot());
+        var fanoutRoute = fanout.CustomInstructions.Single(item => item.NodeId == firstRoute.Id);
+        var next = routeDefinition.OutputPorts!.Where(port => port.Category == GraphPortCategory.Signal)
+            .ToList().FindIndex(port => port.Id == "next");
+        var done = routeDefinition.OutputPorts!.Where(port => port.Category == GraphPortCategory.Signal)
+            .ToList().FindIndex(port => port.Id == "done");
+        Require(fanout.BinaryVersion == 5 && next >= 0 && done >= 0 &&
+                fanout.TypedInstructions[fanoutRoute.BranchTargets[next]].NodeId == secondRoute.Id &&
+                fanout.TypedInstructions[fanoutRoute.BranchAdditionalTargets[next].Single()].NodeId == thirdRoute.Id &&
+                fanout.TypedInstructions[fanoutRoute.BranchTargets[done]].NodeId == fourthRoute.Id &&
+                fanoutRoute.BranchAdditionalTargets[done].Length == 0,
+            "Custom Signal fan-out must retain target order separately for each output.");
     }
 
     private static string FindExampleDirectory()
