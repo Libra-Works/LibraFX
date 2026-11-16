@@ -169,3 +169,11 @@ inputs (16 lanes), and their legacy `then` branch is selected immediately on
 spawn dispatch. Do not map that branch to lifetime Destroy: the compiler and
 host adapter must explicitly replace it with event-kind-3 local routing and
 extend the package/binding contract before exposing larger authoring ports.
+
+EffectLifecycle is a portable owner-thread primitive for an already-initialized
+effect instance. Its caller supplies scaled elapsed seconds and owns the instance
+and memory. It evaluates at zero before an optional OnStart signal and clamps
+the final evaluation to finite expiry. Equal elapsed times do not reevaluate.
+Stop does not report expiry; failed evaluation or signal dispatch is not retried.
+It reports expiry to the caller but does not dispatch Destroy or stop children.
+It is not yet connected to the C ABI, editor, or Unity/Unreal integrations.
