@@ -108,6 +108,9 @@ namespace LiberaFx.Unity
         internal static extern NativeResult libra_evaluate(
             ulong instance, double time, uint* bindings, uint count, NativeValue* values);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_dispatch_signal(
+            ulong instance, byte* id, double time, uint instructionBudget);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_sample_sprite_atlas(
             double frame, uint columns, uint rows, out AtlasFrame atlas);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
@@ -142,6 +145,19 @@ namespace LiberaFx.Unity
         ~NativeProgram() { Dispose(); }
     }
 
+    public sealed class NativeSignal
+    {
+        internal readonly byte[] Id;
+
+        public NativeSignal(string nodeGuid)
+        {
+            var hex = Guid.Parse(nodeGuid).ToString("N");
+            Id = new byte[16];
+            for (var i = 0; i < 16; ++i)
+                Id[i] = byte.Parse(hex.Substring(i * 2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        }
+    }
+
     public sealed unsafe class NativeInstance : IDisposable
     {
         private ulong handle;
@@ -165,11 +181,7 @@ namespace LiberaFx.Unity
         // Windows layout and must not be sent directly to this ABI.
         private static byte[] NodeId(string guid)
         {
-            var hex = Guid.Parse(guid).ToString("N");
-            var bytes = new byte[16];
-            for (var i = 0; i < 16; ++i)
-                bytes[i] = byte.Parse(hex.Substring(i * 2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
-            return bytes;
+            return new NativeSignal(guid).Id;
         }
         public uint BindValue(string nodeGuid)
         {
@@ -202,6 +214,12 @@ namespace LiberaFx.Unity
             fixed (uint* input = bindings)
             fixed (NativeValue* output = values)
                 return Native.libra_evaluate(Alive, time, input, (uint)bindings.Length, output);
+        }
+        public NativeResult DispatchSignal(NativeSignal signal, double time, uint instructionBudget)
+        {
+            if (signal == null) return NativeResult.InvalidArgument;
+            fixed (byte* id = signal.Id)
+                return Native.libra_dispatch_signal(Alive, id, time, instructionBudget);
         }
         public static NativeResult SampleAtlas(double frame, uint columns, uint rows, out AtlasFrame atlas) =>
             Native.libra_sample_sprite_atlas(frame, columns, rows, out atlas);

@@ -101,8 +101,16 @@ LiberaFx > Verify native ABI contracts. These are forward P/Invoke tests, not
 GPU/Play Mode tests.
 GUID bytes are compiler big-endian order, not Guid.ToByteArray() Windows layout.
 The C# binding code converts canonical GUID text once during initialization.
+For a built-in Signal, cache new NativeSignal(nodeGuid), evaluate the instance,
+then call instance.DispatchSignal(signal, time, instructionBudget). Each dispatch
+looks up the node in its program; the cached identifier avoids per-call GUID
+parsing and managed allocations. A positive budget is shared across all branches.
+Branches execute in connection order, depth-first; an error or budget exhaustion
+stops the remaining branches without rolling back effects already performed.
+Check the returned NativeResult. Spawnable packages require a separate host
+adapter and are not supported by this wrapper.
 Program creation COPIES bytecode and owns v3 builtin binding storage. v1/v2/v3
-load through the real Core validator; unknown non-builtin custom nodes fail.
+and supported v4/v5 load through the real Core validator; unknown non-builtin custom nodes fail.
 Instances own fixed-capacity work/default/handle vectors allocated only at create.
 Instances retain their Program after program handle release. Handles are never
 reused. Repeated release, null storage and unknown handles return errors.

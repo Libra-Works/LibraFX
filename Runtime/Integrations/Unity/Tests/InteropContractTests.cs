@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 
 namespace LiberaFx.Unity.Tests
 {
@@ -51,6 +52,29 @@ namespace LiberaFx.Unity.Tests
                 for (var frame = 0; frame < 10000; ++frame)
                     Assert(instance.Evaluate(frame, bindings, values) == NativeResult.Ok);
                 Assert(GC.GetAllocatedBytesForCurrentThread() == allocated);
+            }
+            var fixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_SIGNAL_FIXTURE");
+            if (!string.IsNullOrEmpty(fixture))
+            {
+                using (var program = new NativeProgram(File.ReadAllBytes(fixture)))
+                using (var instance = program.CreateInstance())
+                {
+                    var signal = new NativeSignal(File.ReadAllText(fixture + ".id"));
+                    var missing = new NativeSignal("ffffffff-ffff-ffff-ffff-ffffffffffff");
+                    Assert(instance.DispatchSignal(null, 0, 3) == NativeResult.InvalidArgument);
+                    Assert(instance.DispatchSignal(signal, 0, 3) == NativeResult.NotReady);
+                    Assert(instance.Evaluate(0, new uint[0], new NativeValue[0]) == NativeResult.Ok);
+                    Assert(instance.DispatchSignal(missing, 0, 3) == NativeResult.NodeNotFound);
+                    Assert(instance.DispatchSignal(signal, 0, 0) == NativeResult.InvalidArgument);
+                    Assert(instance.DispatchSignal(signal, 0, 2) == NativeResult.InstructionBudgetExceeded);
+                    Assert(instance.DispatchSignal(signal, 0, 3) == NativeResult.Ok);
+                    for (var i = 0; i < 100; ++i)
+                        Assert(instance.DispatchSignal(signal, 0, 3) == NativeResult.Ok);
+                    var allocated = GC.GetAllocatedBytesForCurrentThread();
+                    for (var i = 0; i < 10000; ++i)
+                        Assert(instance.DispatchSignal(signal, 0, 3) == NativeResult.Ok);
+                    Assert(GC.GetAllocatedBytesForCurrentThread() == allocated);
+                }
             }
         }
     }

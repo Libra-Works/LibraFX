@@ -107,7 +107,13 @@ internal static class GroupBoundaryTests
         var b = plain.CreateNode(GraphNodeKind.Signal);
         if (!plain.TryConnectNodes(plainSource, a, out _) || !plain.TryConnectNodes(plainSource, b, out _))
             throw new InvalidOperationException("Cannot connect plain Signal fan-out.");
-        VerifyNativeBuiltinFanout(SpawnableGroupPackage.Compile(plain.CreateSnapshot()).ParentBytecode, plainSource.Id);
+        var plainBytes = SpawnableGroupPackage.Compile(plain.CreateSnapshot()).ParentBytecode;
+        VerifyNativeBuiltinFanout(plainBytes, plainSource.Id);
+        if (Environment.GetEnvironmentVariable("LIBERAFX_UNITY_SIGNAL_FIXTURE") is { Length: > 0 } fixture)
+        {
+            File.WriteAllBytes(fixture, plainBytes);
+            File.WriteAllText(fixture + ".id", plainSource.Id.ToString());
+        }
     }
 
     private static void VerifyNativeBuiltinFanout(byte[] bytes, Guid source)
