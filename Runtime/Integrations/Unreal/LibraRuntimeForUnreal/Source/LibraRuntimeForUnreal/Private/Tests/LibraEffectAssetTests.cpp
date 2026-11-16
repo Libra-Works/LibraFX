@@ -3,6 +3,8 @@
 #include "LibraEffectAsset.h"
 #include "LibraEffectComponent.h"
 #include "LibraNativeState.h"
+#include "Engine/World.h"
+#include "HAL/PlatformProcess.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
@@ -128,6 +130,42 @@ bool FLibraSignalFanoutFixtureTest::RunTest(const FString&)
     TestEqual(TEXT("Effect component initializes v5 fan-out"), component->SetEffect(asset), ELibraRuntimeResult::Ok);
     TestEqual(TEXT("Effect component binds fan-out entry"), component->BindSignal(entry, handle), ELibraRuntimeResult::Ok);
     component->Stop();
+    auto init = UWorld::InitializationValues().AllowAudioPlayback(false).RequiresHitProxies(false)
+        .CreatePhysicsScene(false).CreateNavigation(false).CreateAISystem(false)
+        .ShouldSimulatePhysics(false).SetTransactional(false);
+    auto world = UWorld::CreateWorld(EWorldType::Game, false, FName(TEXT("LibraSignalFanoutWorld")),
+        nullptr, true, ERHIFeatureLevel::Num, &init);
+    if (!TestNotNull(TEXT("Isolated game world"), world)) return false;
+    auto actor = world->SpawnActor<AActor>();
+    if (!TestNotNull(TEXT("Signal test actor"), actor))
+    {
+        world->DestroyWorld(false);
+        return false;
+    }
+    auto live = NewObject<ULibraEffectComponent>(actor);
+    live->bAutoPlay = false;
+    actor->AddInstanceComponent(live);
+    live->RegisterComponent();
+    auto liveHandle = FLibraSignalHandle{};
+    TestEqual(TEXT("Registered component loads fan-out"), live->SetEffect(asset), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Registered component binds entry"), live->BindSignal(entry, liveHandle), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Component schedules evaluation"), live->EvaluateAtTime(0), ELibraRuntimeResult::Ok);
+    auto deadline = FPlatformTime::Seconds() + 5.0;
+    while (live->IsEvaluationPending() && FPlatformTime::Seconds() < deadline)
+    {
+        live->TickComponent(0, LEVELTICK_All, nullptr);
+        FPlatformProcess::Sleep(0.001f);
+    }
+    if (TestFalse(TEXT("Evaluation completes within timeout"), live->IsEvaluationPending()))
+    {
+        TestEqual(TEXT("Component evaluation succeeds"), live->LastResult, ELibraRuntimeResult::Ok);
+        TestEqual(TEXT("Component shares branch budget"), live->DispatchSignal(liveHandle, 4),
+            ELibraRuntimeResult::InstructionBudgetExceeded);
+        TestEqual(TEXT("Component dispatches both branches"), live->DispatchSignal(liveHandle, 5),
+            ELibraRuntimeResult::Ok);
+    }
+    live->Stop();
+    world->DestroyWorld(false);
     auto compiled = FCompiledLibraProgram(bytes);
     if (!TestTrue(TEXT("Unreal registry resolves fan-out"), compiled.result == liberafx::Result::Ok)) return false;
     auto workBytes = compiled.program.workBytes();
