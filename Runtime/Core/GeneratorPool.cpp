@@ -442,6 +442,16 @@ auto GeneratorPool::setLive(GeneratorInstanceId id, const GeneratorCapture* valu
     return Result::Ok;
 }
 
+auto GeneratorPool::setTimeContext(GeneratorInstanceId id, double effectTime, double frameDelta) noexcept -> Result
+{
+    auto lock = std::lock_guard<std::mutex>(impl_->mutex);
+    if (impl_->executing) return Result::Busy;
+    auto slot = impl_->find(id);
+    if (!slot) return Result::InvalidHandle;
+    if (slot->expiring) return Result::NotReady;
+    return slot->instance->setTimeContext(effectTime, frameDelta);
+}
+
 auto GeneratorPool::evaluate(GeneratorInstanceId id, double time) noexcept -> Result
 {
     if (!std::isfinite(time)) return Result::InvalidArgument;

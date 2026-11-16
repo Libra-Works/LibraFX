@@ -137,6 +137,8 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e3")] = "OwnerDestroy",
         [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e4")] = "Delay",
         [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e5")] = "OnDestroy",
+        [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e6")] = "EffectAge",
+        [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e7")] = "DeltaTime",
         [Guid.Parse("4a94e882-39e8-4efb-92c7-180000000001")] = "LifecycleRuntimeRemaining",
         [Guid.Parse("4a94e882-39e8-4efb-92c7-180000000002")] = "LifecycleRuntimeNormalizedAge",
         [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000002")] = "OnStart",

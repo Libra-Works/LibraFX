@@ -72,7 +72,7 @@ int main(int argc, char** argv)
 #endif
     auto count = std::size_t{};
     auto registry = builtinNodes(count);
-    assert(registry != nullptr && count == 64);
+    assert(registry != nullptr && count == 66);
     const std::uint8_t expectedPrefix[] = {0x74, 0x30, 0x5a, 0xc1, 0x91, 0xb2, 0x4c, 0x33, 0x8d, 0x44};
     assert(std::memcmp(registry[0].typeId, expectedPrefix, sizeof(expectedPrefix)) == 0);
     if (argc >= 2)
@@ -113,8 +113,33 @@ int main(int argc, char** argv)
         alignas(16) auto work = std::array<double, 16>{};
         auto instance = Instance{};
         assert(instance.initialize(program, work.data(), work.size()) == Result::Ok);
+        assert(instance.setTimeContext(0, 0) == Result::Ok);
         assert(instance.updateAsync(0, enqueue, nullptr) == Result::Ok);
         assert(instance.result() == Result::Ok);
+    }
+
+    for (auto index = std::size_t{64}; index < 66; ++index)
+    {
+        auto bytes = fixture(registry[index]);
+        auto binding = CustomNodeBinding{};
+        auto program = Program{};
+        assert(Program::load(bytes.data(), bytes.size(), nullptr, 0, &binding, 1, program) == Result::Ok);
+        alignas(16) auto work = std::array<double, 16>{};
+        auto instance = Instance{};
+        assert(instance.initialize(program, work.data(), work.size()) == Result::Ok);
+        assert(instance.updateAsync(0, enqueue, nullptr) == Result::Ok);
+        assert(instance.result() == Result::NotReady);
+        assert(instance.setTimeContext(-1, 0) == Result::InvalidArgument);
+        assert(instance.setTimeContext(3, -1) == Result::InvalidArgument);
+        assert(instance.setTimeContext(3, 0.125) == Result::Ok);
+        assert(instance.updateAsync(1, enqueue, nullptr) == Result::Ok);
+        assert(instance.result() == Result::Ok && work[0] == (index == 64 ? 3 : 0.125));
+        assert(instance.updateAsync(2, enqueue, nullptr) == Result::Ok);
+        assert(instance.result() == Result::NotReady);
+        assert(instance.setTimeContext(4, 0.125) == Result::Ok);
+        assert(instance.clearTimeContext() == Result::Ok);
+        assert(instance.updateAsync(2, enqueue, nullptr) == Result::Ok);
+        assert(instance.result() == Result::NotReady);
     }
 
     for (auto index = std::size_t{62}; index < 64; ++index)

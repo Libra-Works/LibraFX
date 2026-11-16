@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "typeId": "c982e1be-8f78-4d28-9a65-4f4aa45249e6",
+  "namespace": "LiberaFx",
+  "kind": "EffectAge",
+  "name": "Effect Age",
+  "displayNameKey": "Editor.Node.EffectAge",
+  "group": "Lifecycle",
+  "groupNameKey": "Editor.NodeGroup.Lifecycle",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [],
+  "outputPorts": [{ "id": "value", "name": "Value", "portType": "Float", "category": "Parameter" }]
+}

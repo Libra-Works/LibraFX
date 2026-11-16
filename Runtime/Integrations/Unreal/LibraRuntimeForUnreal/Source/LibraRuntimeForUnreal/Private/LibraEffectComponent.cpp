@@ -4,6 +4,7 @@
 #include "LibraNativeState.h"
 #include "LibraTaskScheduler.h"
 #include "LibraCpuProfiler.h"
+#include "Engine/World.h"
 
 struct FLibraEffectState final
 {
@@ -163,7 +164,7 @@ auto ULibraEffectComponent::Play(bool bRestart) -> ELibraRuntimeResult
     bIsPlaying = true;
     Activate();
     if (NativeState->pending) return LastResult = ELibraRuntimeResult::Ok;
-    auto queued = QueueEvaluation(TimeSeconds);
+    auto queued = QueueEvaluation(TimeSeconds, GetWorld() ? GetWorld()->GetDeltaSeconds() : 0);
     if (queued != ELibraRuntimeResult::Ok)
     {
         bIsPlaying = false;
@@ -194,16 +195,19 @@ auto ULibraEffectComponent::EvaluateAtTime(double evaluationTimeSeconds) -> ELib
     if (!FMath::IsFinite(evaluationTimeSeconds)) return LastResult = ELibraRuntimeResult::NonFinite;
     if (NativeState && NativeState->pending) return LastResult = ELibraRuntimeResult::Busy;
     bIsPlaying = false;
-    return QueueEvaluation(evaluationTimeSeconds);
+    return QueueEvaluation(evaluationTimeSeconds, GetWorld() ? GetWorld()->GetDeltaSeconds() : 0);
 }
 
-auto ULibraEffectComponent::QueueEvaluation(double timeSeconds) -> ELibraRuntimeResult
+auto ULibraEffectComponent::QueueEvaluation(double timeSeconds, double frameDelta) -> ELibraRuntimeResult
 {
     auto result = EnsureState();
     if (result != ELibraRuntimeResult::Ok) return LastResult = result;
     auto& state = *NativeState;
     if (state.pending) return LastResult = ELibraRuntimeResult::Busy;
     state.requestedTime = timeSeconds;
+    auto contextResult = timeSeconds >= 0 ? state.instance.setTimeContext(timeSeconds, frameDelta) :
+        state.instance.clearTimeContext();
+    if (contextResult != liberafx::Result::Ok) return LastResult = ToLibraResult(contextResult);
     auto nativeResult = state.instance.updateAsync(timeSeconds, state.scheduler.GetScheduler());
     LastResult = ToLibraResult(nativeResult);
     if (nativeResult == liberafx::Result::Ok)
@@ -258,7 +262,7 @@ void ULibraEffectComponent::TickComponent(float deltaTime, ELevelTick tickType, 
         return;
     }
     if (NativeState && NativeState->pending) return;
-    if (QueueEvaluation(TimeSeconds) != ELibraRuntimeResult::Ok)
+    if (QueueEvaluation(TimeSeconds, static_cast<double>(deltaTime)) != ELibraRuntimeResult::Ok)
     {
         bIsPlaying = false;
         SetComponentTickEnabled(false);

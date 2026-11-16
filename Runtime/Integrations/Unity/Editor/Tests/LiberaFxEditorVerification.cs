@@ -110,6 +110,7 @@ namespace LiberaFx.Unity.Editor
             {
                 NativeAbi.ValidateLayout();
                 VerifyLifetime();
+                VerifyTimeContext();
                 File.WriteAllText(Path.Combine(Project, "lifetime-verification.txt"), "PASS");
             }
             catch (Exception error)
@@ -117,6 +118,52 @@ namespace LiberaFx.Unity.Editor
                 File.WriteAllText(Path.Combine(Project, "lifetime-verification.txt"), error.ToString());
                 Debug.LogException(error);
                 EditorApplication.Exit(2);
+            }
+        }
+        private static void VerifyTimeContext()
+        {
+            var fixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_CLOCK_FIXTURE");
+            if (string.IsNullOrEmpty(fixture)) return;
+            var ids = File.ReadAllLines(fixture + ".ids");
+            using (var program = new NativeProgram(File.ReadAllBytes(fixture)))
+            using (var instance = program.CreateInstance())
+            {
+                var bindings = new[] { instance.BindValue(ids[0]), instance.BindValue(ids[1]), instance.BindValue(ids[2]) };
+                var values = new NativeValue[3];
+                Assert(instance.SetTimeContext(5, 0.125) == NativeResult.Ok &&
+                    instance.Evaluate(2, bindings, values) == NativeResult.Ok &&
+                    values[0].X == 5 && values[1].X == 0.125 && values[2].X == 2,
+                    "Unity native time context values are incorrect.");
+            }
+            const string assetPath = "Assets/LiberaFxClockVerification.bytes";
+            if (File.Exists(assetPath)) throw new InvalidOperationException("Clock fixture asset already exists.");
+            File.Copy(fixture, assetPath);
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport);
+            var material = new Material(Shader.Find("LiberaFx/Atlas Unlit"));
+            var target = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            target.SetActive(false);
+            var owner = target.AddComponent<LiberaFxRenderer>();
+            try
+            {
+                owner.SetupCubeSample(target.GetComponent<MeshFilter>().sharedMesh, material);
+                Field("compiledProgram").SetValue(owner, AssetDatabase.LoadAssetAtPath<TextAsset>(assetPath));
+                Field("positionNode").SetValue(owner, ids[0]);
+                Field("atlasFrameNode").SetValue(owner, ids[1]);
+                Field("colorNode").SetValue(owner, ids[3]);
+                Field("defaultNode").SetValue(owner, "");
+                Initialize(target, owner);
+                TimeAt(owner, 1);
+                Method(owner, "Update")();
+                var values = (NativeValue[])Field("values").GetValue(owner);
+                Assert(Math.Abs(values[0].X - 1) < 1e-6 &&
+                    Math.Abs(values[2].X - Time.deltaTime) < 1e-7,
+                    "Unity renderer did not forward elapsed time and the game frame delta.");
+            }
+            finally
+            {
+                Cleanup(target, owner);
+                UnityEngine.Object.DestroyImmediate(material);
+                AssetDatabase.DeleteAsset(assetPath);
             }
         }
         private static void VerifyLifetime()

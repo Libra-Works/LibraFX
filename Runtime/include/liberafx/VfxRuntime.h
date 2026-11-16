@@ -76,6 +76,9 @@ struct CustomNodeInvocation final {
     double time = 0;
     std::uint8_t selectedBranch = 0xff;
     void* context = nullptr;
+    double effectTime = 0;
+    double frameDelta = 0;
+    bool hasTimeContext = false;
 };
 
 struct CustomNodeBinding final {
@@ -178,6 +181,10 @@ public:
     Result value(const ValueHandle& handle, double out[4]) const noexcept;
     Result parameter(const ParameterHandle& handle, double& out) const noexcept;
     Result setParameter(const ParameterHandle& handle, double value) noexcept;
+    // Set before each evaluation. Values are supplied by the effect host;
+    // frameDelta is the game's frame delta, not an internal scheduler substep.
+    Result setTimeContext(double effectTime, double frameDelta) noexcept;
+    Result clearTimeContext() noexcept;
     Result updateAsync(double time, Enqueue enqueue, void* queueContext) noexcept;
     Result updateAsync(double time, const JobScheduler& scheduler) noexcept
     {
@@ -213,6 +220,9 @@ private:
     double* work_ = nullptr;
     double* defaults_ = nullptr;
     double time_ = 0;
+    double effectTime_ = 0, frameDelta_ = 0;
+    double pendingEffectTime_ = 0, pendingFrameDelta_ = 0;
+    bool pendingTimeContext_ = false, evaluatedTimeContext_ = false;
     std::uint64_t generation_ = 0;
     double* stateWork_ = nullptr;
     std::size_t initializedStateCount_ = 0;

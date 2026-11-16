@@ -72,6 +72,7 @@ public:
     // lanes must not be passed here; their values stay fixed from spawn.
     Result setLive(GeneratorInstanceId id, const GeneratorCapture* values,
                    std::size_t count) noexcept;
+    Result setTimeContext(GeneratorInstanceId id, double effectTime, double frameDelta) noexcept;
     Result evaluate(GeneratorInstanceId id, double time) noexcept;
     // Send the owner's natural end request at the last evaluated global time.
     // Each instance receives it at most once, even if a callback fails.

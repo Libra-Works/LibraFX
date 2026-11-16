@@ -84,6 +84,20 @@ infinite remaining cannot be represented and is rejected at compile time.
 Effect-level lifecycle is not implemented in engine adapters.
 The `Instance Age` graph node reads local elapsed seconds for the effect or
 Spawnable, using the same sample time as native evaluation.
+`Effect Age` reads seconds since the root effect began, even inside a
+Spawnable; an ordinary Group inherits the enclosing instance's clock.
+`Delta Time` is the game host's frame delta, shared by instances and unchanged
+when the lifecycle host splits a frame at expiry or scheduled events. The host
+must call Instance::setTimeContext / libra_instance_set_time_context before
+each root evaluation, and GeneratorPool::setTimeContext /
+libra_generator_set_time_context before each child start/evaluation. Missing
+context returns NotReady rather than substituting local or substep time.
+Both values must be finite and nonnegative. NativeSpawnableSession.Advance
+accepts an explicit frame delta; its one-argument overload derives delta from
+elapsed time for the fixed-step editor preview only. At replay start the
+preview uses zero and later uses its fixed 1/60-second simulation steps.
+The C++ Instance and CustomNodeInvocation layouts have changed: rebuild hosts
+and native node modules against the matching runtime headers and library.
 
 If event backpressure prevents Destroy from being queued, start/evaluate returns
 QueueRejected. Drain existing records and retry; no evaluation or OnStart is

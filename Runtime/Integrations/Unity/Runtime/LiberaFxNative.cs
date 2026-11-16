@@ -112,6 +112,8 @@ namespace LiberaFx.Unity
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_instance_release(ulong instance);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_instance_set_time_context(ulong instance, double effectTime, double frameDelta);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_bind_value(ulong instance, byte* id, out uint binding);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_bind_parameter(
@@ -238,6 +240,8 @@ namespace LiberaFx.Unity
         }
         public NativeResult SetParameter(uint binding, double value) =>
             Native.libra_parameter_set(Alive, binding, value);
+        public NativeResult SetTimeContext(double effectTime, double frameDelta) =>
+            Native.libra_instance_set_time_context(Alive, effectTime, frameDelta);
         public NativeResult GetParameter(uint binding, out double value) =>
             Native.libra_parameter_get(Alive, binding, out value);
         // Caller caches both arrays. Pinning blittable PODs avoids array marshalling

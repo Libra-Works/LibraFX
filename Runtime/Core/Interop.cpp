@@ -301,6 +301,15 @@ LibraResult LIBRA_INTEROP_CALL libra_instance_release(LibraInstance instance)
         return instances.erase(instance) ? LIBRA_OK : LIBRA_INVALID_HANDLE;
     });
 }
+LibraResult LIBRA_INTEROP_CALL libra_instance_set_time_context(
+    LibraInstance instance, double effectTime, double frameDelta)
+{
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        return native ? static_cast<LibraResult>(native->instance.setTimeContext(effectTime, frameDelta)) :
+            LIBRA_INVALID_HANDLE;
+    });
+}
 LibraResult LIBRA_INTEROP_CALL libra_bind_value(
     LibraInstance instance, const uint8_t nodeId[16], LibraBinding* outBinding)
 {
@@ -889,6 +898,15 @@ LibraResult LIBRA_INTEROP_CALL libra_generator_set_live(
             converted[i].value = values[i].value;
         }
         return static_cast<LibraResult>(found->second->pool->setLive(instance, converted.data(), count));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_set_time_context(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance, double effectTime, double frameDelta)
+{
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        return found == generatorPools.end() ? LIBRA_INVALID_HANDLE :
+            static_cast<LibraResult>(found->second->pool->setTimeContext(instance, effectTime, frameDelta));
     });
 }
 LibraResult LIBRA_INTEROP_CALL libra_generator_evaluate(

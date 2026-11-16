@@ -130,7 +130,7 @@ protected:
 
 private:
     ELibraRuntimeResult EnsureState();
-    ELibraRuntimeResult QueueEvaluation(double timeSeconds);
+    ELibraRuntimeResult QueueEvaluation(double timeSeconds, double frameDelta);
     bool ReadComponents(FGuid nodeId, double (&values)[4], uint8 width) const;
     bool HasCurrentState() const;
     TSharedPtr<FLibraEffectState, ESPMode::NotThreadSafe> NativeState;

@@ -28,7 +28,7 @@ public sealed class EditorNativePreviewSession : IDisposable
 
     public static bool RequiresNative(GraphSnapshot graph) => graph.Nodes.Any(node =>
         node.Kind == GraphNodeKind.SpawnableGroup || node.Kind.Value is "OnStart" or "OnDestroy" or "LifeTime" or
-            "InstanceAge" or "InstanceRemaining" or "InstanceNormalizedAge" ||
+            "InstanceAge" or "InstanceRemaining" or "InstanceNormalizedAge" or "EffectAge" or "DeltaTime" ||
         SpawnableGroupSchema.IsOutput(node.Kind) ||
         node.ChildGraph is { } child && !GpuParticleEditorService.IsGpu(node.Kind) && RequiresNative(child));
 

@@ -81,6 +81,74 @@ internal static class FireworksLifecycleTests
         Reject(() => SpawnableGroupPackage.Compile(ChangeLife(graph, launch.Id, -1)), "negative Life Time");
         var library = Environment.GetEnvironmentVariable("LIBERAFX_NATIVE_TEST_LIBRARY")
             ?? throw new InvalidOperationException("Actual Fireworks execution requires LIBERAFX_NATIVE_TEST_LIBRARY.");
+        var standaloneClocks = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var clockProvider = new ActiveGraphProvider(standaloneClocks);
+        var createEffectAge = LiberaFxMcpTools.CreateNode(clockProvider, "EffectAge");
+        Dispatcher.UIThread.RunJobs();
+        using var createdEffectAge = JsonDocument.Parse(createEffectAge.GetAwaiter().GetResult());
+        var standaloneEffectAge = standaloneClocks.GetNode(createdEffectAge.RootElement.GetProperty("id").GetGuid());
+        var createDelta = LiberaFxMcpTools.CreateNode(clockProvider, "DeltaTime");
+        Dispatcher.UIThread.RunJobs();
+        using var createdDelta = JsonDocument.Parse(createDelta.GetAwaiter().GetResult());
+        var standaloneDelta = standaloneClocks.GetNode(createdDelta.RootElement.GetProperty("id").GetGuid());
+        var standaloneInstanceAge = standaloneClocks.CreateNode(new GraphNodeKind("InstanceAge"));
+        var standaloneColor = standaloneClocks.CreateNode(GraphNodeKind.FloatX4);
+        var clockFixture = Path.Combine(output, "clock-fixture.lfxb");
+        File.WriteAllBytes(clockFixture, VfxProgram.Compile(standaloneClocks.CreateSnapshot()).ToBinary());
+        File.WriteAllLines(clockFixture + ".ids", [standaloneEffectAge.Id.ToString("D"),
+            standaloneDelta.Id.ToString("D"), standaloneInstanceAge.Id.ToString("D"), standaloneColor.Id.ToString("D")]);
+        var clocksWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+        clocksWorkspace.InitializeFromSnapshot(graph);
+        var rootEffectAge = clocksWorkspace.CreateNode(new GraphNodeKind("EffectAge"));
+        var rootDelta = clocksWorkspace.CreateNode(new GraphNodeKind("DeltaTime"));
+        var rootInstanceAge = clocksWorkspace.CreateNode(new GraphNodeKind("InstanceAge"));
+        var clockSum = clocksWorkspace.CreateNode(GraphNodeKind.Add);
+        Require(clocksWorkspace.TryConnectNodes(rootEffectAge, clockSum, out _, "a", "value") &&
+                clocksWorkspace.TryConnectNodes(rootDelta, clockSum, out _, "b", "value") &&
+                clocksWorkspace.History.Undo() && clocksWorkspace.History.Redo(),
+            "Clock outputs must connect and support Undo/Redo.");
+        Require(clocksWorkspace.EnterGraph(clocksWorkspace.GetNode(burst.Id)), "Cannot edit clock fixture.");
+        var childEffectAge = clocksWorkspace.CreateNode(new GraphNodeKind("EffectAge"));
+        var childDelta = clocksWorkspace.CreateNode(new GraphNodeKind("DeltaTime"));
+        var childInstanceAge = clocksWorkspace.CreateNode(new GraphNodeKind("InstanceAge"));
+        var nestedGroup = clocksWorkspace.CreateNode(GraphNodeKind.GraphGroup);
+        Require(clocksWorkspace.EnterGraph(nestedGroup), "Cannot edit nested clock fixture.");
+        var nestedInstanceAge = clocksWorkspace.CreateNode(new GraphNodeKind("InstanceAge"));
+        clocksWorkspace.NavigateToGraph(0);
+        using var clocksFile = new MemoryStream();
+        files.SaveAsync(clocksFile, clocksWorkspace).GetAwaiter().GetResult();
+        clocksFile.Position = 0;
+        var clocksGraph = files.LoadAsync(clocksFile).GetAwaiter().GetResult().Graph;
+        using (var clocks = new NativeSpawnableSession(SpawnableGroupPackage.Compile(clocksGraph), library))
+        {
+            clocks.Advance(0, 0.02);
+            Near(clocks.ReadRoot(rootEffectAge.Id).Lanes, [0], "Root effect age");
+            Near(clocks.ReadRoot(rootDelta.Id).Lanes, [0.02], "Initial game frame delta");
+            Near(clocks.ReadRoot(rootInstanceAge.Id).Lanes, [0], "Root instance age");
+            clocks.Advance(2, 0.125);
+            var child = clocks.ActiveInstances.Single(key => key.Container == burst.Id);
+            Near(clocks.Read(burst.Id, child.Instance, childEffectAge.Id).Lanes, [2], "Effect age at child spawn");
+            Near(clocks.Read(burst.Id, child.Instance, childDelta.Id).Lanes, [0.125], "Game delta at child spawn");
+            Near(clocks.Read(burst.Id, child.Instance, childInstanceAge.Id).Lanes, [0], "Child age at spawn");
+            clocks.Advance(2.5, 0.25);
+            Near(clocks.ReadRoot(rootEffectAge.Id).Lanes, [2.5], "Root effect age after update");
+            Near(clocks.ReadRoot(rootInstanceAge.Id).Lanes, [2.5], "Root instance age after update");
+            Near(clocks.ReadRoot(clockSum.Id).Lanes, [2.75], "Connected clock outputs");
+            Near(clocks.Read(burst.Id, child.Instance, childEffectAge.Id).Lanes, [2.5], "Global effect age in child");
+            Near(clocks.Read(burst.Id, child.Instance, childDelta.Id).Lanes, [0.25], "Game delta in child");
+            Near(clocks.Read(burst.Id, child.Instance, childInstanceAge.Id).Lanes, [0.5], "Local child age");
+            Near(clocks.Read(burst.Id, child.Instance, nestedInstanceAge.Id).Lanes, [0.5], "Ordinary group must inherit its enclosing Spawnable age");
+        }
+        using (var skippedClocks = new NativeSpawnableSession(SpawnableGroupPackage.Compile(clocksGraph), library))
+        {
+            skippedClocks.Advance(0, 0.02);
+            skippedClocks.Advance(2.5, 0.125);
+            var child = skippedClocks.ActiveInstances.Single(key => key.Container == burst.Id);
+            Near(skippedClocks.Read(burst.Id, child.Instance, childDelta.Id).Lanes, [0.125],
+                "Internal expiry substeps must retain the game frame delta");
+            Near(skippedClocks.Read(burst.Id, child.Instance, childEffectAge.Id).Lanes, [2.5],
+                "Skipped child effect age");
+        }
         var infiniteOrderWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
         infiniteOrderWorkspace.InitializeFromSnapshot(graph);
         var earlyGroup = infiniteOrderWorkspace.CreateNode(GraphNodeKind.SpawnableGroup);

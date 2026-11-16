@@ -2,6 +2,8 @@
   "Editor.Language": "Language",
   "Editor.Node.LifeTime": "Life Time",
   "Editor.Node.InstanceAge": "Instance Age",
+  "Editor.Node.EffectAge": "Effect Age",
+  "Editor.Node.DeltaTime": "Delta Time",
   "Editor.Node.InstanceRemaining": "Instance Remaining",
   "Editor.Node.InstanceNormalizedAge": "Instance Normalized Age",
   "Editor.Node.OwnerDestroy": "Owner Destroy (request)",

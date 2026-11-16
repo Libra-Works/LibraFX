@@ -101,6 +101,11 @@ LiberaFx > Verify native ABI contracts. These are forward P/Invoke tests, not
 GPU/Play Mode tests.
 GUID bytes are compiler big-endian order, not Guid.ToByteArray() Windows layout.
 The C# binding code converts canonical GUID text once during initialization.
+Effect Age and Delta Time require instance.SetTimeContext(effectAge, frameDelta)
+before each evaluation. The example renderer supplies its elapsed effect time
+and Unity's Time.deltaTime; manual hosts must supply the actual game frame
+delta rather than an internal scheduler substep. Instance Age is local to the
+enclosing Spawnable; at the effect root it equals the root's elapsed time.
 For a built-in Signal, cache new NativeSignal(nodeGuid), evaluate the instance,
 then call instance.DispatchSignal(signal, time, instructionBudget). Each dispatch
 looks up the node in its program; the cached identifier avoids per-call GUID

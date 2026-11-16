@@ -1,6 +1,8 @@
 {
   "Editor.Node.LifeTime": "寿命",
   "Editor.Node.InstanceAge": "インスタンス経過時間",
+  "Editor.Node.EffectAge": "エフェクト経過時間",
+  "Editor.Node.DeltaTime": "デルタ時間",
   "Editor.Node.InstanceRemaining": "インスタンス残り寿命",
   "Editor.Node.InstanceNormalizedAge": "インスタンス正規化経過時間",
   "Editor.Node.OwnerDestroy": "親の終了要求",

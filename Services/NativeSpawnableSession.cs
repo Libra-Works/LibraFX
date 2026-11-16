@@ -27,6 +27,7 @@ public sealed class NativeSpawnableSession : IDisposable
     private double _rootEnd = double.PositiveInfinity;
     private double _rootAge;
     private double _rootFinishedAt;
+    private double _frameDelta;
     private bool _rootExpired, _rootFinished, _rootStopped, _rootDestroySent;
     private bool _disposed;
     private bool _counted;
@@ -92,14 +93,19 @@ public sealed class NativeSpawnableSession : IDisposable
         catch { Dispose(); throw; }
     }
 
-    public void Advance(double time)
+    public void Advance(double time) => Advance(time, _time < 0 ? time : time - _time);
+
+    public void Advance(double time, double frameDelta)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!double.IsFinite(time) || time < 0 || time < _time)
             throw new ArgumentException("Advance uses nonnegative monotonic seconds. Recreate session for deterministic reset.");
+        if (!double.IsFinite(frameDelta) || frameDelta < 0)
+            throw new ArgumentException("Frame delta must be nonnegative finite seconds.", nameof(frameDelta));
         if (_failed) throw new InvalidOperationException("Recreate the session after a failed lifecycle operation.");
         try
         {
+            _frameDelta = frameDelta;
             AdvanceManaged(time, _package.LifeNodeId);
         }
         catch { _failed = true; throw; }
@@ -112,6 +118,7 @@ public sealed class NativeSpawnableSession : IDisposable
         {
             NativeLifetimeSample initial;
             var startNode = _package.OnStartNodeId is { } start ? Id(start) : null;
+            SetRootTimeContext(0);
             Check(life is { } lifeId
                 ? Fn<StartCaptured>("libra_effect_start_captured")(_parentInstance, Id(lifeId), startNode, 10000, out initial)
                 : Fn<StartInfinite>("libra_effect_start")(_parentInstance, 0, 1, startNode, 10000, out initial));
@@ -227,6 +234,7 @@ public sealed class NativeSpawnableSession : IDisposable
     {
         if (time < _rootAge) throw new InvalidOperationException("Root lifetime cannot evaluate backwards.");
         if (time == _rootAge) return;
+        SetRootTimeContext(time);
         if (_rootExpired)
         {
             Check(Fn<DrainEffect>("libra_effect_drain")(_parentInstance, time));
@@ -252,6 +260,7 @@ public sealed class NativeSpawnableSession : IDisposable
             {
                 evaluated.Add(key);
                 var state = _templates[key.Container];
+                SetChildTimeContext(state.Pool, key.Instance, time);
                 Check(Fn<EvaluateChild>("libra_generator_evaluate")(state.Pool, key.Instance, time), key.Container, key.Instance);
                 Pump(time);
             }
@@ -276,6 +285,7 @@ public sealed class NativeSpawnableSession : IDisposable
                     var container = state.Template.ContainerId;
                     if (value.Kind == 1)
                     {
+                        SetChildTimeContext(state.Pool, value.Instance, value.Start);
                         Check(Fn<InstanceAction>("libra_generator_start")(state.Pool, value.Instance), container, value.Instance);
                         var life = state.Template.Lifecycle?.LifeNodeId is { } lifeId ? Read(container, value.Instance, lifeId).Lanes[0] : double.PositiveInfinity;
                         if (life < 0 || double.IsNaN(life) || (state.Template.Lifecycle?.LifeNodeId is not null && !double.IsFinite(life)))
@@ -395,6 +405,16 @@ public sealed class NativeSpawnableSession : IDisposable
     {
         if (result != 0) throw new InvalidOperationException($"Native lifecycle failed: result={result}, container={container}, instance={instance}.");
     }
+    private void SetRootTimeContext(double time)
+    {
+        if (NativeLibrary.TryGetExport(_library, "libra_instance_set_time_context", out var address))
+            Check(Marshal.GetDelegateForFunctionPointer<SetRootTime>(address)(_parentInstance, time, _frameDelta));
+    }
+    private void SetChildTimeContext(ulong pool, ulong instance, double time)
+    {
+        if (NativeLibrary.TryGetExport(_library, "libra_generator_set_time_context", out var address))
+            Check(Marshal.GetDelegateForFunctionPointer<SetChildTime>(address)(pool, instance, time, _frameDelta));
+    }
     [StructLayout(LayoutKind.Sequential, Pack = 8)]
     private struct NativeBinding
     {
@@ -443,6 +463,8 @@ public sealed class NativeSpawnableSession : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreateParent(byte[] bytes, ulong size, [In] NativeBinding[] bindings, uint count, out ulong handle);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreatePool(ulong program, byte[] container, uint max, ulong budget, uint events, out ulong pool);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreateInstance(ulong program, out ulong instance);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int SetRootTime(ulong instance, double effectTime, double frameDelta);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int SetChildTime(ulong pool, ulong instance, double effectTime, double frameDelta);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Release(ulong handle);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int StartCaptured(ulong instance, byte[] lifeNode, byte[]? onStart, uint budget, out NativeLifetimeSample sample);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int StartInfinite(ulong instance, double duration, uint infinite, byte[]? onStart, uint budget, out NativeLifetimeSample sample);

@@ -54,6 +54,12 @@ Import and use
   Parameter overrides are per instance; asset bytecode is never modified.
   Signals run synchronously on the game thread after a successful evaluation.
   Their instruction budget bounds execution, not rollback of earlier side effects.
+  Effect Age uses effect elapsed time and Delta Time uses the engine tick's
+  delta without substituting effect substeps or applying PlayRate again.
+  Initial/manual evaluations use the world's current delta. Instance Age uses
+  the enclosing Spawnable clock; the component's standalone graph is the root.
+  Spawnable package execution remains separate and is not implemented here.
+  The new time-node path has not yet been verified in a running Unreal project.
 
 Live editor connection
   Start LIBERA FX and show its Preview panel. Use that session's access token

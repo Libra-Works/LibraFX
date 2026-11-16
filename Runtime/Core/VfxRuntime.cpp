@@ -942,6 +942,8 @@ auto Instance::initialize(const Program& program, double* work, std::size_t work
             initializedStateCount_ = index + 1;
         }
     generation_ = nextInstanceGeneration.fetch_add(1, std::memory_order_relaxed);
+    pendingTimeContext_ = false;
+    evaluatedTimeContext_ = false;
     result_ = Result::NotReady;
     phase_.store(Phase::Idle, std::memory_order_release);
     return Result::Ok;
@@ -1175,6 +1177,25 @@ auto Instance::setParameter(const ParameterHandle& handle, double value) noexcep
     return Result::Ok;
 }
 
+auto Instance::setTimeContext(double effectTime, double frameDelta) noexcept -> Result
+{
+    if (dispatching_ || phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
+    if (!program_ || !std::isfinite(effectTime) || !std::isfinite(frameDelta) ||
+        effectTime < 0 || frameDelta < 0) return Result::InvalidArgument;
+    pendingEffectTime_ = effectTime;
+    pendingFrameDelta_ = frameDelta;
+    pendingTimeContext_ = true;
+    return Result::Ok;
+}
+
+auto Instance::clearTimeContext() noexcept -> Result
+{
+    if (dispatching_ || phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
+    if (!program_) return Result::InvalidArgument;
+    pendingTimeContext_ = false;
+    return Result::Ok;
+}
+
 auto Instance::updateAsync(double time, Enqueue enqueue, void* queueContext) noexcept -> Result
 {
     if (dispatching_) return Result::Busy;
@@ -1187,8 +1208,13 @@ auto Instance::updateAsync(double time, Enqueue enqueue, void* queueContext) noe
         if (phase_.compare_exchange_weak(phase, Phase::Running, std::memory_order_acq_rel)) break;
     }
     time_ = time;
+    evaluatedTimeContext_ = pendingTimeContext_;
+    effectTime_ = pendingEffectTime_;
+    frameDelta_ = pendingFrameDelta_;
+    pendingTimeContext_ = false;
     if (!enqueue(queueContext, &Instance::run, this))
     {
+        pendingTimeContext_ = evaluatedTimeContext_;
         phase_.store(Phase::Idle, std::memory_order_release);
         return Result::QueueRejected;
     }
@@ -1409,7 +1435,8 @@ auto Instance::dispatchSignal(const SignalHandle& entry, double time,
         auto invocation = CustomNodeInvocation{
             inputs.data(), current[18], inputWidths.data(), nullptr, 0,
             constants.data(), std::size_t{current[18]} * 4,
-            state, descriptor->stateBytes, time, 0xff, descriptor->context};
+            state, descriptor->stateBytes, time, 0xff, descriptor->context,
+            effectTime_, frameDelta_, evaluatedTimeContext_};
         status = descriptor->function(invocation);
         if (status != Result::Ok) return status;
         if (invocation.selectedBranch >= current[19]) return Result::InvalidValueType;
@@ -1505,7 +1532,8 @@ auto Instance::evaluate() noexcept -> Result
             auto invocation = CustomNodeInvocation{
                 inputs.data(), current[18], inputWidths.data(), work_ + index * 4, current[17],
                 constants.data(), std::size_t{current[18]} * 4,
-                state, descriptor->stateBytes, time_, 0xff, descriptor->context};
+                state, descriptor->stateBytes, time_, 0xff, descriptor->context,
+                effectTime_, frameDelta_, evaluatedTimeContext_};
             auto status = descriptor->function(invocation);
             if (status != Result::Ok) return status;
             for (auto lane = 0u; lane < current[17]; ++lane)

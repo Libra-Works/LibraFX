@@ -37,6 +37,7 @@ namespace LiberaFx.Unity
         private Vertex[] vertices;
         private double elapsed;
         private bool sample;
+        private bool hasTimeContextApi = true;
         private readonly int colorProperty = Shader.PropertyToID("_Color");
         private readonly int textureProperty = Shader.PropertyToID("_MainTex");
         private readonly int atlasProperty = Shader.PropertyToID("_AtlasRect");
@@ -115,6 +116,7 @@ namespace LiberaFx.Unity
                 }
                 else meshFilter.sharedMesh = modelMesh;
                 elapsed = 0;
+                hasTimeContextApi = true;
                 meshRenderer.enabled = true;
             }
             catch (Exception error)
@@ -141,7 +143,22 @@ namespace LiberaFx.Unity
         private void Update()
         {
             if (instance == null) return;
-            elapsed += Time.deltaTime;
+            var frameDelta = Time.deltaTime;
+            elapsed += frameDelta;
+            if (hasTimeContextApi)
+            {
+                try
+                {
+                    var contextResult = instance.SetTimeContext(elapsed, frameDelta);
+                    if (contextResult != NativeResult.Ok)
+                    {
+                        Debug.LogError("LiberaFx time context failed: " + contextResult, this);
+                        enabled = false;
+                        return;
+                    }
+                }
+                catch (EntryPointNotFoundException) { hasTimeContextApi = false; }
+            }
             var result = instance.Evaluate(sample ? elapsed % 2.0 : elapsed, bindings, values);
             if (result != NativeResult.Ok)
             {

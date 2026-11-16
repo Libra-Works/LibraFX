@@ -77,6 +77,21 @@ namespace LiberaFx.Unity.Tests
                     expired.Age == 0.2 && expired.Expired == 1);
                 Assert(instance.StopLifetime() == NativeResult.Ok);
             }
+            var clockFixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_CLOCK_FIXTURE");
+            if (!string.IsNullOrEmpty(clockFixture))
+            {
+                var ids = File.ReadAllLines(clockFixture + ".ids");
+                using (var program = new NativeProgram(File.ReadAllBytes(clockFixture)))
+                using (var instance = program.CreateInstance())
+                {
+                    var bindings = new[] { instance.BindValue(ids[0]), instance.BindValue(ids[1]), instance.BindValue(ids[2]) };
+                    var values = new NativeValue[3];
+                    Assert(instance.SetTimeContext(5, 0.125) == NativeResult.Ok);
+                    Assert(instance.Evaluate(2, bindings, values) == NativeResult.Ok &&
+                        values[0].X == 5 && values[1].X == 0.125 && values[2].X == 2);
+                    Assert(instance.Evaluate(3, bindings, values) == NativeResult.NotReady);
+                }
+            }
             var fixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_SIGNAL_FIXTURE");
             if (!string.IsNullOrEmpty(fixture))
             {

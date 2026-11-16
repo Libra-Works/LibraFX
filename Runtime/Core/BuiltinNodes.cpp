@@ -22,6 +22,28 @@ enum class Op {
 enum class MatrixOp { TransformRow, InverseRow, InverseValid, DecomposePosition,
                       DecomposeRotation, DecomposeScale, DecomposeValid };
 
+template<bool delta>
+auto evaluateHostTime(CustomNodeInvocation& call) noexcept -> Result
+{
+    if (!call.hasTimeContext) return Result::NotReady;
+    call.outputs[0] = delta ? call.frameDelta : call.effectTime;
+    return Result::Ok;
+}
+
+template<bool delta>
+auto makeHostTimeDescriptor() noexcept -> CustomNodeDescriptor
+{
+    auto descriptor = CustomNodeDescriptor{};
+    const auto id = std::array<std::uint8_t, 16>{
+        0xc9, 0x82, 0xe1, 0xbe, 0x8f, 0x78, 0x4d, 0x28,
+        0x9a, 0x65, 0x4f, 0x4a, 0xa4, 0x52, 0x49, delta ? std::uint8_t{0xe7} : std::uint8_t{0xe6}};
+    std::copy(id.begin(), id.end(), descriptor.typeId);
+    descriptor.abiVersion = 1;
+    descriptor.outputWidth = 1;
+    descriptor.function = evaluateHostTime<delta>;
+    return descriptor;
+}
+
 struct CapturedLifetime final {
     double duration;
     bool captured;
@@ -269,7 +291,7 @@ auto makeGameIoOutputSignalDescriptor() noexcept -> CustomNodeDescriptor
     return descriptor;
 }
 
-const std::array<CustomNodeDescriptor, 64> descriptors = {
+const std::array<CustomNodeDescriptor, 66> descriptors = {
     makeDescriptor<Op::Abs, 1>(1, 1, 1), makeDescriptor<Op::Floor, 1>(2, 2, 1),
     makeDescriptor<Op::Round, 1>(3, 1, 1), makeDescriptor<Op::Sign, 1>(4, 1, 1),
     makeDescriptor<Op::Sqrt, 1>(5, 1, 1), makeDescriptor<Op::Pow, 1>(6, 2, 1),
@@ -309,7 +331,8 @@ const std::array<CustomNodeDescriptor, 64> descriptors = {
     makeMatrixDescriptor<MatrixOp::DecomposeScale, 3>(12, 4, 4),
     makeMatrixDescriptor<MatrixOp::DecomposeValid, 1>(13, 4, 4),
     makeSignalPassthroughDescriptor(), makeGameIoOutputSignalDescriptor(),
-    makeLifetimeDescriptor<false>(), makeLifetimeDescriptor<true>()
+    makeLifetimeDescriptor<false>(), makeLifetimeDescriptor<true>(),
+    makeHostTimeDescriptor<false>(), makeHostTimeDescriptor<true>()
 };
 }
 

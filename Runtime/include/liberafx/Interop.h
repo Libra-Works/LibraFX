@@ -184,6 +184,9 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_program_release(LibraProg
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_instance_create(
     LibraProgram program, LibraInstance* outInstance);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_instance_release(LibraInstance instance);
+/* Set before each evaluation for Effect Age and Delta Time nodes. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_instance_set_time_context(
+    LibraInstance instance, double effectTime, double frameDelta);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_bind_value(
     LibraInstance instance, const uint8_t nodeId[16], LibraBinding* outBinding);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_bind_parameter(
@@ -289,6 +292,9 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_reset(LibraGene
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_set_live(
     LibraGeneratorPool pool, LibraGeneratorInstance instance,
     const LibraGeneratorCapture* values, uint32_t count);
+/* Supply effect elapsed time and the game frame's delta before each evaluation. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_set_time_context(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance, double effectTime, double frameDelta);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_evaluate(
     LibraGeneratorPool pool, LibraGeneratorInstance instance, double time);
 /* At-most-once natural owner end request at the instance's last evaluated global time. */
