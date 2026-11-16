@@ -49,6 +49,8 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
                     throw new InvalidDataException("Spawn input nodes must be directly inside a Spawnable Group.");
                 if ((node.Kind.Value == "LifeTime" || SpawnableGroupSchema.IsOutput(node.Kind)) && !directTemplate)
                     throw new InvalidDataException("Life Time and Group Output must be directly inside a Spawnable Group.");
+                if (node.Kind.Value == "InstanceAge" && !withinTemplate)
+                    throw new InvalidDataException("Instance Age requires a Spawnable Group.");
                 if (node.Kind.Value == "OnStart" && !directTemplate && !ReferenceEquals(current, graph))
                     throw new InvalidDataException("On Start must be directly at the root or directly inside a Spawnable Group.");
                 if (node.Kind == GraphNodeKind.SpawnableGroup)

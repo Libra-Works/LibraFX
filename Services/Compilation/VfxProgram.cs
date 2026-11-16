@@ -89,7 +89,7 @@ public sealed class VfxProgram
         if (ContainsSpawnable(graph))
             throw new InvalidDataException("Compile Spawnable Groups with SpawnableGroupPackage so templates are not discarded.");
         if (Flatten(graph).Any(node => SpawnableGroupSchema.IsInput(node.Kind) ||
-            SpawnableGroupSchema.IsOutput(node.Kind) || node.Kind.Value is "LifeTime" or "OnStart"))
+            SpawnableGroupSchema.IsOutput(node.Kind) || node.Kind.Value is "LifeTime" or "OnStart" or "InstanceAge"))
             throw new InvalidDataException("Lifecycle and Spawn boundary nodes require a Spawnable Group package.");
         return CompileForPackage(graph);
     }
@@ -822,6 +822,7 @@ public sealed class VfxProgram
             Nodes = graph.Nodes.Select(node => node.Kind.Value switch
             {
                 "OnStart" => node with { Kind = GraphNodeKind.Signal },
+                "InstanceAge" => node with { Kind = GraphNodeKind.Time },
                 "LifeTime" => node with { Kind = GraphNodeKind.Float, Parameters =
                     [new NodeParameterSnapshot("value", "float", node.Parameters?.SingleOrDefault(p => p.Id == "seconds")?.Value
                         ?? JsonSerializer.SerializeToElement(2d))] },

@@ -1,6 +1,7 @@
 {
   "Editor.Language": "Language",
   "Editor.Node.LifeTime": "Life Time",
+  "Editor.Node.InstanceAge": "Instance Age",
   "Editor.Parameter.Seconds": "Seconds",
   "Editor.Node.OnStart": "On Start",
   "Editor.Node.SpawnOutputVector3": "Group Output (Vector3)",

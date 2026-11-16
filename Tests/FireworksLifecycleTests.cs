@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Avalonia.Threading;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services;
@@ -80,6 +81,32 @@ internal static class FireworksLifecycleTests
         Reject(() => SpawnableGroupPackage.Compile(ChangeLife(graph, launch.Id, -1)), "negative Life Time");
         var library = Environment.GetEnvironmentVariable("LIBERAFX_NATIVE_TEST_LIBRARY")
             ?? throw new InvalidOperationException("Actual Fireworks execution requires LIBERAFX_NATIVE_TEST_LIBRARY.");
+        var ageWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+        ageWorkspace.InitializeFromSnapshot(graph);
+        Require(ageWorkspace.EnterGraph(ageWorkspace.GetNode(launch.Id)), "Cannot enter age fixture.");
+        var createAge = LiberaFxMcpTools.CreateNode(new ActiveGraphProvider(ageWorkspace), "InstanceAge");
+        Dispatcher.UIThread.RunJobs();
+        using var createdAge = JsonDocument.Parse(createAge.GetAwaiter().GetResult());
+        var ageId = createdAge.RootElement.GetProperty("id").GetGuid();
+        Require(ageWorkspace.History.Undo() && !ageWorkspace.Nodes.Any(node => node.Id == ageId) &&
+            ageWorkspace.History.Redo() && ageWorkspace.GetNode(ageId).Definition.Kind.Value == "InstanceAge",
+            "MCP Instance Age creation must support Undo/Redo.");
+        ageWorkspace.NavigateToGraph(0);
+        using (var ageFile = new MemoryStream())
+        {
+            files.SaveAsync(ageFile, ageWorkspace).GetAwaiter().GetResult();
+            ageFile.Position = 0;
+            var ageGraph = files.LoadAsync(ageFile).GetAwaiter().GetResult().Graph;
+            using var ageSession = new NativeSpawnableSession(SpawnableGroupPackage.Compile(ageGraph), library);
+            ageSession.Advance(0);
+            var instance = ageSession.ActiveInstances.Single();
+            Near(ageSession.Read(launch.Id, instance.Instance, ageId).Lanes, [0], "Instance Age at start");
+            ageSession.Advance(1);
+            Near(ageSession.Read(launch.Id, instance.Instance, ageId).Lanes, [1], "Instance Age after one second");
+        }
+        var invalidAge = new GraphWorkspaceViewModel(new UndoRedoManager());
+        invalidAge.CreateNode(new GraphNodeKind("InstanceAge"));
+        Reject(() => SpawnableGroupPackage.Compile(invalidAge.CreateSnapshot()), "Instance Age outside Spawnable");
         using (var immediate = new NativeSpawnableSession(
             SpawnableGroupPackage.Compile(ChangeLife(graph, launch.Id, 0)), library))
         {

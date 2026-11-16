@@ -1,5 +1,6 @@
 {
   "Editor.Node.LifeTime": "寿命",
+  "Editor.Node.InstanceAge": "インスタンス経過時間",
   "Editor.Parameter.Seconds": "秒",
   "Editor.Node.OnStart": "開始時",
   "Editor.Node.SpawnOutputVector3": "グループ出力 (Vector3)",

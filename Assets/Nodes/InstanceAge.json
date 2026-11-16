@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "typeId": "c982e1be-8f78-4d28-9a65-4f4aa45249e0",
+  "namespace": "LiberaFx",
+  "kind": "InstanceAge",
+  "name": "Instance Age",
+  "displayNameKey": "Editor.Node.InstanceAge",
+  "group": "Spawnable Group",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "inputPorts": []
+}

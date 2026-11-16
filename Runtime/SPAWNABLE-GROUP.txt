@@ -66,8 +66,11 @@ expiry state, including the frozen expiry boundary. Before the first successful
 start/evaluation they return NotReady; after finalization or stop the handle is
 invalid. A zero-duration lifetime reports normalized age 1 at expiry. Infinite
 lifetime reports infinite remaining and normalized age 0. Failed updates leave
-the previous sample intact. These host APIs do not yet expose lifetime values
-as graph nodes or implement effect-level lifecycle in engine adapters.
+the previous sample intact. Remaining and normalized age are not yet exposed
+as graph nodes, and effect-level lifecycle is not implemented in engine adapters.
+The `Instance Age` graph node reads the Spawnable's local elapsed seconds using
+the same clamped sample time as native evaluation. It may be used inside a
+Spawnable or its ordinary nested groups, but not at the effect root.
 
 If event backpressure prevents Destroy from being queued, start/evaluate returns
 QueueRejected. Drain existing records and retry; no evaluation or OnStart is

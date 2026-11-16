@@ -131,6 +131,7 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("f43ba0db-ea8c-4c27-93ec-2da000000004")] = "OutputSignal",
         [Guid.Parse("7ff078d2-dce1-42b0-93fb-b40200000001")] = "GameIoRuntimeOutputSignal",
         [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000001")] = "LifeTime",
+        [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e0")] = "InstanceAge",
         [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000002")] = "OnStart",
         [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000003")] = "SpawnOutputVector3",
         [Guid.Parse("fb8c8a83-0c9d-4870-98a1-08c0ee800001")] = "SpawnInputFloat",
