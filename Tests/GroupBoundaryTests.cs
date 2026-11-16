@@ -108,11 +108,33 @@ internal static class GroupBoundaryTests
         if (!plain.TryConnectNodes(plainSource, a, out _) || !plain.TryConnectNodes(plainSource, b, out _))
             throw new InvalidOperationException("Cannot connect plain Signal fan-out.");
         var plainBytes = SpawnableGroupPackage.Compile(plain.CreateSnapshot()).ParentBytecode;
+        if (!plainBytes.SequenceEqual(VfxProgram.Compile(plain.CreateSnapshot()).ToBinary()))
+            throw new InvalidOperationException("Standalone Signal compilation must preserve fan-out.");
         VerifyNativeBuiltinFanout(plainBytes, plainSource.Id);
+        var plainGroup = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var plainContainer = plainGroup.CreateNode(GraphNodeKind.GraphGroup);
+        plainGroup.EnterGraph(plainContainer);
+        var groupInput = plainGroup.CreateNode(new GraphNodeKind("GroupInputSignal"));
+        var groupOutput = plainGroup.CreateNode(new GraphNodeKind("GroupOutputSignal"));
+        if (!plainGroup.TryConnectNodes(groupInput, groupOutput, out _))
+            throw new InvalidOperationException("Cannot connect standalone Group Signal boundaries.");
+        plainGroup.NavigateToGraph(0);
+        plainContainer = plainGroup.GetNode(plainContainer.Id);
+        var entry = plainGroup.CreateNode(GraphNodeKind.Signal);
+        if (!plainGroup.TryConnectNodes(entry, plainContainer, out _, GroupBoundarySchema.InputPortId(groupInput.Id)))
+            throw new InvalidOperationException("Cannot connect standalone Group Signal input.");
+        var groupSnapshot = plainGroup.CreateSnapshot();
+        var groupBytes = VfxProgram.Compile(groupSnapshot).ToBinary();
+        if (!groupBytes.SequenceEqual(SpawnableGroupPackage.Compile(groupSnapshot).ParentBytecode))
+            throw new InvalidOperationException("Standalone Group Signal compilation must preserve boundary routing.");
+        VerifyNativeBuiltinFanout(groupBytes, entry.Id);
         if (Environment.GetEnvironmentVariable("LIBERAFX_UNITY_SIGNAL_FIXTURE") is { Length: > 0 } fixture)
         {
             File.WriteAllBytes(fixture, plainBytes);
             File.WriteAllText(fixture + ".id", plainSource.Id.ToString());
+            using var stream = new MemoryStream();
+            new ProjectFileService().SaveAsync(stream, plain).GetAwaiter().GetResult();
+            File.WriteAllBytes(fixture + ".lfxproj", stream.ToArray());
         }
     }
 

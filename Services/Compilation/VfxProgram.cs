@@ -80,10 +80,9 @@ public sealed class VfxProgram
         ValidateForCompilation(graph);
         if (ContainsSpawnable(graph))
             throw new InvalidDataException("Compile Spawnable Groups with SpawnableGroupPackage so templates are not discarded.");
-        if (Flatten(graph).Any(node => node.Kind == GraphNodeKind.Signal ||
-            node.Kind.Value is "GroupInputSignal" or "GroupOutputSignal" || SpawnableGroupSchema.IsInput(node.Kind) ||
+        if (Flatten(graph).Any(node => SpawnableGroupSchema.IsInput(node.Kind) ||
             SpawnableGroupSchema.IsOutput(node.Kind) || node.Kind.Value is "LifeTime" or "OnStart"))
-            throw new InvalidDataException("Signal, lifecycle and Spawn boundary nodes require a Spawnable Group package.");
+            throw new InvalidDataException("Lifecycle and Spawn boundary nodes require a Spawnable Group package.");
         return CompileForPackage(graph);
     }
 

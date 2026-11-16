@@ -83,7 +83,7 @@ For v3, `Program::workBytes()` includes four result doubles per instruction plus
 
 ### JSON node metadata
 
-Project node definitions opt in with `runtime: { "kind": "custom", "abiVersion": 1, "execution": "parameter" }` or `"signal"`. The definition's stable `typeId` is the native registration key. Per-port `category` may override legacy `portCategory`; data ports use Float/FloatX2/FloatX3/FloatX4/Color and signal execution ports use type `Signal`. A custom signal node may therefore declare both parameter inputs and exec pins. The compiler emits `40`/`41` only for these declarations; ordinary project-defined nodes remain editor-only and built-in v1/v2 output remains unchanged.
+Project node definitions opt in with `runtime: { "kind": "custom", "abiVersion": 1, "execution": "parameter" }` or `"signal"`. The definition's stable `typeId` is the native registration key. Per-port `category` may override legacy `portCategory`; data ports use Float/FloatX2/FloatX3/FloatX4/Color and signal execution ports use type `Signal`. A custom signal node may therefore declare both parameter inputs and exec pins. The compiler also emits the built-in Signal passthrough for ordinary Signal nodes and Group Signal boundaries; the standard native registry supplies its descriptor. Ordinary project-defined nodes without runtime declarations remain editor-only and built-in v1/v2 output remains unchanged. Standalone conversion supports these Signal graphs, but Spawnable and lifecycle graphs still require a package so host metadata is not discarded.
 
 ## Versions 4 and 5: curves and Signal fan-out
 
