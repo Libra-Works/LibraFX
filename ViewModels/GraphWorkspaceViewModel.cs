@@ -77,6 +77,21 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
     public bool HasNoSelection => SelectedNode is null;
 
+    public bool IsRootGraph => _graphPath.Count == 0;
+
+    public bool AutoDestroyWhenIdle
+    {
+        get => _rootSnapshot.AutoDestroyWhenIdle;
+        set
+        {
+            var before = CreateSnapshot();
+            if (before.AutoDestroyWhenIdle == value) return;
+            _history.Execute(new ReplaceGraphSnapshotCommand(this, before,
+                before with { AutoDestroyWhenIdle = value },
+                LocalizationService.Shared.Get("Messages.History.AutoDestroyWhenIdle")));
+        }
+    }
+
     public string SelectedNodeName
     {
         get => SelectedNode?.Name ?? string.Empty;
@@ -193,6 +208,10 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 GraphNodeDefinition.DisplayPortType(diagnostic.ExpectedType));
             problems.Add(new GraphProblemViewModel(target, text));
         }
+        if (!IsCurrentGraphSpawnable)
+            foreach (var node in Nodes.Where(node => node.Definition.Kind.Value == "LifeTime"))
+                problems.Add(new GraphProblemViewModel(node,
+                    LocalizationService.Shared.Get("Messages.LifeTimeSpawnableOnly")));
         var byTarget = problems.ToLookup(problem => problem.Node);
         foreach (var node in Nodes.Where(n => GpuParticleEditorService.IsGpu(n.Definition.Kind)))
             foreach (var diagnostic in GpuParticleEditorService.Diagnostics(GpuParticleEditorService.ReadState(node)))
@@ -360,7 +379,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
     public GraphSnapshot CreateSnapshot()
     {
-        var current = CreateCurrentSnapshot();
+        var current = CreateCurrentSnapshot() with { AutoDestroyWhenIdle = GetCurrentGraph().AutoDestroyWhenIdle };
         _rootSnapshot = ReplaceGraph(_rootSnapshot, _graphPath, 0, current);
         return _rootSnapshot;
     }
@@ -777,6 +796,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
     private void RefreshBreadcrumbs()
     {
+        OnPropertyChanged(nameof(IsRootGraph));
         Breadcrumbs.Clear();
         Breadcrumbs.Add(new GraphBreadcrumb(LocalizationService.Shared.Get("Messages.Top"), 0));
         var graph = _rootSnapshot;
@@ -800,6 +820,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         _graphPath.Clear();
         RestoreCurrentGraph(snapshot);
         RefreshBreadcrumbs();
+        OnPropertyChanged(nameof(AutoDestroyWhenIdle));
         _history.Clear();
     }
 
@@ -824,6 +845,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     {
         ValidateSnapshot(snapshot);
         _rootSnapshot = snapshot;
+        OnPropertyChanged(nameof(AutoDestroyWhenIdle));
         var graph = snapshot;
         var validDepth = 0;
         foreach (var id in _graphPath)
@@ -841,6 +863,23 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     }
 
     internal void RestoreSnapshotForCommand(GraphSnapshot snapshot) => RestoreFromHistory(snapshot);
+
+    private bool IsCurrentGraphSpawnable
+    {
+        get
+        {
+            if (_graphPath.Count == 0) return false;
+            var graph = _rootSnapshot;
+            GraphNodeSnapshot? owner = null;
+            foreach (var id in _graphPath)
+            {
+                owner = graph.Nodes.FirstOrDefault(node => node.Id == id);
+                if (owner?.ChildGraph is not { } child) return false;
+                graph = child;
+            }
+            return owner?.Kind == GraphNodeKind.SpawnableGroup;
+        }
+    }
 
     private void RestoreCurrentGraph(GraphSnapshot snapshot)
     {

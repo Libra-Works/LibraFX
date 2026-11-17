@@ -242,6 +242,15 @@ auto EffectLifecycle::dispatchDeferredSignal(double time, std::size_t instructio
     return Result::Ok;
 }
 
+auto EffectLifecycle::requestNaturalEnd() noexcept -> Result
+{
+    if (phase_ == Phase::Busy) return Result::Busy;
+    if (phase_ == Phase::Expired || phase_ == Phase::Draining) return Result::Ok;
+    if (phase_ != Phase::Running) return Result::NotReady;
+    phase_ = Phase::Draining;
+    return Result::Ok;
+}
+
 auto EffectLifecycle::destroy(const std::uint8_t nodeId[16], std::size_t instructionBudget) noexcept -> Result
 {
     if (!nodeId || !instructionBudget || instructionBudget > 10000) return Result::InvalidArgument;

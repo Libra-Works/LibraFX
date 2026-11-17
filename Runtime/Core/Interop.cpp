@@ -604,6 +604,14 @@ LibraResult LIBRA_INTEROP_CALL libra_effect_dispatch_deferred_signal(
             native->lifecycle->dispatchDeferredSignal(time, instructionBudget)) : LIBRA_NOT_READY;
     });
 }
+LibraResult LIBRA_INTEROP_CALL libra_effect_request_natural_end(LibraInstance instance)
+{
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        return native->lifecycle ? static_cast<LibraResult>(native->lifecycle->requestNaturalEnd()) : LIBRA_NOT_READY;
+    });
+}
 LibraResult LIBRA_INTEROP_CALL libra_effect_destroy(
     LibraInstance instance, const uint8_t nodeId[16], uint32_t instructionBudget)
 {

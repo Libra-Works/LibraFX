@@ -179,6 +179,28 @@ int main(int argc, char** argv)
            std::isinf(sample.remaining) && sample.normalizedAge == 0 && !sample.expired);
     assert(stopped.stop() == Result::Ok && stopped.advance(10, sample) == Result::NotReady);
 
+    alignas(16) auto naturalEndWork = std::array<double, 16>{};
+    auto naturalEndInstance = liberafx::Instance{};
+    assert(naturalEndInstance.initialize(program, naturalEndWork.data(), naturalEndWork.size()) == Result::Ok);
+    auto naturalEnd = liberafx::EffectLifecycle(naturalEndInstance);
+    assert(naturalEnd.start(liberafx::Lifetime::infinite(), nullptr, 0, sample) == Result::Ok);
+    assert(naturalEnd.advance(2, sample) == Result::Ok && sample.age == 2 && !sample.expired);
+    assert(naturalEnd.schedule(3, 1) == Result::Ok);
+    assert(naturalEnd.requestNaturalEnd() == Result::Ok &&
+           naturalEnd.requestNaturalEnd() == Result::Ok &&
+           naturalEnd.advance(3, sample) == Result::NotReady &&
+           naturalEnd.destroy(signalId.data(), 3) == Result::NotReady &&
+           naturalEnd.drain(3) == Result::Ok &&
+           naturalEnd.validateSignalTime(3) == Result::Ok);
+    auto naturalEndEvent = liberafx::ScheduledEvent{};
+    auto hasNaturalEndEvent = false;
+    assert(naturalEnd.takeScheduled(naturalEndEvent, hasNaturalEndEvent) == Result::Ok &&
+           hasNaturalEndEvent && naturalEndEvent.token == 1 && naturalEndEvent.time == 3);
+    context.lifecycle = &naturalEnd;
+    auto destroyCalls = context.calls;
+    assert(naturalEnd.destroy(signalId.data(), 3) == Result::Ok && context.calls == destroyCalls + 1);
+    assert(naturalEnd.finish() == Result::Ok);
+
     alignas(16) auto scheduledWork = std::array<double, 16>{};
     auto scheduledInstance = liberafx::Instance{};
     assert(scheduledInstance.initialize(program, scheduledWork.data(), scheduledWork.size()) == Result::Ok);

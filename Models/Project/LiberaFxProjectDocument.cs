@@ -5,7 +5,9 @@ namespace LiberaFx.Models.Project;
 
 public sealed record LiberaFxProjectDocument
 {
-    public int FormatVersion { get; init; } = 10;
+    public int FormatVersion { get; init; } = 11;
+
+    public bool AutoDestroyWhenIdle { get; init; } = true;
 
     public List<LiberaFxProjectNode>? Nodes { get; init; } = [];
 

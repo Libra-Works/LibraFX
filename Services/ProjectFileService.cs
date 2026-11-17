@@ -51,6 +51,7 @@ public sealed class ProjectFileService
                     connection.TargetPortId,
                     connection.SourcePortId))
                 .ToList(),
+            AutoDestroyWhenIdle = snapshot.AutoDestroyWhenIdle,
             History = history
         };
 

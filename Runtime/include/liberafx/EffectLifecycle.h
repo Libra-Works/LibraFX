@@ -44,13 +44,17 @@ public:
     // after its deadline. The owner evaluates at the due time before dispatch.
     Result nextDeferredSignal(double& time, bool& hasSignal) const noexcept;
     Result dispatchDeferredSignal(double time, std::size_t instructionBudget) noexcept;
+    // The host may end an infinite owner explicitly after it has decided that
+    // no new input will be accepted. Pending work still drains before Destroy.
+    Result requestNaturalEnd() noexcept;
     // Send the natural root Destroy signal once after owned work is quiescent.
     // Further work created by the signal must drain before finish.
     Result destroy(const std::uint8_t nodeId[16], std::size_t instructionBudget) noexcept;
     Result finish() noexcept;
     // Manual stop never reports natural expiry.
     Result stop() noexcept;
-    // Managed game input signals must use the last successfully evaluated age.
+    // Signal dispatch uses the last evaluated age. Hosts must reject external
+    // inputs after natural end while allowing internal routes to drain.
     Result validateSignalTime(double elapsed) const noexcept;
 
 private:

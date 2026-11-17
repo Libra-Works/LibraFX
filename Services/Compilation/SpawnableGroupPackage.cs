@@ -26,19 +26,16 @@ public sealed record SpawnableTemplate(Guid ContainerId, Guid SignalTypeId, byte
 }
 public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<SpawnableTemplate> Templates)
 {
-    public const int FormatVersion = 2;
-    public int Version => HasSignalPorts ? 8 : HasExtendedInputs ? 7 : HasLiveInputs ? 6 : HasChildDeferredSignals ? 5 : HasDeferredSignals ? 4 : OnDestroyNodeId is not null || DestroyRoutes.Any(route => route.DelayNodeId is not null) ||
-        Templates.Any(template => template.Lifecycle?.OwnerDestroyNodeId is not null) ? 3 : FormatVersion;
+    public const int FormatVersion = 9;
+    public int Version => FormatVersion;
+    public bool AutoDestroyWhenIdle { get; init; } = true;
     public bool HasLiveInputs => Templates.Any(template => template.Inputs.Any(input => input.IsLive));
     public bool HasSignalPorts => Templates.Any(template =>
         template.SignalInputs is { Count: > 0 } || template.SignalOutputs is { Count: > 0 });
-    private bool HasExtendedInputs => Templates.Any(template =>
-        template.Inputs.Count > 4 || template.Inputs.Sum(input => input.Width) > 16);
     public bool HasDeferredSignals { get; init; }
     public bool HasChildDeferredSignals { get; init; }
     public Guid? OnStartNodeId { get; init; }
     public Guid? OnDestroyNodeId { get; init; }
-    public Guid? LifeNodeId { get; init; }
     public IReadOnlyList<SpawnableDestroyRoute> DestroyRoutes { get; init; } = [];
     public IReadOnlyList<SpawnableSignalRoute> SignalRoutes { get; init; } = [];
     public IReadOnlyList<GameIoPort> GameIoPorts { get; init; } = [];
@@ -77,14 +74,8 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
         if (starts.Length > 1) throw new InvalidDataException("Only one direct On Start entry is supported.");
         var destroys = graph.Nodes.Where(node => node.Kind.Value == "OnDestroy").ToArray();
         if (destroys.Length > 1) throw new InvalidDataException("Only one root On Destroy entry is supported.");
-        var rootLives = graph.Nodes.Where(node => node.Kind.Value == "LifeTime").ToArray();
-        if (rootLives.Length > 1) throw new InvalidDataException("Only one root Life Time is supported.");
-        if (rootLives.Length == 1 && !graph.Connections.Any(edge => edge.TargetNodeId == rootLives[0].Id))
-        {
-            var seconds = rootLives[0].Parameters?.SingleOrDefault(parameter => parameter.Id == "seconds")?.Value.GetDouble() ?? 2;
-            if (!double.IsFinite(seconds) || seconds < 0)
-                throw new InvalidDataException("Root Life Time must be nonnegative finite seconds.");
-        }
+        if (graph.Nodes.Any(node => node.Kind.Value == "LifeTime"))
+            throw new InvalidDataException("Life Time is only valid directly inside a Spawnable Group; the effect root has no Life Time.");
         var routes = CreateRoutes(graph);
         var routedDelays = routes.Where(route => route.DelayNodeId is not null)
             .Select(route => route.DelayNodeId!.Value).ToHashSet();
@@ -102,9 +93,9 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
                 if ((SpawnableGroupSchema.IsSignalInput(node.Kind) ||
                      SpawnableGroupSchema.IsSignalOutput(node.Kind)) && !directTemplate)
                     throw new InvalidDataException("Spawnable Signal boundary nodes must be directly inside a Spawnable Group.");
-                if ((node.Kind.Value == "LifeTime" && !directTemplate && !ReferenceEquals(current, graph)) ||
+                if ((node.Kind.Value == "LifeTime" && !directTemplate) ||
                     (SpawnableGroupSchema.IsOutput(node.Kind) && !directTemplate))
-                    throw new InvalidDataException("Life Time must be at the root or directly inside a Spawnable Group; Group Output requires a Spawnable Group.");
+                    throw new InvalidDataException("Life Time and Group Output must be directly inside a Spawnable Group.");
                 if (node.Kind.Value == "OnStart" && !directTemplate && !ReferenceEquals(current, graph))
                     throw new InvalidDataException("On Start must be directly at the root or directly inside a Spawnable Group.");
                 if (node.Kind.Value == "OwnerDestroy" && !directTemplate)
@@ -185,9 +176,9 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
             RemoveLocalRoutes(parentWithSignalInputs, routedDelays), signalInputTypes);
         return new(parentProgram.ToBinary(), templates.AsReadOnly())
         {
+            AutoDestroyWhenIdle = graph.AutoDestroyWhenIdle,
             OnStartNodeId = starts.SingleOrDefault()?.Id,
             OnDestroyNodeId = destroys.SingleOrDefault()?.Id,
-            LifeNodeId = rootLives.SingleOrDefault()?.Id,
             HasDeferredSignals = hasDeferredSignals,
             HasChildDeferredSignals = hasChildDeferredSignals,
             DestroyRoutes = routes,

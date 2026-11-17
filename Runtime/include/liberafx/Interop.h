@@ -270,6 +270,8 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_next_deferred_sign
     LibraInstance instance, double* outTime, uint32_t* hasSignal);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_dispatch_deferred_signal(
     LibraInstance instance, double time, uint32_t instructionBudget);
+/* Mark the owner for natural termination; scheduled work still drains before Destroy. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_request_natural_end(LibraInstance instance);
 /* Dispatch natural root Destroy at most once after owned work is quiescent. */
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_destroy(
     LibraInstance instance, const uint8_t nodeId[16], uint32_t instructionBudget);

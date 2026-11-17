@@ -131,7 +131,10 @@ public static class GameIoSchema
                 targetKind == GraphNodeKind.OutputSignal ? "signal" : edge.TargetPortId;
             return edge with { SourcePortId = sourcePort, TargetPortId = targetPort };
         }).ToArray();
-        return (new GraphSnapshot(loweredNodes, connections), ports);
+        return (new GraphSnapshot(loweredNodes, connections)
+        {
+            AutoDestroyWhenIdle = graph.AutoDestroyWhenIdle
+        }, ports);
     }
 
     private static IReadOnlyList<GameIoPort> CreatePorts(GraphSnapshot graph)

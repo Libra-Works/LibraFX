@@ -25,11 +25,10 @@ public sealed class NativeSpawnableSession : IDisposable
     private readonly Dictionary<Guid, uint> _parentValues = [];
     private ulong _parentProgram, _parentInstance;
     private double _time = -1;
-    private double _rootEnd = double.PositiveInfinity;
     private double _rootAge;
     private double _rootFinishedAt;
     private double _frameDelta;
-    private bool _rootExpired, _rootFinished, _rootStopped, _rootDestroySent;
+    private bool _rootEnding, _rootFinished, _rootStopped, _rootDestroySent;
     private bool _disposed;
     private bool _counted;
     private bool _failed;
@@ -57,6 +56,8 @@ public sealed class NativeSpawnableSession : IDisposable
                 (!NativeLibrary.TryGetExport(_library, "libra_effect_next_deferred_signal", out _) ||
                  !NativeLibrary.TryGetExport(_library, "libra_effect_dispatch_deferred_signal", out _)))
                 throw new NotSupportedException("General Delay signals require a matching native runtime.");
+            if (!NativeLibrary.TryGetExport(_library, "libra_effect_request_natural_end", out _))
+                throw new NotSupportedException("Natural root shutdown requires a matching native runtime.");
             if (package.HasChildDeferredSignals &&
                 (!NativeLibrary.TryGetExport(_library, "libra_generator_next_deferred_signal", out _) ||
                  !NativeLibrary.TryGetExport(_library, "libra_generator_dispatch_deferred_signal", out _) ||
@@ -149,7 +150,7 @@ public sealed class NativeSpawnableSession : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_failed) throw new InvalidOperationException("Recreate the session after a failed lifecycle operation.");
-        if (nodeId == Guid.Empty || _time < 0 || _rootFinished || _rootStopped)
+        if (nodeId == Guid.Empty || _time < 0 || _rootEnding || _rootFinished || _rootStopped)
             throw new InvalidOperationException("Dispatch requires a live, started root effect and a valid signal node.");
         try
         {
@@ -172,12 +173,12 @@ public sealed class NativeSpawnableSession : IDisposable
         try
         {
             _frameDelta = frameDelta;
-            AdvanceManaged(time, _package.LifeNodeId);
+            AdvanceManaged(time);
         }
         catch { _failed = true; throw; }
     }
 
-    private void AdvanceManaged(double time, Guid? life)
+    private void AdvanceManaged(double time)
     {
         if (_rootStopped) throw new InvalidOperationException("Recreate the session after stopping the root effect.");
         if (_time < 0)
@@ -185,15 +186,13 @@ public sealed class NativeSpawnableSession : IDisposable
             NativeLifetimeSample initial;
             var startNode = _package.OnStartNodeId is { } start ? Id(start) : null;
             SetRootTimeContext(0);
-            Check(life is { } lifeId
-                ? Fn<StartCaptured>("libra_effect_start_captured")(_parentInstance, Id(lifeId), startNode, 10000, out initial)
-                : Fn<StartInfinite>("libra_effect_start")(_parentInstance, 0, 1, startNode, 10000, out initial));
-            _rootExpired = initial.Expired != 0;
-            _rootEnd = initial.Age + initial.Remaining;
+            Check(Fn<StartInfinite>("libra_effect_start")(_parentInstance, 0, 1, startNode, 10000, out initial));
+            _rootEnding = initial.Expired != 0;
             _rootAge = 0;
             _time = 0;
             Pump(0);
             DispatchScheduled(0);
+            BeginAutoEndIfIdle(0);
             NotifyOwnerDestroy(0);
             FinishManagedIfQuiescent();
         }
@@ -205,11 +204,11 @@ public sealed class NativeSpawnableSession : IDisposable
                     .Select(instance => instance.Start + instance.Life)
                     .Where(expiry => expiry > _rootAge && expiry <= time)
                     .DefaultIfEmpty(double.PositiveInfinity).Min();
-                var deadline = !_rootExpired && _rootEnd > _rootAge ? _rootEnd : double.PositiveInfinity;
-                var next = Math.Min(time, Math.Min(NextScheduledTime(), Math.Min(childExpiry, deadline)));
+                var next = Math.Min(time, Math.Min(NextScheduledTime(), childExpiry));
                 if (next <= _rootAge) break;
                 EvaluateManagedFrame(next);
                 DispatchScheduled(next);
+                BeginAutoEndIfIdle(next);
                 NotifyOwnerDestroy(next);
                 FinishManagedIfQuiescent();
                 if (_rootFinished || next >= time) break;
@@ -221,7 +220,7 @@ public sealed class NativeSpawnableSession : IDisposable
 
     private void FinishManagedIfQuiescent()
     {
-        if (!_rootExpired || _rootFinished || ActiveCount != 0 || _scheduledRoutes.Count != 0 ||
+        if (!_rootEnding || _rootFinished || ActiveCount != 0 || _scheduledRoutes.Count != 0 ||
             NextDeferredTime() != double.PositiveInfinity) return;
         if (!_rootDestroySent && _package.OnDestroyNodeId is { } node)
         {
@@ -236,6 +235,22 @@ public sealed class NativeSpawnableSession : IDisposable
         Check(Fn<Release>("libra_effect_finish")(_parentInstance));
         _rootFinished = true;
         _rootFinishedAt = _rootAge;
+    }
+
+    private void BeginAutoEndIfIdle(double time)
+    {
+        if (_rootEnding || _rootFinished || !_package.AutoDestroyWhenIdle || _templates.Count == 0 ||
+            _scheduledRoutes.Count != 0 || NextDeferredTime() != double.PositiveInfinity) return;
+        RequestNaturalEnd(time);
+    }
+
+    private void RequestNaturalEnd(double time)
+    {
+        if (_rootEnding || _rootFinished || _rootStopped) return;
+        Check(Fn<RequestNaturalEnd>("libra_effect_request_natural_end")(_parentInstance));
+        _rootEnding = true;
+        NotifyOwnerDestroy(time);
+        FinishManagedIfQuiescent();
     }
 
     private double NextScheduledTime()
@@ -322,7 +337,7 @@ public sealed class NativeSpawnableSession : IDisposable
 
     private void NotifyOwnerDestroy(double time)
     {
-        if (!_rootExpired) return;
+        if (!_rootEnding) return;
         for (var round = 0; round < 128; ++round)
         {
             var pending = ActiveInstances.Where(key => !_ownerDestroyNotified.Contains(key)).ToArray();
@@ -343,10 +358,10 @@ public sealed class NativeSpawnableSession : IDisposable
 
     private void EvaluateManagedParent(double time)
     {
-        if (time < _rootAge) throw new InvalidOperationException("Root lifetime cannot evaluate backwards.");
+        if (time < _rootAge) throw new InvalidOperationException("Root effect time cannot evaluate backwards.");
         if (time == _rootAge) return;
         SetRootTimeContext(time);
-        if (_rootExpired)
+        if (_rootEnding)
         {
             Check(Fn<DrainEffect>("libra_effect_drain")(_parentInstance, time));
             _rootAge = time;
@@ -355,7 +370,7 @@ public sealed class NativeSpawnableSession : IDisposable
         {
             Check(Fn<AdvanceEffect>("libra_effect_advance")(_parentInstance, time, out var sample));
             _rootAge = sample.Age;
-            _rootExpired = sample.Expired != 0;
+            _rootEnding = sample.Expired != 0;
         }
     }
 
@@ -525,6 +540,14 @@ public sealed class NativeSpawnableSession : IDisposable
         }
         _rootStopped = true;
     }
+    public void End()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_failed) throw new InvalidOperationException("Recreate the session after a failed lifecycle operation.");
+        if (_time < 0) throw new InvalidOperationException("Advance the root before requesting natural end.");
+        try { RequestNaturalEnd(_rootAge); }
+        catch { _failed = true; throw; }
+    }
     public void Dispose()
     {
         if (_disposed) return;
@@ -653,6 +676,7 @@ public sealed class NativeSpawnableSession : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int AdvanceEffect(ulong instance, double time, out NativeLifetimeSample sample);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int DrainEffect(ulong instance, double time);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int DestroyEffect(ulong instance, byte[] node, uint budget);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int RequestNaturalEnd(ulong instance);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Schedule(ulong instance, double time, ulong token);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int ScheduledEventAction(ulong instance, out NativeScheduledEvent value, out uint has);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Process(ulong pool, uint max, out uint processed);

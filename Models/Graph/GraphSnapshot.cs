@@ -5,7 +5,10 @@ public sealed record GraphSnapshot(
     IReadOnlyList<GraphConnectionSnapshot> Connections,
     IReadOnlyList<GroupExposedItem>? ExposedItems = null)
 {
+    public bool AutoDestroyWhenIdle { get; init; } = true;
+
     public static bool ContentEquals(GraphSnapshot left, GraphSnapshot right) =>
+        left.AutoDestroyWhenIdle == right.AutoDestroyWhenIdle &&
         GroupExposedItems.Equal(left.ExposedItems, right.ExposedItems) &&
         left.Nodes.Count == right.Nodes.Count &&
         left.Nodes.Zip(right.Nodes).All(pair =>
@@ -23,7 +26,8 @@ public sealed record GraphSnapshot(
 
     public static bool EquivalentIgnoringIds(GraphSnapshot left, GraphSnapshot right)
     {
-        if (left.Nodes.Count != right.Nodes.Count || left.Connections.Count != right.Connections.Count) return false;
+        if (left.AutoDestroyWhenIdle != right.AutoDestroyWhenIdle ||
+            left.Nodes.Count != right.Nodes.Count || left.Connections.Count != right.Connections.Count) return false;
         var ids = new Dictionary<Guid, Guid>();
         for (var index = 0; index < left.Nodes.Count; index++)
         {

@@ -62,8 +62,8 @@ child at the request time, call `GeneratorPool::ownerDestroy` or
 `libra_generator_owner_destroy` with the template's ownerDestroyNodeId.
 Duplicate calls do not dispatch again, and a dispatch failure is latched so
 partial signal execution cannot be replayed. Explicit stop/reset is separate.
-The editor-native host implements this for root Life Time; engine hosts must
-implement it explicitly.
+The editor-native host sends this request when natural root shutdown begins;
+engine hosts must implement it explicitly.
 
 When elapsed local time reaches the captured Life value, evaluation samples at
 the exact expiry boundary (clamping overshooting frames), freezes the instance
@@ -127,17 +127,17 @@ each child evaluation. A signal enqueues one runtime instance, never another
 graph node. Nested Spawnable Groups are rejected.
 `SpawnableGroupPackage.Compile` emits the parent LFXB, separate template LFXBs,
 capture maps, per-template render configuration and GPU container snapshots.
-MCP `libera_graph_compile_spawnable` exposes JSON package version 2, version
-3 when On Destroy, Owner Destroy or a delayed Destroy route is present, and
-version 4 for general root Delay signals, version 5 for Spawnable-local
-Delay continuations, version 6 for per-pin CaptureAtSpawn/Live bindings, and
-version 7 for extended input mappings, and version 8 for local Signal I/O.
-Older hosts must reject
+MCP `libera_graph_compile_spawnable` exposes JSON package format version 9.
+Versions 2 through 8 introduced lifecycle routing, root and Spawnable Delay,
+per-pin CaptureAtSpawn/Live bindings, extended inputs, and local Signal I/O.
+Version 9 adds the root `AutoDestroyWhenIdle` policy. Older hosts must reject
 unknown versions rather than silently ignoring these semantics.
-It adds direct root On Start/On Destroy/Life Time identities, per-template On Start,
+It adds direct root On Start/On Destroy identities, per-template On Start,
 Life Time and Owner Destroy identities, typed Group Output mappings and
 explicit Destroy routes.
-Exactly one direct Life Time per template is supported; none means infinity.
+The effect root has no Life Time; a root Life Time is an authoring diagnostic
+and compilation error. Exactly one direct Life Time per template is supported;
+none means infinity.
 Multiple Life Times and nested Spawnables are rejected. Busy/FCurve are never
 implicit lifetime participants. The existing `then` pin remains immediate for
 old projects; `destroy` is a separate natural-expiry-only local event pin.
@@ -167,7 +167,9 @@ The host delivers an input with `GeneratorPool::dispatchSignal` /
 Drain `GeneratorSignalEvent` / `LibraGeneratorSignalEvent` records separately
 from Spawn/Stop/Destroy records. Parent output routes are dispatched at the
 event time using `libra_effect_dispatch_signal`; it accepts only the root
-lifecycle's last evaluated time.
+lifecycle's last evaluated time. After natural end is requested, hosts reject
+new external game signals but continue dispatching internal child routes while
+the root drains.
 Explicit Stop cancels pending signals without sending Destroy.
 Inside a Spawnable, Delay uses that instance's local clock and retains the
 instance after Life Time while continuations remain. Its Instance Age keeps
@@ -179,8 +181,12 @@ effect/Spawnable clock, including Delay routed through group signal boundaries.
 Nested Spawnable ownership and lifecycle routing remain unsupported.
 One delayed Destroy can fan out to multiple sibling Spawn targets; each branch
 retains the parent until its scheduled spawn and resulting child finish.
-The root On Destroy signal runs once after the root deadline and existing
-children and scheduled events have drained. If that signal starts new children,
+The root's natural end begins after startup/queued work drains when
+`AutoDestroyWhenIdle` is enabled and at least one Spawnable template exists.
+With no Spawnables, or when the setting is disabled, the root remains available
+for game signals until the host explicitly requests natural end. The root On
+Destroy signal runs once after that request and existing children and scheduled
+events have drained. If that signal starts new children,
 the root waits for them too; it does not dispatch On Destroy again. Explicit
 Stop and reset do not dispatch it. This is a local graph entry and does not
 implicitly create a game-facing Output Signal.
@@ -302,8 +308,10 @@ fresh instance, optionally with game IO configured before start. Managed game
 signals use the last evaluated age; raw evaluation and independent game IO
 start/update are disabled. Failed evaluation, publication or OnStart is
 terminal rather than replaying partially executed nodes. The editor-native
-host uses it for root Life Time. Unity exposes low-level lifetime calls but does
-not yet host package lifecycle; Unreal does not yet use this lifecycle API.
+host uses an infinite root and requests natural end according to
+`AutoDestroyWhenIdle` or an explicit host `End` call. Unity exposes low-level
+lifetime calls but does not yet host package lifecycle; Unreal does not yet use
+this lifecycle API.
 libra_effect_start_captured obtains a finite scalar duration from the initial
 evaluation, before publishing game properties or invoking OnStart. Later input
 changes do not change the captured duration; invalid values fail before OnStart.

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Avalonia.Threading;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
@@ -192,110 +193,129 @@ internal static class FireworksLifecycleTests
         Dispatcher.UIThread.RunJobs();
         using var createdRootLife = JsonDocument.Parse(createRootLife.GetAwaiter().GetResult());
         var rootLifeId = createdRootLife.RootElement.GetProperty("id").GetGuid();
-        Require(rootWorkspace.History.Undo() && !rootWorkspace.Nodes.Any(node => node.Id == rootLifeId) &&
-                rootWorkspace.History.Redo(), "Root Life Time must support MCP creation and Undo/Redo.");
+        var rootLife = rootWorkspace.CreateSnapshot().Nodes.Single(node => node.Id == rootLifeId);
+        Require(rootWorkspace.GetNode(rootLifeId).HasDiagnostics &&
+                rootWorkspace.History.Undo() && !rootWorkspace.Nodes.Any(node => node.Id == rootLifeId) &&
+                rootWorkspace.History.Redo() && rootWorkspace.GetNode(rootLifeId).HasDiagnostics,
+            "Root Life Time must remain visible as an authoring diagnostic through Undo/Redo.");
+        Reject(() => SpawnableGroupPackage.Compile(rootWorkspace.CreateSnapshot()), "root Life Time");
+        rootWorkspace.DeleteNode(rootWorkspace.GetNode(rootLifeId));
         var rootTime = rootWorkspace.CreateNode(GraphNodeKind.Time);
-        var rootRemaining = rootWorkspace.CreateNode(new GraphNodeKind("InstanceRemaining"));
         var rootNormalized = rootWorkspace.CreateNode(new GraphNodeKind("InstanceNormalizedAge"));
+        GraphSnapshot rootGraph;
+        SpawnableGroupPackage rootPackage;
         using (var rootFile = new MemoryStream())
         {
             files.SaveAsync(rootFile, rootWorkspace).GetAwaiter().GetResult();
             rootFile.Position = 0;
-            var rootGraph = files.LoadAsync(rootFile).GetAwaiter().GetResult().Graph;
-            var rootPackage = SpawnableGroupPackage.Compile(rootGraph);
-            Require(rootPackage.LifeNodeId == rootLifeId, "Root Life Time identity was lost in the package.");
+            rootGraph = files.LoadAsync(rootFile).GetAwaiter().GetResult().Graph;
+            rootPackage = SpawnableGroupPackage.Compile(rootGraph);
+            Require(rootPackage.AutoDestroyWhenIdle && rootPackage.Templates.Count == 0,
+                "A root without Spawnable templates must remain infinite even when auto-destroy is enabled.");
             using var root = new NativeSpawnableSession(rootPackage, library);
             root.Advance(0);
             Require(root.RootVisible && root.ReadRoot(rootTime.Id).Lanes[0] == 0, "Root must start at zero.");
-            Require(root.ReadRoot(rootRemaining.Id).Lanes[0] == 2 && root.ReadRoot(rootNormalized.Id).Lanes[0] == 0,
-                "Root lifetime samples are incorrect at start.");
+            Require(root.ReadRoot(rootNormalized.Id).Lanes[0] == 0, "An infinite root has zero normalized age.");
             root.Advance(1);
-            Require(root.RootVisible && root.ReadRoot(rootTime.Id).Lanes[0] == 1, "Root did not advance.");
-            Require(root.ReadRoot(rootRemaining.Id).Lanes[0] == 1 && root.ReadRoot(rootNormalized.Id).Lanes[0] == 0.5,
-                "Root lifetime samples are incorrect mid-play.");
+            Require(root.RootVisible && root.ReadRoot(rootTime.Id).Lanes[0] == 1 &&
+                    root.ReadRoot(rootNormalized.Id).Lanes[0] == 0,
+                "An infinite root must keep advancing without a normalized lifetime.");
             root.Advance(3);
-            Require(!root.RootVisible && root.ReadRoot(rootTime.Id).Lanes[0] == 2, "Root expiry must clamp the final evaluation.");
-            Require(root.ReadRoot(rootRemaining.Id).Lanes[0] == 0 && root.ReadRoot(rootNormalized.Id).Lanes[0] == 1,
-                "Root lifetime samples are incorrect at expiry.");
-            root.Advance(4);
-            Require(root.ReadRoot(rootTime.Id).Lanes[0] == 2, "Expired root was evaluated again.");
-            var zeroGraph = rootGraph with
-            {
-                Nodes = rootGraph.Nodes.Select(node => node.Id == rootLifeId ? node with
-                {
-                    Parameters = [new("seconds", "float", JsonSerializer.SerializeToElement(0d))]
-                } : node).ToArray()
-            };
-            using (var zero = new NativeSpawnableSession(SpawnableGroupPackage.Compile(zeroGraph), library))
-            {
-                zero.Advance(0);
-                Require(zero.ReadRoot(rootRemaining.Id).Lanes[0] == 0 &&
-                        zero.ReadRoot(rootNormalized.Id).Lanes[0] == 1, "Zero lifetime samples must be 0 and 1.");
-            }
-            var infinite = rootGraph with
-            {
-                Nodes = rootGraph.Nodes.Where(node => node.Id != rootLifeId && node.Id != rootRemaining.Id).ToArray()
-            };
-            using (var forever = new NativeSpawnableSession(SpawnableGroupPackage.Compile(infinite), library))
-            {
-                forever.Advance(10);
-                Require(forever.ReadRoot(rootNormalized.Id).Lanes[0] == 0, "Infinite normalized age must remain zero.");
-            }
-            Reject(() => SpawnableGroupPackage.Compile(infinite with
-            {
-                Nodes = infinite.Nodes.Concat([rootGraph.Nodes.Single(node => node.Id == rootRemaining.Id)]).ToArray()
-            }), "infinite remaining lifetime");
-            Reject(() => SpawnableGroupPackage.Compile(rootGraph with
-            {
-                Connections = rootGraph.Connections.Concat([new(rootNormalized.Id, rootLifeId, "seconds")]).ToArray()
-            }), "cyclic lifetime");
-            using var stopped = new NativeSpawnableSession(rootPackage, library);
+            Require(root.RootVisible && root.ReadRoot(rootTime.Id).Lanes[0] == 3,
+                "An effect with no Spawnables must remain infinite.");
+        }
+        var idleWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+        idleWorkspace.CreateNode(GraphNodeKind.SpawnableGroup);
+        using (var idleRoot = new NativeSpawnableSession(
+            SpawnableGroupPackage.Compile(idleWorkspace.CreateSnapshot()), library))
+        {
+            idleRoot.Advance(0);
+            Require(idleRoot.ActiveCount == 0 && idleRoot.RootVisible,
+                "An idle effect with Spawnable templates must request natural end.");
+            idleRoot.Advance(0.1);
+            Require(!idleRoot.RootVisible, "An idle root without work must finish.");
+        }
+        var settingWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+        Require(settingWorkspace.AutoDestroyWhenIdle, "New effects must default Auto Destroy When Idle on.");
+        settingWorkspace.AutoDestroyWhenIdle = false;
+        Require(!settingWorkspace.AutoDestroyWhenIdle && settingWorkspace.History.Undo() &&
+                settingWorkspace.AutoDestroyWhenIdle && settingWorkspace.History.Redo() &&
+                !settingWorkspace.AutoDestroyWhenIdle,
+            "Auto Destroy When Idle must be undoable.");
+        using (var settingFile = new MemoryStream())
+        {
+            files.SaveAsync(settingFile, settingWorkspace).GetAwaiter().GetResult();
+            settingFile.Position = 0;
+            Require(!files.LoadAsync(settingFile).GetAwaiter().GetResult().Graph.AutoDestroyWhenIdle,
+                "Project persistence lost Auto Destroy When Idle.");
+            var legacyWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+            using var legacyFile = new MemoryStream();
+            files.SaveAsync(legacyFile, legacyWorkspace).GetAwaiter().GetResult();
+            var legacySettings = JsonNode.Parse(legacyFile.ToArray())!.AsObject();
+            legacySettings["FormatVersion"] = 10;
+            legacySettings.Remove("AutoDestroyWhenIdle");
+            using var oldSettings = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(legacySettings.ToJsonString()));
+            Require(files.LoadAsync(oldSettings).GetAwaiter().GetResult().Graph.AutoDestroyWhenIdle,
+                "Pre-setting project formats must default Auto Destroy When Idle on.");
+        }
+        Reject(() => SpawnableGroupPackage.Compile(rootGraph with
+        {
+            Nodes = rootGraph.Nodes.Concat([rootLife]).ToArray()
+        }), "root Life Time");
+        Reject(() => SpawnableGroupPackage.Compile(rootGraph with
+        {
+            Nodes = rootGraph.Nodes.Concat([rootLife, rootLife with { Id = Guid.NewGuid() }]).ToArray()
+        }), "multiple root Life Times");
+        using (var stopped = new NativeSpawnableSession(rootPackage, library))
+        {
             stopped.Advance(0);
             stopped.Stop();
             Require(!stopped.RootVisible, "Manual stop must hide the root.");
-            var curveWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
-            curveWorkspace.CreateNode(new GraphNodeKind("LifeTime"));
-            var longCurve = curveWorkspace.CreateNode(GraphNodeKind.FloatFCurve);
-            curveWorkspace.SetCurve(longCurve, new FCurveSnapshot([
+        }
+        var curveWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var curveGroup = curveWorkspace.CreateNode(GraphNodeKind.SpawnableGroup);
+        Require(curveWorkspace.EnterGraph(curveGroup), "Cannot edit curve-lifetime fixture.");
+        curveWorkspace.CreateNode(new GraphNodeKind("LifeTime"));
+        var longCurve = curveWorkspace.CreateNode(GraphNodeKind.FloatFCurve);
+        curveWorkspace.SetCurve(longCurve, new FCurveSnapshot([
                 new(Guid.NewGuid(), 0, 0, 0, 0, CurveInterpolation.Linear),
                 new(Guid.NewGuid(), 120, 1, 0, 0, CurveInterpolation.Linear)
             ]), "Long curve");
-            using (var independentCurve = new NativeSpawnableSession(SpawnableGroupPackage.Compile(curveWorkspace.CreateSnapshot()), library))
-            {
-                independentCurve.Advance(3);
-                Require(!independentCurve.RootVisible, "FCurve duration must not retain an expired effect.");
-            }
-            var draw = launch.ChildGraph!.Nodes.First(node => node.Kind.Value == "ModelDraw") with { Id = Guid.NewGuid() };
-            var previewGraph = rootGraph with { Nodes = rootGraph.Nodes.Concat([draw]).ToArray() };
-            using var preview = new EditorNativePreviewSession(previewGraph, library);
-            int DrawCount(double time)
-            {
-                using var scene = JsonDocument.Parse(preview.EvaluateScene(time, 1));
-                return scene.RootElement.GetProperty("nodes").GetArrayLength();
-            }
-            Require(DrawCount(0) == 1 && DrawCount(2) == 1 && DrawCount(2 + 1d / 60) == 0 &&
-                    DrawCount(0) == 1, "Root preview must show its final frame, expire, and recreate on seek.");
-            var rootLife = rootGraph.Nodes.Single(node => node.Id == rootLifeId);
-            GraphSnapshot WithRootLife(double seconds) => graph with
-            {
-                Nodes = graph.Nodes.Concat([rootLife with
-                {
-                    Parameters = [new("seconds", "float", JsonSerializer.SerializeToElement(seconds))]
-                }]).ToArray()
-            };
-            using (var parentWaits = new NativeSpawnableSession(SpawnableGroupPackage.Compile(WithRootLife(1)), library))
+        curveWorkspace.NavigateToGraph(0);
+        var curveStart = curveWorkspace.Nodes.Single(node => node.Definition.Kind.Value == "OnStart");
+        Require(curveWorkspace.TryConnectNodes(curveStart, curveWorkspace.GetNode(curveGroup.Id),
+            out _, "spawn", "then"), "Cannot start curve-lifetime fixture.");
+        using (var independentCurve = new NativeSpawnableSession(
+            SpawnableGroupPackage.Compile(curveWorkspace.CreateSnapshot()), library))
+        {
+            independentCurve.Advance(3);
+            Require(!independentCurve.RootVisible, "FCurve duration must not retain a naturally completed effect.");
+        }
+        var draw = launch.ChildGraph!.Nodes.First(node => node.Kind.Value == "ModelDraw") with { Id = Guid.NewGuid() };
+        var previewGraph = rootGraph with { Nodes = rootGraph.Nodes.Concat([draw]).ToArray() };
+        using var preview = new EditorNativePreviewSession(previewGraph, library);
+        int DrawCount(double time)
+        {
+            using var scene = JsonDocument.Parse(preview.EvaluateScene(time, 1));
+            return scene.RootElement.GetProperty("nodes").GetArrayLength();
+        }
+        Require(DrawCount(0) == 1 && DrawCount(2) == 1 && DrawCount(2 + 1d / 60) == 1 &&
+                DrawCount(0) == 1, "An infinite root preview must remain visible and recreate on seek.");
+        {
+            GraphSnapshot WithAutoDestroy(bool enabled) => graph with { AutoDestroyWhenIdle = enabled };
+            using (var parentWaits = new NativeSpawnableSession(SpawnableGroupPackage.Compile(WithAutoDestroy(true)), library))
             {
                 parentWaits.Advance(0);
                 parentWaits.Advance(2);
                 Require(parentWaits.ActiveCount == 1 && parentWaits.RootVisible &&
                         parentWaits.Events.Count(item => item.ContainerId == launch.Id && item.Kind == 3) == 1,
-                    "Root deadline must wait while child Destroy spawns a sibling.");
+                    "Idle root shutdown must wait while child Destroy spawns a sibling.");
                 parentWaits.Advance(3.5);
                 Require(parentWaits.ActiveCount == 0 &&
                         parentWaits.Events.Count(item => item.ContainerId == burst.Id && item.Kind == 3) == 1,
                     "The parent must wait until the sibling naturally expires.");
             }
-            using (var stoppedWhileDraining = new NativeSpawnableSession(SpawnableGroupPackage.Compile(WithRootLife(1)), library))
+            using (var stoppedWhileDraining = new NativeSpawnableSession(SpawnableGroupPackage.Compile(WithAutoDestroy(true)), library))
             {
                 stoppedWhileDraining.Advance(1);
                 stoppedWhileDraining.Stop();
@@ -303,8 +323,34 @@ internal static class FireworksLifecycleTests
                         stoppedWhileDraining.Events.All(item => item.Kind != 3),
                     "Explicit stop during the parent's drain must not emit a natural child Destroy.");
             }
+            var persistentWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+            persistentWorkspace.InitializeFromSnapshot(graph);
+            var gameSignal = persistentWorkspace.CreateNode(GraphNodeKind.Signal);
+            Require(persistentWorkspace.TryConnectNodes(gameSignal,
+                persistentWorkspace.GetNode(launch.Id), out _, targetPortId: "spawn"),
+                "Cannot connect a persistent effect's game signal.");
+            using (var persistentRoot = new NativeSpawnableSession(
+                    SpawnableGroupPackage.Compile(persistentWorkspace.CreateSnapshot() with
+                    { AutoDestroyWhenIdle = false }), library))
+            {
+                persistentRoot.Advance(0);
+                Require(persistentRoot.RootVisible && persistentRoot.ActiveCount == 1,
+                    "A persistent root must accept game signals while idle.");
+                persistentRoot.DispatchSignal(gameSignal.Id);
+                Require(persistentRoot.ActiveCount == 2, "A persistent root must accept repeated game signals.");
+                persistentRoot.End();
+                var rejectedSignal = false;
+                try { persistentRoot.DispatchSignal(gameSignal.Id); }
+                catch (InvalidOperationException) { rejectedSignal = true; }
+                Require(rejectedSignal, "An explicit natural end must reject new external root signals.");
+                persistentRoot.Advance(3.5);
+                Require(persistentRoot.ActiveCount == 0 && persistentRoot.RootVisible,
+                    "An explicitly ended root must wait for all spawned children before finishing.");
+                persistentRoot.Advance(3.6);
+                Require(!persistentRoot.RootVisible, "A naturally finished root must become invisible after its final frame.");
+            }
             var generalDelayWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
-            generalDelayWorkspace.InitializeFromSnapshot(WithRootLife(1));
+            generalDelayWorkspace.InitializeFromSnapshot(WithAutoDestroy(true));
             var rootStart = generalDelayWorkspace.Nodes.Single(node => node.Definition.Kind.Value == "OnStart");
             generalDelayWorkspace.DisconnectConnection(generalDelayWorkspace.Connections.Single(edge =>
                 edge.Source.Id == rootStart.Id && edge.Target.Id == launch.Id && edge.TargetPortId == "spawn"));
@@ -316,7 +362,7 @@ internal static class FireworksLifecycleTests
                     generalDelayWorkspace.TryConnectNodes(secondDelay, generalDelayWorkspace.GetNode(launch.Id),
                         out _, "spawn", "then"), "Cannot connect general root Delay signals.");
             var generalDelayPackage = SpawnableGroupPackage.Compile(generalDelayWorkspace.CreateSnapshot());
-            Require(generalDelayPackage.Version == 4 && generalDelayPackage.HasDeferredSignals,
+            Require(generalDelayPackage.Version == SpawnableGroupPackage.FormatVersion && generalDelayPackage.HasDeferredSignals,
                 "General Delay requires a new package version.");
             var oldLibrary = Environment.GetEnvironmentVariable("LIBERAFX_OLD_NATIVE_TEST_LIBRARY");
             if (!string.IsNullOrEmpty(oldLibrary))
@@ -350,7 +396,7 @@ internal static class FireworksLifecycleTests
                         stoppedGeneralDelay.Events.Count == 0, "Manual stop must cancel pending Delay signals.");
             }
             var groupedDelayWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
-            groupedDelayWorkspace.InitializeFromSnapshot(WithRootLife(1));
+            groupedDelayWorkspace.InitializeFromSnapshot(WithAutoDestroy(true));
             groupedDelayWorkspace.DisconnectConnection(groupedDelayWorkspace.Connections.Single(edge =>
                 edge.Source.Id == rootStart.Id && edge.Target.Id == launch.Id && edge.TargetPortId == "spawn"));
             var delayGroup = groupedDelayWorkspace.CreateNode(GraphNodeKind.GraphGroup);
@@ -370,7 +416,7 @@ internal static class FireworksLifecycleTests
                         GroupBoundarySchema.OutputPortId(groupedSignalOutput.Id)),
                 "Cannot connect grouped Delay at the effect root.");
             var groupedDelayPackage = SpawnableGroupPackage.Compile(groupedDelayWorkspace.CreateSnapshot());
-            Require(groupedDelayPackage.HasDeferredSignals && groupedDelayPackage.Version == 4,
+            Require(groupedDelayPackage.HasDeferredSignals && groupedDelayPackage.Version == SpawnableGroupPackage.FormatVersion,
                 "Delay inside an ordinary group must retain its enclosing effect clock and package requirement.");
             using (var groupedDelaySession = new NativeSpawnableSession(groupedDelayPackage, library))
             {
@@ -385,7 +431,7 @@ internal static class FireworksLifecycleTests
                     "Grouped Delay work must drain before the root finishes.");
             }
             var childDelayWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
-            childDelayWorkspace.InitializeFromSnapshot(WithRootLife(1));
+            childDelayWorkspace.InitializeFromSnapshot(WithAutoDestroy(true));
             Require(childDelayWorkspace.EnterGraph(childDelayWorkspace.GetNode(launch.Id)), "Cannot edit child Delay fixture.");
             var childStart = childDelayWorkspace.CreateNode(new GraphNodeKind("OnStart"));
             var childDelay = childDelayWorkspace.CreateNode(new GraphNodeKind("Delay"));
@@ -404,7 +450,7 @@ internal static class FireworksLifecycleTests
             childDelayFile.Position = 0;
             var childDelayGraph = files.LoadAsync(childDelayFile).GetAwaiter().GetResult().Graph;
             var childDelayPackage = SpawnableGroupPackage.Compile(childDelayGraph);
-            Require(childDelayPackage.Version == 5 && childDelayPackage.HasChildDeferredSignals,
+            Require(childDelayPackage.Version == SpawnableGroupPackage.FormatVersion && childDelayPackage.HasChildDeferredSignals,
                 "Child Delay must require an explicit package version.");
             var delayedTemplate = childDelayPackage.Templates.Single(item => item.ContainerId == launch.Id);
             File.WriteAllBytes(Path.Combine(output, "child-delay.lfxb"), delayedTemplate.Bytecode);
@@ -486,7 +532,7 @@ internal static class FireworksLifecycleTests
                     "Owner Destroy delayed descendants must eventually finish normally.");
             }
             var destroyDelayWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
-            destroyDelayWorkspace.InitializeFromSnapshot(WithRootLife(1));
+            destroyDelayWorkspace.InitializeFromSnapshot(WithAutoDestroy(true));
             destroyDelayWorkspace.DisconnectConnection(destroyDelayWorkspace.Connections.Single(edge =>
                 edge.Source.Id == rootStart.Id && edge.Target.Id == launch.Id && edge.TargetPortId == "spawn"));
             var rootDestroyDelay = destroyDelayWorkspace.CreateNode(new GraphNodeKind("OnDestroy"));
@@ -537,7 +583,7 @@ internal static class FireworksLifecycleTests
                 Require(rejected, "Negative general Delay must be rejected by the runtime.");
             }
             var delayWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
-            delayWorkspace.InitializeFromSnapshot(WithRootLife(1));
+            delayWorkspace.InitializeFromSnapshot(WithAutoDestroy(true));
             var createDelay = LiberaFxMcpTools.CreateNode(new ActiveGraphProvider(delayWorkspace), "Delay");
             Dispatcher.UIThread.RunJobs();
             using var createdDelay = JsonDocument.Parse(createDelay.GetAwaiter().GetResult());
@@ -570,7 +616,7 @@ internal static class FireworksLifecycleTests
             delayFile.Position = 0;
             var delayedGraph = files.LoadAsync(delayFile).GetAwaiter().GetResult().Graph;
             var delayedPackage = SpawnableGroupPackage.Compile(delayedGraph);
-            Require(delayedPackage.Version == 3 && delayedPackage.DestroyRoutes.Single().DelayNodeId == delayId,
+            Require(delayedPackage.Version == SpawnableGroupPackage.FormatVersion && delayedPackage.DestroyRoutes.Single().DelayNodeId == delayId,
                 "Delayed route identity must survive persistence and compilation.");
             using (var delayed = new NativeSpawnableSession(delayedPackage, library))
             {
@@ -710,10 +756,7 @@ internal static class FireworksLifecycleTests
                 Require(zeroDelay.InstanceStartTime(burst.Id, delayedChild.Instance) == 2,
                     "Zero Delay must dispatch at the Destroy timestamp.");
             }
-            var infiniteDelayedGraph = delayedGraph with
-            {
-                Nodes = delayedGraph.Nodes.Where(node => node.Id != rootLifeId).ToArray()
-            };
+            var infiniteDelayedGraph = delayedGraph with { AutoDestroyWhenIdle = false };
             using (var infiniteDelay = new NativeSpawnableSession(SpawnableGroupPackage.Compile(infiniteDelayedGraph), library))
             {
                 infiniteDelay.Advance(4.5);
@@ -729,7 +772,7 @@ internal static class FireworksLifecycleTests
             };
             using (var invalidDelay = new NativeSpawnableSession(SpawnableGroupPackage.Compile(negativeDelayGraph), library))
                 Reject(() => invalidDelay.Advance(2), "negative Delay");
-            using (var childExpiresFirst = new NativeSpawnableSession(SpawnableGroupPackage.Compile(WithRootLife(2.5)), library))
+            using (var childExpiresFirst = new NativeSpawnableSession(SpawnableGroupPackage.Compile(WithAutoDestroy(true)), library))
             {
                 childExpiresFirst.Advance(0);
                 childExpiresFirst.Advance(3);
@@ -743,7 +786,7 @@ internal static class FireworksLifecycleTests
                     "Root may finish only after the remaining sibling naturally expires.");
             }
             var rootDestroyWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
-            rootDestroyWorkspace.InitializeFromSnapshot(WithRootLife(1));
+            rootDestroyWorkspace.InitializeFromSnapshot(WithAutoDestroy(true));
             rootDestroyWorkspace.CreateNode(GraphNodeKind.FloatFCurve);
             var createDestroy = LiberaFxMcpTools.CreateNode(new ActiveGraphProvider(rootDestroyWorkspace), "OnDestroy");
             Dispatcher.UIThread.RunJobs();
@@ -765,7 +808,8 @@ internal static class FireworksLifecycleTests
             rootDestroyFile.Position = 0;
             var rootDestroyGraph = files.LoadAsync(rootDestroyFile).GetAwaiter().GetResult().Graph;
             var rootDestroyPackage = SpawnableGroupPackage.Compile(rootDestroyGraph);
-            Require(rootDestroyPackage.OnDestroyNodeId == rootDestroyId && rootDestroyPackage.Version == 3,
+            Require(rootDestroyPackage.OnDestroyNodeId == rootDestroyId &&
+                    rootDestroyPackage.Version == SpawnableGroupPackage.FormatVersion,
                 "Root On Destroy must survive persistence and compilation.");
             Require(rootDestroyPackage.ParentBytecode[4] >= 4, "Fixture must include a curve-bearing signal program.");
             using (var rootDestroy = new NativeSpawnableSession(rootDestroyPackage, library))
@@ -790,7 +834,7 @@ internal static class FireworksLifecycleTests
                 Require(stoppedRootDestroy.Events.All(item => item.ContainerId != finalGroupId),
                     "Manual Stop must not dispatch root On Destroy.");
             }
-            using (var stepped = new NativeSpawnableSession(SpawnableGroupPackage.Compile(WithRootLife(2.5)), library))
+            using (var stepped = new NativeSpawnableSession(SpawnableGroupPackage.Compile(WithAutoDestroy(true)), library))
             {
                 stepped.Advance(0);
                 stepped.Advance(1);
@@ -804,7 +848,7 @@ internal static class FireworksLifecycleTests
                 Require(stepped.ActiveCount == 0 && stepped.Events.Count(item => item.ContainerId == burst.Id && item.Kind == 3) == 1,
                     "Stepped playback must finish after the sibling expires.");
             }
-            using (var coincident = new NativeSpawnableSession(SpawnableGroupPackage.Compile(WithRootLife(2)), library))
+            using (var coincident = new NativeSpawnableSession(SpawnableGroupPackage.Compile(WithAutoDestroy(true)), library))
             {
                 coincident.Advance(0);
                 coincident.Advance(2);
@@ -817,7 +861,7 @@ internal static class FireworksLifecycleTests
                     "Coincident root completion must wait for the spawned sibling.");
             }
             var ownerWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
-            ownerWorkspace.InitializeFromSnapshot(WithRootLife(1));
+            ownerWorkspace.InitializeFromSnapshot(WithAutoDestroy(true));
             Require(ownerWorkspace.EnterGraph(ownerWorkspace.GetNode(launch.Id)), "Cannot enter Owner Destroy fixture.");
             var createOwner = LiberaFxMcpTools.CreateNode(new ActiveGraphProvider(ownerWorkspace), "OwnerDestroy");
             Dispatcher.UIThread.RunJobs();
@@ -850,20 +894,15 @@ internal static class FireworksLifecycleTests
                 requested.Advance(3.5);
                 Require(requested.ActiveCount == 0, "Owner requests must preserve natural child destruction.");
             }
-            var coincidentOwnerGraph = ownerGraph with
-            {
-                Nodes = ownerGraph.Nodes.Select(node => node.Id == rootLifeId ? node with
-                {
-                    Parameters = [new("seconds", "float", JsonSerializer.SerializeToElement(2d))]
-                } : node).ToArray()
-            };
+            var coincidentOwnerGraph = ownerGraph with { AutoDestroyWhenIdle = false };
             using (var requestedAtExpiry = new NativeSpawnableSession(SpawnableGroupPackage.Compile(coincidentOwnerGraph), library))
             {
                 requestedAtExpiry.Advance(0);
                 requestedAtExpiry.Advance(2);
+                requestedAtExpiry.End();
                 Require(requestedAtExpiry.ActiveCount == 1 && requestedAtExpiry.RootVisible &&
                         requestedAtExpiry.Events.Any(item => item.ContainerId == launch.Id && item.Kind == 3),
-                    "Coincident child Destroy must precede the sibling's owner request.");
+                    "A child Destroy at explicit root end must create the sibling before owner notification.");
                 requestedAtExpiry.Advance(3.5);
                 Require(requestedAtExpiry.ActiveCount == 0, "The sibling must still expire naturally.");
             }
@@ -882,28 +921,6 @@ internal static class FireworksLifecycleTests
                     }
                 } : node).ToArray()
             }), "duplicate Owner Destroy");
-            Reject(() => SpawnableGroupPackage.Compile(WithRootLife(-1)), "negative root Life Time");
-            Reject(() => SpawnableGroupPackage.Compile(rootGraph with
-            {
-                Nodes = rootGraph.Nodes.Concat([rootLife with { Id = Guid.NewGuid() }]).ToArray()
-            }), "multiple root Life Times");
-            var input = rootWorkspace.CreateNode(GraphNodeKind.Float);
-            Require(rootWorkspace.TryConnectNodes(input, rootWorkspace.GetNode(rootLifeId), out _, "seconds"),
-                "Root Life Time must accept an authored input.");
-            var inputGraph = rootWorkspace.CreateSnapshot();
-            inputGraph = inputGraph with
-            {
-                Nodes = inputGraph.Nodes.Select(node => node.Id == input.Id ? node with
-                {
-                    Parameters = [new("value", "float", JsonSerializer.SerializeToElement(3d))]
-                } : node).ToArray()
-            };
-            using var inputSession = new NativeSpawnableSession(SpawnableGroupPackage.Compile(inputGraph), library);
-            inputSession.Advance(2);
-            Require(inputSession.RootVisible, "Connected root Life Time was not captured.");
-            inputSession.Advance(4);
-            Require(!inputSession.RootVisible && inputSession.ReadRoot(rootTime.Id).Lanes[0] == 3,
-                "Connected root Life Time did not expire at its captured value.");
         }
         var ageWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
         ageWorkspace.InitializeFromSnapshot(graph);
@@ -1109,7 +1126,7 @@ internal static class FireworksLifecycleTests
                 [21], "Copied Live source lane and boundary IDs");
         }
         var package = SpawnableGroupPackage.Compile(graph);
-        Require(package.Version == 6 && package.HasLiveInputs &&
+        Require(package.Version == SpawnableGroupPackage.FormatVersion && package.HasLiveInputs &&
                 package.Templates.Single().LiveInputs!.Count == 3,
             "Live pin bindings need an explicit package version and source mappings.");
         var compileMcp = LiberaFxMcpTools.CompileSpawnable(new ActiveGraphProvider(workspace));
@@ -1117,7 +1134,7 @@ internal static class FireworksLifecycleTests
         using (var result = JsonDocument.Parse(compileMcp.GetAwaiter().GetResult()))
         {
             var template = result.RootElement.GetProperty("templates").EnumerateArray().Single();
-            Require(result.RootElement.GetProperty("version").GetInt32() == 6 &&
+            Require(result.RootElement.GetProperty("version").GetInt32() == SpawnableGroupPackage.FormatVersion &&
                     result.RootElement.GetProperty("hasLiveInputs").GetBoolean() &&
                     template.GetProperty("capturePolicy").GetString() == "PerPin" &&
                     template.GetProperty("liveInputs").GetArrayLength() == 3,
@@ -1188,7 +1205,7 @@ internal static class FireworksLifecycleTests
         var graph = workspace.CreateSnapshot();
         var package = SpawnableGroupPackage.Compile(graph);
         var template = package.Templates.Single();
-        Require(package.Version == 7 && template.UsesExtendedCaptureInputs &&
+        Require(package.Version == SpawnableGroupPackage.FormatVersion && template.UsesExtendedCaptureInputs &&
                 template.CapturedInputs?.Count == inputs.Length &&
                 template.Outputs?.Select(output => output.PortType).SequenceEqual(
                     ["Float", "FloatX2", "FloatX3", "FloatX4", "Color"]) == true,
@@ -1236,22 +1253,23 @@ internal static class FireworksLifecycleTests
         Require(workspace.EnterGraph(sourceGroup), "Cannot edit Signal I/O template.");
         var signalInput = workspace.CreateNode(new GraphNodeKind("SpawnInputSignal"));
         var signalOutput = workspace.CreateNode(new GraphNodeKind("SpawnOutputSignal"));
-        Require(workspace.TryConnectNodes(signalInput, signalOutput, out _, "then", "signal"),
+        Require(workspace.TryConnectNodes(signalInput, signalOutput, out _, "signal", "then"),
             "Cannot connect Spawnable local Signal I/O.");
         workspace.NavigateToGraph(0);
         sourceGroup = workspace.GetNode(sourceGroup.Id);
         var targetGroup = workspace.CreateNode(GraphNodeKind.SpawnableGroup);
-        Require(workspace.TryConnectNodes(inputSignal, sourceGroup, out _, null,
-            SpawnableGroupSchema.PortId(signalInput.Id)), "Cannot connect a Spawnable Signal input.");
+        Require(workspace.TryConnectNodes(inputSignal, sourceGroup, out _,
+            targetPortId: SpawnableGroupSchema.PortId(signalInput.Id), sourcePortId: null),
+            "Cannot connect a Spawnable Signal input.");
         Require(workspace.TryConnectNodes(sourceGroup, targetGroup, out _,
-            SpawnableGroupSchema.OutputPortId(signalOutput.Id), "spawn"),
+            targetPortId: "spawn", sourcePortId: SpawnableGroupSchema.OutputPortId(signalOutput.Id)),
             "Cannot connect a Spawnable Signal output.");
 
-        var package = SpawnableGroupPackage.Compile(workspace.CreateSnapshot());
+        var package = SpawnableGroupPackage.Compile(workspace.CreateSnapshot() with { AutoDestroyWhenIdle = false });
         var sourceTemplate = package.Templates.Single(template => template.ContainerId == sourceGroup.Id);
-        Require(package.Version == 8 && sourceTemplate.SignalInputs?.Count == 1 &&
+        Require(package.Version == SpawnableGroupPackage.FormatVersion && sourceTemplate.SignalInputs?.Count == 1 &&
                 sourceTemplate.SignalOutputs?.Count == 1 && package.SignalRoutes.Count == 1,
-            "Spawnable local Signal ports must be represented in package v8.");
+            "Spawnable local Signal ports must be represented in package v9.");
         var compileTask = LiberaFxMcpTools.CompileSpawnable(new ActiveGraphProvider(workspace));
         Dispatcher.UIThread.RunJobs();
         using (var compiled = JsonDocument.Parse(compileTask.GetAwaiter().GetResult()))
@@ -1259,10 +1277,11 @@ internal static class FireworksLifecycleTests
             var compiledRoot = compiled.RootElement;
             var compiledTemplate = compiledRoot.GetProperty("templates").EnumerateArray()
                 .Single(item => item.GetProperty("containerId").GetGuid() == sourceGroup.Id);
-            Require(compiledRoot.GetProperty("signalRoutes").GetArrayLength() == 1 &&
+            Require(!compiledRoot.GetProperty("autoDestroyWhenIdle").GetBoolean() &&
+                    compiledRoot.GetProperty("signalRoutes").GetArrayLength() == 1 &&
                     compiledTemplate.GetProperty("signalInputs").GetArrayLength() == 1 &&
                     compiledTemplate.GetProperty("signalOutputs").GetArrayLength() == 1,
-                "MCP Spawnable compilation must expose local Signal ports and routes.");
+                "MCP Spawnable compilation must expose root policy, local Signal ports and routes.");
         }
         using var session = new NativeSpawnableSession(package, library);
         session.Advance(0);
@@ -1280,6 +1299,51 @@ internal static class FireworksLifecycleTests
                     sourceInstances.Select(item => item.Instance).Order()) &&
                 session.ActiveInstances.Count == 4,
             "A local signal must broadcast to active instances and route each output per source instance.");
+
+        var drainingWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var rootStart = drainingWorkspace.CreateNode(new GraphNodeKind("OnStart"));
+        var delayedSource = drainingWorkspace.CreateNode(GraphNodeKind.SpawnableGroup);
+        Require(drainingWorkspace.EnterGraph(delayedSource), "Cannot edit delayed signal source.");
+        var childStart = drainingWorkspace.CreateNode(new GraphNodeKind("OnStart"));
+        var childDelay = drainingWorkspace.CreateNode(new GraphNodeKind("Delay"));
+        var delayedOutput = drainingWorkspace.CreateNode(new GraphNodeKind("SpawnOutputSignal"));
+        var sourceLife = drainingWorkspace.CreateNode(new GraphNodeKind("LifeTime"));
+        drainingWorkspace.SetParameter(childDelay, "seconds", JsonSerializer.SerializeToElement(1d));
+        drainingWorkspace.SetParameter(sourceLife, "seconds", JsonSerializer.SerializeToElement(2d));
+        Require(drainingWorkspace.TryConnectNodes(childStart, childDelay, out _, "signal", "then") &&
+                drainingWorkspace.TryConnectNodes(childDelay, delayedOutput, out _, "then", "signal"),
+            "Cannot delay a local signal output.");
+        drainingWorkspace.NavigateToGraph(0);
+        var delayedTarget = drainingWorkspace.CreateNode(GraphNodeKind.SpawnableGroup);
+        Require(drainingWorkspace.EnterGraph(delayedTarget), "Cannot edit delayed signal target.");
+        var targetLife = drainingWorkspace.CreateNode(new GraphNodeKind("LifeTime"));
+        drainingWorkspace.SetParameter(targetLife, "seconds", JsonSerializer.SerializeToElement(1d));
+        drainingWorkspace.NavigateToGraph(0);
+        Require(drainingWorkspace.TryConnectNodes(rootStart, drainingWorkspace.GetNode(delayedSource.Id),
+                    out _, "spawn", "then") &&
+                drainingWorkspace.TryConnectNodes(drainingWorkspace.GetNode(delayedSource.Id),
+                    drainingWorkspace.GetNode(delayedTarget.Id), out _, targetPortId: "spawn",
+                    sourcePortId: SpawnableGroupSchema.OutputPortId(delayedOutput.Id)),
+            "Cannot connect delayed local signal routing.");
+        var drainingPackage = SpawnableGroupPackage.Compile(drainingWorkspace.CreateSnapshot());
+        Require(drainingPackage.AutoDestroyWhenIdle && drainingPackage.HasChildDeferredSignals &&
+                drainingPackage.SignalRoutes.Count == 1,
+            "The delayed local signal fixture must naturally end the root while child work is pending.");
+        using var drainingSession = new NativeSpawnableSession(drainingPackage, library);
+        drainingSession.Advance(0);
+        Require(drainingSession.RootVisible &&
+                drainingSession.ActiveInstances.Single().Container == delayedSource.Id,
+            "Startup must spawn the source before the root begins draining.");
+        drainingSession.Advance(1);
+        Require(drainingSession.RootVisible &&
+                drainingSession.ActiveInstances.Any(item => item.Container == delayedTarget.Id) &&
+                drainingSession.Events.Any(item => item.Kind == 4 && item.ContainerId == delayedSource.Id),
+            "Internal child signals must route through the root after natural shutdown begins.");
+        drainingSession.Advance(2);
+        Require(drainingSession.ActiveCount == 0 && drainingSession.RootVisible,
+            "Natural root shutdown must wait for delayed signal descendants.");
+        drainingSession.Advance(2.1);
+        Require(!drainingSession.RootVisible, "The root must finish after routed child work drains.");
     }
 
     private static GraphSnapshot ChangeLife(GraphSnapshot graph, Guid container, double seconds) => graph with

@@ -163,11 +163,11 @@ public sealed class LiberaFxMcpTools
                 version = package.Version,
                 bytecodeFormat = "LFXB",
                 signalPassthroughTypeId = SpawnableGroupPackage.SignalPassthroughTypeId,
+                package.AutoDestroyWhenIdle,
                 gameIoPorts = package.GameIoPorts,
                 parentBytecodeBase64 = Convert.ToBase64String(package.ParentBytecode),
                 package.OnStartNodeId,
                 package.OnDestroyNodeId,
-                package.LifeNodeId,
                 package.HasDeferredSignals,
                 package.HasChildDeferredSignals,
                 package.HasLiveInputs,
@@ -189,7 +189,8 @@ public sealed class LiberaFxMcpTools
                     renderConfigurationBase64 = Convert.ToBase64String(template.RenderConfiguration),
                     template.GpuContainers
                 }),
-                lifecycle = new { life = "nonnegative finite seconds captured at start; absent means infinity",
+                lifecycle = new { life = "valid only inside a Spawnable Group; absent means that instance is infinite",
+                    root = "no Life Time; AutoDestroyWhenIdle ends after root-local work drains when Spawnables exist; otherwise the host must End",
                     destroy = "natural expiry only; frozen outputs routed before finalize",
                     stop = "no Destroy", reset = "no Destroy", instanceIdScope = "pool" }
             }, JsonOptions);

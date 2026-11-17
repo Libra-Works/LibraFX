@@ -29,6 +29,16 @@
                    IsVisible="{Binding Graph.HasNoSelection}"
                    TextWrapping="Wrap"
                    Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+        <StackPanel IsVisible="{Binding Graph.IsRootGraph}" Spacing="4">
+            <TextBlock Text="{DynamicResource Text.Editor.EffectSettings}"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource EffectForegroundBrush}" />
+            <CheckBox Content="{DynamicResource Text.Editor.AutoDestroyWhenIdle}"
+                      IsChecked="{Binding Graph.AutoDestroyWhenIdle, Mode=TwoWay}" />
+            <TextBlock Text="{DynamicResource Text.Editor.AutoDestroyWhenIdleHelp}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+        </StackPanel>
         <StackPanel IsVisible="{Binding Graph.HasSelection}" Spacing="4">
             <TextBlock Text="{DynamicResource Text.Editor.Type}"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />

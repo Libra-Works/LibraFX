@@ -8,7 +8,7 @@ namespace LiberaFx.Services;
 
 public static class ProjectDocumentReader
 {
-    public const int CurrentFormatVersion = 10;
+    public const int CurrentFormatVersion = 11;
     private static readonly JsonSerializerOptions Options = new()
     {
         Converters = { new JsonStringEnumConverter() }
@@ -37,7 +37,10 @@ public static class ProjectDocumentReader
             ? throw new InvalidDataException("The project contains an empty connection.")
             : new GraphConnectionSnapshot(connection.SourceNodeId, connection.TargetNodeId,
                 connection.TargetPortId, connection.SourcePortId)).ToArray();
-        var graph = new GraphSnapshot(nodes, connections);
+        var graph = new GraphSnapshot(nodes, connections)
+        {
+            AutoDestroyWhenIdle = document.AutoDestroyWhenIdle
+        };
         ValidateGraph(graph);
         if (document.FormatVersion >= 2 && document.History is null)
             throw new InvalidDataException("The project file is missing its history timeline.");
