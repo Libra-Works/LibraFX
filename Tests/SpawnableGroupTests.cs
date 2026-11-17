@@ -16,6 +16,7 @@ internal static class SpawnableGroupTests
 {
     public static void Run()
     {
+        VerifyColorOutputCompilation();
         var history = new UndoRedoManager();
         var workspace = new GraphWorkspaceViewModel(history);
         var view = new GraphEditorView { DataContext = workspace };
@@ -80,6 +81,7 @@ internal static class SpawnableGroupTests
             if (!GraphSnapshot.ContentEquals(snapshot, project.Graph) || project.History is null)
                 throw new InvalidOperationException("Project save/load lost the Spawnable Group or shared history.");
         }
+
         var package = SpawnableGroupPackage.Compile(snapshot);
         var template = package.Templates.Single();
         if (template.ContainerId != group.Id || template.Inputs[0].TemplateNodeId != input.Id ||
@@ -146,6 +148,16 @@ internal static class SpawnableGroupTests
             groupDefinition.PortType, groupDefinition.PortCategory, ChildGraph: outer.Graph,
             GroupAsset: new GroupAssetReference(outer.Id, outer.Revision, false));
         _ = SpawnableGroupPackage.Compile(resolver.Resolve(new GraphSnapshot([outerNode], [])));
+    }
+
+    private static void VerifyColorOutputCompilation()
+    {
+        var workspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var group = workspace.CreateNode(GraphNodeKind.SpawnableGroup);
+        if (!workspace.EnterGraph(group)) throw new InvalidOperationException("Cannot enter color output fixture.");
+        workspace.CreateNode(new GraphNodeKind("SpawnOutputColor"));
+        workspace.NavigateToGraph(0);
+        _ = SpawnableGroupPackage.Compile(workspace.CreateSnapshot());
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 8)]

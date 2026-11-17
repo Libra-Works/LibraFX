@@ -865,7 +865,8 @@ public sealed class VfxProgram
                 "SpawnOutputVector2" => node with { Kind = GraphNodeKind.FloatX2 },
                 "SpawnOutputVector3" => node with { Kind = GraphNodeKind.FloatX3 },
                 "SpawnOutputVector4" => node with { Kind = GraphNodeKind.FloatX4 },
-                "SpawnOutputColor" => node with { Kind = new GraphNodeKind("Color") },
+                "SpawnOutputColor" => node with { Kind = GraphNodeDefinition.All.Single(item =>
+                    item.TypeName == "Color" && item.Namespace == "LiberaFx").Kind },
                 "SpawnInputSignal" or "SpawnOutputSignal" => node with { Kind = GraphNodeKind.Signal },
                 _ => node.ChildGraph is { } child && node.Kind != GraphNodeKind.SpawnableGroup &&
                     !GpuParticleEditorService.IsGpu(node.Kind) ? node with { ChildGraph = LowerLifecycle(child, hasLife) } : node
