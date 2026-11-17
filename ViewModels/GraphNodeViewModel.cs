@@ -1,4 +1,5 @@
 using Avalonia.Media;
+using System.Globalization;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -44,6 +45,19 @@ public sealed class GraphNodeViewModel : ObservableObject
     public GroupAssetReference? GroupAsset { get; private set; }
     public bool IsGraphGroup => ChildGraph is not null;
     public bool IsSpawnableGroup => Definition.Kind == GraphNodeKind.SpawnableGroup;
+    public bool IsLifecycleNode => IsSpawnableGroup ||
+        Definition.Kind.Value is "LifeTime" or "Delay";
+    public string LifecycleRoleLabel => !IsLifecycleNode ? string.Empty :
+        LocalizationService.Shared.Get(IsSpawnableGroup ? "Editor.Lifecycle.OwnerRole" :
+            Definition.Kind.Value == "LifeTime" ? "Editor.Lifecycle.InstanceLifeRole" : "Editor.Lifecycle.DelayRole");
+    public string LifecycleSummary => !IsLifecycleNode ? string.Empty :
+        IsSpawnableGroup ? SpawnableLifeTimeSummary() :
+        Definition.Kind.Value == "LifeTime" ? ParameterSecondsSummary("LifeTime") : ParameterSecondsSummary("Delay");
+    public string LifecycleSummaryHelp => !IsLifecycleNode ? string.Empty :
+        LocalizationService.Shared.Get(IsSpawnableGroup ? "Editor.Lifecycle.OwnerHelp" :
+            Definition.Kind.Value == "LifeTime" ? "Editor.Lifecycle.InstanceLifeHelp" : "Editor.Lifecycle.DelayHelp");
+    public IBrush LifecycleAccentBrush => ThemeSettingsService.EditorBrush(
+        IsSpawnableGroup || Definition.Kind.Value == "LifeTime" ? "GraphParameter" : "GraphSignal");
     public bool ShowGroupHint => IsGraphGroup && !IsSpawnableGroup && !HasCustomInputs && !HasCustomOutputs;
     public bool IsGpuParticle => GpuParticleEditorService.IsGpu(Definition.Kind);
     public bool IsComment => Definition.Kind == GraphNodeKind.Comment;
@@ -120,6 +134,14 @@ public sealed class GraphNodeViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(Description));
         OnPropertyChanged(nameof(HeaderHelp));
+        OnPropertyChanged(nameof(LifecycleRoleLabel));
+        OnPropertyChanged(nameof(LifecycleSummary));
+        OnPropertyChanged(nameof(LifecycleSummaryHelp));
+    }
+    internal void RefreshLifecyclePresentation()
+    {
+        OnPropertyChanged(nameof(LifecycleSummary));
+        OnPropertyChanged(nameof(LifecycleSummaryHelp));
     }
     public IBrush BorderBrush => HasDiagnostics ? Brushes.Red :
         ThemeSettingsService.EditorBrush(IsSelected ? "NodeSelectedBorder" : "NodeBorder");
@@ -232,6 +254,7 @@ public sealed class GraphNodeViewModel : ObservableObject
             OnPropertyChanged(nameof(CommentWidth));
             OnPropertyChanged(nameof(CommentHeight));
             OnPropertyChanged(nameof(RenderedWidth));
+            RefreshLifecyclePresentation();
             _workspace.RefreshTypeDiagnostics();
         }
     }
@@ -306,6 +329,7 @@ public sealed class GraphNodeViewModel : ObservableObject
     {
         GroupOverrides = value;
         OnPropertyChanged(nameof(GroupOverrides));
+        RefreshLifecyclePresentation();
     }
 
     internal void PreviewCommentSize(double width, double height)
@@ -330,6 +354,100 @@ public sealed class GraphNodeViewModel : ObservableObject
         var definition = Definition.Parameters.FirstOrDefault(item => item.Id == id);
         return definition is null ? fallback : Math.Clamp(GetParameterValue(definition).GetDouble(), min, max);
     }
+
+    private string ParameterSecondsSummary(string label)
+    {
+        if (IsSecondsInputDriven(null, Id)) return SecondsState(label, "Editor.Lifecycle.InputDependent");
+        return TryGetSeconds(Definition, Parameters, out var seconds)
+            ? SecondsSummary(label, SecondsText(seconds))
+            : SecondsState(label, "Editor.Lifecycle.Invalid");
+    }
+
+    private string SpawnableLifeTimeSummary()
+    {
+        if (ChildGraph is not { } child)
+            return SecondsState("LifeTime", "Editor.Lifecycle.Invalid");
+        var lifetimeNodes = child.Nodes.Where(node => node.Kind.Value == "LifeTime").ToArray();
+        if (lifetimeNodes.Length == 0)
+            return SecondsState("LifeTime", "Editor.Lifecycle.Unbounded");
+        if (lifetimeNodes.Length != 1)
+            return SecondsState("LifeTime", "Editor.Lifecycle.Invalid");
+
+        var lifetime = lifetimeNodes[0];
+        if (IsSecondsInputDriven(child, lifetime.Id))
+            return SecondsState("LifeTime", "Editor.Lifecycle.InputDependent");
+
+        var definition = GraphNodeDefinition.All.FirstOrDefault(item => item.Kind == lifetime.Kind);
+        if (definition is null || !TryGetSeconds(definition, lifetime.Parameters, out var seconds, out var value))
+            return SecondsState("LifeTime", "Editor.Lifecycle.Invalid");
+
+        var exposed = child.ExposedItems?.FirstOrDefault(item => item.Editor == "parameter" &&
+            item.Targets.Any(target => target.NodeId == lifetime.Id && target.ParameterId == "seconds"));
+        if (exposed is not null && GroupOverrides?.FirstOrDefault(item => item.ItemId == exposed.Id) is { } instanceValue)
+        {
+            var componentIndex = exposed.Targets.ToList().FindIndex(target =>
+                target.NodeId == lifetime.Id && target.ParameterId == "seconds");
+            if (componentIndex < 0 || componentIndex >= instanceValue.Components.Count ||
+                instanceValue.Components[componentIndex].Value is not { } overrideValue ||
+                !TryReadSeconds(overrideValue, out seconds))
+                return SecondsState("LifeTime", "Editor.Lifecycle.Invalid");
+            value = overrideValue;
+            return SecondsSummary("LifeTime",
+                LocalizationService.Shared.Get("Editor.Lifecycle.InstanceOverride", FormatSeconds(value)));
+        }
+
+        return SecondsSummary("LifeTime", FormatSeconds(value));
+    }
+
+    private bool IsSecondsInputDriven(GraphSnapshot? childGraph, Guid nodeId)
+    {
+        return childGraph is not null
+            ? childGraph.Connections.Any(connection => connection.TargetNodeId == nodeId &&
+                (connection.TargetPortId is null or "seconds"))
+            : _workspace.Connections.Any(connection => connection.Target.Id == nodeId &&
+                (connection.TargetPortId is null or "seconds"));
+    }
+
+    private static bool TryGetSeconds(GraphNodeDefinition definition,
+        IReadOnlyList<NodeParameterSnapshot>? parameters, out double seconds) =>
+        TryGetSeconds(definition, parameters, out seconds, out _);
+
+    private static bool TryGetSeconds(GraphNodeDefinition definition,
+        IReadOnlyList<NodeParameterSnapshot>? parameters, out double seconds, out JsonElement value)
+    {
+        var parameter = definition.Parameters.FirstOrDefault(item => item.Id == "seconds" && item.Type == "float");
+        value = parameter is null ? default :
+            parameters?.FirstOrDefault(item => item.Id == parameter.Id && item.Type == parameter.Type)?.Value
+            ?? parameter.DefaultValue;
+        if (parameter is null || !TryReadSeconds(value, out seconds))
+        {
+            seconds = 0;
+            return false;
+        }
+        return true;
+    }
+
+    private static bool TryReadSeconds(JsonElement value, out double seconds)
+    {
+        seconds = 0;
+        return NodeParameter.IsValidValue("float", value) &&
+            (seconds = value.GetDouble()) >= 0;
+    }
+
+    private static string FormatSeconds(JsonElement value) =>
+        LocalizationService.Shared.Get("Editor.Lifecycle.Seconds",
+            value.GetDouble().ToString("G", CultureInfo.CurrentCulture));
+
+    private static string SecondsText(double seconds) =>
+        LocalizationService.Shared.Get("Editor.Lifecycle.Seconds",
+            seconds.ToString("G", CultureInfo.CurrentCulture));
+
+    private static string SecondsSummary(string label, string value) =>
+        LocalizationService.Shared.Get(label == "Delay"
+            ? "Editor.Lifecycle.DelaySummary" : "Editor.Lifecycle.LifeTimeSummary", value);
+
+    private static string SecondsState(string label, string key) =>
+        SecondsSummary(label, LocalizationService.Shared.Get(key));
 
     internal void SetPosition(double x, double y)
     {

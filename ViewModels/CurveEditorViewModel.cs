@@ -342,7 +342,7 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
 
     private void OnGraphChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(GraphWorkspaceViewModel.SelectedNode)) RefreshNode();
+        if (e.PropertyName == nameof(GraphWorkspaceViewModel.InspectorNode)) RefreshNode();
     }
 
     private void OnNodeChanged(object? sender, PropertyChangedEventArgs e)
@@ -362,7 +362,7 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
 
     private void RefreshNode()
     {
-        var group = _graph.SelectedNode is { ChildGraph: not null } selected ? selected : null;
+        var group = _graph.InspectorNode is { ChildGraph: not null } selected ? selected : null;
         if (!ReferenceEquals(group, _group))
         {
             if (_group is not null) _group.PropertyChanged -= OnGroupChanged;

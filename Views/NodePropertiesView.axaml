@@ -20,13 +20,13 @@
             <Setter Property="MinHeight" Value="26" />
         </Style>
     </UserControl.Styles>
-    <ScrollViewer HorizontalScrollBarVisibility="Auto">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="8" Spacing="6">
-        <TextBlock Text="{DynamicResource Text.Editor.SelectedNode}"
+        <TextBlock Text="{Binding InspectorTitle}"
                    FontWeight="SemiBold"
                    Foreground="{DynamicResource EffectForegroundBrush}" />
         <TextBlock Text="{DynamicResource Text.Editor.SelectNodeHint}"
-                   IsVisible="{Binding Graph.HasNoSelection}"
+                   IsVisible="{Binding !HasInspectorTarget}"
                    TextWrapping="Wrap"
                    Foreground="{DynamicResource EffectMutedForegroundBrush}" />
         <StackPanel IsVisible="{Binding Graph.IsRootGraph}" Spacing="4">
@@ -39,15 +39,19 @@
                        TextWrapping="Wrap"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
         </StackPanel>
-        <StackPanel IsVisible="{Binding Graph.HasSelection}" Spacing="4">
+        <TextBlock Text="{DynamicResource Text.Panels.ContainingSpawnableHint}"
+                   IsVisible="{Binding IsInspectingContainingSpawnable}" TextWrapping="Wrap"
+                   Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+        <StackPanel IsVisible="{Binding HasInspectorTarget}" Spacing="4">
             <TextBlock Text="{DynamicResource Text.Editor.Type}"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <TextBlock Text="{Binding Graph.SelectedNodeType}"
+            <TextBlock Text="{Binding InspectorNodeType}"
                        Foreground="{DynamicResource EffectForegroundBrush}" />
             <TextBlock Text="{DynamicResource Text.Editor.Name}"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <TextBox Text="{Binding Graph.SelectedNodeName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
-            <Border IsVisible="{Binding IsGroup}" Margin="0,8,0,0" Padding="10"
+            <TextBox Text="{Binding InspectorNodeName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                     IsReadOnly="{Binding IsInspectingContainingSpawnable}" />
+            <Border IsVisible="{Binding CanManageGroup}" Margin="0,8,0,0" Padding="10"
                     BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="1" CornerRadius="4">
                 <StackPanel Spacing="8">
                     <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
@@ -80,14 +84,16 @@
             <Button Content="{DynamicResource Text.Panels.EditGroupCurves}"
                     IsVisible="{Binding HasExposedCurves}" Click="OnEditGroupCurvesClick" />
             <Button Content="{DynamicResource Text.Panels.ConfigureGroupItems}"
-                    IsVisible="{Binding HasExposedItems}" Click="OnConfigureGroupItemsClick" />
+                    IsVisible="{Binding CanConfigureGroupItems}" Click="OnConfigureGroupItemsClick" />
             <TextBlock Text="{Binding GroupExposedDiagnostics}" TextWrapping="Wrap" FontSize="11"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <TextBlock Text="{Binding PluginStatus}" TextWrapping="Wrap" FontSize="11"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <TextBlock Text="{DynamicResource Text.Editor.Connections}" Margin="0,10,0,0"
+                       IsVisible="{Binding !IsInspectingContainingSpawnable}"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <ItemsControl ItemsSource="{Binding Graph.SelectedConnections}">
+            <ItemsControl ItemsSource="{Binding Graph.SelectedConnections}"
+                          IsVisible="{Binding !IsInspectingContainingSpawnable}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="vm:GraphConnectionViewModel">
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4" Margin="0,2">

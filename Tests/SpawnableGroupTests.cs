@@ -16,6 +16,7 @@ internal static class SpawnableGroupTests
 {
     public static void Run()
     {
+        VerifySignalBoundaryNavigation();
         VerifyColorOutputCompilation();
         var history = new UndoRedoManager();
         var workspace = new GraphWorkspaceViewModel(history);
@@ -148,6 +149,49 @@ internal static class SpawnableGroupTests
             groupDefinition.PortType, groupDefinition.PortCategory, ChildGraph: outer.Graph,
             GroupAsset: new GroupAssetReference(outer.Id, outer.Revision, false));
         _ = SpawnableGroupPackage.Compile(resolver.Resolve(new GraphSnapshot([outerNode], [])));
+    }
+
+    private static void VerifySignalBoundaryNavigation()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var group = graph.CreateNode(GraphNodeKind.SpawnableGroup);
+        var groupId = group.Id;
+        graph.EnterGraph(group);
+        var input = graph.CreateNode(new GraphNodeKind("SpawnInputSignal"));
+        var output = graph.CreateNode(new GraphNodeKind("SpawnOutputSignal"));
+        graph.NavigateToGraph(0);
+        group = graph.GetNode(groupId);
+        var source = graph.CreateNode(GraphNodeKind.Signal);
+        var sink = graph.CreateNode(GraphNodeKind.Signal);
+        if (!graph.TryConnectNodes(source, group, out _, "spawn") ||
+            !graph.TryConnectNodes(source, group, out _, SpawnableGroupSchema.PortId(input.Id)) ||
+            !graph.TryConnectNodes(group, sink, out _, sourcePortId: SpawnableGroupSchema.OutputPortId(output.Id)))
+            throw new InvalidOperationException("Cannot create custom Spawnable signal routes.");
+        var before = graph.CreateSnapshot();
+        var historyId = graph.History.CurrentNodeId;
+        graph.EnterGraph(group);
+        if (!GraphSnapshot.ContentEquals(before, graph.CreateSnapshot()) ||
+            historyId != graph.History.CurrentNodeId)
+            throw new InvalidOperationException("Reading inside a Spawnable changed its parent signal routes or history.");
+        graph.NavigateToGraph(0);
+        graph.EnterGraph(graph.GetNode(groupId));
+        using var project = new MemoryStream();
+        new ProjectFileService().SaveAsync(project, graph).GetAwaiter().GetResult();
+        project.Position = 0;
+        var loaded = ProjectDocumentReader.LoadAsync(project).GetAwaiter().GetResult();
+        if (!GraphSnapshot.ContentEquals(before, loaded.Graph))
+            throw new InvalidOperationException("Saving from inside a Spawnable discarded custom signal routes.");
+        graph.DeleteNode(graph.GetNode(output.Id));
+        var remaining = graph.CreateSnapshot().Connections;
+        if (remaining.Count != 2 || remaining.Any(connection => connection.SourceNodeId == groupId))
+            throw new InvalidOperationException("Removing a signal output did not prune only its route.");
+        graph.DeleteNode(graph.GetNode(input.Id));
+        if (graph.CreateSnapshot().Connections.Count != 1 ||
+            graph.CreateSnapshot().Connections.Single().TargetPortId != "spawn")
+            throw new InvalidOperationException("Removing a signal input did not preserve the spawn route.");
+        if (!graph.History.Undo() || !graph.History.Undo() ||
+            !GraphSnapshot.ContentEquals(before, graph.CreateSnapshot()))
+            throw new InvalidOperationException("Undo did not restore the custom signal routes.");
     }
 
     private static void VerifyColorOutputCompilation()

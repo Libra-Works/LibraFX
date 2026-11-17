@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -35,6 +36,7 @@ public partial class GraphNodeView : UserControl
     private Bitmap? _commentBitmap;
     private string? _imageStatusKey;
     private bool _editingComment;
+    private GraphNodeViewModel? _lifecycleNode;
 
     public GraphNodeView()
     {
@@ -53,12 +55,14 @@ public partial class GraphNodeView : UserControl
         base.OnAttachedToVisualTree(e);
         LocalizationService.Shared.LanguageChanged += OnLanguageChanged;
         AttachImageNode();
+        AttachLifecycleNode();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         LocalizationService.Shared.LanguageChanged -= OnLanguageChanged;
         DetachImageNode();
+        DetachLifecycleNode();
         base.OnDetachedFromVisualTree(e);
     }
 
@@ -66,8 +70,30 @@ public partial class GraphNodeView : UserControl
     {
         base.OnDataContextChanged(e);
         DetachImageNode();
-        if (this.IsAttachedToVisualTree()) AttachImageNode();
+        DetachLifecycleNode();
+        if (this.IsAttachedToVisualTree())
+        {
+            AttachImageNode();
+            AttachLifecycleNode();
+        }
     }
+
+    private void AttachLifecycleNode()
+    {
+        if (DataContext is not GraphNodeViewModel { IsLifecycleNode: true } node || _lifecycleNode == node) return;
+        _lifecycleNode = node;
+        node.Workspace.Connections.CollectionChanged += OnLifecycleConnectionsChanged;
+    }
+
+    private void DetachLifecycleNode()
+    {
+        if (_lifecycleNode is not null)
+            _lifecycleNode.Workspace.Connections.CollectionChanged -= OnLifecycleConnectionsChanged;
+        _lifecycleNode = null;
+    }
+
+    private void OnLifecycleConnectionsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) =>
+        _lifecycleNode?.RefreshLifecyclePresentation();
 
     private void AttachImageNode()
     {
@@ -123,6 +149,7 @@ public partial class GraphNodeView : UserControl
 
     private void OnLanguageChanged(object? sender, EventArgs e)
     {
+        if (DataContext is GraphNodeViewModel node) node.RefreshLocalizedText();
         if (_imageStatusKey is { } key)
             ImageStatus.Text = LocalizationService.Shared.Get(key);
     }
@@ -283,7 +310,7 @@ public partial class GraphNodeView : UserControl
             e.Handled = true;
             return;
         }
-        if (e.ClickCount >= 2 && node.IsGraphGroup)
+        if (e.ClickCount >= 2 && node.IsGraphGroup && e.KeyModifiers == KeyModifiers.None)
         {
             node.Workspace.EnterGraph(node);
             e.Handled = true;
@@ -319,6 +346,7 @@ public partial class GraphNodeView : UserControl
 
     private void OnNodePointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        if (e.Handled) return;
         if (DataContext is not GraphNodeViewModel node ||
             !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
@@ -332,6 +360,13 @@ public partial class GraphNodeView : UserControl
             e.Handled = true;
             return;
         }
+        if (e.ClickCount >= 2 && node.IsGraphGroup && e.KeyModifiers == KeyModifiers.None &&
+            !IsInteractiveSource(e.Source))
+        {
+            node.Workspace.EnterGraph(node);
+            e.Handled = true;
+            return;
+        }
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
             node.Workspace.ToggleSelection(node);
@@ -341,6 +376,15 @@ public partial class GraphNodeView : UserControl
             node.Workspace.SelectNode(node);
         }
         e.Handled = true;
+    }
+
+    private static bool IsInteractiveSource(object? source)
+    {
+        if (source is not Visual visual) return false;
+        return visual.GetSelfAndVisualAncestors().OfType<Control>().Any(control =>
+            control is Button or ToggleButton or TextBox or NumericUpDown or ComboBox or Slider ||
+            control.Tag is GraphInputPortDefinition or GraphOutputPortDefinition ||
+            string.Equals(control.Tag?.ToString(), "OutputPort", StringComparison.Ordinal));
     }
 
     private void OnHeaderPointerMoved(object? sender, PointerEventArgs e)

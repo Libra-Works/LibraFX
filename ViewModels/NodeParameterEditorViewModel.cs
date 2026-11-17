@@ -27,7 +27,8 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         connection.Target == _node && (connection.TargetPortId == Id ||
         connection.TargetPortId is null && _node.HasLegacyInput && _node.Definition.Parameters.Count == 1));
     public bool HasConnection => InputConnection is not null;
-    public bool CanReset => _graph.Nodes.Contains(_node) && (_exposed is { } item
+    public bool CanReset => (_exposed is null || IsCurrentInspectorTarget()) && (_graph.Nodes.Contains(_node) ||
+        _exposed is not null && ReferenceEquals(_graph.ContainingSpawnable, _node)) && (_exposed is { } item
         ? _node.GroupOverrides?.Any(value => value.ItemId == item.Id) == true
         : !NodeParameter.ValuesEqual(Value, _definition.DefaultValue));
     public IRelayCommand DisconnectCommand { get; }
@@ -120,6 +121,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         }, () => HasConnection);
         ResetCommand = new RelayCommand(() =>
         {
+            if (_exposed is not null && !IsCurrentInspectorTarget()) return;
             if (_exposed is { } item) _graph.ResetGroupInstanceValue(_node, item.Id);
             else SetValue(_definition.DefaultValue);
             Refresh();
@@ -195,8 +197,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     }
 
     internal bool IsCurrentInspectorTarget() =>
-        _isCurrentInspectorTarget() && _graph.Nodes.Contains(_node) &&
-        ReferenceEquals(_graph.SelectedNode, _node);
+        _isCurrentInspectorTarget() && _graph.IsCurrentInspectorTarget(_node);
 
     internal bool TrySetInspectorValue(JsonElement value) =>
         IsCurrentInspectorTarget() && SetValue(value);
@@ -256,6 +257,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
 
     private bool SetValue(JsonElement value)
     {
+        if (_exposed is not null && !IsCurrentInspectorTarget()) return false;
         try
         {
             if (_exposed is { } item)

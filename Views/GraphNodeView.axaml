@@ -10,14 +10,14 @@
         <views:GraphPortBrushConverter x:Key="PortBrushConverter" />
     </UserControl.Resources>
     <Grid>
-    <Border Width="240" IsVisible="{Binding !IsComment}"
+    <Border x:Name="NodeBody" Width="240" IsVisible="{Binding !IsComment}"
             Background="{DynamicResource EffectSurfaceBrush}"
             BorderBrush="{Binding BorderBrush}"
             ToolTip.Tip="{Binding DiagnosticText}"
             AutomationProperties.HelpText="{Binding DiagnosticText}"
             BorderThickness="2"
             CornerRadius="4">
-        <Grid RowDefinitions="Auto,Auto,Auto">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto">
             <Border Grid.Row="0"
                     x:Name="NodeHeader"
                     Padding="8"
@@ -49,7 +49,21 @@
                                FontWeight="SemiBold" />
                 </DockPanel>
             </Border>
-            <Grid Grid.Row="1"
+            <StackPanel x:Name="LifecycleSummaryPanel" Grid.Row="1" Margin="8,4,8,2" Spacing="2"
+                        IsVisible="{Binding IsLifecycleNode}"
+                        ToolTip.Tip="{Binding LifecycleSummaryHelp}"
+                        AutomationProperties.HelpText="{Binding LifecycleSummaryHelp}">
+                <Border HorizontalAlignment="Left" Padding="4,1" CornerRadius="3"
+                        BorderBrush="{Binding LifecycleAccentBrush}" BorderThickness="1">
+                    <TextBlock Text="{Binding LifecycleRoleLabel}" FontSize="10"
+                               Foreground="{Binding LifecycleAccentBrush}"
+                               TextTrimming="CharacterEllipsis" />
+                </Border>
+                <TextBlock x:Name="LifecycleSummaryLabel" Text="{Binding LifecycleSummary}"
+                           FontSize="11" Foreground="{DynamicResource EffectForegroundBrush}"
+                           TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            <Grid Grid.Row="2"
                   Margin="8"
                   IsVisible="{Binding HasPorts}"
                   ColumnDefinitions="*,Auto,*">
@@ -144,11 +158,11 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </Grid>
-            <TextBlock x:Name="GroupHintLabel" Grid.Row="1" Margin="8" IsVisible="{Binding ShowGroupHint}"
+            <TextBlock x:Name="GroupHintLabel" Grid.Row="2" Margin="8" IsVisible="{Binding ShowGroupHint}"
                        Text="{DynamicResource Text.Panels.DoubleClickToOpen}" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <TextBlock x:Name="GpuProgramLabel" Grid.Row="1" Margin="8" IsVisible="{Binding IsGpuParticle}"
+            <TextBlock x:Name="GpuProgramLabel" Grid.Row="2" Margin="8" IsVisible="{Binding IsGpuParticle}"
                        Text="{DynamicResource Text.Gpu.ContainerHint}" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <Border Grid.Row="2" IsVisible="{Binding IsDetailsExpanded}" Padding="8,5"
+            <Border Grid.Row="3" IsVisible="{Binding IsDetailsExpanded}" Padding="8,5"
                     BorderThickness="0,1,0,0" BorderBrush="{DynamicResource EffectBorderBrush}">
                 <ItemsControl ItemsSource="{Binding InlineParameters}">
                     <ItemsControl.ItemTemplate>

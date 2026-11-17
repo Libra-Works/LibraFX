@@ -128,6 +128,15 @@ lanes. The host reads parent values at the spawn timestamp and applies
 CaptureAtSpawn values before OnStart; Live values are updated before start and
 each child evaluation. A signal enqueues one runtime instance, never another
 graph node. Nested Spawnable Groups are rejected.
+The editor distinguishes expandable lifecycle owners, Life Time and
+non-container Delay nodes with role labels and theme-colored badges. Visible
+summaries show configured seconds, including published instance overrides;
+connected seconds inputs are marked input-dependent. These are durations,
+not predicted final destruction times. Double-click a non-interactive part
+of a group to enter it. With no child selected, the inspector shows the
+immediate containing Spawnable's published values and curves. Editing/reset
+changes that instance's overrides through undo/redo, not child template
+defaults; it does not navigate away or select an out-of-scope node.
 `SpawnableGroupPackage.Compile` emits the parent LFXB, separate template LFXBs,
 capture maps, per-template render configuration and GPU container snapshots.
 MCP `libera_graph_compile_spawnable` exposes JSON package format version 9.

@@ -19,6 +19,20 @@ public sealed class NodePropertiesPaneViewModel : Tool
     private readonly List<string> _unavailableExposedItems = [];
 
     public GraphWorkspaceViewModel Graph => _graph;
+    public bool HasInspectorTarget => _node is not null;
+    public bool IsInspectingContainingSpawnable =>
+        _node is not null && ReferenceEquals(_node, _graph.ContainingSpawnable) && _graph.SelectedNode is null;
+    public string InspectorTitle => LocalizationService.Shared.Get(
+        IsInspectingContainingSpawnable ? "Panels.ContainingSpawnable" : "Editor.SelectedNode");
+    public string InspectorNodeName
+    {
+        get => _node?.Name ?? string.Empty;
+        set { if (_node is not null && !IsInspectingContainingSpawnable) _node.Name = value; }
+    }
+    public string InspectorNodeType => _node is { } node
+        ? LocalizationService.Shared.GetOrDefault(node.Definition.DisplayNameKey, node.Definition.Name) : string.Empty;
+    public bool CanManageGroup => IsGroup && !IsInspectingContainingSpawnable;
+    public bool CanConfigureGroupItems => HasExposedItems && !IsInspectingContainingSpawnable;
     public ObservableCollection<NodeParameterEditorViewModel> Parameters { get; } = [];
     public string GroupExposedDiagnostics => string.Join(Environment.NewLine,
         _unavailableExposedItems.Select(name => LocalizationService.Shared.Get("Panels.GroupExposedUnavailable", name)));
@@ -60,10 +74,10 @@ public sealed class NodePropertiesPaneViewModel : Tool
         _playback = playback;
         _graph = activeGraph.Graph;
         SaveGroupCommand = new RelayCommand(() => RunGroupAction(_graph.SaveSelectedGroupAsset),
-            () => IsGroup && _graph.GroupAssets?.HasLibraryDirectory == true &&
+            () => CanManageGroup && _graph.GroupAssets?.HasLibraryDirectory == true &&
                   (!IsLinkedGroup || CurrentAsset is { Locked: false }));
         ToggleGroupLockCommand = new RelayCommand(() => RunGroupAction(_graph.ToggleSelectedGroupAssetLock),
-            () => IsLinkedGroup && CurrentAsset is not null);
+            () => CanManageGroup && IsLinkedGroup && CurrentAsset is not null);
         PublishCurvesCommand = new RelayCommand(() => RunGroupAction(() => _graph.PublishGroupCurves()),
             () => CanPublishCurves);
         _activeGraph.PropertyChanged += OnActiveGraphChanged;
@@ -98,7 +112,7 @@ public sealed class NodePropertiesPaneViewModel : Tool
 
     private void OnGraphChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(GraphWorkspaceViewModel.SelectedNode)) RefreshNode();
+        if (e.PropertyName == nameof(GraphWorkspaceViewModel.InspectorNode)) RefreshNode();
         if (e.PropertyName == nameof(GraphWorkspaceViewModel.SelectionCount))
         {
             OnPropertyChanged(nameof(CanPublishCurves));
@@ -116,6 +130,7 @@ public sealed class NodePropertiesPaneViewModel : Tool
         if (e.PropertyName is nameof(GraphNodeViewModel.Parameters) or nameof(GraphNodeViewModel.GroupOverrides))
             foreach (var parameter in Parameters) parameter.Refresh();
         if (e.PropertyName == nameof(GraphNodeViewModel.GroupAsset)) RefreshGroupState();
+        if (e.PropertyName == nameof(GraphNodeViewModel.Name)) OnPropertyChanged(nameof(InspectorNodeName));
     }
 
     private void OnConnectionsChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -130,12 +145,16 @@ public sealed class NodePropertiesPaneViewModel : Tool
         InspectorPluginService.Shared.RefreshLocalizedText();
         OnPropertyChanged(nameof(PluginStatus));
         OnPropertyChanged(nameof(GroupExposedDiagnostics));
+        OnPropertyChanged(nameof(InspectorTitle));
+        OnPropertyChanged(nameof(InspectorNodeType));
         RefreshGroupState();
     }
 
     private void RefreshGroupState()
     {
         OnPropertyChanged(nameof(IsGroup));
+        OnPropertyChanged(nameof(CanManageGroup));
+        OnPropertyChanged(nameof(CanConfigureGroupItems));
         OnPropertyChanged(nameof(HasExposedCurves));
         OnPropertyChanged(nameof(HasExposedItems));
         OnPropertyChanged(nameof(CanPublishCurves));
@@ -165,10 +184,15 @@ public sealed class NodePropertiesPaneViewModel : Tool
     {
         var selectionGeneration = ++_selectionGeneration;
         if (_node is not null) _node.PropertyChanged -= OnNodeChanged;
-        _node = _graph.SelectedNode;
+        _node = _graph.InspectorNode;
         Parameters.Clear();
         _unavailableExposedItems.Clear();
         OnPropertyChanged(nameof(GroupExposedDiagnostics));
+        OnPropertyChanged(nameof(HasInspectorTarget));
+        OnPropertyChanged(nameof(IsInspectingContainingSpawnable));
+        OnPropertyChanged(nameof(InspectorTitle));
+        OnPropertyChanged(nameof(InspectorNodeName));
+        OnPropertyChanged(nameof(InspectorNodeType));
         RefreshGroupState();
         if (_node is null) return;
         _node.PropertyChanged += OnNodeChanged;
@@ -180,7 +204,7 @@ public sealed class NodePropertiesPaneViewModel : Tool
         {
             Parameters.Add(new NodeParameterEditorViewModel(graph, selectedNode, definition, isCurrentInspectorTarget: () =>
                 selectionGeneration == _selectionGeneration &&
-                ReferenceEquals(_activeGraph.Graph, graph) && ReferenceEquals(graph.SelectedNode, selectedNode)));
+                ReferenceEquals(_activeGraph.Graph, graph) && graph.IsCurrentInspectorTarget(selectedNode)));
         }
         if (_node.ChildGraph is not { } child) return;
         foreach (var item in (child.ExposedItems ?? []).OrderBy(item => item.Order))
@@ -226,7 +250,7 @@ public sealed class NodePropertiesPaneViewModel : Tool
             var display = definition with { Name = item.Name, DisplayNameKey = null, DefaultValue = initial.Clone(), Editor = editor };
             Parameters.Add(new NodeParameterEditorViewModel(graph, selectedNode, display, item, () =>
                 selectionGeneration == _selectionGeneration &&
-                ReferenceEquals(_activeGraph.Graph, graph) && ReferenceEquals(graph.SelectedNode, selectedNode)));
+                ReferenceEquals(_activeGraph.Graph, graph) && graph.IsCurrentInspectorTarget(selectedNode)));
         }
         OnPropertyChanged(nameof(GroupExposedDiagnostics));
     }

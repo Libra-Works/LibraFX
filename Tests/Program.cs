@@ -212,6 +212,8 @@ internal static class Program
         if (args is ["--spawnable-group"])
         {
             SpawnableGroupTests.Run();
+            ContainingSpawnableInspectorTests.Run();
+            LiberaFx.Tests.LifecycleNodePresentationTests.Run();
             EditorInterfaceTests.VerifyContainerPresentation();
             Console.WriteLine("Spawnable Group checks passed.");
             return;

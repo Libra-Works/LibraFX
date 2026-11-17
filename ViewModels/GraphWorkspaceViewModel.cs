@@ -37,6 +37,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     private object?[] _connectionStatusArgs = [];
     private GraphSnapshot _rootSnapshot = new([], []);
     private readonly List<Guid> _graphPath = [];
+    private GraphNodeViewModel? _containingSpawnable;
 
     public ObservableCollection<GraphNodeViewModel> Nodes { get; } = [];
     public ObservableCollection<GraphNodeViewModel> CommentNodes { get; } = [];
@@ -68,6 +69,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             OnPropertyChanged(nameof(HasNoSelection));
             OnPropertyChanged(nameof(SelectedNodeName));
             OnPropertyChanged(nameof(SelectedNodeType));
+            OnPropertyChanged(nameof(InspectorNode));
             RefreshSelectedConnections();
             DeleteSelectedNodeCommand.NotifyCanExecuteChanged();
         }
@@ -76,6 +78,13 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     public bool HasSelection => SelectedNode is not null;
 
     public bool HasNoSelection => SelectedNode is null;
+
+    public GraphNodeViewModel? ContainingSpawnable => _containingSpawnable;
+    public GraphNodeViewModel? InspectorNode => SelectedNode ?? ContainingSpawnable;
+
+    internal bool IsCurrentInspectorTarget(GraphNodeViewModel node) =>
+        ReferenceEquals(InspectorNode, node) &&
+        (Nodes.Contains(node) || ReferenceEquals(ContainingSpawnable, node));
 
     public bool IsRootGraph => _graphPath.Count == 0;
 
@@ -161,7 +170,11 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         NodeDefinitionCatalog? nodeDefinitions = null)
     {
         _history = history;
-        _history.StateChanged += (_, _) => PublishGpuChanges();
+        _history.StateChanged += (_, _) =>
+        {
+            PublishGpuChanges();
+            RefreshContainingSpawnable();
+        };
         GroupAssets = groupAssets;
         NodeDefinitions = nodeDefinitions;
         Nodes.CollectionChanged += OnNodesChanged;
@@ -428,11 +441,13 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         var connections = root.Connections;
         if (changed.Kind == GraphNodeKind.SpawnableGroup)
         {
-            var valid = changed.ChildGraph!.Nodes.Where(node => SpawnableGroupSchema.IsInput(node.Kind))
+            var valid = changed.ChildGraph!.Nodes.Where(node =>
+                    SpawnableGroupSchema.IsInput(node.Kind) || SpawnableGroupSchema.IsSignalInput(node.Kind))
                 .Select(node => SpawnableGroupSchema.PortId(node.Id)).Append("spawn").ToHashSet(StringComparer.Ordinal);
             connections = root.Connections.Where(edge => edge.TargetNodeId != changed.Id ||
                 edge.TargetPortId is not null && valid.Contains(edge.TargetPortId)).ToArray();
-            var validOutputs = changed.ChildGraph.Nodes.Where(node => SpawnableGroupSchema.IsOutput(node.Kind))
+            var validOutputs = changed.ChildGraph.Nodes.Where(node =>
+                    SpawnableGroupSchema.IsOutput(node.Kind) || SpawnableGroupSchema.IsSignalOutput(node.Kind))
                 .Select(node => SpawnableGroupSchema.OutputPortId(node.Id)).Concat(["then", "destroy"]).ToHashSet();
             connections = connections.Where(edge => edge.SourceNodeId != changed.Id ||
                 edge.SourcePortId is not null && validOutputs.Contains(edge.SourcePortId)).ToArray();
@@ -806,6 +821,31 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             Breadcrumbs.Add(new GraphBreadcrumb(node.Name, Breadcrumbs.Count));
             graph = node.ChildGraph!;
         }
+        RefreshContainingSpawnable();
+    }
+
+    private void RefreshContainingSpawnable()
+    {
+        var graph = _rootSnapshot;
+        GraphNodeSnapshot? owner = null;
+        foreach (var id in _graphPath)
+        {
+            owner = graph.Nodes.FirstOrDefault(node => node.Id == id);
+            if (owner?.ChildGraph is not { } child) { owner = null; break; }
+            graph = child;
+        }
+        if (owner?.Kind != GraphNodeKind.SpawnableGroup) owner = null;
+        if (owner is null && _containingSpawnable is null) return;
+        if (owner is not null && _containingSpawnable is { } current &&
+            current.Id == owner.Id && current.Name == owner.Name && current.GroupAsset == owner.GroupAsset &&
+            GroupExposedItems.OverridesEqual(current.GroupOverrides, owner.GroupOverrides) &&
+            GraphSnapshot.ContentEquals(current.ChildGraph!, owner.ChildGraph!)) return;
+        _containingSpawnable = owner is null ? null : new GraphNodeViewModel(this,
+            GraphNodeDefinition.All.Single(definition => definition.Kind == owner.Kind),
+            owner.Name, owner.X, owner.Y, owner.Id, owner.Curve, owner.ChildGraph,
+            owner.Parameters, owner.GroupAsset, owner.IsPolymorphic, owner.GroupOverrides);
+        OnPropertyChanged(nameof(ContainingSpawnable));
+        OnPropertyChanged(nameof(InspectorNode));
     }
 
     public void InitializeFromSnapshot(GraphSnapshot snapshot)
@@ -1496,7 +1536,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     public void SetGroupInstanceValue(GraphNodeViewModel node, GroupInstanceValue value)
     {
         ArgumentNullException.ThrowIfNull(value);
-        if (!Nodes.Contains(node) || node.ChildGraph is null)
+        if ((!Nodes.Contains(node) && !ReferenceEquals(ContainingSpawnable, node)) || node.ChildGraph is null)
             throw new InvalidOperationException("Select a group in this graph.");
         GroupExposedItems.ValidateOverrides([value]);
         var values = node.GroupOverrides?.ToList() ?? [];
@@ -1509,22 +1549,44 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         var result = values.AsReadOnly();
         GroupExposedItems.ValidateOverrides(result);
         if (GroupExposedItems.OverridesEqual(node.GroupOverrides, result)) return;
-        var snapshot = CreateCurrentSnapshot().Nodes.Single(candidate => candidate.Id == node.Id) with
+        ApplyGroupOverrides(node, result);
+    }
+
+    private void ApplyGroupOverrides(GraphNodeViewModel node, IReadOnlyList<GroupInstanceValue>? values)
+    {
+        var before = CreateSnapshot();
+        var path = ReferenceEquals(ContainingSpawnable, node)
+            ? _graphPath.Take(_graphPath.Count - 1).ToArray() : _graphPath.ToArray();
+        var parent = before;
+        foreach (var id in path) parent = parent.Nodes.Single(candidate => candidate.Id == id).ChildGraph!;
+        var snapshot = parent.Nodes.Single(candidate => candidate.Id == node.Id) with
         {
-            GroupOverrides = result
+            GroupOverrides = values
         };
         var materialized = GroupExposedItems.Materialize(new GraphSnapshot([snapshot], []));
         GraphValidator.Validate(materialized);
-        _history.Execute(new SetGroupOverridesCommand(node, node.GroupOverrides, result));
+        if (!ReferenceEquals(ContainingSpawnable, node))
+        {
+            _history.Execute(new SetGroupOverridesCommand(node, node.GroupOverrides, values));
+            return;
+        }
+        var updated = parent with
+        {
+            Nodes = parent.Nodes.Select(candidate => candidate.Id == node.Id ? snapshot : candidate).ToArray()
+        };
+        var after = ReplaceGraph(before, path, 0, updated);
+        ValidateSnapshot(after);
+        _history.Execute(new ReplaceGraphSnapshotCommand(this, before, after,
+            LocalizationService.Shared.Get("Messages.History.GroupInstanceValue")));
     }
 
     public void ResetGroupInstanceValue(GraphNodeViewModel node, Guid itemId)
     {
-        if (!Nodes.Contains(node) || node.ChildGraph is null)
+        if ((!Nodes.Contains(node) && !ReferenceEquals(ContainingSpawnable, node)) || node.ChildGraph is null)
             throw new InvalidOperationException("Select a group in this graph.");
         if (node.GroupOverrides?.Any(value => value.ItemId == itemId) != true) return;
         var remaining = node.GroupOverrides.Where(value => value.ItemId != itemId).ToArray();
-        _history.Execute(new SetGroupOverridesCommand(node, node.GroupOverrides, remaining.Length == 0 ? null : remaining));
+        ApplyGroupOverrides(node, remaining.Length == 0 ? null : remaining);
     }
 
     public void SetParameter(GraphNodeViewModel node, string id, JsonElement value)
