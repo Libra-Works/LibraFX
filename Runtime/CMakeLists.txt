@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 project(LiberaFxRuntime LANGUAGES CXX)
 
 find_package(Threads REQUIRED)
-add_library(liberafx_runtime STATIC Core/VfxRuntime.cpp Core/LivePreview.cpp Core/BuiltinNodes.cpp Core/GeneratorPool.cpp Core/NamedIo.cpp Core/EffectLifecycle.cpp)
+add_library(liberafx_runtime STATIC Core/VfxRuntime.cpp Core/LivePreview.cpp Core/BuiltinNodes.cpp Core/DelayNode.cpp Core/GeneratorPool.cpp Core/NamedIo.cpp Core/EffectLifecycle.cpp)
 add_library(LibraRuntimeCore ALIAS liberafx_runtime)
 target_include_directories(liberafx_runtime PUBLIC include)
 target_compile_features(liberafx_runtime PUBLIC cxx_std_17)

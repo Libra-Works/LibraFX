@@ -66,8 +66,9 @@ public static class GraphValidator
                 Validate(node.ChildGraph, allIds, depth + 1,
                     insideSpawnable || node.Kind == GraphNodeKind.SpawnableGroup, node.Kind, false);
             if (node.Kind == GraphNodeKind.SpawnableGroup &&
-                node.ChildGraph!.Nodes.Count(child => SpawnableGroupSchema.IsInput(child.Kind)) > SpawnableGroupSchema.MaxInputs)
-                throw new InvalidDataException("A Spawnable Group supports at most four input ports.");
+                node.ChildGraph!.Nodes.Where(child => SpawnableGroupSchema.IsInput(child.Kind))
+                    .Sum(child => SpawnableGroupSchema.InputWidth(child.PortType)) > SpawnableGroupSchema.MaxInputLanes)
+                throw new InvalidDataException($"A Spawnable Group supports at most {SpawnableGroupSchema.MaxInputLanes} input value lanes.");
             effectiveDefinitions.Add(node.Id, GroupBoundarySchema.Effective(SpawnableGroupSchema.Effective(
                 GameIoSchema.Effective(RenderNodeSchema.Effective(definition, node.Parameters), node.Parameters),
                 node.ChildGraph), node.ChildGraph));

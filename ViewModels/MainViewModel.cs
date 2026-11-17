@@ -7,6 +7,7 @@ using Dock.Model.Core;
 using Dock.Model.Mvvm.Controls;
 using LiberaFx.Models.Appearance;
 using LiberaFx.Models.Commands;
+using LiberaFx.Models.Graph;
 using LiberaFx.Services;
 using LiberaFx.Services.Compilation;
 
@@ -226,7 +227,7 @@ public partial class MainViewModel : ViewModelBase
         PreviewFingerprint = previewFingerprint;
         McpEndpoint = mcpEndpoint;
         PreviewEndpoint = previewEndpoint;
-        var initialWorkspace = CreateWorkspace();
+        var initialWorkspace = CreateWorkspace(initializeNew: true);
         var initialDocument = new GraphDocumentViewModel(initialWorkspace)
         {
             Id = Guid.NewGuid().ToString("N"),
@@ -283,7 +284,7 @@ public partial class MainViewModel : ViewModelBase
 
     private void CreateDocument()
     {
-        var document = new GraphDocumentViewModel(CreateWorkspace())
+        var document = new GraphDocumentViewModel(CreateWorkspace(initializeNew: true))
         {
             Id = Guid.NewGuid().ToString("N"),
             CanClose = false
@@ -608,9 +609,13 @@ public partial class MainViewModel : ViewModelBase
         ExportVfxCommand?.NotifyCanExecuteChanged();
     }
 
-    private GraphWorkspaceViewModel CreateWorkspace()
+    private GraphWorkspaceViewModel CreateWorkspace(bool initializeNew = false)
     {
         var workspace = new GraphWorkspaceViewModel(new UndoRedoManager(), GroupAssets, NodeDefinitions);
+        if (initializeNew)
+        {
+            workspace.InitializeFromSnapshot(GraphDefaults.CreateEffect());
+        }
         workspace.History.ActionPerformed += message => Log.Add("Edit", message);
         workspace.PropertyChanged += (_, e) =>
         {

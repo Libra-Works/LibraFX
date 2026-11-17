@@ -27,7 +27,9 @@ public sealed class EditorNativePreviewSession : IDisposable
     public static readonly byte[] TransportShell = CreateTransportShell();
 
     public static bool RequiresNative(GraphSnapshot graph) => graph.Nodes.Any(node =>
-        node.Kind == GraphNodeKind.SpawnableGroup || node.Kind.Value is "OnStart" or "OnDestroy" or "LifeTime" or
+        node.Kind == GraphNodeKind.SpawnableGroup ||
+        node.Kind.Value == "OnStart" && graph.Connections.Any(edge => edge.SourceNodeId == node.Id) ||
+        node.Kind.Value is "OnDestroy" or "LifeTime" or
             "InstanceAge" or "InstanceRemaining" or "InstanceNormalizedAge" or "EffectAge" or "DeltaTime" ||
         SpawnableGroupSchema.IsOutput(node.Kind) ||
         node.ChildGraph is { } child && !GpuParticleEditorService.IsGpu(node.Kind) && RequiresNative(child));

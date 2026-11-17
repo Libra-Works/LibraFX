@@ -3,7 +3,8 @@ using LiberaFx.Services.Compilation;
 
 namespace LiberaFx.Services;
 
-public sealed record SpawnableSessionEvent(Guid ContainerId, ulong InstanceId, uint Kind, double Time, ulong Seed);
+public sealed record SpawnableSessionEvent(Guid ContainerId, ulong InstanceId, uint Kind, double Time, ulong Seed,
+    Guid SignalNodeId = default);
 public sealed record SpawnableSessionValue(double[] Lanes, int Width);
 
 /// <summary>
@@ -52,6 +53,31 @@ public sealed class NativeSpawnableSession : IDisposable
         _library = NativeLibrary.Load(nativeLibraryPath);
         try
         {
+            if (package.HasDeferredSignals &&
+                (!NativeLibrary.TryGetExport(_library, "libra_effect_next_deferred_signal", out _) ||
+                 !NativeLibrary.TryGetExport(_library, "libra_effect_dispatch_deferred_signal", out _)))
+                throw new NotSupportedException("General Delay signals require a matching native runtime.");
+            if (package.HasChildDeferredSignals &&
+                (!NativeLibrary.TryGetExport(_library, "libra_generator_next_deferred_signal", out _) ||
+                 !NativeLibrary.TryGetExport(_library, "libra_generator_dispatch_deferred_signal", out _) ||
+                 !NativeLibrary.TryGetExport(_library, "libra_generator_elapsed", out _)))
+                throw new NotSupportedException("Spawnable Delay signals require a matching native runtime.");
+            if (package.HasLiveInputs && !NativeLibrary.TryGetExport(_library, "libra_generator_set_live", out _))
+                throw new NotSupportedException("Live Spawn inputs require a matching native runtime.");
+            if (package.Templates.Any(template => template.CapturedInputs is { Count: > 0 }) &&
+                !NativeLibrary.TryGetExport(_library, "libra_generator_set_captured", out _))
+                throw new NotSupportedException("Extended CaptureAtSpawn inputs require a matching native runtime.");
+            if (package.Templates.Any(template => template.SignalInputs is { Count: > 0 }) &&
+                (!NativeLibrary.TryGetExport(_library, "libra_generator_dispatch_signal", out _) ||
+                 !NativeLibrary.TryGetExport(_library, "libra_effect_dispatch_signal", out _) ||
+                 !NativeLibrary.TryGetExport(_library, "libra_program_create_spawnable_v2", out _)))
+                throw new NotSupportedException("Spawnable Signal inputs require a matching native runtime.");
+            if (package.Templates.Any(template => template.SignalOutputs is { Count: > 0 }) &&
+                (!NativeLibrary.TryGetExport(_library, "libra_generator_set_signal_outputs", out _) ||
+                 !NativeLibrary.TryGetExport(_library, "libra_generator_next_signal_event", out _) ||
+                 !NativeLibrary.TryGetExport(_library, "libra_effect_dispatch_signal", out _) ||
+                 !NativeLibrary.TryGetExport(_library, "libra_program_create_spawnable_v2", out _)))
+                throw new NotSupportedException("Spawnable Signal outputs require a matching native runtime.");
             foreach (var template in package.Templates)
             {
                 if (template.GpuContainers.Count != 0)
@@ -61,31 +87,55 @@ public sealed class NativeSpawnableSession : IDisposable
                 Check(template.Bytecode[4] >= 3
                     ? Fn<CreateParent>("libra_program_create_spawnable")(template.Bytecode, (ulong)template.Bytecode.Length, [], 0, out state.Program)
                     : Fn<CreateProgram>("libra_program_create")(template.Bytecode, (ulong)template.Bytecode.Length, out state.Program), template.ContainerId);
-                Check(Fn<CreatePool>("libra_generator_pool_create")(state.Program, Id(template.ContainerId), 32, 4 * 1024 * 1024, 128, out state.Pool), template.ContainerId);
+                Check(Fn<CreatePool>("libra_generator_pool_create")(state.Program, Id(template.ContainerId),
+                    32, 4 * 1024 * 1024, 128, out state.Pool), template.ContainerId);
+                if (template.SignalOutputs is { Count: > 0 } outputs)
+                    Check(Fn<SetSignalOutputs>("libra_generator_set_signal_outputs")(state.Pool,
+                        outputs.SelectMany(output => Id(output.TemplateNodeId)).ToArray(), (uint)outputs.Count),
+                        template.ContainerId);
                 var lifecycle = new NativeLifecycle { Start = Id(template.Lifecycle?.OnStartNodeId ?? Guid.Empty),
                     Life = Id(template.Lifecycle?.LifeNodeId ?? Guid.Empty),
                     Flags = (template.Lifecycle?.OnStartNodeId is not null ? 1u : 0) |
-                        (template.Lifecycle?.LifeNodeId is not null ? 2u : 0), Budget = 10000 };
+                        (template.Lifecycle?.LifeNodeId is not null ? 2u : 0) |
+                        (package.HasChildDeferredSignals ? 4u : 0), Budget = 10000 };
                 Check(Fn<Configure>("libra_generator_configure_lifecycle")(state.Pool, ref lifecycle), template.ContainerId);
             }
             var bindings = _templates.Values.Select(state =>
             {
+                var inputs = state.Template.UsesExtendedCaptureInputs
+                    ? Array.Empty<SpawnableInput>() : state.Template.Inputs;
                 var nodes = new byte[64];
                 var widths = new byte[4];
                 var colors = new byte[4];
-                for (var i = 0; i < state.Template.Inputs.Count; ++i)
+                for (var index = 0; index < inputs.Count; ++index)
                 {
-                    Id(state.Template.Inputs[i].TemplateNodeId).CopyTo(nodes, i * 16);
-                    widths[i] = checked((byte)state.Template.Inputs[i].Width);
-                    colors[i] = state.Template.Inputs[i].IsColor ? (byte)1 : (byte)0;
+                    Id(inputs[index].TemplateNodeId).CopyTo(nodes, index * 16);
+                    widths[index] = checked((byte)inputs[index].Width);
+                    colors[index] = inputs[index].IsColor ? (byte)1 : (byte)0;
                 }
                 return new NativeBinding { Container = Id(state.Template.ContainerId), Type = Id(state.Template.SignalTypeId),
-                    Pool = state.Pool, Count = (uint)state.Template.Inputs.Count, Widths = widths, Colors = colors, Nodes = nodes };
+                    Pool = state.Pool, Count = (uint)inputs.Count, Widths = widths, Colors = colors, Nodes = nodes };
             }).ToArray();
-            Check(package.ParentBytecode[4] >= 3
-                ? Fn<CreateParent>("libra_program_create_spawnable")(package.ParentBytecode, (ulong)package.ParentBytecode.Length,
-                    bindings, (uint)bindings.Length, out _parentProgram)
-                : Fn<CreateProgram>("libra_program_create")(package.ParentBytecode, (ulong)package.ParentBytecode.Length, out _parentProgram));
+            if (package.HasSignalPorts)
+            {
+                var signalInputs = package.Templates.SelectMany(template =>
+                    (template.SignalInputs ?? []).Select(input => new NativeSignalInputBinding
+                    {
+                        Container = Id(template.ContainerId),
+                        Type = Id(SpawnableGroupPackage.SignalInputTypeId(template.ContainerId, input.TemplateNodeId)),
+                        Pool = _templates[template.ContainerId].Pool,
+                        Proxy = Id(input.ProxyNodeId),
+                        Node = Id(input.TemplateNodeId)
+                    })).ToArray();
+                Check(Fn<CreateParentWithSignals>("libra_program_create_spawnable_v2")(
+                    package.ParentBytecode, (ulong)package.ParentBytecode.Length, bindings, (uint)bindings.Length,
+                    signalInputs, (uint)signalInputs.Length, out _parentProgram));
+            }
+            else
+                Check(package.ParentBytecode[4] >= 3
+                    ? Fn<CreateParent>("libra_program_create_spawnable")(package.ParentBytecode, (ulong)package.ParentBytecode.Length,
+                        bindings, (uint)bindings.Length, out _parentProgram)
+                    : Fn<CreateProgram>("libra_program_create")(package.ParentBytecode, (ulong)package.ParentBytecode.Length, out _parentProgram));
             Check(Fn<CreateInstance>("libra_instance_create")(_parentProgram, out _parentInstance));
             _counted = true;
             Interlocked.Increment(ref _activeOwners);
@@ -94,6 +144,22 @@ public sealed class NativeSpawnableSession : IDisposable
     }
 
     public void Advance(double time) => Advance(time, _time < 0 ? time : time - _time);
+
+    public void DispatchSignal(Guid nodeId)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_failed) throw new InvalidOperationException("Recreate the session after a failed lifecycle operation.");
+        if (nodeId == Guid.Empty || _time < 0 || _rootFinished || _rootStopped)
+            throw new InvalidOperationException("Dispatch requires a live, started root effect and a valid signal node.");
+        try
+        {
+            SetRootTimeContext(_time);
+            Check(Fn<DispatchEffectSignal>("libra_effect_dispatch_signal")(
+                _parentInstance, Id(nodeId), _time, 10000));
+            Pump(_time);
+        }
+        catch { _failed = true; throw; }
+    }
 
     public void Advance(double time, double frameDelta)
     {
@@ -155,7 +221,8 @@ public sealed class NativeSpawnableSession : IDisposable
 
     private void FinishManagedIfQuiescent()
     {
-        if (!_rootExpired || _rootFinished || ActiveCount != 0 || _scheduledRoutes.Count != 0) return;
+        if (!_rootExpired || _rootFinished || ActiveCount != 0 || _scheduledRoutes.Count != 0 ||
+            NextDeferredTime() != double.PositiveInfinity) return;
         if (!_rootDestroySent && _package.OnDestroyNodeId is { } node)
         {
             Check(Fn<DestroyEffect>("libra_effect_destroy")(_parentInstance, Id(node), 10000));
@@ -163,7 +230,8 @@ public sealed class NativeSpawnableSession : IDisposable
             Pump(_rootAge);
             DispatchScheduled(_rootAge);
             NotifyOwnerDestroy(_rootAge);
-            if (ActiveCount != 0 || _scheduledRoutes.Count != 0) return;
+            if (ActiveCount != 0 || _scheduledRoutes.Count != 0 ||
+                NextDeferredTime() != double.PositiveInfinity) return;
         }
         Check(Fn<Release>("libra_effect_finish")(_parentInstance));
         _rootFinished = true;
@@ -173,7 +241,30 @@ public sealed class NativeSpawnableSession : IDisposable
     private double NextScheduledTime()
     {
         Check(Fn<ScheduledEventAction>("libra_effect_next_scheduled")(_parentInstance, out var item, out var has));
-        return has == 0 ? double.PositiveInfinity : item.Time;
+        return Math.Min(has == 0 ? double.PositiveInfinity : item.Time, Math.Min(NextDeferredTime(), NextChildDeferredTime()));
+    }
+
+    private double NextChildDeferredTime()
+    {
+        if (!_package.HasChildDeferredSignals) return double.PositiveInfinity;
+        var next = double.PositiveInfinity;
+        foreach (var state in _templates.Values)
+        {
+            foreach (var id in state.Instances.Keys)
+            {
+                Check(Fn<NextChildDeferred>("libra_generator_next_deferred_signal")(state.Pool, id, out var time, out var has),
+                    state.Template.ContainerId, id);
+                if (has != 0) next = Math.Min(next, time);
+            }
+        }
+        return next;
+    }
+
+    private double NextDeferredTime()
+    {
+        if (!_package.HasDeferredSignals) return double.PositiveInfinity;
+        Check(Fn<NextDeferred>("libra_effect_next_deferred_signal")(_parentInstance, out var time, out var has));
+        return has == 0 ? double.PositiveInfinity : time;
     }
 
     private void DispatchScheduled(double time)
@@ -181,10 +272,29 @@ public sealed class NativeSpawnableSession : IDisposable
         for (var round = 0; round < 128; ++round)
         {
             Check(Fn<ScheduledEventAction>("libra_effect_take_scheduled")(_parentInstance, out var item, out var has));
-            if (has == 0) return;
-            if (item.Time != time || !_scheduledRoutes.Remove(item.Token, out var pending))
-                throw new InvalidOperationException("Invalid scheduled Spawnable continuation.");
-            SpawnRoute(pending.Route, time, pending.Frozen);
+            if (has != 0)
+            {
+                if (item.Time != time || !_scheduledRoutes.Remove(item.Token, out var pending))
+                    throw new InvalidOperationException("Invalid scheduled Spawnable continuation.");
+                SpawnRoute(pending.Route, time, pending.Frozen);
+            }
+            else if (NextDeferredTime() == time)
+                Check(Fn<DispatchDeferred>("libra_effect_dispatch_deferred_signal")(_parentInstance, time, 10000));
+            else if (NextChildDeferredTime() == time)
+            {
+                foreach (var state in _templates.Values)
+                {
+                    foreach (var id in state.Instances.Keys.ToArray())
+                    {
+                        Check(Fn<NextChildDeferred>("libra_generator_next_deferred_signal")(state.Pool, id, out var due, out var pending),
+                            state.Template.ContainerId, id);
+                        if (pending == 0 || due != time) continue;
+                        Check(Fn<DispatchChildDeferred>("libra_generator_dispatch_deferred_signal")(state.Pool, id, time, 10000),
+                            state.Template.ContainerId, id);
+                    }
+                }
+            }
+            else return;
             Pump(time);
         }
         if (NextScheduledTime() == time)
@@ -226,6 +336,7 @@ public sealed class NativeSpawnableSession : IDisposable
                 _ownerDestroyNotified.Add(key);
             }
             Pump(time);
+            DispatchScheduled(time);
         }
         throw new InvalidOperationException("Owner Destroy routing exceeded the bounded work limit.");
     }
@@ -261,6 +372,7 @@ public sealed class NativeSpawnableSession : IDisposable
                 evaluated.Add(key);
                 var state = _templates[key.Container];
                 SetChildTimeContext(state.Pool, key.Instance, time);
+                ApplyLiveInputs(state, key.Instance);
                 Check(Fn<EvaluateChild>("libra_generator_evaluate")(state.Pool, key.Instance, time), key.Container, key.Instance);
                 Pump(time);
             }
@@ -286,6 +398,8 @@ public sealed class NativeSpawnableSession : IDisposable
                     if (value.Kind == 1)
                     {
                         SetChildTimeContext(state.Pool, value.Instance, value.Start);
+                        ApplyCapturedInputs(state, value.Instance);
+                        ApplyLiveInputs(state, value.Instance);
                         Check(Fn<InstanceAction>("libra_generator_start")(state.Pool, value.Instance), container, value.Instance);
                         var life = state.Template.Lifecycle?.LifeNodeId is { } lifeId ? Read(container, value.Instance, lifeId).Lanes[0] : double.PositiveInfinity;
                         if (life < 0 || double.IsNaN(life) || (state.Template.Lifecycle?.LifeNodeId is not null && !double.IsFinite(life)))
@@ -297,6 +411,12 @@ public sealed class NativeSpawnableSession : IDisposable
                     {
                         var timing = state.Instances[value.Instance];
                         var expiry = timing.Start + timing.Life;
+                        if (_package.HasChildDeferredSignals)
+                        {
+                            Check(Fn<ChildElapsed>("libra_generator_elapsed")(state.Pool, value.Instance, out var elapsed),
+                                container, value.Instance);
+                            expiry = timing.Start + elapsed;
+                        }
                         _events.Add(new(container, value.Instance, 3, expiry, value.Seed));
                         EvaluateManagedParent(expiry);
                         foreach (var route in _package.DestroyRoutes.Where(route => route.SourceContainerId == container))
@@ -329,6 +449,22 @@ public sealed class NativeSpawnableSession : IDisposable
                     }
                     else throw new InvalidDataException("Unknown native generator event.");
                 }
+                while (true)
+                {
+                    Check(Fn<NextSignalEvent>("libra_generator_next_signal_event")(
+                        state.Pool, out var signal, out var has), state.Template.ContainerId);
+                    if (has == 0) break;
+                    progress = true;
+                    var node = new Guid(signal.Node);
+                    _events.Add(new(state.Template.ContainerId, signal.Instance, 4,
+                        signal.Time, signal.Seed, node));
+                    SetRootTimeContext(signal.Time);
+                    foreach (var route in _package.SignalRoutes.Where(route =>
+                                 route.SourceContainerId == state.Template.ContainerId &&
+                                 route.SourceNodeId == node))
+                        Check(Fn<DispatchEffectSignal>("libra_effect_dispatch_signal")(
+                            _parentInstance, Id(route.TargetNodeId), signal.Time, 10000));
+                }
             }
             if (!progress) return;
         }
@@ -340,6 +476,22 @@ public sealed class NativeSpawnableSession : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         Check(Fn<ReadChild>("libra_generator_value")(_templates[container].Pool, instance, Id(node), out var value), container, instance);
         return new([value.X, value.Y, value.Z, value.W], checked((int)value.Count));
+    }
+    private void ApplyLiveInputs(TemplateState state, ulong instance)
+    {
+        if (state.Template.LiveInputs is not { Count: > 0 } inputs) return;
+        var captures = new List<NativeCapture>();
+        foreach (var input in inputs) AppendCapture(captures, input, ReadParent(input.SourceNodeId));
+        Check(Fn<SetLive>("libra_generator_set_live")(state.Pool, instance, captures.ToArray(),
+            (uint)captures.Count), state.Template.ContainerId, instance);
+    }
+    private void ApplyCapturedInputs(TemplateState state, ulong instance)
+    {
+        if (state.Template.CapturedInputs is not { Count: > 0 } inputs) return;
+        var captures = new List<NativeCapture>();
+        foreach (var input in inputs) AppendCapture(captures, input, ReadParent(input.SourceNodeId));
+        Check(Fn<SetCaptured>("libra_generator_set_captured")(state.Pool, instance, captures.ToArray(),
+            (uint)captures.Count), state.Template.ContainerId, instance);
     }
     private SpawnableSessionValue ReadParent(Guid node)
     {
@@ -426,6 +578,15 @@ public sealed class NativeSpawnableSession : IDisposable
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public byte[] Colors;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 64)] public byte[] Nodes;
     }
+    [StructLayout(LayoutKind.Sequential, Pack = 8)]
+    private struct NativeSignalInputBinding
+    {
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public byte[] Container;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public byte[] Type;
+        public ulong Pool;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public byte[] Proxy;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public byte[] Node;
+    }
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     private struct NativeLifecycle
     {
@@ -450,6 +611,15 @@ public sealed class NativeSpawnableSession : IDisposable
         public ulong Seed;
     }
     [StructLayout(LayoutKind.Sequential, Pack = 8)]
+    private struct NativeSignalEvent
+    {
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public byte[] Container;
+        public ulong Instance;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public byte[] Node;
+        public double Time;
+        public ulong Seed;
+    }
+    [StructLayout(LayoutKind.Sequential, Pack = 8)]
     private struct NativeValue { public double X, Y, Z, W; public uint Count, Reserved; }
     [StructLayout(LayoutKind.Sequential, Pack = 8)]
     private struct NativeLifetimeSample
@@ -461,10 +631,22 @@ public sealed class NativeSpawnableSession : IDisposable
     private struct NativeScheduledEvent { public double Time; public ulong Token; }
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreateProgram(byte[] bytes, ulong size, out ulong handle);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreateParent(byte[] bytes, ulong size, [In] NativeBinding[] bindings, uint count, out ulong handle);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreateParentWithSignals(byte[] bytes, ulong size,
+        [In] NativeBinding[] bindings, uint count, [In] NativeSignalInputBinding[] signalInputs,
+        uint signalInputCount, out ulong handle);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreatePool(ulong program, byte[] container, uint max, ulong budget, uint events, out ulong pool);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreateInstance(ulong program, out ulong instance);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int SetRootTime(ulong instance, double effectTime, double frameDelta);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int SetChildTime(ulong pool, ulong instance, double effectTime, double frameDelta);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int SetLive(ulong pool, ulong instance, [In] NativeCapture[] values, uint count);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int SetCaptured(ulong pool, ulong instance, [In] NativeCapture[] values, uint count);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int SetSignalOutputs(ulong pool, [In] byte[] nodeIds, uint count);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int DispatchGeneratorSignal(ulong pool, byte[] nodeId, double time, uint budget);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int NextDeferred(ulong instance, out double time, out uint has);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int DispatchDeferred(ulong instance, double time, uint budget);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int NextChildDeferred(ulong pool, ulong instance, out double time, out uint has);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int DispatchChildDeferred(ulong pool, ulong instance, double time, uint budget);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int ChildElapsed(ulong pool, ulong instance, out double elapsed);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Release(ulong handle);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int StartCaptured(ulong instance, byte[] lifeNode, byte[]? onStart, uint budget, out NativeLifetimeSample sample);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int StartInfinite(ulong instance, double duration, uint infinite, byte[]? onStart, uint budget, out NativeLifetimeSample sample);
@@ -476,6 +658,7 @@ public sealed class NativeSpawnableSession : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Process(ulong pool, uint max, out uint processed);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Configure(ulong pool, ref NativeLifecycle lifecycle);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int NextEvent(ulong pool, out NativeEvent value, out uint has);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int NextSignalEvent(ulong pool, out NativeSignalEvent value, out uint has);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int EvaluateChild(ulong pool, ulong instance, double time);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int OwnerDestroy(ulong pool, ulong instance, byte[] node, double time, uint budget);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int ReadChild(ulong pool, ulong instance, byte[] node, out NativeValue value);
@@ -484,4 +667,5 @@ public sealed class NativeSpawnableSession : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int InstanceAction(ulong pool, ulong instance);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int PoolAction(ulong pool);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Spawn(ulong pool, double time, [In] NativeCapture[] captures, uint count, out ulong instance);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int DispatchEffectSignal(ulong instance, byte[] nodeId, double time, uint budget);
 }

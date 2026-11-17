@@ -117,6 +117,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         RefreshBreadcrumbs();
         OnPropertyChanged(nameof(SelectedNodeType));
         RefreshTypeDiagnostics();
+        foreach (var node in Nodes) node.RefreshLocalizedText();
         foreach (var connection in Connections) connection.RefreshLocalizedText();
         if (_connectionStatusKey is not { } key) return;
         IsRefreshingLocalizedText = true;
@@ -1642,20 +1643,21 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         if (rootDestroyCount != 0 && (owner is not null ||
             Nodes.Count(node => node.Definition.Kind.Value == "OnDestroy") + rootDestroyCount > 1))
             throw new InvalidOperationException(LocalizationService.Shared.Get("Messages.OnDestroyPlacement"));
-        if (owner is not null && additions.Any(kind => kind.Value == "Delay"))
-            throw new InvalidOperationException(LocalizationService.Shared.Get("Messages.DelayPlacement"));
         if (additions.Any(GameIoSchema.IsNode) && owner is not null)
             throw new InvalidOperationException("Game I/O nodes must be placed directly in the root graph.");
         if (additions.Any(kind => GroupBoundarySchema.IsInput(kind) || GroupBoundarySchema.IsOutput(kind)) &&
             owner?.Kind != GraphNodeKind.GraphGroup)
             throw new InvalidOperationException("Group boundary nodes must be placed directly inside a Graph Group.");
-        var newInputs = additions.Count(SpawnableGroupSchema.IsInput);
-        if (newInputs != 0)
+        var newInputLanes = additions.Where(SpawnableGroupSchema.IsInput)
+            .Sum(kind => SpawnableGroupSchema.InputWidth(GraphNodeDefinition.All.Single(item => item.Kind == kind).PortType));
+        if (newInputLanes != 0)
         {
             if (owner?.Kind != GraphNodeKind.SpawnableGroup)
                 throw new InvalidOperationException("Spawn inputs must be placed directly inside a Spawnable Group.");
-            if (Nodes.Count(node => SpawnableGroupSchema.IsInput(node.Definition.Kind)) + newInputs > SpawnableGroupSchema.MaxInputs)
-                throw new InvalidOperationException("A Spawnable Group supports at most four input ports.");
+            var existingInputLanes = Nodes.Where(node => SpawnableGroupSchema.IsInput(node.Definition.Kind))
+                .Sum(node => SpawnableGroupSchema.InputWidth(node.Definition.PortType));
+            if (existingInputLanes + newInputLanes > SpawnableGroupSchema.MaxInputLanes)
+                throw new InvalidOperationException($"A Spawnable Group supports at most {SpawnableGroupSchema.MaxInputLanes} input value lanes.");
         }
     }
 

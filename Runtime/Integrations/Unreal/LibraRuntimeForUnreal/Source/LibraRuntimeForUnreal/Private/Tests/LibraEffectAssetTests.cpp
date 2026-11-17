@@ -3,12 +3,14 @@
 #include "LibraEffectAsset.h"
 #include "LibraEffectComponent.h"
 #include "LibraNativeState.h"
+#include "liberafx/GeneratorPool.h"
 #include "Engine/World.h"
 #include "HAL/PlatformProcess.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
+#include <array>
 
 namespace {
 auto ScalarBytecode(double value) -> TArray<uint8>
@@ -201,6 +203,203 @@ bool FLibraNodeIdentityTest::RunTest(const FString& parameters)
     LibraNodeIdBytes(FGuid(0x00112233, 0x44556677, 0x8899AABB, 0xCCDDEEFF), bytes);
     for (auto index = 0; index < 16; ++index)
         TestEqual(TEXT("Node IDs match compiler network-byte-order GUIDs"), bytes[index], static_cast<uint8>(index * 0x11));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraClockFixtureTest,
+    "Libra.Runtime.Binding.ClockFixture", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraClockFixtureTest::RunTest(const FString&)
+{
+    auto directory = FString{};
+    if (!FParse::Value(FCommandLine::Get(), TEXT("LibraClockFixture="), directory) || directory.IsEmpty())
+    {
+        AddInfo(TEXT("ClockFixture requires an explicit isolated fixture directory."));
+        return true;
+    }
+    auto bytes = TArray<uint8>{};
+    auto ids = TArray<FString>{};
+    if (!TestTrue(TEXT("Compiler-generated clock fixture loads"),
+        FFileHelper::LoadFileToArray(bytes, *(directory / TEXT("clock-fixture.lfxb"))) &&
+        FFileHelper::LoadFileToStringArray(ids, *(directory / TEXT("clock-fixture.lfxb.ids"))) && ids.Num() >= 3))
+    {
+        return false;
+    }
+    auto effectAge = FGuid{};
+    auto delta = FGuid{};
+    auto instanceAge = FGuid{};
+    if (!TestTrue(TEXT("Clock node IDs are valid"), FGuid::Parse(ids[0], effectAge) &&
+        FGuid::Parse(ids[1], delta) && FGuid::Parse(ids[2], instanceAge)))
+    {
+        return false;
+    }
+    auto asset = NewObject<ULibraEffectAsset>();
+    if (!TestEqual(TEXT("Clock bytecode imports"), asset->SetBytecode(bytes), ELibraRuntimeResult::Ok))
+    {
+        return false;
+    }
+    auto init = UWorld::InitializationValues().AllowAudioPlayback(false).RequiresHitProxies(false)
+        .CreatePhysicsScene(false).CreateNavigation(false).CreateAISystem(false)
+        .ShouldSimulatePhysics(false).SetTransactional(false);
+    auto world = UWorld::CreateWorld(EWorldType::Game, false, FName(TEXT("LibraClockWorld")),
+        nullptr, true, ERHIFeatureLevel::Num, &init);
+    if (!TestNotNull(TEXT("Isolated game world"), world))
+    {
+        return false;
+    }
+    auto actor = world->SpawnActor<AActor>();
+    if (!TestNotNull(TEXT("Clock test actor"), actor))
+    {
+        world->DestroyWorld(false);
+        return false;
+    }
+    auto component = NewObject<ULibraEffectComponent>(actor);
+    component->bAutoPlay = false;
+    actor->AddInstanceComponent(component);
+    component->RegisterComponent();
+    TestEqual(TEXT("Component loads clock fixture"), component->SetEffect(asset), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Manual evaluation starts"), component->EvaluateAtTime(2), ELibraRuntimeResult::Ok);
+    auto deadline = FPlatformTime::Seconds() + 5.0;
+    while (component->IsEvaluationPending() && FPlatformTime::Seconds() < deadline)
+    {
+        component->TickComponent(0, LEVELTICK_All, nullptr);
+        FPlatformProcess::Sleep(0.001f);
+    }
+    if (TestFalse(TEXT("Manual evaluation completes"), component->IsEvaluationPending()))
+    {
+        auto value = double{};
+        TestTrue(TEXT("Effect Age uses evaluated time"), component->GetScalar(effectAge, value) && value == 2);
+        TestTrue(TEXT("Root Instance Age uses evaluated time"), component->GetScalar(instanceAge, value) && value == 2);
+    }
+    component->PlayRate = 0.5;
+    TestEqual(TEXT("Playback resumes"), component->Play(false), ELibraRuntimeResult::Ok);
+    deadline = FPlatformTime::Seconds() + 5.0;
+    auto scaledTicks = true;
+    while (component->LastEvaluatedTimeSeconds <= 2 && FPlatformTime::Seconds() < deadline)
+    {
+        auto previous = component->TimeSeconds;
+        component->TickComponent(0.25f, LEVELTICK_All, nullptr);
+        scaledTicks = scaledTicks && component->TimeSeconds == previous + 0.125;
+        FPlatformProcess::Sleep(0.001f);
+    }
+    TestTrue(TEXT("Playback rate scales effect time"), scaledTicks);
+    component->Pause();
+    deadline = FPlatformTime::Seconds() + 5.0;
+    while (component->IsEvaluationPending() && FPlatformTime::Seconds() < deadline)
+    {
+        component->TickComponent(0, LEVELTICK_All, nullptr);
+        FPlatformProcess::Sleep(0.001f);
+    }
+    if (TestFalse(TEXT("Playback evaluation completes"), component->IsEvaluationPending()))
+    {
+        auto value = double{};
+        TestTrue(TEXT("Playback advances local effect time"), component->LastEvaluatedTimeSeconds > 2);
+        TestTrue(TEXT("Effect Age matches the completed update"),
+            component->GetScalar(effectAge, value) && value == component->LastEvaluatedTimeSeconds);
+        TestTrue(TEXT("Delta Time is the unscaled game tick"), component->GetScalar(delta, value) && value == 0.25);
+        TestTrue(TEXT("Root Instance Age matches Effect Age"),
+            component->GetScalar(instanceAge, value) && value == component->LastEvaluatedTimeSeconds);
+    }
+    component->Stop();
+    world->DestroyWorld(false);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraChildDelayFixtureTest,
+    "Libra.Runtime.Binding.ChildDelayFixture", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraChildDelayFixtureTest::RunTest(const FString&)
+{
+    auto directory = FString{};
+    if (!FParse::Value(FCommandLine::Get(), TEXT("LibraClockFixture="), directory) || directory.IsEmpty())
+    {
+        AddInfo(TEXT("ChildDelayFixture requires an explicit isolated fixture directory."));
+        return true;
+    }
+    auto bytes = TArray<uint8>{};
+    auto ids = TArray<FString>{};
+    if (!TestTrue(TEXT("Authored child Delay fixture loads"),
+        FFileHelper::LoadFileToArray(bytes, *(directory / TEXT("child-delay.lfxb"))) &&
+        FFileHelper::LoadFileToStringArray(ids, *(directory / TEXT("child-delay.lfxb.ids"))) && ids.Num() == 6))
+    {
+        return false;
+    }
+    uint8 nodeIds[6][16]{};
+    for (auto index = 0; index < 6; ++index)
+    {
+        auto id = FGuid{};
+        if (!TestTrue(TEXT("Authored node ID is valid"), FGuid::Parse(ids[index], id)))
+        {
+            return false;
+        }
+        LibraNodeIdBytes(id, nodeIds[index]);
+    }
+    auto compiled = FCompiledLibraProgram(bytes);
+    if (!TestTrue(TEXT("Unreal registry resolves child Delay"), compiled.result == liberafx::Result::Ok))
+    {
+        return false;
+    }
+    auto pool = std::unique_ptr<liberafx::GeneratorPool>{};
+    uint8 container[16]{};
+    if (!TestTrue(TEXT("Bounded child pool initializes"),
+        liberafx::GeneratorPool::create(compiled.program, container, 1, 4 * 1024 * 1024, 8, pool) == liberafx::Result::Ok))
+    {
+        return false;
+    }
+    auto lifecycle = liberafx::GeneratorLifecycle{};
+    FMemory::Memcpy(lifecycle.onStartNodeId, nodeIds[0], 16);
+    FMemory::Memcpy(lifecycle.lifeNodeId, nodeIds[1], 16);
+    lifecycle.hasOnStart = true;
+    lifecycle.hasLife = true;
+    lifecycle.enableDeferredSignals = true;
+    lifecycle.instructionBudget = 10000;
+    auto capture = liberafx::GeneratorCapture{};
+    FMemory::Memcpy(capture.nodeId, nodeIds[5], 16);
+    capture.component = 2;
+    capture.value = 20;
+    auto instance = liberafx::GeneratorInstanceId{};
+    if (!TestTrue(TEXT("Lifecycle starts with authored OnStart"),
+        pool->configureLifecycle(lifecycle) == liberafx::Result::Ok &&
+        pool->spawn(10, &capture, 1, instance) == liberafx::Result::Ok &&
+        pool->setTimeContext(instance, 10, 0.125) == liberafx::Result::Ok &&
+        pool->start(instance) == liberafx::Result::Ok))
+    {
+        return false;
+    }
+    auto event = liberafx::GeneratorEvent{};
+    TestTrue(TEXT("Spawn is emitted"), pool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Spawn);
+    auto due = double{};
+    auto pending = false;
+    TestTrue(TEXT("Delay is relative to instance start"), pool->nextDeferredSignal(instance, due, pending) ==
+        liberafx::Result::Ok && pending && due == 13);
+    auto age = 0.0;
+    auto values = std::array<double, 4>{};
+    auto width = uint8{};
+    TestTrue(TEXT("Lifetime boundary evaluates without destroying reserved work"),
+        pool->setTimeContext(instance, 12, 0.125) == liberafx::Result::Ok &&
+        pool->evaluate(instance, 12) == liberafx::Result::Ok && !pool->popEvent(event));
+    TestTrue(TEXT("Child clock advances while draining"),
+        pool->setTimeContext(instance, 12.5, 0.125) == liberafx::Result::Ok &&
+        pool->evaluate(instance, 12.5) == liberafx::Result::Ok &&
+        pool->value(instance, nodeIds[2], values.data(), width) == liberafx::Result::Ok && values[0] == 2.5);
+    TestTrue(TEXT("Game delta remains unscaled"),
+        pool->value(instance, nodeIds[3], values.data(), width) == liberafx::Result::Ok && values[0] == 0.125);
+    TestTrue(TEXT("First continuation schedules another local Delay"),
+        pool->setTimeContext(instance, 13, 0.25) == liberafx::Result::Ok &&
+        pool->evaluate(instance, 13) == liberafx::Result::Ok &&
+        pool->dispatchDeferredSignal(instance, 13, 10000) == liberafx::Result::Ok &&
+        pool->nextDeferredSignal(instance, due, pending) == liberafx::Result::Ok && pending && due == 14 &&
+        !pool->popEvent(event));
+    TestTrue(TEXT("Final continuation naturally destroys the child exactly once"),
+        pool->setTimeContext(instance, 14, 0.5) == liberafx::Result::Ok &&
+        pool->evaluate(instance, 14) == liberafx::Result::Ok &&
+        pool->dispatchDeferredSignal(instance, 14, 10000) == liberafx::Result::Ok &&
+        pool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Destroy && !pool->popEvent(event));
+    TestTrue(TEXT("Destroy timestamp is actual elapsed time"),
+        pool->elapsed(instance, age) == liberafx::Result::Ok && age == 4);
+    TestTrue(TEXT("Final output is still readable before retirement"),
+        pool->value(instance, nodeIds[4], values.data(), width) == liberafx::Result::Ok && width == 3 && values[2] == 500);
+    TestTrue(TEXT("Completed child retires"), pool->finalize(instance) == liberafx::Result::Ok);
     return true;
 }
 

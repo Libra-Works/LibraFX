@@ -1,6 +1,7 @@
 #include "liberafx/VfxRuntime.h"
 #include "liberafx/BuiltinSignals.h"
 #include "liberafx/math/MatrixMath.h"
+#include "DelayNode.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -291,7 +292,7 @@ auto makeGameIoOutputSignalDescriptor() noexcept -> CustomNodeDescriptor
     return descriptor;
 }
 
-const std::array<CustomNodeDescriptor, 66> descriptors = {
+const std::array<CustomNodeDescriptor, 67> descriptors = {
     makeDescriptor<Op::Abs, 1>(1, 1, 1), makeDescriptor<Op::Floor, 1>(2, 2, 1),
     makeDescriptor<Op::Round, 1>(3, 1, 1), makeDescriptor<Op::Sign, 1>(4, 1, 1),
     makeDescriptor<Op::Sqrt, 1>(5, 1, 1), makeDescriptor<Op::Pow, 1>(6, 2, 1),
@@ -332,7 +333,7 @@ const std::array<CustomNodeDescriptor, 66> descriptors = {
     makeMatrixDescriptor<MatrixOp::DecomposeValid, 1>(13, 4, 4),
     makeSignalPassthroughDescriptor(), makeGameIoOutputSignalDescriptor(),
     makeLifetimeDescriptor<false>(), makeLifetimeDescriptor<true>(),
-    makeHostTimeDescriptor<false>(), makeHostTimeDescriptor<true>()
+    makeHostTimeDescriptor<false>(), makeHostTimeDescriptor<true>(), makeDelayDescriptor()
 };
 }
 

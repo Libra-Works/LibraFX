@@ -31,6 +31,7 @@ struct AlignedBuffer final {
 struct Slot final {
     AlignedBuffer work;
     AlignedBuffer defaults;
+    std::array<DeferredSignal, 128> deferred{};
     // Must be destroyed before its storage.
     std::optional<Instance> instance;
     GeneratorInstanceId id = 0;
@@ -39,11 +40,15 @@ struct Slot final {
     std::uint64_t seed = 0;
     bool started = false;
     bool expiring = false;
+    bool expired = false;
     bool destroyPublished = false;
     bool destroyDelivered = false;
     bool sampleReady = false;
     bool ownerDestroySent = false;
     double sampledAge = 0;
+    double signalTime = 0;
+    double signalEffectTime = 0;
+    void* observerOwner = nullptr;
     Result startResult = Result::Ok;
     Result ownerDestroyResult = Result::Ok;
 };
@@ -59,9 +64,12 @@ struct GeneratorPool::Impl final {
     std::size_t maxActive, budget, committed, workBytes, defaultBytes, slotCost, maxCaptureLanes;
     std::vector<std::unique_ptr<Slot>> slots;
     std::vector<GeneratorEvent> events;
+    std::vector<GeneratorSignalEvent> signalEvents;
+    std::vector<std::array<std::uint8_t, 16>> signalOutputs;
     std::vector<SpawnCommand> commands;
     std::vector<GeneratorCapture> commandCaptures;
-    std::size_t eventHead = 0, eventCount = 0, active = 0;
+    std::size_t eventHead = 0, eventCount = 0, signalEventHead = 0, signalEventCount = 0;
+    std::size_t signalOutputCount = 0, active = 0;
     std::size_t commandHead = 0, commandCount = 0;
     GeneratorInstanceId nextId = 1;
     GeneratorLifecycle lifecycle{};
@@ -75,7 +83,8 @@ struct GeneratorPool::Impl final {
          std::size_t work, std::size_t defaults, std::size_t cost, std::size_t maxLanes)
         : program(p), maxActive(maximum), budget(limit), committed(base),
           workBytes(work), defaultBytes(defaults), slotCost(cost), maxCaptureLanes(maxLanes),
-          events(capacity), commands(capacity), commandCaptures(capacity * maxLanes)
+          events(capacity), signalEvents(capacity), signalOutputs(p.nodeCount()),
+          commands(capacity), commandCaptures(capacity * maxLanes)
     {
         std::memcpy(containerId, id, 16);
         slots.reserve(maximum);
@@ -96,6 +105,29 @@ struct GeneratorPool::Impl final {
         event.startTime = slot.start;
         event.seed = slot.seed;
         ++eventCount;
+    }
+    static auto observeSignal(void* context, const std::uint8_t nodeId[16]) noexcept -> Result
+    {
+        auto slot = static_cast<Slot*>(context);
+        auto impl = static_cast<Impl*>(slot->observerOwner);
+        if (!impl) return Result::InvalidHandle;
+        auto lock = std::lock_guard<std::mutex>(impl->mutex);
+        for (auto index = std::size_t{}; index < impl->signalOutputCount; ++index) {
+            if (std::memcmp(impl->signalOutputs[index].data(), nodeId, 16) != 0) continue;
+            if (impl->signalEventCount == impl->signalEvents.size()) return Result::QueueRejected;
+            auto& event = impl->signalEvents[(impl->signalEventHead + impl->signalEventCount) %
+                                             impl->signalEvents.size()];
+            event = {};
+            std::memcpy(event.containerId, impl->containerId, 16);
+            event.instanceId = slot->id;
+            std::memcpy(event.nodeId, nodeId, 16);
+            event.time = slot->signalEffectTime;
+            if (!std::isfinite(event.time)) return Result::InvalidArgument;
+            event.seed = slot->seed;
+            ++impl->signalEventCount;
+            break;
+        }
+        return Result::Ok;
     }
     auto publishDestroy(Slot& slot) noexcept -> Result
     {
@@ -142,8 +174,9 @@ auto GeneratorPool::createWithCaptureLimit(const Program& program, const std::ui
     work = (work + 7) & ~std::size_t{7};
     auto defaults = defaultsCount * sizeof(double);
     auto base = sizeof(Impl) + sizeof(GeneratorPool) + 128 +
-        eventCapacity * (sizeof(GeneratorEvent) + sizeof(SpawnCommand) +
+        eventCapacity * (sizeof(GeneratorEvent) + sizeof(GeneratorSignalEvent) + sizeof(SpawnCommand) +
                          maxCaptureLanes * sizeof(GeneratorCapture)) +
+        program.nodeCount() * sizeof(std::array<std::uint8_t, 16>) +
         maxActive * sizeof(std::unique_ptr<Slot>);
     if (defaults > std::numeric_limits<std::size_t>::max() - sizeof(Slot) - 128 ||
         work > std::numeric_limits<std::size_t>::max() - defaults - sizeof(Slot) - 128)
@@ -188,6 +221,14 @@ auto GeneratorPool::spawn(double time, const GeneratorCapture* captures, std::si
         auto result = slot->instance->initialize(impl_->program,
             static_cast<double*>(slot->work.data), impl_->workBytes / sizeof(double),
             static_cast<double*>(slot->defaults.data), impl_->defaultBytes / sizeof(double));
+        if (result == Result::Ok) {
+            slot->observerOwner = impl_.get();
+            result = slot->instance->setSignalObserver(&Impl::observeSignal, slot);
+        }
+        if (result == Result::Ok && impl_->lifecycle.enableDeferredSignals)
+        {
+            result = slot->instance->setDeferredSignalStorage(slot->deferred.data(), slot->deferred.size());
+        }
         if (result == Result::Ok)
             for (auto i = std::size_t{}; i < count; ++i) {
                 result = slot->instance->setUnconnectedParameter(captures[i].nodeId, captures[i].inputSlot,
@@ -204,11 +245,15 @@ auto GeneratorPool::spawn(double time, const GeneratorCapture* captures, std::si
         slot->lifetime = Lifetime::infinite();
         slot->started = !impl_->lifecycleConfigured;
         slot->expiring = false;
+        slot->expired = false;
         slot->destroyPublished = false;
         slot->destroyDelivered = false;
         slot->sampleReady = false;
         slot->ownerDestroySent = false;
         slot->sampledAge = 0;
+        slot->signalTime = 0;
+        slot->signalEffectTime = slot->start;
+        slot->observerOwner = impl_.get();
         slot->startResult = Result::Ok;
         slot->ownerDestroyResult = Result::Ok;
         auto seed = slot->id;
@@ -301,7 +346,8 @@ auto GeneratorPool::configureLifecycle(const GeneratorLifecycle& lifecycle) noex
         (lifecycle.hasLife && !nonzero(lifecycle.lifeNodeId)))
         return Result::InvalidArgument;
     auto lock = std::lock_guard<std::mutex>(impl_->mutex);
-    if (impl_->executing || impl_->active || impl_->commandCount || impl_->eventCount) return Result::Busy;
+    if (impl_->executing || impl_->active || impl_->commandCount || impl_->eventCount ||
+        impl_->signalEventCount) return Result::Busy;
     impl_->lifecycle = lifecycle;
     impl_->lifecycleConfigured = true;
     return Result::Ok;
@@ -329,6 +375,8 @@ auto GeneratorPool::start(GeneratorInstanceId id) noexcept -> Result
         if (life.componentCount != 1) return Result::InvalidValueType;
     }
     impl_->executing = true;
+    slot->signalTime = 0;
+    slot->signalEffectTime = slot->start;
     lock.unlock();
     status = slot->instance->updateAsync(0, inlineEnqueue, nullptr);
     auto evaluated = status == Result::Ok;
@@ -354,7 +402,16 @@ auto GeneratorPool::start(GeneratorInstanceId id) noexcept -> Result
     if (status != Result::Ok) return status;
     slot->sampleReady = true;
     slot->sampledAge = 0;
-    if (impl_->lifecycle.hasLife && duration[0] == 0) {
+    if (impl_->lifecycle.hasLife && duration[0] == 0)
+    {
+        slot->expired = true;
+        auto due = double{};
+        auto hasSignal = false;
+        status = slot->instance->nextDeferredSignal(due, hasSignal);
+        if (status != Result::Ok || hasSignal)
+        {
+            return status;
+        }
         slot->expiring = true;
         return impl_->publishDestroy(*slot);
     }
@@ -442,6 +499,84 @@ auto GeneratorPool::setLive(GeneratorInstanceId id, const GeneratorCapture* valu
     return Result::Ok;
 }
 
+auto GeneratorPool::setCaptured(GeneratorInstanceId id, const GeneratorCapture* values,
+                                std::size_t count) noexcept -> Result
+{
+    if (count > 256 || (count && !values)) return Result::InvalidArgument;
+    auto lock = std::lock_guard<std::mutex>(impl_->mutex);
+    if (impl_->executing) return Result::Busy;
+    auto slot = impl_->find(id);
+    if (!slot) return Result::InvalidHandle;
+    if (slot->started || slot->sampleReady || slot->expiring) return Result::Busy;
+    auto handles = std::array<ParameterHandle, 256>{};
+    auto previous = std::array<double, 256>{};
+    for (auto i = std::size_t{}; i < count; ++i) {
+        if (!std::isfinite(values[i].value)) return Result::NonFinite;
+        auto result = slot->instance->bindParameter(values[i].nodeId, values[i].inputSlot,
+                                                    values[i].component, handles[i]);
+        if (result != Result::Ok) return result;
+        result = slot->instance->parameter(handles[i], previous[i]);
+        if (result != Result::Ok) return result;
+        result = slot->instance->setUnconnectedParameter(values[i].nodeId, values[i].inputSlot,
+                                                          values[i].component, previous[i]);
+        if (result != Result::Ok) return result;
+    }
+    for (auto i = std::size_t{}; i < count; ++i) {
+        auto result = slot->instance->setParameter(handles[i], values[i].value);
+        if (result != Result::Ok) {
+            while (i) {
+                --i;
+                (void)slot->instance->setParameter(handles[i], previous[i]);
+            }
+            return result;
+        }
+    }
+    return Result::Ok;
+}
+
+auto GeneratorPool::setSignalOutputs(const std::uint8_t* nodeIds, std::size_t count) noexcept -> Result
+{
+    if (count && !nodeIds) return Result::InvalidArgument;
+    auto lock = std::lock_guard<std::mutex>(impl_->mutex);
+    if (count > impl_->signalOutputs.size()) return Result::InvalidArgument;
+    if (impl_->executing || impl_->active || impl_->commandCount || impl_->eventCount ||
+        impl_->signalEventCount)
+        return Result::Busy;
+    for (auto index = std::size_t{}; index < count; ++index) {
+        auto id = nodeIds + index * 16;
+        for (auto previous = std::size_t{}; previous < index; ++previous)
+            if (std::memcmp(impl_->signalOutputs[previous].data(), id, 16) == 0)
+                return Result::InvalidArgument;
+    }
+    for (auto index = std::size_t{}; index < count; ++index)
+        std::memcpy(impl_->signalOutputs[index].data(), nodeIds + index * 16, 16);
+    impl_->signalOutputCount = count;
+    return Result::Ok;
+}
+
+auto GeneratorPool::dispatchSignal(const std::uint8_t nodeId[16], double time,
+                                   std::size_t instructionBudget) noexcept -> Result
+{
+    if (!nodeId || !std::isfinite(time) || !instructionBudget || instructionBudget > 10000)
+        return Result::InvalidArgument;
+    auto lock = std::unique_lock<std::mutex>(impl_->mutex);
+    if (impl_->executing) return Result::Busy;
+    impl_->executing = true;
+    auto result = Result::Ok;
+    for (auto& slot : impl_->slots) {
+        if (!slot->id || !slot->started || !slot->sampleReady || slot->expiring || time < slot->start)
+            continue;
+        slot->signalTime = time - slot->start;
+        slot->signalEffectTime = time;
+        lock.unlock();
+        auto current = slot->instance->dispatchSignal(nodeId, slot->signalTime, instructionBudget);
+        lock.lock();
+        if (result == Result::Ok) result = current;
+    }
+    impl_->executing = false;
+    return result;
+}
+
 auto GeneratorPool::setTimeContext(GeneratorInstanceId id, double effectTime, double frameDelta) noexcept -> Result
 {
     auto lock = std::lock_guard<std::mutex>(impl_->mutex);
@@ -463,27 +598,161 @@ auto GeneratorPool::evaluate(GeneratorInstanceId id, double time) noexcept -> Re
     if (!slot->started) return Result::NotReady;
     if (slot->startResult != Result::Ok) return slot->startResult;
     auto elapsed = time - slot->start;
+    if (impl_->lifecycle.enableDeferredSignals && slot->sampleReady &&
+        time < slot->start + slot->sampledAge)
+    {
+        return Result::InvalidArgument;
+    }
+    if (slot->sampleReady && time == slot->start + slot->sampledAge)
+    {
+        elapsed = slot->sampledAge;
+    }
     auto sample = LifetimeSample{};
     if (slot->lifetime.sample(elapsed, sample) != Result::Ok) return Result::InvalidArgument;
+    auto age = slot->expired ? elapsed : sample.age;
+    auto due = double{};
+    auto hasSignal = false;
+    auto pendingResult = slot->instance->nextDeferredSignal(due, hasSignal);
+    if (pendingResult != Result::Ok)
+    {
+        return pendingResult;
+    }
+    if (hasSignal)
+    {
+        if (time == slot->start + due && (slot->expired || due <= sample.age))
+        {
+            age = due;
+        }
+        if (age > due)
+        {
+            return Result::NotReady;
+        }
+    }
     // Life is captured once by start, never inferred from Busy/FCurve or
     // refreshed by Live inputs. Clamp an overshooting frame to the expiry
     // boundary so Destroy consumers receive the actual final value.
     impl_->executing = true;
     lock.unlock();
-    auto result = slot->instance->updateAsync(sample.age, inlineEnqueue, nullptr);
+    auto result = slot->instance->updateAsync(age, inlineEnqueue, nullptr);
     if (result == Result::Ok) result = slot->instance->result();
     lock.lock();
     impl_->executing = false;
     if (result == Result::Ok) {
-        slot->sampledAge = sample.age;
+        slot->sampledAge = age;
         slot->sampleReady = true;
     }
     if (result == Result::Ok && impl_->lifecycleConfigured && impl_->lifecycle.hasLife &&
         sample.expired) {
+        slot->expired = true;
+        if (!hasSignal)
+        {
+            slot->expiring = true;
+            return impl_->publishDestroy(*slot);
+        }
+    }
+    return result;
+}
+
+auto GeneratorPool::nextDeferredSignal(GeneratorInstanceId id, double& time, bool& hasSignal) noexcept -> Result
+{
+    auto lock = std::lock_guard<std::mutex>(impl_->mutex);
+    if (impl_->executing)
+    {
+        return Result::Busy;
+    }
+    auto slot = impl_->find(id);
+    if (!slot)
+    {
+        return Result::InvalidHandle;
+    }
+    auto due = double{};
+    auto result = slot->instance->nextDeferredSignal(due, hasSignal);
+    if (result == Result::Ok && hasSignal)
+    {
+        time = slot->start + due;
+        if (!std::isfinite(time))
+        {
+            return Result::InvalidArgument;
+        }
+    }
+    return result;
+}
+
+auto GeneratorPool::dispatchDeferredSignal(GeneratorInstanceId id, double time,
+                                           std::size_t instructionBudget) noexcept -> Result
+{
+    if (!std::isfinite(time) || !instructionBudget || instructionBudget > 10000)
+    {
+        return Result::InvalidArgument;
+    }
+    auto lock = std::unique_lock<std::mutex>(impl_->mutex);
+    if (impl_->executing)
+    {
+        return Result::Busy;
+    }
+    auto slot = impl_->find(id);
+    if (!slot)
+    {
+        return Result::InvalidHandle;
+    }
+    if (!slot->started || !slot->sampleReady || slot->expiring)
+    {
+        return Result::NotReady;
+    }
+    if (slot->startResult != Result::Ok)
+    {
+        return slot->startResult;
+    }
+    auto due = double{};
+    auto hasSignal = false;
+    auto result = slot->instance->nextDeferredSignal(due, hasSignal);
+    if (result != Result::Ok)
+    {
+        return result;
+    }
+    if (!hasSignal || slot->start + due != time || due != slot->sampledAge)
+    {
+        return Result::NotReady;
+    }
+    impl_->executing = true;
+    slot->signalTime = due;
+    slot->signalEffectTime = time;
+    lock.unlock();
+    result = slot->instance->dispatchDeferredSignal(due, instructionBudget);
+    lock.lock();
+    impl_->executing = false;
+    if (result != Result::Ok)
+    {
+        slot->startResult = result;
+        return result;
+    }
+    result = slot->instance->nextDeferredSignal(due, hasSignal);
+    if (result == Result::Ok && slot->expired && !hasSignal)
+    {
         slot->expiring = true;
         return impl_->publishDestroy(*slot);
     }
     return result;
+}
+
+auto GeneratorPool::elapsed(GeneratorInstanceId id, double& out) noexcept -> Result
+{
+    auto lock = std::lock_guard<std::mutex>(impl_->mutex);
+    if (impl_->executing)
+    {
+        return Result::Busy;
+    }
+    auto slot = impl_->find(id);
+    if (!slot)
+    {
+        return Result::InvalidHandle;
+    }
+    if (!slot->sampleReady)
+    {
+        return Result::NotReady;
+    }
+    out = slot->sampledAge;
+    return Result::Ok;
 }
 
 auto GeneratorPool::ownerDestroy(GeneratorInstanceId id, const std::uint8_t nodeId[16],
@@ -498,15 +767,16 @@ auto GeneratorPool::ownerDestroy(GeneratorInstanceId id, const std::uint8_t node
     if (slot->ownerDestroySent) return slot->ownerDestroyResult;
     if (!slot->started || !slot->sampleReady || slot->expiring) return Result::NotReady;
     if (slot->startResult != Result::Ok) return slot->startResult;
-    auto elapsed = time - slot->start;
-    if (elapsed != slot->sampledAge) return Result::InvalidArgument;
+    if (time - slot->start != slot->sampledAge) return Result::InvalidArgument;
     auto signal = SignalHandle{};
     auto result = slot->instance->bindSignal(nodeId, signal);
     if (result != Result::Ok) return result;
     slot->ownerDestroySent = true;
     impl_->executing = true;
+    slot->signalTime = slot->sampledAge;
+    slot->signalEffectTime = time;
     lock.unlock();
-    result = slot->instance->dispatchSignal(signal, elapsed, instructionBudget);
+    result = slot->instance->dispatchSignal(signal, slot->sampledAge, instructionBudget);
     lock.lock();
     slot->ownerDestroyResult = result;
     impl_->executing = false;
@@ -544,6 +814,16 @@ auto GeneratorPool::popEvent(GeneratorEvent& out) noexcept -> bool
     }
     impl_->eventHead = (impl_->eventHead + 1) % impl_->events.size();
     --impl_->eventCount;
+    return true;
+}
+
+auto GeneratorPool::popSignalEvent(GeneratorSignalEvent& out) noexcept -> bool
+{
+    auto lock = std::lock_guard<std::mutex>(impl_->mutex);
+    if (impl_->executing || !impl_->signalEventCount) return false;
+    out = impl_->signalEvents[impl_->signalEventHead];
+    impl_->signalEventHead = (impl_->signalEventHead + 1) % impl_->signalEvents.size();
+    --impl_->signalEventCount;
     return true;
 }
 

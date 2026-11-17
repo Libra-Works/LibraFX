@@ -22,6 +22,8 @@ struct StartContext {
     liberafx::EffectLifecycle* lifecycle = nullptr;
     unsigned calls = 0;
     bool fail = false;
+    bool defer = false;
+    double delay = 0;
     liberafx::Result reentrant = liberafx::Result::Ok;
 };
 
@@ -31,6 +33,8 @@ auto onStart(liberafx::CustomNodeInvocation& call) noexcept -> liberafx::Result
     ++context.calls;
     context.reentrant = context.lifecycle->stop();
     call.selectedBranch = 0;
+    call.deferSignal = context.defer;
+    call.delaySeconds = context.delay;
     return context.fail ? liberafx::Result::QueueRejected : liberafx::Result::Ok;
 }
 
@@ -206,6 +210,34 @@ int main(int argc, char** argv)
            context.calls == 3 && context.reentrant == Result::Busy);
     assert(scheduled.destroy(signalId.data(), 3) == Result::Ok && context.calls == 3);
     assert(scheduled.finish() == Result::Ok);
+
+    alignas(16) auto deferredWork = std::array<double, 16>{};
+    auto deferredContext = StartContext{};
+    auto deferredDescriptor = descriptor;
+    deferredDescriptor.context = &deferredContext;
+    auto deferredBindings = std::array<liberafx::CustomNodeBinding, 2>{};
+    auto deferredProgram = liberafx::Program{};
+    assert(liberafx::Program::load(bytes.data(), bytes.size(), &deferredDescriptor, 1,
+        deferredBindings.data(), deferredBindings.size(), deferredProgram) == Result::Ok);
+    auto deferredInstance = liberafx::Instance{};
+    assert(deferredInstance.initialize(deferredProgram, deferredWork.data(), deferredWork.size()) == Result::Ok);
+    auto deferred = liberafx::EffectLifecycle(deferredInstance);
+    deferredContext.lifecycle = &deferred;
+    deferredContext.defer = true;
+    deferredContext.delay = 2;
+    assert(liberafx::Lifetime::finite(1, duration) == Result::Ok);
+    assert(deferred.start(duration, signalId.data(), 3, sample) == Result::Ok);
+    auto deferredTime = double{};
+    auto hasDeferred = false;
+    assert(deferred.nextDeferredSignal(deferredTime, hasDeferred) == Result::Ok && hasDeferred && deferredTime == 2);
+    assert(deferred.advance(3, sample) == Result::Ok && sample.expired && sample.age == 1);
+    assert(deferred.finish() == Result::NotReady);
+    assert(deferred.destroy(signalId.data(), 3) == Result::NotReady);
+    assert(deferred.drain(3) == Result::NotReady);
+    assert(deferred.drain(2) == Result::Ok);
+    assert(deferred.dispatchDeferredSignal(2, 3) == Result::Ok);
+    assert(deferred.nextDeferredSignal(deferredTime, hasDeferred) == Result::Ok && !hasDeferred);
+    assert(deferred.finish() == Result::Ok);
 
     alignas(16) auto queueWork = std::array<double, 16>{};
     auto queueInstance = liberafx::Instance{};

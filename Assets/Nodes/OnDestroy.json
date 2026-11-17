@@ -5,6 +5,7 @@
   "kind": "OnDestroy",
   "name": "On Destroy",
   "displayNameKey": "Editor.Node.OnDestroy",
+  "descriptionKey": "Editor.NodeHelp.OnDestroy",
   "group": "Lifecycle",
   "groupNameKey": "Editor.NodeGroup.Lifecycle",
   "portType": "Signal",

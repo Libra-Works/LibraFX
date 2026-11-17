@@ -78,6 +78,14 @@ typedef struct LIBRA_INTEROP_ALIGN(8) LibraGeneratorEvent {
     uint64_t seed;
 } LibraGeneratorEvent;
 
+typedef struct LIBRA_INTEROP_ALIGN(8) LibraGeneratorSignalEvent {
+    uint8_t containerId[16];
+    LibraGeneratorInstance instanceId;
+    uint8_t nodeId[16];
+    double time;
+    uint64_t seed;
+} LibraGeneratorSignalEvent;
+
 typedef struct LIBRA_INTEROP_ALIGN(4) LibraGeneratorLifecycle {
     uint8_t onStartNodeId[16], lifeNodeId[16];
     uint32_t flags, instructionBudget;
@@ -101,6 +109,14 @@ typedef struct LIBRA_INTEROP_ALIGN(8) LibraSpawnableBinding {
     uint8_t widths[4], colors[4];
     uint8_t templateNodeIds[4][16];
 } LibraSpawnableBinding;
+
+typedef struct LIBRA_INTEROP_ALIGN(8) LibraSpawnableSignalInputBinding {
+    uint8_t containerId[16];
+    uint8_t signalTypeId[16];
+    LibraGeneratorPool pool;
+    uint8_t proxyNodeId[16];
+    uint8_t signalNodeId[16];
+} LibraSpawnableSignalInputBinding;
 
 typedef struct LIBRA_INTEROP_ALIGN(8) LibraGameIoEvent {
     uint8_t containerId[16];
@@ -149,6 +165,12 @@ LIBRA_INTEROP_ASSERT(sizeof(LibraGeneratorEvent) == 48 && LIBRA_INTEROP_ALIGNOF(
 LIBRA_INTEROP_ASSERT(offsetof(LibraGeneratorEvent, containerId) == 8 &&
     offsetof(LibraGeneratorEvent, instanceId) == 24 && offsetof(LibraGeneratorEvent, startTime) == 32 &&
     offsetof(LibraGeneratorEvent, seed) == 40);
+LIBRA_INTEROP_ASSERT(sizeof(LibraGeneratorSignalEvent) == 56 &&
+    LIBRA_INTEROP_ALIGNOF(LibraGeneratorSignalEvent) == 8);
+LIBRA_INTEROP_ASSERT(offsetof(LibraGeneratorSignalEvent, instanceId) == 16 &&
+    offsetof(LibraGeneratorSignalEvent, nodeId) == 24 &&
+    offsetof(LibraGeneratorSignalEvent, time) == 40 &&
+    offsetof(LibraGeneratorSignalEvent, seed) == 48);
 LIBRA_INTEROP_ASSERT(sizeof(LibraGeneratorLifecycle) == 40 && LIBRA_INTEROP_ALIGNOF(LibraGeneratorLifecycle) == 4);
 LIBRA_INTEROP_ASSERT(offsetof(LibraGeneratorLifecycle, flags) == 32 &&
     offsetof(LibraGeneratorLifecycle, instructionBudget) == 36);
@@ -161,6 +183,12 @@ LIBRA_INTEROP_ASSERT(offsetof(LibraSpawnableBinding, containerId) == 0 &&
     offsetof(LibraSpawnableBinding, signalTypeId) == 16 && offsetof(LibraSpawnableBinding, pool) == 32 &&
     offsetof(LibraSpawnableBinding, inputCount) == 40 && offsetof(LibraSpawnableBinding, widths) == 48 &&
     offsetof(LibraSpawnableBinding, colors) == 52 && offsetof(LibraSpawnableBinding, templateNodeIds) == 56);
+LIBRA_INTEROP_ASSERT(sizeof(LibraSpawnableSignalInputBinding) == 72 &&
+    LIBRA_INTEROP_ALIGNOF(LibraSpawnableSignalInputBinding) == 8);
+LIBRA_INTEROP_ASSERT(offsetof(LibraSpawnableSignalInputBinding, signalTypeId) == 16 &&
+    offsetof(LibraSpawnableSignalInputBinding, pool) == 32 &&
+    offsetof(LibraSpawnableSignalInputBinding, proxyNodeId) == 40 &&
+    offsetof(LibraSpawnableSignalInputBinding, signalNodeId) == 56);
 LIBRA_INTEROP_ASSERT(sizeof(LibraGameIoEvent) == 64 && sizeof(LibraGameIoEventV2) == 160 &&
     LIBRA_INTEROP_ALIGNOF(LibraGameIoEventV2) == 8);
 #undef LIBRA_INTEROP_ASSERT
@@ -237,6 +265,11 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_next_scheduled(
     LibraInstance instance, LibraScheduledEvent* outEvent, uint32_t* hasEvent);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_take_scheduled(
     LibraInstance instance, LibraScheduledEvent* outEvent, uint32_t* hasEvent);
+/* Deferred signal continuations use the instance's local effect time. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_next_deferred_signal(
+    LibraInstance instance, double* outTime, uint32_t* hasSignal);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_dispatch_deferred_signal(
+    LibraInstance instance, double time, uint32_t instructionBudget);
 /* Dispatch natural root Destroy at most once after owned work is quiescent. */
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_destroy(
     LibraInstance instance, const uint8_t nodeId[16], uint32_t instructionBudget);
@@ -276,7 +309,7 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_enqueue_spawn_e
     LibraGeneratorPool pool, double time, const LibraGeneratorCapture* captures, uint32_t count);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_process_spawns(
     LibraGeneratorPool pool, uint32_t maxCommands, uint32_t* processed);
-enum { LIBRA_LIFECYCLE_ON_START = 1, LIBRA_LIFECYCLE_LIFE = 2 };
+enum { LIBRA_LIFECYCLE_ON_START = 1, LIBRA_LIFECYCLE_LIFE = 2, LIBRA_LIFECYCLE_DEFERRED_SIGNALS = 4 };
 /* Configure an empty pool. After spawn, apply Live inputs, then start exactly
    once. Life is a scalar duration in seconds; zero expires after OnStart. */
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_configure_lifecycle(
@@ -292,11 +325,29 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_reset(LibraGene
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_set_live(
     LibraGeneratorPool pool, LibraGeneratorInstance instance,
     const LibraGeneratorCapture* values, uint32_t count);
+/* Apply CaptureAtSpawn lanes to a materialized instance before start. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_set_captured(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance,
+    const LibraGeneratorCapture* values, uint32_t count);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_set_signal_outputs(
+    LibraGeneratorPool pool, const uint8_t* nodeIds, uint32_t count);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_dispatch_signal(
+    LibraGeneratorPool pool, const uint8_t nodeId[16], double time, uint32_t instructionBudget);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_next_signal_event(
+    LibraGeneratorPool pool, LibraGeneratorSignalEvent* outEvent, uint32_t* hasEvent);
 /* Supply effect elapsed time and the game frame's delta before each evaluation. */
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_set_time_context(
     LibraGeneratorPool pool, LibraGeneratorInstance instance, double effectTime, double frameDelta);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_evaluate(
     LibraGeneratorPool pool, LibraGeneratorInstance instance, double time);
+/* Due times use the containing effect clock; elapsed returns the actual local
+   evaluation age, including draining past the lifetime deadline. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_next_deferred_signal(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance, double* outTime, uint32_t* hasSignal);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_dispatch_deferred_signal(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance, double time, uint32_t instructionBudget);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_elapsed(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance, double* outElapsed);
 /* At-most-once natural owner end request at the instance's last evaluated global time. */
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_owner_destroy(
     LibraGeneratorPool pool, LibraGeneratorInstance instance, const uint8_t nodeId[16],
@@ -315,7 +366,13 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_next_event(
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_program_create_spawnable(
     const uint8_t* bytes, uint64_t byteCount, const LibraSpawnableBinding* bindings,
     uint32_t bindingCount, LibraProgram* outProgram);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_program_create_spawnable_v2(
+    const uint8_t* bytes, uint64_t byteCount, const LibraSpawnableBinding* bindings,
+    uint32_t bindingCount, const LibraSpawnableSignalInputBinding* signalInputs,
+    uint32_t signalInputCount, LibraProgram* outProgram);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_dispatch_signal(
+    LibraInstance instance, const uint8_t nodeId[16], double time, uint32_t instructionBudget);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_dispatch_signal(
     LibraInstance instance, const uint8_t nodeId[16], double time, uint32_t instructionBudget);
 /* Configure Game I/O once after instance creation; port descriptors are read
    from the validated bytecode and copied into the owner-thread facade. */

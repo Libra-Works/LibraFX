@@ -149,7 +149,7 @@ try {
     if (Test-Path -LiteralPath $usage -PathType Leaf) {
         [IO.File]::Copy($usage, (Join-Path $stage 'USAGE.txt'))
     }
-    foreach ($folder in 'Source', 'Resources') {
+    foreach ($folder in 'Source', 'Resources', 'Shaders') {
         $source = Join-Path $sourceRoot $folder
         if (-not (Test-Path -LiteralPath $source)) { continue }
         foreach ($file in Get-ChildItem -LiteralPath $source -File -Recurse) {
@@ -172,7 +172,7 @@ try {
         }
     }
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $coreRoot 'Core') -Filter '*.cpp' -File -Recurse) {
-        if ($file.Name -in @('VfxRuntime.cpp', 'LivePreview.cpp') -and $file.DirectoryName -eq (Join-Path $coreRoot 'Core')) { continue }
+        if ($file.Name -in @('VfxRuntime.cpp', 'BuiltinNodes.cpp', 'DelayNode.cpp', 'LivePreview.cpp', 'Interop.cpp') -and $file.DirectoryName -eq (Join-Path $coreRoot 'Core')) { continue }
         $relative = [IO.Path]::GetRelativePath($coreRoot, $file.FullName).Replace('\', '/')
         $sha = [Security.Cryptography.SHA256]::Create()
         try { $digest = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($relative)) }

@@ -79,6 +79,8 @@ struct CustomNodeInvocation final {
     double effectTime = 0;
     double frameDelta = 0;
     bool hasTimeContext = false;
+    bool deferSignal = false;
+    double delaySeconds = 0;
 };
 
 struct CustomNodeBinding final {
@@ -119,6 +121,12 @@ struct SignalHandle final {
     std::uint64_t generation = 0;
     std::uint64_t programGeneration = 0;
     std::uint32_t nodeIndex = 0;
+};
+
+struct DeferredSignal final {
+    double time = 0;
+    std::uint32_t nodeIndex = 0;
+    std::uint8_t branch = 0;
 };
 
 class LIBRA_RUNTIME_CORE_API Program final {
@@ -208,12 +216,20 @@ public:
                          std::size_t maxInstructions) noexcept;
     Result dispatchSignal(const SignalHandle& entry, double time,
                           std::size_t maxInstructions) noexcept;
+    // Caller-owned bounded storage; configure only while no work is pending.
+    Result setDeferredSignalStorage(DeferredSignal* storage, std::size_t capacity) noexcept;
+    Result nextDeferredSignal(double& time, bool& hasSignal) const noexcept;
+    // Evaluate at the due time first. Consumes the continuation before dispatch.
+    Result dispatchDeferredSignal(double time, std::size_t maxInstructions) noexcept;
+    Result clearDeferredSignals() noexcept;
     std::size_t capacityGrowthCount() const noexcept { return 0; }
 
 private:
     enum class Phase : std::uint8_t { Idle, Running, Complete };
     static void run(void* context) noexcept;
     Result evaluate() noexcept;
+    Result dispatchSignalInternal(const SignalHandle& entry, double time,
+                                  std::size_t maxInstructions, int resumeBranch) noexcept;
     void cleanupStates() noexcept;
 
     const Program* program_ = nullptr;
@@ -227,6 +243,9 @@ private:
     double* stateWork_ = nullptr;
     std::size_t initializedStateCount_ = 0;
     bool dispatching_ = false;
+    DeferredSignal* deferredSignals_ = nullptr;
+    std::size_t deferredCapacity_ = 0;
+    std::size_t deferredCount_ = 0;
     SignalObserver signalObserver_ = nullptr;
     void* signalObserverContext_ = nullptr;
     Result result_ = Result::NotReady;

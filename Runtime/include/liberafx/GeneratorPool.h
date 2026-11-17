@@ -26,6 +26,13 @@ struct GeneratorEvent final {
     double startTime = 0;
     std::uint64_t seed = 0;
 };
+struct GeneratorSignalEvent final {
+    std::uint8_t containerId[16]{};
+    GeneratorInstanceId instanceId = 0;
+    std::uint8_t nodeId[16]{};
+    double time = 0;
+    std::uint64_t seed = 0;
+};
 
 struct GeneratorLifecycle final {
     std::uint8_t onStartNodeId[16]{};
@@ -33,6 +40,7 @@ struct GeneratorLifecycle final {
     std::size_t instructionBudget = 0;
     bool hasOnStart = false;
     bool hasLife = false;
+    bool enableDeferredSignals = false;
 };
 
 // enqueueSpawn may be called concurrently; all other operations belong to one
@@ -72,8 +80,23 @@ public:
     // lanes must not be passed here; their values stay fixed from spawn.
     Result setLive(GeneratorInstanceId id, const GeneratorCapture* values,
                    std::size_t count) noexcept;
+    // Apply CaptureAtSpawn values to a materialized instance before start.
+    Result setCaptured(GeneratorInstanceId id, const GeneratorCapture* values,
+                       std::size_t count) noexcept;
+    // Configure the template's local signal outputs before spawning any instances.
+    Result setSignalOutputs(const std::uint8_t* nodeIds, std::size_t count) noexcept;
+    // Broadcast a parent signal to every started, non-expiring instance.
+    Result dispatchSignal(const std::uint8_t nodeId[16], double time,
+                         std::size_t instructionBudget) noexcept;
     Result setTimeContext(GeneratorInstanceId id, double effectTime, double frameDelta) noexcept;
+    // Deferred-signal lifecycles require monotonic evaluation without skipping
+    // their next due time. Other lifecycles retain random-access evaluation.
     Result evaluate(GeneratorInstanceId id, double time) noexcept;
+    // Due time is in the effect clock (instance start + local deadline).
+    Result nextDeferredSignal(GeneratorInstanceId id, double& time, bool& hasSignal) noexcept;
+    Result dispatchDeferredSignal(GeneratorInstanceId id, double time, std::size_t instructionBudget) noexcept;
+    // Actual evaluated local age, including work draining past Life Time.
+    Result elapsed(GeneratorInstanceId id, double& out) noexcept;
     // Send the owner's natural end request at the last evaluated global time.
     // Each instance receives it at most once, even if a callback fails.
     Result ownerDestroy(GeneratorInstanceId id, const std::uint8_t nodeId[16],
@@ -83,6 +106,7 @@ public:
     Result value(GeneratorInstanceId id, const std::uint8_t nodeId[16],
                  double out[4], std::uint8_t& width) noexcept;
     bool popEvent(GeneratorEvent& out) noexcept;
+    bool popSignalEvent(GeneratorSignalEvent& out) noexcept;
     std::size_t activeCount() const noexcept;
 
 private:

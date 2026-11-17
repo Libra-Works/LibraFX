@@ -86,16 +86,21 @@ public sealed class VfxProgram
     public static VfxProgram Compile(GraphSnapshot graph)
     {
         ValidateForCompilation(graph);
+        var starts = graph.Nodes.Where(node => node.Kind.Value == "OnStart").ToArray();
+        if (starts.Length == 1 && !graph.Connections.Any(edge => edge.SourceNodeId == starts[0].Id))
+            graph = graph with { Nodes = graph.Nodes.Where(node => node.Id != starts[0].Id).ToArray() };
         if (ContainsSpawnable(graph))
             throw new InvalidDataException("Compile Spawnable Groups with SpawnableGroupPackage so templates are not discarded.");
         if (Flatten(graph).Any(node => SpawnableGroupSchema.IsInput(node.Kind) ||
-            SpawnableGroupSchema.IsOutput(node.Kind) || node.Kind.Value is "LifeTime" or "OnStart" or
+            SpawnableGroupSchema.IsOutput(node.Kind) || SpawnableGroupSchema.IsSignalInput(node.Kind) ||
+            SpawnableGroupSchema.IsSignalOutput(node.Kind) || node.Kind.Value is "LifeTime" or "OnStart" or
                 "InstanceRemaining" or "InstanceNormalizedAge" or "OwnerDestroy" or "OnDestroy" or "Delay"))
             throw new InvalidDataException("Lifecycle and Spawn boundary nodes require a Spawnable Group package.");
         return CompileForPackage(graph);
     }
 
-    internal static VfxProgram CompileForPackage(GraphSnapshot graph)
+    internal static VfxProgram CompileForPackage(GraphSnapshot graph,
+        IReadOnlyDictionary<Guid, Guid>? signalTypeOverrides = null)
     {
         ValidateForCompilation(graph);
         graph = GroupExposedItems.Materialize(graph);
@@ -336,11 +341,21 @@ public sealed class VfxProgram
         {
             var definition = SpawnableGroupSchema.Effective(definitions[node.Kind], node.ChildGraph);
             if (node.Kind == GraphNodeKind.SpawnableGroup)
-                return definition with { TypeId = SpawnableGroupPackage.SignalTypeId(node.Id, node.ChildGraph!),
+            {
+                var inputs = node.ChildGraph!.Nodes.Where(child => SpawnableGroupSchema.IsInput(child.Kind)).ToArray();
+                var useExtendedCapture = inputs.Length > 4 ||
+                    inputs.Sum(input => SpawnableGroupSchema.InputWidth(input.PortType)) > 16;
+                return definition with { TypeId = SpawnableGroupPackage.SignalTypeId(node.Id, node.ChildGraph),
+                    InputPorts = (definition.InputPorts ?? []).Where(port =>
+                        port.Id == "spawn" || !useExtendedCapture &&
+                        definition.GetInputPortCategory(port.Id) == GraphPortCategory.Parameter).ToArray(),
                     OutputPorts = [new GraphOutputPortDefinition("then", "Then", "Signal", GraphPortCategory.Signal)],
                     Runtime = new GraphRuntimeDefinition("custom", 1, "signal") };
+            }
             if (node.Kind == GraphNodeKind.Signal)
-                return definition with { TypeId = SpawnableGroupPackage.SignalPassthroughTypeId,
+                return definition with { TypeId = signalTypeOverrides is not null &&
+                        signalTypeOverrides.TryGetValue(node.Id, out var typeId)
+                            ? typeId : SpawnableGroupPackage.SignalPassthroughTypeId,
                     Runtime = new GraphRuntimeDefinition("custom", 1, "signal"),
                     InputPorts = [new GraphInputPortDefinition("signal", "Signal", "Signal", GraphPortCategory.Signal)],
                     OutputPorts = [new GraphOutputPortDefinition("then", "Then", "Signal", GraphPortCategory.Signal)] };
@@ -823,6 +838,9 @@ public sealed class VfxProgram
         var starts = graph.Nodes.Where(node => node.Kind.Value is "OnStart" or "OwnerDestroy" or "OnDestroy").Select(node => node.Id).ToHashSet();
         var lives = graph.Nodes.Where(node => node.Kind.Value == "LifeTime").Select(node => node.Id).ToHashSet();
         var outputs = graph.Nodes.Where(node => SpawnableGroupSchema.IsOutput(node.Kind)).Select(node => node.Id).ToHashSet();
+        var signalBoundaries = graph.Nodes.Where(node =>
+            SpawnableGroupSchema.IsSignalInput(node.Kind) || SpawnableGroupSchema.IsSignalOutput(node.Kind))
+            .Select(node => node.Id).ToHashSet();
         var lifetimeReads = graph.Nodes.Where(node => node.Kind.Value is "InstanceRemaining" or "InstanceNormalizedAge")
             .Select(node => node.Id).ToHashSet();
         if (!hasLife && graph.Nodes.Any(node => node.Kind.Value == "InstanceRemaining"))
@@ -842,13 +860,18 @@ public sealed class VfxProgram
                 "LifeTime" => node with { Kind = GraphNodeKind.Float, Parameters =
                     [new NodeParameterSnapshot("value", "float", node.Parameters?.SingleOrDefault(p => p.Id == "seconds")?.Value
                         ?? JsonSerializer.SerializeToElement(2d))] },
+                "SpawnOutputFloat" => node with { Kind = GraphNodeKind.Float },
+                "SpawnOutputVector2" => node with { Kind = GraphNodeKind.FloatX2 },
                 "SpawnOutputVector3" => node with { Kind = GraphNodeKind.FloatX3 },
+                "SpawnOutputVector4" => node with { Kind = GraphNodeKind.FloatX4 },
+                "SpawnOutputColor" => node with { Kind = new GraphNodeKind("Color") },
+                "SpawnInputSignal" or "SpawnOutputSignal" => node with { Kind = GraphNodeKind.Signal },
                 _ => node.ChildGraph is { } child && node.Kind != GraphNodeKind.SpawnableGroup &&
                     !GpuParticleEditorService.IsGpu(node.Kind) ? node with { ChildGraph = LowerLifecycle(child, hasLife) } : node
             }).ToArray(),
             Connections = graph.Connections.Select(edge => edge with
             {
-                SourcePortId = starts.Contains(edge.SourceNodeId) ? null :
+                SourcePortId = starts.Contains(edge.SourceNodeId) || signalBoundaries.Contains(edge.SourceNodeId) ? null :
                     hasLife && lifetimeReads.Contains(edge.SourceNodeId) ? "value" : edge.SourcePortId,
                 TargetPortId = lives.Contains(edge.TargetNodeId) || outputs.Contains(edge.TargetNodeId) ? null : edge.TargetPortId
             }).ToArray()

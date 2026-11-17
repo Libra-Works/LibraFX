@@ -21,6 +21,7 @@ Install (PowerShell 7)
   them. Project files and Config are not edited. Build the project yourself.
   Copying the source plugin folder alone is insufficient: the installer bundles
   the native Core sources and generates a separate translation unit per source.
+  The standalone C ABI bridge (Interop.cpp) is not part of the Unreal module.
 
 Linked development installation (no source copying)
   .\Install-LibraRuntimeForUnreal.ps1 -ProjectPath "C:\YourProject\YourProject.uproject" -Link
@@ -42,6 +43,13 @@ Linked development installation (no source copying)
   For packaging/distribution, install a fresh copy into a separate project: the
   copy installer still bundles Core and does not ship the machine-local marker.
 
+Compiler verification
+  For console portability, changes to this plugin and the embedded Core must
+  compile with Clang. Use an isolated copy-installed C++ project, for example:
+    Build.bat YourProjectEditor Win64 Development -Project="C:\isolated\YourProject.uproject" -Compiler=Clang -NoLink
+  The -NoLink check is compilation only; it does not validate linking, execution
+  or a console SDK. Perform the final Unreal build and execution check with MSVC.
+
 Import and use
   Convert an editor graph to .lfxb, then import that file into Unreal.
   Add a Libra Effect component to an actor and set its Effect asset.
@@ -58,8 +66,20 @@ Import and use
   delta without substituting effect substeps or applying PlayRate again.
   Initial/manual evaluations use the world's current delta. Instance Age uses
   the enclosing Spawnable clock; the component's standalone graph is the root.
+  ULibraEffectComponent currently performs raw program evaluation: it does not
+  use Life Time to expire playback or automatically dispatch On Start / On
+  Destroy. Stop is an explicit interruption, not natural expiry.
   Spawnable package execution remains separate and is not implemented here.
-  The new time-node path has not yet been verified in a running Unreal project.
+  Effect Age, root Instance Age and unscaled Delta Time were verified in an
+  isolated UE 5.7 MSVC automation world using compiler-produced bytecode and a
+  0.5 playback rate. UE 5.7 Win64 Clang compilation was checked separately
+  without linking; this does not verify a console SDK or Clang-linked UE.
+  Libra.Runtime.Binding.ChildDelayFixture also verifies an authored child
+  OnStart -> Delay(3) -> Delay(1) chain against the Core embedded in Unreal:
+  Life Time(2) retains pending work, Instance Age advances after the deadline,
+  game Delta Time stays unscaled, and Destroy exposes the actual final value
+  and elapsed time before retirement. This tests the native pool in Unreal,
+  not a component-owned Spawnable package host.
 
 Live editor connection
   Start LIBERA FX and show its Preview panel. Use that session's access token

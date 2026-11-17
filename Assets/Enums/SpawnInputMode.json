@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "typeId": "c06d13eb-4717-411e-ae92-92ea8ee57b65",
+  "namespace": "LiberaFx",
+  "name": "SpawnInputMode",
+  "values": [
+    { "value": 0, "name": "CaptureAtSpawn", "displayNameKey": "Editor.SpawnBinding.CaptureAtSpawn" },
+    { "value": 1, "name": "Live", "displayNameKey": "Editor.SpawnBinding.Live" }
+  ]
+}

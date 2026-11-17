@@ -8,6 +8,7 @@ using Dock.Model.Controls;
 using Dock.Model.Core;
 using Dock.Model.Mvvm.Controls;
 using LiberaFx.Models;
+using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services;
 using LiberaFx.ViewModels;
@@ -52,6 +53,25 @@ internal static class DockLayoutTests
             var tools = factory.Tools.ToArray();
             var document = main.ActiveDocument!;
             var history = document.Workspace.History;
+            var initialStart = document.Workspace.Nodes.Single();
+            Check(initialStart.Definition.Kind.Value == "OnStart" && !history.CanUndo && !document.IsDirty,
+                "A new effect needs one initial OnStart, not an undoable edit or unsaved migration.");
+            var spawnable = document.Workspace.CreateNode(GraphNodeKind.SpawnableGroup);
+            Check(spawnable.ChildGraph!.Nodes.Single().Kind.Value == "OnStart" &&
+                  spawnable.ChildGraph.Nodes.Single().Id != initialStart.Id,
+                "A new Spawnable template must start with its own local OnStart.");
+            var oldEmpty = new GraphWorkspaceViewModel(new UndoRedoManager());
+            oldEmpty.InitializeFromSnapshot(new GraphSnapshot([], []));
+            Check(oldEmpty.Nodes.Count == 0, "Opening an old empty document must not inject OnStart.");
+            var savedTemplate = document.Workspace.CreateSnapshot().Nodes.Single(item => item.Id == spawnable.Id)
+                with { ChildGraph = new GraphSnapshot([], []) };
+            var oldTemplate = new GraphWorkspaceViewModel(new UndoRedoManager());
+            oldTemplate.InitializeFromSnapshot(new GraphSnapshot([savedTemplate], []));
+            Check(oldTemplate.Nodes.Single().ChildGraph!.Nodes.Count == 0,
+                "Restoring a saved empty Spawnable must not silently add OnStart.");
+            Check(history.Undo() && document.Workspace.Nodes.Count == 1 && history.Redo(),
+                "Creating a Spawnable and its initial OnStart must be one undoable operation.");
+            Check(history.Undo(), "Cannot restore the initial graph after checking Spawnable creation.");
             var node = document.Workspace.CreateNode(GraphNodeKind.Comment);
             var count = document.Workspace.Nodes.Count;
             foreach (var tool in tools) ((IFactory)factory).CloseDockable((object)tool);
@@ -71,6 +91,9 @@ internal static class DockLayoutTests
                 "Removed tool did not recover its collapsed home.");
             main.NewDocumentCommand.Execute(null);
             var second = main.ActiveDocument!;
+            Check(second.Workspace.Nodes.Single().Definition.Kind.Value == "OnStart" &&
+                  second.Workspace.Nodes.Single().Id != initialStart.Id && !second.Workspace.History.CanUndo,
+                "Each new document must own an independent initial OnStart.");
             var documentsDock = main.DocumentsDock;
             var extraDock = new DocumentDock { IsCollapsable = false, VisibleDockables = factory.CreateList<IDockable>(second), ActiveDockable = second };
             documentsDock.VisibleDockables!.Remove(second);

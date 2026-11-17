@@ -63,6 +63,7 @@ public:
     Result update(double time) noexcept;
     Result fireSignal(const char* name, double time, std::size_t instructionBudget) noexcept;
     Result fireLifecycleSignal(const SignalHandle& signal, double time, std::size_t instructionBudget) noexcept;
+    Result fireDeferredSignal(double time, std::size_t instructionBudget) noexcept;
     // Intended for a compiled output-signal callback. Only queues a record.
     Result emitSignal(const char* name) noexcept;
     // Retry this after draining if update reported QueueRejected.

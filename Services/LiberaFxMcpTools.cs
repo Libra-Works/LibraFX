@@ -150,7 +150,7 @@ public sealed class LiberaFxMcpTools
         });
 
     [McpServerTool(Name = "libera_graph_compile_spawnable", ReadOnly = true, OpenWorld = false)]
-    [Description("Compile Signal or Spawnable graphs to an immutable parent LFXB program and any separate Spawnable template programs, capture-at-spawn mappings, render configurations and GPU snapshots. This also supports Signal graphs without Spawnable Groups. Signals connected to a Spawnable enqueue runtime instances, not editor graph copies. Engine adapters consume lifecycle events; no engine objects are created by this tool.")]
+    [Description("Compile Signal or Spawnable graphs to an immutable parent LFXB program and any separate Spawnable template programs, per-pin CaptureAtSpawn/Live mappings, render configurations and GPU snapshots. This also supports Signal graphs without Spawnable Groups. Signals connected to a Spawnable enqueue runtime instances, not editor graph copies. Engine adapters consume lifecycle events; no engine objects are created by this tool.")]
     public static async Task<string> CompileSpawnable(ActiveGraphProvider activeGraph)
     {
         var snapshot = await Dispatcher.UIThread.InvokeAsync(() => activeGraph.Graph.CreateCurrentSnapshot());
@@ -168,15 +168,23 @@ public sealed class LiberaFxMcpTools
                 package.OnStartNodeId,
                 package.OnDestroyNodeId,
                 package.LifeNodeId,
+                package.HasDeferredSignals,
+                package.HasChildDeferredSignals,
+                package.HasLiveInputs,
                 package.DestroyRoutes,
+                package.SignalRoutes,
                 templates = package.Templates.Select(template => new
                 {
                     template.ContainerId,
                     template.SignalTypeId,
                     bytecodeBase64 = Convert.ToBase64String(template.Bytecode),
-                    capturePolicy = "CaptureAtSpawn",
+                    capturePolicy = template.Inputs.Any(input => input.IsLive) ? "PerPin" : "CaptureAtSpawn",
                     template.Inputs,
+                    template.CapturedInputs,
+                    template.LiveInputs,
                     template.Outputs,
+                    template.SignalInputs,
+                    template.SignalOutputs,
                     template.Lifecycle,
                     renderConfigurationBase64 = Convert.ToBase64String(template.RenderConfiguration),
                     template.GpuContainers
@@ -195,9 +203,13 @@ public sealed class LiberaFxMcpTools
     {
         instanceIdentity = new[] { "containerId", "instanceId" },
         valueIdentity = new[] { "containerId", "templateNodeId", "instanceId" },
-        capturePolicy = "CaptureAtSpawn",
+        capturePolicy = "PerPin",
+        defaultCapturePolicy = "CaptureAtSpawn",
+        supportedCapturePolicies = new[] { "CaptureAtSpawn", "Live" },
         lifecycle = new[] { "onStartOnce", "spawn", "capturedLifeTime", "naturalDestroy", "manualStop", "reset" },
         localDestroyRouting = "root sibling Spawnables directly or via one Delay; frozen child outputs captured before finalize",
+        localSignalRouting = "incoming local signals broadcast to active child instances; Spawn creates a new instance and natural Destroy remains per-instance; output signals preserve their source instance",
+        deferredSignals = "Signal Delay uses the owning root or Spawnable local time; pending continuations retain the owner past Life Time",
         engineLifecyclePreviewAvailable = false,
         editorNativeLifecyclePreviewAvailable = true,
         previewExecutionOwner = "editor-native (requires matching LIBERAFX_PREVIEW_NATIVE_LIBRARY); UE renders evaluated defaults only",

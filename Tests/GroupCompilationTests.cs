@@ -71,8 +71,8 @@ internal static class GroupCompilationTests
         var pasted = copy.CreateSnapshot();
         GraphValidator.Validate(pasted);
         var pastedGroup = pasted.Nodes.Single(node => node.Kind == GraphNodeKind.SpawnableGroup);
-        var pastedInput = pastedGroup.ChildGraph!.Nodes[0];
-        var pastedOutput = pastedGroup.ChildGraph.Nodes[2];
+        var pastedInput = pastedGroup.ChildGraph!.Nodes.First(node => SpawnableGroupSchema.IsInput(node.Kind));
+        var pastedOutput = pastedGroup.ChildGraph.Nodes.Single(node => SpawnableGroupSchema.IsOutput(node.Kind));
         if (pastedInput.Id == first.Id ||
             !pasted.Connections.Any(edge => edge.TargetNodeId == pastedGroup.Id &&
                 edge.TargetPortId == SpawnableGroupSchema.PortId(pastedInput.Id)) ||
@@ -85,8 +85,8 @@ internal static class GroupCompilationTests
             ? node with { GroupAsset = new GroupAssetReference(asset.Id, asset.Revision, false) } : node).ToArray() };
         var resolved = new GroupCompilationResolver([library]).Resolve(linked);
         var resolvedGroup = resolved.Nodes.Single(node => node.Id == group.Id);
-        var resolvedInput = resolvedGroup.ChildGraph!.Nodes[0];
-        var resolvedOutput = resolvedGroup.ChildGraph.Nodes[2];
+        var resolvedInput = resolvedGroup.ChildGraph!.Nodes.First(node => SpawnableGroupSchema.IsInput(node.Kind));
+        var resolvedOutput = resolvedGroup.ChildGraph.Nodes.Single(node => SpawnableGroupSchema.IsOutput(node.Kind));
         if (resolvedInput.Id == first.Id ||
             !resolved.Connections.Any(edge => edge.TargetNodeId == group.Id &&
                 edge.TargetPortId == SpawnableGroupSchema.PortId(resolvedInput.Id)) ||
@@ -104,7 +104,7 @@ internal static class GroupCompilationTests
         if (!GraphSnapshot.EquivalentIgnoringIds(outer.Graph, cloned))
             throw new InvalidOperationException("Cloned nested group ports were mistaken for local asset changes.");
         var nestedGroup = cloned.Nodes.Single(node => node.Kind == GraphNodeKind.SpawnableGroup);
-        var otherInput = nestedGroup.ChildGraph!.Nodes[1];
+        var otherInput = nestedGroup.ChildGraph!.Nodes.Where(node => SpawnableGroupSchema.IsInput(node.Kind)).Skip(1).First();
         var altered = cloned with { Connections = cloned.Connections.Select(edge =>
             edge.TargetNodeId == nestedGroup.Id
                 ? edge with { TargetPortId = SpawnableGroupSchema.PortId(otherInput.Id) } : edge).ToArray() };

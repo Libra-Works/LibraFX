@@ -10,12 +10,15 @@ class NamedIo;
 
 // Owner-thread lifecycle for one initialized effect Instance. The host supplies
 // scaled, paused elapsed seconds and owns the instance and its work memory.
+// The instance must outlive the lifecycle and must not be reinitialized while
+// the lifecycle exists.
 // Restart requires a freshly initialized instance and a new lifecycle.
 class LIBRA_RUNTIME_CORE_API EffectLifecycle final {
 public:
     explicit EffectLifecycle(Instance& instance) noexcept : instance_(&instance) {}
     // The fresh facade must wrap this instance and outlive the lifecycle.
     EffectLifecycle(Instance& instance, NamedIo& io) noexcept : instance_(&instance), io_(&io) {}
+    ~EffectLifecycle();
     EffectLifecycle(const EffectLifecycle&) = delete;
     EffectLifecycle& operator=(const EffectLifecycle&) = delete;
 
@@ -37,6 +40,10 @@ public:
     Result schedule(double time, std::uint64_t token) noexcept;
     Result nextScheduled(ScheduledEvent& out, bool& hasEvent) const noexcept;
     Result takeScheduled(ScheduledEvent& out, bool& hasEvent) noexcept;
+    // Signal continuations use this effect's local clock and retain the effect
+    // after its deadline. The owner evaluates at the due time before dispatch.
+    Result nextDeferredSignal(double& time, bool& hasSignal) const noexcept;
+    Result dispatchDeferredSignal(double time, std::size_t instructionBudget) noexcept;
     // Send the natural root Destroy signal once after owned work is quiescent.
     // Further work created by the signal must drain before finish.
     Result destroy(const std::uint8_t nodeId[16], std::size_t instructionBudget) noexcept;
@@ -59,9 +66,11 @@ private:
     Result startFailure_ = Result::Ok;
     Phase phase_ = Phase::Ready;
     bool destroySent_ = false;
+    bool ownsDeferredStorage_ = false;
     Result destroyResult_ = Result::Ok;
     std::array<ScheduledEvent, 128> scheduledStorage_{};
     ScheduledEventQueue scheduled_{scheduledStorage_.data(), scheduledStorage_.size()};
+    std::array<DeferredSignal, 128> deferredStorage_{};
 };
 
 }

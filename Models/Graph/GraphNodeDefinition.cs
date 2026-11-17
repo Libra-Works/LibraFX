@@ -143,6 +143,12 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("4a94e882-39e8-4efb-92c7-180000000002")] = "LifecycleRuntimeNormalizedAge",
         [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000002")] = "OnStart",
         [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000003")] = "SpawnOutputVector3",
+        [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000004")] = "SpawnOutputFloat",
+        [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000005")] = "SpawnOutputVector2",
+        [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000006")] = "SpawnOutputVector4",
+        [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000007")] = "SpawnOutputColor",
+        [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000008")] = "SpawnInputSignal",
+        [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000009")] = "SpawnOutputSignal",
         [Guid.Parse("fb8c8a83-0c9d-4870-98a1-08c0ee800001")] = "SpawnInputFloat",
         [Guid.Parse("fb8c8a83-0c9d-4870-98a1-08c0ee800002")] = "SpawnInputVector2",
         [Guid.Parse("fb8c8a83-0c9d-4870-98a1-08c0ee800003")] = "SpawnInputVector3",
@@ -272,6 +278,7 @@ public sealed record GraphNodeDefinition(
          TypeName.StartsWith("LifecycleRuntime", StringComparison.Ordinal) ||
          TypeName.StartsWith("GameIoRuntime", StringComparison.Ordinal));
     public string? DisplayNameKey { get; init; }
+    public string? DescriptionKey { get; init; }
     public string? GroupNameKey { get; init; }
     public IReadOnlyList<NodeParameterDefinition> Parameters { get; init; } = [];
     public IReadOnlyList<GraphInputPortDefinition>? InputPorts { get; init; }
@@ -484,7 +491,7 @@ public sealed record GraphNodeDefinition(
             if (outputs.Count == 0 && node.TypeId != Guid.Parse("57980d8e-701f-443c-91f6-8db56a09d2fc") &&
                 !(BuiltInIds.TryGetValue(node.TypeId, out var builtInKind) &&
                   (GroupBoundarySchema.IsOutput(new GraphNodeKind(builtInKind)) ||
-                   builtInKind is "OutputProperty" or "OutputSignal")))
+                   builtInKind is "OutputProperty" or "OutputSignal" or "SpawnOutputSignal")))
                 throw new InvalidDataException("Output port definitions must not be empty.");
         }
         var parameterIds = new HashSet<string>(StringComparer.Ordinal);
@@ -574,6 +581,7 @@ public sealed record GraphNodeDefinition(
         {
             TypeName = node.Kind!,
             DisplayNameKey = node.DisplayNameKey,
+            DescriptionKey = node.DescriptionKey,
             GroupNameKey = node.GroupNameKey,
             Parameters = parameters.AsReadOnly(),
             InputPorts = inputs?.AsReadOnly(),
@@ -603,6 +611,7 @@ public sealed record GraphNodeDefinition(
         public string? Kind { get; set; }
         public string? Name { get; set; }
         public string? DisplayNameKey { get; set; }
+        public string? DescriptionKey { get; set; }
         public string? GroupNameKey { get; set; }
         public string? Group { get; set; }
         public string? PortType { get; set; }

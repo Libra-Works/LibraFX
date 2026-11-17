@@ -11,6 +11,14 @@ auto inlineJob(void*, Job job, void* context) noexcept -> bool
 }
 }
 
+EffectLifecycle::~EffectLifecycle()
+{
+    if (ownsDeferredStorage_) {
+        (void)instance_->clearDeferredSignals();
+        (void)instance_->setDeferredSignalStorage(nullptr, 0);
+    }
+}
+
 auto EffectLifecycle::start(const Lifetime& lifetime, const std::uint8_t* onStartNodeId,
                             std::size_t instructionBudget, LifetimeSample& out) noexcept -> Result
 {
@@ -43,6 +51,9 @@ auto EffectLifecycle::startInternal(Lifetime lifetime, const std::uint8_t* lifeN
         if (result != Result::Ok) return result;
         if (life.componentCount != 1) return Result::InvalidValueType;
     }
+    auto storageResult = instance_->setDeferredSignalStorage(deferredStorage_.data(), deferredStorage_.size());
+    if (storageResult != Result::Ok) return storageResult;
+    ownsDeferredStorage_ = true;
     phase_ = Phase::Busy;
     auto result = Result::Ok;
     if (io_) {
@@ -108,6 +119,11 @@ auto EffectLifecycle::advance(double elapsed, LifetimeSample& out) noexcept -> R
     if (result != Result::Ok || elapsed < last_.age) return Result::InvalidArgument;
     auto next = ScheduledEvent{};
     if (scheduled_.peek(next) && sample.age > next.time) return Result::NotReady;
+    auto deferredTime = double{};
+    auto hasDeferred = false;
+    result = instance_->nextDeferredSignal(deferredTime, hasDeferred);
+    if (result != Result::Ok) return result;
+    if (hasDeferred && sample.age > deferredTime) return Result::NotReady;
     if (elapsed == last_.age) {
         out = last_;
         return Result::Ok;
@@ -142,6 +158,11 @@ auto EffectLifecycle::drain(double elapsed) noexcept -> Result
     if (!std::isfinite(elapsed) || elapsed < lastElapsed_) return Result::InvalidArgument;
     auto next = ScheduledEvent{};
     if (scheduled_.peek(next) && elapsed > next.time) return Result::NotReady;
+    auto deferredTime = double{};
+    auto hasDeferred = false;
+    auto deferredResult = instance_->nextDeferredSignal(deferredTime, hasDeferred);
+    if (deferredResult != Result::Ok) return deferredResult;
+    if (hasDeferred && elapsed > deferredTime) return Result::NotReady;
     if (elapsed == lastElapsed_) {
         phase_ = Phase::Draining;
         return Result::Ok;
@@ -189,6 +210,38 @@ auto EffectLifecycle::takeScheduled(ScheduledEvent& out, bool& hasEvent) noexcep
     return Result::Ok;
 }
 
+auto EffectLifecycle::nextDeferredSignal(double& time, bool& hasSignal) const noexcept -> Result
+{
+    if (phase_ == Phase::Busy) return Result::Busy;
+    if (phase_ != Phase::Running && phase_ != Phase::Expired && phase_ != Phase::Draining)
+        return Result::NotReady;
+    return instance_->nextDeferredSignal(time, hasSignal);
+}
+
+auto EffectLifecycle::dispatchDeferredSignal(double time, std::size_t instructionBudget) noexcept -> Result
+{
+    if (phase_ == Phase::Busy) return Result::Busy;
+    if (phase_ != Phase::Running && phase_ != Phase::Expired && phase_ != Phase::Draining)
+        return Result::NotReady;
+    if (!instructionBudget || instructionBudget > 10000 || time != lastElapsed_)
+        return Result::InvalidArgument;
+    auto previous = phase_;
+    phase_ = Phase::Busy;
+    auto result = io_ ? io_->fireDeferredSignal(time, instructionBudget) :
+                        instance_->dispatchDeferredSignal(time, instructionBudget);
+    if (result == Result::NotReady) {
+        phase_ = previous;
+        return result;
+    }
+    if (result != Result::Ok) {
+        startFailure_ = result;
+        phase_ = Phase::Failed;
+        return result;
+    }
+    phase_ = previous;
+    return Result::Ok;
+}
+
 auto EffectLifecycle::destroy(const std::uint8_t nodeId[16], std::size_t instructionBudget) noexcept -> Result
 {
     if (!nodeId || !instructionBudget || instructionBudget > 10000) return Result::InvalidArgument;
@@ -196,6 +249,11 @@ auto EffectLifecycle::destroy(const std::uint8_t nodeId[16], std::size_t instruc
     if (destroySent_) return destroyResult_;
     if ((phase_ != Phase::Expired && phase_ != Phase::Draining) || scheduled_.size())
         return Result::NotReady;
+    auto deferredTime = double{};
+    auto hasDeferred = false;
+    auto pendingResult = instance_->nextDeferredSignal(deferredTime, hasDeferred);
+    if (pendingResult != Result::Ok) return pendingResult;
+    if (hasDeferred) return Result::NotReady;
     auto signal = SignalHandle{};
     auto result = instance_->bindSignal(nodeId, signal);
     if (result != Result::Ok) return result;
@@ -218,6 +276,11 @@ auto EffectLifecycle::finish() noexcept -> Result
     if (phase_ == Phase::Busy) return Result::Busy;
     if (phase_ != Phase::Expired && phase_ != Phase::Draining) return Result::NotReady;
     if (scheduled_.size()) return Result::NotReady;
+    auto deferredTime = double{};
+    auto hasDeferred = false;
+    auto result = instance_->nextDeferredSignal(deferredTime, hasDeferred);
+    if (result != Result::Ok) return result;
+    if (hasDeferred) return Result::NotReady;
     phase_ = Phase::Finished;
     return Result::Ok;
 }
@@ -228,6 +291,8 @@ auto EffectLifecycle::stop() noexcept -> Result
     if (phase_ != Phase::Running && phase_ != Phase::Expired &&
         phase_ != Phase::Draining && phase_ != Phase::Failed) return Result::NotReady;
     scheduled_.clear();
+    auto result = instance_->clearDeferredSignals();
+    if (result != Result::Ok) return result;
     phase_ = Phase::Stopped;
     return Result::Ok;
 }

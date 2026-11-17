@@ -73,6 +73,8 @@ struct LifeContext {
     double observed[8]{};
     bool enqueue = false;
     bool fail = false;
+    bool defer = false;
+    double delay = 0;
     liberafx::Result reentrantStop = liberafx::Result::Ok;
     liberafx::Result reentrantStart = liberafx::Result::Ok;
     liberafx::Result enqueueResult = liberafx::Result::Ok;
@@ -88,6 +90,8 @@ auto onStart(liberafx::CustomNodeInvocation& call) noexcept -> liberafx::Result
     context.reentrantStart = context.pool->start(context.instance);
     if (context.enqueue) context.enqueueResult = context.pool->enqueueSpawn(20, nullptr, 0);
     call.selectedBranch = 0;
+    call.deferSignal = context.defer;
+    call.delaySeconds = context.delay;
     return context.fail ? liberafx::Result::QueueRejected : liberafx::Result::Ok;
 }
 void cleanupLife(void*, std::size_t, void* data) noexcept
@@ -141,6 +145,8 @@ void lifecycleTests()
     auto pool = std::unique_ptr<liberafx::GeneratorPool>{};
     assert(liberafx::GeneratorPool::create(program, container.data(), 3, 65536, 8, pool) == Result::Ok);
     context.pool = pool.get();
+    auto signalOutput = std::array<std::uint8_t, 16>{}; signalOutput[15] = 3;
+    assert(pool->setSignalOutputs(signalOutput.data(), 1) == Result::Ok);
     auto config = liberafx::GeneratorLifecycle{};
     config.hasOnStart = true; config.onStartNodeId[15] = 3; config.instructionBudget = 4;
     config.hasLife = true; config.lifeNodeId[15] = 2;
@@ -150,6 +156,9 @@ void lifecycleTests()
     assert(pool->spawn(10, nullptr, 0, first) == Result::Ok);
     assert(pool->spawn(12, nullptr, 0, second) == Result::Ok);
     assert(pool->evaluate(first, 10) == Result::NotReady);
+    auto captured = liberafx::GeneratorCapture{};
+    captured.nodeId[15] = 1; captured.value = 9;
+    assert(pool->setCaptured(first, &captured, 1) == Result::Ok);
     auto live = liberafx::GeneratorCapture{};
     live.nodeId[15] = 1; live.value = 11;
     assert(pool->setLive(first, &live, 1) == Result::Ok);
@@ -158,9 +167,22 @@ void lifecycleTests()
     assert(context.calls == 1 && context.observed[0] == 11 &&
            context.reentrantStop == Result::Busy && context.reentrantStart == Result::Busy &&
            context.enqueueResult == Result::Ok);
+    auto signalEvent = liberafx::GeneratorSignalEvent{};
+    assert(pool->popSignalEvent(signalEvent) && signalEvent.instanceId == first &&
+           signalEvent.time == 10 && signalEvent.nodeId[15] == 3);
+    assert(pool->setCaptured(first, &captured, 1) == Result::Busy);
     assert(pool->start(first) == Result::Ok && context.calls == 1);
     context.instance = second; context.enqueue = false;
-    assert(pool->start(second) == Result::Ok && context.calls == 2 && context.observed[1] == 7);
+    captured.value = 13;
+    assert(pool->setCaptured(second, &captured, 1) == Result::Ok);
+    assert(pool->start(second) == Result::Ok && context.calls == 2 && context.observed[1] == 13);
+    assert(pool->popSignalEvent(signalEvent) && signalEvent.instanceId == second &&
+           signalEvent.time == 12 && signalEvent.nodeId[15] == 3);
+    context.instance = first; context.enqueue = false;
+    assert(pool->dispatchSignal(signalOutput.data(), 13, 4) == Result::Ok &&
+           context.calls == 4 && context.observed[2] == 11 && context.observed[3] == 13);
+    assert(pool->popSignalEvent(signalEvent) && signalEvent.instanceId == first && signalEvent.time == 13);
+    assert(pool->popSignalEvent(signalEvent) && signalEvent.instanceId == second && signalEvent.time == 13);
     auto lifetimeSample = liberafx::LifetimeSample{};
     assert(pool->lifetime(second, lifetimeSample) == Result::Ok &&
            lifetimeSample.age == 0 && lifetimeSample.remaining == 3 && !lifetimeSample.expired);
@@ -233,24 +255,29 @@ void lifecycleTests()
 
     auto ownerPool = std::unique_ptr<liberafx::GeneratorPool>{};
     assert(liberafx::GeneratorPool::create(program, container.data(), 1, 65536, 4, ownerPool) == Result::Ok);
+    auto ownerSignalOutput = std::array<std::uint8_t, 16>{}; ownerSignalOutput[15] = 3;
+    assert(ownerPool->setSignalOutputs(ownerSignalOutput.data(), 1) == Result::Ok);
     auto ownerConfig = config;
     ownerConfig.hasOnStart = false;
     assert(ownerPool->configureLifecycle(ownerConfig) == Result::Ok);
     auto ownerChild = liberafx::GeneratorInstanceId{};
-    assert(ownerPool->spawn(10, nullptr, 0, ownerChild) == Result::Ok);
+    assert(ownerPool->spawn(0.1, nullptr, 0, ownerChild) == Result::Ok);
     context.pool = ownerPool.get(); context.instance = ownerChild; context.fail = false;
-    assert(ownerPool->ownerDestroy(ownerChild, bytes.data() + signalOffset, 10, 4) == Result::NotReady);
+    assert(ownerPool->ownerDestroy(ownerChild, bytes.data() + signalOffset, 0.1, 4) == Result::NotReady);
     assert(ownerPool->start(ownerChild) == Result::Ok);
-    assert(ownerPool->evaluate(ownerChild, 11) == Result::Ok);
-    assert(ownerPool->ownerDestroy(ownerChild, bytes.data() + signalOffset, 12, 4) == Result::InvalidArgument);
+    assert(ownerPool->evaluate(ownerChild, 0.3) == Result::Ok);
+    assert(ownerPool->ownerDestroy(ownerChild, bytes.data() + signalOffset, 0.4, 4) == Result::InvalidArgument);
     auto callsBeforeOwner = context.calls;
-    assert(ownerPool->ownerDestroy(ownerChild, bytes.data() + signalOffset, 11, 4) == Result::Ok);
+    assert(ownerPool->ownerDestroy(ownerChild, bytes.data() + signalOffset, 0.3, 4) == Result::Ok);
     assert(context.calls == callsBeforeOwner + 1 && context.reentrantStop == Result::Busy &&
            context.reentrantStart == Result::Busy);
-    assert(ownerPool->ownerDestroy(ownerChild, bytes.data() + signalOffset, 11, 4) == Result::Ok &&
+    auto ownerSignalEvent = liberafx::GeneratorSignalEvent{};
+    assert(ownerPool->popSignalEvent(ownerSignalEvent) && ownerSignalEvent.time == 0.3 &&
+           ownerSignalEvent.instanceId == ownerChild);
+    assert(ownerPool->ownerDestroy(ownerChild, bytes.data() + signalOffset, 0.3, 4) == Result::Ok &&
            context.calls == callsBeforeOwner + 1);
     assert(ownerPool->stop(ownerChild) == Result::Ok);
-    assert(ownerPool->ownerDestroy(ownerChild, bytes.data() + signalOffset, 11, 4) == Result::InvalidHandle);
+    assert(ownerPool->ownerDestroy(ownerChild, bytes.data() + signalOffset, 0.3, 4) == Result::InvalidHandle);
     assert(ownerPool->spawn(20, nullptr, 0, ownerChild) == Result::Ok);
     context.instance = ownerChild; context.fail = true;
     assert(ownerPool->start(ownerChild) == Result::Ok);
@@ -259,6 +286,75 @@ void lifecycleTests()
            context.calls == callsBeforeOwner + 2);
     assert(ownerPool->stop(ownerChild) == Result::Ok);
     context.fail = false;
+
+    {
+        auto delayedContext = LifeContext{};
+        delayedContext.defer = true;
+        delayedContext.delay = 5;
+        descriptor.context = &delayedContext;
+        auto delayedPool = std::unique_ptr<liberafx::GeneratorPool>{};
+        assert(liberafx::GeneratorPool::create(program, container.data(), 3, 65536, 8, delayedPool) == Result::Ok);
+        delayedContext.pool = delayedPool.get();
+        auto delayedConfig = config;
+        delayedConfig.enableDeferredSignals = true;
+        assert(delayedPool->configureLifecycle(delayedConfig) == Result::Ok);
+        auto delayedFirst = liberafx::GeneratorInstanceId{};
+        auto delayedSecond = liberafx::GeneratorInstanceId{};
+        assert(delayedPool->spawn(10, nullptr, 0, delayedFirst) == Result::Ok);
+        assert(delayedPool->spawn(12, nullptr, 0, delayedSecond) == Result::Ok);
+        assert(delayedPool->start(delayedFirst) == Result::Ok);
+        assert(delayedPool->start(delayedSecond) == Result::Ok);
+        assert(delayedPool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Spawn);
+        assert(delayedPool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Spawn);
+        auto due = double{};
+        auto pending = false;
+        assert(delayedPool->nextDeferredSignal(delayedFirst, due, pending) == Result::Ok && pending && due == 15);
+        assert(delayedPool->nextDeferredSignal(delayedSecond, due, pending) == Result::Ok && pending && due == 17);
+        assert(delayedPool->evaluate(delayedFirst, 13) == Result::Ok);
+        assert(delayedPool->evaluate(delayedFirst, 14) == Result::Ok);
+        assert(delayedPool->elapsed(delayedFirst, due) == Result::Ok && due == 4);
+        assert(delayedPool->lifetime(delayedFirst, lifetimeSample) == Result::Ok &&
+               lifetimeSample.age == 3 && lifetimeSample.expired);
+        assert(!delayedPool->popEvent(event));
+        assert(delayedPool->evaluate(delayedFirst, 16) == Result::NotReady);
+        assert(delayedPool->dispatchDeferredSignal(delayedFirst, 15, 4) == Result::NotReady);
+        assert(delayedPool->evaluate(delayedFirst, 15) == Result::Ok);
+        assert(delayedPool->dispatchDeferredSignal(delayedFirst, 15, 4) == Result::Ok);
+        assert(delayedPool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Destroy &&
+               event.instanceId == delayedFirst);
+        assert(delayedPool->elapsed(delayedFirst, due) == Result::Ok && due == 5);
+        assert(delayedPool->finalize(delayedFirst) == Result::Ok);
+        assert(delayedPool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Stop);
+        assert(delayedPool->evaluate(delayedSecond, 15) == Result::Ok);
+        assert(delayedPool->stop(delayedSecond) == Result::Ok);
+        assert(delayedPool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Stop);
+        assert(!delayedPool->popEvent(event));
+        assert(delayedPool->spawn(20, &life, 1, delayedFirst) == Result::Ok);
+        assert(delayedPool->start(delayedFirst) == Result::Ok);
+        assert(delayedPool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Spawn);
+        assert(!delayedPool->popEvent(event));
+        assert(delayedPool->evaluate(delayedFirst, 25) == Result::Ok);
+        assert(delayedPool->dispatchDeferredSignal(delayedFirst, 25, 4) == Result::Ok);
+        assert(delayedPool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Destroy);
+        assert(delayedPool->finalize(delayedFirst) == Result::Ok);
+        assert(delayedPool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Stop);
+        delayedContext.delay = 0.3;
+        assert(delayedPool->spawn(0.1, nullptr, 0, delayedFirst) == Result::Ok);
+        assert(delayedPool->start(delayedFirst) == Result::Ok);
+        assert(delayedPool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Spawn);
+        assert(delayedPool->nextDeferredSignal(delayedFirst, due, pending) == Result::Ok &&
+               pending && due == 0.1 + 0.3);
+        assert(delayedPool->evaluate(delayedFirst, due) == Result::Ok);
+        assert(delayedPool->dispatchDeferredSignal(delayedFirst, due, 4) == Result::Ok);
+        assert(delayedPool->evaluate(delayedFirst, due) == Result::Ok);
+        assert(delayedPool->evaluate(delayedFirst, 0.2) == Result::InvalidArgument);
+        delayedContext.defer = false;
+        assert(delayedPool->ownerDestroy(delayedFirst, bytes.data() + signalOffset, due, 4) == Result::Ok);
+        assert(delayedPool->stop(delayedFirst) == Result::Ok);
+        assert(delayedPool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Stop);
+        delayedPool.reset();
+        descriptor.context = &context;
+    }
 
     auto failureBytes = bytes;
     std::fill(failureBytes.begin() + 16, failureBytes.begin() + 16 + 256, 0);
@@ -446,6 +542,9 @@ int main()
     assert(pool->evaluate(second.instanceId, 15) == liberafx::Result::Ok);
     assert(pool->value(first.instanceId, resultNode, values.data(), width) == liberafx::Result::Ok && values[0] == 12);
     assert(pool->value(second.instanceId, resultNode, values.data(), width) == liberafx::Result::Ok && values[0] == 10);
+    assert(pool->evaluate(second.instanceId, 14) == liberafx::Result::Ok);
+    assert(pool->value(second.instanceId, resultNode, values.data(), width) == liberafx::Result::Ok && values[0] == 9);
+    assert(pool->evaluate(second.instanceId, 15) == liberafx::Result::Ok);
     auto live = liberafx::GeneratorCapture{};
     std::memcpy(live.nodeId, childBytes.data() + 12, 16);
     live.value = 20;

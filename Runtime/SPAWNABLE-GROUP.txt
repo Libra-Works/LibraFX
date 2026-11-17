@@ -48,6 +48,10 @@ OnStart once after input setup; repeated calls do not refire it. If signal
 dispatch fails, the same error remains latched; stop or reset the instance.
 An instance cannot evaluate before start. For later frames, update Live lanes
 before evaluate; captured lanes are not automatically refreshed.
+For package-v7 inputs sourced from parent nodes, drain the Spawn record, apply
+the mapped CaptureAtSpawn lanes with `GeneratorPool::setCaptured` /
+`libra_generator_set_captured`, then apply Live lanes and start. This API
+rejects updates after start and does not change template defaults.
 
 `Owner Destroy` is a natural owner end request, not destruction of the child.
 The host processes children reaching their own expiry at that timestamp first,
@@ -110,30 +114,69 @@ they must not reenter any C ABI function (the C ABI serializes calls). The
 existing native spawn-signal bridge enqueues directly. No local Destroy is
 implicitly published to named game IO.
 
-Editor package and host bridge (v2/v3)
+Editor package and host bridge (v2-v8)
 
-The Spawnable Group context action creates one editable child graph. Add up to
-four typed Spawn Input nodes directly inside it; their GUIDs become parent
-parameter-port IDs and template capture targets. A signal enqueues one runtime
-instance, never another graph node. Nested Spawnable Groups are rejected.
+The Spawnable Group context action creates one editable child graph. Add typed
+Spawn Input nodes directly inside it; their GUIDs become parent parameter-port
+IDs and template capture targets. Existing package versions carry up to four
+inputs (16 lanes) through the Spawnable custom-node binding. Version 7 stores
+source mappings in the package for larger templates, up to 256 total scalar
+lanes. The host reads parent values at the spawn timestamp and applies
+CaptureAtSpawn values before OnStart; Live values are updated before start and
+each child evaluation. A signal enqueues one runtime instance, never another
+graph node. Nested Spawnable Groups are rejected.
 `SpawnableGroupPackage.Compile` emits the parent LFXB, separate template LFXBs,
 capture maps, per-template render configuration and GPU container snapshots.
-MCP `libera_graph_compile_spawnable` exposes JSON package version 2, or version
-3 when On Destroy, Owner Destroy or a delayed route is present. Older hosts must reject
+MCP `libera_graph_compile_spawnable` exposes JSON package version 2, version
+3 when On Destroy, Owner Destroy or a delayed Destroy route is present, and
+version 4 for general root Delay signals, version 5 for Spawnable-local
+Delay continuations, version 6 for per-pin CaptureAtSpawn/Live bindings, and
+version 7 for extended input mappings, and version 8 for local Signal I/O.
+Older hosts must reject
 unknown versions rather than silently ignoring these semantics.
 It adds direct root On Start/On Destroy/Life Time identities, per-template On Start,
-Life Time and Owner Destroy identities, Group Output (Vector3) mappings and
+Life Time and Owner Destroy identities, typed Group Output mappings and
 explicit Destroy routes.
 Exactly one direct Life Time per template is supported; none means infinity.
 Multiple Life Times and nested Spawnables are rejected. Busy/FCurve are never
 implicit lifetime participants. The existing `then` pin remains immediate for
 old projects; `destroy` is a separate natural-expiry-only local event pin.
-Local outputs can currently route only from the expiring instance to the capture
-inputs of a sibling Spawnable selected by that Destroy route. A single Delay can
+Float, Vector2, Vector3, Vector4 and Color Group Outputs can route only from the
+expiring instance to the capture inputs of a sibling Spawnable selected by that
+Destroy route. A single Delay can
 be inserted between root sibling Destroy and Spawn. Its finite nonnegative
 seconds are sampled at Destroy; zero fires at the same timestamp. The expired
 child's outputs are captured then, while ordinary parent inputs are captured at
-the delayed Spawn time. The pending event keeps the parent alive. Delay on other Signal paths and nested boundary routing fail compilation.
+the delayed Spawn time. The pending event keeps the parent alive.
+Root Signal paths can also use Delay, including chains and fan-out. These
+continuations use the owning effect's elapsed time, not a game-global timer;
+changing the effect's playback speed changes when the due time is reached.
+The host must evaluate at each due local time, dispatch the continuation and
+retain the root until its deferred signals and spawned children drain.
+Spawn Input (Signal) ports broadcast to every started, non-expiring instance in
+that template. Spawn remains a creation command: it creates a new instance and
+is never broadcast. Spawn Output (Signal) emits an event carrying the originating
+instance and effect time; the host routes each event separately through the
+parent connections. Natural Destroy remains its own per-instance lifecycle
+event and is not a general Signal output.
+
+Before spawning, configure each template pool's local signal output node IDs
+with `GeneratorPool::setSignalOutputs` / `libra_generator_set_signal_outputs`.
+The host delivers an input with `GeneratorPool::dispatchSignal` /
+`libra_generator_dispatch_signal`, which visits all currently active instances.
+Drain `GeneratorSignalEvent` / `LibraGeneratorSignalEvent` records separately
+from Spawn/Stop/Destroy records. Parent output routes are dispatched at the
+event time using `libra_effect_dispatch_signal`; it accepts only the root
+lifecycle's last evaluated time.
+Explicit Stop cancels pending signals without sending Destroy.
+Inside a Spawnable, Delay uses that instance's local clock and retains the
+instance after Life Time while continuations remain. Its Instance Age keeps
+advancing; remaining lifetime stays zero. Natural Destroy is emitted only
+after the last continuation finishes, using that actual completion time and
+its final evaluated values. The root waits for the child and subsequent
+Destroy-routed sibling work. Ordinary Graph Groups inherit their enclosing
+effect/Spawnable clock, including Delay routed through group signal boundaries.
+Nested Spawnable ownership and lifecycle routing remain unsupported.
 One delayed Destroy can fan out to multiple sibling Spawn targets; each branch
 retains the parent until its scheduled spawn and resulting child finish.
 The root On Destroy signal runs once after the root deadline and existing
@@ -224,7 +267,36 @@ queue. `schedule`, `nextScheduled` and `takeScheduled` (and the corresponding
 host must advance/drain to each due time before taking and executing the event;
 skipping a pending timestamp and finishing with pending events are rejected.
 Taking consumes the event before execution, and explicit Stop cancels pending
-events. This queue alone does not implement a general Delay Signal node.
+events. Instance's separate caller-owned deferred-signal storage supports general
+root Delay continuations. EffectLifecycle owns this bounded storage, reports
+the next due time and consumes each continuation before dispatch. The owner
+must check both queues, updating at the earlier timestamp. At equal times,
+NativeSpawnableSession delivers scheduled Destroy routes before deferred
+signals; each queue preserves FIFO order.
+The C++ Instance, EffectLifecycle and CustomNodeInvocation layouts changed;
+rebuild native hosts and node plugins against the matching headers. C ABI hosts
+must check for the deferred-signal exports before accepting version 4 packages.
+Version 5 additionally requires generator next/dispatch-deferred-signal and
+elapsed exports. Set LIBRA_LIFECYCLE_DEFERRED_SIGNALS when configuring its pools.
+Each pool slot owns bounded storage for 128 continuations, included in its
+memory budget. Query due times in effect-clock seconds, evaluate each instance
+at that time, then dispatch its continuation. Query elapsed before retiring
+a naturally completed instance; Start + Life is not the completion time when
+work drains past the deadline. The lifetime sample itself remains clamped.
+
+Spawn input binding mode defaults to CaptureAtSpawn in older saved graphs.
+The input node's Binding mode selector changes only that pin. Live pins retain
+their initial capture for startup, then the host applies their LiveInputs
+source mappings through libra_generator_set_live before OnStart and every
+evaluation, after evaluating the enclosing parent. All lanes are applied as
+one validated batch. Read Break sources using SourceComponent, not lane zero;
+ordinary group outputs map to their compiled boundary-node identities.
+Life Time and a dispatched Delay capture their duration once, even when driven
+by a Live pin. Live never keeps extending an existing lifetime or timer.
+Live cannot read a naturally completed sibling's final output: choose
+CaptureAtSpawn for that Destroy-routed input. The existing four-numeric-pin
+bytecode limit remains; arbitrary Signal/Matrix pins and nested ownership
+are separate unfinished authoring/compiler/runtime work.
 The opt-in libra_effect_start/advance/stop C ABI exposes this primitive for a
 fresh instance, optionally with game IO configured before start. Managed game
 signals use the last evaluated age; raw evaluation and independent game IO

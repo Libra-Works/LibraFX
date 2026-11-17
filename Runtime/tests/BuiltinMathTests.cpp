@@ -72,7 +72,7 @@ int main(int argc, char** argv)
 #endif
     auto count = std::size_t{};
     auto registry = builtinNodes(count);
-    assert(registry != nullptr && count == 66);
+    assert(registry != nullptr && count == 67);
     const std::uint8_t expectedPrefix[] = {0x74, 0x30, 0x5a, 0xc1, 0x91, 0xb2, 0x4c, 0x33, 0x8d, 0x44};
     assert(std::memcmp(registry[0].typeId, expectedPrefix, sizeof(expectedPrefix)) == 0);
     if (argc >= 2)

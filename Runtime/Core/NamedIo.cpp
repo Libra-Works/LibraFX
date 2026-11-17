@@ -138,7 +138,7 @@ auto NamedIo::create(Instance& instance, const NamedIoPort* ports, std::size_t c
             auto signal = source.kind == NamedIoKind::InputSignal ||
                           source.kind == NamedIoKind::OutputSignal;
             auto matrix = source.width == 16;
-            auto nodeCount = source.nodeCount == 0 ? 1 : source.nodeCount;
+            auto nodeCount = static_cast<unsigned>(source.nodeCount == 0 ? 1 : source.nodeCount);
             if ((!property && !signal) || (signal && (source.width || source.isColor || nodeCount != 1)) ||
                 (source.kind == NamedIoKind::OwnerMatrix && (!matrix || source.isColor)) ||
                 (property && (!matrix && (source.width < 1 || source.width > 4 ||
@@ -154,7 +154,7 @@ auto NamedIo::create(Instance& instance, const NamedIoPort* ports, std::size_t c
                 std::memcpy(port.nodeIds[row].data(), source.additionalNodeIds[row - 1], 16);
             port.width = source.width;
             port.isColor = source.isColor;
-            port.nodeCount = nodeCount;
+            port.nodeCount = static_cast<std::uint8_t>(nodeCount);
             auto status = Result::Ok;
             if (source.kind == NamedIoKind::InputProperty || source.kind == NamedIoKind::OwnerMatrix) {
                 auto rowWidth = matrix ? 4u : source.width;
@@ -381,6 +381,15 @@ auto NamedIo::fireLifecycleSignal(const SignalHandle& signal, double time, std::
     auto scope = ExecutionScope{impl_->executing};
     auto dispatch = ExecutionScope{impl_->dispatching};
     return impl_->instance.dispatchSignal(signal, time, instructionBudget);
+}
+
+auto NamedIo::fireDeferredSignal(double time, std::size_t instructionBudget) noexcept -> Result
+{
+    if (impl_->executing) return Result::Busy;
+    if (!impl_->started) return Result::NotReady;
+    auto scope = ExecutionScope{impl_->executing};
+    auto dispatch = ExecutionScope{impl_->dispatching};
+    return impl_->instance.dispatchDeferredSignal(time, instructionBudget);
 }
 
 auto NamedIo::emitSignal(const char* name) noexcept -> Result

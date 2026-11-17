@@ -5,6 +5,7 @@
   "kind": "OwnerDestroy",
   "name": "Owner Destroy",
   "displayNameKey": "Editor.Node.OwnerDestroy",
+  "descriptionKey": "Editor.NodeHelp.OwnerDestroy",
   "group": "Spawnable Group",
   "portType": "Signal",
   "portCategory": "Signal",

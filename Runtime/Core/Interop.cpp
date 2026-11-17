@@ -61,10 +61,15 @@ struct SpawnContext {
     std::shared_ptr<NativeGeneratorPool> owner;
     LibraSpawnableBinding binding{};
 };
+struct SpawnSignalInputContext {
+    std::shared_ptr<NativeGeneratorPool> owner;
+    LibraSpawnableSignalInputBinding binding{};
+};
 struct NativeProgram {
     std::vector<std::uint8_t> bytes;
     std::vector<liberafx::CustomNodeBinding> bindings;
     std::vector<SpawnContext> spawnContexts;
+    std::vector<SpawnSignalInputContext> spawnSignalInputContexts;
     std::vector<liberafx::CustomNodeDescriptor> descriptors;
     liberafx::Program program;
 };
@@ -127,6 +132,12 @@ auto spawnSignal(liberafx::CustomNodeInvocation& call) noexcept -> liberafx::Res
     call.selectedBranch = 0;
     return context.owner->pool->enqueueSpawn(call.time, captures.data(), count);
 }
+auto dispatchSpawnSignalInput(liberafx::CustomNodeInvocation& call) noexcept -> liberafx::Result
+{
+    auto& context = *static_cast<SpawnSignalInputContext*>(call.context);
+    call.selectedBranch = 0;
+    return context.owner->pool->dispatchSignal(context.binding.signalNodeId, call.time, 10000);
+}
 auto checkValues(NativeInstance& native, const LibraBinding* bindings,
                  std::uint32_t count, LibraValue* out) -> LibraResult
 {
@@ -187,7 +198,15 @@ LibraResult LIBRA_INTEROP_CALL libra_program_create_spawnable(
     const uint8_t* bytes, uint64_t byteCount, const LibraSpawnableBinding* bindings,
     uint32_t bindingCount, LibraProgram* outProgram)
 {
-    if (!outProgram || !bytes || (bindingCount && !bindings) || bindingCount > 4096)
+    return libra_program_create_spawnable_v2(bytes, byteCount, bindings, bindingCount, nullptr, 0, outProgram);
+}
+LibraResult LIBRA_INTEROP_CALL libra_program_create_spawnable_v2(
+    const uint8_t* bytes, uint64_t byteCount, const LibraSpawnableBinding* bindings,
+    uint32_t bindingCount, const LibraSpawnableSignalInputBinding* signalInputs,
+    uint32_t signalInputCount, LibraProgram* outProgram)
+{
+    if (!outProgram || !bytes || (bindingCount && !bindings) ||
+        (signalInputCount && !signalInputs) || bindingCount > 4096 || signalInputCount > 4096)
         return LIBRA_INVALID_ARGUMENT;
     *outProgram = 0;
     return guarded([&]() -> LibraResult {
@@ -198,13 +217,15 @@ LibraResult LIBRA_INTEROP_CALL libra_program_create_spawnable(
         for (auto i = 0u; i < 4; ++i) count |= std::uint32_t{bytes[8 + i]} << (i * 8);
         const auto instructionBytes = 16ull + 256ull * count;
         if (count > 10000 || byteCount < instructionBytes ||
-            (bytes[4] == 3 && byteCount != instructionBytes) || bindingCount > count)
+            (bytes[4] == 3 && byteCount != instructionBytes) ||
+            bindingCount + signalInputCount > count)
             return LIBRA_INVALID_BINARY;
         auto native = std::make_shared<NativeProgram>();
         native->bytes.assign(bytes, bytes + static_cast<std::size_t>(byteCount));
         native->bindings.resize(count);
         native->spawnContexts.resize(bindingCount);
-        native->descriptors.resize(static_cast<std::size_t>(bindingCount) + 1);
+        native->spawnSignalInputContexts.resize(signalInputCount);
+        native->descriptors.resize(static_cast<std::size_t>(bindingCount) + signalInputCount + 1);
         const auto& passthroughId = liberafx::signalPassthroughTypeId;
         auto& pass = native->descriptors.back();
         std::memcpy(pass.typeId, passthroughId.data(), 16);
@@ -252,6 +273,40 @@ LibraResult LIBRA_INTEROP_CALL libra_program_create_spawnable(
                 descriptor.inputWidths[j] = binding.widths[j];
                 descriptor.inputIsColor[j] = binding.colors[j];
             }
+        }
+        for (auto i = 0u; i < signalInputCount; ++i) {
+            const auto& binding = signalInputs[i];
+            if (std::memcmp(binding.signalTypeId, passthroughId.data(), 16) == 0)
+                return LIBRA_INVALID_ARGUMENT;
+            auto pool = generatorPools.find(binding.pool);
+            if (pool == generatorPools.end()) return LIBRA_INVALID_HANDLE;
+            if (std::memcmp(pool->second->containerId.data(), binding.containerId, 16) != 0)
+                return LIBRA_INVALID_ARGUMENT;
+            auto matches = 0u;
+            for (auto index = 0u; index < count; ++index) {
+                auto record = bytes + 16 + std::size_t{index} * 256;
+                if (record[16] != 41 || std::memcmp(record, binding.proxyNodeId, 16) != 0 ||
+                    std::memcmp(record + 24, binding.signalTypeId, 16) != 0) continue;
+                ++matches;
+            }
+            if (matches != 1) return LIBRA_INVALID_BINARY;
+            for (auto j = 0u; j < bindingCount; ++j)
+                if (std::memcmp(bindings[j].signalTypeId, binding.signalTypeId, 16) == 0)
+                    return LIBRA_INVALID_ARGUMENT;
+            for (auto j = 0u; j < i; ++j)
+                if (std::memcmp(signalInputs[j].signalTypeId, binding.signalTypeId, 16) == 0 ||
+                    std::memcmp(signalInputs[j].proxyNodeId, binding.proxyNodeId, 16) == 0)
+                    return LIBRA_INVALID_ARGUMENT;
+            auto& context = native->spawnSignalInputContexts[i];
+            context.owner = pool->second;
+            context.binding = binding;
+            auto& descriptor = native->descriptors[static_cast<std::size_t>(bindingCount) + i];
+            std::memcpy(descriptor.typeId, binding.signalTypeId, 16);
+            descriptor.abiVersion = 1;
+            descriptor.execution = liberafx::CustomExecution::Signal;
+            descriptor.branchCount = 1;
+            descriptor.function = dispatchSpawnSignalInput;
+            descriptor.context = &context;
         }
         auto result = liberafx::Program::load(native->bytes.data(), native->bytes.size(),
             native->descriptors.data(), native->descriptors.size(), native->bindings.data(),
@@ -521,6 +576,34 @@ LibraResult LIBRA_INTEROP_CALL libra_effect_take_scheduled(
         return static_cast<LibraResult>(result);
     });
 }
+LibraResult LIBRA_INTEROP_CALL libra_effect_next_deferred_signal(
+    LibraInstance instance, double* outTime, uint32_t* hasSignal)
+{
+    if (!outTime || !hasSignal) return LIBRA_INVALID_ARGUMENT;
+    *outTime = 0; *hasSignal = 0;
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        if (!native->lifecycle) return LIBRA_NOT_READY;
+        auto time = double{};
+        auto has = false;
+        auto result = native->lifecycle->nextDeferredSignal(time, has);
+        if (result == liberafx::Result::Ok && has) {
+            *outTime = time; *hasSignal = 1;
+        }
+        return static_cast<LibraResult>(result);
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_effect_dispatch_deferred_signal(
+    LibraInstance instance, double time, uint32_t instructionBudget)
+{
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        return native->lifecycle ? static_cast<LibraResult>(
+            native->lifecycle->dispatchDeferredSignal(time, instructionBudget)) : LIBRA_NOT_READY;
+    });
+}
 LibraResult LIBRA_INTEROP_CALL libra_effect_destroy(
     LibraInstance instance, const uint8_t nodeId[16], uint32_t instructionBudget)
 {
@@ -555,6 +638,20 @@ LibraResult LIBRA_INTEROP_CALL libra_dispatch_signal(
         if (native && native->lifecycle) return LIBRA_NOT_READY;
         return native ? static_cast<LibraResult>(
             native->instance.dispatchSignal(nodeId, time, instructionBudget)) : LIBRA_INVALID_HANDLE;
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_effect_dispatch_signal(
+    LibraInstance instance, const uint8_t nodeId[16], double time, uint32_t instructionBudget)
+{
+    if (!nodeId || !instructionBudget || instructionBudget > 10000) return LIBRA_INVALID_ARGUMENT;
+    return guarded([&]() -> LibraResult {
+        auto native = findInstance(instance);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        if (!native->lifecycle) return LIBRA_NOT_READY;
+        auto result = native->lifecycle->validateSignalTime(time);
+        return result == liberafx::Result::Ok ? static_cast<LibraResult>(
+            native->instance.dispatchSignal(nodeId, time, instructionBudget)) :
+            static_cast<LibraResult>(result);
     });
 }
 LibraResult LIBRA_INTEROP_CALL libra_game_io_configure(
@@ -829,7 +926,7 @@ LibraResult LIBRA_INTEROP_CALL libra_generator_enqueue_spawn_ex(LibraGeneratorPo
 LibraResult LIBRA_INTEROP_CALL libra_generator_configure_lifecycle(
     LibraGeneratorPool pool, const LibraGeneratorLifecycle* lifecycle)
 {
-    if (!lifecycle || (lifecycle->flags & ~(LIBRA_LIFECYCLE_ON_START | LIBRA_LIFECYCLE_LIFE)))
+    if (!lifecycle || (lifecycle->flags & ~(LIBRA_LIFECYCLE_ON_START | LIBRA_LIFECYCLE_LIFE | LIBRA_LIFECYCLE_DEFERRED_SIGNALS)))
         return LIBRA_INVALID_ARGUMENT;
     return guarded([&]() -> LibraResult {
         auto found = generatorPools.find(pool);
@@ -839,6 +936,7 @@ LibraResult LIBRA_INTEROP_CALL libra_generator_configure_lifecycle(
         std::memcpy(config.lifeNodeId, lifecycle->lifeNodeId, 16);
         config.hasOnStart = (lifecycle->flags & LIBRA_LIFECYCLE_ON_START) != 0;
         config.hasLife = (lifecycle->flags & LIBRA_LIFECYCLE_LIFE) != 0;
+        config.enableDeferredSignals = (lifecycle->flags & LIBRA_LIFECYCLE_DEFERRED_SIGNALS) != 0;
         config.instructionBudget = lifecycle->instructionBudget;
         return static_cast<LibraResult>(found->second->pool->configureLifecycle(config));
     });
@@ -900,6 +998,65 @@ LibraResult LIBRA_INTEROP_CALL libra_generator_set_live(
         return static_cast<LibraResult>(found->second->pool->setLive(instance, converted.data(), count));
     });
 }
+LibraResult LIBRA_INTEROP_CALL libra_generator_set_captured(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance,
+    const LibraGeneratorCapture* values, uint32_t count)
+{
+    if (count > 256 || (count && !values)) return LIBRA_INVALID_ARGUMENT;
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        if (found == generatorPools.end()) return LIBRA_INVALID_HANDLE;
+        auto converted = std::array<liberafx::GeneratorCapture, 256>{};
+        for (auto i = 0u; i < count; ++i) {
+            if (values[i].inputSlot > 3 || values[i].component > 3) return LIBRA_INVALID_ARGUMENT;
+            std::memcpy(converted[i].nodeId, values[i].nodeId, 16);
+            converted[i].inputSlot = static_cast<std::uint8_t>(values[i].inputSlot);
+            converted[i].component = static_cast<std::uint8_t>(values[i].component);
+            converted[i].value = values[i].value;
+        }
+        return static_cast<LibraResult>(found->second->pool->setCaptured(instance, converted.data(), count));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_set_signal_outputs(
+    LibraGeneratorPool pool, const uint8_t* nodeIds, uint32_t count)
+{
+    if (count && !nodeIds) return LIBRA_INVALID_ARGUMENT;
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        return found == generatorPools.end() ? LIBRA_INVALID_HANDLE :
+            static_cast<LibraResult>(found->second->pool->setSignalOutputs(nodeIds, count));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_dispatch_signal(
+    LibraGeneratorPool pool, const uint8_t nodeId[16], double time, uint32_t instructionBudget)
+{
+    if (!nodeId) return LIBRA_INVALID_ARGUMENT;
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        return found == generatorPools.end() ? LIBRA_INVALID_HANDLE :
+            static_cast<LibraResult>(found->second->pool->dispatchSignal(nodeId, time, instructionBudget));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_next_signal_event(
+    LibraGeneratorPool pool, LibraGeneratorSignalEvent* outEvent, uint32_t* hasEvent)
+{
+    if (!outEvent || !hasEvent) return LIBRA_INVALID_ARGUMENT;
+    *outEvent = {};
+    *hasEvent = 0;
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        if (found == generatorPools.end()) return LIBRA_INVALID_HANDLE;
+        auto event = liberafx::GeneratorSignalEvent{};
+        if (!found->second->pool->popSignalEvent(event)) return LIBRA_OK;
+        std::memcpy(outEvent->containerId, event.containerId, 16);
+        outEvent->instanceId = event.instanceId;
+        std::memcpy(outEvent->nodeId, event.nodeId, 16);
+        outEvent->time = event.time;
+        outEvent->seed = event.seed;
+        *hasEvent = 1;
+        return LIBRA_OK;
+    });
+}
 LibraResult LIBRA_INTEROP_CALL libra_generator_set_time_context(
     LibraGeneratorPool pool, LibraGeneratorInstance instance, double effectTime, double frameDelta)
 {
@@ -916,6 +1073,53 @@ LibraResult LIBRA_INTEROP_CALL libra_generator_evaluate(
         auto found = generatorPools.find(pool);
         return found == generatorPools.end() ? LIBRA_INVALID_HANDLE :
             static_cast<LibraResult>(found->second->pool->evaluate(instance, time));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_next_deferred_signal(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance, double* outTime, uint32_t* hasSignal)
+{
+    if (!outTime || !hasSignal)
+    {
+        return LIBRA_INVALID_ARGUMENT;
+    }
+    *outTime = 0;
+    *hasSignal = 0;
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        if (found == generatorPools.end())
+        {
+            return LIBRA_INVALID_HANDLE;
+        }
+        auto has = false;
+        auto result = found->second->pool->nextDeferredSignal(instance, *outTime, has);
+        if (result == liberafx::Result::Ok)
+        {
+            *hasSignal = has ? 1u : 0u;
+        }
+        return static_cast<LibraResult>(result);
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_dispatch_deferred_signal(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance, double time, uint32_t instructionBudget)
+{
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        return found == generatorPools.end() ? LIBRA_INVALID_HANDLE :
+            static_cast<LibraResult>(found->second->pool->dispatchDeferredSignal(instance, time, instructionBudget));
+    });
+}
+LibraResult LIBRA_INTEROP_CALL libra_generator_elapsed(
+    LibraGeneratorPool pool, LibraGeneratorInstance instance, double* outElapsed)
+{
+    if (!outElapsed)
+    {
+        return LIBRA_INVALID_ARGUMENT;
+    }
+    *outElapsed = 0;
+    return guarded([&]() -> LibraResult {
+        auto found = generatorPools.find(pool);
+        return found == generatorPools.end() ? LIBRA_INVALID_HANDLE :
+            static_cast<LibraResult>(found->second->pool->elapsed(instance, *outElapsed));
     });
 }
 LibraResult LIBRA_INTEROP_CALL libra_generator_owner_destroy(

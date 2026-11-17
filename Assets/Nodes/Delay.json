@@ -5,10 +5,12 @@
   "kind": "Delay",
   "name": "Delay",
   "displayNameKey": "Editor.Node.Delay",
+  "descriptionKey": "Editor.NodeHelp.Delay",
   "group": "Lifecycle",
   "groupNameKey": "Editor.NodeGroup.Lifecycle",
   "portType": "Signal",
   "portCategory": "Signal",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "signal" },
   "inputPorts": [
     { "id": "signal", "name": "Signal", "portType": "Signal", "category": "Signal" },
     { "id": "seconds", "name": "Seconds", "portType": "Float", "category": "Parameter", "defaultValue": 1 }

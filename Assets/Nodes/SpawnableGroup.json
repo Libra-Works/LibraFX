@@ -5,6 +5,7 @@
   "kind": "SpawnableGroup",
   "name": "Spawnable Group",
   "displayNameKey": "Editor.Node.SpawnableGroup",
+  "descriptionKey": "Editor.NodeHelp.SpawnableGroup",
   "groupNameKey": "Editor.NodeGroup.Graphs",
   "group": "Graph nodes",
   "portType": "Signal",

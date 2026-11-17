@@ -20,6 +20,8 @@ internal static class EditorInterfaceTests
         VerifyGraphToolbars();
         VerifyParameterRows();
         VerifyContainerPresentation();
+        VerifyLifecycleHelp();
+        VerifySpawnInputBindingEditor();
         VerifyCatalogs();
         var text = LocalizationService.Shared;
         var originalLanguage = text.SelectedLanguage;
@@ -196,6 +198,105 @@ internal static class EditorInterfaceTests
             if (gpuView.FindControl<TextBlock>("GpuProgramLabel")!.Text != localization.Get("Gpu.ContainerHint") ||
                 !GraphSnapshot.ContentEquals(before, graph.CreateSnapshot()))
                 throw new InvalidOperationException("GPU container label localization changed graph data.");
+        }
+        finally { localization.SelectedLanguage = language; window.Close(); }
+    }
+
+    private static void VerifyLifecycleHelp()
+    {
+        var root = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var life = root.CreateNode(new GraphNodeKind("LifeTime"));
+        var destroy = root.CreateNode(new GraphNodeKind("OnDestroy"));
+        var delay = root.CreateNode(new GraphNodeKind("Delay"));
+        var spawnable = root.CreateNode(GraphNodeKind.SpawnableGroup);
+        var child = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var childGroup = child.CreateNode(GraphNodeKind.SpawnableGroup);
+        if (!child.EnterGraph(childGroup)) throw new InvalidOperationException("Cannot enter Spawnable for lifecycle help.");
+        var ownerDestroy = child.CreateNode(new GraphNodeKind("OwnerDestroy"));
+        var spawnInput = child.CreateNode(new GraphNodeKind("SpawnInputFloat"));
+        var entries = new[]
+        {
+            (Node: life, Key: "Editor.NodeHelp.LifeTime"),
+            (Node: destroy, Key: "Editor.NodeHelp.OnDestroy"),
+            (Node: delay, Key: "Editor.NodeHelp.Delay"),
+            (Node: spawnable, Key: "Editor.NodeHelp.SpawnableGroup"),
+            (Node: ownerDestroy, Key: "Editor.NodeHelp.OwnerDestroy"),
+            (Node: spawnInput, Key: "Editor.NodeHelp.SpawnInput")
+        };
+        var views = entries.Select(entry => new GraphNodeView { DataContext = entry.Node }).ToArray();
+        var panel = new StackPanel();
+        foreach (var view in views) panel.Children.Add(view);
+        var window = new Window { Content = panel };
+        var localization = LocalizationService.Shared;
+        var language = localization.SelectedLanguage;
+        var before = root.CreateSnapshot();
+        window.Show();
+        try
+        {
+            foreach (var languageId in new[] { "en", "ja" })
+            {
+                localization.SelectedLanguage = localization.Languages.Single(item => item.Id == languageId);
+                Dispatcher.UIThread.RunJobs();
+                for (var index = 0; index < entries.Length; index++)
+                {
+                    var header = views[index].FindControl<Border>("NodeHeader")!;
+                    var expected = localization.Get(entries[index].Key);
+                    if (!header.IsEffectivelyVisible || !Equals(ToolTip.GetTip(header), expected) ||
+                        AutomationProperties.GetHelpText(header) != expected)
+                        throw new InvalidOperationException($"Lifecycle help is missing for {entries[index].Node.Definition.Kind} in {languageId}.");
+                }
+            }
+            if (!GraphSnapshot.ContentEquals(before, root.CreateSnapshot()))
+                throw new InvalidOperationException("Lifecycle help changed the authored graph.");
+        }
+        finally { localization.SelectedLanguage = language; window.Close(); }
+    }
+
+    private static void VerifySpawnInputBindingEditor()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var group = graph.CreateNode(GraphNodeKind.SpawnableGroup);
+        if (!graph.EnterGraph(group)) throw new InvalidOperationException("Cannot enter binding editor fixture.");
+        var input = graph.CreateNode(new GraphNodeKind("SpawnInputVector3"));
+        graph.SelectNode(input);
+        var host = new ParameterEditorHost();
+        void BindCurrent()
+        {
+            var current = graph.GetNode(input.Id);
+            graph.SelectNode(current);
+            host.DataContext = current.InlineParameters.Single(parameter => parameter.Id == "bindingMode");
+            Dispatcher.UIThread.RunJobs();
+        }
+        BindCurrent();
+        var localization = LocalizationService.Shared;
+        var language = localization.SelectedLanguage;
+        var window = new Window { Content = host };
+        window.Show();
+        try
+        {
+            foreach (var id in new[] { "en", "ja" })
+            {
+                localization.SelectedLanguage = localization.Languages.Single(item => item.Id == id);
+                BindCurrent();
+                var parameter = (NodeParameterEditorViewModel)host.DataContext!;
+                if (parameter.Name != localization.Get("Editor.Parameter.SpawnBindingMode") ||
+                    !host.GetVisualDescendants().OfType<ComboBox>().Single().ItemsSource!.Cast<GraphEnumValue>()
+                    .Select(value => value.Name).SequenceEqual([
+                        localization.Get("Editor.SpawnBinding.CaptureAtSpawn"), localization.Get("Editor.SpawnBinding.Live")]))
+                    throw new InvalidOperationException("Capture/Live editor labels are not localized.");
+            }
+            var selector = host.GetVisualDescendants().OfType<ComboBox>().Single();
+            selector.SelectedItem = selector.ItemsSource!.Cast<GraphEnumValue>().Single(value => value.Value == 1);
+            Dispatcher.UIThread.RunJobs();
+            if (!SpawnableGroupSchema.IsLive(graph.CreateCurrentSnapshot().Nodes.Single(node => node.Id == input.Id)) ||
+                !graph.History.Undo())
+                throw new InvalidOperationException("The visible Capture/Live selector did not create an undoable edit.");
+            BindCurrent();
+            if (((NodeParameterEditorViewModel)host.DataContext!).EnumValue != 0 || !graph.History.Redo())
+                throw new InvalidOperationException("Undo did not restore CaptureAtSpawn.");
+            BindCurrent();
+            if (((NodeParameterEditorViewModel)host.DataContext!).EnumValue != 1)
+                throw new InvalidOperationException("Redo did not restore Live.");
         }
         finally { localization.SelectedLanguage = language; window.Close(); }
     }

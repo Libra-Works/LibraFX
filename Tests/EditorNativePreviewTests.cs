@@ -338,6 +338,8 @@ internal static class EditorNativePreviewTests
         probe.Start(); var port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop();
         using var host = new PreviewHost(port);
         var model = new MainViewModel();
+        model.Graph.DeleteNodes(model.Graph.Nodes.ToArray());
+        model.Graph.History.Clear();
         model.Graph.InitializeFromSnapshot(graph);
         model.Playback.EndText = "240";
         model.Playback.Frame = 0;

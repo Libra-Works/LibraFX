@@ -113,6 +113,14 @@ public sealed class GraphNodeViewModel : ObservableObject
 
     public bool HasDiagnostics => _diagnosticText.Length != 0;
     public string DiagnosticText => _diagnosticText;
+    public string Description => LocalizationService.Shared.GetOrDefault(Definition.DescriptionKey, string.Empty);
+    public string HeaderHelp => string.Join(Environment.NewLine, new[] { Description, DiagnosticText }
+        .Where(text => !string.IsNullOrEmpty(text)));
+    internal void RefreshLocalizedText()
+    {
+        OnPropertyChanged(nameof(Description));
+        OnPropertyChanged(nameof(HeaderHelp));
+    }
     public IBrush BorderBrush => HasDiagnostics ? Brushes.Red :
         ThemeSettingsService.EditorBrush(IsSelected ? "NodeSelectedBorder" : "NodeBorder");
 
@@ -121,6 +129,7 @@ public sealed class GraphNodeViewModel : ObservableObject
         if (!SetProperty(ref _diagnosticText, text, nameof(DiagnosticText))) return;
         OnPropertyChanged(nameof(HasDiagnostics));
         OnPropertyChanged(nameof(BorderBrush));
+        OnPropertyChanged(nameof(HeaderHelp));
     }
 
     public string PortType => Definition.PortType;
@@ -159,7 +168,8 @@ public sealed class GraphNodeViewModel : ObservableObject
         _y = y;
         _curve = definition.Kind == GraphNodeKind.FloatFCurve ? curve ?? FCurve.CreateDefault() : null;
         ChildGraph = definition.Kind == GraphNodeKind.GraphGroup || definition.Kind == GraphNodeKind.SpawnableGroup
-            ? childGraph ?? new GraphSnapshot([], []) : null;
+            ? childGraph ?? (definition.Kind == GraphNodeKind.SpawnableGroup
+                ? GraphDefaults.CreateEffect() : new GraphSnapshot([], [])) : null;
         GroupAsset = ChildGraph is not null ? groupAsset : null;
         GroupOverrides = ChildGraph is not null ? groupOverrides : null;
         _parameters = parameters;
@@ -271,6 +281,7 @@ public sealed class GraphNodeViewModel : ObservableObject
         OnPropertyChanged(nameof(HasCustomOutputs));
         OnPropertyChanged(nameof(HasLegacyInput));
         OnPropertyChanged(nameof(HasLegacyOutput));
+        RefreshLocalizedText();
     }
 
     private static GraphNodeDefinition EffectiveDefinition(GraphNodeDefinition definition,

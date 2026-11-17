@@ -420,6 +420,21 @@ auto recordFanout(liberafx::CustomNodeInvocation& invocation) noexcept -> libera
     return liberafx::Result::Ok;
 }
 
+struct DeferredTestContext {
+    FanoutLog* log = nullptr;
+    double delay = 0;
+};
+
+auto recordDeferred(liberafx::CustomNodeInvocation& invocation) noexcept -> liberafx::Result
+{
+    auto context = static_cast<DeferredTestContext*>(invocation.context);
+    context->log->nodes[context->log->count++] = 0;
+    invocation.selectedBranch = 0;
+    invocation.deferSignal = true;
+    invocation.delaySeconds = context->delay;
+    return liberafx::Result::Ok;
+}
+
 void verifySignalFanout()
 {
     auto bytes = std::vector<std::uint8_t>(16 + 5 * 256 + 8);
@@ -479,6 +494,66 @@ void verifySignalFanout()
     log.failNode = 2;
     assert(instance.dispatchSignal(bytes.data() + 16, 0, 10) == liberafx::Result::InvalidArgument);
     assert(log.count == 3);
+
+    auto delayed = DeferredTestContext{&log, 1};
+    descriptors[0].function = recordDeferred;
+    descriptors[0].context = &delayed;
+    log = {};
+    assert(instance.dispatchSignal(bytes.data() + 16, 0, 10) == liberafx::Result::NotReady);
+    auto storage = std::array<liberafx::DeferredSignal, 2>{};
+    assert(instance.setDeferredSignalStorage(storage.data(), storage.size()) == liberafx::Result::Ok);
+    assert(instance.dispatchSignal(bytes.data() + 16, 0, 10) == liberafx::Result::Ok);
+    delayed.delay = 0.5;
+    assert(instance.dispatchSignal(bytes.data() + 16, 0, 10) == liberafx::Result::Ok);
+    assert(instance.dispatchSignal(bytes.data() + 16, 0, 10) == liberafx::Result::QueueRejected);
+    auto due = double{};
+    auto has = false;
+    assert(instance.nextDeferredSignal(due, has) == liberafx::Result::Ok && has && due == 0.5);
+    assert(instance.setDeferredSignalStorage(nullptr, 0) == liberafx::Result::Busy);
+    assert(instance.dispatchDeferredSignal(0.5, 10) == liberafx::Result::NotReady);
+    assert(instance.updateAsync(0.5, enqueue, &queue) == liberafx::Result::Ok);
+    run(queue);
+    log.count = 0;
+    assert(instance.dispatchDeferredSignal(0.5, 10) == liberafx::Result::Ok);
+    assert(log.count == 5 && (log.nodes[0] == 1 && log.nodes[1] == 2 &&
+                              log.nodes[2] == 3 && log.nodes[3] == 4 && log.nodes[4] == 4));
+    assert(instance.nextDeferredSignal(due, has) == liberafx::Result::Ok && has && due == 1);
+    assert(instance.updateAsync(1, enqueue, &queue) == liberafx::Result::Ok);
+    run(queue);
+    log.count = 0;
+    log.failNode = 2;
+    assert(instance.dispatchDeferredSignal(1, 10) == liberafx::Result::InvalidArgument);
+    assert(instance.nextDeferredSignal(due, has) == liberafx::Result::Ok && !has);
+    log = {};
+    delayed.delay = -1;
+    assert(instance.dispatchSignal(bytes.data() + 16, 1, 10) == liberafx::Result::InvalidArgument);
+    delayed.delay = std::numeric_limits<double>::infinity();
+    assert(instance.dispatchSignal(bytes.data() + 16, 1, 10) == liberafx::Result::InvalidArgument);
+    delayed.delay = std::numeric_limits<double>::quiet_NaN();
+    assert(instance.dispatchSignal(bytes.data() + 16, 1, 10) == liberafx::Result::InvalidArgument);
+    delayed.delay = 0;
+    assert(instance.dispatchSignal(bytes.data() + 16, 1, 10) == liberafx::Result::Ok);
+    assert(instance.clearDeferredSignals() == liberafx::Result::Ok);
+    assert(instance.nextDeferredSignal(due, has) == liberafx::Result::Ok && !has);
+    log = {};
+    delayed.delay = 1;
+    descriptors[1].function = recordDeferred;
+    descriptors[1].context = &delayed;
+    assert(instance.dispatchSignal(bytes.data() + 16, 1, 10) == liberafx::Result::Ok);
+    assert(instance.dispatchSignal(bytes.data() + 16 + 256, 1, 10) == liberafx::Result::Ok);
+    assert(storage[0].nodeIndex == 0 && storage[1].nodeIndex == 1);
+    descriptors[1].function = recordFanout;
+    descriptors[1].context = &contexts[1];
+    assert(instance.updateAsync(2, enqueue, &queue) == liberafx::Result::Ok);
+    run(queue);
+    log = {};
+    assert(instance.dispatchDeferredSignal(2, 10) == liberafx::Result::Ok);
+    assert(instance.nextDeferredSignal(due, has) == liberafx::Result::Ok && has && due == 2);
+    assert(instance.dispatchDeferredSignal(2, 10) == liberafx::Result::Ok);
+    assert(log.count == 6 && log.nodes[0] == 1 && log.nodes[1] == 2 &&
+           log.nodes[2] == 3 && log.nodes[3] == 4 && log.nodes[4] == 4 && log.nodes[5] == 2);
+    descriptors[0].function = recordFanout;
+    descriptors[0].context = &contexts[0];
 
     auto oneExtra = bytes;
     write32(oneExtra, 16 + 228, 1);

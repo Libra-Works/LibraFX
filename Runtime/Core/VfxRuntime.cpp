@@ -942,6 +942,9 @@ auto Instance::initialize(const Program& program, double* work, std::size_t work
             initializedStateCount_ = index + 1;
         }
     generation_ = nextInstanceGeneration.fetch_add(1, std::memory_order_relaxed);
+    deferredSignals_ = nullptr;
+    deferredCapacity_ = 0;
+    deferredCount_ = 0;
     pendingTimeContext_ = false;
     evaluatedTimeContext_ = false;
     result_ = Result::NotReady;
@@ -1371,6 +1374,60 @@ auto Instance::dispatchSignal(const std::uint8_t entryNodeId[16], double time,
 auto Instance::dispatchSignal(const SignalHandle& entry, double time,
                               std::size_t maxInstructions) noexcept -> Result
 {
+    return dispatchSignalInternal(entry, time, maxInstructions, -1);
+}
+
+auto Instance::setDeferredSignalStorage(DeferredSignal* storage, std::size_t capacity) noexcept -> Result
+{
+    if (dispatching_ || phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
+    if (!program_ || (capacity != 0 && !storage) || (capacity == 0 && storage) ||
+        capacity > std::numeric_limits<std::size_t>::max() / sizeof(DeferredSignal))
+        return Result::InvalidArgument;
+    if (deferredCount_) return Result::Busy;
+    auto bytes = capacity * sizeof(DeferredSignal);
+    if (capacity && (!isAligned(storage, alignof(DeferredSignal)) ||
+        rangesOverlap(storage, bytes, work_, program_->workBytes()) ||
+        (defaults_ && rangesOverlap(storage, bytes, defaults_, program_->parameterValueCount() * sizeof(double)))))
+        return Result::InvalidArgument;
+    deferredSignals_ = storage;
+    deferredCapacity_ = capacity;
+    return Result::Ok;
+}
+
+auto Instance::nextDeferredSignal(double& time, bool& hasSignal) const noexcept -> Result
+{
+    if (dispatching_ || phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
+    if (!program_) return Result::InvalidArgument;
+    hasSignal = deferredCount_ != 0;
+    if (hasSignal) time = deferredSignals_[0].time;
+    return Result::Ok;
+}
+
+auto Instance::clearDeferredSignals() noexcept -> Result
+{
+    if (dispatching_ || phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
+    if (!program_) return Result::InvalidArgument;
+    deferredCount_ = 0;
+    return Result::Ok;
+}
+
+auto Instance::dispatchDeferredSignal(double time, std::size_t maxInstructions) noexcept -> Result
+{
+    if (dispatching_ || phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
+    if (!program_ || !std::isfinite(time) || !maxInstructions) return Result::InvalidArgument;
+    if (!deferredCount_ || time != deferredSignals_[0].time || time_ != time || result() != Result::Ok)
+        return Result::NotReady;
+    auto item = deferredSignals_[0];
+    for (auto index = std::size_t{1}; index < deferredCount_; ++index)
+        deferredSignals_[index - 1] = deferredSignals_[index];
+    --deferredCount_;
+    auto entry = SignalHandle{program_, generation_, program_->generation_, item.nodeIndex};
+    return dispatchSignalInternal(entry, time, maxInstructions, item.branch);
+}
+
+auto Instance::dispatchSignalInternal(const SignalHandle& entry, double time,
+                                      std::size_t maxInstructions, int resumeBranch) noexcept -> Result
+{
     if (dispatching_) return Result::Busy;
     if (program_ == nullptr || program_->version_ < 3 || !std::isfinite(time) || maxInstructions == 0)
         return Result::InvalidArgument;
@@ -1394,6 +1451,28 @@ auto Instance::dispatchSignal(const SignalHandle& entry, double time,
     auto visited = std::size_t{0};
     auto pending = std::size_t{0};
     auto stack = reinterpret_cast<std::uint8_t*>(work_) + program_->signalStackOffset_;
+    auto selectBranch = [&](const std::uint8_t* current, unsigned branch) noexcept -> Result {
+        if (branch >= current[19]) return Result::InvalidValueType;
+        if (program_->version_ >= 5)
+        {
+            auto offset = read32(current + 224 + branch * 8);
+            auto extraCount = read32(current + 228 + branch * 8);
+            if (extraCount > program_->signalStackCapacity_ - pending) return Result::InvalidBinary;
+            for (auto extra = extraCount; extra > 0; --extra)
+            {
+                auto target = read32(program_->bytes_ + program_->signalRoutesOffset_ +
+                    offset + std::size_t{extra - 1} * 4);
+                std::memcpy(stack + pending++ * sizeof(target), &target, sizeof(target));
+            }
+        }
+        index = read32(current + 208 + branch * 4);
+        return Result::Ok;
+    };
+    if (resumeBranch >= 0)
+    {
+        status = selectBranch(instruction(program_->bytes_, 3, index), static_cast<unsigned>(resumeBranch));
+        if (status != Result::Ok) return status;
+    }
     while (index != noInput || pending != 0)
     {
         if (index == noInput)
@@ -1440,19 +1519,25 @@ auto Instance::dispatchSignal(const SignalHandle& entry, double time,
         status = descriptor->function(invocation);
         if (status != Result::Ok) return status;
         if (invocation.selectedBranch >= current[19]) return Result::InvalidValueType;
-        if (program_->version_ >= 5)
+        if (invocation.deferSignal)
         {
-            auto offset = read32(current + 224 + invocation.selectedBranch * 8);
-            auto extraCount = read32(current + 228 + invocation.selectedBranch * 8);
-            if (extraCount > program_->signalStackCapacity_ - pending) return Result::InvalidBinary;
-            for (auto extra = extraCount; extra > 0; --extra)
-            {
-                auto target = read32(program_->bytes_ + program_->signalRoutesOffset_ +
-                    offset + std::size_t{extra - 1} * 4);
-                std::memcpy(stack + pending++ * sizeof(target), &target, sizeof(target));
+            auto due = time + invocation.delaySeconds;
+            if (!std::isfinite(invocation.delaySeconds) || invocation.delaySeconds < 0 || !std::isfinite(due))
+                return Result::InvalidArgument;
+            if (!deferredSignals_) return Result::NotReady;
+            if (deferredCount_ == deferredCapacity_) return Result::QueueRejected;
+            auto position = deferredCount_;
+            while (position && deferredSignals_[position - 1].time > due) {
+                deferredSignals_[position] = deferredSignals_[position - 1];
+                --position;
             }
+            deferredSignals_[position] = {due, index, invocation.selectedBranch};
+            ++deferredCount_;
+            index = noInput;
+            continue;
         }
-        index = read32(current + 208 + invocation.selectedBranch * 4);
+        status = selectBranch(current, invocation.selectedBranch);
+        if (status != Result::Ok) return status;
     }
     return Result::Ok;
 }
