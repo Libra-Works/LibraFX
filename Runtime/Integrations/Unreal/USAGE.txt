@@ -85,7 +85,9 @@ Import and use
   package asset validation, component startup, child draining, root completion
   and explicit Stop. Supply -LibraSpawnableFixture=<absolute path> and run
   "Automation RunTests Libra.Runtime.Spawnable.ComponentFixture" in Output Log.
-  Importer execution and rendering/GPU payload integration remain unverified.
+  The user also imported Fireworks.lfxp through Content Browser and confirmed
+  the resulting LibraSpawnableAsset and source import data in the asset editor.
+  Save/reload, reimport and rendering/GPU payload integration remain unverified.
   Effect Age, root Instance Age and unscaled Delta Time were verified in an
   isolated UE 5.7 MSVC automation world using compiler-produced bytecode and a
   0.5 playback rate. UE 5.7 Win64 Clang compilation was checked separately
