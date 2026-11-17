@@ -15,6 +15,7 @@ public sealed class NodePropertiesPaneViewModel : Tool
     private readonly EditorPlayback? _playback;
     private GraphWorkspaceViewModel _graph;
     private GraphNodeViewModel? _node;
+    private long _selectionGeneration;
     private readonly List<string> _unavailableExposedItems = [];
 
     public GraphWorkspaceViewModel Graph => _graph;
@@ -42,9 +43,16 @@ public sealed class NodePropertiesPaneViewModel : Tool
         !IsLinkedGroup ? "Editor.GroupUnlinked" :
         CurrentAsset is null ? "Editor.GroupMissing" :
         IsGroupLocked ? "Editor.GroupLocked" : "Editor.GroupUnlocked");
-    public string PluginStatus => Environment.GetEnvironmentVariable("LIBERAFX_INSPECTOR_PLUGINS") == "1"
-        ? string.Join(Environment.NewLine, InspectorEditors.Warnings)
-        : LocalizationService.Shared.Get("Editor.PluginsDisabled");
+    public string PluginStatus
+    {
+        get
+        {
+            var status = InspectorPluginService.Shared.Status;
+            if (Environment.GetEnvironmentVariable("LIBERAFX_INSPECTOR_PLUGINS") != "1") return status;
+            var legacy = InspectorEditors.Warnings;
+            return legacy.Count == 0 ? status : string.Join(Environment.NewLine, new[] { status }.Concat(legacy));
+        }
+    }
 
     public NodePropertiesPaneViewModel(ActiveGraphProvider activeGraph, EditorPlayback? playback = null)
     {
@@ -59,6 +67,8 @@ public sealed class NodePropertiesPaneViewModel : Tool
         PublishCurvesCommand = new RelayCommand(() => RunGroupAction(() => _graph.PublishGroupCurves()),
             () => CanPublishCurves);
         _activeGraph.PropertyChanged += OnActiveGraphChanged;
+        InspectorPluginService.Shared.DefaultsChanged += OnInspectorDefaultsChanged;
+        InspectorPluginService.Shared.PropertyChanged += OnInspectorPluginServiceChanged;
         _graph.PropertyChanged += OnGraphChanged;
         _graph.Connections.CollectionChanged += OnConnectionsChanged;
         if (_graph.GroupAssets is { } catalog) catalog.Changed += OnGroupAssetsChanged;
@@ -77,6 +87,13 @@ public sealed class NodePropertiesPaneViewModel : Tool
         if (_graph.GroupAssets is { } current) current.Changed += OnGroupAssetsChanged;
         OnPropertyChanged(nameof(Graph));
         RefreshNode();
+    }
+
+    private void OnInspectorDefaultsChanged(object? sender, EventArgs e) => RefreshNode();
+
+    private void OnInspectorPluginServiceChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(InspectorPluginService.Status)) OnPropertyChanged(nameof(PluginStatus));
     }
 
     private void OnGraphChanged(object? sender, PropertyChangedEventArgs e)
@@ -110,6 +127,7 @@ public sealed class NodePropertiesPaneViewModel : Tool
 
     public void RefreshLocalizedText()
     {
+        InspectorPluginService.Shared.RefreshLocalizedText();
         OnPropertyChanged(nameof(PluginStatus));
         OnPropertyChanged(nameof(GroupExposedDiagnostics));
         RefreshGroupState();
@@ -145,6 +163,7 @@ public sealed class NodePropertiesPaneViewModel : Tool
 
     private void RefreshNode()
     {
+        var selectionGeneration = ++_selectionGeneration;
         if (_node is not null) _node.PropertyChanged -= OnNodeChanged;
         _node = _graph.SelectedNode;
         Parameters.Clear();
@@ -153,10 +172,16 @@ public sealed class NodePropertiesPaneViewModel : Tool
         RefreshGroupState();
         if (_node is null) return;
         _node.PropertyChanged += OnNodeChanged;
+        var graph = _graph;
+        var selectedNode = _node;
         foreach (var definition in _node.Definition.Parameters.Where(parameter =>
                      !_node.IsGpuParticle &&
                      (!RenderNodeSchema.IsRenderNode(_node.Definition) || parameter.Id != "materialSchema")))
-            Parameters.Add(new NodeParameterEditorViewModel(_graph, _node, definition));
+        {
+            Parameters.Add(new NodeParameterEditorViewModel(graph, selectedNode, definition, isCurrentInspectorTarget: () =>
+                selectionGeneration == _selectionGeneration &&
+                ReferenceEquals(_activeGraph.Graph, graph) && ReferenceEquals(graph.SelectedNode, selectedNode)));
+        }
         if (_node.ChildGraph is not { } child) return;
         foreach (var item in (child.ExposedItems ?? []).OrderBy(item => item.Order))
         {
@@ -199,7 +224,9 @@ public sealed class NodePropertiesPaneViewModel : Tool
                 _ => definition.Editor
             };
             var display = definition with { Name = item.Name, DisplayNameKey = null, DefaultValue = initial.Clone(), Editor = editor };
-            Parameters.Add(new NodeParameterEditorViewModel(_graph, _node, display, item));
+            Parameters.Add(new NodeParameterEditorViewModel(graph, selectedNode, display, item, () =>
+                selectionGeneration == _selectionGeneration &&
+                ReferenceEquals(_activeGraph.Graph, graph) && ReferenceEquals(graph.SelectedNode, selectedNode)));
         }
         OnPropertyChanged(nameof(GroupExposedDiagnostics));
     }

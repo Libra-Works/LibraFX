@@ -14,6 +14,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     private readonly GraphNodeViewModel _node;
     private readonly NodeParameterDefinition _definition;
     private readonly GroupExposedItem? _exposed;
+    private readonly Func<bool> _isCurrentInspectorTarget;
     private string _status = string.Empty;
 
     public string Name => _exposed is { Category.Length: > 0 } item
@@ -72,6 +73,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         private set => SetProperty(ref _status, value);
     }
     public string JsonValue => Value.GetRawText();
+    internal JsonElement InspectorValue => Value.Clone();
     public string DisplayValue => Type switch
     {
         "vector2" => $"({X}, {Y})",
@@ -103,12 +105,14 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     }
 
     public NodeParameterEditorViewModel(GraphWorkspaceViewModel graph, GraphNodeViewModel node,
-        NodeParameterDefinition definition, GroupExposedItem? exposed = null)
+        NodeParameterDefinition definition, GroupExposedItem? exposed = null, Func<bool>? isCurrentInspectorTarget = null)
     {
         _graph = graph;
         _node = node;
         _definition = definition;
         _exposed = exposed;
+        _isCurrentInspectorTarget = isCurrentInspectorTarget ?? (() =>
+            _graph.Nodes.Contains(_node) && ReferenceEquals(_graph.SelectedNode, _node));
         DisconnectCommand = new RelayCommand(() =>
         {
             if (InputConnection is { } connection) _graph.DisconnectConnection(connection);
@@ -189,6 +193,13 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
             return false;
         }
     }
+
+    internal bool IsCurrentInspectorTarget() =>
+        _isCurrentInspectorTarget() && _graph.Nodes.Contains(_node) &&
+        ReferenceEquals(_graph.SelectedNode, _node);
+
+    internal bool TrySetInspectorValue(JsonElement value) =>
+        IsCurrentInspectorTarget() && SetValue(value);
 
     public void SetColor(Color color) => SetValue(JsonSerializer.SerializeToElement(
         new[] { color.R / 255.0, color.G / 255.0, color.B / 255.0, color.A / 255.0 }));

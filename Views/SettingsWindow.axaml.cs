@@ -1,4 +1,7 @@
 using Avalonia.Controls;
+using Avalonia.Automation;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Interactivity;
 using Avalonia.Input;
 using Avalonia.Platform.Storage;
@@ -11,6 +14,7 @@ public partial class SettingsWindow : Window
 {
     private bool _updatingProjects;
     private bool _updatingLanguage;
+    private bool _updatingInspectorDefault;
     public SettingsWindow()
     {
         InitializeComponent();
@@ -51,6 +55,64 @@ public partial class SettingsWindow : Window
     private void OnSaveServersClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is MainViewModel model) model.ServerSettings.Save();
+    }
+
+    private void OnInspectorSearchChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (DataContext is MainViewModel model) model.InspectorPlugins.FilterPlugins(InspectorSearchBox.Text);
+    }
+
+    private async void OnInspectorAddClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model) return;
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = LocalizationService.Shared.Get("Editor.InspectorPickFolder"),
+            AllowMultiple = false
+        });
+        if (folders.Count == 0) return;
+        using var folder = folders[0];
+        if (folder.TryGetLocalPath() is not { } path)
+        {
+            model.InspectorPlugins.SetOperationStatus(LocalizationService.Shared.Get("Editor.InspectorLocalFolderRequired"));
+            return;
+        }
+        model.InspectorPlugins.TryInstallPluginFolder(path, out _);
+    }
+
+    private async void OnInspectorToggleClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model || sender is not Button { Tag: string pluginId }) return;
+        var service = model.InspectorPlugins;
+        var plugin = service.Plugins.FirstOrDefault(item => item.Id == pluginId);
+        if (plugin is null) return;
+        if (plugin.IsEnabled)
+        {
+            service.TrySetEnabled(pluginId, false, userConfirmed: false);
+            return;
+        }
+        if (!plugin.IsCompatible)
+        {
+            service.SetOperationStatus(plugin.Status);
+            return;
+        }
+
+        var dialog = new InspectorTrustDialog(plugin.Name, plugin.Version);
+        if (await dialog.ShowDialog<bool>(this))
+            service.TrySetEnabled(pluginId, true, userConfirmed: true);
+    }
+
+    private void OnInspectorDefaultSelected(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingInspectorDefault || sender is not ComboBox { DataContext: InspectorDefaultChoice choice } combo ||
+            combo.SelectedItem is not InspectorDefaultOption selected) return;
+        _updatingInspectorDefault = true;
+        try
+        {
+            choice.Selected = selected;
+            combo.SetCurrentValue(ComboBox.SelectedItemProperty, choice.Selected);
+        }
+        finally { _updatingInspectorDefault = false; }
     }
 
     private void RefreshProjectSelection()
@@ -127,5 +189,59 @@ public partial class SettingsWindow : Window
         if (folders.Count == 0) return;
         using var folder = folders[0];
         if (folder.TryGetLocalPath() is { } path) target.Text = path;
+    }
+
+    private sealed class InspectorTrustDialog : Window
+    {
+        public InspectorTrustDialog(string name, string version)
+        {
+            var text = LocalizationService.Shared;
+            var cancel = new Button
+            {
+                Content = text.Get("Editor.InspectorCancel"),
+                IsCancel = true,
+                Command = new CommunityToolkit.Mvvm.Input.RelayCommand(() => Close(false))
+            };
+            AutomationProperties.SetName(cancel, text.Get("Editor.InspectorCancel"));
+            var trust = new Button
+            {
+                Content = text.Get("Editor.InspectorTrustConfirm"),
+                IsDefault = true,
+                Command = new CommunityToolkit.Mvvm.Input.RelayCommand(() => Close(true))
+            };
+            AutomationProperties.SetName(trust, text.Get("Editor.InspectorTrustConfirm"));
+            Title = text.Get("Editor.InspectorTrustTitle");
+            Width = 480;
+            SizeToContent = SizeToContent.Height;
+            MinHeight = 250;
+            CanResize = false;
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            Content = new StackPanel
+            {
+                Margin = new Avalonia.Thickness(20),
+                Spacing = 14,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = text.Get("Editor.InspectorTrustPrompt", name, version),
+                        TextWrapping = TextWrapping.Wrap,
+                        FontWeight = FontWeight.SemiBold
+                    },
+                    new TextBlock
+                    {
+                        Text = text.Get("Editor.InspectorTrustWarning"),
+                        TextWrapping = TextWrapping.Wrap
+                    },
+                    new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                        Spacing = 8,
+                        Children = { cancel, trust }
+                    }
+                }
+            };
+        }
     }
 }

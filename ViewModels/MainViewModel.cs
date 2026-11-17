@@ -78,6 +78,7 @@ public partial class MainViewModel : ViewModelBase
     public GroupAssetCatalog GroupAssets { get; }
     public NodeDefinitionCatalog NodeDefinitions { get; }
     public LocalizationService Localization => LocalizationService.Shared;
+    public InspectorPluginService InspectorPlugins => InspectorPluginService.Shared;
     public EditorPlayback Playback { get; } = new();
 
     public string McpAccessToken { get; }
@@ -218,6 +219,7 @@ public partial class MainViewModel : ViewModelBase
         ServerSettingsService? serverSettings = null)
     {
         ServerSettings = serverSettings ?? new ServerSettingsService();
+        _ = InspectorPluginService.Shared;
         PreviewAssets = new PreviewAssetStore(PreviewTelemetry);
         GroupAssets = new GroupAssetCatalog(TeamProfiles);
         NodeDefinitions = new NodeDefinitionCatalog(TeamProfiles);

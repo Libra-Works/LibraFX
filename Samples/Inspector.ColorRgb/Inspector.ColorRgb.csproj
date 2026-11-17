@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>LiberaFx.Inspector.ColorRgb</AssemblyName>
+    <RootNamespace>LiberaFx.SampleInspectors.ColorRgb</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\LiberaFx.Inspector.Abstractions\LiberaFx.Inspector.Abstractions.csproj" />
+    <PackageReference Include="Avalonia" Version="12.1.6" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="liberafx-inspector.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

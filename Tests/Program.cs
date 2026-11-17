@@ -15,6 +15,21 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--inspector-plugins"] or ["--inspector-plugins-reload"] or
+            ["--inspector-plugins-tampered-check"] or ["--inspector-plugins-disabled-check"] or
+            ["--inspector-plugins-missing-check"])
+        {
+            var inspectorDataRoot = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
+            if (string.IsNullOrWhiteSpace(inspectorDataRoot) || !Path.IsPathFullyQualified(inspectorDataRoot))
+                throw new ArgumentException("Set an absolute isolated LIBERAFX_DATA_ROOT for inspector SDK regressions.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            if (args[0] == "--inspector-plugins") LiberaFx.Tests.InspectorPluginTests.Run();
+            else if (args[0] == "--inspector-plugins-reload") LiberaFx.Tests.InspectorPluginTests.RunReloadChild();
+            else if (args[0] == "--inspector-plugins-tampered-check") LiberaFx.Tests.InspectorPluginTests.RunTamperedChildCheck();
+            else if (args[0] == "--inspector-plugins-missing-check") LiberaFx.Tests.InspectorPluginTests.RunMissingChildCheck();
+            else LiberaFx.Tests.InspectorPluginTests.RunDisabledChildCheck();
+            return;
+        }
         if (args is ["--group-exposed-schema"])
         {
             if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")))

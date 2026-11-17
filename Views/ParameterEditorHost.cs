@@ -23,10 +23,18 @@ public sealed class ParameterEditorHost : ContentControl
     private readonly List<RadioButton> _booleanOptions = [];
     private readonly List<TextBlock> _scrubLabels = [];
     private TextBlock? _missingEditorMessage;
+    private InspectorEditorHost? _pluginEditor;
 
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
+        DisposePluginEditor();
+        Content = null;
+        if (this.IsAttachedToVisualTree()) BuildParameterEditor();
+    }
+
+    private void BuildParameterEditor()
+    {
         _booleanOptions.Clear();
         _scrubLabels.Clear();
         _missingEditorMessage = null;
@@ -36,9 +44,15 @@ public sealed class ParameterEditorHost : ContentControl
             return;
         }
         var editorKind = parameter.Editor?.Kind;
+        var pluginService = InspectorPluginService.Shared;
         var custom = editorKind is null
-            ? InspectorEditors.CreateEditor(parameter)
-            : InspectorEditors.CreateNamedEditor(parameter, editorKind);
+            ? pluginService.HasConfiguredDefault(parameter.Type)
+                ? pluginService.CreateDefaultEditor(parameter.Type, parameter)
+                : InspectorEditors.CreateEditor(parameter)
+            : editorKind.StartsWith("inspector:", StringComparison.Ordinal)
+                ? pluginService.CreateNamedEditor(editorKind["inspector:".Length..], parameter.Type, parameter)
+                : InspectorEditors.CreateNamedEditor(parameter, editorKind);
+        _pluginEditor = custom as InspectorEditorHost;
         var editor = custom ?? (editorKind == "slider" ? CreateSlider(parameter) : CreateStandard(parameter));
         editor.Bind(IsEnabledProperty, new Binding(nameof(parameter.IsEnabled)));
         editor.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.Name)));
@@ -47,12 +61,14 @@ public sealed class ParameterEditorHost : ContentControl
         status.Bind(IsVisibleProperty, new Binding(nameof(parameter.Status)) { Converter = StringConverters.IsNotNullOrEmpty });
         _missingEditorMessage = new TextBlock
         {
-            IsVisible = custom is null && editorKind is not (null or "slider" or "text" or "radio" or "multiline"),
+            IsVisible = custom is null && (editorKind?.StartsWith("inspector:", StringComparison.Ordinal) == true ||
+                editorKind is not (null or "slider" or "text" or "radio" or "multiline")),
             Foreground = Brushes.OrangeRed,
             TextWrapping = TextWrapping.Wrap
         };
         var missing = _missingEditorMessage;
-        missing.IsVisible = custom is null && editorKind is not (null or "slider" or "text" or "radio" or "multiline");
+        missing.IsVisible = custom is null && (editorKind?.StartsWith("inspector:", StringComparison.Ordinal) == true ||
+            editorKind is not (null or "slider" or "text" or "radio" or "multiline"));
         var label = new TextBlock { FontWeight = FontWeight.Normal };
         label.Bind(TextBlock.TextProperty, new Binding(nameof(parameter.Name)));
         label.TextTrimming = TextTrimming.CharacterEllipsis;
@@ -122,6 +138,7 @@ public sealed class ParameterEditorHost : ContentControl
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
+        if (Content is null) BuildParameterEditor();
         LocalizationService.Shared.LanguageChanged += OnLanguageChanged;
         RefreshLocalizedLabels(DataContext is NodeParameterEditorViewModel parameter ? parameter.Editor?.Kind : null);
     }
@@ -129,7 +146,15 @@ public sealed class ParameterEditorHost : ContentControl
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         LocalizationService.Shared.LanguageChanged -= OnLanguageChanged;
+        DisposePluginEditor();
+        Content = null;
         base.OnDetachedFromVisualTree(e);
+    }
+
+    private void DisposePluginEditor()
+    {
+        _pluginEditor?.Dispose();
+        _pluginEditor = null;
     }
 
     private void OnLanguageChanged(object? sender, EventArgs e) =>

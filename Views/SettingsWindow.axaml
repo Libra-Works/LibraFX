@@ -196,6 +196,86 @@
                 </StackPanel>
                 </ScrollViewer>
             </TabItem>
+            <TabItem Header="{DynamicResource Text.Editor.Inspectors}">
+                <ScrollViewer>
+                    <StackPanel Margin="10" Spacing="12">
+                        <TextBlock Text="{DynamicResource Text.Editor.InspectorHeading}"
+                                   FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock Text="{DynamicResource Text.Editor.InspectorTrustHelp}"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="{DynamicResource Text.Editor.InspectorInstallHint}"
+                                   TextWrapping="Wrap" />
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <TextBox x:Name="InspectorSearchBox"
+                                     PlaceholderText="{DynamicResource Text.Editor.InspectorSearch}"
+                                     TextChanged="OnInspectorSearchChanged"
+                                     AutomationProperties.Name="{DynamicResource Text.Editor.InspectorSearch}" />
+                            <Button Grid.Column="1" Content="{DynamicResource Text.Editor.InspectorAdd}"
+                                    Click="OnInspectorAddClick"
+                                    AutomationProperties.Name="{DynamicResource Text.Editor.InspectorAdd}" />
+                        </Grid>
+                        <TextBlock Text="{Binding InspectorPlugins.InstallDirectory}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                        <ItemsControl x:Name="InspectorPluginList" ItemsSource="{Binding InspectorPlugins.VisiblePlugins}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="services:InspectorPluginEntry">
+                                    <Border BorderBrush="{DynamicResource EffectBorderBrush}"
+                                            BorderThickness="1" CornerRadius="3" Padding="8" Margin="0,3">
+                                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto"
+                                              ColumnSpacing="8" RowSpacing="3">
+                                            <StackPanel Grid.Row="0" Grid.Column="0" Spacing="2">
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding Id}" FontSize="11" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1" Text="{Binding Version}"
+                                                       VerticalAlignment="Center" />
+                                            <TextBlock Grid.Row="1" Grid.ColumnSpan="2">
+                                                <Run Text="{DynamicResource Text.Editor.InspectorProvided}" />
+                                                <Run Text="{Binding Inspectors}" />
+                                            </TextBlock>
+                                            <TextBlock Grid.Row="2" Grid.ColumnSpan="2" TextWrapping="Wrap">
+                                                <Run Text="{DynamicResource Text.Editor.InspectorTypes}" />
+                                                <Run Text="{Binding Types}" />
+                                            </TextBlock>
+                                            <Grid Grid.Row="3" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <TextBlock Text="{Binding Status}" TextWrapping="Wrap"
+                                                           Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                                                <Button Grid.Column="1" Content="{Binding ActionLabel}" Tag="{Binding Id}"
+                                                        Click="OnInspectorToggleClick"
+                                                        IsEnabled="{Binding IsCompatible}"
+                                                        ToolTip.Tip="{Binding TrustHelp}"
+                                                        AutomationProperties.Name="{Binding ActionLabel}" />
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{DynamicResource Text.Editor.InspectorDefaults}"
+                                   FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock Text="{DynamicResource Text.Editor.InspectorDefaultsHint}"
+                                   TextWrapping="Wrap" />
+                        <ItemsControl ItemsSource="{Binding InspectorPlugins.Defaults}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="services:InspectorDefaultChoice">
+                                    <Grid ColumnDefinitions="120,*" ColumnSpacing="8" Margin="0,2">
+                                        <TextBlock Text="{Binding Type}" VerticalAlignment="Center" />
+                                        <ComboBox Grid.Column="1" ItemsSource="{Binding Options}"
+                                                  DisplayMemberBinding="{Binding Name}"
+                                                  SelectedItem="{Binding Selected, Mode=OneWay}"
+                                                  SelectionChanged="OnInspectorDefaultSelected"
+                                                  IsEnabled="{Binding CanEdit}"
+                                                  AutomationProperties.Name="{Binding Type}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{Binding InspectorPlugins.Status}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                        <TextBlock Text="{Binding InspectorPlugins.OperationStatus}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
             </TabControl>
         <views:IconButton Grid.Row="1"
                 HorizontalAlignment="Right"
