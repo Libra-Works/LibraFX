@@ -80,9 +80,12 @@ Import and use
   Render configuration and GPU payloads remain opaque; this component does not
   create actors, components, materials or GPU resources from those payloads.
   UE 5.7.4 isolated Clang compilation and MSVC Editor linking passed. The
-  component lifecycle automation requires an explicit compiler-produced LFXP
-  fixture via -LibraSpawnableFixture=<absolute path>; in-engine execution was
-  not completed in this verification pass.
+  Libra.Runtime.Spawnable.ComponentFixture passed in the user's isolated
+  Editor session with the compiler-produced Fireworks LFXP fixture. It checks
+  package asset validation, component startup, child draining, root completion
+  and explicit Stop. Supply -LibraSpawnableFixture=<absolute path> and run
+  "Automation RunTests Libra.Runtime.Spawnable.ComponentFixture" in Output Log.
+  Importer execution and rendering/GPU payload integration remain unverified.
   Effect Age, root Instance Age and unscaled Delta Time were verified in an
   isolated UE 5.7 MSVC automation world using compiler-produced bytecode and a
   0.5 playback rate. UE 5.7 Win64 Clang compilation was checked separately
