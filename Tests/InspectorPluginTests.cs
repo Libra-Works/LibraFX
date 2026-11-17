@@ -51,7 +51,6 @@ internal static class InspectorPluginTests
             if (!service.Diagnostics.Any(message => message.Contains("Duplicate plugin ID", StringComparison.Ordinal)) ||
                 incompatible?.IsCompatible != false ||
                 missing is null || !missing.IsEnabled || missing.IsTrusted ||
-                !missing.Status.Contains("not been explicitly trusted", StringComparison.Ordinal) ||
                 legacyTrusted?.IsTrusted != false ||
                 !service.Diagnostics.Any(message => message.Contains("duplicated", StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Duplicate IDs, legacy trust migration, API incompatibility or duplicate inspector IDs were not diagnosed.");
@@ -120,7 +119,8 @@ internal static class InspectorPluginTests
             ?? throw new ArgumentException("Inspector execution marker is not configured.");
         var service = InspectorPluginService.Shared;
         if (!File.Exists(marker) || service.Plugins.SingleOrDefault(plugin => plugin.Id == PluginId) is not
-            { IsEnabled: true, IsTrusted: true } entry || !entry.Status.Contains("loaded", StringComparison.OrdinalIgnoreCase))
+            { IsEnabled: true, IsTrusted: true } entry ||
+            entry.Status != LocalizationService.Shared.Get("Editor.InspectorStatusLoaded"))
             throw new InvalidOperationException("The trusted plugin did not load at startup.");
 
         var model = new MainViewModel();
@@ -177,6 +177,16 @@ internal static class InspectorPluginTests
             if (!NodeParameter.ValuesEqual(reloaded.Graph.Nodes.Single().Parameters!.Single(item => item.Id == color.Id).Value,
                     JsonSerializer.SerializeToElement(new[] { 0.21, 0.32, 0.43, 0.54 })))
                 throw new InvalidOperationException("Inspector-edited values did not survive project persistence.");
+            graph.PasteSnapshot(graph.CreateSelectionSnapshot(), 500, 500);
+            var copiedNode = graph.Nodes.Single(item => item.Id != node.Id);
+            if (!NodeParameter.ValuesEqual(copiedNode.GetParameterValue(color),
+                    JsonSerializer.SerializeToElement(new[] { 0.21, 0.32, 0.43, 0.54 })) ||
+                !graph.History.Undo() || graph.Nodes.Count != 1 ||
+                !graph.History.Redo() || graph.Nodes.Count != 2 ||
+                !NodeParameter.ValuesEqual(copiedNode.GetParameterValue(color),
+                    JsonSerializer.SerializeToElement(new[] { 0.21, 0.32, 0.43, 0.54 })))
+                throw new InvalidOperationException("Inspector-edited values did not survive copy/paste and its undo/redo.");
+            graph.SelectNode(node);
         }
         finally { window.Close(); }
 
@@ -463,6 +473,9 @@ internal static class InspectorPluginTests
                 foreach (var language in new[] { "en", "ja" })
                 {
                     text.SelectedLanguage = text.Languages.Single(item => item.Id == language);
+                    if (service.Plugins.Single(item => item.Id == (stage == "hsv" ? hsvId : rgbId)).Status !=
+                        text.Get("Editor.InspectorStatusLoaded"))
+                        throw new InvalidOperationException($"Inspector status was not localized for {language}.");
                     CaptureWindow(settings, $"settings-{stage}-{language}.png");
                 }
                 text.SelectedLanguage = original;

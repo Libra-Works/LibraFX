@@ -63,7 +63,7 @@ public sealed class InspectorPluginEntry : ObservableObject
             }
         }
     }
-    public string Status { get => _status; internal set => SetProperty(ref _status, value); }
+    public string Status => StatusKey(_status) is { } key ? LocalizationService.Shared.Get(key) : _status;
     public string ActionLabel => LocalizationService.Shared.Get(
         IsEnabled ? "Editor.InspectorDisable" : IsTrusted ? "Editor.InspectorEnable" : "Editor.InspectorTrustEnable");
     public string TrustHelp => LocalizationService.Shared.Get("Editor.InspectorTrustHelp");
@@ -76,7 +76,29 @@ public sealed class InspectorPluginEntry : ObservableObject
     {
         OnPropertyChanged(nameof(ActionLabel));
         OnPropertyChanged(nameof(TrustHelp));
+        OnPropertyChanged(nameof(Status));
     }
+
+    internal void SetStatus(string status)
+    {
+        _status = status;
+        OnPropertyChanged(nameof(Status));
+    }
+
+    private static string? StatusKey(string status) => status switch
+    {
+        "Enabled for next restart. DLL code runs with the editor user's permissions; no sandbox is provided." =>
+            "Editor.InspectorStatusEnabledRestart",
+        "Enabled for next restart; this new DLL has not been executed." => "Editor.InspectorStatusEnabledNew",
+        "Trusted, disabled. DLL not executed." => "Editor.InspectorStatusTrustedDisabled",
+        "Not trusted or enabled. DLL not executed." => "Editor.InspectorStatusUntrusted",
+        "Enabled preference ignored because this DLL has not been explicitly trusted." =>
+            "Editor.InspectorStatusTrustRequired",
+        "Disabled for next restart." => "Editor.InspectorStatusDisabledRestart",
+        "Trusted and loaded. DLL code runs with the editor user's permissions; no sandbox is provided." =>
+            "Editor.InspectorStatusLoaded",
+        _ => null
+    };
 }
 
 public sealed class InspectorDefaultChoice : ObservableObject
@@ -221,9 +243,9 @@ public sealed class InspectorPluginService : ObservableObject, IDisposable
         _preferences = next;
         entry.IsTrusted = next.Trusted.GetValueOrDefault(pluginId);
         entry.IsEnabled = enabled;
-        entry.Status = enabled
+        entry.SetStatus(enabled
             ? "Enabled for next restart. DLL code runs with the editor user's permissions; no sandbox is provided."
-            : "Disabled for next restart.";
+            : "Disabled for next restart.");
         RefreshDefaultChoices();
         DefaultsChanged?.Invoke(this, EventArgs.Empty);
         RefreshStatus();
@@ -312,9 +334,9 @@ public sealed class InspectorPluginService : ObservableObject, IDisposable
                     IsTrusted = IsTrusted(installed.PluginId, fingerprint),
                     IsEnabled = _preferences.Enabled.GetValueOrDefault(installed.PluginId)
                 };
-                entry.Status = entry.IsEnabled && entry.IsTrusted
+                entry.SetStatus(entry.IsEnabled && entry.IsTrusted
                     ? "Enabled for next restart; this new DLL has not been executed."
-                    : entry.IsTrusted ? "Trusted, disabled. DLL not executed." : "Not trusted or enabled. DLL not executed.";
+                    : entry.IsTrusted ? "Trusted, disabled. DLL not executed." : "Not trusted or enabled. DLL not executed.");
                 Plugins.Add(entry);
             }
             catch
@@ -429,7 +451,7 @@ public sealed class InspectorPluginService : ObservableObject, IDisposable
             foreach (var entry in manifests.Where(entry => entry.Id == duplicate))
             {
                 entry.MarkIdentityConflict();
-                entry.Status = $"Duplicate plugin ID '{duplicate}'; none of these copies will load.";
+                entry.SetStatus($"Duplicate plugin ID '{duplicate}'; none of these copies will load.");
             }
             AddDiagnostic($"Duplicate plugin ID '{duplicate}'.");
         }
@@ -444,25 +466,25 @@ public sealed class InspectorPluginService : ObservableObject, IDisposable
             if (duplicatePlugins.Contains(entry.Id)) continue;
             if (entry.Manifest.CompatibilityError is { } compatibilityError)
             {
-                entry.Status = compatibilityError;
+                entry.SetStatus(compatibilityError);
                 AddDiagnostic($"{entry.Name}: {compatibilityError}");
                 continue;
             }
             if (entry.Manifest.Inspectors.Any(inspector => duplicateInspectors.Contains(InspectorKey(entry.Id, inspector.Id))))
             {
                 entry.MarkIdentityConflict();
-                entry.Status = "Duplicate inspector ID; this plugin is not loaded.";
+                entry.SetStatus("Duplicate inspector ID; this plugin is not loaded.");
                 AddDiagnostic($"{entry.Name}: duplicate inspector ID.");
                 continue;
             }
             if (!entry.IsEnabled)
             {
-                entry.Status = entry.IsTrusted ? "Trusted, disabled. DLL not executed." : "Not trusted or enabled. DLL not executed.";
+                entry.SetStatus(entry.IsTrusted ? "Trusted, disabled. DLL not executed." : "Not trusted or enabled. DLL not executed.");
                 continue;
             }
             if (!entry.IsTrusted)
             {
-                entry.Status = "Enabled preference ignored because this DLL has not been explicitly trusted.";
+                entry.SetStatus("Enabled preference ignored because this DLL has not been explicitly trusted.");
                 AddDiagnostic($"{entry.Name}: enabled but not trusted; DLL not executed.");
                 continue;
             }
@@ -511,12 +533,12 @@ public sealed class InspectorPluginService : ObservableObject, IDisposable
             foreach (var item in pending)
                 _loaded.Add(InspectorKey(plugin.Id, item.Definition.Id), item);
             _loadContexts.Add(loadContext);
-            entry.Status = "Trusted and loaded. DLL code runs with the editor user's permissions; no sandbox is provided.";
+            entry.SetStatus("Trusted and loaded. DLL code runs with the editor user's permissions; no sandbox is provided.");
         }
         catch (Exception ex)
         {
             loadContext?.Unload();
-            entry.Status = $"Load failed: {ex.GetBaseException().Message}";
+            entry.SetStatus($"Load failed: {ex.GetBaseException().Message}");
             AddDiagnostic($"{entry.Name}: {entry.Status}");
         }
     }
