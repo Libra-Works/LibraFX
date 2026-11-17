@@ -50,6 +50,18 @@ Compiler verification
   The -NoLink check is compilation only; it does not validate linking, execution
   or a console SDK. Perform the final Unreal build and execution check with MSVC.
 
+Engine version compatibility
+  Keep one shared plugin source for UE 5.7, 5.8 and 5.9. Use engine version
+  guards only where APIs differ; do not maintain a separate source fork per SDK.
+  Build DLLs separately for each engine version. Do not copy Binaries or
+  Intermediate between versions or build different versions through one link.
+  Use UE 5.7 for routine checks. Repeat the Clang compilation, MSVC linking and
+  affected automation on every supported version at feature/release milestones,
+  or earlier when a change touches a version-specific engine API.
+  The current compatibility changes passed UE 5.7.4 Clang compilation, MSVC
+  Editor linking and the isolated preview scene/grid regression. Full UE 5.8
+  and 5.9 verification is pending; source targeting alone is not tested support.
+
 Import and use
   Convert an editor graph to .lfxb, then import that file into Unreal.
   Add a Libra Effect component to an actor and set its Effect asset.

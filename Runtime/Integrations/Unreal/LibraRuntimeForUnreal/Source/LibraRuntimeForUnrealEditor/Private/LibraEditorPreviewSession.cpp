@@ -54,6 +54,7 @@
 #include "ShaderCompiler.h"
 #include "Misc/PackageName.h"
 #include "Misc/Parse.h"
+#include "Misc/EngineVersionComparison.h"
 #include "Modules/ModuleManager.h"
 #include "PreviewScene.h"
 #include "Widgets/Docking/SDockTab.h"
@@ -77,6 +78,33 @@ namespace
 {
     const FName PreviewTabId(TEXT("LibraFxPreview"));
     const TCHAR* PreviewSettingsSection = TEXT("LibraFxPreview");
+
+    auto& PostEngineInitDelegate()
+    {
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
+        return FCoreDelegates::OnPostEngineInit;
+#else
+        return FCoreDelegates::GetOnPostEngineInit();
+#endif
+    }
+
+    bool IsPreviewGridEnabled(const FAdvancedPreviewScene& scene, const FEditorViewportClient& viewport)
+    {
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
+        return scene.IsGridEnabled();
+#else
+        return viewport.IsSetShowGridChecked();
+#endif
+    }
+
+    void TogglePreviewGrid(FAdvancedPreviewScene& scene, FEditorViewportClient& viewport)
+    {
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
+        scene.HandleToggleGrid();
+#else
+        viewport.SetShowGrid();
+#endif
+    }
 
     int32 CountDockTabs(const TSharedRef<SWidget>& widget)
     {
@@ -417,7 +445,7 @@ void FLibraEditorPreviewSession::Start()
     bPreviewRequested = enabled;
     bOpenRequested = enabled;
     bEngineReady = GIsRunning;
-    postEngineInit = FCoreDelegates::OnPostEngineInit.AddRaw(this, &FLibraEditorPreviewSession::HandlePostEngineInit);
+    postEngineInit = PostEngineInitDelegate().AddRaw(this, &FLibraEditorPreviewSession::HandlePostEngineInit);
     preExit = FCoreDelegates::OnPreExit.AddRaw(this, &FLibraEditorPreviewSession::Stop);
     FGlobalTabmanager::Get()->RegisterNomadTabSpawner(tabId,
         FOnSpawnTab::CreateRaw(this, &FLibraEditorPreviewSession::SpawnPreviewTab))
@@ -636,8 +664,24 @@ TSharedRef<SWidget> FLibraEditorPreviewSession::BuildPreviewContent()
                 ]
                 + SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 16, 0)
                 [
-                    makeToggle(TEXT("Grid"), &FAdvancedPreviewScene::IsGridEnabled,
-                        &FAdvancedPreviewScene::HandleToggleGrid)
+                    SNew(SCheckBox)
+                    .IsChecked_Lambda([this]
+                    {
+                        return previewScene.IsValid() && viewportClient.IsValid() &&
+                            IsPreviewGridEnabled(*previewScene, *viewportClient)
+                            ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+                    })
+                    .OnCheckStateChanged_Lambda([this](ECheckBoxState)
+                    {
+                        if (previewScene.IsValid() && viewportClient.IsValid())
+                        {
+                            TogglePreviewGrid(*previewScene, *viewportClient);
+                            SavePreviewProfile();
+                        }
+                    })
+                    [
+                        SNew(STextBlock).Text(FText::FromString(TEXT("Grid")))
+                    ]
                 ]
                 + SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 16, 0)
                 [
@@ -738,6 +782,11 @@ void FLibraEditorPreviewSession::SavePreviewProfile()
     {
         GConfig->SetString(PreviewSettingsSection, TEXT("ProfileName"), *profile->ProfileName, GEditorPerProjectIni);
         GConfig->SetBool(PreviewSettingsSection, TEXT("SettingsVisible"), bSettingsVisible, GEditorPerProjectIni);
+#if !UE_VERSION_OLDER_THAN(5, 8, 0)
+        if (viewportClient.IsValid())
+            GConfig->SetBool(PreviewSettingsSection, TEXT("GridVisible"),
+                IsPreviewGridEnabled(*previewScene, *viewportClient), GEditorPerProjectIni);
+#endif
         GConfig->Flush(false, GEditorPerProjectIni);
         UAssetViewerSettings::Get()->Save();
     }
@@ -753,7 +802,9 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
         UE_LOG(LogTemp, Display, TEXT("LIBERA FX preview: creating isolated scene."));
         auto userSettings = GetMutableDefault<UEditorPerProjectUserSettings>();
         previousPreviewProfileIndex = userSettings->AssetViewerProfileIndex;
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
         previousPreviewProfileName = userSettings->AssetViewerProfileName;
+#endif
         auto construction = FPreviewScene::ConstructionValues{};
         construction.SetTransactional(false).SetCreatePhysicsScene(false).AllowAudioPlayback(false);
         previewScene = MakeShared<FAdvancedPreviewScene>(construction);
@@ -776,7 +827,9 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
         }
         previewScene->SetProfileIndex(profileIndex);
         userSettings->AssetViewerProfileIndex = profileIndex;
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
         userSettings->AssetViewerProfileName = profileName;
+#endif
         world.Reset(previewScene->GetWorld());
         if (!world.IsValid())
         {
@@ -856,6 +909,11 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
             UE_LOG(LogTemp, Display, TEXT("LIBERA FX preview: transport connected and hello queued."));
         viewportWidget = SNew(SLibraPreviewViewport, previewScene.ToSharedRef(), actor);
         viewportClient = viewportWidget->GetViewportClient();
+#if !UE_VERSION_OLDER_THAN(5, 8, 0)
+        auto gridVisible = viewportClient->IsSetShowGridChecked();
+        GConfig->GetBool(PreviewSettingsSection, TEXT("GridVisible"), gridVisible, GEditorPerProjectIni);
+        viewportClient->EngineShowFlags.SetGrid(gridVisible);
+#endif
         auto& previewModule = FModuleManager::LoadModuleChecked<FAdvancedPreviewSceneModule>(TEXT("AdvancedPreviewScene"));
         previewSettings = previewModule.CreateAdvancedPreviewSceneSettingsWidget(previewScene.ToSharedRef());
         if (auto tab = previewTab.Pin())
@@ -1467,7 +1525,7 @@ void FLibraEditorPreviewSession::Stop()
     UToolMenus::UnregisterOwner(this);
     if (preExit.IsValid()) FCoreDelegates::OnPreExit.Remove(preExit);
     preExit.Reset();
-    if (postEngineInit.IsValid()) FCoreDelegates::OnPostEngineInit.Remove(postEngineInit);
+    if (postEngineInit.IsValid()) PostEngineInitDelegate().Remove(postEngineInit);
     postEngineInit.Reset();
     bPreviewRequested = false;
     bTransportRequested = false;
@@ -1495,7 +1553,9 @@ void FLibraEditorPreviewSession::Stop()
     {
         auto userSettings = GetMutableDefault<UEditorPerProjectUserSettings>();
         userSettings->AssetViewerProfileIndex = previousPreviewProfileIndex;
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
         userSettings->AssetViewerProfileName = previousPreviewProfileName;
+#endif
         previousPreviewProfileIndex = INDEX_NONE;
         previousPreviewProfileName.Reset();
     }
@@ -2021,6 +2081,20 @@ bool FLibraPreviewEmptySceneTest::RunTest(const FString&)
     session.bPreviewRequested = true;
     TestTrue(TEXT("An empty isolated preview initializes without a transport"), session.Tick(0));
     if (!TestTrue(TEXT("Empty preview actor exists"), session.previewActor.IsValid())) { session.Stop(); return false; }
+    auto gridWasEnabled = IsPreviewGridEnabled(*session.previewScene, *session.viewportClient);
+    TogglePreviewGrid(*session.previewScene, *session.viewportClient);
+    session.Tick(0);
+    TestEqual(TEXT("Grid toggle survives preview profile application"),
+        IsPreviewGridEnabled(*session.previewScene, *session.viewportClient), !gridWasEnabled);
+    session.SavePreviewProfile();
+#if !UE_VERSION_OLDER_THAN(5, 8, 0)
+    auto savedGridVisible = gridWasEnabled;
+    TestTrue(TEXT("Viewport-owned grid visibility is persisted"),
+        GConfig->GetBool(PreviewSettingsSection, TEXT("GridVisible"), savedGridVisible, GEditorPerProjectIni));
+    TestEqual(TEXT("Saved grid visibility matches the viewport"), savedGridVisible, !gridWasEnabled);
+#endif
+    TogglePreviewGrid(*session.previewScene, *session.viewportClient);
+    session.SavePreviewProfile();
     auto meshes = TArray<UStaticMeshComponent*>{};
     session.previewActor->GetComponents(meshes);
     TestEqual(TEXT("Empty preview contains no static mesh placeholder"), meshes.Num(), 0);

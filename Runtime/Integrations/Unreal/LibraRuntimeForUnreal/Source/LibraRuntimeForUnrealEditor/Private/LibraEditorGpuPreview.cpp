@@ -143,7 +143,7 @@ bool FLibraEditorGpuPreview::Configure(const FString& json, int64 programSequenc
                 (assetPath != TEXT("builtin:white") && (!FPackageName::IsValidObjectPath(assetPath) ||
                 (!assetPath.StartsWith(TEXT("/Game/")) && !assetPath.StartsWith(TEXT("/Engine/"))))))
                 return fail(TEXT("GPU textures require explicit builtin:white or valid /Game or /Engine object paths."));
-            candidate.resourcePaths.Add(path.Key, assetPath);
+            candidate.resourcePaths.Add(FString(*path.Key), assetPath);
         }
         auto error = FString{};
         candidate.asset.Reset(ULibraGpuEffectAsset::CreateInMemory(actor, Encode(object.ToSharedRef()), error));
