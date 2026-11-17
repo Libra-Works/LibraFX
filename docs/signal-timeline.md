@@ -70,3 +70,24 @@ GPUを含むグラフは、このCPU用Converterでは書き出せません。
 
 キーを含む保存形式はプロジェクト12、Groupアセット5です。
 以前の対応形式も読み込めますが、キーを含むデータを古いバージョンとして偽装すると拒否します。
+
+## エンジン上の回帰確認
+
+専用の隔離プロジェクトと、`--signal-timeline <絶対出力ディレクトリ>` で生成する
+合成データ `Timeline.lfxp`、`ScopedTimeline.lfxp` を使います。
+実ユーザーのプロジェクトや設定では実行しないでください。
+
+- Unity: `LIBERAFX_SIGNAL_TIMELINE_FIXTURES` に出力ディレクトリを指定し、
+  `LiberaFx.Unity.Editor.LiberaFxSignalTimelineVerification.Run` を実行します。
+  Play Modeへ移行し、完了時にEditorを終了するため、非同期実行を途中終了する
+  `-quit` は付けません。インポート、実際のUpdate、プレビューキーの除外、
+  名前付きGame I/O、ネイティブ由来のインスタンスローカルSignal、再開始・停止を確認します。
+- Unreal: `LibraSignalTimelineFixtures=<出力ディレクトリ>` を指定し、
+  Automationの `Libra.Runtime.Spawnable.SignalTimeline` を実行します。
+  組み込みC++ホストの出力イベントと、`ULibraEffectComponent` の
+  Play／Tick／完了／再開始／停止を確認します。
+
+2026-11-17にUnity 7000.0.0a16の実Play ModeとUE5.7で上記を確認しました。
+UEはClang 19.1.5によるコンパイル後、MSVCでリンクしてAutomationを実行しています。
+UEの今回の回帰はNullRHIであり、新しい描画結果のピクセル比較やBlueprintユーザー実装、
+未確認のコンソールSDKまで検証済みとするものではありません。
