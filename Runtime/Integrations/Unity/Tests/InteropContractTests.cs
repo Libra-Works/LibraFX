@@ -121,6 +121,80 @@ namespace LiberaFx.Unity.Tests
             var spawnableFixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_SPAWNABLE_FIXTURE");
             if (!string.IsNullOrEmpty(spawnableFixture))
                 VerifySpawnableHost(spawnableFixture);
+            var payloadFixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_SPAWNABLE_PAYLOAD_FIXTURE");
+            if (!string.IsNullOrEmpty(payloadFixture))
+                VerifyPackagePayloadFixtures(payloadFixture);
+            var gameIoFixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_GAMEIO_FIXTURE");
+            if (!string.IsNullOrEmpty(gameIoFixture))
+                VerifyGameIoPortNames(gameIoFixture);
+        }
+
+        private static unsafe void VerifyGameIoPortNames(string fixture)
+        {
+            var packageBytes = File.ReadAllBytes(fixture);
+            VerifyRawGameIoNameAbi(packageBytes);
+            using (var host = new NativeSpawnableHost(packageBytes))
+            {
+                Assert(host.GetGameIoPortName(0, out var position) == NativeResult.Ok && position == "position");
+                Assert(host.GetGameIoPortName(1, out var spawn) == NativeResult.Ok && spawn == "spawn");
+                Assert(host.GetGameIoPortName(2, out var echo) == NativeResult.Ok && echo == "echo");
+                Assert(host.GetGameIoPortName(3, out _) == NativeResult.InvalidArgument);
+
+                Assert(host.SetGameProperty("position", new[] { 2.0 }) == NativeResult.Ok);
+                Assert(host.Advance(0, 0) == NativeResult.Ok);
+                var sawEcho = false;
+                while (host.PopGameIoEvent(out var gameIoEvent) == NativeResult.Ok && gameIoEvent != null)
+                    sawEcho |= gameIoEvent.PortIndex == 2 && gameIoEvent.PortName == "echo" &&
+                        gameIoEvent.Values[0] == 2.0;
+                Assert(sawEcho);
+            }
+        }
+
+        private static unsafe void VerifyRawGameIoNameAbi(byte[] packageBytes)
+        {
+            ulong host = 0;
+            fixed (byte* package = packageBytes)
+                Assert(Native.libra_spawnable_host_create(package, (ulong)packageBytes.LongLength,
+                    32, 4 * 1024 * 1024, 128, 10000, out host) == NativeResult.Ok && host != 0);
+
+            try
+            {
+                Assert(Native.libra_spawnable_host_copy_game_io_port_name(
+                    host, 0, null, 0, out var required) == NativeResult.Ok && required == 8);
+
+                Assert(Native.libra_spawnable_host_copy_game_io_port_name(
+                    host, 0, null, 1, out var mismatchCount) == NativeResult.InvalidArgument &&
+                    mismatchCount == 0);
+
+                var shortBuffer = new byte[7];
+                for (var index = 0; index < shortBuffer.Length; ++index) shortBuffer[index] = 0xa5;
+                fixed (byte* destination = shortBuffer)
+                    Assert(Native.libra_spawnable_host_copy_game_io_port_name(
+                        host, 0, destination, (ulong)shortBuffer.Length, out var shortCount) ==
+                        NativeResult.InsufficientWork && shortCount == 8);
+                foreach (var value in shortBuffer) Assert(value == 0xa5);
+
+                var exactBuffer = new byte[8];
+                fixed (byte* destination = exactBuffer)
+                    Assert(Native.libra_spawnable_host_copy_game_io_port_name(
+                        host, 0, destination, (ulong)exactBuffer.Length, out var copied) ==
+                        NativeResult.Ok && copied == 8);
+                Assert(System.Text.Encoding.UTF8.GetString(exactBuffer) == "position");
+                Assert(Native.libra_spawnable_host_copy_game_io_port_name(
+                    host, 3, null, 0, out var invalidIndexCount) == NativeResult.InvalidArgument &&
+                    invalidIndexCount == 0);
+
+                var staleHost = host;
+                Assert(Native.libra_spawnable_host_release(host) == NativeResult.Ok);
+                host = 0;
+                Assert(Native.libra_spawnable_host_copy_game_io_port_name(
+                    staleHost, 0, null, 0, out var staleCount) == NativeResult.InvalidHandle &&
+                    staleCount == 0);
+            }
+            finally
+            {
+                if (host != 0) Native.libra_spawnable_host_release(host);
+            }
         }
 
         private static void VerifySpawnableHost(string fixture)
@@ -132,7 +206,8 @@ namespace LiberaFx.Unity.Tests
             VerifyTemplatePayloads(bytes);
             VerifyTemplatePayloadBuffers(bytes);
             VerifyRootPayloads(bytes);
-            foreach (var suffix in new[] { ".legacy.lfxp", ".root.lfxp" })
+            foreach (var suffix in new[] { ".legacy.lfxp", ".legacy-v2.lfxp", ".root.lfxp",
+                         ".gpu-programs.lfxp", ".adapter.lfxp", ".adapter-gpu.lfxp" })
             {
                 var additional = Path.ChangeExtension(fixture, suffix);
                 if (File.Exists(additional)) VerifyRootPayloads(File.ReadAllBytes(additional));
@@ -187,6 +262,9 @@ namespace LiberaFx.Unity.Tests
                         out owned) == NativeResult.Ok && owned[0] == first);
                     Assert(host.GetTemplatePayload(id, SpawnableTemplatePayloadKind.GpuContainers,
                         out var gpu) == NativeResult.Ok && System.Text.Encoding.UTF8.GetString(gpu) == "[]");
+                    Assert(host.GetTemplatePayload(id, SpawnableTemplatePayloadKind.GpuPrograms,
+                        out var programs) == NativeResult.Ok &&
+                        System.Text.Encoding.UTF8.GetString(programs).StartsWith("{\"version\":1,\"programs\":[]}", StringComparison.Ordinal));
                     Assert(host.GetTemplatePayload(id, (SpawnableTemplatePayloadKind)99, out _) ==
                         NativeResult.InvalidArgument);
                 }
@@ -240,18 +318,98 @@ namespace LiberaFx.Unity.Tests
                 NativeResult.InvalidHandle && staleCount == 0);
         }
 
+        private static void VerifyPackagePayloadFixtures(string fixture)
+        {
+            VerifyPackagePayloads(File.ReadAllBytes(fixture));
+            foreach (var suffix in new[] { ".legacy.lfxp", ".legacy-v2.lfxp", ".gpu-programs.lfxp",
+                         ".adapter.lfxp", ".adapter-gpu.lfxp", ".gpu.lfxp" })
+            {
+                var additional = Path.ChangeExtension(fixture, suffix);
+                if (File.Exists(additional)) VerifyPackagePayloads(File.ReadAllBytes(additional));
+            }
+        }
+
+        private static unsafe void VerifyPackagePayloads(byte[] bytes)
+        {
+            using (var host = new NativeSpawnableHost(bytes))
+            {
+                Assert(host.GetTemplateCount(out var count) == NativeResult.Ok && count > 0);
+                for (ulong index = 0; index < count; ++index)
+                {
+                    Assert(host.GetTemplateId(index, out var id) == NativeResult.Ok);
+                    Assert(host.GetTemplatePayload(id, SpawnableTemplatePayloadKind.GpuPrograms,
+                        out var programs) == NativeResult.Ok);
+                    if (bytes[4] < 3) Assert(programs.Length == 0);
+                    else
+                    {
+                        var json = System.Text.Encoding.UTF8.GetString(programs);
+                        Assert(json.Contains("\"version\":1", StringComparison.Ordinal) &&
+                            json.Contains("\"programs\":[", StringComparison.Ordinal));
+                    }
+                }
+                Assert(host.GetRootPayload(SpawnableTemplatePayloadKind.GpuPrograms, out var rootPrograms) ==
+                    NativeResult.Ok);
+                if (bytes[4] < 3) Assert(rootPrograms.Length == 0);
+                else
+                {
+                    var json = System.Text.Encoding.UTF8.GetString(rootPrograms);
+                    Assert(json.Contains("\"version\":1", StringComparison.Ordinal) &&
+                        json.Contains("\"programs\":[", StringComparison.Ordinal));
+                }
+            }
+
+            ulong handle;
+            fixed (byte* source = bytes)
+                Assert(Native.libra_spawnable_host_create(source, (ulong)bytes.Length,
+                    32, 4 * 1024 * 1024, 128, 10000, out handle) == NativeResult.Ok);
+            try
+            {
+                var id = new byte[16];
+                fixed (byte* container = id)
+                {
+                    Assert(Native.libra_spawnable_host_template_id(handle, 0, container) == NativeResult.Ok);
+                    Assert(Native.libra_spawnable_host_copy_template_payload(handle, container,
+                        SpawnableTemplatePayloadKind.GpuPrograms, null, 0, out var required) == NativeResult.Ok);
+                    if (required != 0)
+                    {
+                        var copied = new byte[checked((int)required)];
+                        fixed (byte* destination = copied)
+                            Assert(Native.libra_spawnable_host_copy_template_payload(handle, container,
+                                SpawnableTemplatePayloadKind.GpuPrograms, destination, required,
+                                out var actual) == NativeResult.Ok && actual == required && copied[0] == '{');
+                    }
+                }
+                Assert(Native.libra_spawnable_host_copy_root_payload(handle,
+                    SpawnableTemplatePayloadKind.GpuPrograms, null, 0, out var rootRequired) == NativeResult.Ok);
+                if (rootRequired != 0)
+                {
+                    var copiedRoot = new byte[checked((int)rootRequired)];
+                    fixed (byte* destination = copiedRoot)
+                        Assert(Native.libra_spawnable_host_copy_root_payload(handle,
+                            SpawnableTemplatePayloadKind.GpuPrograms, destination, rootRequired,
+                            out var actual) == NativeResult.Ok && actual == rootRequired && copiedRoot[0] == '{');
+                }
+            }
+            finally { Assert(Native.libra_spawnable_host_release(handle) == NativeResult.Ok); }
+        }
+
         private static unsafe void VerifyRootPayloads(byte[] bytes)
         {
             var legacy = bytes[4] == 1;
             using (var host = new NativeSpawnableHost(bytes))
             {
                 foreach (var kind in new[] { SpawnableTemplatePayloadKind.RenderConfiguration,
-                    SpawnableTemplatePayloadKind.GpuContainers })
+                    SpawnableTemplatePayloadKind.GpuContainers, SpawnableTemplatePayloadKind.GpuPrograms })
                 {
                     Assert(host.GetRootPayload(kind, out var owned) == NativeResult.Ok);
-                    Assert(legacy ? owned.Length == 0 : owned.Length > 0);
+                    Assert((bytes[4] == 1 ||
+                            (bytes[4] == 2 && kind == SpawnableTemplatePayloadKind.GpuPrograms))
+                        ? owned.Length == 0 : owned.Length > 0);
                     if (owned.Length == 0) continue;
-                    Assert(owned[0] == (kind == SpawnableTemplatePayloadKind.RenderConfiguration ? '{' : '['));
+                    var expectedStart = kind == SpawnableTemplatePayloadKind.GpuContainers ? '[' : '{';
+                    Assert(owned[0] == expectedStart);
+                    if (kind == SpawnableTemplatePayloadKind.GpuPrograms)
+                        Assert(System.Text.Encoding.UTF8.GetString(owned).Contains("\"programs\"", StringComparison.Ordinal));
                     var first = owned[0];
                     owned[0] ^= 0xff;
                     Assert(host.GetRootPayload(kind, out var second) == NativeResult.Ok && second[0] == first);

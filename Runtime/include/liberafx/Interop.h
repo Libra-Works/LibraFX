@@ -450,13 +450,21 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_next_event
     LibraSpawnableHostHandle host, LibraSpawnableHostEvent* outEvent, uint32_t* hasEvent);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_next_game_io_event(
     LibraSpawnableHostHandle host, LibraGameIoEventV2* outEvent, uint32_t* hasEvent);
+/* Copies a root Game I/O port name as strict UTF-8 without a trailing NUL.
+   Query with destination=NULL/capacity=0; short buffers are left unchanged and
+   return INSUFFICIENT_WORK with the required byte count. Invalid indices return
+   INVALID_ARGUMENT. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_copy_game_io_port_name(
+    LibraSpawnableHostHandle host, uint32_t index, uint8_t* destination,
+    uint64_t capacity, uint64_t* outByteCount);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_active_count(
     LibraSpawnableHostHandle host, uint64_t* outCount);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_root_finished(
     LibraSpawnableHostHandle host, uint32_t* outFinished);
 enum {
     LIBRA_SPAWNABLE_RENDER_CONFIGURATION = 0,
-    LIBRA_SPAWNABLE_GPU_CONTAINERS = 1
+    LIBRA_SPAWNABLE_GPU_CONTAINERS = 1,
+    LIBRA_SPAWNABLE_GPU_PROGRAMS = 2
 };
 /* Immutable template metadata is available before advance and after stop.
    IDs use compiler big-endian byte order. Payloads are opaque bytes, without

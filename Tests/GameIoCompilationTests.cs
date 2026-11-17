@@ -63,6 +63,12 @@ public static class GameIoCompilationTests
         Require(package.GameIoPorts.Select(PortShape).SequenceEqual(program.GameIoPorts.Select(PortShape)) &&
                 BinaryPrimitives.ReadUInt16LittleEndian(package.ParentBytecode.AsSpan(4)) == 7,
             "Spawnable package output must preserve root Game I/O metadata.");
+        var spawnableDefinition = GraphNodeDefinition.All.Single(item => item.Kind == GraphNodeKind.SpawnableGroup);
+        var templateWithGameIo = new GraphNodeSnapshot(Guid.NewGuid(), spawnableDefinition.Kind,
+            spawnableDefinition.Name, 0, 0, spawnableDefinition.PortType, spawnableDefinition.PortCategory,
+            ChildGraph: new GraphSnapshot([inputProperty], []));
+        RequireInvalidMessage(() => SpawnableGroupPackage.Compile(new GraphSnapshot([templateWithGameIo], [])),
+            "Spawn Input/Output", "Named Game I/O inside a Spawnable template must be rejected with guidance.");
         VerifyMatrixPorts();
 
         var duplicate = graph with
@@ -148,5 +154,12 @@ public static class GameIoCompilationTests
         try { action(); }
         catch (InvalidDataException) { return; }
         throw new InvalidOperationException(message);
+    }
+
+    private static void RequireInvalidMessage(Action action, string expectedMessage, string failureMessage)
+    {
+        try { action(); }
+        catch (InvalidDataException ex) when (ex.Message.Contains(expectedMessage, StringComparison.Ordinal)) { return; }
+        throw new InvalidOperationException(failureMessage);
     }
 }

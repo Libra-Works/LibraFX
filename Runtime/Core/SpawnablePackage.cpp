@@ -272,7 +272,8 @@ auto loadSpawnablePackage(const std::uint8_t* bytes, std::size_t byteCount,
         totalLength != byteCount || reserved != 0)
         return Result::InvalidBinary;
     if (!((formatVersion == 1 && packageVersion == 9) ||
-          (formatVersion == 2 && packageVersion == 10)))
+          (formatVersion == 2 && packageVersion == 10) ||
+          (formatVersion == 3 && packageVersion == 11)))
         return Result::UnsupportedBinary;
 
     try {
@@ -331,6 +332,15 @@ auto loadSpawnablePackage(const std::uint8_t* bytes, std::size_t byteCount,
              !reader.readBlob(package.rootGpuContainersJson) ||
              !validUtf8(package.rootGpuContainersJson.data(), package.rootGpuContainersJson.size())))
             return Result::InvalidBinary;
+        if (formatVersion >= 3) {
+            if (!reader.readBlob(package.rootGpuProgramsJson) ||
+                !validUtf8(package.rootGpuProgramsJson.data(), package.rootGpuProgramsJson.size()))
+                return Result::InvalidBinary;
+            for (auto& item : package.templates)
+                if (!reader.readBlob(item.gpuProgramsJson) ||
+                    !validUtf8(item.gpuProgramsJson.data(), item.gpuProgramsJson.size()))
+                    return Result::InvalidBinary;
+        }
         if (reader.remaining() != 0) return Result::InvalidBinary;
         out = std::move(package);
         return Result::Ok;

@@ -1393,6 +1393,27 @@ LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_next_game_io_event(
     });
 }
 
+LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_copy_game_io_port_name(
+    LibraSpawnableHostHandle host, uint32_t index, uint8_t* destination,
+    uint64_t capacity, uint64_t* outByteCount)
+{
+    if (!outByteCount) return LIBRA_INVALID_ARGUMENT;
+    *outByteCount = 0;
+    if (!destination && capacity != 0) return LIBRA_INVALID_ARGUMENT;
+    return guarded([&]() -> LibraResult {
+        auto native = findSpawnableHost(host);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        const auto& ports = native->package().gameIoPorts;
+        if (index >= ports.size()) return LIBRA_INVALID_ARGUMENT;
+        const auto& name = ports[index].name;
+        *outByteCount = name.size();
+        if (!destination) return LIBRA_OK;
+        if (capacity < name.size()) return LIBRA_INSUFFICIENT_WORK;
+        if (!name.empty()) std::memcpy(destination, name.data(), name.size());
+        return LIBRA_OK;
+    });
+}
+
 LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_active_count(
     LibraSpawnableHostHandle host, uint64_t* outCount)
 {
@@ -1454,7 +1475,8 @@ LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_copy_template_payload(
     if (!outByteCount) return LIBRA_INVALID_ARGUMENT;
     *outByteCount = 0;
     if (!containerId || (!destination && capacity != 0) ||
-        (kind != LIBRA_SPAWNABLE_RENDER_CONFIGURATION && kind != LIBRA_SPAWNABLE_GPU_CONTAINERS))
+        (kind != LIBRA_SPAWNABLE_RENDER_CONFIGURATION && kind != LIBRA_SPAWNABLE_GPU_CONTAINERS &&
+         kind != LIBRA_SPAWNABLE_GPU_PROGRAMS))
         return LIBRA_INVALID_ARGUMENT;
     return guarded([&]() -> LibraResult {
         auto native = findSpawnableHost(host);
@@ -1465,7 +1487,8 @@ LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_copy_template_payload(
         });
         if (found == templates.end()) return LIBRA_NODE_NOT_FOUND;
         const auto& payload = kind == LIBRA_SPAWNABLE_RENDER_CONFIGURATION
-            ? found->renderConfiguration : found->gpuContainersJson;
+            ? found->renderConfiguration : kind == LIBRA_SPAWNABLE_GPU_CONTAINERS
+                ? found->gpuContainersJson : found->gpuProgramsJson;
         *outByteCount = payload.size();
         if (!destination) return LIBRA_OK;
         if (capacity < payload.size()) return LIBRA_INSUFFICIENT_WORK;
@@ -1481,13 +1504,15 @@ LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_copy_root_payload(
     if (!outByteCount) return LIBRA_INVALID_ARGUMENT;
     *outByteCount = 0;
     if ((!destination && capacity != 0) ||
-        (kind != LIBRA_SPAWNABLE_RENDER_CONFIGURATION && kind != LIBRA_SPAWNABLE_GPU_CONTAINERS))
+        (kind != LIBRA_SPAWNABLE_RENDER_CONFIGURATION && kind != LIBRA_SPAWNABLE_GPU_CONTAINERS &&
+         kind != LIBRA_SPAWNABLE_GPU_PROGRAMS))
         return LIBRA_INVALID_ARGUMENT;
     return guarded([&]() -> LibraResult {
         auto native = findSpawnableHost(host);
         if (!native) return LIBRA_INVALID_HANDLE;
         const auto& payload = kind == LIBRA_SPAWNABLE_RENDER_CONFIGURATION
-            ? native->package().rootRenderConfiguration : native->package().rootGpuContainersJson;
+            ? native->package().rootRenderConfiguration : kind == LIBRA_SPAWNABLE_GPU_CONTAINERS
+                ? native->package().rootGpuContainersJson : native->package().rootGpuProgramsJson;
         *outByteCount = payload.size();
         if (!destination) return LIBRA_OK;
         if (capacity < payload.size()) return LIBRA_INSUFFICIENT_WORK;

@@ -7,13 +7,14 @@ namespace LiberaFx.Services.Compilation;
 
 public static class SpawnableGroupPackageBinary
 {
-    private const ushort FormatVersion = 2;
+    private const ushort FormatVersion = 3;
     private const ushort HeaderSize = 24;
     private const int MaximumPackageBytes = 512 * 1024 * 1024;
     private const int MaximumBlobBytes = 256 * 1024 * 1024;
     private const int MaximumMetadataItems = 100_000;
     private static readonly byte[] Magic = "LFXP"u8.ToArray();
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
+    private static readonly byte[] EmptyGpuPrograms = "{\"version\":1,\"programs\":[]}"u8.ToArray();
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         Converters = { new JsonStringEnumConverter() }
@@ -64,6 +65,9 @@ public static class SpawnableGroupPackageBinary
         }
         WriteBlob(writer, package.RootRenderConfiguration);
         WriteBlob(writer, JsonSerializer.SerializeToUtf8Bytes(package.RootGpuContainers, JsonOptions));
+        WriteGpuPrograms(writer, package.RootGpuPrograms);
+        foreach (var template in package.Templates)
+            WriteGpuPrograms(writer, template.GpuPrograms);
 
         writer.Flush();
         if (stream.Length > MaximumPackageBytes)
@@ -91,12 +95,14 @@ public static class SpawnableGroupPackageBinary
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
         _ = reader.ReadBytes(4);
         var formatVersion = reader.ReadUInt16();
-        if (formatVersion is not (1 or FormatVersion) || reader.ReadUInt16() != HeaderSize)
+        if (formatVersion is not (1 or 2 or FormatVersion) || reader.ReadUInt16() != HeaderSize)
             throw new InvalidDataException("Unsupported Spawnable binary package format.");
         if (reader.ReadInt64() != bytes.Length)
             throw new InvalidDataException("Spawnable binary package length mismatch.");
         var packageVersion = reader.ReadInt32();
-        if ((formatVersion == 1 ? packageVersion != 9 : packageVersion != SpawnableGroupPackage.FormatVersion) ||
+        if ((formatVersion == 1 ? packageVersion != 9 :
+             formatVersion == 2 ? packageVersion != 10 :
+             packageVersion != SpawnableGroupPackage.FormatVersion) ||
             reader.ReadUInt32() != 0)
             throw new InvalidDataException("Unsupported or malformed Spawnable package metadata.");
 
@@ -129,6 +135,10 @@ public static class SpawnableGroupPackageBinary
         var rootGpuContainers = formatVersion == 1 ? [] :
             JsonSerializer.Deserialize<GraphNodeSnapshot[]>(ReadBlob(reader), JsonOptions)
                 ?? throw new InvalidDataException("Invalid root GPU container metadata.");
+        var rootGpuPrograms = formatVersion < 3 ? [] : ReadGpuPrograms(reader);
+        if (formatVersion == 3)
+            for (var index = 0; index < templates.Length; index++)
+                templates[index] = templates[index] with { GpuPrograms = ReadGpuPrograms(reader) };
         if (stream.Position != stream.Length)
             throw new InvalidDataException("Unexpected trailing data in Spawnable binary package.");
         return new(parentBytecode, Array.AsReadOnly(templates))
@@ -142,7 +152,8 @@ public static class SpawnableGroupPackageBinary
             DestroyRoutes = Array.AsReadOnly(destroyRoutes),
             SignalRoutes = Array.AsReadOnly(signalRoutes),
             RootRenderConfiguration = rootRenderConfiguration,
-            RootGpuContainers = Array.AsReadOnly(rootGpuContainers)
+            RootGpuContainers = Array.AsReadOnly(rootGpuContainers),
+            RootGpuPrograms = rootGpuPrograms
         };
     }
 
@@ -341,6 +352,28 @@ public static class SpawnableGroupPackageBinary
             throw new InvalidDataException("Spawnable binary package blob exceeds the size limit.");
         writer.Write(bytes.Length);
         writer.Write(bytes);
+    }
+
+    private static void WriteGpuPrograms(BinaryWriter writer, byte[] bytes)
+    {
+        ArgumentNullException.ThrowIfNull(bytes);
+        try { _ = StrictUtf8.GetCharCount(bytes); }
+        catch (DecoderFallbackException ex)
+        {
+            throw new InvalidDataException("Invalid UTF-8 in GPU executable payload.", ex);
+        }
+        WriteBlob(writer, bytes.Length == 0 ? EmptyGpuPrograms : bytes);
+    }
+
+    private static byte[] ReadGpuPrograms(BinaryReader reader)
+    {
+        var bytes = ReadBlob(reader);
+        try { _ = StrictUtf8.GetCharCount(bytes); }
+        catch (DecoderFallbackException ex)
+        {
+            throw new InvalidDataException("Invalid UTF-8 in GPU executable payload.", ex);
+        }
+        return bytes;
     }
 
     private static byte[] ReadBlob(BinaryReader reader)

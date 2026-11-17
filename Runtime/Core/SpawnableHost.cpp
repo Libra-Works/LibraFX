@@ -350,6 +350,7 @@ auto SpawnableHost::Impl::initialize() -> Result
         state->data = &data;
         result = loadProgram(data.bytecode, nullptr, 0, state->bindings, state->program);
         if (result != Result::Ok) return result;
+        if (state->program.gameIoPortCount() != 0) return Result::InvalidBinary;
 
         auto maxCaptureLanes = std::size_t{16};
         const auto extended = data.inputs.size() > 4 ||

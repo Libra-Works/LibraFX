@@ -51,6 +51,7 @@ struct SpawnablePackageTemplate final {
     std::vector<std::uint8_t> bytecode;
     std::vector<std::uint8_t> renderConfiguration;
     std::vector<std::uint8_t> gpuContainersJson;
+    std::vector<std::uint8_t> gpuProgramsJson;
     std::vector<SpawnablePackageInput> inputs;
     std::optional<std::vector<SpawnablePackageOutput>> outputs;
     std::optional<std::vector<SpawnablePackageCapture>> liveInputs;
@@ -93,6 +94,7 @@ struct SpawnablePackage final {
     std::vector<std::uint8_t> parentBytecode;
     std::vector<std::uint8_t> rootRenderConfiguration;
     std::vector<std::uint8_t> rootGpuContainersJson;
+    std::vector<std::uint8_t> rootGpuProgramsJson;
     std::vector<SpawnablePackageTemplate> templates;
     std::vector<SpawnablePackageDestroyRoute> destroyRoutes;
     std::vector<SpawnablePackageSignalRoute> signalRoutes;

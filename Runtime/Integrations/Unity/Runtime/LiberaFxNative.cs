@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace LiberaFx.Unity
 {
@@ -14,7 +16,7 @@ namespace LiberaFx.Unity
 
     public enum SpawnableTemplatePayloadKind : uint
     {
-        RenderConfiguration, GpuContainers
+        RenderConfiguration, GpuContainers, GpuPrograms = 2
     }
 
     [StructLayout(LayoutKind.Explicit, Pack = 8, Size = 40)]
@@ -88,17 +90,19 @@ namespace LiberaFx.Unity
         public byte[] ContainerId { get; }
         public ulong InstanceId { get; }
         public uint PortIndex { get; }
+        public string PortName { get; }
         public byte Kind { get; }
         public byte Width { get; }
         public bool IsColor { get; }
         public double[] Values { get; }
 
         internal GameIoEvent(byte[] containerId, ulong instanceId, uint portIndex,
-            byte kind, byte width, bool isColor, double[] values)
+            byte kind, byte width, bool isColor, double[] values, string portName = null)
         {
             ContainerId = containerId;
             InstanceId = instanceId;
             PortIndex = portIndex;
+            PortName = portName;
             Kind = kind;
             Width = width;
             IsColor = isColor;
@@ -269,6 +273,9 @@ namespace LiberaFx.Unity
         internal static extern NativeResult libra_spawnable_host_next_game_io_event(
             ulong host, out NativeGameIoEvent value, out uint hasEvent);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_copy_game_io_port_name(
+            ulong host, uint index, byte* destination, ulong capacity, out ulong count);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_active_count(ulong host, out ulong count);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_root_finished(ulong host, out uint finished);
@@ -345,7 +352,9 @@ namespace LiberaFx.Unity
 
             public class NativeSpawnableHostBase : IDisposable
             {
+                private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
                 private ulong handle;
+                private readonly Dictionary<uint, string> gameIoPortNames = new Dictionary<uint, string>();
                 public NativeSpawnableHostBase(byte[] compiledPackage, uint maxActivePerTemplate = 32,
                     ulong memoryBudgetBytesPerTemplate = 4 * 1024 * 1024, uint eventCapacity = 128,
                     uint instructionBudget = 10000)
@@ -451,6 +460,12 @@ namespace LiberaFx.Unity
                     var result = Native.libra_spawnable_host_next_game_io_event(Alive, out var item, out var has);
                     if (result != NativeResult.Ok) { value = null; return result; }
                     if (has == 0) { value = null; return NativeResult.Ok; }
+                    if (!gameIoPortNames.TryGetValue(item.PortIndex, out var portName))
+                    {
+                        result = GetGameIoPortName(item.PortIndex, out portName);
+                        if (result != NativeResult.Ok) { value = null; return result; }
+                        gameIoPortNames.Add(item.PortIndex, portName);
+                    }
                     var container = new byte[16];
                     var lanes = new double[16];
                     byte* containerSource = item.ContainerId;
@@ -460,7 +475,25 @@ namespace LiberaFx.Unity
                     fixed (double* destination = lanes)
                         Buffer.MemoryCopy(valuesSource, destination, 16 * sizeof(double), 16 * sizeof(double));
                     value = new GameIoEvent(container, item.InstanceId, item.PortIndex,
-                        item.Kind, item.Width, item.IsColor != 0, lanes);
+                        item.Kind, item.Width, item.IsColor != 0, lanes, portName);
+                    return NativeResult.Ok;
+                }
+
+                public NativeResult GetGameIoPortName(uint index, out string name)
+                {
+                    name = null;
+                    var current = Alive;
+                    var result = Native.libra_spawnable_host_copy_game_io_port_name(
+                        current, index, null, 0, out var byteCount);
+                    if (result != NativeResult.Ok) return result;
+                    if (byteCount > int.MaxValue) return NativeResult.OutOfMemory;
+                    var bytes = new byte[(int)byteCount];
+                    fixed (byte* destination = bytes)
+                        result = Native.libra_spawnable_host_copy_game_io_port_name(
+                            current, index, destination, byteCount, out byteCount);
+                    if (result != NativeResult.Ok) return result;
+                    try { name = StrictUtf8.GetString(bytes); }
+                    catch (DecoderFallbackException) { return NativeResult.InvalidBinary; }
                     return NativeResult.Ok;
                 }
 

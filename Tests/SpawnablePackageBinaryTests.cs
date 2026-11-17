@@ -9,6 +9,8 @@ using LiberaFx.ViewModels;
 
 internal static class SpawnablePackageBinaryTests
 {
+    private static readonly byte[] EmptyGpuPrograms = "{\"version\":1,\"programs\":[]}"u8.ToArray();
+
     public static void Run(string outputPath)
     {
         var package = SpawnableGroupPackage.Compile(FireworksSample.Create());
@@ -17,18 +19,39 @@ internal static class SpawnablePackageBinaryTests
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         File.WriteAllBytes(outputPath, binary);
         File.WriteAllBytes(Path.ChangeExtension(outputPath, ".metadata.lfxp"), Verify(CreateMetadataFixture()));
-        File.WriteAllBytes(Path.ChangeExtension(outputPath, ".legacy.lfxp"), VerifyLegacy(package));
+        File.WriteAllBytes(Path.ChangeExtension(outputPath, ".legacy.lfxp"), VerifyLegacyV1(package));
+        File.WriteAllBytes(Path.ChangeExtension(outputPath, ".legacy-v2.lfxp"), VerifyLegacyV2(package));
         File.WriteAllBytes(Path.ChangeExtension(outputPath, ".root.lfxp"), VerifyRootPayloads());
-        Console.WriteLine($"Portable Spawnable package v2 root payloads and v1 compatibility passed ({binary.Length} bytes).");
+        File.WriteAllBytes(Path.ChangeExtension(outputPath, ".gpu-programs.lfxp"), VerifyGpuPrograms());
+        var adapter = CreateAdapterFixture(includeGpu: false);
+        File.WriteAllBytes(Path.ChangeExtension(outputPath, ".adapter.lfxp"), Verify(adapter.Package));
+        File.WriteAllBytes(Path.ChangeExtension(outputPath, ".adapter.ids.json"), adapter.Identities);
+        var adapterGpu = CreateAdapterFixture(includeGpu: true);
+        File.WriteAllBytes(Path.ChangeExtension(outputPath, ".adapter-gpu.lfxp"), Verify(adapterGpu.Package));
+        File.WriteAllBytes(Path.ChangeExtension(outputPath, ".adapter-gpu.ids.json"), adapterGpu.Identities);
+        var gpuSpawnable = CreateGpuSpawnableFixture();
+        File.WriteAllBytes(Path.ChangeExtension(outputPath, ".gpu.lfxp"), Verify(gpuSpawnable.Package));
+        File.WriteAllBytes(Path.ChangeExtension(outputPath, ".gpu.ids.json"), gpuSpawnable.Identities);
+        File.WriteAllBytes(Path.ChangeExtension(outputPath, ".template-gameio.lfxp"), CreateTemplateGameIoFixture());
+        Console.WriteLine($"Portable Spawnable package v3 executable GPU payloads and v1/v2 compatibility passed ({binary.Length} bytes).");
     }
 
     public static byte[] Verify(SpawnableGroupPackage package)
     {
         var binary = SpawnableGroupPackageBinary.Serialize(package);
-        Require(binary.AsSpan(0, 4).SequenceEqual("LFXP"u8), "Portable package signature missing.");
+        Require(binary.AsSpan(0, 4).SequenceEqual("LFXP"u8) &&
+            BinaryPrimitives.ReadUInt16LittleEndian(binary.AsSpan(4)) == 3 &&
+            BinaryPrimitives.ReadUInt32LittleEndian(binary.AsSpan(16)) == 11,
+            "Current writer must emit LFXP container/package version 3/11.");
+        using (var emptyRootPrograms = JsonDocument.Parse(package.RootGpuPrograms.Length == 0
+                   ? EmptyGpuPrograms : package.RootGpuPrograms))
+            Require(emptyRootPrograms.RootElement.GetProperty("version").GetInt32() == 1 &&
+                emptyRootPrograms.RootElement.GetProperty("programs").ValueKind == JsonValueKind.Array,
+                "Current package root executable GPU payload must use the versioned schema.");
         var decoded = SpawnableGroupPackageBinary.Deserialize(binary);
         Require(decoded.ParentBytecode.SequenceEqual(package.ParentBytecode) &&
             decoded.RootRenderConfiguration.SequenceEqual(package.RootRenderConfiguration) &&
+            decoded.RootGpuPrograms.SequenceEqual(EffectiveGpuPrograms(package.RootGpuPrograms)) &&
             JsonSerializer.SerializeToUtf8Bytes(decoded.RootGpuContainers)
                 .SequenceEqual(JsonSerializer.SerializeToUtf8Bytes(package.RootGpuContainers)) &&
             decoded.AutoDestroyWhenIdle == package.AutoDestroyWhenIdle &&
@@ -42,6 +65,7 @@ internal static class SpawnablePackageBinaryTests
                 pair.First.SignalTypeId == pair.Second.SignalTypeId &&
                 pair.First.Bytecode.SequenceEqual(pair.Second.Bytecode) &&
                 pair.First.RenderConfiguration.SequenceEqual(pair.Second.RenderConfiguration) &&
+                pair.First.GpuPrograms.SequenceEqual(EffectiveGpuPrograms(pair.Second.GpuPrograms)) &&
                 pair.First.Inputs.SequenceEqual(pair.Second.Inputs) &&
                 SameOptional(pair.First.Outputs, pair.Second.Outputs) &&
                 SameOptional(pair.First.LiveInputs, pair.Second.LiveInputs) &&
@@ -71,32 +95,63 @@ internal static class SpawnablePackageBinaryTests
         var invalidBoolean = binary.ToArray();
         invalidBoolean[24] = 2;
         Reject(() => SpawnableGroupPackageBinary.Deserialize(invalidBoolean), "invalid portable package boolean");
-        var invalidRootGpu = binary.ToArray();
-        invalidRootGpu[^1] = 0xff;
-        Reject(() => SpawnableGroupPackageBinary.Deserialize(invalidRootGpu), "invalid root GPU JSON");
+        var invalidRootPrograms = binary.ToArray();
+        invalidRootPrograms[RootGpuProgramsOffset(package) + sizeof(int)] = 0xff;
+        Reject(() => SpawnableGroupPackageBinary.Deserialize(invalidRootPrograms), "invalid root GPU program UTF-8");
+        var invalidTemplatePrograms = binary.ToArray();
+        invalidTemplatePrograms[^1] = 0xff;
+        Reject(() => SpawnableGroupPackageBinary.Deserialize(invalidTemplatePrograms), "invalid template GPU program UTF-8");
         return binary;
     }
 
-    private static byte[] VerifyLegacy(SpawnableGroupPackage package)
+    private static byte[] VerifyLegacyV1(SpawnableGroupPackage package)
     {
-        package = package with { RootGpuContainers = [] };
         var current = SpawnableGroupPackageBinary.Serialize(package);
-        var rootPayloadBytes = 2 * sizeof(int) + package.RootRenderConfiguration.Length + "[]"u8.Length;
-        var legacy = current.AsSpan(0, current.Length - rootPayloadBytes).ToArray();
+        var rootGpuContainers = JsonSerializer.SerializeToUtf8Bytes(package.RootGpuContainers);
+        var rootTailBytes = sizeof(int) + package.RootRenderConfiguration.Length +
+            sizeof(int) + rootGpuContainers.Length + TailProgramBytes(package);
+        var legacy = current.AsSpan(0, current.Length - rootTailBytes).ToArray();
         BinaryPrimitives.WriteUInt16LittleEndian(legacy.AsSpan(4), 1);
         BinaryPrimitives.WriteUInt64LittleEndian(legacy.AsSpan(8), (ulong)legacy.Length);
         BinaryPrimitives.WriteUInt32LittleEndian(legacy.AsSpan(16), 9);
         var decoded = SpawnableGroupPackageBinary.Deserialize(legacy);
         Require(decoded.ParentBytecode.SequenceEqual(package.ParentBytecode) &&
             decoded.Templates.Count == package.Templates.Count &&
-            decoded.RootRenderConfiguration.Length == 0 && decoded.RootGpuContainers.Count == 0,
-            "Legacy LFXP data changed or invented root payloads.");
-        _ = Verify(decoded);
+            decoded.RootRenderConfiguration.Length == 0 && decoded.RootGpuContainers.Count == 0 &&
+            decoded.RootGpuPrograms.Length == 0 && decoded.Templates.All(template => template.GpuPrograms.Length == 0),
+            "Legacy v1 LFXP data changed or invented root/program payloads.");
         var mixed = legacy.ToArray();
         BinaryPrimitives.WriteUInt32LittleEndian(mixed.AsSpan(16), SpawnableGroupPackage.FormatVersion);
         Reject(() => SpawnableGroupPackageBinary.Deserialize(mixed), "mismatched container/package versions");
         return legacy;
     }
+
+    private static byte[] VerifyLegacyV2(SpawnableGroupPackage package)
+    {
+        var current = SpawnableGroupPackageBinary.Serialize(package);
+        var tailBytes = TailProgramBytes(package);
+        var legacy = current.AsSpan(0, current.Length - tailBytes).ToArray();
+        BinaryPrimitives.WriteUInt16LittleEndian(legacy.AsSpan(4), 2);
+        BinaryPrimitives.WriteUInt64LittleEndian(legacy.AsSpan(8), (ulong)legacy.Length);
+        BinaryPrimitives.WriteUInt32LittleEndian(legacy.AsSpan(16), 10);
+        var decoded = SpawnableGroupPackageBinary.Deserialize(legacy);
+        Require(decoded.ParentBytecode.SequenceEqual(package.ParentBytecode) &&
+            decoded.Templates.Count == package.Templates.Count &&
+            decoded.RootRenderConfiguration.SequenceEqual(package.RootRenderConfiguration) &&
+            decoded.RootGpuContainers.Count == package.RootGpuContainers.Count &&
+            decoded.RootGpuPrograms.Length == 0 && decoded.Templates.All(template => template.GpuPrograms.Length == 0),
+            "Legacy v2 LFXP data changed or invented executable GPU payloads.");
+        return legacy;
+    }
+
+    private static int TailProgramBytes(SpawnableGroupPackage package) =>
+        sizeof(int) + EffectiveGpuPrograms(package.RootGpuPrograms).Length +
+        package.Templates.Sum(template => sizeof(int) + EffectiveGpuPrograms(template.GpuPrograms).Length);
+
+    private static byte[] EffectiveGpuPrograms(byte[] bytes) => bytes.Length == 0 ? EmptyGpuPrograms : bytes;
+
+    private static int RootGpuProgramsOffset(SpawnableGroupPackage package) =>
+        SpawnableGroupPackageBinary.Serialize(package).Length - TailProgramBytes(package);
 
     private static byte[] VerifyRootPayloads()
     {
@@ -146,9 +201,166 @@ internal static class SpawnablePackageBinaryTests
         using var mcp = JsonDocument.Parse(pending.GetAwaiter().GetResult());
         Require(Convert.FromBase64String(mcp.RootElement.GetProperty("rootRenderConfigurationBase64").GetString()!)
                 .SequenceEqual(package.RootRenderConfiguration) &&
+            Convert.FromBase64String(mcp.RootElement.GetProperty("rootGpuProgramsBase64").GetString()!)
+                .SequenceEqual(package.RootGpuPrograms) &&
+            Convert.FromBase64String(mcp.RootElement.GetProperty("templates")[0]
+                .GetProperty("gpuProgramsBase64").GetString()!)
+                .SequenceEqual(package.Templates.Single().GpuPrograms) &&
             mcp.RootElement.GetProperty("rootGpuContainers").GetArrayLength() == 1,
             "MCP compilation dropped root payloads.");
         return Verify(package);
+    }
+
+    private static byte[] VerifyGpuPrograms()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var rootGpu = graph.CreateNode(new("GpuParticle")).Id;
+        var ordinary = graph.CreateNode(GraphNodeKind.GraphGroup);
+        graph.EnterGraph(ordinary);
+        var nestedRootGpu = graph.CreateNode(new("GpuParticle")).Id;
+        graph.NavigateToGraph(0);
+        var spawnable = graph.CreateNode(GraphNodeKind.SpawnableGroup);
+        graph.EnterGraph(spawnable);
+        var templateGpu = graph.CreateNode(new("GpuParticle")).Id;
+        _ = graph.CreateNode(new("LifeTime"));
+        graph.NavigateToGraph(0);
+
+        var package = SpawnableGroupPackage.Compile(graph.CreateSnapshot());
+        using var rootPayload = JsonDocument.Parse(package.RootGpuPrograms);
+        using var templatePayload = JsonDocument.Parse(package.Templates.Single().GpuPrograms);
+        var rootPrograms = rootPayload.RootElement.GetProperty("programs").EnumerateArray().ToArray();
+        var templatePrograms = templatePayload.RootElement.GetProperty("programs").EnumerateArray().ToArray();
+        Require(rootPayload.RootElement.GetProperty("version").GetInt32() == 1 &&
+            rootPrograms.Length == 2 && templatePrograms.Length == 1 &&
+            rootPrograms.Select(program => program.GetProperty("nodeId").GetGuid()).ToHashSet()
+                .SetEquals([rootGpu, nestedRootGpu]) &&
+            templatePrograms[0].GetProperty("nodeId").GetGuid() == templateGpu &&
+            package.RootGpuContainers.Select(node => node.Id).ToHashSet().SetEquals([rootGpu, nestedRootGpu]) &&
+            package.Templates.Single().GpuContainers.Select(node => node.Id).SequenceEqual([templateGpu]),
+            "Executable GPU payloads mixed root and Spawnable ownership or lost nested root GPU nodes.");
+        var overLimit = new GraphSnapshot(Enumerable.Range(0, 17).Select(_ =>
+            new GraphNodeSnapshot(Guid.NewGuid(), new("GpuParticle"), "GPU", 0, 0,
+                "GpuParticle", GraphPortCategory.Parameter)).ToArray(), []);
+        Reject(() => _ = GpuProgramDeliveryService.CreateExecutablePayload(overLimit),
+            "more than 16 executable GPU programs in one scope");
+        var unboundGraph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var unboundNode = unboundGraph.CreateNode(new("GpuParticle"));
+        var unboundState = GpuParticleEditorService.ReadState(unboundNode) with
+        {
+            ResourceAssetPaths = []
+        };
+        unboundGraph.SetParameter(unboundNode, GpuParticleEditorService.ParameterId,
+            JsonSerializer.SerializeToElement(unboundState, GpuParticleEditorService.Json));
+        Reject(() => SpawnableGroupPackage.Compile(unboundGraph.CreateSnapshot()),
+            "GPU programs with missing engine resource references");
+
+        foreach (var item in rootPrograms.Concat(templatePrograms))
+        {
+            var unreal = item.GetProperty("unreal");
+            var canonical = JsonDocument.Parse(unreal.GetProperty("canonicalJson").GetString()!);
+            using (canonical)
+            using (var unity = JsonDocument.Parse(item.GetProperty("unityMetadataJson").GetString()!))
+            {
+                var unrealMetadata = unreal.GetProperty("metadata");
+                Require(unrealMetadata.GetProperty("format").GetString() == "Usf" &&
+                    unity.RootElement.GetProperty("format").GetString() == "UnityCompute" &&
+                    unrealMetadata.GetProperty("programId").GetString() ==
+                        unity.RootElement.GetProperty("programId").GetString() &&
+                    unrealMetadata.GetProperty("contentHash").GetString() ==
+                        unity.RootElement.GetProperty("contentHash").GetString() &&
+                    canonical.RootElement.GetProperty("id").GetString() ==
+                        unrealMetadata.GetProperty("programId").GetString() &&
+                    item.GetProperty("unityShaderSource").GetString()!.Contains("Kernel", StringComparison.Ordinal),
+                    "Unreal and Unity GPU metadata did not originate from one canonical compiled program.");
+            }
+        }
+        return Verify(package);
+    }
+
+    private static (SpawnableGroupPackage Package, byte[] Identities) CreateAdapterFixture(bool includeGpu)
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager()) { AutoDestroyWhenIdle = false };
+        var signal = graph.CreateNode(GraphNodeKind.Signal);
+        var rootPosition = graph.CreateNode(GraphNodeKind.FloatX3);
+        var rootDraw = graph.CreateNode(new("ModelDraw"));
+        graph.SetParameter(rootDraw, "assetPath", JsonSerializer.SerializeToElement("/Engine/BasicShapes/Cube.Cube"));
+        Require(graph.TryConnectNodes(rootPosition, rootDraw, out _, "position"),
+            "Could not connect the adapter fixture's root constant position.");
+
+        var spawnable = graph.CreateNode(GraphNodeKind.SpawnableGroup);
+        Require(graph.TryConnectNodes(signal, spawnable, out _, "spawn"),
+            "Could not connect the adapter fixture's root Signal to its Spawnable.");
+        Require(graph.EnterGraph(spawnable), "Could not enter the adapter fixture's Spawnable.");
+        var lifeTime = graph.CreateNode(new("LifeTime"));
+        graph.SetParameter(lifeTime, "seconds", JsonSerializer.SerializeToElement(2d));
+        var time = graph.CreateNode(GraphNodeKind.Time);
+        var vector = graph.CreateNode(new("ScalarToVector3"));
+        var templateDraw = graph.CreateNode(new("ModelDraw"));
+        graph.SetParameter(templateDraw, "assetPath", JsonSerializer.SerializeToElement("/Engine/BasicShapes/Cube.Cube"));
+        Require(graph.TryConnectNodes(time, vector, out _, "a") &&
+            graph.TryConnectNodes(vector, templateDraw, out _, "position"),
+            "Could not connect the adapter fixture's template time-to-position chain.");
+        Guid? gpuNodeId = null;
+        if (includeGpu) gpuNodeId = graph.CreateNode(new("GpuParticle")).Id;
+        graph.NavigateToGraph(0);
+
+        var package = SpawnableGroupPackage.Compile(graph.CreateSnapshot());
+        var identities = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            rootSignalNodeId = signal.Id,
+            rootDrawNodeId = rootDraw.Id,
+            spawnableContainerId = spawnable.Id,
+            templateDrawNodeId = templateDraw.Id,
+            lifeTimeNodeId = lifeTime.Id,
+            timeNodeId = time.Id,
+            vectorNodeId = vector.Id,
+            gpuNodeId
+        }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        return (package, identities);
+    }
+
+    private static byte[] CreateTemplateGameIoFixture()
+    {
+        var inputDefinition = GraphNodeDefinition.All.Single(item => item.Kind == GraphNodeKind.InputProperty);
+        var input = new GraphNodeSnapshot(Guid.NewGuid(), inputDefinition.Kind, inputDefinition.Name, 0, 0,
+            inputDefinition.PortType, inputDefinition.PortCategory, Parameters:
+            [
+                new("name", "string", JsonSerializer.SerializeToElement("template-input")),
+                new("valueType", "int", JsonSerializer.SerializeToElement(0))
+            ]);
+        var child = new GraphSnapshot([input], []);
+        var program = VfxProgram.Compile(child);
+        var rootProgram = VfxProgram.Compile(new GraphSnapshot([], []));
+        var template = new SpawnableTemplate(Guid.NewGuid(), Guid.NewGuid(), program.ToBinary(),
+            [], [], []);
+        return SpawnableGroupPackageBinary.Serialize(new SpawnableGroupPackage(rootProgram.ToBinary(), [template]));
+    }
+
+    private static (SpawnableGroupPackage Package, byte[] Identities) CreateGpuSpawnableFixture()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var onStart = graph.CreateNode(new("OnStart"));
+        var spawnable = graph.CreateNode(GraphNodeKind.SpawnableGroup);
+        Require(graph.TryConnectNodes(onStart, spawnable, out _, "spawn", "then") &&
+            graph.EnterGraph(spawnable),
+            "Could not connect On Start to the finite GPU Spawnable.");
+        var lifeTime = graph.CreateNode(new("LifeTime"));
+        graph.SetParameter(lifeTime, "seconds", JsonSerializer.SerializeToElement(2d));
+        var gpu = graph.CreateNode(new("GpuParticle"));
+        graph.NavigateToGraph(0);
+        var package = SpawnableGroupPackage.Compile(graph.CreateSnapshot());
+        Require(package.OnStartNodeId == onStart.Id && package.RootGpuContainers.Count == 0 &&
+            package.Templates.Single().GpuContainers.Select(node => node.Id).SequenceEqual([gpu.Id]),
+            "GPU Spawnable fixture must start one finite GPU template and keep root GPU empty.");
+        var identities = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            onStartNodeId = onStart.Id,
+            spawnableContainerId = spawnable.Id,
+            lifeTimeNodeId = lifeTime.Id,
+            gpuNodeId = gpu.Id,
+            lifeTimeSeconds = 2
+        }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        return (package, identities);
     }
 
     private static SpawnableGroupPackage CreateMetadataFixture()

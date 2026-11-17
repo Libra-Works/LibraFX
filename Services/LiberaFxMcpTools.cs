@@ -150,7 +150,7 @@ public sealed class LiberaFxMcpTools
         });
 
     [McpServerTool(Name = "libera_graph_compile_spawnable", ReadOnly = true, OpenWorld = false)]
-    [Description("Compile Signal or Spawnable graphs to an immutable parent LFXB program and any separate Spawnable template programs, per-pin CaptureAtSpawn/Live mappings, render configurations and GPU snapshots. This also supports Signal graphs without Spawnable Groups. Signals connected to a Spawnable enqueue runtime instances, not editor graph copies. Engine adapters consume lifecycle events; no engine objects are created by this tool.")]
+    [Description("Compile Signal or Spawnable graphs to an immutable parent LFXB program and separate Spawnable template programs, per-pin CaptureAtSpawn/Live mappings, render configurations, GPU snapshots and executable GPU payloads. This also supports Signal graphs without Spawnable Groups. Signals connected to a Spawnable enqueue runtime instances, not editor graph copies. Engine adapters consume lifecycle events; no engine objects are created by this tool.")]
     public static async Task<string> CompileSpawnable(ActiveGraphProvider activeGraph)
     {
         var snapshot = await Dispatcher.UIThread.InvokeAsync(() =>
@@ -169,6 +169,7 @@ public sealed class LiberaFxMcpTools
                 gameIoPorts = package.GameIoPorts,
                 parentBytecodeBase64 = Convert.ToBase64String(package.ParentBytecode),
                 rootRenderConfigurationBase64 = Convert.ToBase64String(package.RootRenderConfiguration),
+                rootGpuProgramsBase64 = Convert.ToBase64String(package.RootGpuPrograms),
                 package.RootGpuContainers,
                 package.OnStartNodeId,
                 package.OnDestroyNodeId,
@@ -182,6 +183,7 @@ public sealed class LiberaFxMcpTools
                     template.ContainerId,
                     template.SignalTypeId,
                     bytecodeBase64 = Convert.ToBase64String(template.Bytecode),
+                    gpuProgramsBase64 = Convert.ToBase64String(template.GpuPrograms),
                     capturePolicy = template.Inputs.Any(input => input.IsLive) ? "PerPin" : "CaptureAtSpawn",
                     template.Inputs,
                     template.CapturedInputs,

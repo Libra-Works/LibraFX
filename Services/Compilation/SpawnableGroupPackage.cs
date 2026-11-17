@@ -22,11 +22,12 @@ public sealed record SpawnableTemplate(Guid ContainerId, Guid SignalTypeId, byte
     IReadOnlyList<SpawnableSignalPort>? SignalInputs = null,
     IReadOnlyList<SpawnableSignalPort>? SignalOutputs = null)
 {
+    public byte[] GpuPrograms { get; init; } = [];
     public bool UsesExtendedCaptureInputs => Inputs.Count > 4 || Inputs.Sum(input => input.Width) > 16;
 }
 public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<SpawnableTemplate> Templates)
 {
-    public const int FormatVersion = 10;
+    public const int FormatVersion = 11;
     public int Version => FormatVersion;
     public bool AutoDestroyWhenIdle { get; init; } = true;
     public bool HasLiveInputs => Templates.Any(template => template.Inputs.Any(input => input.IsLive));
@@ -41,6 +42,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
     public IReadOnlyList<GameIoPort> GameIoPorts { get; init; } = [];
     public byte[] RootRenderConfiguration { get; init; } = [];
     public IReadOnlyList<GraphNodeSnapshot> RootGpuContainers { get; init; } = [];
+    public byte[] RootGpuPrograms { get; init; } = [];
     public static readonly Guid SignalPassthroughTypeId = Guid.Parse("989fa5b5-485f-4e75-8542-9c5500000001");
 
     public static Guid SignalTypeId(Guid containerId, GraphSnapshot child)
@@ -68,6 +70,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
 
     public static SpawnableGroupPackage Compile(GraphSnapshot graph)
     {
+        RejectTemplateGameIo(graph, withinTemplate: false);
         VfxProgram.ValidateForCompilation(graph);
         graph = GroupExposedItems.Materialize(graph);
         VfxProgram.ValidateForCompilation(graph);
@@ -128,6 +131,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
                             capturedInputs.Add(new(input.TemplateNodeId, input.Width, null, source.Id,
                                 ParameterSourceComponent(source, edge.SourcePortId)));
                     }
+
                     Visit(child, true, true);
                     var life = child.Nodes.Where(item => item.Kind.Value == "LifeTime").ToArray();
                     var onStart = child.Nodes.Where(item => item.Kind.Value == "OnStart").ToArray();
@@ -141,7 +145,12 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
                         if (!double.IsFinite(seconds) || seconds < 0)
                             throw new InvalidDataException($"Spawnable '{node.Name}' Life Time must be nonnegative finite seconds.");
                     }
-                    var bytecode = VfxProgram.CompileForPackage(child, out var render).ToBinary();
+                    var childProgram = VfxProgram.CompileForPackage(child, out var render);
+                    if (childProgram.GameIoPorts.Count != 0)
+                        throw new InvalidDataException(
+                            $"Spawnable Group '{node.Name}' cannot host named Game I/O in its template program. " +
+                            "Use Spawn Input/Output for template data, or place named Game I/O at the effect root.");
+                    var bytecode = childProgram.ToBinary();
                     var gpu = CollectGpu(child).ToArray();
                     var outputs = child.Nodes.Where(item => SpawnableGroupSchema.IsOutput(item.Kind))
                         .Select(item => new SpawnableOutput(SpawnableGroupSchema.OutputPortId(item.Id), item.Id, item.PortType)).ToArray();
@@ -164,7 +173,10 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
                     }
                     templates.Add(new(node.Id, SignalTypeId(node.Id, child), bytecode, inputs, render, gpu,
                         new(onStart.SingleOrDefault()?.Id, life.SingleOrDefault()?.Id, ownerDestroy.SingleOrDefault()?.Id), outputs,
-                        liveInputs.AsReadOnly(), capturedInputs.AsReadOnly(), signalInputs, signalOutputs));
+                        liveInputs.AsReadOnly(), capturedInputs.AsReadOnly(), signalInputs, signalOutputs)
+                    {
+                        GpuPrograms = CreateGpuPrograms(child)
+                    });
                 }
                 else if (node.ChildGraph is { } child && !GpuParticleEditorService.IsGpu(node.Kind))
                     Visit(child, withinTemplate, false);
@@ -186,8 +198,33 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
             SignalRoutes = signalRoutes,
             GameIoPorts = parentProgram.GameIoPorts,
             RootRenderConfiguration = rootRender,
-            RootGpuContainers = CollectGpu(graph).ToArray()
+            RootGpuContainers = CollectGpu(graph).ToArray(),
+            RootGpuPrograms = CreateGpuPrograms(graph)
         };
+    }
+
+    private static void RejectTemplateGameIo(GraphSnapshot graph, bool withinTemplate)
+    {
+        foreach (var node in graph.Nodes)
+        {
+            if (withinTemplate && GameIoSchema.IsNode(node.Kind))
+                throw new InvalidDataException(
+                    $"Spawnable Group template '{node.Name}' cannot contain named Game I/O. " +
+                    "Use Spawn Input/Output for template data, or place named Game I/O at the effect root.");
+            if (node.ChildGraph is { } child)
+                RejectTemplateGameIo(child, withinTemplate || node.Kind == GraphNodeKind.SpawnableGroup);
+        }
+    }
+
+    private static byte[] CreateGpuPrograms(GraphSnapshot graph)
+    {
+#if LIBERAFX_CONVERTER
+        if (CollectGpu(graph).Any())
+            throw new InvalidDataException("GPU Particle graphs require executable GPU export; CPU-only conversion cannot discard them.");
+        return Encoding.UTF8.GetBytes("{\"version\":1,\"programs\":[]}");
+#else
+        return LiberaFx.Services.GpuProgramDeliveryService.CreateExecutablePayload(graph);
+#endif
     }
 
     // Local Destroy is not a signal branch evaluated at spawn. Remove only
