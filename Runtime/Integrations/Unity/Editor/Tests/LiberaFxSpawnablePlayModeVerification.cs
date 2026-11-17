@@ -77,7 +77,8 @@ namespace LiberaFx.Unity.Editor
                 target = new GameObject("LIBERA FX Spawnable Play Mode verification");
                 target.SetActive(false);
                 component = target.AddComponent<LiberaFxSpawnableComponent>();
-                Require(component.GetTemplateCount(out _) == NativeResult.NotReady,
+                Require(component.GetTemplateCount(out _) == NativeResult.NotReady &&
+                    component.GetRootPayload(SpawnableTemplatePayloadKind.RenderConfiguration, out _) == NativeResult.NotReady,
                     "An inactive component exposed template metadata without a host.");
                 var settings = new SerializedObject(component);
                 settings.FindProperty("effect").objectReferenceValue =
@@ -98,6 +99,12 @@ namespace LiberaFx.Unity.Editor
                         out var gpu) == NativeResult.Ok && System.Text.Encoding.UTF8.GetString(gpu) == "[]",
                     "The running component did not expose owned template payloads by template/event identity.");
                 proof.Add("Template identities and owned render/GPU payload access through the component: PASS");
+                Require(component.GetRootPayload(SpawnableTemplatePayloadKind.RenderConfiguration,
+                    out var rootRender) == NativeResult.Ok && rootRender.Length > 0 &&
+                    component.GetRootPayload(SpawnableTemplatePayloadKind.GpuContainers,
+                    out var rootGpu) == NativeResult.Ok && System.Text.Encoding.UTF8.GetString(rootGpu) == "[]",
+                    "The running component did not expose root payloads.");
+                proof.Add("LFXP v2 root render/GPU payload access through the component: PASS");
                 deadline = EditorApplication.timeSinceStartup + 60;
                 EditorApplication.update += Tick;
             }
@@ -133,6 +140,8 @@ namespace LiberaFx.Unity.Editor
                             "Finished root continued updating or emitted duplicate events.");
                         Require(component.Stop() == NativeResult.Ok && events.Count == 6,
                             "Stop after natural completion emitted extra events.");
+                        Require(component.GetRootPayload(SpawnableTemplatePayloadKind.RenderConfiguration,
+                            out _) == NativeResult.NotReady, "Stopped component retained its root payload host.");
                         events.Clear();
                         SetPlayRate(1);
                         Require(component.Play() == NativeResult.Ok, "Could not restart completed effect.");

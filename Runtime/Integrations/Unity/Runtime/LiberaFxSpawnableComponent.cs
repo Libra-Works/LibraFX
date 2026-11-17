@@ -142,6 +142,12 @@ namespace LiberaFx.Unity
             return host.GetTemplatePayload(containerId, kind, out payload);
         }
 
+        public NativeResult GetRootPayload(SpawnableTemplatePayloadKind kind, out byte[] payload)
+        {
+            if (host == null) { payload = null; return NativeResult.NotReady; }
+            return host.GetRootPayload(kind, out payload);
+        }
+
         public NativeResult Stop()
         {
             if (host == null) return NativeResult.Ok;

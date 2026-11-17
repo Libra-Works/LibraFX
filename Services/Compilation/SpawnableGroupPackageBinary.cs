@@ -7,7 +7,7 @@ namespace LiberaFx.Services.Compilation;
 
 public static class SpawnableGroupPackageBinary
 {
-    private const ushort FormatVersion = 1;
+    private const ushort FormatVersion = 2;
     private const ushort HeaderSize = 24;
     private const int MaximumPackageBytes = 512 * 1024 * 1024;
     private const int MaximumBlobBytes = 256 * 1024 * 1024;
@@ -62,6 +62,8 @@ public static class SpawnableGroupPackageBinary
             WriteGuid(writer, route.SourceNodeId);
             WriteGuid(writer, route.TargetNodeId);
         }
+        WriteBlob(writer, package.RootRenderConfiguration);
+        WriteBlob(writer, JsonSerializer.SerializeToUtf8Bytes(package.RootGpuContainers, JsonOptions));
 
         writer.Flush();
         if (stream.Length > MaximumPackageBytes)
@@ -88,11 +90,14 @@ public static class SpawnableGroupPackageBinary
         using var stream = new MemoryStream(bytes.ToArray(), writable: false);
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
         _ = reader.ReadBytes(4);
-        if (reader.ReadUInt16() != FormatVersion || reader.ReadUInt16() != HeaderSize)
+        var formatVersion = reader.ReadUInt16();
+        if (formatVersion is not (1 or FormatVersion) || reader.ReadUInt16() != HeaderSize)
             throw new InvalidDataException("Unsupported Spawnable binary package format.");
         if (reader.ReadInt64() != bytes.Length)
             throw new InvalidDataException("Spawnable binary package length mismatch.");
-        if (reader.ReadInt32() != SpawnableGroupPackage.FormatVersion || reader.ReadUInt32() != 0)
+        var packageVersion = reader.ReadInt32();
+        if ((formatVersion == 1 ? packageVersion != 9 : packageVersion != SpawnableGroupPackage.FormatVersion) ||
+            reader.ReadUInt32() != 0)
             throw new InvalidDataException("Unsupported or malformed Spawnable package metadata.");
 
         var autoDestroyWhenIdle = ReadBoolean(reader);
@@ -120,6 +125,10 @@ public static class SpawnableGroupPackageBinary
         for (var index = 0; index < signalRoutes.Length; index++)
             signalRoutes[index] = new(ReadGuid(reader), ReadGuid(reader), ReadGuid(reader));
 
+        var rootRenderConfiguration = formatVersion == 1 ? [] : ReadBlob(reader);
+        var rootGpuContainers = formatVersion == 1 ? [] :
+            JsonSerializer.Deserialize<GraphNodeSnapshot[]>(ReadBlob(reader), JsonOptions)
+                ?? throw new InvalidDataException("Invalid root GPU container metadata.");
         if (stream.Position != stream.Length)
             throw new InvalidDataException("Unexpected trailing data in Spawnable binary package.");
         return new(parentBytecode, Array.AsReadOnly(templates))
@@ -131,7 +140,9 @@ public static class SpawnableGroupPackageBinary
             OnDestroyNodeId = onDestroyNodeId,
             GameIoPorts = Array.AsReadOnly(gameIoPorts),
             DestroyRoutes = Array.AsReadOnly(destroyRoutes),
-            SignalRoutes = Array.AsReadOnly(signalRoutes)
+            SignalRoutes = Array.AsReadOnly(signalRoutes),
+            RootRenderConfiguration = rootRenderConfiguration,
+            RootGpuContainers = Array.AsReadOnly(rootGpuContainers)
         };
     }
 

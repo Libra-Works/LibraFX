@@ -471,6 +471,11 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_template_i
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_copy_template_payload(
     LibraSpawnableHostHandle host, const uint8_t containerId[16], uint32_t kind,
     uint8_t* destination, uint64_t capacity, uint64_t* outByteCount);
+/* Same copy/query rules for effect-root metadata. Legacy LFXP v1 has no root
+   payloads and returns zero bytes; re-export to recover authored root data. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_copy_root_payload(
+    LibraSpawnableHostHandle host, uint32_t kind, uint8_t* destination,
+    uint64_t capacity, uint64_t* outByteCount);
 
 #ifdef __cplusplus
 }

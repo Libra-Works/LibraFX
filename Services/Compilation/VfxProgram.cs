@@ -100,6 +100,10 @@ public sealed class VfxProgram
     }
 
     internal static VfxProgram CompileForPackage(GraphSnapshot graph,
+        IReadOnlyDictionary<Guid, Guid>? signalTypeOverrides = null) =>
+        CompileForPackage(graph, out _, signalTypeOverrides);
+
+    internal static VfxProgram CompileForPackage(GraphSnapshot graph, out byte[] renderConfiguration,
         IReadOnlyDictionary<Guid, Guid>? signalTypeOverrides = null)
     {
         ValidateForCompilation(graph);
@@ -133,7 +137,7 @@ public sealed class VfxProgram
                 throw new InvalidDataException($"Matrix Game I/O port '{port.Name}' did not lower to four rows.");
             return port with { RuntimeNodeIds = outputs.Select(output => output.NodeId).ToArray() };
         }).ToArray();
-        _ = RenderProgramBindings.CreateScene(graph, 0);
+        renderConfiguration = RenderProgramBindings.CreateScene(graph, 0);
         graph = SequenceSchema.Lower(graph);
         var nodes = Flatten(graph)
             .Where(node => node.Kind != GraphNodeKind.Comment && node.Kind != GraphNodeKind.GraphGroup &&

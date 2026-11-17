@@ -91,6 +91,8 @@ struct SpawnablePackage final {
     std::optional<std::array<std::uint8_t, 16>> onDestroyNodeId;
     std::vector<SpawnablePackageGameIoPort> gameIoPorts;
     std::vector<std::uint8_t> parentBytecode;
+    std::vector<std::uint8_t> rootRenderConfiguration;
+    std::vector<std::uint8_t> rootGpuContainersJson;
     std::vector<SpawnablePackageTemplate> templates;
     std::vector<SpawnablePackageDestroyRoute> destroyRoutes;
     std::vector<SpawnablePackageSignalRoute> signalRoutes;

@@ -131,6 +131,12 @@ namespace LiberaFx.Unity.Tests
             Assert(identities.Length == 8 + 11 * 16);
             VerifyTemplatePayloads(bytes);
             VerifyTemplatePayloadBuffers(bytes);
+            VerifyRootPayloads(bytes);
+            foreach (var suffix in new[] { ".legacy.lfxp", ".root.lfxp" })
+            {
+                var additional = Path.ChangeExtension(fixture, suffix);
+                if (File.Exists(additional)) VerifyRootPayloads(File.ReadAllBytes(additional));
+            }
             using (var host = new NativeSpawnableHost(bytes))
             {
                 Assert(host.Advance(0, 0) == NativeResult.Ok);
@@ -232,6 +238,62 @@ namespace LiberaFx.Unity.Tests
             finally { Assert(Native.libra_spawnable_host_release(host) == NativeResult.Ok); }
             Assert(Native.libra_spawnable_host_template_count(host, out var staleCount) ==
                 NativeResult.InvalidHandle && staleCount == 0);
+        }
+
+        private static unsafe void VerifyRootPayloads(byte[] bytes)
+        {
+            var legacy = bytes[4] == 1;
+            using (var host = new NativeSpawnableHost(bytes))
+            {
+                foreach (var kind in new[] { SpawnableTemplatePayloadKind.RenderConfiguration,
+                    SpawnableTemplatePayloadKind.GpuContainers })
+                {
+                    Assert(host.GetRootPayload(kind, out var owned) == NativeResult.Ok);
+                    Assert(legacy ? owned.Length == 0 : owned.Length > 0);
+                    if (owned.Length == 0) continue;
+                    Assert(owned[0] == (kind == SpawnableTemplatePayloadKind.RenderConfiguration ? '{' : '['));
+                    var first = owned[0];
+                    owned[0] ^= 0xff;
+                    Assert(host.GetRootPayload(kind, out var second) == NativeResult.Ok && second[0] == first);
+                }
+                Assert(host.GetRootPayload((SpawnableTemplatePayloadKind)99, out _) == NativeResult.InvalidArgument);
+                Assert(host.Stop() == NativeResult.Ok &&
+                    host.GetRootPayload(SpawnableTemplatePayloadKind.RenderConfiguration, out var stopped) ==
+                    NativeResult.Ok && (legacy ? stopped.Length == 0 : stopped[0] == '{'));
+            }
+            ulong handle;
+            fixed (byte* source = bytes)
+                Assert(Native.libra_spawnable_host_create(source, (ulong)bytes.Length,
+                    32, 4 * 1024 * 1024, 128, 10000, out handle) == NativeResult.Ok);
+            var buffer = new byte[1];
+            try
+            {
+                Assert(Native.libra_spawnable_host_copy_root_payload(handle,
+                    SpawnableTemplatePayloadKind.RenderConfiguration, null, 0, out var size) == NativeResult.Ok);
+                if (size > 0)
+                {
+                    buffer = new byte[checked((int)size)];
+                    for (var index = 0; index < buffer.Length; ++index) buffer[index] = 0x5a;
+                    fixed (byte* destination = buffer)
+                    {
+                        Assert(Native.libra_spawnable_host_copy_root_payload(handle,
+                            SpawnableTemplatePayloadKind.RenderConfiguration, destination, size - 1, out var actual) ==
+                            NativeResult.InsufficientWork && actual == size);
+                        foreach (var value in buffer) Assert(value == 0x5a);
+                        Assert(Native.libra_spawnable_host_copy_root_payload(handle,
+                            SpawnableTemplatePayloadKind.RenderConfiguration, destination, size, out actual) ==
+                            NativeResult.Ok && actual == size && buffer[0] == '{');
+                    }
+                }
+                Assert(Native.libra_spawnable_host_copy_root_payload(handle,
+                    SpawnableTemplatePayloadKind.RenderConfiguration, null, 1, out var invalid) ==
+                    NativeResult.InvalidArgument && invalid == 0);
+            }
+            finally { Assert(Native.libra_spawnable_host_release(handle) == NativeResult.Ok); }
+            Assert(Native.libra_spawnable_host_copy_root_payload(handle,
+                SpawnableTemplatePayloadKind.RenderConfiguration, null, 0, out var stale) ==
+                NativeResult.InvalidHandle && stale == 0);
+            Assert(buffer.Length > 0 && (legacy || buffer[0] == '{'));
         }
     }
 }

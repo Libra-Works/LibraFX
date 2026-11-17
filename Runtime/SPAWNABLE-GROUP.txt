@@ -154,7 +154,7 @@ changes that instance's overrides through undo/redo, not child template
 defaults; it does not navigate away or select an out-of-scope node.
 `SpawnableGroupPackage.Compile` emits the parent LFXB, separate template LFXBs,
 capture maps, per-template render configuration and GPU container snapshots.
-MCP `libera_graph_compile_spawnable` exposes JSON package format version 9.
+MCP `libera_graph_compile_spawnable` exposes JSON package format version 10.
 Versions 2 through 8 introduced lifecycle routing, root and Spawnable Delay,
 per-pin CaptureAtSpawn/Live bindings, extended inputs, and local Signal I/O.
 Version 9 adds the root `AutoDestroyWhenIdle` policy. Older hosts must reject
@@ -344,22 +344,23 @@ libra_effect_start_captured obtains a finite scalar duration from the initial
 evaluation, before publishing game properties or invoking OnStart. Later input
 changes do not change the captured duration; invalid values fail before OnStart.
 
-Portable engine asset container (LFXP v1)
+Portable engine asset container (LFXP v2)
 -----------------------------------------
-JSON package v9 remains the compiler/editor interchange format. Engine assets
+JSON package v10 remains the compiler/editor interchange format. Engine assets
 use a separate LFXP container so LFXB programs and render configurations are
 stored as raw bytes instead of base64. The fixed 24-byte header is:
 
 - bytes 0..3: ASCII `LFXP`
-- bytes 4..5: container version (little-endian u16, currently 1)
+- bytes 4..5: container version (little-endian u16, currently 2)
 - bytes 6..7: header size (little-endian u16, 24)
 - bytes 8..15: total container length (little-endian u64)
-- bytes 16..19: Spawnable package version (little-endian u32, currently 9)
+- bytes 16..19: Spawnable package version (little-endian u32, currently 10)
 - bytes 20..23: reserved, zero
 
 The payload is sequential and little-endian. It contains root policy flags,
 nullable root signal IDs, Game I/O descriptors, parent bytecode, templates,
-Destroy routes and Signal routes. Every list/blob/string is preceded by a
+Destroy routes, Signal routes, root render configuration and root GPU snapshots.
+Every list/blob/string is preceded by a
 little-endian signed 32-bit count/byte length; strings are strict UTF-8. GUIDs
 are the 16 RFC 4122/network-order bytes used by LFXB. Template data includes
 bytecode, render configuration, input/output mappings, lifecycle IDs,
@@ -369,15 +370,26 @@ engine responsibility. Optional lists and GUIDs have explicit presence flags.
 Readers reject unknown versions, invalid counts/flags, truncated payloads and
 trailing bytes. The .NET writer and portable C++ reader reject unknown
 container/package versions and preserve the decoded output on failure. Engine
-asset loaders and the shared lifecycle host remain required before LFXP is a
-runtime-ready asset format.
+render/GPU adapters remain required for visual playback.
+
+Readers accept exactly (container 1, package 9) and (container 2, package 10).
+Legacy v1 packages retain their lifecycle/template metadata but have empty root
+payloads: re-export the source graph to recover root rendering information.
+Decoded .NET objects normalize to the current in-memory version; serializing
+them emits v2, without reconstructing missing legacy data. Older readers reject
+v2 rather than silently discarding root metadata. Rebuild engine modules against
+matching runtime headers: the C++ package layout has changed.
+Root render/GPU collection includes ordinary Groups but excludes Spawnable
+contents, which belong exclusively to their templates. Render bindings are
+generated from the same lowered graph as CPU bytecode, preserving source IDs.
 
 Payload field order is: three u8 root flags (`AutoDestroyWhenIdle`,
 `HasDeferredSignals`, `HasChildDeferredSignals`); nullable OnStart and OnDestroy
 GUIDs; Game I/O count and records (GUID, UTF-8 name, kind u8, width i32,
 isColor u8, runtime-node count i32 where -1 means null); parent bytecode blob;
 template count and records; Destroy route count and records; Signal route count
-and records. Each template record is container/type GUIDs, bytecode, render
+and records; root render configuration blob; root GPU snapshot JSON blob.
+The last two fields are present only in v2. Each template record is container/type GUIDs, bytecode, render
 configuration, GPU JSON blob, input count and records, then presence-flagged
 Outputs, LiveInputs, CapturedInputs, SignalInputs and SignalOutputs lists, then
 a lifecycle presence flag and its three nullable GUIDs. Each Destroy route is

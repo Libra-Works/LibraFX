@@ -1473,3 +1473,25 @@ LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_copy_template_payload(
         return LIBRA_OK;
     });
 }
+
+LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_copy_root_payload(
+    LibraSpawnableHostHandle host, uint32_t kind, uint8_t* destination,
+    uint64_t capacity, uint64_t* outByteCount)
+{
+    if (!outByteCount) return LIBRA_INVALID_ARGUMENT;
+    *outByteCount = 0;
+    if ((!destination && capacity != 0) ||
+        (kind != LIBRA_SPAWNABLE_RENDER_CONFIGURATION && kind != LIBRA_SPAWNABLE_GPU_CONTAINERS))
+        return LIBRA_INVALID_ARGUMENT;
+    return guarded([&]() -> LibraResult {
+        auto native = findSpawnableHost(host);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        const auto& payload = kind == LIBRA_SPAWNABLE_RENDER_CONFIGURATION
+            ? native->package().rootRenderConfiguration : native->package().rootGpuContainersJson;
+        *outByteCount = payload.size();
+        if (!destination) return LIBRA_OK;
+        if (capacity < payload.size()) return LIBRA_INSUFFICIENT_WORK;
+        if (!payload.empty()) std::memcpy(destination, payload.data(), payload.size());
+        return LIBRA_OK;
+    });
+}

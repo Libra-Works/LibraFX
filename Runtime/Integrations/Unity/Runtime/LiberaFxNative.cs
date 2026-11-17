@@ -281,6 +281,10 @@ namespace LiberaFx.Unity
         internal static extern NativeResult libra_spawnable_host_copy_template_payload(
             ulong host, byte* containerId, SpawnableTemplatePayloadKind kind,
             byte* destination, ulong capacity, out ulong count);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_copy_root_payload(
+            ulong host, SpawnableTemplatePayloadKind kind, byte* destination,
+            ulong capacity, out ulong count);
     }
 
     public sealed unsafe class NativeProgram : IDisposable
@@ -482,21 +486,34 @@ namespace LiberaFx.Unity
                     payload = null;
                     if (containerId == null || containerId.Length != 16)
                         return NativeResult.InvalidArgument;
-                    var current = Alive;
                     fixed (byte* id = containerId)
-                    {
-                        var result = Native.libra_spawnable_host_copy_template_payload(
-                            current, id, kind, null, 0, out var count);
-                        if (result != NativeResult.Ok) return result;
-                        if (count > int.MaxValue) return NativeResult.OutOfMemory;
-                        var bytes = new byte[(int)count];
-                        fixed (byte* destination = bytes)
-                            result = Native.libra_spawnable_host_copy_template_payload(
-                                current, id, kind, destination, count, out count);
-                        if (result == NativeResult.Ok) payload = bytes;
-                        return result;
-                    }
+                        return GetPayload(id, kind, out payload);
                 }
+
+                public NativeResult GetRootPayload(SpawnableTemplatePayloadKind kind, out byte[] payload) =>
+                    GetPayload(null, kind, out payload);
+
+                private NativeResult GetPayload(byte* containerId, SpawnableTemplatePayloadKind kind,
+                    out byte[] payload)
+                {
+                    payload = null;
+                    var current = Alive;
+                    var result = CopyPayload(current, containerId, kind, null, 0, out var count);
+                    if (result != NativeResult.Ok) return result;
+                    if (count > int.MaxValue) return NativeResult.OutOfMemory;
+                    var bytes = new byte[(int)count];
+                    fixed (byte* destination = bytes)
+                        result = CopyPayload(current, containerId, kind, destination, count, out count);
+                    if (result == NativeResult.Ok) payload = bytes;
+                    return result;
+                }
+
+                private static NativeResult CopyPayload(ulong host, byte* containerId,
+                    SpawnableTemplatePayloadKind kind, byte* destination, ulong capacity, out ulong count) =>
+                    containerId == null
+                        ? Native.libra_spawnable_host_copy_root_payload(host, kind, destination, capacity, out count)
+                        : Native.libra_spawnable_host_copy_template_payload(host, containerId, kind,
+                            destination, capacity, out count);
 
                 public NativeResult IsRootFinished(out bool finished)
                 {

@@ -271,7 +271,9 @@ auto loadSpawnablePackage(const std::uint8_t* bytes, std::size_t byteCount,
         !reader.readU32(reserved) || encodedHeaderSize != headerSize ||
         totalLength != byteCount || reserved != 0)
         return Result::InvalidBinary;
-    if (formatVersion != 1 || packageVersion != 9) return Result::UnsupportedBinary;
+    if (!((formatVersion == 1 && packageVersion == 9) ||
+          (formatVersion == 2 && packageVersion == 10)))
+        return Result::UnsupportedBinary;
 
     try {
         auto package = SpawnablePackage{};
@@ -322,9 +324,14 @@ auto loadSpawnablePackage(const std::uint8_t* bytes, std::size_t byteCount,
                 return reader.readGuid(route.sourceContainerId) &&
                     reader.readGuid(route.sourceNodeId) &&
                     reader.readGuid(route.targetNodeId);
-            }) ||
-            reader.remaining() != 0)
+            }))
             return Result::InvalidBinary;
+        if (formatVersion >= 2 &&
+            (!reader.readBlob(package.rootRenderConfiguration) ||
+             !reader.readBlob(package.rootGpuContainersJson) ||
+             !validUtf8(package.rootGpuContainersJson.data(), package.rootGpuContainersJson.size())))
+            return Result::InvalidBinary;
+        if (reader.remaining() != 0) return Result::InvalidBinary;
         out = std::move(package);
         return Result::Ok;
     } catch (const std::bad_alloc&) {

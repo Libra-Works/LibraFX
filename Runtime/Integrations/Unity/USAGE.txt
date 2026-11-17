@@ -143,12 +143,19 @@ the template list or a Spawn event to copy RenderConfiguration or GpuContainers.
 The byte arrays are owned by the caller, not pointers into the host. Cache
 them during setup, not every frame. Payload bytes have no added terminator;
 GPU container snapshots remain JSON, not executable GPU programs.
+`GetRootPayload` copies the corresponding root-level payload, using the same
+SpawnableTemplatePayloadKind selector. Ordinary Groups belong to the root;
+Spawnable contents remain in template payloads. LFXP v2/package v10 preserves
+these root fields. Legacy v1/package v9 still loads, but root payloads are empty;
+re-export the source graph to recover root rendering metadata.
 The C ABI supports a null/zero-capacity size query; a short buffer returns
 InsufficientWork with the required size and does not partially copy data.
 Metadata access does not advance time or fire OnStart. It remains valid until
 the native host is disposed; the component releases its host on Stop and then
 returns NotReady. Use a matching rebuilt native DLL for these additive APIs.
 This only exposes the payloads; automatic renderer creation remains unfinished.
+The root equivalent is `libra_spawnable_host_copy_root_payload`; both copy APIs
+return caller-owned bytes and retain metadata after native host Stop.
 
 LiberaFxSpawnablePlayModeVerification.Run passed in an isolated Unity
 7000.0.0a16 Editor with compiler-produced Fireworks.lfxp and the native plugin.

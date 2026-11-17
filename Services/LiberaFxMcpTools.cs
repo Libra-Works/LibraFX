@@ -168,6 +168,8 @@ public sealed class LiberaFxMcpTools
                 package.AutoDestroyWhenIdle,
                 gameIoPorts = package.GameIoPorts,
                 parentBytecodeBase64 = Convert.ToBase64String(package.ParentBytecode),
+                rootRenderConfigurationBase64 = Convert.ToBase64String(package.RootRenderConfiguration),
+                package.RootGpuContainers,
                 package.OnStartNodeId,
                 package.OnDestroyNodeId,
                 package.HasDeferredSignals,

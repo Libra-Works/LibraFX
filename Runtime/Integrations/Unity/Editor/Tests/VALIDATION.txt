@@ -36,7 +36,7 @@ It temporarily enables domain reload and restores the dedicated project's
 previous Enter Play Mode Options setting before exiting.
 It imports a temporary LFXP asset, configures an inactive component, and lets
 Unity invoke OnEnable/Update/OnDisable/OnDestroy (no reflected lifecycle calls).
-It checks template identity and owned render/GPU payload access, child draining,
+It checks template identity and owned root/template render/GPU payload access, child draining,
 exact natural Destroy ordering/times/identities, manual Stop, pause/resume,
 restart and cleanup. Metadata access after component Stop must return NotReady.
 It writes
@@ -71,4 +71,7 @@ Separate Spawnable Play Mode proof:
   natural child draining, exact Destroy/Stop ordering, pause/resume, half-rate
   playback, explicit Stop/restart and object destruction. The temporary import
   was removed and the project's Enter Play Mode Options setting restored.
-  This verifies lifecycle hosting, not render/GPU payloads or player builds.
+  LFXP v2 root metadata and template payload copies pass during playback; the
+  component returns NotReady before host creation and after Stop.
+  This verifies lifecycle hosting and payload access, not rendering/GPU execution
+  or player builds.
