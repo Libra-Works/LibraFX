@@ -1,5 +1,10 @@
 Libra GPU Unreal integration (experimental, requires UE 5.7 SM5).
 
+For whole effects, use ULibraEffectComponent with a .lfxp Package. It owns
+CPU/GPU/Spawnable playback together; no separate author-added GPU component is
+required. The APIs below describe the low-level helper and standalone
+experimental .lfxgpu path retained for compatibility and diagnostics.
+
 Import a .lfxgpu JSON bundle created by LibraGpu.UnrealExport or the frontend
 gpu_export_bundle tool (programSequence/nodeId/canonicalJson/metadata/shaderSource/
 registerKernels[{id,stage,base64}]/resourceAssetPaths). No packet re-lowering or
