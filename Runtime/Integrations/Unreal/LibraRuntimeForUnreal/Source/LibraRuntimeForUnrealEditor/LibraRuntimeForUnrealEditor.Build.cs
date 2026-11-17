@@ -6,8 +6,8 @@ public class LibraRuntimeForUnrealEditor : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PrivateDependencyModuleNames.AddRange(new[] {
-            "Core", "CoreUObject", "Engine", "UnrealEd", "AssetRegistry", "Json",
-            "Slate", "SlateCore", "InputCore", "EditorStyle", "EditorFramework",
+            "Core", "CoreUObject", "Engine", "UnrealEd", "AssetRegistry", "AssetTools", "Json",
+            "Slate", "SlateCore", "InputCore", "EditorStyle", "EditorFramework", "PropertyEditor",
             "AdvancedPreviewScene", "ToolMenus", "ApplicationCore", "RenderCore", "RHI",
             "LibraRuntimeCore", "LibraRuntimeForUnreal", "LibraGpuRuntime"
         });

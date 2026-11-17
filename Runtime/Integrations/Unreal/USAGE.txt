@@ -87,7 +87,18 @@ Import and use
   "Automation RunTests Libra.Runtime.Spawnable.ComponentFixture" in Output Log.
   The user also imported Fireworks.lfxp through Content Browser and confirmed
   the resulting LibraSpawnableAsset and source import data in the asset editor.
-  Save/reload, reimport and rendering/GPU payload integration remain unverified.
+  Save/reload and rendering/GPU payload integration remain unverified.
+  The asset editor's LIBERA FX Package section includes "Reimport from source".
+  It updates the embedded binary from the original .lfxp and lets you locate
+  a moved source file. Failed imports preserve the existing embedded data.
+  Save the asset after reimporting. Source files are not needed for playback.
+  Content Browser's asset type filters include a LIBERA FX category containing
+  "LIBERA FX Compiled Effect" and "LIBERA FX Spawnable Package".
+  Isolated UE automation Libra.Editor.Spawnable.AssetFilters and
+  Libra.Editor.Spawnable.ReimportFixture verified category/filter registration,
+  source-to-embedded binary replacement through the reimport manager, and
+  preservation of embedded data when the source is invalid or missing.
+  Visual placement and clicking the new details button still need a UI check.
   Effect Age, root Instance Age and unscaled Delta Time were verified in an
   isolated UE 5.7 MSVC automation world using compiler-produced bytecode and a
   0.5 playback rate. UE 5.7 Win64 Clang compilation was checked separately
