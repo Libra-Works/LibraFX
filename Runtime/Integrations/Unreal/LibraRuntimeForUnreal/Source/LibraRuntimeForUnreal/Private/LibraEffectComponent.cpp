@@ -78,18 +78,29 @@ void ULibraEffectComponent::BeginPlay()
 void ULibraEffectComponent::EndPlay(const EEndPlayReason::Type endPlayReason)
 {
     Stop();
+    ReleasePackagePlayback();
     Super::EndPlay(endPlayReason);
 }
 
 void ULibraEffectComponent::BeginDestroy()
 {
+    ReleasePackagePlayback();
     NativeState.Reset();
     Super::BeginDestroy();
+}
+
+void ULibraEffectComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
+{
+    ReleasePackagePlayback();
+    NativeState.Reset();
+    Super::OnComponentDestroyed(bDestroyingHierarchy);
 }
 
 auto ULibraEffectComponent::EnsureState() -> ELibraRuntimeResult
 {
     check(IsInGameThread());
+    if (Package) return ReportPackageError(ELibraRuntimeResult::UnsupportedBinary,
+        TEXT("Raw bytecode bindings are unavailable for effect packages; use root/child values and named game I/O."));
     if (!Effect) return ELibraRuntimeResult::InvalidArgument;
     auto compiled = Effect->GetCompiledProgram();
     if (compiled->result != liberafx::Result::Ok) return ToLibraResult(compiled->result);
@@ -101,6 +112,7 @@ auto ULibraEffectComponent::EnsureState() -> ELibraRuntimeResult
 auto ULibraEffectComponent::SetEffect(ULibraEffectAsset* newEffect) -> ELibraRuntimeResult
 {
     check(IsInGameThread());
+    if (bStopping) return ELibraRuntimeResult::Busy;
     TSharedPtr<FLibraEffectState, ESPMode::NotThreadSafe> candidate;
     if (newEffect)
     {
@@ -109,8 +121,12 @@ auto ULibraEffectComponent::SetEffect(ULibraEffectAsset* newEffect) -> ELibraRun
         if (result != ELibraRuntimeResult::Ok) return result;
     }
     Stop();
+    if (Package && LastResult != ELibraRuntimeResult::Ok) return LastResult;
+    Package = nullptr;
+    if (PackagePlayback) PackagePlayback->Package = nullptr;
     Effect = newEffect;
     NativeState = MoveTemp(candidate);
+    LastError.Reset();
     LastResult = newEffect ? ELibraRuntimeResult::Ok : ELibraRuntimeResult::InvalidArgument;
     return LastResult;
 }
@@ -123,6 +139,8 @@ auto ULibraEffectComponent::ConfigureProfiling(bool enableNodeScopes, bool enabl
 auto ULibraEffectComponent::ConfigureRecording(bool enabled, bool enableNodeScopes, bool enableAccessorScopes) -> ELibraRuntimeResult
 {
     check(IsInGameThread());
+    if (Package) return ReportPackageError(ELibraRuntimeResult::UnsupportedBinary,
+        TEXT("Per-node recording is currently supported only for standalone bytecode."));
     if (NativeState)
     {
         if (NativeState->pending) return ELibraRuntimeResult::Busy;
@@ -153,7 +171,22 @@ bool ULibraEffectComponent::IsEvaluationPending() const
 
 auto ULibraEffectComponent::Play(bool bRestart) -> ELibraRuntimeResult
 {
+    check(IsInGameThread());
+    if (bStopping) return LastResult = ELibraRuntimeResult::Busy;
     if (!IsRegistered()) return LastResult = ELibraRuntimeResult::NotReady;
+    if (Package)
+    {
+        if (Effect) return ReportPackageError(ELibraRuntimeResult::InvalidArgument,
+            TEXT("Assign an effect package or standalone bytecode, not both."));
+        NativeState.Reset();
+        return PlayPackage(bRestart);
+    }
+    if (PackagePlayback && PackagePlayback->Package)
+    {
+        auto result = PackagePlayback->Stop();
+        if (result != ELibraRuntimeResult::Ok) return LastResult = result;
+        PackagePlayback->Package = nullptr;
+    }
     if (bRestart)
     {
         if (NativeState) NativeState->Wait();
@@ -175,22 +208,40 @@ auto ULibraEffectComponent::Play(bool bRestart) -> ELibraRuntimeResult
 
 void ULibraEffectComponent::Pause()
 {
+    if (PackagePlayback && Package)
+    {
+        PackagePlayback->Pause();
+        SyncPackageState();
+        return;
+    }
     bIsPlaying = false;
     SetComponentTickEnabled(NativeState && NativeState->pending);
 }
 
 void ULibraEffectComponent::Stop()
 {
+    check(IsInGameThread());
+    if (bStopping) { LastResult = ELibraRuntimeResult::Busy; return; }
+    TGuardValue<bool> stopping(bStopping, true);
+    if (PackagePlayback)
+    {
+        auto result = PackagePlayback->Stop();
+        SyncPackageState();
+        if (result != ELibraRuntimeResult::Ok) { LastResult = result; return; }
+    }
     bIsPlaying = false;
     NativeState.Reset();
     TimeSeconds = 0;
     LastEvaluatedTimeSeconds = 0;
-    LastResult = ELibraRuntimeResult::NotReady;
+    bRootFinished = false;
+    LastResult = Package ? ELibraRuntimeResult::Ok : ELibraRuntimeResult::NotReady;
     SetComponentTickEnabled(false);
 }
 
 auto ULibraEffectComponent::EvaluateAtTime(double evaluationTimeSeconds) -> ELibraRuntimeResult
 {
+    if (Package) return ReportPackageError(ELibraRuntimeResult::UnsupportedBinary,
+        TEXT("Effect package playback is forward-only; use Play, Pause and Tick rather than seeking raw bytecode."));
     if (!IsRegistered()) return LastResult = ELibraRuntimeResult::NotReady;
     if (!FMath::IsFinite(evaluationTimeSeconds)) return LastResult = ELibraRuntimeResult::NonFinite;
     if (NativeState && NativeState->pending) return LastResult = ELibraRuntimeResult::Busy;
@@ -222,6 +273,18 @@ auto ULibraEffectComponent::QueueEvaluation(double timeSeconds, double frameDelt
 void ULibraEffectComponent::TickComponent(float deltaTime, ELevelTick tickType, FActorComponentTickFunction* tickFunction)
 {
     Super::TickComponent(deltaTime, tickType, tickFunction);
+    if (Package && PackagePlayback)
+    {
+        auto playback = PackagePlayback;
+        playback->PlayRate = PlayRate;
+        playback->TickComponent(deltaTime, tickType, nullptr);
+        if (PackagePlayback == playback)
+        {
+            SyncPackageState();
+            OnEvaluationCompleted.Broadcast(LastResult, LastEvaluatedTimeSeconds);
+        }
+        return;
+    }
     if (bIsPlaying)
     {
         auto next = TimeSeconds + static_cast<double>(deltaTime) * PlayRate;
@@ -285,7 +348,7 @@ auto ULibraEffectComponent::SetParameterComponent(FGuid nodeId, double value,
 auto ULibraEffectComponent::HasCurrentState() const -> bool
 {
     check(IsInGameThread());
-    return NativeState && Effect && NativeState->compiled == Effect->GetCompiledProgram();
+    return !Package && NativeState && Effect && NativeState->compiled == Effect->GetCompiledProgram();
 }
 
 auto ULibraEffectComponent::BindValue(FGuid nodeId, FLibraValueHandle& handle) -> ELibraRuntimeResult
@@ -372,6 +435,14 @@ auto ULibraEffectComponent::DispatchSignal(const FLibraSignalHandle& handle, int
 auto ULibraEffectComponent::ReadComponents(FGuid nodeId, double (&values)[4], uint8 width) const -> bool
 {
     check(IsInGameThread());
+    if (Package)
+    {
+        auto value = FVector4{};
+        auto actualWidth = int32{};
+        if (ReadRootValue(nodeId, value, actualWidth) != ELibraRuntimeResult::Ok || actualWidth != width) return false;
+        for (auto lane = 0; lane < width; ++lane) values[lane] = value[lane];
+        return true;
+    }
     if (!NativeState || NativeState->pending || !nodeId.IsValid() || !Effect ||
         NativeState->compiled != Effect->GetCompiledProgram()) return false;
     uint8 bytes[16]{};

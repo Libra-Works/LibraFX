@@ -129,6 +129,13 @@ auto ULibraSpawnableComponent::Play(bool bRestart) -> ELibraRuntimeResult
     return LastResult;
 }
 
+void ULibraSpawnableComponent::Pause()
+{
+    check(IsInGameThread());
+    bIsPlaying = false;
+    SetComponentTickEnabled(false);
+}
+
 auto ULibraSpawnableComponent::RequestNaturalEnd() -> ELibraRuntimeResult
 {
     check(IsInGameThread());

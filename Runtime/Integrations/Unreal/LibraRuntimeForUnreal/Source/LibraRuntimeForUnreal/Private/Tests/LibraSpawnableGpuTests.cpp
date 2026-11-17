@@ -1,7 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "LibraSpawnableAsset.h"
-#include "LibraSpawnableComponent.h"
+#include "LibraEffectComponent.h"
 #include "LibraGpuEffectComponent.h"
 #include "Engine/World.h"
 #include "Misc/AutomationTest.h"
@@ -38,7 +38,7 @@ bool FLibraSpawnableGpuFixtureTest::RunTest(const FString&)
         nullptr, true, ERHIFeatureLevel::Num, &init);
     if (!TestNotNull(TEXT("Isolated GPU world"), world)) return false;
     auto actor = world->SpawnActor<AActor>();
-    auto component = NewObject<ULibraSpawnableComponent>(actor);
+    auto component = NewObject<ULibraEffectComponent>(actor);
     component->bAutoPlay = false;
     component->Package = package;
     actor->AddInstanceComponent(component);
@@ -58,10 +58,16 @@ bool FLibraSpawnableGpuFixtureTest::RunTest(const FString&)
         component->TickComponent(1, LEVELTICK_All, nullptr);
         TestTrue(TEXT("PlayRate zero does not advance GPU time"), FMath::IsNearlyEqual(emitters[0]->GetSimulationTime(), 0.5));
         component->PlayRate = 1;
+        component->Pause();
+        component->TickComponent(0.25f, LEVELTICK_All, nullptr);
+        TestTrue(TEXT("Public Pause retains a frozen GPU scope"),
+            !component->bIsPlaying && component->GetGpuInstanceCount() == 1 &&
+            FMath::IsNearlyEqual(emitters[0]->GetSimulationTime(), 0.5));
+        TestEqual(TEXT("Public Play resumes without recreating scopes"), component->Play(false), ELibraRuntimeResult::Ok);
     }
     auto start = FGuid{};
     FGuid::ParseExact(BytesToHex(metadata.onStartNodeId->data(), 16), EGuidFormats::Digits, start);
-    TestEqual(TEXT("Second GPU scope spawns at independent time"), component->DispatchSignal(start), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Second GPU scope spawns at independent time"), component->DispatchNodeSignal(start), ELibraRuntimeResult::Ok);
     component->TickComponent(0.25f, LEVELTICK_All, nullptr);
     emitters.Reset();
     actor->GetComponents(emitters);
@@ -72,7 +78,8 @@ bool FLibraSpawnableGpuFixtureTest::RunTest(const FString&)
         [](const auto* item) { return FMath::IsNearlyEqual(item->GetSimulationTime(), 0.25); }));
     component->TickComponent(1.25f, LEVELTICK_All, nullptr);
     TestEqual(TEXT("First natural expiry releases only its own GPU"), component->GetGpuInstanceCount(), 1);
-    TestEqual(TEXT("Stop releases the remaining GPU"), component->Stop(), ELibraRuntimeResult::Ok);
+    component->Stop();
+    TestEqual(TEXT("Stop releases the remaining GPU"), component->LastResult, ELibraRuntimeResult::Ok);
     TestEqual(TEXT("No GPU instances survive Stop"), component->GetGpuInstanceCount(), 0);
     component->Play();
     component->DestroyComponent();
@@ -108,7 +115,7 @@ bool FLibraSpawnableRootGpuFixtureTest::RunTest(const FString&)
         nullptr, true, ERHIFeatureLevel::Num, &init);
     if (!TestNotNull(TEXT("Isolated root GPU world"), world)) return false;
     auto actor = world->SpawnActor<AActor>();
-    auto component = NewObject<ULibraSpawnableComponent>(actor);
+    auto component = NewObject<ULibraEffectComponent>(actor);
     component->bAutoPlay = false;
     component->Package = package;
     actor->AddInstanceComponent(component);

@@ -5,6 +5,7 @@
 #include "LibraRuntimeTypes.h"
 #include "LibraRuntimeHandles.h"
 #include "LibraProfileMeasurement.h"
+#include "LibraSpawnableComponent.h"
 #include "LibraEffectComponent.generated.h"
 
 class ULibraEffectAsset;
@@ -19,8 +20,44 @@ public:
     ULibraEffectComponent();
     virtual ~ULibraEffectComponent() override;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime", meta = (EditCondition = "Package == nullptr"))
     TObjectPtr<ULibraEffectAsset> Effect;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime", meta = (EditCondition = "Effect == nullptr"))
+    TObjectPtr<ULibraSpawnableAsset> Package;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Rendering")
+    TArray<FLibraSpawnableAssetBinding> AssetBindings;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Rendering", meta = (ClampMin = "0.0"))
+    float GpuSpawnPerSecond = 100;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Limits", meta = (ClampMin = "1"))
+    int32 MaxActivePerTemplate = 32;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Limits", meta = (ClampMin = "1024"))
+    int64 MemoryBudgetBytesPerTemplate = 4 * 1024 * 1024;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Limits", meta = (ClampMin = "1"))
+    int32 EventCapacity = 256;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Limits", meta = (ClampMin = "1", DisplayName = "Instruction Budget"))
+    int32 PackageInstructionBudget = 10000;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime")
+    bool bRootFinished = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime")
+    FString LastError;
+
+    UPROPERTY(BlueprintAssignable, Category = "Libra Runtime")
+    FOnLibraSpawnableHostEvent OnHostEvent;
+
+    UPROPERTY(BlueprintAssignable, Category = "Libra Runtime")
+    FOnLibraGameIoEvent OnGameIoEvent;
+
+    UPROPERTY(BlueprintAssignable, Category = "Libra Runtime")
+    FOnLibraSpawnableRuntimeError OnRuntimeError;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime")
     bool bAutoPlay = true;
@@ -67,6 +104,37 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult SetEffect(ULibraEffectAsset* newEffect);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
+    ELibraRuntimeResult SetPackage(ULibraSpawnableAsset* newPackage);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
+    ELibraRuntimeResult RequestNaturalEnd();
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Signals")
+    ELibraRuntimeResult DispatchNodeSignal(FGuid nodeId);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Game I/O")
+    ELibraRuntimeResult FireGameSignal(const FString& name);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Game I/O")
+    ELibraRuntimeResult SetGameProperty(const FString& name, const TArray<double>& values);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Game I/O")
+    ELibraRuntimeResult SetOwnerMatrix(const TArray<double>& values);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
+    ELibraRuntimeResult ReadRootValue(FGuid nodeId, FVector4& value, int32& componentCount) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
+    ELibraRuntimeResult ReadChildValue(FGuid containerId, int64 instanceId, FGuid nodeId,
+        FVector4& value, int32& componentCount) const;
+
+    UFUNCTION(BlueprintPure, Category = "Libra Runtime|Rendering")
+    int32 GetRenderObjectCount() const;
+
+    UFUNCTION(BlueprintPure, Category = "Libra Runtime|Rendering")
+    int32 GetGpuInstanceCount() const;
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult Play(bool bRestart = true);
@@ -127,8 +195,22 @@ public:
 protected:
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type endPlayReason) override;
+    virtual void OnComponentDestroyed(bool bDestroyingHierarchy) override;
 
 private:
+    ELibraRuntimeResult PlayPackage(bool bRestart);
+    ELibraRuntimeResult ReportPackageError(ELibraRuntimeResult result, const FString& message);
+    void SyncPackageState();
+    void ReleasePackagePlayback();
+    UFUNCTION()
+    void ForwardHostEvent(const FLibraSpawnableHostEvent& event);
+    UFUNCTION()
+    void ForwardGameIoEvent(const FLibraGameIoEvent& event);
+    UFUNCTION()
+    void ForwardRuntimeError(ELibraRuntimeResult result);
+    UPROPERTY(Transient)
+    TObjectPtr<ULibraSpawnableComponent> PackagePlayback;
+    bool bStopping = false;
     ELibraRuntimeResult EnsureState();
     ELibraRuntimeResult QueueEvaluation(double timeSeconds, double frameDelta);
     bool ReadComponents(FGuid nodeId, double (&values)[4], uint8 width) const;

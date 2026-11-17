@@ -21,7 +21,7 @@ struct FLibraSpawnableAssetBinding
     TObjectPtr<UObject> Asset;
 };
 
-UCLASS(ClassGroup = (Effects), meta = (BlueprintSpawnableComponent, DisplayName = "Libra Spawnable"))
+UCLASS(HideDropdown, ClassGroup = (Effects), meta = (DisplayName = "Libra Spawnable (Internal)"))
 class LIBRARUNTIMEFORUNREAL_API ULibraSpawnableComponent : public UActorComponent
 {
     GENERATED_BODY()
@@ -83,6 +83,9 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult Play(bool bRestart = true);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
+    void Pause();
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult RequestNaturalEnd();

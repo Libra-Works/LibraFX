@@ -1,7 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "LibraSpawnableAsset.h"
-#include "LibraSpawnableComponent.h"
+#include "LibraEffectComponent.h"
 #include "Engine/World.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/Material.h"
@@ -48,7 +48,7 @@ bool FLibraSpawnableComponentFixtureTest::RunTest(const FString&)
         return false;
     }
 
-    auto component = NewObject<ULibraSpawnableComponent>(actor);
+    auto component = NewObject<ULibraEffectComponent>(actor);
     component->bAutoPlay = false;
     component->Package = package;
     actor->AddInstanceComponent(component);
@@ -85,7 +85,8 @@ bool FLibraSpawnableComponentFixtureTest::RunTest(const FString&)
     TestEqual(TEXT("Natural completion releases all renderers"), component->GetRenderObjectCount(), 0);
     TestEqual(TEXT("Restart creates a fresh renderer"), component->Play(), ELibraRuntimeResult::Ok);
     TestEqual(TEXT("Restart has one launch renderer"), component->GetRenderObjectCount(), 1);
-    TestEqual(TEXT("Manual stop releases the host"), component->Stop(), ELibraRuntimeResult::Ok);
+    component->Stop();
+    TestEqual(TEXT("Manual stop releases the host"), component->LastResult, ELibraRuntimeResult::Ok);
     TestEqual(TEXT("Manual stop releases all renderers"), component->GetRenderObjectCount(), 0);
     auto repeated = bytes;
     repeated[24] = 0;
@@ -101,7 +102,7 @@ bool FLibraSpawnableComponentFixtureTest::RunTest(const FString&)
         FGuid::ParseExact(BytesToHex(metadata.onStartNodeId->data(), 16), EGuidFormats::Digits, start);
         TestEqual(TEXT("Repeated fixture starts first instance"), component->Play(), ELibraRuntimeResult::Ok);
         component->TickComponent(0.5f, LEVELTICK_All, nullptr);
-        TestEqual(TEXT("Second spawn at a different root time"), component->DispatchSignal(start), ELibraRuntimeResult::Ok);
+        TestEqual(TEXT("Second spawn at a different root time"), component->DispatchNodeSignal(start), ELibraRuntimeResult::Ok);
         component->TickComponent(0.5f, LEVELTICK_All, nullptr);
         TestEqual(TEXT("Two same-template instances own distinct renderers"), component->GetRenderObjectCount(), 2);
         meshes.Reset();
@@ -110,7 +111,8 @@ bool FLibraSpawnableComponentFixtureTest::RunTest(const FString&)
             meshes.ContainsByPredicate([](const auto* mesh) { return FMath::IsNearlyEqual(mesh->GetRelativeLocation().Z, 140.0); }));
         TestTrue(TEXT("Second instance starts at local time zero"),
             meshes.ContainsByPredicate([](const auto* mesh) { return FMath::IsNearlyEqual(mesh->GetRelativeLocation().Z, 80.0); }));
-        TestEqual(TEXT("Stop releases overlapping instances"), component->Stop(), ELibraRuntimeResult::Ok);
+        component->Stop();
+        TestEqual(TEXT("Stop releases overlapping instances"), component->LastResult, ELibraRuntimeResult::Ok);
         TestEqual(TEXT("No renderer survives Stop"), component->GetRenderObjectCount(), 0);
     }
     world->DestroyWorld(false);
@@ -144,7 +146,7 @@ bool FLibraSpawnableGameIoRenderTest::RunTest(const FString&)
         nullptr, true, ERHIFeatureLevel::Num, &init);
     if (!TestNotNull(TEXT("Isolated game I/O world"), world)) return false;
     auto actor = world->SpawnActor<AActor>();
-    auto component = NewObject<ULibraSpawnableComponent>(actor);
+    auto component = NewObject<ULibraEffectComponent>(actor);
     component->bAutoPlay = false;
     component->Package = package;
     actor->AddInstanceComponent(component);

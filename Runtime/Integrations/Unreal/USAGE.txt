@@ -64,6 +64,22 @@ Engine version compatibility
   and 5.9 verification is pending; source targeting alone is not tested support.
 
 Import and use
+  ULibraEffectComponent ("Libra Effect") is the public playback entry point for
+  an entire effect, including CPU logic, rendering, GPU Particle nodes and
+  Spawnable groups. Do not select different components for CPU and GPU.
+  Import an .lfxp package, then drag the resulting asset from Content Browser
+  into the level viewport. The editor creates ALibraEffectActor with a scene
+  root and one ULibraEffectComponent, assigns the dropped asset to Package and
+  retains the placement transform. Standalone .lfxb assets use the same actor
+  and component, with Effect assigned instead. Placement does not start editor
+  simulation; bAutoPlay starts playback when the game begins.
+  Alternatively add Libra Effect to an existing actor and assign Package.
+  SetPackage/SetEffect switch formats; assigning both properties rejects Play.
+  ULibraSpawnableComponent and ULibraGpuEffectComponent remain internal helpers
+  and legacy-compatible classes, but are hidden from Add Component. A package
+  component owns its helpers and is their sole tick owner.
+
+Standalone bytecode compatibility
   Convert an editor graph to .lfxb, then import that file into Unreal.
   Add a Libra Effect component to an actor and set its Effect asset.
   Play / Pause / Stop / EvaluateAtTime are available to both C++ and Blueprint.
@@ -79,16 +95,23 @@ Import and use
   delta without substituting effect substeps or applying PlayRate again.
   Initial/manual evaluations use the world's current delta. Instance Age uses
   the enclosing Spawnable clock; the component's standalone graph is the root.
-  ULibraEffectComponent currently performs raw program evaluation: it does not
+  When Effect is a standalone .lfxb, the component performs raw evaluation: it does not
   use Life Time to expire playback or automatically dispatch On Start / On
   Destroy. Stop is an explicit interruption, not natural expiry.
-  Import an .lfxp package as a Libra Spawnable asset and assign it to a
-  Libra Spawnable component. The component drives the shared engine-neutral
+Effect package playback
+  Import an .lfxp package as a Libra Spawnable asset and assign it to the
+  public Libra Effect component's Package property. It drives the engine-neutral
   SpawnableHost on the game thread using scaled TimeSeconds and the unscaled
   Unreal frame delta. Blueprint events expose Spawn/Stop/Destroy/Signal and
   named game-I/O records; methods accept game signals/properties and read root
   or active child values. RequestNaturalEnd follows the package's natural
   lifecycle; Stop is explicit and never publishes natural Destroy.
+  Play(false) resumes paused package playback without replacing its scopes.
+  DispatchNodeSignal addresses package node UUIDs; the existing DispatchSignal
+  bound-handle API remains for standalone bytecode. ReadRootValue/ReadChildValue
+  and named game I/O address package values. Package seeking, raw bound handles
+  and per-node profiling flags currently reject explicitly rather than evaluating
+  a separate CPU instance or silently ignoring requested behavior.
   The host owns package lifecycle, delayed work and parent/child routing.
   The component instantiates root and per-child StaticMesh components from
   render_config and updates them from that exact native instance's values.
@@ -130,6 +153,9 @@ Import and use
   the resulting LibraSpawnableAsset and source import data in the asset editor.
   The focused component fixture additionally exercises actual renderer objects,
   two overlapping instances with independent local clocks, and resource cleanup.
+  These lifecycle/rendering fixtures now run through ULibraEffectComponent.
+  Libra.Editor.Effect.ViewportAssetPlacement verifies real editor factory
+  discovery, both asset formats, actor/component assignment and placement pose.
   Isolated UE 5.7 D3D11 automation also passed GameIoRendering (root properties,
   named spawn signals and overlapping Capture/Live values) and GpuFixture
   (actual particle dispatch/readback, independent local clocks, paused playback,

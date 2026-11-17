@@ -9,7 +9,7 @@ struct FLibraGpuState;
 struct FStreamableHandle;
 class FLibraGpuViewExtension;
 
-UCLASS(ClassGroup = (Effects), meta = (BlueprintSpawnableComponent, DisplayName = "Libra GPU Effect"))
+UCLASS(HideDropdown, ClassGroup = (Effects), meta = (DisplayName = "Libra GPU Effect (Internal)"))
 class LIBRAGPURUNTIME_API ULibraGpuEffectComponent : public USceneComponent
 {
     GENERATED_BODY()
