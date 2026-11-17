@@ -767,7 +767,7 @@ auto GeneratorPool::ownerDestroy(GeneratorInstanceId id, const std::uint8_t node
     if (slot->ownerDestroySent) return slot->ownerDestroyResult;
     if (!slot->started || !slot->sampleReady || slot->expiring) return Result::NotReady;
     if (slot->startResult != Result::Ok) return slot->startResult;
-    if (time - slot->start != slot->sampledAge) return Result::InvalidArgument;
+    if (time != slot->start + slot->sampledAge) return Result::InvalidArgument;
     auto signal = SignalHandle{};
     auto result = slot->instance->bindSignal(nodeId, signal);
     if (result != Result::Ok) return result;

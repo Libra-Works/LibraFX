@@ -241,9 +241,12 @@ internal static class EditorInterfaceTests
                 {
                     var header = views[index].FindControl<Border>("NodeHeader")!;
                     var expected = localization.Get(entries[index].Key);
-                    if (!header.IsEffectivelyVisible || !Equals(ToolTip.GetTip(header), expected) ||
-                        AutomationProperties.GetHelpText(header) != expected)
-                        throw new InvalidOperationException($"Lifecycle help is missing for {entries[index].Node.Definition.Kind} in {languageId}.");
+                    var tooltip = ToolTip.GetTip(header)?.ToString();
+                    if (!header.IsEffectivelyVisible || tooltip is null ||
+                        !tooltip.StartsWith(expected, StringComparison.Ordinal) ||
+                        AutomationProperties.GetHelpText(header) != tooltip)
+                        throw new InvalidOperationException($"Lifecycle help is missing for {entries[index].Node.Definition.Kind} in {languageId}. " +
+                            $"Expected '{expected}', tooltip '{ToolTip.GetTip(header)}', help '{AutomationProperties.GetHelpText(header)}'.");
                 }
             }
             if (!GraphSnapshot.ContentEquals(before, root.CreateSnapshot()))

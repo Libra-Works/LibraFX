@@ -247,7 +247,7 @@ public sealed class NativeSpawnableSession : IDisposable
     private void RequestNaturalEnd(double time)
     {
         if (_rootEnding || _rootFinished || _rootStopped) return;
-        Check(Fn<RequestNaturalEnd>("libra_effect_request_natural_end")(_parentInstance));
+        Check(Fn<RequestNaturalEndFunction>("libra_effect_request_natural_end")(_parentInstance));
         _rootEnding = true;
         NotifyOwnerDestroy(time);
         FinishManagedIfQuiescent();
@@ -676,7 +676,7 @@ public sealed class NativeSpawnableSession : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int AdvanceEffect(ulong instance, double time, out NativeLifetimeSample sample);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int DrainEffect(ulong instance, double time);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int DestroyEffect(ulong instance, byte[] node, uint budget);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int RequestNaturalEnd(ulong instance);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int RequestNaturalEndFunction(ulong instance);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Schedule(ulong instance, double time, ulong token);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int ScheduledEventAction(ulong instance, out NativeScheduledEvent value, out uint has);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Process(ulong pool, uint max, out uint processed);

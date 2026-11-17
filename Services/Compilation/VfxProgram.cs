@@ -144,7 +144,7 @@ public sealed class VfxProgram
         var definitions = GraphNodeDefinition.All.ToDictionary(item => item.Kind);
         if (nodes.Any(node => definitions[node.Kind].Runtime is not null ||
                               node.Kind == GraphNodeKind.SpawnableGroup || node.Kind == GraphNodeKind.Signal))
-            return CompileWithCustomNodes(graph, nodes, definitions, gameIoPorts);
+            return CompileWithCustomNodes(graph, nodes, definitions, gameIoPorts, signalTypeOverrides);
         foreach (var node in nodes)
             if (!TryOpcode(node.Kind.Value, out _))
                 throw new InvalidDataException($"Node '{node.Name}' ({node.Kind}) is not supported by the runtime.");
@@ -315,7 +315,8 @@ public sealed class VfxProgram
     private static VfxProgram CompileWithCustomNodes(
         GraphSnapshot graph, GraphNodeSnapshot[] nodes,
         IReadOnlyDictionary<GraphNodeKind, GraphNodeDefinition> definitions,
-        IReadOnlyList<GameIoPort> gameIoPorts)
+        IReadOnlyList<GameIoPort> gameIoPorts,
+        IReadOnlyDictionary<Guid, Guid>? signalTypeOverrides)
     {
         if (nodes.Length > MaxInstructions) throw new InvalidDataException("Too many runtime nodes.");
         var byId = nodes.ToDictionary(node => node.Id);

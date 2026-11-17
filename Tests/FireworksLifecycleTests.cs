@@ -1011,9 +1011,9 @@ internal static class FireworksLifecycleTests
             var position = burst.ChildGraph.Nodes.Single(node => node.Name == "Burst 1 expanding position");
             Near(session.Read(burst.Id, burstInstance.Instance, position.Id).Lanes, [55, 0, 230], "Actual expanding burst particle");
             using (var render = JsonDocument.Parse(burstTemplate.RenderConfiguration))
-                foreach (var draw in render.RootElement.GetProperty("nodes").EnumerateArray())
+                foreach (var renderNode in render.RootElement.GetProperty("nodes").EnumerateArray())
                 {
-                    var binding = draw.GetProperty("inputs").EnumerateArray().Single(input => input.GetProperty("id").GetString() == "position");
+                    var binding = renderNode.GetProperty("inputs").EnumerateArray().Single(input => input.GetProperty("id").GetString() == "position");
                     var result = session.Read(burst.Id, burstInstance.Instance, binding.GetProperty("sourceNodeId").GetGuid());
                     Require(result.Width == 3 && result.Lanes.All(double.IsFinite), "Compiled render position is not readable for the actual Burst instance.");
                 }

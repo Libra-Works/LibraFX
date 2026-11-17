@@ -228,9 +228,11 @@ int main(int argc, char** argv)
     assert(scheduled.takeScheduled(scheduledEvent, hasScheduled) == Result::Ok &&
            hasScheduled && scheduledEvent.token == 1);
     context.lifecycle = &scheduled;
+    auto scheduledDestroyCalls = context.calls;
     assert(scheduled.destroy(signalId.data(), 3) == Result::Ok &&
-           context.calls == 3 && context.reentrant == Result::Busy);
-    assert(scheduled.destroy(signalId.data(), 3) == Result::Ok && context.calls == 3);
+           context.calls == scheduledDestroyCalls + 1 && context.reentrant == Result::Busy);
+    assert(scheduled.destroy(signalId.data(), 3) == Result::Ok &&
+           context.calls == scheduledDestroyCalls + 1);
     assert(scheduled.finish() == Result::Ok);
 
     alignas(16) auto deferredWork = std::array<double, 16>{};
@@ -277,8 +279,11 @@ int main(int argc, char** argv)
     auto failed = liberafx::EffectLifecycle(failedInstance);
     context.lifecycle = &failed;
     context.fail = true;
-    assert(failed.start(duration, signalId.data(), 3, sample) == Result::QueueRejected);
-    assert(failed.start(duration, signalId.data(), 3, sample) == Result::QueueRejected && context.calls == 4);
+    auto callsBeforeFailedStart = context.calls;
+    assert(failed.start(duration, signalId.data(), 3, sample) == Result::QueueRejected &&
+           context.calls == callsBeforeFailedStart + 1);
+    assert(failed.start(duration, signalId.data(), 3, sample) == Result::QueueRejected &&
+           context.calls == callsBeforeFailedStart + 1);
     assert(failed.stop() == Result::Ok);
 
     alignas(16) auto destroyFailureWork = std::array<double, 16>{};
@@ -288,8 +293,11 @@ int main(int argc, char** argv)
     context.lifecycle = &destroyFailure;
     assert(liberafx::Lifetime::finite(0, duration) == Result::Ok);
     assert(destroyFailure.start(duration, nullptr, 0, sample) == Result::Ok && sample.expired);
-    assert(destroyFailure.destroy(signalId.data(), 3) == Result::QueueRejected);
-    assert(destroyFailure.destroy(signalId.data(), 3) == Result::QueueRejected && context.calls == 5);
+    auto callsBeforeFailedDestroy = context.calls;
+    assert(destroyFailure.destroy(signalId.data(), 3) == Result::QueueRejected &&
+           context.calls == callsBeforeFailedDestroy + 1);
+    assert(destroyFailure.destroy(signalId.data(), 3) == Result::QueueRejected &&
+           context.calls == callsBeforeFailedDestroy + 1);
     assert(destroyFailure.stop() == Result::Ok);
 
     auto failureBytes = bytes;

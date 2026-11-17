@@ -938,6 +938,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         ConnectionPreviewPoint = null;
         OnPropertyChanged(nameof(PendingOutputNode));
         OnPropertyChanged(nameof(PendingOutputPortId));
+        RefreshTypeDiagnostics();
     }
 
     public GraphNodeViewModel GetNode(Guid id)
@@ -1725,6 +1726,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     {
         Nodes.Insert(Math.Clamp(index, 0, Nodes.Count), node);
         SelectNode(node);
+        RefreshTypeDiagnostics();
     }
 
     internal int RemoveNode(GraphNodeViewModel node)
@@ -1746,6 +1748,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             SetConnectionStatus("Messages.PendingConnectionDeleted");
         }
 
+        RefreshTypeDiagnostics();
         return index;
     }
 

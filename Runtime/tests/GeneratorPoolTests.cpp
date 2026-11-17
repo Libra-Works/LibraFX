@@ -226,15 +226,16 @@ void lifecycleTests()
     auto zero = liberafx::GeneratorInstanceId{};
     assert(pressure->spawn(0, &life, 1, zero) == Result::Ok);
     context.pool = pressure.get(); context.instance = zero;
-    assert(pressure->start(zero) == Result::QueueRejected && context.calls == 3);
+    auto callsBeforePressure = context.calls;
+    assert(pressure->start(zero) == Result::QueueRejected && context.calls == callsBeforePressure + 1);
     assert(pressure->lifetime(zero, lifetimeSample) == Result::Ok &&
            lifetimeSample.age == 0 && lifetimeSample.remaining == 0 &&
            lifetimeSample.normalizedAge == 1 && lifetimeSample.expired);
-    assert(pressure->start(zero) == Result::QueueRejected && context.calls == 3);
+    assert(pressure->start(zero) == Result::QueueRejected && context.calls == callsBeforePressure + 1);
     assert(pressure->evaluate(zero, 1) == Result::QueueRejected);
     assert(pressure->stop(zero) == Result::Busy && pressure->reset() == Result::Busy);
     assert(pressure->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Spawn);
-    assert(pressure->start(zero) == Result::Ok && context.calls == 3);
+    assert(pressure->start(zero) == Result::Ok && context.calls == callsBeforePressure + 1);
     assert(pressure->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Destroy && event.instanceId == zero);
     assert(pressure->finalize(zero) == Result::Ok);
     assert(pressure->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Stop && event.instanceId == zero);
@@ -246,8 +247,9 @@ void lifecycleTests()
     auto failedId = liberafx::GeneratorInstanceId{};
     assert(failed->spawn(0, nullptr, 0, failedId) == Result::Ok);
     context.pool = failed.get(); context.instance = failedId; context.fail = true;
-    assert(failed->start(failedId) == Result::QueueRejected && context.calls == 4);
-    assert(failed->start(failedId) == Result::QueueRejected && context.calls == 4);
+    auto callsBeforeFailure = context.calls;
+    assert(failed->start(failedId) == Result::QueueRejected && context.calls == callsBeforeFailure + 1);
+    assert(failed->start(failedId) == Result::QueueRejected && context.calls == callsBeforeFailure + 1);
     assert(failed->evaluate(failedId, 5) == Result::QueueRejected);
     assert(failed->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Spawn);
     assert(failed->stop(failedId) == Result::Ok);
@@ -338,6 +340,7 @@ void lifecycleTests()
         assert(delayedPool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Destroy);
         assert(delayedPool->finalize(delayedFirst) == Result::Ok);
         assert(delayedPool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Stop);
+        delayedContext.calls = 0;
         delayedContext.delay = 0.3;
         assert(delayedPool->spawn(0.1, nullptr, 0, delayedFirst) == Result::Ok);
         assert(delayedPool->start(delayedFirst) == Result::Ok);
@@ -349,6 +352,7 @@ void lifecycleTests()
         assert(delayedPool->evaluate(delayedFirst, due) == Result::Ok);
         assert(delayedPool->evaluate(delayedFirst, 0.2) == Result::InvalidArgument);
         delayedContext.defer = false;
+        delayedContext.delay = 0;
         assert(delayedPool->ownerDestroy(delayedFirst, bytes.data() + signalOffset, due, 4) == Result::Ok);
         assert(delayedPool->stop(delayedFirst) == Result::Ok);
         assert(delayedPool->popEvent(event) && event.kind == liberafx::GeneratorEventKind::Stop);

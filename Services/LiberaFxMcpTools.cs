@@ -293,7 +293,7 @@ public sealed class LiberaFxMcpTools
                 ports = group.ChildGraph.Nodes.Where(node => SpawnableGroupSchema.IsInput(node.Kind))
                     .Select(node => new { portId = SpawnableGroupSchema.PortId(node.Id), templateNodeId = node.Id,
                         node.Name, node.PortType }),
-                maxInputs = SpawnableGroupSchema.MaxInputs,
+                maxInputLanes = SpawnableGroupSchema.MaxInputLanes,
                 childGraph = group.ChildGraph
             }, JsonOptions);
         });
