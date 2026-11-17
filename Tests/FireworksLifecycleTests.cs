@@ -47,6 +47,8 @@ internal static class FireworksLifecycleTests
             Require(GraphSnapshot.ContentEquals(graph, files.LoadAsync(stream).GetAwaiter().GetResult().Graph), "Project persistence changed template IDs or routes.");
         var package = SpawnableGroupPackage.Compile(graph);
         Require(package.Templates.Count == 2 && package.DestroyRoutes.Count == 1 && package.OnStartNodeId is not null, "Lifecycle package incomplete.");
+        var binaryPackage = SpawnablePackageBinaryTests.Verify(package);
+        File.WriteAllBytes(Path.Combine(output, "Fireworks.lfxp"), binaryPackage);
         using (var render = JsonDocument.Parse(package.Templates.Single(template => template.ContainerId == launch.Id).RenderConfiguration))
             Require(render.RootElement.GetProperty("nodes").GetArrayLength() == 1, "Launch render binding missing.");
         using (var render = JsonDocument.Parse(package.Templates.Single(template => template.ContainerId == burst.Id).RenderConfiguration))

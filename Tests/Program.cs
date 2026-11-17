@@ -125,6 +125,15 @@ internal static class Program
             EditorNativePreviewTests.Run(fireworksPreviewOutput);
             return;
         }
+        if (args is ["--spawnable-package-binary", var binaryPackagePath])
+        {
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")) ||
+                !Path.IsPathFullyQualified(binaryPackagePath))
+                throw new ArgumentException("Use an isolated LIBERAFX_DATA_ROOT and an absolute package output path.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            SpawnablePackageBinaryTests.Run(binaryPackagePath);
+            return;
+        }
         if (args is ["--fireworks-lifecycle", var fireworksOutput])
         {
             if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")))
