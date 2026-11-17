@@ -82,7 +82,7 @@ public sealed class LiberaFxMcpTools
         Guid.TryParseExact(value, "D", out var id) ? id : throw new McpException("Invalid clientId GUID.");
 
     [McpServerTool(Name = "libera_graph_read", ReadOnly = true, OpenWorld = false)]
-    [Description("Read the active graph, including stable node IDs, positions, types, ports, and ordered connections. Ordinary Signal fan-out executes in connection order, depth first. Spawnable Destroy routes are handled separately by the host.")]
+    [Description("Read the active graph, including stable node IDs, positions, types, parameters and connections. Each Signal output has at most one destination; Signal inputs execute on every arrival, without synchronization. Sequence executes outputs top to bottom, without waiting for Delay or Spawnable completion.")]
     public static async Task<string> GetGraph(ActiveGraphProvider activeGraph) =>
         await Dispatcher.UIThread.InvokeAsync(
             () => JsonSerializer.Serialize(activeGraph.Graph.CreateCurrentSnapshot(), JsonOptions));
@@ -128,7 +128,7 @@ public sealed class LiberaFxMcpTools
     }
 
     [McpServerTool(Name = "libera_graph_list_node_types", ReadOnly = true, OpenWorld = false)]
-    [Description("List authoring node types and ports. Spawnable Group is one editable child template; receiving a signal creates runtime instances, never editor nodes. Add Spawn Input nodes directly inside its child graph.")]
+    [Description("List authoring node types and ports. Sequence has 1..32 outputs: set its integer 'outputs' parameter; stable output IDs are then_0, then_1, etc., in execution order. Each Signal output allows one destination; inputs allow multiple senders. Spawnable Group is an editable child template; receiving a signal creates runtime instances, never editor nodes.")]
     public static async Task<string> ListNodeTypes(ActiveGraphProvider activeGraph) =>
         await Dispatcher.UIThread.InvokeAsync(() => JsonSerializer.Serialize(activeGraph.Graph.AvailableNodeDefinitions, JsonOptions));
 
@@ -377,7 +377,7 @@ public sealed class LiberaFxMcpTools
         });
 
     [McpServerTool(Name = "libera_graph_set_parameter", Destructive = false, OpenWorld = false)]
-    [Description("Set one existing node parameter as a JSON value using the editor's type validation and undo history. Does not replace the graph or change other nodes. Read parameter IDs/types/defaults with libera_graph_list_node_types. For Float, parameterId is value and value can be 7.")]
+    [Description("Set one existing node parameter as a JSON value using undo history. Read IDs/types/defaults with libera_graph_list_node_types. For Sequence, parameterId='outputs', value=1..32; shrinking removes trailing pins and their connections in the same undo step. Sequence output IDs then_0, then_1, etc. remain stable.")]
     public static async Task<string> SetParameter(
         ActiveGraphProvider activeGraph,
         [Description("Existing node GUID.")] string nodeId,

@@ -119,6 +119,21 @@ implicitly published to named game IO.
 
 Editor package and host bridge (v2-v8)
 
+Authored Signal connections have one destination per output pin. An input pin
+may receive multiple sources; each arrival runs independently, without waiting
+for the other sources. Parameter connection rules are unchanged. Existing
+Signal fan-out graphs are rejected, not automatically migrated.
+Use Sequence for explicit branching. Its 1..32 outputs execute in displayed
+top-to-bottom order, not connection creation order. Delay and Spawnable branches
+schedule/start their work; Sequence does not wait for them to finish.
+Append/remove-last preserves surviving output IDs, and removing outputs plus
+their wires is one undoable edit. AND/OR/NOTOR synchronization gates are separate
+future work, not implicit input behavior.
+Compilation lowers Sequence to existing native Signal routing after validating
+the authored graph; no new bytecode format or native node is required.
+Special natural-Destroy routes may traverse Sequence and at most one Delay to
+sibling Spawnables. That Delay still requires exactly one Signal source.
+
 The Spawnable Group context action creates one editable child graph. Add typed
 Spawn Input nodes directly inside it; their GUIDs become parent parameter-port
 IDs and template capture targets. Existing package versions carry up to four

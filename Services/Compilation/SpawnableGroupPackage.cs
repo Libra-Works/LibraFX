@@ -264,28 +264,45 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
     {
         var groups = graph.Nodes.Where(node => node.Kind == GraphNodeKind.SpawnableGroup).ToDictionary(node => node.Id);
         var delays = graph.Nodes.Where(node => node.Kind.Value == "Delay").ToDictionary(node => node.Id);
+        var sequences = graph.Nodes.Where(node => SequenceSchema.IsSequence(node.Kind)).ToDictionary(node => node.Id);
         var routes = new List<SpawnableDestroyRoute>();
         foreach (var edge in graph.Connections.Where(edge => groups.ContainsKey(edge.SourceNodeId) && edge.SourcePortId == "destroy"))
         {
-            var targets = new[] { edge };
-            Guid? delayId = null;
-            if (delays.ContainsKey(edge.TargetNodeId))
+            var targets = new List<(GraphConnectionSnapshot Edge, Guid? Delay)>();
+            var visiting = new HashSet<Guid>();
+            var steps = 0;
+            void VisitTarget(GraphConnectionSnapshot current, Guid? delayId)
             {
-                if (edge.TargetPortId != "signal" ||
-                    graph.Connections.Count(other => other.TargetNodeId == edge.TargetNodeId && other.TargetPortId == "signal") != 1)
-                    throw new InvalidDataException("Delay requires one direct Spawnable Destroy signal.");
-                targets = graph.Connections.Where(other => other.SourceNodeId == edge.TargetNodeId && other.SourcePortId == "then").ToArray();
-                if (targets.Length == 0 || targets.Any(target => target.TargetPortId != "spawn"))
-                    throw new InvalidDataException("Delay currently requires sibling Spawnable.Spawn targets.");
-                delayId = edge.TargetNodeId;
+                if (++steps > 10000 || !visiting.Add(current.TargetNodeId))
+                    throw new InvalidDataException("Destroy routing contains a cycle or too many steps.");
+                if (sequences.TryGetValue(current.TargetNodeId, out var sequence))
+                {
+                    if (current.TargetPortId != "signal")
+                        throw new InvalidDataException("Sequence requires a Signal input.");
+                    for (var index = 0; index < SequenceSchema.OutputCount(sequence.Parameters); index++)
+                        foreach (var next in graph.Connections.Where(other =>
+                            other.SourceNodeId == sequence.Id && other.SourcePortId == SequenceSchema.OutputId(index)))
+                            VisitTarget(next, delayId);
+                }
+                else if (delays.ContainsKey(current.TargetNodeId))
+                {
+                    if (delayId is not null || current.TargetPortId != "signal" ||
+                        graph.Connections.Count(other => other.TargetNodeId == current.TargetNodeId &&
+                            other.TargetPortId == "signal") != 1)
+                        throw new InvalidDataException("A Destroy route supports one Delay with a single Signal source.");
+                    foreach (var next in graph.Connections.Where(other =>
+                        other.SourceNodeId == current.TargetNodeId && other.SourcePortId == "then"))
+                        VisitTarget(next, current.TargetNodeId);
+                }
+                else targets.Add((current, delayId));
+                visiting.Remove(current.TargetNodeId);
             }
-            foreach (var targetEdge in targets)
+            VisitTarget(edge, null);
+            foreach (var (targetEdge, delayId) in targets)
             {
                 if (!groups.TryGetValue(targetEdge.TargetNodeId, out var target) || targetEdge.TargetPortId != "spawn")
                     throw new InvalidDataException("Local Destroy currently supports a sibling Spawnable directly or through Delay.");
                 if (target.Id == edge.SourceNodeId) throw new InvalidDataException("Self-spawning Destroy routes are unsupported.");
-                if (graph.Connections.Count(other => other.TargetNodeId == target.Id && other.TargetPortId == "spawn") != 1)
-                    throw new InvalidDataException("A Destroy-routed Spawnable must have exactly one Spawn signal source.");
                 var captures = new List<SpawnableRouteCapture>();
                 foreach (var input in target.ChildGraph!.Nodes.Where(node => SpawnableGroupSchema.IsInput(node.Kind)))
                 {

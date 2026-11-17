@@ -62,6 +62,7 @@ public static class GraphValidator
             }
             RenderNodeSchema.ValidateNodeParameters(definition, node.Parameters);
             GameIoSchema.ValidateNodeParameters(definition, node.Parameters);
+            if (SequenceSchema.IsSequence(node.Kind)) _ = SequenceSchema.OutputCount(node.Parameters);
             if (node.ChildGraph is not null)
                 Validate(node.ChildGraph, allIds, depth + 1,
                     insideSpawnable || node.Kind == GraphNodeKind.SpawnableGroup, node.Kind, false);
@@ -70,12 +71,14 @@ public static class GraphValidator
                     .Sum(child => SpawnableGroupSchema.InputWidth(child.PortType)) > SpawnableGroupSchema.MaxInputLanes)
                 throw new InvalidDataException($"A Spawnable Group supports at most {SpawnableGroupSchema.MaxInputLanes} input value lanes.");
             effectiveDefinitions.Add(node.Id, GroupBoundarySchema.Effective(SpawnableGroupSchema.Effective(
-                GameIoSchema.Effective(RenderNodeSchema.Effective(definition, node.Parameters), node.Parameters),
+                SequenceSchema.Effective(GameIoSchema.Effective(
+                    RenderNodeSchema.Effective(definition, node.Parameters), node.Parameters), node.Parameters),
                 node.ChildGraph), node.ChildGraph));
         }
 
         var connections = new HashSet<(Guid SourceId, string? SourcePortId, Guid TargetId, string? TargetPortId)>();
         var occupiedInputs = new HashSet<(Guid TargetId, string PortId)>();
+        var occupiedSignalOutputs = new HashSet<(Guid SourceId, string? PortId)>();
         foreach (var connection in snapshot.Connections)
         {
             if (connection is null ||
@@ -91,9 +94,13 @@ public static class GraphValidator
                     ? connection.TargetPortId is not null
                     : connection.TargetPortId is not { } port ||
                       !effectiveDefinitions[target.Id].InputPorts!.Any(item => item.Id == port) ||
+                      effectiveDefinitions[target.Id].GetInputPortCategory(port) != GraphPortCategory.Signal &&
                       !occupiedInputs.Add((target.Id, port))) ||
                 !connections.Add((source.Id, connection.SourcePortId, target.Id, connection.TargetPortId)))
                 throw new InvalidDataException("The project contains an invalid graph connection.");
+            if (effectiveDefinitions[source.Id].GetOutputPortCategory(connection.SourcePortId) == GraphPortCategory.Signal &&
+                !occupiedSignalOutputs.Add((source.Id, connection.SourcePortId)))
+                throw new InvalidDataException("A Signal output can have only one destination. Use a Sequence node to branch.");
         }
     }
 }

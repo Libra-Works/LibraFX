@@ -1054,7 +1054,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 targetPortId ??= ports.FirstOrDefault()?.Id;
                 if (targetPortId is null || !ports.Any(port => port.Id == targetPortId))
                     throw new ArgumentException("The target input port does not exist.", nameof(plan));
-                if (connectionKeys.Any(key => key.Target == target.Id && key.TargetPort == targetPortId))
+                if (target.Definition.GetInputPortCategory(targetPortId) != GraphPortCategory.Signal &&
+                    connectionKeys.Any(key => key.Target == target.Id && key.TargetPort == targetPortId))
                     throw new ArgumentException("The target input is already connected.", nameof(plan));
             }
             else if (targetPortId is not null)
@@ -1068,6 +1069,9 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             }
             else if (sourcePortId is not null)
                 throw new ArgumentException("The source output port does not exist.", nameof(plan));
+            if (source.Definition.GetOutputPortCategory(sourcePortId) == GraphPortCategory.Signal &&
+                connectionKeys.Any(key => key.Source == source.Id && key.SourcePort == sourcePortId))
+                throw new ArgumentException("A Signal output can have only one destination. Use a Sequence node to branch.", nameof(plan));
 
             if (source.Definition.GetOutputPortCategory(sourcePortId) != target.Definition.GetInputPortCategory(targetPortId) ||
                 (!source.IsPolymorphic && !target.IsPolymorphic &&
@@ -1217,7 +1221,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 error = "The target input port does not exist.";
                 return false;
             }
-            if (Connections.Any(connection => connection.Target == target && connection.TargetPortId == targetPortId))
+            if (target.Definition.GetInputPortCategory(targetPortId) != GraphPortCategory.Signal &&
+                Connections.Any(connection => connection.Target == target && connection.TargetPortId == targetPortId))
             {
                 error = "The target input is already connected.";
                 return false;
@@ -1240,6 +1245,13 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         else if (sourcePortId is not null)
         {
             error = "The source output port does not exist.";
+            return false;
+        }
+
+        if (source.Definition.GetOutputPortCategory(sourcePortId) == GraphPortCategory.Signal &&
+            Connections.Any(connection => connection.Source == source && connection.SourcePortId == sourcePortId))
+        {
+            error = LocalizationService.Shared.Get("Editor.Sequence.SingleDestination");
             return false;
         }
 
@@ -1615,7 +1627,18 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         var updated = new NodeParameterSnapshot(id, definition.Type, value.Clone());
         if (index < 0) parameters.Add(updated);
         else parameters[index] = updated;
-        _history.Execute(new SetNodeParametersCommand(node, node.Parameters, parameters.AsReadOnly(), definition.Name));
+        var commands = new List<IUndoableCommand>();
+        if (node.IsSequence)
+        {
+            var count = SequenceSchema.OutputCount(parameters);
+            var valid = Enumerable.Range(0, count).Select(SequenceSchema.OutputId).ToHashSet(StringComparer.Ordinal);
+            commands.AddRange(Connections.Where(connection => connection.Source == node &&
+                    !valid.Contains(connection.SourcePortId ?? string.Empty)).Select(connection =>
+                (IUndoableCommand)new RemoveGraphConnectionCommand(this, connection)));
+        }
+        commands.Add(new SetNodeParametersCommand(node, node.Parameters, parameters.AsReadOnly(), definition.Name));
+        _history.Execute(commands.Count == 1 ? commands[0] :
+            new CompositeUndoableCommand(LocalizationService.Shared.Get("Editor.Sequence.EditOutputs"), commands));
     }
 
     public void AssignRenderAsset(GraphNodeViewModel node, EngineAsset asset)

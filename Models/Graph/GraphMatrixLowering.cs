@@ -26,7 +26,7 @@ public static class GraphMatrixLowering
         var definitions = GraphNodeDefinition.All.ToDictionary(item => item.Kind);
         var byName = GraphNodeDefinition.All.ToDictionary(item => item.QualifiedName);
         GraphNodeDefinition Definition(GraphNodeSnapshot node) =>
-            GameIoSchema.Effective(definitions[node.Kind], node.Parameters);
+            SequenceSchema.Effective(GameIoSchema.Effective(definitions[node.Kind], node.Parameters), node.Parameters);
         var occupied = new HashSet<Guid>();
         var outputs = new Dictionary<(Guid, string?), IReadOnlyList<GraphRuntimeOutput>>();
         void Collect(GraphSnapshot current)

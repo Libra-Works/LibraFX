@@ -13,6 +13,7 @@
     <Compile Include="..\..\Models\Graph\FCurve.cs" Link="Models\FCurve.cs" />
     <Compile Include="..\..\Models\Graph\GraphEnumDefinition.cs" Link="Models\GraphEnumDefinition.cs" />
     <Compile Include="..\..\Models\Graph\GameIoSchema.cs" Link="Models\GameIoSchema.cs" />
+    <Compile Include="..\..\Models\Graph\SequenceSchema.cs" Link="Models\SequenceSchema.cs" />
     <Compile Include="..\..\Models\Graph\GroupExposedItem.cs" Link="Models\GroupExposedItem.cs" />
     <Compile Include="..\..\Models\Graph\GraphNodeDefinition.cs" Link="Models\GraphNodeDefinition.cs" />
     <Compile Include="..\..\Models\Graph\GraphMatrixLowering.cs" Link="Models\GraphMatrixLowering.cs" />

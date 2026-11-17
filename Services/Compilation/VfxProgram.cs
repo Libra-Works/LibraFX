@@ -134,6 +134,7 @@ public sealed class VfxProgram
             return port with { RuntimeNodeIds = outputs.Select(output => output.NodeId).ToArray() };
         }).ToArray();
         _ = RenderProgramBindings.CreateScene(graph, 0);
+        graph = SequenceSchema.Lower(graph);
         var nodes = Flatten(graph)
             .Where(node => node.Kind != GraphNodeKind.Comment && node.Kind != GraphNodeKind.GraphGroup &&
                 !GpuParticleEditorService.IsGpu(node.Kind) &&

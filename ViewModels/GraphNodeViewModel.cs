@@ -45,6 +45,9 @@ public sealed class GraphNodeViewModel : ObservableObject
     public GroupAssetReference? GroupAsset { get; private set; }
     public bool IsGraphGroup => ChildGraph is not null;
     public bool IsSpawnableGroup => Definition.Kind == GraphNodeKind.SpawnableGroup;
+    public bool IsSequence => SequenceSchema.IsSequence(Definition.Kind);
+    public bool CanAddSequenceOutput => IsSequence && OutputPorts.Count < SequenceSchema.MaximumOutputs;
+    public bool CanRemoveSequenceOutput => IsSequence && OutputPorts.Count > 1;
     public bool IsLifecycleNode => IsSpawnableGroup ||
         Definition.Kind.Value is "LifeTime" or "Delay";
     public string LifecycleRoleLabel => !IsLifecycleNode ? string.Empty :
@@ -165,6 +168,8 @@ public sealed class GraphNodeViewModel : ObservableObject
     public IRelayCommand SelectInputPortCommand { get; }
 
     public IRelayCommand SelectOutputPortCommand { get; }
+    public IRelayCommand AddSequenceOutputCommand { get; }
+    public IRelayCommand RemoveSequenceOutputCommand { get; }
 
     public GraphNodeViewModel(
         GraphWorkspaceViewModel workspace,
@@ -200,6 +205,12 @@ public sealed class GraphNodeViewModel : ObservableObject
         SelectCommand = new RelayCommand(() => _workspace.SelectNode(this));
         SelectInputPortCommand = new RelayCommand(() => _workspace.CompleteConnection(this));
         SelectOutputPortCommand = new RelayCommand(() => _workspace.BeginConnection(this));
+        AddSequenceOutputCommand = new RelayCommand(() => _workspace.SetParameter(this,
+            SequenceSchema.OutputCountParameter, JsonSerializer.SerializeToElement(OutputPorts.Count + 1)),
+            () => CanAddSequenceOutput);
+        RemoveSequenceOutputCommand = new RelayCommand(() => _workspace.SetParameter(this,
+            SequenceSchema.OutputCountParameter, JsonSerializer.SerializeToElement(OutputPorts.Count - 1)),
+            () => CanRemoveSequenceOutput);
     }
 
     public void PreviewMoveTo(double x, double y)
@@ -259,19 +270,21 @@ public sealed class GraphNodeViewModel : ObservableObject
         }
     }
 
-    private (JsonElement? Render, JsonElement? GameIo) SchemaValue(IReadOnlyList<NodeParameterSnapshot>? parameters)
+    private (JsonElement? Render, JsonElement? GameIo, int SequenceOutputs) SchemaValue(IReadOnlyList<NodeParameterSnapshot>? parameters)
     {
         var schema = _baseDefinition.Parameters.FirstOrDefault(parameter => parameter.Id == "materialSchema");
         JsonElement? render = schema is null ? null :
             parameters?.FirstOrDefault(parameter => parameter.Id == schema.Id && parameter.Type == schema.Type)?.Value
             ?? schema.DefaultValue;
-        return (render, GameIoSchema.ValueTypeValue(_baseDefinition, parameters));
+        return (render, GameIoSchema.ValueTypeValue(_baseDefinition, parameters),
+            IsSequence ? SequenceSchema.OutputCount(parameters) : 0);
     }
 
     private static bool SchemaValuesEqual(
-        (JsonElement? Render, JsonElement? GameIo) left,
-        (JsonElement? Render, JsonElement? GameIo) right) =>
-        JsonValuesEqual(left.Render, right.Render) && JsonValuesEqual(left.GameIo, right.GameIo);
+        (JsonElement? Render, JsonElement? GameIo, int SequenceOutputs) left,
+        (JsonElement? Render, JsonElement? GameIo, int SequenceOutputs) right) =>
+        JsonValuesEqual(left.Render, right.Render) && JsonValuesEqual(left.GameIo, right.GameIo) &&
+        left.SequenceOutputs == right.SequenceOutputs;
 
     private static bool JsonValuesEqual(JsonElement? left, JsonElement? right) =>
         left is null && right is null ||
@@ -289,6 +302,13 @@ public sealed class GraphNodeViewModel : ObservableObject
         OnPropertyChanged(nameof(HasCustomInputs));
         OnPropertyChanged(nameof(HasLegacyInput));
         OnPropertyChanged(nameof(HasParameters));
+        OnPropertyChanged(nameof(OutputPorts));
+        OnPropertyChanged(nameof(HasCustomOutputs));
+        OnPropertyChanged(nameof(HasLegacyOutput));
+        OnPropertyChanged(nameof(CanAddSequenceOutput));
+        OnPropertyChanged(nameof(CanRemoveSequenceOutput));
+        AddSequenceOutputCommand.NotifyCanExecuteChanged();
+        RemoveSequenceOutputCommand.NotifyCanExecuteChanged();
     }
 
     internal void ApplyResolvedDefinition(GraphNodeDefinition definition)
@@ -310,11 +330,13 @@ public sealed class GraphNodeViewModel : ObservableObject
     private static GraphNodeDefinition EffectiveDefinition(GraphNodeDefinition definition,
         IReadOnlyList<NodeParameterSnapshot>? parameters, GraphSnapshot? childGraph) =>
         GroupBoundarySchema.Effective(SpawnableGroupSchema.Effective(
-            GameIoSchema.Effective(RenderNodeSchema.Effective(definition, parameters), parameters), childGraph), childGraph);
+            SequenceSchema.Effective(GameIoSchema.Effective(
+                RenderNodeSchema.Effective(definition, parameters), parameters), parameters), childGraph), childGraph);
 
     private IReadOnlyList<NodeParameterDefinition> VisibleParameters(GraphNodeDefinition definition) =>
         definition.Parameters.Where(parameter =>
             !IsGpuParticle &&
+            (!IsSequence || parameter.Id != SequenceSchema.OutputCountParameter) &&
             (!IsComment || parameter.Id != "image") &&
             (!RenderNodeSchema.IsRenderNode(definition) ||
              parameter.Id != "materialSchema" && !parameter.Id.StartsWith("material_", StringComparison.Ordinal))).ToArray();

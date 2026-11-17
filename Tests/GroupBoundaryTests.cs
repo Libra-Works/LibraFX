@@ -35,12 +35,13 @@ internal static class GroupBoundaryTests
     private static void VerifySignalConnectionOrder()
     {
         var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
-        var source = graph.CreateNode(GraphNodeKind.Signal);
+        var source = graph.CreateNode(GraphNodeKind.Sequence);
+        graph.SetParameter(source, "outputs", JsonSerializer.SerializeToElement(3));
         var targets = Enumerable.Range(1, 3).Select(index =>
         {
             var target = graph.CreateNode(GraphNodeKind.Signal);
             graph.RenameNode(target, $"Target {index}");
-            if (!graph.TryConnectNodes(source, target, out _))
+            if (!graph.TryConnectNodes(source, target, out _, sourcePortId: SequenceSchema.OutputId(index - 1)))
                 throw new InvalidOperationException("Cannot create Signal fan-out.");
             return target;
         }).ToArray();
@@ -70,8 +71,10 @@ internal static class GroupBoundaryTests
         var parent = destroyGraph.CreateNode(GraphNodeKind.SpawnableGroup);
         var firstChild = destroyGraph.CreateNode(GraphNodeKind.SpawnableGroup);
         var secondChild = destroyGraph.CreateNode(GraphNodeKind.SpawnableGroup);
-        if (!destroyGraph.TryConnectNodes(parent, firstChild, out _, "spawn", "destroy") ||
-            !destroyGraph.TryConnectNodes(parent, secondChild, out _, "spawn", "destroy") ||
+        var destroySequence = destroyGraph.CreateNode(GraphNodeKind.Sequence);
+        if (!destroyGraph.TryConnectNodes(parent, destroySequence, out _, "signal", "destroy") ||
+            !destroyGraph.TryConnectNodes(destroySequence, firstChild, out _, "spawn", "then_0") ||
+            !destroyGraph.TryConnectNodes(destroySequence, secondChild, out _, "spawn", "then_1") ||
             destroyGraph.Connections.Any(connection => connection.SignalOrder != 0))
             throw new InvalidOperationException("Host-routed Destroy must not be labeled as depth-first Signal dispatch.");
     }
@@ -87,12 +90,12 @@ internal static class GroupBoundaryTests
             throw new InvalidOperationException("Cannot connect Signal fan-out Group boundaries.");
         graph.NavigateToGraph(0);
         group = graph.GetNode(group.Id);
-        var source = graph.CreateNode(GraphNodeKind.Signal);
+        var source = graph.CreateNode(GraphNodeKind.Sequence);
         var first = graph.CreateNode(GraphNodeKind.SpawnableGroup);
         var second = graph.CreateNode(GraphNodeKind.SpawnableGroup);
-        if (!graph.TryConnectNodes(source, group, out _, GroupBoundarySchema.InputPortId(input.Id)) ||
+        if (!graph.TryConnectNodes(source, group, out _, GroupBoundarySchema.InputPortId(input.Id), "then_0") ||
             !graph.TryConnectNodes(group, first, out _, "spawn", GroupBoundarySchema.OutputPortId(output.Id)) ||
-            !graph.TryConnectNodes(source, second, out _, "spawn"))
+            !graph.TryConnectNodes(source, second, out _, "spawn", "then_1"))
             throw new InvalidOperationException("Cannot connect Signal fan-out.");
         graph.CreateNode(GraphNodeKind.FloatFCurve);
         var snapshot = graph.CreateSnapshot();
@@ -102,10 +105,11 @@ internal static class GroupBoundaryTests
             throw new InvalidOperationException("Signal fan-out and FCurve must compile deterministically to v5.");
         VerifyNativeFanout(package, source.Id, first.Id, second.Id);
         var plain = new GraphWorkspaceViewModel(new UndoRedoManager());
-        var plainSource = plain.CreateNode(GraphNodeKind.Signal);
+        var plainSource = plain.CreateNode(GraphNodeKind.Sequence);
         var a = plain.CreateNode(GraphNodeKind.Signal);
         var b = plain.CreateNode(GraphNodeKind.Signal);
-        if (!plain.TryConnectNodes(plainSource, a, out _) || !plain.TryConnectNodes(plainSource, b, out _))
+        if (!plain.TryConnectNodes(plainSource, a, out _, sourcePortId: "then_0") ||
+            !plain.TryConnectNodes(plainSource, b, out _, sourcePortId: "then_1"))
             throw new InvalidOperationException("Cannot connect plain Signal fan-out.");
         var plainBytes = SpawnableGroupPackage.Compile(plain.CreateSnapshot()).ParentBytecode;
         if (!plainBytes.SequenceEqual(VfxProgram.Compile(plain.CreateSnapshot()).ToBinary()))

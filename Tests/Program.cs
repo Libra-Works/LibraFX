@@ -30,6 +30,18 @@ internal static class Program
             else LiberaFx.Tests.InspectorPluginTests.RunDisabledChildCheck();
             return;
         }
+        if (args.Length is 1 or 2 && args[0] == "--sequence")
+        {
+            var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
+            if (string.IsNullOrEmpty(root) || !Path.IsPathFullyQualified(root))
+                throw new ArgumentException("Set an absolute isolated LIBERAFX_DATA_ROOT for Sequence verification.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            if (args.Length == 2 && !Path.IsPathFullyQualified(args[1]))
+                throw new ArgumentException("Use an absolute Sequence fixture output directory.");
+            SequenceNodeTests.Run(args.Length == 2 ? args[1] : null);
+            Console.WriteLine("Sequence dynamic pins, Signal cardinality, persistence, history, MCP and native execution passed.");
+            return;
+        }
         if (args is ["--group-exposed-schema"])
         {
             if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")))

@@ -23,6 +23,7 @@ public sealed record GroupInstanceValue(Guid ItemId, IReadOnlyList<GroupInstance
 public static class GroupExposedItems
 {
     public static bool SupportsParameter(GraphNodeDefinition definition, NodeParameterDefinition parameter) =>
+        !SequenceSchema.IsSequence(definition.Kind) &&
         parameter.EnabledWhen is null &&
         !(parameter.Id == "materialSchema" && RenderNodeSchema.IsRenderNode(definition)) &&
         (parameter.Type is "float" or "int" or "bool" or "string" or "vector2" or "vector3" or "vector4" or "color" ||

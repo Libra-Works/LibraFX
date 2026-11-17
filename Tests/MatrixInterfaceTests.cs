@@ -19,7 +19,7 @@ internal static class MatrixInterfaceTests
         Directory.CreateDirectory(directory);
         var model = new MainViewModel();
         var workspace = model.Graph;
-        workspace.InitializeFromSnapshot(new([], []));
+        workspace.DeleteNodes(workspace.Nodes.ToArray());
         var transform = workspace.CreateNode(new("Transform"), 40, 40);
         var point = workspace.CreateNode(new("TransformPoint"), 430, 40);
         var split = workspace.CreateNode(new("MatrixBreak"), 40, 300);
@@ -142,23 +142,24 @@ internal static class MatrixInterfaceTests
             var signalOutput = workspace.CreateNode(new GraphNodeKind("GroupOutputSignal"));
             workspace.NavigateToGraph(0);
             signalGroup = workspace.GetNode(signalGroup.Id);
-            var firstTarget = workspace.CreateNode(GraphNodeKind.SpawnableGroup, 430, 40);
-            var secondTarget = workspace.CreateNode(GraphNodeKind.SpawnableGroup, 430, 310);
+            var sequence = workspace.CreateNode(GraphNodeKind.Sequence, 320, 180);
+            var firstTarget = workspace.CreateNode(GraphNodeKind.SpawnableGroup, 620, 40);
+            var secondTarget = workspace.CreateNode(GraphNodeKind.SpawnableGroup, 620, 310);
             Pump();
             var outputPort = GroupBoundarySchema.OutputPortId(signalOutput.Id);
-            Connect(signalGroup, outputPort, firstTarget, "spawn");
-            Connect(signalGroup, outputPort, secondTarget, "spawn");
-            workspace.SelectNode(signalGroup);
+            Connect(signalGroup, outputPort, sequence, "signal");
+            Connect(sequence, "then_0", firstTarget, "spawn");
+            Connect(sequence, "then_1", secondTarget, "spawn");
+            workspace.SelectNode(sequence);
             Pump();
-            Require(workspace.Connections.Select(connection => connection.SignalOrder).SequenceEqual([1, 2]) &&
-                workspace.SelectedConnections.All(connection => connection.Description.Contains("Signal実行順", StringComparison.Ordinal)) &&
-                inspector.GetVisualDescendants().OfType<TextBlock>().Any(block =>
-                    ToolTip.GetTip(block)?.ToString() == text.Get("Editor.SignalExecutionOrderHelp")),
-                "Signal fan-out order must be visible and localized in the real inspector.");
-            Capture("signal-fanout-ja.png");
-            Require(workspace.History.Undo() && workspace.Connections.Single().SignalOrder == 0 &&
-                workspace.History.Redo() && workspace.Connections.Select(connection => connection.SignalOrder).SequenceEqual([1, 2]),
-                "Signal order badges must update after undo and redo.");
+            Require(workspace.Connections.All(connection => connection.SignalOrder == 0) &&
+                graph.GetVisualDescendants().OfType<TextBlock>().Any(block =>
+                    block.IsEffectivelyVisible && block.Text == text.Get("Editor.Sequence.Hint")),
+                "Signal execution order must be explicit in the localized Sequence node, not wire badges.");
+            Capture("signal-sequence-ja.png");
+            Require(workspace.History.Undo() && workspace.Connections.Count == 2 &&
+                workspace.History.Redo() && workspace.Connections.Count == 3,
+                "Sequence connections must support undo and redo.");
         }
         finally
         {

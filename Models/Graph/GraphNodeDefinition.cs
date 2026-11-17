@@ -13,6 +13,7 @@ public readonly record struct GraphNodeKind(string Value)
     public static GraphNodeKind FloatX4 => new("FloatX4");
     public static GraphNodeKind Int32 => new("Int32");
     public static GraphNodeKind Signal => new("Signal");
+    public static GraphNodeKind Sequence => new("Sequence");
     public static GraphNodeKind InputProperty => new("InputProperty");
     public static GraphNodeKind InputSignal => new("InputSignal");
     public static GraphNodeKind OutputProperty => new("OutputProperty");
@@ -108,6 +109,7 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("0a613e91-1039-478e-9ca7-b8555a67f988")] = "FloatX4",
         [Guid.Parse("c7410281-9b6e-46f0-9bb7-334cc3b40767")] = "Int32",
         [Guid.Parse("a40e6f94-c2c1-48ed-9a7b-2087c422ad5a")] = "Signal",
+        [Guid.Parse("48f83fc4-4030-4b67-8cb6-11198f4b1701")] = "Sequence",
         [Guid.Parse("f54171ee-4aa3-498b-b2ff-8c9983fc1501")] = "FloatFCurve",
         [Guid.Parse("149e6e41-9976-4b69-a74c-3f6e6b254e5a")] = "GraphGroup",
         [Guid.Parse("c0bc50ea-c514-41a2-9b28-9c2c931d2821")] = "SpawnableGroup",

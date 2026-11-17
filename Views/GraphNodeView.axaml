@@ -17,7 +17,7 @@
             AutomationProperties.HelpText="{Binding DiagnosticText}"
             BorderThickness="2"
             CornerRadius="4">
-        <Grid RowDefinitions="Auto,Auto,Auto,Auto">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto">
             <Border Grid.Row="0"
                     x:Name="NodeHeader"
                     Padding="8"
@@ -63,6 +63,9 @@
                            FontSize="11" Foreground="{DynamicResource EffectForegroundBrush}"
                            TextTrimming="CharacterEllipsis" />
             </StackPanel>
+            <TextBlock Grid.Row="1" Margin="8,4" IsVisible="{Binding IsSequence}" TextWrapping="Wrap"
+                       Text="{DynamicResource Text.Editor.Sequence.Hint}"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" FontSize="11" />
             <Grid Grid.Row="2"
                   Margin="8"
                   IsVisible="{Binding HasPorts}"
@@ -162,7 +165,18 @@
                        Text="{DynamicResource Text.Panels.DoubleClickToOpen}" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <TextBlock x:Name="GpuProgramLabel" Grid.Row="2" Margin="8" IsVisible="{Binding IsGpuParticle}"
                        Text="{DynamicResource Text.Gpu.ContainerHint}" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <Border Grid.Row="3" IsVisible="{Binding IsDetailsExpanded}" Padding="8,5"
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right"
+                        Margin="8,2,8,6" Spacing="4" IsVisible="{Binding IsSequence}">
+                <views:IconButton x:Name="SequenceAddOutputButton" Icon="Add"
+                                  Command="{Binding AddSequenceOutputCommand}"
+                                  ToolTip.Tip="{DynamicResource Text.Editor.Sequence.AddOutput}"
+                                  AutomationProperties.Name="{DynamicResource Text.Editor.Sequence.AddOutput}" />
+                <views:IconButton x:Name="SequenceRemoveOutputButton" Icon="Remove"
+                                  Command="{Binding RemoveSequenceOutputCommand}"
+                                  ToolTip.Tip="{DynamicResource Text.Editor.Sequence.RemoveOutput}"
+                                  AutomationProperties.Name="{DynamicResource Text.Editor.Sequence.RemoveOutput}" />
+            </StackPanel>
+            <Border Grid.Row="4" IsVisible="{Binding IsDetailsExpanded}" Padding="8,5"
                     BorderThickness="0,1,0,0" BorderBrush="{DynamicResource EffectBorderBrush}">
                 <ItemsControl ItemsSource="{Binding InlineParameters}">
                     <ItemsControl.ItemTemplate>

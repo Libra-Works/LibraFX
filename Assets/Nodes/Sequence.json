@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "typeId": "48f83fc4-4030-4b67-8cb6-11198f4b1701",
+  "namespace": "LiberaFx",
+  "kind": "Sequence",
+  "name": "Sequence",
+  "displayNameKey": "Editor.Node.Sequence",
+  "descriptionKey": "Editor.NodeHelp.Sequence",
+  "groupNameKey": "Editor.NodeGroup.Signals",
+  "group": "Signal nodes",
+  "portType": "Signal",
+  "portCategory": "Signal",
+  "inputPorts": [
+    { "id": "signal", "name": "Signal", "portType": "Signal", "category": "Signal" }
+  ],
+  "outputPorts": [
+    { "id": "then_0", "name": "1", "portType": "Signal", "category": "Signal" },
+    { "id": "then_1", "name": "2", "portType": "Signal", "category": "Signal" }
+  ],
+  "parameters": [
+    {
+      "id": "outputs",
+      "name": "Output count",
+      "displayNameKey": "Editor.Sequence.OutputCount",
+      "type": "int",
+      "defaultValue": 2,
+      "editor": { "kind": "slider", "minimum": 1, "maximum": 32, "step": 1 }
+    }
+  ]
+}

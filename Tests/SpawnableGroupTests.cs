@@ -161,10 +161,10 @@ internal static class SpawnableGroupTests
         var output = graph.CreateNode(new GraphNodeKind("SpawnOutputSignal"));
         graph.NavigateToGraph(0);
         group = graph.GetNode(groupId);
-        var source = graph.CreateNode(GraphNodeKind.Signal);
+        var source = graph.CreateNode(GraphNodeKind.Sequence);
         var sink = graph.CreateNode(GraphNodeKind.Signal);
-        if (!graph.TryConnectNodes(source, group, out _, "spawn") ||
-            !graph.TryConnectNodes(source, group, out _, SpawnableGroupSchema.PortId(input.Id)) ||
+        if (!graph.TryConnectNodes(source, group, out _, "spawn", "then_0") ||
+            !graph.TryConnectNodes(source, group, out _, SpawnableGroupSchema.PortId(input.Id), "then_1") ||
             !graph.TryConnectNodes(group, sink, out _, sourcePortId: SpawnableGroupSchema.OutputPortId(output.Id)))
             throw new InvalidOperationException("Cannot create custom Spawnable signal routes.");
         var before = graph.CreateSnapshot();

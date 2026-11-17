@@ -1,4 +1,12 @@
 {
+  "Editor.Node.Sequence": "シーケンス",
+  "Editor.NodeHelp.Sequence": "Signalを受け取るたびに、出力を上から順に実行します。各出力の接続先は1つです。Delayの継続やSpawnableの終了は待ちません。",
+  "Editor.Sequence.Hint": "上から順に実行・待機なし",
+  "Editor.Sequence.OutputCount": "出力数",
+  "Editor.Sequence.AddOutput": "Signal出力を追加",
+  "Editor.Sequence.RemoveOutput": "末尾のSignal出力とその接続を削除",
+  "Editor.Sequence.EditOutputs": "シーケンスの出力を編集",
+  "Editor.Sequence.SingleDestination": "Signal出力の接続先は1つです。分岐にはシーケンスノードを追加してください。",
   "Editor.Node.LifeTime": "寿命",
   "Editor.Node.InstanceAge": "インスタンス経過時間",
   "Editor.Node.EffectAge": "エフェクト経過時間",

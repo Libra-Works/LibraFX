@@ -174,8 +174,15 @@ internal static class FireworksLifecycleTests
         infiniteOrderWorkspace.CreateNode(new GraphNodeKind("LifeTime"));
         infiniteOrderWorkspace.NavigateToGraph(0);
         var startId = graph.Nodes.Single(node => node.Kind.Value == "OnStart").Id;
+        var earlySequence = infiniteOrderWorkspace.CreateNode(GraphNodeKind.Sequence);
+        infiniteOrderWorkspace.DisconnectConnection(infiniteOrderWorkspace.Connections.Single(connection =>
+            connection.Source.Id == startId && connection.Target.Id == launch.Id));
         Require(infiniteOrderWorkspace.TryConnectNodes(infiniteOrderWorkspace.GetNode(startId),
-            infiniteOrderWorkspace.GetNode(earlyGroupId), out _, "spawn", "then"),
+                    earlySequence, out _, "signal", "then") &&
+                infiniteOrderWorkspace.TryConnectNodes(earlySequence,
+                    infiniteOrderWorkspace.GetNode(launch.Id), out _, "spawn", "then_0") &&
+                infiniteOrderWorkspace.TryConnectNodes(earlySequence,
+                    infiniteOrderWorkspace.GetNode(earlyGroupId), out _, "spawn", "then_1"),
             "Cannot connect the early-expiring sibling.");
         var infiniteOrderGraph = ChangeLife(infiniteOrderWorkspace.CreateSnapshot(), earlyGroupId, 1) with
         { AutoDestroyWhenIdle = false };
@@ -685,7 +692,12 @@ internal static class FireworksLifecycleTests
             var secondInput = fanoutWorkspace.CreateNode(new GraphNodeKind("SpawnInputFloat"));
             var componentInput = fanoutWorkspace.CreateNode(new GraphNodeKind("SpawnInputFloat"));
             fanoutWorkspace.NavigateToGraph(0);
-            Require(fanoutWorkspace.TryConnectNodes(fanoutWorkspace.GetNode(delayId), fanoutWorkspace.GetNode(secondTarget.Id), out _, "spawn", "then") &&
+            var delayedSequence = fanoutWorkspace.CreateNode(GraphNodeKind.Sequence);
+            fanoutWorkspace.DisconnectConnection(fanoutWorkspace.Connections.Single(connection =>
+                connection.Source.Id == delayId && connection.Target.Id == burst.Id && connection.TargetPortId == "spawn"));
+            Require(fanoutWorkspace.TryConnectNodes(fanoutWorkspace.GetNode(delayId), delayedSequence, out _, "signal", "then") &&
+                    fanoutWorkspace.TryConnectNodes(delayedSequence, fanoutWorkspace.GetNode(burst.Id), out _, "spawn", "then_0") &&
+                    fanoutWorkspace.TryConnectNodes(delayedSequence, fanoutWorkspace.GetNode(secondTarget.Id), out _, "spawn", "then_1") &&
                     fanoutWorkspace.TryConnectNodes(fanoutWorkspace.GetNode(delayRootTime.Id), fanoutWorkspace.GetNode(secondTarget.Id), out _,
                         SpawnableGroupSchema.PortId(secondInput.Id)) &&
                     fanoutWorkspace.TryConnectNodes(fanoutWorkspace.GetNode(breakSource.Id), fanoutWorkspace.GetNode(secondTarget.Id), out _,

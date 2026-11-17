@@ -1,4 +1,12 @@
 {
+  "Editor.Node.Sequence": "Sequence",
+  "Editor.NodeHelp.Sequence": "On each received Signal, execute outputs from top to bottom. Each output has one destination. Delay continuations and spawned instances are not awaited.",
+  "Editor.Sequence.Hint": "Top to bottom · no waiting",
+  "Editor.Sequence.OutputCount": "Output count",
+  "Editor.Sequence.AddOutput": "Add Signal output",
+  "Editor.Sequence.RemoveOutput": "Remove last Signal output and its connection",
+  "Editor.Sequence.EditOutputs": "Edit Sequence outputs",
+  "Editor.Sequence.SingleDestination": "A Signal output can have only one destination. Add a Sequence node to branch.",
   "Editor.Language": "Language",
   "Editor.Node.LifeTime": "Life Time",
   "Editor.Node.InstanceAge": "Instance Age",
