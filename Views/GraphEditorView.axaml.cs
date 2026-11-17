@@ -430,13 +430,14 @@ public partial class GraphEditorView : UserControl
             .Where(definition => !GraphPolymorphism.IsHiddenVariant(definition.Kind))
             .Select(definition => new NodeCatalogEntryViewModel(definition, workspace?.NodeDefinitions?.ProjectName))
             .Concat((DataContext as GraphWorkspaceViewModel)?.GroupAssets?.Assets
-                .Select(asset => new NodeCatalogEntryViewModel(asset)) ?? [])
+                .Select(asset => new NodeCatalogEntryViewModel(asset, workspace?.GroupAssets)) ?? [])
             .Where(entry => entry.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.OriginalName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.KindName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.QualifiedName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.Namespace.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                            entry.Group.Contains(search, StringComparison.OrdinalIgnoreCase))
+                            entry.Group.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                            entry.SearchTerms.Contains(search, StringComparison.OrdinalIgnoreCase))
             .ToArray();
         NodeSearchResults.ItemsSource = entries;
         NodeSearchResults.SelectedIndex = entries.Length > 0 ? 0 : -1;

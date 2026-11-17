@@ -127,7 +127,12 @@ public sealed class ProjectResourcesViewModel : ObservableObject, IDisposable
     {
         if (_disposed) return;
         var candidates = IsLocal ? _localEntries : _main.GroupAssets.Assets
-            .Select(group => new WorkspaceResourceEntry(group.Name, _main.TeamProfiles.Active.Name, Group: group)).ToArray();
+            .Select(group => new WorkspaceResourceEntry(
+                LocalizationService.Shared.GetOrDefault(_main.GroupAssets.Metadata(group.Id)?.NameKey, group.Name),
+                group.Origin == GroupAssetOrigin.Standard
+                    ? LocalizationService.Shared.Get("Modules.StandardLibrary")
+                    : _main.TeamProfiles.Active.Name,
+                Group: group)).ToArray();
         var filtered = candidates.Where(entry =>
             entry.Name.Contains(Query.Trim(), StringComparison.OrdinalIgnoreCase) ||
             entry.KindLabel.Contains(Query.Trim(), StringComparison.OrdinalIgnoreCase) ||

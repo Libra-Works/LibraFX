@@ -67,6 +67,7 @@ private:
     Lifetime lifetime_{};
     LifetimeSample last_{};
     double lastElapsed_ = 0;
+    std::size_t instructionBudget_ = 10000;
     Result startFailure_ = Result::Ok;
     Phase phase_ = Phase::Ready;
     bool destroySent_ = false;

@@ -25,6 +25,7 @@ namespace LiberaFx.Unity
         public LiberaFxRenderInputPayload[] inputs;
         public LiberaFxRenderTexturePayload[] textures;
         public bool billboard;
+        public string rotationConvention;
     }
 
     [Serializable] internal sealed class LiberaFxRenderMaterialPayload
@@ -111,6 +112,7 @@ namespace LiberaFx.Unity
         public string nodeId;
         public bool isSprite;
         public bool billboard;
+        public bool worldRotation;
         public Mesh mesh;
         public Texture texture;
         public Material[] materials;
@@ -323,11 +325,14 @@ namespace LiberaFx.Unity
                 if (node.billboard && !Camera.main)
                     throw new InvalidOperationException("A billboard Sprite requires an enabled MainCamera before Play.");
             }
+            if (!string.IsNullOrEmpty(node.rotationConvention) && node.rotationConvention != "liberafx-world")
+                throw new InvalidOperationException("Unsupported render rotation convention.");
             return new LiberaFxPreparedRenderNode
             {
                 nodeId = node.nodeId,
                 isSprite = isSprite,
                 billboard = node.billboard,
+                worldRotation = node.rotationConvention == "liberafx-world",
                 mesh = asset.mesh,
                 texture = asset.texture,
                 materials = resolvedMaterials,

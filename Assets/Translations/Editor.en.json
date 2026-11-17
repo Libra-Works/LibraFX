@@ -279,7 +279,7 @@
   "Matrix.Node.Compose": "Compose Matrix",
   "Matrix.Node.Owner": "Owner Matrix",
   "Matrix.Node.Break": "Break Matrix",
-  "Matrix.Node.Transform": "Transform (TRS)",
+  "Matrix.Node.Transform": "Transform",
   "Matrix.Node.Multiply": "Matrix Multiply (Parent x Local)",
   "Matrix.Node.Point": "Transform Point",
   "Matrix.Node.RotatePoint": "Rotate Point",

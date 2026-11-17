@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "typeId": "b0af61d2-29f6-4cc9-a71e-000000000201",
+  "namespace": "LiberaFx",
+  "name": "TransformOrder",
+  "values": [
+    { "value": 0, "name": "TRS" },
+    { "value": 1, "name": "TSR" },
+    { "value": 2, "name": "RTS" },
+    { "value": 3, "name": "RST" },
+    { "value": 4, "name": "STR" },
+    { "value": 5, "name": "SRT" }
+  ]
+}

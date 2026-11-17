@@ -15,6 +15,56 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Length is 1 or 2 && args[0] == "--logical-signals")
+        {
+            var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
+            if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root) ||
+                args.Length == 2 && !Path.IsPathFullyQualified(args[1]))
+                throw new ArgumentException("Use isolated absolute data/fixture paths for logical Signal checks.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            LiberaFx.Tests.LogicalSignalTests.Run(args.Length == 2 ? args[1] : null);
+            return;
+        }
+        if (args.Length is 1 or 2 && args[0] == "--runtime-enum-branches")
+        {
+            var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
+            if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root) ||
+                args.Length == 2 && !Path.IsPathFullyQualified(args[1]))
+                throw new ArgumentException("Use isolated absolute data/fixture paths for runtime Enum checks.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            LiberaFx.Tests.RuntimeEnumBranchTests.Run(args.Length == 2 ? args[1] : null);
+            LiberaFx.Tests.EnumCatalogTests.Run();
+            return;
+        }
+        if (args is ["--standard-modules-ui", var moduleReviewDirectory])
+        {
+            var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
+            if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root) || !Path.IsPathFullyQualified(moduleReviewDirectory))
+                throw new ArgumentException("Use isolated absolute data/review paths for module UI checks.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            StandardModuleInterfaceTests.Run(moduleReviewDirectory);
+            return;
+        }
+        if (args.Length is 1 or 2 && args[0] == "--standard-modules")
+        {
+            var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
+            if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root) ||
+                args.Length == 2 && !Path.IsPathFullyQualified(args[1]))
+                throw new ArgumentException("Use isolated absolute data/fixture paths for standard-module checks.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            StandardModuleTests.Run(args.Length == 2 ? args[1] : null);
+            return;
+        }
+        if (args.Length is 1 or 2 && args[0] == "--billboard-groups")
+        {
+            var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
+            if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root) ||
+                args.Length == 2 && !Path.IsPathFullyQualified(args[1]))
+                throw new ArgumentException("Use isolated absolute data/fixture paths for Billboard checks.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            BillboardGroupTests.Run(args.Length == 2 ? args[1] : null);
+            return;
+        }
         if (args is ["--asset-references"])
         {
             var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");

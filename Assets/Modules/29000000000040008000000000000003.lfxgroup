@@ -1,0 +1,44 @@
+{
+  "FormatVersion": 5,
+  "Id": "29000000-0000-4000-8000-000000000003",
+  "Name": "Initial Velocity from Direction and Speed",
+  "Revision": 1,
+  "Locked": true,
+  "Graph": {
+    "Nodes": [
+      { "Id": "29030000-0000-4000-8000-000000000001", "Kind": "GroupInputVector3", "Name": "Direction", "X": 0, "Y": 0, "PortType": "FloatX3", "PortCategory": "Parameter" },
+      { "Id": "29030000-0000-4000-8000-000000000002", "Kind": "GroupInputFloat", "Name": "Speed", "X": 0, "Y": 160, "PortType": "Float", "PortCategory": "Parameter" },
+      { "Id": "29030000-0000-4000-8000-000000000010", "Kind": "Float", "Name": "Speed Scale", "X": 200, "Y": 300, "PortType": "Float", "PortCategory": "Parameter", "Parameters": [{ "Id": "value", "Type": "float", "Value": 1.0 }] },
+      { "Id": "29030000-0000-4000-8000-000000000011", "Kind": "Multiply", "Name": "Scale Speed", "X": 400, "Y": 180, "PortType": "Float", "PortCategory": "Parameter" },
+      { "Id": "29030000-0000-4000-8000-000000000012", "Kind": "ScalarToVector3", "Name": "Speed Vector", "X": 600, "Y": 180, "PortType": "FloatX3", "PortCategory": "Parameter" },
+      { "Id": "29030000-0000-4000-8000-000000000013", "Kind": "NormalizeVector3", "Name": "Unit Direction", "X": 400, "Y": 0, "PortType": "FloatX3", "PortCategory": "Parameter" },
+      { "Id": "29030000-0000-4000-8000-000000000014", "Kind": "MultiplyVector3", "Name": "Velocity", "X": 820, "Y": 40, "PortType": "FloatX3", "PortCategory": "Parameter" },
+      { "Id": "29030000-0000-4000-8000-000000000020", "Kind": "GroupOutputVector3", "Name": "Velocity", "X": 1060, "Y": 40, "PortType": "FloatX3", "PortCategory": "Parameter" }
+    ],
+    "Connections": [
+      { "SourceNodeId": "29030000-0000-4000-8000-000000000001", "TargetNodeId": "29030000-0000-4000-8000-000000000013", "TargetPortId": "a" },
+      { "SourceNodeId": "29030000-0000-4000-8000-000000000002", "TargetNodeId": "29030000-0000-4000-8000-000000000011", "TargetPortId": "a" },
+      { "SourceNodeId": "29030000-0000-4000-8000-000000000010", "TargetNodeId": "29030000-0000-4000-8000-000000000011", "TargetPortId": "b" },
+      { "SourceNodeId": "29030000-0000-4000-8000-000000000011", "TargetNodeId": "29030000-0000-4000-8000-000000000012", "TargetPortId": "a" },
+      { "SourceNodeId": "29030000-0000-4000-8000-000000000013", "TargetNodeId": "29030000-0000-4000-8000-000000000014", "TargetPortId": "a", "SourcePortId": "value" },
+      { "SourceNodeId": "29030000-0000-4000-8000-000000000012", "TargetNodeId": "29030000-0000-4000-8000-000000000014", "TargetPortId": "b" },
+      { "SourceNodeId": "29030000-0000-4000-8000-000000000014", "TargetNodeId": "29030000-0000-4000-8000-000000000020" }
+    ],
+    "ExposedItems": [
+      {
+        "Id": "2903ffff-0000-4000-8000-000000000001",
+        "Name": "Speed Scale",
+        "Description": "Multiplies supplied speed.",
+        "Category": "Motion",
+        "Order": 0,
+        "Editor": "parameter",
+        "Targets": [{ "NodeId": "29030000-0000-4000-8000-000000000010", "ParameterId": "value" }],
+        "Minimum": 0,
+        "Maximum": 5,
+        "Step": 0.05,
+        "Presentation": "slider"
+      }
+    ],
+    "AutoDestroyWhenIdle": true
+  }
+}

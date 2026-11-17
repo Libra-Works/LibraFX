@@ -15,6 +15,14 @@ public static class RenderProgramBindings
         graph = GraphPolymorphism.Lower(GroupBoundaryLowering.Lower(graph));
         var nodes = Flatten(graph).ToDictionary(node => node.Id);
         var connections = Connections(graph).ToLookup(connection => connection.TargetNodeId);
+        bool IsWorldRotation(Guid id, HashSet<Guid> visiting)
+        {
+            if (!visiting.Add(id) || !nodes.TryGetValue(id, out var source)) return false;
+            if (source.Kind.Value == "MatrixRuntimeDecomposeRotation") return true;
+            if (source.Kind != GraphNodeKind.FloatX3) return false;
+            var incoming = connections[id].ToArray();
+            return incoming.Length == 1 && IsWorldRotation(incoming[0].SourceNodeId, visiting);
+        }
         var renderNodes = new List<object>();
         foreach (var node in nodes.Values.Where(node => IsRenderNode(node.Kind)))
         {
@@ -69,6 +77,10 @@ public static class RenderProgramBindings
                     defaults, materialParameter = MaterialParameter(port.Id) });
             }
             var sprite = definition.TypeName is "SpriteDraw" or "SpriteAnimation";
+            var worldRotation = connections[node.Id].Any(edge => edge.TargetPortId == "rotation" &&
+                IsWorldRotation(edge.SourceNodeId, []));
+            if (worldRotation && sprite && Parameter("billboard").GetBoolean())
+                throw new InvalidDataException("Disable renderer Billboard when supplying a decomposed world rotation; automatic Billboard would rotate it twice.");
             if (sprite)
             {
                 foreach (var id in new[] { "columns", "rows", "fps", "playing" })
@@ -94,7 +106,8 @@ public static class RenderProgramBindings
                     return new { slot = slot.Key, path = paths[0] };
                 }).ToArray();
             renderNodes.Add(new { nodeId = node.Id, kind = sprite ? "sprite" : "model", assetPath = path,
-                materials, inputs, textures, billboard = sprite && Parameter("billboard").GetBoolean() });
+                materials, inputs, textures, billboard = sprite && Parameter("billboard").GetBoolean(),
+                rotationConvention = worldRotation ? "liberafx-world" : null });
         }
         return JsonSerializer.SerializeToUtf8Bytes(new { type = "render_config", programSequence, nodes = renderNodes }, JsonOptions);
     }

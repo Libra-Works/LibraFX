@@ -387,6 +387,9 @@ auto GeneratorPool::start(GeneratorInstanceId id) noexcept -> Result
         if (status == Result::Ok && (!std::isfinite(duration[0]) || duration[0] < 0))
             status = Result::InvalidValueType;
     }
+    if (status == Result::Ok)
+        status = slot->instance->dispatchGeneratedSignals(
+            impl_->lifecycle.instructionBudget ? impl_->lifecycle.instructionBudget : 10000);
     // Once signal traversal starts it is never replayed, even if a callback fails.
     auto dispatched = status == Result::Ok;
     if (dispatched && impl_->lifecycle.hasOnStart)
@@ -632,9 +635,14 @@ auto GeneratorPool::evaluate(GeneratorInstanceId id, double time) noexcept -> Re
     // refreshed by Live inputs. Clamp an overshooting frame to the expiry
     // boundary so Destroy consumers receive the actual final value.
     impl_->executing = true;
+    slot->signalTime = age;
+    slot->signalEffectTime = slot->start + age;
     lock.unlock();
     auto result = slot->instance->updateAsync(age, inlineEnqueue, nullptr);
     if (result == Result::Ok) result = slot->instance->result();
+    if (result == Result::Ok)
+        result = slot->instance->dispatchGeneratedSignals(
+            impl_->lifecycle.instructionBudget ? impl_->lifecycle.instructionBudget : 10000);
     lock.lock();
     impl_->executing = false;
     if (result == Result::Ok) {

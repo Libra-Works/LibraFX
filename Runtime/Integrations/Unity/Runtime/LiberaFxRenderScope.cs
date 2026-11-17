@@ -219,7 +219,11 @@ namespace LiberaFx.Unity
             var scale = Value("scale");
             nodeTransform.localPosition = new Vector3(position.x, position.y, position.z);
             nodeTransform.localScale = new Vector3(scale.x, scale.y, scale.z);
-            var euler = Quaternion.Euler(rotation.x, rotation.y, rotation.z);
+            var euler = definition.worldRotation
+                ? Quaternion.AngleAxis(rotation.z, Vector3.forward) *
+                  Quaternion.AngleAxis(-rotation.y, Vector3.up) *
+                  Quaternion.AngleAxis(-rotation.x, Vector3.right)
+                : Quaternion.Euler(rotation.x, rotation.y, rotation.z);
             nodeTransform.localRotation = euler;
             if (definition.billboard)
             {

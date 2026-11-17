@@ -1,0 +1,42 @@
+{
+  "FormatVersion": 5,
+  "Id": "29000000-0000-4000-8000-000000000004",
+  "Name": "Effect-Time F-Curve",
+  "Revision": 1,
+  "Locked": true,
+  "Graph": {
+    "Nodes": [
+      {
+        "Id": "29040000-0000-4000-8000-000000000001",
+        "Kind": "FloatFCurve",
+        "Name": "Effect-Time Curve",
+        "X": 0,
+        "Y": 0,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": {
+          "Keys": [
+            { "Id": "2904aa00-0000-4000-8000-000000000001", "TimeSeconds": 0, "Value": 0, "InSlope": 0, "OutSlope": 0, "Interpolation": "Linear" },
+            { "Id": "2904aa00-0000-4000-8000-000000000002", "TimeSeconds": 1, "Value": 1, "InSlope": 0, "OutSlope": 0, "Interpolation": "Linear" }
+          ]
+        }
+      },
+      { "Id": "29040000-0000-4000-8000-000000000002", "Kind": "GroupOutputFloat", "Name": "Curve Value", "X": 300, "Y": 0, "PortType": "Float", "PortCategory": "Parameter" }
+    ],
+    "Connections": [
+      { "SourceNodeId": "29040000-0000-4000-8000-000000000001", "TargetNodeId": "29040000-0000-4000-8000-000000000002" }
+    ],
+    "ExposedItems": [
+      {
+        "Id": "2904ffff-0000-4000-8000-000000000001",
+        "Name": "Effect-Time Curve",
+        "Description": "Curve key times and runtime effect time use seconds.",
+        "Category": "Curve",
+        "Order": 0,
+        "Editor": "curve",
+        "Targets": [{ "NodeId": "29040000-0000-4000-8000-000000000001" }]
+      }
+    ],
+    "AutoDestroyWhenIdle": true
+  }
+}

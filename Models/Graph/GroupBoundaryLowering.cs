@@ -23,6 +23,25 @@ public static class GroupBoundaryLowering
             {
                 if (!insideGroup)
                     throw new InvalidDataException("Group boundary nodes must be directly inside a Graph Group.");
+                if (GraphEnumBranchSchema.TryGetBoundaryDefinition(node.Kind, out _, out _))
+                {
+                    if (!GraphEnumDefinition.TryGetTypeId(node.PortType, out var enumTypeId))
+                        throw new InvalidDataException("An Enum group boundary has no stable Enum type.");
+                    var valueKind = new GraphNodeKind(GraphEnumBranchSchema.ValueKind(enumTypeId));
+                    var valueDefinition = GraphNodeDefinition.All.Single(item => item.Kind == valueKind);
+                    var enumParameters = node.Parameters?.ToList() ?? [];
+                    if (enumParameters.All(item => item.Id != "value"))
+                    {
+                        var value = valueDefinition.Parameters.Single(item => item.Id == "value");
+                        enumParameters.Add(new NodeParameterSnapshot(value.Id, value.Type, value.DefaultValue.Clone()));
+                    }
+                    nodes.Add(node with
+                    {
+                        Kind = valueKind,
+                        Parameters = enumParameters.AsReadOnly()
+                    });
+                    continue;
+                }
                 var kind = node.PortType switch
                 {
                     "Float" => GraphNodeKind.Float,
@@ -75,6 +94,8 @@ public static class GroupBoundaryLowering
             }
             if (expandedNodes[sourceId].Kind.Value == "MatrixRuntimeBoundary") sourcePort = "value";
             if (expandedNodes[targetId].Kind.Value == "MatrixRuntimeBoundary") targetPort = "matrix";
+            if (GraphEnumBranchSchema.TryGetValueDefinition(expandedNodes[targetId].Kind, out _))
+                targetPort = "value";
             connections.Add(new(sourceId, targetId, targetPort, sourcePort));
         }
         return new(nodes, connections);

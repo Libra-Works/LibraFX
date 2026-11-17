@@ -23,6 +23,7 @@
 
 namespace {
 static_assert(static_cast<int>(liberafx::Result::InstructionBudgetExceeded) == LIBRA_INSTRUCTION_BUDGET_EXCEEDED);
+static_assert(static_cast<int>(liberafx::Result::CounterOverflow) == LIBRA_COUNTER_OVERFLOW);
 static_assert(sizeof(LibraValue) == 40 && sizeof(LibraAtlasFrame) == 20 && sizeof(LibraSpriteVertex) == 36);
 static_assert(sizeof(LibraGameIoEvent) == 64 && sizeof(LibraGameIoEventV2) == 160);
 static_assert(sizeof(LibraSpawnableHostEvent) == 64);
@@ -221,7 +222,7 @@ LibraResult LIBRA_INTEROP_CALL libra_program_create_spawnable_v2(
     *outProgram = 0;
     return guarded([&]() -> LibraResult {
         if (byteCount < 16 || byteCount > 256ull * 1024 * 1024 ||
-            std::memcmp(bytes, "LFXB", 4) != 0 || bytes[4] < 3 || bytes[4] > 7 || bytes[5] != 0 ||
+            std::memcmp(bytes, "LFXB", 4) != 0 || bytes[4] < 3 || bytes[4] > 9 || bytes[5] != 0 ||
             bytes[12] != 0 || bytes[13] != 1) return LIBRA_INVALID_BINARY;
         auto count = std::uint32_t{};
         for (auto i = 0u; i < 4; ++i) count |= std::uint32_t{bytes[8 + i]} << (i * 8);
@@ -680,7 +681,7 @@ LibraResult LIBRA_INTEROP_CALL libra_game_io_configure(
         auto native = findInstance(instance);
         if (!native) return LIBRA_INVALID_HANDLE;
         if (native->lifecycle || native->gameIo || native->owner->program.version() < 6 ||
-            native->owner->program.version() > 7)
+            native->owner->program.version() > 9)
             return LIBRA_INVALID_VALUE_TYPE;
         auto converted = std::vector<liberafx::NamedIoPort>{};
         auto count = native->owner->program.gameIoPortCount();

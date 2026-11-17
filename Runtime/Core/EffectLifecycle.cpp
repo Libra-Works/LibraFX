@@ -54,6 +54,7 @@ auto EffectLifecycle::startInternal(Lifetime lifetime, const std::uint8_t* lifeN
     auto storageResult = instance_->setDeferredSignalStorage(deferredStorage_.data(), deferredStorage_.size());
     if (storageResult != Result::Ok) return storageResult;
     ownsDeferredStorage_ = true;
+    instructionBudget_ = instructionBudget ? instructionBudget : 10000;
     phase_ = Phase::Busy;
     auto result = Result::Ok;
     if (io_) {
@@ -85,6 +86,12 @@ auto EffectLifecycle::startInternal(Lifetime lifetime, const std::uint8_t* lifeN
                 phase_ = Phase::Failed;
                 return result;
             }
+        }
+        result = instance_->dispatchGeneratedSignals(instructionBudget_);
+        if (result != Result::Ok) {
+            startFailure_ = result;
+            phase_ = Phase::Failed;
+            return result;
         }
         if (onStartNodeId) {
             result = instance_->dispatchSignal(signal, 0, instructionBudget);
@@ -138,6 +145,7 @@ auto EffectLifecycle::advance(double elapsed, LifetimeSample& out) noexcept -> R
             return result;
         }
         result = instance_->result();
+        if (result == Result::Ok) result = instance_->dispatchGeneratedSignals(instructionBudget_);
     }
     if (result != Result::Ok) {
         startFailure_ = result;
@@ -170,6 +178,7 @@ auto EffectLifecycle::drain(double elapsed) noexcept -> Result
     phase_ = Phase::Busy;
     auto result = io_ ? io_->update(elapsed) : instance_->updateAsync(elapsed, inlineJob, nullptr);
     if (!io_ && result == Result::Ok) result = instance_->result();
+    if (!io_ && result == Result::Ok) result = instance_->dispatchGeneratedSignals(instructionBudget_);
     if (result != Result::Ok) {
         startFailure_ = result;
         phase_ = Phase::Failed;

@@ -346,6 +346,26 @@ int main()
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
     verifyEffectLifetime();
+    if (auto bytecodePath = std::getenv("LIBERAFX_CONDITIONAL_BYTECODE")) {
+        auto stream = std::ifstream{bytecodePath, std::ios::binary};
+        auto bytes = std::vector<std::uint8_t>(
+            std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{});
+        assert(stream.good() || stream.eof());
+        for (auto spawnable = 0; spawnable < 2; ++spawnable) {
+            auto program = LibraProgram{};
+            auto status = spawnable
+                ? libra_program_create_spawnable_v2(bytes.data(), bytes.size(), nullptr, 0, nullptr, 0, &program)
+                : libra_program_create(bytes.data(), bytes.size(), &program);
+            assert(status == LIBRA_OK);
+            auto instance = LibraInstance{};
+            assert(libra_instance_create(program, &instance) == LIBRA_OK);
+            assert(libra_game_io_configure(instance, 32, nullptr, 0) == LIBRA_OK);
+            assert(libra_game_io_start(instance, 0, nullptr, 10000) == LIBRA_OK);
+            assert(libra_game_io_update(instance, 0.5) == LIBRA_OK);
+            assert(libra_instance_release(instance) == LIBRA_OK);
+            assert(libra_program_release(program) == LIBRA_OK);
+        }
+    }
     if (auto bytecodePath = std::getenv("LIBERAFX_GAMEIO_MATRIX_BYTECODE")) {
         auto stream = std::ifstream{bytecodePath, std::ios::binary};
         auto bytes = std::vector<std::uint8_t>(

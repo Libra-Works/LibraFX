@@ -4,10 +4,12 @@ public static class GroupBoundarySchema
 {
     public static bool IsInput(GraphNodeKind kind) => kind.Value is
         "GroupInputFloat" or "GroupInputVector2" or "GroupInputVector3" or
-        "GroupInputVector4" or "GroupInputColor" or "GroupInputSignal" or "GroupInputMatrix";
+        "GroupInputVector4" or "GroupInputColor" or "GroupInputSignal" or "GroupInputMatrix" ||
+        GraphEnumBranchSchema.TryGetBoundaryDefinition(kind, out _, out var isInput) && isInput;
     public static bool IsOutput(GraphNodeKind kind) => kind.Value is
         "GroupOutputFloat" or "GroupOutputVector2" or "GroupOutputVector3" or
-        "GroupOutputVector4" or "GroupOutputColor" or "GroupOutputSignal" or "GroupOutputMatrix";
+        "GroupOutputVector4" or "GroupOutputColor" or "GroupOutputSignal" or "GroupOutputMatrix" ||
+        GraphEnumBranchSchema.TryGetBoundaryDefinition(kind, out _, out var isInput) && !isInput;
     public static string InputPortId(Guid id) => "p_" + id.ToString("N");
     public static string OutputPortId(Guid id) => "o_" + id.ToString("N");
 

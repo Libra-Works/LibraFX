@@ -1,0 +1,2771 @@
+{
+  "FormatVersion": 5,
+  "Id": "b17b0000-0000-4000-8000-000000000003",
+  "Name": "Tree Billboard",
+  "Revision": 1,
+  "Locked": true,
+  "Graph": {
+    "Nodes": [
+      {
+        "Id": "4af2e628-4172-a7bb-c3d4-b9e9ceed7ca7",
+        "Kind": "GroupInputVector3",
+        "Name": "Position",
+        "X": 0,
+        "Y": 0,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "value",
+            "Type": "vector3",
+            "Value": [
+              0,
+              0,
+              0
+            ]
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "7756eb73-3846-88d7-ab42-a1c123cbfdca",
+        "Kind": "GroupInputVector3",
+        "Name": "Target",
+        "X": 300,
+        "Y": 0,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "value",
+            "Type": "vector3",
+            "Value": [
+              1,
+              0,
+              0
+            ]
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "b994e99b-7718-9696-3300-9c1962c46e57",
+        "Kind": "GroupInputVector3",
+        "Name": "World Up",
+        "X": 600,
+        "Y": 0,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "value",
+            "Type": "vector3",
+            "Value": [
+              0,
+              0,
+              1
+            ]
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "6c9d2b15-ee2d-199d-2d3a-840f04c13664",
+        "Kind": "GroupInputVector3",
+        "Name": "Local Forward",
+        "X": 900,
+        "Y": 0,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "value",
+            "Type": "vector3",
+            "Value": [
+              1,
+              0,
+              0
+            ]
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "d28aefd9-11a0-e838-9fd9-cd5cebe974d3",
+        "Kind": "GroupInputVector3",
+        "Name": "Local Up",
+        "X": 1200,
+        "Y": 0,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "value",
+            "Type": "vector3",
+            "Value": [
+              0,
+              0,
+              1
+            ]
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "a65ac90a-0bd8-4cc1-a3ba-9cf4ba5ecf0e",
+        "Kind": "GroupInputVector3",
+        "Name": "Scale",
+        "X": 1500,
+        "Y": 0,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "value",
+            "Type": "vector3",
+            "Value": [
+              1,
+              1,
+              1
+            ]
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "000db29f-ec85-49d0-b690-11ec476c54b0",
+        "Kind": "GroupInputVector3",
+        "Name": "Pivot",
+        "X": 0,
+        "Y": 180,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "value",
+            "Type": "vector3",
+            "Value": [
+              0,
+              0,
+              0
+            ]
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "0ad46a55-df6d-2a15-ac2d-1305a7a039f3",
+        "Kind": "GroupInputFloat",
+        "Name": "Tolerance",
+        "X": 300,
+        "Y": 180,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "value",
+            "Type": "float",
+            "Value": 1E-06
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "12ca1875-6a1e-20e6-f0f5-06b290b9b2a4",
+        "Kind": "Max",
+        "Name": "minimum tolerance",
+        "X": 600,
+        "Y": 180,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "b",
+            "Type": "float",
+            "Value": 1E-12
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "d438ca53-c151-436a-94c5-543e51b1b866",
+        "Kind": "SubtractVector3",
+        "Name": "target direction",
+        "X": 900,
+        "Y": 180,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "3f5ec9c2-655e-ba9c-404e-36f297601c5a",
+        "Kind": "NormalizeVector3",
+        "Name": "unit world up",
+        "X": 1200,
+        "Y": 180,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "947f13e1-cf5b-67eb-518b-05886efb1373",
+        "Kind": "DotVector3",
+        "Name": "height along world up",
+        "X": 1500,
+        "Y": 180,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "0b8fe4be-105e-69dc-3ab7-c05cf15d4aa9",
+        "Kind": "ScalarToVector3",
+        "Name": "broadcast height",
+        "X": 0,
+        "Y": 360,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "d6f73715-693e-a534-9c04-d4a5bd535bce",
+        "Kind": "MultiplyVector3",
+        "Name": "vertical direction",
+        "X": 300,
+        "Y": 360,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "6057b7c9-4b24-fccc-97b5-f8f8f942b63e",
+        "Kind": "SubtractVector3",
+        "Name": "direction in up plane",
+        "X": 600,
+        "Y": 360,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "ac5bc8b4-c649-a41a-0391-be6bda9b3471",
+        "Kind": "NormalizeVector3",
+        "Name": "world: forward",
+        "X": 900,
+        "Y": 360,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "d87e570b-4a1c-5bf3-6e2c-3f30676fbb0e",
+        "Kind": "NormalizeVector3",
+        "Name": "world: unit up",
+        "X": 1200,
+        "Y": 360,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "f4a0ba2c-bd95-c552-0f64-52fdf4eb7f03",
+        "Kind": "CrossVector3",
+        "Name": "world: cross",
+        "X": 1500,
+        "Y": 360,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "973cacac-2d79-f0a3-d43d-62b51c3da50d",
+        "Kind": "NormalizeVector3",
+        "Name": "world: right",
+        "X": 0,
+        "Y": 540,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "25998304-2111-f721-4255-d277f988f1aa",
+        "Kind": "CrossVector3",
+        "Name": "world: up",
+        "X": 300,
+        "Y": 540,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "ad9503da-abf8-1279-2b83-37b56f03c287",
+        "Kind": "BreakVector3",
+        "Name": "world: column 0",
+        "X": 600,
+        "Y": 540,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "b3fac1f6-c5dc-aed1-a191-a51570ba9420",
+        "Kind": "BreakVector3",
+        "Name": "world: column 1",
+        "X": 900,
+        "Y": 540,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "133259d2-4afc-4a05-bf51-393eb531cf3e",
+        "Kind": "BreakVector3",
+        "Name": "world: column 2",
+        "X": 1200,
+        "Y": 540,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "21529854-149d-262d-b5af-a632e4ee7e6d",
+        "Kind": "BreakVector3",
+        "Name": "world: column 3",
+        "X": 1500,
+        "Y": 540,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "ea525af0-ff7f-a5e7-a924-2152ffec9ec1",
+        "Kind": "MatrixCompose",
+        "Name": "world: matrix",
+        "X": 0,
+        "Y": 720,
+        "PortType": "Matrix",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "c214cc6c-8b75-d4c2-54a4-7e9e0e1ca8ea",
+        "Kind": "ComposeVector4",
+        "Name": "world: row 0",
+        "X": 300,
+        "Y": 720,
+        "PortType": "FloatX4",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "f57fde88-05b7-1f53-5773-c06600eda568",
+        "Kind": "ComposeVector4",
+        "Name": "world: row 1",
+        "X": 600,
+        "Y": 720,
+        "PortType": "FloatX4",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "109252a2-2def-8cc1-846e-f4e0d81598c1",
+        "Kind": "ComposeVector4",
+        "Name": "world: row 2",
+        "X": 900,
+        "Y": 720,
+        "PortType": "FloatX4",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "36bd3b99-cbc1-8872-9581-59b75d6b4905",
+        "Kind": "LengthVector3",
+        "Name": "world: direction valid: length",
+        "X": 1200,
+        "Y": 720,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "01ea4444-808a-bf1f-b64e-65c4890c925a",
+        "Kind": "Subtract",
+        "Name": "world: direction valid: excess",
+        "X": 1500,
+        "Y": 720,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "c0663cb9-f2c9-4315-3e6a-c8b94e6fb886",
+        "Kind": "Sign",
+        "Name": "world: direction valid: sign",
+        "X": 0,
+        "Y": 900,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "4db43385-de45-fea5-f111-edf55d89d840",
+        "Kind": "Max",
+        "Name": "world: direction valid",
+        "X": 300,
+        "Y": 900,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "b",
+            "Type": "float",
+            "Value": 0
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "9b367ab9-ad02-459a-1d7b-7a0646a7b58f",
+        "Kind": "LengthVector3",
+        "Name": "world: up valid: length",
+        "X": 600,
+        "Y": 900,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "79e68550-2d2e-1b0e-54e3-d9e2fb31a155",
+        "Kind": "Subtract",
+        "Name": "world: up valid: excess",
+        "X": 900,
+        "Y": 900,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "817ccb19-b76f-7663-20cc-0a0ccde0b971",
+        "Kind": "Sign",
+        "Name": "world: up valid: sign",
+        "X": 1200,
+        "Y": 900,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "4301955c-7371-ba7d-9b95-4ecfce4860e8",
+        "Kind": "Max",
+        "Name": "world: up valid",
+        "X": 1500,
+        "Y": 900,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "b",
+            "Type": "float",
+            "Value": 0
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "91689d3f-a5ba-b27e-5716-f95529d77e75",
+        "Kind": "LengthVector3",
+        "Name": "world: cross valid: length",
+        "X": 0,
+        "Y": 1080,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "6d8729a8-cb50-8c93-5437-0200a0f1e58d",
+        "Kind": "Subtract",
+        "Name": "world: cross valid: excess",
+        "X": 300,
+        "Y": 1080,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "a3a795fe-4b71-fae2-a42c-be76a276b34a",
+        "Kind": "Sign",
+        "Name": "world: cross valid: sign",
+        "X": 600,
+        "Y": 1080,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "ea1c998b-13c6-6d59-8905-d2776ab67455",
+        "Kind": "Max",
+        "Name": "world: cross valid",
+        "X": 900,
+        "Y": 1080,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "b",
+            "Type": "float",
+            "Value": 0
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "82e336ef-b359-e0a3-1855-d65374779a21",
+        "Kind": "Multiply",
+        "Name": "world: up and cross valid",
+        "X": 1200,
+        "Y": 1080,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "a9b9d3e0-194e-765c-32ad-8a063d2edf4f",
+        "Kind": "Multiply",
+        "Name": "world: valid",
+        "X": 1500,
+        "Y": 1080,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "fd98534e-edd3-68e2-db2b-92260ef3276c",
+        "Kind": "FloatX3",
+        "Name": "origin",
+        "X": 0,
+        "Y": 1260,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "value",
+            "Type": "vector3",
+            "Value": [
+              0,
+              0,
+              0
+            ]
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "38c52c8e-6127-82f2-5e36-8dddac8a1698",
+        "Kind": "NormalizeVector3",
+        "Name": "local: forward",
+        "X": 300,
+        "Y": 1260,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "5426b361-d8d7-8651-e8fb-677ccd7c7d03",
+        "Kind": "NormalizeVector3",
+        "Name": "local: unit up",
+        "X": 600,
+        "Y": 1260,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "4d074877-b4d6-dac9-69e3-52265d4691b7",
+        "Kind": "CrossVector3",
+        "Name": "local: cross",
+        "X": 900,
+        "Y": 1260,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "907efeeb-0bf7-4a80-3815-67a7beb58930",
+        "Kind": "NormalizeVector3",
+        "Name": "local: right",
+        "X": 1200,
+        "Y": 1260,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "8bdbf7f0-4bb7-24f6-b795-8414b30c0dcc",
+        "Kind": "CrossVector3",
+        "Name": "local: up",
+        "X": 1500,
+        "Y": 1260,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "bb648f2c-243f-ab7c-e979-3754d8a7347e",
+        "Kind": "BreakVector3",
+        "Name": "local: column 0",
+        "X": 0,
+        "Y": 1440,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "5d91d600-5286-d958-7ebc-5fa570417ece",
+        "Kind": "BreakVector3",
+        "Name": "local: column 1",
+        "X": 300,
+        "Y": 1440,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "bfeb35ae-6a60-1a35-2659-ebf54c355a82",
+        "Kind": "BreakVector3",
+        "Name": "local: column 2",
+        "X": 600,
+        "Y": 1440,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "fc003b02-d850-d960-0b4b-91e2fff07d92",
+        "Kind": "BreakVector3",
+        "Name": "local: column 3",
+        "X": 900,
+        "Y": 1440,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "bb156557-55b7-69a6-bf48-15196c818d31",
+        "Kind": "MatrixCompose",
+        "Name": "local: matrix",
+        "X": 1200,
+        "Y": 1440,
+        "PortType": "Matrix",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "ba8d041a-697a-7b32-aa7e-b938e7faee74",
+        "Kind": "ComposeVector4",
+        "Name": "local: row 0",
+        "X": 1500,
+        "Y": 1440,
+        "PortType": "FloatX4",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "2c0797ca-9adc-4fc1-cc9e-6c17edcee56b",
+        "Kind": "ComposeVector4",
+        "Name": "local: row 1",
+        "X": 0,
+        "Y": 1620,
+        "PortType": "FloatX4",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "f2a72618-fde5-f48d-90b6-dd036bcecd82",
+        "Kind": "ComposeVector4",
+        "Name": "local: row 2",
+        "X": 300,
+        "Y": 1620,
+        "PortType": "FloatX4",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "da20809f-5ebe-6f26-a2fe-9c763c65e81c",
+        "Kind": "LengthVector3",
+        "Name": "local: direction valid: length",
+        "X": 600,
+        "Y": 1620,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "1a1ca961-ac80-033f-0e2b-64f313332f65",
+        "Kind": "Subtract",
+        "Name": "local: direction valid: excess",
+        "X": 900,
+        "Y": 1620,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "2b442fbe-ec0b-ee4c-9cbc-825a7570a75a",
+        "Kind": "Sign",
+        "Name": "local: direction valid: sign",
+        "X": 1200,
+        "Y": 1620,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "f35b9924-32aa-fa40-fa06-927f5c3489a2",
+        "Kind": "Max",
+        "Name": "local: direction valid",
+        "X": 1500,
+        "Y": 1620,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "b",
+            "Type": "float",
+            "Value": 0
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "5189c5af-6779-fbc8-1e01-ee1ea1ef623c",
+        "Kind": "LengthVector3",
+        "Name": "local: up valid: length",
+        "X": 0,
+        "Y": 1800,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "46f203eb-d792-8202-76da-557233bbd8b0",
+        "Kind": "Subtract",
+        "Name": "local: up valid: excess",
+        "X": 300,
+        "Y": 1800,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "a5fb1fa0-576d-3057-4778-daa46f5ea53c",
+        "Kind": "Sign",
+        "Name": "local: up valid: sign",
+        "X": 600,
+        "Y": 1800,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "70d34a25-30cd-a97c-f37d-3ebb59432033",
+        "Kind": "Max",
+        "Name": "local: up valid",
+        "X": 900,
+        "Y": 1800,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "b",
+            "Type": "float",
+            "Value": 0
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "0f4b306d-fc38-0102-b4a7-95fb94b96b53",
+        "Kind": "LengthVector3",
+        "Name": "local: cross valid: length",
+        "X": 1200,
+        "Y": 1800,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "8d84c9f8-0b0d-bb38-d60f-7c37cad72e4d",
+        "Kind": "Subtract",
+        "Name": "local: cross valid: excess",
+        "X": 1500,
+        "Y": 1800,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "bd5ae42c-da17-a5a5-896b-ce7b510125a0",
+        "Kind": "Sign",
+        "Name": "local: cross valid: sign",
+        "X": 0,
+        "Y": 1980,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "0cdb68df-3eec-5543-0d63-c827a93fb9f4",
+        "Kind": "Max",
+        "Name": "local: cross valid",
+        "X": 300,
+        "Y": 1980,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "b",
+            "Type": "float",
+            "Value": 0
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "faa1b806-62a9-e00a-14ec-195689d6b9ac",
+        "Kind": "Multiply",
+        "Name": "local: up and cross valid",
+        "X": 600,
+        "Y": 1980,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "713c1bc4-007e-e523-5f80-a6ce7be195f6",
+        "Kind": "Multiply",
+        "Name": "local: valid",
+        "X": 900,
+        "Y": 1980,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "afa2a13f-1673-360b-2e6a-ebe0588e8cb9",
+        "Kind": "MatrixInverse",
+        "Name": "inverse local axes",
+        "X": 1200,
+        "Y": 1980,
+        "PortType": "Matrix",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "6fedd8ec-ae95-7432-73c5-5443539d6537",
+        "Kind": "MatrixMultiply",
+        "Name": "world facing",
+        "X": 1500,
+        "Y": 1980,
+        "PortType": "Matrix",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "200ada1c-63ad-5d82-e283-a3d493a5f650",
+        "Kind": "MultiplyVector3",
+        "Name": "negative pivot",
+        "X": 0,
+        "Y": 2160,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "b",
+            "Type": "vector3",
+            "Value": [
+              -1,
+              -1,
+              -1
+            ]
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "d0a13c83-f2c4-933b-b826-f336f3ba38fd",
+        "Kind": "MultiplyVector3",
+        "Name": "scaled negative pivot",
+        "X": 300,
+        "Y": 2160,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "56c7b221-f64b-d2ee-ab2d-b75af1feae0a",
+        "Kind": "Transform",
+        "Name": "local pivot and scale",
+        "X": 600,
+        "Y": 2160,
+        "PortType": "Matrix",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "6bf00961-aa62-8543-7c9f-4a7c9e4ed637",
+        "Kind": "MatrixMultiply",
+        "Name": "world with pivot and scale",
+        "X": 900,
+        "Y": 2160,
+        "PortType": "Matrix",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "6dd912b3-cb98-428c-5321-6df63428fec2",
+        "Kind": "NormalizeVector3",
+        "Name": "unit local forward",
+        "X": 1200,
+        "Y": 2160,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "8abaac83-6dd7-cfee-259b-e5628cc5c7e0",
+        "Kind": "NormalizeVector3",
+        "Name": "unit local up",
+        "X": 1500,
+        "Y": 2160,
+        "PortType": "FloatX3",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "9693b8b4-93a9-12c4-0720-70a4d821b46e",
+        "Kind": "DotVector3",
+        "Name": "local axes dot",
+        "X": 0,
+        "Y": 2340,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "3e7282cd-673e-cff1-b4cb-9185824182b0",
+        "Kind": "Abs",
+        "Name": "absolute local dot",
+        "X": 300,
+        "Y": 2340,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "69cf0efc-7557-7e0e-f46d-0c60fc5f9b25",
+        "Kind": "Subtract",
+        "Name": "local orthogonality error",
+        "X": 600,
+        "Y": 2340,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "3b256f3e-c383-184d-f3f2-035292fd6c4f",
+        "Kind": "Sign",
+        "Name": "local axes skewed: sign",
+        "X": 900,
+        "Y": 2340,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "7c856cef-5d64-05e3-5945-9b06f64ed4d4",
+        "Kind": "Max",
+        "Name": "local axes skewed",
+        "X": 1200,
+        "Y": 2340,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "b",
+            "Type": "float",
+            "Value": 0
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "971affac-4059-1df5-3c78-50ef58a29ae5",
+        "Kind": "Subtract",
+        "Name": "local axes orthogonal",
+        "X": 1500,
+        "Y": 2340,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [
+          {
+            "Id": "a",
+            "Type": "float",
+            "Value": 1
+          }
+        ],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "ca8dd7c8-8951-f490-4cf3-4da6a6b45a31",
+        "Kind": "Multiply",
+        "Name": "both frames valid",
+        "X": 0,
+        "Y": 2520,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "10ccb067-1db9-e983-cc63-4e7067655dc6",
+        "Kind": "Multiply",
+        "Name": "combined validity",
+        "X": 300,
+        "Y": 2520,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "c766b34a-74df-fe46-2cc5-6e27ece85a10",
+        "Kind": "MatrixBreak",
+        "Name": "world rows",
+        "X": 600,
+        "Y": 2520,
+        "PortType": "FloatX4",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "2944c1a3-0af8-10e9-6bb7-160221758e90",
+        "Kind": "ScalarToVector4",
+        "Name": "validity row mask",
+        "X": 900,
+        "Y": 2520,
+        "PortType": "FloatX4",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "289a2f11-73a8-21e5-06e9-7089b8dedd31",
+        "Kind": "MatrixCompose",
+        "Name": "finite valid world matrix",
+        "X": 1200,
+        "Y": 2520,
+        "PortType": "Matrix",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "8d5be85a-8144-6e1c-b30f-e0b010fe842d",
+        "Kind": "MultiplyVector4",
+        "Name": "valid world row 0",
+        "X": 1500,
+        "Y": 2520,
+        "PortType": "FloatX4",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "d6f150a0-28f6-991f-9919-72283b373ec0",
+        "Kind": "MultiplyVector4",
+        "Name": "valid world row 1",
+        "X": 0,
+        "Y": 2700,
+        "PortType": "FloatX4",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "edd357c7-cdc8-cde0-74ca-f0c632821232",
+        "Kind": "MultiplyVector4",
+        "Name": "valid world row 2",
+        "X": 300,
+        "Y": 2700,
+        "PortType": "FloatX4",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "7f7da896-382b-7eba-e16c-6a04cbc1af12",
+        "Kind": "MultiplyVector4",
+        "Name": "valid world row 3",
+        "X": 600,
+        "Y": 2700,
+        "PortType": "FloatX4",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "3f949d7a-9025-7ed0-ffc3-6bf4db598c87",
+        "Kind": "GroupOutputMatrix",
+        "Name": "World Matrix",
+        "X": 900,
+        "Y": 2700,
+        "PortType": "Matrix",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      },
+      {
+        "Id": "83f9f6dc-1c66-04f0-7e95-aa5991a0ef05",
+        "Kind": "GroupOutputFloat",
+        "Name": "Valid",
+        "X": 1200,
+        "Y": 2700,
+        "PortType": "Float",
+        "PortCategory": "Parameter",
+        "Curve": null,
+        "ChildGraph": null,
+        "Parameters": [],
+        "GroupAsset": null,
+        "IsPolymorphic": false,
+        "GroupOverrides": null,
+        "SignalKeys": null,
+        "KindDomain": "Cpu"
+      }
+    ],
+    "Connections": [
+      {
+        "SourceNodeId": "0ad46a55-df6d-2a15-ac2d-1305a7a039f3",
+        "TargetNodeId": "12ca1875-6a1e-20e6-f0f5-06b290b9b2a4",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "7756eb73-3846-88d7-ab42-a1c123cbfdca",
+        "TargetNodeId": "d438ca53-c151-436a-94c5-543e51b1b866",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "4af2e628-4172-a7bb-c3d4-b9e9ceed7ca7",
+        "TargetNodeId": "d438ca53-c151-436a-94c5-543e51b1b866",
+        "TargetPortId": "b",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "b994e99b-7718-9696-3300-9c1962c46e57",
+        "TargetNodeId": "3f5ec9c2-655e-ba9c-404e-36f297601c5a",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "d438ca53-c151-436a-94c5-543e51b1b866",
+        "TargetNodeId": "947f13e1-cf5b-67eb-518b-05886efb1373",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "3f5ec9c2-655e-ba9c-404e-36f297601c5a",
+        "TargetNodeId": "947f13e1-cf5b-67eb-518b-05886efb1373",
+        "TargetPortId": "b",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "947f13e1-cf5b-67eb-518b-05886efb1373",
+        "TargetNodeId": "0b8fe4be-105e-69dc-3ab7-c05cf15d4aa9",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "3f5ec9c2-655e-ba9c-404e-36f297601c5a",
+        "TargetNodeId": "d6f73715-693e-a534-9c04-d4a5bd535bce",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "0b8fe4be-105e-69dc-3ab7-c05cf15d4aa9",
+        "TargetNodeId": "d6f73715-693e-a534-9c04-d4a5bd535bce",
+        "TargetPortId": "b",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "d438ca53-c151-436a-94c5-543e51b1b866",
+        "TargetNodeId": "6057b7c9-4b24-fccc-97b5-f8f8f942b63e",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "d6f73715-693e-a534-9c04-d4a5bd535bce",
+        "TargetNodeId": "6057b7c9-4b24-fccc-97b5-f8f8f942b63e",
+        "TargetPortId": "b",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "6057b7c9-4b24-fccc-97b5-f8f8f942b63e",
+        "TargetNodeId": "ac5bc8b4-c649-a41a-0391-be6bda9b3471",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "b994e99b-7718-9696-3300-9c1962c46e57",
+        "TargetNodeId": "d87e570b-4a1c-5bf3-6e2c-3f30676fbb0e",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "d87e570b-4a1c-5bf3-6e2c-3f30676fbb0e",
+        "TargetNodeId": "f4a0ba2c-bd95-c552-0f64-52fdf4eb7f03",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "ac5bc8b4-c649-a41a-0391-be6bda9b3471",
+        "TargetNodeId": "f4a0ba2c-bd95-c552-0f64-52fdf4eb7f03",
+        "TargetPortId": "b",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "f4a0ba2c-bd95-c552-0f64-52fdf4eb7f03",
+        "TargetNodeId": "973cacac-2d79-f0a3-d43d-62b51c3da50d",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "ac5bc8b4-c649-a41a-0391-be6bda9b3471",
+        "TargetNodeId": "25998304-2111-f721-4255-d277f988f1aa",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "973cacac-2d79-f0a3-d43d-62b51c3da50d",
+        "TargetNodeId": "25998304-2111-f721-4255-d277f988f1aa",
+        "TargetPortId": "b",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "ac5bc8b4-c649-a41a-0391-be6bda9b3471",
+        "TargetNodeId": "ad9503da-abf8-1279-2b83-37b56f03c287",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "973cacac-2d79-f0a3-d43d-62b51c3da50d",
+        "TargetNodeId": "b3fac1f6-c5dc-aed1-a191-a51570ba9420",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "25998304-2111-f721-4255-d277f988f1aa",
+        "TargetNodeId": "133259d2-4afc-4a05-bf51-393eb531cf3e",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "4af2e628-4172-a7bb-c3d4-b9e9ceed7ca7",
+        "TargetNodeId": "21529854-149d-262d-b5af-a632e4ee7e6d",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "ad9503da-abf8-1279-2b83-37b56f03c287",
+        "TargetNodeId": "c214cc6c-8b75-d4c2-54a4-7e9e0e1ca8ea",
+        "TargetPortId": "r",
+        "SourcePortId": "x"
+      },
+      {
+        "SourceNodeId": "b3fac1f6-c5dc-aed1-a191-a51570ba9420",
+        "TargetNodeId": "c214cc6c-8b75-d4c2-54a4-7e9e0e1ca8ea",
+        "TargetPortId": "g",
+        "SourcePortId": "x"
+      },
+      {
+        "SourceNodeId": "133259d2-4afc-4a05-bf51-393eb531cf3e",
+        "TargetNodeId": "c214cc6c-8b75-d4c2-54a4-7e9e0e1ca8ea",
+        "TargetPortId": "b",
+        "SourcePortId": "x"
+      },
+      {
+        "SourceNodeId": "21529854-149d-262d-b5af-a632e4ee7e6d",
+        "TargetNodeId": "c214cc6c-8b75-d4c2-54a4-7e9e0e1ca8ea",
+        "TargetPortId": "a",
+        "SourcePortId": "x"
+      },
+      {
+        "SourceNodeId": "c214cc6c-8b75-d4c2-54a4-7e9e0e1ca8ea",
+        "TargetNodeId": "ea525af0-ff7f-a5e7-a924-2152ffec9ec1",
+        "TargetPortId": "row0",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "ad9503da-abf8-1279-2b83-37b56f03c287",
+        "TargetNodeId": "f57fde88-05b7-1f53-5773-c06600eda568",
+        "TargetPortId": "r",
+        "SourcePortId": "y"
+      },
+      {
+        "SourceNodeId": "b3fac1f6-c5dc-aed1-a191-a51570ba9420",
+        "TargetNodeId": "f57fde88-05b7-1f53-5773-c06600eda568",
+        "TargetPortId": "g",
+        "SourcePortId": "y"
+      },
+      {
+        "SourceNodeId": "133259d2-4afc-4a05-bf51-393eb531cf3e",
+        "TargetNodeId": "f57fde88-05b7-1f53-5773-c06600eda568",
+        "TargetPortId": "b",
+        "SourcePortId": "y"
+      },
+      {
+        "SourceNodeId": "21529854-149d-262d-b5af-a632e4ee7e6d",
+        "TargetNodeId": "f57fde88-05b7-1f53-5773-c06600eda568",
+        "TargetPortId": "a",
+        "SourcePortId": "y"
+      },
+      {
+        "SourceNodeId": "f57fde88-05b7-1f53-5773-c06600eda568",
+        "TargetNodeId": "ea525af0-ff7f-a5e7-a924-2152ffec9ec1",
+        "TargetPortId": "row1",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "ad9503da-abf8-1279-2b83-37b56f03c287",
+        "TargetNodeId": "109252a2-2def-8cc1-846e-f4e0d81598c1",
+        "TargetPortId": "r",
+        "SourcePortId": "z"
+      },
+      {
+        "SourceNodeId": "b3fac1f6-c5dc-aed1-a191-a51570ba9420",
+        "TargetNodeId": "109252a2-2def-8cc1-846e-f4e0d81598c1",
+        "TargetPortId": "g",
+        "SourcePortId": "z"
+      },
+      {
+        "SourceNodeId": "133259d2-4afc-4a05-bf51-393eb531cf3e",
+        "TargetNodeId": "109252a2-2def-8cc1-846e-f4e0d81598c1",
+        "TargetPortId": "b",
+        "SourcePortId": "z"
+      },
+      {
+        "SourceNodeId": "21529854-149d-262d-b5af-a632e4ee7e6d",
+        "TargetNodeId": "109252a2-2def-8cc1-846e-f4e0d81598c1",
+        "TargetPortId": "a",
+        "SourcePortId": "z"
+      },
+      {
+        "SourceNodeId": "109252a2-2def-8cc1-846e-f4e0d81598c1",
+        "TargetNodeId": "ea525af0-ff7f-a5e7-a924-2152ffec9ec1",
+        "TargetPortId": "row2",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "6057b7c9-4b24-fccc-97b5-f8f8f942b63e",
+        "TargetNodeId": "36bd3b99-cbc1-8872-9581-59b75d6b4905",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "36bd3b99-cbc1-8872-9581-59b75d6b4905",
+        "TargetNodeId": "01ea4444-808a-bf1f-b64e-65c4890c925a",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "12ca1875-6a1e-20e6-f0f5-06b290b9b2a4",
+        "TargetNodeId": "01ea4444-808a-bf1f-b64e-65c4890c925a",
+        "TargetPortId": "b",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "01ea4444-808a-bf1f-b64e-65c4890c925a",
+        "TargetNodeId": "c0663cb9-f2c9-4315-3e6a-c8b94e6fb886",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "c0663cb9-f2c9-4315-3e6a-c8b94e6fb886",
+        "TargetNodeId": "4db43385-de45-fea5-f111-edf55d89d840",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "b994e99b-7718-9696-3300-9c1962c46e57",
+        "TargetNodeId": "9b367ab9-ad02-459a-1d7b-7a0646a7b58f",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "9b367ab9-ad02-459a-1d7b-7a0646a7b58f",
+        "TargetNodeId": "79e68550-2d2e-1b0e-54e3-d9e2fb31a155",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "12ca1875-6a1e-20e6-f0f5-06b290b9b2a4",
+        "TargetNodeId": "79e68550-2d2e-1b0e-54e3-d9e2fb31a155",
+        "TargetPortId": "b",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "79e68550-2d2e-1b0e-54e3-d9e2fb31a155",
+        "TargetNodeId": "817ccb19-b76f-7663-20cc-0a0ccde0b971",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "817ccb19-b76f-7663-20cc-0a0ccde0b971",
+        "TargetNodeId": "4301955c-7371-ba7d-9b95-4ecfce4860e8",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "f4a0ba2c-bd95-c552-0f64-52fdf4eb7f03",
+        "TargetNodeId": "91689d3f-a5ba-b27e-5716-f95529d77e75",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "91689d3f-a5ba-b27e-5716-f95529d77e75",
+        "TargetNodeId": "6d8729a8-cb50-8c93-5437-0200a0f1e58d",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "12ca1875-6a1e-20e6-f0f5-06b290b9b2a4",
+        "TargetNodeId": "6d8729a8-cb50-8c93-5437-0200a0f1e58d",
+        "TargetPortId": "b",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "6d8729a8-cb50-8c93-5437-0200a0f1e58d",
+        "TargetNodeId": "a3a795fe-4b71-fae2-a42c-be76a276b34a",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "a3a795fe-4b71-fae2-a42c-be76a276b34a",
+        "TargetNodeId": "ea1c998b-13c6-6d59-8905-d2776ab67455",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "4301955c-7371-ba7d-9b95-4ecfce4860e8",
+        "TargetNodeId": "82e336ef-b359-e0a3-1855-d65374779a21",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "ea1c998b-13c6-6d59-8905-d2776ab67455",
+        "TargetNodeId": "82e336ef-b359-e0a3-1855-d65374779a21",
+        "TargetPortId": "b",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "4db43385-de45-fea5-f111-edf55d89d840",
+        "TargetNodeId": "a9b9d3e0-194e-765c-32ad-8a063d2edf4f",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "82e336ef-b359-e0a3-1855-d65374779a21",
+        "TargetNodeId": "a9b9d3e0-194e-765c-32ad-8a063d2edf4f",
+        "TargetPortId": "b",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "6c9d2b15-ee2d-199d-2d3a-840f04c13664",
+        "TargetNodeId": "38c52c8e-6127-82f2-5e36-8dddac8a1698",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "d28aefd9-11a0-e838-9fd9-cd5cebe974d3",
+        "TargetNodeId": "5426b361-d8d7-8651-e8fb-677ccd7c7d03",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "5426b361-d8d7-8651-e8fb-677ccd7c7d03",
+        "TargetNodeId": "4d074877-b4d6-dac9-69e3-52265d4691b7",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "38c52c8e-6127-82f2-5e36-8dddac8a1698",
+        "TargetNodeId": "4d074877-b4d6-dac9-69e3-52265d4691b7",
+        "TargetPortId": "b",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "4d074877-b4d6-dac9-69e3-52265d4691b7",
+        "TargetNodeId": "907efeeb-0bf7-4a80-3815-67a7beb58930",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "38c52c8e-6127-82f2-5e36-8dddac8a1698",
+        "TargetNodeId": "8bdbf7f0-4bb7-24f6-b795-8414b30c0dcc",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "907efeeb-0bf7-4a80-3815-67a7beb58930",
+        "TargetNodeId": "8bdbf7f0-4bb7-24f6-b795-8414b30c0dcc",
+        "TargetPortId": "b",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "38c52c8e-6127-82f2-5e36-8dddac8a1698",
+        "TargetNodeId": "bb648f2c-243f-ab7c-e979-3754d8a7347e",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "907efeeb-0bf7-4a80-3815-67a7beb58930",
+        "TargetNodeId": "5d91d600-5286-d958-7ebc-5fa570417ece",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "8bdbf7f0-4bb7-24f6-b795-8414b30c0dcc",
+        "TargetNodeId": "bfeb35ae-6a60-1a35-2659-ebf54c355a82",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "fd98534e-edd3-68e2-db2b-92260ef3276c",
+        "TargetNodeId": "fc003b02-d850-d960-0b4b-91e2fff07d92",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "bb648f2c-243f-ab7c-e979-3754d8a7347e",
+        "TargetNodeId": "ba8d041a-697a-7b32-aa7e-b938e7faee74",
+        "TargetPortId": "r",
+        "SourcePortId": "x"
+      },
+      {
+        "SourceNodeId": "5d91d600-5286-d958-7ebc-5fa570417ece",
+        "TargetNodeId": "ba8d041a-697a-7b32-aa7e-b938e7faee74",
+        "TargetPortId": "g",
+        "SourcePortId": "x"
+      },
+      {
+        "SourceNodeId": "bfeb35ae-6a60-1a35-2659-ebf54c355a82",
+        "TargetNodeId": "ba8d041a-697a-7b32-aa7e-b938e7faee74",
+        "TargetPortId": "b",
+        "SourcePortId": "x"
+      },
+      {
+        "SourceNodeId": "fc003b02-d850-d960-0b4b-91e2fff07d92",
+        "TargetNodeId": "ba8d041a-697a-7b32-aa7e-b938e7faee74",
+        "TargetPortId": "a",
+        "SourcePortId": "x"
+      },
+      {
+        "SourceNodeId": "ba8d041a-697a-7b32-aa7e-b938e7faee74",
+        "TargetNodeId": "bb156557-55b7-69a6-bf48-15196c818d31",
+        "TargetPortId": "row0",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "bb648f2c-243f-ab7c-e979-3754d8a7347e",
+        "TargetNodeId": "2c0797ca-9adc-4fc1-cc9e-6c17edcee56b",
+        "TargetPortId": "r",
+        "SourcePortId": "y"
+      },
+      {
+        "SourceNodeId": "5d91d600-5286-d958-7ebc-5fa570417ece",
+        "TargetNodeId": "2c0797ca-9adc-4fc1-cc9e-6c17edcee56b",
+        "TargetPortId": "g",
+        "SourcePortId": "y"
+      },
+      {
+        "SourceNodeId": "bfeb35ae-6a60-1a35-2659-ebf54c355a82",
+        "TargetNodeId": "2c0797ca-9adc-4fc1-cc9e-6c17edcee56b",
+        "TargetPortId": "b",
+        "SourcePortId": "y"
+      },
+      {
+        "SourceNodeId": "fc003b02-d850-d960-0b4b-91e2fff07d92",
+        "TargetNodeId": "2c0797ca-9adc-4fc1-cc9e-6c17edcee56b",
+        "TargetPortId": "a",
+        "SourcePortId": "y"
+      },
+      {
+        "SourceNodeId": "2c0797ca-9adc-4fc1-cc9e-6c17edcee56b",
+        "TargetNodeId": "bb156557-55b7-69a6-bf48-15196c818d31",
+        "TargetPortId": "row1",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "bb648f2c-243f-ab7c-e979-3754d8a7347e",
+        "TargetNodeId": "f2a72618-fde5-f48d-90b6-dd036bcecd82",
+        "TargetPortId": "r",
+        "SourcePortId": "z"
+      },
+      {
+        "SourceNodeId": "5d91d600-5286-d958-7ebc-5fa570417ece",
+        "TargetNodeId": "f2a72618-fde5-f48d-90b6-dd036bcecd82",
+        "TargetPortId": "g",
+        "SourcePortId": "z"
+      },
+      {
+        "SourceNodeId": "bfeb35ae-6a60-1a35-2659-ebf54c355a82",
+        "TargetNodeId": "f2a72618-fde5-f48d-90b6-dd036bcecd82",
+        "TargetPortId": "b",
+        "SourcePortId": "z"
+      },
+      {
+        "SourceNodeId": "fc003b02-d850-d960-0b4b-91e2fff07d92",
+        "TargetNodeId": "f2a72618-fde5-f48d-90b6-dd036bcecd82",
+        "TargetPortId": "a",
+        "SourcePortId": "z"
+      },
+      {
+        "SourceNodeId": "f2a72618-fde5-f48d-90b6-dd036bcecd82",
+        "TargetNodeId": "bb156557-55b7-69a6-bf48-15196c818d31",
+        "TargetPortId": "row2",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "6c9d2b15-ee2d-199d-2d3a-840f04c13664",
+        "TargetNodeId": "da20809f-5ebe-6f26-a2fe-9c763c65e81c",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "da20809f-5ebe-6f26-a2fe-9c763c65e81c",
+        "TargetNodeId": "1a1ca961-ac80-033f-0e2b-64f313332f65",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "12ca1875-6a1e-20e6-f0f5-06b290b9b2a4",
+        "TargetNodeId": "1a1ca961-ac80-033f-0e2b-64f313332f65",
+        "TargetPortId": "b",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "1a1ca961-ac80-033f-0e2b-64f313332f65",
+        "TargetNodeId": "2b442fbe-ec0b-ee4c-9cbc-825a7570a75a",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "2b442fbe-ec0b-ee4c-9cbc-825a7570a75a",
+        "TargetNodeId": "f35b9924-32aa-fa40-fa06-927f5c3489a2",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "d28aefd9-11a0-e838-9fd9-cd5cebe974d3",
+        "TargetNodeId": "5189c5af-6779-fbc8-1e01-ee1ea1ef623c",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "5189c5af-6779-fbc8-1e01-ee1ea1ef623c",
+        "TargetNodeId": "46f203eb-d792-8202-76da-557233bbd8b0",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "12ca1875-6a1e-20e6-f0f5-06b290b9b2a4",
+        "TargetNodeId": "46f203eb-d792-8202-76da-557233bbd8b0",
+        "TargetPortId": "b",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "46f203eb-d792-8202-76da-557233bbd8b0",
+        "TargetNodeId": "a5fb1fa0-576d-3057-4778-daa46f5ea53c",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "a5fb1fa0-576d-3057-4778-daa46f5ea53c",
+        "TargetNodeId": "70d34a25-30cd-a97c-f37d-3ebb59432033",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "4d074877-b4d6-dac9-69e3-52265d4691b7",
+        "TargetNodeId": "0f4b306d-fc38-0102-b4a7-95fb94b96b53",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "0f4b306d-fc38-0102-b4a7-95fb94b96b53",
+        "TargetNodeId": "8d84c9f8-0b0d-bb38-d60f-7c37cad72e4d",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "12ca1875-6a1e-20e6-f0f5-06b290b9b2a4",
+        "TargetNodeId": "8d84c9f8-0b0d-bb38-d60f-7c37cad72e4d",
+        "TargetPortId": "b",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "8d84c9f8-0b0d-bb38-d60f-7c37cad72e4d",
+        "TargetNodeId": "bd5ae42c-da17-a5a5-896b-ce7b510125a0",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "bd5ae42c-da17-a5a5-896b-ce7b510125a0",
+        "TargetNodeId": "0cdb68df-3eec-5543-0d63-c827a93fb9f4",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "70d34a25-30cd-a97c-f37d-3ebb59432033",
+        "TargetNodeId": "faa1b806-62a9-e00a-14ec-195689d6b9ac",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "0cdb68df-3eec-5543-0d63-c827a93fb9f4",
+        "TargetNodeId": "faa1b806-62a9-e00a-14ec-195689d6b9ac",
+        "TargetPortId": "b",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "f35b9924-32aa-fa40-fa06-927f5c3489a2",
+        "TargetNodeId": "713c1bc4-007e-e523-5f80-a6ce7be195f6",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "faa1b806-62a9-e00a-14ec-195689d6b9ac",
+        "TargetNodeId": "713c1bc4-007e-e523-5f80-a6ce7be195f6",
+        "TargetPortId": "b",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "bb156557-55b7-69a6-bf48-15196c818d31",
+        "TargetNodeId": "afa2a13f-1673-360b-2e6a-ebe0588e8cb9",
+        "TargetPortId": "matrix",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "ea525af0-ff7f-a5e7-a924-2152ffec9ec1",
+        "TargetNodeId": "6fedd8ec-ae95-7432-73c5-5443539d6537",
+        "TargetPortId": "parent",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "afa2a13f-1673-360b-2e6a-ebe0588e8cb9",
+        "TargetNodeId": "6fedd8ec-ae95-7432-73c5-5443539d6537",
+        "TargetPortId": "local",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "000db29f-ec85-49d0-b690-11ec476c54b0",
+        "TargetNodeId": "200ada1c-63ad-5d82-e283-a3d493a5f650",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "200ada1c-63ad-5d82-e283-a3d493a5f650",
+        "TargetNodeId": "d0a13c83-f2c4-933b-b826-f336f3ba38fd",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "a65ac90a-0bd8-4cc1-a3ba-9cf4ba5ecf0e",
+        "TargetNodeId": "d0a13c83-f2c4-933b-b826-f336f3ba38fd",
+        "TargetPortId": "b",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "d0a13c83-f2c4-933b-b826-f336f3ba38fd",
+        "TargetNodeId": "56c7b221-f64b-d2ee-ab2d-b75af1feae0a",
+        "TargetPortId": "position",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "a65ac90a-0bd8-4cc1-a3ba-9cf4ba5ecf0e",
+        "TargetNodeId": "56c7b221-f64b-d2ee-ab2d-b75af1feae0a",
+        "TargetPortId": "scale",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "6fedd8ec-ae95-7432-73c5-5443539d6537",
+        "TargetNodeId": "6bf00961-aa62-8543-7c9f-4a7c9e4ed637",
+        "TargetPortId": "parent",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "56c7b221-f64b-d2ee-ab2d-b75af1feae0a",
+        "TargetNodeId": "6bf00961-aa62-8543-7c9f-4a7c9e4ed637",
+        "TargetPortId": "local",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "6c9d2b15-ee2d-199d-2d3a-840f04c13664",
+        "TargetNodeId": "6dd912b3-cb98-428c-5321-6df63428fec2",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "d28aefd9-11a0-e838-9fd9-cd5cebe974d3",
+        "TargetNodeId": "8abaac83-6dd7-cfee-259b-e5628cc5c7e0",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "6dd912b3-cb98-428c-5321-6df63428fec2",
+        "TargetNodeId": "9693b8b4-93a9-12c4-0720-70a4d821b46e",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "8abaac83-6dd7-cfee-259b-e5628cc5c7e0",
+        "TargetNodeId": "9693b8b4-93a9-12c4-0720-70a4d821b46e",
+        "TargetPortId": "b",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "9693b8b4-93a9-12c4-0720-70a4d821b46e",
+        "TargetNodeId": "3e7282cd-673e-cff1-b4cb-9185824182b0",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "3e7282cd-673e-cff1-b4cb-9185824182b0",
+        "TargetNodeId": "69cf0efc-7557-7e0e-f46d-0c60fc5f9b25",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "12ca1875-6a1e-20e6-f0f5-06b290b9b2a4",
+        "TargetNodeId": "69cf0efc-7557-7e0e-f46d-0c60fc5f9b25",
+        "TargetPortId": "b",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "69cf0efc-7557-7e0e-f46d-0c60fc5f9b25",
+        "TargetNodeId": "3b256f3e-c383-184d-f3f2-035292fd6c4f",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "3b256f3e-c383-184d-f3f2-035292fd6c4f",
+        "TargetNodeId": "7c856cef-5d64-05e3-5945-9b06f64ed4d4",
+        "TargetPortId": "a",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "7c856cef-5d64-05e3-5945-9b06f64ed4d4",
+        "TargetNodeId": "971affac-4059-1df5-3c78-50ef58a29ae5",
+        "TargetPortId": "b",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "a9b9d3e0-194e-765c-32ad-8a063d2edf4f",
+        "TargetNodeId": "ca8dd7c8-8951-f490-4cf3-4da6a6b45a31",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "713c1bc4-007e-e523-5f80-a6ce7be195f6",
+        "TargetNodeId": "ca8dd7c8-8951-f490-4cf3-4da6a6b45a31",
+        "TargetPortId": "b",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "ca8dd7c8-8951-f490-4cf3-4da6a6b45a31",
+        "TargetNodeId": "10ccb067-1db9-e983-cc63-4e7067655dc6",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "971affac-4059-1df5-3c78-50ef58a29ae5",
+        "TargetNodeId": "10ccb067-1db9-e983-cc63-4e7067655dc6",
+        "TargetPortId": "b",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "6bf00961-aa62-8543-7c9f-4a7c9e4ed637",
+        "TargetNodeId": "c766b34a-74df-fe46-2cc5-6e27ece85a10",
+        "TargetPortId": "matrix",
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "10ccb067-1db9-e983-cc63-4e7067655dc6",
+        "TargetNodeId": "2944c1a3-0af8-10e9-6bb7-160221758e90",
+        "TargetPortId": "a",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "c766b34a-74df-fe46-2cc5-6e27ece85a10",
+        "TargetNodeId": "8d5be85a-8144-6e1c-b30f-e0b010fe842d",
+        "TargetPortId": "a",
+        "SourcePortId": "row0"
+      },
+      {
+        "SourceNodeId": "2944c1a3-0af8-10e9-6bb7-160221758e90",
+        "TargetNodeId": "8d5be85a-8144-6e1c-b30f-e0b010fe842d",
+        "TargetPortId": "b",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "8d5be85a-8144-6e1c-b30f-e0b010fe842d",
+        "TargetNodeId": "289a2f11-73a8-21e5-06e9-7089b8dedd31",
+        "TargetPortId": "row0",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "c766b34a-74df-fe46-2cc5-6e27ece85a10",
+        "TargetNodeId": "d6f150a0-28f6-991f-9919-72283b373ec0",
+        "TargetPortId": "a",
+        "SourcePortId": "row1"
+      },
+      {
+        "SourceNodeId": "2944c1a3-0af8-10e9-6bb7-160221758e90",
+        "TargetNodeId": "d6f150a0-28f6-991f-9919-72283b373ec0",
+        "TargetPortId": "b",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "d6f150a0-28f6-991f-9919-72283b373ec0",
+        "TargetNodeId": "289a2f11-73a8-21e5-06e9-7089b8dedd31",
+        "TargetPortId": "row1",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "c766b34a-74df-fe46-2cc5-6e27ece85a10",
+        "TargetNodeId": "edd357c7-cdc8-cde0-74ca-f0c632821232",
+        "TargetPortId": "a",
+        "SourcePortId": "row2"
+      },
+      {
+        "SourceNodeId": "2944c1a3-0af8-10e9-6bb7-160221758e90",
+        "TargetNodeId": "edd357c7-cdc8-cde0-74ca-f0c632821232",
+        "TargetPortId": "b",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "edd357c7-cdc8-cde0-74ca-f0c632821232",
+        "TargetNodeId": "289a2f11-73a8-21e5-06e9-7089b8dedd31",
+        "TargetPortId": "row2",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "c766b34a-74df-fe46-2cc5-6e27ece85a10",
+        "TargetNodeId": "7f7da896-382b-7eba-e16c-6a04cbc1af12",
+        "TargetPortId": "a",
+        "SourcePortId": "row3"
+      },
+      {
+        "SourceNodeId": "2944c1a3-0af8-10e9-6bb7-160221758e90",
+        "TargetNodeId": "7f7da896-382b-7eba-e16c-6a04cbc1af12",
+        "TargetPortId": "b",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "7f7da896-382b-7eba-e16c-6a04cbc1af12",
+        "TargetNodeId": "289a2f11-73a8-21e5-06e9-7089b8dedd31",
+        "TargetPortId": "row3",
+        "SourcePortId": null
+      },
+      {
+        "SourceNodeId": "289a2f11-73a8-21e5-06e9-7089b8dedd31",
+        "TargetNodeId": "3f949d7a-9025-7ed0-ffc3-6bf4db598c87",
+        "TargetPortId": null,
+        "SourcePortId": "value"
+      },
+      {
+        "SourceNodeId": "10ccb067-1db9-e983-cc63-4e7067655dc6",
+        "TargetNodeId": "83f9f6dc-1c66-04f0-7e95-aa5991a0ef05",
+        "TargetPortId": null,
+        "SourcePortId": null
+      }
+    ],
+    "ExposedItems": [
+      {
+        "Id": "4ded9c59-5590-b0dd-0471-2e62f14089d1",
+        "Name": "Position",
+        "Description": "World anchor; same coordinate system as Target.",
+        "Category": "Orientation",
+        "Order": 0,
+        "Editor": "parameter",
+        "Targets": [
+          {
+            "NodeId": "4af2e628-4172-a7bb-c3d4-b9e9ceed7ca7",
+            "ParameterId": "value"
+          }
+        ],
+        "Minimum": null,
+        "Maximum": null,
+        "Step": null,
+        "Presentation": null
+      },
+      {
+        "Id": "07d6ef52-220b-5f47-76cd-293ebe163f29",
+        "Name": "Target",
+        "Description": "Explicit world target or camera position; no camera singleton.",
+        "Category": "Orientation",
+        "Order": 1,
+        "Editor": "parameter",
+        "Targets": [
+          {
+            "NodeId": "7756eb73-3846-88d7-ab42-a1c123cbfdca",
+            "ParameterId": "value"
+          }
+        ],
+        "Minimum": null,
+        "Maximum": null,
+        "Step": null,
+        "Presentation": null
+      },
+      {
+        "Id": "33c9d11d-deb7-a41e-8fd1-da2349459452",
+        "Name": "World Up",
+        "Description": "World up direction. Tree preserves this axis.",
+        "Category": "Orientation",
+        "Order": 2,
+        "Editor": "parameter",
+        "Targets": [
+          {
+            "NodeId": "b994e99b-7718-9696-3300-9c1962c46e57",
+            "ParameterId": "value"
+          }
+        ],
+        "Minimum": null,
+        "Maximum": null,
+        "Step": null,
+        "Presentation": null
+      },
+      {
+        "Id": "7fc4b186-0e12-7383-025d-54fdd619a575",
+        "Name": "Local Forward",
+        "Description": "Mesh forward axis; perpendicular to Local Up.",
+        "Category": "Orientation",
+        "Order": 3,
+        "Editor": "parameter",
+        "Targets": [
+          {
+            "NodeId": "6c9d2b15-ee2d-199d-2d3a-840f04c13664",
+            "ParameterId": "value"
+          }
+        ],
+        "Minimum": null,
+        "Maximum": null,
+        "Step": null,
+        "Presentation": null
+      },
+      {
+        "Id": "7aa7e0de-8a45-6648-0c05-2a63a9b96d02",
+        "Name": "Local Up",
+        "Description": "Mesh up axis; perpendicular to Local Forward.",
+        "Category": "Orientation",
+        "Order": 4,
+        "Editor": "parameter",
+        "Targets": [
+          {
+            "NodeId": "d28aefd9-11a0-e838-9fd9-cd5cebe974d3",
+            "ParameterId": "value"
+          }
+        ],
+        "Minimum": null,
+        "Maximum": null,
+        "Step": null,
+        "Presentation": null
+      },
+      {
+        "Id": "8bc2f704-46cc-bb84-a1f1-23cb8894d216",
+        "Name": "Scale",
+        "Description": "Mesh-local scale; negative scale deliberately flips facing.",
+        "Category": "Orientation",
+        "Order": 5,
+        "Editor": "parameter",
+        "Targets": [
+          {
+            "NodeId": "a65ac90a-0bd8-4cc1-a3ba-9cf4ba5ecf0e",
+            "ParameterId": "value"
+          }
+        ],
+        "Minimum": null,
+        "Maximum": null,
+        "Step": null,
+        "Presentation": null
+      },
+      {
+        "Id": "9c676e20-ec4f-3055-7d96-a921271fd655",
+        "Name": "Pivot",
+        "Description": "Mesh-local point mapped onto Position.",
+        "Category": "Orientation",
+        "Order": 6,
+        "Editor": "parameter",
+        "Targets": [
+          {
+            "NodeId": "000db29f-ec85-49d0-b690-11ec476c54b0",
+            "ParameterId": "value"
+          }
+        ],
+        "Minimum": null,
+        "Maximum": null,
+        "Step": null,
+        "Presentation": null
+      },
+      {
+        "Id": "f129210b-904d-5ce1-fb77-4598b98edaf1",
+        "Name": "Tolerance",
+        "Description": "Positive distance/axis threshold; clamped to at least 1e-12. Invalid output is the zero matrix.",
+        "Category": "Orientation",
+        "Order": 7,
+        "Editor": "parameter",
+        "Targets": [
+          {
+            "NodeId": "0ad46a55-df6d-2a15-ac2d-1305a7a039f3",
+            "ParameterId": "value"
+          }
+        ],
+        "Minimum": 1E-12,
+        "Maximum": null,
+        "Step": null,
+        "Presentation": null
+      }
+    ],
+    "AutoDestroyWhenIdle": true
+  }
+}

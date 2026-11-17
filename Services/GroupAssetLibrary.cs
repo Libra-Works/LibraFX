@@ -1,16 +1,28 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Collections.Concurrent;
 using LiberaFx.Models.Graph;
 
 namespace LiberaFx.Services;
 
-public sealed record GroupAsset(int FormatVersion, Guid Id, string Name, long Revision, bool Locked, GraphSnapshot Graph);
+public enum GroupAssetOrigin
+{
+    Project,
+    Standard
+}
+
+public sealed record GroupAsset(int FormatVersion, Guid Id, string Name, long Revision, bool Locked, GraphSnapshot Graph)
+{
+    [JsonIgnore]
+    public GroupAssetOrigin Origin { get; init; } = GroupAssetOrigin.Project;
+}
 
 public sealed class GroupAssetLibrary
 {
     public const string FileExtension = ".lfxgroup";
     private const int CurrentFormatVersion = 5;
     private const long MaxFileBytes = 16 * 1024 * 1024;
+    private static readonly ConcurrentDictionary<Guid, byte> StandardAssetIds = new();
     private readonly string _directory;
     private static readonly JsonSerializerOptions Options = new()
     {
@@ -74,14 +86,26 @@ public sealed class GroupAssetLibrary
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(graph);
-        var asset = new GroupAsset(CurrentFormatVersion, Guid.NewGuid(), name.Trim(), 1, false, graph);
+        var id = Guid.NewGuid();
+        EnsureProjectOwnedId(id);
+        var asset = new GroupAsset(CurrentFormatVersion, id, name.Trim(), 1, false, graph);
         Validate(asset);
         Write(asset, false);
         return asset;
     }
 
+    public static byte[] SerializeAsset(GroupAsset asset)
+    {
+        ArgumentNullException.ThrowIfNull(asset);
+        Validate(asset);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(asset, Options);
+        if (bytes.LongLength > MaxFileBytes) throw new InvalidDataException("Group asset is too large.");
+        return bytes;
+    }
+
     public GroupAsset Save(Guid id, long expectedRevision, string name, GraphSnapshot graph)
     {
+        EnsureProjectOwnedId(id);
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(graph);
         using var guard = Lock(id);
@@ -97,6 +121,7 @@ public sealed class GroupAssetLibrary
 
     public GroupAsset SetLocked(Guid id, bool locked)
     {
+        EnsureProjectOwnedId(id);
         using var guard = Lock(id);
         var current = Load(id);
         if (current.Locked == locked) return current;
@@ -143,8 +168,7 @@ public sealed class GroupAssetLibrary
         var temporary = Path.Combine(_directory, $".group-{Guid.NewGuid():N}.tmp");
         try
         {
-            var bytes = JsonSerializer.SerializeToUtf8Bytes(asset, Options);
-            if (bytes.LongLength > MaxFileBytes) throw new InvalidDataException("Group asset is too large.");
+            var bytes = SerializeAsset(asset);
             File.WriteAllBytes(temporary, bytes);
             File.Move(temporary, path, overwrite);
         }
@@ -179,8 +203,7 @@ public sealed class GroupAssetLibrary
                 throw new InvalidDataException("The saved group revision conflicts with the current asset.");
             return;
         }
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(asset, Options);
-        if (bytes.LongLength > MaxFileBytes) throw new InvalidDataException("Group asset is too large.");
+        var bytes = SerializeAsset(asset);
         var temporary = Path.Combine(directory, $".group-{Guid.NewGuid():N}.tmp");
         try
         {
@@ -202,4 +225,14 @@ public sealed class GroupAssetLibrary
         if (id == Guid.Empty) throw new ArgumentException("A group ID is required.", nameof(id));
         return Path.Combine(_directory, id.ToString("N") + FileExtension);
     }
+
+    private static void EnsureProjectOwnedId(Guid id)
+    {
+        if (StandardGroupAssetLibrary.IsRegisteredId(id))
+            throw new InvalidOperationException("Standard group assets are read-only; clone the asset into a project library first.");
+    }
+
+    internal static void RegisterStandardAssetId(Guid id) => StandardAssetIds.TryAdd(id, 0);
+
+    internal static bool IsRegisteredStandardAssetId(Guid id) => StandardAssetIds.ContainsKey(id);
 }

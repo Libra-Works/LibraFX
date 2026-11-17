@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "typeId": "e9778c40-209b-4ce8-918d-35c000000003",
+  "namespace": "LiberaFx",
+  "kind": "SignalOr",
+  "name": "Signal OR",
+  "displayNameKey": "Logical.Node.SignalOr",
+  "descriptionKey": "Logical.Description.SignalOr",
+  "groupNameKey": "Editor.NodeGroup.Logic",
+  "group": "Logic",
+  "portType": "Signal",
+  "portCategory": "Signal",
+  "inputPorts": [
+    { "id": "a", "name": "A", "portType": "Signal", "category": "Signal" },
+    { "id": "b", "name": "B", "portType": "Signal", "category": "Signal" },
+    { "id": "reset", "name": "Reset", "portType": "Signal", "category": "Signal" }
+  ],
+  "outputPorts": [
+    { "id": "pulse", "name": "Pulse", "portType": "Float", "category": "Parameter" },
+    { "id": "signal", "name": "Signal", "portType": "Signal", "category": "Signal" }
+  ]
+}

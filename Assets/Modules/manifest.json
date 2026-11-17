@@ -1,0 +1,151 @@
+[
+  {
+    "id": "29000000-0000-4000-8000-000000000001",
+    "nameKey": "Modules.PositionStep.Name",
+    "descriptionKey": "Modules.PositionStep.Description",
+    "categoryKey": "Modules.Category.Motion",
+    "phaseKey": "Modules.Phase.UpdateStep",
+    "unitsKey": "Modules.Units.PositionStep",
+    "inputsKey": "Modules.Inputs.PositionStep",
+    "outputsKey": "Modules.Outputs.PositionStep",
+    "stateKey": "Modules.State.CallerOwned",
+    "backendKey": "Modules.Backend.GenericPortable",
+    "keywords": ["position", "integrate", "euler", "velocity", "motion", "移動", "位置", "積分", "速度"],
+    "parameters": [
+      {
+        "itemId": "2901ffff-0000-4000-8000-000000000001",
+        "nameKey": "Modules.Parameter.TimeScale",
+        "descriptionKey": "Modules.Parameter.TimeScaleDescription"
+      }
+    ]
+  },
+  {
+    "id": "29000000-0000-4000-8000-000000000002",
+    "nameKey": "Modules.VelocityStep.Name",
+    "descriptionKey": "Modules.VelocityStep.Description",
+    "categoryKey": "Modules.Category.Motion",
+    "phaseKey": "Modules.Phase.UpdateStep",
+    "unitsKey": "Modules.Units.VelocityStep",
+    "inputsKey": "Modules.Inputs.VelocityStep",
+    "outputsKey": "Modules.Outputs.VelocityStep",
+    "stateKey": "Modules.State.CallerOwned",
+    "backendKey": "Modules.Backend.GenericPortable",
+    "keywords": ["velocity", "acceleration", "gravity", "euler", "motion", "速度", "加速度", "重力"],
+    "parameters": [
+      {
+        "itemId": "2902ffff-0000-4000-8000-000000000001",
+        "nameKey": "Modules.Parameter.TimeScale",
+        "descriptionKey": "Modules.Parameter.TimeScaleDescription"
+      }
+    ]
+  },
+  {
+    "id": "29000000-0000-4000-8000-000000000003",
+    "nameKey": "Modules.InitialVelocity.Name",
+    "descriptionKey": "Modules.InitialVelocity.Description",
+    "categoryKey": "Modules.Category.Motion",
+    "phaseKey": "Modules.Phase.Initialize",
+    "unitsKey": "Modules.Units.InitialVelocity",
+    "inputsKey": "Modules.Inputs.InitialVelocity",
+    "outputsKey": "Modules.Outputs.InitialVelocity",
+    "stateKey": "Modules.State.Stateless",
+    "backendKey": "Modules.Backend.GenericPortable",
+    "keywords": ["initial", "velocity", "direction", "speed", "normalize", "initialize", "初期", "速度", "方向", "速さ"],
+    "parameters": [
+      {
+        "itemId": "2903ffff-0000-4000-8000-000000000001",
+        "nameKey": "Modules.Parameter.SpeedScale",
+        "descriptionKey": "Modules.Parameter.SpeedScaleDescription"
+      }
+    ]
+  },
+  {
+    "id": "29000000-0000-4000-8000-000000000004",
+    "nameKey": "Modules.EffectCurve.Name",
+    "descriptionKey": "Modules.EffectCurve.Description",
+    "categoryKey": "Modules.Category.Curves",
+    "phaseKey": "Modules.Phase.EffectTime",
+    "unitsKey": "Modules.Units.EffectCurve",
+    "inputsKey": "Modules.Inputs.EffectCurve",
+    "outputsKey": "Modules.Outputs.EffectCurve",
+    "stateKey": "Modules.State.Stateless",
+    "backendKey": "Modules.Backend.GenericCurve",
+    "keywords": ["fcurve", "curve", "animation", "time", "seconds", "カーブ", "時間", "秒"],
+    "parameters": [
+      {
+        "itemId": "2904ffff-0000-4000-8000-000000000001",
+        "nameKey": "Modules.Parameter.Curve",
+        "descriptionKey": "Modules.Parameter.CurveDescription"
+      }
+    ]
+  },
+  {
+    "id": "b17b0000-0000-4000-8000-000000000001",
+    "nameKey": "Modules.WorldLookAt.Name",
+    "descriptionKey": "Modules.WorldLookAt.Description",
+    "categoryKey": "Modules.Category.Orientation",
+    "phaseKey": "Modules.Phase.Orientation",
+    "unitsKey": "Modules.Units.Billboard",
+    "inputsKey": "Modules.Inputs.Billboard",
+    "outputsKey": "Modules.Outputs.Billboard",
+    "stateKey": "Modules.State.Stateless",
+    "backendKey": "Modules.Backend.GenericPortable",
+    "keywords": ["world look at", "look at", "billboard", "target", "camera", "orientation", "world up", "ワールド", "注視", "ビルボード", "カメラ", "向き"],
+    "parameters": [
+      { "itemId": "5140450f-ab32-1cb6-d407-08e303708f05", "nameKey": "Modules.Billboard.Parameter.Position.Name", "descriptionKey": "Modules.Billboard.Parameter.Position.Description" },
+      { "itemId": "493c58ca-f673-4470-ab7f-473ac203e601", "nameKey": "Modules.Billboard.Parameter.Target.Name", "descriptionKey": "Modules.Billboard.Parameter.Target.Description" },
+      { "itemId": "f56e59b8-08a2-c5ff-0bb1-bbf5d8fed1fc", "nameKey": "Modules.Billboard.Parameter.WorldUp.Name", "descriptionKey": "Modules.Billboard.Parameter.WorldUp.Description" },
+      { "itemId": "ada6a81d-5a14-b2a3-6770-6adf1894d9be", "nameKey": "Modules.Billboard.Parameter.LocalForward.Name", "descriptionKey": "Modules.Billboard.Parameter.LocalForward.Description" },
+      { "itemId": "e7664201-6f7c-7fde-c8a9-75e158da8f81", "nameKey": "Modules.Billboard.Parameter.LocalUp.Name", "descriptionKey": "Modules.Billboard.Parameter.LocalUp.Description" },
+      { "itemId": "b707af54-7300-190c-945e-46a7c1582139", "nameKey": "Modules.Billboard.Parameter.Scale.Name", "descriptionKey": "Modules.Billboard.Parameter.Scale.Description" },
+      { "itemId": "9a15e588-d23c-f0cd-51b2-5ebc7dac1d18", "nameKey": "Modules.Billboard.Parameter.Pivot.Name", "descriptionKey": "Modules.Billboard.Parameter.Pivot.Description" },
+      { "itemId": "899d1f52-df5a-a544-e208-8b3529ee882d", "nameKey": "Modules.Billboard.Parameter.Tolerance.Name", "descriptionKey": "Modules.Billboard.Parameter.Tolerance.Description" }
+    ]
+  },
+  {
+    "id": "b17b0000-0000-4000-8000-000000000002",
+    "nameKey": "Modules.SphericalBillboard.Name",
+    "descriptionKey": "Modules.SphericalBillboard.Description",
+    "categoryKey": "Modules.Category.Orientation",
+    "phaseKey": "Modules.Phase.Orientation",
+    "unitsKey": "Modules.Units.Billboard",
+    "inputsKey": "Modules.Inputs.Billboard",
+    "outputsKey": "Modules.Outputs.Billboard",
+    "stateKey": "Modules.State.Stateless",
+    "backendKey": "Modules.Backend.GenericPortable",
+    "keywords": ["spherical billboard", "billboard", "camera facing", "camera", "sphere", "球", "球面", "ビルボード", "カメラ向き"],
+    "parameters": [
+      { "itemId": "fba45900-20d4-be3e-e2cc-abc5fdbf11a5", "nameKey": "Modules.Billboard.Parameter.Position.Name", "descriptionKey": "Modules.Billboard.Parameter.Position.Description" },
+      { "itemId": "c59694f3-7547-2116-eedd-9a2bd5304d2b", "nameKey": "Modules.Billboard.Parameter.Target.Name", "descriptionKey": "Modules.Billboard.Parameter.Target.Description" },
+      { "itemId": "6df16bdc-4209-d04a-91d2-810cd731c5fb", "nameKey": "Modules.Billboard.Parameter.WorldUp.Name", "descriptionKey": "Modules.Billboard.Parameter.WorldUp.Description" },
+      { "itemId": "fe68e82f-41a5-bb79-07f3-8ada408f502f", "nameKey": "Modules.Billboard.Parameter.LocalForward.Name", "descriptionKey": "Modules.Billboard.Parameter.LocalForward.Description" },
+      { "itemId": "0705f15a-86a1-c05c-222b-a44e40188388", "nameKey": "Modules.Billboard.Parameter.LocalUp.Name", "descriptionKey": "Modules.Billboard.Parameter.LocalUp.Description" },
+      { "itemId": "d25eb978-ca9a-ce3e-f75e-019b93cd5379", "nameKey": "Modules.Billboard.Parameter.Scale.Name", "descriptionKey": "Modules.Billboard.Parameter.Scale.Description" },
+      { "itemId": "ce2e255a-7ac8-710a-6fe1-ce8125f30941", "nameKey": "Modules.Billboard.Parameter.Pivot.Name", "descriptionKey": "Modules.Billboard.Parameter.Pivot.Description" },
+      { "itemId": "e0006d0a-b4a7-4473-3691-415bc8436f58", "nameKey": "Modules.Billboard.Parameter.Tolerance.Name", "descriptionKey": "Modules.Billboard.Parameter.Tolerance.Description" }
+    ]
+  },
+  {
+    "id": "b17b0000-0000-4000-8000-000000000003",
+    "nameKey": "Modules.TreeBillboard.Name",
+    "descriptionKey": "Modules.TreeBillboard.Description",
+    "categoryKey": "Modules.Category.Orientation",
+    "phaseKey": "Modules.Phase.Orientation",
+    "unitsKey": "Modules.Units.Billboard",
+    "inputsKey": "Modules.Inputs.Billboard",
+    "outputsKey": "Modules.Outputs.Billboard",
+    "stateKey": "Modules.State.Stateless",
+    "backendKey": "Modules.Backend.GenericPortable",
+    "keywords": ["tree billboard", "tree", "billboard", "axial", "world up", "樹木", "樹木ビルボード", "軸固定", "ビルボード"],
+    "parameters": [
+      { "itemId": "4ded9c59-5590-b0dd-0471-2e62f14089d1", "nameKey": "Modules.Billboard.Parameter.Position.Name", "descriptionKey": "Modules.Billboard.Parameter.Position.Description" },
+      { "itemId": "07d6ef52-220b-5f47-76cd-293ebe163f29", "nameKey": "Modules.Billboard.Parameter.Target.Name", "descriptionKey": "Modules.Billboard.Parameter.Target.Description" },
+      { "itemId": "33c9d11d-deb7-a41e-8fd1-da2349459452", "nameKey": "Modules.Billboard.Parameter.WorldUp.Name", "descriptionKey": "Modules.Billboard.Parameter.WorldUp.Description" },
+      { "itemId": "7fc4b186-0e12-7383-025d-54fdd619a575", "nameKey": "Modules.Billboard.Parameter.LocalForward.Name", "descriptionKey": "Modules.Billboard.Parameter.LocalForward.Description" },
+      { "itemId": "7aa7e0de-8a45-6648-0c05-2a63a9b96d02", "nameKey": "Modules.Billboard.Parameter.LocalUp.Name", "descriptionKey": "Modules.Billboard.Parameter.LocalUp.Description" },
+      { "itemId": "8bc2f704-46cc-bb84-a1f1-23cb8894d216", "nameKey": "Modules.Billboard.Parameter.Scale.Name", "descriptionKey": "Modules.Billboard.Parameter.Scale.Description" },
+      { "itemId": "9c676e20-ec4f-3055-7d96-a921271fd655", "nameKey": "Modules.Billboard.Parameter.Pivot.Name", "descriptionKey": "Modules.Billboard.Parameter.Pivot.Description" },
+      { "itemId": "f129210b-904d-5ce1-fb77-4598b98edaf1", "nameKey": "Modules.Billboard.Parameter.Tolerance.Name", "descriptionKey": "Modules.Billboard.Parameter.Tolerance.Description" }
+    ]
+  }
+]

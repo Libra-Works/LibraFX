@@ -55,7 +55,7 @@ auto bytecodeInstructionBytes(const std::vector<std::uint8_t>& bytes,
                               std::size_t& size) noexcept -> Result
 {
     if (bytes.size() < bytecodeHeaderBytes || std::memcmp(bytes.data(), "LFXB", 4) != 0 ||
-        bytes[4] < 2 || bytes[4] > 7 || bytes[5] != 0 || bytes[6] != 1 || bytes[7] != 0)
+        bytes[4] < 2 || bytes[4] > 9 || bytes[5] != 0 || bytes[6] != 1 || bytes[7] != 0)
         return Result::InvalidBinary;
     if (bytes[4] == 2) {
         if (bytes[12] != typedInstructionBytes || bytes[13] != 0 ||

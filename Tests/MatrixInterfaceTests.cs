@@ -76,6 +76,15 @@ internal static class MatrixInterfaceTests
                 "Inspector connection descriptions must show human-readable pin labels without changing saved output IDs.");
             workspace.SelectNode(workspace.GetNode(transform.Id));
             Pump();
+            var order = inspector.GetVisualDescendants().OfType<ComboBox>().Single(control =>
+                control.DataContext is NodeParameterEditorViewModel parameter && parameter.Id == "order");
+            order.SelectedItem = order.ItemsSource!.Cast<GraphEnumValue>().Single(item => item.Value == 5);
+            Pump();
+            Require(workspace.GetNode(transform.Id).Parameters!.Single(item => item.Id == "order").Value.GetInt32() == 5 &&
+                workspace.History.Undo() && workspace.History.Redo(),
+                "The visible Transform order Enum control must commit through Undo/Redo.");
+            workspace.SetParameter(workspace.GetNode(transform.Id), "order", JsonSerializer.SerializeToElement(0));
+            Pump();
             Capture("matrix-authoring-en.png");
             text.SelectedLanguage = text.Languages.Single(language => language.Id == "ja");
             Pump();

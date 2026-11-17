@@ -162,10 +162,19 @@ public static class GraphMatrixLowering
                             }
                         case "Transform":
                             {
-                                var inputs = new[] { ("position", Numeric("position", 3)),
+                                var inputs = new List<(string, GraphRuntimeOutput)> { ("position", Numeric("position", 3)),
                                 ("rotation", Numeric("rotation", 3)), ("scale", Numeric("scale", 3)) };
+                                var order = node.Parameters?.FirstOrDefault(parameter => parameter.Id == "order");
+                                if (order is not null && (order.Type != "enum:b0af61d2-29f6-4cc9-a71e-000000000201" ||
+                                    order.Value.ValueKind != JsonValueKind.Number ||
+                                    !order.Value.TryGetInt32(out _) || order.Value.GetInt32() is < 0 or > 5))
+                                    throw new InvalidDataException("Transform order must be a declared TransformOrder value.");
+                                var value = order?.Value.GetInt32() ?? 0;
+                                if (value != 0)
+                                    inputs.Add(("order", Emit("Float", "order", [("value", "float", (double)value)])));
                                 Output("value", Enumerable.Range(0, 4).Select(row =>
-                                    Emit($"MatrixRuntimeTransformRow{row}", $"row{row}", inputs: inputs)).ToArray());
+                                    Emit(value == 0 ? $"MatrixRuntimeTransformRow{row}" : $"MatrixRuntimeOrderedTransformRow{row}",
+                                        $"row{row}", inputs: inputs)).ToArray());
                                 break;
                             }
                         case "MatrixMultiply":

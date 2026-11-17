@@ -1,0 +1,46 @@
+{
+  "FormatVersion": 5,
+  "Id": "29000000-0000-4000-8000-000000000001",
+  "Name": "Euler Position Step",
+  "Revision": 1,
+  "Locked": true,
+  "Graph": {
+    "Nodes": [
+      { "Id": "29010000-0000-4000-8000-000000000001", "Kind": "GroupInputVector3", "Name": "Previous Position", "X": 0, "Y": 0, "PortType": "FloatX3", "PortCategory": "Parameter" },
+      { "Id": "29010000-0000-4000-8000-000000000002", "Kind": "GroupInputVector3", "Name": "Velocity", "X": 0, "Y": 120, "PortType": "FloatX3", "PortCategory": "Parameter" },
+      { "Id": "29010000-0000-4000-8000-000000000003", "Kind": "GroupInputFloat", "Name": "Delta Time (seconds)", "X": 0, "Y": 240, "PortType": "Float", "PortCategory": "Parameter" },
+      { "Id": "29010000-0000-4000-8000-000000000010", "Kind": "Float", "Name": "Time Scale", "X": 220, "Y": 360, "PortType": "Float", "PortCategory": "Parameter", "Parameters": [{ "Id": "value", "Type": "float", "Value": 1.0 }] },
+      { "Id": "29010000-0000-4000-8000-000000000011", "Kind": "Multiply", "Name": "Scale Delta Time", "X": 240, "Y": 220, "PortType": "Float", "PortCategory": "Parameter" },
+      { "Id": "29010000-0000-4000-8000-000000000012", "Kind": "ScalarToVector3", "Name": "Time Vector", "X": 440, "Y": 220, "PortType": "FloatX3", "PortCategory": "Parameter" },
+      { "Id": "29010000-0000-4000-8000-000000000013", "Kind": "MultiplyVector3", "Name": "Velocity Delta", "X": 640, "Y": 140, "PortType": "FloatX3", "PortCategory": "Parameter" },
+      { "Id": "29010000-0000-4000-8000-000000000014", "Kind": "AddVector3", "Name": "Next Position", "X": 850, "Y": 40, "PortType": "FloatX3", "PortCategory": "Parameter" },
+      { "Id": "29010000-0000-4000-8000-000000000020", "Kind": "GroupOutputVector3", "Name": "Next Position", "X": 1080, "Y": 40, "PortType": "FloatX3", "PortCategory": "Parameter" }
+    ],
+    "Connections": [
+      { "SourceNodeId": "29010000-0000-4000-8000-000000000001", "TargetNodeId": "29010000-0000-4000-8000-000000000014", "TargetPortId": "a" },
+      { "SourceNodeId": "29010000-0000-4000-8000-000000000003", "TargetNodeId": "29010000-0000-4000-8000-000000000011", "TargetPortId": "a" },
+      { "SourceNodeId": "29010000-0000-4000-8000-000000000010", "TargetNodeId": "29010000-0000-4000-8000-000000000011", "TargetPortId": "b" },
+      { "SourceNodeId": "29010000-0000-4000-8000-000000000011", "TargetNodeId": "29010000-0000-4000-8000-000000000012", "TargetPortId": "a" },
+      { "SourceNodeId": "29010000-0000-4000-8000-000000000002", "TargetNodeId": "29010000-0000-4000-8000-000000000013", "TargetPortId": "a" },
+      { "SourceNodeId": "29010000-0000-4000-8000-000000000012", "TargetNodeId": "29010000-0000-4000-8000-000000000013", "TargetPortId": "b" },
+      { "SourceNodeId": "29010000-0000-4000-8000-000000000013", "TargetNodeId": "29010000-0000-4000-8000-000000000014", "TargetPortId": "b" },
+      { "SourceNodeId": "29010000-0000-4000-8000-000000000014", "TargetNodeId": "29010000-0000-4000-8000-000000000020" }
+    ],
+    "ExposedItems": [
+      {
+        "Id": "2901ffff-0000-4000-8000-000000000001",
+        "Name": "Time Scale",
+        "Description": "Multiplies supplied delta time.",
+        "Category": "Timing",
+        "Order": 0,
+        "Editor": "parameter",
+        "Targets": [{ "NodeId": "29010000-0000-4000-8000-000000000010", "ParameterId": "value" }],
+        "Minimum": 0,
+        "Maximum": 5,
+        "Step": 0.05,
+        "Presentation": "slider"
+      }
+    ],
+    "AutoDestroyWhenIdle": true
+  }
+}

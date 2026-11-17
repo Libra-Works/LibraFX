@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "typeId": "b0af61d2-29f6-4cc9-a71e-000000000103",
-  "namespace": "LiberaFx", "kind": "Transform", "name": "Transform (TRS)",
+  "namespace": "LiberaFx", "kind": "Transform", "name": "Transform",
   "displayNameKey": "Matrix.Node.Transform", "group": "Matrices", "groupNameKey": "Matrix.Group",
   "portType": "Matrix", "portCategory": "Parameter",
   "inputPorts": [
@@ -13,6 +13,7 @@
   "parameters": [
     { "id": "position", "name": "Position", "displayNameKey": "Matrix.Parameter.Position", "type": "vector3", "defaultValue": [0,0,0] },
     { "id": "rotation", "name": "Rotation (degrees: X roll, Y pitch, Z yaw)", "displayNameKey": "Matrix.Parameter.Rotation", "type": "vector3", "defaultValue": [0,0,0] },
-    { "id": "scale", "name": "Scale", "displayNameKey": "Matrix.Parameter.Scale", "type": "vector3", "defaultValue": [1,1,1] }
+    { "id": "scale", "name": "Scale", "displayNameKey": "Matrix.Parameter.Scale", "type": "vector3", "defaultValue": [1,1,1] },
+    { "id": "order", "name": "Matrix product order (rightmost acts first)", "displayNameKey": "TransformOrder.Parameter", "type": "enum:b0af61d2-29f6-4cc9-a71e-000000000201", "defaultValue": 0 }
   ]
 }

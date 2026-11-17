@@ -21,6 +21,9 @@
 名前付き出力を持つノードでは省略できません。Breakの各成分も別々のルールです。
 同じピンの組み合わせの重複、存在しないピン、Signal、同じ型への変換、
 `explicit` 以外のmodeは拒否します。1ノード最大32ルールです。
+ここでのSignal制限は変換ルール登録の制限です。数値条件からSignalを発火するには
+`Compare`、Signalを数値へ変換するには `Signal To Number` の
+Pulse／Latch／Counterを使います（[論理Signal](logical-signals.md)）。
 
 CoreのノードJSONと、選択中プロジェクトのノードディレクトリにあるJSONが対象です。
 UUIDと定義の不変性、既存グラフの保持、プロジェクト切替、再読み込みは既存カタログと共通です。

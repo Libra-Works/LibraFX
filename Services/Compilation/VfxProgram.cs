@@ -17,7 +17,8 @@ public enum VfxOpcode : byte
     Vector2ToVector3 = 29, Vector2ToVector4 = 30, Vector3ToVector2 = 31,
     Vector3ToVector4 = 32, Vector4ToVector2 = 33, Vector4ToVector3 = 34,
     MaskVector2 = 35, MaskVector3 = 36, MaskVector4 = 37,
-    ColorToVector4 = 38, Vector4ToColor = 39, FCurve = 42
+    ColorToVector4 = 38, Vector4ToColor = 39, FCurve = 42,
+    EnumValue = 43, EnumSelect = 44, BranchTime = 45, LogicalEventSignal = 47
 }
 
 public readonly record struct VfxInstruction(
@@ -26,7 +27,18 @@ public readonly record struct VfxInstruction(
 public readonly record struct VfxTypedInstruction(
     Guid NodeId, VfxOpcode Opcode, int OutputWidth, int InputAWidth, int InputBWidth, byte TypeFlags,
     int InputASourceComponent, int InputBSourceComponent, int InputA, int InputB,
-    double[] DefaultA, double[] DefaultB);
+    double[] DefaultA, double[] DefaultB, int BranchGuardId = -1);
+
+public readonly record struct VfxEnumValueInstruction(Guid NodeId, Guid TypeId, int InputIndex, int DefaultValue);
+public readonly record struct VfxEnumCaseTarget(int Value, int SourceIndex, double[] DefaultValue);
+public readonly record struct VfxEnumSelectInstruction(Guid NodeId, Guid TypeId, int SelectorIndex,
+    int OutputWidth, VfxEnumCaseTarget[] Cases, int DefaultSourceIndex, double[] Fallback);
+public readonly record struct VfxBranchGuard(int SelectorIndex, Guid EnumTypeId, int[] CaseValues,
+    int[] DefaultExcludedValues, bool IncludesDefault, int ParentGuardId);
+public readonly record struct VfxLogicalInstruction(Guid NodeId, Guid TypeId, int AbiVersion,
+    uint Configuration, int NumericInputCount, int SignalInputCount, int OutputWidth, int SignalBranchCount);
+public readonly record struct VfxLogicalSignalRoute(int SourceIndex, int SourceBranch,
+    int TargetIndex, int TargetInputSlot);
 
 public readonly record struct VfxCustomInput(
     int SourceIndex, int SourceWidth, int SourceComponent, bool IsColor, double[] Defaults);
@@ -50,9 +62,24 @@ public sealed class VfxProgram
     private const int MaxSignalRoutes = 1000000;
     private const int GameIoHeaderSize = 8;
     private const int GameIoPortRecordSize = 72;
+    private const int EnumBranchHeaderSize = 16;
+    private const int LogicalEventHeaderSize = 16;
+    private sealed class BranchGuardBuilder(Guid selectorNodeId, Guid enumTypeId)
+    {
+        public Guid SelectorNodeId { get; } = selectorNodeId;
+        public Guid EnumTypeId { get; } = enumTypeId;
+        public HashSet<int> CaseValues { get; } = [];
+        public HashSet<int> DefaultExcludedValues { get; } = [];
+        public bool IncludesDefault { get; set; }
+    }
     private readonly VfxInstruction[] _instructions;
     private readonly VfxTypedInstruction[] _typedInstructions;
     private readonly VfxCustomInstruction[] _customInstructions;
+    private readonly VfxEnumValueInstruction[] _enumValueInstructions;
+    private readonly VfxEnumSelectInstruction[] _enumSelectInstructions;
+    private readonly VfxBranchGuard[] _branchGuards;
+    private readonly VfxLogicalInstruction[] _logicalInstructions;
+    private readonly VfxLogicalSignalRoute[] _logicalSignalRoutes;
     private readonly VfxCurveInstruction[] _curveInstructions;
     private readonly GameIoPort[] _gameIoPorts;
     private readonly ushort _version;
@@ -60,25 +87,46 @@ public sealed class VfxProgram
     public IReadOnlyList<VfxInstruction> Instructions { get; }
     public IReadOnlyList<VfxTypedInstruction> TypedInstructions { get; }
     public IReadOnlyList<VfxCustomInstruction> CustomInstructions { get; }
+    public IReadOnlyList<VfxEnumValueInstruction> EnumValueInstructions { get; }
+    public IReadOnlyList<VfxEnumSelectInstruction> EnumSelectInstructions { get; }
+    public IReadOnlyList<VfxBranchGuard> BranchGuards { get; }
+    public IReadOnlyList<VfxLogicalInstruction> LogicalInstructions { get; }
+    public IReadOnlyList<VfxLogicalSignalRoute> LogicalSignalRoutes { get; }
     public IReadOnlyList<VfxCurveInstruction> CurveInstructions { get; }
     public IReadOnlyList<GameIoPort> GameIoPorts { get; }
     public ushort BinaryVersion => _version;
     public int WorkSizeBytes => checked(_instructions.Length * (_version == 1 ? sizeof(double) : 4 * sizeof(double)) +
-        ((_customInstructions.Sum(item => item.BranchAdditionalTargets.Sum(targets => targets.Length)) + 1) / 2) * sizeof(double));
+        ((_customInstructions.Sum(item => item.BranchAdditionalTargets.Sum(targets => targets.Length)) + 1) / 2) * sizeof(double) +
+        _branchGuards.Length * 24);
 
     private VfxProgram(VfxInstruction[] instructions, VfxTypedInstruction[] typedInstructions,
         VfxCustomInstruction[] customInstructions, VfxCurveInstruction[] curveInstructions, ushort version,
-        IReadOnlyList<GameIoPort>? gameIoPorts = null)
+        IReadOnlyList<GameIoPort>? gameIoPorts = null,
+        VfxEnumValueInstruction[]? enumValueInstructions = null,
+        VfxEnumSelectInstruction[]? enumSelectInstructions = null,
+        VfxBranchGuard[]? branchGuards = null,
+        VfxLogicalInstruction[]? logicalInstructions = null,
+        VfxLogicalSignalRoute[]? logicalSignalRoutes = null)
     {
         _instructions = instructions;
         _typedInstructions = typedInstructions;
         _customInstructions = customInstructions;
+        _enumValueInstructions = enumValueInstructions ?? [];
+        _enumSelectInstructions = enumSelectInstructions ?? [];
+        _branchGuards = branchGuards ?? [];
+        _logicalInstructions = logicalInstructions ?? [];
+        _logicalSignalRoutes = logicalSignalRoutes ?? [];
         _curveInstructions = curveInstructions;
         _gameIoPorts = gameIoPorts?.ToArray() ?? [];
         _version = version;
         Instructions = Array.AsReadOnly(instructions);
         TypedInstructions = Array.AsReadOnly(typedInstructions);
         CustomInstructions = Array.AsReadOnly(customInstructions);
+        EnumValueInstructions = Array.AsReadOnly(_enumValueInstructions);
+        EnumSelectInstructions = Array.AsReadOnly(_enumSelectInstructions);
+        BranchGuards = Array.AsReadOnly(_branchGuards);
+        LogicalInstructions = Array.AsReadOnly(_logicalInstructions);
+        LogicalSignalRoutes = Array.AsReadOnly(_logicalSignalRoutes);
         CurveInstructions = Array.AsReadOnly(curveInstructions);
         GameIoPorts = Array.AsReadOnly(_gameIoPorts);
     }
@@ -151,7 +199,10 @@ public sealed class VfxProgram
         var byId = nodes.ToDictionary(node => node.Id);
         var definitions = GraphNodeDefinition.All.ToDictionary(item => item.Kind);
         if (nodes.Any(node => definitions[node.Kind].Runtime is not null ||
-                              node.Kind == GraphNodeKind.SpawnableGroup || node.Kind == GraphNodeKind.Signal))
+                              node.Kind == GraphNodeKind.SpawnableGroup || node.Kind == GraphNodeKind.Signal ||
+                              GraphEnumBranchSchema.TryGetValueDefinition(node.Kind, out _) ||
+                              GraphEnumBranchSchema.TryGetSelector(node.Kind, out _, out _, out _) ||
+                              GraphLogicalSchema.IsLogical(definitions[node.Kind])))
             return CompileWithCustomNodes(graph, nodes, definitions, gameIoPorts, signalTypeOverrides);
         foreach (var node in nodes)
             if (!TryOpcode(node.Kind.Value, out _))
@@ -331,7 +382,135 @@ public sealed class VfxProgram
         var connections = graphConnections(graph, nodes).ToArray();
         var incoming = connections.ToLookup(connection => connection.TargetNodeId);
         var outgoing = connections.ToLookup(connection => connection.SourceNodeId);
+        var precedence = new Dictionary<Guid, HashSet<Guid>>();
+        var guardsByNode = new Dictionary<Guid, Dictionary<Guid, BranchGuardBuilder>>();
+        var selectorNodes = nodes.Where(node => GraphEnumBranchSchema.TryGetSelector(
+            node.Kind, out _, out _, out _)).ToArray();
+        foreach (var selectorNode in selectorNodes)
+        {
+            GraphEnumBranchSchema.TryGetSelector(selectorNode.Kind, out var enumTypeId,
+                out _, out var enumValues);
+            var selectorEdges = incoming[selectorNode.Id]
+                .Where(edge => edge.TargetPortId == "selector").ToArray();
+            if (selectorEdges.Length != 1)
+                throw new InvalidDataException($"Enum Select '{selectorNode.Name}' requires one Enum selector connection.");
+            var selectorSourceId = selectorEdges[0].SourceNodeId;
+            var selectorSource = byId[selectorSourceId];
+            var selectorType = definitions[selectorSource.Kind].GetOutputPortType(selectorEdges[0].SourcePortId);
+            if (selectorType != GraphEnumBranchSchema.EnumPortType(enumTypeId))
+                throw new InvalidDataException($"Enum Select '{selectorNode.Name}' has a mismatched Enum type.");
+
+            var selectorAncestors = new HashSet<Guid>();
+            var selectorStack = new Stack<Guid>();
+            selectorStack.Push(selectorSourceId);
+            while (selectorStack.TryPop(out var ancestor))
+            {
+                if (!selectorAncestors.Add(ancestor)) continue;
+                foreach (var edge in incoming[ancestor])
+                    selectorStack.Push(edge.SourceNodeId);
+            }
+
+            var explicitCaseValues = new HashSet<int>();
+            var caseClosures = new List<(int? Value, bool IsDefault, HashSet<Guid> Nodes)>();
+            foreach (var enumValue in enumValues)
+            {
+                var portId = GraphEnumBranchSchema.CasePortId(enumValue.Value);
+                var branchEdges = incoming[selectorNode.Id].Where(edge => edge.TargetPortId == portId).ToArray();
+                if (branchEdges.Length > 1)
+                    throw new InvalidDataException($"Enum Select '{selectorNode.Name}' has multiple connections for case '{enumValue.Name}'.");
+                if (branchEdges.Length == 0) continue;
+                explicitCaseValues.Add(enumValue.Value);
+                caseClosures.Add((enumValue.Value, false,
+                    TraceParameterClosure(branchEdges[0].SourceNodeId, selectorNode.Id)));
+            }
+            var defaultEdges = incoming[selectorNode.Id].Where(edge => edge.TargetPortId == "default").ToArray();
+            if (defaultEdges.Length > 1)
+                throw new InvalidDataException($"Enum Select '{selectorNode.Name}' has multiple Default connections.");
+            if (defaultEdges.Length == 1)
+                caseClosures.Add((null, true,
+                    TraceParameterClosure(defaultEdges[0].SourceNodeId, selectorNode.Id)));
+
+            foreach (var branch in caseClosures)
+            {
+                var renderNodeId = branch.Nodes.FirstOrDefault(branchNodeId =>
+                {
+                    var branchNode = byId[branchNodeId];
+                    var branchDefinition = definitions[branchNode.Kind];
+                    return RenderNodeSchema.IsRenderNode(branchDefinition) ||
+                        branchDefinition.TypeName == "GpuParticle";
+                });
+                if (renderNodeId != Guid.Empty)
+                    throw new InvalidDataException(
+                        $"Enum Select '{selectorNode.Name}' cannot guard GPU or rendering nodes yet.");
+
+                var branchWork = new Queue<Guid>(branch.Nodes);
+                var propagatedNodes = new HashSet<Guid>();
+                while (branchWork.TryDequeue(out var branchNodeId))
+                {
+                    if (!propagatedNodes.Add(branchNodeId)) continue;
+                    if (selectorAncestors.Contains(branchNodeId)) continue;
+                    if (!guardsByNode.TryGetValue(branchNodeId, out var nodeGuards))
+                        guardsByNode.Add(branchNodeId, nodeGuards = []);
+                    if (!nodeGuards.TryGetValue(selectorNode.Id, out var guard))
+                        nodeGuards.Add(selectorNode.Id, guard = new(selectorSourceId, enumTypeId));
+                    if (branch.IsDefault)
+                    {
+                        guard.IncludesDefault = true;
+                        guard.DefaultExcludedValues.UnionWith(explicitCaseValues);
+                    }
+                    else if (branch.Value is { } value)
+                        guard.CaseValues.Add(value);
+                    if (!precedence.TryGetValue(selectorSourceId, out var targets))
+                        precedence.Add(selectorSourceId, targets = []);
+                    targets.Add(branchNodeId);
+
+                    foreach (var edge in outgoing[branchNodeId])
+                    {
+                        if (edge.TargetNodeId == selectorNode.Id ||
+                            selectorAncestors.Contains(edge.TargetNodeId)) continue;
+                        var target = byId[edge.TargetNodeId];
+                        var targetDefinition = target.Kind == GraphNodeKind.SpawnableGroup
+                            ? SpawnableGroupSchema.Effective(definitions[target.Kind], target.ChildGraph)
+                            : definitions[target.Kind];
+                        if (RenderNodeSchema.IsRenderNode(targetDefinition) ||
+                            targetDefinition.TypeName == "GpuParticle")
+                            throw new InvalidDataException(
+                                $"Enum Select '{selectorNode.Name}' cannot guard GPU or rendering nodes yet.");
+                        var category = targetDefinition.GetInputPortCategory(edge.TargetPortId);
+                        if (category is not (GraphPortCategory.Parameter or GraphPortCategory.Signal)) continue;
+                        branchWork.Enqueue(edge.TargetNodeId);
+                    }
+                }
+            }
+        }
+        if (guardsByNode.Values.Any(guards => guards.Count > 1))
+            throw new InvalidDataException("A node cannot belong to multiple Enum execution regions; nest independent branches in separate groups.");
+
+        HashSet<Guid> TraceParameterClosure(Guid start, Guid stopAt)
+        {
+            var closure = new HashSet<Guid>();
+            var stack = new Stack<Guid>();
+            stack.Push(start);
+            while (stack.TryPop(out var current))
+            {
+                if (current == stopAt)
+                    throw new InvalidDataException("An Enum branch value cannot depend on its own Enum Select output.");
+                if (!closure.Add(current)) continue;
+                foreach (var edge in incoming[current])
+                {
+                    var targetDefinition = definitions[byId[current].Kind];
+                    if (targetDefinition.GetInputPortCategory(edge.TargetPortId) == GraphPortCategory.Parameter)
+                        stack.Push(edge.SourceNodeId);
+                }
+            }
+            return closure;
+        }
+
         var degree = nodes.ToDictionary(node => node.Id, node => incoming[node.Id].Count());
+        foreach (var (sourceId, targets) in precedence)
+            foreach (var targetId in targets)
+                if (!connections.Any(edge => edge.SourceNodeId == sourceId && edge.TargetNodeId == targetId))
+                    degree[targetId]++;
         var queue = new Queue<GraphNodeSnapshot>(nodes.Where(node => degree[node.Id] == 0));
         var order = new List<GraphNodeSnapshot>(nodes.Length);
         while (queue.TryDequeue(out var node))
@@ -339,13 +518,22 @@ public sealed class VfxProgram
             order.Add(node);
             foreach (var connection in outgoing[node.Id])
                 if (--degree[connection.TargetNodeId] == 0) queue.Enqueue(byId[connection.TargetNodeId]);
+            if (precedence.TryGetValue(node.Id, out var targets))
+                foreach (var targetId in targets)
+                    if (!connections.Any(edge => edge.SourceNodeId == node.Id && edge.TargetNodeId == targetId) &&
+                        --degree[targetId] == 0)
+                        queue.Enqueue(byId[targetId]);
         }
         if (order.Count != nodes.Length) throw new InvalidDataException("The graph contains a cycle.");
         var indices = order.Select((node, index) => (node.Id, index))
             .ToDictionary(item => item.Id, item => item.index);
         var typedCode = new VfxTypedInstruction[order.Count];
         var customCode = new List<VfxCustomInstruction>();
+        var logicalCode = new List<VfxLogicalInstruction>();
+        var logicalSignalRoutes = new List<VfxLogicalSignalRoute>();
         var curveCode = new List<VfxCurveInstruction>();
+        var enumValueCode = new List<VfxEnumValueInstruction>();
+        var enumSelectCode = new List<VfxEnumSelectInstruction>();
         var effective = nodes.ToDictionary(node => node.Id, node =>
         {
             var definition = SpawnableGroupSchema.Effective(definitions[node.Kind], node.ChildGraph);
@@ -370,6 +558,41 @@ public sealed class VfxProgram
                     OutputPorts = [new GraphOutputPortDefinition("then", "Then", "Signal", GraphPortCategory.Signal)] };
             return definition;
         });
+
+        // Event-derived values may change after the ordinary parameter pass.
+        // Only Core-owned stateless math is permitted on that late-refresh path;
+        // arbitrary custom callbacks, lifetime capture and RNG must not be rerun.
+        static bool SupportsLateRefresh(GraphNodeDefinition definition)
+        {
+            if (definition.Runtime is not { AbiVersion: 1, Execution: "parameter" }) return false;
+            var id = definition.TypeId.ToString("N");
+            if (!byte.TryParse(id.AsSpan(30, 2), System.Globalization.NumberStyles.HexNumber,
+                    System.Globalization.CultureInfo.InvariantCulture, out var number)) return false;
+            return id.StartsWith("74305ac191b24c338d440000000000", StringComparison.Ordinal) &&
+                    number is >= 1 and <= 47 ||
+                id.StartsWith("b0af61d229f64cc9a71e0000000000", StringComparison.Ordinal) &&
+                    (number is >= 1 and <= 13 or >= 15 and <= 18);
+        }
+
+        var lateValues = new HashSet<Guid>();
+        foreach (var node in order)
+        {
+            var definition = effective[node.Id];
+            var isEventValue = GraphLogicalSchema.IsAnd(definition) || GraphLogicalSchema.IsOr(definition) ||
+                GraphLogicalSchema.IsSignalToNumber(definition);
+            var dependsOnEventValue = incoming[node.Id].Any(edge =>
+                lateValues.Contains(edge.SourceNodeId) &&
+                effective[edge.SourceNodeId].GetOutputPortCategory(edge.SourcePortId) == GraphPortCategory.Parameter &&
+                definition.GetInputPortCategory(edge.TargetPortId) == GraphPortCategory.Parameter);
+            if (dependsOnEventValue &&
+                (GraphLogicalSchema.IsLogical(definition) ||
+                 definition.Runtime is { Execution: "parameter" } && !SupportsLateRefresh(definition)))
+                throw new InvalidDataException(
+                    $"Node '{node.Name}' cannot consume a same-update Signal-derived value: " +
+                    "its runtime callback is not supported by late pure refresh.");
+            if (isEventValue || dependsOnEventValue && definition.Runtime?.Execution != "signal")
+                lateValues.Add(node.Id);
+        }
 
         int Input(GraphNodeSnapshot node, GraphNodeDefinition definition, string? port, int expectedWidth,
             out int sourceComponent, out bool sourceIsColor)
@@ -411,6 +634,186 @@ public sealed class VfxProgram
         {
             var node = order[index];
             var definition = effective[node.Id];
+            if (GraphEnumBranchSchema.TryGetValueDefinition(node.Kind, out var enumValueDefinition))
+            {
+                if (!GraphEnumDefinition.TryGetTypeId(enumValueDefinition.PortType, out var enumTypeId))
+                    throw new InvalidDataException($"Enum value node '{node.Name}' has no stable Enum type.");
+                var enumParameter = enumValueDefinition.Parameters.Single(item => item.Id == "value");
+                var enumValue = node.Parameters?.SingleOrDefault(item =>
+                    item.Id == "value" && item.Type == enumParameter.Type)?.Value ?? enumParameter.DefaultValue;
+                if (!NodeParameter.IsValidValue(enumParameter.Type, enumValue) ||
+                    !enumValue.TryGetInt32(out var enumNumber) ||
+                    !GraphEnumDefinition.All[enumTypeId].Values.Any(item => item.Value == enumNumber))
+                    throw new InvalidDataException($"Enum value node '{node.Name}' has an invalid value.");
+                var input = Input(node, definition, "value", 1, out _, out _);
+                if (input >= 0)
+                {
+                    var sourceType = effective[byId[connections.Single(edge =>
+                        edge.TargetNodeId == node.Id && edge.TargetPortId == "value").SourceNodeId].Id]
+                        .GetOutputPortType(connections.Single(edge =>
+                            edge.TargetNodeId == node.Id && edge.TargetPortId == "value").SourcePortId);
+                    if (sourceType != enumValueDefinition.PortType)
+                        throw new InvalidDataException($"Enum value node '{node.Name}' received a mismatched Enum type.");
+                }
+                var fallback = new double[4];
+                fallback[0] = enumNumber;
+                typedCode[index] = new(node.Id, VfxOpcode.EnumValue, 1, input < 0 ? 0 : 1, 0,
+                    0, 0, 0, input, -1, fallback, new double[4]);
+                enumValueCode.Add(new(node.Id, enumTypeId, input, enumNumber));
+                continue;
+            }
+            if (GraphEnumBranchSchema.TryGetSelector(node.Kind, out var enumSelectorType,
+                    out var outputType, out var enumCases))
+            {
+                var enumOutputWidth = Width(outputType);
+                var selector = Input(node, definition, "selector", 1, out _, out _);
+                if (selector < 0) throw new InvalidDataException($"Enum Select '{node.Name}' requires an Enum selector.");
+                if (enumCases.Count > 32)
+                    throw new InvalidDataException($"Enum Select '{node.Name}' supports at most 32 cases.");
+                var cases = new VfxEnumCaseTarget[enumCases.Count];
+                for (var caseIndex = 0; caseIndex < enumCases.Count; caseIndex++)
+                {
+                    var enumCase = enumCases[caseIndex];
+                    var casePortId = GraphEnumBranchSchema.CasePortId(enumCase.Value);
+                    var source = Input(node, definition, casePortId,
+                        enumOutputWidth, out _, out _);
+                    var casePort = definition.InputPorts!.Single(port => port.Id == casePortId);
+                    var caseDefault = casePort.DefaultValue ?? GraphEnumBranchSchema.DefaultValue(outputType);
+                    var defaultComponents = enumOutputWidth == 1
+                        ? new[] { caseDefault.GetDouble(), 0d, 0d, 0d }
+                        : caseDefault.EnumerateArray().Select(value => value.GetDouble())
+                            .Concat(Enumerable.Repeat(0d, 4 - enumOutputWidth)).ToArray();
+                    cases[caseIndex] = new(enumCase.Value, source, defaultComponents);
+                }
+                var defaultSource = Input(node, definition, "default", enumOutputWidth, out _, out _);
+                var fallbackParameter = definition.Parameters.Single(item => item.Id == "fallback");
+                var fallbackValue = node.Parameters?.SingleOrDefault(item =>
+                    item.Id == fallbackParameter.Id && item.Type == fallbackParameter.Type)?.Value ??
+                    fallbackParameter.DefaultValue;
+                if (!NodeParameter.IsValidValue(fallbackParameter.Type, fallbackValue))
+                    throw new InvalidDataException($"Enum Select '{node.Name}' has an invalid Fallback value.");
+                var fallback = enumOutputWidth == 1
+                    ? new[] { fallbackValue.GetDouble(), 0d, 0d, 0d }
+                    : fallbackValue.EnumerateArray().Select(item => item.GetDouble())
+                        .Concat(Enumerable.Repeat(0d, 4 - enumOutputWidth)).ToArray();
+                typedCode[index] = new(node.Id, VfxOpcode.EnumSelect, enumOutputWidth, 1, 0,
+                    0, 0, 0, selector, -1, fallback, new double[4]);
+                enumSelectCode.Add(new(node.Id, enumSelectorType, selector, enumOutputWidth,
+                    cases, defaultSource, fallback));
+                continue;
+            }
+            if (node.Kind == GraphEnumBranchSchema.BranchTime.Kind)
+            {
+                typedCode[index] = new(node.Id, VfxOpcode.BranchTime, 1, 0, 0,
+                    0, 0, 0, -1, -1, new double[4], new double[4]);
+                continue;
+            }
+            if (GraphLogicalSchema.IsLogical(definition))
+            {
+                GraphLogicalSchema.ValidateNodeParameters(definition, node.Parameters);
+                var inputPorts = (definition.InputPorts ?? [])
+                    .Where(port => definition.GetInputPortCategory(port.Id) == GraphPortCategory.Parameter)
+                    .ToArray();
+                var signalInputs = (definition.InputPorts ?? [])
+                    .Where(port => definition.GetInputPortCategory(port.Id) == GraphPortCategory.Signal)
+                    .ToArray();
+                var parameterOutputs = (definition.OutputPorts ?? [])
+                    .Where(port => definition.GetOutputPortCategory(port.Id) == GraphPortCategory.Parameter)
+                    .ToArray();
+                var signalOutputs = (definition.OutputPorts ?? [])
+                    .Where(port => definition.GetOutputPortCategory(port.Id) == GraphPortCategory.Signal)
+                    .ToArray();
+                var expectedNumericInputs = GraphLogicalSchema.IsCompare(definition) ? 2 : 0;
+                var expectedSignalInputs = GraphLogicalSchema.IsAnd(definition) ||
+                    GraphLogicalSchema.IsOr(definition) ? 3 :
+                    GraphLogicalSchema.IsSignalToNumber(definition) ? 2 : 0;
+                var expectedBranches = GraphLogicalSchema.IsCompare(definition) ||
+                    GraphLogicalSchema.IsAnd(definition) || GraphLogicalSchema.IsOr(definition) ? 1 : 0;
+                var expectedNumericInputIds = GraphLogicalSchema.IsCompare(definition)
+                    ? GraphLogicalSchema.CompareInputPortIds : Array.Empty<string>();
+                var expectedSignalInputIds = GraphLogicalSchema.IsAnd(definition) ||
+                    GraphLogicalSchema.IsOr(definition) ? GraphLogicalSchema.GateSignalInputPortIds :
+                    GraphLogicalSchema.IsSignalToNumber(definition)
+                        ? GraphLogicalSchema.SignalToNumberInputPortIds : Array.Empty<string>();
+                var expectedParameterOutputId = GraphLogicalSchema.IsCompare(definition)
+                    ? GraphLogicalSchema.ConditionOutput :
+                    GraphLogicalSchema.IsSignalToNumber(definition)
+                        ? GraphLogicalSchema.ValueOutput : GraphLogicalSchema.PulseOutput;
+                var expectedSignalOutputIds = expectedBranches == 0 ? Array.Empty<string>() :
+                    new[] { GraphLogicalSchema.IsCompare(definition)
+                        ? GraphLogicalSchema.EventOutput : GraphLogicalSchema.SignalOutput };
+                if (inputPorts.Length != expectedNumericInputs ||
+                    signalInputs.Length != expectedSignalInputs ||
+                    parameterOutputs.Length != 1 || signalOutputs.Length != expectedBranches ||
+                    !inputPorts.Select(port => port.Id).SequenceEqual(expectedNumericInputIds) ||
+                    !signalInputs.Select(port => port.Id).SequenceEqual(expectedSignalInputIds) ||
+                    parameterOutputs[0].Id != expectedParameterOutputId ||
+                    !signalOutputs.Select(port => port.Id).SequenceEqual(expectedSignalOutputIds) ||
+                    definition.GetOutputPortType(parameterOutputs[0].Id) != "Float" ||
+                    signalInputs.Any(port => definition.GetInputPortType(port.Id) != "Signal"))
+                    throw new InvalidDataException($"Logical node '{node.Name}' has an unsupported port layout.");
+
+                var logicalInputs = new VfxCustomInput[inputPorts.Length];
+                for (var inputIndex = 0; inputIndex < inputPorts.Length; inputIndex++)
+                {
+                    var port = inputPorts[inputIndex];
+                    if (definition.GetInputPortType(port.Id) != "Float")
+                        throw new InvalidDataException($"Logical input '{port.Id}' must be Float.");
+                    var source = Input(node, definition, port.Id, 1, out var sourceComponent, out var sourceColor);
+                    if (sourceColor)
+                        throw new InvalidDataException($"Logical input '{port.Id}' cannot be Color.");
+                    var value = port.DefaultValue;
+                    var defaults = new double[4];
+                    if (value is { } defaultValue)
+                    {
+                        if (!NodeParameter.IsValidValue("float", defaultValue) ||
+                            !defaultValue.TryGetDouble(out defaults[0]) || !double.IsFinite(defaults[0]))
+                            throw new InvalidDataException($"Logical input '{port.Id}' has an invalid default.");
+                    }
+                    logicalInputs[inputIndex] = new(source, source < 0 ? 0 : 1,
+                        sourceComponent, false, defaults);
+                }
+
+                var branchTargets = new int[signalOutputs.Length];
+                var additionalTargets = new int[signalOutputs.Length][];
+                for (var branch = 0; branch < signalOutputs.Length; branch++)
+                {
+                    var targets = outgoing[node.Id].Where(connection =>
+                        connection.SourcePortId == signalOutputs[branch].Id).ToArray();
+                    var targetIndices = new int[targets.Length];
+                    for (var targetIndex = 0; targetIndex < targets.Length; targetIndex++)
+                    {
+                        var edge = targets[targetIndex];
+                        var target = byId[edge.TargetNodeId];
+                        var targetDefinition = effective[target.Id];
+                        var targetSignalInputs = (targetDefinition.InputPorts ?? [])
+                            .Where(port => targetDefinition.GetInputPortCategory(port.Id) == GraphPortCategory.Signal)
+                            .ToArray();
+                        var isLogicalTarget = GraphLogicalSchema.IsLogical(targetDefinition);
+                        var targetSlot = isLogicalTarget
+                            ? Array.FindIndex(targetSignalInputs, port => port.Id == edge.TargetPortId)
+                            : 0;
+                        if ((!isLogicalTarget && targetDefinition.Runtime?.Execution != "signal") ||
+                            targetSlot < 0 || targetSlot > byte.MaxValue)
+                            throw new InvalidDataException(
+                                $"Logical Signal output '{signalOutputs[branch].Id}' has an invalid target.");
+                        targetIndices[targetIndex] = indices[target.Id];
+                        logicalSignalRoutes.Add(new(index, branch, indices[target.Id], targetSlot));
+                    }
+                    branchTargets[branch] = targetIndices.Length == 0 ? -1 : targetIndices[0];
+                    additionalTargets[branch] = targetIndices.Skip(1).ToArray();
+                }
+
+                var logicalOutputWidth = Width(definition.GetOutputPortType(parameterOutputs[0].Id)!);
+                var configuration = GraphLogicalSchema.Configuration(node, definition);
+                logicalCode.Add(new(node.Id, definition.TypeId, 1, configuration,
+                    logicalInputs.Length, signalInputs.Length, logicalOutputWidth, signalOutputs.Length));
+                customCode.Add(new(node.Id, (byte)VfxOpcode.LogicalEventSignal, logicalOutputWidth, false,
+                    definition.TypeId, 1, signalOutputs.Length, logicalInputs, branchTargets, additionalTargets));
+                typedCode[index] = new(node.Id, VfxOpcode.LogicalEventSignal, logicalOutputWidth,
+                    0, 0, 0, 0, 0, -1, -1, new double[4], new double[4]);
+                continue;
+            }
             if (definition.Runtime is { } runtime)
             {
                 var isSignal = runtime.Execution == "signal";
@@ -473,8 +876,19 @@ public sealed class VfxProgram
                     var targetIndices = targets.Select(edge =>
                     {
                         var target = byId[edge.TargetNodeId];
-                        if (effective[target.Id].Runtime?.Execution != "signal")
+                        var targetDefinition = effective[target.Id];
+                        var isLogicalTarget = GraphLogicalSchema.IsLogical(targetDefinition);
+                        if (!isLogicalTarget && targetDefinition.Runtime?.Execution != "signal")
                             throw new InvalidDataException("Signal branches must target registered signal nodes.");
+                        var targetSignalInputs = (targetDefinition.InputPorts ?? [])
+                            .Where(port => targetDefinition.GetInputPortCategory(port.Id) == GraphPortCategory.Signal)
+                            .ToArray();
+                        var targetSlot = isLogicalTarget
+                            ? Array.FindIndex(targetSignalInputs, port => port.Id == edge.TargetPortId)
+                            : 0;
+                        if (targetSlot < 0 || targetSlot > byte.MaxValue)
+                            throw new InvalidDataException("A Signal route has an invalid target input slot.");
+                        logicalSignalRoutes.Add(new(index, branch, indices[target.Id], targetSlot));
                         return indices[target.Id];
                     }).ToArray();
                     branchTargets[branch] = targetIndices.Length == 0 ? -1 : targetIndices[0];
@@ -587,14 +1001,36 @@ public sealed class VfxProgram
                 typeFlags, inputASourceComponent, inputBSourceComponent,
                 inputA, inputB, defaultA, defaultB);
         }
+        var branchGuards = new List<VfxBranchGuard>();
+        var branchGuardByNode = new Dictionary<Guid, int>();
+        foreach (var (nodeId, nodeGuards) in guardsByNode)
+        {
+            var guard = nodeGuards.Values.Single();
+            var guardId = branchGuards.Count;
+            branchGuards.Add(new(indices[guard.SelectorNodeId], guard.EnumTypeId,
+                guard.CaseValues.Order().ToArray(), guard.DefaultExcludedValues.Order().ToArray(),
+                guard.IncludesDefault, -1));
+            branchGuardByNode.Add(nodeId, guardId);
+            typedCode[indices[nodeId]] = typedCode[indices[nodeId]] with { BranchGuardId = guardId };
+        }
+        foreach (var node in order.Where(item => item.Kind == GraphEnumBranchSchema.BranchTime.Kind))
+            if (!branchGuardByNode.ContainsKey(node.Id))
+                throw new InvalidDataException("Enum Branch Time must be inside an Enum Select case or Default branch.");
+
         var legacy = typedCode.Select(item => new VfxInstruction(item.NodeId, item.Opcode, item.InputA, item.InputB,
             item.DefaultA[0], item.DefaultB[0])).ToArray();
         ValidateCurveBudget(curveCode);
         var extraRoutes = customCode.Sum(item => item.BranchAdditionalTargets.Sum(targets => (long)targets.Length));
         if (extraRoutes > MaxSignalRoutes) throw new InvalidDataException("The graph contains too many Signal routes.");
+        if (logicalSignalRoutes.Count > MaxSignalRoutes)
+            throw new InvalidDataException("The graph contains too many logical Signal routes.");
+        var hasEnumBranches = enumValueCode.Count != 0 || enumSelectCode.Count != 0 || branchGuards.Count != 0;
+        var version = logicalCode.Count != 0 ? (ushort)9 :
+            hasEnumBranches ? (ushort)8 : gameIoPorts.Count != 0 ? (ushort)7 :
+            extraRoutes != 0 ? (ushort)5 : curveCode.Count != 0 ? (ushort)4 : (ushort)3;
         return new VfxProgram(legacy, typedCode, customCode.ToArray(), curveCode.ToArray(),
-            gameIoPorts.Count != 0 ? (ushort)7 : extraRoutes != 0 ? (ushort)5 : curveCode.Count != 0 ? (ushort)4 : (ushort)3,
-            gameIoPorts);
+            version, gameIoPorts, enumValueCode.ToArray(), enumSelectCode.ToArray(), branchGuards.ToArray(),
+            logicalCode.ToArray(), logicalSignalRoutes.ToArray());
     }
 
     internal byte[] ToPackageBinary() => _version == 1
@@ -631,7 +1067,10 @@ public sealed class VfxProgram
         var routeBytes = checked(_customInstructions.Sum(item =>
             item.BranchAdditionalTargets.Sum(targets => targets.Length)) * sizeof(int));
         var gameIoBytes = _version >= 6 ? CreateGameIoMetadata(_gameIoPorts) : [];
-        var typedBytes = new byte[checked(instructionBytes + curveBytes + routeBytes + gameIoBytes.Length)];
+        var enumBranchBytes = _version >= 8 ? CreateEnumBranchMetadata() : [];
+        var logicalEventBytes = _version >= 9 ? CreateLogicalEventMetadata() : [];
+        var typedBytes = new byte[checked(instructionBytes + curveBytes + routeBytes +
+            enumBranchBytes.Length + gameIoBytes.Length + logicalEventBytes.Length)];
         "LFXB"u8.CopyTo(typedBytes);
         BinaryPrimitives.WriteUInt16LittleEndian(typedBytes.AsSpan(4), _version);
         typedBytes[6] = 1;
@@ -639,6 +1078,8 @@ public sealed class VfxProgram
         BinaryPrimitives.WriteUInt16LittleEndian(typedBytes.AsSpan(12), (ushort)instructionSize);
         var customById = _customInstructions.ToDictionary(item => item.NodeId);
         var curvesById = _curveInstructions.ToDictionary(item => item.NodeId);
+        var enumValuesById = _enumValueInstructions.ToDictionary(item => item.NodeId);
+        var enumSelectsById = _enumSelectInstructions.ToDictionary(item => item.NodeId);
         var curveOffset = 0;
         var routeOffset = 0;
         for (var index = 0; index < _typedInstructions.Length; index++)
@@ -669,6 +1110,7 @@ public sealed class VfxProgram
                 }
                 for (var input = custom.Inputs.Length; input < 4; input++)
                     BinaryPrimitives.WriteInt32LittleEndian(span[(48 + input * 8)..], -1);
+                BinaryPrimitives.WriteInt32LittleEndian(span[112..], instruction.BranchGuardId);
                 for (var branch = 0; branch < 4; branch++)
                 {
                     BinaryPrimitives.WriteInt32LittleEndian(span[(208 + branch * 4)..],
@@ -700,6 +1142,14 @@ public sealed class VfxProgram
                 BinaryPrimitives.WriteDoubleLittleEndian(span[(32 + component * 8)..], instruction.DefaultA[component]);
                 BinaryPrimitives.WriteDoubleLittleEndian(span[(64 + component * 8)..], instruction.DefaultB[component]);
             }
+            if (_version >= 8)
+            {
+                BinaryPrimitives.WriteInt32LittleEndian(span[112..], instruction.BranchGuardId);
+                if (enumValuesById.TryGetValue(instruction.NodeId, out var enumValue))
+                    enumValue.TypeId.TryWriteBytes(span[96..], bigEndian: true, out _);
+                else if (enumSelectsById.TryGetValue(instruction.NodeId, out var enumSelect))
+                    enumSelect.TypeId.TryWriteBytes(span[96..], bigEndian: true, out _);
+            }
             if (instruction.Opcode == VfxOpcode.FCurve)
             {
                 var curve = curvesById[instruction.NodeId];
@@ -717,8 +1167,134 @@ public sealed class VfxProgram
                 }
             }
         }
-        gameIoBytes.CopyTo(typedBytes, instructionBytes + curveBytes + routeBytes);
+        enumBranchBytes.CopyTo(typedBytes, instructionBytes + curveBytes + routeBytes);
+        gameIoBytes.CopyTo(typedBytes, instructionBytes + curveBytes + routeBytes + enumBranchBytes.Length);
+        logicalEventBytes.CopyTo(typedBytes, instructionBytes + curveBytes + routeBytes +
+            enumBranchBytes.Length + gameIoBytes.Length);
         return typedBytes;
+    }
+
+    private byte[] CreateLogicalEventMetadata()
+    {
+        const int instructionRecordSize = 32;
+        const int routeRecordSize = 12;
+        var size = checked(LogicalEventHeaderSize + _logicalInstructions.Length * instructionRecordSize +
+            _logicalSignalRoutes.Length * routeRecordSize);
+        var bytes = new byte[size];
+        "LFLE"u8.CopyTo(bytes);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(4), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(6),
+            checked((ushort)_logicalInstructions.Length));
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(8),
+            checked((uint)_logicalSignalRoutes.Length));
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(12), checked((uint)size));
+        var indexById = _typedInstructions.Select((item, index) => (item.NodeId, Index: index))
+            .ToDictionary(item => item.NodeId, item => item.Index);
+        var offset = LogicalEventHeaderSize;
+        foreach (var item in _logicalInstructions)
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(offset), checked((uint)indexById[item.NodeId]));
+            item.TypeId.TryWriteBytes(bytes.AsSpan(offset + 4, 16), bigEndian: true, out _);
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(offset + 20), checked((uint)item.AbiVersion));
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(offset + 24), item.Configuration);
+            bytes[offset + 28] = checked((byte)item.NumericInputCount);
+            bytes[offset + 29] = checked((byte)item.SignalInputCount);
+            bytes[offset + 30] = checked((byte)item.OutputWidth);
+            bytes[offset + 31] = checked((byte)item.SignalBranchCount);
+            offset += instructionRecordSize;
+        }
+        foreach (var route in _logicalSignalRoutes)
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(offset), checked((uint)route.SourceIndex));
+            bytes[offset + 4] = checked((byte)route.SourceBranch);
+            bytes[offset + 5] = checked((byte)route.TargetInputSlot);
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(offset + 8),
+                checked((uint)route.TargetIndex));
+            offset += routeRecordSize;
+        }
+        return bytes;
+    }
+
+    private byte[] CreateEnumBranchMetadata()
+    {
+        var indexById = _typedInstructions.Select((item, index) => (item.NodeId, Index: index))
+            .ToDictionary(item => item.NodeId, item => item.Index);
+        const int enumValueRecordSize = 24;
+        const int selectRecordSize = 68;
+        const int guardRecordSize = 40;
+        const int enumCaseRecordSize = 40;
+        var selectRecordsOffset = EnumBranchHeaderSize + _enumValueInstructions.Length * enumValueRecordSize;
+        var guardRecordsOffset = selectRecordsOffset + _enumSelectInstructions.Length * selectRecordSize;
+        var caseDataOffset = guardRecordsOffset + _branchGuards.Length * guardRecordSize;
+        var guardDataOffset = caseDataOffset + _enumSelectInstructions.Sum(item => item.Cases.Length * enumCaseRecordSize);
+        var size = guardDataOffset + _branchGuards.Sum(item =>
+            (item.CaseValues.Length + item.DefaultExcludedValues.Length) * 4);
+        var bytes = new byte[size];
+        "LFEB"u8.CopyTo(bytes);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(4), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(6), checked((ushort)_branchGuards.Length));
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(8), checked((ushort)_enumValueInstructions.Length));
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(10), checked((ushort)_enumSelectInstructions.Length));
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(12), checked((uint)size));
+        var offset = EnumBranchHeaderSize;
+        foreach (var item in _enumValueInstructions)
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset), indexById[item.NodeId]);
+            item.TypeId.TryWriteBytes(bytes.AsSpan(offset + 4, 16), bigEndian: true, out _);
+            offset += 24;
+        }
+        var caseOffset = caseDataOffset;
+        for (var index = 0; index < _enumSelectInstructions.Length; index++)
+        {
+            var item = _enumSelectInstructions[index];
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset), indexById[item.NodeId]);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset + 4), item.SelectorIndex);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset + 8), item.DefaultSourceIndex);
+            item.TypeId.TryWriteBytes(bytes.AsSpan(offset + 12, 16), bigEndian: true, out _);
+            bytes[offset + 28] = checked((byte)item.OutputWidth);
+            bytes[offset + 29] = checked((byte)item.Cases.Length);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset + 32), caseOffset);
+            for (var lane = 0; lane < 4; lane++)
+                BinaryPrimitives.WriteDoubleLittleEndian(bytes.AsSpan(offset + 36 + lane * 8), item.Fallback[lane]);
+            offset += selectRecordSize;
+            foreach (var branch in item.Cases)
+            {
+                BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(caseOffset), branch.Value);
+                BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(caseOffset + 4), branch.SourceIndex);
+                for (var lane = 0; lane < 4; lane++)
+                    BinaryPrimitives.WriteDoubleLittleEndian(bytes.AsSpan(caseOffset + 8 + lane * 8),
+                        branch.DefaultValue[lane]);
+                caseOffset += enumCaseRecordSize;
+            }
+        }
+        offset = guardRecordsOffset;
+        foreach (var item in _branchGuards)
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset), item.SelectorIndex);
+            item.EnumTypeId.TryWriteBytes(bytes.AsSpan(offset + 4, 16), bigEndian: true, out _);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset + 20), item.ParentGuardId);
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(offset + 24), item.IncludesDefault ? 1u : 0u);
+            BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(offset + 28), checked((ushort)item.CaseValues.Length));
+            BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(offset + 30), checked((ushort)item.DefaultExcludedValues.Length));
+            var guardIndex = (offset - guardRecordsOffset) / guardRecordSize;
+            var guardValuesOffset = guardDataOffset + _branchGuards.Take(guardIndex)
+                .Sum(guard => (guard.CaseValues.Length + guard.DefaultExcludedValues.Length) * 4);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset + 32), guardValuesOffset);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset + 36),
+                guardValuesOffset + item.CaseValues.Length * 4);
+            offset += guardRecordSize;
+            foreach (var value in item.CaseValues)
+            {
+                BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(guardValuesOffset), value);
+                guardValuesOffset += 4;
+            }
+            foreach (var value in item.DefaultExcludedValues)
+            {
+                BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(guardValuesOffset), value);
+                guardValuesOffset += 4;
+            }
+        }
+        return bytes;
     }
 
     private static byte[] CreateGameIoMetadata(IReadOnlyList<GameIoPort> ports)
@@ -908,6 +1484,7 @@ public sealed class VfxProgram
     private static int Width(string portType) => portType switch
     {
         "Float" => 1, "FloatX2" => 2, "FloatX3" => 3, "FloatX4" or "Color" => 4,
+        _ when GraphEnumBranchSchema.IsEnumPort(portType) => 1,
         _ => throw new InvalidDataException($"Port type '{portType}' is not supported by the runtime.")
     };
 

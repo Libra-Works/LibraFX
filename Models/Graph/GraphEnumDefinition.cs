@@ -30,7 +30,8 @@ public sealed record GraphEnumDefinition(Guid TypeId, string Namespace, string N
         {
             [Guid.Parse("c0bb0566-0892-4c0f-b8eb-ce5a38d3f0b2")] = "Interpolation",
             [Guid.Parse("c1c90dae-c39c-46c9-bc67-c0b6fd7cf06b")] = "CommentFormat",
-            [Guid.Parse("1e309707-1fa0-4d38-aed9-42d000000001")] = "PropertyValueType"
+            [Guid.Parse("1e309707-1fa0-4d38-aed9-42d000000001")] = "PropertyValueType",
+            [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000201")] = "TransformOrder"
         };
         var builtInPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (id, name) in builtIns)

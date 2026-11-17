@@ -20,7 +20,7 @@ enum class Op {
 
 // Domain errors and non-finite inputs/results report NonFinite. Round ties go away
 // from zero; angles wrap to [-pi, pi) or [-180, 180). Zero vectors normalize to zero.
-enum class MatrixOp { TransformRow, InverseRow, InverseValid, DecomposePosition,
+enum class MatrixOp { TransformRow, OrderedTransformRow, InverseRow, InverseValid, DecomposePosition,
                       DecomposeRotation, DecomposeScale, DecomposeValid };
 
 template<bool delta>
@@ -93,12 +93,18 @@ auto evaluateMatrix(CustomNodeInvocation& call) noexcept -> Result
         for (auto lane = 0u; lane < call.inputWidths[input]; ++lane)
             if (!std::isfinite(call.inputs[input * 4 + lane])) return Result::NonFinite;
 
-    if constexpr (op == MatrixOp::TransformRow)
+    if constexpr (op == MatrixOp::TransformRow || op == MatrixOp::OrderedTransformRow)
     {
         auto position = math::Vector3{call.inputs[0], call.inputs[1], call.inputs[2]};
         auto rotation = math::Vector3{call.inputs[4], call.inputs[5], call.inputs[6]};
         auto scale = math::Vector3{call.inputs[8], call.inputs[9], call.inputs[10]};
         auto matrix = math::makeTransform(position, rotation, scale);
+        if constexpr (op == MatrixOp::OrderedTransformRow)
+        {
+            auto order = call.inputs[12];
+            if (order < 0 || order > 5 || order != std::floor(order)) return Result::InvalidArgument;
+            matrix = math::makeOrderedTransform(position, rotation, scale, static_cast<math::TransformOrder>(order));
+        }
         for (auto lane = 0u; lane < 4; ++lane)
         {
             auto value = matrix[selectedRow * 4 + lane];
@@ -262,6 +268,7 @@ auto makeMatrixDescriptor(unsigned id, unsigned inputCount, unsigned inputWidth)
     descriptor.inputCount = static_cast<std::uint8_t>(inputCount);
     for (auto input = 0u; input < inputCount; ++input)
         descriptor.inputWidths[input] = static_cast<std::uint8_t>(inputWidth);
+    if constexpr (op == MatrixOp::OrderedTransformRow) descriptor.inputWidths[3] = 1;
     descriptor.outputWidth = static_cast<std::uint8_t>(outputWidth);
     descriptor.function = evaluateMatrix<op, selectedRow>;
     return descriptor;
@@ -292,7 +299,7 @@ auto makeGameIoOutputSignalDescriptor() noexcept -> CustomNodeDescriptor
     return descriptor;
 }
 
-const std::array<CustomNodeDescriptor, 67> descriptors = {
+const std::array<CustomNodeDescriptor, 71> descriptors = {
     makeDescriptor<Op::Abs, 1>(1, 1, 1), makeDescriptor<Op::Floor, 1>(2, 2, 1),
     makeDescriptor<Op::Round, 1>(3, 1, 1), makeDescriptor<Op::Sign, 1>(4, 1, 1),
     makeDescriptor<Op::Sqrt, 1>(5, 1, 1), makeDescriptor<Op::Pow, 1>(6, 2, 1),
@@ -333,7 +340,11 @@ const std::array<CustomNodeDescriptor, 67> descriptors = {
     makeMatrixDescriptor<MatrixOp::DecomposeValid, 1>(13, 4, 4),
     makeSignalPassthroughDescriptor(), makeGameIoOutputSignalDescriptor(),
     makeLifetimeDescriptor<false>(), makeLifetimeDescriptor<true>(),
-    makeHostTimeDescriptor<false>(), makeHostTimeDescriptor<true>(), makeDelayDescriptor()
+    makeHostTimeDescriptor<false>(), makeHostTimeDescriptor<true>(), makeDelayDescriptor(),
+    makeMatrixDescriptor<MatrixOp::OrderedTransformRow, 4, 0>(15, 4, 3),
+    makeMatrixDescriptor<MatrixOp::OrderedTransformRow, 4, 1>(16, 4, 3),
+    makeMatrixDescriptor<MatrixOp::OrderedTransformRow, 4, 2>(17, 4, 3),
+    makeMatrixDescriptor<MatrixOp::OrderedTransformRow, 4, 3>(18, 4, 3)
 };
 }
 
@@ -441,6 +452,34 @@ auto makeTransform(const Vector3& position, const Vector3& rotationDegrees,
         sp * scale[0], -cp * sr * scale[1], cp * cr * scale[2], position[2],
         0, 0, 0, 1
     };
+}
+
+auto makeOrderedTransform(const Vector3& position, const Vector3& rotationDegrees,
+                          const Vector3& scale, TransformOrder order) noexcept -> Matrix4
+{
+    if (order == TransformOrder::TRS) return makeTransform(position, rotationDegrees, scale);
+    auto rotation = makeTransform({}, rotationDegrees, {1, 1, 1});
+    auto result = rotation;
+    auto leftScale = order == TransformOrder::TSR || order == TransformOrder::STR || order == TransformOrder::SRT;
+    if (static_cast<unsigned>(order) > 5) return {};
+    for (auto row = 0u; row < 3; ++row)
+        for (auto column = 0u; column < 3; ++column)
+            result[row * 4 + column] *= scale[leftScale ? row : column];
+    auto translated = position;
+    if (order == TransformOrder::STR)
+        for (auto lane = 0u; lane < 3; ++lane) translated[lane] *= scale[lane];
+    else if (order == TransformOrder::RTS || order == TransformOrder::RST || order == TransformOrder::SRT)
+    {
+        translated.fill(0);
+        for (auto row = 0u; row < 3; ++row)
+            for (auto column = 0u; column < 3; ++column)
+                translated[row] += rotation[row * 4 + column] * position[column] *
+                    (order == TransformOrder::RST ? scale[column] : 1);
+        if (order == TransformOrder::SRT)
+            for (auto lane = 0u; lane < 3; ++lane) translated[lane] *= scale[lane];
+    }
+    for (auto lane = 0u; lane < 3; ++lane) result[lane * 4 + 3] = translated[lane];
+    return result;
 }
 
 auto invertMatrix(const Matrix4& matrix, Matrix4& inverse) noexcept -> bool

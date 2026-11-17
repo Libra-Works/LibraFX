@@ -15,6 +15,7 @@ internal static class MatrixNodeTests
         VerifyLowering(fixtureDirectory);
         VerifyDefaultsAndFailures(fixtureDirectory);
         VerifyPointOperations(fixtureDirectory);
+        VerifyTransformOrders(fixtureDirectory);
         var dedicated = SolarSystemSample.CreateDedicated();
         Require(dedicated.Nodes.Count < SolarSystemSample.Create().Nodes.Count / 2,
             "The dedicated Matrix sample must substantially reduce authoring graph complexity.");
@@ -27,6 +28,93 @@ internal static class MatrixNodeTests
         Require(bundled.Nodes.Count == dedicated.Nodes.Count, "The delivered compact sample must match the dedicated graph.");
         _ = VfxProgram.Compile(bundled);
         VerifySolarFixtures(bundled, fixtureDirectory);
+    }
+
+    private static void VerifyTransformOrders(string? directory)
+    {
+        const string enumType = "enum:b0af61d2-29f6-4cc9-a71e-000000000201";
+        var names = new[] { "TRS", "TSR", "RTS", "RST", "STR", "SRT" };
+        var position = new[] { 3d, -5, 7 };
+        var rotation = new[] { 17d, -31, 43 };
+        var scale = new[] { -2d, 3, 0.5 };
+        double[] Identity() => Enumerable.Range(0, 16).Select(index => index % 5 == 0 ? 1d : 0).ToArray();
+        double[] Multiply(double[] a, double[] b) => Enumerable.Range(0, 16)
+            .Select(index => Enumerable.Range(0, 4).Sum(k => a[index / 4 * 4 + k] * b[k * 4 + index % 4])).ToArray();
+        double[] Axis(int axis, double angle)
+        {
+            var value = Identity();
+            var a = (axis + 1) % 3;
+            var b = (axis + 2) % 3;
+            value[a * 4 + a] = value[b * 4 + b] = Math.Cos(angle);
+            value[a * 4 + b] = -Math.Sin(angle);
+            value[b * 4 + a] = Math.Sin(angle);
+            return value;
+        }
+        var t = Identity();
+        var s = Identity();
+        for (var lane = 0; lane < 3; lane++) { t[lane * 4 + 3] = position[lane]; s[lane * 4 + lane] = scale[lane]; }
+        var r = Multiply(Multiply(Axis(2, rotation[2] * Math.PI / 180),
+            Axis(1, -rotation[1] * Math.PI / 180)), Axis(0, -rotation[0] * Math.PI / 180));
+        var matrices = new Dictionary<char, double[]> { ['T'] = t, ['R'] = r, ['S'] = s };
+        var nodes = names.Select((name, index) => Node("Transform", name,
+            ("position", "vector3", position), ("rotation", "vector3", rotation), ("scale", "vector3", scale),
+            ("order", enumType, index))).ToArray();
+        var decompositions = names.Select(name => Node("DecomposeTransform", $"{name} decomposition")).ToArray();
+        var graph = new GraphSnapshot([.. nodes, .. decompositions], nodes.Select((node, index) =>
+            new GraphConnectionSnapshot(node.Id, decompositions[index].Id, "matrix", "value")).ToArray());
+        var checks = names.Select((name, index) => (nodes[index].Id, (string?)"value",
+            name.Aggregate(Identity(), (product, letter) => Multiply(product, matrices[letter]))))
+            .Concat(decompositions.Select((node, index) => (node.Id, (string?)"valid",
+                new[] { index is 0 or 2 or 3 ? 1d : 0 }))).ToArray();
+        Export(directory, "transform-orders", graph, checks);
+        if (directory is not null)
+        {
+            var savedOrders = new GraphWorkspaceViewModel(new UndoRedoManager());
+            savedOrders.InitializeFromSnapshot(graph);
+            using var project = new MemoryStream();
+            new ProjectFileService().SaveAsync(project, savedOrders).GetAwaiter().GetResult();
+            File.WriteAllBytes(Path.Combine(directory, "transform-orders.lfxproj"), project.ToArray());
+        }
+        var explicitTrs = new GraphSnapshot([nodes[0]], []);
+        var legacyTrs = new GraphSnapshot([nodes[0] with { Parameters = nodes[0].Parameters!.Where(item => item.Id != "order").ToArray() }], []);
+        Require(VfxProgram.Compile(explicitTrs).ToBinary().SequenceEqual(VfxProgram.Compile(legacyTrs).ToBinary()),
+            "Missing order must compile to the exact original three-input TRS bytecode.");
+        var invalid = nodes[0] with { Parameters = [.. nodes[0].Parameters!.Where(item => item.Id != "order"),
+            new("order", enumType, JsonSerializer.SerializeToElement(99))] };
+        try { _ = VfxProgram.Compile(new([invalid], [])); throw new Exception("Invalid Transform order accepted."); }
+        catch (InvalidDataException) { }
+        var workspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var transform = workspace.CreateNode(new("Transform"));
+        var editor = new NodeParameterEditorViewModel(workspace, transform,
+            transform.Definition.Parameters.Single(parameter => parameter.Id == "order"));
+        Require(editor.EnumValues.Select(item => item.Value).SequenceEqual(Enumerable.Range(0, 6)),
+            "Transform order must use stable Enum values, not the current visual ordering.");
+        editor.EnumValue = 5;
+        Require(workspace.History.Undo() && workspace.History.Redo(), "Order edits must support Undo/Redo.");
+        using var stream = new MemoryStream();
+        new ProjectFileService().SaveAsync(stream, workspace).GetAwaiter().GetResult();
+        stream.Position = 0;
+        Require(GraphSnapshot.ContentEquals(workspace.CreateSnapshot(), ProjectDocumentReader.LoadAsync(stream).GetAwaiter().GetResult().Graph),
+            "Transform order must persist in the project and its history.");
+        workspace.SetSelection([workspace.GetNode(transform.Id)]);
+        workspace.PasteSnapshot(workspace.CreateSelectionSnapshot(), 500, 300);
+        Require(workspace.SelectedNode!.Parameters!.Single(item => item.Id == "order").Value.GetInt32() == 5,
+            "Transform order must survive copy/paste.");
+        var group = workspace.CreateNode(GraphNodeKind.GraphGroup);
+        workspace.EnterGraph(group);
+        var nested = workspace.CreateNode(new("Transform"));
+        workspace.PublishGroupParameter(nested, "order");
+        var exposed = workspace.CreateCurrentSnapshot().ExposedItems!.Single();
+        workspace.NavigateToGraph(0);
+        var edit = LiberaFxMcpTools.SetGroupInstanceValue(new ActiveGraphProvider(workspace), group.Id.ToString(),
+            exposed.Id.ToString(), JsonSerializer.SerializeToElement(2));
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        edit.GetAwaiter().GetResult();
+        var effective = GroupExposedItems.Materialize(workspace.CreateSnapshot());
+        Require(effective.Nodes.Single(node => node.Id == group.Id).ChildGraph!.Nodes.Single().Parameters!
+            .Single(item => item.Id == "order").Value.GetInt32() == 2,
+            "Published order must retain its Enum identity and compile the MCP instance override.");
+        _ = VfxProgram.Compile(workspace.CreateSnapshot());
     }
 
     private static void VerifyPointOperations(string? directory)

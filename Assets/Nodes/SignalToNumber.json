@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "typeId": "e9778c40-209b-4ce8-918d-35c000000004",
+  "namespace": "LiberaFx",
+  "kind": "SignalToNumber",
+  "name": "Signal To Number",
+  "displayNameKey": "Logical.Node.SignalToNumber",
+  "descriptionKey": "Logical.Description.SignalToNumber",
+  "groupNameKey": "Editor.NodeGroup.Logic",
+  "group": "Logic",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "inputPorts": [
+    { "id": "signal", "name": "Signal", "portType": "Signal", "category": "Signal" },
+    { "id": "reset", "name": "Reset", "portType": "Signal", "category": "Signal" }
+  ],
+  "outputPorts": [
+    { "id": "value", "name": "Value", "portType": "Float", "category": "Parameter" }
+  ],
+  "parameters": [
+    {
+      "id": "mode",
+      "name": "Mode",
+      "displayNameKey": "Logical.Parameter.Mode",
+      "type": "enum:e9778c40-209b-4ce8-918d-35c000000013",
+      "defaultValue": 0
+    }
+  ]
+}

@@ -11,7 +11,7 @@ namespace LiberaFx.Unity
         Ok, InvalidArgument, InvalidBinary, UnsupportedBinary, InsufficientWork,
         Busy, QueueRejected, NotReady, NodeNotFound, DivideByZero, NonFinite,
         InvalidValueType, UnknownCustomNode, InvalidHandle, InstructionBudgetExceeded,
-        OutOfMemory, InternalError
+        OutOfMemory, InternalError, CounterOverflow = 17
     }
 
     public enum SpawnableTemplatePayloadKind : uint

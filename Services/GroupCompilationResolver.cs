@@ -5,6 +5,8 @@ namespace LiberaFx.Services;
 
 public sealed class GroupCompilationResolver(IReadOnlyList<GroupAssetLibrary> libraries, bool useEmbedded = false)
 {
+    private readonly IReadOnlyList<GroupAssetLibrary> _libraries =
+        libraries.Append(new GroupAssetLibrary(StandardGroupAssetLibrary.DefaultDirectory)).ToArray();
     private readonly Dictionary<Guid, GroupAsset> _assets = [];
 
     public GraphSnapshot Resolve(GraphSnapshot graph)
@@ -87,7 +89,7 @@ public sealed class GroupCompilationResolver(IReadOnlyList<GroupAssetLibrary> li
     {
         if (_assets.TryGetValue(id, out var cached)) return cached;
         GroupAsset? found = null;
-        foreach (var library in libraries)
+        foreach (var library in _libraries)
         {
             GroupAsset candidate;
             try { candidate = library.Load(id); }
@@ -106,7 +108,7 @@ public sealed class GroupCompilationResolver(IReadOnlyList<GroupAssetLibrary> li
 
     private GroupAsset LoadRevision(Guid id, long revision)
     {
-        foreach (var library in libraries)
+        foreach (var library in _libraries)
         {
             try { return library.LoadRevision(id, revision); }
             catch (FileNotFoundException) { }

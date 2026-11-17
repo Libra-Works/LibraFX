@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "typeId": "e9778c40-209b-4ce8-918d-35c000000013",
+  "namespace": "LiberaFx",
+  "name": "SignalToNumberMode",
+  "values": [
+    { "value": 0, "name": "Pulse", "displayNameKey": "Logical.Enum.SignalToNumberMode.Pulse" },
+    { "value": 1, "name": "Latch", "displayNameKey": "Logical.Enum.SignalToNumberMode.Latch" },
+    { "value": 2, "name": "Counter", "displayNameKey": "Logical.Enum.SignalToNumberMode.Counter" }
+  ]
+}

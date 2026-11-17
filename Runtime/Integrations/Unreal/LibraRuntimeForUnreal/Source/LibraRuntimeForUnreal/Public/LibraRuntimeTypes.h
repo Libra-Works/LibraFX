@@ -20,7 +20,8 @@ enum class ELibraRuntimeResult : uint8
     InvalidValueType,
     UnknownCustomNode,
     InvalidHandle,
-    InstructionBudgetExceeded
+    InstructionBudgetExceeded,
+    CounterOverflow = 17
 };
 
 UENUM(BlueprintType)

@@ -48,6 +48,7 @@ struct NamedIo::Impl final {
     std::vector<NamedIoEvent> events;
     std::size_t head = 0;
     std::size_t count = 0;
+    std::size_t instructionBudget = 10000;
     bool started = false;
     bool executing = false;
     bool dispatching = false;
@@ -347,9 +348,14 @@ auto NamedIo::startInternal(double time, const std::uint8_t* onStartNodeId,
     if (status != Result::Ok) return status;
     // A partially traversed signal must not be replayed after an error.
     impl_->started = true;
-    if (!onStartNodeId) return Result::Ok;
+    impl_->instructionBudget = instructionBudget ? instructionBudget : 10000;
     auto dispatch = ExecutionScope{impl_->dispatching};
-    return impl_->instance.dispatchSignal(entry, time, instructionBudget);
+    status = impl_->instance.dispatchGeneratedSignals(impl_->instructionBudget);
+    if (status != Result::Ok) return status;
+    status = impl_->publishProperties();
+    if (status != Result::Ok || !onStartNodeId) return status;
+    status = impl_->instance.dispatchSignal(entry, time, instructionBudget);
+    return status == Result::Ok ? impl_->publishProperties() : status;
 }
 
 auto NamedIo::update(double time) noexcept -> Result
@@ -360,6 +366,9 @@ auto NamedIo::update(double time) noexcept -> Result
     auto status = impl_->instance.updateAsync(time, inlineJob, nullptr);
     if (status != Result::Ok) return status;
     status = impl_->instance.result();
+    if (status != Result::Ok) return status;
+    auto dispatch = ExecutionScope{impl_->dispatching};
+    status = impl_->instance.dispatchGeneratedSignals(impl_->instructionBudget);
     return status == Result::Ok ? impl_->publishProperties() : status;
 }
 
@@ -371,7 +380,8 @@ auto NamedIo::fireSignal(const char* name, double time, std::size_t instructionB
     if (!port) return Result::NodeNotFound;
     auto scope = ExecutionScope{impl_->executing};
     auto dispatch = ExecutionScope{impl_->dispatching};
-    return impl_->instance.dispatchSignal(port->signal, time, instructionBudget);
+    auto status = impl_->instance.dispatchSignal(port->signal, time, instructionBudget);
+    return status == Result::Ok ? impl_->publishProperties() : status;
 }
 
 auto NamedIo::fireLifecycleSignal(const SignalHandle& signal, double time, std::size_t instructionBudget) noexcept -> Result
@@ -380,7 +390,8 @@ auto NamedIo::fireLifecycleSignal(const SignalHandle& signal, double time, std::
     if (!impl_->started) return Result::NotReady;
     auto scope = ExecutionScope{impl_->executing};
     auto dispatch = ExecutionScope{impl_->dispatching};
-    return impl_->instance.dispatchSignal(signal, time, instructionBudget);
+    auto status = impl_->instance.dispatchSignal(signal, time, instructionBudget);
+    return status == Result::Ok ? impl_->publishProperties() : status;
 }
 
 auto NamedIo::fireDeferredSignal(double time, std::size_t instructionBudget) noexcept -> Result
@@ -389,7 +400,8 @@ auto NamedIo::fireDeferredSignal(double time, std::size_t instructionBudget) noe
     if (!impl_->started) return Result::NotReady;
     auto scope = ExecutionScope{impl_->executing};
     auto dispatch = ExecutionScope{impl_->dispatching};
-    return impl_->instance.dispatchDeferredSignal(time, instructionBudget);
+    auto status = impl_->instance.dispatchDeferredSignal(time, instructionBudget);
+    return status == Result::Ok ? impl_->publishProperties() : status;
 }
 
 auto NamedIo::emitSignal(const char* name) noexcept -> Result

@@ -32,12 +32,16 @@ public sealed class NodePropertiesPaneViewModel : Tool
     public string InspectorNodeType => _node is { } node
         ? LocalizationService.Shared.GetOrDefault(node.Definition.DisplayNameKey, node.Definition.Name) : string.Empty;
     public bool CanManageGroup => IsGroup && !IsInspectingContainingSpawnable;
+    public bool IsStandardGroup => CurrentAsset?.Origin == GroupAssetOrigin.Standard;
+    public bool IsProjectLinkedGroup => IsLinkedGroup && !IsStandardGroup;
+    public bool CanCloneGroup => CanManageGroup && IsStandardGroup && _graph.GroupAssets?.HasLibraryDirectory == true;
     public bool CanConfigureGroupItems => HasExposedItems && !IsInspectingContainingSpawnable;
     public ObservableCollection<NodeParameterEditorViewModel> Parameters { get; } = [];
     public string GroupExposedDiagnostics => string.Join(Environment.NewLine,
         _unavailableExposedItems.Select(name => LocalizationService.Shared.Get("Panels.GroupExposedUnavailable", name)));
     public IRelayCommand SaveGroupCommand { get; }
     public IRelayCommand ToggleGroupLockCommand { get; }
+    public IRelayCommand CloneGroupCommand { get; }
     public IRelayCommand PublishCurvesCommand { get; }
     public bool CanPublishCurves => _graph.CanPublishGroupCurves();
     public bool HasExposedCurves => _node?.ChildGraph?.ExposedItems?.Any(item =>
@@ -53,10 +57,28 @@ public sealed class NodePropertiesPaneViewModel : Tool
     public string GroupRevision => _node?.GroupAsset is { } reference
         ? LocalizationService.Shared.Get("Editor.GroupRevision", reference.Revision) : string.Empty;
     public string GroupStatus => LocalizationService.Shared.Get(
+        IsStandardGroup ? "Modules.StandardReadOnly" :
         _graph.GroupAssets?.HasLibraryDirectory != true ? "Editor.GroupNoLibrary" :
         !IsLinkedGroup ? "Editor.GroupUnlinked" :
         CurrentAsset is null ? "Editor.GroupMissing" :
         IsGroupLocked ? "Editor.GroupLocked" : "Editor.GroupUnlocked");
+    public string StandardGroupDetails
+    {
+        get
+        {
+            if (_node?.GroupAsset is not { } reference ||
+                _graph.GroupAssets?.Metadata(reference.Id) is not { } metadata) return string.Empty;
+            var localization = LocalizationService.Shared;
+            return localization.Get("Modules.Details",
+                localization.GetOrDefault(metadata.DescriptionKey, string.Empty),
+                localization.GetOrDefault(metadata.PhaseKey, metadata.PhaseKey),
+                localization.GetOrDefault(metadata.InputsKey, metadata.InputsKey),
+                localization.GetOrDefault(metadata.OutputsKey, metadata.OutputsKey),
+                localization.GetOrDefault(metadata.UnitsKey, metadata.UnitsKey),
+                localization.GetOrDefault(metadata.StateKey, metadata.StateKey),
+                localization.GetOrDefault(metadata.BackendKey, metadata.BackendKey));
+        }
+    }
     public string PluginStatus
     {
         get
@@ -75,9 +97,12 @@ public sealed class NodePropertiesPaneViewModel : Tool
         _graph = activeGraph.Graph;
         SaveGroupCommand = new RelayCommand(() => RunGroupAction(_graph.SaveSelectedGroupAsset),
             () => CanManageGroup && _graph.GroupAssets?.HasLibraryDirectory == true &&
-                  (!IsLinkedGroup || CurrentAsset is { Locked: false }));
+                  (!IsLinkedGroup || CurrentAsset is { Locked: false, Origin: GroupAssetOrigin.Project }));
         ToggleGroupLockCommand = new RelayCommand(() => RunGroupAction(_graph.ToggleSelectedGroupAssetLock),
-            () => CanManageGroup && IsLinkedGroup && CurrentAsset is not null);
+            () => CanManageGroup && IsLinkedGroup &&
+                  CurrentAsset is { Origin: GroupAssetOrigin.Project });
+        CloneGroupCommand = new RelayCommand(() => RunGroupAction(() => _graph.CloneSelectedStandardGroupToProject()),
+            () => CanCloneGroup);
         PublishCurvesCommand = new RelayCommand(() => RunGroupAction(() => _graph.PublishGroupCurves()),
             () => CanPublishCurves);
         _activeGraph.PropertyChanged += OnActiveGraphChanged;
@@ -153,6 +178,9 @@ public sealed class NodePropertiesPaneViewModel : Tool
     private void RefreshGroupState()
     {
         OnPropertyChanged(nameof(IsGroup));
+        OnPropertyChanged(nameof(IsStandardGroup));
+        OnPropertyChanged(nameof(IsProjectLinkedGroup));
+        OnPropertyChanged(nameof(CanCloneGroup));
         OnPropertyChanged(nameof(CanManageGroup));
         OnPropertyChanged(nameof(CanConfigureGroupItems));
         OnPropertyChanged(nameof(HasExposedCurves));
@@ -164,8 +192,10 @@ public sealed class NodePropertiesPaneViewModel : Tool
         OnPropertyChanged(nameof(GroupLockHint));
         OnPropertyChanged(nameof(GroupRevision));
         OnPropertyChanged(nameof(GroupStatus));
+        OnPropertyChanged(nameof(StandardGroupDetails));
         SaveGroupCommand.NotifyCanExecuteChanged();
         ToggleGroupLockCommand.NotifyCanExecuteChanged();
+        CloneGroupCommand.NotifyCanExecuteChanged();
         PublishCurvesCommand.NotifyCanExecuteChanged();
     }
 
@@ -209,16 +239,21 @@ public sealed class NodePropertiesPaneViewModel : Tool
         if (_node.ChildGraph is not { } child) return;
         foreach (var item in (child.ExposedItems ?? []).OrderBy(item => item.Order))
         {
+            var itemMetadata = _node.GroupAsset is { } groupReference
+                ? _graph.GroupAssets?.Metadata(groupReference.Id)?.Parameters
+                    .FirstOrDefault(parameter => parameter.ItemId == item.Id)
+                : null;
+            var displayName = LocalizationService.Shared.GetOrDefault(itemMetadata?.NameKey, item.Name);
             if (item.Editor is "curve" or "vector3Curve")
             {
                 if (item.Targets.Any(target => !child.Nodes.Any(node => node.Id == target.NodeId &&
                         node.Kind == GraphNodeKind.FloatFCurve && node.Curve is not null)))
-                    _unavailableExposedItems.Add(item.Name);
+                    _unavailableExposedItems.Add(displayName);
                 continue;
             }
             if (item.Editor != "parameter" || item.Targets.Count != 1)
             {
-                _unavailableExposedItems.Add(item.Name);
+                _unavailableExposedItems.Add(displayName);
                 continue;
             }
             var target = item.Targets[0];
@@ -238,7 +273,7 @@ public sealed class NodePropertiesPaneViewModel : Tool
                 stored is not null && (stored.Components.Count != 1 || stored.Components[0].Value is not { } storedValue ||
                     !NodeParameter.IsValidValue(definition.Type, storedValue)))
             {
-                _unavailableExposedItems.Add(item.Name);
+                _unavailableExposedItems.Add(displayName);
                 continue;
             }
             var editor = item.Presentation switch
@@ -247,10 +282,11 @@ public sealed class NodePropertiesPaneViewModel : Tool
                 "text" => new NodeParameterEditorDefinition("text", null, null, null),
                 _ => definition.Editor
             };
-            var display = definition with { Name = item.Name, DisplayNameKey = null, DefaultValue = initial.Clone(), Editor = editor };
+            var display = definition with { Name = displayName, DisplayNameKey = null, DefaultValue = initial.Clone(), Editor = editor };
             Parameters.Add(new NodeParameterEditorViewModel(graph, selectedNode, display, item, () =>
                 selectionGeneration == _selectionGeneration &&
-                ReferenceEquals(_activeGraph.Graph, graph) && graph.IsCurrentInspectorTarget(selectedNode)));
+                ReferenceEquals(_activeGraph.Graph, graph) && graph.IsCurrentInspectorTarget(selectedNode),
+                itemMetadata?.DescriptionKey));
         }
         OnPropertyChanged(nameof(GroupExposedDiagnostics));
     }

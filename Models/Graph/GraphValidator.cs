@@ -63,6 +63,7 @@ public static class GraphValidator
             }
             RenderNodeSchema.ValidateNodeParameters(definition, node.Parameters);
             GameIoSchema.ValidateNodeParameters(definition, node.Parameters);
+            GraphLogicalSchema.ValidateNodeParameters(definition, node.Parameters);
             if (SequenceSchema.IsSequence(node.Kind)) _ = SequenceSchema.OutputCount(node.Parameters);
             if (node.ChildGraph is not null)
                 Validate(node.ChildGraph, allIds, depth + 1,

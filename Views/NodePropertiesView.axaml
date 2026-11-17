@@ -58,16 +58,24 @@
                         <TextBlock Text="{DynamicResource Text.Editor.GroupAsset}" VerticalAlignment="Center"
                                    FontWeight="SemiBold" />
                         <views:IconButton x:Name="SaveGroupButton" Grid.Column="1" Icon="Save"
+                                          IsVisible="{Binding !IsStandardGroup}"
                                           Command="{Binding SaveGroupCommand}"
                                           ToolTip.Tip="{DynamicResource Text.Editor.SaveGroup}"
                                           AutomationProperties.Name="{DynamicResource Text.Editor.SaveGroup}" />
                         <views:IconButton x:Name="GroupLockButton" Grid.Column="2" Icon="{Binding GroupLockIcon}"
-                                          IsVisible="{Binding IsLinkedGroup}" Command="{Binding ToggleGroupLockCommand}"
+                                          IsVisible="{Binding IsProjectLinkedGroup}" Command="{Binding ToggleGroupLockCommand}"
                                           ToolTip.Tip="{Binding GroupLockHint}" AutomationProperties.Name="{Binding GroupLockHint}" />
                     </Grid>
                     <TextBlock Text="{Binding GroupRevision}" IsVisible="{Binding IsLinkedGroup}" />
                     <TextBlock Text="{Binding GroupStatus}" TextWrapping="Wrap"
                                Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                    <TextBlock Text="{Binding StandardGroupDetails}" TextWrapping="Wrap"
+                               IsVisible="{Binding IsStandardGroup}"
+                               Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                    <Button Content="{DynamicResource Text.Modules.CloneToProject}"
+                            IsVisible="{Binding IsStandardGroup}"
+                            IsEnabled="{Binding CanCloneGroup}"
+                            Command="{Binding CloneGroupCommand}" />
                 </StackPanel>
             </Border>
             <ItemsControl ItemsSource="{Binding Parameters}" Margin="0,8,0,0">

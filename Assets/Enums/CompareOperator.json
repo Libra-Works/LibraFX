@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "typeId": "e9778c40-209b-4ce8-918d-35c000000010",
+  "namespace": "LiberaFx",
+  "name": "CompareOperator",
+  "values": [
+    { "value": 0, "name": "Less", "displayNameKey": "Logical.Enum.CompareOperator.Less" },
+    { "value": 1, "name": "LessOrEqual", "displayNameKey": "Logical.Enum.CompareOperator.LessOrEqual" },
+    { "value": 2, "name": "Equal", "displayNameKey": "Logical.Enum.CompareOperator.Equal" },
+    { "value": 3, "name": "NotEqual", "displayNameKey": "Logical.Enum.CompareOperator.NotEqual" },
+    { "value": 4, "name": "GreaterOrEqual", "displayNameKey": "Logical.Enum.CompareOperator.GreaterOrEqual" },
+    { "value": 5, "name": "Greater", "displayNameKey": "Logical.Enum.CompareOperator.Greater" }
+  ]
+}

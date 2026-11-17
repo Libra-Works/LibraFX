@@ -24,6 +24,8 @@
     <None Update="Assets\Nodes\*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\Polymorphism\*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\Enums\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\Modules\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\Modules\*.lfxgroup" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\ColorSchemes\*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\Inspectors\*.dll" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Samples\*.lfxproj" CopyToOutputDirectory="PreserveNewest" />

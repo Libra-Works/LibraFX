@@ -27,12 +27,15 @@ enum class Result : std::uint8_t {
     InvalidValueType,
     UnknownCustomNode,
     InvalidHandle,
-    InstructionBudgetExceeded
+    InstructionBudgetExceeded,
+    CounterOverflow = 17
 };
 
 enum class CustomExecution : std::uint8_t { Parameter = 1, Signal = 2 };
 
 struct CustomNodeInvocation;
+struct LogicalNodeInvocation;
+struct LogicalNodeDescriptor;
 // Parameter callbacks run on scheduler workers; signal callbacks run only from explicit
 // owner-thread dispatch. Callbacks may not traverse the graph or allocate during execution.
 using CustomNodeFunction = Result (*)(CustomNodeInvocation&) noexcept;
@@ -86,7 +89,50 @@ struct CustomNodeInvocation final {
 struct CustomNodeBinding final {
     const CustomNodeDescriptor* descriptor = nullptr;
     std::size_t stateOffset = 0;
+    const LogicalNodeDescriptor* logicalDescriptor = nullptr;
 };
+
+using LogicalNodeUpdate = Result (*)(LogicalNodeInvocation&) noexcept;
+using LogicalNodeSignal = Result (*)(LogicalNodeInvocation&) noexcept;
+using LogicalNodeCommit = void (*)(LogicalNodeInvocation&) noexcept;
+
+struct LIBRA_RUNTIME_CORE_API LogicalNodeDescriptor final {
+    std::uint8_t typeId[16]{};
+    std::uint32_t abiVersion = 0;
+    std::uint8_t inputCount = 0;
+    std::uint8_t inputWidths[4]{};
+    std::uint8_t parameterCount = 0;
+    std::uint8_t signalInputCount = 0;
+    std::uint8_t outputWidth = 0;
+    std::uint8_t signalBranchCount = 0;
+    std::size_t stateBytes = 0;
+    std::size_t stateAlignment = 16;
+    LogicalNodeUpdate update = nullptr;
+    LogicalNodeSignal onSignal = nullptr;
+    LogicalNodeCommit commit = nullptr;
+};
+
+struct LogicalNodeInvocation final {
+    const double* inputs = nullptr;
+    std::uint8_t inputCount = 0;
+    const std::uint8_t* inputWidths = nullptr;
+    double* outputs = nullptr;
+    std::uint8_t outputWidth = 0;
+    void* state = nullptr;
+    std::size_t stateBytes = 0;
+    std::uint32_t configuration = 0;
+    std::uint64_t eventTick = 0;
+    std::uint8_t signalInputSlot = 0xff;
+    std::uint64_t emittedBranches = 0;
+};
+
+struct LogicalQueuedSignal final {
+    std::uint32_t nodeIndex = 0;
+    std::uint8_t inputSlot = 0;
+    std::uint8_t isRoot = 0;
+    std::uint16_t reserved = 0;
+};
+static_assert(sizeof(LogicalQueuedSignal) == 8, "LogicalQueuedSignal ABI size must remain stable.");
 
 struct ProgramGameIoPort final {
     const char* name = nullptr;
@@ -98,6 +144,7 @@ struct ProgramGameIoPort final {
 
 // Immutable process-lifetime descriptors. IDs use Guid.TryWriteBytes(bigEndian: true).
 LIBRA_RUNTIME_CORE_API const CustomNodeDescriptor* builtinNodes(std::size_t& count) noexcept;
+LIBRA_RUNTIME_CORE_API const LogicalNodeDescriptor* logicalNodes(std::size_t& count) noexcept;
 
 struct ValueHandle final {
     const void* programIdentity = nullptr;
@@ -127,7 +174,10 @@ struct DeferredSignal final {
     double time = 0;
     std::uint32_t nodeIndex = 0;
     std::uint8_t branch = 0;
+    std::uint8_t branchGuardId = 0xff;
+    bool usesBranchTime = false;
 };
+static_assert(sizeof(DeferredSignal) == 16, "DeferredSignal ABI size must remain stable.");
 
 class LIBRA_RUNTIME_CORE_API Program final {
 public:
@@ -166,6 +216,23 @@ private:
     std::size_t signalStackCapacity_ = 0;
     std::size_t gameIoMetadataOffset_ = 0;
     std::uint16_t gameIoPortCount_ = 0;
+    std::size_t enumBranchMetadataOffset_ = 0;
+    std::size_t enumSelectRecordsOffset_ = 0;
+    std::size_t enumGuardRecordsOffset_ = 0;
+    std::size_t enumGuardValuesOffset_ = 0;
+    std::size_t branchClockOffset_ = 0;
+    std::uint16_t enumValueCount_ = 0;
+    std::uint16_t enumSelectCount_ = 0;
+    std::uint16_t branchGuardCount_ = 0;
+    std::size_t logicalEventMetadataOffset_ = 0;
+    std::size_t logicalInstructionRecordsOffset_ = 0;
+    std::size_t logicalSignalRoutesOffset_ = 0;
+    std::size_t logicalEventMaskOffset_ = 0;
+    std::size_t logicalDirtyOffset_ = 0;
+    std::size_t logicalQueueOffset_ = 0;
+    std::size_t logicalQueueCapacity_ = 0;
+    std::uint16_t logicalInstructionCount_ = 0;
+    std::uint32_t logicalSignalRouteCount_ = 0;
 };
 
 class LIBRA_RUNTIME_CORE_API Instance final {
@@ -216,6 +283,9 @@ public:
                          std::size_t maxInstructions) noexcept;
     Result dispatchSignal(const SignalHandle& entry, double time,
                           std::size_t maxInstructions) noexcept;
+    // Drain compiler-generated logical Signal events FIFO, then refresh only dirty pure numeric dependents.
+    // Call on the owner thread after a successful update and before producing render data.
+    Result dispatchGeneratedSignals(std::size_t maxInstructions) noexcept;
     // Caller-owned bounded storage; configure only while no work is pending.
     Result setDeferredSignalStorage(DeferredSignal* storage, std::size_t capacity) noexcept;
     Result nextDeferredSignal(double& time, bool& hasSignal) const noexcept;
@@ -227,9 +297,15 @@ public:
 private:
     enum class Phase : std::uint8_t { Idle, Running, Complete };
     static void run(void* context) noexcept;
-    Result evaluate() noexcept;
+    Result evaluate(bool pureRefresh = false, const bool* dirty = nullptr) noexcept;
+    Result updateBranchClocks(std::uint32_t guardId, bool& active) noexcept;
+    bool isBranchActive(std::uint32_t guardId) const noexcept;
     Result dispatchSignalInternal(const SignalHandle& entry, double time,
                                   std::size_t maxInstructions, int resumeBranch) noexcept;
+    Result dispatchSignalV9(const SignalHandle& entry, double time,
+                            std::size_t maxInstructions, int resumeBranch) noexcept;
+    Result drainLogicalSignals(std::size_t maxInstructions, bool seedGenerated) noexcept;
+    Result refreshDirtyPure() noexcept;
     void cleanupStates() noexcept;
 
     const Program* program_ = nullptr;
@@ -246,9 +322,16 @@ private:
     DeferredSignal* deferredSignals_ = nullptr;
     std::size_t deferredCapacity_ = 0;
     std::size_t deferredCount_ = 0;
+    std::size_t logicalQueueHead_ = 0;
+    std::size_t logicalQueueCount_ = 0;
+    std::uint64_t evaluationSerial_ = 0;
+    std::uint64_t pendingEvaluationSerial_ = 0;
+    bool generatedQueueSeeded_ = false;
+    bool generatedSignalsPending_ = false;
     SignalObserver signalObserver_ = nullptr;
     void* signalObserverContext_ = nullptr;
     Result result_ = Result::NotReady;
+    std::uint64_t updateSerial_ = 0;
     ProfilingHooks profiling_;
     std::atomic<Phase> phase_{Phase::Idle};
 };

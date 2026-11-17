@@ -54,7 +54,7 @@ public sealed class NodeCatalogViewModel : Tool
         _entries = (_definitions?.AvailableDefinitions ?? GraphNodeDefinition.AuthoringCore)
             .Where(definition => !GraphPolymorphism.IsHiddenVariant(definition.Kind))
             .Select(definition => new NodeCatalogEntryViewModel(definition, ProjectName))
-            .Concat((_groups?.Assets ?? []).Select(asset => new NodeCatalogEntryViewModel(asset)))
+            .Concat((_groups?.Assets ?? []).Select(asset => new NodeCatalogEntryViewModel(asset, _groups)))
             .ToArray();
         OnPropertyChanged(nameof(LoadWarnings));
         OnPropertyChanged(nameof(ProjectName));
@@ -71,6 +71,7 @@ public sealed class NodeCatalogViewModel : Tool
                             entry.QualifiedName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.Namespace.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.Group.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                            entry.SearchTerms.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.ConversionDescription.Contains(search, StringComparison.OrdinalIgnoreCase))
             .GroupBy(entry => entry.Group)
             .Select(group => new NodeCatalogGroupViewModel(group.Key, group.ToArray()))
@@ -103,6 +104,7 @@ public sealed class NodeCatalogEntryViewModel
     public string Namespace { get; }
     public string QualifiedName { get; }
     public string DragIdentifier { get; }
+    public string SearchTerms { get; } = string.Empty;
     public Guid? GroupAssetId { get; }
     public bool IsPolymorphic { get; }
     public string ConversionDescription { get; } = string.Empty;
@@ -120,17 +122,33 @@ public sealed class NodeCatalogEntryViewModel
         var source = GraphNodeDefinition.Core.Contains(definition)
             ? LocalizationService.Shared.Get("Editor.CoreNodes") : projectName ?? definition.Namespace;
         Group = $"{source} / {LocalizationService.Shared.GetOrDefault(definition.GroupNameKey, definition.Group)}";
+        if (GraphEnumBranchSchema.TryGetEnumDefinition(definition.Kind, out var enumeration))
+        {
+            var fallback = GraphEnumDefinition.All.Values.Count(item =>
+                string.Equals(item.Name, enumeration.Name, StringComparison.OrdinalIgnoreCase)) > 1
+                ? enumeration.QualifiedName : enumeration.Name;
+            var typeName = LocalizationService.Shared.GetOrDefault(
+                $"EnumBranches.Type.{enumeration.TypeId:D}", fallback);
+            Name = $"{Name} — {typeName}";
+            Group = $"{Group} / {typeName}";
+            SearchTerms = $"{enumeration.Name} {enumeration.QualifiedName}";
+        }
         DragIdentifier = (IsPolymorphic ? PolymorphicPrefix : "") + definition.Kind;
     }
 
-    public NodeCatalogEntryViewModel(GroupAsset asset)
+    public NodeCatalogEntryViewModel(GroupAsset asset, GroupAssetCatalog? catalog = null)
     {
-        Name = asset.Name;
+        var metadata = asset.Origin == GroupAssetOrigin.Standard ? catalog?.Metadata(asset.Id) : null;
+        Name = LocalizationService.Shared.GetOrDefault(metadata?.NameKey, asset.Name);
         OriginalName = asset.Name;
         KindName = "GraphGroup";
-        Namespace = "Project";
-        QualifiedName = $"Project.{asset.Name}";
-        Group = LocalizationService.Shared.Get("Messages.ProjectGroups");
+        Namespace = asset.Origin == GroupAssetOrigin.Standard ? "Standard" : "Project";
+        QualifiedName = $"{Namespace}.{asset.Name}";
+        Group = asset.Origin == GroupAssetOrigin.Standard
+            ? $"{LocalizationService.Shared.Get("Modules.StandardLibrary")} / " +
+              LocalizationService.Shared.GetOrDefault(metadata?.CategoryKey, "Modules")
+            : LocalizationService.Shared.Get("Messages.ProjectGroups");
+        SearchTerms = string.Join(" ", metadata?.Keywords ?? []);
         GroupAssetId = asset.Id;
         DragIdentifier = GroupPrefix + asset.Id.ToString("D");
     }

@@ -262,7 +262,11 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000000b")] = "MatrixRuntimeDecomposeRotation",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000000c")] = "MatrixRuntimeDecomposeScale",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000000d")] = "MatrixRuntimeDecomposeValid",
-        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000000e")] = "MatrixRuntimeBoundary"
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000000e")] = "MatrixRuntimeBoundary",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000000f")] = "MatrixRuntimeOrderedTransformRow0",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000010")] = "MatrixRuntimeOrderedTransformRow1",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000011")] = "MatrixRuntimeOrderedTransformRow2",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000012")] = "MatrixRuntimeOrderedTransformRow3"
     };
 
     private static readonly List<string> Warnings = [];
@@ -424,6 +428,10 @@ public sealed record GraphNodeDefinition(
             }
         }
 
+        definitions.AddRange(GraphEnumBranchSchema.NodeDefinitions);
+        if (definitions.Select(item => item.TypeId).Distinct().Count() != definitions.Count ||
+            definitions.Select(item => item.QualifiedName).Distinct(StringComparer.OrdinalIgnoreCase).Count() != definitions.Count)
+            throw new InvalidDataException("Generated Enum node definitions conflict with the node catalog.");
         return definitions.AsReadOnly();
     }
 

@@ -529,7 +529,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         {
             try
             {
-                var asset = GroupAssets?.Library().Load(reference.Id)
+                var asset = GroupAssets?.Load(reference.Id)
                     ?? throw new InvalidOperationException("The group library is unavailable.");
                 if (asset.Locked)
                 {
@@ -557,11 +557,12 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     {
         if (!double.IsFinite(x) || !double.IsFinite(y)) throw new ArgumentException("A finite position is required.");
         var catalog = GroupAssets ?? throw new InvalidOperationException("The group library is unavailable.");
-        var asset = catalog.Library().Load(assetId);
+        var asset = catalog.Load(assetId);
         ValidateSnapshot(asset.Graph, new HashSet<Guid>(), _graphPath.Count + 1);
         var definition = GraphNodeDefinition.All.Single(item => item.Kind == GraphNodeKind.GraphGroup);
         var reference = new GroupAssetReference(asset.Id, asset.Revision, asset.Locked);
-        var node = new GraphNodeViewModel(this, definition, asset.Name, x, y,
+        var displayName = LocalizationService.Shared.GetOrDefault(catalog.Metadata(asset.Id)?.NameKey, asset.Name);
+        var node = new GraphNodeViewModel(this, definition, displayName, x, y,
             childGraph: CloneGraph(asset.Graph), groupAsset: reference);
         _history.Execute(new AddGraphNodeCommand(this, node, Nodes.Count));
         SelectNode(node);
@@ -574,14 +575,35 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         if (SelectedNode is not { IsGraphGroup: true } node || node.ChildGraph is null)
             throw new InvalidOperationException("Select one Graph Group to save.");
         var catalog = GroupAssets ?? throw new InvalidOperationException("The group library is unavailable.");
-        var library = catalog.Library();
-        var asset = node.GroupAsset is { } reference
-            ? library.Save(reference.Id, reference.Revision, node.Name, node.ChildGraph)
-            : library.Create(node.Name, node.ChildGraph);
+        GroupAsset asset;
+        if (node.GroupAsset is { } reference)
+        {
+            if (catalog.Load(reference.Id).Origin == GroupAssetOrigin.Standard)
+                throw new InvalidOperationException("Standard group assets are read-only; clone the group into a project library first.");
+            var library = catalog.Library();
+            asset = library.Save(reference.Id, reference.Revision, node.Name, node.ChildGraph);
+        }
+        else asset = catalog.Library().Create(node.Name, node.ChildGraph);
         var current = new GroupAssetReference(asset.Id, asset.Revision, asset.Locked);
         _history.Execute(new SetGroupAssetCommand(node, node.GroupAsset, current));
         catalog.Refresh();
         SetConnectionStatus("Messages.GroupSaved", asset.Name, asset.Revision);
+    }
+
+    public GroupAsset CloneSelectedStandardGroupToProject()
+    {
+        if (SelectedNode is not { IsGraphGroup: true, GroupAsset: { } reference } node)
+            throw new InvalidOperationException("Select a standard Graph Group to clone.");
+        var catalog = GroupAssets ?? throw new InvalidOperationException("The group library is unavailable.");
+        var asset = catalog.Load(reference.Id);
+        if (asset.Origin != GroupAssetOrigin.Standard)
+            throw new InvalidOperationException("Only a standard group asset can be cloned with this operation.");
+        var clone = catalog.CloneToProject(asset.Id, node.Name);
+        _history.Execute(new SetGroupAssetCommand(node, node.GroupAsset,
+            new GroupAssetReference(clone.Id, clone.Revision, clone.Locked)));
+        catalog.Refresh();
+        SetConnectionStatus("Messages.GroupSaved", clone.Name, clone.Revision);
+        return clone;
     }
 
     public void ToggleSelectedGroupAssetLock()
@@ -589,6 +611,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         if (SelectedNode?.GroupAsset is not { } reference)
             throw new InvalidOperationException("Select a saved group asset.");
         var catalog = GroupAssets ?? throw new InvalidOperationException("The group library is unavailable.");
+        if (catalog.Load(reference.Id).Origin == GroupAssetOrigin.Standard)
+            throw new InvalidOperationException("Standard group assets are permanently locked; clone the group into a project library first.");
         var library = catalog.Library();
         var asset = library.Load(reference.Id);
         asset = library.SetLocked(reference.Id, !asset.Locked);
@@ -600,7 +624,6 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     {
         var catalog = GroupAssets;
         if (catalog is null || catalog.Assets.Count == 0) return [];
-        var library = catalog.Library();
         var latest = catalog.Assets.ToDictionary(asset => asset.Id);
         var results = new List<GroupUpdateCandidate>();
         bool Visit(GraphSnapshot graph)
@@ -615,7 +638,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                     var changed = true;
                     try
                     {
-                        var baseline = library.LoadRevision(reference.Id, reference.Revision);
+                        var baseline = catalog.LoadRevision(reference.Id, reference.Revision);
                         changed = !GraphSnapshot.EquivalentIgnoringIds(baseline.Graph, child);
                     }
                     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
@@ -637,7 +660,6 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     public PreparedGroupUpdates? PrepareGroupUpdates(IReadOnlyList<GroupUpdateCandidate> candidates)
     {
         var catalog = GroupAssets ?? throw new InvalidOperationException("The group library is unavailable.");
-        var library = catalog.Library();
         var requested = candidates.Where(candidate => !candidate.HasLocalChanges).ToDictionary(candidate => candidate.NodeId);
         if (requested.Count == 0) return null;
         var currentCandidates = FindGroupUpdates().ToDictionary(candidate => candidate.NodeId);
@@ -704,8 +726,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                         item.AssetId == reference.Id && item.CurrentRevision == reference.Revision);
                     if (approvedUpdate != default)
                     {
-                        var baseline = library.LoadRevision(reference.Id, reference.Revision);
-                        var current = library.Load(reference.Id);
+                        var baseline = catalog.LoadRevision(reference.Id, reference.Revision);
+                        var current = catalog.Load(reference.Id);
                         if (current.Revision != approvedUpdate.LatestRevision)
                             throw new InvalidOperationException($"Group '{node.Name}' changed again; check for updates again.");
                         if (node.GroupOverrides is not { Count: > 0 } &&
@@ -734,8 +756,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                     requested.TryGetValue(node.Id, out var candidate) &&
                     reference.Id == candidate.AssetId && reference.Revision == candidate.CurrentRevision)
                 {
-                    var baseline = library.LoadRevision(reference.Id, reference.Revision);
-                    var current = library.Load(reference.Id);
+                    var baseline = catalog.LoadRevision(reference.Id, reference.Revision);
+                    var current = catalog.Load(reference.Id);
                     if (current.Revision != candidate.LatestRevision)
                         throw new InvalidOperationException($"Group '{node.Name}' changed again; check for updates again.");
                     if (!GraphSnapshot.EquivalentIgnoringIds(baseline.Graph, child))
@@ -1526,7 +1548,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             var owner = parent.Nodes.Single(candidate => candidate.Id == id);
             if (owner.GroupAsset is { } reference)
             {
-                var asset = GroupAssets?.Library().Load(reference.Id)
+                var asset = GroupAssets?.Load(reference.Id)
                     ?? throw new InvalidOperationException("The group library is unavailable.");
                 if (asset.Locked) throw new InvalidOperationException("The group asset is locked.");
             }
@@ -1599,7 +1621,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     private void EnsureAssetUnlocked(GroupAssetReference? reference)
     {
         if (reference is null) return;
-        var asset = GroupAssets?.Library().Load(reference.Id)
+        var asset = GroupAssets?.Load(reference.Id)
             ?? throw new InvalidOperationException("The group library is unavailable.");
         if (asset.Locked) throw new InvalidOperationException("The group asset is locked.");
     }
