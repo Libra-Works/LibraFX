@@ -14,6 +14,28 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 {
     public event EventHandler<Guid>? GpuEditorRequested;
     public event EventHandler<Guid>? GpuProgramChanged;
+    // Transient preview intent only: never a graph edit or an undoable command.
+    public event EventHandler<Guid>? PreviewSignalRequested;
+
+    public bool CanSendPreviewSignal(GraphNodeViewModel node) =>
+        Nodes.Contains(node) && SignalTimeline.Supports(node.BaseDefinition.Kind) &&
+        node.BaseDefinition.Kind.Value != "SpawnInputSignal" && !InsideSpawnable();
+
+    internal void RequestPreviewSignal(GraphNodeViewModel node)
+    {
+        if (!CanSendPreviewSignal(node))
+        {
+            SetConnectionStatus("Editor.SignalSend.InstanceTargetRequired");
+            return;
+        }
+        if (PreviewSignalRequested is not { } requested)
+        {
+            SetConnectionStatus("Editor.SignalSend.CompiledClientRequired");
+            return;
+        }
+        requested.Invoke(this, node.Id);
+    }
+
     private Dictionary<Guid, string> _publishedGpuStates = [];
     public void OpenGpuEditor(GraphNodeViewModel node)
     {
@@ -346,7 +368,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             var node = new GraphNodeViewModel(this, definition, specification.Name, newX, newY,
                 curve: specification.Curve, childGraph: specification.ChildGraph is null ? null : CloneGraph(specification.ChildGraph),
                 parameters: specification.Parameters, groupAsset: specification.GroupAsset,
-                isPolymorphic: specification.IsPolymorphic, groupOverrides: specification.GroupOverrides);
+                isPolymorphic: specification.IsPolymorphic, groupOverrides: specification.GroupOverrides,
+                signalKeys: specification.SignalKeys);
             nodesByOldId.Add(specification.Id, node);
             commands.Add(new AddGraphNodeCommand(this, node, Nodes.Count + commands.Count));
         }
@@ -413,7 +436,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 node.Parameters,
                 node.GroupAsset,
                 node.IsPolymorphic,
-                node.GroupOverrides))
+                node.GroupOverrides) { SignalKeys = node.SignalKeys })
             .ToArray();
         var connections = Connections
             .Select(connection => new GraphConnectionSnapshot(
@@ -942,7 +965,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 specification.Parameters,
                 specification.GroupAsset,
                 specification.IsPolymorphic,
-                specification.GroupOverrides)
+                specification.GroupOverrides, specification.SignalKeys)
             {
                 IsDetailsExpanded = expandedNodes.Contains(specification.Id)
             };
@@ -1411,6 +1434,15 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         }
 
         _history.Execute(new SetFCurveCommand(node, node.Curve, curve, description));
+    }
+
+    public void SetSignalKeys(GraphNodeViewModel node, IReadOnlyList<SignalTimelineKey> keys, string description)
+    {
+        if (!Nodes.Contains(node))
+            throw new InvalidOperationException("Select a Signal entry in this graph.");
+        SignalTimeline.Validate(node.BaseDefinition.Kind, keys);
+        if (!SignalTimeline.Equal(node.SignalKeys, keys))
+            _history.Execute(new SetSignalKeysCommand(node, node.SignalKeys, keys.ToArray(), description));
     }
 
     public bool CanPublishGroupParameter(GraphNodeViewModel node, string parameterId)

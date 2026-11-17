@@ -11,6 +11,7 @@
     <Compile Include="..\..\Models\Graph\BuiltInAssets.cs" Link="Models\BuiltInAssets.cs" />
     <Compile Include="..\..\Models\Graph\CommentImage.cs" Link="Models\CommentImage.cs" />
     <Compile Include="..\..\Models\Graph\FCurve.cs" Link="Models\FCurve.cs" />
+    <Compile Include="..\..\Models\Graph\SignalTimeline.cs" Link="Models\SignalTimeline.cs" />
     <Compile Include="..\..\Models\Graph\GraphEnumDefinition.cs" Link="Models\GraphEnumDefinition.cs" />
     <Compile Include="..\..\Models\Graph\GameIoSchema.cs" Link="Models\GameIoSchema.cs" />
     <Compile Include="..\..\Models\Graph\SequenceSchema.cs" Link="Models\SequenceSchema.cs" />
@@ -34,6 +35,8 @@
     <Compile Include="..\..\Services\GroupCompilationResolver.cs" Link="Services\GroupCompilationResolver.cs" />
     <Compile Include="..\..\Services\Compilation\VfxProgram.cs" Link="Services\VfxProgram.cs" />
     <Compile Include="..\..\Services\Compilation\SpawnableGroupPackage.cs" Link="Services\SpawnableGroupPackage.cs" />
+    <Compile Include="..\..\Services\Compilation\SpawnableGroupPackageBinary.cs" Link="Services\SpawnableGroupPackageBinary.cs" />
+    <Compile Include="..\..\Services\Compilation\SignalTimelineLowering.cs" Link="Services\SignalTimelineLowering.cs" />
     <Compile Include="..\..\Services\Compilation\RenderProgramBindings.cs" Link="Services\RenderProgramBindings.cs" />
     <Compile Include="..\..\Services\EngineAsset.cs" Link="Services\EngineAsset.cs" />
     <Compile Include="..\..\Services\EngineAssetPath.cs" Link="Services\EngineAssetPath.cs" />

@@ -25,6 +25,8 @@
             <TextBlock Text="FPS" VerticalAlignment="Center" />
             <TextBox Width="50" Text="{Binding Playback.FpsText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
             <CheckBox Content="{DynamicResource Text.Timeline.Loop}" IsChecked="{Binding Playback.Loop}" />
+            <Button x:Name="AddPreviewSignalButton" Content="{DynamicResource Text.Timeline.AddPreviewSignal}" Command="{Binding AddPreviewSignalKeyCommand}" />
+            <Button x:Name="AddRuntimeSignalButton" Content="{DynamicResource Text.Timeline.AddRuntimeSignal}" Command="{Binding AddRuntimeSignalKeyCommand}" />
         </StackPanel>
         </ScrollViewer>
         <Grid Grid.Row="1" ColumnDefinitions="*,180">
@@ -33,10 +35,25 @@
             </ScrollViewer>
             <StackPanel Grid.Column="1" Spacing="4" Margin="8">
                 <TextBlock Text="{Binding SelectedTrack.Name}" FontWeight="SemiBold" />
-                <TextBlock Text="{DynamicResource Text.Timeline.Start}" />
-                <TextBox Text="{Binding SelectedTrack.StartText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
-                <TextBlock Text="{DynamicResource Text.Timeline.Duration}" />
-                <TextBox IsEnabled="{Binding SelectedTrack.CanStretch}" Text="{Binding SelectedTrack.DurationText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                <StackPanel IsVisible="{Binding SelectedTrack.IsCurve}" Spacing="4">
+                    <TextBlock Text="{DynamicResource Text.Timeline.Start}" />
+                    <TextBox Text="{Binding SelectedTrack.StartText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                    <TextBlock Text="{DynamicResource Text.Timeline.Duration}" />
+                    <TextBox IsEnabled="{Binding SelectedTrack.CanStretch}" Text="{Binding SelectedTrack.DurationText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                </StackPanel>
+                <StackPanel IsVisible="{Binding SelectedTrack.IsSignal}" Spacing="4">
+                    <ListBox ItemsSource="{Binding SelectedTrack.SignalKeys}" SelectedItem="{Binding SelectedSignalKey}"
+                             MaxHeight="180">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:TimelineSignalKeyViewModel">
+                                <TextBlock Text="{Binding TimeText}" />
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <TextBlock Text="{DynamicResource Text.Timeline.SignalTime}" />
+                    <TextBox Text="{Binding SignalTimeText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                    <Button Content="{DynamicResource Text.Timeline.DeleteSignal}" Command="{Binding DeleteSignalKeyCommand}" />
+                </StackPanel>
             </StackPanel>
         </Grid>
         <StackPanel Grid.Row="2" Margin="8,3">

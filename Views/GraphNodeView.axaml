@@ -176,6 +176,16 @@
                                   ToolTip.Tip="{DynamicResource Text.Editor.Sequence.RemoveOutput}"
                                   AutomationProperties.Name="{DynamicResource Text.Editor.Sequence.RemoveOutput}" />
             </StackPanel>
+            <Border Grid.Row="3" Margin="8,2,8,6" HorizontalAlignment="Right"
+                    IsVisible="{Binding IsPreviewSignal}"
+                    ToolTip.Tip="{Binding PreviewSignalSendHelp}"
+                    AutomationProperties.HelpText="{Binding PreviewSignalSendHelp}">
+                <Button x:Name="PreviewSignalSendButton" Padding="8,2" MinHeight="24"
+                        Content="{DynamicResource Text.Editor.SignalSend.Send}"
+                        Command="{Binding SendPreviewSignalCommand}"
+                        AutomationProperties.Name="{DynamicResource Text.Editor.SignalSend.AccessibleName}"
+                        AutomationProperties.HelpText="{Binding PreviewSignalSendHelp}" />
+            </Border>
             <Border Grid.Row="4" IsVisible="{Binding IsDetailsExpanded}" Padding="8,5"
                     BorderThickness="0,1,0,0" BorderBrush="{DynamicResource EffectBorderBrush}">
                 <ItemsControl ItemsSource="{Binding InlineParameters}">

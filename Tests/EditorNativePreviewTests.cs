@@ -36,7 +36,7 @@ internal static class EditorNativePreviewTests
                 node.Parameters?.Any(parameter => parameter.Id == "text" && parameter.Value.GetString()!.Contains("End = 240")) == true),
                 "Distributed Fireworks sample must prominently explain End=240 before Play.");
         }
-        var ownerBaseline = NativeSpawnableSession.ActiveOwnerCount;
+        var ownerBaseline = EditorNativeHostSession.ActiveOwnerCount;
         var workspace = new GraphWorkspaceViewModel(new UndoRedoManager());
         workspace.InitializeFromSnapshot(graph);
         using (var memory = new MemoryStream())
@@ -223,12 +223,12 @@ internal static class EditorNativePreviewTests
             Near(Position(node), [0, 0, 20]);
         }
         sender.Dispose();
-        Require(NativeSpawnableSession.ActiveOwnerCount == ownerBaseline, "Reset/graph-change/error/sender disposal leaked a native owner.");
+        Require(EditorNativeHostSession.ActiveOwnerCount == ownerBaseline, "Reset/graph-change/error/sender disposal leaked a native owner.");
         var previous = Environment.GetEnvironmentVariable("LIBERAFX_PREVIEW_NATIVE_LIBRARY");
         Environment.SetEnvironmentVariable("LIBERAFX_PREVIEW_NATIVE_LIBRARY", library);
         try { RunWithDispatcher(VerifyTransportAsync(graph)); }
         finally { Environment.SetEnvironmentVariable("LIBERAFX_PREVIEW_NATIVE_LIBRARY", previous); }
-        Require(NativeSpawnableSession.ActiveOwnerCount == ownerBaseline, "Preview disconnect leaked its editor-native owner.");
+        Require(EditorNativeHostSession.ActiveOwnerCount == ownerBaseline, "Preview disconnect leaked its editor-native owner.");
         Console.WriteLine("Editor-native preview PASS: real C++ lifecycle -> per-instance render defaults; 1/1/12/12/0 renderers at 0/1/2/2.5/3.5s.");
         Console.WriteLine("TLS/WebSocket shell + evaluated Scene delivery, t0->t2.5 jump (captured Z260; Burst age0.5), Pause/Resume, seek/loop replay, owner disposal and missing-library errors passed.");
         Console.WriteLine($"UE CPU/pixel fixtures: {output}\\frame-000 .. frame-004 (executionOwner=editor-native; UE owns rendering only).");

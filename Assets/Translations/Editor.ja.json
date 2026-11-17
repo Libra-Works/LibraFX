@@ -1,4 +1,10 @@
 {
+  "Editor.SignalSend.Send": "送信",
+  "Editor.SignalSend.AccessibleName": "Signalを送信（プレビュー専用・ルートスコープ・一時停止中も使用可能）",
+  "Editor.SignalSend.Help": "プレビュー専用：通常のGraph Groupを含むルートスコープで、現在の再生位置に1回送信します。一時停止中も使用でき、時間やプロジェクトは変更しません。compiled-preview（v3）クライアントの接続が必要です。",
+  "Editor.SignalSend.InstanceTargetRequired": "Spawnableスコープでは送信できません。明示的なインスタンス指定は未実装です。子Signalを暗黙に一斉送信することはありません。",
+  "Editor.SignalSend.CompiledClientRequired": "Signalは送信されていません。compiled-preview（プロトコルv3）クライアントを接続して、再度送信してください。",
+  "Editor.SignalSend.Requested": "現在の再生位置でプレビューSignalを要求しました（ルートスコープ）。ランタイムでの配信完了を示すものではありません。",
   "Editor.Node.Sequence": "シーケンス",
   "Editor.NodeHelp.Sequence": "Signalを受け取るたびに、出力を上から順に実行します。各出力の接続先は1つです。Delayの継続やSpawnableの終了は待ちません。",
   "Editor.Sequence.Hint": "上から順に実行・待機なし",

@@ -22,6 +22,7 @@ public sealed class TimelineCanvas : Control
     private Point _pointerStart;
     private double _previewDelta;
     private Guid _revision;
+    private Guid? _dragKey;
 
     public TimelineCanvas() { ClipToBounds = true; Focusable = true; }
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -84,6 +85,30 @@ public sealed class TimelineCanvas : Control
             context.DrawLine(grid, new(0, y + 31), new(Bounds.Width, y + 31));
             using (context.PushClip(new Rect(4, y, NameWidth - 8, 31)))
                 DrawText(context, track.Name, new(6, y + 8), label);
+            if (track.IsSignal)
+            {
+                using var clip = context.PushClip(new Rect(NameWidth, Header,
+                    Math.Max(0, Bounds.Width - NameWidth), Math.Max(0, Bounds.Height - Header)));
+                foreach (var key in track.SignalKeys)
+                {
+                    var time = DisplayTime(key.TimeSeconds) +
+                        (ReferenceEquals(track, _drag) && _dragKey == key.Id ? _previewDelta : 0);
+                    var center = new Point(X(time), y + 16);
+                    var shape = new StreamGeometry();
+                    using (var geometry = shape.Open())
+                    {
+                        geometry.BeginFigure(center + new Vector(0, -6), true);
+                        geometry.LineTo(center + new Vector(6, 0));
+                        geometry.LineTo(center + new Vector(0, 6));
+                        geometry.LineTo(center + new Vector(-6, 0));
+                        geometry.EndFigure(true);
+                    }
+                    context.DrawGeometry(ThemeSettingsService.EditorBrush(
+                        key.Id == _model.SelectedSignalKey?.Id && track == _model.SelectedTrack
+                            ? "CurveSelected" : "CurveLine"), null, shape);
+                }
+                continue;
+            }
             var start = DisplayTime(track.Start) +
                 (ReferenceEquals(track, _drag) && !_stretching ? _previewDelta : 0);
             var end = DisplayTime(track.Start + track.Duration) +
@@ -114,6 +139,26 @@ public sealed class TimelineCanvas : Control
             if (index < 0 || index >= _model.Tracks.Count) return;
             var track = _model.Tracks[index];
             _model.Select(track);
+            Focus();
+            if (track.IsSignal)
+            {
+                var key = track.SignalKeys.OrderBy(key => Math.Abs(X(DisplayTime(key.TimeSeconds)) - position.X))
+                    .FirstOrDefault();
+                if (position.X < NameWidth || key is null ||
+                    Math.Abs(X(DisplayTime(key.TimeSeconds)) - position.X) > 8)
+                {
+                    if (position.X >= NameWidth && e.ClickCount == 2)
+                        _model.AddSignalKey(track.SignalMode!.Value, track,
+                            TimeSeconds(SnapDisplayTime(DisplayPosition(position.X))));
+                    return;
+                }
+                _model.SelectSignalKey(track, key.Id);
+                _drag = track;
+                _dragKey = key.Id;
+                _revision = _model.Revision;
+            }
+            else
+            {
             if (position.X < NameWidth || track.Node.Curve?.Keys.Count == 0) return;
             if (position.X < X(DisplayTime(track.Start)) - 4 ||
                 position.X > X(DisplayTime(track.Start + track.Duration)) + 7) return;
@@ -121,6 +166,7 @@ public sealed class TimelineCanvas : Control
             _stretching = track.CanStretch &&
                 Math.Abs(position.X - X(DisplayTime(track.Start + track.Duration))) <= 7;
             _revision = _model.Revision;
+            }
         }
         _pointerStart = position;
         _previewDelta = 0;
@@ -149,10 +195,17 @@ public sealed class TimelineCanvas : Control
         if (_drag is { } track && _model?.Revision == _revision)
         {
             var deltaSeconds = _model.Playback.SecondsFromDisplayDelta(_previewDelta);
-            _model.Retime(track, track.Start + (_stretching ? 0 : deltaSeconds),
-                track.Duration + (_stretching ? deltaSeconds : 0));
+            if (_dragKey is { } keyId)
+            {
+                var key = track.SignalKeys.Single(item => item.Id == keyId);
+                _model.MoveSignalKey(track, keyId, key.TimeSeconds + deltaSeconds);
+            }
+            else
+                _model.Retime(track, track.Start + (_stretching ? 0 : deltaSeconds),
+                    track.Duration + (_stretching ? deltaSeconds : 0));
         }
         _drag = null;
+        _dragKey = null;
         _scrubbing = false;
         _previewDelta = 0;
         e.Pointer.Capture(null);
@@ -162,6 +215,7 @@ public sealed class TimelineCanvas : Control
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
     {
         _drag = null;
+        _dragKey = null;
         _scrubbing = false;
         _previewDelta = 0;
         InvalidateVisual();
@@ -179,6 +233,14 @@ public sealed class TimelineCanvas : Control
         _start = Math.Clamp(anchor - duration * ratio, -1_000_000, 1_000_000 - duration);
         _end = _start + duration;
         InvalidateVisual();
+        e.Handled = true;
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Key != Key.Delete || _model?.DeleteSignalKeyCommand.CanExecute(null) != true) return;
+        _model.DeleteSignalKeyCommand.Execute(null);
         e.Handled = true;
     }
 }

@@ -27,6 +27,7 @@ public sealed class GraphNodeViewModel : ObservableObject
     private bool _isSelected;
     private bool _isDetailsExpanded;
     private FCurveSnapshot? _curve;
+    private IReadOnlyList<SignalTimelineKey>? _signalKeys;
     private IReadOnlyList<NodeParameterSnapshot>? _parameters;
     private string _diagnosticText = string.Empty;
 
@@ -39,6 +40,7 @@ public sealed class GraphNodeViewModel : ObservableObject
     public bool IsPolymorphic { get; }
 
     public FCurveSnapshot? Curve => _curve;
+    public IReadOnlyList<SignalTimelineKey>? SignalKeys => _signalKeys;
     public IReadOnlyList<NodeParameterSnapshot>? Parameters => _parameters;
     public GraphSnapshot? ChildGraph { get; }
     public IReadOnlyList<GroupInstanceValue>? GroupOverrides { get; private set; }
@@ -46,6 +48,10 @@ public sealed class GraphNodeViewModel : ObservableObject
     public bool IsGraphGroup => ChildGraph is not null;
     public bool IsSpawnableGroup => Definition.Kind == GraphNodeKind.SpawnableGroup;
     public bool IsSequence => SequenceSchema.IsSequence(Definition.Kind);
+    public bool IsPreviewSignal => SignalTimeline.Supports(BaseDefinition.Kind);
+    public bool CanSendPreviewSignal => _workspace.CanSendPreviewSignal(this);
+    public string PreviewSignalSendHelp => LocalizationService.Shared.Get(CanSendPreviewSignal
+        ? "Editor.SignalSend.Help" : "Editor.SignalSend.InstanceTargetRequired");
     public bool CanAddSequenceOutput => IsSequence && OutputPorts.Count < SequenceSchema.MaximumOutputs;
     public bool CanRemoveSequenceOutput => IsSequence && OutputPorts.Count > 1;
     public bool IsLifecycleNode => IsSpawnableGroup ||
@@ -140,6 +146,7 @@ public sealed class GraphNodeViewModel : ObservableObject
         OnPropertyChanged(nameof(LifecycleRoleLabel));
         OnPropertyChanged(nameof(LifecycleSummary));
         OnPropertyChanged(nameof(LifecycleSummaryHelp));
+        OnPropertyChanged(nameof(PreviewSignalSendHelp));
     }
     internal void RefreshLifecyclePresentation()
     {
@@ -170,6 +177,7 @@ public sealed class GraphNodeViewModel : ObservableObject
     public IRelayCommand SelectOutputPortCommand { get; }
     public IRelayCommand AddSequenceOutputCommand { get; }
     public IRelayCommand RemoveSequenceOutputCommand { get; }
+    public IRelayCommand SendPreviewSignalCommand { get; }
 
     public GraphNodeViewModel(
         GraphWorkspaceViewModel workspace,
@@ -183,7 +191,8 @@ public sealed class GraphNodeViewModel : ObservableObject
         IReadOnlyList<NodeParameterSnapshot>? parameters = null,
         GroupAssetReference? groupAsset = null,
         bool isPolymorphic = false,
-        IReadOnlyList<GroupInstanceValue>? groupOverrides = null)
+        IReadOnlyList<GroupInstanceValue>? groupOverrides = null,
+        IReadOnlyList<SignalTimelineKey>? signalKeys = null)
     {
         _workspace = workspace;
         _baseDefinition = definition;
@@ -194,6 +203,7 @@ public sealed class GraphNodeViewModel : ObservableObject
         _x = x;
         _y = y;
         _curve = definition.Kind == GraphNodeKind.FloatFCurve ? curve ?? FCurve.CreateDefault() : null;
+        _signalKeys = signalKeys;
         ChildGraph = definition.Kind == GraphNodeKind.GraphGroup || definition.Kind == GraphNodeKind.SpawnableGroup
             ? childGraph ?? (definition.Kind == GraphNodeKind.SpawnableGroup
                 ? GraphDefaults.CreateEffect() : new GraphSnapshot([], [])) : null;
@@ -211,6 +221,8 @@ public sealed class GraphNodeViewModel : ObservableObject
         RemoveSequenceOutputCommand = new RelayCommand(() => _workspace.SetParameter(this,
             SequenceSchema.OutputCountParameter, JsonSerializer.SerializeToElement(OutputPorts.Count - 1)),
             () => CanRemoveSequenceOutput);
+        SendPreviewSignalCommand = new RelayCommand(() => _workspace.RequestPreviewSignal(this),
+            () => CanSendPreviewSignal);
     }
 
     public void PreviewMoveTo(double x, double y)
@@ -246,6 +258,9 @@ public sealed class GraphNodeViewModel : ObservableObject
     {
         SetProperty(ref _curve, value, nameof(Curve));
     }
+
+    internal void SetSignalKeysValue(IReadOnlyList<SignalTimelineKey>? value) =>
+        SetProperty(ref _signalKeys, value, nameof(SignalKeys));
 
     public JsonElement GetParameterValue(NodeParameterDefinition definition) =>
         Parameters?.FirstOrDefault(item => item.Id == definition.Id && item.Type == definition.Type)?.Value

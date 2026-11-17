@@ -155,6 +155,9 @@ public sealed class CompiledPreviewSender : IDisposable
     private GraphSnapshot? _nativeGraph;
     private string? _nativeDocument;
     private readonly string? _nativeLibraryPath;
+    private GraphSnapshot? _signalGraph;
+    private string? _signalDocument;
+    private long _signalSequence;
     private bool _disposed;
 
     public CompiledPreviewSender(string? nativeLibraryPath = null) => _nativeLibraryPath = nativeLibraryPath;
@@ -162,13 +165,22 @@ public sealed class CompiledPreviewSender : IDisposable
     public CompiledPreviewMessage? Prepare(PreviewPublication publication, bool forceSnapshot = false)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        if (forceSnapshot || _signalDocument != publication.DocumentId || !ReferenceEquals(_signalGraph, publication.Graph))
+        {
+            _signalDocument = publication.DocumentId;
+            _signalGraph = publication.Graph;
+            _signalSequence = publication.SignalRequestSequence;
+        }
         if (_native is not null && (_nativeDocument != publication.DocumentId ||
             !ReferenceEquals(_nativeGraph, publication.Graph))) ReleaseNative();
         if (!forceSnapshot && _failed is not null && _failed.DocumentId == publication.DocumentId &&
-            ReferenceEquals(_failed.Graph, publication.Graph)) return null;
+            ReferenceEquals(_failed.Graph, publication.Graph) &&
+            _failed.Playback?.SignalEpoch == publication.Playback?.SignalEpoch &&
+            _failed.SignalRequestSequence == publication.SignalRequestSequence) return null;
         var playback = !forceSnapshot && _good is not null && _lastSent < publication.Sequence &&
             _good.DocumentId == publication.DocumentId && ReferenceEquals(_good.Graph, publication.Graph);
-        if (EditorNativePreviewSession.RequiresNative(publication.Graph))
+        if (_native is not null || EditorNativePreviewSession.RequiresNative(publication.Graph) ||
+            publication.SignalRequests.Count > 0)
         {
             try
             {
@@ -178,11 +190,21 @@ public sealed class CompiledPreviewSender : IDisposable
                     _nativeGraph = publication.Graph;
                     _nativeDocument = publication.DocumentId;
                 }
-                var state = publication.Playback;
+                var requests = publication.SignalRequests.Where(item => item.Sequence > _signalSequence).ToArray();
+                if (publication.SignalRequestSequence < _signalSequence ||
+                    publication.SignalRequestSequence - _signalSequence != requests.Length ||
+                    requests.Where((item, index) => item.Sequence != _signalSequence + index + 1).Any())
+                    throw new InvalidDataException("Preview Send input history exceeded its bounded window; resync preview. Inputs were not silently dropped.");
+                _signalSequence = publication.SignalRequestSequence;
+                if (publication.SignalRequests.Count > 0) _native.EnableManualSignals();
+                var state = publication.Playback ?? new PreviewPlaybackState(false, 0, 60, 0, 120, false);
                 if (state is not null && (!double.IsFinite(state.FramesPerSecond) || state.FramesPerSecond <= 0))
                     throw new InvalidDataException("Editor-native preview needs a positive finite frame rate.");
                 var time = state is null ? 0 : state.Frame / state.FramesPerSecond;
-                var scene = _native.EvaluateScene(time, playback ? _good!.Sequence : publication.Sequence);
+                var scene = _native.EvaluateScene(time, playback ? _good!.Sequence : publication.Sequence, state);
+                foreach (var request in requests) _native.SendSignal(request.NodeId);
+                if (requests.Length > 0)
+                    scene = _native.EvaluateScene(time, playback ? _good!.Sequence : publication.Sequence, state);
                 var kind = playback ? CompiledPreviewKind.Playback : CompiledPreviewKind.Program;
                 return CompiledPreviewProtocol.CreatePayload(publication, kind,
                     playback ? [] : EditorNativePreviewSession.TransportShell, checked((ulong)_lastSent), true)

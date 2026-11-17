@@ -4,6 +4,8 @@ using LiberaFx.Models.Graph;
 
 namespace LiberaFx.Services;
 
+public sealed record PreviewSignalRequest(long Sequence, Guid NodeId);
+
 public sealed class PreviewPublication(long sequence, string documentId, GraphSnapshot graph,
     IReadOnlyList<GraphNodeDefinition> nodeTypes, PreviewPlaybackState? playback = null)
 {
@@ -13,6 +15,8 @@ public sealed class PreviewPublication(long sequence, string documentId, GraphSn
     public GraphSnapshot Graph { get; } = graph;
     public IReadOnlyList<GraphNodeDefinition> NodeTypes { get; } = nodeTypes;
     public PreviewPlaybackState? Playback { get; } = playback;
+    public IReadOnlyList<PreviewSignalRequest> SignalRequests { get; init; } = [];
+    public long SignalRequestSequence { get; init; }
     public byte[] LegacyPayload => _legacy.Value;
 }
 

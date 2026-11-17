@@ -12,8 +12,9 @@ public sealed record GraphSnapshot(
         GroupExposedItems.Equal(left.ExposedItems, right.ExposedItems) &&
         left.Nodes.Count == right.Nodes.Count &&
         left.Nodes.Zip(right.Nodes).All(pair =>
-            pair.First with { Curve = null, ChildGraph = null, Parameters = null, GroupOverrides = null } ==
-                pair.Second with { Curve = null, ChildGraph = null, Parameters = null, GroupOverrides = null } &&
+            pair.First with { Curve = null, ChildGraph = null, Parameters = null, GroupOverrides = null, SignalKeys = null } ==
+                pair.Second with { Curve = null, ChildGraph = null, Parameters = null, GroupOverrides = null, SignalKeys = null } &&
+            SignalTimeline.Equal(pair.First.SignalKeys, pair.Second.SignalKeys) &&
             ParametersEqual(pair.First.Parameters, pair.Second.Parameters) &&
             GroupExposedItems.OverridesEqual(pair.First.GroupOverrides, pair.Second.GroupOverrides) &&
             (pair.First.Curve is null && pair.Second.Curve is null ||
@@ -34,8 +35,9 @@ public sealed record GraphSnapshot(
             var a = left.Nodes[index];
             var b = right.Nodes[index];
             if (!ids.TryAdd(a.Id, b.Id) ||
-                a with { Id = Guid.Empty, Curve = null, ChildGraph = null, Parameters = null, GroupOverrides = null } !=
-                b with { Id = Guid.Empty, Curve = null, ChildGraph = null, Parameters = null, GroupOverrides = null } ||
+                a with { Id = Guid.Empty, Curve = null, ChildGraph = null, Parameters = null, GroupOverrides = null, SignalKeys = null } !=
+                b with { Id = Guid.Empty, Curve = null, ChildGraph = null, Parameters = null, GroupOverrides = null, SignalKeys = null } ||
+                !SignalTimeline.Equal(a.SignalKeys, b.SignalKeys) ||
                 !ParametersEqual(a.Parameters, b.Parameters) ||
                 !GroupExposedItems.OverridesEqual(a.GroupOverrides, b.GroupOverrides) ||
                 (a.Curve is null) != (b.Curve is null) ||
@@ -80,6 +82,7 @@ public sealed record GraphNodeSnapshot(
     bool IsPolymorphic = false,
     IReadOnlyList<GroupInstanceValue>? GroupOverrides = null)
 {
+    public IReadOnlyList<SignalTimelineKey>? SignalKeys { get; init; }
     public string KindDomain => Services.GpuParticleEditorService.IsGpu(Kind) ? "GpuParticle" : "Cpu";
 }
 

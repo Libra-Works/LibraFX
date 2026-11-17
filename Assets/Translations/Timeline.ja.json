@@ -14,6 +14,16 @@
   "Timeline.InvalidFps": "FPS は 1 ～ 240 にしてください。",
   "Timeline.InvalidNumber": "有限の数値を入力してください。",
   "Timeline.InvalidClip": "変更後のカーブがフレーム・長さ・接線の有効範囲を超えています。",
-  "Timeline.Hint": "カーブトラックはグラフを直接編集します。本体をドラッグで移動、右端で長さ変更、目盛りで時間移動、ホイールで拡大縮小できます。",
-  "Timeline.RetimeHistory": "カーブトラックの時間を変更"
+  "Timeline.Hint": "Signal入力ノードを選んでキーを追加します。◇をドラッグして時刻変更、ダブルクリックで追加、Deleteで削除。プレビュー入力は書き出されず、実行用キーは各スコープの開始からの秒数で実行されます。カーブは本体で移動、右端で長さ変更。目盛りでシーク、ホイールで拡大縮小。",
+  "Timeline.RetimeHistory": "カーブトラックの時間を変更",
+  "Timeline.SignalPreview": "プレビュー入力",
+  "Timeline.SignalRuntime": "実行用",
+  "Timeline.AddPreviewSignal": "＋ プレビューSignalキー",
+  "Timeline.AddRuntimeSignal": "＋ 実行用Signalキー",
+  "Timeline.DeleteSignal": "Signalキーを削除",
+  "Timeline.SignalTime": "Signalキーの時刻",
+  "Timeline.AddSignalHistory": "Signalタイムラインキーを追加",
+  "Timeline.MoveSignalHistory": "Signalタイムラインキーを移動",
+  "Timeline.DeleteSignalHistory": "Signalタイムラインキーを削除",
+  "Timeline.InvalidSignalTime": "Signalキーの時刻は0～1,000,000秒の有限値にしてください。"
 }

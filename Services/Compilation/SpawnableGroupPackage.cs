@@ -68,11 +68,13 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
         return new Guid(digest.AsSpan(0, 16), bigEndian: true);
     }
 
-    public static SpawnableGroupPackage Compile(GraphSnapshot graph)
+    public static SpawnableGroupPackage Compile(GraphSnapshot graph, bool includePreviewSignalKeys = false)
     {
         RejectTemplateGameIo(graph, withinTemplate: false);
         VfxProgram.ValidateForCompilation(graph);
         graph = GroupExposedItems.Materialize(graph);
+        VfxProgram.ValidateForCompilation(graph);
+        graph = SignalTimelineLowering.Lower(graph, includePreviewSignalKeys);
         VfxProgram.ValidateForCompilation(graph);
         GraphTypeDiagnostics.Validate(graph);
         var starts = graph.Nodes.Where(node => node.Kind.Value == "OnStart").ToArray();
@@ -150,7 +152,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
                         throw new InvalidDataException(
                             $"Spawnable Group '{node.Name}' cannot host named Game I/O in its template program. " +
                             "Use Spawn Input/Output for template data, or place named Game I/O at the effect root.");
-                    var bytecode = childProgram.ToBinary();
+                    var bytecode = childProgram.ToPackageBinary();
                     var gpu = CollectGpu(child).ToArray();
                     var outputs = child.Nodes.Where(item => SpawnableGroupSchema.IsOutput(item.Kind))
                         .Select(item => new SpawnableOutput(SpawnableGroupSchema.OutputPortId(item.Id), item.Id, item.PortType)).ToArray();
@@ -187,7 +189,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
         var signalRoutes = CreateSignalRoutes(flatParent, signalInputProxies);
         var parentProgram = VfxProgram.CompileForPackage(
             RemoveLocalRoutes(parentWithSignalInputs, routedDelays), out var rootRender, signalInputTypes);
-        return new(parentProgram.ToBinary(), templates.AsReadOnly())
+        return new(parentProgram.ToPackageBinary(), templates.AsReadOnly())
         {
             AutoDestroyWhenIdle = graph.AutoDestroyWhenIdle,
             OnStartNodeId = starts.SingleOrDefault()?.Id,
@@ -205,8 +207,10 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
 
     private static void RejectTemplateGameIo(GraphSnapshot graph, bool withinTemplate)
     {
+        if (graph?.Nodes is null) return;
         foreach (var node in graph.Nodes)
         {
+            if (node is null) continue;
             if (withinTemplate && GameIoSchema.IsNode(node.Kind))
                 throw new InvalidDataException(
                     $"Spawnable Group template '{node.Name}' cannot contain named Game I/O. " +

@@ -15,18 +15,32 @@ public sealed class EditorNativePreviewSession : IDisposable
     public const string ExecutionOwner = "editor-native";
     public const int StepsPerSecond = 60;
     public const int MaximumReplaySeconds = 120;
-    private readonly SpawnableGroupPackage _package;
+    private SpawnableGroupPackage _package;
+    private readonly GraphSnapshot _graph;
+    private readonly bool _hasSignalKeys;
     private readonly byte[] _rootRender;
     private readonly string _library;
-    private NativeSpawnableSession? _native;
+    private EditorNativeHostSession? _native;
     private long _step = -1;
     private bool _disposed;
-    public double EvaluatedTimeSeconds => _step < 0 ? 0 : (double)_step / StepsPerSecond;
+    private PreviewPlaybackState? _signalPlayback;
+    private double _signalSampleTime = -1;
+    private bool _exactTimeline;
+    private int _collectedGameEvents;
+    private int _collectedEvents;
+    private bool _manualSignals;
+    private readonly List<Guid> _pendingManualSignals = [];
+    private readonly List<SpawnableSessionEvent> _events = [];
+    private readonly List<EditorNativeGameIoEvent> _gameEvents = [];
+    public double EvaluatedTimeSeconds => _exactTimeline ? Math.Max(0, _signalSampleTime) :
+        _step < 0 ? 0 : (double)_step / StepsPerSecond;
     public int ActiveCount => _native?.ActiveCount ?? 0;
-    public IReadOnlyList<SpawnableSessionEvent> Events => _native?.Events ?? [];
+    public IReadOnlyList<SpawnableSessionEvent> Events => _exactTimeline ? _events : _native?.Events ?? [];
+    public IReadOnlyList<EditorNativeGameIoEvent> GameIoEvents => _gameEvents;
     public static readonly byte[] TransportShell = CreateTransportShell();
 
     public static bool RequiresNative(GraphSnapshot graph) => graph.Nodes.Any(node =>
+        node.SignalKeys is { Count: > 0 } ||
         node.Kind == GraphNodeKind.SpawnableGroup ||
         node.Kind.Value == "OnStart" && graph.Connections.Any(edge => edge.SourceNodeId == node.Id) ||
         node.Kind.Value is "OnDestroy" or "LifeTime" or
@@ -46,12 +60,15 @@ public sealed class EditorNativePreviewSession : IDisposable
 
     public EditorNativePreviewSession(GraphSnapshot graph, string? nativeLibraryPath = null)
     {
+        VfxProgram.ValidateForCompilation(graph);
+        _graph = graph;
+        _hasSignalKeys = SignalTimeline.ContainsKeys(graph);
         _library = ResolveLibraryPath(nativeLibraryPath);
         if (ContainsGpu(graph))
             throw new NotSupportedException("Editor-native lifecycle preview cannot yet combine GPU particle containers with Spawnable lifecycles. Preview GPU graphs separately; no GPU payload will be silently discarded.");
-        _package = SpawnableGroupPackage.Compile(graph);
+        _package = SpawnableGroupPackage.Compile(graph, includePreviewSignalKeys: true);
         _rootRender = RenderProgramBindings.CreateScene(WithoutTemplates(graph), 0);
-        try { _native = new NativeSpawnableSession(_package, _library); }
+        try { _native = new EditorNativeHostSession(_package, _library); }
         catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or EntryPointNotFoundException)
         {
             throw new InvalidDataException("Editor-native lifecycle preview could not load the configured native library/ABI. " +
@@ -73,12 +90,19 @@ public sealed class EditorNativePreviewSession : IDisposable
     private static bool ContainsGpu(GraphSnapshot graph) => graph.Nodes.Any(node =>
         GpuParticleEditorService.IsGpu(node.Kind) || node.ChildGraph is { } child && ContainsGpu(child));
 
-    public byte[] EvaluateScene(double requestedTime, long programSequence)
+    public byte[] EvaluateScene(double requestedTime, long programSequence, PreviewPlaybackState? playback = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!double.IsFinite(requestedTime) || requestedTime < 0 || requestedTime > MaximumReplaySeconds)
             throw new InvalidDataException($"Editor-native preview supports a bounded 0..{MaximumReplaySeconds} second timeline. Shorten the timeline or seek within that range.");
         if (programSequence < 1) throw new ArgumentOutOfRangeException(nameof(programSequence));
+        if ((_hasSignalKeys || _manualSignals) && playback is not null)
+        {
+            _exactTimeline = true;
+            EvaluateSignalPlayback(playback, requestedTime);
+        }
+        else
+        {
         var step = checked((long)Math.Floor(requestedTime * StepsPerSecond + 1e-9));
         if (step < _step)
         {
@@ -86,18 +110,21 @@ public sealed class EditorNativePreviewSession : IDisposable
             // programs/pools/IDs/seeds and replay the same fixed native steps.
             _native!.Dispose();
             _native = null;
-            _native = new NativeSpawnableSession(_package, _library);
+            _native = new EditorNativeHostSession(_package, _library);
+            _collectedGameEvents = 0;
+            _collectedEvents = 0;
             _step = -1;
         }
         if (_step < 0)
         {
-            _native!.Advance(0);
+            AdvanceNative(0, 0);
             _step = 0;
         }
         while (_step < step)
         {
-            _native!.Advance((double)(_step + 1) / StepsPerSecond);
+            AdvanceNative((double)(_step + 1) / StepsPerSecond, 1d / StepsPerSecond);
             ++_step;
+        }
         }
         // Equal sampled time (pause/resume/resync) does not evaluate again.
         var nodes = new JsonArray();
@@ -124,6 +151,148 @@ public sealed class EditorNativePreviewSession : IDisposable
         if (bytes.Length > CompiledPreviewProtocol.MaxSceneBytes)
             throw new InvalidDataException("Editor-native evaluated render snapshot exceeds the preview payload limit.");
         return bytes;
+    }
+
+    private void AdvanceNative(double time, double delta, bool publish = true)
+    {
+        _native!.Advance(time, delta);
+        CollectEvents(publish);
+    }
+
+    private void CollectEvents(bool publish)
+    {
+        while (_collectedEvents < _native!.Events.Count)
+        {
+            var item = _native.Events[_collectedEvents++];
+            if (!publish) continue;
+            if (_events.Count >= 100_000)
+                throw new InvalidDataException("Preview event history exceeded its bounded event limit; resync preview.");
+            _events.Add(item);
+        }
+        while (_collectedGameEvents < _native.GameIoEvents.Count)
+        {
+            var item = _native.GameIoEvents[_collectedGameEvents++];
+            if (!publish) continue;
+            if (_gameEvents.Count >= 100_000)
+                throw new InvalidDataException("Preview Game I/O history exceeded its bounded event limit; resync preview.");
+            _gameEvents.Add(item);
+        }
+    }
+
+    public void EnableManualSignals()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_manualSignals) return;
+        _manualSignals = true;
+        // Keep the preview owner available for exploratory inputs. Authored
+        // LifeTime and exported package completion behavior are unchanged.
+        _package = _package with { AutoDestroyWhenIdle = false };
+        ResetSignalNative();
+        _signalPlayback = null;
+        _step = -1;
+    }
+
+    public void SendSignal(Guid node)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        static bool Contains(GraphSnapshot graph, Guid id) => graph.Nodes.Any(item =>
+            item.Id == id && SignalTimeline.Supports(item.Kind) && item.Kind.Value != "SpawnInputSignal" ||
+            item.ChildGraph is { } child && item.Kind != GraphNodeKind.SpawnableGroup &&
+            !GpuParticleEditorService.IsGpu(item.Kind) && Contains(child, id));
+        if (!_manualSignals || _signalSampleTime < 0 || !Contains(_graph, node))
+            throw new InvalidOperationException("Preview Send requires an evaluated root-scope Signal input; child instances need explicit targeting.");
+        if (_signalPlayback?.SignalStartSeconds is null && _pendingManualSignals.Count >= 256)
+            throw new InvalidDataException("Too many paused preview inputs; restart preview or author a Signal track.");
+        AdvanceNative(_signalSampleTime, 0);
+        _native!.SendSignal(node);
+        CollectEvents(true);
+        if (_signalPlayback?.SignalStartSeconds is null)
+        {
+            _pendingManualSignals.Add(node);
+        }
+    }
+
+    private void ResetSignalNative()
+    {
+        _native!.Dispose();
+        _native = null;
+        _native = new EditorNativeHostSession(_package, _library);
+        _collectedGameEvents = 0;
+        _collectedEvents = 0;
+        _signalSampleTime = -1;
+    }
+
+    private void AdvanceSignalNative(double time, bool publish = true)
+    {
+        if (time < _signalSampleTime)
+            throw new InvalidDataException("Signal playback cannot advance backwards without a seek epoch.");
+        if (_signalSampleTime < 0) { AdvanceNative(0, 0, publish); _signalSampleTime = 0; }
+        while (_signalSampleTime < time)
+        {
+            var next = (Math.Floor(_signalSampleTime * StepsPerSecond + 1e-9) + 1) / StepsPerSecond;
+            if (next <= _signalSampleTime) next = _signalSampleTime + 1d / StepsPerSecond;
+            next = Math.Min(next, time);
+            AdvanceNative(next, next - _signalSampleTime, publish);
+            _signalSampleTime = next;
+        }
+    }
+
+    private void ReconstructSignalNative(double time, bool publishBoundary = false)
+    {
+        ResetSignalNative();
+        if (publishBoundary && time > 0) AdvanceSignalNative(Math.BitDecrement(time), false);
+        AdvanceSignalNative(time, publishBoundary);
+    }
+
+    private void EvaluateSignalPlayback(PreviewPlaybackState state, double requestedTime)
+    {
+        var start = state.RangeStart / state.FramesPerSecond;
+        var end = state.RangeEnd / state.FramesPerSecond;
+        if (!double.IsFinite(state.ForwardSeconds) || state.ForwardSeconds < 0 ||
+            !double.IsFinite(state.SeekTimeSeconds) || state.SeekTimeSeconds is < 0 or > MaximumReplaySeconds ||
+            state.SignalStartSeconds is { } signalStart &&
+                (!double.IsFinite(signalStart) || signalStart < 0 || signalStart > MaximumReplaySeconds) ||
+            !double.IsFinite(start) || !double.IsFinite(end) || start < 0 || end <= start ||
+            end > MaximumReplaySeconds || state.SignalEpoch < 0 || state.LoopCount < 0)
+            throw new InvalidDataException("Invalid Signal timeline playback state.");
+        var previous = _signalPlayback;
+        if (previous is null)
+        {
+            ReconstructSignalNative(requestedTime);
+        }
+        else
+        {
+            var reset = previous.SignalEpoch != state.SignalEpoch ||
+                previous.SignalStartSeconds != state.SignalStartSeconds;
+            var priorLoops = reset ? 0 : previous.LoopCount;
+            var priorProgress = reset ? 0 : previous.ForwardSeconds;
+            var loops = state.LoopCount - priorLoops;
+            var progress = state.ForwardSeconds - priorProgress;
+            if (loops is < 0 or > 128 || progress < 0 || progress > MaximumReplaySeconds ||
+                loops > 0 && !state.Loop)
+                throw new InvalidDataException("Signal timeline advance exceeds its replay budget; resync preview.");
+            if (reset)
+            {
+                var seeking = previous.SignalEpoch != state.SignalEpoch;
+                if (seeking) _pendingManualSignals.Clear();
+                ReconstructSignalNative(state.SeekTimeSeconds,
+                    state.SignalStartSeconds is not null && state.IncludeSignalStart);
+                foreach (var node in _pendingManualSignals)
+                {
+                    _native!.SendSignal(node);
+                    CollectEvents(false);
+                }
+                _pendingManualSignals.Clear();
+            }
+            for (var index = 0L; index < loops; ++index)
+            {
+                AdvanceSignalNative(end);
+                _pendingManualSignals.Clear();
+                ReconstructSignalNative(start, true);
+            }
+            AdvanceSignalNative(requestedTime);
+        }
+        _signalPlayback = state;
     }
 
     private void Append(byte[] configuration, Guid container, ulong instance, double start, JsonArray nodes)

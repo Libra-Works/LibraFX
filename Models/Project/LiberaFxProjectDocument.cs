@@ -5,7 +5,7 @@ namespace LiberaFx.Models.Project;
 
 public sealed record LiberaFxProjectDocument
 {
-    public int FormatVersion { get; init; } = 11;
+    public int FormatVersion { get; init; } = 12;
 
     public bool AutoDestroyWhenIdle { get; init; } = true;
 
@@ -27,7 +27,10 @@ public sealed record LiberaFxProjectNode(
     IReadOnlyList<NodeParameterSnapshot>? Parameters = null,
     GroupAssetReference? GroupAsset = null,
     bool IsPolymorphic = false,
-    IReadOnlyList<GroupInstanceValue>? GroupOverrides = null);
+    IReadOnlyList<GroupInstanceValue>? GroupOverrides = null)
+{
+    public IReadOnlyList<SignalTimelineKey>? SignalKeys { get; init; }
+}
 
 public sealed record LiberaFxProjectConnection(
     Guid SourceNodeId, Guid TargetNodeId, string? TargetPortId = null, string? SourcePortId = null);

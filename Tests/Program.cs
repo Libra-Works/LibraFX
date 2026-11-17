@@ -15,6 +15,18 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Length is 1 or 2 && args[0] == "--signal-timeline")
+        {
+            var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
+            if (string.IsNullOrEmpty(root) || !Path.IsPathFullyQualified(root) ||
+                args.Length == 2 && !Path.IsPathFullyQualified(args[1]))
+                throw new ArgumentException("Use isolated absolute data/fixture paths for Signal timeline verification.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            TimelineTests.Run();
+            SignalTimelineTests.Run(args.Length == 2 ? args[1] : null);
+            PreviewSignalSendTests.Run();
+            return;
+        }
         if (args is ["--inspector-plugins"] or ["--inspector-plugins-reload"] or
             ["--inspector-plugins-tampered-check"] or ["--inspector-plugins-disabled-check"] or
             ["--inspector-plugins-missing-check"])
@@ -395,6 +407,8 @@ internal static class Program
         McpParameterTests.Run();
         Console.WriteLine("Compiled preview protocol, playback baselines and TLS transport checks passed.");
         TimelineTests.Run();
+        if (Environment.GetEnvironmentVariable("LIBERAFX_PREVIEW_NATIVE_LIBRARY") is { Length: > 0 })
+            SignalTimelineTests.Run();
         Console.WriteLine("Timeline retiming, shared playhead and graph persistence checks passed.");
         LiberaFx.Tests.VectorArithmeticTests.Run();
         Console.WriteLine("Vector operations, explicit conversions and persistent multi-output Break pins passed.");

@@ -11,6 +11,7 @@
 - [Unity連携](../Runtime/Integrations/Unity/USAGE.txt)
 - [Unreal連携](../Runtime/Integrations/Unreal/USAGE.txt)
 - [ランタイムのバイトコード仕様](../Runtime/BYTECODE.md)
+- [SignalタイムラインとプレビューSend](signal-timeline.md)
 
 これらはリポジトリ内で読むためのリンクです。既存の構想・仕様と実装済みの範囲を
 整理した「入門」「寿命の考え方」「小さな実例」の整備は、[#60](https://github.com/Libra-Works/LibraFX/issues/60)

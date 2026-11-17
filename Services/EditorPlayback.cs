@@ -8,7 +8,15 @@ using LiberaFx.Models.Appearance;
 namespace LiberaFx.Services;
 
 public sealed record PreviewPlaybackState(bool Playing, double Frame, double FramesPerSecond,
-    double RangeStart, double RangeEnd, bool Loop);
+    double RangeStart, double RangeEnd, bool Loop)
+{
+    public long SignalEpoch { get; init; }
+    public double ForwardSeconds { get; init; }
+    public double SeekTimeSeconds { get; init; }
+    public double? SignalStartSeconds { get; init; }
+    public long LoopCount { get; init; }
+    public bool IncludeSignalStart { get; init; }
+}
 
 public sealed class EditorPlayback : ObservableObject, IDisposable
 {
@@ -22,6 +30,13 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
     private bool _playing;
     private bool _showSeconds;
     private string? _statusKey;
+    private long _signalEpoch;
+    private double _forwardSeconds;
+    private double _seekTime;
+    private double? _signalStart;
+    private long _loopCount;
+    private bool _includeSignalStart = true;
+    private bool _hasStarted;
 
     public event EventHandler? StateChanged;
     public IRelayCommand PlayPauseCommand { get; }
@@ -48,6 +63,7 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
         {
             if (!double.IsFinite(value)) return;
             SetFrame(Math.Clamp(value, _start, _end));
+            MarkSeek();
             _lastTick = Stopwatch.GetTimestamp();
             StateChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -78,7 +94,12 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
         get => _loop;
         set { if (SetProperty(ref _loop, value)) StateChanged?.Invoke(this, EventArgs.Empty); }
     }
-    public PreviewPlaybackState Snapshot => new(IsPlaying, Frame, _fps, _start, _end, Loop);
+    public PreviewPlaybackState Snapshot => new(IsPlaying, Frame, _fps, _start, _end, Loop)
+    {
+        SignalEpoch = _signalEpoch, ForwardSeconds = _forwardSeconds,
+        SeekTimeSeconds = _seekTime, SignalStartSeconds = _signalStart, LoopCount = _loopCount,
+        IncludeSignalStart = _includeSignalStart
+    };
 
     public double DisplayUnits(double timeSeconds) => _showSeconds ? timeSeconds : timeSeconds * _fps;
     public double TimeSecondsFromDisplay(double value) => _showSeconds ? value : value / _fps;
@@ -102,9 +123,15 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
     public EditorPlayback()
     {
         PlayPauseCommand = new RelayCommand(() => { if (_playing) Pause(); else Play(); });
-        StopCommand = new RelayCommand(() => { Pause(); Frame = _start; });
+        StopCommand = new RelayCommand(() =>
+        {
+            Pause();
+            SetFrame(_start);
+            MarkSeek(restart: true);
+            StateChanged?.Invoke(this, EventArgs.Empty);
+        });
         StepBackCommand = new RelayCommand(() => { Pause(); Frame = Math.Ceiling(Frame) - 1; });
-        StepForwardCommand = new RelayCommand(() => { Pause(); Frame = Math.Floor(Frame) + 1; });
+        StepForwardCommand = new RelayCommand(StepForward);
         _timer.Tick += OnTick;
         MessageLocalization.Observe(this, static playback =>
         {
@@ -116,7 +143,9 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
     public void Play()
     {
         if (_playing) return;
-        if (Frame >= _end) SetFrame(_start);
+        if (Frame >= _end) { SetFrame(_start); MarkSeek(restart: true); }
+        _signalStart ??= TimeSeconds;
+        _hasStarted = true;
         _playing = true;
         _lastTick = Stopwatch.GetTimestamp();
         _timer.Start();
@@ -136,14 +165,46 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
         if (!_playing || !double.IsFinite(seconds) || seconds < 0) return;
         var next = Frame + seconds * _fps;
         if (!double.IsFinite(next)) return;
+        var progress = Loop ? seconds : Math.Min(seconds, (_end - Frame) / _fps);
+        if (!double.IsFinite(_forwardSeconds + progress)) return;
+        var wraps = Loop && next >= _end ? Math.Floor((next - _start) / (_end - _start)) : 0;
+        if (wraps >= long.MaxValue - _loopCount) return;
+        _forwardSeconds += progress;
         if (next >= _end)
         {
-            if (Loop) next = _start + (next - _start) % (_end - _start);
+            if (Loop)
+            {
+                _loopCount += (long)wraps;
+                next = _start + (next - _start) % (_end - _start);
+            }
             else { SetFrame(_end); Pause(); return; }
         }
         var previousFrame = Frame;
         SetFrame(next);
-        if (Frame != previousFrame) StateChanged?.Invoke(this, EventArgs.Empty);
+        if (Frame != previousFrame || progress > 0) StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void StepForward()
+    {
+        Pause();
+        var next = Math.Min(_end, Math.Floor(Frame) + 1);
+        if (next <= Frame) return;
+        _signalStart ??= TimeSeconds;
+        _hasStarted = true;
+        _forwardSeconds += (next - Frame) / _fps;
+        SetFrame(next);
+        _lastTick = Stopwatch.GetTimestamp();
+        StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void MarkSeek(bool restart = false)
+    {
+        ++_signalEpoch;
+        _forwardSeconds = 0;
+        _seekTime = TimeSeconds;
+        _signalStart = null;
+        _loopCount = 0;
+        _includeSignalStart = restart || !_hasStarted;
     }
 
     private void OnTick(object? sender, EventArgs e)
@@ -164,6 +225,7 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
         _start = start;
         _end = end;
         SetFrame(Math.Clamp(Frame, start, end));
+        MarkSeek();
         OnPropertyChanged(nameof(RangeStart));
         OnPropertyChanged(nameof(RangeEnd));
         OnPropertyChanged(nameof(RangeStartSeconds));
@@ -180,6 +242,7 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
         if (fps is < 1 or > 240) { SetStatus("Timeline.InvalidFps"); return; }
         if (_fps == fps) return;
         _fps = fps;
+        MarkSeek();
         _lastTick = Stopwatch.GetTimestamp();
         OnPropertyChanged(nameof(FramesPerSecond));
         OnPropertyChanged(nameof(TimeSeconds));

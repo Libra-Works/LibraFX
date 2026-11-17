@@ -80,11 +80,12 @@ internal static class Converter
 
     private static void Usage(TextWriter writer)
     {
-        writer.WriteLine("Usage: LiberaFxConverter convert <input.lfxproj> <output.lfxb> [options]");
+        writer.WriteLine("Usage: LiberaFxConverter convert <input.lfxproj> <output.lfxb|output.lfxp> [options]");
         writer.WriteLine("       LiberaFxConverter batch <input-directory> <output-directory> [options]");
         writer.WriteLine("Options: --force  --groups <directory> (repeatable)  --nodes <directory> (repeatable)  --embedded-groups");
         writer.WriteLine("Linked groups use the latest library versions by default. --embedded-groups explicitly uses frozen embedded versions.");
         writer.WriteLine("Source projects and group libraries are never modified.");
+        writer.WriteLine("Use .lfxp for effect packages with lifecycle or runtime Signal timeline keys. .lfxb remains raw bytecode.");
     }
 
     private static async Task<bool> ConvertAsync(string input, string output, bool force, GroupCompilationResolver resolver)
@@ -98,7 +99,10 @@ internal static class Converter
             await using var stream = File.OpenRead(input);
             var project = await ProjectDocumentReader.LoadAsync(stream);
             GpuParticleEditorService.RejectGpu(project.Graph);
-            var bytes = VfxProgram.Compile(resolver.Resolve(project.Graph)).ToBinary();
+            var graph = resolver.Resolve(project.Graph);
+            var bytes = Path.GetExtension(output).Equals(".lfxp", StringComparison.OrdinalIgnoreCase)
+                ? SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(graph))
+                : VfxProgram.Compile(graph).ToBinary();
             var directory = Path.GetDirectoryName(output)!;
             Directory.CreateDirectory(directory);
             if (!force && File.Exists(output)) throw new IOException($"Output already exists: {output}");

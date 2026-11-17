@@ -34,6 +34,9 @@ public sealed class PreviewHost : IDisposable
     private GraphWorkspaceViewModel? _graph;
     private PreviewPublication? _latest;
     private long _sequence;
+    private long _signalRequestSequence;
+    private const int SignalRequestHistoryLimit = 256;
+    private readonly List<PreviewSignalRequest> _signalRequests = [];
     private PreviewTelemetryStore? _telemetry;
     private PreviewAssetStore? _assets;
 
@@ -104,16 +107,35 @@ public sealed class PreviewHost : IDisposable
 
     private void AttachGraph(GraphWorkspaceViewModel graph)
     {
-        if (_graph is not null) _graph.History.StateChanged -= OnHistoryChanged;
+        if (_graph is not null)
+        {
+            _graph.History.StateChanged -= OnHistoryChanged;
+            _graph.PreviewSignalRequested -= OnPreviewSignalRequested;
+        }
+        lock (_sync)
+        {
+            _signalRequests.Clear();
+            _latest = null;
+        }
         _graph = graph;
         graph.History.StateChanged += OnHistoryChanged;
+        graph.PreviewSignalRequested += OnPreviewSignalRequested;
     }
 
     private void DetachGraph()
     {
         if (_model is not null) _model.ActiveGraphProvider.PropertyChanged -= OnActiveGraphChanged;
         if (_model is not null) _model.Playback.StateChanged -= OnPlaybackChanged;
-        if (_graph is not null) _graph.History.StateChanged -= OnHistoryChanged;
+        if (_graph is not null)
+        {
+            _graph.History.StateChanged -= OnHistoryChanged;
+            _graph.PreviewSignalRequested -= OnPreviewSignalRequested;
+        }
+        lock (_sync)
+        {
+            _signalRequests.Clear();
+            _latest = null;
+        }
         _model = null;
         _graph = null;
     }
@@ -136,13 +158,57 @@ public sealed class PreviewHost : IDisposable
         }
     }
 
-    private void Publish(bool reuseGraph = false)
+    private void OnPreviewSignalRequested(object? sender, Guid nodeId)
     {
-        if (_model?.ActiveDocument is not { } document || _graph is null) return;
-        var graph = reuseGraph && _latest?.DocumentId == document.Id ? _latest.Graph : _graph.CreateSnapshot();
-        var publication = new PreviewPublication(++_sequence, document.Id, graph, GraphNodeDefinition.All, _model.Playback.Snapshot);
+        if (_graph is null || !ReferenceEquals(sender, _graph) || _model is null) return;
+        var node = _graph.Nodes.FirstOrDefault(node => node.Id == nodeId);
+        if (node is null || !_graph.CanSendPreviewSignal(node))
+        {
+            SetSignalStatus("Editor.SignalSend.InstanceTargetRequired");
+            return;
+        }
         lock (_sync)
         {
+            if (!_clients.Values.Any(client => client.Version == 3) ||
+                _latest is null || _latest.DocumentId != _model.ActiveDocument?.Id)
+            {
+                SetSignalStatus("Editor.SignalSend.CompiledClientRequired");
+                return;
+            }
+            _signalRequests.Add(new PreviewSignalRequest(++_signalRequestSequence, nodeId));
+            if (_signalRequests.Count > SignalRequestHistoryLimit) _signalRequests.RemoveAt(0);
+            Publish(reuseGraph: true, reusePlayback: true);
+        }
+        SetSignalStatus("Editor.SignalSend.Requested");
+    }
+
+    private void SetSignalStatus(string key)
+    {
+        if (_model is not null) _model.PreviewStatus = LocalizationService.Shared.Get(key);
+        _graph?.SetConnectionStatus(key);
+    }
+
+    private void Publish(bool reuseGraph = false, bool reusePlayback = false)
+    {
+        if (_model?.ActiveDocument is not { } document || _graph is null) return;
+        // Invalidate commands before capturing the new history state, even if capture fails.
+        if (!reuseGraph || _latest?.DocumentId != document.Id)
+        {
+            lock (_sync)
+            {
+                _signalRequests.Clear();
+                _latest = null;
+            }
+        }
+        var graph = reuseGraph && _latest?.DocumentId == document.Id ? _latest.Graph : _graph.CreateSnapshot();
+        lock (_sync)
+        {
+            var publication = new PreviewPublication(++_sequence, document.Id, graph, GraphNodeDefinition.All,
+                reusePlayback ? _latest?.Playback : _model.Playback.Snapshot)
+            {
+                SignalRequests = _signalRequests.ToArray(),
+                SignalRequestSequence = _signalRequestSequence
+            };
             _latest = publication;
             foreach (var client in _clients.Values) client.Channel.Writer.TryWrite(publication);
         }

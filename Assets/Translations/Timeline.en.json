@@ -14,6 +14,16 @@
   "Timeline.InvalidFps": "FPS must be between 1 and 240.",
   "Timeline.InvalidNumber": "Enter a finite number.",
   "Timeline.InvalidClip": "The retimed curve exceeds its valid frame, duration or tangent limits.",
-  "Timeline.Hint": "Curve tracks edit the graph directly. Drag a clip to move it, its right edge to retime it, or the ruler to seek. Wheel zooms.",
-  "Timeline.RetimeHistory": "Retime curve track"
+  "Timeline.Hint": "Select a Signal input node to add keys. Drag diamonds to move, double-click to add, Delete to remove. Preview inputs are not exported; runtime keys use seconds since each scope started. Move curves by their body, resize at the right edge. Use the ruler to seek and the wheel to zoom.",
+  "Timeline.RetimeHistory": "Retime curve track",
+  "Timeline.SignalPreview": "Preview input",
+  "Timeline.SignalRuntime": "Effect runtime",
+  "Timeline.AddPreviewSignal": "+ Preview Signal key",
+  "Timeline.AddRuntimeSignal": "+ Runtime Signal key",
+  "Timeline.DeleteSignal": "Delete Signal key",
+  "Timeline.SignalTime": "Signal key time",
+  "Timeline.AddSignalHistory": "Add Signal timeline key",
+  "Timeline.MoveSignalHistory": "Move Signal timeline key",
+  "Timeline.DeleteSignalHistory": "Delete Signal timeline key",
+  "Timeline.InvalidSignalTime": "Signal keys require finite seconds between 0 and 1,000,000."
 }

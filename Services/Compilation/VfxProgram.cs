@@ -86,6 +86,8 @@ public sealed class VfxProgram
     public static VfxProgram Compile(GraphSnapshot graph)
     {
         ValidateForCompilation(graph);
+        if (Flatten(graph).Any(node => node.SignalKeys?.Any(key => key.Mode == SignalTimelineMode.Runtime) == true))
+            throw new InvalidDataException("Runtime Signal timeline keys require a Spawnable Group package; export .lfxp.");
         var starts = graph.Nodes.Where(node => node.Kind.Value == "OnStart").ToArray();
         if (starts.Length == 1 && !graph.Connections.Any(edge => edge.SourceNodeId == starts[0].Id))
             graph = graph with { Nodes = graph.Nodes.Where(node => node.Id != starts[0].Id).ToArray() };
@@ -593,6 +595,11 @@ public sealed class VfxProgram
             gameIoPorts.Count != 0 ? (ushort)7 : extraRoutes != 0 ? (ushort)5 : curveCode.Count != 0 ? (ushort)4 : (ushort)3,
             gameIoPorts);
     }
+
+    internal byte[] ToPackageBinary() => _version == 1
+        ? new VfxProgram(_instructions, _typedInstructions, _customInstructions, _curveInstructions,
+            2, _gameIoPorts).ToBinary()
+        : ToBinary();
 
     public byte[] ToBinary()
     {

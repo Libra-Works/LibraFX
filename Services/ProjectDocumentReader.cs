@@ -8,7 +8,7 @@ namespace LiberaFx.Services;
 
 public static class ProjectDocumentReader
 {
-    public const int CurrentFormatVersion = 11;
+    public const int CurrentFormatVersion = 12;
     private static readonly JsonSerializerOptions Options = new()
     {
         Converters = { new JsonStringEnumConverter() }
@@ -31,7 +31,7 @@ public static class ProjectDocumentReader
                 throw new InvalidDataException("The project contains an unknown node type.");
             nodes.Add(new GraphNodeSnapshot(node.Id, definition!.Kind, node.Name, node.X, node.Y,
                 definition.PortType, definition.PortCategory, node.Curve, node.ChildGraph, node.Parameters,
-                node.GroupAsset, node.IsPolymorphic, node.GroupOverrides));
+                node.GroupAsset, node.IsPolymorphic, node.GroupOverrides) { SignalKeys = node.SignalKeys });
         }
         var connections = document.Connections.Select(connection => connection is null
             ? throw new InvalidDataException("The project contains an empty connection.")
@@ -45,6 +45,10 @@ public static class ProjectDocumentReader
         if (document.FormatVersion >= 2 && document.History is null)
             throw new InvalidDataException("The project file is missing its history timeline.");
         if (document.History is { } history) ValidateHistory(history, graph);
+        if (document.FormatVersion < 12 &&
+            (SignalTimeline.ContainsKeys(graph) ||
+             document.History?.Entries?.Any(entry => SignalTimeline.ContainsKeys(entry.State)) == true))
+            throw new InvalidDataException("Signal timeline keys require project format 12 or later.");
         if (document.FormatVersion < 10 &&
             (GroupExposedItems.ContainsMetadata(graph) ||
              document.History?.Entries?.Any(entry => GroupExposedItems.ContainsMetadata(entry.State)) == true))

@@ -44,6 +44,7 @@ public static class GraphValidator
                 !nodes.TryAdd(node.Id, node))
                 throw new InvalidDataException("The project contains an invalid graph node.");
             if (node.Curve is not null) FCurve.Validate(node.Curve);
+            SignalTimeline.Validate(node.Kind, node.SignalKeys);
             if (node.GroupOverrides is not null && node.ChildGraph is null)
                 throw new InvalidDataException("Only a group can have instance values.");
             GroupExposedItems.ValidateOverrides(node.GroupOverrides);

@@ -42,7 +42,7 @@ public sealed class ProjectFileService
                     node.Parameters,
                     node.GroupAsset,
                     node.IsPolymorphic,
-                    node.GroupOverrides))
+                    node.GroupOverrides) { SignalKeys = node.SignalKeys })
                 .ToList(),
             Connections = snapshot.Connections
                 .Select(connection => new LiberaFxProjectConnection(
