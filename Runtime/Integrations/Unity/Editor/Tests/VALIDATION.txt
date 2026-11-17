@@ -9,8 +9,9 @@ root. It invokes the actual MonoBehaviour lifecycle/update methods through
 cached delegates in the Editor; it does not enter Play Mode.
 
 Copy LiberaFx Runtime/Editor directories and the matching native plugin into
-Assets\LiberaFx and Assets\Plugins\x86_64 of a dedicated project. No packages are
-needed (Packages\manifest.json can contain {"dependencies":{}}).
+Assets\LiberaFx and Assets\Plugins\x86_64 of a dedicated project. No third-party
+packages are needed. Minimal projects require the built-in
+com.unity.modules.jsonserialize module for the adapter's GPU metadata code.
 Windows command, using your own dedicated project and log paths:
 
   "C:\Program Files\Unity\Hub\Editor\6000.2.6f1\Editor\Unity.exe" -batchmode -quit -noUpm -disable-assembly-updater -force-d3d11 -projectPath "<dedicated project>" -executeMethod LiberaFx.Unity.Editor.LiberaFxEditorVerification.RunBatch -logFile "<dedicated project>\unity-editor.log"
@@ -24,6 +25,21 @@ For the focused native lifetime check without framebuffer rendering, use
 LiberaFx.Unity.Editor.LiberaFxEditorVerification.RunLifetime instead. It writes
 lifetime-verification.txt and covers explicit and captured lifetimes, expiry,
 drain, finish and stop. This does not verify a Spawnable package or Play Mode.
+
+For real Spawnable MonoBehaviour scheduling, use a dedicated project and set
+LIBERAFX_UNITY_SPAWNABLE_FIXTURE to the compiler-produced Fireworks.lfxp FILE.
+Run -batchmode -nographics -projectPath "<dedicated project>" -executeMethod
+LiberaFx.Unity.Editor.LiberaFxSpawnablePlayModeVerification.Run -logFile
+"<dedicated project>\spawnable-playmode.log". Do NOT add -quit: this asynchronous
+test enters Play Mode, survives the domain reload, and exits the Editor itself.
+It temporarily enables domain reload and restores the dedicated project's
+previous Enter Play Mode Options setting before exiting.
+It imports a temporary LFXP asset, configures an inactive component, and lets
+Unity invoke OnEnable/Update/OnDisable/OnDestroy (no reflected lifecycle calls).
+It checks child draining, exact natural Destroy ordering/times/identities,
+manual Stop, pause/resume, restart and cleanup. It writes
+spawnable-playmode-verification.txt and deletes only its temporary import.
+Use a bounded process timeout. This check needs no GPU or Unity Test Framework.
 
 Checks:
   Actual native DLL P/Invoke evaluates the C#-generated .lfxb fixture.
@@ -45,3 +61,12 @@ buffer reuse, zero-GC and all three framebuffer checks passed.
 Logs/results/images remain local; no package installation or sharing is needed.
 This proves real Editor/Unity API and GPU behavior, not player builds, Play Mode
 automatic scheduling/domain reload, console hardware or IL2CPP.
+
+Separate Spawnable Play Mode proof:
+  Unity 7000.0.0a16, batchmode/Null graphics, Windows native plugin.
+  LiberaFxSpawnablePlayModeVerification.Run exited 0 with result=PASS.
+  Real domain reload and automatic component callbacks passed, together with
+  natural child draining, exact Destroy/Stop ordering, pause/resume, half-rate
+  playback, explicit Stop/restart and object destruction. The temporary import
+  was removed and the project's Enter Play Mode Options setting restored.
+  This verifies lifecycle hosting, not render/GPU payloads or player builds.

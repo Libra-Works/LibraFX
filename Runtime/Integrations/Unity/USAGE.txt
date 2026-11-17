@@ -32,7 +32,9 @@ Unity installation (Unity 2021.3+ APIs; verified against 6000.2.6f1 assemblies)
 ----------------------------------------------------------------------------
 1. Copy Runtime and Editor folders from this directory into Assets\LiberaFx.
    Keep both asmdef files: the runtime asmdef enables unsafe pointer pinning.
-   No packages, network service, scene synchronization or reverse P/Invoke needed.
+   No third-party packages, network service, scene synchronization or reverse
+   P/Invoke needed. Minimal projects need the built-in
+   com.unity.modules.jsonserialize module for the adapter's GPU metadata code.
 2. Copy the native artifact into the appropriate Assets\Plugins folder:
      Windows x64: liberafx_native.dll (Release), e.g. Plugins\x86_64
      macOS: libliberafx_native.dylib, built for the target architecture(s)
@@ -135,6 +137,15 @@ or instantiate render objects; those remain the subscriber's engine adapter
 responsibility. The importer preserves the LFXP bytes; host creation performs
 native package validation and reports errors rather than falling back.
 
+LiberaFxSpawnablePlayModeVerification.Run passed in an isolated Unity
+7000.0.0a16 Editor with compiler-produced Fireworks.lfxp and the native plugin.
+The test enters actual Play Mode with domain reload enabled and exercises
+automatic OnEnable/Update/OnDisable/OnDestroy, half-rate playback, child
+draining, ordered exactly-once natural Destroy, manual Stop without Destroy,
+timeScale/PlayRate pause and resume, restart and native host release.
+No reflected lifecycle calls, GPU, player build or user project is involved.
+See Editor\Tests\VALIDATION.txt for the repeatable batch command and limits.
+
 Low-level lifetime API
 ----------------------
 NativeInstance.StartLifetime starts a root with an explicit duration or an
@@ -199,7 +210,8 @@ GUID bindings, default mutation, atlas/quad and 10,000 no-GC evaluate calls.
 Unity 6000.2.6f1 synchronous Editor lifecycle checks also passed on Direct3D11:
 shader compilation, cube/atlas framebuffer readback, dynamic buffer reuse and
 zero managed GC across 1,000 updates per mode. See Editor\Tests\VALIDATION.txt.
-Play Mode scheduling, IL2CPP, non-Windows plugins and native engine-neutral
-draw-command streaming were not exercised.
+The Spawnable component's automatic Play Mode lifecycle is verified separately
+as described above. Renderer sample Play Mode scheduling, IL2CPP, non-Windows
+plugins and native engine-neutral draw-command streaming were not exercised.
 The sample pulls bound numeric outputs; it does not yet import engine asset
 catalogs or consume an entire graph's render-command stream.
