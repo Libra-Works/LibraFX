@@ -362,20 +362,20 @@ auto SpawnableHost::Impl::initialize() -> Result
             maxCaptureLanes, state->pool);
         if (result != Result::Ok) return result;
 
-        auto lifecycle = GeneratorLifecycle{};
-        lifecycle.instructionBudget = options.instructionBudget;
-        lifecycle.enableDeferredSignals = packageData.hasChildDeferredSignals;
+        auto lifecycleConfig = GeneratorLifecycle{};
+        lifecycleConfig.instructionBudget = options.instructionBudget;
+        lifecycleConfig.enableDeferredSignals = packageData.hasChildDeferredSignals;
         if (data.lifecycle) {
             if (data.lifecycle->onStartNodeId) {
-                std::memcpy(lifecycle.onStartNodeId, data.lifecycle->onStartNodeId->data(), 16);
-                lifecycle.hasOnStart = true;
+                std::memcpy(lifecycleConfig.onStartNodeId, data.lifecycle->onStartNodeId->data(), 16);
+                lifecycleConfig.hasOnStart = true;
             }
             if (data.lifecycle->lifeNodeId) {
-                std::memcpy(lifecycle.lifeNodeId, data.lifecycle->lifeNodeId->data(), 16);
-                lifecycle.hasLife = true;
+                std::memcpy(lifecycleConfig.lifeNodeId, data.lifecycle->lifeNodeId->data(), 16);
+                lifecycleConfig.hasLife = true;
             }
         }
-        result = state->pool->configureLifecycle(lifecycle);
+        result = state->pool->configureLifecycle(lifecycleConfig);
         if (result != Result::Ok) return result;
         if (data.signalOutputs && !data.signalOutputs->empty()) {
             state->outputIds.reserve(data.signalOutputs->size());

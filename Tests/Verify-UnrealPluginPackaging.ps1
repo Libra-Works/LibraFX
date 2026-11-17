@@ -23,7 +23,12 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $plugin 'Source\ThirdParty\LibraRuntimeCore\Core\VfxRuntime.cpp'))) {
         throw 'The packaged plugin depends on external repository source files.'
     }
-    if (@(Get-ChildItem (Join-Path $plugin 'Source') -Recurse -Filter '*.Build.cs').Count -ne 3) {
+    $moduleRules = @(Get-ChildItem (Join-Path $plugin 'Source') -Recurse -Filter '*.Build.cs' |
+        ForEach-Object { $_.Name -replace '\.Build\.cs$', '' } | Sort-Object)
+    $expectedRules = @('LibraGpuEditor', 'LibraGpuRuntime', 'LibraRuntimeCore',
+        'LibraRuntimeForUnreal', 'LibraRuntimeForUnrealEditor') | Sort-Object
+    if ($moduleRules.Count -ne $expectedRules.Count -or
+        (Compare-Object -ReferenceObject $expectedRules -DifferenceObject $moduleRules)) {
         throw 'RuntimeCore, Runtime and Editor module boundaries were not packaged.'
     }
     $local = Join-Path $plugin 'LocalNotes.txt'

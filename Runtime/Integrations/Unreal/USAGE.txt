@@ -69,7 +69,20 @@ Import and use
   ULibraEffectComponent currently performs raw program evaluation: it does not
   use Life Time to expire playback or automatically dispatch On Start / On
   Destroy. Stop is an explicit interruption, not natural expiry.
-  Spawnable package execution remains separate and is not implemented here.
+  Import an .lfxp package as a Libra Spawnable asset and assign it to a
+  Libra Spawnable component. The component drives the shared engine-neutral
+  SpawnableHost on the game thread using scaled TimeSeconds and the unscaled
+  Unreal frame delta. Blueprint events expose Spawn/Stop/Destroy/Signal and
+  named game-I/O records; methods accept game signals/properties and read root
+  or active child values. RequestNaturalEnd follows the package's natural
+  lifecycle; Stop is explicit and never publishes natural Destroy.
+  The host owns package lifecycle, delayed work and parent/child routing.
+  Render configuration and GPU payloads remain opaque; this component does not
+  create actors, components, materials or GPU resources from those payloads.
+  UE 5.7.4 isolated Clang compilation and MSVC Editor linking passed. The
+  component lifecycle automation requires an explicit compiler-produced LFXP
+  fixture via -LibraSpawnableFixture=<absolute path>; in-engine execution was
+  not completed in this verification pass.
   Effect Age, root Instance Age and unscaled Delta Time were verified in an
   isolated UE 5.7 MSVC automation world using compiler-produced bytecode and a
   0.5 playback rate. UE 5.7 Win64 Clang compilation was checked separately
