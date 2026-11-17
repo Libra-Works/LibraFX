@@ -113,7 +113,27 @@ parsing and managed allocations. A positive budget is shared across all branches
 Branches execute in connection order, depth-first; an error or budget exhaustion
 stops the remaining branches without rolling back effects already performed.
 Check the returned NativeResult. Spawnable packages require a separate host
-adapter and are not supported by this wrapper.
+adapter; use `NativeSpawnableHost` or `LiberaFxSpawnableComponent` for LFXP.
+
+Spawnable package playback
+--------------------------
+The Unity `LiberaFxSpawnableImporter` imports `.lfxp` files as
+`LiberaFxSpawnableAsset`. Add `LiberaFxSpawnableComponent` to an object and
+assign that asset. It drives the shared native package host using Unity's
+scaled `Time.deltaTime`, exposes Spawn/Stop/Destroy/Signal and named game-I/O
+events to C# subscribers, and accepts game signals/properties through its API.
+`playRate` scales effect time; the Delta Time graph node receives Unity's frame
+delta unchanged. Setting playRate to zero or pausing Unity time holds lifecycle
+time. Natural root completion follows `AutoDestroyWhenIdle`; explicit Stop
+retires instances without natural Destroy.
+
+The host event callbacks run synchronously on Unity's main thread. Use their
+container GUID bytes and pool-scoped instance IDs to associate engine objects.
+`NativeSpawnableHost.ReadChildValue` reads template outputs while the instance
+is active. The component does not interpret render configuration/GPU payloads
+or instantiate render objects; those remain the subscriber's engine adapter
+responsibility. The importer preserves the LFXP bytes; host creation performs
+native package validation and reports errors rather than falling back.
 
 Low-level lifetime API
 ----------------------
@@ -131,8 +151,9 @@ work is complete should it call DispatchNaturalDestroy (if an On Destroy
 signal exists), wait for any work it creates, and call FinishLifetime.
 StopLifetime is an explicit interruption and does not fire natural Destroy.
 Check every NativeResult, and dispose the instance when no longer needed.
-These are low-level calls only: this Unity adapter does not host Spawnable
-packages, schedule Delay or Owner Destroy, or automatically drive renderer
+These are low-level calls only; `NativeInstance` does not host Spawnable
+packages. `NativeSpawnableHost` and `LiberaFxSpawnableComponent` provide the
+shared lifecycle/package bridge, but do not automatically drive renderer
 lifetime. Do not treat this API as a complete engine lifecycle implementation.
 
 Program creation COPIES bytecode and owns v3 builtin binding storage. v1/v2/v3

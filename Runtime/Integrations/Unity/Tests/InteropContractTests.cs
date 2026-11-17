@@ -118,6 +118,46 @@ namespace LiberaFx.Unity.Tests
                 UnityEngine.Debug.Log("LiberaFx compiler-generated Signal interop contract passed.");
 #endif
             }
+            var spawnableFixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_SPAWNABLE_FIXTURE");
+            if (!string.IsNullOrEmpty(spawnableFixture))
+                VerifySpawnableHost(spawnableFixture);
+        }
+
+        private static void VerifySpawnableHost(string fixture)
+        {
+            var folder = Path.GetDirectoryName(fixture);
+            var bytes = File.ReadAllBytes(fixture);
+            var identities = File.ReadAllBytes(Path.Combine(folder, "Fireworks.native-fixture"));
+            Assert(identities.Length == 8 + 11 * 16);
+            using (var host = new NativeSpawnableHost(bytes))
+            {
+                Assert(host.Advance(0, 0) == NativeResult.Ok);
+                Assert(host.GetActiveCount(out var active) == NativeResult.Ok && active == 1);
+                Assert(host.PopEvent(out var started) == NativeResult.Ok &&
+                    started != null && started.Kind == 1 && started.Time == 0 &&
+                    started.ContainerId[0] == identities[24]);
+                Assert(host.Advance(2, 1) == NativeResult.Ok);
+                Assert(host.PopEvent(out var destroyed) == NativeResult.Ok && destroyed != null &&
+                    destroyed.Kind == 3 && destroyed.Time == 2);
+                Assert(host.PopEvent(out var stopped) == NativeResult.Ok && stopped != null &&
+                    stopped.Kind == 2 && stopped.Time == 2);
+                Assert(host.PopEvent(out var burst) == NativeResult.Ok && burst != null &&
+                    burst.Kind == 1 && burst.Time == 2 && burst.ContainerId[0] == identities[104]);
+                Assert(host.Advance(3.5, 1.5) == NativeResult.Ok);
+                Assert(host.PopEvent(out var burstDestroyed) == NativeResult.Ok &&
+                    burstDestroyed != null && burstDestroyed.Kind == 3 && burstDestroyed.Time == 3.5);
+                Assert(host.PopEvent(out var burstStopped) == NativeResult.Ok &&
+                    burstStopped != null && burstStopped.Kind == 2 && burstStopped.Time == 3.5);
+                Assert(host.IsRootFinished(out var finished) == NativeResult.Ok && finished);
+            }
+            using (var host = new NativeSpawnableHost(bytes))
+            {
+                Assert(host.Advance(0, 0) == NativeResult.Ok);
+                Assert(host.PopEvent(out var started) == NativeResult.Ok && started != null);
+                Assert(host.Stop() == NativeResult.Ok);
+                Assert(host.PopEvent(out var stopped) == NativeResult.Ok &&
+                    stopped != null && stopped.Kind == 2);
+            }
         }
     }
 }

@@ -57,6 +57,75 @@ namespace LiberaFx.Unity
         [FieldOffset(32)] public float A;
     }
 
+    public sealed class SpawnableHostEvent
+    {
+        public uint Kind { get; }
+        public byte[] ContainerId { get; }
+        public ulong InstanceId { get; }
+        public double Time { get; }
+        public ulong Seed { get; }
+        public byte[] SignalNodeId { get; }
+
+        internal SpawnableHostEvent(uint kind, byte[] containerId, ulong instanceId,
+            double time, ulong seed, byte[] signalNodeId)
+        {
+            Kind = kind;
+            ContainerId = containerId;
+            InstanceId = instanceId;
+            Time = time;
+            Seed = seed;
+            SignalNodeId = signalNodeId;
+        }
+    }
+
+    public sealed class GameIoEvent
+    {
+        public byte[] ContainerId { get; }
+        public ulong InstanceId { get; }
+        public uint PortIndex { get; }
+        public byte Kind { get; }
+        public byte Width { get; }
+        public bool IsColor { get; }
+        public double[] Values { get; }
+
+        internal GameIoEvent(byte[] containerId, ulong instanceId, uint portIndex,
+            byte kind, byte width, bool isColor, double[] values)
+        {
+            ContainerId = containerId;
+            InstanceId = instanceId;
+            PortIndex = portIndex;
+            Kind = kind;
+            Width = width;
+            IsColor = isColor;
+            Values = values;
+        }
+    }
+
+    [StructLayout(LayoutKind.Explicit, Pack = 8, Size = 64)]
+    internal unsafe struct NativeSpawnableHostEvent
+    {
+        [FieldOffset(0)] public uint Kind;
+        [FieldOffset(4)] public uint Reserved;
+        [FieldOffset(8)] public fixed byte ContainerId[16];
+        [FieldOffset(24)] public ulong InstanceId;
+        [FieldOffset(32)] public double Time;
+        [FieldOffset(40)] public ulong Seed;
+        [FieldOffset(48)] public fixed byte SignalNodeId[16];
+    }
+
+    [StructLayout(LayoutKind.Explicit, Pack = 8, Size = 160)]
+    internal unsafe struct NativeGameIoEvent
+    {
+        [FieldOffset(0)] public fixed byte ContainerId[16];
+        [FieldOffset(16)] public ulong InstanceId;
+        [FieldOffset(24)] public uint PortIndex;
+        [FieldOffset(28)] public byte Kind;
+        [FieldOffset(29)] public byte Width;
+        [FieldOffset(30)] public byte IsColor;
+        [FieldOffset(31)] public byte Reserved;
+        [FieldOffset(32)] public fixed double Values[16];
+    }
+
     public static class NativeAbi
     {
         // Initialization-time contract test, never called by the frame loop.
@@ -89,7 +158,15 @@ namespace LiberaFx.Unity
                 Marshal.OffsetOf<SpriteVertex>(nameof(SpriteVertex.R)).ToInt32() != 20 ||
                 Marshal.OffsetOf<SpriteVertex>(nameof(SpriteVertex.G)).ToInt32() != 24 ||
                 Marshal.OffsetOf<SpriteVertex>(nameof(SpriteVertex.B)).ToInt32() != 28 ||
-                Marshal.OffsetOf<SpriteVertex>(nameof(SpriteVertex.A)).ToInt32() != 32)
+                Marshal.OffsetOf<SpriteVertex>(nameof(SpriteVertex.A)).ToInt32() != 32 ||
+                Marshal.SizeOf<NativeSpawnableHostEvent>() != 64 ||
+                Marshal.OffsetOf<NativeSpawnableHostEvent>(nameof(NativeSpawnableHostEvent.ContainerId)).ToInt32() != 8 ||
+                Marshal.OffsetOf<NativeSpawnableHostEvent>(nameof(NativeSpawnableHostEvent.InstanceId)).ToInt32() != 24 ||
+                Marshal.OffsetOf<NativeSpawnableHostEvent>(nameof(NativeSpawnableHostEvent.Time)).ToInt32() != 32 ||
+                Marshal.OffsetOf<NativeSpawnableHostEvent>(nameof(NativeSpawnableHostEvent.Seed)).ToInt32() != 40 ||
+                Marshal.OffsetOf<NativeSpawnableHostEvent>(nameof(NativeSpawnableHostEvent.SignalNodeId)).ToInt32() != 48 ||
+                Marshal.SizeOf<NativeGameIoEvent>() != 160 ||
+                Marshal.OffsetOf<NativeGameIoEvent>(nameof(NativeGameIoEvent.Values)).ToInt32() != 32)
                 throw new TypeLoadException("LiberaFx POD layout does not match the native C ABI.");
         }
     }
@@ -153,6 +230,43 @@ namespace LiberaFx.Unity
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_make_sprite_quad(
             in AtlasFrame atlas, float width, float height, SpriteVertex* vertices);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_create(
+            byte* bytes, ulong count, uint maxActivePerTemplate, ulong memoryBudgetBytesPerTemplate,
+            uint eventCapacity, uint instructionBudget, out ulong host);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_release(ulong host);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_advance(ulong host, double time, double frameDelta);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_dispatch_signal(ulong host, byte* nodeId);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_fire_game_signal(ulong host, byte* name);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_set_game_property(
+            ulong host, byte* name, double* values, uint width);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_set_owner_matrix(ulong host, double* values);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_request_natural_end(ulong host);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_stop(ulong host);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_root_value(
+            ulong host, byte* nodeId, out NativeValue value);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_child_value(
+            ulong host, byte* containerId, ulong instance, byte* nodeId, out NativeValue value);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_next_event(
+            ulong host, out NativeSpawnableHostEvent value, out uint hasEvent);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_next_game_io_event(
+            ulong host, out NativeGameIoEvent value, out uint hasEvent);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_active_count(ulong host, out ulong count);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_root_finished(ulong host, out uint finished);
     }
 
     public sealed unsafe class NativeProgram : IDisposable
@@ -210,6 +324,146 @@ namespace LiberaFx.Unity
                 return handle;
             }
         }
+
+            public class NativeSpawnableHostBase : IDisposable
+            {
+                private ulong handle;
+                public NativeSpawnableHostBase(byte[] compiledPackage, uint maxActivePerTemplate = 32,
+                    ulong memoryBudgetBytesPerTemplate = 4 * 1024 * 1024, uint eventCapacity = 128,
+                    uint instructionBudget = 10000)
+                {
+                    if (compiledPackage == null) throw new ArgumentNullException(nameof(compiledPackage));
+                    NativeAbi.ValidateLayout();
+                    if (Native.libra_abi_version() != 1) throw new NotSupportedException("LiberaFx ABI version mismatch.");
+                    fixed (byte* bytes = compiledPackage)
+                    {
+                        NativeInstance.Check(Native.libra_spawnable_host_create(bytes,
+                            (ulong)compiledPackage.LongLength, maxActivePerTemplate,
+                            memoryBudgetBytesPerTemplate, eventCapacity, instructionBudget, out handle));
+                    }
+                }
+
+                private ulong Alive
+                {
+                    get
+                    {
+                        if (handle == 0) throw new ObjectDisposedException(nameof(NativeSpawnableHostBase));
+                        return handle;
+                    }
+                }
+
+                public NativeResult Advance(double time, double frameDelta) =>
+                    Native.libra_spawnable_host_advance(Alive, time, frameDelta);
+
+                public NativeResult DispatchSignal(string nodeGuid)
+                {
+                    var id = new NativeSignal(nodeGuid).Id;
+                    fixed (byte* pointer = id)
+                        return Native.libra_spawnable_host_dispatch_signal(Alive, pointer);
+                }
+
+                public NativeResult FireGameSignal(string name)
+                {
+                    if (name == null) return NativeResult.InvalidArgument;
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(name + "\0");
+                    fixed (byte* pointer = bytes)
+                        return Native.libra_spawnable_host_fire_game_signal(Alive, pointer);
+                }
+
+                public NativeResult SetGameProperty(string name, double[] values)
+                {
+                    if (name == null || values == null) return NativeResult.InvalidArgument;
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(name + "\0");
+                    fixed (byte* pointer = bytes)
+                    fixed (double* lanes = values)
+                        return Native.libra_spawnable_host_set_game_property(Alive, pointer, lanes, (uint)values.Length);
+                }
+
+                public NativeResult SetOwnerMatrix(double[] values)
+                {
+                    if (values == null || values.Length != 16) return NativeResult.InvalidArgument;
+                    fixed (double* lanes = values)
+                        return Native.libra_spawnable_host_set_owner_matrix(Alive, lanes);
+                }
+
+                public NativeResult RequestNaturalEnd() => Native.libra_spawnable_host_request_natural_end(Alive);
+                public NativeResult Stop() => Native.libra_spawnable_host_stop(Alive);
+
+                public NativeResult ReadRootValue(string nodeGuid, out NativeValue value)
+                {
+                    var id = new NativeSignal(nodeGuid).Id;
+                    fixed (byte* pointer = id)
+                        return Native.libra_spawnable_host_root_value(Alive, pointer, out value);
+                }
+
+                public NativeResult ReadChildValue(byte[] containerId, ulong instance, string nodeGuid,
+                    out NativeValue value)
+                {
+                    if (containerId == null || containerId.Length != 16)
+                    {
+                        value = default;
+                        return NativeResult.InvalidArgument;
+                    }
+                    var id = new NativeSignal(nodeGuid).Id;
+                    fixed (byte* container = containerId)
+                    fixed (byte* node = id)
+                        return Native.libra_spawnable_host_child_value(Alive, container, instance, node, out value);
+                }
+
+                public NativeResult PopEvent(out SpawnableHostEvent value)
+                {
+                    var result = Native.libra_spawnable_host_next_event(Alive, out var item, out var has);
+                    if (result != NativeResult.Ok) { value = null; return result; }
+                    if (has == 0) { value = null; return NativeResult.Ok; }
+                    var container = new byte[16];
+                    var signalNode = new byte[16];
+                    byte* containerSource = item.ContainerId;
+                    fixed (byte* destination = container)
+                        Buffer.MemoryCopy(containerSource, destination, 16, 16);
+                    byte* signalSource = item.SignalNodeId;
+                    fixed (byte* destination = signalNode)
+                        Buffer.MemoryCopy(signalSource, destination, 16, 16);
+                    value = new SpawnableHostEvent(item.Kind, container, item.InstanceId,
+                        item.Time, item.Seed, signalNode);
+                    return NativeResult.Ok;
+                }
+
+                public NativeResult PopGameIoEvent(out GameIoEvent value)
+                {
+                    var result = Native.libra_spawnable_host_next_game_io_event(Alive, out var item, out var has);
+                    if (result != NativeResult.Ok) { value = null; return result; }
+                    if (has == 0) { value = null; return NativeResult.Ok; }
+                    var container = new byte[16];
+                    var lanes = new double[16];
+                    byte* containerSource = item.ContainerId;
+                    fixed (byte* destination = container)
+                        Buffer.MemoryCopy(containerSource, destination, 16, 16);
+                    double* valuesSource = item.Values;
+                    fixed (double* destination = lanes)
+                        Buffer.MemoryCopy(valuesSource, destination, 16 * sizeof(double), 16 * sizeof(double));
+                    value = new GameIoEvent(container, item.InstanceId, item.PortIndex,
+                        item.Kind, item.Width, item.IsColor != 0, lanes);
+                    return NativeResult.Ok;
+                }
+
+                public NativeResult GetActiveCount(out ulong count) =>
+                    Native.libra_spawnable_host_active_count(Alive, out count);
+
+                public NativeResult IsRootFinished(out bool finished)
+                {
+                    var result = Native.libra_spawnable_host_root_finished(Alive, out var value);
+                    finished = value != 0;
+                    return result;
+                }
+
+                public void Dispose()
+                {
+                    if (handle != 0) { Native.libra_spawnable_host_release(handle); handle = 0; }
+                    GC.SuppressFinalize(this);
+                }
+
+                ~NativeSpawnableHostBase() { Dispose(); }
+            }
         internal static void Check(NativeResult result)
         {
             if (result != NativeResult.Ok) throw new InvalidOperationException("LiberaFx: " + result);
@@ -307,5 +561,14 @@ namespace LiberaFx.Unity
             GC.SuppressFinalize(this);
         }
         ~NativeInstance() { Dispose(); }
+    }
+
+    public sealed class NativeSpawnableHost : NativeInstance.NativeSpawnableHostBase
+    {
+        public NativeSpawnableHost(byte[] compiledPackage, uint maxActivePerTemplate = 32,
+            ulong memoryBudgetBytesPerTemplate = 4 * 1024 * 1024, uint eventCapacity = 128,
+            uint instructionBudget = 10000)
+            : base(compiledPackage, maxActivePerTemplate, memoryBudgetBytesPerTemplate,
+                eventCapacity, instructionBudget) { }
     }
 }

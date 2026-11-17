@@ -30,6 +30,7 @@ typedef uint64_t LibraProgram;
 typedef uint64_t LibraInstance;
 typedef uint64_t LibraGeneratorPool;
 typedef uint64_t LibraGeneratorInstance;
+typedef uint64_t LibraSpawnableHostHandle;
 typedef uint32_t LibraBinding;
 typedef int32_t LibraResult;
 enum {
@@ -133,6 +134,15 @@ typedef struct LIBRA_INTEROP_ALIGN(8) LibraGameIoEventV2 {
     uint8_t kind, width, isColor, reserved;
     double values[16];
 } LibraGameIoEventV2;
+
+typedef struct LIBRA_INTEROP_ALIGN(8) LibraSpawnableHostEvent {
+    uint32_t kind, reserved;
+    uint8_t containerId[16];
+    LibraGeneratorInstance instanceId;
+    double time;
+    uint64_t seed;
+    uint8_t signalNodeId[16];
+} LibraSpawnableHostEvent;
 #pragma pack(pop)
 
 #if defined(__cplusplus)
@@ -191,6 +201,13 @@ LIBRA_INTEROP_ASSERT(offsetof(LibraSpawnableSignalInputBinding, signalTypeId) ==
     offsetof(LibraSpawnableSignalInputBinding, signalNodeId) == 56);
 LIBRA_INTEROP_ASSERT(sizeof(LibraGameIoEvent) == 64 && sizeof(LibraGameIoEventV2) == 160 &&
     LIBRA_INTEROP_ALIGNOF(LibraGameIoEventV2) == 8);
+LIBRA_INTEROP_ASSERT(sizeof(LibraSpawnableHostEvent) == 64 &&
+    LIBRA_INTEROP_ALIGNOF(LibraSpawnableHostEvent) == 8);
+LIBRA_INTEROP_ASSERT(offsetof(LibraSpawnableHostEvent, containerId) == 8 &&
+    offsetof(LibraSpawnableHostEvent, instanceId) == 24 &&
+    offsetof(LibraSpawnableHostEvent, time) == 32 &&
+    offsetof(LibraSpawnableHostEvent, seed) == 40 &&
+    offsetof(LibraSpawnableHostEvent, signalNodeId) == 48);
 #undef LIBRA_INTEROP_ASSERT
 #undef LIBRA_INTEROP_ALIGNOF
 #endif
@@ -400,6 +417,43 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_game_io_next_event(
    reports LIBRA_INVALID_VALUE_TYPE and leaves a matrix event queued. */
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_game_io_next_event_v2(
     LibraInstance instance, LibraGameIoEventV2* outEvent, uint32_t* hasEvent);
+
+/* Engine-neutral owner-thread host for versioned LFXP Spawnable packages.
+   Event kind values are 1=Spawn, 2=Stop, 3=natural Destroy, 4=local Signal.
+   QueueRejected is recoverable: drain events and retry advance at the same time. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_create(
+    const uint8_t* bytes, uint64_t byteCount, uint32_t maxActivePerTemplate,
+    uint64_t memoryBudgetBytesPerTemplate, uint32_t eventCapacity,
+    uint32_t instructionBudget, LibraSpawnableHostHandle* outHost);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_release(
+    LibraSpawnableHostHandle host);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_advance(
+    LibraSpawnableHostHandle host, double time, double frameDelta);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_dispatch_signal(
+    LibraSpawnableHostHandle host, const uint8_t nodeId[16]);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_fire_game_signal(
+    LibraSpawnableHostHandle host, const char* name);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_game_property(
+    LibraSpawnableHostHandle host, const char* name, const double* values, uint32_t width);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_owner_matrix(
+    LibraSpawnableHostHandle host, const double values[16]);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_request_natural_end(
+    LibraSpawnableHostHandle host);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_stop(
+    LibraSpawnableHostHandle host);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_root_value(
+    LibraSpawnableHostHandle host, const uint8_t nodeId[16], LibraValue* outValue);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_child_value(
+    LibraSpawnableHostHandle host, const uint8_t containerId[16],
+    LibraGeneratorInstance instance, const uint8_t nodeId[16], LibraValue* outValue);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_next_event(
+    LibraSpawnableHostHandle host, LibraSpawnableHostEvent* outEvent, uint32_t* hasEvent);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_next_game_io_event(
+    LibraSpawnableHostHandle host, LibraGameIoEventV2* outEvent, uint32_t* hasEvent);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_active_count(
+    LibraSpawnableHostHandle host, uint64_t* outCount);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_root_finished(
+    LibraSpawnableHostHandle host, uint32_t* outFinished);
 
 #ifdef __cplusplus
 }
