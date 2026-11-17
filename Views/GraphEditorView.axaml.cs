@@ -68,10 +68,23 @@ public partial class GraphEditorView : UserControl
 
     private void ObserveDefinitionChanges(bool subscribe)
     {
+        if (_observedGraph is not null)
+        {
+            _observedGraph.FrameSelectionRequested -= OnFrameSelectionRequested;
+            if (subscribe) _observedGraph.FrameSelectionRequested += OnFrameSelectionRequested;
+        }
         if (_observedGraph?.NodeDefinitions is not { } definitions) return;
         definitions.Changed -= OnNodeDefinitionsChanged;
         if (subscribe) definitions.Changed += OnNodeDefinitionsChanged;
     }
+
+    private void OnFrameSelectionRequested(object? sender, EventArgs e) =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!ReferenceEquals(DataContext, sender) || TopLevel.GetTopLevel(this) is null) return;
+            InitializeViewport();
+            FrameSelection();
+        }, DispatcherPriority.Loaded);
 
     internal Point ToGraphPoint(Point canvasPoint) =>
         new(canvasPoint.X - _graphOrigin.X, canvasPoint.Y - _graphOrigin.Y);

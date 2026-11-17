@@ -15,6 +15,18 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--asset-references"])
+        {
+            var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
+            if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root))
+                throw new ArgumentException("Set an absolute isolated LIBERAFX_DATA_ROOT for asset-reference checks.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            LiberaFx.Tests.AssetReferenceTests.Run();
+            LiberaFx.Tests.ResourceWorkspaceTests.Run();
+            AssetAuthoringTests.Run();
+            AssetSceneProtocolTests.Run();
+            return;
+        }
         if (args is ["--resource-workspace"])
         {
             var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");

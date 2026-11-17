@@ -46,6 +46,10 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
     public ObservableCollection<EngineAsset> Assets { get; } = [];
     public ObservableCollection<ResourceAssignmentTarget> AssignmentTargets { get; } = [];
     public ProjectResourcesViewModel ProjectResources { get; }
+    public AssetReferencesViewModel References { get; }
+    private int _selectedTab;
+    public int SelectedTab { get => _selectedTab; set => SetProperty(ref _selectedTab, value); }
+    public IRelayCommand InspectReferencesCommand { get; }
     public ResourceAssignmentTarget? SelectedAssignmentTarget
     {
         get => _selectedAssignmentTarget;
@@ -125,6 +129,13 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
     {
         _main = main;
         ProjectResources = new ProjectResourcesViewModel(main);
+        References = new AssetReferencesViewModel(main);
+        InspectReferencesCommand = new RelayCommand(() =>
+        {
+            if (SelectedAsset is not { } asset) return;
+            References.InspectBinding(asset.Path);
+            SelectedTab = 2;
+        }, () => SelectedAsset is not null);
         SearchCommand = new AsyncRelayCommand(() => LoadPageAsync(0));
         PreviousCommand = new AsyncRelayCommand(() => LoadPageAsync(Math.Max(0, Offset - 32)), () => CanGoPrevious);
         NextCommand = new AsyncRelayCommand(() => LoadPageAsync(Offset + 32), () => CanGoNext);
@@ -153,6 +164,7 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanAssign));
         OnPropertyChanged(nameof(AssetDetails));
         SaveMetadataCommand.NotifyCanExecuteChanged();
+        InspectReferencesCommand.NotifyCanExecuteChanged();
         AssignCommand.NotifyCanExecuteChanged();
         AddModelCommand.NotifyCanExecuteChanged();
         AddSpriteCommand.NotifyCanExecuteChanged();
@@ -492,6 +504,7 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
             _observedGraph.History.StateChanged -= OnGraphHistoryChanged;
         }
         ProjectResources.Dispose();
+        References.Dispose();
         ClearThumbnail();
     }
 }

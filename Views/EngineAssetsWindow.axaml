@@ -8,7 +8,7 @@
         Title="{DynamicResource Text.Asset.Title}" Width="1200" Height="800"
         MinWidth="900" MinHeight="620" ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
-    <TabControl>
+    <TabControl SelectedIndex="{Binding SelectedTab}">
     <TabItem Header="{DynamicResource Text.Resources.Connected}">
     <Grid RowDefinitions="Auto,*,Auto" Margin="16" RowSpacing="12">
         <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
@@ -61,6 +61,7 @@
                     <TextBlock Text="{DynamicResource Text.Asset.MaterialDetails}" FontWeight="SemiBold" />
                     <TextBlock Text="{Binding AssetDetails}" TextWrapping="Wrap"
                                FontFamily="Consolas" FontSize="12" />
+                    <Button Command="{Binding InspectReferencesCommand}" Content="{DynamicResource Text.References.Inspect}" />
                     <TextBlock Text="{DynamicResource Text.Asset.Description}" />
                     <TextBox Text="{Binding Description}" AcceptsReturn="True" MinHeight="54" TextWrapping="Wrap" />
                     <TextBlock Text="{DynamicResource Text.Asset.SemanticUsage}" />
@@ -100,6 +101,9 @@
     </TabItem>
     <TabItem Header="{DynamicResource Text.Resources.ProjectAndLocal}">
         <views:ProjectResourcesView DataContext="{Binding ProjectResources}" />
+    </TabItem>
+    <TabItem Header="{DynamicResource Text.References.Title}">
+        <views:AssetReferencesView DataContext="{Binding References}" />
     </TabItem>
     </TabControl>
 </Window>

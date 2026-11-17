@@ -59,6 +59,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     private object?[] _connectionStatusArgs = [];
     private GraphSnapshot _rootSnapshot = new([], []);
     private readonly List<Guid> _graphPath = [];
+    public event EventHandler? FrameSelectionRequested;
     private GraphNodeViewModel? _containingSpawnable;
 
     public ObservableCollection<GraphNodeViewModel> Nodes { get; } = [];
@@ -796,7 +797,11 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             }
         }
         var target = Nodes.FirstOrDefault(node => node.Id == nodeId);
-        if (target is not null) SelectNode(target);
+        if (target is not null)
+        {
+            SelectNode(target);
+            FrameSelectionRequested?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public bool GroupSelection()

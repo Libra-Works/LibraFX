@@ -47,11 +47,15 @@ public sealed class GraphDocumentViewModel : Document
         GraphSnapshot savedSnapshot,
         UndoRedoHistorySnapshot? savedHistory)
     {
+        var oldName = _fileName;
+        var oldKey = FileKey;
         _fileName = string.IsNullOrWhiteSpace(fileName) ? LocalizationService.Shared.Get("Messages.Untitled") : fileName;
         FileKey = fileKey;
         _savedSnapshot = savedSnapshot;
         _savedHistoryRevisionId = savedHistory?.TimelineRevisionId;
         _savedHistoryNodeId = savedHistory?.CurrentNodeId;
+        if (oldName != _fileName) OnPropertyChanged(nameof(FileName));
+        if (oldKey != FileKey) OnPropertyChanged(nameof(FileKey));
         UpdateDirtyState();
         UpdateTitle();
     }

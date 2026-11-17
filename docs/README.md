@@ -14,6 +14,7 @@
 - [SignalタイムラインとプレビューSend](signal-timeline.md)
 - [外部定義の型変換](type-conversions.md)
 - [資源ワークスペース](resource-workspace.md)
+- [使用中アセットと参照ビュー](asset-references.md)
 
 これらはリポジトリ内で読むためのリンクです。既存の構想・仕様と実装済みの範囲を
 整理した「入門」「寿命の考え方」「小さな実例」の整備は、[#60](https://github.com/Libra-Works/LibraFX/issues/60)
