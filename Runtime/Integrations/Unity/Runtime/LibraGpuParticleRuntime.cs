@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -27,7 +28,9 @@ namespace LiberaFx.Unity
         [SerializeField] Material billboardMaterial;
         [SerializeField] LibraGpuTextureBinding[] textures = Array.Empty<LibraGpuTextureBinding>();
         [SerializeField] bool playOnEnable = true;
+        [SerializeField] bool automaticUpdate = true;
         [SerializeField] float spawnRate = 64;
+        [SerializeField] float billboardSizeScale = 1;
         [SerializeField] uint emitterSeed = 1;
         [SerializeField] Vector3 boundsSize = new Vector3(1000, 1000, 1000);
         ComputeBuffer particles, args;
@@ -39,11 +42,12 @@ namespace LiberaFx.Unity
         int particleId;
         uint cursor, frame;
         float elapsed, spawnFraction;
-        bool running, submittedWork;
+        bool running, submittedWork, spawnableStepMode;
         public bool IsConfigured => particles != null;
         public bool IsRunning => running;
         public bool RuntimeExecuted { get; private set; }
         public string SourceContentHash => program == null ? null : program.contentHash;
+        public string SourceHash => program == null ? null : program.sourceHash;
         public int DispatchCount { get; private set; }
         public int DrawCount { get; private set; }
         public int Capacity => program == null ? 0 : program.capacity;
@@ -53,12 +57,15 @@ namespace LiberaFx.Unity
             DeltaId = Shader.PropertyToID("LibraGpuDeltaTime"), TimeId = Shader.PropertyToID("LibraGpuTime"),
             SeedId = Shader.PropertyToID("LibraGpuEmitterSeed"), FrameId = Shader.PropertyToID("LibraGpuFrameIndex"),
             PositionId = Shader.PropertyToID("LibraGpuEmitterPosition"), PaddingId = Shader.PropertyToID("LibraGpuPadding"),
-            DrawParticlesId = Shader.PropertyToID("_LibraParticles"), TextureId = Shader.PropertyToID("_MainTex");
+            DrawParticlesId = Shader.PropertyToID("_LibraParticles"), TextureId = Shader.PropertyToID("_MainTex"),
+            SizeScaleId = Shader.PropertyToID("_LibraGpuSizeScale");
 
         public void Configure(ComputeShader shader, TextAsset sourceMetadata, Material material, LibraGpuTextureBinding[] bindings)
         {
             if (shader == null || sourceMetadata == null || material == null) throw new ArgumentException("Compute shader, metadata and billboard material are required.");
             if (!material.enableInstancing) throw new ArgumentException("The billboard material must enable GPU instancing.");
+            if (!material.HasProperty("_Color"))
+                throw new ArgumentException("The billboard Material must expose _Color.");
             if (material.shader == null || !material.shader.isSupported) throw new ArgumentException("The billboard material shader is unsupported.");
             if (!SystemInfo.supportsComputeShaders || !SystemInfo.supportsInstancing) throw new NotSupportedException("GPU compute and instancing are required.");
             var next = LibraGpuMetadata.Parse(sourceMetadata.text);
@@ -91,10 +98,14 @@ namespace LiberaFx.Unity
                 {
                     if (b == null || string.IsNullOrEmpty(b.resourceId) || textureMap.ContainsKey(b.resourceId))
                         throw new ArgumentException("Duplicate or invalid GPU texture binding.");
-                    textureMap.Add(b.resourceId, b.texture != null ? b.texture : Texture2D.whiteTexture);
+                    if (b.texture == null)
+                        throw new ArgumentException("GPU texture binding is unresolved: " + b.resourceId);
+                    textureMap.Add(b.resourceId, b.texture);
                 }
             foreach (var r in next.resources)
                 if (!textureMap.ContainsKey(r.id)) throw new ArgumentException("Missing texture binding for resource " + r.id);
+            if (textureMap.Count != next.resources.Length)
+                throw new ArgumentException("One or more GPU texture bindings do not belong to this program.");
             var nextKernels = new int[next.flow.Length];
             var nextTextures = new Texture[next.flow.Length];
             for (int i = 0; i < next.flow.Length; i++)
@@ -122,8 +133,78 @@ namespace LiberaFx.Unity
             flowKernels = nextKernels; flowTextures = nextTextures; particleId = Shader.PropertyToID(next.particleBuffer);
             properties = new MaterialPropertyBlock();
             properties.SetBuffer(DrawParticlesId, particles);
+            billboardSizeScale = 1;
             cursor = frame = 0; elapsed = spawnFraction = 0;
             RuntimeExecuted = submittedWork = false; DispatchCount = DrawCount = 0;
+        }
+
+        // Performs the same imported-asset, shader-kernel and resource checks as
+        // Configure, without allocating per-instance GPU buffers.
+        public static LibraGpuMetadata ValidateSpawnableConfiguration(ComputeShader shader,
+            TextAsset sourceMetadata, Material material, LibraGpuTextureBinding[] bindings)
+        {
+            if (shader == null || sourceMetadata == null || material == null)
+                throw new ArgumentException("Compute shader, metadata and billboard material are required.");
+            if (!material.enableInstancing || !material.HasProperty("_Color") ||
+                material.shader == null || !material.shader.isSupported)
+                throw new ArgumentException("Billboard Material needs a supported instanced shader with _Color.");
+            if (!SystemInfo.supportsComputeShaders || !SystemInfo.supportsInstancing)
+                throw new NotSupportedException("GPU compute and instancing are required.");
+            var next = LibraGpuMetadata.Parse(sourceMetadata.text);
+#if UNITY_EDITOR
+            var shaderPath = UnityEditor.AssetDatabase.GetAssetPath(shader);
+            if (!string.IsNullOrEmpty(shaderPath) && System.IO.File.Exists(shaderPath))
+            {
+                using (var sha = System.Security.Cryptography.SHA256.Create())
+                {
+                    var sourceBytes = System.Text.Encoding.UTF8.GetBytes(System.IO.File.ReadAllText(shaderPath));
+                    var actual = BitConverter.ToString(sha.ComputeHash(sourceBytes)).Replace("-", "").ToLowerInvariant();
+                    if (actual != next.sourceHash)
+                        throw new ArgumentException("Compute shader source hash does not match the GPU metadata.");
+                }
+            }
+#endif
+            if (Marshal.SizeOf(typeof(LibraGpuParticle)) != 80)
+                throw new InvalidOperationException("Managed particle ABI is not 80 bytes.");
+            var kernelIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var kernel in next.kernels)
+            {
+                if (!kernelIds.Add(kernel.id))
+                    throw new ArgumentException("Duplicate GPU kernel metadata: " + kernel.id);
+                int index;
+                try { index = shader.FindKernel(kernel.entryPoint); }
+                catch (Exception error) { throw new ArgumentException("Compute shader is missing kernel " + kernel.entryPoint, error); }
+                shader.GetKernelThreadGroupSizes(index, out uint x, out uint y, out uint z);
+                if (x != kernel.threadsX || y != 1 || z != 1)
+                    throw new ArgumentException("Compute shader thread group mismatch: " + kernel.entryPoint);
+            }
+            var resourceIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var binding in bindings ?? Array.Empty<LibraGpuTextureBinding>())
+                if (binding == null || string.IsNullOrWhiteSpace(binding.resourceId) ||
+                    !binding.texture || !resourceIds.Add(binding.resourceId))
+                    throw new ArgumentException("GPU texture bindings contain an unresolved or duplicate resource.");
+            if (resourceIds.Count != next.resources.Length ||
+                next.resources.Any(resource => !resourceIds.Contains(resource.id)))
+                throw new ArgumentException("GPU texture bindings do not exactly match metadata resources.");
+            return next;
+        }
+
+        // Spawnable scopes own a separate buffer set and are stepped only by their
+        // LiberaFxSpawnableComponent. They never use Unity's global frame delta.
+        public void ConfigureForSpawnable(ComputeShader shader, TextAsset sourceMetadata,
+            Material material, LibraGpuTextureBinding[] bindings, uint seed, float rate, float sizeScale = 1)
+        {
+            if (float.IsNaN(rate) || float.IsInfinity(rate) || rate < 0)
+                throw new ArgumentOutOfRangeException(nameof(rate), "Spawn rate must be finite and nonnegative.");
+            if (float.IsNaN(sizeScale) || float.IsInfinity(sizeScale) || sizeScale <= 0 || sizeScale > 10000)
+                throw new ArgumentOutOfRangeException(nameof(sizeScale), "Billboard size scale must be finite and positive.");
+            Configure(shader, sourceMetadata, material, bindings);
+            automaticUpdate = false;
+            playOnEnable = false;
+            spawnableStepMode = true;
+            spawnRate = rate;
+            emitterSeed = seed;
+            billboardSizeScale = sizeScale;
         }
 
         static Mesh CreateQuad()
@@ -144,6 +225,26 @@ namespace LiberaFx.Unity
         public void StepCircular(float deltaTime, uint spawnStart, uint spawnCount, Vector3 emitterPosition, Camera camera = null)
         {
             StepInternal(deltaTime, spawnStart, spawnCount, emitterPosition, camera, true);
+        }
+
+        // Advances one isolated Spawnable GPU scope. Fractional births and circular
+        // buffer position belong to this component instance and reset on configure.
+        public void StepSpawnable(float effectLocalDelta, Vector3 emitterPosition, Camera camera = null)
+        {
+            if (!spawnableStepMode)
+                throw new InvalidOperationException("Configure this GPU runtime for a Spawnable scope before stepping it.");
+            if (!running)
+                throw new InvalidOperationException("Start the Spawnable GPU simulation before stepping it.");
+            if (float.IsNaN(effectLocalDelta) || float.IsInfinity(effectLocalDelta) || effectLocalDelta < 0)
+                throw new ArgumentOutOfRangeException(nameof(effectLocalDelta), "Effect-local delta must be finite and nonnegative.");
+            var amount = (double)spawnRate * effectLocalDelta + spawnFraction;
+            if (double.IsNaN(amount) || double.IsInfinity(amount))
+                throw new ArgumentOutOfRangeException(nameof(effectLocalDelta), "Spawn count overflowed.");
+            var whole = Math.Floor(amount);
+            var count = (uint)Math.Min(whole, program.capacity);
+            spawnFraction = (float)(amount - whole);
+            StepCircular(effectLocalDelta, cursor, count, emitterPosition, camera);
+            cursor = (cursor + count) % (uint)program.capacity;
         }
 
         void StepInternal(float deltaTime, uint spawnStart, uint spawnCount, Vector3 emitterPosition, Camera camera, bool circular)
@@ -169,6 +270,7 @@ namespace LiberaFx.Unity
                 if (program.flow[i].kind == "RenderBillboard")
                 {
                     properties.SetTexture(TextureId, flowTextures[i]);
+                    properties.SetFloat(SizeScaleId, billboardSizeScale);
                     Graphics.DrawMeshInstancedIndirect(quad, 0, billboardMaterial, new Bounds(emitterPosition, boundsSize), args, 0, properties,
                         ShadowCastingMode.Off, false, gameObject.layer, camera);
                     DrawCount++;
@@ -218,7 +320,7 @@ namespace LiberaFx.Unity
         }
         void Update()
         {
-            if (!running) return;
+            if (!running || !automaticUpdate) return;
             float delta = Time.deltaTime;
             float amount = Mathf.Max(0, spawnRate) * delta + spawnFraction;
             uint count = (uint)Mathf.Min(program.capacity, Mathf.Floor(amount));
@@ -235,6 +337,7 @@ namespace LiberaFx.Unity
             LibraGpuRetirement.Retire(particles, args, quad, submittedWork);
             particles = null; args = null; quad = null;
             program = null; flowKernels = null; flowTextures = null; properties = null;
+            spawnableStepMode = false;
             DrawCount = 0; submittedWork = false;
         }
         static void DestroyOwnedObject(UnityEngine.Object o) { if (Application.isPlaying) Destroy(o); else DestroyImmediate(o); }

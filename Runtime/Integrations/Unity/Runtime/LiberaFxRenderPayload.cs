@@ -1,0 +1,645 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+namespace LiberaFx.Unity
+{
+    [Serializable] internal sealed class LiberaFxRenderPayload
+    {
+        public string type;
+        public long programSequence;
+        public LiberaFxRenderNodePayload[] nodes;
+    }
+
+    [Serializable] internal sealed class LiberaFxRenderNodePayload
+    {
+        public string nodeId;
+        public string kind;
+        public string assetPath;
+        public LiberaFxRenderMaterialPayload[] materials;
+        public LiberaFxRenderInputPayload[] inputs;
+        public LiberaFxRenderTexturePayload[] textures;
+        public bool billboard;
+    }
+
+    [Serializable] internal sealed class LiberaFxRenderMaterialPayload
+    {
+        public int slot;
+        public string path;
+    }
+
+    [Serializable] internal sealed class LiberaFxRenderInputPayload
+    {
+        public string id;
+        public int width;
+        public string sourceNodeId;
+        public int sourceComponent;
+        public double[] defaults;
+        public LiberaFxMaterialParameterPayload materialParameter;
+    }
+
+    [Serializable] internal sealed class LiberaFxMaterialParameterPayload
+    {
+        public string name;
+        public string kind;
+        public int slot;
+        public int association;
+        public int index;
+    }
+
+    [Serializable] internal sealed class LiberaFxRenderTexturePayload
+    {
+        public string name;
+        public int slot;
+        public string path;
+        public int association;
+        public int index;
+    }
+
+    [Serializable] internal sealed class LiberaFxGpuManifestPayload
+    {
+        public int version;
+        public LiberaFxGpuManifestProgram[] programs;
+    }
+
+    [Serializable] internal sealed class LiberaFxGpuManifestProgram
+    {
+        public string nodeId;
+        public LiberaFxGpuUnrealProgram unreal;
+        public string unityMetadataJson;
+        public string unityShaderSource;
+    }
+
+    [Serializable] internal sealed class LiberaFxGpuUnrealProgram
+    {
+        public string canonicalJson;
+        public LiberaFxGpuUnrealMetadata metadata;
+        public LiberaFxGpuRendererBinding[] rendererBindings;
+    }
+
+    [Serializable] internal sealed class LiberaFxGpuUnrealMetadata
+    {
+        public string programId;
+        public string contentHash;
+    }
+
+    [Serializable] internal sealed class LiberaFxGpuRendererBinding
+    {
+        public string flowId;
+        public string renderer;
+        public string material;
+        public double sizeScale;
+    }
+
+    [Serializable] internal sealed class LiberaFxGpuContainerSnapshot
+    {
+        public string id;
+    }
+
+    [Serializable] internal sealed class LiberaFxGpuContainerSnapshotList
+    {
+        public LiberaFxGpuContainerSnapshot[] items;
+    }
+
+    internal sealed class LiberaFxPreparedRenderNode
+    {
+        public string nodeId;
+        public bool isSprite;
+        public bool billboard;
+        public Mesh mesh;
+        public Texture texture;
+        public Material[] materials;
+        public string[] tintPropertyNames;
+        public string[] materialParameterPropertyNames;
+        public Camera billboardCamera;
+        public LiberaFxRenderInputPayload[] inputs;
+        public LiberaFxPreparedTextureParameter[] textures;
+    }
+
+    internal sealed class LiberaFxPreparedTextureParameter
+    {
+        public string name;
+        public int slot;
+        public Texture texture;
+    }
+
+    internal sealed class LiberaFxPreparedGpuProgram
+    {
+        public string nodeId;
+        public LiberaFxUnityGpuProgramBinding binding;
+        public LibraGpuMetadata packageMetadata;
+        public float sizeScale;
+    }
+
+    internal sealed class LiberaFxPreparedScope
+    {
+        public string templateId;
+        public LiberaFxPreparedRenderNode[] renderNodes;
+        public LiberaFxPreparedGpuProgram[] gpuPrograms;
+    }
+
+    internal sealed class LiberaFxUnityBindingLookup
+    {
+        private const string NullMaterialParameterSentinel = "__LIBERAFX_NULL_MATERIAL_PARAMETER__";
+        private readonly Dictionary<string, LiberaFxUnityRenderAssetBinding> renderAssets;
+        private readonly Dictionary<string, LiberaFxUnityMaterialBinding> materials;
+        private readonly Dictionary<string, Dictionary<string, string>> materialPropertyMappings;
+        private readonly Dictionary<string, LiberaFxUnityGpuProgramBinding> gpuPrograms;
+        public uint RootGpuSeed { get; }
+
+        public LiberaFxUnityBindingLookup(LiberaFxUnityBindingAsset source)
+        {
+            renderAssets = new Dictionary<string, LiberaFxUnityRenderAssetBinding>(StringComparer.Ordinal);
+            materials = new Dictionary<string, LiberaFxUnityMaterialBinding>(StringComparer.Ordinal);
+            materialPropertyMappings = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
+            gpuPrograms = new Dictionary<string, LiberaFxUnityGpuProgramBinding>(StringComparer.Ordinal);
+            RootGpuSeed = source ? source.RootGpuSeed : 1;
+            if (!source) return;
+            foreach (var binding in source.RenderAssets ?? Array.Empty<LiberaFxUnityRenderAssetBinding>())
+            {
+                if (binding == null || string.IsNullOrWhiteSpace(binding.assetIdentity) ||
+                    renderAssets.ContainsKey(binding.assetIdentity))
+                    throw new InvalidOperationException("Unity render asset bindings contain an empty or duplicate identity.");
+                renderAssets.Add(binding.assetIdentity, binding);
+            }
+            foreach (var binding in source.Materials ?? Array.Empty<LiberaFxUnityMaterialBinding>())
+            {
+                if (binding == null || string.IsNullOrWhiteSpace(binding.assetIdentity) || !binding.material ||
+                    materials.ContainsKey(binding.assetIdentity))
+                    throw new InvalidOperationException("Unity material bindings contain an empty/duplicate identity or missing Material.");
+                var authoredToUnity = new Dictionary<string, string>(StringComparer.Ordinal);
+                var unityTargets = new HashSet<string>(StringComparer.Ordinal);
+                var parameterMappings = binding.parameterMappings ?? Array.Empty<LiberaFxUnityMaterialPropertyBinding>();
+                if (parameterMappings.Length > 256)
+                    throw new InvalidOperationException("Unity material parameter mapping count exceeds 256.");
+                foreach (var mapping in parameterMappings)
+                {
+                    if (mapping == null || string.IsNullOrWhiteSpace(mapping.authoredName) ||
+                        mapping.authoredName.Length > 256 || string.IsNullOrWhiteSpace(mapping.unityPropertyName) ||
+                        mapping.unityPropertyName.Length > 256)
+                        throw new InvalidOperationException("Unity material property mappings contain an empty or oversized name.");
+                    if (!authoredToUnity.TryAdd(mapping.authoredName, mapping.unityPropertyName))
+                        throw new InvalidOperationException("Unity material property mappings contain duplicate authored name '" +
+                            mapping.authoredName + "'.");
+                    if (!unityTargets.Add(mapping.unityPropertyName))
+                        throw new InvalidOperationException("Unity material property mappings contain duplicate Unity target '" +
+                            mapping.unityPropertyName + "'.");
+                    if (!binding.material.HasProperty(mapping.unityPropertyName))
+                        throw new InvalidOperationException("Mapped Unity shader property '" + mapping.unityPropertyName +
+                            "' does not exist on Material binding '" + binding.assetIdentity + "'.");
+                }
+                materials.Add(binding.assetIdentity, binding);
+                materialPropertyMappings.Add(binding.assetIdentity, authoredToUnity);
+            }
+            foreach (var binding in source.GpuPrograms ?? Array.Empty<LiberaFxUnityGpuProgramBinding>())
+            {
+                if (binding == null || !TryCanonicalGuid(binding.nodeId, out var key) ||
+                    gpuPrograms.ContainsKey(key))
+                    throw new InvalidOperationException("Unity GPU bindings contain an invalid or duplicate node GUID.");
+                gpuPrograms.Add(key, binding);
+            }
+        }
+
+        public LiberaFxPreparedScope Prepare(string templateId, byte[] renderBytes,
+            byte[] gpuContainerBytes, byte[] gpuProgramBytes)
+        {
+            var renderNodes = ParseRender(renderBytes);
+            var authoredGpuIds = ParseGpuContainerIds(gpuContainerBytes);
+            var gpuPrograms = ParseGpuPrograms(gpuProgramBytes, authoredGpuIds);
+            return new LiberaFxPreparedScope
+            {
+                templateId = templateId,
+                renderNodes = renderNodes.Select(ResolveRenderNode).ToArray(),
+                gpuPrograms = gpuPrograms.Select(ResolveGpuProgram).ToArray()
+            };
+        }
+
+        private LiberaFxPreparedRenderNode ResolveRenderNode(LiberaFxRenderNodePayload node)
+        {
+            if (!renderAssets.TryGetValue(node.assetPath, out var asset))
+                throw new InvalidOperationException("No Unity asset binding exists for render asset '" + node.assetPath + "'.");
+            var isSprite = node.kind == "sprite";
+            if (isSprite ? !asset.texture : !asset.mesh)
+                throw new InvalidOperationException("Unity render asset binding '" + node.assetPath +
+                    "' does not supply the required " + (isSprite ? "Texture" : "Mesh") + ".");
+
+            var slots = isSprite ? 1 : asset.mesh.subMeshCount;
+            if (slots < 1 || slots > 256)
+                throw new InvalidOperationException("Render node material slot count is outside supported bounds.");
+            if (asset.defaultMaterials != null && asset.defaultMaterials.Length > slots ||
+                asset.defaultTintPropertyNames != null && asset.defaultTintPropertyNames.Length > slots)
+                throw new InvalidOperationException("Unity render asset binding defines unused material slots.");
+            var resolvedMaterials = new Material[slots];
+            var tintPropertyNames = new string[slots];
+            var materialBindings = new LiberaFxUnityMaterialBinding[slots];
+            if (asset.defaultMaterials != null)
+                Array.Copy(asset.defaultMaterials, resolvedMaterials,
+                    Math.Min(asset.defaultMaterials.Length, resolvedMaterials.Length));
+            if (asset.defaultTintPropertyNames != null)
+                Array.Copy(asset.defaultTintPropertyNames, tintPropertyNames,
+                    Math.Min(asset.defaultTintPropertyNames.Length, tintPropertyNames.Length));
+            foreach (var material in node.materials ?? Array.Empty<LiberaFxRenderMaterialPayload>())
+            {
+                if (material == null || material.slot < 0 || material.slot >= resolvedMaterials.Length ||
+                    !materials.TryGetValue(material.path ?? string.Empty, out var binding) || !binding.material)
+                    throw new InvalidOperationException("No Unity Material binding exists for render material slot " +
+                        (material == null ? "<null>" : material.slot.ToString(CultureInfo.InvariantCulture)) + ".");
+                if (materialBindings[material.slot] != null)
+                    throw new InvalidOperationException("Render node has duplicate material bindings for slot " + material.slot + ".");
+                resolvedMaterials[material.slot] = binding.material;
+                tintPropertyNames[material.slot] = binding.tintPropertyName;
+                materialBindings[material.slot] = binding;
+            }
+            var requiredSlots = isSprite ? 1 : asset.mesh.subMeshCount;
+            for (var slot = 0; slot < requiredSlots; ++slot)
+            {
+                if (!resolvedMaterials[slot])
+                    throw new InvalidOperationException("Render node '" + node.nodeId +
+                        "' has no Unity Material bound for slot " + slot + ".");
+                if (string.IsNullOrWhiteSpace(tintPropertyNames[slot]) ||
+                    !resolvedMaterials[slot].HasProperty(tintPropertyNames[slot]))
+                    throw new InvalidOperationException("Unity Material slot " + slot +
+                        " has no configured tint property for render node " + node.nodeId + ".");
+            }
+
+            var textureParameters = new List<LiberaFxPreparedTextureParameter>();
+            var materialParameterPropertyNames = new string[(node.inputs ?? Array.Empty<LiberaFxRenderInputPayload>()).Length];
+            foreach (var texture in node.textures ?? Array.Empty<LiberaFxRenderTexturePayload>())
+            {
+                ValidateUnityAssociation(texture.association, texture.index);
+                if (texture.slot < 0 || texture.slot >= resolvedMaterials.Length ||
+                    string.IsNullOrWhiteSpace(texture.name))
+                    throw new InvalidOperationException("Render texture parameter has an invalid name or slot.");
+                if (string.IsNullOrEmpty(texture.path)) continue;
+                if (!renderAssets.TryGetValue(texture.path, out var textureBinding) || !textureBinding.texture)
+                    throw new InvalidOperationException("No Unity Texture binding exists for material texture '" + texture.path + "'.");
+                var targetMaterial = resolvedMaterials[texture.slot];
+                var unityPropertyName = ResolveMappedProperty(materialBindings[texture.slot],
+                    texture.name, texture.slot, "texture");
+                ValidateMappedPropertyType(targetMaterial, unityPropertyName, texture.name, "texture");
+                textureParameters.Add(new LiberaFxPreparedTextureParameter
+                {
+                    name = unityPropertyName,
+                    slot = texture.slot,
+                    texture = textureBinding.texture
+                });
+            }
+            for (var inputIndex = 0; inputIndex < (node.inputs ?? Array.Empty<LiberaFxRenderInputPayload>()).Length; ++inputIndex)
+            {
+                var input = node.inputs[inputIndex];
+                if (input.materialParameter == null) continue;
+                ValidateUnityAssociation(input.materialParameter.association, input.materialParameter.index);
+                if (input.materialParameter.slot < 0 || input.materialParameter.slot >= resolvedMaterials.Length ||
+                    string.IsNullOrWhiteSpace(input.materialParameter.name))
+                    throw new InvalidOperationException("Render material parameter has an invalid name or slot.");
+                var material = resolvedMaterials[input.materialParameter.slot];
+                if (input.materialParameter.kind == "scalar" && input.width != 1 ||
+                    input.materialParameter.kind == "vector" && input.width != 4 ||
+                    input.materialParameter.kind != "scalar" && input.materialParameter.kind != "vector")
+                    throw new InvalidOperationException("Render material parameter type is unsupported by Unity.");
+                var propertyKind = input.materialParameter.kind == "scalar" ? "scalar" : "vector";
+                var unityPropertyName = ResolveMappedProperty(materialBindings[input.materialParameter.slot],
+                    input.materialParameter.name, input.materialParameter.slot, propertyKind);
+                ValidateMappedPropertyType(material, unityPropertyName, input.materialParameter.name, propertyKind);
+                materialParameterPropertyNames[inputIndex] = unityPropertyName;
+            }
+
+            if (isSprite)
+            {
+                if ((node.materials ?? Array.Empty<LiberaFxRenderMaterialPayload>()).Length > 1 ||
+                    textureParameters.Exists(parameter => parameter.slot != 0) ||
+                    (node.inputs ?? Array.Empty<LiberaFxRenderInputPayload>())
+                        .Any(input => input.materialParameter != null && input.materialParameter.slot != 0))
+                    throw new InvalidOperationException("Unity sprite rendering supports only material slot zero.");
+                foreach (var material in resolvedMaterials)
+                    if (!material.HasProperty("_MainTex") || !material.HasProperty("_AtlasRect"))
+                        throw new InvalidOperationException(
+                            "Unity sprite Materials must expose _MainTex and _AtlasRect.");
+                if (node.billboard && !Camera.main)
+                    throw new InvalidOperationException("A billboard Sprite requires an enabled MainCamera before Play.");
+            }
+            return new LiberaFxPreparedRenderNode
+            {
+                nodeId = node.nodeId,
+                isSprite = isSprite,
+                billboard = node.billboard,
+                mesh = asset.mesh,
+                texture = asset.texture,
+                materials = resolvedMaterials,
+                tintPropertyNames = tintPropertyNames,
+                materialParameterPropertyNames = materialParameterPropertyNames,
+                billboardCamera = node.billboard ? Camera.main : null,
+                inputs = node.inputs ?? Array.Empty<LiberaFxRenderInputPayload>(),
+                textures = textureParameters.ToArray()
+            };
+        }
+
+        private string ResolveMappedProperty(LiberaFxUnityMaterialBinding binding,
+            string authoredName, int slot, string propertyKind)
+        {
+            if (binding == null ||
+                !materialPropertyMappings.TryGetValue(binding.assetIdentity, out var mappings) ||
+                !mappings.TryGetValue(authoredName, out var unityPropertyName))
+                throw new InvalidOperationException("Render material " + propertyKind + " '" + authoredName +
+                    "' in slot " + slot + " has no explicit Unity shader-property mapping.");
+            return unityPropertyName;
+        }
+
+        private static void ValidateMappedPropertyType(Material material, string unityPropertyName,
+            string authoredName, string propertyKind)
+        {
+            if (!material || !material.shader)
+                throw new InvalidOperationException("Mapped Unity Material or shader is missing.");
+            var shader = material.shader;
+            ShaderPropertyType? targetType = null;
+            for (var index = 0; index < shader.GetPropertyCount(); ++index)
+                if (shader.GetPropertyName(index) == unityPropertyName)
+                {
+                    targetType = shader.GetPropertyType(index);
+                    break;
+                }
+            if (!targetType.HasValue)
+                throw new InvalidOperationException("Mapped Unity shader property '" + unityPropertyName +
+                    "' for authored parameter '" + authoredName + "' is not declared by the Material shader.");
+
+            var compatible = propertyKind switch
+            {
+                "scalar" => targetType == ShaderPropertyType.Float || targetType == ShaderPropertyType.Range,
+                "vector" => targetType == ShaderPropertyType.Color || targetType == ShaderPropertyType.Vector,
+                "texture" => targetType == ShaderPropertyType.Texture,
+                _ => false
+            };
+            if (!compatible)
+                throw new InvalidOperationException("Mapped Unity shader property '" + unityPropertyName +
+                    "' has type " + targetType.Value + ", incompatible with authored " + propertyKind + " parameter '" +
+                    authoredName + "'.");
+        }
+
+        private LiberaFxPreparedGpuProgram ResolveGpuProgram(LiberaFxGpuManifestProgram program)
+        {
+            var nodeId = CanonicalGuid(program.nodeId);
+            if (!gpuPrograms.TryGetValue(nodeId, out var binding))
+                throw new InvalidOperationException("No Unity GPU binding exists for node " + nodeId + ".");
+            if (!binding.computeShader || !binding.metadata || !binding.billboardMaterial)
+                throw new InvalidOperationException("Unity GPU binding " + nodeId +
+                    " requires an imported ComputeShader, metadata TextAsset and billboard Material.");
+            if (string.IsNullOrWhiteSpace(program.unityMetadataJson) ||
+                string.IsNullOrWhiteSpace(program.unityShaderSource))
+                throw new InvalidOperationException("GPU executable payload is missing Unity metadata or source for " + nodeId + ".");
+            var packageMetadata = LibraGpuMetadata.Parse(program.unityMetadataJson);
+            var importedMetadata = LibraGpuMetadata.Parse(binding.metadata.text);
+            if (program.unreal == null || program.unreal.metadata == null ||
+                program.unreal.canonicalJson == null ||
+                program.unreal.metadata.programId != packageMetadata.programId ||
+                program.unreal.metadata.contentHash != packageMetadata.contentHash ||
+                HashUtf8(program.unreal.canonicalJson) != packageMetadata.contentHash ||
+                HashUtf8(program.unityShaderSource) != packageMetadata.sourceHash ||
+                importedMetadata.programId != packageMetadata.programId ||
+                importedMetadata.contentHash != packageMetadata.contentHash ||
+                importedMetadata.sourceHash != packageMetadata.sourceHash)
+                throw new InvalidOperationException("GPU program identity/hash does not match the preimported Unity assets for " + nodeId + ".");
+
+            var configured = gpuPrograms[nodeId];
+            if (float.IsNaN(configured.spawnRate) || float.IsInfinity(configured.spawnRate) || configured.spawnRate < 0 ||
+                float.IsNaN(configured.sizeScale) || float.IsInfinity(configured.sizeScale) ||
+                configured.sizeScale <= 0 || configured.sizeScale > 10000)
+                throw new InvalidOperationException("Unity GPU spawn rate or size scale is invalid for " + nodeId + ".");
+            ValidateGpuTextures(packageMetadata, configured.textures, nodeId);
+            var renderBindings = program.unreal.rendererBindings ?? Array.Empty<LiberaFxGpuRendererBinding>();
+            var renderFlowCount = 0;
+            foreach (var flow in packageMetadata.flow)
+                if (flow.kind == "RenderBillboard") ++renderFlowCount;
+            if (renderBindings.Length != renderFlowCount)
+                throw new InvalidOperationException("GPU renderer binding count does not match the compiled billboard flow.");
+            if (renderBindings.Length > 1)
+                throw new InvalidOperationException("Unity GPU binding currently supports one billboard flow per GPU node.");
+            var sizeScale = 1f;
+            foreach (var renderer in renderBindings)
+            {
+                if (renderer == null || renderer.renderer != "builtin:billboard" ||
+                    renderer.material != configured.rendererMaterialIdentity ||
+                    (renderer.material != "builtin:unlit-alpha" && renderer.material != "builtin:unlit-additive") ||
+                    double.IsNaN(renderer.sizeScale) || double.IsInfinity(renderer.sizeScale) ||
+                    renderer.sizeScale <= 0 ||
+                    renderer.sizeScale > 10000 || Math.Abs(renderer.sizeScale - configured.sizeScale) > 0.0001)
+                    throw new InvalidOperationException("Unity GPU renderer material/size binding is unsupported or mismatched for " + nodeId + ".");
+                sizeScale = (float)renderer.sizeScale;
+            }
+            LibraGpuParticleRuntime.ValidateSpawnableConfiguration(configured.computeShader,
+                configured.metadata, configured.billboardMaterial, configured.textures);
+            return new LiberaFxPreparedGpuProgram
+            {
+                nodeId = nodeId,
+                binding = configured,
+                packageMetadata = packageMetadata,
+                sizeScale = sizeScale
+            };
+        }
+
+        private static void ValidateGpuTextures(LibraGpuMetadata metadata,
+            LibraGpuTextureBinding[] bindings, string nodeId)
+        {
+            var byId = new Dictionary<string, LibraGpuTextureBinding>(StringComparer.Ordinal);
+            foreach (var binding in bindings ?? Array.Empty<LibraGpuTextureBinding>())
+                if (binding == null || string.IsNullOrWhiteSpace(binding.resourceId) || !binding.texture ||
+                    byId.ContainsKey(binding.resourceId))
+                    throw new InvalidOperationException("Unity GPU texture bindings contain an unresolved or duplicate resource for " + nodeId + ".");
+                else byId.Add(binding.resourceId, binding);
+            if (metadata.resources.Length != byId.Count)
+                throw new InvalidOperationException("Unity GPU texture binding count does not match metadata for " + nodeId + ".");
+            foreach (var resource in metadata.resources)
+                if (!byId.ContainsKey(resource.id))
+                    throw new InvalidOperationException("Unity GPU resource '" + resource.id + "' is unbound for " + nodeId + ".");
+        }
+
+        private static LiberaFxRenderNodePayload[] ParseRender(byte[] bytes)
+        {
+            if (bytes == null || bytes.Length == 0) return Array.Empty<LiberaFxRenderNodePayload>();
+            if (bytes.Length > 4 * 1024 * 1024) throw new InvalidOperationException("Render configuration exceeds 4 MiB.");
+            LiberaFxRenderPayload payload;
+            try
+            {
+                var json = Encoding.UTF8.GetString(bytes).Replace("\"materialParameter\":null",
+                    "\"materialParameter\":{\"name\":\"" + NullMaterialParameterSentinel +
+                    "\",\"kind\":\"" + NullMaterialParameterSentinel + "\"}");
+                payload = JsonUtility.FromJson<LiberaFxRenderPayload>(json);
+            }
+            catch (Exception error) { throw new InvalidOperationException("Render configuration JSON is malformed.", error); }
+            if (payload == null || payload.type != "render_config" || payload.nodes == null || payload.nodes.Length > 128)
+                throw new InvalidOperationException("Render configuration type or node count is invalid.");
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var node in payload.nodes)
+            {
+                if (node == null || !TryCanonicalGuid(node.nodeId, out var id) ||
+                    !ids.Add(id) || (node.kind != "model" && node.kind != "sprite") ||
+                    string.IsNullOrWhiteSpace(node.assetPath) || node.assetPath.Length > 512)
+                    throw new InvalidOperationException("Render configuration contains an invalid node identity, kind or asset.");
+                node.nodeId = id;
+                foreach (var input in node.inputs ?? Array.Empty<LiberaFxRenderInputPayload>())
+                    if (input != null && input.materialParameter != null &&
+                        input.materialParameter.name == NullMaterialParameterSentinel &&
+                        input.materialParameter.kind == NullMaterialParameterSentinel)
+                        input.materialParameter = null;
+                ValidateInputs(node);
+                if ((node.materials?.Length ?? 0) > 256 || (node.textures?.Length ?? 0) > 256)
+                    throw new InvalidOperationException("Render node material metadata exceeds the supported bound.");
+            }
+            return payload.nodes;
+        }
+
+        private static void ValidateInputs(LiberaFxRenderNodePayload node)
+        {
+            if (node.inputs == null || node.inputs.Length > 256)
+                throw new InvalidOperationException("Render node input count is invalid.");
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var input in node.inputs)
+            {
+                if (input == null) throw new InvalidOperationException("Render node contains a null input.");
+                if (string.IsNullOrWhiteSpace(input.id) || input.id.Length > 128 || !ids.Add(input.id))
+                    throw new InvalidOperationException("Render node contains an empty or duplicate input ID.");
+                if (input.width < 1 || input.width > 4 || input.defaults == null ||
+                    input.defaults.Length != input.width)
+                    throw new InvalidOperationException("Render input '" + input.id +
+                        "' has invalid width/default lanes (width=" + input.width + ", defaults=" +
+                        (input.defaults == null ? "null" : input.defaults.Length.ToString(CultureInfo.InvariantCulture)) + ").");
+                if (input.sourceComponent < 0 || input.sourceComponent > 3)
+                    throw new InvalidOperationException("Render input '" + input.id + "' has an invalid source component.");
+                if (!string.IsNullOrEmpty(input.sourceNodeId) && !TryCanonicalGuid(input.sourceNodeId, out _))
+                    throw new InvalidOperationException("Render input '" + input.id + "' has an invalid source node GUID.");
+                foreach (var lane in input.defaults)
+                    if (!IsFiniteFloat(lane))
+                        throw new InvalidOperationException("Render node default exceeds finite Unity float range.");
+            }
+            RequireInput(node, "position", 3);
+            RequireInput(node, "rotation", 3);
+            RequireInput(node, "scale", 3);
+            RequireInput(node, "tint", 4);
+            if (node.kind == "sprite")
+            {
+                RequireInput(node, "frame", 1);
+                var columns = StaticInput(node, "columns", 1);
+                var rows = StaticInput(node, "rows", 1);
+                var fps = StaticInput(node, "fps", 1);
+                StaticInput(node, "playing", 1);
+                if (columns.sourceNodeId != null || rows.sourceNodeId != null || fps.sourceNodeId != null ||
+                    StaticInput(node, "playing", 1).sourceNodeId != null ||
+                    columns.defaults[0] < 1 || columns.defaults[0] > 65536 ||
+                    rows.defaults[0] < 1 || rows.defaults[0] > 65536 || fps.defaults[0] < 0 ||
+                    Math.Floor(columns.defaults[0]) != columns.defaults[0] ||
+                    Math.Floor(rows.defaults[0]) != rows.defaults[0] ||
+                    (StaticInput(node, "playing", 1).defaults[0] != 0 &&
+                     StaticInput(node, "playing", 1).defaults[0] != 1))
+                    throw new InvalidOperationException("Sprite atlas settings are unsupported or invalid.");
+            }
+            foreach (var input in node.inputs)
+                if (!IsStandardInput(input.id) && input.materialParameter == null)
+                    throw new InvalidOperationException("Unsupported render input '" + input.id + "'.");
+        }
+
+        private static bool IsStandardInput(string id) =>
+            id == "position" || id == "rotation" || id == "scale" || id == "tint" ||
+            id == "frame" || id == "columns" || id == "rows" || id == "fps" || id == "playing";
+
+        private static void RequireInput(LiberaFxRenderNodePayload node, string id, int width)
+        {
+            var input = node.inputs.SingleOrDefault(value => value.id == id);
+            if (input == null || input.width != width)
+                throw new InvalidOperationException("Render node '" + node.nodeId + "' is missing " + id + " input.");
+        }
+
+        private static LiberaFxRenderInputPayload StaticInput(LiberaFxRenderNodePayload node, string id, int width)
+        {
+            var input = node.inputs.SingleOrDefault(value => value.id == id);
+            if (input == null || input.width != width)
+                throw new InvalidOperationException("Sprite node is missing " + id + " setting.");
+            return input;
+        }
+
+        private static HashSet<string> ParseGpuContainerIds(byte[] bytes)
+        {
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            if (bytes == null || bytes.Length == 0) return ids;
+            if (bytes.Length > 4 * 1024 * 1024) throw new InvalidOperationException("GPU authored snapshot exceeds 4 MiB.");
+            var json = Encoding.UTF8.GetString(bytes);
+            LiberaFxGpuContainerSnapshotList wrapper;
+            try { wrapper = JsonUtility.FromJson<LiberaFxGpuContainerSnapshotList>("{\"items\":" + json + "}"); }
+            catch (Exception error) { throw new InvalidOperationException("GPU authored snapshot JSON is malformed.", error); }
+            if (wrapper == null || wrapper.items == null || wrapper.items.Length > 16)
+                throw new InvalidOperationException("GPU authored snapshot count is invalid.");
+            foreach (var snapshot in wrapper.items)
+                if (snapshot == null || !TryCanonicalGuid(snapshot.id, out var id) || !ids.Add(id))
+                    throw new InvalidOperationException("GPU authored snapshot has an invalid or duplicate node GUID.");
+            return ids;
+        }
+
+        internal static bool HasGpuContainers(byte[] bytes) => ParseGpuContainerIds(bytes).Count != 0;
+
+        private LiberaFxGpuManifestProgram[] ParseGpuPrograms(byte[] bytes, HashSet<string> authoredIds)
+        {
+            if (bytes == null || bytes.Length == 0)
+            {
+                if (authoredIds.Count != 0)
+                    throw new InvalidOperationException("GPU authored nodes have no executable GpuPrograms payload.");
+                return Array.Empty<LiberaFxGpuManifestProgram>();
+            }
+            if (bytes.Length > 16 * 1024 * 1024)
+                throw new InvalidOperationException("GPU executable payload exceeds 16 MiB.");
+            LiberaFxGpuManifestPayload manifest;
+            try { manifest = JsonUtility.FromJson<LiberaFxGpuManifestPayload>(Encoding.UTF8.GetString(bytes)); }
+            catch (Exception error) { throw new InvalidOperationException("GPU executable payload JSON is malformed.", error); }
+            if (manifest == null || manifest.version != 1 || manifest.programs == null || manifest.programs.Length > 16)
+                throw new InvalidOperationException("GPU executable payload version or program count is invalid.");
+            var programs = new Dictionary<string, LiberaFxGpuManifestProgram>(StringComparer.Ordinal);
+            foreach (var program in manifest.programs)
+            {
+                if (program == null || !TryCanonicalGuid(program.nodeId, out var id) ||
+                    programs.ContainsKey(id))
+                    throw new InvalidOperationException("GPU executable payload has an invalid or duplicate node GUID.");
+                program.nodeId = id;
+                programs.Add(id, program);
+            }
+            if (programs.Count != authoredIds.Count || authoredIds.Any(id => !programs.ContainsKey(id)))
+                throw new InvalidOperationException("GPU authored node IDs do not match compiled executable programs.");
+            return programs.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => pair.Value).ToArray();
+        }
+
+        private static void ValidateUnityAssociation(int association, int index)
+        {
+            // Unity MaterialPropertyBlock addresses shader properties by name only;
+            // Unreal Layer/Blend association/index semantics have no Unity equivalent.
+            if (association != 2 || index != -1)
+                throw new InvalidOperationException("Unity supports only global material parameters (association 2, index -1).");
+        }
+
+        internal static bool IsFiniteFloat(double value) =>
+            !double.IsNaN(value) && !double.IsInfinity(value) &&
+            value >= -float.MaxValue && value <= float.MaxValue;
+
+        private static string HashUtf8(string text)
+        {
+            using (var sha = SHA256.Create())
+                return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(text)))
+                    .Replace("-", string.Empty).ToLowerInvariant();
+        }
+
+        internal static bool TryCanonicalGuid(string value, out string canonical)
+        {
+            canonical = null;
+            if (!Guid.TryParse(value, out var guid)) return false;
+            canonical = guid.ToString("D").ToLowerInvariant();
+            return true;
+        }
+
+        private static string CanonicalGuid(string value)
+        {
+            if (!TryCanonicalGuid(value, out var canonical))
+                throw new InvalidOperationException("Invalid GPU node GUID.");
+            return canonical;
+        }
+    }
+}

@@ -7,8 +7,9 @@ jsonserialize module, compute shaders and GPU instancing are required.
 
 Create a material using Libra/GPU Particle Billboard and enable GPU instancing.
 Add LibraGpuParticleRuntime and assign the compute shader, metadata, material,
-and one Texture2D binding for every exported resource ID. A null texture in a
-binding means white. Play On Enable configures and starts automatically.
+and one Texture2D binding for every exported resource ID. Every resource must
+have an explicit non-null Texture2D; unresolved/null bindings are rejected
+instead of silently substituting white. Play On Enable configures and starts automatically.
 Assets/Libra GPU/Reimport generated shaders and metadata reimports selected
 assets after editing. In the Editor Configure checks the actual compute source
 SHA-256 against sourceHash; deployed builds cannot inspect source and must
@@ -16,8 +17,10 @@ ship matching generated assets together.
 
 Code can call Configure(shader, metadata, material, bindings), StartSimulation,
 StopSimulation, ResetSimulation, Step(deltaTime, start, count, position, camera)
-or StepCircular for a wrapping spawn range. Reconfigure creates and clears new
-storage and stops automatic simulation; call StartSimulation explicitly to
+or StepCircular for a wrapping spawn range. Spawnable scopes instead use
+ConfigureForSpawnable and StepSpawnable; that API disables automatic Update
+simulation and retains fractional spawn progress per owner instance.
+Reconfigure creates and clears new storage and stops automatic simulation; call StartSimulation explicitly to
 resume. A failed configuration leaves the prior program intact. Reset is the
 only in-place clear. Dispose/OnDisable release ownership. Previously submitted
 draws retain their buffers through the next frame; on platforms supporting

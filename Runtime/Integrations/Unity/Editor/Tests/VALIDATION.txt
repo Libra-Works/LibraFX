@@ -64,14 +64,84 @@ Logs/results/images remain local; no package installation or sharing is needed.
 This proves real Editor/Unity API and GPU behavior, not player builds, Play Mode
 automatic scheduling/domain reload, console hardware or IL2CPP.
 
-Separate Spawnable Play Mode proof:
-  Unity 7000.0.0a16, batchmode/Null graphics, Windows native plugin.
-  LiberaFxSpawnablePlayModeVerification.Run exited 0 with result=PASS.
-  Real domain reload and automatic component callbacks passed, together with
-  natural child draining, exact Destroy/Stop ordering, pause/resume, half-rate
-  playback, explicit Stop/restart and object destruction. The temporary import
-  was removed and the project's Enter Play Mode Options setting restored.
-  LFXP v2 root metadata and template payload copies pass during playback; the
-  component returns NotReady before host creation and after Stop.
-  This verifies lifecycle hosting and payload access, not rendering/GPU execution
-  or player builds.
+Spawnable CPU render verification:
+  Use a dedicated Unity project, a compiler-produced GameIo.lfxp and its
+  sibling GameIo.identities.json. Set LIBERAFX_UNITY_GAMEIO_FIXTURE to the
+  absolute .lfxp path, then run:
+
+  Unity.exe -batchmode -force-d3d11 -projectPath "<dedicated project>"
+    -executeMethod LiberaFx.Unity.Editor.LiberaFxSpawnableRenderVerification.Run
+    -logFile "<dedicated project>\spawnable-render.log"
+
+  Do not add -quit; the test enters Play Mode and exits the Editor itself.
+  Unity 7000.0.0a16 actual Play Mode result: PASS. Root render follows named
+  Game Property updates; Output Property emits the named "echo" port; two
+  instances of the same Spawnable preserve captured/live values independently;
+  explicit Stop releases all five owned renderers. Result file:
+  spawnable-render-verification.txt.
+
+Spawnable GPU integration verification:
+  Requires a dedicated graphics-enabled project, D3D11, and compiler-produced
+  fixtures. Set these environment variables to the corresponding absolute
+  fixture paths/values:
+  LIBERAFX_UNITY_GPU_SCOPE_PACKAGE, LIBERAFX_UNITY_GPU_SCOPE_IDS,
+  LIBERAFX_UNITY_GPU_SCOPE_COMPUTE, LIBERAFX_UNITY_GPU_SCOPE_METADATA,
+  LIBERAFX_UNITY_GPU_ROOT_PACKAGE, LIBERAFX_UNITY_GPU_ROOT_AUTOIDLE_PACKAGE,
+  LIBERAFX_UNITY_GPU_LEGACY_PACKAGE, LIBERAFX_UNITY_GPU_ROOT_NODE_ID,
+  LIBERAFX_UNITY_GPU_ROOT_COMPUTE, LIBERAFX_UNITY_GPU_ROOT_METADATA.
+  Run LiberaFx.Unity.Editor.LiberaFxSpawnableGpuIntegrationVerification.Run
+  with -batchmode -force-d3d11 and no -quit. Unity 7000.0.0a16 on Direct3D11
+  passed finite GPU Spawnable dispatch, billboard draw and particle readback;
+  root GPU Play/Tick/readback/RequestNaturalEnd cleanup; actionable root GPU +
+  AutoDestroyWhenIdle rejection; and pre-OnStart rejection of legacy authored
+  GPU snapshots without executable payload. Result file:
+  spawnable-gpu-integration-verification.txt.
+
+Independent GPU scope verification:
+  Import generated Emitter.compute and Emitter.json into
+  Assets/LibraFXGPUValidation/Fixtures, set LIBRA_GPU_VERIFICATION_DIR to the
+  isolated project directory, and run
+  LiberaFx.Unity.Editor.LibraGpuScopedVerification.Run with
+  -batchmode -force-d3d11. Unity 7000.0.0a16, AMD Radeon RX 6700 XT,
+  Direct3D11: PASS for fractional spawn cursor, independent buffers, local
+  particle age and per-scope seed. Missing textures and non-finite spawn rate
+  were rejected before scope allocation. Result file:
+  spawnable-gpu-verification.txt.
+
+Spawnable CPU lifecycle and material-property mapping:
+  Use the compiler-produced Fireworks.lfxp v2/package-v10 fixture and set
+  LIBERAFX_UNITY_SPAWNABLE_FIXTURE to its absolute path. Run
+  LiberaFx.Unity.Editor.LiberaFxSpawnablePlayModeVerification.Run in a
+  dedicated Unity 7000.0.0a16 project with -batchmode -force-d3d11 and no
+  -quit. The Editor enters Play Mode, restores the project's previous Enter
+  Play Mode Options setting, removes its temporary import and exits itself.
+
+  Result: PASS. The binding asset maps authored material parameter "Color" to
+  Unity shader property "_Color" on material identity "builtin:unlit-color".
+  The test verifies the MaterialPropertyBlock receives the authored vector and
+  the package still exposes the unchanged authored name "Color". Missing asset
+  bindings, missing property mappings, duplicate authored names, duplicate
+  Unity targets, a vector mapped to a Range property, and a nonexistent Unity
+  target property are all rejected before native OnStart and object creation.
+
+  Actual MonoBehaviour callbacks also passed half-rate Update, child draining,
+  exactly-once natural Destroy ordering/times/identities and removal of render
+  scopes; timeScale/PlayRate pause; manual Stop without natural Destroy and
+  renderer cleanup; OnDisable/OnEnable restart; explicit restart, non-restarting
+  Play and actual object destruction. Result file:
+  spawnable-playmode-verification.txt.
+
+Player builds/IL2CPP, consoles, and non-Windows Unity plugins remain unverified.
+No user project or Editor settings were used.
+
+Spawnable event/GPU scheduling regressions:
+  Unity 7000.0.0a16 actual Play Mode and D3D11 checks passed. A synthetic
+  kind-4 event is routed through the production event-batch handler and retains
+  its exact container, instance, and signal-node identity without changing
+  render scopes.
+  A large frame crossing a complete finite lifetime forwards Spawn/terminal
+  events but does not recreate a scope for an already finalized instance.
+  With PlayRate=0, scoped GPU dispatch/draw counts, frame counter, and particle
+  buffer remain unchanged. Root completion is checked before rendering/GPU
+  updates, and the completion frame issues no extra GPU dispatch. The existing
+  Game I/O rendering Play Mode check also passed after event-batch changes.

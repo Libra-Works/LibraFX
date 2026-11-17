@@ -4,6 +4,7 @@ Shader "Libra/GPU Particle Billboard"
     {
         _MainTex ("Texture", 2D) = "white" {}
         [HDR] _Color ("Color", Color) = (1,1,1,1)
+        _LibraGpuSizeScale ("Libra GPU Size Scale", Float) = 1
     }
     SubShader
     {
@@ -22,6 +23,7 @@ Shader "Libra/GPU Particle Billboard"
             StructuredBuffer<Particle> _LibraParticles;
             sampler2D _MainTex;
             float4 _Color;
+            float _LibraGpuSizeScale;
             struct Input { float4 vertex : POSITION; float2 uv : TEXCOORD0; uint instanceID : SV_InstanceID; };
             struct Output { float4 position : SV_POSITION; float2 uv : TEXCOORD0; float4 color : COLOR0; };
             Output vert(Input v)
@@ -30,7 +32,7 @@ Shader "Libra/GPU Particle Billboard"
                 Output o;
                 float s, c;
                 sincos(p.sizeRotation.z, s, c);
-                float2 local = v.vertex.xy * p.sizeRotation.xy;
+                float2 local = v.vertex.xy * p.sizeRotation.xy * _LibraGpuSizeScale;
                 local = float2(c * local.x - s * local.y, s * local.x + c * local.y);
                 float3 right = UNITY_MATRIX_I_V._m00_m10_m20;
                 float3 up = UNITY_MATRIX_I_V._m01_m11_m21;

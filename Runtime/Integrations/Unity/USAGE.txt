@@ -121,21 +121,76 @@ Spawnable package playback
 --------------------------
 The Unity `LiberaFxSpawnableImporter` imports `.lfxp` files as
 `LiberaFxSpawnableAsset`. Add `LiberaFxSpawnableComponent` to an object and
-assign that asset. It drives the shared native package host using Unity's
-scaled `Time.deltaTime`, exposes Spawn/Stop/Destroy/Signal and named game-I/O
-events to C# subscribers, and accepts game signals/properties through its API.
+assign that asset, and assign a `LiberaFxUnityBindingAsset` created from
+Assets > Create > LiberaFx > Unity Bindings. The binding asset maps opaque
+render/material identities and GPU node GUIDs to project-local Unity Mesh,
+Texture, Material, ComputeShader and metadata TextAsset references. Do not put
+Unity paths into the effect package or infer Unity assets from Unreal paths.
+Bind every asset referenced by the root and all templates before Play; missing
+or unsupported bindings fail preflight before native OnStart or spawn events,
+with the reason in `LastError`.
+
+The component drives the shared native package host using Unity's scaled
+`Time.deltaTime`, exposes Spawn/Stop/Destroy/Signal and named game-I/O events
+to C# subscribers, and accepts game signals/properties through its API.
 `playRate` scales effect time; the Delta Time graph node receives Unity's frame
 delta unchanged. Setting playRate to zero or pausing Unity time holds lifecycle
 time. Natural root completion follows `AutoDestroyWhenIdle`; explicit Stop
 retires instances without natural Destroy.
 
+The component creates actual root/per-instance render scopes. Each model or
+sprite gets a Unity object; CPU numeric values are read from the same native
+root/template instance that drives lifecycle (no second CPU effect is created).
+Shared Mesh/Material assets are borrowed; per-scope objects, sprite meshes,
+property blocks and GPU buffers are owned and released on finish/Stop/restart/
+disable/destroy. Material parameters use MaterialPropertyBlock, not material
+clones. Model material slots and exposed scalar/vector properties are checked
+against the selected Unity Materials. Sprite rendering requires the supported
+atlas properties; billboard sprites require an enabled MainCamera before Play.
+Unsupported render features, material associations or missing shader
+properties are rejected, not ignored.
+
+Each `LiberaFxUnityMaterialBinding` can define `parameterMappings` entries with
+an exact `authoredName` and `unityPropertyName`, for example `Color` ->
+`_Color`. This mapping is local to that material identity; no automatic
+underscore prefixing or global name guessing is performed. Every authored
+scalar/vector/texture parameter used by a render node must have one mapping.
+Duplicate authored names or Unity targets, missing mappings, nonexistent
+shader properties, and scalar/vector/texture type mismatches fail preflight
+before native OnStart. The package's authored parameter name remains unchanged;
+the mapping only selects the Unity property used by MaterialPropertyBlock.
+
+GPU nodes require the package's executable `GpuPrograms` payload and an
+explicit GPU program binding by node GUID: imported Unity ComputeShader,
+matching Unity metadata TextAsset, billboard Material, every declared texture
+resource, and spawn rate. Export/import the UnityCompute shader and metadata
+together; runtime shader compilation and filesystem-path loading are not used.
+The Unity payload's program/content/source hashes are checked against the
+imported binding. GPU buffers and simulation age are per root/Spawnable scope. Root seed comes
+from the binding asset; a Spawnable scope starts from its native instance seed.
+Each GPU node GUID is mixed into that scope seed. GPU resources
+end with their CPU owner on Stop/natural finalization. Root GPU together with
+`AutoDestroyWhenIdle` is rejected because this adapter cannot truthfully drain
+GPU work after CPU idle; use `AutoDestroyWhenIdle=false`, then call
+`RequestNaturalEnd` or `Stop`. Legacy packages with authored GPU snapshots but
+without executable GPU programs must be re-exported. CPU-only legacy packages
+remain supported.
+
 The host event callbacks run synchronously on Unity's main thread. Use their
 container GUID bytes and pool-scoped instance IDs to associate engine objects.
 `NativeSpawnableHost.ReadChildValue` reads template outputs while the instance
-is active. The component does not interpret render configuration/GPU payloads
-or instantiate render objects; those remain the subscriber's engine adapter
-responsibility. The importer preserves the LFXP bytes; host creation performs
-native package validation and reports errors rather than falling back.
+is active. The component interprets render/GPU payloads and instantiates
+root/per-instance scopes from an explicit Unity binding asset. The importer
+preserves LFXP bytes; host creation performs native package validation and
+reports errors rather than falling back.
+
+Playback uses Unity's scaled `Time.deltaTime`; `playRate` scales effect age,
+while the graph Delta Time input receives Unity's frame delta unchanged.
+Setting playRate to zero or pausing Unity time holds lifecycle and GPU scope
+time. Explicit Stop retires scopes without natural Destroy. Host callbacks and
+render updates run on Unity's main thread. Emitted game-I/O events include
+their port name. `SetGameProperty`, `FireGameSignal`, `DispatchSignal`,
+`SetOwnerMatrix` and `RequestNaturalEnd` are available on the component.
 
 `GetTemplateCount`, `GetTemplateId` and `GetTemplatePayload` are available on
 the native host wrapper and component. Use the big-endian container ID from
@@ -153,18 +208,26 @@ InsufficientWork with the required size and does not partially copy data.
 Metadata access does not advance time or fire OnStart. It remains valid until
 the native host is disposed; the component releases its host on Stop and then
 returns NotReady. Use a matching rebuilt native DLL for these additive APIs.
-This only exposes the payloads; automatic renderer creation remains unfinished.
+The component also uses these payloads to create and update render scopes.
 The root equivalent is `libra_spawnable_host_copy_root_payload`; both copy APIs
 return caller-owned bytes and retain metadata after native host Stop.
 
-LiberaFxSpawnablePlayModeVerification.Run passed in an isolated Unity
-7000.0.0a16 Editor with compiler-produced Fireworks.lfxp and the native plugin.
-The test enters actual Play Mode with domain reload enabled and exercises
-automatic OnEnable/Update/OnDisable/OnDestroy, half-rate playback, child
-draining, ordered exactly-once natural Destroy, manual Stop without Destroy,
-timeScale/PlayRate pause and resume, restart and native host release.
-No reflected lifecycle calls, GPU, player build or user project is involved.
-See Editor\Tests\VALIDATION.txt for the repeatable batch command and limits.
+Payload kinds include `RenderConfiguration`, `GpuContainers` (authored
+snapshots) and `GpuPrograms` (executable package manifest). Root metadata covers
+the root graph; Spawnable metadata is per template. The component copies and
+preflights these payloads during Play setup. Use a native plugin exposing the
+matching package and game-I/O C ABI.
+
+Focused engine verification passed in an isolated Unity 7000.0.0a16 project:
+actual CPU root/per-instance renderer creation and updates, named echo output,
+captured/live values across two instances, explicit and natural scope cleanup,
+and authored `Color` -> Unity `_Color` material-property mapping with preflight
+rejections; finite GPU Spawnable dispatch/draw/readback; root GPU
+dispatch/readback/RequestNaturalEnd cleanup; and root GPU auto-idle plus legacy
+authored-GPU rejection. A separate D3D11 test passed fractional GPU spawning,
+independent buffers, local age and per-scope seed on an AMD Radeon RX 6700 XT.
+These tests are not player/IL2CPP, console or cross-platform validation. See
+Editor\Tests\VALIDATION.txt for commands, fixtures, environment and limits.
 
 Low-level lifetime API
 ----------------------
@@ -183,9 +246,9 @@ signal exists), wait for any work it creates, and call FinishLifetime.
 StopLifetime is an explicit interruption and does not fire natural Destroy.
 Check every NativeResult, and dispose the instance when no longer needed.
 These are low-level calls only; `NativeInstance` does not host Spawnable
-packages. `NativeSpawnableHost` and `LiberaFxSpawnableComponent` provide the
-shared lifecycle/package bridge, but do not automatically drive renderer
-lifetime. Do not treat this API as a complete engine lifecycle implementation.
+packages. `NativeSpawnableHost` is the low-level lifecycle/package bridge.
+`LiberaFxSpawnableComponent` additionally owns Unity root and per-instance
+render scopes when supplied a complete `LiberaFxUnityBindingAsset`.
 
 Program creation COPIES bytecode and owns v3 builtin binding storage. v1/v2/v3
 and supported v4/v5 load through the real Core validator; unknown non-builtin custom nodes fail.
@@ -230,8 +293,7 @@ GUID bindings, default mutation, atlas/quad and 10,000 no-GC evaluate calls.
 Unity 6000.2.6f1 synchronous Editor lifecycle checks also passed on Direct3D11:
 shader compilation, cube/atlas framebuffer readback, dynamic buffer reuse and
 zero managed GC across 1,000 updates per mode. See Editor\Tests\VALIDATION.txt.
-The Spawnable component's automatic Play Mode lifecycle is verified separately
-as described above. Renderer sample Play Mode scheduling, IL2CPP, non-Windows
-plugins and native engine-neutral draw-command streaming were not exercised.
-The sample pulls bound numeric outputs; it does not yet import engine asset
-catalogs or consume an entire graph's render-command stream.
+The Spawnable component's CPU and D3D11 GPU integration is verified separately
+as described above. Player builds/IL2CPP, consoles, non-Windows plugins and
+other graphics devices were not exercised. The explicit binding asset is
+project-local; automatic engine asset catalog discovery is not implemented.
