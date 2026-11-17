@@ -12,6 +12,7 @@ TestResults/
 !.env.example
 .github/skills/
 *.md
+!/docs/**/*.md
 .mcp.json
 .vscode/mcp.json
 Assets/Inspectors/
