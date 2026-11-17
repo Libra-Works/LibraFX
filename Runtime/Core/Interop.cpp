@@ -1418,3 +1418,58 @@ LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_root_finished(
         return LIBRA_OK;
     });
 }
+
+LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_template_count(
+    LibraSpawnableHostHandle host, uint64_t* outCount)
+{
+    if (!outCount) return LIBRA_INVALID_ARGUMENT;
+    *outCount = 0;
+    return guarded([&]() -> LibraResult {
+        auto native = findSpawnableHost(host);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        *outCount = native->package().templates.size();
+        return LIBRA_OK;
+    });
+}
+
+LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_template_id(
+    LibraSpawnableHostHandle host, uint64_t index, uint8_t outContainerId[16])
+{
+    if (!outContainerId) return LIBRA_INVALID_ARGUMENT;
+    return guarded([&]() -> LibraResult {
+        auto native = findSpawnableHost(host);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        const auto& templates = native->package().templates;
+        if (index >= templates.size()) return LIBRA_INVALID_ARGUMENT;
+        const auto& id = templates[static_cast<std::size_t>(index)].containerId;
+        std::copy(id.begin(), id.end(), outContainerId);
+        return LIBRA_OK;
+    });
+}
+
+LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_copy_template_payload(
+    LibraSpawnableHostHandle host, const uint8_t containerId[16], uint32_t kind,
+    uint8_t* destination, uint64_t capacity, uint64_t* outByteCount)
+{
+    if (!outByteCount) return LIBRA_INVALID_ARGUMENT;
+    *outByteCount = 0;
+    if (!containerId || (!destination && capacity != 0) ||
+        (kind != LIBRA_SPAWNABLE_RENDER_CONFIGURATION && kind != LIBRA_SPAWNABLE_GPU_CONTAINERS))
+        return LIBRA_INVALID_ARGUMENT;
+    return guarded([&]() -> LibraResult {
+        auto native = findSpawnableHost(host);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        const auto& templates = native->package().templates;
+        auto found = std::find_if(templates.begin(), templates.end(), [&](const auto& value) {
+            return std::memcmp(value.containerId.data(), containerId, 16) == 0;
+        });
+        if (found == templates.end()) return LIBRA_NODE_NOT_FOUND;
+        const auto& payload = kind == LIBRA_SPAWNABLE_RENDER_CONFIGURATION
+            ? found->renderConfiguration : found->gpuContainersJson;
+        *outByteCount = payload.size();
+        if (!destination) return LIBRA_OK;
+        if (capacity < payload.size()) return LIBRA_INSUFFICIENT_WORK;
+        if (!payload.empty()) std::memcpy(destination, payload.data(), payload.size());
+        return LIBRA_OK;
+    });
+}

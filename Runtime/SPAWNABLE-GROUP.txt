@@ -87,8 +87,8 @@ are available as graph nodes;
 infinite remaining cannot be represented and is rejected at compile time.
 `liberafx::SpawnableHost` loads this versioned package and owns the shared
 effect/Spawnable lifecycle, routing, game I/O and bounded host events without
-engine dependencies. Unity and Unreal components are not wired to this host yet;
-they must consume its lifecycle and render/GPU payloads separately.
+engine dependencies. Unity and Unreal LFXP components drive this shared
+lifecycle; instantiating render/GPU payloads still requires engine-side adapters.
 The `Instance Age` graph node reads local elapsed seconds for the effect or
 Spawnable, using the same sample time as native evaluation.
 `Effect Age` reads seconds since the root effect began, even inside a

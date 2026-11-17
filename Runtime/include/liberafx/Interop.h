@@ -454,6 +454,23 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_active_cou
     LibraSpawnableHostHandle host, uint64_t* outCount);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_root_finished(
     LibraSpawnableHostHandle host, uint32_t* outFinished);
+enum {
+    LIBRA_SPAWNABLE_RENDER_CONFIGURATION = 0,
+    LIBRA_SPAWNABLE_GPU_CONTAINERS = 1
+};
+/* Immutable template metadata is available before advance and after stop.
+   IDs use compiler big-endian byte order. Payloads are opaque bytes, without
+   an added terminator. All returned data is copied into caller-owned storage. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_template_count(
+    LibraSpawnableHostHandle host, uint64_t* outCount);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_template_id(
+    LibraSpawnableHostHandle host, uint64_t index, uint8_t outContainerId[16]);
+/* Query required bytes with destination=NULL and capacity=0. A short buffer
+   returns INSUFFICIENT_WORK and the required size without changing its bytes.
+   Unknown containers return NODE_NOT_FOUND. No native pointer is retained. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_copy_template_payload(
+    LibraSpawnableHostHandle host, const uint8_t containerId[16], uint32_t kind,
+    uint8_t* destination, uint64_t capacity, uint64_t* outByteCount);
 
 #ifdef __cplusplus
 }

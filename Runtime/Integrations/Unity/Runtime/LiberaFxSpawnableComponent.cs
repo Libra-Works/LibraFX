@@ -123,6 +123,25 @@ namespace LiberaFx.Unity
             return host.ReadChildValue(containerId, instanceId, nodeGuid, out value);
         }
 
+        public NativeResult GetTemplateCount(out ulong count)
+        {
+            if (host == null) { count = 0; return NativeResult.NotReady; }
+            return host.GetTemplateCount(out count);
+        }
+
+        public NativeResult GetTemplateId(ulong index, out byte[] containerId)
+        {
+            if (host == null) { containerId = null; return NativeResult.NotReady; }
+            return host.GetTemplateId(index, out containerId);
+        }
+
+        public NativeResult GetTemplatePayload(byte[] containerId,
+            SpawnableTemplatePayloadKind kind, out byte[] payload)
+        {
+            if (host == null) { payload = null; return NativeResult.NotReady; }
+            return host.GetTemplatePayload(containerId, kind, out payload);
+        }
+
         public NativeResult Stop()
         {
             if (host == null) return NativeResult.Ok;

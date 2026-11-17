@@ -129,6 +129,8 @@ namespace LiberaFx.Unity.Tests
             var bytes = File.ReadAllBytes(fixture);
             var identities = File.ReadAllBytes(Path.Combine(folder, "Fireworks.native-fixture"));
             Assert(identities.Length == 8 + 11 * 16);
+            VerifyTemplatePayloads(bytes);
+            VerifyTemplatePayloadBuffers(bytes);
             using (var host = new NativeSpawnableHost(bytes))
             {
                 Assert(host.Advance(0, 0) == NativeResult.Ok);
@@ -158,6 +160,78 @@ namespace LiberaFx.Unity.Tests
                 Assert(host.PopEvent(out var stopped) == NativeResult.Ok &&
                     stopped != null && stopped.Kind == 2);
             }
+        }
+
+        private static void VerifyTemplatePayloads(byte[] bytes)
+        {
+            byte[] owned = null;
+            byte first = 0;
+            using (var host = new NativeSpawnableHost(bytes))
+            {
+                Assert(host.GetTemplateCount(out var count) == NativeResult.Ok && count == 2);
+                for (ulong index = 0; index < count; ++index)
+                {
+                    Assert(host.GetTemplateId(index, out var id) == NativeResult.Ok);
+                    Assert(host.GetTemplatePayload(id, SpawnableTemplatePayloadKind.RenderConfiguration,
+                        out var render) == NativeResult.Ok && render.Length > 0);
+                    Assert(System.Text.Encoding.UTF8.GetString(render).Contains("\"nodes\""));
+                    first = render[0];
+                    render[0] ^= 0xff;
+                    Assert(host.GetTemplatePayload(id, SpawnableTemplatePayloadKind.RenderConfiguration,
+                        out owned) == NativeResult.Ok && owned[0] == first);
+                    Assert(host.GetTemplatePayload(id, SpawnableTemplatePayloadKind.GpuContainers,
+                        out var gpu) == NativeResult.Ok && System.Text.Encoding.UTF8.GetString(gpu) == "[]");
+                    Assert(host.GetTemplatePayload(id, (SpawnableTemplatePayloadKind)99, out _) ==
+                        NativeResult.InvalidArgument);
+                }
+                Assert(host.GetTemplateId(count, out _) == NativeResult.InvalidArgument);
+                Assert(host.GetTemplatePayload(new byte[15], SpawnableTemplatePayloadKind.RenderConfiguration,
+                    out _) == NativeResult.InvalidArgument);
+                Assert(host.GetTemplatePayload(new byte[16], SpawnableTemplatePayloadKind.RenderConfiguration,
+                    out _) == NativeResult.NodeNotFound);
+                Assert(host.Stop() == NativeResult.Ok);
+                Assert(host.GetTemplateId(0, out var stoppedId) == NativeResult.Ok &&
+                    host.GetTemplatePayload(stoppedId, SpawnableTemplatePayloadKind.RenderConfiguration,
+                        out _) == NativeResult.Ok);
+            }
+            Assert(owned != null && owned[0] == first);
+        }
+
+        private static unsafe void VerifyTemplatePayloadBuffers(byte[] bytes)
+        {
+            ulong host;
+            fixed (byte* source = bytes)
+                Assert(Native.libra_spawnable_host_create(source, (ulong)bytes.Length,
+                    32, 4 * 1024 * 1024, 128, 10000, out host) == NativeResult.Ok);
+            try
+            {
+                var id = new byte[16];
+                fixed (byte* container = id)
+                {
+                    Assert(Native.libra_spawnable_host_template_id(host, 0, container) == NativeResult.Ok);
+                    Assert(Native.libra_spawnable_host_copy_template_payload(host, container,
+                        SpawnableTemplatePayloadKind.RenderConfiguration, null, 0, out var required) ==
+                        NativeResult.Ok && required > 1);
+                    var buffer = new byte[checked((int)required)];
+                    for (var index = 0; index < buffer.Length; ++index) buffer[index] = 0x5a;
+                    fixed (byte* destination = buffer)
+                    {
+                        Assert(Native.libra_spawnable_host_copy_template_payload(host, container,
+                            SpawnableTemplatePayloadKind.RenderConfiguration, destination, required - 1,
+                            out var actual) == NativeResult.InsufficientWork && actual == required);
+                        foreach (var value in buffer) Assert(value == 0x5a);
+                        Assert(Native.libra_spawnable_host_copy_template_payload(host, container,
+                            SpawnableTemplatePayloadKind.RenderConfiguration, destination, required,
+                            out actual) == NativeResult.Ok && actual == required && buffer[0] == '{');
+                    }
+                    Assert(Native.libra_spawnable_host_copy_template_payload(host, container,
+                        SpawnableTemplatePayloadKind.RenderConfiguration, null, 1, out var invalidCount) ==
+                        NativeResult.InvalidArgument && invalidCount == 0);
+                }
+            }
+            finally { Assert(Native.libra_spawnable_host_release(host) == NativeResult.Ok); }
+            Assert(Native.libra_spawnable_host_template_count(host, out var staleCount) ==
+                NativeResult.InvalidHandle && staleCount == 0);
         }
     }
 }

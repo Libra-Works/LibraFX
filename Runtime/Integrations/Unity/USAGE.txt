@@ -137,6 +137,19 @@ or instantiate render objects; those remain the subscriber's engine adapter
 responsibility. The importer preserves the LFXP bytes; host creation performs
 native package validation and reports errors rather than falling back.
 
+`GetTemplateCount`, `GetTemplateId` and `GetTemplatePayload` are available on
+the native host wrapper and component. Use the big-endian container ID from
+the template list or a Spawn event to copy RenderConfiguration or GpuContainers.
+The byte arrays are owned by the caller, not pointers into the host. Cache
+them during setup, not every frame. Payload bytes have no added terminator;
+GPU container snapshots remain JSON, not executable GPU programs.
+The C ABI supports a null/zero-capacity size query; a short buffer returns
+InsufficientWork with the required size and does not partially copy data.
+Metadata access does not advance time or fire OnStart. It remains valid until
+the native host is disposed; the component releases its host on Stop and then
+returns NotReady. Use a matching rebuilt native DLL for these additive APIs.
+This only exposes the payloads; automatic renderer creation remains unfinished.
+
 LiberaFxSpawnablePlayModeVerification.Run passed in an isolated Unity
 7000.0.0a16 Editor with compiler-produced Fireworks.lfxp and the native plugin.
 The test enters actual Play Mode with domain reload enabled and exercises

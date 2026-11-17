@@ -12,6 +12,11 @@ namespace LiberaFx.Unity
         OutOfMemory, InternalError
     }
 
+    public enum SpawnableTemplatePayloadKind : uint
+    {
+        RenderConfiguration, GpuContainers
+    }
+
     [StructLayout(LayoutKind.Explicit, Pack = 8, Size = 40)]
     public struct NativeValue
     {
@@ -267,6 +272,15 @@ namespace LiberaFx.Unity
         internal static extern NativeResult libra_spawnable_host_active_count(ulong host, out ulong count);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_root_finished(ulong host, out uint finished);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_template_count(ulong host, out ulong count);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_template_id(
+            ulong host, ulong index, byte* containerId);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_copy_template_payload(
+            ulong host, byte* containerId, SpawnableTemplatePayloadKind kind,
+            byte* destination, ulong capacity, out ulong count);
     }
 
     public sealed unsafe class NativeProgram : IDisposable
@@ -448,6 +462,41 @@ namespace LiberaFx.Unity
 
                 public NativeResult GetActiveCount(out ulong count) =>
                     Native.libra_spawnable_host_active_count(Alive, out count);
+
+                public NativeResult GetTemplateCount(out ulong count) =>
+                    Native.libra_spawnable_host_template_count(Alive, out count);
+
+                public NativeResult GetTemplateId(ulong index, out byte[] containerId)
+                {
+                    var id = new byte[16];
+                    NativeResult result;
+                    fixed (byte* pointer = id)
+                        result = Native.libra_spawnable_host_template_id(Alive, index, pointer);
+                    containerId = result == NativeResult.Ok ? id : null;
+                    return result;
+                }
+
+                public NativeResult GetTemplatePayload(byte[] containerId,
+                    SpawnableTemplatePayloadKind kind, out byte[] payload)
+                {
+                    payload = null;
+                    if (containerId == null || containerId.Length != 16)
+                        return NativeResult.InvalidArgument;
+                    var current = Alive;
+                    fixed (byte* id = containerId)
+                    {
+                        var result = Native.libra_spawnable_host_copy_template_payload(
+                            current, id, kind, null, 0, out var count);
+                        if (result != NativeResult.Ok) return result;
+                        if (count > int.MaxValue) return NativeResult.OutOfMemory;
+                        var bytes = new byte[(int)count];
+                        fixed (byte* destination = bytes)
+                            result = Native.libra_spawnable_host_copy_template_payload(
+                                current, id, kind, destination, count, out count);
+                        if (result == NativeResult.Ok) payload = bytes;
+                        return result;
+                    }
+                }
 
                 public NativeResult IsRootFinished(out bool finished)
                 {

@@ -77,6 +77,8 @@ namespace LiberaFx.Unity.Editor
                 target = new GameObject("LIBERA FX Spawnable Play Mode verification");
                 target.SetActive(false);
                 component = target.AddComponent<LiberaFxSpawnableComponent>();
+                Require(component.GetTemplateCount(out _) == NativeResult.NotReady,
+                    "An inactive component exposed template metadata without a host.");
                 var settings = new SerializedObject(component);
                 settings.FindProperty("effect").objectReferenceValue =
                     AssetDatabase.LoadAssetAtPath<LiberaFxSpawnableAsset>(AssetPath);
@@ -88,6 +90,14 @@ namespace LiberaFx.Unity.Editor
                 startUnityTime = Time.timeAsDouble;
                 Require(events.Count == 1 && events[0].Kind == 1 && events[0].Time == 0,
                     "Automatic OnEnable did not spawn Launch at zero.");
+                Require(component.GetTemplateCount(out var templates) == NativeResult.Ok && templates == 2 &&
+                    component.GetTemplateId(0, out var templateId) == NativeResult.Ok &&
+                    component.GetTemplatePayload(templateId, SpawnableTemplatePayloadKind.RenderConfiguration,
+                        out var render) == NativeResult.Ok && render.Length > 0 &&
+                    component.GetTemplatePayload(events[0].ContainerId, SpawnableTemplatePayloadKind.GpuContainers,
+                        out var gpu) == NativeResult.Ok && System.Text.Encoding.UTF8.GetString(gpu) == "[]",
+                    "The running component did not expose owned template payloads by template/event identity.");
+                proof.Add("Template identities and owned render/GPU payload access through the component: PASS");
                 deadline = EditorApplication.timeSinceStartup + 60;
                 EditorApplication.update += Tick;
             }
@@ -148,6 +158,8 @@ namespace LiberaFx.Unity.Editor
                         Require(component.ElapsedTime < 2 && !component.IsRootFinished,
                             "Did not resume before the natural deadline.");
                         Require(component.Stop() == NativeResult.Ok, "Manual Stop failed.");
+                        Require(component.GetTemplateCount(out _) == NativeResult.NotReady,
+                            "Manual Stop retained metadata access to a released host.");
                         VerifyInterrupted();
                         Require(component.FireGameSignal("unused") == NativeResult.NotReady,
                             "Manual Stop retained the native host.");
