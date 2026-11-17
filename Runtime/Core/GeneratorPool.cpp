@@ -827,6 +827,18 @@ auto GeneratorPool::popSignalEvent(GeneratorSignalEvent& out) noexcept -> bool
     return true;
 }
 
+auto GeneratorPool::pendingEventCount() const noexcept -> std::size_t
+{
+    auto lock = std::lock_guard<std::mutex>(impl_->mutex);
+    return impl_->eventCount;
+}
+
+auto GeneratorPool::pendingSignalEventCount() const noexcept -> std::size_t
+{
+    auto lock = std::lock_guard<std::mutex>(impl_->mutex);
+    return impl_->signalEventCount;
+}
+
 auto GeneratorPool::activeCount() const noexcept -> std::size_t
 {
     auto lock = std::lock_guard<std::mutex>(impl_->mutex);

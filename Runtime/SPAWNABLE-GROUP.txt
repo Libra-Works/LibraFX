@@ -85,7 +85,10 @@ lifetime reports infinite remaining and normalized age 0. Failed updates leave
 the previous sample intact. Instance Remaining and Instance Normalized Age
 are available as graph nodes;
 infinite remaining cannot be represented and is rejected at compile time.
-Effect-level lifecycle is not implemented in engine adapters.
+`liberafx::SpawnableHost` loads this versioned package and owns the shared
+effect/Spawnable lifecycle, routing, game I/O and bounded host events without
+engine dependencies. Unity and Unreal components are not wired to this host yet;
+they must consume its lifecycle and render/GPU payloads separately.
 The `Instance Age` graph node reads local elapsed seconds for the effect or
 Spawnable, using the same sample time as native evaluation.
 `Effect Age` reads seconds since the root effect began, even inside a
@@ -215,9 +218,10 @@ instances and programs first.
 If a package has no Spawnable Groups and its parent bytecode is v1 or v2,
 load it with `libra_program_create` instead.
 
-UE/Unity adapters must consume the lifecycle and render/GPU payloads separately;
-this code does not instantiate engine objects. Diagnostics should identify the
-container GUID, template node GUID and pool-scoped instance ID together.
+The portable host does not instantiate engine objects. UE/Unity adapters must
+consume lifecycle and render/GPU payloads separately. Diagnostics should
+identify the container GUID, template node GUID and pool-scoped instance ID
+together.
 
 Work in progress: explicit named game IO and live updates
 

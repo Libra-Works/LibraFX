@@ -1,0 +1,183 @@
+#include "liberafx/SpawnableHost.h"
+#include <array>
+#include <cmath>
+#include <cstring>
+#include <fstream>
+#include <iostream>
+#include <iterator>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+namespace {
+using Id = std::array<std::uint8_t, 16>;
+
+void require(bool condition, const char* message)
+{
+    if (!condition) throw std::runtime_error(message);
+}
+
+auto read(const std::string& path) -> std::vector<std::uint8_t>
+{
+    auto file = std::ifstream(path, std::ios::binary);
+    require(file.good(), "Missing compiler-produced Fireworks fixture.");
+    return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+}
+
+auto readIds(const std::string& path) -> std::array<Id, 11>
+{
+    const auto bytes = read(path);
+    require(bytes.size() == 8 + 11 * 16 && std::memcmp(bytes.data(), "LFXF", 4) == 0 &&
+        bytes[4] == 1 && bytes[5] == 0 && bytes[6] == 0 && bytes[7] == 0,
+        "Invalid Fireworks identity fixture.");
+    auto ids = std::array<Id, 11>{};
+    for (auto index = std::size_t{}; index < ids.size(); ++index)
+        std::memcpy(ids[index].data(), bytes.data() + 8 + index * 16, 16);
+    return ids;
+}
+
+auto nextEvent(liberafx::SpawnableHost& host) -> liberafx::SpawnableHostEvent
+{
+    auto event = liberafx::SpawnableHostEvent{};
+    require(host.popEvent(event), "Expected SpawnableHost event is missing.");
+    return event;
+}
+
+void requireValue(liberafx::SpawnableHost& host, const Id& container, std::uint64_t instance,
+                  const Id& node, const std::array<double, 3>& expected)
+{
+    auto actual = std::array<double, 4>{};
+    auto width = std::uint8_t{};
+    require(host.childValue(container.data(), instance, node.data(), actual.data(), width) ==
+            liberafx::Result::Ok && width == expected.size(),
+        "Could not read the expected compiler-produced child value.");
+    for (auto lane = std::size_t{}; lane < expected.size(); ++lane)
+        require(std::abs(actual[lane] - expected[lane]) < 1e-8,
+            "Compiler-produced child value does not match expected lifecycle output.");
+}
+
+auto createHost(const std::vector<std::uint8_t>& bytes, const liberafx::SpawnableHostOptions& options,
+                std::unique_ptr<liberafx::SpawnableHost>& host) -> void
+{
+    auto package = liberafx::SpawnablePackage{};
+    require(liberafx::loadSpawnablePackage(bytes.data(), bytes.size(), package) == liberafx::Result::Ok,
+        "Could not decode compiler-produced LFXP.");
+    const auto result = liberafx::SpawnableHost::create(std::move(package), options, host);
+    if (result != liberafx::Result::Ok)
+        throw std::runtime_error("Could not create SpawnableHost from compiler-produced LFXP: " +
+            std::to_string(static_cast<unsigned>(result)));
+}
+
+void verifyNaturalLifecycle(const std::vector<std::uint8_t>& bytes, const std::array<Id, 11>& ids)
+{
+    auto host = std::unique_ptr<liberafx::SpawnableHost>{};
+    createHost(bytes, {}, host);
+    require(host->advance(0, 0) == liberafx::Result::Ok && host->activeCount() == 1,
+        "Root OnStart must spawn one Launch instance.");
+    const auto launchSpawn = nextEvent(*host);
+    require(launchSpawn.kind == liberafx::SpawnableHostEventKind::Spawn &&
+        std::memcmp(launchSpawn.containerId, ids[1].data(), 16) == 0 && launchSpawn.time == 0,
+        "Root OnStart did not produce the expected Launch event.");
+
+    require(host->advance(1, 1) == liberafx::Result::Ok,
+        "SpawnableHost failed to advance the compiler-produced Launch.");
+    requireValue(*host, ids[1], launchSpawn.instanceId, ids[5], {0, 0, 140});
+
+    require(host->advance(2, 1) == liberafx::Result::Ok && host->activeCount() == 1,
+        "Launch expiry must route one sibling Burst at its exact deadline.");
+    const auto destroy = nextEvent(*host);
+    const auto stopped = nextEvent(*host);
+    const auto burstSpawn = nextEvent(*host);
+    require(destroy.kind == liberafx::SpawnableHostEventKind::Destroy &&
+        std::memcmp(destroy.containerId, ids[1].data(), 16) == 0 && destroy.time == 2 &&
+        destroy.instanceId == launchSpawn.instanceId &&
+        stopped.kind == liberafx::SpawnableHostEventKind::Stop &&
+        std::memcmp(stopped.containerId, ids[1].data(), 16) == 0 && stopped.time == 2 &&
+        stopped.instanceId == launchSpawn.instanceId &&
+        burstSpawn.kind == liberafx::SpawnableHostEventKind::Spawn &&
+        std::memcmp(burstSpawn.containerId, ids[6].data(), 16) == 0 && burstSpawn.time == 2,
+        "Launch Destroy, Stop and Burst Spawn events are not ordered or timed correctly.");
+    requireValue(*host, ids[6], burstSpawn.instanceId, ids[9], {0, 0, 260});
+    requireValue(*host, ids[6], burstSpawn.instanceId, ids[10], {0, 0, 260});
+
+    require(host->advance(3.5, 1.5) == liberafx::Result::Ok &&
+        host->activeCount() == 0 && host->rootFinished(),
+        "SpawnableHost must naturally finish after the final child Destroy.");
+    const auto burstDestroy = nextEvent(*host);
+    const auto burstStop = nextEvent(*host);
+    require(burstDestroy.kind == liberafx::SpawnableHostEventKind::Destroy &&
+        std::memcmp(burstDestroy.containerId, ids[6].data(), 16) == 0 &&
+        burstDestroy.time == 3.5 && burstDestroy.instanceId == burstSpawn.instanceId,
+        "Burst did not emit exactly one Destroy at its life deadline.");
+    require(burstStop.kind == liberafx::SpawnableHostEventKind::Stop &&
+        std::memcmp(burstStop.containerId, ids[6].data(), 16) == 0 &&
+        burstStop.time == 3.5 && burstStop.instanceId == burstSpawn.instanceId,
+        "Burst did not emit the matching cleanup event.");
+    auto unexpected = liberafx::SpawnableHostEvent{};
+    require(!host->popEvent(unexpected), "SpawnableHost emitted an unexpected lifecycle event.");
+}
+
+void verifyManualStop(const std::vector<std::uint8_t>& bytes)
+{
+    auto host = std::unique_ptr<liberafx::SpawnableHost>{};
+    createHost(bytes, {}, host);
+    require(host->advance(0, 0) == liberafx::Result::Ok, "Could not start manual-stop fixture.");
+    const auto spawn = nextEvent(*host);
+    require(spawn.kind == liberafx::SpawnableHostEventKind::Spawn,
+        "Manual-stop fixture did not spawn its child.");
+    require(host->stop() == liberafx::Result::Ok && host->activeCount() == 0,
+        "Manual Stop did not release active child instances.");
+    auto event = liberafx::SpawnableHostEvent{};
+    auto foundDestroy = false;
+    while (host->popEvent(event))
+        foundDestroy = foundDestroy || event.kind == liberafx::SpawnableHostEventKind::Destroy;
+    require(!foundDestroy, "Manual Stop must not publish natural Destroy events.");
+}
+
+void verifyEventBackpressure(const std::vector<std::uint8_t>& bytes, const std::array<Id, 11>& ids)
+{
+    auto options = liberafx::SpawnableHostOptions{};
+    options.eventCapacity = 1;
+    auto host = std::unique_ptr<liberafx::SpawnableHost>{};
+    createHost(bytes, options, host);
+    require(host->advance(0, 0) == liberafx::Result::Ok,
+        "Could not start event backpressure fixture.");
+    auto result = host->advance(2, 0);
+    require(result == liberafx::Result::QueueRejected,
+        "A full host event queue must reject, not silently lose, lifecycle events.");
+    auto events = std::vector<liberafx::SpawnableHostEvent>{};
+    auto event = liberafx::SpawnableHostEvent{};
+    while (host->popEvent(event)) events.push_back(event);
+    for (auto attempt = 0u; attempt < 8 && result == liberafx::Result::QueueRejected; ++attempt) {
+        result = host->advance(2, 0);
+        while (host->popEvent(event)) events.push_back(event);
+    }
+    require(result == liberafx::Result::Ok && events.size() == 4 &&
+        events[0].kind == liberafx::SpawnableHostEventKind::Spawn &&
+        events[1].kind == liberafx::SpawnableHostEventKind::Destroy &&
+        events[2].kind == liberafx::SpawnableHostEventKind::Stop &&
+        events[3].kind == liberafx::SpawnableHostEventKind::Spawn &&
+        std::memcmp(events[3].containerId, ids[6].data(), 16) == 0 &&
+        host->activeCount() == 1,
+        "Draining and retrying a backpressured lifecycle must resume without replay or event loss.");
+}
+}
+
+auto main(int argc, char** argv) -> int
+{
+    try {
+        require(argc == 2, "Usage: liberafx_spawnable_host_tests <isolated compiler-produced fixture folder>");
+        const auto folder = std::string(argv[1]) + "/";
+        const auto package = read(folder + "Fireworks.lfxp");
+        const auto ids = readIds(folder + "Fireworks.native-fixture");
+        verifyNaturalLifecycle(package, ids);
+        verifyManualStop(package);
+        verifyEventBackpressure(package, ids);
+        std::cout << "Compiler-produced LFXP SpawnableHost lifecycle checks passed.\n";
+        return 0;
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}

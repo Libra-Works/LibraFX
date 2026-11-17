@@ -107,6 +107,8 @@ public:
                  double out[4], std::uint8_t& width) noexcept;
     bool popEvent(GeneratorEvent& out) noexcept;
     bool popSignalEvent(GeneratorSignalEvent& out) noexcept;
+    std::size_t pendingEventCount() const noexcept;
+    std::size_t pendingSignalEventCount() const noexcept;
     std::size_t activeCount() const noexcept;
 
 private:

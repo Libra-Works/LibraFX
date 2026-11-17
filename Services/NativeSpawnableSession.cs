@@ -470,7 +470,7 @@ public sealed class NativeSpawnableSession : IDisposable
                         state.Pool, out var signal, out var has), state.Template.ContainerId);
                     if (has == 0) break;
                     progress = true;
-                    var node = new Guid(signal.Node);
+                    var node = new Guid(signal.Node, bigEndian: true);
                     _events.Add(new(state.Template.ContainerId, signal.Instance, 4,
                         signal.Time, signal.Seed, node));
                     SetRootTimeContext(signal.Time);

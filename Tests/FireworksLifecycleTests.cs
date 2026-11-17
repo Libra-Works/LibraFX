@@ -177,7 +177,8 @@ internal static class FireworksLifecycleTests
         Require(infiniteOrderWorkspace.TryConnectNodes(infiniteOrderWorkspace.GetNode(startId),
             infiniteOrderWorkspace.GetNode(earlyGroupId), out _, "spawn", "then"),
             "Cannot connect the early-expiring sibling.");
-        var infiniteOrderGraph = ChangeLife(infiniteOrderWorkspace.CreateSnapshot(), earlyGroupId, 1);
+        var infiniteOrderGraph = ChangeLife(infiniteOrderWorkspace.CreateSnapshot(), earlyGroupId, 1) with
+        { AutoDestroyWhenIdle = false };
         using (var infiniteOrder = new NativeSpawnableSession(SpawnableGroupPackage.Compile(infiniteOrderGraph), library))
         {
             infiniteOrder.Advance(3);
@@ -275,6 +276,7 @@ internal static class FireworksLifecycleTests
             Require(!stopped.RootVisible, "Manual stop must hide the root.");
         }
         var curveWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+        curveWorkspace.CreateNode(new GraphNodeKind("OnStart"));
         var curveGroup = curveWorkspace.CreateNode(GraphNodeKind.SpawnableGroup);
         Require(curveWorkspace.EnterGraph(curveGroup), "Cannot edit curve-lifetime fixture.");
         curveWorkspace.CreateNode(new GraphNodeKind("LifeTime"));
@@ -327,9 +329,16 @@ internal static class FireworksLifecycleTests
             }
             var persistentWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
             persistentWorkspace.InitializeFromSnapshot(graph);
+            var persistentSpawner = persistentWorkspace.CreateNode(GraphNodeKind.SpawnableGroup);
+            Require(persistentWorkspace.EnterGraph(persistentSpawner),
+                "Cannot edit the persistent root-signal target.");
+            var persistentLifetime = persistentWorkspace.CreateNode(new GraphNodeKind("LifeTime"));
+            persistentWorkspace.SetParameter(persistentLifetime, "seconds", JsonSerializer.SerializeToElement(2d));
+            persistentWorkspace.NavigateToGraph(0);
+            persistentSpawner = persistentWorkspace.GetNode(persistentSpawner.Id);
             var gameSignal = persistentWorkspace.CreateNode(GraphNodeKind.Signal);
             Require(persistentWorkspace.TryConnectNodes(gameSignal,
-                persistentWorkspace.GetNode(launch.Id), out _, targetPortId: "spawn"),
+                persistentSpawner, out _, targetPortId: "spawn"),
                 "Cannot connect a persistent effect's game signal.");
             using (var persistentRoot = new NativeSpawnableSession(
                     SpawnableGroupPackage.Compile(persistentWorkspace.CreateSnapshot() with
@@ -347,7 +356,9 @@ internal static class FireworksLifecycleTests
                 Require(rejectedSignal, "An explicit natural end must reject new external root signals.");
                 persistentRoot.Advance(3.5);
                 Require(persistentRoot.ActiveCount == 0 && persistentRoot.RootVisible,
-                    "An explicitly ended root must wait for all spawned children before finishing.");
+                    $"An explicitly ended root must wait for all spawned children before finishing " +
+                    $"(visible={persistentRoot.RootVisible}, active={persistentRoot.ActiveCount}, " +
+                    $"events={string.Join(',', persistentRoot.Events.Select(item => $"{item.Kind}@{item.Time}"))}).");
                 persistentRoot.Advance(3.6);
                 Require(!persistentRoot.RootVisible, "A naturally finished root must become invisible after its final frame.");
             }
@@ -527,8 +538,10 @@ internal static class FireworksLifecycleTests
                 Require(ownerDelay.ActiveCount == 1 && ownerDelay.Events.All(item => item.Kind != 3),
                     "An Owner Destroy request must not force-stop child-local delayed work.");
                 ownerDelay.Advance(5);
-                Require(ownerDelay.Events.Single(item => item.ContainerId == launch.Id && item.Kind == 3).Time == 5,
-                    "Owner Destroy Delay must begin at the owner's deadline and be sent only once.");
+                var ownerDelayDestroy = ownerDelay.Events.Where(item =>
+                    item.ContainerId == launch.Id && item.Kind == 3).ToArray();
+                Require(ownerDelayDestroy.Length == 1 && ownerDelayDestroy[0].Time == 4,
+                    "Owner Destroy Delay must start at the root's idle deadline and be sent only once.");
                 ownerDelay.Advance(7);
                 Require(!ownerDelay.RootVisible && ownerDelay.ActiveCount == 0,
                     "Owner Destroy delayed descendants must eventually finish normally.");
@@ -539,6 +552,7 @@ internal static class FireworksLifecycleTests
                 edge.Source.Id == rootStart.Id && edge.Target.Id == launch.Id && edge.TargetPortId == "spawn"));
             var rootDestroyDelay = destroyDelayWorkspace.CreateNode(new GraphNodeKind("OnDestroy"));
             var afterDestroyDelay = destroyDelayWorkspace.CreateNode(new GraphNodeKind("Delay"));
+            destroyDelayWorkspace.SetParameter(afterDestroyDelay, "seconds", JsonSerializer.SerializeToElement(2d));
             Require(destroyDelayWorkspace.TryConnectNodes(rootDestroyDelay, afterDestroyDelay, out _, "signal", "then") &&
                     destroyDelayWorkspace.TryConnectNodes(afterDestroyDelay, destroyDelayWorkspace.GetNode(launch.Id),
                         out _, "spawn", "then"), "Cannot connect On Destroy through Delay.");
@@ -547,7 +561,9 @@ internal static class FireworksLifecycleTests
             {
                 destroyDelay.Advance(1, 0.5);
                 Require(destroyDelay.RootVisible && destroyDelay.ActiveCount == 0,
-                    "Delay created by On Destroy must retain the root.");
+                    $"Delay created by On Destroy must retain the root " +
+                    $"(visible={destroyDelay.RootVisible}, active={destroyDelay.ActiveCount}, " +
+                    $"events={string.Join(',', destroyDelay.Events.Select(item => $"{item.Kind}@{item.Time}"))}).");
                 destroyDelay.Advance(2, 0.25);
                 var launched = destroyDelay.ActiveInstances.Single(key => key.Container == launch.Id);
                 Require(destroyDelay.InstanceStartTime(launch.Id, launched.Instance) == 2,
@@ -567,7 +583,7 @@ internal static class FireworksLifecycleTests
             {
                 zeroGeneral.Advance(1);
                 var launched = zeroGeneral.ActiveInstances.Single(key => key.Container == launch.Id);
-                Require(zeroGeneral.InstanceStartTime(launch.Id, launched.Instance) == 1,
+                Require(zeroGeneral.InstanceStartTime(launch.Id, launched.Instance) == 0,
                     "Zero Delay must resume at the same local time.");
             }
             var negativeGeneralGraph = destroyDelayGraph with
@@ -1258,16 +1274,18 @@ internal static class FireworksLifecycleTests
         Require(workspace.TryConnectNodes(signalInput, signalOutput, out _, "signal", "then"),
             "Cannot connect Spawnable local Signal I/O.");
         workspace.NavigateToGraph(0);
+        inputSignal = workspace.GetNode(inputSignal.Id);
         sourceGroup = workspace.GetNode(sourceGroup.Id);
         var targetGroup = workspace.CreateNode(GraphNodeKind.SpawnableGroup);
-        Require(workspace.TryConnectNodes(inputSignal, sourceGroup, out _,
+        Require(workspace.TryConnectNodes(inputSignal, sourceGroup, out var inputConnectionError,
             targetPortId: SpawnableGroupSchema.PortId(signalInput.Id), sourcePortId: null),
-            "Cannot connect a Spawnable Signal input.");
+            $"Cannot connect a Spawnable Signal input: {inputConnectionError}");
         Require(workspace.TryConnectNodes(sourceGroup, targetGroup, out _,
             targetPortId: "spawn", sourcePortId: SpawnableGroupSchema.OutputPortId(signalOutput.Id)),
             "Cannot connect a Spawnable Signal output.");
 
-        var package = SpawnableGroupPackage.Compile(workspace.CreateSnapshot() with { AutoDestroyWhenIdle = false });
+        workspace.AutoDestroyWhenIdle = false;
+        var package = SpawnableGroupPackage.Compile(workspace.CreateSnapshot());
         var sourceTemplate = package.Templates.Single(template => template.ContainerId == sourceGroup.Id);
         Require(package.Version == SpawnableGroupPackage.FormatVersion && sourceTemplate.SignalInputs?.Count == 1 &&
                 sourceTemplate.SignalOutputs?.Count == 1 && package.SignalRoutes.Count == 1,
@@ -1279,11 +1297,13 @@ internal static class FireworksLifecycleTests
             var compiledRoot = compiled.RootElement;
             var compiledTemplate = compiledRoot.GetProperty("templates").EnumerateArray()
                 .Single(item => item.GetProperty("containerId").GetGuid() == sourceGroup.Id);
-            Require(!compiledRoot.GetProperty("autoDestroyWhenIdle").GetBoolean() &&
-                    compiledRoot.GetProperty("signalRoutes").GetArrayLength() == 1 &&
-                    compiledTemplate.GetProperty("signalInputs").GetArrayLength() == 1 &&
-                    compiledTemplate.GetProperty("signalOutputs").GetArrayLength() == 1,
-                "MCP Spawnable compilation must expose root policy, local Signal ports and routes.");
+            var autoDestroy = compiledRoot.GetProperty("autoDestroyWhenIdle").GetBoolean();
+            var routeCount = compiledRoot.GetProperty("signalRoutes").GetArrayLength();
+            var inputCount = compiledTemplate.GetProperty("signalInputs").GetArrayLength();
+            var outputCount = compiledTemplate.GetProperty("signalOutputs").GetArrayLength();
+            Require(!autoDestroy && routeCount == 1 && inputCount == 1 && outputCount == 1,
+                $"MCP Spawnable compilation mismatch: autoDestroy={autoDestroy}, routes={routeCount}, " +
+                $"signalInputs={inputCount}, signalOutputs={outputCount}.");
         }
         using var session = new NativeSpawnableSession(package, library);
         session.Advance(0);
@@ -1297,6 +1317,7 @@ internal static class FireworksLifecycleTests
         var emitted = session.Events.Where(item => item.Kind == 4 && item.ContainerId == sourceGroup.Id).ToArray();
         Require(emitted.Length == 2 &&
                 emitted.All(item => item.Time == 0.3) &&
+                emitted.All(item => item.SignalNodeId == signalOutput.Id) &&
                 emitted.Select(item => item.InstanceId).Order().SequenceEqual(
                     sourceInstances.Select(item => item.Instance).Order()) &&
                 session.ActiveInstances.Count == 4,
@@ -1306,14 +1327,14 @@ internal static class FireworksLifecycleTests
         var rootStart = drainingWorkspace.CreateNode(new GraphNodeKind("OnStart"));
         var delayedSource = drainingWorkspace.CreateNode(GraphNodeKind.SpawnableGroup);
         Require(drainingWorkspace.EnterGraph(delayedSource), "Cannot edit delayed signal source.");
-        var childStart = drainingWorkspace.CreateNode(new GraphNodeKind("OnStart"));
+        var childStart = drainingWorkspace.Nodes.Single(node => node.Definition.Kind.Value == "OnStart");
         var childDelay = drainingWorkspace.CreateNode(new GraphNodeKind("Delay"));
         var delayedOutput = drainingWorkspace.CreateNode(new GraphNodeKind("SpawnOutputSignal"));
         var sourceLife = drainingWorkspace.CreateNode(new GraphNodeKind("LifeTime"));
         drainingWorkspace.SetParameter(childDelay, "seconds", JsonSerializer.SerializeToElement(1d));
         drainingWorkspace.SetParameter(sourceLife, "seconds", JsonSerializer.SerializeToElement(2d));
         Require(drainingWorkspace.TryConnectNodes(childStart, childDelay, out _, "signal", "then") &&
-                drainingWorkspace.TryConnectNodes(childDelay, delayedOutput, out _, "then", "signal"),
+                drainingWorkspace.TryConnectNodes(childDelay, delayedOutput, out _, "signal", "then"),
             "Cannot delay a local signal output.");
         drainingWorkspace.NavigateToGraph(0);
         var delayedTarget = drainingWorkspace.CreateNode(GraphNodeKind.SpawnableGroup);
@@ -1321,6 +1342,7 @@ internal static class FireworksLifecycleTests
         var targetLife = drainingWorkspace.CreateNode(new GraphNodeKind("LifeTime"));
         drainingWorkspace.SetParameter(targetLife, "seconds", JsonSerializer.SerializeToElement(1d));
         drainingWorkspace.NavigateToGraph(0);
+        rootStart = drainingWorkspace.GetNode(rootStart.Id);
         Require(drainingWorkspace.TryConnectNodes(rootStart, drainingWorkspace.GetNode(delayedSource.Id),
                     out _, "spawn", "then") &&
                 drainingWorkspace.TryConnectNodes(drainingWorkspace.GetNode(delayedSource.Id),

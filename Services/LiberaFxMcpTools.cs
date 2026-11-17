@@ -153,7 +153,9 @@ public sealed class LiberaFxMcpTools
     [Description("Compile Signal or Spawnable graphs to an immutable parent LFXB program and any separate Spawnable template programs, per-pin CaptureAtSpawn/Live mappings, render configurations and GPU snapshots. This also supports Signal graphs without Spawnable Groups. Signals connected to a Spawnable enqueue runtime instances, not editor graph copies. Engine adapters consume lifecycle events; no engine objects are created by this tool.")]
     public static async Task<string> CompileSpawnable(ActiveGraphProvider activeGraph)
     {
-        var snapshot = await Dispatcher.UIThread.InvokeAsync(() => activeGraph.Graph.CreateCurrentSnapshot());
+        var snapshot = await Dispatcher.UIThread.InvokeAsync(() =>
+            activeGraph.Graph.CreateCurrentSnapshot() with
+            { AutoDestroyWhenIdle = activeGraph.Graph.AutoDestroyWhenIdle });
         try
         {
             var package = SpawnableGroupPackage.Compile(snapshot);
