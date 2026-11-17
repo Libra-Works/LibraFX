@@ -9,5 +9,6 @@
   "group": "Vectors",
   "portType": "FloatX4",
   "portCategory": "Parameter",
+  "conversions": [{ "inputPortId": "a", "mode": "explicit" }],
   "inputPorts": [{ "id": "a", "name": "Color", "portType": "Color" }]
 }

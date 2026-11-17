@@ -199,6 +199,17 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         };
         GroupAssets = groupAssets;
         NodeDefinitions = nodeDefinitions;
+        if (nodeDefinitions is not null)
+        {
+            var weakGraph = new WeakReference<GraphWorkspaceViewModel>(this);
+            EventHandler? changed = null;
+            changed = (_, _) =>
+            {
+                if (weakGraph.TryGetTarget(out var graph)) graph.RefreshTypeDiagnostics();
+                else nodeDefinitions.Changed -= changed;
+            };
+            nodeDefinitions.Changed += changed;
+        }
         Nodes.CollectionChanged += OnNodesChanged;
         DeleteSelectedNodeCommand = new RelayCommand(DeleteSelectedNode, () => HasSelection);
         Connections.CollectionChanged += (_, _) =>
@@ -233,14 +244,15 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             node.ApplyResolvedDefinition(effective[node.Id]);
         var byId = Nodes.ToDictionary(node => node.Id);
         var problems = new List<GraphProblemViewModel>();
-        foreach (var diagnostic in GraphTypeDiagnostics.Analyze(snapshot))
+        foreach (var diagnostic in GraphTypeDiagnostics.Analyze(snapshot, AvailableNodeDefinitions))
         {
             if (!byId.TryGetValue(diagnostic.NodeId, out var target) ||
                 !byId.TryGetValue(diagnostic.SourceNodeId, out var source)) continue;
             var text = LocalizationService.Shared.Get("Messages.GraphTypeMismatch",
                 target.Name, target.Id, diagnostic.InputPortId ?? "input",
                 source.Name, source.Id, GraphNodeDefinition.DisplayPortType(diagnostic.SourceType),
-                GraphNodeDefinition.DisplayPortType(diagnostic.ExpectedType));
+                GraphNodeDefinition.DisplayPortType(diagnostic.ExpectedType)) +
+                " " + GraphConversionPresentation.Describe(diagnostic.Conversion);
             problems.Add(new GraphProblemViewModel(target, text));
         }
         if (!IsCurrentGraphSpawnable)
@@ -1101,7 +1113,10 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                  source.Definition.GetOutputPortType(sourcePortId) != target.Definition.GetInputPortType(targetPortId)))
             {
                 throw new ArgumentException(
-                    "Port categories and data types must match.",
+                    "Port categories and data types must match. " +
+                    new GraphConversionRegistry(AvailableNodeDefinitions).Resolve(
+                        source.Definition.GetOutputPortType(sourcePortId)!,
+                        target.Definition.GetInputPortType(targetPortId)!).Describe(),
                     nameof(plan));
             }
 
@@ -1283,6 +1298,13 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
              source.Definition.GetOutputPortType(sourcePortId) != target.Definition.GetInputPortType(targetPortId)))
         {
             error = "Port categories and data types must match.";
+            if (source.Definition.GetOutputPortCategory(sourcePortId) == GraphPortCategory.Parameter &&
+                target.Definition.GetInputPortCategory(targetPortId) == GraphPortCategory.Parameter)
+                error = LocalizationService.Shared.Get("Messages.Error.PortTypeMismatch") + " " +
+                    GraphConversionPresentation.Describe(
+                        new GraphConversionRegistry(AvailableNodeDefinitions).Resolve(
+                            source.Definition.GetOutputPortType(sourcePortId)!,
+                            target.Definition.GetInputPortType(targetPortId)!));
             return false;
         }
 

@@ -15,6 +15,16 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--conversion-registry"])
+        {
+            var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
+            if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root))
+                throw new ArgumentException("Set an absolute isolated LIBERAFX_DATA_ROOT for conversion registry checks.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            LiberaFx.Tests.GraphTypeDiagnosticsTests.Run();
+            Console.WriteLine("Explicit conversion registry, type diagnostics, catalog and compilation checks passed.");
+            return;
+        }
         if (args.Length is 1 or 2 && args[0] == "--signal-timeline")
         {
             var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");

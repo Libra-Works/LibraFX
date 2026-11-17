@@ -20,6 +20,7 @@
     <Compile Include="..\..\Models\Graph\GraphMatrixLowering.cs" Link="Models\GraphMatrixLowering.cs" />
     <Compile Include="..\..\Models\Graph\GraphPolymorphism.cs" Link="Models\GraphPolymorphism.cs" />
     <Compile Include="..\..\Models\Graph\GraphTypeDiagnostics.cs" Link="Models\GraphTypeDiagnostics.cs" />
+    <Compile Include="..\..\Models\Graph\GraphConversionRegistry.cs" Link="Models\GraphConversionRegistry.cs" />
     <Compile Include="..\..\Models\Graph\SpawnableGroupSchema.cs" Link="Models\SpawnableGroupSchema.cs" />
     <Compile Include="..\..\Models\Graph\GroupBoundarySchema.cs" Link="Models\GroupBoundarySchema.cs" />
     <Compile Include="..\..\Models\Graph\GroupBoundaryLowering.cs" Link="Models\GroupBoundaryLowering.cs" />

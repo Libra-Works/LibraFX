@@ -71,6 +71,7 @@ public static class GraphTypeDiagnosticsTests
         }
         catch (InvalidDataException) { }
         PolymorphicMathTests.Run();
+        GraphConversionRegistryTests.Run();
     }
 
     private static void Require(bool condition, string message)

@@ -1,13 +1,18 @@
 namespace LiberaFx.Models.Graph;
 
 public sealed record GraphTypeDiagnostic(Guid NodeId, string? InputPortId, Guid SourceNodeId,
-    string SourceType, string ExpectedType);
+    string SourceType, string ExpectedType)
+{
+    public GraphConversionResolution Conversion { get; init; } = new([]);
+}
 
 public static class GraphTypeDiagnostics
 {
-    public static IReadOnlyList<GraphTypeDiagnostic> Analyze(GraphSnapshot graph)
+    public static IReadOnlyList<GraphTypeDiagnostic> Analyze(GraphSnapshot graph,
+        IEnumerable<GraphNodeDefinition>? availableDefinitions = null)
     {
         var result = new List<GraphTypeDiagnostic>();
+        var conversions = new GraphConversionRegistry(availableDefinitions ?? GraphNodeDefinition.All);
         void Visit(GraphSnapshot current)
         {
             var nodes = current.Nodes.ToDictionary(item => item.Id);
@@ -19,7 +24,8 @@ public static class GraphTypeDiagnostics
                 if (source is not null && target is not null && source != target &&
                     !GraphPolymorphism.CanBroadcast(nodes[connection.TargetNodeId], connection.TargetPortId, source, target))
                     result.Add(new(connection.TargetNodeId, connection.TargetPortId,
-                        connection.SourceNodeId, source, target));
+                        connection.SourceNodeId, source, target)
+                    { Conversion = conversions.Resolve(source, target) });
             }
             foreach (var node in nodes.Values)
                 if (node.ChildGraph is not null) Visit(node.ChildGraph);
@@ -35,6 +41,6 @@ public static class GraphTypeDiagnostics
         throw new InvalidDataException(string.Join(Environment.NewLine, diagnostics.Select(item =>
             $"Node {item.NodeId}, input '{item.InputPortId ?? "(default)"}': " +
             $"source {item.SourceNodeId} has type {item.SourceType}; expected {item.ExpectedType}. " +
-            "Disconnect the input or connect a compatible source.")));
+            "Disconnect the input or connect a compatible source. " + item.Conversion.Describe())));
     }
 }

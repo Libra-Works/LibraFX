@@ -1,0 +1,6 @@
+{
+  "Conversions.Missing": "この型の組み合わせには明示変換が登録されていません。",
+  "Conversions.Required": "明示変換ノードを挿入してください: {0}。",
+  "Conversions.Ambiguous": "複数の変換が登録されています。ノードと出力を明示的に選択してください: {0}。",
+  "Conversions.Signature": "{0} -> {1}{2}（明示変換）"
+}

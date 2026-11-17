@@ -122,7 +122,8 @@ public sealed class VfxProgram
             throw new InvalidDataException(string.Join(Environment.NewLine, typeProblems.Select(problem =>
                 LocalizationService.Shared.Get("Messages.GraphCompileMismatch",
                     problem.NodeId, problem.InputPortId ?? "input", problem.SourceNodeId,
-                    problem.SourceType, problem.ExpectedType))));
+                    problem.SourceType, problem.ExpectedType) +
+                " " + GraphConversionPresentation.Describe(problem.Conversion))));
 #endif
         graph = GroupBoundaryLowering.Lower(graph);
         if (lifeNodeId is { } lifeId)

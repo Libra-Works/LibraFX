@@ -70,7 +70,8 @@ public sealed class NodeCatalogViewModel : Tool
                             entry.KindName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.QualifiedName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.Namespace.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                            entry.Group.Contains(search, StringComparison.OrdinalIgnoreCase))
+                            entry.Group.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                            entry.ConversionDescription.Contains(search, StringComparison.OrdinalIgnoreCase))
             .GroupBy(entry => entry.Group)
             .Select(group => new NodeCatalogGroupViewModel(group.Key, group.ToArray()))
             .ToArray();
@@ -104,6 +105,8 @@ public sealed class NodeCatalogEntryViewModel
     public string DragIdentifier { get; }
     public Guid? GroupAssetId { get; }
     public bool IsPolymorphic { get; }
+    public string ConversionDescription { get; } = string.Empty;
+    public bool HasConversions => ConversionDescription.Length != 0;
 
     public NodeCatalogEntryViewModel(GraphNodeDefinition definition, string? projectName = null)
     {
@@ -113,6 +116,7 @@ public sealed class NodeCatalogEntryViewModel
         KindName = definition.Kind.ToString();
         Namespace = definition.Namespace;
         QualifiedName = definition.QualifiedName;
+        ConversionDescription = GraphConversionPresentation.Describe(definition);
         var source = GraphNodeDefinition.Core.Contains(definition)
             ? LocalizationService.Shared.Get("Editor.CoreNodes") : projectName ?? definition.Namespace;
         Group = $"{source} / {LocalizationService.Shared.GetOrDefault(definition.GroupNameKey, definition.Group)}";

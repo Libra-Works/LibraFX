@@ -9,6 +9,7 @@
   "group": "Vectors",
   "portType": "FloatX4",
   "portCategory": "Parameter",
+  "conversions": [{ "inputPortId": "a", "mode": "explicit" }],
   "inputPorts": [{ "id": "a", "name": "Value", "portType": "FloatX2" }],
   "parameters": [{ "id": "fill", "name": "Added component fill", "displayNameKey": "Vectors.Parameter.Fill", "type": "float", "defaultValue": 0.0 }]
 }

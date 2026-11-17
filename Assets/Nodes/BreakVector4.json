@@ -9,6 +9,12 @@
   "group": "Vectors",
   "portType": "FloatX4",
   "portCategory": "Parameter",
+  "conversions": [
+    { "inputPortId": "a", "outputPortId": "x", "mode": "explicit" },
+    { "inputPortId": "a", "outputPortId": "y", "mode": "explicit" },
+    { "inputPortId": "a", "outputPortId": "z", "mode": "explicit" },
+    { "inputPortId": "a", "outputPortId": "w", "mode": "explicit" }
+  ],
   "inputPorts": [{ "id": "a", "name": "Value", "portType": "FloatX4" }],
   "outputPorts": [
     { "id": "x", "name": "X", "portType": "Float" },

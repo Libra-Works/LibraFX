@@ -128,7 +128,7 @@ public sealed class LiberaFxMcpTools
     }
 
     [McpServerTool(Name = "libera_graph_list_node_types", ReadOnly = true, OpenWorld = false)]
-    [Description("List authoring node types and ports. Sequence has 1..32 outputs: set its integer 'outputs' parameter; stable output IDs are then_0, then_1, etc., in execution order. Each Signal output allows one destination; inputs allow multiple senders. Spawnable Group is an editable child template; receiving a signal creates runtime instances, never editor nodes.")]
+    [Description("List authoring node types and ports. Conversions lists explicit conversion input/output port IDs; insert these nodes visibly instead of directly connecting different types. Existing polymorphic math scalar broadcast is the only implicit exception. Sequence has 1..32 outputs: set its integer 'outputs' parameter; stable output IDs are then_0, then_1, etc., in execution order. Each Signal output allows one destination; inputs allow multiple senders. Spawnable Group is an editable child template; receiving a signal creates runtime instances, never editor nodes.")]
     public static async Task<string> ListNodeTypes(ActiveGraphProvider activeGraph) =>
         await Dispatcher.UIThread.InvokeAsync(() => JsonSerializer.Serialize(activeGraph.Graph.AvailableNodeDefinitions, JsonOptions));
 

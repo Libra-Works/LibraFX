@@ -1,0 +1,6 @@
+{
+  "Conversions.Missing": "No explicit conversion is registered for these types.",
+  "Conversions.Required": "Insert an explicit conversion node: {0}.",
+  "Conversions.Ambiguous": "Multiple conversions are registered; explicitly choose the node and output: {0}.",
+  "Conversions.Signature": "{0} -> {1}{2} (explicit)"
+}

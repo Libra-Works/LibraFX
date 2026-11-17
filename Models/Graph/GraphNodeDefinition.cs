@@ -286,6 +286,7 @@ public sealed record GraphNodeDefinition(
     public IReadOnlyList<GraphInputPortDefinition>? InputPorts { get; init; }
     public IReadOnlyList<GraphOutputPortDefinition>? OutputPorts { get; init; }
     public GraphRuntimeDefinition? Runtime { get; init; }
+    public IReadOnlyList<GraphConversionDefinition> Conversions { get; init; } = [];
     public string KindDomain => Services.GpuParticleEditorService.IsGpu(Kind) ? "GpuParticle" : "Cpu";
 
     public GraphPortCategory GetInputPortCategory(string? portId) =>
@@ -576,10 +577,8 @@ public sealed record GraphNodeDefinition(
                 throw new InvalidDataException("Custom runtime ports do not match the execution declaration.");
             runtime = new GraphRuntimeDefinition(runtimeFile.Kind, runtimeFile.AbiVersion, runtimeFile.Execution);
         }
-        ids.Add(node.TypeId);
-        names.Add(qualifiedName);
         var kind = new GraphNodeKind(BuiltInIds.GetValueOrDefault(node.TypeId) ?? node.TypeId.ToString("D"));
-        definitions.Add(new GraphNodeDefinition(kind, node.TypeId, node.Namespace, node.Name, node.PortType, category, node.Group)
+        var definition = new GraphNodeDefinition(kind, node.TypeId, node.Namespace, node.Name, node.PortType, category, node.Group)
         {
             TypeName = node.Kind!,
             DisplayNameKey = node.DisplayNameKey,
@@ -588,8 +587,13 @@ public sealed record GraphNodeDefinition(
             Parameters = parameters.AsReadOnly(),
             InputPorts = inputs?.AsReadOnly(),
             OutputPorts = outputs?.AsReadOnly(),
-            Runtime = runtime
-        });
+            Runtime = runtime,
+            Conversions = node.Conversions is { } conversions ? conversions.AsReadOnly() : []
+        };
+        GraphConversionRegistry.ValidateDefinition(definition);
+        ids.Add(node.TypeId);
+        names.Add(qualifiedName);
+        definitions.Add(definition);
     }
 
     private static bool TryPortCategory(string? value, GraphPortCategory fallback, out GraphPortCategory category)
@@ -622,6 +626,7 @@ public sealed record GraphNodeDefinition(
         public List<InputPortFile>? InputPorts { get; set; }
         public List<OutputPortFile>? OutputPorts { get; set; }
         public RuntimeFile? Runtime { get; set; }
+        public List<GraphConversionDefinition>? Conversions { get; set; }
     }
 
     private sealed class InputPortFile
