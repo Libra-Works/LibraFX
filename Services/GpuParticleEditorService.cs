@@ -150,7 +150,19 @@ public static class GpuParticleEditorService
         PreviewAssetStore.ValidateAssetPath(asset.Path);
         var resources = BillboardTextures(ReadState(node));
         if (resources.Count != 1) throw new InvalidOperationException("Select the texture resource inside the GPU workspace.");
-        Apply(graph, node.Id, [new() { Action = "resource", Resource = resources[0], AssetPath = asset.Path }]);
+        AssignTextureResource(graph, node, asset, resources[0].Id);
+    }
+
+    public static void AssignTextureResource(GraphWorkspaceViewModel graph, GraphNodeViewModel node,
+        EngineAsset asset, string resourceId)
+    {
+        if (!graph.Nodes.Contains(node)) throw new ArgumentException("Select a node in the active graph.");
+        if (asset.AssetClass != "texture") throw new ArgumentException("Select a texture asset.");
+        PreviewAssetStore.ValidateAssetPath(asset.Path);
+        var resource = ReadState(node).Program.Resources.SingleOrDefault(resource =>
+            resource.Id == resourceId && resource.Kind == ResourceKind.Texture2D)
+            ?? throw new ArgumentException("Select an existing Texture2D resource.");
+        Apply(graph, node.Id, [new() { Action = "resource", Resource = resource, AssetPath = asset.Path }]);
     }
 
     public static IReadOnlyList<GpuDiagnostic> Diagnostics(GpuEditorState state) =>

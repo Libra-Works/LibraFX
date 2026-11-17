@@ -36,9 +36,33 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
     private AssetPeerOption? _selectedPeer;
     private Guid? _explicitPeerId;
     private GraphWorkspaceViewModel? _observedGraph;
+    private ResourceAssignmentTarget? _selectedAssignmentTarget;
+    private bool _refreshingTargets;
+    private bool _refreshingPeers;
+    private bool _updatingAssetSelection;
+    private bool _detailsReady;
 
     public ObservableCollection<AssetPeerOption> Peers { get; } = [];
     public ObservableCollection<EngineAsset> Assets { get; } = [];
+    public ObservableCollection<ResourceAssignmentTarget> AssignmentTargets { get; } = [];
+    public ProjectResourcesViewModel ProjectResources { get; }
+    public ResourceAssignmentTarget? SelectedAssignmentTarget
+    {
+        get => _selectedAssignmentTarget;
+        set
+        {
+            if (_refreshingTargets) return;
+            SetProperty(ref _selectedAssignmentTarget, value);
+            OnPropertyChanged(nameof(SelectedAssignmentTarget));
+            OnPropertyChanged(nameof(CanAssign));
+            OnPropertyChanged(nameof(AssignmentHint));
+            AssignCommand?.NotifyCanExecuteChanged();
+        }
+    }
+    public string AssignmentHint => LocalizationService.Shared.Get(
+        SelectedAsset is not null && !_detailsReady ? "Resources.LoadDetails" :
+        AssignmentTargets.Count > 1 && SelectedAssignmentTarget is null
+            ? "Resources.SelectTarget" : AssignmentTargets.Count == 0 ? "Resources.NoTarget" : "Resources.TargetReady");
     public IReadOnlyList<string> AssetClasses { get; } = ["", "model", "texture", "material"];
 
     public string Query { get => _query; set => SetProperty(ref _query, value); }
@@ -55,13 +79,13 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
     public EngineAsset? SelectedAsset
     {
         get => _selectedAsset;
-        set => SetSelectedAsset(value, loadDetails: true);
+        set { if (!_updatingAssetSelection) SetSelectedAsset(value, loadDetails: true); }
     }
 
     public AssetPeerOption? SelectedPeer
     {
         get => _selectedPeer;
-        set => SetSelectedPeer(value, userChanged: true);
+        set { if (!_refreshingPeers) SetSelectedPeer(value, userChanged: true); }
     }
 
     public Bitmap? Thumbnail
@@ -84,10 +108,9 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
               ? $"{Environment.NewLine}{LocalizationService.Shared.Get("Asset.Size")}: {asset.Width} × {asset.Height}"
               : "") +
           FormatMaterials(asset.Materials);
-    public bool CanAssign => SelectedAsset is not null && _main.ActiveDocument is not null &&
-        _main.Graph.SelectedNode is { } node && (RenderNodeSchema.IsRenderNode(node.Definition) ||
-            node.IsGpuParticle && SelectedAsset.AssetClass == "texture" &&
-            GpuParticleEditorService.BillboardTextures(GpuParticleEditorService.ReadState(node)).Count == 1);
+    public bool CanAssign => !_disposed && _detailsReady && SelectedAsset is not null && _main.ActiveDocument is not null &&
+        _main.Graph.SelectedNode is { } node && SelectedAssignmentTarget is { } target &&
+        target.NodeId == node.Id && AssignmentTargets.Contains(target);
     public bool CanGoPrevious => Offset > 0;
     public bool CanGoNext => Offset + Assets.Count < Total;
     public IAsyncRelayCommand SearchCommand { get; }
@@ -101,21 +124,31 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
     public EngineAssetsWindowViewModel(MainViewModel main)
     {
         _main = main;
+        ProjectResources = new ProjectResourcesViewModel(main);
         SearchCommand = new AsyncRelayCommand(() => LoadPageAsync(0));
         PreviousCommand = new AsyncRelayCommand(() => LoadPageAsync(Math.Max(0, Offset - 32)), () => CanGoPrevious);
         NextCommand = new AsyncRelayCommand(() => LoadPageAsync(Offset + 32), () => CanGoNext);
-        AddModelCommand = new RelayCommand(AddModel, () => SelectedAsset is not null);
-        AddSpriteCommand = new RelayCommand(AddSprite, () => SelectedAsset is not null);
+        AddModelCommand = new RelayCommand(AddModel,
+            () => !_disposed && _detailsReady && SelectedAsset?.AssetClass == "model" && _main.ActiveDocument is not null);
+        AddSpriteCommand = new RelayCommand(AddSprite,
+            () => !_disposed && _detailsReady && SelectedAsset?.AssetClass == "texture" && _main.ActiveDocument is not null);
         AssignCommand = new RelayCommand(Assign, () => CanAssign);
         SaveMetadataCommand = new RelayCommand(SaveMetadata, () => SelectedAsset is not null);
         _main.PropertyChanged += OnMainPropertyChanged;
         AttachGraph();
         RefreshPeers();
+        MessageLocalization.Observe(this, static model => { if (!model._disposed) model.RefreshLocalizedText(); });
     }
 
     private void SetSelectedAsset(EngineAsset? value, bool loadDetails)
     {
         if (!SetProperty(ref _selectedAsset, value)) return;
+        if (loadDetails)
+        {
+            _detailsReady = false;
+            ClearThumbnail();
+            if (value is null) CancelRequest();
+        }
         OnPropertyChanged(nameof(HasSelectedAsset));
         OnPropertyChanged(nameof(CanAssign));
         OnPropertyChanged(nameof(AssetDetails));
@@ -123,13 +156,26 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
         AssignCommand.NotifyCanExecuteChanged();
         AddModelCommand.NotifyCanExecuteChanged();
         AddSpriteCommand.NotifyCanExecuteChanged();
+        RefreshAssignmentState();
         if (loadDetails && value is not null) _ = LoadDetailsAsync(value);
     }
 
     private void SetSelectedPeer(AssetPeerOption? value, bool userChanged)
     {
+        var changed = _selectedPeer?.ClientId != value?.ClientId;
         SetProperty(ref _selectedPeer, value);
         if (userChanged) _explicitPeerId = value?.ClientId;
+        if (!changed) return;
+        CancelRequest();
+        Assets.Clear();
+        SelectedAsset = null;
+        ClearThumbnail();
+        _detailsReady = false;
+        Offset = Total = 0;
+        OnPropertyChanged(nameof(CanGoPrevious));
+        OnPropertyChanged(nameof(CanGoNext));
+        PreviousCommand?.NotifyCanExecuteChanged();
+        NextCommand?.NotifyCanExecuteChanged();
     }
 
     private void OnMainPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -140,9 +186,18 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
 
     private void AttachGraph()
     {
-        if (_observedGraph is not null) _observedGraph.PropertyChanged -= OnGraphPropertyChanged;
+        if (_observedGraph is not null)
+        {
+            _observedGraph.PropertyChanged -= OnGraphPropertyChanged;
+            _observedGraph.History.StateChanged -= OnGraphHistoryChanged;
+        }
+        SelectedAssignmentTarget = null;
         _observedGraph = _main.ActiveDocument?.Workspace;
-        if (_observedGraph is not null) _observedGraph.PropertyChanged += OnGraphPropertyChanged;
+        if (_observedGraph is not null)
+        {
+            _observedGraph.PropertyChanged += OnGraphPropertyChanged;
+            _observedGraph.History.StateChanged += OnGraphHistoryChanged;
+        }
         RefreshAssignmentState();
     }
 
@@ -153,27 +208,51 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
 
     private void RefreshAssignmentState()
     {
+        if (_disposed) return;
+        var previous = SelectedAssignmentTarget;
+        _refreshingTargets = true;
+        try
+        {
+            AssignmentTargets.Clear();
+            if (SelectedAsset is { } asset && _observedGraph?.SelectedNode is { } node)
+                foreach (var target in ResourceAssignment.Targets(node, asset)) AssignmentTargets.Add(target);
+        }
+        finally { _refreshingTargets = false; }
+        SelectedAssignmentTarget = AssignmentTargets.FirstOrDefault(target =>
+            previous is not null && target.NodeId == previous.NodeId && target.Kind == previous.Kind && target.Id == previous.Id)
+            ?? (AssignmentTargets.Count == 1 ? AssignmentTargets[0] : null);
         OnPropertyChanged(nameof(CanAssign));
         AssignCommand?.NotifyCanExecuteChanged();
+        AddModelCommand?.NotifyCanExecuteChanged();
+        AddSpriteCommand?.NotifyCanExecuteChanged();
     }
+
+    private void OnGraphHistoryChanged(object? sender, EventArgs e) => RefreshAssignmentState();
 
     public void RefreshPeers()
     {
         var clients = _main.PreviewTelemetry.Clients()
             .Where(peer => _main.PreviewAssets.Supports(peer.ClientId))
-            .Select(peer => new AssetPeerOption(peer.ClientId, $"{peer.Engine ?? "Unreal"} · {peer.ClientId:D}"))
+            .Select(peer => new AssetPeerOption(peer.ClientId,
+                $"{peer.Engine ?? "?"} · {peer.ViewerName ?? ""} · {peer.ClientId:D}"))
             .ToArray();
-        Peers.Clear();
-        foreach (var client in clients) Peers.Add(client);
-        if (_explicitPeerId is { } explicitId)
-            SetSelectedPeer(Peers.FirstOrDefault(peer => peer.ClientId == explicitId), userChanged: false);
-        else
-            SetSelectedPeer(Peers.Count == 1 ? Peers[0] : null, userChanged: false);
+        _refreshingPeers = true;
+        try
+        {
+            Peers.Clear();
+            foreach (var client in clients) Peers.Add(client);
+            if (_explicitPeerId is { } explicitId)
+                SetSelectedPeer(Peers.FirstOrDefault(peer => peer.ClientId == explicitId), userChanged: false);
+            else
+                SetSelectedPeer(Peers.Count == 1 ? Peers[0] : null, userChanged: false);
+        }
+        finally { _refreshingPeers = false; }
     }
 
     public void RefreshLocalizedText()
     {
         OnPropertyChanged(nameof(AssetDetails));
+        RefreshAssignmentState();
     }
 
     private async Task LoadPageAsync(int offset)
@@ -189,13 +268,16 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
                 : LocalizationService.Shared.Get("Asset.NoPeer");
             return;
         }
+        CancellationTokenSource? request = null;
+        var peerId = SelectedPeer.ClientId;
         try
         {
-            var request = BeginRequest();
+            request = BeginRequest();
             var cancellation = request.Token;
             var page = await _main.PreviewAssets.CatalogAsync(Query.Trim(), AssetClass,
-                offset, 32, SelectedPeer.ClientId).WaitAsync(cancellation);
+                offset, 32, peerId).WaitAsync(cancellation);
             cancellation.ThrowIfCancellationRequested();
+            if (SelectedPeer?.ClientId != peerId) return;
             Assets.Clear();
             foreach (var asset in page.Assets) Assets.Add(asset);
             Offset = page.Offset;
@@ -210,12 +292,14 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
         }
         catch (OperationCanceledException)
         {
-            Status = LocalizationService.Shared.Get("Asset.RequestTimedOut");
+            if (ReferenceEquals(_requests, request) && !_disposed)
+                Status = LocalizationService.Shared.Get("Asset.RequestTimedOut");
         }
         catch (Exception exception) when (exception is InvalidOperationException or ArgumentException or
                                            IOException or InvalidDataException or TimeoutException)
         {
-            Status = LocalizationService.Shared.Get("Asset.RequestFailed", exception.Message);
+            if (ReferenceEquals(_requests, request) && !_disposed)
+                Status = LocalizationService.Shared.Get("Asset.RequestFailed", exception.Message);
         }
     }
 
@@ -225,34 +309,48 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
         ClearThumbnail();
         LoadMetadata(selected);
         if (SelectedPeer is null) return;
+        var peerId = SelectedPeer.ClientId;
+        CancellationTokenSource? request = null;
         try
         {
-            var request = BeginRequest();
+            request = BeginRequest();
             var cancellation = request.Token;
-            var detail = await _main.PreviewAssets.DetailsAsync(selected.Path, SelectedPeer.ClientId)
+            var detail = await _main.PreviewAssets.DetailsAsync(selected.Path, peerId)
                 .WaitAsync(cancellation);
             cancellation.ThrowIfCancellationRequested();
-            if (SelectedAsset?.Path != selected.Path) return;
-            SetSelectedAsset(detail, loadDetails: false);
-            var thumbnail = await _main.PreviewAssets.ThumbnailAsync(selected.Path, 256, SelectedPeer.ClientId)
+            if (SelectedAsset?.Path != selected.Path || SelectedPeer?.ClientId != peerId) return;
+            _updatingAssetSelection = true;
+            try
+            {
+                var index = Assets.IndexOf(selected);
+                if (index >= 0) Assets[index] = detail;
+                _detailsReady = true;
+                SetSelectedAsset(detail, loadDetails: false);
+                RefreshAssignmentState();
+            }
+            finally { _updatingAssetSelection = false; }
+            OnPropertyChanged(nameof(SelectedAsset));
+            var thumbnail = await _main.PreviewAssets.ThumbnailAsync(selected.Path, 256, peerId)
                 .WaitAsync(cancellation);
             cancellation.ThrowIfCancellationRequested();
-            if (SelectedAsset?.Path != selected.Path) return;
+            if (SelectedAsset?.Path != selected.Path || SelectedPeer?.ClientId != peerId) return;
             using var stream = new MemoryStream(thumbnail.Image, writable: false);
             Thumbnail = new Bitmap(stream);
-            Status = selected.Materials?.Count > 0
-                ? LocalizationService.Shared.Get("Asset.MaterialCount", selected.Materials.Count)
+            Status = detail.Materials?.Count > 0
+                ? LocalizationService.Shared.Get("Asset.MaterialCount", detail.Materials.Count)
                 : LocalizationService.Shared.Get("Asset.Ready");
         }
         catch (OperationCanceledException)
         {
-            Status = LocalizationService.Shared.Get("Asset.RequestTimedOut");
+            if (ReferenceEquals(_requests, request) && !_disposed)
+                Status = LocalizationService.Shared.Get("Asset.RequestTimedOut");
         }
         catch (Exception exception) when (exception is InvalidOperationException or ArgumentException or
                                            IOException or InvalidDataException or TimeoutException or
                                            FormatException)
         {
-            Status = LocalizationService.Shared.Get("Asset.RequestFailed", exception.Message);
+            if (ReferenceEquals(_requests, request) && !_disposed)
+                Status = LocalizationService.Shared.Get("Asset.RequestFailed", exception.Message);
         }
     }
 
@@ -338,13 +436,11 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
 
     private void Assign()
     {
-        if (SelectedAsset is not { } asset || _main.Graph.SelectedNode is not { } node) return;
+        if (!CanAssign || SelectedAsset is not { } asset || _main.Graph.SelectedNode is not { } node ||
+            SelectedAssignmentTarget is not { } target) return;
         try
         {
-            if (node.IsGpuParticle)
-                GpuParticleEditorService.AssignBillboardTexture(_main.Graph, node, asset);
-            else
-                RenderNodeAuthoring.AssignAsset(_main.Graph, node, asset);
+            ResourceAssignment.Assign(_main.Graph, node, asset, target);
             Status = LocalizationService.Shared.Get("Asset.Assigned");
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or InvalidDataException)
@@ -390,7 +486,12 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
         _disposed = true;
         CancelRequest();
         _main.PropertyChanged -= OnMainPropertyChanged;
-        if (_observedGraph is not null) _observedGraph.PropertyChanged -= OnGraphPropertyChanged;
+        if (_observedGraph is not null)
+        {
+            _observedGraph.PropertyChanged -= OnGraphPropertyChanged;
+            _observedGraph.History.StateChanged -= OnGraphHistoryChanged;
+        }
+        ProjectResources.Dispose();
         ClearThumbnail();
     }
 }

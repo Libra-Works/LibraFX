@@ -1700,6 +1700,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(asset);
         if (!Nodes.Contains(node) || !RenderNodeSchema.IsRenderNode(node.Definition))
             throw new InvalidOperationException("Select a model or sprite render node.");
+        RenderNodeAuthoring.ValidateAssetClass(asset, node.Definition.TypeName == "ModelDraw" ? "model" : "texture");
         var assetPath = RenderNodeSchema.IsSafeAssetPath(asset.Path)
             ? asset.Path
             : throw new ArgumentException("The engine asset path is invalid.", nameof(asset));

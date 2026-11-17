@@ -660,7 +660,20 @@ public partial class GraphEditorView : UserControl
     private void FrameSelection()
     {
         if (DataContext is not GraphWorkspaceViewModel graph || graph.SelectionCount == 0) return;
-        var selected = graph.SelectedNodes.ToHashSet();
+        FrameNodes(graph.SelectedNodes);
+    }
+
+    internal void FrameAll()
+    {
+        if (DataContext is not GraphWorkspaceViewModel graph) return;
+        InitializeViewport();
+        FrameNodes(graph.Nodes);
+    }
+
+    private void FrameNodes(IEnumerable<GraphNodeViewModel> nodes)
+    {
+        var selected = nodes.ToHashSet();
+        if (selected.Count == 0) return;
         var views = GraphCanvas.GetVisualDescendants().OfType<GraphNodeView>()
             .Where(view => view.DataContext is GraphNodeViewModel node && selected.Contains(node)).ToArray();
         var left = selected.Min(node => node.DisplayX);

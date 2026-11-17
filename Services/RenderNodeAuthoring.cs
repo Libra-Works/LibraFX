@@ -12,6 +12,7 @@ public static class RenderNodeAuthoring
         double? x = null,
         double? y = null)
     {
+        ValidateAssetClass(asset, "model");
         return CreateNode(graph, "ModelDraw", asset, [], x, y);
     }
 
@@ -24,6 +25,7 @@ public static class RenderNodeAuthoring
         double? x = null,
         double? y = null)
     {
+        ValidateAssetClass(asset, "texture");
         if (columns is < 1 or > 4096 || rows is < 1 or > 4096 ||
             !double.IsFinite(fps) || fps is < 0 or > 10000)
             throw new ArgumentOutOfRangeException(nameof(columns), "Sprite atlas settings are invalid.");
@@ -40,6 +42,13 @@ public static class RenderNodeAuthoring
     {
         ArgumentNullException.ThrowIfNull(graph);
         graph.AssignRenderAsset(node, asset);
+    }
+
+    public static void ValidateAssetClass(EngineAsset asset, string expected)
+    {
+        ArgumentNullException.ThrowIfNull(asset);
+        if (asset.AssetClass != expected)
+            throw new ArgumentException($"This target requires a {expected} asset.", nameof(asset));
     }
 
     private static GraphNodeViewModel CreateNode(

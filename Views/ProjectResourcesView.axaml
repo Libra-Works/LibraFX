@@ -1,0 +1,53 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:LiberaFx.ViewModels"
+             xmlns:views="using:LiberaFx.Views"
+             x:Class="LiberaFx.Views.ProjectResourcesView"
+             x:DataType="vm:ProjectResourcesViewModel">
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="12" RowSpacing="10">
+        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+            <ComboBox SelectedIndex="{Binding SourceIndex}" MinWidth="180">
+                <ComboBoxItem Content="{DynamicResource Text.Resources.Groups}" />
+                <ComboBoxItem Content="{DynamicResource Text.Resources.Local}" />
+            </ComboBox>
+            <TextBox Grid.Column="1" Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
+                     PlaceholderText="{DynamicResource Text.Asset.SearchHint}"
+                     AutomationProperties.Name="{DynamicResource Text.Asset.Search}" />
+            <Button Grid.Column="2" Command="{Binding RefreshCommand}" Content="{DynamicResource Text.Editor.Refresh}" />
+        </Grid>
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" IsVisible="{Binding IsLocal}">
+            <TextBox Text="{Binding Folder}" AutomationProperties.Name="{DynamicResource Text.Library.ChooseFolder}" />
+            <Button Grid.Column="1" Click="OnChooseFolder" Content="{DynamicResource Text.Library.ChooseFolder}" />
+            <CheckBox Grid.Column="2" IsChecked="{Binding Recursive}" Content="{DynamicResource Text.Resources.Recursive}" />
+        </Grid>
+        <Grid Grid.Row="2" ColumnDefinitions="2*,3*" ColumnSpacing="12">
+            <ListBox x:Name="ResourceList" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:WorkspaceResourceEntry">
+                        <StackPanel Margin="4">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding KindLabel}" />
+                            <TextBlock Text="{Binding Origin}" TextWrapping="Wrap" FontSize="11"
+                                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8">
+                <TextBlock Text="{Binding Details}" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="1" IsVisible="{Binding PreviewOnly}" TextWrapping="Wrap"
+                           Text="{DynamicResource Text.Resources.PreviewOnly}" />
+                <Grid Grid.Row="2">
+                    <Image x:Name="LocalThumbnail" Source="{Binding Thumbnail}" Stretch="Uniform" MaxHeight="450" />
+                    <Border IsVisible="{Binding HasGraphPreview}">
+                        <views:GraphEditorView x:Name="ResourceGraphPreview" DataContext="{Binding PreviewGraph}"
+                                               IsEnabled="False" IsHitTestVisible="False" />
+                    </Border>
+                </Grid>
+                <Button Grid.Row="3" x:Name="UseResourceButton" Command="{Binding UseCommand}" Content="{Binding UseLabel}" />
+            </Grid>
+        </Grid>
+        <TextBlock Grid.Row="3" Text="{Binding Status}" TextWrapping="Wrap"
+                   Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+    </Grid>
+</UserControl>
