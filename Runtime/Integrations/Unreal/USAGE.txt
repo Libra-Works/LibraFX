@@ -3,7 +3,8 @@ LIBRA RUNTIME FOR UNREAL - SOURCE INTEGRATION
 Scope
   Engine-independent CPU bytecode evaluation, project-native nodes, bound values
   and parameters, explicit game-thread signals, and live editor communication.
-  This is not a GPU particle renderer. Viewer/rendering integration is separate.
+  Spawnable playback creates bound mesh/sprite renderers and delegates GPU
+  compute/billboards to the separate LibraGpuRuntime module.
   Source targets UE 5.7 and later. UHT and the Win64 Development Editor build
   succeeded using the local UE 5.7.4 SDK and MyProject28 linked installation.
   Engine task/render snapshot and independent recorder automation passed locally.
@@ -89,8 +90,36 @@ Import and use
   or active child values. RequestNaturalEnd follows the package's natural
   lifecycle; Stop is explicit and never publishes natural Destroy.
   The host owns package lifecycle, delayed work and parent/child routing.
-  Render configuration and GPU payloads remain opaque; this component does not
-  create actors, components, materials or GPU resources from those payloads.
+  The component instantiates root and per-child StaticMesh components from
+  render_config and updates them from that exact native instance's values.
+  Spawn creates a scope; Stop releases it. Natural Destroy is a notification,
+  not a second destruction. Root completion, explicit Stop, restart and
+  component destruction release owned rendering/GPU resources.
+  AssetBindings maps opaque identities to engine Mesh/Material/Texture objects.
+  Otherwise a valid Unreal soft object path may resolve an engine asset.
+  builtin:unlit-color requires an explicit runtime material binding exposing
+  the authored Color parameter; no editor-only material is generated at runtime.
+  Shared meshes/materials are never modified. Dynamic material instances are
+  allocated once per render scope, not per frame. Exposed material identities,
+  associations and texture overrides are validated before playback.
+  Sprites use the engine Plane mesh and a bound builtin:sprite material (or
+  explicit material override) exposing Texture and AtlasRect. Tint/Color are
+  used only when exposed. Frame -1 with playing enabled follows scope-local time.
+  Missing/wrong-typed assets, unsupported inputs/material parameters and invalid
+  manifests reject playback with LastError instead of a partial visual fallback.
+  Executable GPU manifests require current package export; legacy GPU snapshots
+  alone reject with a re-export diagnostic. Each scope owns an independent
+  LibraGpuEffectComponent, particle buffers, spawn cursor and seed. GPU ticking
+  uses effect-scaled local elapsed time and is driven only by the Spawnable
+  owner, never a second automatic component tick. GpuSpawnPerSecond controls
+  emission; GPU emitter position follows the owning actor's root transform.
+  Scope Stop terminates its particles; queued GPU work retains shared render
+  state until the render thread has consumed it.
+  At most 16 emitters/scope, 128 templates, 4096 active mesh objects and 256 MiB
+  aggregate active GPU state are accepted. GPU execution requires a real SM5
+  device. Root GPU auto-idle draining is unsupported: disable AutoDestroyWhenIdle
+  and call RequestNaturalEnd or Stop. Per-template named game I/O is unsupported;
+  use root game I/O with Spawnable Capture/Live and instance-identified outputs.
   UE 5.7.4 isolated Clang compilation and MSVC Editor linking passed. The
   Libra.Runtime.Spawnable.ComponentFixture passed in the user's isolated
   Editor session with the compiler-produced Fireworks LFXP fixture. It checks
@@ -99,7 +128,21 @@ Import and use
   "Automation RunTests Libra.Runtime.Spawnable.ComponentFixture" in Output Log.
   The user also imported Fireworks.lfxp through Content Browser and confirmed
   the resulting LibraSpawnableAsset and source import data in the asset editor.
-  Save/reload and rendering/GPU payload integration remain unverified.
+  The focused component fixture additionally exercises actual renderer objects,
+  two overlapping instances with independent local clocks, and resource cleanup.
+  Isolated UE 5.7 D3D11 automation also passed GameIoRendering (root properties,
+  named spawn signals and overlapping Capture/Live values) and GpuFixture
+  (actual particle dispatch/readback, independent local clocks, paused playback,
+  natural scope release, Stop and component destruction). Supply the matching
+  compiler-produced fixtures using -LibraSpawnableGameIoFixture=<absolute path>
+  and -LibraSpawnableGpuFixture=<absolute path>, then run
+  "Automation RunTests Libra.Runtime.Spawnable". RootGpuFixture additionally
+  passed actual root dispatch/readback, natural teardown, legacy re-export and
+  auto-idle rejection; supply -LibraSpawnableRootGpuFixture=<RootGpu.lfxp>, with
+  RootGpu.legacy.lfxp beside it. The isolated test project's
+  --spawnable-adapter-fixtures command emits these root GPU and game I/O files.
+  Synchronous GPU diagnostics wait on the readback fence; an idle GPU alone
+  does not make an emulated frame-based RHI fence immediately report ready.
   The asset editor's LIBERA FX Package section includes "Reimport from source".
   It updates the embedded binary from the original .lfxp and lets you locate
   a moved source file. Failed imports preserve the existing embedded data.

@@ -487,8 +487,7 @@ bool ULibraGpuEffectComponent::VerifyGpuSmoke(FString& report)
         FRDGBuilder graph(commandList);
         AddEnqueueCopyPass(graph, &readback, graph.RegisterExternalBuffer(state->Particles), bytes.Num());
         graph.Execute();
-        commandList.SubmitAndBlockUntilGPUIdle();
-        if (!readback.IsReady()) return;
+        readback.Wait(commandList, readback.GetLastCopyGPUMask());
         auto data = readback.Lock(bytes.Num());
         if (data)
         {
@@ -633,12 +632,9 @@ bool FLibraGpuInterpreterReadbackTest::RunTest(const FString& parameters)
             FRDGBuilder graph(commandList);
             AddEnqueueCopyPass(graph, &readback, graph.RegisterExternalBuffer(state->Particles), sizeof(FTestParticle));
             graph.Execute();
-            commandList.SubmitAndBlockUntilGPUIdle();
-            if (readback.IsReady())
-            {
-                FMemory::Memcpy(&output, readback.Lock(sizeof(FTestParticle)), sizeof(FTestParticle));
-                readback.Unlock();
-            }
+            readback.Wait(commandList, readback.GetLastCopyGPUMask());
+            FMemory::Memcpy(&output, readback.Lock(sizeof(FTestParticle)), sizeof(FTestParticle));
+            readback.Unlock();
         };
         FLibraGpuFrame frame;
         frame.SpawnCount = 1;
@@ -696,8 +692,7 @@ bool FLibraGpuBillboardReadbackTest::RunTest(const FString& parameters)
             AddLibraGpuBillboardRasterPass(graph, draw, FIntRect(0, 0, 32, 32), 1, GMaxRHIFeatureLevel);
             AddEnqueueCopyPass(graph, &readback, target);
             graph.Execute();
-            commandList.SubmitAndBlockUntilGPUIdle();
-            if (!readback.IsReady()) return;
+            readback.Wait(commandList, readback.GetLastCopyGPUMask());
             int32 pitch = 0;
             auto pixels = static_cast<const uint8*>(readback.Lock(pitch));
             if (pixels)
@@ -806,8 +801,7 @@ bool LibraGpuEvaluateReferences(ULibraGpuEffectAsset* asset, const FString& kern
         auto bytes = outputs.Num() * sizeof(FTestParticle);
         AddEnqueueCopyPass(graph, &readback, graph.RegisterExternalBuffer(state->Particles), bytes);
         graph.Execute();
-        commandList.SubmitAndBlockUntilGPUIdle();
-        if (!readback.IsReady()) return;
+        readback.Wait(commandList, readback.GetLastCopyGPUMask());
         auto data = readback.Lock(bytes);
         if (data)
         {
@@ -878,8 +872,7 @@ bool FLibraGpuDefaultEmitterRendererTest::RunTest(const FString& parameters)
             FRDGBuilder graph(commandList);
             AddEnqueueCopyPass(graph, &readback, graph.RegisterExternalBuffer(state->Particles), sizeof(first));
             graph.Execute();
-            commandList.SubmitAndBlockUntilGPUIdle();
-            if (!readback.IsReady()) return;
+            readback.Wait(commandList, readback.GetLastCopyGPUMask());
             if (auto data = readback.Lock(sizeof(first)))
             {
                 FMemory::Memcpy(&first, data, sizeof(first));
@@ -924,8 +917,7 @@ bool FLibraGpuDefaultEmitterRendererTest::RunTest(const FString& parameters)
             AddLibraGpuBillboardRasterPass(graph, draw, FIntRect(0, 0, 128, 128), state->Capacity, GMaxRHIFeatureLevel, blend);
             AddEnqueueCopyPass(graph, &readback, target);
             graph.Execute();
-            commandList.SubmitAndBlockUntilGPUIdle();
-            if (!readback.IsReady()) return;
+            readback.Wait(commandList, readback.GetLastCopyGPUMask());
             int32 pitch = 0;
             if (auto pixels = static_cast<const uint8*>(readback.Lock(pitch)))
             {

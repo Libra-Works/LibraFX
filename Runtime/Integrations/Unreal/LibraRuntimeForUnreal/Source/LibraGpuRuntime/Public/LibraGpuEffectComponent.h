@@ -43,6 +43,7 @@ public:
     FBox LocalPreviewBounds = FBox(ForceInit);
 
     bool GetPreviewBounds(FBox& outBounds) const;
+    double GetSimulationTime() const { return Elapsed; }
 
     UFUNCTION(BlueprintCallable, Category = "Libra GPU")
     bool SetEffect(ULibraGpuEffectAsset* newEffect);

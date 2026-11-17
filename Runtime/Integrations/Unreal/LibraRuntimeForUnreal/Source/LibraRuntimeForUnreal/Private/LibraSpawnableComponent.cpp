@@ -2,6 +2,7 @@
 
 #include "LibraNativeState.h"
 #include "LibraSpawnableAsset.h"
+#include "LibraSpawnableRenderState.h"
 #include "liberafx/SpawnableHost.h"
 #include "liberafx/SpawnablePackage.h"
 
@@ -51,11 +52,18 @@ void ULibraSpawnableComponent::BeginDestroy()
     Super::BeginDestroy();
 }
 
+void ULibraSpawnableComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
+{
+    ReleaseHost();
+    Super::OnComponentDestroyed(bDestroyingHierarchy);
+}
+
 auto ULibraSpawnableComponent::Play(bool bRestart) -> ELibraRuntimeResult
 {
     check(IsInGameThread());
     if (!IsRegistered()) return Report(ELibraRuntimeResult::NotReady);
     if (!Package) return Report(ELibraRuntimeResult::InvalidArgument);
+    if (bStopping) return Report(ELibraRuntimeResult::Busy);
     if (NativeHost && !bRestart)
     {
         if (bRootFinished) return Report(ELibraRuntimeResult::NotReady);
@@ -73,6 +81,9 @@ auto ULibraSpawnableComponent::Play(bool bRestart) -> ELibraRuntimeResult
     auto packageBytes = Package->GetPackageBytes();
     auto result = liberafx::loadSpawnablePackage(packageBytes.GetData(), packageBytes.Num(), package);
     if (result != liberafx::Result::Ok) return Report(ToLibraResult(result));
+    LastError.Reset();
+    auto rendering = MakeUnique<FLibraSpawnableRenderState>(*this);
+    if (!rendering->Prepare(package)) return Report(ELibraRuntimeResult::UnsupportedBinary);
     auto options = liberafx::SpawnableHostOptions{};
     options.maxActivePerTemplate = static_cast<std::size_t>(FMath::Max(1, MaxActivePerTemplate));
     options.memoryBudgetBytesPerTemplate = static_cast<std::size_t>(FMath::Max<int64>(1024, MemoryBudgetBytesPerTemplate));
@@ -82,30 +93,38 @@ auto ULibraSpawnableComponent::Play(bool bRestart) -> ELibraRuntimeResult
     result = liberafx::SpawnableHost::create(MoveTemp(package), options, host);
     if (result != liberafx::Result::Ok) return Report(ToLibraResult(result));
     NativeHost.Reset(host.release());
+    ++HostGeneration;
+    RenderState = MoveTemp(rendering);
+    if (!RenderState->Spawn(FGuid{}, 0, 0, 0))
+    {
+        ReleaseHost();
+        return Report(ELibraRuntimeResult::UnsupportedBinary);
+    }
     TimeSeconds = 0;
     bRootFinished = false;
     bIsPlaying = true;
     SetComponentTickEnabled(true);
 
     auto* current = NativeHost.Get();
+    auto generation = HostGeneration;
     result = current->advance(0, 0);
     DrainEvents();
-    if (NativeHost.Get() != current) return LastResult;
+    if (HostGeneration != generation) return LastResult;
     for (auto attempt = 0; result == liberafx::Result::QueueRejected && attempt < 16; ++attempt)
     {
         result = current->advance(0, 0);
         DrainEvents();
-        if (NativeHost.Get() != current) return LastResult;
+        if (HostGeneration != generation) return LastResult;
     }
     if (result != liberafx::Result::Ok)
     {
         if (result != liberafx::Result::QueueRejected)
         {
-            bIsPlaying = false;
-            SetComponentTickEnabled(false);
+            ReleaseHost();
         }
         return Report(ToLibraResult(result));
     }
+    if (!RefreshRendering()) return LastResult;
     LastResult = ELibraRuntimeResult::Ok;
     return LastResult;
 }
@@ -114,9 +133,10 @@ auto ULibraSpawnableComponent::RequestNaturalEnd() -> ELibraRuntimeResult
 {
     check(IsInGameThread());
     if (!NativeHost) return Report(ELibraRuntimeResult::NotReady);
+    auto generation = HostGeneration;
     auto result = NativeHost->requestNaturalEnd();
     DrainEvents();
-    if (!NativeHost) return LastResult;
+    if (generation != HostGeneration || !RefreshRendering()) return LastResult;
     return Report(ToLibraResult(result));
 }
 
@@ -129,13 +149,16 @@ auto ULibraSpawnableComponent::Stop() -> ELibraRuntimeResult
         SetComponentTickEnabled(false);
         return ELibraRuntimeResult::Ok;
     }
+    if (bStopping) return ELibraRuntimeResult::Busy;
+    TGuardValue<bool> stopping(bStopping, true);
     auto* current = NativeHost.Get();
+    auto generation = HostGeneration;
     auto result = liberafx::Result::QueueRejected;
     for (auto attempt = 0; result == liberafx::Result::QueueRejected && attempt < 16; ++attempt)
     {
         result = current->stop();
         DrainEvents();
-        if (NativeHost.Get() != current) return LastResult;
+        if (HostGeneration != generation) return LastResult;
     }
     if (result != liberafx::Result::Ok) return Report(ToLibraResult(result));
     ReleaseHost();
@@ -152,11 +175,12 @@ auto ULibraSpawnableComponent::DispatchSignal(FGuid nodeId) -> ELibraRuntimeResu
     check(IsInGameThread());
     if (!NativeHost) return Report(ELibraRuntimeResult::NotReady);
     if (!nodeId.IsValid()) return Report(ELibraRuntimeResult::InvalidArgument);
+    auto generation = HostGeneration;
     uint8 bytes[16]{};
     LibraNodeIdBytes(nodeId, bytes);
     auto result = NativeHost->dispatchSignal(bytes);
     DrainEvents();
-    if (!NativeHost) return LastResult;
+    if (generation != HostGeneration || !RefreshRendering()) return LastResult;
     return Report(ToLibraResult(result));
 }
 
@@ -165,10 +189,11 @@ auto ULibraSpawnableComponent::FireGameSignal(const FString& name) -> ELibraRunt
     check(IsInGameThread());
     if (!NativeHost) return Report(ELibraRuntimeResult::NotReady);
     if (name.IsEmpty()) return Report(ELibraRuntimeResult::InvalidArgument);
+    auto generation = HostGeneration;
     auto utf8Name = FTCHARToUTF8(*name);
     auto result = NativeHost->fireGameSignal(utf8Name.Get());
     DrainEvents();
-    if (!NativeHost) return LastResult;
+    if (generation != HostGeneration || !RefreshRendering()) return LastResult;
     return Report(ToLibraResult(result));
 }
 
@@ -231,6 +256,9 @@ auto ULibraSpawnableComponent::ReadChildValue(FGuid containerId, int64 instanceI
     return ELibraRuntimeResult::Ok;
 }
 
+int32 ULibraSpawnableComponent::GetRenderObjectCount() const { return RenderState ? RenderState->DrawCount() : 0; }
+int32 ULibraSpawnableComponent::GetGpuInstanceCount() const { return RenderState ? RenderState->GpuCount() : 0; }
+
 void ULibraSpawnableComponent::TickComponent(float deltaTime, ELevelTick tickType,
     FActorComponentTickFunction* tickFunction)
 {
@@ -238,40 +266,39 @@ void ULibraSpawnableComponent::TickComponent(float deltaTime, ELevelTick tickTyp
     if (!bIsPlaying || !NativeHost) return;
     if (!FMath::IsFinite(PlayRate) || PlayRate < 0)
     {
-        bIsPlaying = false;
-        SetComponentTickEnabled(false);
+        ReleaseHost();
         Report(ELibraRuntimeResult::InvalidArgument);
         return;
     }
     auto* current = NativeHost.Get();
+    auto generation = HostGeneration;
     auto nextTime = TimeSeconds + static_cast<double>(deltaTime) * PlayRate;
     if (!FMath::IsFinite(nextTime))
     {
-        bIsPlaying = false;
-        SetComponentTickEnabled(false);
+        ReleaseHost();
         Report(ELibraRuntimeResult::NonFinite);
         return;
     }
     TimeSeconds = nextTime;
     auto result = current->advance(TimeSeconds, deltaTime);
     DrainEvents();
-    if (NativeHost.Get() != current) return;
+    if (HostGeneration != generation) return;
     for (auto attempt = 0; result == liberafx::Result::QueueRejected && attempt < 16; ++attempt)
     {
         result = current->advance(TimeSeconds, deltaTime);
         DrainEvents();
-        if (NativeHost.Get() != current) return;
+        if (HostGeneration != generation) return;
     }
     if (result != liberafx::Result::Ok)
     {
         if (result != liberafx::Result::QueueRejected)
         {
-            bIsPlaying = false;
-            SetComponentTickEnabled(false);
+            ReleaseHost();
         }
         Report(ToLibraResult(result));
         return;
     }
+    if (!RefreshRendering()) return;
     LastResult = ELibraRuntimeResult::Ok;
     bRootFinished = current->rootFinished();
     if (bRootFinished)
@@ -288,10 +315,29 @@ auto ULibraSpawnableComponent::Report(ELibraRuntimeResult result) -> ELibraRunti
     return result;
 }
 
+bool ULibraSpawnableComponent::RefreshRendering()
+{
+    if (!NativeHost) return false;
+    if (RenderState && !RenderState->Update(TimeSeconds, NativeHost->rootFinished()))
+    {
+        ReleaseHost();
+        Report(ELibraRuntimeResult::InvalidValueType);
+        return false;
+    }
+    bRootFinished = NativeHost->rootFinished();
+    if (bRootFinished)
+    {
+        bIsPlaying = false;
+        SetComponentTickEnabled(false);
+    }
+    return true;
+}
+
 void ULibraSpawnableComponent::DrainEvents()
 {
     if (!NativeHost) return;
     auto* current = NativeHost.Get();
+    auto generation = HostGeneration;
     auto hostEvents = TArray<FLibraSpawnableHostEvent>{};
     auto gameIoEvents = TArray<FLibraGameIoEvent>{};
     auto invalidPortIndex = false;
@@ -324,12 +370,42 @@ void ULibraSpawnableComponent::DrainEvents()
             invalidPortIndex = true;
         gameIoEvents.Add(MoveTemp(gameIoEvent));
     }
-    for (const auto& hostEvent : hostEvents) OnHostEvent.Broadcast(hostEvent);
-    for (const auto& gameIoEvent : gameIoEvents) OnGameIoEvent.Broadcast(gameIoEvent);
+    for (const auto& hostEvent : hostEvents)
+    {
+        if (HostGeneration != generation) return;
+        if (RenderState && hostEvent.Kind == ELibraSpawnableHostEventKind::Spawn)
+        {
+            // A whole lifetime can complete in one advance; never resurrect its engine objects.
+            auto alreadyStopped = hostEvents.ContainsByPredicate([&](const auto& later)
+            {
+                return later.Kind == ELibraSpawnableHostEventKind::Stop &&
+                    later.ContainerId == hostEvent.ContainerId && later.InstanceId == hostEvent.InstanceId;
+            });
+            if (!alreadyStopped && !RenderState->Spawn(hostEvent.ContainerId, hostEvent.InstanceId,
+                hostEvent.TimeSeconds, static_cast<uint64>(hostEvent.Seed)))
+            {
+                ReleaseHost();
+                Report(ELibraRuntimeResult::UnsupportedBinary);
+                return;
+            }
+        }
+        if (RenderState && hostEvent.Kind == ELibraSpawnableHostEventKind::Stop)
+            RenderState->Stop(hostEvent.ContainerId, hostEvent.InstanceId);
+        OnHostEvent.Broadcast(hostEvent);
+    }
+    for (const auto& gameIoEvent : gameIoEvents)
+    {
+        if (HostGeneration != generation) return;
+        OnGameIoEvent.Broadcast(gameIoEvent);
+    }
     if (invalidPortIndex) Report(ELibraRuntimeResult::InvalidBinary);
 }
 
 void ULibraSpawnableComponent::ReleaseHost()
 {
+    ++HostGeneration;
+    RenderState.Reset();
     NativeHost.Reset();
+    bIsPlaying = false;
+    SetComponentTickEnabled(false);
 }

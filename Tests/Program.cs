@@ -137,6 +137,15 @@ internal static class Program
             EditorNativePreviewTests.Run(fireworksPreviewOutput);
             return;
         }
+        if (args is ["--spawnable-adapter-fixtures", var adapterFixturePath])
+        {
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")) ||
+                !Path.IsPathFullyQualified(adapterFixturePath))
+                throw new ArgumentException("Use an isolated LIBERAFX_DATA_ROOT and an absolute fixture path.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            SpawnableAdapterFixtureTests.Run(adapterFixturePath);
+            return;
+        }
         if (args is ["--spawnable-package-binary", var binaryPackagePath])
         {
             if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")) ||

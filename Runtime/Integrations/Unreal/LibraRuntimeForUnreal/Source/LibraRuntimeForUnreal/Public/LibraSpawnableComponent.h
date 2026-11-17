@@ -7,6 +7,19 @@
 
 namespace liberafx { class SpawnableHost; }
 class ULibraSpawnableAsset;
+class FLibraSpawnableRenderState;
+
+USTRUCT(BlueprintType)
+struct FLibraSpawnableAssetBinding
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime")
+    FString Identity;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime")
+    TObjectPtr<UObject> Asset;
+};
 
 UCLASS(ClassGroup = (Effects), meta = (BlueprintSpawnableComponent, DisplayName = "Libra Spawnable"))
 class LIBRARUNTIMEFORUNREAL_API ULibraSpawnableComponent : public UActorComponent
@@ -19,6 +32,15 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime")
     TObjectPtr<ULibraSpawnableAsset> Package;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Rendering")
+    TArray<FLibraSpawnableAssetBinding> AssetBindings;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Rendering", meta = (ClampMin = "0.0"))
+    float GpuSpawnPerSecond = 100;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime")
+    FString LastError;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime")
     bool bAutoPlay = true;
@@ -87,6 +109,12 @@ public:
     ELibraRuntimeResult ReadChildValue(FGuid containerId, int64 instanceId, FGuid nodeId,
         FVector4& value, int32& componentCount) const;
 
+    UFUNCTION(BlueprintPure, Category = "Libra Runtime|Rendering")
+    int32 GetRenderObjectCount() const;
+
+    UFUNCTION(BlueprintPure, Category = "Libra Runtime|Rendering")
+    int32 GetGpuInstanceCount() const;
+
     virtual void TickComponent(float deltaTime, ELevelTick tickType,
         FActorComponentTickFunction* tickFunction) override;
     virtual void BeginDestroy() override;
@@ -94,10 +122,15 @@ public:
 protected:
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type endPlayReason) override;
+    virtual void OnComponentDestroyed(bool bDestroyingHierarchy) override;
 
 private:
     ELibraRuntimeResult Report(ELibraRuntimeResult result);
     void DrainEvents();
     void ReleaseHost();
+    bool RefreshRendering();
     TUniquePtr<liberafx::SpawnableHost> NativeHost;
+    TUniquePtr<FLibraSpawnableRenderState> RenderState;
+    uint64 HostGeneration = 0;
+    bool bStopping = false;
 };
