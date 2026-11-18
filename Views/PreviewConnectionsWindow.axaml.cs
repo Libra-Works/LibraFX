@@ -14,12 +14,75 @@ public partial class PreviewConnectionsWindow : Window
     private bool _busy;
     private bool _refreshing;
     private Guid? _selectedId;
+    private readonly CancellationTokenSource _stop = new();
+    private readonly ViewerDiscovery _discovery = new();
+    private bool _discovering;
     public PreviewConnectionsWindow()
     {
         InitializeComponent();
         _refresh.Tick += (_, _) => Refresh();
         Opened += (_, _) => { Refresh(); _refresh.Start(); };
-        Closed += (_, _) => _refresh.Stop();
+        Closed += (_, _) => { _refresh.Stop(); _stop.Cancel(); };
+    }
+
+    private void OnAvailableViewerChanged(object? sender, SelectionChangedEventArgs e) =>
+        ConnectViewerButton.IsEnabled = !_discovering && AvailableViewers.SelectedItem is AvailableViewer;
+
+    private async void OnFindViewers(object? sender, RoutedEventArgs e)
+    {
+        if (_discovering) return;
+        _discovering = true;
+        FindViewersButton.IsEnabled = ConnectViewerButton.IsEnabled = false;
+        DiscoveryStatus.Text = LocalizationService.Shared.Get("Connections.FindingViewers");
+        try
+        {
+            var viewers = await _discovery.DiscoverAsync(_stop.Token);
+            if (_stop.IsCancellationRequested) return;
+            AvailableViewers.ItemsSource = viewers;
+            AvailableViewers.SelectedIndex = viewers.Count == 1 ? 0 : -1;
+            DiscoveryStatus.Text = LocalizationService.Shared.Get(viewers.Count == 0
+                ? "Connections.NoViewers" : "Connections.ViewersFound", viewers.Count);
+        }
+        catch (OperationCanceledException)
+        {
+            if (!_stop.IsCancellationRequested)
+                DiscoveryStatus.Text = LocalizationService.Shared.Get("Connections.ViewerTimeout");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        { DiscoveryStatus.Text = LocalizationService.Shared.Get("Connections.ViewerFailed", exception.Message); }
+        finally
+        {
+            _discovering = false;
+            FindViewersButton.IsEnabled = true;
+            ConnectViewerButton.IsEnabled = AvailableViewers.SelectedItem is AvailableViewer;
+        }
+    }
+
+    private async void OnConnectViewer(object? sender, RoutedEventArgs e)
+    {
+        if (_discovering || AvailableViewers.SelectedItem is not AvailableViewer viewer ||
+            DataContext is not MainViewModel model) return;
+        _discovering = true;
+        FindViewersButton.IsEnabled = ConnectViewerButton.IsEnabled = false;
+        try
+        {
+            var invitation = PreviewConnectionInvitation.Create(model.PreviewEndpoint,
+                model.PreviewAccessToken, model.PreviewFingerprint);
+            await _discovery.ConnectAsync(viewer, invitation, _stop.Token);
+            DiscoveryStatus.Text = LocalizationService.Shared.Get("Connections.ViewerQueued");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+            InvalidDataException or OperationCanceledException or System.ComponentModel.Win32Exception)
+        {
+            if (!_stop.IsCancellationRequested)
+                DiscoveryStatus.Text = LocalizationService.Shared.Get("Connections.ViewerFailed", exception.Message);
+        }
+        finally
+        {
+            _discovering = false;
+            FindViewersButton.IsEnabled = true;
+            ConnectViewerButton.IsEnabled = AvailableViewers.SelectedItem is AvailableViewer;
+        }
     }
 
     private void Refresh()

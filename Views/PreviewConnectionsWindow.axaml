@@ -9,6 +9,15 @@
     <TextBlock Text="{DynamicResource Text.Connections.Hint}" TextWrapping="Wrap" />
     <StackPanel Grid.Row="1" Spacing="6">
       <TextBlock Text="{DynamicResource Text.Connections.ConnectHint}" TextWrapping="Wrap" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button x:Name="FindViewersButton" Click="OnFindViewers"
+                Content="{DynamicResource Text.Connections.FindViewers}" />
+        <ComboBox x:Name="AvailableViewers" Width="350" SelectionChanged="OnAvailableViewerChanged"
+                  AutomationProperties.Name="{DynamicResource Text.Connections.AvailableViewers}" />
+        <Button x:Name="ConnectViewerButton" Click="OnConnectViewer" IsEnabled="False"
+                Content="{DynamicResource Text.Connections.ConnectViewer}" />
+      </StackPanel>
+      <TextBlock x:Name="DiscoveryStatus" TextWrapping="Wrap" />
       <Button x:Name="CopyConnectionButton" Click="OnCopyConnection"
               Content="{DynamicResource Text.Connections.CopyConnection}"
               AutomationProperties.Name="{DynamicResource Text.Connections.CopyConnection}"

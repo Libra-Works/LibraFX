@@ -87,6 +87,16 @@ internal static class Program
             InlineGroupTests.Run();
             return;
         }
+        if (args is ["--viewer-discovery-engine", var viewerPid])
+        {
+            var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
+            if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root) ||
+                !int.TryParse(viewerPid, out var processId) || processId <= 0)
+                throw new ArgumentException("Use an isolated absolute data root and dedicated engine PID.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            ViewerDiscoveryEngineTests.Run(processId);
+            return;
+        }
         if (args is ["--resource-identity"])
         {
             InitializeIsolatedUi();
@@ -95,6 +105,11 @@ internal static class Program
             ResourceIdentityConverterTests.Run();
             ResourceIdentityProjectHistoryTests.Run();
             ResourceIdentityScopedPackageTests.Run();
+            return;
+        }
+        if (args is ["--viewer-discovery"])
+        {
+            ViewerDiscoveryTests.RunAsync().GetAwaiter().GetResult();
             return;
         }
         if (args is ["--extension-host", var sampleDirectory])
