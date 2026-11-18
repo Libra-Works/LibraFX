@@ -8,6 +8,7 @@
   <ItemGroup>
     <None Update="Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="..\LiberaFx.csproj" />
+    <ProjectReference Include="..\Samples\Extensions.RedmineCrash\Extensions.RedmineCrash.csproj" />
     <None Include="..\Runtime\examples\**\*.json"
           Link="Runtime\examples\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

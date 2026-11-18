@@ -65,6 +65,7 @@
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="{DynamicResource Text.Editor.View}">
+                <MenuItem Header="{DynamicResource Text.Crash.Title}" Click="OnCrashReportsClick" />
                 <MenuItem Header="{DynamicResource Text.Editor.Log}" Click="OnLogClick">
                     <MenuItem.Icon><views:EditorIconView Icon="Info" /></MenuItem.Icon>
                 </MenuItem>

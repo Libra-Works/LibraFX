@@ -1,0 +1,84 @@
+LIBERA FX crash drafts and report providers
+
+View > Crash reports opens local drafts. Recoverable drafts are also presented
+on the next normal startup. Saving, editing, excluding diagnostics, cancelling,
+and deleting a draft are local operations. No report is sent automatically.
+Check the selected tracker, repository/project and visibility, review the
+exact report/attachment, then explicitly consent to one submission.
+
+The application lifetime owns CrashReportLifecycle. Fatal managed exceptions
+are distinguished from an unclean prior session. An exclusive per-session lease
+avoids reporting another live editor instance as crashed. Only an uncancelled
+normal application Exit clears its marker; a captured fatal exception suppresses
+that cleanup. An unclean session can be a native crash, kill, power loss or a
+missed exit hook: it is not proof of a native exception. FailFast, stack overflow,
+corrupted process state, disk failure and early startup failures may prevent
+collection. There is no dump/sidecar collector or universal recovery guarantee.
+
+CrashDrafts under the isolated AppDataDirectory.Root contain local plaintext
+drafts, not encrypted data. No projects, source, application settings, logs,
+exception messages, type names, stack traces or source locations are collected.
+Fixed classification text and coarse runtime/OS metadata are the defaults.
+Diagnostics are excluded from sending until selected. Do not enter secrets.
+A conservative token/credential/path tripwire rejects common sensitive text;
+it is not a complete personal-data scrubber. User review remains required.
+Corrupt, unsupported or oversized drafts are preserved and visibly flagged.
+Only valid drafts can be deleted through the UI; corrupt/orphan files require
+manual cleanup. Recovery reads at most 100 markers and 100 JSON drafts per call.
+
+The attachment preview may be edited directly or populated by explicitly
+choosing a UTF-8 .txt/.log file, bounded to 16,000 bytes. It is excluded by
+default after loading or applying line redaction. Its original path and name
+are not included in the SDK snapshot; the fixed name is diagnostics.txt.
+The redaction action removes whole lines matching common secrets/paths and entire
+PEM private-key blocks. This is not comprehensive PII/secret detection: review
+the whole preview, title and body, and remove anything confidential. Saving a
+draft stores the preview as local plaintext; cancel discards unsaved edits.
+Providers must explicitly declare InlineText capability or selection fails closed.
+
+The built-in GitHub provider requires an explicit owner/repository and a Windows
+Credential Manager generic target (default LiberaFX.GitHub). Create that
+credential separately; use a fine-grained token authorized for Issues:write.
+No token is accepted by the report UI or stored in project/configuration files.
+GitHub API/github.com HTTPS only, no redirect, cookie or alternate-auth fallback.
+Repository identity/visibility is checked again before submission; a normal
+server-side check-to-post race still exists. Other OS stores and GitHub
+Enterprise are not implemented. GitHub does not upload an attachment: selected
+text is HTML-escaped and embedded in the issue body. This affects the published
+body and is disclosed before consent. No undocumented upload API is used.
+
+The SDK ICrashReportProvider receives only the approved report and selected
+attachment bytes, not disk paths, editor internals or credentials. External
+providers use the shared trusted-package host and liberafx.editor.crash-reports
+manifest point. Samples\Extensions.RedmineCrash is an independent SDK-only
+provider. Its README documents configuration, Windows credentials and REST
+compatibility. DLLs have arbitrary host privileges, not a sandbox; enable only
+trusted code. Disablement cannot recall an already-started remote request.
+
+Sending intent is saved before submission. Failures, cancellation, timeout or a
+failure to record success locally leave an outcome-unknown draft. Check the
+tracker before explicitly accepting duplicate risk and retrying. No remote
+idempotency guarantee is assumed. Sent drafts cannot resend through the UI.
+Provider errors use fixed messages, not exception/HTTP response details. The
+returned URL is validated and displayed, never opened automatically.
+
+Local builds are not crash/restart, UI, DLL-hosting or remote-service acceptance
+evidence. Such checks require the user's presence and isolated synthetic data;
+real submissions require explicit permission and dedicated validation targets.
+Reopen code-built report windows after changing the editor language.
+
+Focused checks: Tests/CrashReport48SourceTests.cs checks consent, retry,
+redaction, bounded snapshots and offline fake providers. The independent
+Samples/CrashRecoveryChecks program launches isolated child processes and
+verifies a real unhandled managed exception and forced process termination.
+Tests/CrashUi48Tests.cs exercises the actual window with an in-process synthetic
+provider, then runs CrashTrackerLoopback48Tests against a certificate-pinned
+HTTPS fixture bound to IPv4 loopback. The latter uses the actual GitHub and
+Redmine provider implementations, injecting only the test transport/destination
+and synthetic header values. It covers authentication rejection, no POST
+before consent, redaction, GitHub inline text, Redmine attachment rejection
+and exclusion, POST rejection, cancellation during POST, explicit retry and
+successful issue creation with a displayed result URL. Both run under the
+existing --chat-adapters selector or Samples/ProviderUiChecks. The tests require
+an absolute isolated LIBERAFX_DATA_ROOT. No external issue is submitted and
+production credential lookup and tracker access are not verified by these tests.

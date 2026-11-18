@@ -16,6 +16,7 @@ public partial class App : Application
     private PreviewHost _previewHost = null!;
     private DebugSessionPipe? _debugSessionPipe;
     private PreviewDiscoveryPipe? _previewDiscovery;
+    private CrashReportLifecycle? _crashReports;
     private Task _mcpStart = Task.CompletedTask;
     private Task _previewStart = Task.CompletedTask;
     private bool _shutdownInProgress;
@@ -26,6 +27,7 @@ public partial class App : Application
         AvaloniaXamlLoader.Load(this);
         LocalizationService.Initialize(this);
         _serverSettings = new ServerSettingsService();
+        _crashReports = new CrashReportLifecycle();
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -39,6 +41,8 @@ public partial class App : Application
             {
                 _previewDiscovery?.Dispose();
                 _debugSessionPipe?.Dispose();
+                _crashReports?.CompleteCleanExit();
+                _crashReports?.Dispose();
             };
             var viewModel = new MainViewModel(_mcpHost.AccessToken, _previewHost.AccessToken, _previewHost.Fingerprint,
                 _mcpHost.ActualEndpoint, _previewHost.ActualEndpoint, _serverSettings);
@@ -46,6 +50,7 @@ public partial class App : Application
             {
                 DataContext = viewModel,
             };
+            window.ConfigureCrashReports(_crashReports!.Drafts);
             window.Opened += (_, _) =>
             {
                 viewModel.SetStorageProvider(window.StorageProvider);
