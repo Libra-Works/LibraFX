@@ -70,6 +70,7 @@ public partial class SpriteEditorView : UserControl
     private void OnAddCell(object? sender, RoutedEventArgs e) => _model.AddCell();
     private void OnDeleteCell(object? sender, RoutedEventArgs e) => _model.RemoveCell();
     private void OnAddFrame(object? sender, RoutedEventArgs e) => _model.AddFrame();
+    private void OnInsertFrame(object? sender, RoutedEventArgs e) => _model.InsertFrame();
     private void OnCellDoubleTapped(object? sender, Avalonia.Input.TappedEventArgs e) => _model.AddFrame();
     private void OnDuplicateFrame(object? sender, RoutedEventArgs e) => _model.DuplicateFrame();
     private void OnDeleteFrame(object? sender, RoutedEventArgs e) => _model.RemoveFrame();

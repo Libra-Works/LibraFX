@@ -11,6 +11,7 @@
 - [小さな実例](small-example.md)
 - [文書用グラフ撮影と更新](documentation-capture.md)
 - [SDKの導入と配布準備](sdk-distribution.md)
+- [GPUバックエンドとCore Runtimeの契約](gpu-backends.md)
 
 - [イントロダクション](../イントロダクション.md)
 - [概要書](../概要書.md)

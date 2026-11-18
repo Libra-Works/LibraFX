@@ -197,6 +197,16 @@ void verify(const std::vector<std::uint8_t>& bytes)
     assert(recorder.read(static_cast<size_t>(liberafx::ProfileEvent::Evaluate), profile) && profile.calls == 1);
     assert(profile.exclusiveNs <= profile.inclusiveNs);
     assert(recorder.read(static_cast<size_t>(liberafx::ProfileEvent::Count) + 2, profile) && profile.calls == 1);
+    auto profiledValue = double{};
+    auto profiledId = bytes.data() + 12 + 2 * 44;
+    assert(profiled.value(profiledId, profiledValue) == liberafx::Result::Ok && profiledValue == 10);
+    assert(profiled.setProfiling({}) == liberafx::Result::Ok);
+    assert(profiled.updateAsync(8, liberafx::JobScheduler{enqueue, &profiledQueue}) == liberafx::Result::Ok);
+    run(profiledQueue);
+    assert(profiled.result() == liberafx::Result::Ok);
+    assert(profiled.value(profiledId, profiledValue) == liberafx::Result::Ok && profiledValue == 11);
+    assert(recorder.read(static_cast<size_t>(liberafx::ProfileEvent::Evaluate), profile) && profile.calls == 1);
+    assert(recorder.read(static_cast<size_t>(liberafx::ProfileEvent::Count) + 2, profile) && profile.calls == 1);
     auto program = liberafx::Program{};
     assert(liberafx::Program::load(bytes.data(), bytes.size(), program) == liberafx::Result::Ok);
     assert(program.nodeCount() == 3 && program.workBytes() == 3 * sizeof(double));

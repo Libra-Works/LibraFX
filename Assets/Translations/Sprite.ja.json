@@ -66,6 +66,7 @@
   "Sprite.CellSize": "サイズ (px)",
   "Sprite.Sequence": "フレームシーケンス",
   "Sprite.AddFrame": "追加",
+  "Sprite.InsertFrame": "選択フレームの後に挿入",
   "Sprite.DuplicateFrame": "複製",
   "Sprite.DeleteFrame": "削除",
   "Sprite.FrameUp": "上へ移動",

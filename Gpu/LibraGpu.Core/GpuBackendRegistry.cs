@@ -7,6 +7,7 @@ public sealed class GpuBackendRegistry
     public static GpuBackendRegistry BuiltIn { get; } = new([]);
 
     private readonly FrozenDictionary<string, GpuBackendCapabilities> backends;
+    public IReadOnlyDictionary<string, GpuBackendCapabilities> Profiles => backends;
 
     public GpuBackendRegistry(IEnumerable<GpuBackendCapabilities> profiles)
     {

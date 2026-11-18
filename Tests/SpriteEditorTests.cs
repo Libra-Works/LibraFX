@@ -324,6 +324,19 @@ internal static class SpriteEditorTests
         if (Math.Abs(model.Frames[0].DurationFrames - 1.5) > .001 ||
             Math.Abs(timeline.FrameBounds(0).Width / timeline.FrameBounds(1).Width - 1.5) > .001)
             throw new Exception("Timeline edge resize or common linear time scale is incorrect.");
+        var priorIds = model.Frames.Select(frame => frame.Id).ToArray();
+        model.SelectedSequenceFrame = model.Frames[0];
+        model.RangeStart = "1";
+        model.RangeEnd = "2";
+        var insertedCell = model.SelectedCell!.Id;
+        window.FindControl<Button>("InsertFrameButton")!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        if (model.Frames.Count != priorIds.Length + 1 || model.Frames[1].CellId != insertedCell ||
+            model.SelectedSequenceFrame?.Id != model.Frames[1].Id ||
+            !model.Frames.Where((_, index) => index != 1).Select(frame => frame.Id).SequenceEqual(priorIds) ||
+            model.RangeStart != "2" || model.RangeEnd != "3")
+        {
+            throw new Exception("Inserting a frame did not preserve the other clips and the authored playback range.");
+        }
         model.Frames.Clear();
         model.SelectedCell = model.Cells.Single(cell => cell.Width == 1 && cell.Height == 1 && cell.X == 0 && cell.Y == 0);
         model.AddFrame();

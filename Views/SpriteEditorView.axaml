@@ -203,6 +203,7 @@
                     <Button Content="{DynamicResource Text.Sprite.PreviousFrame}" Click="OnPreviousFrame"/>
                     <Button Content="{DynamicResource Text.Sprite.NextFrame}" Click="OnNextFrame" Margin="0,0,8,0"/>
                     <Button Content="{DynamicResource Text.Sprite.AddToTimeline}" Click="OnAddFrame"/>
+                    <Button x:Name="InsertFrameButton" Content="{DynamicResource Text.Sprite.InsertFrame}" Click="OnInsertFrame"/>
                     <Button Content="{DynamicResource Text.Sprite.DuplicateFrame}" Click="OnDuplicateFrame"/>
                     <Button Content="{DynamicResource Text.Sprite.DeleteFrame}" Click="OnDeleteFrame" Margin="0,0,8,0"/>
                     <Button Content="{DynamicResource Text.Sprite.FrameLeft}" Click="OnFrameUp"/>

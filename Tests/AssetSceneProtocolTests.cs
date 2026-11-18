@@ -20,7 +20,7 @@ internal static class AssetSceneProtocolTests
     {
         VerifyConnectionInvitation();
         VerifyGpuScenes();
-        VerifyQueriesAsync().GetAwaiter().GetResult();
+        RunWithDispatcher(VerifyQueriesAsync());
         RunWithDispatcher(VerifyResourceIdentityAuthoringLoopbackAsync());
         VerifyAssetWindowRequestLifetimeAsync().GetAwaiter().GetResult();
         VerifyLocalDiscoveryAsync().GetAwaiter().GetResult();
@@ -301,6 +301,8 @@ internal static class AssetSceneProtocolTests
         var telemetry = new PreviewTelemetryStore();
         var assets = new PreviewAssetStore(telemetry);
         var peer = Guid.NewGuid();
+        var otherPeer = Guid.NewGuid();
+        byte[]? reconnectReply = null;
         var sawQuery = false;
         telemetry.Connect(peer, 3, bytes =>
         {
@@ -310,11 +312,15 @@ internal static class AssetSceneProtocolTests
             var request = command.RootElement.GetProperty("requestId").GetGuid();
             var type = command.RootElement.GetProperty("type").GetString();
             sawQuery = true;
-            object response = type == "asset_catalog" ?
-                new { type = "asset_result", requestId = request, operation = "catalog", total = 1, offset = 0,
-                    assets = new[] { new { path = "/Engine/BasicShapes/Cube.Cube", name = "Cube", assetClass = "model", engine = "Unreal" } },
-                    error = (string?)null } :
-                new { type = "asset_result", requestId = request, operation = "reconnect", error = (string?)null };
+            if (type == "reconnect")
+            {
+                reconnectReply = JsonSerializer.SerializeToUtf8Bytes(
+                    new { type = "asset_result", requestId = request, operation = "reconnect", error = (string?)null });
+                return Task.CompletedTask;
+            }
+            var response = new { type = "asset_result", requestId = request, operation = "catalog", total = 1, offset = 0,
+                assets = new[] { new { path = "/Engine/BasicShapes/Cube.Cube", name = "Cube", assetClass = "model", engine = "Unreal" } },
+                error = (string?)null };
             Require(assets.Receive(peer, JsonSerializer.SerializeToUtf8Bytes(response)), "Matching replies must complete requests.");
             return Task.CompletedTask;
         }, "127.0.0.1");
@@ -324,7 +330,18 @@ internal static class AssetSceneProtocolTests
         var page = await assets.CatalogAsync("Cube", "model");
         Require(sawQuery && page.Assets.Single().Path == "/Engine/BasicShapes/Cube.Cube" &&
             telemetry.Clients().Single().ViewerName == "Test preview", "Real reply fields and viewer identity must be retained.");
-        await assets.ReconnectAsync(peer);
+        telemetry.Connect(otherPeer, 3, _ => Task.CompletedTask);
+        Require(telemetry.Receive(otherPeer, Encoding.UTF8.GetBytes(
+            """{"type":"hello","version":1,"engine":"Unreal","role":"editor","capabilities":["assets"]}""")),
+            "The second editor must negotiate the same asset capability.");
+        var reconnect = assets.ReconnectAsync(peer);
+        Require(reconnectReply is not null && !reconnect.IsCompleted,
+            "Sending the reconnect command must not report a remote acknowledgement.");
+        Require(!assets.Receive(otherPeer, reconnectReply!) && !reconnect.IsCompleted,
+            "An acknowledgement from another editor must not complete the request.");
+        Require(assets.Receive(peer, reconnectReply!), "The selected editor must be able to acknowledge reconnect.");
+        await reconnect.WaitAsync(TimeSpan.FromSeconds(2));
+        telemetry.Disconnect(otherPeer);
         var nodeId = Guid.NewGuid();
         byte[] GpuStatus(long sequence) => JsonSerializer.SerializeToUtf8Bytes(new
         {
@@ -380,7 +397,10 @@ internal static class AssetSceneProtocolTests
                 Dispatcher.UIThread.Post(() => frame.Continue = false), TaskScheduler.Default);
             Dispatcher.UIThread.PushFrame(frame);
         }
-        if (!task.IsCompleted) throw new TimeoutException("Resource identity preview loopback timed out.");
+        if (!task.IsCompleted)
+        {
+            throw new TimeoutException("Preview asset protocol check timed out.");
+        }
         task.GetAwaiter().GetResult();
     }
 }

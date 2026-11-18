@@ -721,19 +721,51 @@ public sealed class SpriteEditorViewModel : ObservableObject, IDisposable
         Status = LocalizationService.Shared.Get("Sprite.DragToAddCell");
     }
 
-    public void AddFrame()
+    public void AddFrame() => AddFrameAt(Frames.Count);
+
+    public void InsertFrame()
     {
-        if (SelectedCell is null && Cells.Count > 0) SelectedCell = Cells[0];
+        var index = SelectedSequenceFrame is { } current ? Frames.IndexOf(current) : -1;
+        AddFrameAt(index < 0 ? Frames.Count : index + 1);
+    }
+
+    private void AddFrameAt(int index)
+    {
+        if (SelectedCell is null && Cells.Count > 0)
+        {
+            SelectedCell = Cells[0];
+        }
         if (SelectedCell is not { } selected)
         {
             Status = LocalizationService.Shared.Get("Sprite.CreateCellFirst");
             return;
         }
-        if (Frames.Count >= 4096) { Status = LocalizationService.Shared.Get("Sprite.FrameLimit"); return; }
+        if (Frames.Count >= 4096)
+        {
+            Status = LocalizationService.Shared.Get("Sprite.FrameLimit");
+            return;
+        }
+        var oldLast = Frames.Count - 1;
+        var start = ParseInt(RangeStart, 0);
+        var end = ParseInt(RangeEnd, oldLast);
         var frame = new SpriteAnimationFrame(Guid.NewGuid(), selected.Id, 1);
-        Frames.Add(frame);
+        Frames.Insert(index, frame);
         SelectedSequenceFrame = frame;
-        RangeEnd = Math.Max(0, Frames.Count - 1).ToString(CultureInfo.InvariantCulture);
+        if (oldLast < 0)
+        {
+            RangeStart = RangeEnd = "0";
+        }
+        else
+        {
+            if (index <= start)
+            {
+                RangeStart = (start + 1).ToString(CultureInfo.InvariantCulture);
+            }
+            if (index <= end || (index == oldLast + 1 && end == oldLast))
+            {
+                RangeEnd = (end + 1).ToString(CultureInfo.InvariantCulture);
+            }
+        }
         OnPropertyChanged(nameof(HasSpriteData));
     }
 

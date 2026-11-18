@@ -66,6 +66,7 @@
   "Sprite.CellSize": "Size (px)",
   "Sprite.Sequence": "Frame sequence",
   "Sprite.AddFrame": "Add",
+  "Sprite.InsertFrame": "Insert after selected frame",
   "Sprite.DuplicateFrame": "Duplicate",
   "Sprite.DeleteFrame": "Delete",
   "Sprite.FrameUp": "Move up",

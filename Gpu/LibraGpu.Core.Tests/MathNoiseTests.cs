@@ -116,6 +116,10 @@ internal static partial class Program
                 [LibraGpu.Core.ResourceKind.Texture2D], 256, 256UL * 1024 * 1024);
             var registry = new LibraGpu.Core.GpuBackendRegistry([limited]);
             var unsupported = registry.Validate(limited.Id, compiled);
+            Check(registry.Profiles.Keys.ToHashSet(StringComparer.Ordinal)
+                    .SetEquals(["unreal-lgpk", "unity-compute", "sample-host"]) &&
+                registry.Profiles[limited.Id].Resources.SetEquals([LibraGpu.Core.ResourceKind.Texture2D]),
+                "Capability discovery must expose the same registered profiles used to validate delivery");
             Check(registry.Validate("missing-host", compiled).Single().Code == "BackendUnknown",
                 "Unregistered backends are rejected instead of falling back to an engine profile");
             Check(unsupported.Any(d => d.Code == "BackendResource" && d.Message.Contains("wind map/flow")) &&
