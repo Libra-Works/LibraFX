@@ -212,6 +212,12 @@ internal static class Program
             CrashReport48SourceTests.RunAsync().GetAwaiter().GetResult();
             return;
         }
+        if (args is ["--crash-report-extension", var crashProviderDirectory])
+        {
+            InitializeIsolatedUi();
+            ExtensionHostTests.VerifyCrashProvider(crashProviderDirectory);
+            return;
+        }
         if (args is ["--chat-adapters"])
         {
             var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
