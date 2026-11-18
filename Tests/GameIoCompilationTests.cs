@@ -116,6 +116,14 @@ public static class GameIoCompilationTests
         var bytecodePath = Environment.GetEnvironmentVariable("LIBERAFX_GAMEIO_MATRIX_BYTECODE");
         if (!string.IsNullOrWhiteSpace(bytecodePath))
             File.WriteAllBytes(bytecodePath, program.ToBinary());
+        var fixtureDirectory = Environment.GetEnvironmentVariable("LIBERAFX_INSTANCE_GAMEIO_FIXTURES");
+        if (!string.IsNullOrWhiteSpace(fixtureDirectory))
+        {
+            Directory.CreateDirectory(fixtureDirectory);
+            File.WriteAllBytes(Path.Combine(fixtureDirectory, "RootMatrixGameIo.lfxp"),
+                SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(
+                    graph with { AutoDestroyWhenIdle = false })));
+        }
     }
 
     private static string PortShape(GameIoPort port) =>

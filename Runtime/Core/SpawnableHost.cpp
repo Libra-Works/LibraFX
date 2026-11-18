@@ -568,7 +568,7 @@ auto SpawnableHost::Impl::initialize() -> Result
             return Result::InvalidBinary;
         const auto& saved = packageData.gameIoPorts[index];
         if (saved.name != compiled.name || saved.kind != compiled.kind || saved.width != compiled.width ||
-            saved.isColor != (compiled.isColor != 0) || !sameId(saved.nodeId.data(), compiled.nodeId))
+            saved.isColor != (compiled.isColor != 0))
             return Result::InvalidBinary;
         auto port = NamedIoPort{};
         port.name = compiled.name;
@@ -578,6 +578,7 @@ auto SpawnableHost::Impl::initialize() -> Result
         port.width = compiled.width;
         port.isColor = compiled.isColor != 0;
         port.nodeCount = compiled.nodeCount;
+        // Matrix ports keep a logical authoring ID distinct from their runtime rows.
         if (saved.runtimeNodeIds) {
             if (saved.runtimeNodeIds->size() != compiled.nodeCount) return Result::InvalidBinary;
             for (auto node = std::size_t{}; node < saved.runtimeNodeIds->size(); ++node) {
@@ -585,7 +586,7 @@ auto SpawnableHost::Impl::initialize() -> Result
                 if (!sameId((*saved.runtimeNodeIds)[node].data(), compiledNode))
                     return Result::InvalidBinary;
             }
-        } else if (compiled.nodeCount != 1) {
+        } else if (compiled.nodeCount != 1 || !sameId(saved.nodeId.data(), compiled.nodeId)) {
             return Result::InvalidBinary;
         }
         gameIoPorts.push_back(port);

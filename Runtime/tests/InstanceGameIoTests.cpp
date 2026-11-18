@@ -20,7 +20,7 @@ void require(bool condition, const char* message)
 auto read(const std::filesystem::path& path) -> std::vector<std::uint8_t>
 {
     auto file = std::ifstream(path, std::ios::binary);
-    require(file.good(), "Missing compiler-produced instance Game I/O fixture.");
+    require(file.good(), "Missing compiler-produced Game I/O fixture.");
     return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 struct Host final {
@@ -28,7 +28,7 @@ struct Host final {
     explicit Host(const std::vector<std::uint8_t>& bytes)
     {
         require(libra_spawnable_host_create(bytes.data(), bytes.size(), 8, 4 * 1024 * 1024,
-            32, 10000, &value) == LIBRA_OK, "Cannot load instance Game I/O package.");
+            32, 10000, &value) == LIBRA_OK, "Cannot load Game I/O package.");
     }
     ~Host() { if (value) libra_spawnable_host_release(value); }
 };
@@ -41,6 +41,26 @@ auto spawn(Host& host) -> LibraGeneratorInstance
         if (event.kind == 1) return event.instanceId;
     throw std::runtime_error("Spawn identity was not published.");
 }
+void verifyRootMatrix(const std::filesystem::path& folder)
+{
+    auto host = Host(read(folder / "RootMatrixGameIo.lfxp"));
+    auto owner = std::array<double, 16>{};
+    auto local = std::array<double, 16>{};
+    for (auto index = 0u; index < 16; ++index) {
+        owner[index] = index % 5 == 0 ? 1 : 0;
+        local[index] = index + 1;
+    }
+    require(libra_spawnable_host_set_owner_matrix(host.value, owner.data()) == LIBRA_OK &&
+        libra_spawnable_host_set_game_property(host.value, "local", local.data(), 16) == LIBRA_OK &&
+        libra_spawnable_host_advance(host.value, 0, 0) == LIBRA_OK,
+        "Root Matrix bindings must use their lowered runtime rows.");
+    auto event = LibraGameIoEventV2{};
+    auto has = std::uint32_t{};
+    require(libra_spawnable_host_next_game_io_event(host.value, &event, &has) == LIBRA_OK &&
+        has && event.width == 16, "Root Matrix output was not published.");
+    for (auto index = 0u; index < 16; ++index)
+        require(event.values[index] == local[index], "Root Matrix output lost a runtime row.");
+}
 }
 
 auto main() -> int
@@ -48,6 +68,7 @@ auto main() -> int
     const auto* folder = std::getenv("LIBERAFX_INSTANCE_GAMEIO_FIXTURES");
     if (!folder || !*folder) return 77;
     try {
+        verifyRootMatrix(folder);
         const auto bytes = read(std::filesystem::path(folder) / "InstanceGameIo.lfxp");
         const auto container = read(std::filesystem::path(folder) / "InstanceGameIo.container");
         require(container.size() == 16, "Invalid instance container identity.");
