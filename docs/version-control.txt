@@ -12,8 +12,10 @@ The built-in Git provider runs local read-only Git commands, without a shell,
 credential prompts, network fetch, checkout or hooks. Git must be installed.
 History is limited to 100 revisions and revision content to 16 MiB; operations
 have finite cancellation timeouts. Git tree paths are not portable asset IDs.
-Rename-following history and visual expansion of nested diff graphs are not
-implemented; nested changes are listed by stable node path.
+Select a nested change to compare its parent Group side by side. Readable scope
+breadcrumbs retain stable-ID navigation, including a Group removed on one side.
+Both sides use shared coordinate bounds; changed connections are accent dashed.
+Rename-following Git history is not implemented.
 
 An independent net10.0 DLL can implement IVersionControlProvider from
 LiberaFx.Extensions.Abstractions and register it from IEditorExtension using

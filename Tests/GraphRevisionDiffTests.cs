@@ -20,6 +20,9 @@ internal static class GraphRevisionDiffTests
         var nested = GraphRevisionDiff.Compare(new([group], []), new([group with { ChildGraph = after }], []));
         if (!nested.Any(change => change.Path.Contains('/') && change.Kind == GraphDiffKind.Modified))
             throw new InvalidOperationException("Nested changes must not be hidden.");
+        if (!ReferenceEquals(GraphRevisionDiff.Scope(new([group], []), [group.Id]), before) ||
+            GraphRevisionDiff.Scope(new([], []), [group.Id]) is not null)
+            throw new InvalidOperationException("Nested comparison must follow stable group IDs and retain a missing side.");
         if (GraphRevisionDiff.Compare(before, before with { AutoDestroyWhenIdle = false })
                 .Single(change => change.Kind == GraphDiffKind.Modified).Path != "$graph")
             throw new InvalidOperationException("Graph-level lifecycle metadata must not be hidden.");

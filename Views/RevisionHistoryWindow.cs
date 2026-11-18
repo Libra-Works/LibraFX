@@ -21,9 +21,14 @@ public sealed class RevisionHistoryWindow : Window
     private readonly RevisionGraphCanvas _left = new();
     private readonly RevisionGraphCanvas _right = new();
     private readonly ListBox _changes = new();
+    private readonly TextBlock _scope = new();
+    private GraphSnapshot? _beforeGraph, _afterGraph;
+    private IReadOnlyList<GraphNodeDifference> _differences = [];
     private readonly CancellationTokenSource _lifetime = new();
     private bool _busy;
     private sealed record Choice(string? Revision, string Label)
+    { public override string ToString() => Label; }
+    private sealed record ChangeChoice(GraphNodeDifference Difference, string Label)
     { public override string ToString() => Label; }
 
     public RevisionHistoryWindow(MainViewModel main)
@@ -58,16 +63,32 @@ public sealed class RevisionHistoryWindow : Window
         graphs.Children.Add(_left);
         Grid.SetColumn(_right, 1);
         graphs.Children.Add(_right);
-        var root = new Grid { Margin = new Thickness(12), RowDefinitions = new RowDefinitions("Auto,*,150,Auto"), RowSpacing = 8 };
+        var root = new Grid { Margin = new Thickness(12), RowDefinitions = new RowDefinitions("Auto,Auto,*,150,Auto"), RowSpacing = 8 };
         root.Children.Add(controls);
-        Grid.SetRow(graphs, 1);
+        Grid.SetRow(_scope, 1);
+        root.Children.Add(_scope);
+        Grid.SetRow(graphs, 2);
         root.Children.Add(graphs);
-        Grid.SetRow(_changes, 2);
+        Grid.SetRow(_changes, 3);
         root.Children.Add(_changes);
-        Grid.SetRow(_status, 3);
+        Grid.SetRow(_status, 4);
         root.Children.Add(_status);
         Content = root;
-        _provider.SelectionChanged += (_, _) => { _before.ItemsSource = null; _after.ItemsSource = null; };
+        _provider.SelectionChanged += (_, _) =>
+        {
+            _before.ItemsSource = null;
+            _after.ItemsSource = null;
+            _changes.ItemsSource = null;
+            _beforeGraph = _afterGraph = null;
+            _scope.Text = "";
+            _left.Show(new([], []), [], true, new([], []));
+            _right.Show(new([], []), [], false, new([], []));
+        };
+        _changes.SelectionChanged += (_, _) =>
+        {
+            if (_changes.SelectedItem is ChangeChoice choice)
+                ShowScope(choice.Difference.Path.Split('/').SkipLast(1).Select(Guid.Parse).ToArray());
+        };
         Closed += (_, _) => { _lifetime.Cancel(); _lifetime.Dispose(); };
         _status.Text = _file is null ? text.Get("Vcs.SaveFirst") : _file;
     }
@@ -108,17 +129,45 @@ public sealed class RevisionHistoryWindow : Window
             var after = await ReadAsync(b, provider);
             if (!_main.Extensions.VersionControlProviders.Contains(provider))
                 throw new InvalidOperationException("The selected provider was disabled.");
-            var diff = GraphRevisionDiff.Compare(before, after);
-            _left.Show(before, diff.Where(item => !item.Path.Contains('/')).ToArray(), beforeSide: true);
-            _right.Show(after, diff.Where(item => !item.Path.Contains('/')).ToArray(), beforeSide: false);
-            _changes.ItemsSource = diff.Where(item => item.Kind != GraphDiffKind.Unchanged)
-                .Select(item => $"{LocalizationService.Shared.Get("Vcs." + item.Kind)}  " +
-                    $"{item.After?.Name ?? item.Before?.Name ?? LocalizationService.Shared.Get("Vcs.GraphSettings")}  [{item.Path}]").ToArray();
+            _beforeGraph = before;
+            _afterGraph = after;
+            _differences = GraphRevisionDiff.Compare(before, after);
+            ShowScope([]);
+            _changes.ItemsSource = _differences.Where(item => item.Kind != GraphDiffKind.Unchanged)
+                .Select(item => new ChangeChoice(item, $"{LocalizationService.Shared.Get("Vcs." + item.Kind)}  " +
+                    $"{item.After?.Name ?? item.Before?.Name ?? LocalizationService.Shared.Get("Vcs.GraphSettings")}  " +
+                    $"[{ScopeLabel(item.Path.Split('/').SkipLast(1).Select(Guid.Parse).ToArray())}]")).ToArray();
             _status.Text = LocalizationService.Shared.Get("Vcs.Legend");
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { _status.Text = ex.GetBaseException().Message; }
         finally { _busy = false; _provider.IsEnabled = true; }
+    }
+
+    private string ScopeLabel(IReadOnlyList<Guid> path)
+    {
+        var labels = new List<string> { LocalizationService.Shared.Get("Vcs.RootGraph") };
+        for (var index = 0; index < path.Count; ++index)
+        {
+            var parent = path.Take(index).ToArray();
+            var node = GraphRevisionDiff.Scope(_afterGraph!, parent)?.Nodes.FirstOrDefault(item => item.Id == path[index]) ??
+                GraphRevisionDiff.Scope(_beforeGraph!, parent)?.Nodes.FirstOrDefault(item => item.Id == path[index]);
+            labels.Add(node?.Name ?? LocalizationService.Shared.Get("Vcs.GraphSettings"));
+        }
+        return string.Join(" / ", labels);
+    }
+
+    private void ShowScope(IReadOnlyList<Guid> path)
+    {
+        if (_beforeGraph is null || _afterGraph is null) return;
+        var before = GraphRevisionDiff.Scope(_beforeGraph, path) ?? new([], []);
+        var after = GraphRevisionDiff.Scope(_afterGraph, path) ?? new([], []);
+        var prefix = string.Concat(path.Select(id => id.ToString("D") + "/"));
+        var diff = _differences.Where(item => item.Path.StartsWith(prefix, StringComparison.Ordinal) &&
+            !item.Path[prefix.Length..].Contains('/')).ToArray();
+        _left.Show(before, diff, true, after);
+        _right.Show(after, diff, false, before);
+        _scope.Text = ScopeLabel(path);
     }
 
     private async Task<GraphSnapshot> ReadAsync(Choice choice, IVersionControlProvider provider)
@@ -138,9 +187,11 @@ public sealed class RevisionHistoryWindow : Window
     {
         private GraphSnapshot? _graph;
         private Dictionary<Guid, GraphDiffKind> _changes = [];
-        public void Show(GraphSnapshot graph, IReadOnlyList<GraphNodeDifference> diff, bool beforeSide)
+        private GraphSnapshot _other = new([], []);
+        public void Show(GraphSnapshot graph, IReadOnlyList<GraphNodeDifference> diff, bool beforeSide, GraphSnapshot other)
         {
             _graph = graph;
+            _other = other;
             _changes = diff.Where(item => (beforeSide ? item.Before : item.After) is not null)
                 .ToDictionary(item => (beforeSide ? item.Before : item.After)!.Id, item => item.Kind);
             InvalidateVisual();
@@ -153,16 +204,19 @@ public sealed class RevisionHistoryWindow : Window
                 fg is not IBrush foreground) return;
             var accent = Application.Current.Resources.TryGetResource("DockApplicationAccentBrushIndicator", ActualThemeVariant, out var ac) &&
                 ac is IBrush brush ? brush : foreground;
-            var minX = graph.Nodes.Min(node => node.X);
-            var minY = graph.Nodes.Min(node => node.Y);
-            var width = Math.Max(160, graph.Nodes.Max(node => node.X) - minX + 160);
-            var height = Math.Max(70, graph.Nodes.Max(node => node.Y) - minY + 70);
+            var all = graph.Nodes.Concat(_other.Nodes).ToArray();
+            var minX = all.Min(node => node.X);
+            var minY = all.Min(node => node.Y);
+            var width = Math.Max(160, all.Max(node => node.X) - minX + 160);
+            var height = Math.Max(70, all.Max(node => node.Y) - minY + 70);
+            if (!double.IsFinite(width) || !double.IsFinite(height)) return;
             var scale = Math.Min(1, Math.Min(Math.Max(1, Bounds.Width - 24) / width, Math.Max(1, Bounds.Height - 24) / height));
             Point Position(GraphNodeSnapshot node) => new(12 + (node.X - minX) * scale, 12 + (node.Y - minY) * scale);
             var nodes = graph.Nodes.ToDictionary(node => node.Id);
             foreach (var edge in graph.Connections)
                 if (nodes.TryGetValue(edge.SourceNodeId, out var source) && nodes.TryGetValue(edge.TargetNodeId, out var target))
-                    context.DrawLine(new Pen(foreground, 1), Position(source) + new Vector(140 * scale, 22 * scale),
+                    context.DrawLine(_other.Connections.Contains(edge) ? new Pen(foreground, 1) :
+                        new Pen(accent, 2, DashStyle.Dash), Position(source) + new Vector(140 * scale, 22 * scale),
                         Position(target) + new Vector(0, 22 * scale));
             foreach (var node in graph.Nodes)
             {

@@ -9,6 +9,21 @@ public sealed record GraphNodeDifference(string Path, GraphNodeSnapshot? Before,
 
 public static class GraphRevisionDiff
 {
+    public static GraphSnapshot? Scope(GraphSnapshot graph, IReadOnlyList<Guid> parentPath)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        ArgumentNullException.ThrowIfNull(parentPath);
+        if (parentPath.Count > 12 || parentPath.Any(id => id == Guid.Empty))
+            throw new ArgumentException("Invalid graph scope.", nameof(parentPath));
+        foreach (var id in parentPath)
+        {
+            var child = graph.Nodes.SingleOrDefault(node => node.Id == id)?.ChildGraph;
+            if (child is null) return null;
+            graph = child;
+        }
+        return graph;
+    }
+
     public static IReadOnlyList<GraphNodeDifference> Compare(GraphSnapshot before, GraphSnapshot after)
     {
         var result = new List<GraphNodeDifference>();
