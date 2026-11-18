@@ -71,5 +71,7 @@
   "Profiler.Sending": "制御を送信中…",
   "Profiler.Sent": "制御を送信しました。ネイティブのフィードバックを待機中です。応答確認を意味しません。",
   "Profiler.InvalidControl": "制御が無効です。間隔は 100～5000 ms、ノードは空でない異なる GUID を最大 64 件にしてください。",
-  "Profiler.SendFailed": "制御を送信できませんでした。接続と宣言された機能を確認してください。"
+  "Profiler.SendFailed": "制御を送信できませんでした。接続と宣言された機能を確認してください。",
+  "Profiler.SettingsLoadFailed": "保存済みプロファイラー設定が無効または読み取れません。既定値を使用し、ファイルは上書きしていません。{0}",
+  "Profiler.SettingsSaveFailed": "プロファイラー設定を保存できませんでした。以前の値に戻しました。{0}"
 }

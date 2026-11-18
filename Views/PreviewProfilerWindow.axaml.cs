@@ -11,13 +11,17 @@ namespace LiberaFx.Views;
 public partial class PreviewProfilerWindow : Window
 {
     private readonly DispatcherTimer _refresh = new() { Interval = TimeSpan.FromMilliseconds(100) };
+    private readonly PreviewProfilerSettingsService _settings;
     private PreviewProfile? _displayedProfile;
     private PreviewValues? _displayedValues;
     private string _peerSignature = "";
     private string? _controlMessage;
     private bool _busy;
     private bool _refreshing;
+    private bool _loadingSettings;
     private Guid? _lastPeerId;
+    private string? _settingsMessageKey;
+    private object?[] _settingsMessageArgs = [];
     private readonly PreviewProfileHistory _history = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private ulong? _selectedSnapshot;
@@ -25,8 +29,26 @@ public partial class PreviewProfilerWindow : Window
     private sealed record PeerOption(Guid Id, string Label) { public override string ToString() => Label; }
 
     public PreviewProfilerWindow()
+        : this(new PreviewProfilerSettingsService())
     {
+    }
+
+    public PreviewProfilerWindow(PreviewProfilerSettingsService settings)
+    {
+        _settings = settings;
         InitializeComponent();
+        _loadingSettings = true;
+        NodesCheck.IsChecked = _settings.Current.Nodes;
+        AccessorsCheck.IsChecked = _settings.Current.Accessors;
+        IntervalInput.Value = _settings.Current.IntervalMs;
+        _loadingSettings = false;
+        NodesCheck.IsCheckedChanged += OnSettingsChanged;
+        AccessorsCheck.IsCheckedChanged += OnSettingsChanged;
+        IntervalInput.ValueChanged += (_, _) => SaveSettings();
+        if (_settings.LoadError is { } loadError)
+        {
+            SetSettingsMessage("SettingsLoadFailed", loadError);
+        }
         HistoryChart.SampleSelected += index =>
         {
             _selectedSnapshot = _history.Samples[index].SnapshotId;
@@ -134,11 +156,49 @@ public partial class PreviewProfilerWindow : Window
             ValuesText.Text = _displayedValues is null ? "" : string.Join(Environment.NewLine, _displayedValues.Values.Select(value =>
                 $"{value.NodeId:D}    [{string.Join(", ", value.Components.Select(c => c.ToString("R", CultureInfo.InvariantCulture)))}]"));
         }
-        ControlStatus.Text = _controlMessage is null ? "" : Text(_controlMessage);
+        ControlStatus.Text = _settingsMessageKey is { } key
+            ? Text(key, _settingsMessageArgs)
+            : _controlMessage is null ? "" : Text(_controlMessage);
     }
 
     private void OnHistoryModeChanged(object? sender, RoutedEventArgs e) => RenderSelected();
     private void OnCostModeChanged(object? sender, SelectionChangedEventArgs e) => RenderSelected();
+    private void OnSettingsChanged(object? sender, RoutedEventArgs e) => SaveSettings();
+
+    private void SaveSettings()
+    {
+        if (_loadingSettings)
+        {
+            return;
+        }
+
+        try
+        {
+            _settings.Save(new(NodesCheck.IsChecked == true, AccessorsCheck.IsChecked == true,
+                checked((int)(IntervalInput.Value ?? 500))));
+            SetSettingsMessage(null);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            _loadingSettings = true;
+            NodesCheck.IsChecked = _settings.Current.Nodes;
+            AccessorsCheck.IsChecked = _settings.Current.Accessors;
+            IntervalInput.Value = _settings.Current.IntervalMs;
+            _loadingSettings = false;
+            SetSettingsMessage("SettingsSaveFailed", ex.Message);
+        }
+    }
+
+    private void SetSettingsMessage(string? key, params object?[] args)
+    {
+        _settingsMessageKey = key;
+        _settingsMessageArgs = args;
+        if (ControlStatus is not null)
+        {
+            ControlStatus.Text = key is null ? "" : Text(key, args);
+        }
+    }
+
     private void OnClearHistory(object? sender, RoutedEventArgs e)
     {
         _history.Clear();

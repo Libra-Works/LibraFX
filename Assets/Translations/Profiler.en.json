@@ -71,5 +71,7 @@
   "Profiler.Sending": "Sending control…",
   "Profiler.Sent": "Control sent. Waiting for native feedback; no acknowledgment is implied.",
   "Profiler.InvalidControl": "Invalid control. Use interval 100–5000 ms and at most 64 distinct nonempty node GUIDs.",
-  "Profiler.SendFailed": "Control could not be sent. Check the client connection and advertised capabilities."
+  "Profiler.SendFailed": "Control could not be sent. Check the client connection and advertised capabilities.",
+  "Profiler.SettingsLoadFailed": "Saved profiler settings are invalid or unavailable; defaults are active and the file was not overwritten. {0}",
+  "Profiler.SettingsSaveFailed": "Profiler settings could not be saved; the previous values were restored. {0}"
 }

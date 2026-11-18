@@ -20,6 +20,7 @@ internal static class PreviewTelemetryTests
         VerifyReceive();
         VerifyHistory();
         VerifyFrozenChart();
+        VerifySettingsPersistence();
         VerifyControlsAsync().GetAwaiter().GetResult();
         VerifyPanel();
     }
@@ -133,6 +134,38 @@ internal static class PreviewTelemetryTests
         using (var drawing = new DrawingGroup().Open()) chart.Render(drawing);
     }
 
+    private static void VerifySettingsPersistence()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "librafx-profiler-settings-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "preview-profiler.json");
+        try
+        {
+            var settings = new PreviewProfilerSettingsService(path);
+            Require(settings.Current == PreviewProfilerSettings.Default, "Missing profiler settings must use defaults.");
+            var expected = new PreviewProfilerSettings(false, true, 1200);
+            settings.Save(expected);
+            Require(new PreviewProfilerSettingsService(path).Current == expected,
+                "Profiler detail and interval settings must survive reopening.");
+
+            var invalidPath = Path.Combine(directory, "invalid.json");
+            File.WriteAllText(invalidPath, """{"nodes":false,"accessors":true,"intervalMs":99}""");
+            var invalid = new PreviewProfilerSettingsService(invalidPath);
+            var original = File.ReadAllBytes(invalidPath);
+            Require(invalid.LoadError is not null && invalid.Current == PreviewProfilerSettings.Default,
+                "Invalid profiler settings must be reported without becoming active.");
+            try { invalid.Save(expected); throw new Exception("Invalid profiler settings must not be overwritten."); }
+            catch (InvalidDataException) { }
+            Require(original.SequenceEqual(File.ReadAllBytes(invalidPath)) &&
+                invalid.Current == PreviewProfilerSettings.Default,
+                "Rejected profiler settings must preserve the file and active defaults.");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static async Task VerifyControlsAsync()
     {
         var store = new PreviewTelemetryStore();
@@ -198,18 +231,30 @@ internal static class PreviewTelemetryTests
         var store = model.PreviewTelemetry;
         var id = Guid.NewGuid();
         store.Connect(id, 3, _ => Task.CompletedTask);
-        var window = new PreviewProfilerWindow { DataContext = model };
+        var settingsDirectory = Path.Combine(Path.GetTempPath(), "librafx-profiler-panel-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(settingsDirectory);
+        var settingsPath = Path.Combine(settingsDirectory, "preview-profiler.json");
+        var savedSettings = new PreviewProfilerSettings(false, true, 1400);
+        new PreviewProfilerSettingsService(settingsPath).Save(savedSettings);
+        var window = new PreviewProfilerWindow(new PreviewProfilerSettingsService(settingsPath)) { DataContext = model };
         var language = LocalizationService.Shared;
         var original = language.SelectedLanguage;
         window.Show();
         try
         {
             Refresh(window);
+            Require(window.FindControl<CheckBox>("NodesCheck")!.IsChecked == savedSettings.Nodes &&
+                window.FindControl<CheckBox>("AccessorsCheck")!.IsChecked == savedSettings.Accessors &&
+                window.FindControl<Avalonia.Controls.NumericUpDown>("IntervalInput")!.Value == savedSettings.IntervalMs,
+                "Profiler controls must restore saved values when the window is reopened.");
             Require(!window.FindControl<Button>("StartButton")!.IsEnabled, "Unnegotiated clients must not enable capture.");
             Require(Receive(store, id, Hello), "Panel peer negotiation failed.");
             Refresh(window);
             Require(window.FindControl<Button>("StartButton")!.IsEnabled && window.FindControl<Button>("WatchButton")!.IsEnabled,
                 "Advertised capabilities must enable the real controls.");
+            window.FindControl<Avalonia.Controls.NumericUpDown>("IntervalInput")!.Value = 1600;
+            Require(new PreviewProfilerSettingsService(settingsPath).Current.IntervalMs == 1600,
+                "Changing profiler controls must persist immediately.");
             Require(Receive(store, id, Page(7, 1, 0, 1, Metric("node"))) && Receive(store, id, Values()), "Panel fixtures failed.");
             Refresh(window);
             Require(window.FindControl<ListBox>("MetricList")!.Items.Count == 1 &&
@@ -234,7 +279,12 @@ internal static class PreviewTelemetryTests
                 string.IsNullOrEmpty(window.FindControl<TextBox>("ValuesText")!.Text),
                 "Disconnect must clear the panel and disable controls.");
         }
-        finally { window.Close(); language.SelectedLanguage = original; }
+        finally
+        {
+            window.Close();
+            language.SelectedLanguage = original;
+            Directory.Delete(settingsDirectory, recursive: true);
+        }
     }
 
     private static void Refresh(PreviewProfilerWindow window) =>
