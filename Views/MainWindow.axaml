@@ -18,7 +18,8 @@
     </Design.DataContext>
 
     <Grid RowDefinitions="Auto,*,Auto">
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+        <Border Grid.Row="0" Classes="editor-bar" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
         <Menu>
             <MenuItem Header="{DynamicResource Text.Editor.File}">
                 <MenuItem Header="{DynamicResource Text.Editor.New}"
@@ -116,28 +117,24 @@
                 </MenuItem>
             </MenuItem>
         </Menu>
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="8,2">
-            <views:IconButton Icon="{Binding Playback.PlayIcon}" Command="{Binding Playback.PlayPauseCommand}"
-                              ToolTip.Tip="{DynamicResource Text.Timeline.PlayPause}" AutomationProperties.Name="{DynamicResource Text.Timeline.PlayPause}" />
-            <views:IconButton Icon="Stop" Command="{Binding Playback.StopCommand}"
-                              ToolTip.Tip="{DynamicResource Text.Timeline.Stop}" AutomationProperties.Name="{DynamicResource Text.Timeline.Stop}" />
-            <TextBlock Width="80" Text="{Binding Playback.FrameText}" VerticalAlignment="Center" />
-        </StackPanel>
+        <views:PlaybackTransport Grid.Column="1" DataContext="{Binding Playback}" />
         </Grid>
+        </Border>
 
         <dock:DockControl Grid.Row="1"
                           Layout="{Binding Layout}" />
         <views:GpuWorkspaceView x:Name="GpuWorkspace" Grid.Row="1" IsVisible="False" />
 
-        <StackPanel Grid.Row="2" Margin="8,4" Spacing="2">
-            <Button Content="{Binding PreviewConnectionSummary}" Click="OnConnectionsClick"
-                    HorizontalAlignment="Left" Padding="4,2" />
-            <TextBlock Text="{Binding FileStatus}"
-                       TextWrapping="Wrap"
-                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <TextBlock Text="{Binding WindowLayouts.Status}" TextWrapping="Wrap"
-                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-        </StackPanel>
+        <Border Grid.Row="2" Classes="editor-bar" BorderThickness="0,1,0,0">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                <Button Classes="editor-tool" Content="{Binding PreviewConnectionSummary}" Click="OnConnectionsClick"
+                        Padding="6,3" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Classes="editor-label" Text="{Binding FileStatus}" TextWrapping="Wrap" />
+                    <TextBlock Classes="editor-label" Text="{Binding WindowLayouts.Status}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+        </Border>
     </Grid>
 
 </Window>

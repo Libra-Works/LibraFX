@@ -19,11 +19,11 @@
             <SolidColorBrush x:Key="EffectBorderBrush"
                              Color="{DynamicResource SystemBaseMediumLowColor}" />
             <SolidColorBrush x:Key="DockApplicationAccentBrushLow"
-                             Color="{DynamicResource SystemAccentColor}" />
+                             Color="{DynamicResource SystemAccentColor}" Opacity="0.16" />
             <SolidColorBrush x:Key="DockApplicationAccentBrushMed"
-                             Color="{DynamicResource SystemAccentColor}" />
+                             Color="{DynamicResource SystemAccentColor}" Opacity="0.26" />
             <SolidColorBrush x:Key="DockApplicationAccentBrushHigh"
-                             Color="{DynamicResource SystemAccentColor}" />
+                             Color="{DynamicResource SystemAccentColor}" Opacity="0.38" />
             <SolidColorBrush x:Key="DockApplicationAccentBrushIndicator"
                              Color="{DynamicResource SystemAccentColor}" />
         </ResourceDictionary>
@@ -69,5 +69,6 @@
         <FluentTheme />
         <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
         <DockFluentTheme />
+        <StyleInclude Source="avares://LiberaFx/Views/EditorChrome.axaml" />
     </Application.Styles>
 </Application>

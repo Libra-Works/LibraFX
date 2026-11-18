@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:services="using:LiberaFx.Services"
+             xmlns:views="using:LiberaFx.Views"
+             x:Class="LiberaFx.Views.PlaybackTransport"
+             x:DataType="services:EditorPlayback"
+             x:Name="Transport">
+    <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+        <views:IconButton Classes="editor-tool" Icon="StepBack" Command="{Binding StepBackCommand}"
+                          IsVisible="{ReflectionBinding ShowFrameTools, ElementName=Transport}"
+                          ToolTip.Tip="{DynamicResource Text.Timeline.StepBack}"
+                          AutomationProperties.Name="{DynamicResource Text.Timeline.StepBack}" />
+        <views:IconButton Classes="editor-tool transport-primary" Classes.playing="{Binding IsPlaying}"
+                          Icon="{Binding PlayIcon}" Command="{Binding PlayPauseCommand}"
+                          ToolTip.Tip="{DynamicResource Text.Timeline.PlayPause}"
+                          AutomationProperties.Name="{DynamicResource Text.Timeline.PlayPause}" />
+        <views:IconButton Classes="editor-tool" Icon="Stop" Command="{Binding StopCommand}"
+                          ToolTip.Tip="{DynamicResource Text.Timeline.Stop}"
+                          AutomationProperties.Name="{DynamicResource Text.Timeline.Stop}" />
+        <views:IconButton Classes="editor-tool" Icon="StepForward" Command="{Binding StepForwardCommand}"
+                          IsVisible="{ReflectionBinding ShowFrameTools, ElementName=Transport}"
+                          ToolTip.Tip="{DynamicResource Text.Timeline.StepForward}"
+                          AutomationProperties.Name="{DynamicResource Text.Timeline.StepForward}" />
+        <Border Classes="editor-card" Width="140" Margin="4,0,0,0" Padding="6,0"
+                VerticalAlignment="Stretch">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="5">
+                <TextBlock Classes="editor-heading" Text="{Binding FrameText}"
+                           HorizontalAlignment="Right" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                           IsVisible="{ReflectionBinding !ShowFrameTools, ElementName=Transport}"
+                           AutomationProperties.Name="{DynamicResource Text.Timeline.CurrentTime}" />
+                <TextBox Classes="editor-field" Text="{Binding FrameText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                         IsVisible="{ReflectionBinding ShowFrameTools, ElementName=Transport}"
+                         AutomationProperties.Name="{DynamicResource Text.Timeline.CurrentTime}" />
+                <TextBlock Grid.Column="1" Classes="editor-label" Text="{Binding TimeUnitLabel}" />
+            </Grid>
+        </Border>
+    </StackPanel>
+</UserControl>

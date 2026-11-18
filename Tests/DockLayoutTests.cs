@@ -20,6 +20,7 @@ internal static class DockLayoutTests
 {
     public static void Run()
     {
+        VerifyAuthoringDefault();
         VerifyCloseReopenAndDocuments();
         VerifyTopologyRoundtrip();
         VerifyPresetsAndFailures();
@@ -43,6 +44,46 @@ internal static class DockLayoutTests
     }
 
     private static DockFactory Factory(MainViewModel main) => (DockFactory)main.Layout.Factory!;
+
+    private static void VerifyAuthoringDefault()
+    {
+        var main = new MainViewModel();
+        try
+        {
+            var factory = Factory(main);
+            var timeline = factory.Tools.Single(t => t.Id == "Timeline");
+            var properties = factory.Tools.Single(t => t.Id == "Properties");
+            var preview = factory.Tools.Single(t => t.Id == "EngineConnection");
+
+            void CheckDefault()
+            {
+                var columns = ((IDock)main.Layout.VisibleDockables!.Single()).VisibleDockables!.OfType<IDock>().ToArray();
+                var canvas = (IDock)main.DocumentsDock.Owner!;
+                Check(columns.Length == 3 && columns.Contains(canvas) &&
+                      columns.Where(dock => dock != canvas).All(dock => dock.Proportion < canvas.Proportion),
+                    "The initial graph column must have more room than either sidebar.");
+                Check(timeline.Owner is IToolDock { Alignment: Alignment.Bottom } timelineDock &&
+                      ReferenceEquals(timelineDock.ActiveDockable, timeline) &&
+                      ReferenceEquals(timelineDock.Owner, canvas),
+                    "The timeline must be selected directly below the graph.");
+                Check(properties.Owner is IToolDock propertiesDock && preview.Owner is IToolDock previewDock &&
+                      !ReferenceEquals(propertiesDock, previewDock) && ReferenceEquals(propertiesDock.Owner, previewDock.Owner) &&
+                      ReferenceEquals(propertiesDock.ActiveDockable, properties) &&
+                      ReferenceEquals(previewDock.ActiveDockable, preview),
+                    "Properties and preview connection must be visible together.");
+            }
+
+            CheckDefault();
+            factory.ShowTool("Curves");
+            factory.CloseDockable(preview);
+            factory.ApplyLayout(factory.DefaultLayout, showWindows: false);
+            CheckDefault();
+        }
+        finally
+        {
+            main.DisposeStorageFiles();
+        }
+    }
 
     private static void VerifyCloseReopenAndDocuments()
     {

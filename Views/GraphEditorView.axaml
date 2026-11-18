@@ -10,8 +10,7 @@
         <views:GraphPositionConverter x:Key="GraphPositionConverter" />
     </UserControl.Resources>
     <Grid RowDefinitions="Auto,*,Auto">
-        <Border Grid.Row="0" Padding="6,3" Background="{DynamicResource EffectSurfaceBrush}"
-                BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="0,0,0,1"
+        <Border Grid.Row="0" Classes="editor-bar" BorderThickness="0,0,0,1"
                 IsVisible="{Binding !IsInlineWorkspace}">
             <ItemsControl ItemsSource="{Binding Breadcrumbs}">
                 <ItemsControl.ItemsPanel>
@@ -23,7 +22,7 @@
                             <TextBlock Text="›" IsVisible="{Binding HasSeparator}"
                                        FontSize="18" VerticalAlignment="Center"
                                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-                            <Button Tag="{Binding Depth}" AutomationProperties.Name="{Binding Name}"
+                            <Button Classes="editor-tool" Tag="{Binding Depth}" AutomationProperties.Name="{Binding Name}"
                                     Click="OnBreadcrumbClick" Padding="8,2">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <views:EditorIconView Icon="Group" />
@@ -35,22 +34,18 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </Border>
-        <Border x:Name="GraphToolbar" Grid.Row="2"
-                Padding="8"
-                Background="{DynamicResource EffectSurfaceBrush}"
-                BorderBrush="{DynamicResource EffectBorderBrush}"
-                BorderThickness="0,1,0,0">
+        <Border x:Name="GraphToolbar" Grid.Row="2" Classes="editor-bar" BorderThickness="0,1,0,0">
             <StackPanel Spacing="3">
             <TextBlock Text="{DynamicResource Text.Inline.Locked}" IsVisible="{Binding IsReadOnly}"
                        TextWrapping="Wrap" />
             <StackPanel Orientation="Horizontal" Spacing="6">
-                <views:IconButton Icon="ZoomOut" ToolTip.Tip="{DynamicResource Text.Editor.ZoomOut}"
+                <views:IconButton Classes="editor-tool" Icon="ZoomOut" ToolTip.Tip="{DynamicResource Text.Editor.ZoomOut}"
                         AutomationProperties.Name="{DynamicResource Text.Editor.ZoomOut}" Click="OnZoomOutClick" />
                 <Slider x:Name="ZoomSlider" Width="105" Minimum="-4.321928094887363" Maximum="2"
                         Value="0" ValueChanged="OnZoomSliderChanged"
                         VerticalAlignment="Center" ToolTip.Tip="{DynamicResource Text.Editor.GraphZoom}"
                         AutomationProperties.Name="{DynamicResource Text.Editor.GraphZoom}" />
-                <Button x:Name="ZoomButton"
+                <Button x:Name="ZoomButton" Classes="editor-tool"
                         ToolTip.Tip="{DynamicResource Text.Editor.ResetZoom}"
                         AutomationProperties.Name="{DynamicResource Text.Editor.ResetZoom}"
                         Click="OnResetZoomClick">
@@ -59,15 +54,15 @@
                         <TextBlock x:Name="ZoomText" Text="100%" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
-                <views:IconButton Icon="ZoomIn" ToolTip.Tip="{DynamicResource Text.Editor.ZoomIn}"
+                <views:IconButton Classes="editor-tool" Icon="ZoomIn" ToolTip.Tip="{DynamicResource Text.Editor.ZoomIn}"
                         AutomationProperties.Name="{DynamicResource Text.Editor.ZoomIn}" Click="OnZoomInClick" />
-                <views:IconButton Icon="Frame" ToolTip.Tip="{DynamicResource Text.Editor.Frame}"
+                <views:IconButton Classes="editor-tool" Icon="Frame" ToolTip.Tip="{DynamicResource Text.Editor.Frame}"
                         AutomationProperties.Name="{DynamicResource Text.Editor.Frame}" Click="OnFrameSelectionClick"
                         IsEnabled="{Binding HasSelection}" />
-                <views:IconButton Icon="Group" ToolTip.Tip="{DynamicResource Text.Editor.Group}"
+                <views:IconButton Classes="editor-tool" Icon="Group" ToolTip.Tip="{DynamicResource Text.Editor.Group}"
                         AutomationProperties.Name="{DynamicResource Text.Editor.Group}" Click="OnGroupSelectionClick"
                         IsEnabled="{Binding HasSelection}" />
-                <views:IconButton Icon="Disconnect" IsEnabled="{Binding HasSelection}"
+                <views:IconButton Classes="editor-tool" Icon="Disconnect" IsEnabled="{Binding HasSelection}"
                                   ToolTip.Tip="{DynamicResource Text.Inline.Disconnect}"
                                   AutomationProperties.Name="{DynamicResource Text.Inline.Disconnect}">
                     <Button.Flyout>
@@ -84,9 +79,7 @@
                         </Flyout>
                     </Button.Flyout>
                 </views:IconButton>
-                <TextBlock Text="{Binding ConnectionStatus}"
-                           VerticalAlignment="Center"
-                           Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                <TextBlock Classes="editor-label" Text="{Binding ConnectionStatus}" />
             </StackPanel>
             </StackPanel>
         </Border>

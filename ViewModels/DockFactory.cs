@@ -82,11 +82,12 @@ public sealed partial class DockFactory : Factory
 
         var leftDock = new ProportionalDock
         {
-            Proportion = 0.22,
+            Proportion = 0.19,
             Orientation = Orientation.Vertical,
             VisibleDockables = CreateList<IDockable>(
                 new ToolDock
                 {
+                    Proportion = 0.35,
                     Alignment = Alignment.Left,
                     ActiveDockable = outliner,
                     VisibleDockables = CreateList<IDockable>(outliner)
@@ -94,17 +95,33 @@ public sealed partial class DockFactory : Factory
                 new ProportionalDockSplitter(),
                 new ToolDock
                 {
+                    Proportion = 0.65,
                     Alignment = Alignment.Left,
                     ActiveDockable = nodeList,
                     VisibleDockables = CreateList<IDockable>(nodeList, resources)
                 })
         };
 
-        var rightDock = new ToolDock
+        var rightDock = new ProportionalDock
         {
-            Alignment = Alignment.Right,
-            ActiveDockable = properties,
-            VisibleDockables = CreateList<IDockable>(properties, history, engineConnection)
+            Proportion = 0.27,
+            Orientation = Orientation.Vertical,
+            VisibleDockables = CreateList<IDockable>(
+                new ToolDock
+                {
+                    Proportion = 0.62,
+                    Alignment = Alignment.Right,
+                    ActiveDockable = properties,
+                    VisibleDockables = CreateList<IDockable>(properties, history)
+                },
+                new ProportionalDockSplitter(),
+                new ToolDock
+                {
+                    Proportion = 0.38,
+                    Alignment = Alignment.Right,
+                    ActiveDockable = engineConnection,
+                    VisibleDockables = CreateList<IDockable>(engineConnection)
+                })
         };
 
         DocumentsDock = new DocumentDock
@@ -118,6 +135,7 @@ public sealed partial class DockFactory : Factory
 
         var graphAndTimeline = new ProportionalDock
         {
+            Proportion = 0.54,
             Orientation = Orientation.Vertical,
             ActiveDockable = DocumentsDock,
             VisibleDockables = CreateList<IDockable>(
@@ -125,9 +143,9 @@ public sealed partial class DockFactory : Factory
                 new ProportionalDockSplitter(),
                 new ToolDock
                 {
-                    Proportion = 0.25,
+                    Proportion = 0.30,
                     Alignment = Alignment.Bottom,
-                    ActiveDockable = curves,
+                    ActiveDockable = timeline,
                     VisibleDockables = CreateList<IDockable>(timeline, curves)
                 })
         };

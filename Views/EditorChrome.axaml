@@ -1,0 +1,57 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Styles.Resources>
+        <CornerRadius x:Key="EditorChromeCornerRadius">6</CornerRadius>
+        <SolidColorBrush x:Key="EditorChromeDividerBrush"
+                         Color="{DynamicResource SystemBaseMediumLowColor}" Opacity="0.55" />
+    </Styles.Resources>
+
+    <Style Selector="Border.editor-bar">
+        <Setter Property="Background" Value="{DynamicResource EffectSurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource EditorChromeDividerBrush}" />
+        <Setter Property="Padding" Value="8,4" />
+    </Style>
+    <Style Selector="Border.editor-card">
+        <Setter Property="Background" Value="{DynamicResource EffectSurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource EditorChromeDividerBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource EditorChromeCornerRadius}" />
+        <Setter Property="Padding" Value="10" />
+    </Style>
+    <Style Selector="TextBlock.editor-label">
+        <Setter Property="Foreground" Value="{DynamicResource EffectMutedForegroundBrush}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.editor-heading">
+        <Setter Property="Foreground" Value="{DynamicResource EffectForegroundBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.editor-tool">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="{DynamicResource EditorChromeCornerRadius}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.editor-tool.transport-primary">
+        <Setter Property="Background" Value="{DynamicResource DockApplicationAccentBrushLow}" />
+        <Setter Property="Foreground" Value="{DynamicResource EffectForegroundBrush}" />
+    </Style>
+    <Style Selector="Button.editor-tool.transport-primary.playing">
+        <Setter Property="BorderBrush" Value="{DynamicResource DockApplicationAccentBrushIndicator}" />
+    </Style>
+    <Style Selector="TextBox.editor-field, .editor-inspector TextBox">
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Padding" Value="6,3" />
+        <Setter Property="CornerRadius" Value="{DynamicResource EditorChromeCornerRadius}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector=".editor-inspector ComboBox">
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Padding" Value="6,3" />
+        <Setter Property="CornerRadius" Value="{DynamicResource EditorChromeCornerRadius}" />
+    </Style>
+    <Style Selector=".editor-inspector CheckBox">
+        <Setter Property="MinHeight" Value="28" />
+    </Style>
+</Styles>

@@ -3,36 +3,18 @@
              xmlns:vm="using:LiberaFx.ViewModels"
              xmlns:views="using:LiberaFx.Views"
              x:Class="LiberaFx.Views.NodePropertiesView"
+             Classes="editor-inspector"
              FontSize="12"
              x:DataType="vm:NodePropertiesPaneViewModel">
-    <UserControl.Styles>
-        <Style Selector="TextBox">
-            <Setter Property="MinHeight" Value="26" />
-            <Setter Property="Padding" Value="6,3" />
-            <Setter Property="CornerRadius" Value="2" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-        </Style>
-        <Style Selector="ComboBox">
-            <Setter Property="MinHeight" Value="26" />
-            <Setter Property="Padding" Value="6,3" />
-        </Style>
-        <Style Selector="CheckBox">
-            <Setter Property="MinHeight" Value="26" />
-        </Style>
-    </UserControl.Styles>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="8" Spacing="6">
-        <TextBlock Text="{Binding InspectorTitle}"
-                   FontWeight="SemiBold"
-                   Foreground="{DynamicResource EffectForegroundBrush}" />
+        <TextBlock Classes="editor-heading" Text="{Binding InspectorTitle}" />
         <TextBlock Text="{DynamicResource Text.Editor.SelectNodeHint}"
                    IsVisible="{Binding !HasInspectorTarget}"
                    TextWrapping="Wrap"
                    Foreground="{DynamicResource EffectMutedForegroundBrush}" />
         <StackPanel IsVisible="{Binding Graph.IsRootGraph}" Spacing="4">
-            <TextBlock Text="{DynamicResource Text.Editor.EffectSettings}"
-                       FontWeight="SemiBold"
-                       Foreground="{DynamicResource EffectForegroundBrush}" />
+            <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Editor.EffectSettings}" />
             <CheckBox Content="{DynamicResource Text.Editor.AutoDestroyWhenIdle}"
                       IsChecked="{Binding Graph.AutoDestroyWhenIdle, Mode=TwoWay}" />
             <TextBlock Text="{DynamicResource Text.Editor.AutoDestroyWhenIdleHelp}"
@@ -51,18 +33,17 @@
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <TextBox Text="{Binding InspectorNodeName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                      IsReadOnly="{Binding IsInspectingContainingSpawnable}" />
-            <Border IsVisible="{Binding CanManageGroup}" Margin="0,8,0,0" Padding="10"
-                    BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="1" CornerRadius="4">
+            <Border Classes="editor-card" IsVisible="{Binding CanManageGroup}" Margin="0,8,0,0">
                 <StackPanel Spacing="8">
                     <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
-                        <TextBlock Text="{DynamicResource Text.Editor.GroupAsset}" VerticalAlignment="Center"
-                                   FontWeight="SemiBold" />
-                        <views:IconButton x:Name="SaveGroupButton" Grid.Column="1" Icon="Save"
+                        <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Editor.GroupAsset}"
+                                   VerticalAlignment="Center" />
+                        <views:IconButton x:Name="SaveGroupButton" Classes="editor-tool" Grid.Column="1" Icon="Save"
                                           IsVisible="{Binding !IsStandardGroup}"
                                           Command="{Binding SaveGroupCommand}"
                                           ToolTip.Tip="{DynamicResource Text.Editor.SaveGroup}"
                                           AutomationProperties.Name="{DynamicResource Text.Editor.SaveGroup}" />
-                        <views:IconButton x:Name="GroupLockButton" Grid.Column="2" Icon="{Binding GroupLockIcon}"
+                        <views:IconButton x:Name="GroupLockButton" Classes="editor-tool" Grid.Column="2" Icon="{Binding GroupLockIcon}"
                                           IsVisible="{Binding IsProjectLinkedGroup}" Command="{Binding ToggleGroupLockCommand}"
                                           ToolTip.Tip="{Binding GroupLockHint}" AutomationProperties.Name="{Binding GroupLockHint}" />
                     </Grid>
