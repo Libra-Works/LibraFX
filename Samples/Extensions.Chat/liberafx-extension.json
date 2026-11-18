@@ -1,0 +1,12 @@
+{
+  "manifestVersion": 1,
+  "id": "liberafx.sample.gemini-text",
+  "name": "Gemini REST text-only adapter / Gemini REST 会話専用",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "targetFramework": "net10.0",
+  "assembly": "Extensions.Chat.dll",
+  "entryType": "LiberaFx.Samples.ChatExtension",
+  "extensionPoints": ["liberafx.editor.chat"],
+  "dependencies": []
+}

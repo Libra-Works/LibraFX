@@ -75,6 +75,8 @@ public sealed class McpHost
                     return;
                 }
 
+                using var chatContext = ChatMcpExecution.EnterRequest(
+                    context.Request.Headers[ChatMcpExecution.Header].ToString());
                 await next(context);
             });
             app.MapMcp("/mcp");

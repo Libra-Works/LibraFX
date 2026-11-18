@@ -1,0 +1,142 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Reflection;
+using System.Text.Json;
+using Avalonia.Automation.Peers;
+using Avalonia.Automation.Provider;
+using Avalonia.Controls;
+using LiberaFx.Extensions.Abstractions;
+using LiberaFx.Services;
+using LiberaFx.ViewModels;
+using LiberaFx.Views;
+
+internal static class ChatUi47Tests
+{
+    public static async Task RunAsync()
+    {
+        var reservation = new TcpListener(IPAddress.Loopback, 0);
+        reservation.Start();
+        var port = ((IPEndPoint)reservation.LocalEndpoint).Port;
+        reservation.Stop();
+        var host = new McpHost(port);
+        var main = new MainViewModel(host.AccessToken, mcpEndpoint: host.ActualEndpoint);
+        var adapter = new SyntheticAdapter();
+        main.Extensions.RegisterBuiltIn(adapter);
+        var window = new ChatWindow(main);
+        try
+        {
+            await host.StartAsync(main.ActiveGraphProvider);
+            using (var unauthorized = new ChatMcpClient(host.ActualEndpoint, "synthetic-invalid"))
+            {
+                try
+                {
+                    await unauthorized.ConnectAsync(CancellationToken.None);
+                    throw new Exception("Unauthenticated MCP connected.");
+                }
+                catch (HttpRequestException) { }
+            }
+            window.Show();
+            await Task.Delay(250); // Allow initial control bindings/layout to settle.
+            var input = Field<TextBox>(window, "_input");
+            var send = Field<Button>(window, "_send");
+            var connect = Field<Button>(window, "_connect");
+            var disconnect = Field<Button>(window, "_disconnect");
+            if (input.IsEnabled || send.IsEnabled) throw new Exception("Offline chat was enabled.");
+            Field<ComboBox>(window, "_adapters").SelectedIndex = 1;
+            Field<CheckBox>(window, "_share").IsChecked = true;
+            await Task.Delay(100);
+            var initialCount = main.Graph.Nodes.Count;
+            Invoke(connect);
+            try { await WaitAsync(() => input.IsEnabled, "MCP connection"); }
+            catch (TimeoutException)
+            {
+                throw new TimeoutException("MCP connection: " + Field<TextBlock>(window, "_status").Text);
+            }
+            input.Text = "Create a synthetic node";
+            Invoke(send);
+            await WaitAsync(() => Field<Window?>(window, "_confirmation") is not null, "Edit approval");
+            var dialog = Field<Window>(window, "_confirmation");
+            var grid = (Grid)dialog.Content!;
+            var buttons = (StackPanel)grid.Children[2];
+            Invoke((Button)buttons.Children[1]);
+            await WaitAsync(() => main.Graph.Nodes.Count == initialCount + 1 && input.IsEnabled, "Approved edit");
+            if (!main.Graph.History.CanUndo) throw new Exception("MCP edit lacks undo.");
+            main.Graph.History.Undo();
+            if (main.Graph.Nodes.Count != initialCount) throw new Exception("Undo failed.");
+            main.Graph.History.Redo();
+            if (main.Graph.Nodes.Count != initialCount + 1) throw new Exception("Redo failed.");
+            Invoke(disconnect);
+            if (input.IsEnabled || send.IsEnabled) throw new Exception("Disconnected chat stayed enabled.");
+            Field<CheckBox>(window, "_share").IsChecked = true;
+            Invoke(connect);
+            await WaitAsync(() => input.IsEnabled, "MCP reconnect");
+            input.Text = "Reject this synthetic edit";
+            Invoke(send);
+            await WaitAsync(() => Field<Window?>(window, "_confirmation") is not null, "Reject approval");
+            dialog = Field<Window>(window, "_confirmation");
+            grid = (Grid)dialog.Content!;
+            buttons = (StackPanel)grid.Children[2];
+            Invoke((Button)buttons.Children[0]);
+            await WaitAsync(() => input.IsEnabled, "Rejected edit");
+            if (main.Graph.Nodes.Count != initialCount + 1) throw new Exception("Rejected edit changed graph.");
+            Invoke(disconnect);
+            adapter.Mode = "invalid";
+            Field<CheckBox>(window, "_share").IsChecked = true;
+            Invoke(connect);
+            await WaitAsync(() => input.IsEnabled, "MCP reconnect for invalid tool");
+            input.Text = "Synthetic invalid tool";
+            Invoke(send);
+            await WaitAsync(() => !input.IsEnabled && connect.IsEnabled, "Invalid tool rejected");
+            if (main.Graph.Nodes.Count != initialCount + 1) throw new Exception("Invalid tool changed graph.");
+
+            adapter.Mode = "wait";
+            Field<CheckBox>(window, "_share").IsChecked = true;
+            Invoke(connect);
+            await WaitAsync(() => input.IsEnabled, "MCP reconnect for cancellation");
+            input.Text = "Synthetic cancellation";
+            Invoke(send);
+            var cancel = Field<Button>(window, "_cancel");
+            await WaitAsync(() => cancel.IsEnabled, "Pending synthetic response");
+            Invoke(cancel);
+            await WaitAsync(() => !input.IsEnabled && connect.IsEnabled, "Cancellation");
+            if (main.Graph.Nodes.Count != initialCount + 1) throw new Exception("Cancelled turn changed graph.");
+        }
+        finally
+        {
+            window.Close();
+            await host.StopAsync();
+            main.Extensions.Dispose();
+        }
+    }
+
+    private static T Field<T>(object instance, string name) =>
+        (T)instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(instance)!;
+    private static void Invoke(Button button) =>
+        new ButtonAutomationPeer(button).GetProvider<IInvokeProvider>()!.Invoke();
+    private static async Task WaitAsync(Func<bool> predicate, string step)
+    {
+        for (var i = 0; i < 400; i++)
+        {
+            if (predicate()) return;
+            await Task.Delay(25);
+        }
+        throw new TimeoutException(step);
+    }
+
+    private sealed class SyntheticAdapter : IChatAdapter
+    {
+        public string Id => "synthetic.chat.ui";
+        public string Name => "Synthetic offline";
+        public string Destination => "Synthetic in-process";
+        public string PrivacyNotice => "No external service.";
+        public string Mode = "edit";
+        public async Task<ChatReply> SendAsync(ChatRequest request, CancellationToken cancellation)
+        {
+            if (Mode == "wait") await Task.Delay(Timeout.Infinite, cancellation);
+            if (request.Messages.Any(m => m.Role == "tool"))
+                return new ChatReply("Synthetic edit complete.", []);
+            using var json = JsonDocument.Parse("""{"kind":"Float","x":100,"y":100}""");
+            return new ChatReply("", [new("synthetic-call", Mode == "invalid" ? "untrusted_tool" : "libera_graph_create_node", json.RootElement.Clone())]);
+        }
+    }
+}

@@ -84,13 +84,13 @@ public sealed class LiberaFxMcpTools
     [McpServerTool(Name = "libera_graph_read", ReadOnly = true, OpenWorld = false)]
     [Description("Read the active graph, including stable node IDs, positions, types, parameters and connections. Each Signal output has at most one destination; Signal inputs execute on every arrival, without synchronization. Sequence executes outputs top to bottom, without waiting for Delay or Spawnable completion.")]
     public static async Task<string> GetGraph(ActiveGraphProvider activeGraph) =>
-        await Dispatcher.UIThread.InvokeAsync(
+        await ChatMcpExecution.InvokeAsync(
             () => JsonSerializer.Serialize(activeGraph.Graph.CreateCurrentSnapshot(), JsonOptions));
 
     [McpServerTool(Name = "libera_graph_enter", Destructive = false, OpenWorld = false)]
     [Description("Navigate into an existing editable Graph Group or Spawnable Group child graph. This changes editor navigation only; it creates no runtime instance.")]
     public static async Task<string> EnterGraph(ActiveGraphProvider activeGraph, string nodeId) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await ChatMcpExecution.InvokeAsync(() =>
         {
             var graph = activeGraph.Graph;
             if (!graph.EnterGraph(FindNode(graph, nodeId)))
@@ -101,7 +101,7 @@ public sealed class LiberaFxMcpTools
     [McpServerTool(Name = "libera_graph_up", Destructive = false, OpenWorld = false)]
     [Description("Navigate to the parent editable graph without creating or changing runtime instances.")]
     public static async Task<string> ParentGraph(ActiveGraphProvider activeGraph) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await ChatMcpExecution.InvokeAsync(() =>
         {
             var graph = activeGraph.Graph;
             if (graph.Breadcrumbs.Count < 2) throw new McpException("Already at the root graph.");
@@ -113,7 +113,7 @@ public sealed class LiberaFxMcpTools
     [Description("Compile a numeric graph to VFX bytecode. Graphs containing Signal, lifecycle, Spawn boundaries, or Spawnable Group must use libera_graph_compile_spawnable.")]
     public static async Task<string> CompileGraph(ActiveGraphProvider activeGraph)
     {
-        var snapshot = await Dispatcher.UIThread.InvokeAsync(() => activeGraph.Graph.CreateCurrentSnapshot());
+        var snapshot = await ChatMcpExecution.InvokeAsync(() => activeGraph.Graph.CreateCurrentSnapshot());
         try
         {
             var program = VfxProgram.Compile(snapshot);
@@ -130,7 +130,7 @@ public sealed class LiberaFxMcpTools
     [McpServerTool(Name = "libera_graph_list_node_types", ReadOnly = true, OpenWorld = false)]
     [Description("List authoring node types and ports. Conversions lists explicit conversion input/output port IDs; insert these nodes visibly instead of directly connecting different types. Existing polymorphic math scalar broadcast is the only implicit exception. Sequence has 1..32 outputs: set its integer 'outputs' parameter; stable output IDs are then_0, then_1, etc., in execution order. Each Signal output allows one destination; inputs allow multiple senders. Spawnable Group is an editable child template; receiving a signal creates runtime instances, never editor nodes.")]
     public static async Task<string> ListNodeTypes(ActiveGraphProvider activeGraph) =>
-        await Dispatcher.UIThread.InvokeAsync(() => JsonSerializer.Serialize(activeGraph.Graph.AvailableNodeDefinitions, JsonOptions));
+        await ChatMcpExecution.InvokeAsync(() => JsonSerializer.Serialize(activeGraph.Graph.AvailableNodeDefinitions, JsonOptions));
 
     [McpServerTool(Name = "libera_graph_create_node", Destructive = false, OpenWorld = false)]
     [Description("Create one editable node in the active graph, including one Spawnable Group container. This never creates a runtime instance. Family base kinds are polymorphic by default.")]
@@ -140,7 +140,7 @@ public sealed class LiberaFxMcpTools
         [Description("Optional horizontal position.")] double? x = null,
         [Description("Optional vertical position.")] double? y = null,
         [Description("Override the family default; false creates an explicitly typed legacy node.")] bool? isPolymorphic = null) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await ChatMcpExecution.InvokeAsync(() =>
         {
             ValidatePosition(x, y);
             var graph = activeGraph.Graph;
@@ -153,7 +153,7 @@ public sealed class LiberaFxMcpTools
     [Description("Compile Signal or Spawnable graphs to an immutable parent LFXB program and separate Spawnable template programs, per-pin CaptureAtSpawn/Live mappings, render configurations, GPU snapshots and executable GPU payloads. This also supports Signal graphs without Spawnable Groups. Signals connected to a Spawnable enqueue runtime instances, not editor graph copies. Engine adapters consume lifecycle events; no engine objects are created by this tool.")]
     public static async Task<string> CompileSpawnable(ActiveGraphProvider activeGraph)
     {
-        var snapshot = await Dispatcher.UIThread.InvokeAsync(() =>
+        var snapshot = await ChatMcpExecution.InvokeAsync(() =>
             activeGraph.Graph.CreateCurrentSnapshot() with
             { AutoDestroyWhenIdle = activeGraph.Graph.AutoDestroyWhenIdle });
         try
@@ -227,7 +227,7 @@ public sealed class LiberaFxMcpTools
     [McpServerTool(Name = "libera_graph_describe_runtime_outputs", ReadOnly = true, OpenWorld = false)]
     [Description("Describe deterministic runtime value bindings for an authoring node's output pins. A Matrix maps to four FloatX4 rows, never one four-component value. Use runtimeNodeId with value watching and sourceComponent for scalar Break outputs. This does not evaluate the graph or create runtime instances.")]
     public static async Task<string> DescribeRuntimeOutputs(ActiveGraphProvider activeGraph, string nodeId) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await ChatMcpExecution.InvokeAsync(() =>
         {
             var workspace = activeGraph.Graph;
             var node = FindNode(workspace, nodeId);
@@ -287,7 +287,7 @@ public sealed class LiberaFxMcpTools
     [McpServerTool(Name = "libera_graph_describe_spawnable", ReadOnly = true, OpenWorld = false)]
     [Description("Describe an editable Spawnable Group's synchronized signal and typed capture-at-spawn ports and child template. No runtime instance is created.")]
     public static async Task<string> DescribeSpawnable(ActiveGraphProvider activeGraph, string nodeId) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await ChatMcpExecution.InvokeAsync(() =>
         {
             var group = FindNode(activeGraph.Graph, nodeId);
             if (!group.IsSpawnableGroup || group.ChildGraph is null) throw new McpException("Node is not a Spawnable Group.");
@@ -307,7 +307,7 @@ public sealed class LiberaFxMcpTools
     [McpServerTool(Name = "libera_graph_describe_group", ReadOnly = true, OpenWorld = false)]
     [Description("Describe an ordinary Group's scoped Property and Signal pins. Port IDs are stable within this instance and are used by libera_graph_connect_nodes. Name is the boundary node's authored name; displayName is the label shown on the group pin.")]
     public static async Task<string> DescribeGroup(ActiveGraphProvider activeGraph, string nodeId) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await ChatMcpExecution.InvokeAsync(() =>
         {
             var group = FindNode(activeGraph.Graph, nodeId);
             if (group.Definition.Kind != GraphNodeKind.GraphGroup || group.ChildGraph is null)
@@ -336,7 +336,7 @@ public sealed class LiberaFxMcpTools
         [Description("Target node ID.")] string targetId,
         [Description("Optional input port ID; defaults to the first input.")] string? targetPortId = null,
         [Description("Output port ID for multi-output nodes (for example BreakVector4.w).")] string? sourcePortId = null) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await ChatMcpExecution.InvokeAsync(() =>
         {
             var graph = activeGraph.Graph;
             var source = FindNode(graph, sourceId);
@@ -354,7 +354,7 @@ public sealed class LiberaFxMcpTools
         ActiveGraphProvider activeGraph,
         [Description("Node ID.")] string nodeId,
         [Description("New non-empty node name.")] string name) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await ChatMcpExecution.InvokeAsync(() =>
         {
             if (string.IsNullOrWhiteSpace(name))
                 throw new McpException("The node name must not be empty.");
@@ -371,7 +371,7 @@ public sealed class LiberaFxMcpTools
         [Description("Node ID.")] string nodeId,
         [Description("Horizontal position.")] double x,
         [Description("Vertical position.")] double y) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await ChatMcpExecution.InvokeAsync(() =>
         {
             ValidatePosition(x, y);
             var graph = activeGraph.Graph;
@@ -387,7 +387,7 @@ public sealed class LiberaFxMcpTools
         [Description("Existing node GUID.")] string nodeId,
         [Description("Parameter ID from the node definition, for example value.")] string parameterId,
         [Description("Actual JSON value, not JSON encoded as a string: a number, boolean, string, or component array matching the parameter type.")] JsonElement value) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await ChatMcpExecution.InvokeAsync(() =>
         {
             var graph = activeGraph.Graph;
             var node = FindNode(graph, nodeId);
@@ -400,7 +400,7 @@ public sealed class LiberaFxMcpTools
     [McpServerTool(Name = "libera_graph_expose_parameter", Destructive = false, OpenWorld = false)]
     [Description("Expose a direct child node parameter on its containing group. The active graph must be inside an editable group. Uses the same validation and undo history as the inspector.")]
     public static async Task<string> ExposeParameter(ActiveGraphProvider activeGraph, string nodeId, string parameterId) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await ChatMcpExecution.InvokeAsync(() =>
         {
             var graph = activeGraph.Graph;
             try
@@ -416,7 +416,7 @@ public sealed class LiberaFxMcpTools
     [McpServerTool(Name = "libera_graph_expose_curves", Destructive = false, OpenWorld = false)]
     [Description("Expose one Float F-Curve or three Float F-Curves in X/Y/Z order on the containing group. The active graph must be inside an editable group.")]
     public static async Task<string> ExposeCurves(ActiveGraphProvider activeGraph, string[] nodeIds) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await ChatMcpExecution.InvokeAsync(() =>
         {
             var graph = activeGraph.Graph;
             try
@@ -435,7 +435,7 @@ public sealed class LiberaFxMcpTools
     [Description("Set an exposed group item on this instance without changing the shared group. Pass the item GUID and a JSON parameter value, one F-Curve object, or an array of three F-Curve objects for vector3Curve.")]
     public static async Task<string> SetGroupInstanceValue(
         ActiveGraphProvider activeGraph, string nodeId, string exposedItemId, JsonElement value) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await ChatMcpExecution.InvokeAsync(() =>
         {
             var graph = activeGraph.Graph;
             var node = FindNode(graph, nodeId);
@@ -466,7 +466,7 @@ public sealed class LiberaFxMcpTools
     [Description("Configure an exposed item on an editable group. Supply the complete item from the graph snapshot; its ID, editor type and targets cannot be changed. Uses the same validation, asset lock and undo history as the inspector.")]
     public static async Task<string> ConfigureGroupItem(
         ActiveGraphProvider activeGraph, string nodeId, GroupExposedItem item) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await ChatMcpExecution.InvokeAsync(() =>
         {
             var graph = activeGraph.Graph;
             var node = FindNode(graph, nodeId);
@@ -480,7 +480,7 @@ public sealed class LiberaFxMcpTools
     [McpServerTool(Name = "libera_graph_reset_group_instance_value", Destructive = false, OpenWorld = false)]
     [Description("Remove one exposed-item instance override, restoring the shared group default. Uses the editor's undo history.")]
     public static async Task<string> ResetGroupInstanceValue(ActiveGraphProvider activeGraph, string nodeId, string exposedItemId) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await ChatMcpExecution.InvokeAsync(() =>
         {
             var graph = activeGraph.Graph;
             var node = FindNode(graph, nodeId);
@@ -496,7 +496,7 @@ public sealed class LiberaFxMcpTools
     public static async Task<string> DeleteNode(
         ActiveGraphProvider activeGraph,
         [Description("Node ID.")] string nodeId) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await ChatMcpExecution.InvokeAsync(() =>
         {
             var graph = activeGraph.Graph;
             var node = FindNode(graph, nodeId);
@@ -511,7 +511,7 @@ public sealed class LiberaFxMcpTools
         ActiveGraphProvider activeGraph,
         [Description("Nodes with unique keys, a kind from libera_graph_list_node_types, name, and x/y coordinates.")] IReadOnlyList<LiberaFxMcpPlanNode> nodes,
         [Description("Connections between sourceKey and targetKey from this plan; use an empty array for none.")] IReadOnlyList<LiberaFxMcpPlanConnection> connections) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await ChatMcpExecution.InvokeAsync(() =>
         {
             if (nodes is null || connections is null)
                 throw new McpException("Both nodes and connections arrays are required.");

@@ -1,0 +1,286 @@
+LIBERA FX AI chat and adapter SDK
+
+Optional SDK-only Samples\Extensions.CodexResponses implements the OpenAI
+Responses API at https://api.openai.com/v1/responses, with a configurable
+LIBERAFX_CODEX_MODEL and OPENAI_API_KEY from the editor process environment.
+It is a Codex-model API example, NOT a Codex CLI/app-server integration.
+The default gpt-5.3-codex is deprecated; use a model available to your API
+account. The Responses API supports that model but Chat Completions does not:
+https://developers.openai.com/api/docs/models/gpt-5.3-codex
+This example deliberately implements text only and fails closed if graph tools
+are requested. Disable graph sharing; it cannot edit graphs. It never starts a
+process or enables hosted shell, web search, or other built-in tools. Requests
+use store=false, which is not a promise of zero retention under provider policy.
+The synthetic handler test is not evidence of live service access.
+Samples\ProviderUiChecks runs the linked chat/crash UI regressions in an
+isolated test profile, using an in-process synthetic provider and the actual
+authenticated loopback MCP server. It is not a test of a live AI provider.
+
+Open View > AI Chat. One owned chat window follows the current editor; closing
+the application revokes/cancels its active turn and clears memory-only UI state.
+The optional independent Samples\Extensions.Chat\Extensions.Chat.csproj references
+only LiberaFx.Extensions.Abstractions. Build and install it explicitly through the
+shared extension host; it is not automatically installed or enabled.
+Samples\Extensions.CopilotChat\Extensions.CopilotChat.csproj is another optional
+SDK-only extension (plus its explicit Microsoft.Copilot.SDK dependency).
+Neither optional project is referenced by the editor or automatically installed.
+Local compilation does not establish protocol compatibility, rendered UI,
+Undo/Redo or real provider behavior. Not every external CLI is supported.
+
+## Authoring scenario
+
+Open AI Chat without a server: the window explains why input is disabled.
+Choose an enabled trusted DLL adapter, or configure a real OpenAI-compatible
+Chat Completions endpoint/model/key. No provider request happens on Connect.
+Connect performs authenticated HTTP MCP initialize, initialized, and tools/list
+against MainViewModel's actual loopback endpoint and token.
+
+Ask a simple question with sharing OFF. Only the user's messages and prior
+conversation are sent to the displayed model destination; no project snapshot,
+tool catalog, source files, filesystem tools or graph results are provided.
+
+For "create a Float node and set its value", opt in to sharing before connecting.
+The model receives the conservative graph-tool catalog. Graph reads require the
+sharing opt-in; all edit/navigation calls additionally show the exact tool name
+and JSON arguments for approval. Each approved operation uses authenticated
+HTTP tools/call, existing MCP validation, graph methods, locks and undo history.
+Use libera_graph_apply_plan for additive plans that should be one undo step.
+There is deliberately no promise that an arbitrary sequence of tool calls is one
+transaction: each existing tool retains its normal undo semantics.
+
+Changing the destination/model/key/adapter clears the session and sharing consent.
+Toggling sharing clears the existing session and requires reconnecting. Clear,
+Disconnect, Cancel and closing do not persist conversation or credentials.
+The masked key field remains until the window closes; .NET strings cannot promise
+cryptographic memory erasure. SDK DLLs are trusted executable code, not a sandbox;
+their own privacy behavior must be assessed before approving the package.
+
+## Actual model transports
+
+1. Built-in OpenAiCompatibleChatAdapter
+   Exact full /chat/completions URL, model ID, optional in-memory bearer key.
+   HTTPS for external hosts; HTTP only on loopback. Redirects and cookie storage
+   are disabled. Non-streaming Chat Completions messages/function tools supported.
+   Preserve assistant tool_calls, IDs, JSON argument objects and tool replies.
+   Partial/filtered/malformed responses fail visibly instead of inventing success.
+   This is NOT a generic Responses API, Gemini API, Copilot SDK or Codex endpoint.
+   Individual model/server support is established only by an authorized live run.
+
+2. User DLL adapters (required extensibility)
+   Existing IEditorExtension.Register receives IExtensionRegistration.
+   Call registration.AddChatAdapter(yourAdapter).
+   Implement IChatAdapter.Id/Name/Destination/PrivacyNotice/SendAsync using only the
+   public SDK. Declare liberafx.editor.chat in liberafx-extension.json.
+   The trusted host's ChatAdapters collection is the UI's dynamic provider list;
+   disabling/removing a provider cancels the session. There is NO second host/SDK.
+   Return ChatReply with actual text and validated ChatToolCalls; preserve tool IDs
+   and assistant tool-call history. Do not execute graph operations in an adapter:
+   return requests to the UI so approval, scope guards and MCP remain in control.
+   Keep Destination and PrivacyNotice stable for a session; a changed declaration
+   invalidates the user's consent and aborts the turn.
+   Honor CancellationToken; do not persist/log prompts, results or secrets.
+   Never start a CLI in the user's project directory or enable autonomous
+   filesystem/shell/MCP tools to bypass the host's approval path.
+
+3. Optional concrete Gemini REST text-only DLL sample
+   Samples/Extensions.Chat is source for a real generateContent HTTP adapter,
+   NOT a fake OpenAI endpoint and NOT Gemini CLI. It reads GEMINI_API_KEY and the
+   optional LIBERAFX_GEMINI_MODEL only from the editor process environment.
+   It explicitly rejects supplied tools; disable project sharing to use it.
+   It has no graph-tool support, CLI subprocesses or source/filesystem access.
+   Actual package loading, auth and API requests are UNVERIFIED.
+   Gemini function-calling integrations may require provider-specific opaque
+   thought signatures. This sample does not drop those and claim full tool support;
+   it intentionally remains text-only.
+
+4. Optional concrete Copilot SDK Empty-mode text-only DLL
+   Target: Samples/Extensions.CopilotChat/Extensions.CopilotChat.csproj
+   This is actual IChatAdapter source calling the public SDK's StartAsync,
+   CreateSessionAsync and SendAndWaitAsync, not an OpenAI URL or prose-only stub.
+   Microsoft.Copilot.SDK is pinned to 2.0.0-preview.2. The public source tag
+   v2.0.0-preview.2 pins copilotCliVersion=1.0.113-1 in nodejs/package.json.
+   These preview API names were checked against that exact SDK source tag.
+   Package restore and compilation remain the parent's/user's responsibility;
+   this follow-up did not restore, compile, install or execute anything.
+
+   CopilotSkipCliDownload=true is set in the optional project. Do not override it
+   or supply CopilotCliBinaryPath when building: native runtime acquisition and
+   installation must be explicit, not a side effect of compiling the sample.
+   Package dependencies are copied locally and a .deps.json is generated. Install
+   the complete managed output/dependency closure and manifest through the existing
+   trusted extension host, not just Extensions.CopilotChat.dll. The native runtime
+   stays in a separately user-supplied trusted bundle; it is NOT loaded into the
+   editor through the extension's unmanaged-DLL resolver.
+
+   Configure these environment variables for a deliberately launched test editor:
+     LIBERAFX_COPILOT_RUNTIME
+       Absolute copilot-runtime.exe (Windows) or copilot-runtime (other OS) from
+       the matching 1.0.113-1 bundle, with matching adjacent runtime.node/assets.
+       Not a shell script, PATH command, generic copilot CLI, guessed installation
+       path or default in-process SDK runtime. Symlink/junction paths are refused.
+     LIBERAFX_COPILOT_RUNTIME_SHA256
+     LIBERAFX_COPILOT_NATIVE_SHA256
+       Explicit 64-hex SHA-256 pins for the wrapper and adjacent runtime.node.
+       Obtain/verify the matching release bundle by a trusted route; the sample
+       does not download it, infer trusted hashes, or attest their provenance.
+       Both hashes are rechecked before each launch. SDK protocol negotiation is
+       also required; a compatible protocol alone is not exact CLI-version proof.
+     LIBERAFX_COPILOT_ISOLATION_ROOT
+       An explicitly provisioned existing EMPTY dedicated absolute directory,
+       outside the editor launch-directory tree, without symlink/junction ancestry.
+       Never a project, settings, runtime-bundle or general temporary directory.
+       Provision it with owner-only access (including Windows inherited ACLs).
+       The sample creates/removes only its own fresh GUID child, never the root.
+       Residue after a failed cleanup blocks the next launch; do not silently
+       reuse it or delete arbitrary root contents. Inspect privately first.
+     LIBERAFX_COPILOT_TOKEN
+       Explicit token accepted by GitHub Copilot for the github.com account.
+       No ambient logged-in-user/keychain/token/environment-auth fallback.
+       The token is passed to the SDK, never to a command line or editor log.
+     LIBERAFX_COPILOT_MODEL (optional)
+       Supported account model ID; defaults to auto. Invalid IDs fail.
+   Non-secret runtime/model/root/hash settings are captured when the extension
+   loads; restart that explicitly launched test editor to change them. The token
+   is read on Send. Do not put tokens in manifests, source, paths or issue comments.
+
+   Open the window with project sharing OFF. Connect only checks editor MCP;
+   it does not start/probe Copilot. Send validates all prerequisites, serializes
+   only user/assistant text, then uses ForSpawnedStdio(explicitPath) with a new
+   empty process WorkingDirectory and BaseDirectory. The child gets a replacement
+   environment, not the editor's credentials, NODE_OPTIONS, OTEL, proxy or project
+   environment. Its home/app-data/temp paths point into that owned GUID subtree.
+   OS runtime locations and a minimal native-runtime PATH are the exceptions.
+   This intentionally does not support corporate proxy/enterprise-host discovery.
+
+   Every Send creates a fresh session. The text history is quoted JSON in one
+   prompt; it is NOT a native session resume, privilege-preserving role replay,
+   attachment upload, CLI conversation relay or graph-capable adapter.
+   Tool-bearing requests/tool-result history are explicitly rejected. Empty mode,
+   AvailableTools=[], no declarations, reject-all permission handling, disabled
+   config/custom-instruction discovery, MCP/apps, skills, plugins/extensions,
+   built-in agents, host git, cross-session retrieval and memories prevent
+   opting back into ambient coding-agent behavior. No blanket approvals exist.
+
+   A bounded in-memory SessionFsProvider holds runtime session events/state;
+   it has no host-filesystem fallback, binary or SQLite capability. Embedding
+   cache and MCP OAuth storage are explicitly in-memory. Native runtime/SDK logs
+   and Copilot-owned process/session telemetry are disabled. The native runtime
+   remains trusted executable code, not an OS sandbox or a guarantee about
+   GitHub/model-provider service-side retention. No source is read by this adapter.
+   Temporary non-session runtime support data is isolated and removed after
+   owned-client teardown. No successful reply is returned on cleanup failure.
+
+   Calls have deadlines; cancellation/error explicitly attempts bounded AbortAsync
+   before disposing the owned session/client. SDK stdio stop handles only its own
+   child process. Disabling the extension cancels its lifetime; no name-based
+   process termination or unrelated runtime/editor shutdown is performed.
+   No provider/process/test was executed to validate these source-level controls.
+
+## Codex / Gemini CLI integration limits
+
+Codex has NO runnable adapter in this change. Gemini uses the concrete REST
+adapter above, not a subprocess. These distinctions are intentional, not parity.
+
+Codex app-server:
+  Public app-server uses stdio JSONL (without jsonrpc), initialize -> initialized
+  -> thread/start -> turn/start. That alone is NOT a safe conversation adapter.
+  Do not copy an unrestricted thread/start with empty params into a plugin.
+  Read-only sandbox plus approvalPolicy=never does NOT prohibit reading files.
+
+  Canonical isolation source reviewed at exact Codex commit
+  378364e78429a0cef3992b5462a62bdd5eaea00a:
+    codex-rs/tui/src/temporary_structured_request.rs
+  Its title-thread path reads remote-effective MCP configuration FIRST (fail
+  closed if config/read cannot enumerate it), explicitly disables EVERY server,
+  requests an ephemeral thread with empty runtimeWorkspaceRoots, dynamicTools,
+  environments and selectedCapabilityRoots, and selects the read-only managed
+  permission profile/never approvals. It disables apps, code_mode/code_mode_only,
+  context_management, current_time_reminder, deferred_executor, enable_fanout,
+  goals, hooks, image_generation, memories, multi_agent/multi_agent_v2, plugins,
+  request_permissions_tool, shell_snapshot, shell_tool, standalone_web_search,
+  token_budget, tool_suggest, unified_exec, view_image, cloud.skills.enabled,
+  skills.include_instructions, experimental_request_user_input, update_plan
+  and web_search. It checks returned effective permissions, bounds the turn,
+  interrupts on cancellation and detaches the ephemeral thread.
+
+  Exact blocker for shipping a launcher here: this is a commit-specific internal
+  TUI implementation, not evidence that an arbitrary installed public app-server
+  accepts/enforces all of those fields/feature gates or that its effective config
+  and managed permission profile match. No supported runtime binary/schema pair
+  or effective tool-free startup/readback contract has been validated for this
+  adapter; ephemeral thread also is not proof of no runtime-global disk/log state.
+  The permitted source-only work cannot establish those missing guarantees by
+  silently relying on sandbox, omitted fields or ignored configuration flags.
+  Consequently there is deliberately NO Codex process launch, provider entry,
+  permissive fallback or unsupported-success stub. A future adapter needs a
+  pinned matching runtime/schema, explicit isolated process/home/auth policy,
+  verified complete effective MCP enumeration/disable and permission/tool controls
+  before turn/start, bounded event/error/approval handling and proven cleanup.
+  It must not access the user's project or attach to their existing Codex process.
+
+Gemini CLI:
+  Documented command interface: gemini -p PROMPT --output-format json
+  Output is one object with response/stats and optional error, not OpenAI messages.
+  Nonzero exit, an error object, or absent response is failure.
+  This by itself supplies neither safe function-call delegation nor an editor
+  conversation relay. CLI tools/settings/filesystem access/session persistence
+  must be separately restricted and tested. The shipped sample uses REST instead.
+
+Public documentation consulted (public requests only; no source uploaded):
+  https://developers.openai.com/api/reference/resources/chat
+  https://github.com/microsoft/copilot-sdk/blob/main/docs/getting-started.md
+  https://github.com/microsoft/copilot-sdk/blob/main/docs/setup/multi-tenancy.md
+  https://github.com/microsoft/copilot-sdk/tree/v2.0.0-preview.2/dotnet/src
+  https://github.com/microsoft/copilot-sdk/blob/v2.0.0-preview.2/dotnet/README.md
+  https://github.com/microsoft/copilot-sdk/blob/v2.0.0-preview.2/nodejs/package.json
+  https://learn.chatgpt.com/docs/app-server
+  https://github.com/openai/codex/blob/378364e78429a0cef3992b5462a62bdd5eaea00a/codex-rs/tui/src/temporary_structured_request.rs
+  https://geminicli.com/docs/cli/headless/
+  https://aistudio.google.com/api-reference/generate-content
+
+## Safety / consistency
+
+ChatMcpExecution captures document identity, full/current snapshots and history/
+navigation invalidation BEFORE awaiting the model. An opaque one-turn capability
+travels over the authenticated loopback HTTP request. McpHost captures it in request
+context; every LiberaFxMcpTools graph dispatcher captures it before dispatch and
+checks it again ON the UI thread, immediately before running the existing tool.
+Only that synchronous tool may advance its own expected snapshot. User edits,
+history navigation, document switches or nested-graph navigation invalidate it.
+Cancellation revokes it immediately, including requests queued for UI execution.
+Ordinary external MCP calls without the chat capability keep their existing API.
+An idle conversation retains a separate revision marker. If its context changed,
+the next Send clears stale history and requires reconnecting, preserving the
+unsent prompt rather than reusing another document's tool IDs.
+
+The client uses a small allowlist of guarded graph tools, not annotation-based
+trust. Preview/asset/filesystem/GPU tools and unknown future tools are excluded.
+Unknown tool names, duplicate call IDs, non-object/oversize arguments and invalid
+provider replies abort the turn. All tool results preserve MCP's isError/content.
+Responses, conversations, arguments, turns and pagination are bounded.
+No retry of edits occurs automatically; no cancellation or disconnect implies
+rollback. A request may have committed before the cancellation was observed.
+
+The MCP connection is rechecked with ping while idle (8-second interval) and
+through real tool requests. A network failure cannot be known instantaneously.
+The status explicitly distinguishes editor MCP verification from model readiness;
+the SDK has no provider-readiness handshake. No model is probed on Connect.
+
+## Safe usability handoff after user's build
+
+Starting state: user's newly built editor, a disposable isolated test project,
+no existing sensitive project open. Use LIBERAFX_DATA_ROOT for a test profile.
+Do not overwrite personal settings, enable a paid provider, install a package,
+or restart another editor without permission.
+
+Task for reviewer: open AI Chat offline; connect a deliberately selected safe
+provider; create a tiny effect through conversation, reject one suggested edit,
+then accept a small change and undo/redo it. Change document/graph level while a
+reply is pending, then cancel/disconnect. Report whether the destination,
+sharing scope, approvals, failures and resulting graph are understandable.
+
+Acceptance checks beyond compilation: HTTP handshake and SSE handling with the
+current MCP SDK server; runtime context propagation;
+rendered layout and keyboard/accessibility; trusted DLL loading; model calls and
+tool round trips; queued cancellation races; actual Undo/Redo and lock behavior.
+No issue acceptance checkbox should be closed on static inspection alone.
