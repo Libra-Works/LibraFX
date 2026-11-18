@@ -25,7 +25,7 @@ public sealed class McpHost
 
     public async Task StartAsync(ActiveGraphProvider activeGraph, PreviewTelemetryStore? previewTelemetry = null,
         PreviewAssetStore? previewAssets = null, AssetMetadataStore? assetMetadata = null,
-        EditorPlayback? playback = null)
+        EditorPlayback? playback = null, MainViewModel? documents = null)
     {
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
         {
@@ -42,12 +42,17 @@ public sealed class McpHost
         builder.Services.AddSingleton(previewAssets ?? new PreviewAssetStore(telemetry));
         builder.Services.AddSingleton(assetMetadata ?? new AssetMetadataStore());
         builder.Services.AddSingleton(playback ?? new EditorPlayback());
-        builder.Services.AddMcpServer()
+        var mcp = builder.Services.AddMcpServer()
             .WithHttpTransport(options => options.Stateless = true)
             .WithTools<LiberaFxMcpTools>()
             .WithTools<AssetMcpTools>()
             .WithTools<GpuParticleMcpTools>()
             .WithTools<GraphDebugTools>();
+        if (documents is not null)
+        {
+            builder.Services.AddSingleton(documents);
+            mcp.WithTools<ProjectFileMcpTools>();
+        }
 
         var app = builder.Build();
         try

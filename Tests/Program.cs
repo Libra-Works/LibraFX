@@ -39,6 +39,12 @@ internal static class Program
 
     private static void MainCore(string[] args)
     {
+        if (args is ["--mcp-project-files"])
+        {
+            InitializeIsolatedUi();
+            ProjectFileMcpTests.Run();
+            return;
+        }
         if (args is ["--material-authoring"])
         {
             InitializeIsolatedUi();
@@ -543,6 +549,7 @@ internal static class Program
             CompiledPreviewProtocolTests.Run();
             PreviewTelemetryTests.Run();
             McpParameterTests.Run();
+            ProjectFileMcpTests.Run();
             EditorInterfaceTests.VerifyParameterRows();
             Console.WriteLine("Preview protocol, native telemetry UI and MCP parameter checks passed.");
             return;
@@ -663,6 +670,7 @@ internal static class Program
         CompiledPreviewProtocolTests.Run();
         PreviewTelemetryTests.Run();
         McpParameterTests.Run();
+        ProjectFileMcpTests.Run();
         Console.WriteLine("Compiled preview protocol, playback baselines and TLS transport checks passed.");
         TimelineTests.Run();
         if (Environment.GetEnvironmentVariable("LIBERAFX_PREVIEW_NATIVE_LIBRARY") is { Length: > 0 })

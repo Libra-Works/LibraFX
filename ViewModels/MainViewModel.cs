@@ -361,21 +361,7 @@ public partial class MainViewModel : ViewModelBase
 
             await using var stream = await file.OpenReadAsync();
             var project = await _projectFiles.LoadAsync(stream);
-            var workspace = CreateWorkspace();
-            workspace.InitializeFromSnapshot(project.Graph);
-            if (project.History is not null)
-            {
-                workspace.History.LoadSnapshot(project.History);
-            }
-            var document = new GraphDocumentViewModel(workspace)
-            {
-                Id = Guid.NewGuid().ToString("N"),
-                CanClose = false
-            };
-            document.MarkSaved(file.Name, fileKey, project.Graph, project.History);
-            Documents.Add(document);
-            _dockFactory.DocumentsDock.AddDocument(document);
-            ActivateDocument(document);
+            AddLoadedProject(project, file.Name, fileKey);
             StoreStorageFile(fileKey, file);
             retained = true;
             SetFileStatus("Messages.ProjectOpened", file.Name);
@@ -450,6 +436,21 @@ public partial class MainViewModel : ViewModelBase
         {
             SetFileStatus("Messages.NoDocumentToSave");
             return false;
+        }
+        if (!saveAs && document.FileKey is { } key && !_storageFiles.ContainsKey(key) &&
+            Uri.TryCreate(key, UriKind.Absolute, out var local) && local.IsFile && !local.IsUnc)
+        {
+            try
+            {
+                await SaveLocalProjectAsync(local.LocalPath, overwrite: true);
+                return true;
+            }
+            catch (Exception ex) when (IsFileOperationException(ex) ||
+                                       ex is ArgumentException or InvalidOperationException or InvalidDataException)
+            {
+                SetFileStatus("Messages.SaveProjectFailed", ex.Message);
+                return false;
+            }
         }
         if (_storageProvider is null)
         {

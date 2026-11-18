@@ -15,6 +15,12 @@ public static class ChatMcpExecution
     private static readonly AsyncLocal<string?> RequestContext = new();
     private static readonly ConcurrentDictionary<string, Lease> Leases = new();
 
+    internal static void RequireProjectFileAccess()
+    {
+        if (RequestContext.Value is not null)
+            throw new McpException("Project file operations are not available in a graph-scoped chat context.");
+    }
+
     public static IDisposable EnterRequest(string? token)
     {
         var previous = RequestContext.Value;

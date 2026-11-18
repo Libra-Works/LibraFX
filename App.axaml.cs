@@ -107,7 +107,7 @@ public partial class App : Application
         try
         {
             await Task.Run(() => _mcpHost.StartAsync(viewModel.ActiveGraphProvider, viewModel.PreviewTelemetry,
-                viewModel.PreviewAssets, viewModel.AssetMetadata, viewModel.Playback));
+                viewModel.PreviewAssets, viewModel.AssetMetadata, viewModel.Playback, documents: viewModel));
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 viewModel.SetMcpStatus(Environment.GetEnvironmentVariable("LIBERAFX_MCP_DEBUG") == "1"
