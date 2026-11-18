@@ -39,6 +39,8 @@ namespace LiberaFx.Unity
         LibraGpuMetadata program;
         int[] flowKernels;
         Texture[] flowTextures;
+        Texture[] resourceTextures;
+        int[][] flowMapResourceIndices;
         int particleId;
         uint cursor, frame;
         float elapsed, spawnFraction;
@@ -106,11 +108,27 @@ namespace LiberaFx.Unity
                 if (!textureMap.ContainsKey(r.id)) throw new ArgumentException("Missing texture binding for resource " + r.id);
             if (textureMap.Count != next.resources.Length)
                 throw new ArgumentException("One or more GPU texture bindings do not belong to this program.");
+            var resourceIndices = new Dictionary<string, int>(StringComparer.Ordinal);
+            var nextResourceTextures = new Texture[next.resources.Length];
+            for (int i = 0; i < next.resources.Length; i++)
+            {
+                resourceIndices.Add(next.resources[i].id, i);
+                nextResourceTextures[i] = textureMap[next.resources[i].id];
+            }
             var nextKernels = new int[next.flow.Length];
             var nextTextures = new Texture[next.flow.Length];
+            var nextFlowMapResourceIndices = new int[next.flow.Length][];
             for (int i = 0; i < next.flow.Length; i++)
+            {
                 if (next.flow[i].kind == "RenderBillboard") nextTextures[i] = textureMap[next.flow[i].resourceId];
-                else nextKernels[i] = lookup[next.flow[i].kernelId];
+                else
+                {
+                    nextKernels[i] = lookup[next.flow[i].kernelId];
+                    var kernel = Array.Find(next.kernels, candidate => candidate.id == next.flow[i].kernelId);
+                    nextFlowMapResourceIndices[i] = (kernel.flowMapResourceIds ?? Array.Empty<string>())
+                        .Select(id => resourceIndices[id]).ToArray();
+                }
+            }
             ComputeBuffer nextParticles = null, nextArgs = null;
             Mesh nextQuad = null;
             try
@@ -130,7 +148,8 @@ namespace LiberaFx.Unity
             Release();
             compute = shader; metadata = sourceMetadata; billboardMaterial = material; textures = bindings;
             program = next; particles = nextParticles; args = nextArgs; quad = nextQuad;
-            flowKernels = nextKernels; flowTextures = nextTextures; particleId = Shader.PropertyToID(next.particleBuffer);
+            flowKernels = nextKernels; flowTextures = nextTextures; resourceTextures = nextResourceTextures;
+            flowMapResourceIndices = nextFlowMapResourceIndices; particleId = Shader.PropertyToID(next.particleBuffer);
             properties = new MaterialPropertyBlock();
             properties.SetBuffer(DrawParticlesId, particles);
             billboardSizeScale = 1;
@@ -279,6 +298,11 @@ namespace LiberaFx.Unity
                 {
                     int kernel = flowKernels[i];
                     compute.SetBuffer(kernel, particleId, particles);
+                    foreach (var resourceIndex in flowMapResourceIndices[i])
+                    {
+                        var resource = program.resources[resourceIndex];
+                        compute.SetTexture(kernel, Shader.PropertyToID(resource.shaderName), resourceTextures[resourceIndex]);
+                    }
                     uint first = Math.Min(spawnCount, (uint)program.capacity - spawnStart);
                     compute.SetInt(SpawnStartId, (int)spawnStart);
                     compute.SetInt(SpawnCountId, (int)first);

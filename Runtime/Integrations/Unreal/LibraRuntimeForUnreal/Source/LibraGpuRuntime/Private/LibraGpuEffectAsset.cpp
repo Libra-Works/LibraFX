@@ -37,7 +37,8 @@ FString LibraGpuSha256(const FString& text)
     return BytesToHex(digest, UE_ARRAY_COUNT(digest)).ToLower();
 }
 
-bool ValidatePacket(const FLibraGpuKernelPacket& packet, int32 capacity, FString& error)
+bool ValidatePacket(const FLibraGpuKernelPacket& packet, int32 capacity,
+    const TArray<bool>& flowMapResources, FString& error)
 {
     auto fail = [&error](const TCHAR* message) { error = message; return false; };
     const auto& bytes = packet.Bytes;
@@ -65,9 +66,10 @@ bool ValidatePacket(const FLibraGpuKernelPacket& packet, int32 capacity, FString
         auto dst = Word(bytes, base + 4);
         uint32 args[] = {Word(bytes, base + 8), Word(bytes, base + 12),
             Word(bytes, base + 16), Word(bytes, base + 28)};
+        auto d = Word(bytes, base + 28);
         auto type = Word(bytes, base + 20);
         auto aux = Word(bytes, base + 24);
-        if (op > 40 || type > 6) return fail(TEXT("Unknown GPU opcode or type."));
+        if (op > 41 || type > 6) return fail(TEXT("Unknown GPU opcode or type."));
         auto arity = 0;
         if (op >= 3 && op <= 6) arity = 2;
         else if (op == 7 || op == 8 || op == 12 || op == 13 || op == 16 || op == 17 || op == 18) arity = 1;
@@ -78,9 +80,11 @@ bool ValidatePacket(const FLibraGpuKernelPacket& packet, int32 capacity, FString
             (op >= 27 && op <= 29) || op == 36) arity = 1;
         else if (op == 24 || op == 26 || (op >= 33 && op <= 35) || op == 37) arity = 2;
         else if (op >= 30 && op <= 32) arity = 3;
-        else if (op >= 38) arity = 4;
+        else if (op >= 38 && op <= 40) arity = 4;
+        else if (op == 41) arity = 1;
         for (auto j = 0; j < 4; ++j)
-            if ((j < arity && args[j] >= uint32(types.Num())) || (j >= arity && args[j] != Missing))
+            if ((j < arity && args[j] >= uint32(types.Num())) ||
+                (j >= arity && args[j] != Missing && !(op == 41 && type == 5 && j == 3)))
                 return fail(TEXT("GPU packet has an invalid or forward register reference."));
         if ((i < registers && (op == 18 || dst != i)) ||
             (i >= registers && (op != 18 || dst != Missing)))
@@ -144,6 +148,31 @@ bool ValidatePacket(const FLibraGpuKernelPacket& packet, int32 capacity, FString
         else if (op == 34) valid = aux == 0 && type == 5 && types[args[0]] == 5 && types[args[1]] == 5;
         else if (op == 35) valid = aux == 0 && type == 0 && types[args[0]] == types[args[1]] && IsFloat(types[args[0]]);
         else if (op == 37) valid = aux == 0 && type == 0 && types[args[0]] == 5 && types[args[1]] == 2;
+        else if (op == 41)
+        {
+            valid = (type == 4 || type == 5) && types[args[0]] == type;
+            valid &= aux < uint32(flowMapResources.Num());
+            if (valid) valid &= flowMapResources[int32(aux)];
+            if (type == 4)
+                valid &= d == Missing;
+            else
+            {
+                auto axisU = d & 3u;
+                auto axisV = (d >> 2) & 3u;
+                float minimumU, minimumV, rangeU, rangeV;
+                auto bitsU = Word(bytes, base + 32);
+                auto bitsV = Word(bytes, base + 36);
+                auto bitsRangeU = Word(bytes, base + 40);
+                auto bitsRangeV = Word(bytes, base + 44);
+                FMemory::Memcpy(&minimumU, &bitsU, sizeof(minimumU));
+                FMemory::Memcpy(&minimumV, &bitsV, sizeof(minimumV));
+                FMemory::Memcpy(&rangeU, &bitsRangeU, sizeof(rangeU));
+                FMemory::Memcpy(&rangeV, &bitsRangeV, sizeof(rangeV));
+                valid &= (d & 0xfffffff0u) == 0 && axisU <= 2 && axisV <= 2 && axisU != axisV &&
+                    FMath::IsFinite(minimumU) && FMath::IsFinite(minimumV) &&
+                    FMath::IsFinite(rangeU) && FMath::IsFinite(rangeV) && rangeU > 0 && rangeV > 0;
+            }
+        }
         else if (op >= 38)
         {
             valid = aux == 0 && type == (op == 40 ? 5u : 0u) && types[args[0]] == 5 &&
@@ -171,7 +200,8 @@ bool ValidatePacket(const FLibraGpuKernelPacket& packet, int32 capacity, FString
         {
             auto floatBits = Word(bytes, base + 32 + j * 4);
             auto integerBits = Word(bytes, base + 48 + j * 4);
-            if ((op != 0 && (floatBits || integerBits)) ||
+            if ((op != 0 && op != 41 && (floatBits || integerBits)) ||
+                (op == 41 && (integerBits || (type == 4 && floatBits))) ||
                 (op == 0 && IsFloat(type) && (integerBits || (j >= Components(type) && floatBits))) ||
                 (op == 0 && !IsFloat(type) && (floatBits || (j > 0 && integerBits))))
                 return fail(TEXT("GPU packet has nonzero inactive payload fields."));
@@ -236,15 +266,19 @@ bool ULibraGpuEffectAsset::ValidateProgram(FString& error) const
         error = TEXT("GPU program source or IR hash mismatch.");
         return false;
     }
-    for (const auto& packet : Kernels)
-        if (!ValidatePacket(packet, Capacity, error)) return false;
-    if (!LibraGpuBufferBudget(Kernels, Capacity, error)) return false;
+    TArray<bool> flowMapResources;
     for (const auto& texture : Textures)
+    {
         if ((texture.bBuiltinWhite && texture.Texture) || (!texture.bBuiltinWhite && !texture.Texture))
         {
             error = TEXT("Missing GPU texture dependency.");
             return false;
         }
+        flowMapResources.Add(texture.bFlowMap);
+    }
+    for (const auto& packet : Kernels)
+        if (!ValidatePacket(packet, Capacity, flowMapResources, error)) return false;
+    if (!LibraGpuBufferBudget(Kernels, Capacity, error)) return false;
     auto seenSpawn = false;
     auto seenUpdate = false;
     auto seenRender = false;
@@ -486,11 +520,9 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
         packet.Id = id;
         packet.bUpdate = stage == TEXT("Update");
         if (!FBase64::Decode(encoded, packet.Bytes)) { error = TEXT("Invalid GPU packet encoding."); return false; }
-        if (!ValidatePacket(packet, newCapacity, error)) return false;
         kernelIndices.Add(id, newKernels.Num());
         newKernels.Add(MoveTemp(packet));
     }
-    if (!LibraGpuBufferBudget(newKernels, newCapacity, error)) return false;
     for (const auto& value : *textureJson)
     {
         auto object = value->AsObject();
@@ -520,18 +552,62 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
         newTextures.Add(MoveTemp(binding));
     }
     TSet<FString> resourceIds;
-    for (const auto& value : *resourcesJson)
+    TArray<FLibraGpuTextureBinding> orderedTextures;
+    TMap<FString, int32> orderedTextureIndices;
+    TArray<bool> flowMapResources;
+    for (int32 resourceIndex = 0; resourceIndex < resourcesJson->Num(); ++resourceIndex)
     {
-        auto object = value->AsObject();
+        auto object = (*resourcesJson)[resourceIndex]->AsObject();
         FString id, kind;
+        double declaredRegister = -1;
         if (!object || !object->TryGetStringField(TEXT("id"), id) || resourceIds.Contains(id) ||
-            !textureIndices.Contains(id) || !object->TryGetStringField(TEXT("kind"), kind) || kind != TEXT("Texture2D"))
+            !textureIndices.Contains(id) || !object->TryGetStringField(TEXT("kind"), kind) ||
+            (kind != TEXT("Texture2D") && kind != TEXT("FlowMap2D")) ||
+            !object->TryGetNumberField(TEXT("register"), declaredRegister) || declaredRegister != resourceIndex)
         {
             error = TEXT("Unsupported or mismatched GPU resource.");
             return false;
         }
+        if (kind == TEXT("FlowMap2D"))
+        {
+            const TSharedPtr<FJsonObject>* settings = nullptr;
+            FString axisU, axisV;
+            double minimumU = 0, maximumU = 0, minimumV = 0, maximumV = 0;
+            auto validAxis = [](const FString& axis) { return axis == TEXT("X") || axis == TEXT("Y") || axis == TEXT("Z"); };
+            if (!object->TryGetObjectField(TEXT("flowMap"), settings) || !settings->IsValid() ||
+                !(*settings)->TryGetStringField(TEXT("axisU"), axisU) || !validAxis(axisU) ||
+                !(*settings)->TryGetStringField(TEXT("axisV"), axisV) || !validAxis(axisV) || axisU == axisV ||
+                !(*settings)->TryGetNumberField(TEXT("worldMinimumU"), minimumU) ||
+                !(*settings)->TryGetNumberField(TEXT("worldMaximumU"), maximumU) ||
+                !(*settings)->TryGetNumberField(TEXT("worldMinimumV"), minimumV) ||
+                !(*settings)->TryGetNumberField(TEXT("worldMaximumV"), maximumV) ||
+                !FMath::IsFinite(minimumU) || !FMath::IsFinite(maximumU) ||
+                !FMath::IsFinite(minimumV) || !FMath::IsFinite(maximumV) ||
+                !(float(minimumU) < float(maximumU)) || !(float(minimumV) < float(maximumV)))
+            {
+                error = TEXT("Invalid FlowMap2D metadata or world mapping bounds.");
+                return false;
+            }
+        }
+        else if (object->HasField(TEXT("flowMap")))
+        {
+            error = TEXT("Texture2D resources cannot contain FlowMap2D metadata.");
+            return false;
+        }
         resourceIds.Add(id);
+        auto binding = MoveTemp(newTextures[textureIndices[id]]);
+        binding.bFlowMap = kind == TEXT("FlowMap2D");
+        orderedTextureIndices.Add(id, orderedTextures.Num());
+        orderedTextures.Add(MoveTemp(binding));
+        flowMapResources.Add(kind == TEXT("FlowMap2D"));
     }
+    newTextures = MoveTemp(orderedTextures);
+    textureIndices = MoveTemp(orderedTextureIndices);
+    for (const auto& packet : newKernels)
+    {
+        if (!ValidatePacket(packet, newCapacity, flowMapResources, error)) return false;
+    }
+    if (!LibraGpuBufferBudget(newKernels, newCapacity, error)) return false;
     auto seenSpawn = false;
     auto seenUpdate = false;
     auto seenRender = false;

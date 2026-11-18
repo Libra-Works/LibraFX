@@ -7,9 +7,14 @@ jsonserialize module, compute shaders and GPU instancing are required.
 
 Create a material using Libra/GPU Particle Billboard and enable GPU instancing.
 Add LibraGpuParticleRuntime and assign the compute shader, metadata, material,
-and one Texture2D binding for every exported resource ID. Every resource must
-have an explicit non-null Texture2D; unresolved/null bindings are rejected
-instead of silently substituting white. Play On Enable configures and starts automatically.
+and one Texture2D binding for every exported resource ID. FlowMap2D uses the
+same Texture2D binding path. Every resource must have an explicit non-null
+Texture2D; unresolved/null bindings are rejected instead of silently
+substituting white. Play On Enable configures and starts automatically.
+Flow maps sample RG and decode [0,1] to [-1,1]. Float2 inputs are UVs; Float3
+inputs use the resource's configured world-axis pair and bounds. Any Texture2D
+can be assigned; disable sRGB for vector data when possible. The runtime binds
+each flow-map texture only to compute kernels that reference it.
 Assets/Libra GPU/Reimport generated shaders and metadata reimports selected
 assets after editing. In the Editor Configure checks the actual compute source
 SHA-256 against sourceHash; deployed builds cannot inspect source and must
@@ -35,7 +40,7 @@ export. Capacity is fixed by the export; all particles are Update candidates,
 and generated kernels skip dead particles. Flow compute dispatch order is
 preserved. Unity's queued billboard draws must be terminal: metadata placing a
 compute step after a render step is rejected. RenderStartTexture, ComputePass,
-non-Texture2D resources, other ABI versions/strides, and non-64-thread kernels
+StorageTexture2D/Buffer resources, other ABI versions/strides, and non-64-thread kernels
 are rejected, not silently approximated. Draw bounds are configurable; enlarge
 them if particles travel outside the default region.
 

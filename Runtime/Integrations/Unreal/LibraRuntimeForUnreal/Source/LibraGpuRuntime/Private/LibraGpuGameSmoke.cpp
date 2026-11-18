@@ -1,11 +1,12 @@
 #if !UE_BUILD_SHIPPING
 
+#include "Components/SceneComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "LibraGpuEffectAsset.h"
-#include "LibraGpuEffectComponent.h"
+#include "LibraGpuEffectRuntime.h"
 #include "RenderingThread.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogLibraGpuGameSmoke, Log, All);
@@ -33,26 +34,27 @@ static FAutoConsoleCommandWithWorldAndArgs LibraGpuGameSmokeCommand(
             UE_LOG(LogLibraGpuGameSmoke, Error, TEXT("LIBRA_GPU_GAME_SMOKE_FAILED: cannot spawn gameplay actor."));
             return;
         }
-        auto component = NewObject<ULibraGpuEffectComponent>(actor);
-        actor->AddInstanceComponent(component);
-        actor->SetRootComponent(component);
-        component->bAutoPlay = false;
-        component->RegisterComponent();
+        auto root = NewObject<USceneComponent>(actor);
+        actor->SetRootComponent(root);
+        actor->AddInstanceComponent(root);
+        root->RegisterComponent();
+        auto runtime = NewObject<ULibraGpuEffectRuntime>(actor);
+        runtime->Initialize(actor);
         FVector cameraPosition = FVector::ZeroVector;
         FRotator cameraRotation = FRotator::ZeroRotator;
         if (auto controller = world->GetFirstPlayerController())
             controller->GetPlayerViewPoint(cameraPosition, cameraRotation);
-        component->SetWorldLocation(cameraPosition + cameraRotation.Vector() * 10);
-        component->ConfigureEmitter(100, 1);
-        auto passed = component->SetEffect(asset) && component->Play();
-        FString report = component->LastError;
+        actor->SetActorLocation(cameraPosition + cameraRotation.Vector() * 10);
+        runtime->ConfigureEmitter(100, 1);
+        auto passed = runtime->SetEffect(asset) && runtime->Play();
+        FString report = runtime->LastError;
         if (passed)
         {
-            component->TickComponent(0.016f, LEVELTICK_All, nullptr);
-            passed = component->VerifyGpuSmoke(report);
+            runtime->Tick(0.016f);
+            passed = runtime->VerifyGpuSmoke(report);
         }
-        component->Pause();
-        component->Stop();
+        runtime->Pause();
+        runtime->Stop();
         FlushRenderingCommands();
         actor->Destroy();
         if (passed)

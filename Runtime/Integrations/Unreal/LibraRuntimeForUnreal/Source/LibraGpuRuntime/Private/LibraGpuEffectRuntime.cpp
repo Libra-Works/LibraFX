@@ -1,4 +1,4 @@
-#include "LibraGpuEffectComponent.h"
+#include "LibraGpuEffectRuntime.h"
 
 #include "CommonRenderResources.h"
 #include "Engine/AssetManager.h"
@@ -11,6 +11,7 @@
 #include "LibraGpuEffectAsset.h"
 #include "PipelineStateCache.h"
 #include "PostProcess/PostProcessMaterialInputs.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "RenderGraphBuilder.h"
 #include "RenderGraphUtils.h"
 #include "RenderingThread.h"
@@ -21,6 +22,10 @@
 #include "ScreenPass.h"
 #include "ShaderParameterStruct.h"
 
+static constexpr int32 LibraGpuFlowMapTextureCount = 64;
+
+#define LIBRA_GPU_FLOWMAP_PARAMETER(Index) SHADER_PARAMETER_TEXTURE(Texture2D, FlowMapTexture##Index)
+
 class FLibraGpuInterpreterCS : public FGlobalShader
 {
     DECLARE_GLOBAL_SHADER(FLibraGpuInterpreterCS);
@@ -29,7 +34,73 @@ class FLibraGpuInterpreterCS : public FGlobalShader
     BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
         SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<LibraParticle>, Particles)
         SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint4>, Registers)
-        SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint4>, Instructions)
+        // Keep the 64 texture SRV slots available on shader models with a 64-SRV limit.
+        SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint4>, Instructions)
+        LIBRA_GPU_FLOWMAP_PARAMETER(0)
+        LIBRA_GPU_FLOWMAP_PARAMETER(1)
+        LIBRA_GPU_FLOWMAP_PARAMETER(2)
+        LIBRA_GPU_FLOWMAP_PARAMETER(3)
+        LIBRA_GPU_FLOWMAP_PARAMETER(4)
+        LIBRA_GPU_FLOWMAP_PARAMETER(5)
+        LIBRA_GPU_FLOWMAP_PARAMETER(6)
+        LIBRA_GPU_FLOWMAP_PARAMETER(7)
+        LIBRA_GPU_FLOWMAP_PARAMETER(8)
+        LIBRA_GPU_FLOWMAP_PARAMETER(9)
+        LIBRA_GPU_FLOWMAP_PARAMETER(10)
+        LIBRA_GPU_FLOWMAP_PARAMETER(11)
+        LIBRA_GPU_FLOWMAP_PARAMETER(12)
+        LIBRA_GPU_FLOWMAP_PARAMETER(13)
+        LIBRA_GPU_FLOWMAP_PARAMETER(14)
+        LIBRA_GPU_FLOWMAP_PARAMETER(15)
+        LIBRA_GPU_FLOWMAP_PARAMETER(16)
+        LIBRA_GPU_FLOWMAP_PARAMETER(17)
+        LIBRA_GPU_FLOWMAP_PARAMETER(18)
+        LIBRA_GPU_FLOWMAP_PARAMETER(19)
+        LIBRA_GPU_FLOWMAP_PARAMETER(20)
+        LIBRA_GPU_FLOWMAP_PARAMETER(21)
+        LIBRA_GPU_FLOWMAP_PARAMETER(22)
+        LIBRA_GPU_FLOWMAP_PARAMETER(23)
+        LIBRA_GPU_FLOWMAP_PARAMETER(24)
+        LIBRA_GPU_FLOWMAP_PARAMETER(25)
+        LIBRA_GPU_FLOWMAP_PARAMETER(26)
+        LIBRA_GPU_FLOWMAP_PARAMETER(27)
+        LIBRA_GPU_FLOWMAP_PARAMETER(28)
+        LIBRA_GPU_FLOWMAP_PARAMETER(29)
+        LIBRA_GPU_FLOWMAP_PARAMETER(30)
+        LIBRA_GPU_FLOWMAP_PARAMETER(31)
+        LIBRA_GPU_FLOWMAP_PARAMETER(32)
+        LIBRA_GPU_FLOWMAP_PARAMETER(33)
+        LIBRA_GPU_FLOWMAP_PARAMETER(34)
+        LIBRA_GPU_FLOWMAP_PARAMETER(35)
+        LIBRA_GPU_FLOWMAP_PARAMETER(36)
+        LIBRA_GPU_FLOWMAP_PARAMETER(37)
+        LIBRA_GPU_FLOWMAP_PARAMETER(38)
+        LIBRA_GPU_FLOWMAP_PARAMETER(39)
+        LIBRA_GPU_FLOWMAP_PARAMETER(40)
+        LIBRA_GPU_FLOWMAP_PARAMETER(41)
+        LIBRA_GPU_FLOWMAP_PARAMETER(42)
+        LIBRA_GPU_FLOWMAP_PARAMETER(43)
+        LIBRA_GPU_FLOWMAP_PARAMETER(44)
+        LIBRA_GPU_FLOWMAP_PARAMETER(45)
+        LIBRA_GPU_FLOWMAP_PARAMETER(46)
+        LIBRA_GPU_FLOWMAP_PARAMETER(47)
+        LIBRA_GPU_FLOWMAP_PARAMETER(48)
+        LIBRA_GPU_FLOWMAP_PARAMETER(49)
+        LIBRA_GPU_FLOWMAP_PARAMETER(50)
+        LIBRA_GPU_FLOWMAP_PARAMETER(51)
+        LIBRA_GPU_FLOWMAP_PARAMETER(52)
+        LIBRA_GPU_FLOWMAP_PARAMETER(53)
+        LIBRA_GPU_FLOWMAP_PARAMETER(54)
+        LIBRA_GPU_FLOWMAP_PARAMETER(55)
+        LIBRA_GPU_FLOWMAP_PARAMETER(56)
+        LIBRA_GPU_FLOWMAP_PARAMETER(57)
+        LIBRA_GPU_FLOWMAP_PARAMETER(58)
+        LIBRA_GPU_FLOWMAP_PARAMETER(59)
+        LIBRA_GPU_FLOWMAP_PARAMETER(60)
+        LIBRA_GPU_FLOWMAP_PARAMETER(61)
+        LIBRA_GPU_FLOWMAP_PARAMETER(62)
+        LIBRA_GPU_FLOWMAP_PARAMETER(63)
+        SHADER_PARAMETER_SAMPLER(SamplerState, FlowMapSampler)
         SHADER_PARAMETER(uint32, Capacity)
         SHADER_PARAMETER(uint32, Count)
         SHADER_PARAMETER(uint32, SpawnStart)
@@ -50,6 +121,89 @@ class FLibraGpuInterpreterCS : public FGlobalShader
         return IsFeatureLevelSupported(parameters.Platform, ERHIFeatureLevel::SM5);
     }
 };
+
+#undef LIBRA_GPU_FLOWMAP_PARAMETER
+
+#define LIBRA_GPU_BIND_FLOWMAP_TEXTURE(Index) \
+    case Index: parameters.FlowMapTexture##Index = texture; break
+
+static void BindFlowMapTexture(FLibraGpuInterpreterCS::FParameters& parameters, int32 textureIndex, FRHITexture* texture)
+{
+    switch (textureIndex)
+    {
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(0);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(1);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(2);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(3);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(4);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(5);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(6);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(7);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(8);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(9);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(10);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(11);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(12);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(13);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(14);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(15);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(16);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(17);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(18);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(19);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(20);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(21);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(22);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(23);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(24);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(25);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(26);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(27);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(28);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(29);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(30);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(31);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(32);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(33);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(34);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(35);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(36);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(37);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(38);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(39);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(40);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(41);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(42);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(43);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(44);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(45);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(46);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(47);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(48);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(49);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(50);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(51);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(52);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(53);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(54);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(55);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(56);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(57);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(58);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(59);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(60);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(61);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(62);
+        LIBRA_GPU_BIND_FLOWMAP_TEXTURE(63);
+        default:
+        {
+            checkNoEntry();
+            break;
+        }
+    }
+}
+
+#undef LIBRA_GPU_BIND_FLOWMAP_TEXTURE
 
 IMPLEMENT_GLOBAL_SHADER(FLibraGpuInterpreterCS, "/LibraGpu/Private/LibraGpuInterpreter.usf", "MainCS", SF_Compute);
 
@@ -96,12 +250,13 @@ END_SHADER_PARAMETER_STRUCT()
 
 static void AddLibraGpuBillboardRasterPass(FRDGBuilder& graph,
     FLibraGpuBillboardPassParameters* parameters, FIntRect rect, int32 count,
-    ERHIFeatureLevel::Type featureLevel, ELibraGpuBillboardBlend blend = ELibraGpuBillboardBlend::Alpha)
+    ERHIFeatureLevel::Type featureLevel, const TCHAR* profileName,
+    ELibraGpuBillboardBlend blend = ELibraGpuBillboardBlend::Alpha)
 {
     auto shaderMap = GetGlobalShaderMap(featureLevel);
     TShaderMapRef<FLibraGpuBillboardVS> vertexShader(shaderMap);
     TShaderMapRef<FLibraGpuBillboardPS> pixelShader(shaderMap);
-    graph.AddPass(RDG_EVENT_NAME("LibraGpu.Billboards"), parameters, ERDGPassFlags::Raster,
+    graph.AddPass(RDG_EVENT_NAME("%s.Billboards", *profileName), parameters, ERDGPassFlags::Raster,
         [parameters, vertexShader, pixelShader, rect, count, blend](FRHICommandList& commandList)
         {
             FGraphicsPipelineStateInitializer pipeline;
@@ -160,6 +315,7 @@ struct FLibraGpuRenderTexture
 struct FLibraGpuState
 {
     int32 Capacity = 0;
+    FString ProfileName;
     uint32 MaximumRegisters = 0;
     TArray<FLibraGpuKernelPacket> Kernels;
     TArray<FLibraGpuFlowStep> Flow;
@@ -215,7 +371,17 @@ struct FLibraGpuState
                 auto parameters = graph.AllocParameters<FLibraGpuInterpreterCS::FParameters>();
                 parameters->Particles = graph.CreateUAV(particles);
                 parameters->Registers = graph.CreateUAV(registers);
-                parameters->Instructions = graph.CreateSRV(program);
+                parameters->Instructions = graph.CreateUAV(program);
+                for (auto textureIndex = 0; textureIndex < LibraGpuFlowMapTextureCount; ++textureIndex)
+                {
+                    auto texture = textureIndex < Textures.Num() ? Textures[textureIndex].GetTexture() : nullptr;
+                    if (!texture)
+                    {
+                        texture = GWhiteTexture ? GWhiteTexture->TextureRHI.GetReference() : nullptr;
+                    }
+                    BindFlowMapTexture(*parameters, textureIndex, texture);
+                }
+                parameters->FlowMapSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
                 parameters->Capacity = Capacity;
                 parameters->Count = Capacity;
                 parameters->SpawnStart = start;
@@ -229,7 +395,7 @@ struct FLibraGpuState
                 parameters->InstructionCount = ComponentPacketWord(kernel.Bytes, 12);
                 parameters->Stage = kernel.bUpdate ? 1 : 0;
                 parameters->DefaultAge = ComponentPacketWord(kernel.Bytes, 48);
-                FComputeShaderUtils::AddPass(graph, RDG_EVENT_NAME("LibraGpu.Interpret"),
+                FComputeShaderUtils::AddPass(graph, RDG_EVENT_NAME("%s.Interpret.%s", *ProfileName, *kernel.Id),
                     shader, parameters, FIntVector(FMath::DivideAndRoundUp(Capacity, 64), 1, 1));
             };
             if (step.Kind == TEXT("Spawn"))
@@ -282,7 +448,8 @@ public:
             parameters->PS.BillboardTexture = State->Textures[step.Index].GetTexture();
             parameters->PS.BillboardSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
             parameters->PS.RenderTargets[0] = FRenderTargetBinding(output.Texture, ERenderTargetLoadAction::ELoad);
-            AddLibraGpuBillboardRasterPass(graph, parameters, output.ViewRect, State->Capacity, view.GetFeatureLevel(), step.BillboardBlend);
+            AddLibraGpuBillboardRasterPass(graph, parameters, output.ViewRect, State->Capacity,
+                view.GetFeatureLevel(), *State->ProfileName, step.BillboardBlend);
         }
         return output;
     }
@@ -292,14 +459,11 @@ private:
     FSceneInterface* Scene;
 };
 
-ULibraGpuEffectComponent::ULibraGpuEffectComponent()
-{
-    PrimaryComponentTick.bCanEverTick = true;
-}
+ULibraGpuEffectRuntime::ULibraGpuEffectRuntime() = default;
 
-ULibraGpuEffectComponent::~ULibraGpuEffectComponent() = default;
+ULibraGpuEffectRuntime::~ULibraGpuEffectRuntime() = default;
 
-bool ULibraGpuEffectComponent::SetEffect(ULibraGpuEffectAsset* newEffect)
+bool ULibraGpuEffectRuntime::SetEffect(ULibraGpuEffectAsset* newEffect)
 {
     FString error;
     if (newEffect && !newEffect->ValidateProgram(error))
@@ -313,7 +477,7 @@ bool ULibraGpuEffectComponent::SetEffect(ULibraGpuEffectAsset* newEffect)
     return true;
 }
 
-bool ULibraGpuEffectComponent::ConfigureEmitter(float emitterSpawnRate, int32 seed)
+bool ULibraGpuEffectRuntime::ConfigureEmitter(float emitterSpawnRate, int32 seed)
 {
     if (!FMath::IsFinite(emitterSpawnRate) || emitterSpawnRate < 0)
     {
@@ -326,29 +490,35 @@ bool ULibraGpuEffectComponent::ConfigureEmitter(float emitterSpawnRate, int32 se
     return true;
 }
 
-void ULibraGpuEffectComponent::LoadSoftEffect()
+void ULibraGpuEffectRuntime::LoadSoftEffect()
 {
     ++LoadGeneration;
     if (LoadHandle) LoadHandle->CancelHandle();
     LoadHandle.Reset();
     if (SoftEffect.IsNull()) return;
     auto generation = LoadGeneration;
-    auto weak = TWeakObjectPtr<ULibraGpuEffectComponent>(this);
+    auto weak = TWeakObjectPtr<ULibraGpuEffectRuntime>(this);
     auto path = SoftEffect.ToSoftObjectPath();
     LoadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(path,
         FStreamableDelegate::CreateLambda([weak, generation, path]()
         {
-            auto component = weak.Get();
-            if (!component || component->LoadGeneration != generation || component->SoftEffect.ToSoftObjectPath() != path) return;
-            auto loaded = component->SoftEffect.Get();
-            component->LoadHandle.Reset();
-            if (!loaded) component->LastError = TEXT("GPU effect failed to load.");
-            else if (component->SetEffect(loaded) && component->bAutoPlay) component->Play();
+            auto runtime = weak.Get();
+            if (!runtime || runtime->LoadGeneration != generation || runtime->SoftEffect.ToSoftObjectPath() != path) return;
+            auto loaded = runtime->SoftEffect.Get();
+            runtime->LoadHandle.Reset();
+            if (!loaded) runtime->LastError = TEXT("GPU effect failed to load.");
+            else if (runtime->SetEffect(loaded) && runtime->bAutoPlay) runtime->Play();
         }));
 }
 
-bool ULibraGpuEffectComponent::ResetEffect()
+bool ULibraGpuEffectRuntime::ResetEffect()
 {
+    auto owner = Owner.Get();
+    if (!owner || !owner->GetWorld())
+    {
+        LastError = TEXT("GPU playback requires a live owner actor and world.");
+        return false;
+    }
     FString error;
     if (!Effect || !Effect->ValidateProgram(error))
     {
@@ -362,6 +532,7 @@ bool ULibraGpuEffectComponent::ResetEffect()
     }
     auto state = MakeShared<FLibraGpuState, ESPMode::ThreadSafe>();
     state->Capacity = Effect->GetCapacity();
+    state->ProfileName = GetPathName();
     state->Kernels = Effect->GetKernels();
     state->Flow = Effect->GetFlow();
     for (const auto& texture : Effect->GetTextures())
@@ -369,41 +540,46 @@ bool ULibraGpuEffectComponent::ResetEffect()
         FLibraGpuRenderTexture binding;
         binding.bBuiltinWhite = texture.bBuiltinWhite;
         if (texture.Texture) binding.Reference = texture.Texture->TextureReference.TextureReferenceRHI;
+        if (texture.bFlowMap && !binding.GetTexture())
+        {
+            LastError = TEXT("FlowMap texture has no initialized GPU resource.");
+            return false;
+        }
         state->Textures.Add(MoveTemp(binding));
     }
     for (const auto& kernel : state->Kernels) state->MaximumRegisters = FMath::Max(state->MaximumRegisters, ComponentPacketWord(kernel.Bytes, 16));
     State = MoveTemp(state);
     ViewExtension.Reset();
-    if (GetWorld() && GetWorld()->Scene)
-        ViewExtension = FSceneViewExtensions::NewExtension<FLibraGpuViewExtension>(State.ToSharedRef(), GetWorld()->Scene);
+    if (owner->GetWorld()->Scene)
+        ViewExtension = FSceneViewExtensions::NewExtension<FLibraGpuViewExtension>(State.ToSharedRef(), owner->GetWorld()->Scene);
     SpawnCursor = FrameIndex = 0;
     Elapsed = SpawnRemainder = 0;
     LastError.Reset();
     return true;
 }
 
-bool ULibraGpuEffectComponent::Play()
+bool ULibraGpuEffectRuntime::Play()
 {
     if (!State && !ResetEffect()) return false;
     bIsPlaying = true;
     return true;
 }
 
-void ULibraGpuEffectComponent::Pause() { bIsPlaying = false; }
+void ULibraGpuEffectRuntime::Pause() { bIsPlaying = false; }
 
-bool ULibraGpuEffectComponent::GetPreviewBounds(FBox& outBounds) const
+bool ULibraGpuEffectRuntime::GetPreviewBounds(FBox& outBounds) const
 {
     if (!Effect || !LocalPreviewBounds.IsValid ||
         LocalPreviewBounds.Min.ContainsNaN() || LocalPreviewBounds.Max.ContainsNaN() ||
-        GetComponentLocation().ContainsNaN() ||
+        !Owner.IsValid() || Owner->GetActorLocation().ContainsNaN() ||
         LocalPreviewBounds.Min.X > LocalPreviewBounds.Max.X ||
         LocalPreviewBounds.Min.Y > LocalPreviewBounds.Max.Y ||
         LocalPreviewBounds.Min.Z > LocalPreviewBounds.Max.Z) return false;
-    outBounds = LocalPreviewBounds.ShiftBy(GetComponentLocation());
+    outBounds = LocalPreviewBounds.ShiftBy(Owner->GetActorLocation());
     return !outBounds.Min.ContainsNaN() && !outBounds.Max.ContainsNaN();
 }
 
-void ULibraGpuEffectComponent::Stop()
+void ULibraGpuEffectRuntime::Stop()
 {
     bIsPlaying = false;
     ++LoadGeneration;
@@ -415,13 +591,34 @@ void ULibraGpuEffectComponent::Stop()
     Elapsed = SpawnRemainder = 0;
 }
 
-void ULibraGpuEffectComponent::TickComponent(float deltaTime, ELevelTick tickType, FActorComponentTickFunction* tickFunction)
+void ULibraGpuEffectRuntime::Initialize(AActor* owner)
 {
-    Super::TickComponent(deltaTime, tickType, tickFunction);
+    Stop();
+    Owner = owner;
+    if (!owner)
+    {
+        LastError = TEXT("GPU runtime owner is unavailable.");
+    }
+}
+
+void ULibraGpuEffectRuntime::Tick(float deltaTime)
+{
+    TRACE_CPUPROFILER_EVENT_SCOPE(LibraGpu_SubmitFrame);
     if (!bIsPlaying || !State || !FMath::IsFinite(deltaTime) || deltaTime < 0 ||
-        !FMath::IsFinite(SpawnPerSecond) || SpawnPerSecond < 0) return;
-    auto position = FVector3f(GetComponentLocation());
-    if (!FMath::IsFinite(position.X) || !FMath::IsFinite(position.Y) || !FMath::IsFinite(position.Z)) return;
+        !FMath::IsFinite(SpawnPerSecond) || SpawnPerSecond < 0)
+    {
+        return;
+    }
+    auto owner = Owner.Get();
+    if (!owner || !owner->GetWorld())
+    {
+        return;
+    }
+    auto position = FVector3f(owner->GetActorLocation());
+    if (!FMath::IsFinite(position.X) || !FMath::IsFinite(position.Y) || !FMath::IsFinite(position.Z))
+    {
+        return;
+    }
     Elapsed += deltaTime;
     SpawnRemainder = FMath::Min(SpawnRemainder + double(SpawnPerSecond) * deltaTime, double(State->Capacity));
     auto count = uint32(SpawnRemainder);
@@ -442,23 +639,7 @@ void ULibraGpuEffectComponent::TickComponent(float deltaTime, ELevelTick tickTyp
     });
 }
 
-void ULibraGpuEffectComponent::BeginPlay()
-{
-    Super::BeginPlay();
-    if (Effect && bAutoPlay) Play();
-    else if (!SoftEffect.IsNull()) LoadSoftEffect();
-}
-
-void ULibraGpuEffectComponent::EndPlay(const EEndPlayReason::Type endPlayReason)
-{
-    ++LoadGeneration;
-    if (LoadHandle) LoadHandle->CancelHandle();
-    LoadHandle.Reset();
-    Stop();
-    Super::EndPlay(endPlayReason);
-}
-
-void ULibraGpuEffectComponent::BeginDestroy()
+void ULibraGpuEffectRuntime::BeginDestroy()
 {
     ++LoadGeneration;
     if (LoadHandle) LoadHandle->CancelHandle();
@@ -468,7 +649,7 @@ void ULibraGpuEffectComponent::BeginDestroy()
 }
 
 #if !UE_BUILD_SHIPPING
-bool ULibraGpuEffectComponent::VerifyGpuSmoke(FString& report)
+bool ULibraGpuEffectRuntime::VerifyGpuSmoke(FString& report)
 {
     if (!State || GUsingNullRHI || GMaxRHIFeatureLevel < ERHIFeatureLevel::SM5)
     {
@@ -530,6 +711,7 @@ bool ULibraGpuEffectComponent::VerifyGpuSmoke(FString& report)
 #include "Dom/JsonObject.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/Base64.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
@@ -582,6 +764,78 @@ FLibraGpuKernelPacket TestPacket(bool update, float movement)
     return packet;
 }
 
+FLibraGpuKernelPacket FlowMapTestPacket()
+{
+    FLibraGpuKernelPacket packet;
+    packet.Id = TEXT("wind");
+    packet.bUpdate = true;
+    packet.Bytes.SetNumZeroed(256);
+    FMemory::Memcpy(packet.Bytes.GetData(), "LGPK", 4);
+    TestWord(packet.Bytes, 4, 1);
+    TestWord(packet.Bytes, 8, 64);
+    TestWord(packet.Bytes, 12, 3);
+    TestWord(packet.Bytes, 16, 2);
+    TestWord(packet.Bytes, 20, 1);
+    TestWord(packet.Bytes, 24, 80);
+    TestWord(packet.Bytes, 28, 48);
+    TestWord(packet.Bytes, 48, 1);
+
+    auto missing = MAX_uint32;
+    TestWord(packet.Bytes, 64, 1);
+    TestWord(packet.Bytes, 68, 0);
+    TestWord(packet.Bytes, 72, missing);
+    TestWord(packet.Bytes, 76, missing);
+    TestWord(packet.Bytes, 80, missing);
+    TestWord(packet.Bytes, 84, 5);
+    TestWord(packet.Bytes, 88, 0);
+    TestWord(packet.Bytes, 92, missing);
+
+    TestWord(packet.Bytes, 128, 41);
+    TestWord(packet.Bytes, 132, 1);
+    TestWord(packet.Bytes, 136, 0);
+    TestWord(packet.Bytes, 140, missing);
+    TestWord(packet.Bytes, 144, missing);
+    TestWord(packet.Bytes, 148, 5);
+    TestWord(packet.Bytes, 152, 0);
+    TestWord(packet.Bytes, 156, 1);
+    for (auto index = 0; index < 4; ++index)
+    {
+        float value = index < 2 ? -1.0f : 2.0f;
+        uint32 bits = 0;
+        FMemory::Memcpy(&bits, &value, sizeof(bits));
+        TestWord(packet.Bytes, 160 + index * 4, bits);
+    }
+
+    TestWord(packet.Bytes, 192, 18);
+    TestWord(packet.Bytes, 196, missing);
+    TestWord(packet.Bytes, 200, 1);
+    TestWord(packet.Bytes, 204, missing);
+    TestWord(packet.Bytes, 208, missing);
+    TestWord(packet.Bytes, 212, 5);
+    TestWord(packet.Bytes, 216, 1);
+    TestWord(packet.Bytes, 220, missing);
+    return packet;
+}
+
+FString FlowMapTestBundle(const FString& texturePath)
+{
+    auto packet = FlowMapTestPacket();
+    return FString::Printf(
+        TEXT("{\"version\":1,\"purpose\":\"SourceExport\",\"runtimeExecuted\":false,")
+        TEXT("\"canonicalJson\":\"{}\",\"usf\":\"source only\",\"metadata\":{\"version\":1,")
+        TEXT("\"capacity\":1,\"particleStride\":80,\"uniformBufferBytes\":48,")
+        TEXT("\"contentHash\":\"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\",")
+        TEXT("\"sourceHash\":\"cc8bac8c92ab27cddfc0cbf92f17d23b43f2cae747744de80f25fe546a24ff5e\",")
+        TEXT("\"purpose\":\"SourceExport\",\"runtimeExecuted\":false,\"format\":\"Usf\",")
+        TEXT("\"resources\":[{\"id\":\"wind\",\"kind\":\"FlowMap2D\",\"register\":0,")
+        TEXT("\"flowMap\":{\"axisU\":\"Y\",\"axisV\":\"X\",\"worldMinimumU\":-1,\"worldMaximumU\":1,")
+        TEXT("\"worldMinimumV\":-1,\"worldMaximumV\":1}}],")
+        TEXT("\"flow\":[{\"kind\":\"Update\",\"kernelId\":\"wind\"}]},")
+        TEXT("\"kernels\":[{\"id\":\"wind\",\"stage\":\"Update\",\"packet\":\"%s\"}],")
+        TEXT("\"textures\":[{\"id\":\"wind\",\"objectPath\":\"%s\"}]}"),
+        *FBase64::Encode(packet.Bytes), *texturePath);
+}
+
 struct FTestParticle
 {
     FVector4f PositionAge = FVector4f(0, 0, 0, 0);
@@ -608,6 +862,17 @@ TSharedRef<FLibraGpuState, ESPMode::ThreadSafe> TestState(float movement)
     state->Flow = {spawn, update};
     return state;
 }
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraGpuInterpreterShaderCompileTest,
+    "Libra.GPU.Compute.InterpreterShaderCompilation",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraGpuInterpreterShaderCompileTest::RunTest(const FString& parameters)
+{
+    TShaderMapRef<FLibraGpuInterpreterCS> shader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+    TestTrue(TEXT("GPU interpreter shader is compiled for the current feature level"), shader.IsValid());
+    return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraGpuInterpreterReadbackTest,
@@ -689,7 +954,8 @@ bool FLibraGpuBillboardReadbackTest::RunTest(const FString& parameters)
             draw->PS.BillboardTexture = GWhiteTexture->TextureRHI;
             draw->PS.BillboardSampler = TStaticSamplerState<SF_Bilinear>::GetRHI();
             draw->PS.RenderTargets[0] = FRenderTargetBinding(target, ERenderTargetLoadAction::ELoad);
-            AddLibraGpuBillboardRasterPass(graph, draw, FIntRect(0, 0, 32, 32), 1, GMaxRHIFeatureLevel);
+            AddLibraGpuBillboardRasterPass(graph, draw, FIntRect(0, 0, 32, 32), 1,
+                GMaxRHIFeatureLevel, TEXT("LibraGpu.TestBillboards"));
             AddEnqueueCopyPass(graph, &readback, target);
             graph.Execute();
             readback.Wait(commandList, readback.GetLastCopyGPUMask());
@@ -784,6 +1050,16 @@ bool LibraGpuEvaluateReferences(ULibraGpuEffectAsset* asset, const FString& kern
     state->Capacity = inputs.Num();
     state->Kernels.Add(*kernel);
     state->MaximumRegisters = ComponentPacketWord(kernel->Bytes, 16);
+    for (const auto& texture : asset->GetTextures())
+    {
+        FLibraGpuRenderTexture binding;
+        binding.bBuiltinWhite = texture.bBuiltinWhite;
+        if (texture.Texture)
+        {
+            binding.Reference = texture.Texture->TextureReference.TextureReferenceRHI;
+        }
+        state->Textures.Add(MoveTemp(binding));
+    }
     FLibraGpuFlowStep step;
     step.Kind = kernel->bUpdate ? TEXT("Update") : TEXT("Spawn");
     step.Index = 0;
@@ -846,17 +1122,16 @@ bool FLibraGpuDefaultEmitterRendererTest::RunTest(const FString& parameters)
         nullptr, true, ERHIFeatureLevel::Num, &init);
     auto actor = world->SpawnActor<AActor>();
     if (!actor) { world->DestroyWorld(false); return false; }
-    auto component = NewObject<ULibraGpuEffectComponent>(actor);
-    actor->AddInstanceComponent(component);
-    component->RegisterComponent();
-    TestTrue(TEXT("Actual component accepts the canonical default starter"), component->SetEffect(asset));
-    TestTrue(TEXT("Actual component starts GPU playback"), component->Play());
-    component->TickComponent(0.2f, LEVELTICK_All, nullptr);
-    auto state = component->State;
+    auto runtime = NewObject<ULibraGpuEffectRuntime>(actor);
+    runtime->Initialize(actor);
+    TestTrue(TEXT("Actual GPU runtime accepts the canonical default starter"), runtime->SetEffect(asset));
+    TestTrue(TEXT("Actual GPU runtime starts playback"), runtime->Play());
+    runtime->Tick(0.2f);
+    auto state = runtime->State;
     if (!state)
     {
-        AddError(component->LastError);
-        component->Stop();
+        AddError(runtime->LastError);
+        runtime->Stop();
         world->DestroyWorld(false);
         return false;
     }
@@ -914,7 +1189,8 @@ bool FLibraGpuDefaultEmitterRendererTest::RunTest(const FString& parameters)
             draw->PS.BillboardTexture = state->Textures[0].GetTexture();
             draw->PS.BillboardSampler = TStaticSamplerState<SF_Bilinear>::GetRHI();
             draw->PS.RenderTargets[0] = FRenderTargetBinding(target, ERenderTargetLoadAction::ELoad);
-            AddLibraGpuBillboardRasterPass(graph, draw, FIntRect(0, 0, 128, 128), state->Capacity, GMaxRHIFeatureLevel, blend);
+            AddLibraGpuBillboardRasterPass(graph, draw, FIntRect(0, 0, 128, 128), state->Capacity,
+                GMaxRHIFeatureLevel, TEXT("LibraGpu.TestStarter"), blend);
             AddEnqueueCopyPass(graph, &readback, target);
             graph.Execute();
             readback.Wait(commandList, readback.GetLastCopyGPUMask());
@@ -941,13 +1217,13 @@ bool FLibraGpuDefaultEmitterRendererTest::RunTest(const FString& parameters)
     TestTrue(TEXT("Explicit renderer sizeScale fixes the centimeter subpixel starter"), litPixels[0] > litPixels[1]);
     TestTrue(TEXT("Additive and alpha material presets actually produce different framebuffer colors"),
         centerGreen[1] > centerGreen[0] + 30);
-    component->Pause();
+    runtime->Pause();
     auto paused = first;
-    component->TickComponent(0.25f, LEVELTICK_All, nullptr);
+    runtime->Tick(0.25f);
     readParticle();
     TestTrue(TEXT("Pause preserves actual GPU particle bytes"), copied && FMemory::Memcmp(&first, &paused, sizeof(first)) == 0);
-    TestTrue(TEXT("Resume retains the same GPU state"), component->Play());
-    component->TickComponent(0.1f, LEVELTICK_All, nullptr);
+    TestTrue(TEXT("Resume retains the same GPU state"), runtime->Play());
+    runtime->Tick(0.1f);
     readParticle();
     TestTrue(TEXT("Resume advances real GPU age"), copied && first.PositionAge.W > paused.PositionAge.W);
     FString editedBundle;
@@ -955,18 +1231,18 @@ bool FLibraGpuDefaultEmitterRendererTest::RunTest(const FString& parameters)
     {
         editedBundle = editedBundle.Replace(TEXT("builtin:unlit-additive"), TEXT("builtin:unlit-alpha"));
         auto alphaAsset = ULibraGpuEffectAsset::CreateInMemory(actor, editedBundle, error);
-        TestTrue(TEXT("Accepted material edit can replace the real component effect"), alphaAsset && component->SetEffect(alphaAsset));
-        TestTrue(TEXT("Material edit starts a fresh renderer snapshot"), component->Play() && component->State != state);
-        if (component->State)
+        TestTrue(TEXT("Accepted material edit can replace the GPU runtime effect"), alphaAsset && runtime->SetEffect(alphaAsset));
+        TestTrue(TEXT("Material edit starts a fresh renderer snapshot"), runtime->Play() && runtime->State != state);
+        if (runtime->State)
             TestEqual(TEXT("Replacement actually selects alpha instead of additive"),
-                component->State->Flow.Last().BillboardBlend, ELibraGpuBillboardBlend::Alpha);
+                runtime->State->Flow.Last().BillboardBlend, ELibraGpuBillboardBlend::Alpha);
     }
     else AddError(TEXT("Missing starter fixture for material replacement test."));
     FBox bounds;
-    TestFalse(TEXT("No invented dynamic particle bounds"), component->GetPreviewBounds(bounds));
-    component->LocalPreviewBounds = FBox(FVector(-100), FVector(100));
-    TestTrue(TEXT("Explicit conservative framing bounds are available"), component->GetPreviewBounds(bounds));
-    component->Stop();
+    TestFalse(TEXT("No invented dynamic particle bounds"), runtime->GetPreviewBounds(bounds));
+    runtime->LocalPreviewBounds = FBox(FVector(-100), FVector(100));
+    TestTrue(TEXT("Explicit conservative framing bounds are available"), runtime->GetPreviewBounds(bounds));
+    runtime->Stop();
     FlushRenderingCommands();
     world->DestroyWorld(false);
     FlushRenderingCommands();
@@ -1074,6 +1350,82 @@ bool FLibraGpuNoiseReferenceTest::RunTest(const FString& parameters)
         FVector4f(0, 0, 0, 0), 3, tolerance);
     TestEqual(TEXT("Guarded noise result stays alive"), guardOutput[0].SeedAlive.Y, 1u);
     AddInfo(FString::Printf(TEXT("Canonical GPU noise proof: %d cases, curl divergence=%.9g"), cases.Num(), divergence));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraGpuFlowMapReadbackTest,
+    "Libra.GPU.Compute.FlowMapTextureSampling",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraGpuFlowMapReadbackTest::RunTest(const FString& parameters)
+{
+    if (GUsingNullRHI || GMaxRHIFeatureLevel < ERHIFeatureLevel::SM5)
+    {
+        AddError(TEXT("A real SM5 GPU is required for FlowMap sampling verification."));
+        return false;
+    }
+
+    auto texture = UTexture2D::CreateTransient(2, 2, PF_B8G8R8A8);
+    if (!TestNotNull(TEXT("Transient FlowMap texture is created"), texture))
+    {
+        return false;
+    }
+    texture->SRGB = false;
+    texture->Filter = TF_Bilinear;
+    texture->MipGenSettings = TMGS_NoMipmaps;
+    auto textureName = FString::Printf(TEXT("LibraGpuFlowMap_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits));
+    if (!texture->Rename(*textureName, GetTransientPackage(), REN_DontCreateRedirectors))
+    {
+        AddError(TEXT("Transient FlowMap texture could not be named for native asset binding."));
+        return false;
+    }
+    if (!texture->GetPlatformData() || texture->GetPlatformData()->Mips.IsEmpty())
+    {
+        AddError(TEXT("Transient FlowMap texture has no writable mip."));
+        return false;
+    }
+    auto& mip = texture->GetPlatformData()->Mips[0];
+    auto pixels = static_cast<FColor*>(mip.BulkData.Lock(LOCK_READ_WRITE));
+    if (!pixels)
+    {
+        mip.BulkData.Unlock();
+        AddError(TEXT("Transient FlowMap texture mip could not be locked."));
+        return false;
+    }
+    pixels[0] = FColor::Black;
+    pixels[1] = FColor(255, 128, 0, 255);
+    pixels[2] = FColor::Black;
+    pixels[3] = FColor::Black;
+    mip.BulkData.Unlock();
+    texture->UpdateResource();
+    FlushRenderingCommands();
+
+    FString error;
+    auto asset = NewObject<ULibraGpuEffectAsset>();
+    if (!asset->ImportBundle(FlowMapTestBundle(texture->GetPathName()), error) ||
+        !asset->ValidateProgram(error))
+    {
+        AddError(FString::Printf(TEXT("FlowMap GPU asset failed validation: %s"), *error));
+        return false;
+    }
+    FTestParticle input;
+    input.PositionAge = FVector4f(-0.5f, 0.5f, 0, 0);
+    input.VelocityLifetime.W = 1000;
+    input.SeedAlive = FUintVector4(1, 1, 0, 0);
+    TArray<FTestParticle> outputs;
+    if (!LibraGpuEvaluateReferences(asset, TEXT("wind"), {input}, outputs))
+    {
+        AddError(TEXT("FlowMap GPU kernel dispatch or readback failed."));
+        return false;
+    }
+    TestTrue(TEXT("FlowMap red channel maps to selected U axis"),
+        FMath::IsNearlyEqual(outputs[0].VelocityLifetime.Y, 1.0f, 0.02f));
+    TestTrue(TEXT("FlowMap green channel is decoded from unsigned to signed values"),
+        FMath::IsNearlyZero(outputs[0].VelocityLifetime.X, 0.02f));
+    TestTrue(TEXT("FlowMap leaves the unused world axis at zero"),
+        FMath::IsNearlyZero(outputs[0].VelocityLifetime.Z, 0.02f));
+    TestEqual(TEXT("FlowMap writes a finite live particle"), outputs[0].SeedAlive.Y, 1u);
+    AddInfo(TEXT("FlowMap world-axis projection, texture sampling and signed RG decoding executed on the GPU."));
     return true;
 }
 

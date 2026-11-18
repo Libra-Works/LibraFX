@@ -12,7 +12,74 @@ struct LibraParticle
 
 RWStructuredBuffer<LibraParticle> Particles;
 RWStructuredBuffer<uint4> Registers;
-StructuredBuffer<uint4> Instructions;
+RWStructuredBuffer<uint4> Instructions;
+#define LIBRA_GPU_FLOWMAP_TEXTURE(Index) Texture2D FlowMapTexture##Index;
+LIBRA_GPU_FLOWMAP_TEXTURE(0)
+LIBRA_GPU_FLOWMAP_TEXTURE(1)
+LIBRA_GPU_FLOWMAP_TEXTURE(2)
+LIBRA_GPU_FLOWMAP_TEXTURE(3)
+LIBRA_GPU_FLOWMAP_TEXTURE(4)
+LIBRA_GPU_FLOWMAP_TEXTURE(5)
+LIBRA_GPU_FLOWMAP_TEXTURE(6)
+LIBRA_GPU_FLOWMAP_TEXTURE(7)
+LIBRA_GPU_FLOWMAP_TEXTURE(8)
+LIBRA_GPU_FLOWMAP_TEXTURE(9)
+LIBRA_GPU_FLOWMAP_TEXTURE(10)
+LIBRA_GPU_FLOWMAP_TEXTURE(11)
+LIBRA_GPU_FLOWMAP_TEXTURE(12)
+LIBRA_GPU_FLOWMAP_TEXTURE(13)
+LIBRA_GPU_FLOWMAP_TEXTURE(14)
+LIBRA_GPU_FLOWMAP_TEXTURE(15)
+LIBRA_GPU_FLOWMAP_TEXTURE(16)
+LIBRA_GPU_FLOWMAP_TEXTURE(17)
+LIBRA_GPU_FLOWMAP_TEXTURE(18)
+LIBRA_GPU_FLOWMAP_TEXTURE(19)
+LIBRA_GPU_FLOWMAP_TEXTURE(20)
+LIBRA_GPU_FLOWMAP_TEXTURE(21)
+LIBRA_GPU_FLOWMAP_TEXTURE(22)
+LIBRA_GPU_FLOWMAP_TEXTURE(23)
+LIBRA_GPU_FLOWMAP_TEXTURE(24)
+LIBRA_GPU_FLOWMAP_TEXTURE(25)
+LIBRA_GPU_FLOWMAP_TEXTURE(26)
+LIBRA_GPU_FLOWMAP_TEXTURE(27)
+LIBRA_GPU_FLOWMAP_TEXTURE(28)
+LIBRA_GPU_FLOWMAP_TEXTURE(29)
+LIBRA_GPU_FLOWMAP_TEXTURE(30)
+LIBRA_GPU_FLOWMAP_TEXTURE(31)
+LIBRA_GPU_FLOWMAP_TEXTURE(32)
+LIBRA_GPU_FLOWMAP_TEXTURE(33)
+LIBRA_GPU_FLOWMAP_TEXTURE(34)
+LIBRA_GPU_FLOWMAP_TEXTURE(35)
+LIBRA_GPU_FLOWMAP_TEXTURE(36)
+LIBRA_GPU_FLOWMAP_TEXTURE(37)
+LIBRA_GPU_FLOWMAP_TEXTURE(38)
+LIBRA_GPU_FLOWMAP_TEXTURE(39)
+LIBRA_GPU_FLOWMAP_TEXTURE(40)
+LIBRA_GPU_FLOWMAP_TEXTURE(41)
+LIBRA_GPU_FLOWMAP_TEXTURE(42)
+LIBRA_GPU_FLOWMAP_TEXTURE(43)
+LIBRA_GPU_FLOWMAP_TEXTURE(44)
+LIBRA_GPU_FLOWMAP_TEXTURE(45)
+LIBRA_GPU_FLOWMAP_TEXTURE(46)
+LIBRA_GPU_FLOWMAP_TEXTURE(47)
+LIBRA_GPU_FLOWMAP_TEXTURE(48)
+LIBRA_GPU_FLOWMAP_TEXTURE(49)
+LIBRA_GPU_FLOWMAP_TEXTURE(50)
+LIBRA_GPU_FLOWMAP_TEXTURE(51)
+LIBRA_GPU_FLOWMAP_TEXTURE(52)
+LIBRA_GPU_FLOWMAP_TEXTURE(53)
+LIBRA_GPU_FLOWMAP_TEXTURE(54)
+LIBRA_GPU_FLOWMAP_TEXTURE(55)
+LIBRA_GPU_FLOWMAP_TEXTURE(56)
+LIBRA_GPU_FLOWMAP_TEXTURE(57)
+LIBRA_GPU_FLOWMAP_TEXTURE(58)
+LIBRA_GPU_FLOWMAP_TEXTURE(59)
+LIBRA_GPU_FLOWMAP_TEXTURE(60)
+LIBRA_GPU_FLOWMAP_TEXTURE(61)
+LIBRA_GPU_FLOWMAP_TEXTURE(62)
+LIBRA_GPU_FLOWMAP_TEXTURE(63)
+#undef LIBRA_GPU_FLOWMAP_TEXTURE
+SamplerState FlowMapSampler;
 uint Capacity;
 uint Count;
 uint SpawnStart;
@@ -114,13 +181,83 @@ float ExtendedScalar(uint op, float a, float b, float c, float2 sourceRange, flo
     return LibraGpuSaturate(a);
 }
 
+float4 SampleFlowMap(uint textureIndex, float2 uv)
+{
+    switch (textureIndex)
+    {
+        case 0: return FlowMapTexture0.SampleLevel(FlowMapSampler, uv, 0);
+        case 1: return FlowMapTexture1.SampleLevel(FlowMapSampler, uv, 0);
+        case 2: return FlowMapTexture2.SampleLevel(FlowMapSampler, uv, 0);
+        case 3: return FlowMapTexture3.SampleLevel(FlowMapSampler, uv, 0);
+        case 4: return FlowMapTexture4.SampleLevel(FlowMapSampler, uv, 0);
+        case 5: return FlowMapTexture5.SampleLevel(FlowMapSampler, uv, 0);
+        case 6: return FlowMapTexture6.SampleLevel(FlowMapSampler, uv, 0);
+        case 7: return FlowMapTexture7.SampleLevel(FlowMapSampler, uv, 0);
+        case 8: return FlowMapTexture8.SampleLevel(FlowMapSampler, uv, 0);
+        case 9: return FlowMapTexture9.SampleLevel(FlowMapSampler, uv, 0);
+        case 10: return FlowMapTexture10.SampleLevel(FlowMapSampler, uv, 0);
+        case 11: return FlowMapTexture11.SampleLevel(FlowMapSampler, uv, 0);
+        case 12: return FlowMapTexture12.SampleLevel(FlowMapSampler, uv, 0);
+        case 13: return FlowMapTexture13.SampleLevel(FlowMapSampler, uv, 0);
+        case 14: return FlowMapTexture14.SampleLevel(FlowMapSampler, uv, 0);
+        case 15: return FlowMapTexture15.SampleLevel(FlowMapSampler, uv, 0);
+        case 16: return FlowMapTexture16.SampleLevel(FlowMapSampler, uv, 0);
+        case 17: return FlowMapTexture17.SampleLevel(FlowMapSampler, uv, 0);
+        case 18: return FlowMapTexture18.SampleLevel(FlowMapSampler, uv, 0);
+        case 19: return FlowMapTexture19.SampleLevel(FlowMapSampler, uv, 0);
+        case 20: return FlowMapTexture20.SampleLevel(FlowMapSampler, uv, 0);
+        case 21: return FlowMapTexture21.SampleLevel(FlowMapSampler, uv, 0);
+        case 22: return FlowMapTexture22.SampleLevel(FlowMapSampler, uv, 0);
+        case 23: return FlowMapTexture23.SampleLevel(FlowMapSampler, uv, 0);
+        case 24: return FlowMapTexture24.SampleLevel(FlowMapSampler, uv, 0);
+        case 25: return FlowMapTexture25.SampleLevel(FlowMapSampler, uv, 0);
+        case 26: return FlowMapTexture26.SampleLevel(FlowMapSampler, uv, 0);
+        case 27: return FlowMapTexture27.SampleLevel(FlowMapSampler, uv, 0);
+        case 28: return FlowMapTexture28.SampleLevel(FlowMapSampler, uv, 0);
+        case 29: return FlowMapTexture29.SampleLevel(FlowMapSampler, uv, 0);
+        case 30: return FlowMapTexture30.SampleLevel(FlowMapSampler, uv, 0);
+        case 31: return FlowMapTexture31.SampleLevel(FlowMapSampler, uv, 0);
+        case 32: return FlowMapTexture32.SampleLevel(FlowMapSampler, uv, 0);
+        case 33: return FlowMapTexture33.SampleLevel(FlowMapSampler, uv, 0);
+        case 34: return FlowMapTexture34.SampleLevel(FlowMapSampler, uv, 0);
+        case 35: return FlowMapTexture35.SampleLevel(FlowMapSampler, uv, 0);
+        case 36: return FlowMapTexture36.SampleLevel(FlowMapSampler, uv, 0);
+        case 37: return FlowMapTexture37.SampleLevel(FlowMapSampler, uv, 0);
+        case 38: return FlowMapTexture38.SampleLevel(FlowMapSampler, uv, 0);
+        case 39: return FlowMapTexture39.SampleLevel(FlowMapSampler, uv, 0);
+        case 40: return FlowMapTexture40.SampleLevel(FlowMapSampler, uv, 0);
+        case 41: return FlowMapTexture41.SampleLevel(FlowMapSampler, uv, 0);
+        case 42: return FlowMapTexture42.SampleLevel(FlowMapSampler, uv, 0);
+        case 43: return FlowMapTexture43.SampleLevel(FlowMapSampler, uv, 0);
+        case 44: return FlowMapTexture44.SampleLevel(FlowMapSampler, uv, 0);
+        case 45: return FlowMapTexture45.SampleLevel(FlowMapSampler, uv, 0);
+        case 46: return FlowMapTexture46.SampleLevel(FlowMapSampler, uv, 0);
+        case 47: return FlowMapTexture47.SampleLevel(FlowMapSampler, uv, 0);
+        case 48: return FlowMapTexture48.SampleLevel(FlowMapSampler, uv, 0);
+        case 49: return FlowMapTexture49.SampleLevel(FlowMapSampler, uv, 0);
+        case 50: return FlowMapTexture50.SampleLevel(FlowMapSampler, uv, 0);
+        case 51: return FlowMapTexture51.SampleLevel(FlowMapSampler, uv, 0);
+        case 52: return FlowMapTexture52.SampleLevel(FlowMapSampler, uv, 0);
+        case 53: return FlowMapTexture53.SampleLevel(FlowMapSampler, uv, 0);
+        case 54: return FlowMapTexture54.SampleLevel(FlowMapSampler, uv, 0);
+        case 55: return FlowMapTexture55.SampleLevel(FlowMapSampler, uv, 0);
+        case 56: return FlowMapTexture56.SampleLevel(FlowMapSampler, uv, 0);
+        case 57: return FlowMapTexture57.SampleLevel(FlowMapSampler, uv, 0);
+        case 58: return FlowMapTexture58.SampleLevel(FlowMapSampler, uv, 0);
+        case 59: return FlowMapTexture59.SampleLevel(FlowMapSampler, uv, 0);
+        case 60: return FlowMapTexture60.SampleLevel(FlowMapSampler, uv, 0);
+        case 61: return FlowMapTexture61.SampleLevel(FlowMapSampler, uv, 0);
+        case 62: return FlowMapTexture62.SampleLevel(FlowMapSampler, uv, 0);
+        case 63: return FlowMapTexture63.SampleLevel(FlowMapSampler, uv, 0);
+        default: return 0;
+    }
+}
+
 [numthreads(64, 1, 1)]
 void MainCS(uint3 threadId : SV_DispatchThreadID)
 {
     uint i = threadId.x;
-    uint actualCapacity, particleStride;
-    Particles.GetDimensions(actualCapacity, particleStride);
-    if (i >= min(Capacity, actualCapacity) || particleStride != 80) return;
+    if (i >= Capacity) return;
     LibraParticle p = Particles[i];
     if (Stage == 0)
     {
@@ -149,11 +286,11 @@ void MainCS(uint3 threadId : SV_DispatchThreadID)
         uint4 second = Instructions[5 + n * 4];
         uint4 immediate = Instructions[6 + n * 4];
         uint4 integer = Instructions[7 + n * 4];
-        uint op = first.x, dst = first.y, type = second.y, aux = second.z;
+        uint op = first.x, dst = first.y, type = second.y, aux = second.z, dIndex = second.w;
         uint4 a = LoadRegister(i, first.z);
         uint4 b = LoadRegister(i, first.w);
         uint4 c = LoadRegister(i, second.x);
-        uint4 d = LoadRegister(i, second.w);
+        uint4 d = op == 41 && type == 5 ? 0 : LoadRegister(i, dIndex);
         uint4 result = 0;
         if (op == 0) result = (type == 1 || type == 2 || type == 3) ? integer : immediate;
         else if (op == 1) result = Attribute(p, aux);
@@ -275,6 +412,26 @@ void MainCS(uint3 threadId : SV_DispatchThreadID)
         else if (op == 38) result.x = asuint(LibraGpuFbm(asfloat(a.xyz), b.x, asint(c.x), asfloat(d.x)));
         else if (op == 39) result.x = asuint(LibraGpuTurbulence(asfloat(a.xyz), b.x, asint(c.x), asfloat(d.x)));
         else if (op == 40) result = asuint(float4(LibraGpuCurlNoise(asfloat(a.xyz), b.x, asint(c.x), asfloat(d.x)), 0));
+        else if (op == 41)
+        {
+            if (type == 4)
+            {
+                float2 flow = SampleFlowMap(aux, saturate(asfloat(a.xy))).rg * 2.0f - 1.0f;
+                result = asuint(float4(flow, 0, 0));
+            }
+            else
+            {
+                uint axisU = dIndex & 3u;
+                uint axisV = (dIndex >> 2) & 3u;
+                float4 bounds = asfloat(immediate);
+                float2 uv = saturate((float2(asfloat(a)[axisU], asfloat(a)[axisV]) - bounds.xy) / bounds.zw);
+                float2 flow = SampleFlowMap(aux, uv).rg * 2.0f - 1.0f;
+                float3 vector = 0;
+                vector[axisU] = flow.x;
+                vector[axisV] = flow.y;
+                result = asuint(float4(vector, 0));
+            }
+        }
         if (op != 18)
         {
             Registers[i * RegisterCount + dst] = result;

@@ -47,7 +47,7 @@ public static class ResourceAssignment
         var targets = new List<ResourceAssignmentTarget>();
         if (node.IsGpuParticle && asset.AssetClass == "texture")
             targets.AddRange(GpuParticleEditorService.ReadState(node).Program.Resources
-                .Where(resource => resource.Kind == ResourceKind.Texture2D)
+                .Where(resource => resource.Kind is ResourceKind.Texture2D or ResourceKind.FlowMap2D)
                 .Select(resource => new ResourceAssignmentTarget(node.Id, ResourceTargetKind.GpuTexture,
                     resource.Id, LocalizationService.Shared.Get("Resources.GpuTarget", resource.Id))));
         if (!RenderNodeSchema.IsRenderNode(node.Definition)) return targets;

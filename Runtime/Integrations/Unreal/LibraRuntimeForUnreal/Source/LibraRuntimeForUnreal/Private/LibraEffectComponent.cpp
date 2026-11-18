@@ -2,7 +2,7 @@
 
 #include "LibraEffectAsset.h"
 #include "LibraGpuEffectAsset.h"
-#include "LibraGpuEffectComponent.h"
+#include "LibraGpuEffectRuntime.h"
 #include "LibraNativeState.h"
 #include "LibraTaskScheduler.h"
 #include "LibraCpuProfiler.h"
@@ -10,6 +10,7 @@
 #include "LibraQualityContext.h"
 #include "EngineGlobals.h"
 #include "Engine/World.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 
 struct FLibraEffectState final
 {
@@ -422,6 +423,7 @@ auto ULibraEffectComponent::QueueEvaluation(double timeSeconds, double frameDelt
 
 void ULibraEffectComponent::TickComponent(float deltaTime, ELevelTick tickType, FActorComponentTickFunction* tickFunction)
 {
+    TRACE_CPUPROFILER_EVENT_SCOPE(Libra_EffectComponentTick);
     Super::TickComponent(deltaTime, tickType, tickFunction);
     if (Package && PackagePlayback)
     {
@@ -437,6 +439,7 @@ void ULibraEffectComponent::TickComponent(float deltaTime, ELevelTick tickType, 
     }
     if (GpuEffect && GpuPlayback)
     {
+        GpuPlayback->Tick(deltaTime);
         bIsPlaying = GpuPlayback->bIsPlaying;
         TimeSeconds = LastEvaluatedTimeSeconds = GpuPlayback->GetSimulationTime();
         if (!bIsPlaying) SetComponentTickEnabled(false);

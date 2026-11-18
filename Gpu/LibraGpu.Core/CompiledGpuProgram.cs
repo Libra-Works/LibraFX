@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.Json.Serialization;
 
 namespace LibraGpu.Core;
 
@@ -15,8 +16,12 @@ public enum ShaderFormat { HlslInclude, Usf, UnityCompute }
 public enum CompilationPurpose { SourceExport }
 public sealed record SourceLineMapping(int Line, string KernelId, string NodeId, string? PinId, TextSpan? Span = null);
 public sealed record UniformMetadata(string Name, GpuType Type, int ByteOffset, string ShaderName);
-public sealed record ResourceMetadata(string Id, ResourceKind Kind, string ShaderName, int Register, uint Width, uint Height);
-public sealed record KernelMetadata(string Id, KernelStage Stage, string EntryPoint, uint ThreadsX, uint DispatchGroupsX);
+public sealed record ResourceMetadata(string Id, ResourceKind Kind, string ShaderName, int Register, uint Width, uint Height,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] FlowMapSettings? FlowMap = null);
+public sealed record KernelMetadata(string Id, KernelStage Stage, string EntryPoint, uint ThreadsX, uint DispatchGroupsX)
+{
+    public IReadOnlyList<string> FlowMapResourceIds { get; init; } = [];
+}
 public sealed record FlowMetadata(string Id, FlowKind Kind, string? KernelId, string? ResourceId);
 public sealed record GpuExportMetadata
 {
@@ -75,7 +80,12 @@ public sealed class CompiledGpuProgram
     internal CompiledGpuProgram(GpuProgram p, string json)
     {
         snapshot = p; ProgramId = p.Id; Capacity = p.Capacity; CanonicalJson = json; ContentHash = ShaderEmitter.Hash(json);
-        Kernels = Array.AsReadOnly(p.Kernels.Select((k, i) => new KernelMetadata(k.Id, k.Stage, $"LibraGpuKernel_{i:D4}", 64, (p.Capacity + 63) / 64)).ToArray());
+        Kernels = Array.AsReadOnly(p.Kernels.Select((k, i) => new KernelMetadata(
+            k.Id, k.Stage, $"LibraGpuKernel_{i:D4}", 64, (p.Capacity + 63) / 64)
+        {
+            FlowMapResourceIds = Array.AsReadOnly(k.Nodes.Where(node => node.Op == GpuOp.SampleFlowMap)
+                .Select(node => node.Resource!).Distinct(StringComparer.Ordinal).OrderBy(id => id, StringComparer.Ordinal).ToArray())
+        }).ToArray());
         Uniforms = Array.AsReadOnly(new[]
         {
             new UniformMetadata("capacity",GpuType.UInt,0,"LibraGpuCapacity"),new("count",GpuType.UInt,4,"LibraGpuCount"),
@@ -84,9 +94,10 @@ public sealed class CompiledGpuProgram
             new("emitterSeed",GpuType.UInt,24,"LibraGpuEmitterSeed"),new("frameIndex",GpuType.UInt,28,"LibraGpuFrameIndex"),
             new("emitterPosition",GpuType.Float3,32,"LibraGpuEmitterPosition"),new("padding",GpuType.UInt,44,"LibraGpuPadding")
         });
-        Resources = Array.AsReadOnly(p.Resources.Select((r, i) => new ResourceMetadata(r.Id, r.Kind, $"LibraGpuTexture_{i:D4}", i, r.Width, r.Height)).ToArray());
+        Resources = Array.AsReadOnly(p.Resources.Select((r, i) =>
+            new ResourceMetadata(r.Id, r.Kind, $"LibraGpuTexture_{i:D4}", i, r.Width, r.Height, r.FlowMap)).ToArray());
         Flow = Array.AsReadOnly(p.Flow.Select(f => new FlowMetadata(f.Id, f.Kind, f.Kernel, f.Resource)).ToArray());
-        RegisterKernels = Array.AsReadOnly(p.Kernels.Select(k => new CompiledRegisterKernel(k)).ToArray());
+        RegisterKernels = Array.AsReadOnly(p.Kernels.Select(k => new CompiledRegisterKernel(k, p.Resources)).ToArray());
     }
     public ShaderSource EmitUsf(ShaderBindings? bindings = null) => ShaderEmitter.Emit(snapshot, Kernels, ShaderFormat.Usf, bindings ?? new());
     public ShaderSource EmitUnityCompute(ShaderBindings? bindings = null) => ShaderEmitter.Emit(snapshot, Kernels, ShaderFormat.UnityCompute, bindings ?? new());

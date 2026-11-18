@@ -8,6 +8,7 @@ namespace LiberaFx.Unity
     {
         public string id, stage, entryPoint;
         public int threadsX;
+        public string[] flowMapResourceIds;
     }
 
     [Serializable] public sealed class LibraGpuFlowMetadata
@@ -15,9 +16,16 @@ namespace LiberaFx.Unity
         public string id, kind, kernelId, resourceId;
     }
 
+    [Serializable] public sealed class LibraGpuFlowMapMetadata
+    {
+        public string axisU, axisV;
+        public float worldMinimumU, worldMaximumU, worldMinimumV, worldMaximumV;
+    }
+
     [Serializable] public sealed class LibraGpuResourceMetadata
     {
         public string id, kind, shaderName;
+        public LibraGpuFlowMapMetadata flowMap;
     }
 
     [Serializable] public sealed class LibraGpuUniformMetadata
@@ -64,10 +72,38 @@ namespace LiberaFx.Unity
                     throw new ArgumentException("Invalid or duplicate GPU kernel metadata.");
                 kernels.Add(k.id, k);
             }
-            var resources = new HashSet<string>();
+            if (m.resources.Length > 64) throw new ArgumentException("GPU resource limit exceeded.");
+            var resources = new Dictionary<string, LibraGpuResourceMetadata>();
+            var shaderNames = new HashSet<string>(StringComparer.Ordinal);
             foreach (var r in m.resources)
-                if (r == null || string.IsNullOrEmpty(r.id) || r.kind != "Texture2D" || string.IsNullOrEmpty(r.shaderName) || !resources.Add(r.id))
-                    throw new ArgumentException("Only uniquely identified Texture2D GPU resources are supported.");
+            {
+                if (r == null || string.IsNullOrEmpty(r.id) ||
+                    (r.kind != "Texture2D" && r.kind != "FlowMap2D") ||
+                    string.IsNullOrEmpty(r.shaderName) || !shaderNames.Add(r.shaderName) || resources.ContainsKey(r.id))
+                    throw new ArgumentException("GPU resources must be uniquely identified Texture2D or FlowMap2D declarations.");
+                if (r.kind == "FlowMap2D")
+                {
+                    if (r.flowMap == null || !ValidAxis(r.flowMap.axisU) || !ValidAxis(r.flowMap.axisV) ||
+                        r.flowMap.axisU == r.flowMap.axisV ||
+                        !Finite(r.flowMap.worldMinimumU) || !Finite(r.flowMap.worldMaximumU) ||
+                        !Finite(r.flowMap.worldMinimumV) || !Finite(r.flowMap.worldMaximumV) ||
+                        r.flowMap.worldMinimumU >= r.flowMap.worldMaximumU ||
+                        r.flowMap.worldMinimumV >= r.flowMap.worldMaximumV)
+                        throw new ArgumentException("FlowMap2D sampling metadata is invalid.");
+                }
+                else if (r.flowMap != null)
+                    throw new ArgumentException("Texture2D resources cannot carry FlowMap2D settings.");
+                resources.Add(r.id, r);
+            }
+            foreach (var kernel in m.kernels)
+            {
+                var ids = kernel.flowMapResourceIds ?? Array.Empty<string>();
+                var uniqueIds = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var id in ids)
+                    if (string.IsNullOrEmpty(id) || !uniqueIds.Add(id) ||
+                        !resources.TryGetValue(id, out var resource) || resource.kind != "FlowMap2D")
+                        throw new ArgumentException("GPU kernel references a missing or invalid FlowMap2D resource.");
+            }
             var steps = new HashSet<string>();
             bool rendered = false;
             foreach (var f in m.flow)
@@ -83,12 +119,16 @@ namespace LiberaFx.Unity
                 else if (f.kind == "RenderBillboard")
                 {
                     rendered = true;
-                    if (!string.IsNullOrEmpty(f.kernelId) || string.IsNullOrEmpty(f.resourceId) || !resources.Contains(f.resourceId))
+                    if (!string.IsNullOrEmpty(f.kernelId) || string.IsNullOrEmpty(f.resourceId) || !resources.ContainsKey(f.resourceId) ||
+                        resources[f.resourceId].kind != "Texture2D")
                         throw new ArgumentException("GPU billboard flow references a missing texture: " + f.id);
                 }
                 else throw new ArgumentException("Unsupported GPU flow kind: " + f.kind);
             }
             return m;
         }
+
+        static bool ValidAxis(string axis) => axis == "X" || axis == "Y" || axis == "Z";
+        static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

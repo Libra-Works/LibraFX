@@ -5,7 +5,7 @@
 #include "GameFramework/Actor.h"
 #include "HAL/PlatformTime.h"
 #include "LibraGpuEffectAsset.h"
-#include "LibraGpuEffectComponent.h"
+#include "LibraGpuEffectRuntime.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -18,12 +18,12 @@ class FLibraGpuSoftLoadCommand final : public IAutomationLatentCommand
 {
 public:
     FLibraGpuSoftLoadCommand(FAutomationTestBase* test, UWorld* world,
-        ULibraGpuEffectComponent* component, ULibraGpuEffectAsset* expected)
-        : Test(test), World(world), Component(component), Expected(expected), Started(FPlatformTime::Seconds()) {}
+        ULibraGpuEffectRuntime* runtime, ULibraGpuEffectAsset* expected)
+        : Test(test), World(world), Runtime(runtime), Expected(expected), Started(FPlatformTime::Seconds()) {}
 
     ~FLibraGpuSoftLoadCommand() override
     {
-        if (Component) Component->Stop();
+        if (Runtime) Runtime->Stop();
         FlushRenderingCommands();
         if (World) World->DestroyWorld(false);
         FlushRenderingCommands();
@@ -31,34 +31,34 @@ public:
 
     bool Update() override
     {
-        if (!Component->Effect)
+        if (!Runtime->Effect)
         {
             if (FPlatformTime::Seconds() - Started < 15) return false;
-            Test->AddError(FString::Printf(TEXT("Async GPU asset load timed out: %s"), *Component->LastError));
+            Test->AddError(FString::Printf(TEXT("Async GPU asset load timed out: %s"), *Runtime->LastError));
             return true;
         }
-        Test->TestTrue(TEXT("Streamable load assigned native asset hard reference"), Component->Effect == Expected);
-        Test->TestTrue(TEXT("Async asset is playing without an external tool"), Component->bIsPlaying);
-        Component->TickComponent(0.016f, LEVELTICK_All, nullptr);
-        Component->Pause();
-        Test->TestFalse(TEXT("Pause stops simulation ticks"), Component->bIsPlaying);
-        Test->TestTrue(TEXT("Pause can resume retained GPU resources"), Component->Play());
-        Test->TestTrue(TEXT("Reset creates a fresh independent instance"), Component->ResetEffect());
-        Component->TickComponent(0.016f, LEVELTICK_All, nullptr);
-        Component->Stop();
-        Test->TestFalse(TEXT("Stop stops gameplay"), Component->bIsPlaying);
-        Test->TestTrue(TEXT("Stop preserves the serialized hard asset binding"), Component->Effect == Expected);
-        Component->LoadSoftEffect();
-        Component->Stop();
-        Test->TestFalse(TEXT("Stopping a pending soft load does not restart playback"), Component->bIsPlaying);
-        Test->AddInfo(TEXT("Native saved asset hard reference and StreamableManager component lifecycle passed."));
+        Test->TestTrue(TEXT("Streamable load assigned native asset hard reference"), Runtime->Effect == Expected);
+        Test->TestTrue(TEXT("Async asset is playing without an external tool"), Runtime->bIsPlaying);
+        Runtime->Tick(0.016f);
+        Runtime->Pause();
+        Test->TestFalse(TEXT("Pause stops simulation ticks"), Runtime->bIsPlaying);
+        Test->TestTrue(TEXT("Pause can resume retained GPU resources"), Runtime->Play());
+        Test->TestTrue(TEXT("Reset creates a fresh independent instance"), Runtime->ResetEffect());
+        Runtime->Tick(0.016f);
+        Runtime->Stop();
+        Test->TestFalse(TEXT("Stop stops gameplay"), Runtime->bIsPlaying);
+        Test->TestTrue(TEXT("Stop preserves the serialized hard asset binding"), Runtime->Effect == Expected);
+        Runtime->LoadSoftEffect();
+        Runtime->Stop();
+        Test->TestFalse(TEXT("Stopping a pending soft load does not restart playback"), Runtime->bIsPlaying);
+        Test->AddInfo(TEXT("Native saved asset hard reference and StreamableManager runtime lifecycle passed."));
         return true;
     }
 
 private:
     FAutomationTestBase* Test;
     UWorld* World;
-    ULibraGpuEffectComponent* Component;
+    ULibraGpuEffectRuntime* Runtime;
     ULibraGpuEffectAsset* Expected;
     double Started;
 };
@@ -128,12 +128,11 @@ bool FLibraGpuNativeAssetLifecycleTest::RunTest(const FString& parameters)
         AddError(TEXT("Could not construct isolated GPU gameplay actor."));
         return false;
     }
-    auto hard = NewObject<ULibraGpuEffectComponent>(actor);
-    actor->AddInstanceComponent(hard);
-    hard->RegisterComponent();
-    TestTrue(TEXT("Gameplay component accepts hard native asset reference"), hard->SetEffect(asset));
-    TestTrue(TEXT("Native component plays in a real render world"), hard->Play());
-    hard->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    auto hard = NewObject<ULibraGpuEffectRuntime>(actor);
+    hard->Initialize(actor);
+    TestTrue(TEXT("Gameplay runtime accepts hard native asset reference"), hard->SetEffect(asset));
+    TestTrue(TEXT("Native runtime plays in a real render world"), hard->Play());
+    hard->Tick(0.016f);
     auto invalid = NewObject<ULibraGpuEffectAsset>();
     TestFalse(TEXT("Invalid asset replacement is rejected"), hard->SetEffect(invalid));
     TestTrue(TEXT("Rejected replacement preserves active asset and playback"), hard->Effect == asset && hard->bIsPlaying);
@@ -142,9 +141,8 @@ bool FLibraGpuNativeAssetLifecycleTest::RunTest(const FString& parameters)
     hard->Stop();
     FlushRenderingCommands();
 
-    auto soft = NewObject<ULibraGpuEffectComponent>(actor);
-    actor->AddInstanceComponent(soft);
-    soft->RegisterComponent();
+    auto soft = NewObject<ULibraGpuEffectRuntime>(actor);
+    soft->Initialize(actor);
     soft->SoftEffect = TSoftObjectPtr<ULibraGpuEffectAsset>(FSoftObjectPath(objectPath));
     soft->bAutoPlay = true;
     soft->LoadSoftEffect();

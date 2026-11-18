@@ -5,7 +5,7 @@
 
 class AActor;
 class ULibraGpuEffectAsset;
-class ULibraGpuEffectComponent;
+class ULibraGpuEffectRuntime;
 
 class FLibraEditorGpuPreview final
 {
@@ -24,7 +24,7 @@ private:
     {
         FGuid id;
         TStrongObjectPtr<ULibraGpuEffectAsset> asset;
-        TStrongObjectPtr<ULibraGpuEffectComponent> component;
+        TStrongObjectPtr<ULibraGpuEffectRuntime> runtime;
         TMap<FString, FString> resourcePaths;
         FString rendererIdentity;
         double timeSeconds = 0;

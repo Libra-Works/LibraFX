@@ -15,15 +15,21 @@ a serialized discriminator for the engine's runtime white texture. Missing
 bindings never silently fall back to white. Invalid replacement packets and unresolved
 texture references leave an existing asset's program unchanged. Core's generated
 USF is retained as source export, not executed.
+FlowMap2D resources use the same UTexture2D binding. SampleFlowMap decodes RG
+from [0,1] to [-1,1]; Float2 coordinates are UVs and Float3 coordinates use
+the resource's selected world-axis pair and bounds. Any Texture2D can be
+assigned, with Linear vector data recommended.
 
-ULibraGpuEffectComponent supports SetEffect, Play, Pause, Stop, ResetEffect,
-ConfigureEmitter(emitterSpawnRate, seed) and LoadSoftEffect; SoftEffect is loaded
-with the engine streamable manager. Scene component translation supplies
-emitterPosition; the component supplies time and deltaTime uniforms. Each playing component holds separate
-GPU buffers. The execution mode is the fixed GpuRegisterInterpreter shader:
+ULibraGpuEffectRuntime is an internal UObject, not an actor component.
+ULibraEffectComponent owns and ticks it for standalone effects; Spawnable and
+editor preview owners drive their own runtimes. SoftEffect is loaded with the
+engine streamable manager. The owner actor location supplies emitterPosition;
+the owning tick supplies time and deltaTime. Each runtime holds separate GPU
+buffers. The execution mode is the fixed GpuRegisterInterpreter shader:
 it executes validated LGPK packets, not per-asset generated HLSL. Packet limits
 are 256 registers per kernel, 64 kernels, and 256 MiB total particle and
-per-particle register storage. Unsupported resource types and pass kinds fail
+per-particle register storage. StorageTexture2D/Buffer resources and
+unsupported pass kinds fail
 import. Asset changes are snapshotted at ResetEffect and do not mutate a running
 render-thread instance.
 
@@ -46,15 +52,15 @@ state. /Game material paths and unknown renderer/material tokens reject
 atomically. Legacy absent renderer fields retain alpha and sizeScale1.
 sizeScale is an optional finite float, 0<sizeScale<=10000, multiplying quad
 half-extents only. It is NOT simulation/position/velocity/physics-unit conversion.
-Rendering uses UE world centimeters and the component supplies native world XYZ
+Rendering uses UE world centimeters and the runtime supplies native world XYZ
 to emitterPosition. Canonical CreateEmitter Size0.1 is therefore subpixel at
 ordinary UE camera distances without an explicit scale. A UE starter can
 explicitly choose sizeScale100 (10cm half-extents); its velocity3 remains
 3cm/second along UE Y, not a silently converted meters/Y-up simulation.
 
-Component GetPreviewBounds(FBox&) returns false when LocalPreviewBounds is
+Runtime GetPreviewBounds(FBox&) returns false when LocalPreviewBounds is
 invalid/unknown. An explicitly supplied conservative emitter-relative
-LocalPreviewBounds is shifted by component translation into world space;
+LocalPreviewBounds is shifted by owner actor translation into world space;
 it is not readback, alive-particle bounds, or inferred arbitrary-IR bounds.
 For the canonical starter with sizeScale100, an explicitly selected
 [-100,+100]cm box covers its lifetime/gravity/quad extent. Preview owners must
@@ -66,7 +72,7 @@ Focused new cases:
   Libra.GPU.Assets.ExplicitBuiltinRendererBindings
   Libra.GPU.Render.AuthoredDefaultEmitterBuiltinWhite
 The renderer case uses canonical exported CreateEmitter packets with unchanged
-Size0.1, actual component Spawn/Update/Pause/Resume, the production explicit
+Size0.1, actual runtime Spawn/Update/Pause/Resume, the production explicit
 builtin texture resolver, a 200cm perspective camera and framebuffer readback.
 It compares sizeScale100 vs1 and actual alpha vs additive framebuffer colors.
 Regenerate the canonical starter fixture with:
@@ -176,6 +182,7 @@ inside the documented bounded coordinate domain.
 New real-GPU tests:
   Libra.GPU.Compute.ExtendedMathCanonicalReferences
   Libra.GPU.Compute.NoiseCanonicalReferencesAndCurlDivergence
+  Libra.GPU.Compute.FlowMapTextureSampling
   Libra.GPU.Assets.CanonicalSharedShaderSupport
 The math/noise cases initialize test-only particle buffers from Core reference
 inputs and compare actual GPU results: 54 math cases/18 kernels; 16 noise cases,

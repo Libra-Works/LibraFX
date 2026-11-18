@@ -2,7 +2,7 @@
 
 #include "LibraSpawnableAsset.h"
 #include "LibraEffectComponent.h"
-#include "LibraGpuEffectComponent.h"
+#include "LibraGpuEffectRuntime.h"
 #include "Engine/World.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
@@ -10,6 +10,25 @@
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "liberafx/LbSpawnablePackage.h"
+
+namespace
+{
+TArray<ULibraGpuEffectRuntime*> FindGpuRuntimes(AActor* actor, bool activeOnly = true)
+{
+    auto objects = TArray<UObject*>{};
+    GetObjectsWithOuter(actor, objects, false);
+    auto runtimes = TArray<ULibraGpuEffectRuntime*>{};
+    for (auto object : objects)
+    {
+        auto runtime = Cast<ULibraGpuEffectRuntime>(object);
+        if (runtime && (!activeOnly || runtime->HasRuntimeState()))
+        {
+            runtimes.Add(runtime);
+        }
+    }
+    return runtimes;
+}
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraSpawnableGpuFixtureTest,
     "Libra.Runtime.Spawnable.GpuFixture",
@@ -47,8 +66,7 @@ bool FLibraSpawnableGpuFixtureTest::RunTest(const FString&)
     AddInfo(component->LastError);
     TestEqual(TEXT("One GPU emitter is owned by first child"), component->GetGpuInstanceCount(), 1);
     component->TickComponent(0.5f, LEVELTICK_All, nullptr);
-    auto emitters = TArray<ULibraGpuEffectComponent*>{};
-    actor->GetComponents(emitters);
+    auto emitters = FindGpuRuntimes(actor);
     if (emitters.Num() == 1)
     {
         auto report = FString{};
@@ -69,8 +87,7 @@ bool FLibraSpawnableGpuFixtureTest::RunTest(const FString&)
     FGuid::ParseExact(BytesToHex(metadata.onStartNodeId->data(), 16), EGuidFormats::Digits, start);
     TestEqual(TEXT("Second GPU scope spawns at independent time"), component->DispatchNodeSignal(start), ELibraRuntimeResult::Ok);
     component->TickComponent(0.25f, LEVELTICK_All, nullptr);
-    emitters.Reset();
-    actor->GetComponents(emitters);
+    emitters = FindGpuRuntimes(actor);
     TestEqual(TEXT("Independent GPU buffers for both children"), emitters.Num(), 2);
     TestTrue(TEXT("First GPU retains its local time"), emitters.ContainsByPredicate(
         [](const auto* item) { return FMath::IsNearlyEqual(item->GetSimulationTime(), 0.75); }));
@@ -101,10 +118,9 @@ bool FLibraSpawnableGpuFixtureTest::RunTest(const FString&)
     TestTrue(TEXT("Forced GPU root is finished"), component->bRootFinished && !component->bIsPlaying);
     TestEqual(TEXT("Fresh GPU playback after force"), component->Play(), ELibraRuntimeResult::Ok);
     component->DestroyComponent();
-    emitters.Reset();
-    actor->GetComponents(emitters);
-    TestTrue(TEXT("Component destruction releases owned emitters"),
-        !emitters.ContainsByPredicate([](const auto* item) { return item->IsRegistered(); }));
+    emitters = FindGpuRuntimes(actor, false);
+    TestTrue(TEXT("Component destruction releases owned GPU runtime state"),
+        !emitters.ContainsByPredicate([](const auto* item) { return item->HasRuntimeState(); }));
     world->DestroyWorld(false);
     return true;
 }
@@ -151,9 +167,8 @@ bool FLibraSpawnableRootGpuFixtureTest::RunTest(const FString&)
     TestEqual(TEXT("Manual root GPU starts"), component->Play(), ELibraRuntimeResult::Ok);
     TestEqual(TEXT("Root owns one GPU scope without children"), component->GetGpuInstanceCount(), 1);
     component->TickComponent(0.25f, LEVELTICK_All, nullptr);
-    auto emitters = TArray<ULibraGpuEffectComponent*>{};
-    actor->GetComponents(emitters);
-    TestEqual(TEXT("One actual root GPU component"), emitters.Num(), 1);
+    auto emitters = FindGpuRuntimes(actor);
+    TestEqual(TEXT("One actual root GPU runtime"), emitters.Num(), 1);
     if (emitters.Num() == 1)
     {
         auto report = FString{};

@@ -101,14 +101,18 @@ public static class GpuParticleEditorService
                 p.Attributes.Any(a => a is null || a.Id is not { Length: > 0 and <= 128 } || !Enum.IsDefined(a.Type)) ||
                 p.Flow.Any(f => f is null || f.Id is not { Length: > 0 and <= 128 } || !Enum.IsDefined(f.Kind) ||
                     f.Kernel is { Length: > 128 } || f.Resource is { Length: > 128 }) ||
-                p.Resources.Any(r => r is null || r.Id is not { Length: > 0 and <= 128 } || !Enum.IsDefined(r.Kind)) ||
+                p.Resources.Any(r => r is null || r.Id is not { Length: > 0 and <= 128 } || !Enum.IsDefined(r.Kind) ||
+                    (r.Kind == ResourceKind.FlowMap2D) != (r.FlowMap is not null) ||
+                    r.FlowMap is { } flowMap && (!Enum.IsDefined(flowMap.AxisU) || !Enum.IsDefined(flowMap.AxisV) ||
+                        !double.IsFinite(flowMap.WorldMinimumU) || !double.IsFinite(flowMap.WorldMaximumU) ||
+                        !double.IsFinite(flowMap.WorldMinimumV) || !double.IsFinite(flowMap.WorldMaximumV))) ||
                 p.Kernels.Any(k => k is null || k.Id is not { Length: > 0 and <= 128 } ||
                     !Enum.IsDefined(k.Stage) ||
                     k.Nodes is null || k.Writes is null || k.Nodes.Count > 4096 || k.Writes.Count > 4096 ||
                     k.Nodes.Any(n => n is null || n.Id is not { Length: > 0 and <= 128 } ||
                         n.Inputs is null || n.Value is null || n.Inputs.Count > 4 || n.Value.Count > 4 ||
                         !Enum.IsDefined(n.Op) || !Enum.IsDefined(n.Type) ||
-                        n.Attribute is { Length: > 128 } || n.Uniform is { Length: > 128 } ||
+                        n.Attribute is { Length: > 128 } || n.Uniform is { Length: > 128 } || n.Resource is { Length: > 128 } ||
                         n.Inputs.Any(s => s is null || s.Length > 128) ||
                         n.Value.Any(v => !double.IsFinite(v))) ||
                     k.Writes.Any(w => w is null || w.Id is not { Length: > 0 and <= 128 } ||
@@ -160,8 +164,8 @@ public static class GpuParticleEditorService
         if (asset.AssetClass != "texture") throw new ArgumentException("Select a texture asset.");
         PreviewAssetStore.ValidateAssetPath(asset.Path);
         var resource = ReadState(node).Program.Resources.SingleOrDefault(resource =>
-            resource.Id == resourceId && resource.Kind == ResourceKind.Texture2D)
-            ?? throw new ArgumentException("Select an existing Texture2D resource.");
+            resource.Id == resourceId && (resource.Kind is ResourceKind.Texture2D or ResourceKind.FlowMap2D))
+            ?? throw new ArgumentException("Select an existing texture resource.");
         Apply(graph, node.Id, [new() { Action = "resource", Resource = resource, AssetPath = asset.Path }]);
     }
 
@@ -249,12 +253,12 @@ public static class GpuParticleEditorService
                 DslLoweringOptions? maps = null;
                 try
                 {
-                    var emitted = GpuDsl.Emit(k);
+                    var emitted = GpuDsl.Emit(k, resources: p.Resources);
                     if (emitted.Text == text)
                         maps = new() { NodeIdsBySpan = emitted.NodeIdsBySpan, WriteIdsBySpan = emitted.WriteIdsBySpan };
                 }
                 catch (GpuValidationException) { }
-                var replacement = GpuDsl.Compile(text, k.Id, k.Stage, options: maps);
+                var replacement = GpuDsl.Compile(text, k.Id, k.Stage, options: maps, resources: p.Resources);
                 var candidate = p with { Kernels = p.Kernels.Select(x => x.Id == k.Id ? replacement : x).ToList() };
                 var errors = GpuCompiler.Validate(candidate).Where(d => d.KernelId == k.Id).ToList();
                 if (errors.Count > 0) throw new GpuValidationException(errors);
@@ -315,6 +319,15 @@ public static class GpuParticleEditorService
             }
             while (n.Inputs.Count <= edit.Input) n.Inputs.Add("");
             n.Inputs[edit.Input] = edit.Action == "disconnect" ? "" : edit.SourceId!;
+            if (edit.Action == "connect" && n.Op == GpuOp.SampleFlowMap && edit.Input == 0)
+            {
+                var source = k.Nodes.Single(candidate => candidate.Id == edit.SourceId);
+                if (source.Type is GpuType.Float2 or GpuType.Float3)
+                {
+                    var nodeIndex = k.Nodes.FindIndex(candidate => candidate.Id == n.Id);
+                    k.Nodes[nodeIndex] = n with { Type = source.Type };
+                }
+            }
         }
         else if (edit.Action == "write")
         {

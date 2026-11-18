@@ -13,11 +13,12 @@ public enum GpuOp
     Abs = 19, Floor = 20, Ceil = 21, Round = 22, Frac = 23, Mod = 24, Sign = 25,
     Pow = 26, Sqrt = 27, Exp = 28, Log = 29, Lerp = 30, Smoothstep = 31, Remap = 32,
     Dot = 33, Cross = 34, Distance = 35, Saturate = 36,
-    GradientNoise3D = 37, Fbm = 38, Turbulence = 39, CurlNoise = 40
+    GradientNoise3D = 37, Fbm = 38, Turbulence = 39, CurlNoise = 40, SampleFlowMap = 41
 }
 public enum KernelStage { Spawn, Update }
 public enum FlowKind { Spawn, Update, RenderBillboard, RenderStartTexture, ComputePass }
-public enum ResourceKind { Texture2D, StorageTexture2D, Buffer }
+public enum ResourceKind { Texture2D, StorageTexture2D, Buffer, FlowMap2D }
+public enum GpuAxis { X, Y, Z }
 
 public sealed record GpuProgram
 {
@@ -36,6 +37,16 @@ public sealed record ResourceDeclaration
     public ResourceKind Kind { get; init; }
     public uint Width { get; init; }
     public uint Height { get; init; }
+    public FlowMapSettings? FlowMap { get; init; }
+}
+public sealed record FlowMapSettings
+{
+    public GpuAxis AxisU { get; init; } = GpuAxis.X;
+    public GpuAxis AxisV { get; init; } = GpuAxis.Z;
+    public double WorldMinimumU { get; init; } = -1;
+    public double WorldMaximumU { get; init; } = 1;
+    public double WorldMinimumV { get; init; } = -1;
+    public double WorldMaximumV { get; init; } = 1;
 }
 public sealed record KernelGraph
 {
@@ -54,6 +65,7 @@ public sealed record GpuNode
     public string? Attribute { get; init; }
     public string? Uniform { get; init; }
     public int? ComponentIndex { get; init; }
+    public string? Resource { get; init; }
     public TextSpan? SourceSpan { get; init; }
 }
 public sealed record AttributeWrite(string Id, string Attribute, string Value, TextSpan? SourceSpan = null);

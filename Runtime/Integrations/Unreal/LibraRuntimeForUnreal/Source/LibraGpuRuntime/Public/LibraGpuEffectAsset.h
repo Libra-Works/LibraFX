@@ -48,6 +48,9 @@ struct FLibraGpuTextureBinding
 
     UPROPERTY()
     bool bBuiltinWhite = false;
+
+    UPROPERTY()
+    bool bFlowMap = false;
 };
 
 USTRUCT()

@@ -146,7 +146,24 @@ public static class GpuCompiler
             GlobalId(r.Id);
             if (ValidId(r.Id)) resources.TryAdd(r.Id, r);
             if (!Enum.IsDefined(r.Kind)) Add("ResourceKind", "Unknown resource kind.");
-            if (r.Kind != ResourceKind.Texture2D) Add("UnsupportedResource", "Storage textures and buffers are reserved, not implemented.");
+            if (r.Kind is not (ResourceKind.Texture2D or ResourceKind.FlowMap2D))
+                Add("UnsupportedResource", "Storage textures and buffers are reserved, not implemented.");
+            if (r.Kind == ResourceKind.FlowMap2D)
+            {
+                if (r.FlowMap is not { } settings)
+                    Add("FlowMapSettings", "FlowMap2D resources require sampling settings.");
+                else
+                {
+                    var bounds = new[] { settings.WorldMinimumU, settings.WorldMaximumU, settings.WorldMinimumV, settings.WorldMaximumV };
+                    var ranges = new[] { settings.WorldMaximumU - settings.WorldMinimumU, settings.WorldMaximumV - settings.WorldMinimumV };
+                    if (!Enum.IsDefined(settings.AxisU) || !Enum.IsDefined(settings.AxisV) || settings.AxisU == settings.AxisV ||
+                        bounds.Any(value => !double.IsFinite(value) || !float.IsFinite((float)value)) ||
+                        ranges.Any(value => !double.IsFinite(value) || !float.IsFinite((float)value) || value <= 0))
+                        Add("FlowMapSettings", "Flow-map axes must be distinct and world bounds must be finite, increasing, and representable as floats.");
+                }
+            }
+            else if (r.FlowMap is not null)
+                Add("FlowMapSettings", "Only FlowMap2D resources may define flow-map sampling settings.");
             if ((r.Width == 0) != (r.Height == 0) || (ulong)r.Width * r.Height > limits.MaxResourceTexels)
                 Add("ResourceSize", "Texture dimensions must both be zero (external) or bounded positive values.");
         }
@@ -157,7 +174,7 @@ public static class GpuCompiler
             GlobalId(k.Id);
             if (ValidId(k.Id)) kernels.TryAdd(k.Id, k);
             if (!Enum.IsDefined(k.Stage)) Add("Stage", "Unsupported kernel stage.", k.Id);
-            ValidateKernel(k, attributes, limits, d);
+            ValidateKernel(k, attributes, resources, limits, d);
         }
         bool rendered = false;
         bool updated = false;
@@ -200,7 +217,8 @@ public static class GpuCompiler
     }
 
     private static bool ValidId(string? id) => !string.IsNullOrWhiteSpace(id) && id.Length <= 128 && !id.Any(char.IsControl);
-    private static void ValidateKernel(KernelGraph k, Dictionary<string, GpuType> attrs, GpuLimits limits, List<GpuDiagnostic> d)
+    private static void ValidateKernel(KernelGraph k, Dictionary<string, GpuType> attrs,
+        Dictionary<string, ResourceDeclaration> resources, GpuLimits limits, List<GpuDiagnostic> d)
     {
         void Add(string c, string m, string? n = null, string? pin = null) => d.Add(new(c, m, k.Id, n, pin,
             k.Nodes?.FirstOrDefault(x => x is not null && x.Id == n)?.SourceSpan ??
@@ -237,7 +255,8 @@ public static class GpuCompiler
             if (n.Op != GpuOp.Constant && n.Value.Count != 0 ||
                 n.Op != GpuOp.ReadAttribute && n.Attribute is not null ||
                 n.Op != GpuOp.ReadUniform && n.Uniform is not null ||
-                n.Op != GpuOp.Component && n.ComponentIndex is not null)
+                n.Op != GpuOp.Component && n.ComponentIndex is not null ||
+                n.Op != GpuOp.SampleFlowMap && n.Resource is not null)
                 Add("Payload", "Unexpected operation payload.", n.Id);
             if (n.Op == GpuOp.Constant)
             {
@@ -263,6 +282,9 @@ public static class GpuCompiler
                 _ => GpuOperationRegistry.TypesMatch(n.Op, n.Type, input)
             };
             if (!validType) Add("TypeMismatch", "Operation types or declared attribute/uniform do not match.", n.Id, "out");
+            if (n.Op == GpuOp.SampleFlowMap &&
+                (n.Resource is null || !resources.TryGetValue(n.Resource, out var resource) || resource.Kind != ResourceKind.FlowMap2D))
+                Add("FlowMapResource", "Flow-map sampling requires a declared FlowMap2D resource.", n.Id, "resource");
             if (op.Policy == TypePolicy.FractalNoise)
                 for (int i = 2; i < 4; i++)
                     if (nodes.TryGetValue(n.Inputs[i], out var parameter) && parameter.Op == GpuOp.Constant && parameter.Value?.Count == 1 &&

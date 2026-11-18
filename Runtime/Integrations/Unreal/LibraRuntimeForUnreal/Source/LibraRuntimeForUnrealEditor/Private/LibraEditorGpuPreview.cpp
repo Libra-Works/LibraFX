@@ -1,7 +1,7 @@
 #include "LibraEditorGpuPreview.h"
 
 #include "LibraGpuEffectAsset.h"
-#include "LibraGpuEffectComponent.h"
+#include "LibraGpuEffectRuntime.h"
 #include "GameFramework/Actor.h"
 #include "Dom/JsonObject.h"
 #include "Misc/PackageName.h"
@@ -73,11 +73,12 @@ namespace
         return true;
     }
 
-    void Dispose(ULibraGpuEffectComponent* component)
+    void Dispose(ULibraGpuEffectRuntime* runtime)
     {
-        if (!component) return;
-        component->Stop();
-        component->DestroyComponent();
+        if (runtime)
+        {
+            runtime->Stop();
+        }
     }
 }
 
@@ -157,8 +158,8 @@ bool FLibraEditorGpuPreview::Configure(const FString& json, int64 programSequenc
         candidates.Add(MoveTemp(candidate));
     }
 
-    // Components are staged without ticking; no candidate can dispatch before the whole replacement validates.
-    auto staged = TArray<ULibraGpuEffectComponent*>{};
+    // Runtimes are staged without dispatch; no candidate can run before the whole replacement validates.
+    auto staged = TArray<ULibraGpuEffectRuntime*>{};
     for (auto& candidate : candidates)
     {
         auto previous = emitters.FindByPredicate([&candidate](const FEmitter& value) { return value.id == candidate.id; });
@@ -168,34 +169,30 @@ bool FLibraEditorGpuPreview::Configure(const FString& json, int64 programSequenc
                 if (auto oldPath = previous->resourcePaths.Find(path.Key); !oldPath || *oldPath != path.Value)
                     samePaths = false;
         if (samePaths && previous->rendererIdentity == candidate.rendererIdentity &&
-            previous->asset.IsValid() && previous->component.IsValid() &&
+            previous->asset.IsValid() && previous->runtime.IsValid() &&
             SameProgram(*previous->asset.Get(), *candidate.asset.Get()))
         {
             candidate.asset.Reset(previous->asset.Get());
-            candidate.component.Reset(previous->component.Get());
+            candidate.runtime.Reset(previous->runtime.Get());
             candidate.timeSeconds = previous->timeSeconds;
             candidate.executed = previous->executed;
             continue;
         }
-        candidate.component.Reset(NewObject<ULibraGpuEffectComponent>(actor, NAME_None, RF_Transient));
-        auto component = candidate.component.Get();
-        component->bAutoPlay = false;
-        component->SetupAttachment(actor->GetRootComponent());
-        component->RegisterComponent();
-        component->SetComponentTickEnabled(false);
-        staged.Add(component);
-        if (!component->IsRegistered() || !component->SetEffect(candidate.asset.Get()) || !component->ResetEffect())
+        candidate.runtime.Reset(NewObject<ULibraGpuEffectRuntime>(actor, NAME_None, RF_Transient));
+        auto runtime = candidate.runtime.Get();
+        runtime->Initialize(actor);
+        staged.Add(runtime);
+        if (!runtime->SetEffect(candidate.asset.Get()) || !runtime->ResetEffect())
         {
-            auto error = component->LastError;
+            auto error = runtime->LastError;
             for (auto value : staged) Dispose(value);
-            return fail(TEXT("GPU component rejected: ") + error);
+            return fail(TEXT("GPU runtime rejected: ") + error);
         }
     }
     for (auto& previous : emitters)
         if (!candidates.ContainsByPredicate([&previous](const FEmitter& value)
-            { return value.component.Get() == previous.component.Get(); }))
-            Dispose(previous.component.Get());
-    for (auto component : staged) actor->AddInstanceComponent(component);
+            { return value.runtime.Get() == previous.runtime.Get(); }))
+            Dispose(previous.runtime.Get());
     emitters = MoveTemp(candidates);
     appliedSequence = sequence;
     configurationError.Reset();
@@ -204,8 +201,8 @@ bool FLibraEditorGpuPreview::Configure(const FString& json, int64 programSequenc
     if (seekBlocked)
         errors = {TEXT("GPU timeline scrubbing is unsupported. Return the timeline to zero to restart simulation.")};
     for (auto& emitter : emitters)
-        if (remotePlaying && !seekBlocked) emitter.component->Play();
-        else emitter.component->Pause();
+        if (remotePlaying && !seekBlocked) emitter.runtime->Play();
+        else emitter.runtime->Pause();
     return true;
 }
 
@@ -225,7 +222,7 @@ void FLibraEditorGpuPreview::SetPlayback(int64 programSequence, bool playing, do
             seekBlocked = false;
             for (auto& emitter : emitters)
             {
-                emitter.component->ResetEffect();
+                emitter.runtime->ResetEffect();
                 emitter.timeSeconds = 0;
                 emitter.executed = false;
             }
@@ -245,8 +242,8 @@ void FLibraEditorGpuPreview::SetPlayback(int64 programSequence, bool playing, do
     lastRemoteTime = timeSeconds;
     lastRemoteArrival = now;
     for (auto& emitter : emitters)
-        if (remotePlaying && !seekBlocked) emitter.component->Play();
-        else emitter.component->Pause();
+        if (remotePlaying && !seekBlocked) emitter.runtime->Play();
+        else emitter.runtime->Pause();
 }
 
 void FLibraEditorGpuPreview::Tick(float deltaTime, bool connected)
@@ -261,12 +258,12 @@ void FLibraEditorGpuPreview::Tick(float deltaTime, bool connected)
     }
     for (auto& emitter : emitters)
     {
-        auto component = emitter.component.Get();
-        if (!connected || !remotePlaying || seekBlocked) { component->Pause(); continue; }
-        if (!component->bIsPlaying && !component->Play()) continue;
+        auto runtime = emitter.runtime.Get();
+        if (!connected || !remotePlaying || seekBlocked) { runtime->Pause(); continue; }
+        if (!runtime->bIsPlaying && !runtime->Play()) continue;
         if (step <= 0) continue;
-        component->TickComponent(static_cast<float>(step), LEVELTICK_All, &component->PrimaryComponentTick);
-        if (component->LastError.IsEmpty())
+        runtime->Tick(static_cast<float>(step));
+        if (runtime->LastError.IsEmpty())
         {
             emitter.timeSeconds += step;
             emitter.executed = true;
@@ -276,7 +273,7 @@ void FLibraEditorGpuPreview::Tick(float deltaTime, bool connected)
 
 void FLibraEditorGpuPreview::Reset()
 {
-    for (auto& emitter : emitters) Dispose(emitter.component.Get());
+    for (auto& emitter : emitters) Dispose(emitter.runtime.Get());
     emitters.Reset();
     errors.Reset();
     configurationError.Reset();
@@ -308,11 +305,11 @@ FString FLibraEditorGpuPreview::Status(int64 programSequence) const
         if (FJsonSerializer::Deserialize(bindingReader, bindings) && bindings.IsValid())
             for (const auto& field : bindings->Values) item->SetField(field.Key, field.Value);
         item->SetNumberField(TEXT("capacity"), emitter.asset->GetCapacity());
-        item->SetBoolField(TEXT("playing"), emitter.component->bIsPlaying);
+        item->SetBoolField(TEXT("playing"), emitter.runtime->bIsPlaying);
         item->SetNumberField(TEXT("timeSeconds"), emitter.timeSeconds);
         auto itemErrors = TArray<TSharedPtr<FJsonValue>>{};
-        if (!emitter.component->LastError.IsEmpty())
-            itemErrors.Add(MakeShared<FJsonValueString>(emitter.component->LastError.Left(4096)));
+        if (!emitter.runtime->LastError.IsEmpty())
+            itemErrors.Add(MakeShared<FJsonValueString>(emitter.runtime->LastError.Left(4096)));
         item->SetArrayField(TEXT("errors"), MoveTemp(itemErrors));
         programs.Add(MakeShared<FJsonValueObject>(item));
         executed |= emitter.executed;
@@ -425,12 +422,12 @@ bool FLibraGpuPreviewTransactionTest::RunTest(const FString&)
     TestTrue(TEXT("Zero-emitter looping preserves configuration rejection rather than emitting seek warnings"),
         !rejectionError.IsEmpty() && preview.configurationError == rejectionError && preview.errors.IsEmpty() &&
         preview.Status(1).Contains(rejectionError));
-    TestTrue(TEXT("Real GPU component creation accepts a validated frontend delivery"),
+    TestTrue(TEXT("Real GPU runtime creation accepts a validated frontend delivery"),
         preview.Configure(PreviewConfig(1, {MakeShared<FJsonValueObject>(PreviewDelivery(1, firstId))}), 1));
     TestTrue(TEXT("A successful GPU configuration clears the previous rejection"), preview.configurationError.IsEmpty());
     if (preview.emitters.Num() != 1) return false;
-    auto firstComponent = preview.emitters[0].component.Get();
-    TestFalse(TEXT("Editor GPU automatic ticking is disabled"), firstComponent->IsComponentTickEnabled());
+    auto firstRuntime = preview.emitters[0].runtime.Get();
+    TestFalse(TEXT("Editor GPU playback is not an actor component"), firstRuntime->IsA<UActorComponent>());
     preview.Tick(0.016f, true);
     TestFalse(TEXT("Paused creation does not claim GPU execution"), preview.emitters[0].executed);
     preview.SetPlayback(1, true, 0, false);
@@ -439,13 +436,13 @@ bool FLibraGpuPreviewTransactionTest::RunTest(const FString&)
     preview.SetPlayback(2, false, 0.016, true);
     TestTrue(TEXT("A layout-only program replacement validates"),
         preview.Configure(PreviewConfig(2, {MakeShared<FJsonValueObject>(PreviewDelivery(2, firstId))}), 2));
-    TestTrue(TEXT("Unchanged GPU body retains its component and simulation"),
-        preview.emitters[0].component.Get() == firstComponent && preview.emitters[0].timeSeconds > 0);
+    TestTrue(TEXT("Unchanged GPU body retains its runtime and simulation"),
+        preview.emitters[0].runtime.Get() == firstRuntime && preview.emitters[0].timeSeconds > 0);
     TestTrue(TEXT("A valid changed packet with identical IR and source labels is accepted"),
         preview.Configure(PreviewConfig(2, {MakeShared<FJsonValueObject>(PreviewDelivery(2, firstId, 4, true))}), 2));
     TestTrue(TEXT("Packet-byte changes replace and reset the simulation despite identical hashes"),
-        preview.emitters[0].component.Get() != firstComponent && preview.emitters[0].timeSeconds == 0);
-    firstComponent = preview.emitters[0].component.Get();
+        preview.emitters[0].runtime.Get() != firstRuntime && preview.emitters[0].timeSeconds == 0);
+    firstRuntime = preview.emitters[0].runtime.Get();
     preview.SetPlayback(3, false, 0.016, true);
     auto invalid = PreviewDelivery(3, secondId);
     invalid->SetStringField(TEXT("shaderSource"), TEXT("incorrect source hash"));
@@ -453,8 +450,8 @@ bool FLibraGpuPreviewTransactionTest::RunTest(const FString&)
         preview.Configure(PreviewConfig(3, {
             MakeShared<FJsonValueObject>(PreviewDelivery(3, FGuid::NewGuid())),
             MakeShared<FJsonValueObject>(invalid)}), 3));
-    TestTrue(TEXT("Invalid transaction retains every previous component"),
-        preview.emitters.Num() == 1 && preview.emitters[0].component.Get() == firstComponent && preview.appliedSequence == 2);
+    TestTrue(TEXT("Invalid transaction retains every previous runtime"),
+        preview.emitters.Num() == 1 && preview.emitters[0].runtime.Get() == firstRuntime && preview.appliedSequence == 2);
     rejectionError = preview.configurationError;
     preview.SetPlayback(3, false, 1, false);
     preview.SetPlayback(3, false, 0, false);
@@ -466,8 +463,8 @@ bool FLibraGpuPreviewTransactionTest::RunTest(const FString&)
     TestFalse(TEXT("Aggregate memory is bounded across individually valid emitters"),
         preview.Configure(PreviewConfig(3, {MakeShared<FJsonValueObject>(PreviewDelivery(3, firstId, 2000000)),
             MakeShared<FJsonValueObject>(PreviewDelivery(3, secondId, 2000000))}), 3));
-    TestFalse(TEXT("Stale configuration cannot clear current GPU components"), preview.Configure(PreviewConfig(2, {}), 3));
-    TestTrue(TEXT("Current empty replacement clears GPU components"), preview.Configure(PreviewConfig(3, {}), 3));
+    TestFalse(TEXT("Stale configuration cannot clear current GPU runtimes"), preview.Configure(PreviewConfig(2, {}), 3));
+    TestTrue(TEXT("Current empty replacement clears GPU runtimes"), preview.Configure(PreviewConfig(3, {}), 3));
     TestTrue(TEXT("Successful empty replacement also clears configuration diagnostics"), preview.configurationError.IsEmpty());
     TestTrue(TEXT("GPU clearing preserves the shared CPU scene root"), cpuRoot->IsRegistered() && actor->GetRootComponent() == cpuRoot);
     auto white = PreviewDelivery(3, firstId);
@@ -496,7 +493,7 @@ bool FLibraGpuPreviewTransactionTest::RunTest(const FString&)
     TestTrue(TEXT("Actual preview boundary accepts explicit builtin:white and frontend renderer bindings"),
         preview.Configure(PreviewConfig(3, {MakeShared<FJsonValueObject>(white)}), 3));
     if (preview.emitters.Num() != 1) return false;
-    auto whiteComponent = preview.emitters[0].component.Get();
+    auto whiteRuntime = preview.emitters[0].runtime.Get();
     TestTrue(TEXT("Native imported renderer state retains alpha and sizeScale100"),
         preview.emitters[0].asset->GetTextures()[0].bBuiltinWhite &&
         preview.emitters[0].asset->GetFlow().Last().SizeScale == 100 &&
@@ -504,13 +501,13 @@ bool FLibraGpuPreviewTransactionTest::RunTest(const FString&)
     paths->SetStringField(TEXT("texture"), TEXT("builtin:unknown"));
     TestFalse(TEXT("Unknown builtin resources remain rejected transactionally"),
         preview.Configure(PreviewConfig(3, {MakeShared<FJsonValueObject>(white)}), 3));
-    TestTrue(TEXT("Unknown builtin rejection preserves the previous real component"), preview.emitters[0].component.Get() == whiteComponent);
+    TestTrue(TEXT("Unknown builtin rejection preserves the previous runtime"), preview.emitters[0].runtime.Get() == whiteRuntime);
     paths->SetStringField(TEXT("texture"), TEXT("builtin:white"));
     binding->SetStringField(TEXT("material"), TEXT("builtin:unlit-additive"));
     TestTrue(TEXT("Same-IR renderer material replacement is accepted"),
         preview.Configure(PreviewConfig(3, {MakeShared<FJsonValueObject>(white)}), 3));
-    TestTrue(TEXT("Renderer material changes replace the component despite identical IR/source hashes"),
-        preview.emitters[0].component.Get() != whiteComponent &&
+    TestTrue(TEXT("Renderer material changes replace the runtime despite identical IR/source hashes"),
+        preview.emitters[0].runtime.Get() != whiteRuntime &&
         preview.emitters[0].asset->GetFlow().Last().BillboardBlend == ELibraGpuBillboardBlend::Additive &&
         preview.Status(3).Contains(TEXT("builtin:unlit-additive")));
     preview.Reset();
@@ -518,7 +515,7 @@ bool FLibraGpuPreviewTransactionTest::RunTest(const FString&)
     TestTrue(TEXT("A new connection generation may restart sequence numbering"),
         preview.Configure(PreviewConfig(0, {MakeShared<FJsonValueObject>(PreviewDelivery(0, firstId))}), 0));
     preview.SetPlayback(0, false, 1, false);
-    TestTrue(TEXT("Forward scrubbing reports unsupported operation and pauses GPU"), preview.seekBlocked && !preview.emitters[0].component->bIsPlaying);
+    TestTrue(TEXT("Forward scrubbing reports unsupported operation and pauses GPU"), preview.seekBlocked && !preview.emitters[0].runtime->bIsPlaying);
     preview.SetPlayback(0, true, 0, false);
     TestTrue(TEXT("Returning to zero resets GPU simulation deterministically"),
         !preview.seekBlocked && preview.emitters[0].timeSeconds == 0 && !preview.emitters[0].executed);

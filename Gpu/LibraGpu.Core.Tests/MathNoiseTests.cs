@@ -82,6 +82,88 @@ internal static partial class Program
             Check(c.EmitUsf().LineMappings.Any(m => m.Span is not null), "Noise source mappings");
             Check(LibraGpu.Core.GpuCompiler.Validate(LibraGpu.Core.GpuSamples.CreateNoiseGuardProbe()).Count == 0, "Computed invalid params are bounded runtime zeros");
         });
+        Run("flow map resource semantics and backend lowering", () =>
+        {
+            var resources = new[]
+            {
+                new LibraGpu.Core.ResourceDeclaration
+                {
+                    Id = "wind map/flow",
+                    Kind = LibraGpu.Core.ResourceKind.FlowMap2D,
+                    FlowMap = new()
+                    {
+                        AxisU = LibraGpu.Core.GpuAxis.Y,
+                        AxisV = LibraGpu.Core.GpuAxis.X,
+                        WorldMinimumU = -10,
+                        WorldMaximumU = 30,
+                        WorldMinimumV = -20,
+                        WorldMaximumV = 20
+                    }
+                }
+            };
+            var kernel = LibraGpu.Core.GpuDsl.Compile(
+                "@Velocity = sampleFlowMap(\"wind map/flow\", @Position); @Age = turbulence(@Position);",
+                "k", LibraGpu.Core.KernelStage.Update, resources: resources);
+            var program = One() with { Resources = resources.ToList(), Kernels = [kernel] };
+            var compiled = LibraGpu.Core.GpuCompiler.Compile(program);
+            Check(LibraGpu.Core.GpuBackendCapabilities.Unreal.Validate(compiled).Count == 0 &&
+                LibraGpu.Core.GpuBackendCapabilities.Unity.Validate(compiled).Count == 0,
+                "Both built-in backends accept the same canonical FlowMap and noise fixture");
+            var limited = new LibraGpu.Core.GpuBackendCapabilities("sample-host",
+                LibraGpu.Core.GpuBackendInput.RegisterPackets, 1,
+                Enum.GetValues<LibraGpu.Core.GpuInstructionOpcode>().Where(op =>
+                    op != LibraGpu.Core.GpuInstructionOpcode.SampleFlowMap),
+                [LibraGpu.Core.ResourceKind.Texture2D], 256, 256UL * 1024 * 1024);
+            var unsupported = limited.Validate(compiled);
+            Check(unsupported.Any(d => d.Code == "BackendResource" && d.Message.Contains("wind map/flow")) &&
+                unsupported.Any(d => d.Code == "BackendOpcode" && d.KernelId == "k" && d.NodeId is not null && d.Span is not null),
+                "A custom backend must reject unsupported resources and identify the authored operation");
+            var instruction = compiled.RegisterKernels.Single().Instructions.Single(i =>
+                i.Opcode == LibraGpu.Core.GpuInstructionOpcode.SampleFlowMap);
+            Check(instruction.Type == LibraGpu.Core.GpuType.Float3 && instruction.Aux == 0 &&
+                instruction.D == 1 && instruction.FloatImmediate == new Vector4(-10, -20, 40, 40),
+                "World sampling packs the typed resource index, axis pair and bounds");
+            var source = compiled.EmitUsf().Text;
+            Check(source.Contains("SampleFlowMapWorld_0000") && source.Contains("position.y, position.x") &&
+                source.Contains("rg * 2.0f - 1.0f") && source.Contains("LibraGpuTurbulence"),
+                "Generated shader projects world coordinates and preserves existing turbulence support");
+            using var metadataDocument = JsonDocument.Parse(compiled.ExportMetadataJson());
+            var metadata = metadataDocument.RootElement;
+            Check(metadata.GetProperty("resources")[0].GetProperty("kind").GetString() == "FlowMap2D" &&
+                metadata.GetProperty("resources")[0].GetProperty("flowMap").GetProperty("axisU").GetString() == "Y" &&
+                metadata.GetProperty("kernels")[0].GetProperty("flowMapResourceIds")[0].GetString() == "wind map/flow",
+                "Backend metadata carries the resource meaning and per-kernel binding");
+            using var textureMetadataDocument = JsonDocument.Parse(
+                LibraGpu.Core.GpuCompiler.Compile(LibraGpu.Core.GpuSamples.CreateEmitter())
+                    .ExportMetadataJson(LibraGpu.Core.ShaderFormat.Usf));
+            Check(!textureMetadataDocument.RootElement.GetProperty("resources")[0].TryGetProperty("flowMap", out _),
+                "Ordinary Texture2D metadata omits optional FlowMap settings for Unreal import");
+            var emitted = LibraGpu.Core.GpuDsl.Emit(kernel, resources: resources);
+            var copy = LibraGpu.Core.GpuDsl.Compile(emitted.Text, "k", kernel.Stage, options: new()
+            {
+                NodeIdsBySpan = emitted.NodeIdsBySpan,
+                WriteIdsBySpan = emitted.WriteIdsBySpan
+            }, resources: resources);
+            Check(copy.Nodes.Any(node => node.Op == LibraGpu.Core.GpuOp.SampleFlowMap &&
+                node.Resource == "wind map/flow" && node.Type == LibraGpu.Core.GpuType.Float3),
+                "Flow-map DSL roundtrip preserves resource ID and coordinate type");
+            var uvKernel = LibraGpu.Core.GpuDsl.Compile(
+                "@Size = sampleFlowMap(\"wind map/flow\", float2(0.25, 0.75));",
+                "k", LibraGpu.Core.KernelStage.Update, resources: resources);
+            var uvInstruction = LibraGpu.Core.GpuCompiler.Compile(
+                One() with { Resources = resources.ToList(), Kernels = [uvKernel] })
+                .RegisterKernels.Single().Instructions.Single(i =>
+                    i.Opcode == LibraGpu.Core.GpuInstructionOpcode.SampleFlowMap);
+            Check(uvInstruction.Type == LibraGpu.Core.GpuType.Float2 &&
+                uvInstruction.D == uint.MaxValue && uvInstruction.FloatImmediate == Vector4.Zero,
+                "UV sampling needs no world-projection payload");
+            var invalid = program with { Resources = [resources[0] with { FlowMap = resources[0].FlowMap! with { AxisV = LibraGpu.Core.GpuAxis.Y } }] };
+            Check(LibraGpu.Core.GpuCompiler.Validate(invalid).Any(d => d.Code == "FlowMapSettings"),
+                "Duplicate world axes are rejected");
+            var wrongKind = program with { Resources = [resources[0] with { Kind = LibraGpu.Core.ResourceKind.Texture2D }] };
+            Check(LibraGpu.Core.GpuCompiler.Validate(wrongKind).Any(d => d.Code == "FlowMapResource"),
+                "Flow-map sampling cannot bind an ordinary Texture2D declaration");
+        });
         Run("noise range determinism derivatives and lattice continuity", () =>
         {
             float maxDerivativeError = 0;

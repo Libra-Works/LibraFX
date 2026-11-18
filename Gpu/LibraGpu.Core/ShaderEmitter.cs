@@ -44,7 +44,32 @@ internal static partial class ShaderEmitter
         {
             Write($"Texture2D<float4> LibraGpuTexture_{i:D4} : register(t{b.TextureRegisterBase + i});");
         }
-        if (p.Resources.Count > 0) Write($"SamplerState LibraGpuSampler : register(s{b.SamplerRegisterBase});");
+        if (p.Resources.Count > 0 && format != ShaderFormat.UnityCompute)
+            Write($"SamplerState LibraGpuSampler : register(s{b.SamplerRegisterBase});");
+        var resourceIndices = p.Resources.Select((resource, index) => (resource.Id, Index: index))
+            .ToDictionary(x => x.Id, x => x.Index, StringComparer.Ordinal);
+        for (int i = 0; i < p.Resources.Count; i++)
+        {
+            var resource = p.Resources[i];
+            if (resource.Kind != ResourceKind.FlowMap2D) continue;
+            var settings = resource.FlowMap!;
+            var samplerName = format == ShaderFormat.UnityCompute ? $"samplerLibraGpuTexture_{i:D4}" : "LibraGpuSampler";
+            if (format == ShaderFormat.UnityCompute) Write($"SamplerState {samplerName};");
+            var u = "xyz"[(int)settings.AxisU].ToString();
+            var v = "xyz"[(int)settings.AxisV].ToString();
+            var minimumU = ((float)settings.WorldMinimumU).ToString("R", CultureInfo.InvariantCulture);
+            var minimumV = ((float)settings.WorldMinimumV).ToString("R", CultureInfo.InvariantCulture);
+            var rangeU = ((float)(settings.WorldMaximumU - settings.WorldMinimumU)).ToString("R", CultureInfo.InvariantCulture);
+            var rangeV = ((float)(settings.WorldMaximumV - settings.WorldMinimumV)).ToString("R", CultureInfo.InvariantCulture);
+            Write($"float2 LibraGpuSampleFlowMapUv_{i:D4}(float2 uv) {{ return LibraGpuTexture_{i:D4}.SampleLevel({samplerName}, saturate(uv), 0).rg * 2.0f - 1.0f; }}");
+            Write($"float3 LibraGpuSampleFlowMapWorld_{i:D4}(float3 position) {{");
+            Write($"    float2 uv = saturate((float2(position.{u}, position.{v}) - float2({minimumU}, {minimumV})) / float2({rangeU}, {rangeV}));");
+            Write($"    float2 flow = LibraGpuSampleFlowMapUv_{i:D4}(uv);");
+            Write("    float3 result = 0.0f;");
+            Write($"    result.{u} = flow.x; result.{v} = flow.y;");
+            Write("    return result;");
+            Write("}");
+        }
         foreach (var supportLine in GpuShaderSupport.EmitHlslInclude().Split('\n')) Write(supportLine);
         Write("bool LibraGpuFinite(LibraGpuParticle p) { return LibraGpuIsFinite(p.positionAge) && LibraGpuIsFinite(p.velocityLifetime) && LibraGpuIsFinite(p.color) && LibraGpuIsFinite(p.sizeRotation); }");
         for (int kernelIndex = 0; kernelIndex < p.Kernels.Count; kernelIndex++)
@@ -60,7 +85,7 @@ internal static partial class ShaderEmitter
             {
                 var args = n.Inputs.Select(id => registers[id]).ToArray();
                 var types = n.Inputs.Select(id => nodeLookup[id].Type).ToArray();
-                var expression = Expression(n, args, types);
+                var expression = Expression(n, args, types, resourceIndices);
                 Mapped($"    {HlslType(n.Type)} {registers[n.Id]} = {expression};", k, n.Id, "out");
             }
             // SSA reads the incoming particle snapshot; attribute stores happen only after evaluation.
@@ -103,7 +128,7 @@ internal static partial class ShaderEmitter
         }
         if (format == ShaderFormat.HlslInclude) Write("#endif");
         return new(format, s.ToString(), mappings, b, p.Resources.Select((r, i) =>
-            new ResourceMetadata(r.Id, r.Kind, $"LibraGpuTexture_{i:D4}", b.TextureRegisterBase + i, r.Width, r.Height)));
+            new ResourceMetadata(r.Id, r.Kind, $"LibraGpuTexture_{i:D4}", b.TextureRegisterBase + i, r.Width, r.Height, r.FlowMap)));
     }
     internal static string HlslType(GpuType t) => t switch
     { GpuType.Float => "float", GpuType.Int => "int", GpuType.UInt => "uint", GpuType.Bool => "bool", GpuType.Float2 => "float2", GpuType.Float3 => "float3", GpuType.Float4 => "float4", _ => throw new InvalidOperationException() };
@@ -120,7 +145,7 @@ internal static partial class ShaderEmitter
         "Alive" => "p.seedAlive.y",
         _ => throw new InvalidOperationException()
     };
-    private static string Expression(GpuNode n, string[] a, GpuType[] types)
+    private static string Expression(GpuNode n, string[] a, GpuType[] types, IReadOnlyDictionary<string, int> resourceIndices)
     {
         string Cast(int i) => types[i] == n.Type ? a[i] :
             $"{HlslType(n.Type)}({string.Join(", ", Enumerable.Repeat(a[i], GpuOperationRegistry.Components(n.Type)))})";
@@ -179,6 +204,7 @@ internal static partial class ShaderEmitter
             GpuOp.Fbm => RawCall("LibraGpuFbm"),
             GpuOp.Turbulence => RawCall("LibraGpuTurbulence"),
             GpuOp.CurlNoise => RawCall("LibraGpuCurlNoise"),
+            GpuOp.SampleFlowMap => $"LibraGpuSampleFlowMap{(n.Type == GpuType.Float2 ? "Uv" : "World")}_{resourceIndices[n.Resource!]:D4}({a[0]})",
             _ => throw new InvalidOperationException()
         };
     }

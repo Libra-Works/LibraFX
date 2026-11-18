@@ -10,7 +10,7 @@
 
 class ULibraEffectAsset;
 class ULibraGpuEffectAsset;
-class ULibraGpuEffectComponent;
+class ULibraGpuEffectRuntime;
 struct FLibraEffectState;
 
 UCLASS(ClassGroup = (Effects), meta = (BlueprintSpawnableComponent, DisplayName = "Libra Effect"))
@@ -282,7 +282,7 @@ private:
     UPROPERTY(Transient)
     TObjectPtr<ULibraSpawnableComponent> PackagePlayback;
     UPROPERTY(Transient)
-    TObjectPtr<ULibraGpuEffectComponent> GpuPlayback;
+    TObjectPtr<ULibraGpuEffectRuntime> GpuPlayback;
     bool bStopping = false;
     ELibraRuntimeResult EnsureState();
     ELibraRuntimeResult QueueEvaluation(double timeSeconds, double frameDelta);

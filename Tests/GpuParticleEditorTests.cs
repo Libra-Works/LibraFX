@@ -267,8 +267,15 @@ internal static class GpuParticleEditorTests
             flowLabels.Any(text => text.Contains("emitterPosition", StringComparison.Ordinal) &&
                 text.Contains("external host uniform", StringComparison.Ordinal)),
             "The actual flow view distinguishes static cross-flow dependencies from external uniforms and runtime traces");
-        view.Workspace.EnterKernel(view.Workspace.State.Program.Kernels[0].Id);
+        view.Workspace.EnterKernel(view.Workspace.State.Program.Kernels.Single(k => k.Stage == KernelStage.Update).Id);
         Check(view.FindControl<Avalonia.Controls.Canvas>("NodeCanvas")!.Children.Count > 0, "Actual visual graph nodes");
+        var nodeLabels = view.FindControl<Avalonia.Controls.Canvas>("NodeCanvas")!.GetLogicalDescendants()
+            .OfType<TextBlock>().Select(block => block.Text ?? "").ToArray();
+        Check(nodeLabels.Any(text => text.Contains("Position", StringComparison.Ordinal)) &&
+            nodeLabels.Any(text => text.Contains("Color", StringComparison.Ordinal)) &&
+            nodeLabels.Any(text => text.Contains("deltaTime", StringComparison.Ordinal)) &&
+            nodeLabels.All(text => !text.Contains("in0", StringComparison.Ordinal)),
+            "GPU graph labels expose particle attributes, uniforms and semantic math inputs");
         foreach (var (language, expected) in new[] { ("en", "Kernel Graph"), ("ja", "カーネルグラフ") })
         {
             using var strings = AssetLoader.Open(new Uri($"avares://LiberaFx/Assets/Translations/Gpu.{language}.json"));

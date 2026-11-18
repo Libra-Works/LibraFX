@@ -44,9 +44,9 @@ Only root GPU containers are delivered; spawnable templates require an instance
 bridge and must not be included.
 
 All candidates validate on the game thread before replacing any previous GPU
-component. Limits: 16 emitters, 1 MiB scene JSON, 256 MiB aggregate particle,
+runtime. Limits: 16 emitters, 1 MiB scene JSON, 256 MiB aggregate particle,
 register scratch and instruction buffers. Textures must be Texture2D assets with
-valid /Game or /Engine object paths. An empty replacement removes GPU components
+valid /Game or /Engine object paths. An empty replacement removes GPU runtimes
 only, leaving CPU rendering, camera and the user's edited level unchanged.
 
 Identical node IDs, IR/source hashes, packet bytes, ordered flow, capacity and
@@ -57,8 +57,8 @@ are part of reuse identity. Explicit builtin:white is a supported GPU resource;
 unknown builtins and missing bindings are rejected, never silently substituted.
 Reconnect resets the preview generation and permits sequence numbering to restart.
 
-The isolated scene owns one manual GPU component tick per preview tick; automatic
-component ticking is disabled. Remote play, pause and playback rate drive it.
+The isolated scene owns one manual GPU runtime tick per preview tick. Remote
+play, pause and playback rate drive it.
 Forward seeking is unsupported and pauses GPU simulation with a diagnostic.
 Backward seeking resets simulation to zero rather than claiming reconstruction
 at the requested time; returning to zero clears the seek block.

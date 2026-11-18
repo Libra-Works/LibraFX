@@ -77,7 +77,7 @@ public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
             if (_text is not null) return _text;
             if (Kernel is not { } k) return "";
             if (State.Drafts.TryGetValue(k.Id, out var draft)) return _text = draft.Text;
-            try { return _text = GpuDsl.Emit(k).Text; }
+            try { return _text = GpuDsl.Emit(k, resources: State.Program.Resources).Text; }
             catch (GpuValidationException) { return ""; }
         }
     }
@@ -98,6 +98,9 @@ public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
             Attribute = op == GpuOp.ReadAttribute ? ParticleAbi.Attributes.First(a => a.Type == type).Id : null,
             Uniform = op == GpuOp.ReadUniform ? ParticleAbi.Uniforms.First(u => u.Value == type).Key : null,
             ComponentIndex = op == GpuOp.Component ? 0 : null,
+            Resource = op == GpuOp.SampleFlowMap
+                ? State.Program.Resources.FirstOrDefault(resource => resource.Kind == ResourceKind.FlowMap2D)?.Id
+                : null,
             Inputs = defaults.Select(d => d.Id).ToList()
         };
         position ??= new(350, k.Nodes.Select(node => GetPosition(node).Y + GpuGraphLayout.NodeHeight(node))

@@ -6,7 +6,7 @@
 #include "LibraEffectActorFactory.h"
 #include "LibraGpuEffectAsset.h"
 #include "LibraSpawnableAsset.h"
-#include "LibraGpuEffectComponent.h"
+#include "LibraGpuEffectRuntime.h"
 #include "AssetRegistry/AssetData.h"
 #include "AssetSelection.h"
 #include "Editor.h"
@@ -35,7 +35,7 @@ bool FLibraEffectPlacementTest::RunTest(const FString&)
     TestTrue(TEXT("Only the public effect component is addable"),
         ULibraEffectComponent::StaticClass()->HasMetaData(TEXT("BlueprintSpawnableComponent")) &&
         !ULibraSpawnableComponent::StaticClass()->HasMetaData(TEXT("BlueprintSpawnableComponent")) &&
-        !ULibraGpuEffectComponent::StaticClass()->HasMetaData(TEXT("BlueprintSpawnableComponent")));
+        !ULibraGpuEffectRuntime::StaticClass()->IsChildOf(UActorComponent::StaticClass()));
     auto init = UWorld::InitializationValues().AllowAudioPlayback(false).RequiresHitProxies(false)
         .CreatePhysicsScene(false).CreateNavigation(false).CreateAISystem(false)
         .ShouldSimulatePhysics(false).SetTransactional(false);

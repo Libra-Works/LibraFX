@@ -4,7 +4,7 @@
 #include "LibraSpawnableComponent.h"
 #include "LibraSpawnableAsset.h"
 #include "LibraGpuEffectAsset.h"
-#include "LibraGpuEffectComponent.h"
+#include "LibraGpuEffectRuntime.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/StaticMeshComponent.h"
 #include "Dom/JsonObject.h"
@@ -137,13 +137,23 @@ struct FInstance
     double Started = 0, Previous = 0;
     FDefinition* Definition = nullptr;
     TArray<TStrongObjectPtr<UStaticMeshComponent>> Draws;
-    TArray<TStrongObjectPtr<ULibraGpuEffectComponent>> Gpu;
+    TArray<TStrongObjectPtr<ULibraGpuEffectRuntime>> Gpu;
     ~FInstance()
     {
-        for (auto& component : Gpu)
-            if (component.IsValid()) { component->Stop(); component->DestroyComponent(); }
+        for (auto& runtime : Gpu)
+        {
+            if (runtime.IsValid())
+            {
+                runtime->Stop();
+            }
+        }
         for (auto& component : Draws)
-            if (component.IsValid()) component->DestroyComponent();
+        {
+            if (component.IsValid())
+            {
+                component->DestroyComponent();
+            }
+        }
     }
 };
 }
@@ -558,14 +568,10 @@ struct FLibraSpawnableRenderState::FImpl
         }
         for (const auto& asset : instance->Definition->Gpu)
         {
-            auto component = TStrongObjectPtr<ULibraGpuEffectComponent>(
-                NewObject<ULibraGpuEffectComponent>(actor, NAME_None, RF_Transient));
-            component->bAutoPlay = false;
-            component->SetupAttachment(actor->GetRootComponent());
-            actor->AddInstanceComponent(component.Get());
-            component->RegisterComponent();
-            component->SetComponentTickEnabled(false);
-            instance->Gpu.Add(MoveTemp(component));
+            auto runtime = TStrongObjectPtr<ULibraGpuEffectRuntime>(
+                NewObject<ULibraGpuEffectRuntime>(actor, NAME_None, RF_Transient));
+            runtime->Initialize(actor);
+            instance->Gpu.Add(MoveTemp(runtime));
             auto gpu = instance->Gpu.Last().Get();
             if (!gpu->SetEffect(asset.Get()) ||
                 !gpu->ConfigureEmitter(Owner.GpuSpawnPerSecond, static_cast<int32>(seed)) || !gpu->Play())
@@ -692,11 +698,16 @@ struct FLibraSpawnableRenderState::FImpl
             auto delta = time - instance->Previous;
             if (!FMath::IsFinite(delta) || delta < 0 || delta > MAX_flt) return Fail(TEXT("Invalid GPU local time."));
             if (delta > 0)
+            {
                 for (auto& gpu : instance->Gpu)
                 {
-                    if (!gpu.IsValid() || !gpu->IsRegistered()) return Fail(TEXT("An owned GPU emitter was destroyed externally."));
-                    gpu->TickComponent(static_cast<float>(delta), LEVELTICK_All, nullptr);
+                    if (!gpu.IsValid())
+                    {
+                        return Fail(TEXT("An owned GPU runtime was destroyed externally."));
+                    }
+                    gpu->Tick(static_cast<float>(delta));
                 }
+            }
             instance->Previous = time;
         }
         return true;

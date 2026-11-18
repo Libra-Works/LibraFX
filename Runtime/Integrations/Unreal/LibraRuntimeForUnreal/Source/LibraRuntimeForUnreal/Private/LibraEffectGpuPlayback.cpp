@@ -1,9 +1,8 @@
 #include "LibraEffectComponent.h"
 
-#include "Components/SceneComponent.h"
 #include "GameFramework/Actor.h"
 #include "LibraGpuEffectAsset.h"
-#include "LibraGpuEffectComponent.h"
+#include "LibraGpuEffectRuntime.h"
 
 auto ULibraEffectComponent::SetGpuEffect(ULibraGpuEffectAsset* newEffect) -> ELibraRuntimeResult
 {
@@ -53,15 +52,9 @@ auto ULibraEffectComponent::EnsureGpuPlayback() -> ELibraRuntimeResult
     }
     if (!GpuPlayback)
     {
-        auto playback = NewObject<ULibraGpuEffectComponent>(actor, NAME_None, RF_Transient);
-        playback->bAutoPlay = false;
-        if (auto root = actor->GetRootComponent())
-        {
-            playback->SetupAttachment(root);
-        }
-        actor->AddInstanceComponent(playback);
+        auto playback = NewObject<ULibraGpuEffectRuntime>(actor, NAME_None, RF_Transient);
+        playback->Initialize(actor);
         GpuPlayback = playback;
-        playback->RegisterComponent();
     }
     if (GpuPlayback->Effect != GpuEffect && !GpuPlayback->SetEffect(GpuEffect))
     {
@@ -84,6 +77,6 @@ void ULibraEffectComponent::ReleaseGpuPlayback()
     GpuPlayback = nullptr;
     if (playback)
     {
-        playback->DestroyComponent();
+        playback->Stop();
     }
 }

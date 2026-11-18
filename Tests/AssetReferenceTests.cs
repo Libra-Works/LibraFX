@@ -5,6 +5,7 @@ using Avalonia.Automation.Peers;
 using Avalonia.Automation.Provider;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using LibraGpu.Core;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services;
@@ -59,8 +60,17 @@ public static class AssetReferenceTests
         var resource = GpuParticleEditorService.ReadState(gpu).Program.Resources.Single();
         GpuParticleEditorService.AssignTextureResource(gpuGraph, gpu,
             new("/Game/Textures/Flow.Flow", "Flow", "texture", "Unreal"), resource.Id);
-        GpuParticleEditorService.Apply(gpuGraph, gpu.Id, [new() { Action = "resource",
-            Resource = resource with { Id = "flowMap" }, AssetPath = "/Game/Textures/Flow.Flow" }]);
+        var flowAsset = new EngineAsset("/Game/Textures/Flow.Flow", "Flow", "texture", "Unreal");
+        var flowMap = new ResourceDeclaration
+        {
+            Id = "flowMap",
+            Kind = ResourceKind.FlowMap2D,
+            FlowMap = new()
+        };
+        GpuParticleEditorService.Apply(gpuGraph, gpu.Id, [new() { Action = "resource", Resource = flowMap }]);
+        var flowTarget = ResourceAssignment.Targets(gpu, flowAsset).Single(target =>
+            target.Kind == ResourceTargetKind.GpuTexture && target.Id == flowMap.Id);
+        ResourceAssignment.Assign(gpuGraph, gpu, flowAsset, flowTarget);
         var gpuIndex = new AssetReferenceIndex([new(first.Resource, gpuGraph.CreateSnapshot())]);
         Require(gpuIndex.Uses.Count(use => use.Target.Binding == "/Game/Textures/Flow.Flow") == 2 &&
                 gpuIndex.Uses.Any(use => use.Parameter == "GPU/flowMap") &&

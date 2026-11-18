@@ -14,7 +14,7 @@ public enum GpuInstructionOpcode : uint
     Abs = 19, Floor = 20, Ceil = 21, Round = 22, Frac = 23, Mod = 24, Sign = 25,
     Pow = 26, Sqrt = 27, Exp = 28, Log = 29, Lerp = 30, Smoothstep = 31, Remap = 32,
     Dot = 33, Cross = 34, Distance = 35, Saturate = 36,
-    GradientNoise3D = 37, Fbm = 38, Turbulence = 39, CurlNoise = 40
+    GradientNoise3D = 37, Fbm = 38, Turbulence = 39, CurlNoise = 40, SampleFlowMap = 41
 }
 public enum GpuAttributeSlot : uint { Position = 0, Velocity = 1, Color = 2, Size = 3, Rotation = 4, Age = 5, Lifetime = 6, Alive = 7, Seed = 8 }
 public enum GpuUniformSlot : uint { DeltaTime = 0, Time = 1, EmitterPosition = 2 }
@@ -60,7 +60,7 @@ public sealed class CompiledRegisterKernel
     public uint RegisterCount { get; }
     public IReadOnlyList<GpuInstruction> Instructions { get; }
     public IReadOnlyList<InstructionMapping> Mappings { get; }
-    internal CompiledRegisterKernel(KernelGraph k)
+    internal CompiledRegisterKernel(KernelGraph k, IReadOnlyList<ResourceDeclaration> resources)
     {
         KernelId = k.Id; Stage = k.Stage;
         AdvanceDefaultAge = k.Stage == KernelStage.Update && !k.Writes.Any(w => w.Attribute == "Age");
@@ -69,6 +69,8 @@ public sealed class CompiledRegisterKernel
         var ordered = GpuCompiler.Topological(lookup);
         RegisterCount = (uint)ordered.Count;
         var registers = ordered.Select((n, i) => (n.Id, Register: (uint)i)).ToDictionary(x => x.Id, x => x.Register, StringComparer.Ordinal);
+        var resourceIndices = resources.Select((resource, index) => (resource.Id, Index: (uint)index))
+            .ToDictionary(x => x.Id, x => x.Index, StringComparer.Ordinal);
         var instructions = new List<GpuInstruction>();
         var mappings = new List<InstructionMapping>();
         foreach (var n in ordered)
@@ -79,17 +81,28 @@ public sealed class CompiledRegisterKernel
                 GpuOp.ReadAttribute => (uint)Enum.Parse<GpuAttributeSlot>(n.Attribute!),
                 GpuOp.ReadUniform => n.Uniform switch { "deltaTime" => (uint)GpuUniformSlot.DeltaTime, "time" => (uint)GpuUniformSlot.Time, "emitterPosition" => (uint)GpuUniformSlot.EmitterPosition, _ => throw new InvalidOperationException() },
                 GpuOp.Component => (uint)n.ComponentIndex!.Value,
+                GpuOp.SampleFlowMap => resourceIndices[n.Resource!],
                 _ => 0
             };
             var floats = new float[4]; uint integer = 0;
+            uint d = Ref(3);
             if (n.Op == GpuOp.Constant)
             {
                 if (GpuOperationRegistry.Float(n.Type))
                     for (int i = 0; i < n.Value.Count; i++) floats[i] = (float)n.Value[i];
                 else integer = n.Type == GpuType.Int ? unchecked((uint)(int)n.Value[0]) : (uint)n.Value[0];
             }
+            else if (n.Op == GpuOp.SampleFlowMap && n.Type == GpuType.Float3)
+            {
+                var settings = resources[(int)aux].FlowMap!;
+                floats[0] = (float)settings.WorldMinimumU;
+                floats[1] = (float)settings.WorldMinimumV;
+                floats[2] = (float)(settings.WorldMaximumU - settings.WorldMinimumU);
+                floats[3] = (float)(settings.WorldMaximumV - settings.WorldMinimumV);
+                d = (uint)settings.AxisU | (uint)settings.AxisV << 2;
+            }
             mappings.Add(new(instructions.Count, n.Id, "out", n.SourceSpan));
-            instructions.Add(new((GpuInstructionOpcode)(uint)n.Op, registers[n.Id], Ref(0), Ref(1), Ref(2), Ref(3), n.Type, aux, new(floats[0], floats[1], floats[2], floats[3]), integer));
+            instructions.Add(new((GpuInstructionOpcode)(uint)n.Op, registers[n.Id], Ref(0), Ref(1), Ref(2), d, n.Type, aux, new(floats[0], floats[1], floats[2], floats[3]), integer));
         }
         foreach (var w in k.Writes)
         {

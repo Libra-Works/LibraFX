@@ -37,10 +37,12 @@ public sealed class DslSource
 public static class GpuDsl
 {
     public static GpuDslAst Parse(string text, GpuLimits? limits = null) => new Parser(text, limits ?? new()).Parse();
-    public static KernelGraph Compile(string text, string kernelId, KernelStage stage, GpuLimits? limits = null, DslLoweringOptions? options = null)
-        => Lower(Parse(text, limits), kernelId, stage, limits, options);
-    public static KernelGraph Lower(GpuDslAst ast, string kernelId, KernelStage stage, GpuLimits? limits = null, DslLoweringOptions? options = null)
-        => new Lowerer(kernelId, stage, limits ?? new(), options ?? new()).Run(ast);
+    public static KernelGraph Compile(string text, string kernelId, KernelStage stage, GpuLimits? limits = null,
+        DslLoweringOptions? options = null, IReadOnlyList<ResourceDeclaration>? resources = null)
+        => Lower(Parse(text, limits), kernelId, stage, limits, options, resources);
+    public static KernelGraph Lower(GpuDslAst ast, string kernelId, KernelStage stage, GpuLimits? limits = null,
+        DslLoweringOptions? options = null, IReadOnlyList<ResourceDeclaration>? resources = null)
+        => new Lowerer(kernelId, stage, limits ?? new(), options ?? new(), resources ?? []).Run(ast);
 
     private static GpuValidationException Error(string message, TextSpan span, string? kernel = null, string? node = null)
         => new([new("Dsl", message, kernel, node, null, span)]);
@@ -87,10 +89,24 @@ public static class GpuDsl
                 }
                 else if (c == '"')
                 {
-                    i++; int content = i;
-                    while (i < text.Length && (char.IsAsciiLetterOrDigit(text[i]) || text[i] == '_')) i++;
-                    if (i >= text.Length || text[i] != '"') throw Error("Only plain parameter-name strings are allowed.", new(start, i - start));
-                    tokens.Add(new(text[content..i], start, ++i - start, true));
+                    i++;
+                    var value = new StringBuilder();
+                    while (i < text.Length && text[i] != '"')
+                    {
+                        var current = text[i++];
+                        if (current == '\\')
+                        {
+                            if (i >= text.Length || text[i] is not ('\\' or '"'))
+                                throw Error("Only escaped quotes and backslashes are allowed in strings.", new(start, i - start));
+                            current = text[i++];
+                        }
+                        if (char.IsControl(current)) throw Error("Control characters are not allowed in strings.", new(start, i - start));
+                        value.Append(current);
+                        if (value.Length > 128) throw Error("String parameter too long.", new(start, i - start));
+                    }
+                    if (i >= text.Length) throw Error("Unterminated string.", new(start, i - start));
+                    i++;
+                    tokens.Add(new(value.ToString(), start, i - start, true));
                 }
                 else if ("@.=;()+-*/, ".Contains(c))
                 {
@@ -174,6 +190,12 @@ public static class GpuDsl
                         if (!Current.String) throw Error("param requires a fixed uniform-name string.", Current.Span);
                         parameter = Current.Text; index++; Require(")");
                     }
+                    else if (name == "sampleFlowMap")
+                    {
+                        if (!Current.String) throw Error("sampleFlowMap requires a fixed FlowMap2D resource ID string.", Current.Span);
+                        parameter = Current.Text; index++; Require(",");
+                        args.Add(Expression()); Require(")");
+                    }
                     else if (!Take(")"))
                     {
                         do { args.Add(Expression()); if (args.Count > 4) throw Error("Function arity limit exceeded.", Current.Span); } while (Take(","));
@@ -206,15 +228,22 @@ public static class GpuDsl
         private readonly KernelStage stage;
         private readonly GpuLimits limits;
         private readonly DslLoweringOptions options;
+        private readonly IReadOnlyDictionary<string, ResourceDeclaration> resources;
+        private readonly IReadOnlyList<ResourceDeclaration> resourceDeclarations;
         private readonly List<GpuNode> nodes = [];
         private readonly Dictionary<string, GpuNode> locals = new(StringComparer.Ordinal);
         private readonly Dictionary<string, GpuNode> attributes = new(StringComparer.Ordinal);
         private readonly Dictionary<string, AttributeWrite> writes = new(StringComparer.Ordinal);
         private readonly HashSet<string> reservedIds;
         private int sequence, depth;
-        public Lowerer(string id, KernelStage stage, GpuLimits limits, DslLoweringOptions options)
+        public Lowerer(string id, KernelStage stage, GpuLimits limits, DslLoweringOptions options,
+            IReadOnlyList<ResourceDeclaration> resources)
         {
             this.id = id; this.stage = stage; this.limits = limits; this.options = options;
+            resourceDeclarations = resources.ToArray();
+            this.resources = resources.Where(resource => resource is not null && resource.Id is not null)
+                .GroupBy(resource => resource.Id, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
             if (options.NodeIdsBySpan?.Count > limits.MaxNodesPerKernel || options.WriteIdsBySpan?.Count > ParticleAbi.Attributes.Count)
                 throw Error("ID mapping limits exceeded.", new(0, 0), id);
             reservedIds = options.NodeIdsBySpan?.Values.ToHashSet(StringComparer.Ordinal) ?? [];
@@ -322,6 +351,16 @@ public static class GpuDsl
                     throw Error("Unknown fixed uniform parameter.", c.Span, id);
                 return New(new() { Op = GpuOp.ReadUniform, Type = t, Uniform = c.Parameter }, c.Span);
             }
+            if (c.Name == "sampleFlowMap")
+            {
+                if (c.Arguments.Count != 1 || c.Parameter is null ||
+                    !resources.TryGetValue(c.Parameter, out var resource) || resource.Kind != ResourceKind.FlowMap2D)
+                    throw Error("sampleFlowMap requires one coordinate input and a declared FlowMap2D resource.", c.Span, id);
+                var coordinate = Expression(c.Arguments[0]);
+                if (coordinate.Type is not (GpuType.Float2 or GpuType.Float3))
+                    throw Error("sampleFlowMap coordinates must be Float2 UVs or Float3 world positions.", c.Span, id, coordinate.Id);
+                return New(new() { Op = GpuOp.SampleFlowMap, Type = coordinate.Type, Inputs = [coordinate.Id], Resource = c.Parameter }, c.Span);
+            }
             if (c.Parameter is not null) throw Error("Unexpected function parameter payload.", c.Span, id);
             GpuOp op;
             if (c.Name is "float2" or "float3" or "float4") op = GpuOp.Compose;
@@ -392,7 +431,8 @@ public static class GpuDsl
                 else throw Error("Unsupported AST statement.", statement?.Span ?? new(0, 0), id);
             }
             var k = new KernelGraph { Id = id, Stage = stage, Nodes = nodes, Writes = writes.Values.OrderBy(w => w.Attribute, StringComparer.Ordinal).ToList() };
-            var p = new GpuProgram { Id = "__dsl_program", Kernels = [k], Flow = [new() { Id = "__dsl_flow", Kind = stage == KernelStage.Spawn ? FlowKind.Spawn : FlowKind.Update, Kernel = id }] };
+            var p = new GpuProgram { Id = "__dsl_program", Resources = resourceDeclarations.ToList(),
+                Kernels = [k], Flow = [new() { Id = "__dsl_flow", Kind = stage == KernelStage.Spawn ? FlowKind.Spawn : FlowKind.Update, Kernel = id }] };
             var diagnostics = GpuCompiler.Validate(p, limits);
             if (diagnostics.Count != 0) throw new GpuValidationException(diagnostics);
             return k;
@@ -401,9 +441,11 @@ public static class GpuDsl
             (char.IsAsciiLetter(name[0]) || name[0] == '_') && name.All(c => char.IsAsciiLetterOrDigit(c) || c == '_');
     }
 
-    public static DslSource Emit(KernelGraph kernel, GpuLimits? limits = null)
+    public static DslSource Emit(KernelGraph kernel, GpuLimits? limits = null, IReadOnlyList<ResourceDeclaration>? resources = null)
     {
-        var p = new GpuProgram { Id = "__dsl_program", Kernels = [kernel], Flow = [new() { Id = "__dsl_flow", Kind = kernel.Stage == KernelStage.Spawn ? FlowKind.Spawn : FlowKind.Update, Kernel = kernel.Id }] };
+        resources ??= [];
+        var p = new GpuProgram { Id = "__dsl_program", Resources = resources.ToList(),
+            Kernels = [kernel], Flow = [new() { Id = "__dsl_flow", Kind = kernel.Stage == KernelStage.Spawn ? FlowKind.Spawn : FlowKind.Update, Kernel = kernel.Id }] };
         var errors = GpuCompiler.Validate(p, limits);
         if (errors.Count > 0) throw new GpuValidationException(errors);
         var order = GpuCompiler.Topological(kernel.Nodes.ToDictionary(n => n.Id, StringComparer.Ordinal));
@@ -419,6 +461,7 @@ public static class GpuDsl
                 GpuOp.Constant => DslLiteralText(n),
                 GpuOp.ReadAttribute => $"@{n.Attribute}",
                 GpuOp.ReadUniform => $"param(\"{n.Uniform}\")",
+                GpuOp.SampleFlowMap => $"sampleFlowMap(\"{EscapeString(n.Resource!)}\", {args[0]})",
                 GpuOp.Add => $"{args[0]} + {args[1]}",
                 GpuOp.Sub => $"{args[0]} - {args[1]}",
                 GpuOp.Mul => $"{args[0]} * {args[1]}",
@@ -449,4 +492,6 @@ public static class GpuDsl
         };
         return n.Value.Count == 1 ? Literal(n.Value[0]) : $"{ShaderEmitter.HlslType(n.Type)}({string.Join(", ", n.Value.Select(Literal))})";
     }
+    private static string EscapeString(string value) => value.Replace("\\", "\\\\", StringComparison.Ordinal)
+        .Replace("\"", "\\\"", StringComparison.Ordinal);
 }

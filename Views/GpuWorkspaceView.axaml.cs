@@ -502,7 +502,11 @@ public partial class GpuWorkspaceView : UserControl
             foreach (var n in k.Nodes)
             {
                 var panel = new StackPanel { Spacing = 3 };
-                var title = new TextBlock { Margin = new Thickness(4, 0), MinHeight = 26, Tag = n.Id };
+                var title = new TextBlock
+                {
+                    Margin = new Thickness(4, 0), MinHeight = 26, Tag = n.Id,
+                    TextWrapping = TextWrapping.Wrap
+                };
                 panel.Children.Add(title);
                 var output = PortButton("gpu-output");
                 var outputLabel = PortLabel();
@@ -588,15 +592,15 @@ public partial class GpuWorkspaceView : UserControl
         {
             var visual = _nodeVisuals[n.Id];
             visual.Model = n;
-            visual.Title.Text = $"{GpuOperationRegistry.Operations[n.Op].DisplayName} : {n.Type}";
-            visual.OutputLabel.Text = "output : " + n.Type;
+            visual.Title.Text = NodeDisplayName(n);
+            visual.OutputLabel.Text = OutputDisplayName(n) + " : " + n.Type;
             visual.Output.Foreground = TypeBrush(n.Type);
             for (var i = 0; i < visual.Inputs.Length; i++)
             {
                 var source = k.Nodes.FirstOrDefault(x => x.Id == n.Inputs.ElementAtOrDefault(i));
                 var defaults = GpuOperationRegistry.GetDefaultInputs(n.Op, n.Type);
                 var descriptor = defaults.ElementAtOrDefault(i);
-                visual.InputLabels[i].Text = $"{descriptor?.Id ?? "in " + i} : {source?.Type ?? descriptor?.DefaultType ?? n.Type}";
+                visual.InputLabels[i].Text = $"{InputDisplayName(descriptor?.Id ?? "input")} : {source?.Type ?? descriptor?.DefaultType ?? n.Type}";
                 visual.Inputs[i].Foreground = TypeBrush(source?.Type ?? descriptor?.DefaultType ?? n.Type);
             }
         }
@@ -617,6 +621,32 @@ public partial class GpuWorkspaceView : UserControl
     {
         VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
         IsHitTestVisible = false
+    };
+    private static string InputDisplayName(string id) => LocalizationService.Shared.Get("Gpu.Input." + id);
+    private static string AttributeDisplayName(string? id) => id is null
+        ? "?"
+        : LocalizationService.Shared.Get("Gpu.Attribute." + id);
+    private static string UniformDisplayName(string? id) => id is null
+        ? "?"
+        : LocalizationService.Shared.Get("Gpu.Uniform." + id);
+    private static string NodeDisplayName(GpuNode node)
+    {
+        var operation = node.Op switch
+        {
+            GpuOp.ReadAttribute => LocalizationService.Shared.Get("Gpu.ReadAttribute") + " · " +
+                AttributeDisplayName(node.Attribute),
+            GpuOp.ReadUniform => LocalizationService.Shared.Get("Gpu.ReadUniform") + " · " +
+                UniformDisplayName(node.Uniform),
+            GpuOp.SampleFlowMap => GpuOperationRegistry.Operations[node.Op].DisplayName + " · " + node.Resource,
+            _ => GpuOperationRegistry.Operations[node.Op].DisplayName
+        };
+        return $"{operation} : {node.Type}";
+    }
+    private static string OutputDisplayName(GpuNode node) => node.Op switch
+    {
+        GpuOp.ReadAttribute => AttributeDisplayName(node.Attribute),
+        GpuOp.ReadUniform => UniformDisplayName(node.Uniform),
+        _ => LocalizationService.Shared.Get("Gpu.Output")
     };
     private static IBrush TypeBrush(GpuType type) => ThemeSettingsService.EditorBrush(
         type == GpuType.Bool ? "GraphSignal" : "GraphParameter");
@@ -979,30 +1009,48 @@ public partial class GpuWorkspaceView : UserControl
         NodeInspector.Children.Clear();
         var vm = Workspace!;
         var n = vm.Kernel?.Nodes.FirstOrDefault(n => n.Id == _selection);
-        SelectionLabel.Text = n?.Id ?? "Select a visual node / ノードを選択";
+        SelectionLabel.Text = n is null ? "Select a visual node / ノードを選択" : NodeDisplayName(n);
+        ToolTip.SetTip(SelectionLabel, n?.Id);
         if (n is null) return;
         var type = new ComboBox { ItemsSource = Enum.GetValues<GpuType>().Where(t => t != GpuType.Quaternion).ToArray(), SelectedItem = n.Type };
-        NodeInspector.Children.Add(new TextBlock { Text = "Result type / 出力型" });
-        NodeInspector.Children.Add(type);
+        if (n.Op == GpuOp.SampleFlowMap)
+            NodeInspector.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.FlowMapTypeFromInput") });
+        else
+        {
+            NodeInspector.Children.Add(new TextBlock { Text = "Result type / 出力型" });
+            NodeInspector.Children.Add(type);
+        }
         var value = new TextBox { Text = string.Join(", ", n.Value.Select(v => v.ToString("G", CultureInfo.InvariantCulture))) };
         if (n.Op == GpuOp.Constant) { NodeInspector.Children.Add(new TextBlock { Text = "Constant components / 定数" }); NodeInspector.Children.Add(value); }
         var attr = new ComboBox { ItemsSource = ParticleAbi.Attributes.Select(a => a.Id).ToArray(), SelectedItem = n.Attribute };
         if (n.Op == GpuOp.ReadAttribute) NodeInspector.Children.Add(attr);
         var uniform = new ComboBox { ItemsSource = ParticleAbi.Uniforms.Keys.ToArray(), SelectedItem = n.Uniform };
         if (n.Op == GpuOp.ReadUniform) NodeInspector.Children.Add(uniform);
+        var flowMap = new ComboBox
+        {
+            ItemsSource = vm.State.Program.Resources.Where(resource => resource.Kind == ResourceKind.FlowMap2D)
+                .Select(resource => resource.Id).ToArray(),
+            SelectedItem = n.Resource
+        };
+        if (n.Op == GpuOp.SampleFlowMap)
+        {
+            NodeInspector.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.FlowMapResource") });
+            NodeInspector.Children.Add(flowMap);
+        }
         var component = new TextBox { Text = (n.ComponentIndex ?? 0).ToString(CultureInfo.InvariantCulture) };
         if (n.Op == GpuOp.Component) { NodeInspector.Children.Add(new TextBlock { Text = "Component 0…3" }); NodeInspector.Children.Add(component); }
         NodeInspector.Children.Add(Button("Apply properties / 適用", () =>
         {
             var updated = n with
             {
-                Type = (GpuType)type.SelectedItem!,
+                Type = n.Op == GpuOp.SampleFlowMap ? n.Type : (GpuType)type.SelectedItem!,
                 Value = n.Op == GpuOp.Constant
                     ? value.Text!.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
                         .Select(v => double.Parse(v, CultureInfo.InvariantCulture)).ToList() : n.Value,
                 Attribute = n.Op == GpuOp.ReadAttribute ? attr.SelectedItem as string : n.Attribute,
                 Uniform = n.Op == GpuOp.ReadUniform ? uniform.SelectedItem as string : n.Uniform,
                 ComponentIndex = n.Op == GpuOp.Component ? int.Parse(component.Text!, CultureInfo.InvariantCulture) : n.ComponentIndex,
+                Resource = n.Op == GpuOp.SampleFlowMap ? flowMap.SelectedItem as string : n.Resource,
                 SourceSpan = null
             };
             vm.Edit(new() { Action = "update", KernelId = vm.KernelId, Node = updated });
@@ -1024,7 +1072,13 @@ public partial class GpuWorkspaceView : UserControl
         foreach (var write in k.Writes)
         {
             var attribute = ParticleAbi.Attributes.SingleOrDefault(a => a.Id == write.Attribute);
-            WritesPanel.Children.Add(new TextBlock { Text = $"@{write.Attribute} : {attribute?.Type} ← {write.Value}", TextWrapping = TextWrapping.Wrap });
+            var producer = k.Nodes.FirstOrDefault(node => node.Id == write.Value);
+            var target = LocalizationService.Shared.Get("Gpu.Attribute." + write.Attribute);
+            WritesPanel.Children.Add(new TextBlock
+            {
+                Text = $"@{target} : {attribute?.Type} ← {(producer is null ? write.Value : NodeDisplayName(producer))}",
+                TextWrapping = TextWrapping.Wrap
+            });
             WritesPanel.Children.Add(Button("Remove " + write.Id, () => vm.Edit(new() { Action = "write-remove", KernelId = k.Id, NodeId = write.Id })));
         }
         var attributes = new ComboBox { ItemsSource = ParticleAbi.Attributes.Select(a => a.Id).ToArray(), SelectedIndex = 0 };
@@ -1049,6 +1103,16 @@ public partial class GpuWorkspaceView : UserControl
     {
         BindingsPanel.Children.Clear();
         var vm = Workspace!;
+        BindingsPanel.Children.Add(Button(LocalizationService.Shared.Get("Gpu.AddFlowMap"), () =>
+        {
+            var resource = new ResourceDeclaration
+            {
+                Id = "flowmap_" + Guid.NewGuid().ToString("N"),
+                Kind = ResourceKind.FlowMap2D,
+                FlowMap = new()
+            };
+            vm.Edit(new() { Action = "resource", Resource = resource });
+        }));
         foreach (var flow in vm.State.Program.Flow.Where(f => f.Kind == FlowKind.RenderBillboard))
         {
             var settings = vm.State.RendererSettings.GetValueOrDefault(flow.Id) ?? new GpuRendererSettings();
@@ -1079,6 +1143,54 @@ public partial class GpuWorkspaceView : UserControl
         {
             BindingsPanel.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.TextureBinding") + " : " + resource.Id,
                 TextWrapping = TextWrapping.Wrap });
+            if (resource.Kind == ResourceKind.FlowMap2D && resource.FlowMap is { } settings)
+            {
+                BindingsPanel.Children.Add(new TextBlock
+                {
+                    Text = LocalizationService.Shared.Get("Gpu.FlowMapLinearHint"),
+                    TextWrapping = TextWrapping.Wrap
+                });
+                var axes = Enum.GetValues<GpuAxis>();
+                var axisU = new ComboBox { ItemsSource = axes, SelectedItem = settings.AxisU };
+                var axisV = new ComboBox { ItemsSource = axes, SelectedItem = settings.AxisV };
+                BindingsPanel.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.FlowMapAxisU") });
+                BindingsPanel.Children.Add(axisU);
+                BindingsPanel.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.FlowMapAxisV") });
+                BindingsPanel.Children.Add(axisV);
+                var minimumU = new TextBox { Text = settings.WorldMinimumU.ToString("G", CultureInfo.InvariantCulture) };
+                var maximumU = new TextBox { Text = settings.WorldMaximumU.ToString("G", CultureInfo.InvariantCulture) };
+                var minimumV = new TextBox { Text = settings.WorldMinimumV.ToString("G", CultureInfo.InvariantCulture) };
+                var maximumV = new TextBox { Text = settings.WorldMaximumV.ToString("G", CultureInfo.InvariantCulture) };
+                foreach (var (label, field) in new[]
+                {
+                    (LocalizationService.Shared.Get("Gpu.FlowMapMinimumU"), minimumU),
+                    (LocalizationService.Shared.Get("Gpu.FlowMapMaximumU"), maximumU),
+                    (LocalizationService.Shared.Get("Gpu.FlowMapMinimumV"), minimumV),
+                    (LocalizationService.Shared.Get("Gpu.FlowMapMaximumV"), maximumV)
+                })
+                {
+                    BindingsPanel.Children.Add(new TextBlock { Text = label });
+                    BindingsPanel.Children.Add(field);
+                }
+                BindingsPanel.Children.Add(Button(LocalizationService.Shared.Get("Gpu.ApplyFlowMap"), () =>
+                    vm.Edit(new()
+                    {
+                        Action = "resource",
+                        Resource = resource with
+                        {
+                            FlowMap = settings with
+                            {
+                                AxisU = (GpuAxis)axisU.SelectedItem!,
+                                AxisV = (GpuAxis)axisV.SelectedItem!,
+                                WorldMinimumU = double.Parse(minimumU.Text!, CultureInfo.InvariantCulture),
+                                WorldMaximumU = double.Parse(maximumU.Text!, CultureInfo.InvariantCulture),
+                                WorldMinimumV = double.Parse(minimumV.Text!, CultureInfo.InvariantCulture),
+                                WorldMaximumV = double.Parse(maximumV.Text!, CultureInfo.InvariantCulture)
+                            }
+                        },
+                        AssetPath = vm.State.ResourceAssetPaths.GetValueOrDefault(resource.Id)
+                    })));
+            }
             var path = new TextBox { Text = vm.State.ResourceAssetPaths.GetValueOrDefault(resource.Id) ?? "",
                 PlaceholderText = LocalizationService.Shared.Get("Gpu.TexturePathHint") };
             BindingsPanel.Children.Add(path);

@@ -4,7 +4,7 @@ Public frontend contract (namespace LibraGpu.Core):
   GpuProgram: Version (1), Id, Capacity, Attributes, Resources, Kernels, Flow.
   KernelGraph: Id, Stage (Spawn/Update), Nodes, Writes.
   GpuNode: Id, Op, Type, Inputs (node IDs), Value (literal components),
-    Attribute, Uniform, ComponentIndex, SourceSpan (optional UTF-16 offset/length).
+    Attribute, Uniform, Resource, ComponentIndex, SourceSpan (optional UTF-16 offset/length).
   Each node has one typed output. Writes require exact attribute types.
   Graph reads evaluate against the incoming particle snapshot; stores occur last.
   IDs are descriptive strings (1..128 characters), never shader identifiers.
@@ -52,7 +52,8 @@ Stores preserve other attributes and spare slots during Update.
 
 Flow v1: at most one Spawn, at most one Update, then RenderBillboard step(s).
 RenderBillboard binds a declared Texture2D; an engine backend consumes the GPU
-buffer directly. Compute code does not render or perform CPU per-particle work.
+buffer directly. FlowMap2D is a declared Texture2D interpreted as a vector
+field by SampleFlowMap. Compute code does not render or perform CPU per-particle work.
 RenderStartTexture, ComputePass, storage textures and arbitrary buffers are
 reserved with explicit unsupported diagnostics. Texture2D dimensions 0,0 mean
 external; otherwise both dimensions must be positive and bounded.
@@ -73,7 +74,9 @@ Safe independent text frontend, same typed IR:
     parentheses; float literals, signed-i/unsigned-u literals, true/false.
   dt/time/emitterPosition or param("deltaTime")/param("time")/
     param("emitterPosition"); float2/3/4 constructors, sin/cos/min/max/clamp,
-    normalize/length/select/random. Select takes bool, value, value.
+    normalize/length/select/random, and sampleFlowMap("resourceId", coordinates).
+  Select takes bool, value, value. FlowMap coordinates are Float2 UVs or Float3
+  world positions.
   No loops, arbitrary calls, declarations, shader injection or native code.
   Sequential component writes lower to Compose/Component nodes and final stores.
   GpuDsl.Emit(kernel) returns generated text plus NodeIdsBySpan/WriteIdsBySpan.
@@ -91,7 +94,8 @@ Optional future fixed-interpreter export:
   KernelKey preserves GUID IDs, otherwise SHA256(UTF8 ID) first16 canonical bytes.
   Instruction64: uint opcode@0,dst@4,a@8,b@12,c@16,type@20,aux@24,d@28;
     float4 immediate@32; uint4 exact integer/bool payload@48.
-  Missing registers=UINT_MAX; aux is attribute/uniform slot or component index.
+  Missing registers=UINT_MAX; aux is attribute/uniform slot, component index,
+  or resource index.
   Compose uses a/b/c/d. Stores use a and aux with no destination. Constants use
     float or integer payload according to Type, never lossy packed float casts.
   No separate constant table is needed: constants are embedded instructions.
@@ -107,13 +111,52 @@ Local focused validation from repository root:
     -DxcPath selects a compiler; -KeepArtifacts retains shader/DXIL fixtures.
   No external uploads or GPU execution are part of these tests.
 
+Backend compatibility contract
+------------------------------
+Production hosts embed the native C++ Core Runtime. It owns CPU jobs, effect
+and instance lifetimes, and timing. A GPU adapter is a host extension, not a
+replacement for Core or a second author-added effect entry point. The managed
+LibraGpu.Core compiler is tooling only.
+
+GPU ABI v1 binds 80-byte particle records and 48-byte uniform records. LGPK
+uses the bounded little-endian 64-byte header and instruction layout described
+in RegisterBytecode.cs. Generated shaders instead use source and matching
+metadata from the same canonical IR revision; neither path consumes the
+other's artifacts. SourceExport never means the GPU executed. Unreal uses
+LGPK with its fixed USF interpreter; Unity dispatches generated ComputeShaders.
+Both accept v1 opcodes 0–41 and Texture2D/FlowMap2D. Unreal also budgets
+register scratch and packet storage and caps registers at 256 per kernel.
+
+For a new host, define a GpuBackendCapabilities profile alongside the adapter.
+In its delivery tool, compile canonical IR and call the selected profile's
+Validate before serializing native assets. Unsupported opcode, resource,
+ABI and budget produce diagnostics without falling back. This is authoring
+preflight, not a native plugin ABI: importers independently validate version,
+bounds, bindings and layout before replacing a live program. Resolve
+resources on the owning engine thread using explicit bindings and embed
+compiled assets in packaged builds; never require the original source path.
+
+Allocate and clear private storage per owning effect instance. Sample finite
+uniforms from the owning update, dispatch Spawn then Update, and preserve
+kernel order with UAV barriers before the terminal billboard phase. The
+adapter owns device resources, queued draw lifetime and retirement; retain
+submitted resources until the renderer finishes with them. Core workers do
+not call engine or graphics SDKs. Reject failed replacement before publishing
+it, and retire each instance's GPU state on stop/destroy.
+
+Use the shared math/noise and FlowMap fixtures in LibraGpu.Core.Tests when
+adding an adapter. Compare actual GPU readbacks with the same canonical inputs
+and reference outputs; capability acceptance alone is not parity evidence.
+Custom engines and console SDK build/cook/hardware remain unverified.
+
 Common math/noise extension (append-only opcodes, version1 packet unchanged):
   Opcode18 remains WriteAttribute and is NOT a GpuOp.
   19 Abs, 20 Floor, 21 Ceil, 22 Round, 23 Frac, 24 Mod, 25 Sign,
   26 Pow, 27 Sqrt, 28 Exp, 29 Log, 30 Lerp, 31 Smoothstep, 32 Remap,
   33 Dot, 34 Cross, 35 Distance, 36 Saturate,
-  37 GradientNoise3D, 38 Fbm, 39 Turbulence, 40 CurlNoise.
-  All new ops use aux0, destination typed as below, and no immediate payload.
+  37 GradientNoise3D, 38 Fbm, 39 Turbulence, 40 CurlNoise, 41 SampleFlowMap.
+  Ops 19..40 use aux0 and no immediate payload; SampleFlowMap uses aux as the
+  FlowMap2D resource index.
   Unary uses a; binary a/b; ternary a/b/c; fractal noise a/b/c/d.
   None use casts or packed float encodings for UInt seeds / Int octaves.
   Old opcode/type values, particle/uniform/packet layout and lifecycle unchanged.
@@ -135,6 +178,11 @@ Typing / operand order:
   Fbm/Turbulence/CurlNoise: a=position Float3, b=seed UInt,
     c=octaves Int1..8, d=gain Float0..1.
     Fbm/Turbulence -> Float; CurlNoise -> Float3.
+  SampleFlowMap: a=Float2 UV or Float3 world position, result matches a.
+    RG is decoded as rg*2-1. World projection uses the resource's selected
+    axis pair and bounds; instruction d packs the axes and immediate.xy/zw
+    stores minimumU/minimumV/rangeU/rangeV. Strength remains graph-side math.
+    Any Texture2D may be assigned; Linear vector data is recommended.
 
 New math policies:
   New Float math guards return zero per lane for nonfinite input/result.
@@ -181,8 +229,9 @@ Shared frontends / support / verification:
     OptionalInDsl,Minimum,Maximum) are immutable machine-readable palette data.
   GpuOperationRegistry.TryInferType/TypesMatch share compiler shape rules.
   GetDefaultInputs(op, preferredResult=Float) returns valid typed defaults.
-  Safe DSL uses lowercase names, including gradientnoise3d/fbm/turbulence/
-    curlnoise; noise optional arguments materialize as ordinary constant nodes.
+  Safe DSL uses lowercase math/noise names, including gradientnoise3d/fbm/
+    turbulence/curlnoise; sampleFlowMap takes a quoted resource ID. Noise
+    optional arguments materialize as ordinary constant nodes.
     E.g. curlnoise(@Position) -> position3, seed0u, octaves4i, gain0.5.
   Graph -> generated DSL -> typed IR preserves mapped node IDs for new ops too.
   Shaders\LibraGpuSupport.hlsl is the original shared portable helper include;
@@ -205,7 +254,7 @@ Shared frontends / support / verification:
     curl central-difference divergence -1.0e-5. The library remains source-export;
     runtime execution belongs to that backend, not CompiledGpuProgram itself.
 
-Implemented: all common math and four noise ops listed above; graph/DSL/packet
+Implemented: all common math, four noise ops and SampleFlowMap listed above; graph/DSL/packet
   lowering, metadata and shader source. Future: clamped five-bound Fit convenience,
   editable frequency/lacunarity inside noise op, quaternion algebra, texture
   simulation passes. Engine runtime support/verification belongs to each backend.

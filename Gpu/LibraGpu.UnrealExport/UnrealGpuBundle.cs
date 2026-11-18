@@ -46,13 +46,11 @@ public static class UnrealGpuExporter
         ArgumentNullException.ThrowIfNull(program);
         ArgumentNullException.ThrowIfNull(texturePaths);
         var compiled = GpuCompiler.Compile(program);
-        var maximumRegisters = compiled.RegisterKernels.Count == 0 ? 0u :
-            compiled.RegisterKernels.Max(kernel => kernel.RegisterCount);
-        var instructionBytes = compiled.RegisterKernels.Sum(kernel =>
-            (long)CompiledRegisterKernel.HeaderBytes + (long)kernel.Instructions.Count * CompiledRegisterKernel.InstructionStride);
-        if (maximumRegisters > 256 ||
-            (ulong)compiled.Capacity * (80UL + maximumRegisters * 16UL) + (ulong)instructionBytes > 256UL * 1024 * 1024)
-            throw new NotSupportedException("Unreal GPU interpreter limits are 256 registers and 256 MiB per instance.");
+        var diagnostics = GpuBackendCapabilities.Unreal.Validate(compiled);
+        if (diagnostics.Count != 0)
+        {
+            throw new NotSupportedException(string.Join(" ", diagnostics.Select(diagnostic => diagnostic.Message)));
+        }
         var resources = compiled.Resources;
         if (texturePaths.Count != resources.Count)
             throw new ArgumentException("Supply exactly one explicit binding for each declared texture.", nameof(texturePaths));
@@ -60,8 +58,6 @@ public static class UnrealGpuExporter
         var textures = new List<UnrealGpuTextureBinding>(resources.Count);
         foreach (var resource in resources)
         {
-            if (resource.Kind != ResourceKind.Texture2D)
-                throw new NotSupportedException($"Resource '{resource.Id}' is not a Texture2D.");
             if (!texturePaths.TryGetValue(resource.Id, out var path) || (path != "builtin:white" && !IsObjectPath(path)))
                 throw new ArgumentException($"Texture '{resource.Id}' requires an absolute Unreal object path or explicit builtin:white.", nameof(texturePaths));
             textures.Add(new(resource.Id, path));

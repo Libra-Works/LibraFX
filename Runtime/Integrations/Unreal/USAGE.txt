@@ -113,9 +113,10 @@ Import and use
   simulation; bAutoPlay starts playback when the game begins.
   Alternatively add Libra Effect to an existing actor and assign Package.
   SetPackage/SetEffect switch formats; assigning both properties rejects Play.
-  ULibraSpawnableComponent and ULibraGpuEffectComponent remain internal helpers
-  and legacy-compatible classes, but are hidden from Add Component. The effect
-  component creates them as needed; package playback keeps a single tick owner.
+  ULibraSpawnableComponent remains an internal helper, hidden from Add Component.
+  GPU execution uses an internal UObject runtime, not a second actor component.
+  The effect component owns and ticks standalone GPU playback; Spawnable playback
+  drives its own per-instance runtimes.
 
 Imported asset inspector
   Open the imported .lfxp asset in the Content Browser. Under LIBERA FX Resource
@@ -207,9 +208,9 @@ Effect package playback
   manifests reject playback with LastError instead of a partial visual fallback.
   Executable GPU manifests require current package export; legacy GPU snapshots
   alone reject with a re-export diagnostic. Each scope owns an independent
-  LibraGpuEffectComponent, particle buffers, spawn cursor and seed. GPU ticking
+  GPU runtime, particle buffers, spawn cursor and seed. GPU ticking
   uses effect-scaled local elapsed time and is driven only by the Spawnable
-  owner, never a second automatic component tick. GpuSpawnPerSecond controls
+  owner. GpuSpawnPerSecond controls
   emission; GPU emitter position follows the owning actor's root transform.
   Scope Stop terminates its particles; queued GPU work retains shared render
   state until the render thread has consumed it.
@@ -313,6 +314,14 @@ Profiling and native feedback
   ConfigureRecording enables UE's independent recorder; ConfigureProfiling
   controls optional node/accessor detail. Reconfigure only while evaluation and
   signal dispatch are idle. UE Insights is an optional parallel sink, not required.
+  With the CPU trace channel enabled, standalone effects expose named component,
+  scheduler, lifecycle and task scopes; optional node scopes use
+  Libra.Node.<runtime-node-UUID>. Matrix-lowered rows are measured separately by
+  their runtime UUID; the trace does not reconstruct a parent Matrix aggregate.
+  Package playback exposes a SpawnableAdvance aggregate but still rejects
+  standalone per-node recording flags. GPU RDG events include the owning component
+  path and kernel ID, so GPU timings can be compared per emitter/kernel; they are
+  pass timings, not individual instruction timings.
   Connected peers explicitly advertise engine, role and capabilities. Editor,
   runtime and viewer roles do not imply asset catalog or profiling support.
   Protocol 3 peers advertising profiling/values accept bounded LFXP Control frames

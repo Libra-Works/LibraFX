@@ -104,7 +104,8 @@ public sealed class AssetReferenceIndex
                     if (GpuParticleEditorService.IsGpu(node.Kind))
                     {
                         var state = GpuParticleEditorService.ReadState(node);
-                        foreach (var resource in state.Program.Resources.Where(resource => resource.Kind == ResourceKind.Texture2D))
+                        foreach (var resource in state.Program.Resources.Where(resource =>
+                                     resource.Kind is ResourceKind.Texture2D or ResourceKind.FlowMap2D))
                         {
                             if (state.ResourceAssetPaths.TryGetValue(resource.Id, out var path) && path.Length > 0)
                                 Binding(path, "texture", "GPU/" + resource.Id);

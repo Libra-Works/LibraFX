@@ -12,6 +12,7 @@
 #include "liberafx/LbSpawnableHost.h"
 #include "liberafx/LbSpawnablePackage.h"
 #include "Misc/ScopeExit.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 
 #include <array>
 #include <memory>
@@ -718,6 +719,7 @@ void ULibraSpawnableComponent::TickDebugger(float deltaTime)
 void ULibraSpawnableComponent::TickComponent(float deltaTime, ELevelTick tickType,
     FActorComponentTickFunction* tickFunction)
 {
+    TRACE_CPUPROFILER_EVENT_SCOPE(Libra_SpawnableAdvance);
     Super::TickComponent(deltaTime, tickType, tickFunction);
     if (DebugState) { TickDebugger(deltaTime); return; }
     if (!bIsPlaying || !NativeHost) return;
