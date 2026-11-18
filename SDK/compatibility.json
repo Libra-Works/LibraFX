@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "sdkVersion": "0.1.0",
+  "nativeAbi": 1,
+  "maximumBytecodeVersion": 11,
+  "spawnablePackageVersion": 11,
+  "unity": {
+    "package": "works.libra.liberafx",
+    "minimumDeclaredEditor": "6000.0",
+    "previouslyExercised": "7000-series editor, URP, D3D11",
+    "unity6Acceptance": "not yet verified",
+    "nativeLibrary": "liberafx_native"
+  },
+  "unreal": {
+    "minimumEditor": "5.7",
+    "plugin": "LibraRuntimeForUnreal",
+    "portableCompiler": "Clang",
+    "finalWindowsIntegrationCompiler": "MSVC"
+  },
+  "godot": {
+    "implemented": false
+  }
+}

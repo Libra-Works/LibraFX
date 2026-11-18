@@ -1,0 +1,8 @@
+{
+  "name": "LiberaFx.Unity.StandaloneTools",
+  "rootNamespace": "LiberaFx.Unity",
+  "autoReferenced": false,
+  "includePlatforms": ["Editor"],
+  "defineConstraints": ["LIBERAFX_STANDALONE_DOTNET_TOOLS"],
+  "noEngineReferences": true
+}

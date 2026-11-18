@@ -1,0 +1,8 @@
+{
+  "name": "works.libra.liberafx",
+  "version": "0.1.0",
+  "displayName": "LIBERA FX Runtime",
+  "description": "Portable native runtime adapters, package assets and GPU rendering for LIBERA FX. See USAGE.txt for verified engine/backend coverage and native plugin installation.",
+  "unity": "6000.0",
+  "keywords": [ "vfx", "liberafx" ]
+}
