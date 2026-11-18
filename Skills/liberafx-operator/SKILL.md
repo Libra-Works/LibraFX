@@ -122,8 +122,10 @@ A single UUID refers to the current editing level. For an absolute path, use
 The editor exposes locally resolved references as readable navigation buttons.
 They retain the originating document and group-instance path, never resolve by
 name, and select/frame the target without editing history. Closed or deleted
-targets are unavailable. Following a reference starts a fresh graph context for
-the next chat message rather than reusing old tool permissions.
+targets are unavailable. Following a reference preserves the explanatory
+conversation, but discards old tool results and selection instructions, revokes
+old tool permissions, and refreshes the current graph context before the next
+shared chat message.
 
 ## Assets and material authoring
 

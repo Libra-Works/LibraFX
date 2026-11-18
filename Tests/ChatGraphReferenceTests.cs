@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Commands;
+using LiberaFx.Extensions.Abstractions;
 using LiberaFx.Services;
 using LiberaFx.ViewModels;
 using LiberaFx.Views;
@@ -43,8 +44,20 @@ internal static class ChatGraphReferenceTests
         graph.FrameSelectionRequested += (_, _) => framed++;
         var window = new ChatWindow(main);
         window.Show();
+        Dispatcher.UIThread.RunJobs();
         try
         {
+            Field<CheckBox>(window, "_share").IsChecked = true;
+            var messages = Field<List<ChatMessage>>(window, "_messages");
+            messages.Add(new("system", "Old selected node context"));
+            messages.Add(new("user", "Explain how this value works."));
+            messages.Add(new("assistant", "", ToolCalls:
+                [new("old-read", "libera_graph_read", System.Text.Json.JsonSerializer.SerializeToElement(new { }))]));
+            messages.Add(new("tool", "Old graph snapshot", "old-read"));
+            messages.Add(new("assistant", "This value controls the movement."));
+            var oldContext = ChatMcpExecution.Capture(main.ActiveGraphProvider);
+            typeof(ChatWindow).GetField("_conversationContext", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(window, oldContext);
             typeof(ChatWindow).GetMethod("ShowNodeReferences", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(window, [link]);
             var buttons = Field<WrapPanel>(window, "_nodeReferences");
@@ -54,6 +67,16 @@ internal static class ChatGraphReferenceTests
                 framed > 0 && graph.History.CurrentNodeId == revision &&
                 GraphSnapshot.ContentEquals(before, graph.CreateSnapshot()),
                 "Reference navigation must select/frame the correct group instance without editing history.");
+            Require(messages.Any(message => message.Role == "user" && message.Text == "Explain how this value works.") &&
+                messages.Any(message => message.Role == "assistant" && message.Text == "This value controls the movement.") &&
+                messages.All(message => message.Role != "tool" && message.ToolCalls is null &&
+                    !message.Text.Contains("Old graph snapshot") && !message.Text.Contains("Old selected node context")),
+                "Navigation must preserve explanations without carrying stale tool cycles or selection instructions.");
+            var expired = false;
+            try { oldContext.Validate(); }
+            catch (ModelContextProtocol.McpException) { expired = true; }
+            Require(expired, "Navigation must revoke the old editing capability.");
+            Field<ChatMcpExecution.Lease>(window, "_conversationContext").Validate();
             var rootLink = $"[Root group](liberafx-node:/{group.Id:D})";
             var rootReference = ChatGraphReferences.Read(rootLink, document, [second.Id]).Single();
             Require(rootReference.ParentPath.Count == 0, "Absolute root references must not bind to a child scope.");
@@ -63,6 +86,13 @@ internal static class ChatGraphReferenceTests
             Require(ChatGraphReferences.Navigate(main, reference) && ReferenceEquals(main.ActiveDocument, document),
                 "A reference must activate its original document, not a same-ID node in another document.");
             graph.DeleteNode(graph.GetNode(child.Id));
+            var retainedConversation = messages.ToArray();
+            var retainedContext = Field<ChatMcpExecution.Lease>(window, "_conversationContext");
+            Invoke((Button)buttons.Children.Single());
+            Dispatcher.UIThread.RunJobs();
+            Require(messages.SequenceEqual(retainedConversation) &&
+                ReferenceEquals(retainedContext, Field<ChatMcpExecution.Lease>(window, "_conversationContext")),
+                "Unavailable references must not discard conversation or renew an invalid editing capability.");
             Require(!ChatGraphReferences.Navigate(main, reference) &&
                 !ChatGraphReferences.Navigate(main, reference with { DocumentId = "closed-document" }),
                 "Deleted/closed targets must not navigate to another node with the same name.");

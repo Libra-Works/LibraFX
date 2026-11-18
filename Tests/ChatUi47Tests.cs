@@ -73,6 +73,22 @@ internal static class ChatUi47Tests
                 "Chat node navigation");
             if (main.Graph.History.CurrentNodeId != referenceRevision)
                 throw new Exception("Chat navigation edited history.");
+            adapter.Mode = "continue";
+            input.Text = "What happens if I change that value?";
+            Invoke(send);
+            await WaitAsync(() => input.IsEnabled, "Conversation after navigation");
+            var continuation = adapter.Continuation ??
+                throw new Exception("Navigation did not deliver the follow-up conversation.");
+            if (!continuation.Messages.Any(message => message.Role == "user" &&
+                    message.Text == "Create a synthetic node") ||
+                !continuation.Messages.Any(message => message.Role == "assistant" &&
+                    message.Text.Contains("Synthetic edit complete")) ||
+                continuation.Messages.Any(message => message.Role == "tool" || message.ToolCalls is not null) ||
+                !continuation.Messages.Any(message => message.Role == "system" &&
+                    message.Text.Contains(main.Graph.SelectedNode!.Id.ToString("D")) &&
+                    message.Text.Contains("graphRead") && message.Text.Contains("selectedNodeIds")))
+                throw new Exception("Follow-up lost the explanation or reused stale tool context without a fresh graph read.");
+            adapter.Mode = "edit";
             var callsBeforeSelection = adapter.Calls;
             Invoke(Field<Button>(window, "_explainSelection"));
             await WaitAsync(() => (input.Text ?? "").Contains(main.Graph.SelectedNode!.Name), "Selection question draft");
@@ -143,9 +159,15 @@ internal static class ChatUi47Tests
         public string PrivacyNotice => "No external service.";
         public string Mode = "edit";
         public int Calls;
+        public ChatRequest? Continuation;
         public async Task<ChatReply> SendAsync(ChatRequest request, CancellationToken cancellation)
         {
             Calls++;
+            if (Mode == "continue")
+            {
+                Continuation = request;
+                return new ChatReply("Synthetic explanation continued with the current graph.", []);
+            }
             if (Mode == "wait") await Task.Delay(Timeout.Infinite, cancellation);
             if (request.Messages.Any(m => m.Role == "tool"))
             {

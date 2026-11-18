@@ -268,6 +268,8 @@ public sealed partial class ChatWindow : Window
         {
             lease.Validate();
             if (_messages.Count == 0 && share) _messages.Add(new("system", ReferenceInstructions));
+            if (_navigationContextPending && share &&
+                !await RefreshNavigationContextAsync(client, lease, operation.Token)) return;
             if (!PrepareSelectionContext(share)) return;
             _messages.Add(new("user", prompt));
             _input.Text = "";
@@ -418,6 +420,7 @@ public sealed partial class ChatWindow : Window
         _configured?.Dispose();
         _configured = null;
         _messages.Clear();
+        _navigationContextPending = false;
         _selectionWorkspace = null;
         _selectionIds = [];
         _selectionPath = [];
