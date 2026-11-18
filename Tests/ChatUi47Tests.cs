@@ -65,6 +65,18 @@ internal static class ChatUi47Tests
             if (main.Graph.Nodes.Count != initialCount) throw new Exception("Undo failed.");
             main.Graph.History.Redo();
             if (main.Graph.Nodes.Count != initialCount + 1) throw new Exception("Redo failed.");
+            var referenceButtons = Field<WrapPanel>(window, "_nodeReferences");
+            if (referenceButtons.Children.Count != 1) throw new Exception("Reply did not expose a readable node reference.");
+            var referenceRevision = main.Graph.History.CurrentNodeId;
+            Invoke((Button)referenceButtons.Children.Single());
+            await WaitAsync(() => main.Graph.SelectedNode?.Definition.Kind == LiberaFx.Models.Graph.GraphNodeKind.Float,
+                "Chat node navigation");
+            if (main.Graph.History.CurrentNodeId != referenceRevision)
+                throw new Exception("Chat navigation edited history.");
+            var callsBeforeSelection = adapter.Calls;
+            Invoke(Field<Button>(window, "_explainSelection"));
+            await WaitAsync(() => (input.Text ?? "").Contains(main.Graph.SelectedNode!.Name), "Selection question draft");
+            if (adapter.Calls != callsBeforeSelection) throw new Exception("Selection question sent data before Send.");
             Invoke(disconnect);
             if (input.IsEnabled || send.IsEnabled) throw new Exception("Disconnected chat stayed enabled.");
             Field<CheckBox>(window, "_share").IsChecked = true;
@@ -130,11 +142,19 @@ internal static class ChatUi47Tests
         public string Destination => "Synthetic in-process";
         public string PrivacyNotice => "No external service.";
         public string Mode = "edit";
+        public int Calls;
         public async Task<ChatReply> SendAsync(ChatRequest request, CancellationToken cancellation)
         {
+            Calls++;
             if (Mode == "wait") await Task.Delay(Timeout.Infinite, cancellation);
             if (request.Messages.Any(m => m.Role == "tool"))
-                return new ChatReply("Synthetic edit complete.", []);
+            {
+                using var result = JsonDocument.Parse(request.Messages.Last(m => m.Role == "tool").Text);
+                var content = result.RootElement.GetProperty("content")[0].GetProperty("text").GetString()!;
+                using var node = JsonDocument.Parse(content);
+                var id = node.RootElement.GetProperty("id").GetGuid();
+                return new ChatReply($"Synthetic edit complete: [Created Float](liberafx-node:{id:D})", []);
+            }
             using var json = JsonDocument.Parse("""{"kind":"Float","x":100,"y":100}""");
             return new ChatReply("", [new("synthetic-call", Mode == "invalid" ? "untrusted_tool" : "libera_graph_create_node", json.RootElement.Clone())]);
         }

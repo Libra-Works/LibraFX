@@ -12,7 +12,7 @@ using LiberaFx.ViewModels;
 namespace LiberaFx.Views;
 
 /// <summary>Session-only chat: no keys, transcripts or tool results are persisted or logged.</summary>
-public sealed class ChatWindow : Window
+public sealed partial class ChatWindow : Window
 {
     private readonly MainViewModel _main;
     private readonly ComboBox _adapters = new() { HorizontalAlignment = HorizontalAlignment.Stretch };
@@ -70,6 +70,7 @@ public sealed class ChatWindow : Window
         _send.Content = Text("Send");
         _cancel.Content = Text("Cancel");
         _clear.Content = Text("Clear");
+        _explainSelection.Content = Text("ExplainSelection");
         _share.Content = Text("Share");
         _share.IsChecked = false;
         _input.PlaceholderText = Text("Input");
@@ -95,7 +96,8 @@ public sealed class ChatWindow : Window
             Children =
             {
                 _input,
-                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _send, _cancel } }
+                _nodeReferences,
+                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _send, _cancel, _explainSelection } }
             }
         };
         var grid = new Grid { Margin = new Thickness(12), RowDefinitions = new RowDefinitions("Auto,*,Auto"), RowSpacing = 8 };
@@ -110,6 +112,7 @@ public sealed class ChatWindow : Window
         _cancel.Click += (_, _) => Disconnect("Cancelled");
         _clear.Click += (_, _) => Disconnect("Cleared");
         _send.Click += async (_, _) => await SendAsync();
+        _explainSelection.Click += (_, _) => ExplainSelection();
         _adapters.SelectionChanged += (_, _) => { if (!_reloading) SettingsChanged(); };
         _endpoint.TextChanged += (_, _) => SettingsChanged();
         _model.TextChanged += (_, _) => SettingsChanged();
@@ -187,6 +190,8 @@ public sealed class ChatWindow : Window
         _adapters.IsEnabled = !_busy;
         _endpoint.IsEnabled = _model.IsEnabled = _key.IsEnabled = !_busy;
         _share.IsEnabled = !_busy;
+        _explainSelection.IsEnabled = connected && !_busy && _share.IsChecked == true;
+        _nodeReferences.IsEnabled = !_busy;
     }
 
     private async Task ConnectAsync()
@@ -262,6 +267,8 @@ public sealed class ChatWindow : Window
         try
         {
             lease.Validate();
+            if (_messages.Count == 0 && share) _messages.Add(new("system", ReferenceInstructions));
+            if (!PrepareSelectionContext(share)) return;
             _messages.Add(new("user", prompt));
             _input.Text = "";
             Append(Text("You"), prompt);
@@ -293,7 +300,11 @@ public sealed class ChatWindow : Window
                     reply.ToolCalls.Select(call => call.Id).Distinct(StringComparer.Ordinal).Count() != reply.ToolCalls.Count)
                     throw new InvalidDataException("Invalid or unapproved tool call.");
                 _messages.Add(new("assistant", reply.Text, ToolCalls: reply.ToolCalls));
-                if (reply.Text.Length > 0) Append(adapter.Name, reply.Text);
+                if (reply.Text.Length > 0)
+                {
+                    Append(adapter.Name, ChatGraphReferences.DisplayText(reply.Text));
+                    ShowNodeReferences(reply.Text);
+                }
                 if (reply.ToolCalls.Count == 0)
                 {
                     _conversationContext = ChatMcpExecution.Capture(_main.ActiveGraphProvider);
@@ -407,6 +418,10 @@ public sealed class ChatWindow : Window
         _configured?.Dispose();
         _configured = null;
         _messages.Clear();
+        _selectionWorkspace = null;
+        _selectionIds = [];
+        _selectionPath = [];
+        _nodeReferences.Children.Clear();
         _transcript.Text = "";
         _input.Text = "";
         SetStatus(reason);

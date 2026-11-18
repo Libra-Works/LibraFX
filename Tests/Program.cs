@@ -43,6 +43,7 @@ internal static class Program
         {
             InitializeIsolatedUi();
             GraphFlowLayoutTests.Run();
+            ChatGraphReferenceTests.Run();
             return;
         }
         if (args is ["--operator-skill"])
@@ -50,6 +51,7 @@ internal static class Program
             InitializeIsolatedUi();
             OperatorSkillTests.Run();
             GraphFlowLayoutTests.Run();
+            ChatGraphReferenceTests.Run();
             return;
         }
         if (args is ["--mcp-project-files"])

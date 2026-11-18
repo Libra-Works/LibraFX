@@ -110,6 +110,21 @@ History can branch after an edit at an older state. Keep branches and bookmarks.
 Before undoing, verify that the active document and latest edit are still the
 ones you intended; never undo an intervening user edit blindly.
 
+### Explain and navigate
+
+In editor chat, "Explain selected nodes" prepares a draft for up to 32 selected
+nodes; it does not send anything until the user presses Send and permits project
+sharing. Separate graph facts from inferred author intent.
+
+Reference known nodes as `[readable name](liberafx-node:UUID)` in assistant text.
+A single UUID refers to the current editing level. For an absolute path, use
+`[name](liberafx-node:/GROUP-UUID/NODE-UUID)`; `/NODE-UUID` refers to a root node.
+The editor exposes locally resolved references as readable navigation buttons.
+They retain the originating document and group-instance path, never resolve by
+name, and select/frame the target without editing history. Closed or deleted
+targets are unavailable. Following a reference starts a fresh graph context for
+the next chat message rather than reusing old tool permissions.
+
 ## Assets and material authoring
 
 Select an explicit connected engine peer using `libera_preview_clients`.

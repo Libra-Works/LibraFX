@@ -1,0 +1,10 @@
+{
+  "Chat.ExplainSelection": "選択ノードを説明",
+  "Chat.SelectionQuestion": "選択した次のノードの処理を説明してください。グラフの事実と意図の推測を区別してください:",
+  "Chat.SelectionRequired": "先にグラフのノードを選択してください（1 回の質問で最大 32 個）。",
+  "Chat.SelectionAttached": "選択範囲を下書きに添付しました。「送信」を押すまで何も送信しません。",
+  "Chat.SelectionChanged": "対象のグラフまたはノードが変わりました。選択し直してから送信してください。",
+  "Chat.JumpToNode": "グラフのノードへ移動",
+  "Chat.NodeNavigated": "参照先のノードへ移動しました。次のメッセージは新しいグラフの文脈で開始します。",
+  "Chat.NodeUnavailable": "参照先のドキュメント・グループ・ノードが閉じられたか、削除済み、または利用できません。"
+}

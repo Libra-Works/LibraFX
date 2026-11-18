@@ -1,0 +1,10 @@
+{
+  "Chat.ExplainSelection": "Explain selected nodes",
+  "Chat.SelectionQuestion": "Explain what these selected nodes do. Separate graph facts from inferred intent:",
+  "Chat.SelectionRequired": "Select graph nodes first (up to 32 nodes per question).",
+  "Chat.SelectionAttached": "Selection attached to the draft. Nothing is sent until you press Send.",
+  "Chat.SelectionChanged": "The selected graph or nodes changed. Select them again before sending.",
+  "Chat.JumpToNode": "Jump to graph node",
+  "Chat.NodeNavigated": "Moved to the referenced node. Your next message starts a new graph context.",
+  "Chat.NodeUnavailable": "The referenced document, group or node is closed, deleted or unavailable."
+}
