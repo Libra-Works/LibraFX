@@ -49,6 +49,7 @@
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="{DynamicResource Text.Editor.Edit}">
+                <MenuItem Header="{DynamicResource Text.Vcs.Title}" Click="OnRevisionHistoryClick" />
                 <MenuItem Header="{DynamicResource Text.Editor.Undo}"
                           Command="{Binding UndoCommand}">
                     <MenuItem.Icon><views:EditorIconView Icon="Undo" /></MenuItem.Icon>

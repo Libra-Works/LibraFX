@@ -20,6 +20,16 @@ public partial class MainWindow : Window
     private LocalProjectsWindow? _localProjectsWindow;
     private ProblemsWindow? _problemsWindow;
     private WindowLayoutsWindow? _windowLayoutsWindow;
+    private RevisionHistoryWindow? _revisionHistoryWindow;
+
+    private void OnRevisionHistoryClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model) return;
+        if (_revisionHistoryWindow is not null) { _revisionHistoryWindow.Activate(); return; }
+        _revisionHistoryWindow = new RevisionHistoryWindow(model);
+        _revisionHistoryWindow.Closed += (_, _) => _revisionHistoryWindow = null;
+        _revisionHistoryWindow.Show(this);
+    }
     private LayoutWindowBounds? _normalLayoutBounds;
     private MainViewModel? _groupModel;
     private bool _checkingGroupUpdates;

@@ -1,0 +1,16 @@
+{
+  "Vcs.Title": "Revision history and graph diff",
+  "Vcs.History": "Load history",
+  "Vcs.Compare": "Compare",
+  "Vcs.Provider": "Version control provider",
+  "Vcs.Before": "Before revision (left)",
+  "Vcs.After": "After revision or working document (right)",
+  "Vcs.Working": "Open working document",
+  "Vcs.GraphSettings": "Graph settings and exposed ports",
+  "Vcs.SaveFirst": "Save this project to a local file before browsing version history.",
+  "Vcs.ReadOnly": "Read-only history. Choose any two revisions, or compare with the open document.",
+  "Vcs.Legend": "Left: before. Right: after. + added, - removed, ~ changed (including parameters and connections). Nested changes are listed below. No revisions are applied to the document.",
+  "Vcs.Added": "Added",
+  "Vcs.Removed": "Removed",
+  "Vcs.Modified": "Changed"
+}

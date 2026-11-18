@@ -1,0 +1,40 @@
+LIBERA FX revision adapters and graphical diff
+
+Edit > Revision history and graph diff opens a read-only comparison for the
+active saved local project. Choose a provider, load history, and choose two
+revisions or an old revision and the open working document (including its
+unsaved edits). Both root graphs are drawn side by side. Added (+), removed
+(-), and changed (~) nodes are marked; parameter, connection and nested graph
+changes are included in the change list. Nothing is checked out, reverted,
+written to the working file or applied to document history.
+
+The built-in Git provider runs local read-only Git commands, without a shell,
+credential prompts, network fetch, checkout or hooks. Git must be installed.
+History is limited to 100 revisions and revision content to 16 MiB; operations
+have finite cancellation timeouts. Git tree paths are not portable asset IDs.
+Rename-following history and visual expansion of nested diff graphs are not
+implemented; nested changes are listed by stable node path.
+
+An independent net10.0 DLL can implement IVersionControlProvider from
+LiberaFx.Extensions.Abstractions and register it from IEditorExtension using
+AddVersionControlProvider. Declare liberafx.editor.vcs in its manifest.
+GetHistoryAsync returns provider-specific opaque revision IDs; ReadRevisionAsync
+returns the original project bytes for that revision. Do not write to the
+working copy. Honor cancellation and return meaningful failures. The provider
+owns backend-specific authentication, command invocation and path mapping;
+no credentials belong in revisions or document files.
+
+Samples\Extensions.DirectoryHistory is an SDK-only provider with no editor
+assembly reference. It reads manually archived project files from
+<project-file>.history and does not create that directory or archives.
+Build and install its output as described in extension-sdk.txt, explicitly
+enable it, and restart.
+
+Samples\Extensions.Svn is an independent Subversion provider using the same
+contract. It requires svn on PATH and an existing authenticated working copy.
+Only explicit history/read operations contact the configured SVN repository;
+it never invokes checkout, update, commit or an interactive password prompt.
+It uses the CLI's existing authentication configuration; no passwords are
+stored in LIBERA FX. Build/install/trust it just like the other SDK samples.
+The source and local build do not establish service connectivity or prove
+compatibility with the user's server. Perforce is not bundled.

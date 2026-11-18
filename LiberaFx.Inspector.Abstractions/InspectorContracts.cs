@@ -5,7 +5,7 @@ namespace LiberaFx.Inspector.Abstractions;
 
 public static class InspectorSdk
 {
-    public const int ApiVersion = 1;
+    public const int ApiVersion = Extensions.Abstractions.ExtensionSdk.ApiVersion;
 }
 
 /// <summary>

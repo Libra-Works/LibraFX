@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <GenerateDependencyFile>true</GenerateDependencyFile>
+    <!-- A source build must NEVER download a native runtime. Deployment is explicit. -->
+    <CopilotSkipCliDownload>true</CopilotSkipCliDownload>
+    <NoWarn>$(NoWarn);MCPSDK001</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\LiberaFx.Extensions.Abstractions\LiberaFx.Extensions.Abstractions.csproj" />
+    <PackageReference Include="Microsoft.Copilot.SDK" Version="2.0.0-preview.2" />
+    <None Update="liberafx-extension.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

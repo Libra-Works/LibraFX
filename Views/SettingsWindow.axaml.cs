@@ -27,6 +27,47 @@ public partial class SettingsWindow : Window
         Close();
     }
 
+    private async void OnExtensionEnableClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model || sender is not Button { Tag: string id }) return;
+        var entry = model.Extensions.Extensions.FirstOrDefault(item => item.Id == id);
+        if (entry is null) return;
+        var text = LocalizationService.Shared;
+        var dialog = new Window
+        {
+            Title = text.Get("Extensions.Confirm"), Width = 480, SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+        var cancel = new Button { Content = text.Get("Extensions.Cancel"), IsCancel = true };
+        var trust = new Button { Content = text.Get("Extensions.Enable") };
+        cancel.Click += (_, _) => dialog.Close(false);
+        trust.Click += (_, _) => dialog.Close(true);
+        dialog.Content = new StackPanel
+        {
+            Margin = new Avalonia.Thickness(20), Spacing = 12,
+            Children =
+            {
+                new TextBlock { Text = $"{entry.Name} ({entry.Id}) {entry.Version}", TextWrapping = TextWrapping.Wrap },
+                new TextBlock { Text = text.Get("Extensions.Trust"), TextWrapping = TextWrapping.Wrap },
+                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { cancel, trust } }
+            }
+        };
+        if (await dialog.ShowDialog<bool>(this)) model.Extensions.SetEnabled(id, true, explicitlyTrusted: true);
+    }
+
+    private void OnExtensionDisableClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel model && sender is Button { Tag: string id })
+            model.Extensions.SetEnabled(id, false, explicitlyTrusted: false);
+    }
+
+    private async void OnExtensionRunClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel model &&
+            ExtensionCommandList.SelectedItem is RegisteredExtensionCommand command)
+            await model.Extensions.ExecuteAsync(command.Id);
+    }
+
     private void OnLanguageSelected(object? sender, SelectionChangedEventArgs e)
     {
         if (_updatingLanguage || DataContext is not MainViewModel model ||

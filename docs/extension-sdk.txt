@@ -1,0 +1,59 @@
+LIBERA FX editor extension SDK, API 1
+
+The public, UI-independent assembly is LiberaFx.Extensions.Abstractions.
+Reference only that assembly from an independent net10.0 project.
+Samples\Extensions.AddComment is a minimal command extension.
+
+Build the sample separately and copy its output folder under the Extensions
+directory shown in Settings > Extensions. Each package needs a
+liberafx-extension.json manifest, an IEditorExtension entry point, and its
+managed dependencies. No editor rebuild is required. Review the manifest,
+trust the package explicitly in Settings, and restart. Changes to package
+contents invalidate approval. Duplicate IDs, API/framework mismatches,
+missing/failed dependencies and dependency cycles prevent loading.
+No install-time or disabled-plugin discovery invokes plugin code.
+apiVersion defaults to an exact compatibility requirement. Optional apiMinimum
+and apiMaximum declare an inclusive supported SDK range; apiVersion must be
+inside that range. Optional targets defaults to ["editor"]; this host requires
+the editor target and net10.0. Each dependency declares id and minimumVersion,
+and may declare an inclusive maximumVersion.
+
+The initial non-Inspector extension points are liberafx.editor.commands,
+liberafx.editor.vcs, liberafx.editor.chat and liberafx.editor.crash-reports.
+The same trusted-package host registers commands and provider objects.
+Commands can inspect a detached JSON graph snapshot
+and submit an additive LiberaGraphEditPlan. Node kinds use their persistent
+string representation, not a display label. Edits use the workspace validator,
+lock checks and document Undo/Redo. A context expires on document/navigation
+or history changes and after its first successful edit. Use it on the UI
+thread. Do not retain context objects or UI state between invocations.
+
+The existing Inspector SDK API 1 remains binary/source compatible and uses
+the same SDK API version and package approval/fingerprint policy. Its
+liberafx-inspector.json packages, type-specific UI factories, trust preferences
+and Settings > Inspectors remain supported; legacy manifests are not silently
+migrated or granted approval. Inspector UI is Avalonia-version-specific;
+command extensions do not need an Avalonia dependency.
+
+Extension DLLs execute arbitrary code in the editor process with the current
+user's permissions. Neither the load context nor SDK restrictions constitute
+a sandbox. Trust only known packages. The loader shares the SDK identity,
+resolves package-local managed dependencies and rejects native package dependencies.
+On Windows, advapi32.dll imports resolve explicitly from the OS system directory
+to support Credential Manager in report providers; this is not sandboxing.
+Disablement blocks subsequent commands immediately; disposal/unload happens
+at shutdown. There is no hot reload or guaranteed immediate assembly unload.
+
+This is an editor API, not a runtime/compiler/GPU ABI. Data-only node and
+Group catalogs retain their existing mechanisms. No C# extension is loaded
+by the portable C++ Core, headless converter, Unity or Unreal player.
+New runtime operations still need a separately supported target backend.
+Document-owned missing extension data is not rewritten by the host.
+Provider contracts are UI-independent. They do not give direct access to
+editor collections or ViewModels. VCS providers return revision metadata and
+original project bytes. Chat adapters return text and proposed tool calls;
+the editor owns MCP execution and consent. Report providers receive only the
+user-approved report and selected attachments, never credentials in the
+contract. Register each provider using its explicit registration method and
+declare the matching manifest extension point. IDs must be unique.
+Custom windows, import/export and runtime backend plugins are not implemented.

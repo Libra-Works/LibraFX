@@ -1,11 +1,7 @@
 using System.Collections.ObjectModel;
-using System.Buffers.Binary;
 using System.Reflection;
 using System.Runtime.Loader;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -139,8 +135,6 @@ public sealed class InspectorPluginService : ObservableObject, IDisposable
 {
     private const int ManifestVersion = 1;
     private const string RequiredAvaloniaVersion = "12.1.6";
-    private static readonly Regex StableIdPattern = new("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
-        RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly string[] CommonTypes =
         ["bool", "color", "float", "int", "string", "vector2", "vector3", "vector4"];
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -685,31 +679,14 @@ public sealed class InspectorPluginService : ObservableObject, IDisposable
         return manifest;
     }
 
-    private static bool ValidId(string id) => !string.IsNullOrWhiteSpace(id) && StableIdPattern.IsMatch(id);
+    private static bool ValidId(string id) => ExtensionPackagePolicy.ValidId(id);
     private bool IsTrusted(string pluginId, string fingerprint) =>
         _preferences.Trusted.GetValueOrDefault(pluginId) &&
         _preferences.Fingerprints.TryGetValue(pluginId, out var trustedFingerprint) &&
         string.Equals(trustedFingerprint, fingerprint, StringComparison.Ordinal);
 
     private static string ComputePluginFingerprint(string directory)
-    {
-        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        foreach (var path in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
-                     .OrderBy(Path.GetFileName, StringComparer.Ordinal))
-        {
-            var name = Encoding.UTF8.GetBytes(Path.GetFileName(path));
-            var length = new byte[sizeof(int)];
-            BinaryPrimitives.WriteInt32LittleEndian(length, name.Length);
-            hash.AppendData(length);
-            hash.AppendData(name);
-            using var stream = File.OpenRead(path);
-            var buffer = new byte[81920];
-            int count;
-            while ((count = stream.Read(buffer, 0, buffer.Length)) != 0)
-                hash.AppendData(buffer.AsSpan(0, count));
-        }
-        return Convert.ToHexString(hash.GetHashAndReset());
-    }
+        => ExtensionPackagePolicy.Fingerprint(directory, recursive: false, legacy: true);
 
     private static string InspectorKey(string pluginId, string inspectorId) => $"{pluginId}/{inspectorId}";
 

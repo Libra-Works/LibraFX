@@ -19,6 +19,7 @@
     <Compile Remove="Gpu\**\*.cs" />
     <Compile Remove="Samples\**\*.cs" />
     <Compile Remove="LiberaFx.Inspector.Abstractions\**\*.cs" />
+    <Compile Remove="LiberaFx.Extensions.Abstractions\**\*.cs" />
     <Folder Include="Models\" />
     <AvaloniaResource Include="Assets\**" Exclude="Assets\Inspectors\**" />
     <None Update="Assets\Nodes\*.json" CopyToOutputDirectory="PreserveNewest" />
@@ -34,6 +35,7 @@
 
   <ItemGroup>
     <ProjectReference Include="LiberaFx.Inspector.Abstractions\LiberaFx.Inspector.Abstractions.csproj" />
+    <ProjectReference Include="LiberaFx.Extensions.Abstractions\LiberaFx.Extensions.Abstractions.csproj" />
     <ProjectReference Include="Gpu\LibraGpu.Core\LibraGpu.Core.csproj" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.4.0" />

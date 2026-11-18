@@ -79,6 +79,7 @@ public partial class MainViewModel : ViewModelBase
     public NodeDefinitionCatalog NodeDefinitions { get; }
     public LocalizationService Localization => LocalizationService.Shared;
     public InspectorPluginService InspectorPlugins => InspectorPluginService.Shared;
+    public EditorExtensionHost Extensions { get; }
     public EditorPlayback Playback { get; } = new();
 
     public string McpAccessToken { get; }
@@ -236,6 +237,7 @@ public partial class MainViewModel : ViewModelBase
             CanClose = false
         };
         ActiveGraphProvider = new ActiveGraphProvider(initialWorkspace);
+        Extensions = new EditorExtensionHost(ActiveGraphProvider, builtIns: [new GitVersionControlProvider()]);
         _dockFactory = new DockFactory(ActiveGraphProvider, initialDocument, this);
         Layout = _dockFactory.CreateLayout();
         _dockFactory.InitLayout(Layout);
@@ -631,6 +633,7 @@ public partial class MainViewModel : ViewModelBase
 
     public void DisposeStorageFiles()
     {
+        Extensions.Dispose();
         Playback.Dispose();
         GroupAssets.Dispose();
         NodeDefinitions.Dispose();

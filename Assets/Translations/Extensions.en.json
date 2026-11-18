@@ -1,0 +1,13 @@
+{
+  "Extensions.Title": "Extensions",
+  "Extensions.Trust": "Extension DLLs run arbitrary code with your permissions, without a sandbox. Enable only packages you trust. Installation, updates and enablement require a restart. Copy each package folder into the directory below; disabled packages are inspected as data only.",
+  "Extensions.Enable": "Trust and enable",
+  "Extensions.Disable": "Disable",
+  "Extensions.Restart": "Preference saved. Restart the editor to apply it.",
+  "Extensions.Disabled": "Disabled or changed since approval. DLL not executed.",
+  "Extensions.Loaded": "Trusted and loaded.",
+  "Extensions.Commands": "Extension commands",
+  "Extensions.Run": "Run selected command",
+  "Extensions.Confirm": "Trust this extension?",
+  "Extensions.Cancel": "Cancel"
+}

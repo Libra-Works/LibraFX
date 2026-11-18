@@ -1,0 +1,13 @@
+{
+  "Extensions.Title": "拡張機能",
+  "Extensions.Trust": "拡張DLLは利用者の権限で任意のコードを実行します。サンドボックスではありません。信頼するパッケージだけを有効にしてください。導入・更新・有効化の反映には再起動が必要です。下のフォルダーへパッケージをフォルダーごと配置してください。無効な拡張はデータだけを読み取ります。",
+  "Extensions.Enable": "信頼して有効化",
+  "Extensions.Disable": "無効化",
+  "Extensions.Restart": "設定を保存しました。エディターの再起動後に反映します。",
+  "Extensions.Disabled": "無効、または承認後に変更されています。DLLは実行していません。",
+  "Extensions.Loaded": "信頼済み・読み込み済み",
+  "Extensions.Commands": "拡張コマンド",
+  "Extensions.Run": "選択したコマンドを実行",
+  "Extensions.Confirm": "この拡張を信頼しますか？",
+  "Extensions.Cancel": "キャンセル"
+}
