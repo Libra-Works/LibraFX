@@ -68,8 +68,21 @@ public static class Int32CompilationTests
             0, 0, groupDefinition.PortType, groupDefinition.PortCategory,
             ChildGraph: new GraphSnapshot([groupInput, groupOutput],
                 [new(groupInput.Id, groupOutput.Id)]));
-        var groupProgram = VfxProgram.Compile(new GraphSnapshot([grouped], []));
-        VerifyInt32TypeTable(groupProgram.ToBinary(), GraphValueType.Int32, GraphValueType.Int32);
+        var source = Node(int32,
+            new NodeParameterSnapshot("value", "int", JsonSerializer.SerializeToElement(-17)));
+        var multiplier = Node(int32,
+            new NodeParameterSnapshot("value", "int", JsonSerializer.SerializeToElement(3)));
+        var multiply = Node(Definition("Int32Multiply"));
+        var groupBytes = VfxProgram.Compile(new GraphSnapshot([source, grouped, multiplier, multiply],
+        [
+            new(source.Id, grouped.Id, GroupBoundarySchema.InputPortId(groupInput.Id)),
+            new(grouped.Id, multiply.Id, "a", GroupBoundarySchema.OutputPortId(groupOutput.Id)),
+            new(multiplier.Id, multiply.Id, "b")
+        ])).ToBinary();
+        VerifyInt32TypeTable(groupBytes, GraphValueType.Int32, GraphValueType.Int32,
+            GraphValueType.Int32, GraphValueType.Int32, GraphValueType.Int32);
+        if (!string.IsNullOrWhiteSpace(fixtureDirectory))
+            File.WriteAllBytes(Path.Combine(fixtureDirectory, "GroupBoundary.lfxb"), groupBytes);
 
         var badTarget = Node(Definition("Int32Add"));
         var mismatched = new GraphSnapshot([floatNode, badTarget], [new(floatNode.Id, badTarget.Id, "a")]);

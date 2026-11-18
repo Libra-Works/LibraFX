@@ -233,6 +233,7 @@ int main()
     verifyArithmetic("Int32Subtract.lfxb", 50, 11);
     verifyArithmetic("Int32Multiply.lfxb", 51, 42);
     verifyArithmetic("Int32Divide.lfxb", 52, 4);
+    verifyArithmetic("GroupBoundary.lfxb", 51, -51);
 
     verifyFailure("Int32Add.lfxb", 49, std::numeric_limits<std::int32_t>::max(), 1,
         liberafx::Result::ArithmeticOverflow);
