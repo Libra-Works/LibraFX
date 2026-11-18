@@ -81,7 +81,7 @@ namespace LiberaFx.Unity.Editor
                 typeof(LiberaFxSpawnableComponent).GetField("playOnEnable", flags).SetValue(component, false);
                 owner.SetActive(true);
                 Require(component.Play() == NativeResult.Ok, "Package playback failed.");
-                var update = typeof(LiberaFxSpawnableComponent).GetMethod("Update", flags);
+                var update = typeof(LiberaFxSpawnableComponent).GetMethod("LateUpdate", flags);
                 foreach (var frame in expected.frames)
                 {
                     if (frame.timeSeconds > 0)

@@ -66,7 +66,7 @@ namespace LiberaFx.Unity.Editor
                         "Exported composition package failed Unity render preflight/startup: " + playResult + ": " + component.LastError);
                     var flags = BindingFlags.Instance | BindingFlags.NonPublic;
                     var elapsed = typeof(LiberaFxSpawnableComponent).GetField("elapsed", flags);
-                    var update = typeof(LiberaFxSpawnableComponent).GetMethod("Update", flags);
+                    var update = typeof(LiberaFxSpawnableComponent).GetMethod("LateUpdate", flags);
                     var renderers = owner.GetComponentsInChildren<MeshRenderer>();
                     Require(component.ActiveRenderScopeCount == 1 && renderers.Length == 2,
                         "Exported package did not initialize one root scope with two real renderers.");
@@ -241,7 +241,7 @@ namespace LiberaFx.Unity.Editor
                 Check(component.Play());
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
                 var elapsed = typeof(LiberaFxSpawnableComponent).GetField("elapsed", flags);
-                var update = typeof(LiberaFxSpawnableComponent).GetMethod("Update", flags);
+                var update = typeof(LiberaFxSpawnableComponent).GetMethod("LateUpdate", flags);
                 void At(double time, double expected)
                 {
                     elapsed.SetValue(component, time - Time.deltaTime);
@@ -310,7 +310,7 @@ namespace LiberaFx.Unity.Editor
                         transform.gameObject.layer = 31;
                     var flags = BindingFlags.Instance | BindingFlags.NonPublic;
                     var elapsed = typeof(LiberaFxSpawnableComponent).GetField("elapsed", flags);
-                    var update = typeof(LiberaFxSpawnableComponent).GetMethod("Update", flags);
+                    var update = typeof(LiberaFxSpawnableComponent).GetMethod("LateUpdate", flags);
                     Sample(0, 0);
                     Sample(1, 0);
                     Sample(1.5, 1);

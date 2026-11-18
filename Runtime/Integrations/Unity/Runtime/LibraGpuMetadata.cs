@@ -74,12 +74,12 @@ namespace LiberaFx.Unity
             }
             if (m.resources.Length > 64) throw new ArgumentException("GPU resource limit exceeded.");
             var resources = new Dictionary<string, LibraGpuResourceMetadata>();
-            var shaderNames = new HashSet<string>(StringComparer.Ordinal);
+            var resourceShaderNames = new HashSet<string>(StringComparer.Ordinal);
             foreach (var r in m.resources)
             {
                 if (r == null || string.IsNullOrEmpty(r.id) ||
                     (r.kind != "Texture2D" && r.kind != "FlowMap2D") ||
-                    string.IsNullOrEmpty(r.shaderName) || !shaderNames.Add(r.shaderName) || resources.ContainsKey(r.id))
+                    string.IsNullOrEmpty(r.shaderName) || !resourceShaderNames.Add(r.shaderName) || resources.ContainsKey(r.id))
                     throw new ArgumentException("GPU resources must be uniquely identified Texture2D or FlowMap2D declarations.");
                 if (r.kind == "FlowMap2D")
                 {

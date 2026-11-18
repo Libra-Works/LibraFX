@@ -174,7 +174,7 @@ namespace LiberaFx.Unity.Editor
         {
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
             var elapsed = typeof(LiberaFxSpawnableComponent).GetField("elapsed", flags);
-            var update = typeof(LiberaFxSpawnableComponent).GetMethod("Update", flags);
+            var update = typeof(LiberaFxSpawnableComponent).GetMethod("LateUpdate", flags);
             var block = new MaterialPropertyBlock();
             foreach (var time in new[] { 0, 1, 2, 4 })
             {

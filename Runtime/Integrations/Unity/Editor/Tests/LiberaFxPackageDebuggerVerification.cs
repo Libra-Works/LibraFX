@@ -69,7 +69,7 @@ namespace LiberaFx.Unity.Editor
 
                     var scopes = component.ActiveRenderScopeCount;
                     var clock = Stopwatch.StartNew();
-                    typeof(LiberaFxSpawnableComponent).GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic)
+                    typeof(LiberaFxSpawnableComponent).GetMethod("LateUpdate", BindingFlags.Instance | BindingFlags.NonPublic)
                         .Invoke(component, null);
                     Require(component.ActiveRenderScopeCount == scopes &&
                         component.ForceTerminate() == NativeResult.Busy, "Paused worker did not preserve owner state.");
@@ -95,7 +95,7 @@ namespace LiberaFx.Unity.Editor
             }
             UnityEngine.Debug.Log("PASS PackageDebugger: exact child pause, responsive main thread, Busy, destroy while paused.");
             VerifyRenderedRoot(directory);
-            UnityEngine.Debug.Log("PASS PackageDebugger: rendered root stays visible with its mesh, material and transform intact while paused, including across Update.");
+            UnityEngine.Debug.Log("PASS PackageDebugger: rendered root stays visible with its mesh, material and transform intact while paused, including across LateUpdate.");
         }
 
         private static void VerifyRenderedRoot(string directory)
@@ -156,7 +156,7 @@ namespace LiberaFx.Unity.Editor
                 Check(component.Play());
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
                 var elapsed = typeof(LiberaFxSpawnableComponent).GetField("elapsed", flags);
-                var update = typeof(LiberaFxSpawnableComponent).GetMethod("Update", flags);
+                var update = typeof(LiberaFxSpawnableComponent).GetMethod("LateUpdate", flags);
                 elapsed.SetValue(component, -(double)Time.deltaTime);
                 update.Invoke(component, null);
 
