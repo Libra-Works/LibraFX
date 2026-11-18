@@ -1,4 +1,8 @@
 {
+  "Resources.MaterialSlot": "マテリアル {0}",
+  "Resources.MaterialBrowseRequired": "アセットブラウザーからマテリアルを選択し、公開パラメーターを読み込んでください。",
+  "Resources.MaterialIdentityManaged": "このスロットは共通リソースIDを使用しています。リソースID画面でマテリアルとパラメーターの対応を更新してください。",
+  "Resources.AssignMaterialHistory": "{1}番スロットに{0}を設定",
   "Resources.Connected": "接続エンジンのアセット",
   "Resources.ProjectAndLocal": "プロジェクト・ローカル資源",
   "Resources.Groups": "プロジェクトのGroupライブラリ",

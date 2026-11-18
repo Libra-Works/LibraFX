@@ -1,4 +1,8 @@
 {
+  "Resources.MaterialSlot": "Material {0}",
+  "Resources.MaterialBrowseRequired": "Use the asset browser to select a material and load its exposed parameters.",
+  "Resources.MaterialIdentityManaged": "This slot uses a portable resource identity. Update its material and parameter bindings in Resource Identity instead.",
+  "Resources.AssignMaterialHistory": "Assign {0} to material slot {1}",
   "Resources.Connected": "Connected engine assets",
   "Resources.ProjectAndLocal": "Project and local resources",
   "Resources.Groups": "Project Group library",

@@ -4,7 +4,7 @@ using LibraGpu.Core;
 
 namespace LiberaFx.Services;
 
-public enum ResourceTargetKind { RenderAsset, MaterialTexture, GpuTexture }
+public enum ResourceTargetKind { RenderAsset, MaterialTexture, GpuTexture, RenderMaterial }
 public sealed record ResourceAssignmentTarget(Guid NodeId, ResourceTargetKind Kind, string Id, string Label)
 {
     public override string ToString() => Label;
@@ -20,6 +20,10 @@ public static class ResourceAssignment
         if (parameterId == "assetPath")
             return new(node.Id, ResourceTargetKind.RenderAsset, parameterId,
                 LocalizationService.Shared.Get("Resources.RenderTarget", node.Name));
+        if (RenderNodeSchema.TryGetMaterialSlot(parameterId, out var slot) &&
+            RenderNodeSchema.ReadMaterials(node.Definition, node.Parameters).Any(material => material.Slot == slot))
+            return new(node.Id, ResourceTargetKind.RenderMaterial, parameterId,
+                LocalizationService.Shared.Get("Resources.MaterialSlot", slot));
         var parameter = RenderNodeSchema.Read(node.Definition, node.Parameters)
             .FirstOrDefault(candidate => candidate.Id == parameterId && candidate.Kind == "texture");
         return parameter is null ? null : new(node.Id, ResourceTargetKind.MaterialTexture, parameter.Id,
@@ -30,9 +34,12 @@ public static class ResourceAssignment
     public static string? AssetClassForParameter(GraphNodeViewModel node, string parameterId)
     {
         if (TargetForParameter(node, parameterId) is not { } target) return null;
-        return target.Kind == ResourceTargetKind.RenderAsset
-            ? node.Definition.TypeName == "ModelDraw" ? "model" : "texture"
-            : "texture";
+        return target.Kind switch
+        {
+            ResourceTargetKind.RenderAsset => node.Definition.TypeName == "ModelDraw" ? "model" : "texture",
+            ResourceTargetKind.RenderMaterial => "material",
+            _ => "texture"
+        };
     }
 
     public static IReadOnlyList<ResourceAssignmentTarget> Targets(GraphNodeViewModel node, EngineAsset asset)
@@ -48,6 +55,11 @@ public static class ResourceAssignment
         if (asset.AssetClass == expected)
             targets.Add(new(node.Id, ResourceTargetKind.RenderAsset, "assetPath",
                 LocalizationService.Shared.Get("Resources.RenderTarget", node.Name)));
+        if (asset.AssetClass == "material")
+            targets.AddRange(RenderNodeSchema.ReadMaterials(node.Definition, node.Parameters).Select(material =>
+                new ResourceAssignmentTarget(node.Id, ResourceTargetKind.RenderMaterial,
+                    RenderNodeSchema.MaterialSlotId(material.Slot),
+                    LocalizationService.Shared.Get("Resources.MaterialSlot", material.Slot))));
         if (asset.AssetClass == "texture")
             targets.AddRange(RenderNodeSchema.Read(node.Definition, node.Parameters)
                 .Where(parameter => parameter.Kind == "texture")
@@ -71,6 +83,11 @@ public static class ResourceAssignment
                 break;
             case ResourceTargetKind.MaterialTexture:
                 graph.SetParameter(node, target.Id, System.Text.Json.JsonSerializer.SerializeToElement(asset.Path));
+                break;
+            case ResourceTargetKind.RenderMaterial:
+                if (!RenderNodeSchema.TryGetMaterialSlot(target.Id, out var slot))
+                    throw new ArgumentException("The selected material slot is invalid.");
+                graph.AssignRenderMaterial(node, asset, slot);
                 break;
             case ResourceTargetKind.GpuTexture:
                 GpuParticleEditorService.AssignTextureResource(graph, node, asset, target.Id);

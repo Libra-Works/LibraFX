@@ -377,9 +377,8 @@ public sealed class ResourceIdentityPaneViewModel : ObservableObject, IDisposabl
         {
             var definition = GraphNodeDefinition.All.Single(item => item.Kind == node.Kind);
             Locations.Add(new("assetPath", "assetPath", StringParameter(node, "assetPath")));
-            foreach (var material in RenderNodeSchema.Read(definition, node.Parameters)
-                         .GroupBy(parameter => parameter.Slot).OrderBy(group => group.Key))
-                Locations.Add(new($"material:{material.Key}", $"material:{material.Key}", material.First().MaterialPath));
+            foreach (var material in RenderNodeSchema.ReadMaterials(definition, node.Parameters).OrderBy(slot => slot.Slot))
+                Locations.Add(new($"material:{material.Slot}", $"material:{material.Slot}", material.Path));
             foreach (var parameter in RenderNodeSchema.Read(definition, node.Parameters).Where(item => item.Kind == "texture"))
                 Locations.Add(new($"texture:{parameter.Id}", $"texture:{parameter.Name}", parameter.Value.GetString() ?? ""));
         }

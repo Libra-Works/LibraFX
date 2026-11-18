@@ -26,6 +26,7 @@ public static class GroupExposedItems
         !SequenceSchema.IsSequence(definition.Kind) &&
         parameter.EnabledWhen is null &&
         !(parameter.Id == "materialSchema" && RenderNodeSchema.IsRenderNode(definition)) &&
+        !(RenderNodeSchema.IsRenderNode(definition) && RenderNodeSchema.TryGetMaterialSlot(parameter.Id, out _)) &&
         (parameter.Type is "float" or "int" or "bool" or "string" or "vector2" or "vector3" or "vector4" or "color" ||
          GraphEnumDefinition.TryGetTypeId(parameter.Type, out _));
 

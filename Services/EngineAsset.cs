@@ -24,6 +24,9 @@ public interface IRenderResourceBindingContext
     void ValidateRenderNode(Guid nodeId, IEnumerable<(string Id, string Kind, int Slot)> parameters);
     void ValidateRenderNode(Guid nodeId, IEnumerable<(string Id, string Kind, int Slot)> parameters,
         IReadOnlyList<Guid> instancePath) => ValidateRenderNode(nodeId, parameters);
+    void ValidateRenderNode(Guid nodeId, IEnumerable<(string Id, string Kind, int Slot)> parameters,
+        IReadOnlyList<Guid> instancePath, IReadOnlyList<int> materialSlots) =>
+        ValidateRenderNode(nodeId, parameters, instancePath);
     string ResolvePath(Guid nodeId, string location, string kind, string legacyValue);
     string ResolvePath(Guid nodeId, string location, string kind, string legacyValue,
         IReadOnlyList<Guid> instancePath) => ResolvePath(nodeId, location, kind, legacyValue);

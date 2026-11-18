@@ -452,6 +452,10 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
                 IReadOnlyList<Guid> instancePath) =>
                 inner.ValidateRenderNode(nodeId, parameters, Combine(nodeId, instancePath));
 
+            public void ValidateRenderNode(Guid nodeId, IEnumerable<(string Id, string Kind, int Slot)> parameters,
+                IReadOnlyList<Guid> instancePath, IReadOnlyList<int> materialSlots) =>
+                inner.ValidateRenderNode(nodeId, parameters, Combine(nodeId, instancePath), materialSlots);
+
             public string ResolvePath(Guid nodeId, string location, string kind, string legacyValue) =>
                 ResolvePath(nodeId, location, kind, legacyValue, Array.Empty<Guid>());
 

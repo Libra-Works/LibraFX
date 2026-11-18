@@ -54,6 +54,23 @@ Unity's built-in Cube mesh and maps the material's Color input to _Color.
 The Unreal verification binds the same sample lookup key independently.
 There is no automatic cross-project asset-identity inference in this demo.
 
+For independent material selection and a graph-authored white/blue animation,
+generate another isolated fixture using --model-material-animation instead of
+--model-draw. ModelDraw first selects the mesh, then assigns a standalone
+material descriptor to slot 0, generating its Color input pin. Time, Cos and
+LerpVector4 drive white at 0 seconds, blue at 2, and white again at 4.
+Run LiberaFx.Unity.Editor.LiberaFxModelDrawVerification.RunMaterialAnimationBatch
+with the same guarded environment variables pointing to this fixture. It checks
+material values and actual camera pixels at 0/1/2/4 seconds without replacing
+the renderer, and saves Assets\LiberaFxMaterialSample\MaterialPulse.unity.
+VerifySavedMaterialAnimation independently reloads that scene and its embedded
+package/bindings. The sample material key is explicitly mapped to a Unity
+Material; its Unreal-shaped text does not imply Unity asset discovery.
+Unlike the older Cube fixture, this graph references the actual Unreal engine
+Cube path, /Engine/BasicShapes/Cube.Cube, so it can also be transferred directly
+to the Unreal preview window in that project. Unity explicitly binds this key
+to its own built-in mesh; no Unreal-to-Unity lookup inference is performed.
+
 Unity installation (Unity 2021.3+ APIs; verified against 6000.2.6f1 assemblies)
 ----------------------------------------------------------------------------
 Unity 7 alpha verification of these Built-In RP sample shaders requires

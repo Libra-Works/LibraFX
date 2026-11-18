@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
+using LiberaFx.Models.Resources;
 using LiberaFx.Services;
 
 namespace LiberaFx.ViewModels;
@@ -1739,6 +1740,8 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
         if (!Nodes.Contains(node)) throw new InvalidOperationException("The node is not in this graph.");
         if (RenderNodeSchema.IsRenderNode(node.Definition) && id == "materialSchema")
             throw new InvalidOperationException("Assign an engine asset to update the material schema.");
+        if (RenderNodeSchema.IsRenderNode(node.Definition) && RenderNodeSchema.TryGetMaterialSlot(id, out _))
+            throw new InvalidOperationException(LocalizationService.Shared.Get("Resources.MaterialBrowseRequired"));
         var definition = node.Definition.Parameters.FirstOrDefault(parameter => parameter.Id == id)
             ?? throw new InvalidOperationException("The node parameter no longer exists.");
         if (!NodeParameter.IsValidValue(definition.Type, value))
@@ -1783,9 +1786,40 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
         var assetPath = RenderNodeSchema.IsSafeAssetPath(asset.Path)
             ? asset.Path
             : throw new ArgumentException("The engine asset path is invalid.", nameof(asset));
-        var schema = RenderNodeSchema.Encode(asset);
-        var pathDefinition = node.Definition.Parameters.FirstOrDefault(parameter => parameter.Id == "assetPath")
-            ?? throw new InvalidOperationException("The render node does not define an asset path.");
+        ApplyRenderSchema(node, RenderNodeSchema.Encode(asset), assetPath, "Assign engine asset");
+    }
+
+    public void AssignRenderMaterial(GraphNodeViewModel node, EngineAsset asset, int slot)
+    {
+        ArgumentNullException.ThrowIfNull(asset);
+        if (!Nodes.Contains(node) || !RenderNodeSchema.IsRenderNode(node.Definition))
+            throw new InvalidOperationException("Select a model or sprite render node.");
+        RenderNodeAuthoring.ValidateAssetClass(asset, "material");
+        if (!RenderNodeSchema.ReadMaterials(node.Definition, node.Parameters).Any(material => material.Slot == slot))
+            throw new ArgumentException("The selected material slot no longer exists.", nameof(slot));
+        if (asset.Materials is not { Count: 1 } || asset.Materials[0].Path != asset.Path)
+            throw new InvalidDataException("Load the material's parameter metadata before assigning it.");
+        var oldIds = RenderNodeSchema.Read(node.Definition, node.Parameters)
+            .Where(parameter => parameter.Slot == slot).Select(parameter => parameter.Id).ToHashSet(StringComparer.Ordinal);
+        var identities = CreateSnapshot().ResourceIdentities;
+        if (identities is not null &&
+            (identities.Uses.Any(use => use.NodeId == node.Id &&
+                (use.Location == $"material:{slot}" ||
+                 use.Location.StartsWith("texture:", StringComparison.Ordinal) && oldIds.Contains(use.Location["texture:".Length..])) &&
+                ResourceIdentityScope.Equal(use.InstancePath, _graphPath)) ||
+             identities.ParameterUses.Any(use => use.NodeId == node.Id && oldIds.Contains(use.PinId) &&
+                ResourceIdentityScope.Equal(use.InstancePath, _graphPath))))
+            throw new InvalidOperationException(LocalizationService.Shared.Get("Resources.MaterialIdentityManaged"));
+        var materials = RenderNodeSchema.ReadEngineMaterials(node.Definition, node.Parameters)
+            .Where(material => material.Slot != slot).Append(
+                new EngineMaterial(slot, asset.Path, asset.Name, asset.Materials[0].Parameters))
+            .OrderBy(material => material.Slot).ToArray();
+        ApplyRenderSchema(node, RenderNodeSchema.EncodeMaterials(materials), null,
+            LocalizationService.Shared.Get("Resources.AssignMaterialHistory", asset.Name, slot));
+    }
+
+    private void ApplyRenderSchema(GraphNodeViewModel node, string schema, string? assetPath, string description)
+    {
         var schemaDefinition = node.Definition.Parameters.FirstOrDefault(parameter => parameter.Id == "materialSchema")
             ?? throw new InvalidOperationException("The render node does not define a material schema.");
 
@@ -1796,8 +1830,10 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
         var oldIds = RenderNodeSchema.Describe(oldSchema.ValueKind == JsonValueKind.String
             ? oldSchema.GetString() : "[]").Select(parameter => parameter.Id).ToHashSet(StringComparer.Ordinal);
         var newIds = RenderNodeSchema.Describe(schema).Select(parameter => parameter.Id).ToHashSet(StringComparer.Ordinal);
-        values.RemoveAll(parameter => oldIds.Contains(parameter.Id) && !newIds.Contains(parameter.Id));
-        SetValue(values, pathDefinition.Id, pathDefinition.Type, JsonSerializer.SerializeToElement(assetPath));
+        values.RemoveAll(parameter => RenderNodeSchema.TryGetMaterialSlot(parameter.Id, out _) ||
+            oldIds.Contains(parameter.Id) && !newIds.Contains(parameter.Id));
+        if (assetPath is not null)
+            SetValue(values, "assetPath", "string", JsonSerializer.SerializeToElement(assetPath));
         SetValue(values, schemaDefinition.Id, schemaDefinition.Type, JsonSerializer.SerializeToElement(schema));
 
         var updated = values.AsReadOnly();
@@ -1815,7 +1851,7 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
                 commands.Add(new RemoveGraphConnectionCommand(this, connection));
         }
         if (commands.Count != 0)
-            ExecuteEdit(new CompositeUndoableCommand("Assign engine asset", commands));
+            ExecuteEdit(new CompositeUndoableCommand(description, commands));
 
         static void SetValue(List<NodeParameterSnapshot> parameters, string id, string type, JsonElement value)
         {

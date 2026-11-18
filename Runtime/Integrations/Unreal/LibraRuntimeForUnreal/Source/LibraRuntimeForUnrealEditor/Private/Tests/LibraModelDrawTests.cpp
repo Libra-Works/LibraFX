@@ -48,6 +48,10 @@ bool FLibraModelDrawTest::RunTest(const FString& parameters)
         return false;
     }
     auto saveDemo = FParse::Param(FCommandLine::Get(), TEXT("LibraModelDrawSaveDemo"));
+    auto materialAnimation = FParse::Param(FCommandLine::Get(), TEXT("LibraModelDrawMaterialAnimation"));
+    auto folder = FString(materialAnimation ? TEXT("/Game/LiberaFxMaterialSample/") : TEXT("/Game/LiberaFxModelDrawSample/"));
+    auto name = FString(materialAnimation ? TEXT("MaterialPulse") : TEXT("Cube"));
+    auto materialName = FString(materialAnimation ? TEXT("PulseMaterial") : TEXT("CubeMaterial"));
     if (saveDemo)
     {
         auto expectedProject = FString{};
@@ -57,10 +61,10 @@ bool FLibraModelDrawTest::RunTest(const FString& parameters)
             AddError(TEXT("Saving a demo requires the explicitly named isolated verification project."));
             return false;
         }
-        for (auto name : {TEXT("CubePackage"), TEXT("CubeMaterial"), TEXT("Cube")})
+        for (const auto& assetName : {name + TEXT("Package"), materialName, name})
         {
-            auto path = FString(TEXT("/Game/LiberaFxModelDrawSample/")) + name;
-            auto extension = FString(name) == TEXT("Cube") ?
+            auto path = folder + assetName;
+            auto extension = assetName == name ?
                 FPackageName::GetMapPackageExtension() : FPackageName::GetAssetPackageExtension();
             if (IFileManager::Get().FileExists(*FPackageName::LongPackageNameToFilename(path, extension)))
             {
@@ -70,7 +74,7 @@ bool FLibraModelDrawTest::RunTest(const FString& parameters)
         }
     }
     auto bytes = TArray<uint8>{};
-    auto source = FPaths::Combine(directory, TEXT("Cube.lfxp"));
+    auto source = FPaths::Combine(directory, name + TEXT(".lfxp"));
     if (!TestTrue(TEXT("Bounded compiler-produced Cube package"),
         IFileManager::Get().FileSize(*source) > 0 && IFileManager::Get().FileSize(*source) <= 1024 * 1024 &&
         FFileHelper::LoadFileToArray(bytes, *source))) return false;
@@ -93,9 +97,9 @@ bool FLibraModelDrawTest::RunTest(const FString& parameters)
         return false;
     component->Package = asset;
     auto materialOuter = saveDemo
-        ? static_cast<UObject*>(CreatePackage(TEXT("/Game/LiberaFxModelDrawSample/CubeMaterial")))
+        ? static_cast<UObject*>(CreatePackage(*(folder + materialName)))
         : static_cast<UObject*>(actor);
-    auto material = NewObject<UMaterial>(materialOuter, saveDemo ? FName(TEXT("CubeMaterial")) : NAME_None,
+    auto material = NewObject<UMaterial>(materialOuter, saveDemo ? FName(*materialName) : NAME_None,
         saveDemo ? RF_Public | RF_Standalone : RF_Transient);
     material->SetShadingModel(MSM_Unlit);
     auto color = NewObject<UMaterialExpressionVectorParameter>(material);
@@ -106,8 +110,10 @@ bool FLibraModelDrawTest::RunTest(const FString& parameters)
     material->PostEditChange();
     auto cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
     if (!TestNotNull(TEXT("Actual engine Cube"), cube)) return false;
-    component->AssetBindings.Add({TEXT("/Game/LiberaFxSamples/Cube.Cube"), cube});
-    component->AssetBindings.Add({TEXT("builtin:unlit-color"), material});
+    if (!materialAnimation) component->AssetBindings.Add({TEXT("/Game/LiberaFxSamples/Cube.Cube"), cube});
+    auto materialKey = materialAnimation
+        ? TEXT("/Game/LiberaFxMaterialSample/PulseMaterial.PulseMaterial") : TEXT("builtin:unlit-color");
+    component->AssetBindings.Add({materialKey, material});
     if (!TestEqual(*FString::Printf(TEXT("Public effect component plays authored model: %s"), *component->LastError),
         component->Play(), ELibraRuntimeResult::Ok)) return false;
     component->TickComponent(0, LEVELTICK_All, nullptr);
@@ -121,7 +127,8 @@ bool FLibraModelDrawTest::RunTest(const FString& parameters)
     auto dynamic = Cast<UMaterialInstanceDynamic>(meshes[0]->GetMaterial(0));
     if (!TestNotNull(TEXT("Real instance material"), dynamic)) return false;
     TestTrue(TEXT("Compiled FloatX4 drives the exposed material color"),
-        dynamic->K2_GetVectorParameterValue(TEXT("Color")).Equals(FLinearColor(0.15f, 0.65f, 1, 1)));
+        dynamic->K2_GetVectorParameterValue(TEXT("Color")).Equals(
+            materialAnimation ? FLinearColor::White : FLinearColor(0.15f, 0.65f, 1, 1)));
     if (GShaderCompilingManager) GShaderCompilingManager->FinishAllCompilation();
     auto capture = world->SpawnActor<ASceneCapture2D>();
     auto camera = capture->GetCaptureComponent2D();
@@ -141,46 +148,73 @@ bool FLibraModelDrawTest::RunTest(const FString& parameters)
     auto viewLocation = FVector(-300, -400, 200);
     capture->SetActorLocation(viewLocation);
     capture->SetActorRotation((-viewLocation).Rotation());
-    auto linearPixels = TArray<FFloat16Color>{};
-    auto deadline = FPlatformTime::Seconds() + 5;
-    auto read = false;
-    do
+    auto captureFrame = [&](int time)
     {
-        FAssetCompilingManager::Get().ProcessAsyncTasks(true);
-        FTaskGraphInterface::Get().ProcessThreadUntilIdle(ENamedThreads::GameThread);
-        if (GShaderCompilingManager) GShaderCompilingManager->ProcessAsyncResults(false, false);
-        world->SendAllEndOfFrameUpdates();
-        FlushRenderingCommands();
-        if (!meshes[0]->IsCompiling() && !meshes[0]->IsPSOPrecaching() && meshes[0]->GetSceneProxy())
+        auto linearPixels = TArray<FFloat16Color>{};
+        auto deadline = FPlatformTime::Seconds() + 5;
+        auto read = false;
+        do
         {
-            camera->CaptureScene();
+            FAssetCompilingManager::Get().ProcessAsyncTasks(true);
+            FTaskGraphInterface::Get().ProcessThreadUntilIdle(ENamedThreads::GameThread);
+            if (GShaderCompilingManager) GShaderCompilingManager->ProcessAsyncResults(false, false);
+            world->SendAllEndOfFrameUpdates();
             FlushRenderingCommands();
-            read = target->GameThread_GetRenderTargetResource()->ReadFloat16Pixels(linearPixels);
-            if (read && linearPixels.Num() == 256 * 256 && linearPixels[128 * 256 + 128].B.GetFloat() > 0.5f)
-                break;
+            if (!meshes[0]->IsCompiling() && !meshes[0]->IsPSOPrecaching() && meshes[0]->GetSceneProxy())
+            {
+                camera->CaptureScene();
+                FlushRenderingCommands();
+                read = target->GameThread_GetRenderTargetResource()->ReadFloat16Pixels(linearPixels);
+                if (read && linearPixels.Num() == 256 * 256 && linearPixels[128 * 256 + 128].B.GetFloat() > 0.5f)
+                    break;
+            }
+            FPlatformProcess::Sleep(0.01f);
+        } while (FPlatformTime::Seconds() < deadline);
+        if (!TestTrue(TEXT("Read actual camera pixels after mesh/PSO readiness"), read) ||
+            !TestEqual(TEXT("Camera dimensions"), linearPixels.Num(), 256 * 256)) return false;
+        auto pixels = TArray<FColor>{};
+        pixels.Reserve(linearPixels.Num());
+        for (const auto& pixel : linearPixels)
+            pixels.Add(FLinearColor(pixel.R.GetFloat(), pixel.G.GetFloat(), pixel.B.GetFloat(), pixel.A.GetFloat()).ToFColor(true));
+        auto center = pixels[128 * 256 + 128];
+        auto png = TArray64<uint8>{};
+        FImageUtils::PNGCompressImageArray(256, 256, pixels, png);
+        auto filename = name + TEXT(".Unreal") + (materialAnimation ? FString::Printf(TEXT(".%d"), time) : TEXT("")) + TEXT(".png");
+        TestTrue(TEXT("Save local render evidence"),
+            FFileHelper::SaveArrayToFile(png, *FPaths::Combine(directory, filename)));
+        auto expectedPixel = materialAnimation
+            ? time == 2 ? center.R < 20 && center.G < 20
+                : time == 1 ? center.R > 64 && center.R < center.B * 0.95
+                : center.R > 180 && center.G > 180
+            : center.G > center.R * 1.2 && center.B > center.R * 1.3;
+        return TestTrue(*FString::Printf(TEXT("Camera renders graph color at %d (RGB %d %d %d)"),
+            time, center.R, center.G, center.B), center.B > 80 && expectedPixel);
+    };
+    if (materialAnimation)
+    {
+        auto previous = 0;
+        for (auto time : {0, 1, 2, 4})
+        {
+            component->TickComponent(static_cast<float>(time - previous), LEVELTICK_All, nullptr);
+            previous = time;
+            auto currentMeshes = TArray<UStaticMeshComponent*>{};
+            actor->GetComponents(currentMeshes);
+            if (!TestTrue(TEXT("Forward animation retains its mesh and material instance"),
+                currentMeshes.Num() == 1 && currentMeshes[0] == meshes[0] &&
+                meshes[0]->GetMaterial(0) == dynamic && component->LastResult == ELibraRuntimeResult::Ok)) return false;
+            auto expected = static_cast<float>(0.5 + 0.5 * FMath::Cos(UE_DOUBLE_PI / 2 * time));
+            if (!TestTrue(TEXT("Native time and Lerp drive white-blue-white material color"),
+                dynamic->K2_GetVectorParameterValue(TEXT("Color")).Equals(FLinearColor(expected, expected, 1, 1), 0.001f)) ||
+                !captureFrame(time)) return false;
         }
-        FPlatformProcess::Sleep(0.01f);
-    } while (FPlatformTime::Seconds() < deadline);
-    if (!TestTrue(TEXT("Read actual camera pixels after mesh/PSO readiness"), read) ||
-        !TestEqual(TEXT("Camera dimensions"), linearPixels.Num(), 256 * 256)) return false;
-    auto pixels = TArray<FColor>{};
-    pixels.Reserve(linearPixels.Num());
-    for (const auto& pixel : linearPixels)
-        pixels.Add(FLinearColor(pixel.R.GetFloat(), pixel.G.GetFloat(), pixel.B.GetFloat(), pixel.A.GetFloat()).ToFColor(true));
-    auto center = pixels[128 * 256 + 128];
-    auto png = TArray64<uint8>{};
-    FImageUtils::PNGCompressImageArray(256, 256, pixels, png);
-    TestTrue(TEXT("Save local render evidence"),
-        FFileHelper::SaveArrayToFile(png, *FPaths::Combine(directory, TEXT("Cube.Unreal.png"))));
-    if (!TestTrue(*FString::Printf(TEXT("Camera renders the graph-authored blue Cube (RGB %d %d %d)"),
-        center.R, center.G, center.B),
-        center.B > 80 && center.G > center.R * 1.2 && center.B > center.R * 1.3)) return false;
+    }
+    else if (!captureFrame(0)) return false;
     component->ForceTerminate();
     TestEqual(TEXT("Stopping releases model objects"), component->GetRenderObjectCount(), 0);
     if (saveDemo)
     {
-        auto packageOuter = CreatePackage(TEXT("/Game/LiberaFxModelDrawSample/CubePackage"));
-        auto savedAsset = NewObject<ULibraSpawnableAsset>(packageOuter, TEXT("CubePackage"), RF_Public | RF_Standalone);
+        auto packageOuter = CreatePackage(*(folder + name + TEXT("Package")));
+        auto savedAsset = NewObject<ULibraSpawnableAsset>(packageOuter, FName(*(name + TEXT("Package"))), RF_Public | RF_Standalone);
         if (!TestEqual(TEXT("Persistent package validates"), savedAsset->SetPackageBytes(bytes), ELibraRuntimeResult::Ok))
             return false;
         auto saveAsset = [](UPackage* outer, UObject* object)
@@ -198,15 +232,15 @@ bool FLibraModelDrawTest::RunTest(const FString& parameters)
         auto editorWorld = UEditorLoadingAndSavingUtils::NewBlankMap(false);
         if (!TestNotNull(TEXT("Owned demonstration map"), editorWorld)) return false;
         auto demoActor = editorWorld->SpawnActor<ALibraEffectActor>();
-        demoActor->SetActorLabel(TEXT("Compiled ModelDraw Cube"));
+        demoActor->SetActorLabel(TEXT("Compiled ModelDraw ") + name);
         demoActor->EffectComponent->Package = savedAsset;
-        demoActor->EffectComponent->AssetBindings.Add({TEXT("/Game/LiberaFxSamples/Cube.Cube"), cube});
-        demoActor->EffectComponent->AssetBindings.Add({TEXT("builtin:unlit-color"), material});
+        if (!materialAnimation) demoActor->EffectComponent->AssetBindings.Add({TEXT("/Game/LiberaFxSamples/Cube.Cube"), cube});
+        demoActor->EffectComponent->AssetBindings.Add({materialKey, material});
         auto start = editorWorld->SpawnActor<APlayerStart>();
         start->SetActorLocation(viewLocation);
         start->SetActorRotation((-viewLocation).Rotation());
         TestTrue(TEXT("Save reproducible authored model map"),
-            UEditorLoadingAndSavingUtils::SaveMap(editorWorld, TEXT("/Game/LiberaFxModelDrawSample/Cube")));
+            UEditorLoadingAndSavingUtils::SaveMap(editorWorld, folder + name));
     }
     return true;
 }
@@ -233,8 +267,13 @@ bool FLibraVerifySavedModelPlay::Update()
             meshes[0]->GetStaticMesh()->GetPathName() == TEXT("/Engine/BasicShapes/Cube.Cube"));
         auto dynamic = Cast<UMaterialInstanceDynamic>(meshes[0]->GetMaterial(0));
         if (test->TestNotNull(TEXT("Saved material instantiates"), dynamic))
-            test->TestTrue(TEXT("Saved material retains compiled graph color"),
-                dynamic->K2_GetVectorParameterValue(TEXT("Color")).Equals(FLinearColor(0.15f, 0.65f, 1, 1)));
+        {
+            auto materialAnimation = FParse::Param(FCommandLine::Get(), TEXT("LibraModelDrawMaterialAnimation"));
+            auto value = static_cast<float>(0.5 + 0.5 * FMath::Cos(UE_DOUBLE_PI / 2 * component->LastEvaluatedTimeSeconds));
+            auto expected = materialAnimation ? FLinearColor(value, value, 1, 1) : FLinearColor(0.15f, 0.65f, 1, 1);
+            test->TestTrue(TEXT("Saved material retains compiled graph color and clock"),
+                dynamic->K2_GetVectorParameterValue(TEXT("Color")).Equals(expected, 0.001f));
+        }
     }
     test->TestEqual(TEXT("One public effect actor"), actors, 1);
     return true;
@@ -252,7 +291,9 @@ bool FLibraSavedModelDrawTest::RunTest(const FString& parameters)
         AddError(TEXT("Loading the saved demo requires the explicitly named isolated verification project."));
         return false;
     }
-    auto filename = FPackageName::LongPackageNameToFilename(TEXT("/Game/LiberaFxModelDrawSample/Cube"),
+    auto materialAnimation = FParse::Param(FCommandLine::Get(), TEXT("LibraModelDrawMaterialAnimation"));
+    auto filename = FPackageName::LongPackageNameToFilename(materialAnimation
+        ? TEXT("/Game/LiberaFxMaterialSample/MaterialPulse") : TEXT("/Game/LiberaFxModelDrawSample/Cube"),
         FPackageName::GetMapPackageExtension());
     if (!TestNotNull(TEXT("Saved Cube map reloads independently of the source fixture"),
         UEditorLoadingAndSavingUtils::LoadMap(filename))) return false;

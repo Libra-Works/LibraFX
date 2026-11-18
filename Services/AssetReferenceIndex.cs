@@ -93,9 +93,9 @@ public sealed class AssetReferenceIndex
                                 node.Name, assetClass), "assetPath");
                         else Binding(path, assetClass, "assetPath");
                         var schema = RenderNodeSchema.Read(definition, node.Parameters);
-                        foreach (var material in schema.Where(item => item.MaterialPath.Length > 0)
-                                     .DistinctBy(item => (item.Slot, item.MaterialPath)))
-                            Binding(material.MaterialPath, "material", $"material[{material.Slot}]");
+                        foreach (var material in RenderNodeSchema.ReadMaterials(definition, node.Parameters)
+                                     .Where(slot => slot.Path.Length > 0))
+                            Binding(material.Path, "material", $"material[{material.Slot}]");
                         foreach (var parameter in schema.Where(item => item.Kind == "texture"))
                             Binding(Value(parameter.Id), "texture", parameter.Id);
                         handled.UnionWith(schema.Select(item => item.Id));

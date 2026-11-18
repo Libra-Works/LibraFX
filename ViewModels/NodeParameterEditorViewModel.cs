@@ -20,7 +20,8 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     private readonly AssetBrowserCoordinator? _assetBrowser;
     private string _status = string.Empty;
 
-    public string Name => _exposed is { Category.Length: > 0 } item
+    public string Name => IsMaterialSlot ? LocalizationService.Shared.Get("Resources.MaterialSlot", MaterialSlot) :
+        _exposed is { Category.Length: > 0 } item
         ? $"{item.Category} / {_definition.Name}"
         : LocalizationService.Shared.GetOrDefault(_definition.DisplayNameKey, _definition.Name);
     public string Description => _exposed is { } item
@@ -28,6 +29,8 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         : Name;
     public string Type => _definition.Type;
     public string Id => _definition.Id;
+    private int MaterialSlot => RenderNodeSchema.TryGetMaterialSlot(Id, out var slot) ? slot : -1;
+    public bool IsMaterialSlot => _exposed is null && RenderNodeSchema.IsRenderNode(_node.Definition) && MaterialSlot >= 0;
     private GraphConnectionViewModel? InputConnection => _exposed is not null ? null : _graph.Connections.FirstOrDefault(connection =>
         connection.Target == _node && (connection.TargetPortId == Id ||
         connection.TargetPortId is null && _node.HasLegacyInput && _node.Definition.Parameters.Count == 1));
@@ -55,7 +58,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     public IRelayCommand DisconnectCommand { get; }
     public IRelayCommand ResetCommand { get; }
     public IRelayCommand PublishCommand { get; }
-    public bool ShowPublish => _exposed is null && _graph.CanPublishGroupParameter(_node, Id);
+    public bool ShowPublish => !IsMaterialSlot && _exposed is null && _graph.CanPublishGroupParameter(_node, Id);
     public string DisconnectHint => LocalizationService.Shared.Get("Panels.DisconnectParameter", Name);
     public string ResetHint => LocalizationService.Shared.Get("Panels.ResetParameter", Name);
     public string PublishHint => LocalizationService.Shared.Get("Panels.PublishGroupParameter", Name);

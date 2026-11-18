@@ -16,6 +16,8 @@ public sealed record RenderMaterialParameter(
     int Index,
     JsonElement Value);
 
+public sealed record RenderMaterialSlot(int Slot, string Path, string Name);
+
 public static class RenderNodeSchema
 {
     public const int MaximumParameters = 256;
@@ -29,14 +31,24 @@ public static class RenderNodeSchema
     {
         ArgumentNullException.ThrowIfNull(asset);
         ValidateAssetPath(asset.Path);
+        return EncodeMaterials(asset.Materials ?? []);
+    }
+
+    public static string EncodeMaterials(IReadOnlyList<EngineMaterial> materials)
+    {
+        ArgumentNullException.ThrowIfNull(materials);
+        if (materials.Count > 256)
+            throw new InvalidDataException("The material schema contains too many slots.");
         var parameters = new List<RenderMaterialParameter>();
-        foreach (var material in asset.Materials ?? [])
+        var slots = new List<RenderMaterialSlot>();
+        foreach (var material in materials)
         {
             if (material is null || material.Parameters is null)
                 throw new InvalidDataException("A material descriptor is invalid.");
             if (material.Slot < 0 || material.Slot > 4096)
                 throw new InvalidDataException("A material slot is invalid.");
             ValidateMaterialPath(material.Path);
+            slots.Add(new(material.Slot, material.Path ?? string.Empty, material.Name ?? string.Empty));
             foreach (var parameter in material.Parameters)
             {
                 if (parameters.Count >= MaximumParameters)
@@ -56,7 +68,7 @@ public static class RenderNodeSchema
             }
         }
 
-        var encoded = JsonSerializer.Serialize(parameters, JsonOptions);
+        var encoded = JsonSerializer.Serialize(new { version = 2, materials = slots, parameters }, JsonOptions);
         if (encoded.Length > MaximumSchemaCharacters)
             throw new InvalidDataException("The material schema is too large.");
         _ = Decode(encoded);
@@ -78,14 +90,20 @@ public static class RenderNodeSchema
         var stored = storedSnapshot?.Value ?? schemaParameter.DefaultValue;
         if (stored.ValueKind != JsonValueKind.String)
             throw new InvalidDataException("The render node material schema must be a JSON string.");
-        var schema = Decode(stored.GetString() ?? string.Empty);
-        if (schema.Count == 0) return baseDefinition;
+        var schema = ReadSchema(stored.GetString() ?? string.Empty);
 
         var parameters = baseDefinition.Parameters.ToList();
         var ports = (baseDefinition.InputPorts ?? []).ToList();
         var existingIds = parameters.Select(parameter => parameter.Id).ToHashSet(StringComparer.Ordinal);
         var existingPortIds = ports.Select(port => port.Id).ToHashSet(StringComparer.Ordinal);
-        foreach (var item in schema)
+        foreach (var slot in SlotsOrDefault(schema.Materials))
+        {
+            var id = MaterialSlotId(slot.Slot);
+            if (!existingIds.Add(id))
+                throw new InvalidDataException("A material slot conflicts with a render node parameter.");
+            parameters.Add(new(id, $"Material {slot.Slot}", "string", JsonSerializer.SerializeToElement(slot.Path)));
+        }
+        foreach (var item in schema.Parameters)
         {
             if (!existingIds.Add(item.Id))
                 throw new InvalidDataException("A material parameter conflicts with a render node parameter.");
@@ -117,8 +135,39 @@ public static class RenderNodeSchema
     public static IReadOnlyList<RenderMaterialParameter> Describe(string? schemaJson) =>
         Decode(schemaJson ?? "[]");
 
+    public static string MaterialSlotId(int slot) => $"materialSlot_{slot}";
+
+    public static bool TryGetMaterialSlot(string? id, out int slot)
+    {
+        slot = -1;
+        return id?.StartsWith("materialSlot_", StringComparison.Ordinal) == true &&
+            int.TryParse(id["materialSlot_".Length..], System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out slot) &&
+            slot is >= 0 and <= 4096 && id == MaterialSlotId(slot);
+    }
+
+    public static IReadOnlyList<RenderMaterialSlot> ReadMaterials(
+        GraphNodeDefinition definition, IReadOnlyList<NodeParameterSnapshot>? nodeParameters) =>
+        SlotsOrDefault(ReadSchema(ReadSchemaJson(definition, nodeParameters)).Materials);
+
+    public static IReadOnlyList<EngineMaterial> ReadEngineMaterials(
+        GraphNodeDefinition definition, IReadOnlyList<NodeParameterSnapshot>? nodeParameters)
+    {
+        var schema = ReadSchema(ReadSchemaJson(definition, nodeParameters));
+        return schema.Materials.Select(slot => new EngineMaterial(slot.Slot, slot.Path, slot.Name,
+            schema.Parameters.Where(parameter => parameter.Slot == slot.Slot).Select(parameter =>
+                new EngineMaterialParameter(parameter.Name, parameter.Kind, parameter.Value.Clone(),
+                    parameter.Association, parameter.Index)).ToArray())).ToArray();
+    }
+
+    private static IReadOnlyList<RenderMaterialSlot> SlotsOrDefault(IReadOnlyList<RenderMaterialSlot> slots) =>
+        slots.Count == 0 ? [new(0, "", "")] : slots;
+
     public static IReadOnlyList<RenderMaterialParameter> Read(
         GraphNodeDefinition definition,
+        IReadOnlyList<NodeParameterSnapshot>? nodeParameters) => Decode(ReadSchemaJson(definition, nodeParameters));
+
+    private static string ReadSchemaJson(GraphNodeDefinition definition,
         IReadOnlyList<NodeParameterSnapshot>? nodeParameters)
     {
         ArgumentNullException.ThrowIfNull(definition);
@@ -127,10 +176,10 @@ public static class RenderNodeSchema
         if (stored is not null && (schemaParameter is null || stored.Type != schemaParameter.Type))
             throw new InvalidDataException("The render node material schema parameter has an invalid type.");
         var json = stored?.Value ?? schemaParameter?.DefaultValue;
-        if (json is null) return [];
+        if (json is null) return "[]";
         if (json.Value.ValueKind != JsonValueKind.String)
             throw new InvalidDataException("The render node material schema must be a JSON string.");
-        return Decode(json.Value.GetString() ?? string.Empty);
+        return json.Value.GetString() ?? string.Empty;
     }
 
     public static RenderMaterialParameter? DescribePin(string? schemaJson, string pinId) =>
@@ -167,6 +216,13 @@ public static class RenderNodeSchema
             !IsSafeAssetPath(path))
             throw new InvalidDataException("The render node asset path is invalid.");
         var schema = Read(definition, parameters);
+        foreach (var slot in ReadMaterials(definition, parameters))
+        {
+            var stored = parameters?.FirstOrDefault(parameter => parameter.Id == MaterialSlotId(slot.Slot));
+            if (stored is not null && (stored.Type != "string" || stored.Value.ValueKind != JsonValueKind.String ||
+                stored.Value.GetString() != slot.Path))
+                throw new InvalidDataException("Material slot references must match their material schema.");
+        }
         foreach (var descriptor in schema)
         {
             var value = parameters?.FirstOrDefault(parameter => parameter.Id == descriptor.Id);
@@ -256,14 +312,35 @@ public static class RenderNodeSchema
         return $"material_{hash}";
     }
 
-    private static IReadOnlyList<RenderMaterialParameter> Decode(string json)
+    private sealed record MaterialSchema(
+        IReadOnlyList<RenderMaterialSlot> Materials, IReadOnlyList<RenderMaterialParameter> Parameters);
+
+    private static IReadOnlyList<RenderMaterialParameter> Decode(string json) => ReadSchema(json).Parameters;
+
+    private static MaterialSchema ReadSchema(string json)
     {
         if (json.Length > MaximumSchemaCharacters)
             throw new InvalidDataException("The material schema is too large.");
         try
         {
-            var parameters = JsonSerializer.Deserialize<List<RenderMaterialParameter>>(json, JsonOptions)
-                ?? throw new InvalidDataException("The material schema is empty.");
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            List<RenderMaterialSlot>? slots = null;
+            List<RenderMaterialParameter>? parameters;
+            if (root.ValueKind == JsonValueKind.Array)
+                parameters = root.Deserialize<List<RenderMaterialParameter>>(JsonOptions);
+            else if (root.ValueKind == JsonValueKind.Object &&
+                root.TryGetProperty("version", out var version) && version.ValueKind == JsonValueKind.Number &&
+                version.TryGetInt32(out var number) && number == 2 &&
+                root.TryGetProperty("materials", out var materialArray) && materialArray.ValueKind == JsonValueKind.Array &&
+                root.TryGetProperty("parameters", out var parameterArray) && parameterArray.ValueKind == JsonValueKind.Array)
+            {
+                slots = materialArray.Deserialize<List<RenderMaterialSlot>>(JsonOptions)
+                    ?? throw new InvalidDataException("The material slots are empty.");
+                parameters = parameterArray.Deserialize<List<RenderMaterialParameter>>(JsonOptions);
+            }
+            else throw new InvalidDataException("The material schema has an unsupported format or version.");
+            if (parameters is null) throw new InvalidDataException("The material schema is empty.");
             if (parameters.Count > MaximumParameters)
                 throw new InvalidDataException("The material schema contains too many parameters.");
 
@@ -291,7 +368,25 @@ public static class RenderNodeSchema
                     throw new InvalidDataException("The material schema contains an invalid default value.");
                 if (kind == "texture") ValidateOptionalAssetPath(parameter.Value.GetString());
             }
-            return parameters.AsReadOnly();
+            if (slots is null)
+            {
+                slots = [];
+                foreach (var group in parameters.GroupBy(parameter => parameter.Slot))
+                {
+                    if (group.Select(parameter => parameter.MaterialPath).Distinct(StringComparer.Ordinal).Count() != 1)
+                        throw new InvalidDataException("A material slot has conflicting overrides.");
+                    slots.Add(new(group.Key, group.First().MaterialPath ?? "", group.First().MaterialName));
+                }
+            }
+            if (slots.Count > 256 || slots.Any(slot => slot is null || slot.Slot is < 0 or > 4096 ||
+                slot.Path is null || slot.Name is null || slot.Name.Length > 256) ||
+                slots.Select(slot => slot.Slot).Distinct().Count() != slots.Count)
+                throw new InvalidDataException("The material schema contains invalid or duplicate slots.");
+            foreach (var slot in slots) ValidateMaterialPath(slot.Path);
+            if (parameters.Any(parameter => !slots.Any(slot => slot.Slot == parameter.Slot &&
+                slot.Path == (parameter.MaterialPath ?? ""))))
+                throw new InvalidDataException("A material parameter does not match its slot.");
+            return new(slots.AsReadOnly(), parameters.AsReadOnly());
         }
         catch (JsonException exception)
         {

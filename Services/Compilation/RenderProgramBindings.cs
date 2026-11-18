@@ -47,14 +47,17 @@ public static class RenderProgramBindings
             var path = Parameter("assetPath").GetString() ?? "";
             path = resourceContext?.ResolvePath(node.Id, "assetPath", sprite ? "texture" : "model", path, instancePath) ?? path;
             var materialEntries = RenderNodeSchema.Read(definition, node.Parameters);
+            var materialSlots = RenderNodeSchema.ReadMaterials(definition, node.Parameters);
             resourceContext?.ValidateRenderNode(node.Id,
-                materialEntries.Select(entry => (entry.Id, entry.Kind, entry.Slot)), instancePath);
+                materialEntries.Select(entry => (entry.Id, entry.Kind, entry.Slot)), instancePath,
+                materialSlots.Select(slot => slot.Slot).ToArray());
             if (path.Length == 0)
             {
                 if (sprite) throw new InvalidDataException($"Sprite node '{node.Id}' has no bound texture resource.");
-                if (resourceContext is not null && materialEntries.Any(entry =>
-                    resourceContext.HasResourceUse(node.Id, $"material:{entry.Slot}", instancePath) ||
-                    resourceContext.HasResourceUse(node.Id, "texture:" + entry.Id, instancePath)))
+                if (resourceContext is not null && (materialSlots.Any(slot =>
+                    resourceContext.HasResourceUse(node.Id, $"material:{slot.Slot}", instancePath)) ||
+                    materialEntries.Any(entry => entry.Kind == "texture" &&
+                        resourceContext.HasResourceUse(node.Id, "texture:" + entry.Id, instancePath))))
                     throw new InvalidDataException($"Model node '{node.Id}' has mapped materials or textures but no model.");
                 continue;
             }
@@ -179,17 +182,16 @@ public static class RenderProgramBindings
                         Parameter(entry.Id).GetString() ?? "", instancePath) ?? Parameter(entry.Id).GetString(),
                     association = mappedParameters[entry.Id]?.Association ?? MaterialAssociation(entry),
                     index = mappedParameters[entry.Id]?.Index ?? entry.Index }).ToArray();
-            var materials = materialEntries.Where(entry => !string.IsNullOrEmpty(entry.MaterialPath) ||
-                    resourceContext?.HasResourceUse(node.Id, $"material:{entry.Slot}", instancePath) == true)
-                .GroupBy(entry => entry.Slot).Select(slot =>
+            var materials = materialSlots
+                .Where(slot => !string.IsNullOrEmpty(slot.Path) ||
+                    resourceContext?.HasResourceUse(node.Id, $"material:{slot.Slot}", instancePath) == true)
+                .Select(slot =>
                 {
-                    var paths = slot.Select(entry => entry.MaterialPath).Distinct(StringComparer.Ordinal).ToArray();
-                    if (paths.Length != 1) throw new InvalidDataException("A material slot has conflicting overrides.");
-                    var materialPath = resourceContext?.ResolvePath(node.Id, $"material:{slot.Key}", "material",
-                        paths[0], instancePath) ?? paths[0];
+                    var materialPath = resourceContext?.ResolvePath(node.Id, $"material:{slot.Slot}", "material",
+                        slot.Path, instancePath) ?? slot.Path;
                     if (sprite && materialPath == "builtin:unlit-color")
                         throw new InvalidDataException("The builtin color material is only supported for models.");
-                    return new { slot = slot.Key, path = materialPath };
+                    return new { slot = slot.Slot, path = materialPath };
                 }).ToArray();
             void AddDraw(Guid id, object? animation)
             {

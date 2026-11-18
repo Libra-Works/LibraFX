@@ -109,10 +109,17 @@ public sealed class ResourceIdentityRenderContext : IRenderResourceBindingContex
         IReadOnlyList<Guid> instancePath)
     {
         var entries = parameters.ToArray();
+        ValidateRenderNode(nodeId, entries, instancePath, entries.Select(entry => entry.Slot).Distinct().ToArray());
+    }
+
+    public void ValidateRenderNode(Guid nodeId, IEnumerable<(string Id, string Kind, int Slot)> parameters,
+        IReadOnlyList<Guid> instancePath, IReadOnlyList<int> materialSlots)
+    {
+        var entries = parameters.ToArray();
         var locations = new HashSet<string>(StringComparer.Ordinal) { "assetPath" };
+        foreach (var slot in materialSlots) locations.Add($"material:{slot}");
         foreach (var entry in entries)
         {
-            locations.Add($"material:{entry.Slot}");
             if (entry.Kind == "texture") locations.Add("texture:" + entry.Id);
         }
         var pins = entries.Select(entry => entry.Id).ToHashSet(StringComparer.Ordinal);

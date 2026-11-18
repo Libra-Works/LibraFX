@@ -254,6 +254,7 @@ public sealed class ParameterEditorHost : ContentControl
             return button;
         }
         var text = CreateTextBox(nameof(parameter.ValueText));
+        text.IsReadOnly = parameter.IsMaterialSlot;
         if (parameter.Editor?.Kind == "multiline")
         {
             text.AcceptsReturn = true;

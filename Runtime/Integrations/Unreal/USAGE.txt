@@ -76,6 +76,17 @@ Graph-authored ModelDraw Cube verification
   Mesh size/world units remain engine-native (Unity Cube 1 unit, UE Cube 100 cm);
   the two demonstration cameras are placed accordingly.
 
+  For independent material selection and white/blue animation, generate the
+  --model-material-animation fixture described in the Unity USAGE.txt.
+  Add -LibraModelDrawMaterialAnimation to the CubePackage automation command
+  and point -LibraModelDrawFixture to that new directory. Time/Cos/LerpVector4
+  drive the selected material's dynamic Color pin. The check verifies material
+  values and actual camera pixels at 0/1/2/4 seconds on the same mesh/MID.
+  With the guarded save arguments it creates /Game/LiberaFxMaterialSample/MaterialPulse.
+  Run SavedScenePlay in a fresh process with -LibraModelDrawMaterialAnimation
+  and the verification-project argument to check embedded playback and color
+  against the running effect clock. The original Cube demo is preserved.
+
 Engine version compatibility
   Keep one shared plugin source for UE 5.7, 5.8 and 5.9. Use engine version
   guards only where APIs differ; do not maintain a separate source fork per SDK.

@@ -39,10 +39,24 @@ internal static class Program
 
     private static void MainCore(string[] args)
     {
+        if (args is ["--material-authoring"])
+        {
+            InitializeIsolatedUi();
+            MaterialAuthoringTests.Run();
+            AssetAuthoringTests.Run();
+            LiberaFx.Tests.AssetReferenceTests.Run();
+            return;
+        }
         if (args is ["--model-draw", var modelFixtureDirectory])
         {
             InitializeIsolatedUi();
             ModelDrawTests.Run(modelFixtureDirectory);
+            return;
+        }
+        if (args is ["--model-material-animation", var materialFixtureDirectory])
+        {
+            InitializeIsolatedUi();
+            ModelDrawTests.Run(materialFixtureDirectory, materialAnimation: true);
             return;
         }
         if (args is ["--authored-quality", var qualityFixtureDirectory])
@@ -633,6 +647,7 @@ internal static class Program
         GroupLibraryTests.Run();
         Console.WriteLine("Project profile and group library checks passed.");
         EditorInterfaceTests.Run();
+        MaterialAuthoringTests.Run();
         Console.WriteLine("Inspector actions and English/Japanese localization checks passed.");
         ProjectNodeCatalogTests.Run();
         Console.WriteLine("Layered project node catalog, quick search and retained history checks passed.");

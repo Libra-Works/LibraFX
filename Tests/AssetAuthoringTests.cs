@@ -15,6 +15,8 @@ internal static class AssetAuthoringTests
         VerifyProjectAssetRoot();
         VerifyCallerTargetBinding();
         VerifyCallerTargetBinding(inline: true);
+        VerifyCallerTargetBinding(material: true);
+        VerifyCallerTargetBinding(inline: true, material: true);
     }
 
     private static void VerifyMaterialAssociationDelivery()
@@ -252,7 +254,7 @@ internal static class AssetAuthoringTests
         }
     }
 
-    private static void VerifyCallerTargetBinding(bool inline = false)
+    private static void VerifyCallerTargetBinding(bool inline = false, bool material = false)
     {
         var main = new MainViewModel();
         var peerId = Guid.NewGuid();
@@ -291,22 +293,26 @@ internal static class AssetAuthoringTests
             }
             var sourceAsset = new EngineAsset("/Game/Meshes/SM_Binding.SM_Binding",
                 "SM_Binding", "model", "Unreal");
-            var selectedAsset = new EngineAsset("/Game/Meshes/SM_Selected.SM_Selected",
-                "SM_Selected", "model", "Unreal");
+            var selectedAsset = material
+                ? new EngineAsset("/Game/Materials/M_Selected.M_Selected", "M_Selected", "material", "Unreal",
+                    Materials: [new(0, "/Game/Materials/M_Selected.M_Selected", "M_Selected",
+                        [new("Color", "vector", JsonSerializer.SerializeToElement(new[] { 1d, 1, 1, 1 }))])])
+                : new EngineAsset("/Game/Meshes/SM_Selected.SM_Selected", "SM_Selected", "model", "Unreal");
+            var parameterId = material ? RenderNodeSchema.MaterialSlotId(0) : "assetPath";
             var firstNode = RenderNodeAuthoring.CreateModel(graph, sourceAsset);
             var secondNode = RenderNodeAuthoring.CreateModel(graph,
                 new EngineAsset("/Game/Meshes/SM_Other.SM_Other", "SM_Other", "model", "Unreal"));
 
             ResourceAssignmentTarget TargetFor(GraphNodeViewModel node) =>
-                ResourceAssignment.TargetForParameter(node, "assetPath")
+                ResourceAssignment.TargetForParameter(node, parameterId)
                 ?? throw new InvalidOperationException("The model asset parameter did not expose a caller target.");
 
             AssetSelectionRequest BeginFor(GraphNodeViewModel node)
             {
                 graph.SelectNode(node);
                 var target = TargetFor(node);
-                var request = coordinator.BeginForParameter(document, graph, node, "assetPath",
-                    target, "model", static () => true)
+                var request = coordinator.BeginForParameter(document, graph, node, parameterId,
+                    target, selectedAsset.AssetClass, static () => true)
                     ?? throw new InvalidOperationException("A current resource parameter did not bind to the browser.");
                 if (!coordinator.IsCurrent(request, peerId))
                     throw new InvalidOperationException("A freshly captured resource target was unexpectedly stale.");
@@ -331,8 +337,13 @@ internal static class AssetAuthoringTests
                 throw new InvalidOperationException("A resource selection applied after switching nodes.");
 
             var parameterBound = BeginFor(firstNode);
-            graph.SetParameter(firstNode, "assetPath",
-                JsonSerializer.SerializeToElement("/Game/Meshes/SM_Changed.SM_Changed"));
+            if (material)
+                graph.AssignRenderMaterial(firstNode,
+                    new("/Game/Materials/M_Changed.M_Changed", "M_Changed", "material", "Unreal",
+                        Materials: [new(0, "/Game/Materials/M_Changed.M_Changed", "M_Changed", [])]), 0);
+            else
+                graph.SetParameter(firstNode, "assetPath",
+                    JsonSerializer.SerializeToElement("/Game/Meshes/SM_Changed.SM_Changed"));
             if (TryApply(TargetFor(firstNode)) || !parameterBound.IsStale)
                 throw new InvalidOperationException("A resource selection applied after its parameter value changed.");
 
@@ -357,6 +368,10 @@ internal static class AssetAuthoringTests
 
             if (!ReferenceEquals(sharedViewModel, coordinator.ViewModel))
                 throw new InvalidOperationException("Caller replacement discarded the MainViewModel-owned shared VM.");
+            BeginFor(firstNode);
+            if (!TryApply(TargetFor(firstNode)) ||
+                material && firstNode.InputPorts.All(port => port.Name != "Color"))
+                throw new InvalidOperationException("A current resource selection did not assign its metadata to the caller.");
             if (sentFrames != 0)
                 throw new InvalidOperationException("The caller-binding source test unexpectedly sent a preview request.");
         }
