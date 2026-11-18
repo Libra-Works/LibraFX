@@ -6,9 +6,9 @@ using LiberaFx.ViewModels;
 
 internal static class ViewerDiscoveryEngineTests
 {
-    public static void Run(int processId)
+    public static void Run(int[] processIds)
     {
-        var task = VerifyAsync(processId);
+        var task = VerifyAsync(processIds);
         var frame = new DispatcherFrame();
         using var timeout = DispatcherTimer.RunOnce(() => frame.Continue = false, TimeSpan.FromSeconds(60));
         _ = task.ContinueWith(_ => Dispatcher.UIThread.Post(() => frame.Continue = false), TaskScheduler.Default);
@@ -17,10 +17,37 @@ internal static class ViewerDiscoveryEngineTests
         task.GetAwaiter().GetResult();
     }
 
-    private static async Task VerifyAsync(int processId)
+    private static async Task VerifyAsync(int[] processIds)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
         var token = timeout.Token;
+        var service = new ViewerDiscovery();
+        var viewers = await FindExpectedViewersAsync();
+        foreach (var viewer in viewers.Append(viewers[0]))
+        {
+            var current = await FindExpectedViewersAsync();
+            if (!current.Select(item => item.InstanceId).SequenceEqual(viewers.Select(item => item.InstanceId)))
+                throw new InvalidDataException("A viewer restarted between searches.");
+            await VerifyPairingAsync(service, viewer, current, token);
+            while ((await service.QueryAsync(viewer.PipeName, token)).Connected)
+                await Task.Delay(100, token);
+        }
+        Console.WriteLine($"Real Unreal discovery, selection and pinned TLS reconnection passed ({viewers.Length} viewers).");
+
+        async Task<AvailableViewer[]> FindExpectedViewersAsync()
+        {
+            var discovered = await service.DiscoverAsync(token);
+            var expected = processIds.Select(id => discovered.SingleOrDefault(viewer => viewer.ProcessId == id)
+                ?? throw new InvalidDataException($"Dedicated Viewer {id} was not discovered.")).ToArray();
+            if (expected.Any(viewer => viewer.Engine != "Unreal" || viewer.Connected))
+                throw new InvalidDataException("Expected dedicated, disconnected Unreal Viewers.");
+            return expected;
+        }
+    }
+
+    private static async Task VerifyPairingAsync(ViewerDiscovery service, AvailableViewer viewer,
+        AvailableViewer[] candidates, CancellationToken token)
+    {
         var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
@@ -30,10 +57,6 @@ internal static class ViewerDiscoveryEngineTests
         try
         {
             await host.StartAsync(model);
-            var service = new ViewerDiscovery();
-            var viewers = await service.DiscoverAsync(token);
-            var viewer = viewers.Single(candidate => candidate.ProcessId == processId);
-            if (viewer.Engine != "Unreal") throw new InvalidDataException("Expected the dedicated Unreal viewer.");
             await service.ConnectAsync(viewer,
                 PreviewConnectionInvitation.Create($"wss://127.0.0.1:{port}/preview", host.AccessToken, host.Fingerprint),
                 token);
@@ -51,7 +74,11 @@ internal static class ViewerDiscoveryEngineTests
                 }
                 await Task.Delay(100, token);
             }
-            Console.WriteLine("Real Unreal discovery, incarnation check and pinned TLS preview connection passed.");
+            foreach (var other in candidates.Where(item => item.ProcessId != viewer.ProcessId))
+            {
+                if ((await service.QueryAsync(other.PipeName, token)).Connected)
+                    throw new InvalidDataException("A Viewer that was not selected connected.");
+            }
         }
         finally
         {

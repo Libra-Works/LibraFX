@@ -33,6 +33,7 @@ public partial class PreviewConnectionsWindow : Window
         if (_discovering) return;
         _discovering = true;
         FindViewersButton.IsEnabled = ConnectViewerButton.IsEnabled = false;
+        AvailableViewers.ItemsSource = null;
         DiscoveryStatus.Text = LocalizationService.Shared.Get("Connections.FindingViewers");
         try
         {

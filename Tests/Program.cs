@@ -152,14 +152,14 @@ internal static class Program
             InlineGroupTests.Run();
             return;
         }
-        if (args is ["--viewer-discovery-engine", var viewerPid])
+        if (args is ["--viewer-discovery-engine", .. var viewerPids])
         {
-            var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
-            if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root) ||
-                !int.TryParse(viewerPid, out var processId) || processId <= 0)
-                throw new ArgumentException("Use an isolated absolute data root and dedicated engine PID.");
-            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
-            ViewerDiscoveryEngineTests.Run(processId);
+            var processIds = viewerPids.Select(pid => int.TryParse(pid, out var parsed) ? parsed : 0).ToArray();
+            if (processIds.Length is < 1 or > 2 || processIds.Any(id => id <= 0) ||
+                processIds.Distinct().Count() != processIds.Length)
+                throw new ArgumentException("Pass one or two distinct dedicated Unreal Viewer PIDs.");
+            InitializeIsolatedUi();
+            ViewerDiscoveryEngineTests.Run(processIds);
             return;
         }
         if (args is ["--resource-identity"])

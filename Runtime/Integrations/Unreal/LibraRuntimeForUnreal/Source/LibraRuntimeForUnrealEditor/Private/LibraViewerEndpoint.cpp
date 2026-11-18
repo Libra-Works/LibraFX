@@ -121,29 +121,53 @@ struct FLibraViewerEndpoint::FState
         security.lpSecurityDescriptor = descriptor;
         auto pipeName = FString::Printf(TEXT("\\\\.\\pipe\\LibraFX.Viewer.%u"),
             FPlatformProcess::GetCurrentProcessId());
+        auto pipe = CreateNamedPipeW(*pipeName, PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED |
+            FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_REJECT_REMOTE_CLIENTS,
+            1, 8192, 8192, 0, &security);
+        LocalFree(descriptor);
+        if (pipe == INVALID_HANDLE_VALUE)
+        {
+            return;
+        }
+        auto event = CreateEventW(nullptr, true, false, nullptr);
+        if (!event)
+        {
+            CloseHandle(pipe);
+            return;
+        }
+        // Keep the pipe name discoverable while switching between clients.
         while (WaitForSingleObject(stop, 0) != WAIT_OBJECT_0)
         {
-            auto pipe = CreateNamedPipeW(*pipeName, PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED |
-                FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_REJECT_REMOTE_CLIENTS,
-                1, 8192, 8192, 0, &security);
-            if (pipe == INVALID_HANDLE_VALUE) break;
-            auto event = CreateEventW(nullptr, true, false, nullptr);
-            if (!event) { CloseHandle(pipe); break; }
+            ResetEvent(event);
             auto operation = OVERLAPPED{};
             operation.hEvent = event;
             auto connectedPipe = ConnectNamedPipe(pipe, &operation) != 0;
             auto error = connectedPipe ? ERROR_SUCCESS : GetLastError();
-            if (error == ERROR_PIPE_CONNECTED) connectedPipe = true;
+            if (error == ERROR_PIPE_CONNECTED)
+            {
+                connectedPipe = true;
+            }
             else if (error == ERROR_IO_PENDING)
             {
                 HANDLE waits[] = {stop, event};
                 auto result = WaitForMultipleObjects(2, waits, false, INFINITE);
-                if (result != WAIT_OBJECT_0 + 1) CancelIoEx(pipe, &operation);
+                if (result != WAIT_OBJECT_0 + 1)
+                {
+                    CancelIoEx(pipe, &operation);
+                }
                 auto transferred = DWORD{};
-                connectedPipe = GetOverlappedResult(pipe, &operation, &transferred, true) &&
-                    result == WAIT_OBJECT_0 + 1;
+                auto completed = GetOverlappedResult(pipe, &operation, &transferred, true);
+                if (result != WAIT_OBJECT_0 + 1)
+                {
+                    break;
+                }
+                connectedPipe = completed != 0;
+                error = connectedPipe ? ERROR_SUCCESS : GetLastError();
             }
-            CloseHandle(event);
+            if (!connectedPipe && error != ERROR_NO_DATA && error != ERROR_BROKEN_PIPE)
+            {
+                break;
+            }
             if (connectedPipe)
             {
                 auto bytes = TArray<uint8>{};
@@ -182,11 +206,11 @@ struct FLibraViewerEndpoint::FState
                     auto received = DWORD{};
                     transfer(pipe, false, &acknowledgement, 1, received, deadline);
                 }
-                DisconnectNamedPipe(pipe);
             }
-            CloseHandle(pipe);
+            DisconnectNamedPipe(pipe);
         }
-        LocalFree(descriptor);
+        CloseHandle(event);
+        CloseHandle(pipe);
     }
 #endif
 };
