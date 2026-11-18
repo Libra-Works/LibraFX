@@ -1,6 +1,7 @@
 #include "liberafx/Interop.h"
 #include <array>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <filesystem>
@@ -59,14 +60,17 @@ void run(const std::vector<std::uint8_t>& bytes, const Id& start, const Id& posi
     // Both new entry points enforce the creating owner thread, without freeing
     // work or coalescing a notification on a foreign caller.
     auto wrongForce = LibraResult{LIBRA_OK}, wrongEnd = LibraResult{LIBRA_OK};
+    auto wrongAdvance = LibraResult{LIBRA_OK};
     auto worker = std::thread([&] {
+        wrongAdvance = libra_spawnable_host_advance(host.value, 1, 1);
         wrongForce = libra_spawnable_host_force_terminate(
             host.value, LIBRA_SPAWNABLE_SCOPE_EFFECT, nullptr, 0);
         wrongEnd = libra_spawnable_host_notify_end_request(
             host.value, LIBRA_SPAWNABLE_SCOPE_EFFECT, nullptr, 0, start.data());
     });
     worker.join();
-    require(wrongForce == LIBRA_BUSY && wrongEnd == LIBRA_BUSY, "Foreign thread must receive Busy.");
+    require(wrongForce == LIBRA_BUSY && wrongEnd == LIBRA_BUSY && wrongAdvance == LIBRA_BUSY,
+        "Foreign thread must receive Busy even without an attached debugger.");
     empty(host);
     require(libra_spawnable_host_force_terminate(host.value, 99, nullptr, 0) == LIBRA_INVALID_ARGUMENT,
         "Unknown scope was not rejected.");
@@ -136,9 +140,15 @@ void run(const std::vector<std::uint8_t>& bytes, const Id& start, const Id& posi
 
 int main(int argc, char** argv)
 {
+    auto directory = argc == 2 ? argv[1] : std::getenv("LIBERAFX_FORCE_FIXTURE_DIR");
+    if (argc == 1 && (!directory || !*directory))
+    {
+        return 77;
+    }
     try {
-        require(argc == 2, "Usage: liberafx_interop_scoped_termination_tests <isolated Fireworks fixture folder>");
-        auto folder = std::filesystem::path(argv[1]);
+        require(argc == 1 || argc == 2,
+            "Usage: liberafx_interop_scoped_termination_tests [isolated Fireworks fixture folder]");
+        auto folder = std::filesystem::path(directory);
         auto ids = read(folder / "Fireworks.native-fixture");
         require(ids.size() == 8 + 11 * 16 && std::memcmp(ids.data(), "LFXF", 4) == 0 &&
             ids[4] == 1, "Invalid Fireworks identity fixture.");

@@ -184,9 +184,15 @@ auto guardedSpawnable(LibraSpawnableHostHandle handle, Function function, bool e
         auto found = spawnableHosts.find(handle);
         if (found == spawnableHosts.end()) return LIBRA_INVALID_HANDLE;
         auto& owner = found->second;
+        if (owner.ownerThread != std::this_thread::get_id())
+        {
+            return LIBRA_BUSY;
+        }
 #if defined(_WIN32)
-        if (owner.debug && (owner.ownerThread != std::this_thread::get_id() ||
-            owner.debug->job.pending() || evaluates)) return LIBRA_BUSY;
+        if (owner.debug && (owner.debug->job.pending() || evaluates))
+        {
+            return LIBRA_BUSY;
+        }
 #else
         (void)evaluates;
 #endif
@@ -197,9 +203,10 @@ auto ownedSpawnableHost(LibraSpawnableHostHandle handle, liberafx::SpawnableHost
 {
     auto found = spawnableHosts.find(handle);
     if (found == spawnableHosts.end()) return LIBRA_INVALID_HANDLE;
-#if defined(_WIN32)
-    if (found->second.debug && found->second.ownerThread != std::this_thread::get_id()) return LIBRA_BUSY;
-#endif
+    if (found->second.ownerThread != std::this_thread::get_id())
+    {
+        return LIBRA_BUSY;
+    }
     out = found->second.host.get();
     return LIBRA_OK;
 }
