@@ -14,8 +14,8 @@
                           Click="OnTogglePinClick" ToolTip.Tip="{Binding InspectorPinHint}"
                           AutomationProperties.Name="{Binding InspectorPinHint}" />
     </Grid>
-    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto">
-    <StackPanel Margin="8" Spacing="6" MinWidth="290">
+    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="8" Spacing="6">
         <TextBlock Text="{DynamicResource Text.Editor.SelectNodeHint}"
                    IsVisible="{Binding !HasInspectorTarget}"
                    TextWrapping="Wrap"
@@ -66,7 +66,8 @@
                             Command="{Binding CloneGroupCommand}" />
                 </StackPanel>
             </Border>
-            <Grid x:Name="ParameterHeader" ColumnDefinitions="124,*" ColumnSpacing="6" Margin="0,8,0,0">
+            <Grid x:Name="ParameterHeader" ColumnDefinitions="124,*" ColumnSpacing="6" Margin="0,8,0,0"
+                  SizeChanged="OnParameterHeaderSizeChanged">
                 <TextBlock Text="{DynamicResource Text.Editor.Name}" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
                 <Thumb HorizontalAlignment="Right" Width="8"
                        Cursor="SizeWestEast" DragDelta="OnParameterDividerDrag"
@@ -85,7 +86,7 @@
             <ItemsControl x:Name="ParameterList" ItemsSource="{Binding Parameters}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="vm:NodeParameterEditorViewModel">
-                        <views:ParameterEditorHost Margin="0,0,0,2" PreserveEditorWidth="True" />
+                        <views:ParameterEditorHost Margin="0,0,0,2" WrapVectorComponents="True" />
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>

@@ -24,7 +24,7 @@ public sealed class ParameterEditorHost : ContentControl
         AvaloniaProperty.RegisterAttached<ParameterEditorHost, Control, GridLength>(
             "LabelColumnWidth", new GridLength(124), inherits: true);
 
-    public bool PreserveEditorWidth { get; set; }
+    public bool WrapVectorComponents { get; set; }
 
     private readonly List<RadioButton> _booleanOptions = [];
     private readonly List<TextBlock> _scrubLabels = [];
@@ -126,10 +126,6 @@ public sealed class ParameterEditorHost : ContentControl
             Children = { label, editor, actions, status, missing }
         };
         row.ColumnDefinitions[0].Bind(ColumnDefinition.WidthProperty, this.GetObservable(LabelColumnWidthProperty));
-        if (PreserveEditorWidth)
-        {
-            row.ColumnDefinitions[1].MinWidth = 144;
-        }
         Grid.SetColumn(editor, 1);
         Grid.SetColumn(actions, 2);
         Grid.SetColumn(status, 1);
@@ -211,13 +207,28 @@ public sealed class ParameterEditorHost : ContentControl
         if (parameter.Type is "vector2" or "vector3" or "vector4")
         {
             var count = parameter.Type == "vector2" ? 2 : parameter.Type == "vector3" ? 3 : 4;
-            var panel = new Grid { ColumnDefinitions = new ColumnDefinitions(string.Join(",", Enumerable.Repeat("*", count))), ColumnSpacing = 4 };
+            Panel panel = WrapVectorComponents
+                ? new VectorComponentPanel()
+                : new Grid { ColumnDefinitions = new ColumnDefinitions(string.Join(",", Enumerable.Repeat("*", count))), ColumnSpacing = 4 };
             var index = 0;
             foreach (var component in new[] { "X", "Y", "Z", "W" }.Take(count))
             {
                 var box = CreateTextBox(component);
-                box.MinWidth = 35;
+                if (WrapVectorComponents)
+                {
+                    box.Padding = new Thickness(4, 2);
+                    AutomationProperties.SetName(box, component);
+                    box.Bind(ToolTip.TipProperty, new Binding(component));
+                }
+                else
+                {
+                    box.MinWidth = 35;
+                }
                 var label = new TextBlock { Text = component, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+                if (WrapVectorComponents)
+                {
+                    label.Width = 14;
+                }
                 EnableScrubbing(label, box, parameter, component);
                 var cell = new Grid
                 {
@@ -226,7 +237,10 @@ public sealed class ParameterEditorHost : ContentControl
                     Children = { label, box }
                 };
                 Grid.SetColumn(box, 1);
-                Grid.SetColumn(cell, index++);
+                if (panel is Grid)
+                {
+                    Grid.SetColumn(cell, index++);
+                }
                 panel.Children.Add(cell);
             }
             return panel;

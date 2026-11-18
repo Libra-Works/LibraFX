@@ -357,6 +357,39 @@ internal static class EditorInterfaceTests
             if (resetVector.RootElement.GetArrayLength() != 4 ||
                 resetVector.RootElement.EnumerateArray().Any(component => component.GetDouble() != 0))
                 throw new InvalidOperationException("Vector reset must restore all components from the declared default.");
+
+            VerifyResponsiveVectorRows(graph, vector);
+        }
+        finally { window.Close(); }
+    }
+
+    private static void VerifyResponsiveVectorRows(GraphWorkspaceViewModel graph, GraphNodeViewModel vector)
+    {
+        graph.SetParameter(vector, "value", JsonSerializer.SerializeToElement(new[] { -123456.123456789, 2, 3, 4 }));
+        using var pane = new NodePropertiesPaneViewModel(new ActiveGraphProvider(graph));
+        var view = new NodePropertiesView { DataContext = pane };
+        var frame = new Border { Width = 270, Child = view };
+        var window = new Window { Width = 680, Height = 470, Content = frame };
+        window.Show();
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            var host = view.GetVisualDescendants().OfType<ParameterEditorHost>().Single();
+            var inputs = host.GetVisualDescendants().OfType<TextBox>().ToArray();
+            if (inputs.Length != 4 || inputs.Any(input => input.Bounds.Width < 40) ||
+                inputs.Max(input => input.Bounds.Width) - inputs.Min(input => input.Bounds.Width) > 1 ||
+                inputs[3].TranslatePoint(default, host)!.Value.Y <= inputs[0].TranslatePoint(default, host)!.Value.Y ||
+                inputs.Any(input => input.TranslatePoint(new Point(input.Bounds.Width, 0), view)!.Value.X > view.Bounds.Width))
+            {
+                throw new InvalidOperationException("A narrow inspector must wrap vector components without widening for long values.");
+            }
+
+            frame.Width = 620;
+            Dispatcher.UIThread.RunJobs();
+            if (inputs.Any(input => input.TranslatePoint(default, host)!.Value.Y != inputs[0].TranslatePoint(default, host)!.Value.Y))
+            {
+                throw new InvalidOperationException("Widening the inspector did not put the same vector inputs back on one row.");
+            }
         }
         finally { window.Close(); }
     }

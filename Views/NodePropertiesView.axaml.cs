@@ -8,6 +8,8 @@ namespace LiberaFx.Views;
 
 public partial class NodePropertiesView : UserControl
 {
+    private double _preferredLabelWidth = 124;
+
     public NodePropertiesView()
     {
         InitializeComponent();
@@ -29,9 +31,19 @@ public partial class NodePropertiesView : UserControl
 
     private void OnParameterDividerDrag(object? sender, VectorEventArgs e)
     {
-        var column = ParameterHeader.ColumnDefinitions[0];
-        column.Width = new GridLength(Math.Clamp(column.Width.Value + e.Vector.X, 64, 320));
-        ParameterList.SetValue(ParameterEditorHost.LabelColumnWidthProperty, column.Width);
+        _preferredLabelWidth = Math.Clamp(ParameterHeader.ColumnDefinitions[0].Width.Value + e.Vector.X, 48, 320);
+        UpdateParameterColumns(ParameterHeader.Bounds.Width);
+    }
+
+    private void OnParameterHeaderSizeChanged(object? sender, SizeChangedEventArgs e) =>
+        UpdateParameterColumns(e.NewSize.Width);
+
+    private void UpdateParameterColumns(double width)
+    {
+        var maximum = Math.Max(0, Math.Min(width * 0.45, width - 172));
+        var labelWidth = new GridLength(Math.Min(_preferredLabelWidth, maximum));
+        ParameterHeader.ColumnDefinitions[0].Width = labelWidth;
+        ParameterList.SetValue(ParameterEditorHost.LabelColumnWidthProperty, labelWidth);
     }
 
     private void RefreshLocalizedText()
