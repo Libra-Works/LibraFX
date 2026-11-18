@@ -33,7 +33,11 @@ writes the graph. External uses serialize an optional ordered instancePath of co
 Group/Spawnable node GUIDs; omitted paths mean the root and preserve v1 documents.
 History and project persistence are implemented. The registration pane tracks the selected
 editor/project and rejects stale async results if the document, target, or project changes.
-Copy/paste remapping must preserve instance paths and remains a separate acceptance check.
+Copy/paste includes only selected resource uses and their referenced definitions and
+bindings. Paste remaps node and instance path IDs, keeps resource IDs fixed, and rejects
+conflicting destination registrations without modifying either the graph or its registry.
+Cut/delete removes the selected uses but retains the project registry. These edits
+are recorded together with the affected nodes in document history.
 
 ResourceIdentityResolver reports unregistered, offline, missing, query failure, and type
 mismatch separately. The desktop routes correlated project, resource, parameter-schema, and

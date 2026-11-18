@@ -84,6 +84,66 @@ internal static class ResourceIdentityProjectHistoryTests
             migrated.Graph.Nodes.Single().Parameters!.Single(item => item.Id == "assetPath")
                 .Value.GetString() == "/Game/Old/Old.Old",
             "Legacy resource data was erased or implicitly migrated.");
+
+        VerifyScopedClipboard(legacyState, identities);
+    }
+
+    private static void VerifyScopedClipboard(GraphSnapshot child, ResourceIdentityDocument registry)
+    {
+        var group = GraphNodeDefinition.All.Single(item => item.Kind == GraphNodeKind.GraphGroup);
+        var parentId = Guid.NewGuid();
+        var sourceUse = registry.Uses.Single() with { NodeId = child.Nodes.Single().Id, InstancePath = [parentId] };
+        var source = new GraphWorkspaceViewModel(new UndoRedoManager());
+        source.InitializeFromSnapshot(new GraphSnapshot(
+            [new(parentId, group.Kind, "Group", 0, 0, group.PortType, group.PortCategory, ChildGraph: child)], [])
+        {
+            ResourceIdentities = registry with { Uses = [sourceUse] }
+        });
+        source.SelectNode(source.GetNode(parentId));
+        var copied = JsonSerializer.Deserialize<GraphSnapshot>(JsonSerializer.Serialize(source.CreateSelectionSnapshot()))!;
+
+        var target = new GraphWorkspaceViewModel(new UndoRedoManager());
+        target.InitializeFromSnapshot(new GraphSnapshot([], []));
+        target.PasteSnapshot(copied, 100, 100);
+        var pasted = target.Nodes.Single();
+        var pastedUse = target.ResourceIdentities!.Uses.Single();
+        Require(pastedUse.ResourceId == sourceUse.ResourceId && pastedUse.NodeId != sourceUse.NodeId &&
+            pastedUse.NodeId == pasted.ChildGraph!.Nodes.Single().Id &&
+            pastedUse.InstancePath!.SequenceEqual(new[] { pasted.Id }) && pasted.Id != parentId,
+            "Pasting a nested graph did not remap its scoped resource use.");
+        Require(target.ResourceIdentities.ResourceBindings.SequenceEqual(registry.ResourceBindings),
+            "Clipboard lost the exact project binding.");
+        Require(target.History.Undo() && target.Nodes.Count == 0 && target.ResourceIdentities is null,
+            "Paste did not undo nodes and copied registry together.");
+        Require(target.History.Redo() && target.ResourceIdentities!.Uses.Single().NodeId == pastedUse.NodeId,
+            "Paste redo did not restore the resource use.");
+        target.DeleteNode(target.GetNode(pasted.Id));
+        Require(target.ResourceIdentities!.Uses.Count == 0 && target.ResourceIdentities.Resources.Count == 1,
+            "Deleting a group must remove its descendant uses without unregistering the resource.");
+        Require(target.History.Undo() && target.ResourceIdentities!.Uses.Count == 1,
+            "Undo did not restore deleted scoped uses.");
+
+        var conflicting = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var existing = registry with
+        {
+            Uses = [],
+            ResourceBindings = [registry.ResourceBindings.Single() with
+            {
+                Binding = new("unreal.object-path", "/Game/Different/Different.Different")
+            }]
+        };
+        conflicting.InitializeFromSnapshot(new GraphSnapshot([], []) { ResourceIdentities = existing });
+        var before = conflicting.CreateSnapshot();
+        try
+        {
+            conflicting.PasteSnapshot(copied, 100, 100);
+            throw new InvalidOperationException("Paste overwrote a conflicting resource binding.");
+        }
+        catch (InvalidDataException)
+        {
+            Require(GraphSnapshot.ContentEquals(before, conflicting.CreateSnapshot()) && !conflicting.History.Undo(),
+                "A conflicting paste changed the document or added a history entry.");
+        }
     }
 
     private static void Require(bool condition, string message)

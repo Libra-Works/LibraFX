@@ -59,7 +59,10 @@ public sealed partial class GraphWorkspaceViewModel
         return new GraphSnapshot(
             snapshot.Nodes.Where(node => ids.Contains(node.Id)).ToArray(),
             snapshot.Connections.Where(connection =>
-                ids.Contains(connection.SourceNodeId) && ids.Contains(connection.TargetNodeId)).ToArray());
+                ids.Contains(connection.SourceNodeId) && ids.Contains(connection.TargetNodeId)).ToArray())
+        {
+            ResourceIdentities = CopySelectedResourceIdentities(ids)
+        };
     }
 
     public void PasteSnapshot(GraphSnapshot snapshot, double x, double y)
@@ -111,7 +114,9 @@ public sealed partial class GraphWorkspaceViewModel
                     nodesByOldId[connection.SourceNodeId].ChildGraph, connection.SourcePortId)));
         }
 
-        ExecuteEdit(new CompositeUndoableCommand(LocalizationService.Shared.Get("Messages.History.PasteNodes"), commands));
+        var pastedIdentities = RemapPastedResourceIdentities(snapshot, nodesByOldId);
+        ExecuteEdit(new CompositeUndoableCommand(LocalizationService.Shared.Get("Messages.History.PasteNodes"), commands),
+            updatedResourceIdentities: pastedIdentities);
         _nextNodeIndex += snapshot.Nodes.Count;
         SetSelection(snapshot.Nodes.Select(node => nodesByOldId[node.Id]));
         SetConnectionStatus("Messages.NodesPasted", snapshot.Nodes.Count);
@@ -127,7 +132,8 @@ public sealed partial class GraphWorkspaceViewModel
 
         ExecuteEdit(new CompositeUndoableCommand(
             LocalizationService.Shared.Get("Messages.History.DeleteNodes"),
-            selected.Select(node => new DeleteGraphNodeCommand(this, node))));
+            selected.Select(node => new DeleteGraphNodeCommand(this, node))),
+            updatedResourceIdentities: RemoveSelectedResourceUses(selected.Select(node => node.Id).ToHashSet()));
     }
 
     public void DeleteNode(GraphNodeViewModel node)
@@ -137,7 +143,8 @@ public sealed partial class GraphWorkspaceViewModel
             throw new InvalidOperationException("The node is not in this graph.");
         }
 
-        ExecuteEdit(new DeleteGraphNodeCommand(this, node));
+        ExecuteEdit(new DeleteGraphNodeCommand(this, node),
+            updatedResourceIdentities: RemoveSelectedResourceUses(new HashSet<Guid> { node.Id }));
     }
 
     private void DeleteSelectedNode()

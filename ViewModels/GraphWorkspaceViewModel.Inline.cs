@@ -2,6 +2,7 @@ using System.Text.Json;
 using Avalonia.Threading;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
+using LiberaFx.Models.Resources;
 using LiberaFx.Services;
 
 namespace LiberaFx.ViewModels;
@@ -78,7 +79,8 @@ public sealed partial class GraphWorkspaceViewModel
 
     // Every existing editing command goes through this gate, including MCP/non-UI commands.
     // History captures the full document only after the edited level has been merged.
-    private void ExecuteEdit(IUndoableCommand command, bool containingInstanceValue = false)
+    private void ExecuteEdit(IUndoableCommand command, bool containingInstanceValue = false,
+        ResourceIdentityDocument? updatedResourceIdentities = null)
     {
         Dispatcher.UIThread.VerifyAccess();
         _document.CreateSnapshot();
@@ -97,6 +99,10 @@ public sealed partial class GraphWorkspaceViewModel
                         AutoDestroyWhenIdle = GetCurrentGraph().AutoDestroyWhenIdle
                     };
                     after = ReplaceGraph(after, _graphPath, 0, current);
+                }
+                if (updatedResourceIdentities is not null)
+                {
+                    after = after with { ResourceIdentities = updatedResourceIdentities };
                 }
                 ValidateSnapshot(after);
                 _document.AcceptInlineDocument(after, this);

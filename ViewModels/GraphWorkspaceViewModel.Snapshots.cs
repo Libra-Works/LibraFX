@@ -14,10 +14,12 @@ public sealed partial class GraphWorkspaceViewModel
 
         var current = CreateCurrentSnapshot() with
         {
-            AutoDestroyWhenIdle = GetCurrentGraph().AutoDestroyWhenIdle,
+            AutoDestroyWhenIdle = GetCurrentGraph().AutoDestroyWhenIdle
+        };
+        _rootSnapshot = ReplaceGraph(_rootSnapshot, _graphPath, 0, current) with
+        {
             ResourceIdentities = _rootSnapshot.ResourceIdentities
         };
-        _rootSnapshot = ReplaceGraph(_rootSnapshot, _graphPath, 0, current);
         return _rootSnapshot;
     }
 
