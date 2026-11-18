@@ -24,6 +24,8 @@ auto ULibraEffectComponent::SetPackage(ULibraSpawnableAsset* newPackage) -> ELib
     if (Package && LastResult != ELibraRuntimeResult::Ok) return LastResult;
     Effect = nullptr;
     Package = newPackage;
+    GpuEffect = nullptr;
+    ReleaseGpuPlayback();
     if (PackagePlayback) PackagePlayback->Package = nullptr;
     LastError.Reset();
     return LastResult = newPackage ? ELibraRuntimeResult::Ok : ELibraRuntimeResult::NotReady;
@@ -269,5 +271,9 @@ int32 ULibraEffectComponent::GetRenderObjectCount() const
 
 int32 ULibraEffectComponent::GetGpuInstanceCount() const
 {
-    return PackagePlayback ? PackagePlayback->GetGpuInstanceCount() : 0;
+    if (Package)
+    {
+        return PackagePlayback ? PackagePlayback->GetGpuInstanceCount() : 0;
+    }
+    return GpuEffect && GpuPlayback ? 1 : 0;
 }

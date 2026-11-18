@@ -6,8 +6,8 @@ public class LibraRuntimeForUnreal : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         CppStandard = CppStandardVersion.Cpp20;
-        PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "LibraRuntimeCore" });
-        PrivateDependencyModuleNames.AddRange(new[] { "RenderCore", "RHI", "Json", "LibraGpuRuntime" });
+        PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "LibraRuntimeCore", "LibraGpuRuntime" });
+        PrivateDependencyModuleNames.AddRange(new[] { "RenderCore", "RHI", "Json" });
         var supportsEditorTransport =
             Target.Platform == UnrealTargetPlatform.Win64 ||
             Target.Platform == UnrealTargetPlatform.Mac ||

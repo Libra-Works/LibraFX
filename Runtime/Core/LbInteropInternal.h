@@ -167,6 +167,14 @@ auto ownedSpawnableHost(LibraSpawnableHostHandle handle,
 auto readSpawnableScope(std::uint32_t kind, const std::uint8_t *container,
                         LibraGeneratorInstance instance,
                         liberafx::SpawnableScope &out) -> bool;
+auto inlineEnqueue(void *context, liberafx::Job job, void *data) noexcept -> bool;
+auto checkValues(NativeInstance &native, const LibraBinding *bindings,
+                 std::uint32_t count, LibraValue *out) -> LibraResult;
+auto readValues(NativeInstance &native, const LibraBinding *bindings,
+                std::uint32_t count, LibraValue *out) -> LibraResult;
+auto parameterValueType(const NativeInstance &native,
+                        const liberafx::ParameterHandle &handle,
+                        LibraValueType &outType) noexcept -> LibraResult;
 
 template <class Function>
 auto guarded(Function function) noexcept -> LibraResult {

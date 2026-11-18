@@ -1,6 +1,8 @@
 #include "LibraEffectComponent.h"
 
 #include "LibraEffectAsset.h"
+#include "LibraGpuEffectAsset.h"
+#include "LibraGpuEffectComponent.h"
 #include "LibraNativeState.h"
 #include "LibraTaskScheduler.h"
 #include "LibraCpuProfiler.h"
@@ -170,12 +172,14 @@ void ULibraEffectComponent::EndPlay(const EEndPlayReason::Type endPlayReason)
 {
     Stop();
     ReleasePackagePlayback();
+    ReleaseGpuPlayback();
     Super::EndPlay(endPlayReason);
 }
 
 void ULibraEffectComponent::BeginDestroy()
 {
     ReleasePackagePlayback();
+    ReleaseGpuPlayback();
     NativeState.Reset();
     Super::BeginDestroy();
 }
@@ -183,6 +187,7 @@ void ULibraEffectComponent::BeginDestroy()
 void ULibraEffectComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
 {
     ReleasePackagePlayback();
+    ReleaseGpuPlayback();
     NativeState.Reset();
     Super::OnComponentDestroyed(bDestroyingHierarchy);
 }
@@ -192,6 +197,7 @@ auto ULibraEffectComponent::EnsureState() -> ELibraRuntimeResult
     check(IsInGameThread());
     if (Package) return ReportPackageError(ELibraRuntimeResult::UnsupportedBinary,
         TEXT("Raw bytecode bindings are unavailable for effect packages; use root/child values and named game I/O."));
+    if (GpuEffect) return ELibraRuntimeResult::UnsupportedBinary;
     if (!Effect) return ELibraRuntimeResult::InvalidArgument;
     auto compiled = Effect->GetCompiledProgram();
     if (compiled->result != liberafx::Result::Ok) return ToLibraResult(compiled->result);
@@ -215,6 +221,8 @@ auto ULibraEffectComponent::SetEffect(ULibraEffectAsset* newEffect) -> ELibraRun
     if (Package && LastResult != ELibraRuntimeResult::Ok) return LastResult;
     Package = nullptr;
     if (PackagePlayback) PackagePlayback->Package = nullptr;
+    GpuEffect = nullptr;
+    ReleaseGpuPlayback();
     Effect = newEffect;
     NativeState = MoveTemp(candidate);
     LastError.Reset();
@@ -230,8 +238,8 @@ auto ULibraEffectComponent::ConfigureProfiling(bool enableNodeScopes, bool enabl
 auto ULibraEffectComponent::ConfigureRecording(bool enabled, bool enableNodeScopes, bool enableAccessorScopes) -> ELibraRuntimeResult
 {
     check(IsInGameThread());
-    if (Package) return ReportPackageError(ELibraRuntimeResult::UnsupportedBinary,
-        TEXT("Per-node recording is currently supported only for standalone bytecode."));
+    if (Package || GpuEffect) return ReportPackageError(ELibraRuntimeResult::UnsupportedBinary,
+        TEXT("Per-node recording is currently supported only for standalone CPU bytecode."));
     if (NativeState)
     {
         if (NativeState->pending) return ELibraRuntimeResult::Busy;
@@ -265,10 +273,39 @@ auto ULibraEffectComponent::Play(bool bRestart) -> ELibraRuntimeResult
     check(IsInGameThread());
     if (bStopping) return LastResult = ELibraRuntimeResult::Busy;
     if (!IsRegistered()) return LastResult = ELibraRuntimeResult::NotReady;
+    if ((Effect && Package) || (Effect && GpuEffect) || (Package && GpuEffect))
+    {
+        LastError = TEXT("Assign exactly one of Effect, Package, or GpuEffect.");
+        return LastResult = ELibraRuntimeResult::InvalidArgument;
+    }
+    if (GpuEffect)
+    {
+        if (PackagePlayback && PackagePlayback->Package)
+        {
+            auto result = PackagePlayback->Stop();
+            if (result != ELibraRuntimeResult::Ok) return LastResult = result;
+            PackagePlayback->Package = nullptr;
+        }
+        NativeState.Reset();
+        auto result = EnsureGpuPlayback();
+        if (result != ELibraRuntimeResult::Ok) return LastResult = result;
+        if (bRestart) GpuPlayback->Stop();
+        if (!GpuPlayback->Play())
+        {
+            LastError = GpuPlayback->LastError;
+            bIsPlaying = false;
+            SetComponentTickEnabled(false);
+            return LastResult = ELibraRuntimeResult::UnsupportedBinary;
+        }
+        LastError.Reset();
+        bIsPlaying = true;
+        TimeSeconds = LastEvaluatedTimeSeconds = GpuPlayback->GetSimulationTime();
+        Activate();
+        SetComponentTickEnabled(true);
+        return LastResult = ELibraRuntimeResult::Ok;
+    }
     if (Package)
     {
-        if (Effect) return ReportPackageError(ELibraRuntimeResult::InvalidArgument,
-            TEXT("Assign an effect package or standalone bytecode, not both."));
         NativeState.Reset();
         return PlayPackage(bRestart);
     }
@@ -303,6 +340,14 @@ auto ULibraEffectComponent::Play(bool bRestart) -> ELibraRuntimeResult
 
 void ULibraEffectComponent::Pause()
 {
+    if (GpuEffect && GpuPlayback)
+    {
+        GpuPlayback->Pause();
+        bIsPlaying = false;
+        TimeSeconds = LastEvaluatedTimeSeconds = GpuPlayback->GetSimulationTime();
+        SetComponentTickEnabled(false);
+        return;
+    }
     if (PackagePlayback && Package)
     {
         PackagePlayback->Pause();
@@ -324,19 +369,22 @@ void ULibraEffectComponent::Stop()
         SyncPackageState();
         if (result != ELibraRuntimeResult::Ok) { LastResult = result; return; }
     }
+    if (GpuPlayback) GpuPlayback->Stop();
     bIsPlaying = false;
     NativeState.Reset();
     TimeSeconds = 0;
     LastEvaluatedTimeSeconds = 0;
     bRootFinished = false;
-    LastResult = Package ? ELibraRuntimeResult::Ok : ELibraRuntimeResult::NotReady;
+    LastResult = Package || Effect || GpuEffect
+        ? ELibraRuntimeResult::Ok
+        : ELibraRuntimeResult::NotReady;
     SetComponentTickEnabled(false);
 }
 
 auto ULibraEffectComponent::EvaluateAtTime(double evaluationTimeSeconds) -> ELibraRuntimeResult
 {
-    if (Package) return ReportPackageError(ELibraRuntimeResult::UnsupportedBinary,
-        TEXT("Effect package playback is forward-only; use Play, Pause and Tick rather than seeking raw bytecode."));
+    if (Package || GpuEffect) return ReportPackageError(ELibraRuntimeResult::UnsupportedBinary,
+        TEXT("Package and GPU effect playback are forward-only; use Play, Pause and Tick rather than seeking."));
     if (!IsRegistered()) return LastResult = ELibraRuntimeResult::NotReady;
     if (!FMath::IsFinite(evaluationTimeSeconds)) return LastResult = ELibraRuntimeResult::NonFinite;
     if (NativeState && NativeState->pending) return LastResult = ELibraRuntimeResult::Busy;
@@ -385,6 +433,13 @@ void ULibraEffectComponent::TickComponent(float deltaTime, ELevelTick tickType, 
             SyncPackageState();
             OnEvaluationCompleted.Broadcast(LastResult, LastEvaluatedTimeSeconds);
         }
+        return;
+    }
+    if (GpuEffect && GpuPlayback)
+    {
+        bIsPlaying = GpuPlayback->bIsPlaying;
+        TimeSeconds = LastEvaluatedTimeSeconds = GpuPlayback->GetSimulationTime();
+        if (!bIsPlaying) SetComponentTickEnabled(false);
         return;
     }
     if (bIsPlaying)
@@ -456,7 +511,8 @@ auto ULibraEffectComponent::SetParameterComponent(FGuid nodeId, double value,
 auto ULibraEffectComponent::HasCurrentState() const -> bool
 {
     check(IsInGameThread());
-    return !Package && NativeState && Effect && NativeState->compiled == Effect->GetCompiledProgram();
+    return !Package && !GpuEffect && NativeState && Effect &&
+        NativeState->compiled == Effect->GetCompiledProgram();
 }
 
 auto ULibraEffectComponent::BindValue(FGuid nodeId, FLibraValueHandle& handle) -> ELibraRuntimeResult

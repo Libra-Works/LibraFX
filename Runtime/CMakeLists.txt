@@ -37,6 +37,10 @@ option(LIBERAFX_BUILD_INTEROP "Build the native C ABI plugin" ON)
 if(LIBERAFX_BUILD_INTEROP)
     add_library(liberafx_native SHARED
         Core/LbInterop.cpp
+        Core/LbInteropInstance.cpp
+        Core/LbInteropEffectLifecycle.cpp
+        Core/LbInteropGameIo.cpp
+        Core/LbInteropSprite.cpp
         Core/LbInteropGeneratorPool.cpp
         Core/LbInteropSpawnableHost.cpp
         Core/LbInteropSession.cpp)

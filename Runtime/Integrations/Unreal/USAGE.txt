@@ -103,17 +103,19 @@ Import and use
   ULibraEffectComponent ("Libra Effect") is the public playback entry point for
   an entire effect, including CPU logic, rendering, GPU Particle nodes and
   Spawnable groups. Do not select different components for CPU and GPU.
-  Import an .lfxp package, then drag the resulting asset from Content Browser
+  Import an .lfxp package, .lfxb bytecode asset, or standalone .lfxgpu asset,
+  then drag the resulting asset from Content Browser
   into the level viewport. The editor creates ALibraEffectActor with a scene
   root and one ULibraEffectComponent, assigns the dropped asset to Package and
-  retains the placement transform. Standalone .lfxb assets use the same actor
-  and component, with Effect assigned instead. Placement does not start editor
+  retains the placement transform. Standalone .lfxb and .lfxgpu assets use the
+  same actor and component, with Effect or GpuEffect assigned respectively.
+  Assign only one of Effect, Package, or GpuEffect. Placement does not start editor
   simulation; bAutoPlay starts playback when the game begins.
   Alternatively add Libra Effect to an existing actor and assign Package.
   SetPackage/SetEffect switch formats; assigning both properties rejects Play.
   ULibraSpawnableComponent and ULibraGpuEffectComponent remain internal helpers
-  and legacy-compatible classes, but are hidden from Add Component. A package
-  component owns its helpers and is their sole tick owner.
+  and legacy-compatible classes, but are hidden from Add Component. The effect
+  component creates them as needed; package playback keeps a single tick owner.
 
 Imported asset inspector
   Open the imported .lfxp asset in the Content Browser. Under LIBERA FX Resource
@@ -133,7 +135,7 @@ Imported asset inspector
   refresh the list and clear the old override explicitly; it is not guessed or
   transferred to another key. The compiled payload is not rewritten by edits.
   A raw .lfxb contains bytecode only; use a resource-bearing .lfxp for these
-  controls. Standalone .lfxgpu keeps its existing dedicated import workflow.
+  controls. Standalone .lfxgpu assets use the same Libra Effect placement component.
 
   On either .lfxp or .lfxb, set the editor-only Source Project Path to the
   original local .lfxproj, then use Open LIBERA FX. This path is independent of

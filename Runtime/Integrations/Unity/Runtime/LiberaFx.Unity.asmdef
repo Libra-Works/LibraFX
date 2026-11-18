@@ -1,5 +1,6 @@
 {
   "name": "LiberaFx.Unity",
   "rootNamespace": "LiberaFx.Unity",
+  "references": ["UnityEngine.JSONSerializeModule"],
   "allowUnsafeCode": true
 }

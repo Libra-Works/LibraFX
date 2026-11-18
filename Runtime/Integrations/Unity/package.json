@@ -4,5 +4,8 @@
   "displayName": "LIBERA FX Runtime",
   "description": "Portable native runtime adapters, package assets and GPU rendering for LIBERA FX. See USAGE.txt for verified engine/backend coverage and native plugin installation.",
   "unity": "6000.0",
-  "keywords": [ "vfx", "liberafx" ]
+  "keywords": [ "vfx", "liberafx" ],
+  "dependencies": {
+    "com.unity.modules.jsonserialize": "1.0.0"
+  }
 }

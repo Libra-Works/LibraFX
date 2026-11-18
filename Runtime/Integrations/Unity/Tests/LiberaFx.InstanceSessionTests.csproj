@@ -11,5 +11,6 @@
     <Compile Include="..\Runtime\LiberaFxInstanceSession.cs" />
     <Compile Include="..\Runtime\LiberaFxNative.cs" />
     <Compile Include="..\Runtime\LiberaFxExecutionDebugger.cs" />
+    <Compile Include="..\Runtime\LiberaFxHostQuality.cs" />
   </ItemGroup>
 </Project>

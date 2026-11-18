@@ -3,6 +3,7 @@
 #include "LibraEffectActor.h"
 #include "LibraEffectAsset.h"
 #include "LibraEffectComponent.h"
+#include "LibraGpuEffectAsset.h"
 #include "LibraSpawnableAsset.h"
 #include "AssetRegistry/AssetData.h"
 
@@ -17,9 +18,10 @@ ULibraEffectActorFactory::ULibraEffectActorFactory()
 bool ULibraEffectActorFactory::CanCreateActorFrom(const FAssetData& assetData, FText& error)
 {
     if (assetData.IsValid() && (assetData.IsInstanceOf(ULibraEffectAsset::StaticClass()) ||
-        assetData.IsInstanceOf(ULibraSpawnableAsset::StaticClass()))) return true;
+        assetData.IsInstanceOf(ULibraSpawnableAsset::StaticClass()) ||
+        assetData.IsInstanceOf(ULibraGpuEffectAsset::StaticClass()))) return true;
     error = NSLOCTEXT("LibraRuntimeForUnreal", "InvalidEffectActorAsset",
-        "Select a LIBERA FX compiled effect or effect package.");
+        "Select a LIBERA FX compiled effect, effect package, or GPU effect.");
     return false;
 }
 
@@ -31,6 +33,7 @@ void ULibraEffectActorFactory::PostSpawnActor(UObject* asset, AActor* actor)
     component->Modify();
     component->Effect = Cast<ULibraEffectAsset>(asset);
     component->Package = Cast<ULibraSpawnableAsset>(asset);
+    component->GpuEffect = Cast<ULibraGpuEffectAsset>(asset);
     if (actor->HasActorBegunPlay() && component->bAutoPlay) component->Play();
 }
 
@@ -39,5 +42,7 @@ UObject* ULibraEffectActorFactory::GetAssetFromActorInstance(AActor* actor)
     auto effectActor = Cast<ALibraEffectActor>(actor);
     if (!effectActor || !effectActor->EffectComponent) return nullptr;
     auto component = effectActor->EffectComponent;
-    return component->Package ? static_cast<UObject*>(component->Package.Get()) : component->Effect.Get();
+    if (component->Package) return component->Package.Get();
+    if (component->Effect) return component->Effect.Get();
+    return component->GpuEffect.Get();
 }

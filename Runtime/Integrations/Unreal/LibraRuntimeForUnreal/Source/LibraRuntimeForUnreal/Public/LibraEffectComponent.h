@@ -9,6 +9,8 @@
 #include "LibraEffectComponent.generated.h"
 
 class ULibraEffectAsset;
+class ULibraGpuEffectAsset;
+class ULibraGpuEffectComponent;
 struct FLibraEffectState;
 
 UCLASS(ClassGroup = (Effects), meta = (BlueprintSpawnableComponent, DisplayName = "Libra Effect"))
@@ -21,17 +23,23 @@ public:
     ULibraEffectComponent();
     virtual ~ULibraEffectComponent() override;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime", meta = (EditCondition = "Package == nullptr"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime", meta = (EditCondition = "Package == nullptr && GpuEffect == nullptr"))
     TObjectPtr<ULibraEffectAsset> Effect;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime", meta = (EditCondition = "Effect == nullptr"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime", meta = (EditCondition = "Effect == nullptr && GpuEffect == nullptr"))
     TObjectPtr<ULibraSpawnableAsset> Package;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime", meta = (EditCondition = "Effect == nullptr && Package == nullptr"))
+    TObjectPtr<ULibraGpuEffectAsset> GpuEffect;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Rendering")
     TArray<FLibraSpawnableAssetBinding> AssetBindings;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Rendering", meta = (ClampMin = "0.0"))
     float GpuSpawnPerSecond = 100;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Rendering")
+    int32 GpuEmitterSeed = 1;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Limits", meta = (ClampMin = "1"))
     int32 MaxActivePerTemplate = 32;
@@ -108,6 +116,9 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult SetPackage(ULibraSpawnableAsset* newPackage);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
+    ELibraRuntimeResult SetGpuEffect(ULibraGpuEffectAsset* newEffect);
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult RequestNaturalEnd();
@@ -257,9 +268,11 @@ protected:
 private:
     bool bSuppressPreviewDebugDraw = false;
     ELibraRuntimeResult PlayPackage(bool bRestart);
+    ELibraRuntimeResult EnsureGpuPlayback();
     ELibraRuntimeResult ReportPackageError(ELibraRuntimeResult result, const FString& message);
     void SyncPackageState();
     void ReleasePackagePlayback();
+    void ReleaseGpuPlayback();
     UFUNCTION()
     void ForwardHostEvent(const FLibraSpawnableHostEvent& event);
     UFUNCTION()
@@ -268,6 +281,8 @@ private:
     void ForwardRuntimeError(ELibraRuntimeResult result);
     UPROPERTY(Transient)
     TObjectPtr<ULibraSpawnableComponent> PackagePlayback;
+    UPROPERTY(Transient)
+    TObjectPtr<ULibraGpuEffectComponent> GpuPlayback;
     bool bStopping = false;
     ELibraRuntimeResult EnsureState();
     ELibraRuntimeResult QueueEvaluation(double timeSeconds, double frameDelta);
