@@ -15,8 +15,11 @@ LIBERA FXは、値・Signal・寿命をグラフで組み合わせる作者用�
 
 細かな手順と対応範囲は[SDKの導入と配布](sdk-distribution.md)、
 [Unity手順](../Runtime/Integrations/Unity/USAGE.txt)、
-[Unreal手順](../Runtime/Integrations/Unreal/USAGE.txt)を参照してください。
-Unity 7000系での過去の確認とUnity 6の確認は別です。Godotは未対応です。
+[Unreal手順](../Runtime/Integrations/Unreal/USAGE.txt)、
+[Godot手順](../Runtime/Integrations/Godot/USAGE.txt)を参照してください。
+Unity 7000系での過去の確認とUnity 6での現行機能の確認は別です。
+Godotでは Windows x86-64 で CPU バイトコードの単体再生に対応しています。
+ライブプレビュー、描画、Spawnable パッケージにはまだ対応していません。
 
 編集はUndo／Redoできます。以前の履歴へ戻った後の編集は別の枝になるので、
 別案を試すために元の案を破棄する必要はありません。MCP操作の入口は同梱の英語

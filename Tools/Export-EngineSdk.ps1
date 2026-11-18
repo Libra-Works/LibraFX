@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('Unity', 'Unreal')]
+    [ValidateSet('Unity', 'Unreal', 'Godot')]
     [string] $Engine,
     [Parameter(Mandatory)]
     [string] $OutputDirectory,

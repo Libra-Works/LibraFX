@@ -5,9 +5,8 @@ The SDKs still live in this repository. `Libra-Works/ForUnity` and
 Repository creation, history migration, removal of the originals, releases and
 pushes require a separate approved migration.
 
-Godot has an initial Windows x86-64 GDExtension for standalone CPU programs.
-See `Runtime\Integrations\Godot\USAGE.txt` for the separate build and smoke
-test. The SDK staging script below still targets Unity and Unreal only.
+Unity, Unreal and the initial Windows x86-64 Godot GDExtension can all be
+staged locally with the same tool.
 
 ## Reproducible local staging
 
@@ -16,6 +15,7 @@ From PowerShell 7, export into a **new absolute directory outside the repository
 ```powershell
 .\Tools\Export-EngineSdk.ps1 -Engine Unity -OutputDirectory C:\SdkStaging\ForUnity
 .\Tools\Export-EngineSdk.ps1 -Engine Unreal -OutputDirectory C:\SdkStaging\ForUnreal
+.\Tools\Export-EngineSdk.ps1 -Engine Godot -OutputDirectory C:\SdkStaging\ForGodot
 ```
 
 The parent directory must exist. Existing destinations, links and dirty source
@@ -67,6 +67,23 @@ Play/Stop, instance I/O and lifetime ownership. UE 5.7+ is the current declared
 minimum. Keep the portable Core/Unreal integration Clang-compilable, and use MSVC
 for final Windows Unreal integration verification. This does not certify console
 SDKs, cooking or gameplay merely because a desktop source build succeeds.
+
+## Godot entry point
+
+Build `Runtime\Integrations\Godot` from the staged source with a separate
+`godot-cpp` checkout supplying the 4.7 API. Copy `liberafx.gdextension` and
+the matching DLL into the Godot project and add a `LibraEffectPlayer` node.
+Convert `.lfxproj` to `.lfxb` using the Converter from the full authoring
+repository before copying the bytecode into the project. See the included
+`Runtime\Integrations\Godot\USAGE.txt` for exact build, installation, and smoke
+test commands.
+
+The Godot adapter accepts standalone CPU bytecode v1 and v2, not Spawnable
+packages. It does not expose rendering, Game I/O, asset resolution, GPU or
+live preview. Headless playback has been exercised on Godot 4.7.2 Windows
+x86-64; exported players have not been verified. When selecting engine
+verification targets, include the Godot smoke test for changes that affect its
+supported Core, Converter, integration or distribution paths.
 
 ## Version and ownership boundary
 
