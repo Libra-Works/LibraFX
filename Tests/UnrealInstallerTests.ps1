@@ -27,7 +27,7 @@ function Assert-Wrappers {
     foreach ($file in Get-ChildItem -LiteralPath $core -Filter '*.cpp' -File -Recurse) {
         $relative = 'Core\' + [IO.Path]::GetRelativePath($core, $file.FullName)
         $count = if ($includes.ContainsKey($relative)) { $includes[$relative] } else { 0 }
-        $expected = if ($relative -eq 'Core\Interop.cpp') { 0 } else { 1 }
+        $expected = if ($relative -eq 'Core\LbInterop.cpp') { 0 } else { 1 }
         if ($count -ne $expected) {
             throw "Expected $expected Unreal wrappers for ${relative}; found $count."
         }
@@ -43,12 +43,12 @@ function Assert-Wrappers {
 Assert-Wrappers
 $plugin = Join-Path $root 'Plugins\LibraRuntimeForUnreal'
 $generated = Join-Path $plugin 'Source\LibraRuntimeCore\Private\Generated'
-$digest = [Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes('Core/BuiltinNodes.cpp'))
+$digest = [Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes('Core/LbBuiltinNodes.cpp'))
 $suffix = [Convert]::ToHexString($digest).Substring(0, 12)
 $oldRelative = "Source\LibraRuntimeCore\Private\Generated\LibraNative_$suffix.cpp"
 $oldWrapper = Join-Path $plugin $oldRelative
 [IO.Directory]::CreateDirectory($generated) | Out-Null
-[IO.File]::WriteAllText($oldWrapper, "#include `"HAL/Platform.h`"`n#include `"Core/BuiltinNodes.cpp`"`n", [Text.UTF8Encoding]::new($false))
+[IO.File]::WriteAllText($oldWrapper, "#include `"HAL/Platform.h`"`n#include `"Core/LbBuiltinNodes.cpp`"`n", [Text.UTF8Encoding]::new($false))
 $manifestPath = Join-Path $plugin '.libra-install-manifest.json'
 $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json
 $manifest.Files += [pscustomobject]@{ Path = $oldRelative; Hash = (Get-FileHash -LiteralPath $oldWrapper -Algorithm SHA256).Hash }

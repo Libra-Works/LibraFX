@@ -1,4 +1,4 @@
-#include "liberafx/InstanceSession.h"
+#include "liberafx/LbInstanceSession.h"
 #ifdef NDEBUG
 #undef NDEBUG
 #endif

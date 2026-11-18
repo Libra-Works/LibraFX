@@ -1,5 +1,5 @@
-#include "liberafx/SceneBindings.h"
-#include "liberafx/platform/RenderBuffers.h"
+#include "liberafx/LbSceneBindings.h"
+#include "liberafx/platform/LbRenderBuffers.h"
 #include <array>
 #include <cstdlib>
 #include <cstdio>

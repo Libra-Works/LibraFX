@@ -3,7 +3,7 @@
 #include "LibraEffectComponent.h"
 #include "LibraSpawnableAsset.h"
 #include "Engine/World.h"
-#include "liberafx/SpawnableHost.h"
+#include "liberafx/LbSpawnableHost.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"

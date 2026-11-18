@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "LibraRuntimeTypes.h"
 #include "UObject/StrongObjectPtr.h"
-#include "liberafx/platform/DebugDrawQueue.h"
+#include "liberafx/platform/LbDebugDrawQueue.h"
 
 class AActor;
 class UStaticMesh;

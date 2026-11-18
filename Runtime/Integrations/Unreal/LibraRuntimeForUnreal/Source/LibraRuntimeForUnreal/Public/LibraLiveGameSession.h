@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "LibraSpawnableComponent.h"
-#include "liberafx/InstanceSession.h"
+#include "liberafx/LbInstanceSession.h"
 
 class ULibraEffectComponent;
 

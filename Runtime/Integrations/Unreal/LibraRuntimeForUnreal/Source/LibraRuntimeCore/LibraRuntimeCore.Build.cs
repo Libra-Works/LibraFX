@@ -24,8 +24,8 @@ public class LibraRuntimeCore : ModuleRules
         {
             coreRoot = Path.GetFullPath(File.ReadAllText(developmentPath).Trim());
         }
-        if (!File.Exists(Path.Combine(coreRoot, "Core", "VfxProgram.cpp")) ||
-            !File.Exists(Path.Combine(coreRoot, "Core", "VfxInstance.cpp")))
+        if (!File.Exists(Path.Combine(coreRoot, "Core", "LbVfxProgram.cpp")) ||
+            !File.Exists(Path.Combine(coreRoot, "Core", "LbVfxInstance.cpp")))
         {
             throw new BuildException("LibraRuntimeCore sources are missing. Use Install-LibraRuntimeForUnreal.ps1 (copy or -Link).");
         }

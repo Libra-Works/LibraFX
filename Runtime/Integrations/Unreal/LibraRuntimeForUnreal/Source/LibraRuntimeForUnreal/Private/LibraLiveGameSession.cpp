@@ -5,7 +5,7 @@
 #include "Engine/World.h"
 #include "Components/SceneComponent.h"
 #include "UObject/StrongObjectPtr.h"
-#include "liberafx/host/LivePackage.h"
+#include "liberafx/host/LbLivePackage.h"
 #include <deque>
 #include <mutex>
 #include <unordered_map>

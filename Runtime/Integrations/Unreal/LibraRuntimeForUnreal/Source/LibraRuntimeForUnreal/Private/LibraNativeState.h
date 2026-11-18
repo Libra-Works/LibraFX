@@ -5,7 +5,7 @@
 #include "LibraEffectAsset.h"
 #include "LibraRuntimeTypes.h"
 #include "LibraNativeNodesInternal.h"
-#include "liberafx/VfxRuntime.h"
+#include "liberafx/LbVfxRuntime.h"
 #include "LibraCpuProfiler.h"
 
 inline auto ToLibraResult(liberafx::Result result) -> ELibraRuntimeResult

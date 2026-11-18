@@ -3,7 +3,7 @@
 #include "LibraEffectAsset.h"
 #include "LibraEffectComponent.h"
 #include "LibraNativeState.h"
-#include "liberafx/GeneratorPool.h"
+#include "liberafx/LbGeneratorPool.h"
 #include "Engine/World.h"
 #include "HAL/PlatformProcess.h"
 #include "Misc/AutomationTest.h"

@@ -1,5 +1,5 @@
-#include "liberafx/platform/ProfileRecorder.h"
-#include "liberafx/VfxRuntime.h"
+#include "liberafx/platform/LbProfileRecorder.h"
+#include "liberafx/LbVfxRuntime.h"
 #include <array>
 #ifdef NDEBUG
 #undef NDEBUG

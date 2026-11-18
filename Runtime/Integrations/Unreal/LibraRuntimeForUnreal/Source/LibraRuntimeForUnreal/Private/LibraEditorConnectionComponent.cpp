@@ -4,7 +4,7 @@
 #include "LibraEditorTransport.h"
 #include "LibraEffectAsset.h"
 #include "LibraEffectComponent.h"
-#include "liberafx/LivePreview.h"
+#include "liberafx/LbLivePreview.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"

@@ -6,7 +6,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
-#include "liberafx/SpawnablePackage.h"
+#include "liberafx/LbSpawnablePackage.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"

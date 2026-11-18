@@ -1,4 +1,4 @@
-#include "liberafx/EffectLifecycle.h"
+#include "liberafx/LbEffectLifecycle.h"
 #ifdef NDEBUG
 #undef NDEBUG
 #endif

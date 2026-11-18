@@ -1,7 +1,7 @@
 #pragma pack(push, 1)
-#include "liberafx/Interop.h"
+#include "liberafx/LbInterop.h"
 #pragma pack(pop)
-#include "liberafx/ExecutionDebugInterop.h"
+#include "liberafx/LbExecutionDebugInterop.h"
 #if defined(_WIN32)
 #define NOMINMAX
 #include <Windows.h>

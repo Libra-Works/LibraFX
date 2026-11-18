@@ -1,7 +1,7 @@
-#include "liberafx/SpawnableHost.h"
-#include "liberafx/BuiltinSignals.h"
-#include "liberafx/EffectLifecycle.h"
-#include "liberafx/PhasePrimitives.h"
+#include "liberafx/LbSpawnableHost.h"
+#include "liberafx/LbBuiltinSignals.h"
+#include "liberafx/LbEffectLifecycle.h"
+#include "liberafx/LbPhasePrimitives.h"
 #ifdef NDEBUG
 #undef NDEBUG
 #endif

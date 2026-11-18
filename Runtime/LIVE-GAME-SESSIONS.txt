@@ -174,7 +174,7 @@ Add to Runtime/CMakeLists.txt (LIBERAFX_BUILD_TESTS):
   set_tests_properties(liberafx_live_package_tests PROPERTIES SKIP_RETURN_CODE 77)
 Pass compiler-fixture directory explicitly for actual subset acceptance; the
 no-argument ctest result is only a skip, never evidence of functional acceptance.
-The validator is header-only; InteropSession.cpp exposes the additive C export.
+The validator is header-only; LbInteropSession.cpp exposes the additive C export.
 Unity .cs and Unreal .cpp/.h use normal integration auto-discovery; no central
 runtime source registration is necessary beyond refreshing engine deployments.
 

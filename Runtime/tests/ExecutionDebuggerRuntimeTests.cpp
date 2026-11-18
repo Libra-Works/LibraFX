@@ -1,8 +1,8 @@
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
-#include "liberafx/ExecutionDebugger.h"
-#include "liberafx/host/SpawnableDebugJob.h"
+#include "liberafx/LbExecutionDebugger.h"
+#include "liberafx/host/LbSpawnableDebugJob.h"
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>

@@ -2,8 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
-#include "liberafx/platform/Profiler.h"
-#include "liberafx/platform/ProfileRecorder.h"
+#include "liberafx/platform/LbProfiler.h"
+#include "liberafx/platform/LbProfileRecorder.h"
 #include "LibraProfileMeasurement.h"
 #include <array>
 

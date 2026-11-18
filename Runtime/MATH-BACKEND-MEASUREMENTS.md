@@ -163,8 +163,8 @@ than hiding that variability.
 ## Final #32 math / pre-#34 VM measurement
 
 The final-math snapshot deliberately uses committed `e826bbf` Runtime plus
-exactly these worktree overlays: `Core/BuiltinNodes.cpp`,
-`include/liberafx/math/MatrixMath.h`, `tests/BuiltinMathTests.cpp`,
+exactly these worktree overlays: `Core/LbBuiltinNodes.cpp`,
+`include/liberafx/math/LbMatrixMath.h`, `tests/BuiltinMathTests.cpp`,
 `CMakeLists.txt`, and `benchmarks/MathBackendBenchmarks.cpp`. Thus it includes
 final #32 ordered transforms and 71 built-in descriptors, but **not #34
 conditional execution, branch guards, or enum changes**. #33 adds ordinary
@@ -195,8 +195,8 @@ The manifest records every file, size, overlay and baseline commit; key hashes:
 | Source | SHA-256 |
 |---|---|
 | Core/VfxRuntime.cpp (committed, pre-#34) | `26ba0f53b70d7c0666f80ce8edbfd80a94409cc08d89916905352500d30112da` |
-| Core/BuiltinNodes.cpp (#32) | `3b13e608f9b128d2d728a19c8d81326a8b6b5dbf8529797130dd378e44290d87` |
-| include/liberafx/math/MatrixMath.h (#32) | `c92dc22b4c2ee611693072308aa64513fc0031d48fe64dc3c5691247865071fe` |
+| Core/LbBuiltinNodes.cpp (#32) | `3b13e608f9b128d2d728a19c8d81326a8b6b5dbf8529797130dd378e44290d87` |
+| include/liberafx/math/LbMatrixMath.h (#32) | `c92dc22b4c2ee611693072308aa64513fc0031d48fe64dc3c5691247865071fe` |
 | tests/BuiltinMathTests.cpp (#32) | `f484f47f08e08b2613cc6f78a8882f493211356d82757d6e9a87afc3a163579b` |
 | benchmarks/MathBackendBenchmarks.cpp | `76b25cda1615680132cc27e84c982bec8885b3671acbffe907e95c9aebbf5900` |
 | CMakeLists.txt | `5e3616862198df3d3be487906537f5f9991eb46cb743a4589038420bc5337f31` |

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "liberafx/platform/RenderQueue.h"
+#include "liberafx/platform/LbRenderQueue.h"
 #include <atomic>
 
 class FRHICommandListImmediate;

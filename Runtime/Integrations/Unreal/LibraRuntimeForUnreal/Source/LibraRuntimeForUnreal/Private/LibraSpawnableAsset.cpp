@@ -15,7 +15,7 @@
 #include "UObject/AssetRegistryTagsContext.h"
 #include "UObject/Package.h"
 #endif
-#include "liberafx/SpawnablePackage.h"
+#include "liberafx/LbSpawnablePackage.h"
 
 auto ULibraSpawnableAsset::ValidatePackage() const -> ELibraRuntimeResult
 {

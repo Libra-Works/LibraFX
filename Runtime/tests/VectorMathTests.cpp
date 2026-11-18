@@ -1,4 +1,4 @@
-#include "liberafx/math/VectorMath.h"
+#include "liberafx/math/LbVectorMath.h"
 
 #include <array>
 #include <cmath>

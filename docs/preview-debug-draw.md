@@ -32,7 +32,7 @@ Preview Signal keys do **not** implicitly enable debug output.
 - The existing `render_config` path carries explicit `previewOnly:true`,
   `debugVersion:1` descriptors. Matrix lowering supplies four real row bindings.
   No Matrix is packed into a four-component runtime value.
-- Core `platform/DebugDrawQueue.h` owns bounded snapshots in caller-provided
+- Core `platform/LbDebugDrawQueue.h` owns bounded snapshots in caller-provided
   storage; no engine SDK/OS/graphics calls or allocations occur there. Rejected
   submissions retain their batch and must not partially display/retain data.
 - UE `FLibraDebugDrawScope` consumes that queue on the engine owner thread and
@@ -198,7 +198,7 @@ engine observations is closed by this source handoff.
   `PreviewProtocol.cs`, `ResourceIdentityExport.cs`.
 - ViewModels/Views: `MainViewModel.PreviewDebugDraw.cs`, `GraphNodeViewModel.cs`,
   `PreviewPaneView.axaml`, `GraphNodeView.axaml`.
-- Core: `Runtime/include/liberafx/platform/DebugDrawQueue.h`,
+- Core: `Runtime/include/liberafx/platform/LbDebugDrawQueue.h`,
   `Runtime/tests/DebugDrawQueueTests.cpp`, `Runtime/CMakeLists.txt`.
 - Unity Runtime: `LiberaFxDebugDrawInstance.cs`, `LiberaFxRenderPayload.cs`,
   `LiberaFxRenderScope.cs`; Editor/Tests: `LiberaFxDebugDrawVerification.cs`.

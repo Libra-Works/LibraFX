@@ -6,7 +6,7 @@
 #include "HAL/Event.h"
 #include "HAL/PlatformProcess.h"
 #include "RenderingThread.h"
-#include "liberafx/SceneBindings.h"
+#include "liberafx/LbSceneBindings.h"
 #include <array>
 #include <limits>
 

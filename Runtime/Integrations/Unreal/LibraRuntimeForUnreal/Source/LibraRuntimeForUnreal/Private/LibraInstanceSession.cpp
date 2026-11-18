@@ -1,6 +1,6 @@
 #include "LibraInstanceSession.h"
 #include "Misc/ScopeLock.h"
-#include "liberafx/host/ProgramSession.h"
+#include "liberafx/host/LbProgramSession.h"
 
 struct FLibraInstanceSession::FImpl final
 {

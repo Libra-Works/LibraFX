@@ -4,7 +4,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "Misc/Base64.h"
-#include "liberafx/SpawnableHost.h"
+#include "liberafx/LbSpawnableHost.h"
 
 #include <array>
 #include <cmath>

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "liberafx/VfxRuntime.h"
+#include "liberafx/LbVfxRuntime.h"
 #include "LibraRuntimeHandles.generated.h"
 
 class ULibraEffectComponent;

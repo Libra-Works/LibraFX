@@ -1,9 +1,9 @@
-#include "liberafx/VfxRuntime.h"
-#include "liberafx/EffectLifecycle.h"
-#include "liberafx/GeneratorPool.h"
-#include "liberafx/NamedIo.h"
-#include "liberafx/SpawnableHost.h"
-#include "../Core/LogicalNodes.h"
+#include "liberafx/LbVfxRuntime.h"
+#include "liberafx/LbEffectLifecycle.h"
+#include "liberafx/LbGeneratorPool.h"
+#include "liberafx/LbNamedIo.h"
+#include "liberafx/LbSpawnableHost.h"
+#include "../Core/LbLogicalNodes.h"
 
 #ifdef NDEBUG
 #undef NDEBUG

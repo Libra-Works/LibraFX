@@ -21,9 +21,9 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "UObject/StrongObjectPtr.h"
-#include "liberafx/SceneBindings.h"
+#include "liberafx/LbSceneBindings.h"
 #include "LibraSpriteCompositionRender.h"
-#include "liberafx/SpawnablePackage.h"
+#include "liberafx/LbSpawnablePackage.h"
 
 namespace {
 auto Text(const std::vector<std::uint8_t>& bytes) -> FString

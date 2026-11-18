@@ -1,5 +1,5 @@
-#include "liberafx/ExecutionDebugger.h"
-#include "liberafx/host/ExecutionDebugProtocol.h"
+#include "liberafx/LbExecutionDebugger.h"
+#include "liberafx/host/LbExecutionDebugProtocol.h"
 #include <atomic>
 #include <cassert>
 

@@ -22,7 +22,7 @@ Install (PowerShell 7)
   them. Project files and Config are not edited. Build the project yourself.
   Copying the source plugin folder alone is insufficient: the installer bundles
   the native Core sources and generates a separate translation unit per source.
-  The standalone C ABI bridge (Interop.cpp) is not part of the Unreal module.
+  The standalone C ABI bridge (LbInterop.cpp) is not part of the Unreal module.
 
 Linked development installation (no source copying)
   .\Install-LibraRuntimeForUnreal.ps1 -ProjectPath "C:\YourProject\YourProject.uproject" -Link

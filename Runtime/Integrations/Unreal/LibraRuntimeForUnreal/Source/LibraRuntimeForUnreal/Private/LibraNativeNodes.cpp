@@ -1,6 +1,6 @@
 #include "LibraNativeNodes.h"
 #include "LibraNativeNodesInternal.h"
-#include "liberafx/BuiltinSignals.h"
+#include "liberafx/LbBuiltinSignals.h"
 
 namespace {
 auto CurrentRegistry() -> TSharedRef<const FLibraNodeRegistrySnapshot, ESPMode::ThreadSafe>&

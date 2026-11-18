@@ -166,7 +166,7 @@ engine's Cube asset; the default Cube material does not expose Color/Tint.
 
 Public API / adapter integration
 --------------------------------------------------------
-Interop.h exports these additive ABI-1 calls (existing POD sizes unchanged):
+LbInterop.h exports these additive ABI-1 calls (existing POD sizes unchanged):
   libra_spawnable_host_force_terminate(host, scopeKind, containerId, instance)
   libra_spawnable_host_notify_end_request(host, scopeKind, containerId, instance,
                                          userSignalNodeId)

@@ -1,4 +1,4 @@
-#include "liberafx/VfxRuntime.h"
+#include "liberafx/LbVfxRuntime.h"
 
 #include <array>
 #include <cassert>

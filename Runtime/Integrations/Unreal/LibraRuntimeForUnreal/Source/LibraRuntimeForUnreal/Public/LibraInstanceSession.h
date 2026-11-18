@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "HAL/CriticalSection.h"
-#include "liberafx/InstanceSession.h"
+#include "liberafx/LbInstanceSession.h"
 #include <array>
 
 // Native-only facade: no UObject is an ID, and no UObject/asset/render operation

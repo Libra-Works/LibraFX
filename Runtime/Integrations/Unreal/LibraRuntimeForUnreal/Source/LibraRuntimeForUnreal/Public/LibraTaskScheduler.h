@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Tasks/Task.h"
-#include "liberafx/platform/JobScheduler.h"
+#include "liberafx/platform/LbJobScheduler.h"
 
 // One owner thread submits/waits; task bodies run on UE workers.
 class LIBRARUNTIMEFORUNREAL_API FLibraTaskScheduler final

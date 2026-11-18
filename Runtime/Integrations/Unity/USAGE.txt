@@ -122,7 +122,7 @@ create an inactive object, add/configure its component, then activate it.
 
 ABI and ownership
 -----------------
-Interop.h compiles as C or C++; cdecl exports use uint64 program/instance handles,
+LbInterop.h compiles as C or C++; cdecl exports use uint64 program/instance handles,
 uint32 instance-local binding tokens, int32 result codes and fixed-layout POD.
 LibraValue is 40 bytes; LibraAtlasFrame 20; LibraSpriteVertex 36.
 Host ABI records are not wire overlays. The C header asserts every field offset,
@@ -317,7 +317,7 @@ OnDisable is the normal release path, finalizers are only a fallback.
 
 iOS / IL2CPP
 ------------
-For iOS link Core + Interop.cpp statically into the Xcode player (build for iOS,
+For iOS link Core + LbInterop.cpp statically into the Xcode player (build for iOS,
 not a desktop dylib), keep cdecl exports visible, and ensure linker dead-strip
 does not remove exported libra_* functions. P/Invoke uses __Internal on iOS
 players and liberafx_native elsewhere. Android needs the target ABI's .so and

@@ -7,7 +7,7 @@ the current effect. This is native infrastructure, **not completed game live edi
 
 ## Public API and existing runtime integration
 
-`include/liberafx/InstanceSession.h`, `Core/InstanceSession.cpp` expose
+`include/liberafx/LbInstanceSession.h`, `Core/LbInstanceSession.cpp` expose
 `InstanceSession`. It does not allocate queue, slot, instance work, or defaults
 memory. The caller supplies **exclusive**, default-constructed `InstanceSlot[]`
 and `InstanceRequestStorage[]` for the whole session lifetime. Do not share these
@@ -145,14 +145,14 @@ instead of substituting placeholder resources.
 
 ## Additive public C ABI and engine owner facades
 
-`include/liberafx/InteropSession.h` and `Core/InteropSession.cpp` provide additive
+`include/liberafx/LbInteropSession.h` and `Core/LbInteropSession.cpp` provide additive
 ABI v1 exports named `libra_session_*`. No old function, structure, handle
 registry or `libra_abi_version` changes. New session/request/instance records
 contain only integer nonces, incarnation, sequence, generation and slot. The C
 header defines packing, sizes and offsets; it remains a host ABI, not a wire
 format. Never encode the caller's bytecode pointer as an ID.
 
-The shared host service `include/liberafx/host/ProgramSession.h` owns arrays,
+The shared host service `include/liberafx/host/LbProgramSession.h` owns arrays,
 immutable bytecode copies and aligned work/defaults as a CALLER of the existing
 InstanceSession kernel. This optional allocating host convenience does not change
 the raw Core caller-memory API. Pure v1/v2 only; packages, custom callbacks,
@@ -277,7 +277,7 @@ Minimal parent CMake integration (not applied by this agent):
 
 ```cmake
 # Within LIBERAFX_BUILD_INTEROP, after liberafx_native is declared:
-target_sources(liberafx_native PRIVATE Core/InteropSession.cpp)
+target_sources(liberafx_native PRIVATE Core/LbInteropSession.cpp)
 # Within LIBERAFX_BUILD_TESTS AND LIBERAFX_BUILD_INTEROP:
 add_executable(liberafx_interop_session_tests tests/InteropSessionTests.cpp)
 target_link_libraries(liberafx_interop_session_tests PRIVATE liberafx_native Threads::Threads)
@@ -291,7 +291,7 @@ With Ninja, select CMAKE_BUILD_TYPE at configure; use an isolated absolute -B
 outside the repository and keep vcvars64 setup/configure/build in one cmd process.
 Do not invoke tests as part of a compile-only authorization.
 
-The new InteropSession.cpp is guarded by LIBRA_INTEROP_BUILD (already defined by
+The new LbInteropSession.cpp is guarded by LIBRA_INTEROP_BUILD (already defined by
 the native shared target). Unreal's source installer automatically discovers Core
 cpp sources; its generated wrapper is intentionally empty without that macro.
 No ABI import/export redefinition or extra Unreal DLL is required. Refresh the

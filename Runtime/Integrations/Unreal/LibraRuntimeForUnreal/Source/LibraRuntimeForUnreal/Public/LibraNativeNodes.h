@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "LibraRuntimeTypes.h"
-#include "liberafx/VfxRuntime.h"
+#include "liberafx/LbVfxRuntime.h"
 
 class LIBRARUNTIMEFORUNREAL_API FLibraNativeNodes final
 {

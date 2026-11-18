@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "liberafx/VfxRuntime.h"
+#include "liberafx/LbVfxRuntime.h"
 
 struct FLibraNodeRegistrySnapshot final
 {

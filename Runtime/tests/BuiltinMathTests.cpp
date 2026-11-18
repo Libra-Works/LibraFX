@@ -1,5 +1,5 @@
-#include "liberafx/VfxRuntime.h"
-#include "liberafx/math/MatrixMath.h"
+#include "liberafx/LbVfxRuntime.h"
+#include "liberafx/math/LbMatrixMath.h"
 #ifdef NDEBUG
 #undef NDEBUG
 #endif

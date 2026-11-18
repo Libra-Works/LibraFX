@@ -9,7 +9,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
-#include "liberafx/SpawnablePackage.h"
+#include "liberafx/LbSpawnablePackage.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraSpawnableGpuFixtureTest,
     "Libra.Runtime.Spawnable.GpuFixture",

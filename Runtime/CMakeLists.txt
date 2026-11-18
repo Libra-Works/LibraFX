@@ -3,27 +3,30 @@ project(LiberaFxRuntime LANGUAGES CXX)
 
 find_package(Threads REQUIRED)
 add_library(liberafx_runtime STATIC
-    Core/VfxProgram.cpp
-    Core/VfxInstance.cpp
-    Core/LivePreview.cpp
-    Core/BuiltinNodes.cpp
-    Core/BuiltinMathNodes.cpp
-    Core/BuiltinMatrixNodes.cpp
-    Core/BuiltinSignalNodes.cpp
-    Core/BuiltinTimeNodes.cpp
-    Core/MatrixMath.cpp
-    Core/DelayNode.cpp
-    Core/GeneratorPool.cpp
-    Core/NamedIo.cpp
-    Core/EffectLifecycle.cpp
-    Core/SpawnablePackage.cpp
-    Core/SpawnableHost.cpp
-    Core/SpawnableHostExecution.cpp
-    Core/SpawnableHostScheduling.cpp
-    Core/SpawnableHostApi.cpp)
-target_sources(liberafx_runtime PRIVATE Core/LogicalNodes.cpp)
-target_sources(liberafx_runtime PRIVATE Core/InstanceSession.cpp)
-target_sources(liberafx_runtime PRIVATE Core/PhasePrimitives.cpp)
+    Core/LbVfxProgram.cpp
+    Core/LbVfxInstance.cpp
+    Core/LbVfxInstanceSignals.cpp
+    Core/LbVfxInstanceEvaluation.cpp
+    Core/LbLivePreview.cpp
+    Core/LbBuiltinNodes.cpp
+    Core/LbBuiltinMathNodes.cpp
+    Core/LbBuiltinMatrixNodes.cpp
+    Core/LbBuiltinSignalNodes.cpp
+    Core/LbBuiltinTimeNodes.cpp
+    Core/LbMatrixMath.cpp
+    Core/LbDelayNode.cpp
+    Core/LbGeneratorPool.cpp
+    Core/LbGeneratorPoolEvaluation.cpp
+    Core/LbNamedIo.cpp
+    Core/LbEffectLifecycle.cpp
+    Core/LbSpawnablePackage.cpp
+    Core/LbSpawnableHost.cpp
+    Core/LbSpawnableHostExecution.cpp
+    Core/LbSpawnableHostScheduling.cpp
+    Core/LbSpawnableHostApi.cpp)
+target_sources(liberafx_runtime PRIVATE Core/LbLogicalNodes.cpp)
+target_sources(liberafx_runtime PRIVATE Core/LbInstanceSession.cpp)
+target_sources(liberafx_runtime PRIVATE Core/LbPhasePrimitives.cpp)
 add_library(LibraRuntimeCore ALIAS liberafx_runtime)
 target_include_directories(liberafx_runtime PUBLIC include)
 target_compile_features(liberafx_runtime PUBLIC cxx_std_17)
@@ -32,7 +35,11 @@ set_target_properties(liberafx_runtime PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 option(LIBERAFX_BUILD_INTEROP "Build the native C ABI plugin" ON)
 if(LIBERAFX_BUILD_INTEROP)
-    add_library(liberafx_native SHARED Core/Interop.cpp Core/InteropSession.cpp)
+    add_library(liberafx_native SHARED
+        Core/LbInterop.cpp
+        Core/LbInteropGeneratorPool.cpp
+        Core/LbInteropSpawnableHost.cpp
+        Core/LbInteropSession.cpp)
     target_link_libraries(liberafx_native PRIVATE liberafx_runtime Threads::Threads)
     target_include_directories(liberafx_native PUBLIC include)
     target_compile_features(liberafx_native PRIVATE cxx_std_17)

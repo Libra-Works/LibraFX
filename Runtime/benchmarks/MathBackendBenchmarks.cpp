@@ -1,6 +1,6 @@
-#include "liberafx/VfxRuntime.h"
-#include "liberafx/math/MatrixMath.h"
-#include "liberafx/math/VectorMath.h"
+#include "liberafx/LbVfxRuntime.h"
+#include "liberafx/math/LbMatrixMath.h"
+#include "liberafx/math/LbVectorMath.h"
 
 #include <algorithm>
 #include <array>

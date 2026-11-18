@@ -1,17 +1,17 @@
-#56 integration points in the parent-owned VfxInstance.cpp / VfxRuntime.h
+#56 integration points in the parent-owned LbVfxInstance.cpp / LbVfxRuntime.h
 
 The editor and the Unity/Unreal stand-alone owners consume the existing
 Instance::setDebugHooks ABI. The following wiring is needed to remove the
 current numerical-only rejection without reading inactive branch values.
 
-1. VfxRuntime.h, Instance private declarations, next to beforeDebugNode:
+1. LbVfxRuntime.h, Instance private declarations, next to beforeDebugNode:
      Result debugResolvedInputs(std::uint32_t index, double time,
          const double* inputs, const std::uint8_t* widths,
          const std::uint8_t* colorFlags = nullptr,
          const std::uint8_t* signalSource = nullptr) noexcept;
      Result debugEnumSelect(std::uint32_t index, std::uint32_t selector,
          std::uint32_t selectedSource, const std::uint8_t* selectedDefaults) noexcept;
-   VfxInstance.cpp, immediately after Instance::beforeDebugNode (inside liberafx):
+   LbVfxInstance.cpp, immediately after Instance::beforeDebugNode (inside liberafx):
      #include "ExecutionDebugCapture.inl"
 
 2. Instance::setDebugHooks: retain Busy and uninitialized guards; remove the

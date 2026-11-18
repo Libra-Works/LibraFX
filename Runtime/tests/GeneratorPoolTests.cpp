@@ -1,5 +1,5 @@
-#include "liberafx/GeneratorPool.h"
-#include "liberafx/NamedIo.h"
+#include "liberafx/LbGeneratorPool.h"
+#include "liberafx/LbNamedIo.h"
 #ifdef NDEBUG
 #undef NDEBUG
 #endif

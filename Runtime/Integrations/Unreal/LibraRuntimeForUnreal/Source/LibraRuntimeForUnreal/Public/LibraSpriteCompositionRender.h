@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"
-#include "liberafx/SceneBindings.h"
+#include "liberafx/LbSceneBindings.h"
 
 // Shared by the packaged gameplay renderer and the editor live preview.
 struct FLibraSpriteCompositionRender

@@ -9,8 +9,8 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
-#include "liberafx/NamedIo.h"
-#include "liberafx/SpawnablePackage.h"
+#include "liberafx/LbNamedIo.h"
+#include "liberafx/LbSpawnablePackage.h"
 #include <algorithm>
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraInstanceGameIoFacadeTest,

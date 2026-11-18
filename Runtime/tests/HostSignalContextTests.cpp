@@ -1,6 +1,6 @@
-#include "liberafx/HostSignalContext.h"
-#include "liberafx/VfxRuntime.h"
-#include "liberafx/SpawnableHost.h"
+#include "liberafx/LbHostSignalContext.h"
+#include "liberafx/LbVfxRuntime.h"
+#include "liberafx/LbSpawnableHost.h"
 #ifdef NDEBUG
 #undef NDEBUG
 #endif

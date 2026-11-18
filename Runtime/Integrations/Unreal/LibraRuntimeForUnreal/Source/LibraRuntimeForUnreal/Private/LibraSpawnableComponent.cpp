@@ -1,7 +1,7 @@
 #include "LibraSpawnableComponent.h"
 #include "LibraExecutionDebugAdapter.h"
 #include "LibraTaskScheduler.h"
-#include "liberafx/host/SpawnableDebugJob.h"
+#include "liberafx/host/LbSpawnableDebugJob.h"
 
 #include "LibraNativeState.h"
 #include "LibraSpawnableAsset.h"
@@ -9,8 +9,8 @@
 #include "LibraSkeletalPoseRuntime.h"
 #include "LibraQualityContext.h"
 #include "EngineGlobals.h"
-#include "liberafx/SpawnableHost.h"
-#include "liberafx/SpawnablePackage.h"
+#include "liberafx/LbSpawnableHost.h"
+#include "liberafx/LbSpawnablePackage.h"
 #include "Misc/ScopeExit.h"
 
 #include <array>

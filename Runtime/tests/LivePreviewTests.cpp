@@ -1,4 +1,4 @@
-#include "liberafx/LivePreview.h"
+#include "liberafx/LbLivePreview.h"
 
 #include <array>
 #include <cstdlib>

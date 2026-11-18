@@ -172,7 +172,7 @@ try {
         }
     }
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $coreRoot 'Core') -Filter '*.cpp' -File -Recurse) {
-        if ($file.Name -in @('VfxProgram.cpp', 'VfxInstance.cpp', 'BuiltinNodes.cpp', 'DelayNode.cpp', 'LogicalNodes.cpp', 'LivePreview.cpp', 'Interop.cpp', 'SpawnableHost.cpp') -and
+        if ($file.Name -in @('LbVfxProgram.cpp', 'LbVfxInstance.cpp', 'LbBuiltinNodes.cpp', 'LbDelayNode.cpp', 'LbLogicalNodes.cpp', 'LbLivePreview.cpp', 'LbInterop.cpp', 'LbInteropGeneratorPool.cpp', 'LbInteropSpawnableHost.cpp', 'LbSpawnableHost.cpp') -and
             $file.DirectoryName -eq (Join-Path $coreRoot 'Core'))
         {
             continue
