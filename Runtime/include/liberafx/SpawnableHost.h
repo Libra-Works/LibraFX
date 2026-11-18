@@ -9,7 +9,20 @@
 
 namespace liberafx {
 
-enum class SpawnableHostEventKind : std::uint8_t { Spawn = 1, Stop = 2, Destroy = 3, Signal = 4 };
+enum class SpawnableHostEventKind : std::uint8_t {
+    Spawn = 1, Stop = 2, Destroy = 3, Signal = 4, ForceTerminated = 5
+};
+
+enum class SpawnableScopeKind : std::uint8_t { Effect, Instance };
+struct SpawnableScope final {
+    SpawnableScopeKind kind = SpawnableScopeKind::Effect;
+    std::uint8_t containerId[16]{};
+    GeneratorInstanceId instanceId = 0;
+};
+struct SpawnableDebugTarget final {
+    std::uint64_t hostGeneration = 0;
+    SpawnableScope scope{};
+};
 
 struct SpawnableHostEvent final {
     SpawnableHostEventKind kind{};
@@ -29,6 +42,11 @@ struct SpawnableHostOptions final {
 
 // Owner-thread lifecycle and routing host for one engine-neutral package.
 // Rendering and engine object operations remain the adapter's responsibility.
+// All calls are owner-thread only, never concurrent. Evaluation jobs are inline;
+// reentrant lifecycle calls return Busy without freeing work. Submit force before
+// advance/notifications for same-tick priority. Already executed side effects
+// cannot be undone. Force discards queued target events before publishing its
+// own cleanup notice; the adapter must invalidate matching render snapshots.
 class LIBRA_RUNTIME_CORE_API SpawnableHost final {
 public:
     static Result create(SpawnablePackage package, const SpawnableHostOptions& options,
@@ -42,8 +60,24 @@ public:
     Result fireGameSignal(const char* name);
     Result setGameProperty(const char* name, const double* values, std::size_t width);
     Result setOwnerMatrix(const double* values, std::size_t width);
+    Result setHostQuality(const HostQualitySnapshot& snapshot);
     Result requestNaturalEnd();
     Result stop();
+    // Notification only: nodeId is an explicit user-authored signal entry.
+    // Every call is a separate arrival; no fixed immediate/boundary End policy,
+    // rootEnding, lifetime change or automatic Destroy is attached to it.
+    Result notifyEndRequest(const SpawnableScope& scope, const std::uint8_t nodeId[16]);
+    // Effect covers root, all child pools, pending spawns and continuations.
+    // Instance covers exactly (containerId,instanceId), including its deferred
+    // signals. Current packages prohibit nested Spawnables; sibling instances
+    // and Destroy-route targets are NOT children of the source instance.
+    // On QueueRejected nothing changes: drain events then retry before advance.
+    // Issued, retired targets and duplicate requests succeed without replay.
+    Result forceTerminate(const SpawnableScope& scope);
+    // Only at an owner/job boundary. Scope Effect means root only here.
+    Result debugTarget(const SpawnableScope& scope, SpawnableDebugTarget& out) noexcept;
+    Result setDebugHooks(const SpawnableDebugTarget& target, const ExecutionDebugHooks& hooks) noexcept;
+    std::uint64_t debugGeneration() const noexcept;
 
     Result rootValue(const std::uint8_t nodeId[16], double out[4],
                      std::uint8_t& width) const;

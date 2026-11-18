@@ -1,0 +1,263 @@
+Live game component sessions (#49/#50)
+=====================================
+
+This is NOT the old numerical v1/v2 session facade or an editor preview.
+Unity LiberaFxLiveGameSession owns real LiberaFxSpawnableComponent GameObjects.
+Unreal FLibraLiveGameSession owns real ULibraEffectComponents on dedicated game
+actors, attached to the supplied game owner when it has a scene root. Gameplay
+must opt in and route instances through this service to expose them. Existing
+unregistered components and production games are not enumerated or modified.
+
+Development transport and trust boundary
+---------------------------------------
+LiberaFxLiveGameEndpoint / ULibraLiveGameEndpointComponent are opt-in, local-only
+isolated spool transports, deliberately SEPARATE from the preview TLS protocol.
+They do not listen on a network port, scan projects, broadcast discovery, read
+credentials, or introduce a password/token. Shipping UE and non-development
+Unity players reject sessions. Explicitly provision a private same-user session
+root in isolated artifacts; NEVER use a project, upload folder, or shared folder.
+
+On Windows, Runtime/tools/New-LiveGameSessionRoot.ps1 creates a NEW directory
+with protected current-user-only inherited ACLs using the existing OS identity.
+On Unix the integrator must provision mode 0700 and private ancestors. The
+runtime requires an existing absolute root; ACL provisioning is a deployment
+precondition, not an assertion that arbitrary user-supplied folders are safe.
+This isolation is NOT a replacement for authenticated TLS for remote clients.
+Remote/multi-user transport is unsupported. No new remote endpoint is exposed.
+
+Each connection creates a fresh unity-<nonce>/unreal-<nonce> subdirectory and an
+endpoint.json descriptor containing process, engine, opaque session identity,
+protocol=1 and supportedUpdate=restart-root-render-v1-v2. A local tool explicitly
+selects that descriptor. Only fixed request.json/response.json are exchanged.
+Commands contain compiled bytes, never a path for the engine to read. Responses
+include correlated sequence, failure, selected target, and current live list.
+Only one tool/one outstanding spool command is supported; requests must be
+published by atomic rename. Replayed sequences and other-session IDs fail.
+No transport identifier is a pointer. A session identity is NOT a credential.
+
+Invoke-LiveGameSession.ps1 -EndpointDirectory <selected-absolute-directory>
+  -Operation list
+  -Operation create -CompiledPackage <absolute-converter-output.lfxp> -Label ...
+  -Operation replace -Target <exact-target-from-list> -CompiledPackage <...lfxp>
+  -Operation end -Target <...>
+  -Operation destroy -Target <...>
+
+The client always requests explicit restart for replacement, waits at most
+15 seconds by default, and reports non-Ok as failure. A timeout does NOT prove
+the operation failed; list before retrying create. It never automatically
+retries mutations. The helper is optional. The editor now has a dedicated LiveGameWindow with
+explicit folder selection, development-editing consent, process/session display,
+live list and target selection, refresh, explicit "Apply active graph — Restart",
+disconnect and cancellation. It is separate from preview/resource dispatch.
+MainViewModel.LiveGame.cs exposes ShowLiveGameWindow(owner) and
+CloseLiveGameWindow(); the View menu opens it and main-window shutdown closes it.
+The existing converter command is:
+  LiberaFxConverter convert <explicit-source.lfxproj> <isolated-output.lfxp>
+    --groups <explicit-library-directory>
+Use --embedded-groups only when deliberately freezing the saved group revision.
+Portable resource-map exports are a separate contract; not silently loaded here.
+All engine assets must already be explicitly bound in the endpoint's bindings.
+
+Editor conversion and UI safety
+------------------------------
+The UI captures the FULL active document (including nested edits) on Avalonia's
+UI thread when Apply is invoked, along with the explicitly selected session/
+target and configured group library. It resolves latest groups and uses the
+same SpawnableGroupPackage compiler and binary serializer as .lfxp conversion.
+It does not save/export source files, modify history or send parameter-only
+patches. Unsupported lifecycle/children/GPU/game-I/O/state migrations are
+rejected before publication where possible; actual engine preflight can also
+reject an update. Both failures are visible without replacing old playback.
+Portable resource mapping without an engine binding context remains an explicit
+compiler rejection; it is not silently discarded or sent through PreviewHost.
+
+The client touches only fixed protocol files under the explicitly selected
+endpoint directory; it rejects links, UNC paths and network drives. It performs
+no search of projects or endpoint directories and opens no network transport.
+One process-scoped asynchronous command lease uses editor.lock in that private
+spool, while command publication uses atomic rename. It verifies descriptor
+identity before every command, correlates responses and bounds protocol bytes.
+No automatic mutation retries. A finite ten-second operation deadline applies
+by default, with explicit cancellation. If cancellation/disconnect/timeout
+occurs AFTER publication, the UI says the outcome is UNKNOWN and disables
+Apply until an acknowledged list refresh reconciles game state. Cancellation
+does not falsely claim rollback of a command the game may already have applied.
+Disconnect/closing this window never sends destroy or stops game playback.
+
+Focused actual UI/isolated-loopback check (does not launch either engine):
+  $env:LIBERAFX_DATA_ROOT = "$files\app-data"
+  dotnet run --project Samples\LiveGameEditorChecks\LiveGameEditorChecks.csproj `
+    --artifacts-path "$files\live-editor-build" -- `
+    "$files\live-editor-build\spool-tests"
+This invokes real Avalonia button automation/commands, an injected explicit
+folder picker, live list/selection, edits/re-wires an active graph, and verifies
+the compiled package reaches ONLY the selected spool target. It checks local
+unsupported graph rejection, game-side rejection retaining old bytes, published
+cancellation/unknown outcome, required reconciliation, finite timeout,
+disconnect without destroy and remote-share rejection before network access.
+The loopback game is an explicitly labelled transport contract double, not a
+numerical facade or evidence replacing the actual Unity/Unreal component tests.
+This workflow does not repurpose the resource UI or Preview dispatch.
+
+Worker and owner contract
+-------------------------
+Construct on the initialized Unity main thread / Unreal game thread. Give
+workers a stable, caller-owned session reference while producers are running.
+SubmitCreate/Replace copy caller-stable bytes before returning; SubmitDestroy,
+SubmitNaturalEnd and TakeCompletion are also worker-safe. Submission Ok is
+acceptance ONLY. Owner Process is the sole SDK creation/destruction boundary.
+The endpoint pumps Process every game frame; direct users must do likewise.
+The session facade itself must outlive/join its producers, as any C++ service.
+
+Per-session enqueue order determines operations on the same instance. Bounded
+request capacity includes pending, processing AND unconsumed completions.
+Payload byte limits include queued and active package payloads (not all SDK/GPU
+allocation). At most 16 MiB/package, <=256 instances, <=1024 request cells;
+default is 32 instances, 64 requests, 64 MiB retained package payloads.
+Components retain the existing host's per-template/render limits too.
+IDs become usable only in a successful Create completion. Replacement keeps the
+logical ID. Destroy retires its generation before slot reuse. Generation wrap
+exhausts the slot. Fresh session nonces prevent cross-connection/process reuse.
+SDK operations are rejected off owner thread and owner reentry returns Busy.
+Workers never instantiate/destroy GameObjects, UObjects, meshes or materials.
+
+NaturalEnd delegates to the actual component's existing lifecycle (including
+children and scheduled operations); normal lifetime is never changed to forced
+termination by Close. Destroy is explicit forced owner destruction. Component
+evaluation/ticking is engine-owner-thread work; the session does not run a
+second numerical/evaluation copy or race a job with SDK destruction.
+Close stops new creates/replaces/natural-end requests but keeps accepting
+Destroy, processes already accepted work, and returns NotReady until live
+instances AND all completions are drained. It never force-stops on its own.
+
+On owner teardown explicitly call ShutdownAndForceDestroy on the owner thread:
+queued operations become consumable NotReady failures, new work is rejected,
+and real instances are forcibly released. The endpoint does this on disable /
+EndPlay. Hold the session reference long enough to consume receipts, and join
+producers before releasing the facade. A component returned by Resolve is an
+owner-thread diagnostic borrow, never transport data or independent ownership.
+
+Transactional supported graph updates
+-------------------------------------
+Creation can use packages already supported by the actual component. Broad
+package/state migration is intentionally rejected. Replacement requires BOTH
+old and candidate packages to satisfy the shared portable validator:
+  - manually ended root-only numerical v1/v2 program and root render bindings;
+  - no templates/children, lifecycle start/destroy signals, deferred signals,
+    signal/destroy routes, game I/O, GPU containers or GPU programs;
+  - explicit Restart (time/defaults/lifetime/output state reset), no PreserveState.
+
+This supports adding/removing arithmetic nodes and rewiring renderer inputs,
+not merely tweaking a numerical facade. The compiler fixtures add Float + Add
+and rewire the SAME existing position/ModelDraw graph from 1 to 3.
+Malformed bytecode, unsupported policies/packages and missing assets fail
+without changing the old component, elapsed state, renderers or handle.
+Candidates use independent host work/defaults and exclusively owned transient
+assets. Unity stages under an inactive owner; Unreal stages on a hidden game
+actor so candidate render resources cannot flash during failed preflight.
+Only successful actual component initialization commits; old component/render
+owners are then retired and the candidate made visible. No broad state,
+children, pending signal, host object or GPU migration is silently attempted.
+Restart of components mutated independently outside the session contract is
+unsupported: do not independently destroy/reconfigure diagnostic borrows.
+
+Registration and verification handoff
+-------------------------------------
+Central files are parent-owned. Add to Tests/Program.cs:
+  --live-game-fixtures <output> -> InitializeIsolatedUi();
+                                 LiveGameSessionFixtures.Run(output); return;
+The SDK glob already includes Tests/LiveGameSessionFixtures.cs.
+Add to Runtime/CMakeLists.txt (LIBERAFX_BUILD_TESTS):
+  add_executable(liberafx_live_package_tests tests/LivePackageTests.cpp)
+  target_link_libraries(liberafx_live_package_tests PRIVATE liberafx_runtime)
+  add_test(NAME liberafx_live_package_tests COMMAND liberafx_live_package_tests)
+  set_tests_properties(liberafx_live_package_tests PROPERTIES SKIP_RETURN_CODE 77)
+Pass compiler-fixture directory explicitly for actual subset acceptance; the
+no-argument ctest result is only a skip, never evidence of functional acceptance.
+The validator is header-only; InteropSession.cpp exposes the additive C export.
+Unity .cs and Unreal .cpp/.h use normal integration auto-discovery; no central
+runtime source registration is necessary beyond refreshing engine deployments.
+
+Safe project/version at implementation time:
+  Unity 7000.0.0a16, C:\Users\taku3\lfv0780\unity
+  Unreal 5.7, C:\Users\taku3\lfv0780\unreal\LibraValidation.uproject
+Do not run either concurrently with the parent build or an existing editor.
+Parent owns final engine build/launch. Do not copy over user projects/settings.
+
+Let $files be the assigned session's files root; all following outputs are
+inside $files\artifacts; LIBERAFX_DATA_ROOT must be $files\app-data.
+Fixture output already generated in artifacts\live-fixtures uses the previously
+built editor compiler DLL/catalog. Regenerate through the final current test
+runner after registration to verify final compiler integration too.
+
+Parent Unity actual game-loop/pixel verification (after deploying current
+Runtime/Editor files and native DLL to the dedicated project):
+  $env:LIBERAFX_DATA_ROOT = "$files\app-data"
+  $env:LIBERAFX_LIVE_FIXTURE_DIR = "$files\artifacts\live-fixtures"
+  $env:LIBERAFX_LIVE_SESSION_ROOT = "$files\artifacts\live-spool"
+  $env:LIBERAFX_VERIFICATION_PROJECT = 'C:\Users\taku3\lfv0780\unity'
+  & 'C:\Program Files\Unity\Hub\Editor\7000.0.0a16\Editor\Unity.exe' `
+    -batchmode -projectPath $env:LIBERAFX_VERIFICATION_PROJECT `
+    -executeMethod LiberaFx.Unity.Editor.LiberaFxLiveGameVerification.RunPlayModeBatch `
+    -logFile "$files\artifacts\live-unity-playmode.log"
+Do NOT add -quit or -nographics. It explicitly enters Play Mode, survives
+domain reload, runs the test in the actual game loop, exits Play Mode then
+exits the owned editor with result 0/2. A finite three-minute timeout fails.
+RunBatch alone is an additional synchronous editor-object test, NOT Play Mode.
+
+Parent Unreal builds, sequentially (existing verified engine command shape):
+  & 'C:\Program Files\Epic Games\UE_5.7\Engine\Build\BatchFiles\Build.bat' `
+    LibraValidationEditor Win64 Development `
+    -Project=C:\Users\taku3\lfv0780\unreal\LibraValidation.uproject `
+    -Compiler=Clang -NoLink -NoUBA -NoXGE -NoHotReloadFromIDE `
+    -MaxParallelActions=2 -Log="$files\artifacts\live-unreal-clang.log"
+  & 'C:\Program Files\Epic Games\UE_5.7\Engine\Build\BatchFiles\Build.bat' `
+    LibraValidationEditor Win64 Development `
+    -Project=C:\Users\taku3\lfv0780\unreal\LibraValidation.uproject `
+    -Compiler=VisualStudio2022 -NoUBA -NoXGE -NoHotReloadFromIDE `
+    -MaxParallelActions=2 -Log="$files\artifacts\live-unreal-msvc.log"
+  & 'C:\Program Files\Epic Games\UE_5.7\Engine\Binaries\Win64\UnrealEditor-Cmd.exe' `
+    C:\Users\taku3\lfv0780\unreal\LibraValidation.uproject `
+    -unattended -nosplash -nop4 `
+    "-ExecCmds=Automation RunTests Libra.Runtime.LiveGame.ComponentSession" `
+    "-TestExit=Automation Test Queue Empty" `
+    "-LibraLiveFixture=$files\artifacts\live-fixtures" `
+    "-LibraLiveSessionRoot=$files\artifacts\live-spool" `
+    "-ReportExportPath=$files\artifacts\live-unreal-reports" `
+    "-abslog=$files\artifacts\live-unreal-runtime.log"
+Use the parent's established dedicated appdata/DDC arguments and process
+timeout as well. Check exported automation test results, not just process exit.
+This constructs a real Game UWorld, connects via the same isolated spool,
+asserts real ULibraEffectComponent/StaticMeshComponent playback and changed
+render transforms, failure rollback, concurrent worker requests, queue credit,
+stale generation and shutdown. It does NOT assert rendered Unreal pixels.
+
+Observed checks so far:
+  - isolated Clang 22 native plugin/Core/ABI builds and existing session tests;
+  - managed native-session ABI tests against that freshly built DLL;
+  - focused portable live-package header/test compiled and executed with MSVC
+    as well (this is not an Unreal MSVC engine build);
+  - actual compiler-produced before/after accepted, OnDestroy graph rejected by
+    portable validator and exported C ABI; truncated data rejected;
+  - all Unity runtime sources + new Editor test compile against installed
+    Unity 7000 engine/editor assemblies in isolated netstandard2.1 output;
+  - PowerShell helper syntax and private Windows ACL provisioning succeeded.
+Additional observed engine acceptance with regenerated compiler fixtures:
+  - Unity 7000.0.0a16 actual Play Mode, real component creation, tool-spool graph
+    update, changed camera pixels, failed-update rollback, concurrent worker
+    create/destroy, stale generations and shutdown all passed.
+  - Unreal 5.7 plugin compiled with Clang 19.1.5 -NoLink, then linked with MSVC
+    14.44. Libra.Runtime.LiveGame.ComponentSession passed in a real Game UWorld
+    with an engine world context. It checks component/renderer transforms,
+    actual replacement actor destruction, rollback, concurrent worker queues,
+    stale generations and shutdown. It does not assert rendered Unreal pixels.
+  - Actual Avalonia list/select/apply commands passed the isolated editor spool
+    contract test. Real-engine acceptance above uses the same protocol; it is
+    not evidence of live updates in unregistered or production game instances.
+
+Usability review task after successful engine builds:
+  In the dedicated game project, identify one opted-in playing instance, add
+  arithmetic to its position graph, apply the new compiled graph, and verify
+  that only the selected real instance moves. Try an unsupported lifecycle
+  edit and verify visible failure while the old playback continues. Evaluate
+  selection/feedback effort before reading implementation details.

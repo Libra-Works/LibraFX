@@ -50,6 +50,16 @@ public:
     }
 
     auto size() const noexcept -> std::size_t { return count_; }
+    // Cancel all matching opaque continuations; preserve other equal-time FIFO.
+    void cancel(std::uint64_t token) noexcept
+    {
+        auto kept = std::size_t{};
+        for (auto index = std::size_t{}; index < count_; ++index) {
+            if (storage_[index].token == token) continue;
+            storage_[kept++] = storage_[index];
+        }
+        count_ = kept;
+    }
     void clear() noexcept { count_ = 0; }
 
 private:

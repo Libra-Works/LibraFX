@@ -1,0 +1,314 @@
+# Portable instance sessions (#49 / #50 source subset)
+
+Authoring goal: a development host selects an actual running effect by opaque ID,
+queues an edit while evaluation is in progress, and either installs a supported
+replacement at the next owner/job boundary or reports failure without damaging
+the current effect. This is native infrastructure, **not completed game live editing**.
+
+## Public API and existing runtime integration
+
+`include/liberafx/InstanceSession.h`, `Core/InstanceSession.cpp` expose
+`InstanceSession`. It does not allocate queue, slot, instance work, or defaults
+memory. The caller supplies **exclusive**, default-constructed `InstanceSlot[]`
+and `InstanceRequestStorage[]` for the whole session lifetime. Do not share these
+arrays between sessions or inspect/mutate them concurrently.
+
+`LifecycleSessionEffect` actually initializes a native `Instance` and drives the
+existing `EffectLifecycle`, with borrowed immutable `Program` and correctly
+aligned caller work/defaults. It deliberately accepts only pure v1/v2 bytecode;
+v3+ callbacks, logical events and child routing return `UnsupportedBinary`, not
+partial/successful playback. Pass packages to `SpawnableSessionEffect` instead.
+Neither facade transfers ownership of backing allocations to Core. Writable
+buffers must not alias immutable program/bytecode/bindings or other resources.
+Resources must not wrap storage in use by another session.
+
+`SpawnableSessionEffect` adopts the existing prepared `SpawnableHost`, not a
+second disconnected interpreter. Construct the host on its owner thread and do
+not advance it before adoption. Session creation starts it at time zero. It keeps
+the existing root/child, Owner Destroy, scheduled routes, deferred signal and
+natural draining behavior. Package construction still uses the existing host's
+setup allocations; this wrapper does **not** make SpawnableHost a caller-memory
+allocator or allow worker-side engine creation.
+
+For adapter-specific IO, drain events/read children/set properties inside
+`session.access(id, callback, context)`. The callback receives the actual
+`SessionEffect&`; verify it against the caller's known resource, then access that
+resource's caller-owned host. Access holds the same owner gate as evaluation and
+destruction. No raw resource access outside this boundary while adopted.
+The reference and completion `returnedEffect` are **local borrowed memory/release
+receipts**, never instance identifiers and never transport fields.
+
+## Identity and thread contract
+
+* The host supplies a nonzero, freshly generated 128-bit `SessionId` nonce unique
+  across processes/connections/reconnections. Core has no OS/random API and cannot
+  establish global nonce uniqueness itself. A monotonic, non-wrapping local
+  incarnation additionally prevents collisions between managers in one module,
+  even with the same nonce. Generation/sequence/incarnation exhaustion never
+  wraps into a reusable valid identifier.
+* `InstanceId` contains nonce, incarnation, slot and generation; `RequestId`
+  contains nonce, incarnation and sequence. No pointer is encoded. Validate all
+  fields through the session. Reused slots advance generation, retired generations
+  fail, and foreign connections/managers fail. These IDs are not authentication
+  credentials. The host must authenticate/authorize development updates and must
+  not use these records as packed ABI or wire overlays. Serialize named integer
+  fields explicitly with a defined endian/schema.
+* Multiple workers may call **only** `submit` and `takeCompletion`. Short queue
+  metadata sections use a standard C++ mutex. There is no lock-free, wait-free,
+  real-time, or fairness guarantee.
+* One designated owner (game/main thread for engines) calls `process`, `advance`,
+  `read`, `access`, `close`. An atomic owner gate returns `Busy` on overlap or
+  reentry. It serializes calls; it does not identify or dispatch to a game thread.
+  Evaluation and custom cleanup must finish synchronously before leaving the
+  boundary. Independent raw `Instance::updateAsync` jobs on these resources are
+  prohibited. The raw InstanceSession kernel does not allocate or call an SDK
+  from worker submission/completion polling. The optional host convenience
+  layer described below DOES allocate/copy/validate ordinary host memory on
+  submission; it never initializes/evaluates a native Instance or calls an SDK
+  there. Host memory reclamation after owner-side cleanup may happen on a consumer.
+* No SDK, OS, network, graphics, or editor dependency is introduced into Core.
+
+## Requests, ordering, queue limits, and ownership
+
+1. Prepare a resource with exclusive backing storage, then `submit(Create)`.
+   An enqueue rejection retains caller ownership and issues no ticket. On
+   acceptance, the resource is exclusively claimed, including across sessions
+   that submit the **same resource object**. Distinct resource wrappers must not
+   alias the same underlying host. The request reserves its completion cell.
+2. `Ok` from submit means **accepted, not created/destroyed/applied**.
+   The owner processes in accepted sequence order (mutex acquisition order for
+   racing producers). Target validity is checked again at execution. The
+   instance becomes usable only after successful Create completion.
+3. Every accepted request, including failure, has one completion, taken by ticket
+   exactly once. Pending is `NotReady`; unknown/consumed/foreign is `InvalidHandle`.
+   Unconsumed completions occupy capacity: no overwrite or dropped result.
+4. `NaturalEnd` asks the existing lifecycle to drain. Its completion acknowledges
+   the request, **not final destruction**. Continue advancing until `finished`.
+   Neither natural expiry nor session shutdown calls force-stop automatically.
+   The slot/program/buffers remain alive even after natural finish.
+5. `Destroy` is an explicit forced stop, ordered with other requests. Only after
+   successful stop does Core release its native state and invalidate the slot.
+   A failed stop retains the slot/resource and reports the error; drain adapter
+   events at an owner boundary and explicitly retry where the host permits it.
+6. Only a **consumed** completion with `returnedEffect` returns exclusive access
+   to that resource. This applies to failed Create/Replace, successful Destroy,
+   or the old side of successful Replace. Core native cleanup has finished
+   before publication. Caller buffers/program/host may then be freed. A failed
+   Create may have initialized part of a package: dispose that returned host;
+   do not assume start side effects were rolled back.
+7. `close` disables new work except Destroy. `NotReady` means active slots or
+   outstanding requests/completions remain; service these and consume results,
+   then close again. `Busy` does not change acceptance. There is no implicit
+   shutdown wait or forced cancellation. Quiesce/join producer threads before
+   destroying the session. Successful close is required before destruction;
+   debug builds assert this requirement.
+
+The work unit remains one effect; there is no per-node allocation or scheduling.
+Session capacities are chosen by the caller and never grow.
+
+## Transactional replacement
+
+`PreserveState` always returns `UnsupportedBinary`. No custom state, age,
+parameter override, random sequence, children, scheduled event, render object or
+game IO migration is guessed.
+
+Explicit `Restart` is implemented only when **both** resources declare safe,
+side-effect-free staging. The shipped concrete implementation permits only
+v1/v2 pure `LifecycleSessionEffect` graphs. It checks candidate writable ranges
+against **all active session resources**, not just the target; overlapping work
+or defaults returns `InvalidArgument` before initialization. All backing storage
+must also respect the caller's global non-aliasing contract.
+
+The candidate initializes and evaluates at age zero in separate memory before
+commit. If this fails, only candidate state is cleaned up; old values, lifetime,
+work/defaults and identity are untouched. On success the same instance ID
+addresses the new graph, with fresh age/lifetime/defaults; the old native state
+is released without a natural Destroy or forced-stop signal. Then its release
+receipt is published. There are no public cached node binding tokens in this
+session API: reads resolve node UUIDs against the current graph.
+The host must restart that effect's elapsed clock at zero after a successful
+Restart acknowledgement. Requests ordered after Replace address the new graph;
+there is no separate optimistic graph-revision token or automatic game-clock
+conversion in this API.
+The host must coordinate ticket delivery back to its owner. Do not advance with
+the previous elapsed value between applying a Restart and observing its result;
+pause the target while that result is outstanding, then reset elapsed only on
+success (on failure continue the prior clock). Process returning a count is not
+a replacement acknowledgement.
+
+`SpawnableSessionEffect` rejects all replacement, including Restart, before
+touching either host. Migrating active children, reserved events and engine
+render objects is **unsupported**. Host-provided SessionEffect implementations
+must leave `restartable()` false unless start/release have no externally visible
+side effects and staging memory is accurately reported. They must report errors
+instead of substituting placeholder resources.
+
+## Additive public C ABI and engine owner facades
+
+`include/liberafx/InteropSession.h` and `Core/InteropSession.cpp` provide additive
+ABI v1 exports named `libra_session_*`. No old function, structure, handle
+registry or `libra_abi_version` changes. New session/request/instance records
+contain only integer nonces, incarnation, sequence, generation and slot. The C
+header defines packing, sizes and offsets; it remains a host ABI, not a wire
+format. Never encode the caller's bytecode pointer as an ID.
+
+The shared host service `include/liberafx/host/ProgramSession.h` owns arrays,
+immutable bytecode copies and aligned work/defaults as a CALLER of the existing
+InstanceSession kernel. This optional allocating host convenience does not change
+the raw Core caller-memory API. Pure v1/v2 only; packages, custom callbacks,
+logical events, assets, scripts, GPU and state migration are explicitly unsupported
+by this convenience API. They are never replaced with placeholders.
+
+Creation requires nonzero host nonce and DEVELOPMENT_OPT_IN; the C registry caps
+open sessions at 128. Capacities bound instances (1..4096), outstanding requests
+(1..8192) and resource count (instance capacity + request capacity).
+maxProgramBytes is 12..16 MiB, node count <=10000, exact v1/v2 record length is
+validated before storage allocation. maxOwnedBytes (<=1 GiB) charges bytecode,
+work/defaults and resource object sizes, including live, candidate and retired
+resources until completion consumption. Allocator overhead and the separately
+bounded slot/request/map metadata are not an exact RSS budget. A rejected
+submission may transiently allocate one bounded validation copy under the
+resource mutex. Allocation is per effect/request, never per node evaluation.
+Allocation failure is reported through the C ABI, not turned into success.
+
+`libra_session_create` captures the native calling thread. Only that thread may
+process/advance/read/close/release; wrong-thread owner operations return
+INVALID_ARGUMENT. submit/take are worker-safe. A mutex-protected registry retains
+the service while any API call is using it, including calls racing release.
+No registry mutex is held during evaluation. No public raw pointer resource
+receipt crosses this ABI; completion consumption reclaims the corresponding host
+memory only after Core's owner cleanup. There is no automatic shutdown stop,
+finalizer, executable script or network listener.
+
+Typical order:
+1. Owner creates opted-in session.
+2. Worker submits Create with stable bytecode for the duration of that call.
+   The native layer copies it before returning; queued work never pins that input.
+3. Owner Process; worker or owner TakeCompletion gets the usable instance ID.
+4. Owner Advance/ReadValue by opaque ID. Queue explicit Replace(Restart), then
+   owner Process and consume/forward the result before resuming the target clock.
+5. NaturalEnd acknowledges an end request; Advance continues until finished.
+   Finished still retains its ID/native resources.
+6. Explicit Destroy, owner Process, consume result. Release rejects active slots,
+   pending requests or unconsumed results. Close disables new work except Destroy.
+   Join/quiesce producers and successfully release; never abandon an active session.
+
+Unity: `Runtime/LiberaFxInstanceSession.cs` provides `NativeInstanceSession` P/Invoke
+and `UnityInstanceSession`. The former also supports a standalone managed contract
+runner and enforces creator-thread owner methods. UnityInstanceSession additionally
+requires Unity's initialized main thread for construction; initialization is
+recorded by RuntimeInitializeOnLoadMethod / Editor InitializeOnLoadMethod.
+Both require explicit development opt-in and use fresh GUID nonces. Submit* and
+TakeCompletion can run on workers; Process/Advance/Read/Close/Dispose cannot.
+Dispose refuses active work instead of auto-stopping. There is no finalizer.
+Unity construction/polling is not permission to create GameObjects or touch
+render/material resources on workers.
+
+Unreal: `Public/LibraInstanceSession.h` and `Private/LibraInstanceSession.cpp`
+provide FLibraInstanceSession, using the SAME C++ host service, not a second
+interpreter or the C DLL. Create/Process/Advance/Read/CloseAndRelease explicitly
+check IsInGameThread; worker Submit*/TakeCompletion use retained, thread-safe
+state snapshots. It uses FGuid::NewGuid on the game thread, not UObject pointers
+as IDs. CloseAndRelease refuses live work. Destructor requires game-thread
+quiescence, never calls Stop, and asserts misuse. No UObject/render asset is
+created or destroyed by this facade. Host allocation follows the toolchain's
+normal exception/OOM policy; exception-disabled engine builds can terminate on
+allocator OOM, not return a fabricated successful request.
+
+## Engine / transport limitations — issues remain open
+
+* Legacy global LibraInstance / LibraSpawnableHostHandle registries are unchanged.
+  Do not advertise them as process/session-scoped IDs or serialize them over
+  connections. Use only the new integer session records for this contract.
+* New Unity/Unreal facades create/evaluate actual native pure graph instances and
+  can replace those graphs. Existing main engine components/editor-preview
+  sessions are intentionally unchanged and do not yet attach their running
+  rendered package effects to these facades. No actual-game rendered package
+  update or child/render-state migration is claimed.
+* Integration into Unity Update / Unreal game-thread tick must explicitly pump
+  requests and apply outputs to the correct game object/render adapter. The
+  facades reject wrong-thread owner calls; they do not automatically schedule
+  SDK operations or select game instances. Packages still use the raw C++
+  SpawnableSessionEffect integration, not the new pure-program host convenience.
+* Existing preview `SequenceCursor` identifies transport revisions, not running
+  instance identity. Explicit local development opt-in is implemented; transport
+  authentication/authorization, remote permission confirmation, target
+  discovery/selection, acknowledgements, program transfer/validation, and an
+  editor-to-actual-game path still need integration. The editor extension host
+  and math/LookAt/billboard nodes are outside this source change.
+* No Unity/Unreal actual-game end-to-end observation has been performed. #49 and
+  #50 are **not complete**.
+
+## Source tests / deferred verification
+
+`tests/InstanceSessionTests.cpp` adds native work-buffer creation, failed and
+successful restart, alias rejection, unsupported preserve-state, natural expiry,
+stale generation and foreign incarnation/nonce, duplicate resource claim,
+completion backpressure, shutdown refusal, evaluation/destroy overlap, and
+four-producer bounded create/destroy churn. It also covers generation exhaustion,
+ordered duplicate destruction, retained claims until completion consumption,
+failed candidate evaluation preserving age/defaults, and adoption/IO access/
+natural completion of a synthetic existing `SpawnableHost`. Concurrent waits
+have finite deadlines. Synthetic source fixtures do not establish the
+converter-to-game or actual-child-render paths.
+
+`tests/InteropSessionTests.cpp` exercises actual exported C calls, worker
+submission/completion, owner-thread rejection, copied bytecode, completion
+credits, foreign/stale/session-release rejection, native graph values and
+transactional restart/failure, natural lifetime retention, and four-producer
+churn. Unity `Tests/InstanceSessionContractTests.cs` exercises the actual managed
+wrapper/native requests, not a registration-only assertion: copied input,
+worker submission and completion, owner pumping/read, unsupported migration,
+failed/successful graph restart, stale IDs, natural finish and concurrent churn.
+It can run as a Unity Editor menu contract test (uses UnityInstanceSession), or
+via its dedicated LiberaFx.InstanceSessionTests.csproj (NativeInstanceSession).
+The Unreal automation source registers AND implements
+Libra.Runtime.Session.WorkerRequestsAndRestart, using Async worker submission/
+consumption and game-thread processing/graph replacement/read/destruction.
+None of these tests asserts observed rendering or remote live transport.
+
+This agent performed **source/static inspection only** and ran no configure,
+build, test, application, provider or engine. Parent reported that the earlier
+InstanceSession foundation compiled; this is not evidence that these NEW ABI
+and adapter additions compile, execute, race correctly, or work in either engine.
+Functional verification is owned/serialized by the parent.
+
+Minimal parent CMake integration (not applied by this agent):
+
+```cmake
+# Within LIBERAFX_BUILD_INTEROP, after liberafx_native is declared:
+target_sources(liberafx_native PRIVATE Core/InteropSession.cpp)
+# Within LIBERAFX_BUILD_TESTS AND LIBERAFX_BUILD_INTEROP:
+add_executable(liberafx_interop_session_tests tests/InteropSessionTests.cpp)
+target_link_libraries(liberafx_interop_session_tests PRIVATE liberafx_native Threads::Threads)
+add_test(NAME liberafx_interop_session_tests COMMAND liberafx_interop_session_tests)
+```
+
+No custom commands or fixture generation are needed. Build targets:
+liberafx_runtime, liberafx_native, liberafx_instance_session_tests,
+liberafx_interop_session_tests. New test execution is never a build dependency.
+With Ninja, select CMAKE_BUILD_TYPE at configure; use an isolated absolute -B
+outside the repository and keep vcvars64 setup/configure/build in one cmd process.
+Do not invoke tests as part of a compile-only authorization.
+
+The new InteropSession.cpp is guarded by LIBRA_INTEROP_BUILD (already defined by
+the native shared target). Unreal's source installer automatically discovers Core
+cpp sources; its generated wrapper is intentionally empty without that macro.
+No ABI import/export redefinition or extra Unreal DLL is required. Refresh the
+installed plugin Core/include and the new runtime facade/test files after source
+settles; existing module dependencies already include LibraRuntimeCore.
+
+Unity native plugin must be refreshed with the parent-built DLL exposing the new
+session symbols before invoking the managed wrapper. No existing LiberaFxNative.cs
+edit or old test Main hook is necessary. Dedicated managed compile project:
+Runtime/Integrations/Unity/Tests/LiberaFx.InstanceSessionTests.csproj.
+Keep output/intermediate paths outside the source tree. No project build target
+starts the managed contract runner or generates fixtures. Unity asmdefs discover
+the new runtime/test source files; the Editor menu is
+"LiberaFx/Verify instance session requests". The menu/UE automation source are
+available for parent verification but have NOT been launched by this agent.
+
+Existing focused regression targets remain liberafx_effect_lifecycle_tests,
+liberafx_spawnable_host_tests, liberafx_generator_pool_tests and liberafx_interop_tests.
+Source tests and successful compilation cannot close actual-game, UI usability,
+transport, child/render migration, engine verification or observed-pixels criteria.

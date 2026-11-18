@@ -1,4 +1,5 @@
 #include "LogicalNodes.h"
+#include <liberafx/PhasePrimitives.h>
 
 #include <algorithm>
 #include <array>
@@ -22,6 +23,15 @@ constexpr auto orTypeId = std::array<std::uint8_t, 16>{
 constexpr auto signalToNumberTypeId = std::array<std::uint8_t, 16>{
     0xe9, 0x77, 0x8c, 0x40, 0x20, 0x9b, 0x4c, 0xe8,
     0x91, 0x8d, 0x35, 0xc0, 0x00, 0x00, 0x00, 0x04};
+constexpr auto loopClockTypeId = std::array<std::uint8_t, 16>{
+    0xe9, 0x77, 0x8c, 0x40, 0x20, 0x9b, 0x4c, 0xe8,
+    0x91, 0x8d, 0x35, 0xc0, 0x00, 0x00, 0x00, 0x05};
+constexpr auto qualityBranchTypeId = std::array<std::uint8_t, 16>{
+    0xe9, 0x77, 0x8c, 0x40, 0x20, 0x9b, 0x4c, 0xe8,
+    0x91, 0x8d, 0x35, 0xc0, 0x00, 0x00, 0x00, 0x06};
+constexpr auto signalCaptureTypeId = std::array<std::uint8_t, 16>{
+    0xe9, 0x77, 0x8c, 0x40, 0x20, 0x9b, 0x4c, 0xe8,
+    0x91, 0x8d, 0x35, 0xc0, 0x00, 0x00, 0x00, 0x07};
 
 constexpr auto compareAbiVersion = std::uint32_t{1};
 constexpr auto gateAbiVersion = std::uint32_t{1};
@@ -55,6 +65,145 @@ struct alignas(16) SignalToNumberState final {
     std::uint64_t count = 0;
     bool latched = false;
 };
+
+struct alignas(16) SignalValueState final {
+    std::array<double, 4> value{};
+};
+
+auto updateSignalValue(LogicalNodeInvocation& invocation) noexcept -> Result
+{
+    if (invocation.state == nullptr || invocation.stateBytes < sizeof(SignalValueState) ||
+        invocation.outputs == nullptr || invocation.outputWidth < 1 || invocation.outputWidth > 4)
+        return Result::InvalidArgument;
+    auto state = static_cast<SignalValueState*>(invocation.state);
+    std::copy_n(state->value.data(), invocation.outputWidth, invocation.outputs);
+    invocation.emittedBranches = 0;
+    return Result::Ok;
+}
+
+auto onQualitySignal(LogicalNodeInvocation& invocation) noexcept -> Result
+{
+    if (invocation.quality == nullptr || invocation.signalInputSlot != 0 ||
+        (invocation.configuration & 0xffff0000u) != 0 || invocation.outputWidth != 1)
+        return Result::InvalidArgument;
+    auto result = updateSignalValue(invocation);
+    if (result != Result::Ok) return result;
+    auto selected = false;
+    result = compareHostQuality(*invocation.quality,
+        static_cast<QualityComparison>(invocation.configuration & 0xffu),
+        static_cast<HostQualityTier>((invocation.configuration >> 8u) & 0xffu), selected);
+    if (result != Result::Ok) return result;
+    auto state = static_cast<SignalValueState*>(invocation.state);
+    state->value[0] = invocation.outputs[0] = selected ? 1 : 0;
+    invocation.emittedBranches = selected ? 1 : 2;
+    return Result::Ok;
+}
+
+auto onCaptureSignal(LogicalNodeInvocation& invocation) noexcept -> Result
+{
+    if (invocation.inputs == nullptr || invocation.inputCount != 1 ||
+        invocation.inputWidths == nullptr || invocation.inputWidths[0] != 4 ||
+        invocation.signalInputSlot != 0 || invocation.outputWidth != 4 || invocation.configuration != 0)
+        return Result::InvalidArgument;
+    auto result = updateSignalValue(invocation);
+    if (result != Result::Ok) return result;
+    for (auto lane = 0u; lane < 4; ++lane)
+        if (!std::isfinite(invocation.inputs[lane])) return Result::NonFinite;
+    auto state = static_cast<SignalValueState*>(invocation.state);
+    std::copy_n(invocation.inputs, 4, state->value.data());
+    std::copy_n(invocation.inputs, 4, invocation.outputs);
+    invocation.captureSignalValue = true;
+    invocation.emittedBranches = 1;
+    return Result::Ok;
+}
+
+struct LoopValues final {
+    LoopClock clock{};
+    FutureBoundaryArm arm{};
+    LoopSample sample{};
+    double time = 0;
+    bool initialized = false;
+};
+
+struct alignas(16) LoopState final {
+    LoopValues value{};
+    LoopValues pending{};
+    bool pendingCommit = false;
+};
+
+auto sampleLoop(LogicalNodeInvocation& invocation, bool reset) noexcept -> Result
+{
+    if (invocation.state == nullptr || invocation.stateBytes < sizeof(LoopState) ||
+        invocation.inputs == nullptr || invocation.inputCount != 4 ||
+        invocation.inputWidths == nullptr || invocation.outputs == nullptr ||
+        invocation.outputWidth != 4 || invocation.configuration != 0)
+        return Result::InvalidArgument;
+    for (auto index = 0u; index < 4; ++index)
+        if (invocation.inputWidths[index] != 1 || !std::isfinite(invocation.inputs[index * 4]))
+            return Result::InvalidArgument;
+    auto time = invocation.inputs[0] == -1 ? invocation.time : invocation.inputs[0];
+    auto length = invocation.inputs[4];
+    auto count = invocation.inputs[8];
+    auto bounded = invocation.inputs[12];
+    if (!std::isfinite(time) || time < 0 || length < 0 || count < 0 ||
+        count > static_cast<double>(maximumExactCounter) || std::trunc(count) != count ||
+        (bounded != 0 && bounded != 1))
+        return Result::InvalidArgument;
+    auto state = static_cast<LoopState*>(invocation.state);
+    auto next = state->value;
+    if (reset || !next.initialized || time < next.time)
+    {
+        auto result = next.clock.reset(reset ? time : 0, length, bounded != 0,
+            static_cast<std::uint64_t>(count));
+        if (result != Result::Ok) return result;
+        next.arm.clear();
+        next.sample = {};
+        next.initialized = true;
+    }
+    auto sample = LoopSample{};
+    auto result = next.clock.advance(time, sample);
+    if (result != Result::Ok) return result;
+    if (sample.boundaryCount > maximumExactCounter || sample.loopIndex > maximumExactCounter)
+        return Result::CounterOverflow;
+    invocation.emittedBranches = (sample.boundariesCrossed != 0 ? std::uint64_t{1} : 0) |
+        (sample.complete && !next.sample.complete ? std::uint64_t{2} : 0) |
+        (next.arm.consume(sample) ? std::uint64_t{4} : 0);
+    next.sample = sample;
+    next.time = time;
+    invocation.outputs[0] = sample.loopTime;
+    invocation.outputs[1] = static_cast<double>(sample.loopIndex);
+    invocation.outputs[2] = static_cast<double>(sample.boundaryCount);
+    invocation.outputs[3] = sample.complete ? 1 : 0;
+    state->pending = next;
+    state->pendingCommit = true;
+    return Result::Ok;
+}
+
+auto updateLoop(LogicalNodeInvocation& invocation) noexcept -> Result
+{
+    return sampleLoop(invocation, false);
+}
+
+auto commitLoop(LogicalNodeInvocation& invocation) noexcept -> void
+{
+    if (invocation.state == nullptr || invocation.stateBytes < sizeof(LoopState)) return;
+    auto state = static_cast<LoopState*>(invocation.state);
+    if (!state->pendingCommit) return;
+    state->value = state->pending;
+    state->pendingCommit = false;
+}
+
+auto onLoopSignal(LogicalNodeInvocation& invocation) noexcept -> Result
+{
+    if (invocation.signalInputSlot > 1) return Result::InvalidArgument;
+    auto result = sampleLoop(invocation, invocation.signalInputSlot == 1);
+    if (result != Result::Ok) return result;
+    auto state = static_cast<LoopState*>(invocation.state);
+    if (invocation.signalInputSlot == 0 && !state->pending.sample.complete)
+        state->pending.arm.arm(state->pending.sample);
+    commitLoop(invocation);
+    return Result::Ok;
+}
 
 auto isValidInvocation(const LogicalNodeInvocation& invocation, std::size_t stateBytes) noexcept -> bool
 {
@@ -277,7 +426,7 @@ auto makeDescriptor(const std::array<std::uint8_t, 16>& typeId, std::uint32_t ab
     return descriptor;
 }
 
-const auto descriptors = std::array<LogicalNodeDescriptor, 4>{
+const auto descriptors = std::array<LogicalNodeDescriptor, 7>{
     makeDescriptor(compareTypeId, compareAbiVersion, 2, {1, 1, 0, 0}, 2, 0, 1, 1,
         sizeof(CompareState), alignof(CompareState), updateCompare, nullptr, commitCompare),
     makeDescriptor(andTypeId, gateAbiVersion, 0, {}, 1, 3, 1, 1,
@@ -286,7 +435,13 @@ const auto descriptors = std::array<LogicalNodeDescriptor, 4>{
         sizeof(GateState), alignof(GateState), updateOr, onOrSignal),
     makeDescriptor(signalToNumberTypeId, signalToNumberAbiVersion, 0, {}, 1, 2, 1, 0,
         sizeof(SignalToNumberState), alignof(SignalToNumberState),
-        updateSignalToNumber, onSignalToNumber)
+        updateSignalToNumber, onSignalToNumber),
+    makeDescriptor(loopClockTypeId, 1, 4, {1, 1, 1, 1}, 0, 2, 4, 3,
+        sizeof(LoopState), alignof(LoopState), updateLoop, onLoopSignal, commitLoop),
+    makeDescriptor(qualityBranchTypeId, 1, 0, {}, 2, 1, 1, 2,
+        sizeof(SignalValueState), alignof(SignalValueState), updateSignalValue, onQualitySignal),
+    makeDescriptor(signalCaptureTypeId, 1, 1, {4, 0, 0, 0}, 0, 1, 4, 1,
+        sizeof(SignalValueState), alignof(SignalValueState), updateSignalValue, onCaptureSignal)
 };
 
 }

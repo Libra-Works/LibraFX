@@ -22,6 +22,7 @@
   "Asset.Close": "Close",
   "Asset.SelectPeer": "Select the Unreal editor to query.",
   "Asset.NoPeer": "No supported Unreal editor is connected.",
+  "Asset.PeerDisconnected": "The selected Unreal editor is no longer connected.",
   "Asset.Results": "{0} assets · {1}–{2}",
   "Asset.RequestTimedOut": "The asset request timed out or was cancelled.",
   "Asset.RequestFailed": "Asset request failed: {0}",

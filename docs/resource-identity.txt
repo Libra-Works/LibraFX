@@ -1,0 +1,114 @@
+Resource identity (issue #61)
+
+ResourceIdentityDocument version 1 is an explicit, UI-independent mapping document.
+Allocate each Libera resource and material parameter Guid independently of names, paths,
+and connection IDs. EngineProjectIdentity is the engine and an independently persistent
+project Guid; it is not the active peer/session ID. The host must persist and obtain this
+identity from the project, and reject cloned projects that have not chosen their identity
+policy. Binding format and value are opaque and are scoped by that project identity.
+No matching or registration is performed from a path, name, reference-index key, or hash.
+
+ResourceIdentityStore reads/writes a caller-owned stream. The .lfxproj format 13 project
+document stores the current identity document and each history state stores its own copy;
+GraphWorkspaceViewModel.SetResourceIdentityDocument is an undoable full-document update.
+The host still owns atomic replacement of the actual project file.
+Uses are explicit opt-ins keyed by containing Group node IDs, target node Guid and location:
+assetPath, material:<slot>, or
+texture:<existing-pin-id>. ParameterUses explicitly associate an existing material pin with
+the Libera material and parameter IDs. Existing graph values and connections are untouched.
+Material defaults and ranges are definitions, not edits to node values. Each project must
+explicitly bind each selected parameter; names alone are never matched. The Engine Assets
+window's Resource Identity tab offers project selection, explicit registration, existing
+resource assignment, material schema inspection, parameter binding, and Unity binding
+delivery. These operations are undoable document edits; no legacy graph value is replaced.
+Selecting an occupied use requires the explicit Replace existing use confirmation.
+
+An alternative to external Uses is the existing opaque node parameter
+liberaResourceIdentities, type liberaResourceIdentities:v1, with JSON object
+{"version":1,"uses":[{"location":"assetPath","resourceId":"<guid>"}],
+"parameterUses":[]}. The node implicitly supplies the node ID. Material entries use
+{"pinId":"<existing pin>","resourceId":"<material guid>","parameterId":"<guid>"}.
+MergeEmbedded validates these references and rejects conflicting external uses. It never
+writes the graph. External uses serialize an optional ordered instancePath of containing
+Group/Spawnable node GUIDs; omitted paths mean the root and preserve v1 documents.
+History and project persistence are implemented. The registration pane tracks the selected
+editor/project and rejects stale async results if the document, target, or project changes.
+Copy/paste remapping must preserve instance paths and remains a separate acceptance check.
+
+ResourceIdentityResolver reports unregistered, offline, missing, query failure, and type
+mismatch separately. The desktop routes correlated project, resource, parameter-schema, and
+Unity-delivery requests through the authenticated preview scene protocol. The Unity Editor
+has an explicit WSS client under Tools > LiberaFx > Resources > Connect to LIBERA FX. Copy
+the Preview WSS endpoint, preview-only token, and SHA-256 TLS certificate fingerprint from
+the desktop Preview pane; credentials are held only in the open Unity window and are not
+written to EditorPrefs. The client requests protocol 3, advertises resourceIdentity, pins
+the exact TLS certificate fingerprint, and dispatches asset queries on Unity's main Editor
+thread. It does not auto-connect or discover/guess projects.
+
+Unity binding delivery is an explicit author action. The Editor adapter writes or updates
+Assets/LiberaFx/LiberaFxBindings.asset with the exact resource GUID/local-file-ID bindings
+and registered material parameter bindings, preserving unrelated existing entries. This
+asset is the Unity runtime lookup table; delivery is not evidence that an effect has been
+observed rendering. Unity/Unreal live engine execution and binding application still require
+their respective integration checks.
+
+IResourceBindingProbe must query the exact supplied project and return actual kinds; a
+catalog search miss, partial index, or unavailable adapter must not be reported as a verified
+missing asset. Async desktop requests have correlation and timeouts. Unity project identity
+and exact resource/property helpers run through the live Editor bridge; Unreal project
+identity/resource/schema requests are routed by its authenticated editor connection.
+Unity stores its project GUID in LiberaFxUnityResourceProjectIdentity and its clone decision in
+an ignored Library marker. Unreal stores its GUID in project Game config and its clone decision
+in Saved. Missing local markers are CloneDecisionRequired, never implicitly adopted. The Unity
+Editor menu and the adapter request operations provide explicit initialize/keep/fork actions.
+ResourceIdentitySnapshotProbe loads explicit caller-supplied query assertions for exactly
+one project. A snapshot is not a live engine lookup; unknown entries are query failures,
+not missing. Only an explicit Missing assertion means missing.
+
+RenderProgramBindings.CreateScene accepts an optional IRenderResourceBindingContext.
+ResourceIdentityRenderContext resolves selected uses before emitting the existing render
+configuration. Unreal delivery accepts unreal.object-path and
+unreal.material-parameter.v1 (JSON name/association/index). Unity delivery accepts
+unity.asset-guid-local-id.v1 values formatted as <asset-guid>:<local-file-id> and
+unity.shader-property.v1 (the explicitly bound authored shader property name, with
+association/index fields retained in the render schema). Unsupported formats fail rather
+than being emitted as paths. Nested Group and Spawnable render contexts carry their ordered
+instance scope. Unselected legacy values remain unchanged and are NOT portable. Unity
+delivery populates the Unity runtime binding asset only when requested from the Resource
+Identity tab.
+
+Headless path (after the owner adds the source links and builds):
+  LiberaFxConverter convert effect.lfxproj effect.lfxrm
+    --binding-snapshot snapshot.json --target-engine Unreal --target-project <guid>
+Add --resource-map mapping.json only when the project does not already store the same
+identity document. Only convert with .lfxrm is accepted. .lfxrm
+is a JSON manifest containing the original Libera IDs, exact opaque project bindings,
+material definitions, compiled bytecode and resolved render_config. Spawnable projects also
+carry the compiled .lfxp package bytes. It remains a manifest rather than a direct importable
+engine asset. Its evidence field explicitly says caller-supplied-snapshot-not-live.
+Legacy resource paths are never used as mapped resources; every nonempty asset/material/
+texture path needs an explicit use except the supported builtin material. An unassigned
+texture is allowed; material parameters must also have explicit parameter uses. Graph Groups
+and Spawnable packages retain instance scope. No fallback to an unmapped .lfxb/.lfxp occurs.
+Even without mapping options, the converter rejects portable identity metadata rather than
+silently exporting the legacy path. Source graph/map/snapshot are not rewritten.
+
+Snapshot version 1 JSON uses a project {engine,projectId}, available boolean, resources
+array entries {binding:{format,value},status,actualKind}, and parameters array entries
+{resourceBinding,parameterBinding,status,actualKind}. Status is Resolved, Missing,
+QueryFailure or TypeMismatch; Resolved requires actualKind. Empty or incomplete snapshots
+are not evidence of absence. Both resource and parameter lookup require exact opaque
+binding equality inside the exact project, after explicit Libera-ID mapping.
+
+Remaining acceptance/verification:
+* Validate the Resource Identity tab and Unity WSS bridge in a Unity Editor with a safe
+  project, including project initialize/clone decisions, missing/type-mismatch responses,
+  parameter schema, and delivery of the runtime binding asset.
+* Validate Unreal live resource/schema queries and runtime binding application in the
+  dedicated Unreal project. Unreal schema range/default semantics require an engine check;
+  do not infer missing assets from incomplete catalog results.
+* Verify safe copy/paste remapping of external uses and parameters, including nested Group
+  instance paths. Preserve IDs and old node references when a remap is not explicit.
+* Run focused managed loopback/protocol and converter checks with isolated artifacts. The
+  loopback test exercises authoring commands through correlated preview messages, but does
+  not replace a real Unity/Unreal Editor check.

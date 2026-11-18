@@ -27,7 +27,8 @@ public static class NodeParameter
             if (!Convert.TryFromBase64String(text, bytes, out var length) || length > 512 * 1024) return false;
             return CommentImage.IsValid(bytes.AsSpan(0, length));
         }
-        if (value.ValueKind is JsonValueKind.Undefined || value.GetRawText().Length > 16384) return false;
+        var maximumJsonLength = type == "spriteData" ? 1_048_576 : 16384;
+        if (value.ValueKind is JsonValueKind.Undefined || value.GetRawText().Length > maximumJsonLength) return false;
         if (type.StartsWith("enum:", StringComparison.Ordinal))
             return GraphEnumDefinition.TryGetTypeId(type, out _) &&
                    value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out _);

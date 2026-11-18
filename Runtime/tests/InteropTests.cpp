@@ -1,6 +1,13 @@
 #pragma pack(push, 1)
 #include "liberafx/Interop.h"
 #pragma pack(pop)
+#include "liberafx/ExecutionDebugInterop.h"
+#if defined(_WIN32)
+#define NOMINMAX
+#include <Windows.h>
+#include <chrono>
+#include <thread>
+#endif
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -10,6 +17,7 @@
 #include <cstdlib>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <limits>
@@ -328,6 +336,112 @@ void verifyEffectLifetime()
     assert(libra_instance_release(instance) == LIBRA_OK);
     assert(libra_program_release(program) == LIBRA_OK);
 }
+auto readCompilerFixture(const std::filesystem::path& directory, const char* name)
+    -> std::vector<std::uint8_t>
+{
+    auto stream = std::ifstream{directory / name, std::ios::binary};
+    assert(stream.good());
+    return {std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
+}
+auto compilerFixtureNode(const std::vector<std::uint8_t>& bytes, std::uint8_t opcode,
+                         std::size_t occurrence = 0) -> const std::uint8_t*
+{
+    assert(bytes.size() >= 16 && bytes[4] == 10 && bytes[5] == 0);
+    auto count = std::uint32_t{};
+    for (auto lane = 0u; lane < 4; ++lane)
+        count |= std::uint32_t{bytes[8 + lane]} << (lane * 8);
+    assert(bytes[12] == 0 && bytes[13] == 1);
+    for (auto index = 0u; index < count; ++index) {
+        auto current = bytes.data() + 16 + std::size_t{index} * 256;
+        if (current[16] != opcode) continue;
+        if (occurrence-- == 0) return current;
+    }
+    assert(false && "Compiler fixture is missing the requested instruction.");
+    return nullptr;
+}
+void verifyInt32InteropFixture(const std::filesystem::path& directory)
+{
+    auto bytes = readCompilerFixture(directory, "Int32Add.lfxb");
+    auto program = LibraProgram{};
+    assert(libra_program_create(bytes.data(), bytes.size(), &program) == LIBRA_OK);
+    auto instance = LibraInstance{};
+    assert(libra_instance_create(program, &instance) == LIBRA_OK);
+    auto outputBinding = LibraBinding{};
+    auto operation = compilerFixtureNode(bytes, 49);
+    assert(libra_bind_value(instance, operation, &outputBinding) == LIBRA_OK);
+    auto outputType = LIBRA_VALUE_TYPE_UNKNOWN;
+    assert(libra_value_type(instance, outputBinding, &outputType) == LIBRA_OK &&
+        outputType == LIBRA_VALUE_TYPE_INT32);
+    auto leftBinding = LibraBinding{};
+    auto rightBinding = LibraBinding{};
+    assert(libra_bind_parameter(instance, compilerFixtureNode(bytes, 48, 0), 0, 0,
+        &leftBinding) == LIBRA_OK);
+    assert(libra_bind_parameter(instance, compilerFixtureNode(bytes, 48, 1), 0, 0,
+        &rightBinding) == LIBRA_OK);
+    auto parameterType = LIBRA_VALUE_TYPE_UNKNOWN;
+    assert(libra_parameter_type(instance, leftBinding, &parameterType) == LIBRA_OK &&
+        parameterType == LIBRA_VALUE_TYPE_INT32);
+    auto left = std::int32_t{};
+    assert(libra_parameter_get_int32(instance, leftBinding, &left) == LIBRA_OK && left == 14);
+    assert(libra_parameter_set(instance, leftBinding, 1.5) == LIBRA_INVALID_VALUE_TYPE);
+    assert(libra_parameter_set_int32(instance, leftBinding,
+        std::numeric_limits<std::int32_t>::max()) == LIBRA_OK);
+    assert(libra_parameter_set_int32(instance, rightBinding, 1) == LIBRA_OK);
+    auto output = LibraValue{};
+    assert(libra_evaluate(instance, 0, &outputBinding, 1, &output) == LIBRA_ARITHMETIC_OVERFLOW);
+    auto exactValue = std::int32_t{};
+    assert(libra_value_read_int32(instance, outputBinding, &exactValue) == LIBRA_ARITHMETIC_OVERFLOW);
+    assert(libra_instance_release(instance) == LIBRA_OK);
+    assert(libra_program_release(program) == LIBRA_OK);
+
+    auto conversions = readCompilerFixture(directory, "Conversions.lfxb");
+    assert(libra_program_create(conversions.data(), conversions.size(), &program) == LIBRA_OK);
+    assert(libra_instance_create(program, &instance) == LIBRA_OK);
+    auto intBinding = LibraBinding{};
+    auto floatBinding = LibraBinding{};
+    assert(libra_bind_value(instance, compilerFixtureNode(conversions, 53), &intBinding) == LIBRA_OK);
+    assert(libra_bind_value(instance, compilerFixtureNode(conversions, 54), &floatBinding) == LIBRA_OK);
+    assert(libra_value_type(instance, intBinding, &outputType) == LIBRA_OK &&
+        outputType == LIBRA_VALUE_TYPE_INT32);
+    assert(libra_value_type(instance, floatBinding, &outputType) == LIBRA_OK &&
+        outputType == LIBRA_VALUE_TYPE_FLOAT);
+    auto sourceBinding = LibraBinding{};
+    assert(libra_bind_parameter(instance, compilerFixtureNode(conversions, 1), 0, 0,
+        &sourceBinding) == LIBRA_OK);
+    assert(libra_parameter_type(instance, sourceBinding, &parameterType) == LIBRA_OK &&
+        parameterType == LIBRA_VALUE_TYPE_FLOAT);
+    assert(libra_parameter_set_int32(instance, sourceBinding, 4) == LIBRA_INVALID_VALUE_TYPE);
+    auto outputs = std::array<LibraBinding, 2>{intBinding, floatBinding};
+    auto values = std::array<LibraValue, 2>{};
+    assert(libra_evaluate(instance, 0, outputs.data(), outputs.size(), values.data()) == LIBRA_OK);
+    assert(libra_value_read_int32(instance, intBinding, &exactValue) == LIBRA_OK && exactValue == 3);
+    assert(values[1].x == 3);
+    assert(libra_parameter_set(instance, sourceBinding, 2147483648.0) == LIBRA_OK);
+    assert(libra_evaluate(instance, 0, outputs.data(), outputs.size(), values.data()) ==
+        LIBRA_ARITHMETIC_OVERFLOW);
+    assert(libra_parameter_set(instance, sourceBinding,
+        std::numeric_limits<double>::quiet_NaN()) == LIBRA_NON_FINITE);
+    assert(libra_instance_release(instance) == LIBRA_OK);
+    assert(libra_program_release(program) == LIBRA_OK);
+
+    auto divide = readCompilerFixture(directory, "Int32Divide.lfxb");
+    assert(libra_program_create(divide.data(), divide.size(), &program) == LIBRA_OK);
+    assert(libra_instance_create(program, &instance) == LIBRA_OK);
+    auto dividend = LibraBinding{};
+    auto divisor = LibraBinding{};
+    auto quotient = LibraBinding{};
+    assert(libra_bind_parameter(instance, compilerFixtureNode(divide, 48, 1), 0, 0,
+        &divisor) == LIBRA_OK);
+    assert(libra_bind_parameter(instance, compilerFixtureNode(divide, 48, 0), 0, 0,
+        &dividend) == LIBRA_OK);
+    assert(libra_parameter_set_int32(instance, dividend, 8) == LIBRA_OK);
+    assert(libra_parameter_set_int32(instance, divisor, 0) == LIBRA_OK);
+    assert(libra_bind_value(instance, compilerFixtureNode(divide, 52), &quotient) == LIBRA_OK);
+    auto quotientValue = LibraValue{};
+    assert(libra_evaluate(instance, 0, &quotient, 1, &quotientValue) == LIBRA_DIVIDE_BY_ZERO);
+    assert(libra_instance_release(instance) == LIBRA_OK);
+    assert(libra_program_release(program) == LIBRA_OK);
+}
 #if defined(_MSC_VER) && defined(_DEBUG)
 auto frameAllocations = 0u;
 auto __cdecl allocationHook(int kind, void*, size_t, int, long, const unsigned char*, int) -> int
@@ -338,6 +452,115 @@ auto __cdecl allocationHook(int kind, void*, size_t, int, long, const unsigned c
 #endif
 }
 
+#if defined(_WIN32)
+static void verifyPackageDebugger(const std::filesystem::path& path)
+{
+    auto file = std::ifstream(path / "GameIo.lfxp", std::ios::binary);
+    auto bytes = std::vector<std::uint8_t>{std::istreambuf_iterator<char>(file), {}};
+    assert(!bytes.empty());
+    auto hash = UINT64_C(14695981039346656037);
+    for (auto b : bytes) hash = (hash ^ b) * UINT64_C(1099511628211);
+    auto host = LibraSpawnableHostHandle{}, foreign = LibraSpawnableHostHandle{};
+    for (auto* handle : {&host, &foreign})
+        assert(libra_spawnable_host_create(bytes.data(), bytes.size(), 8, 4 * 1024 * 1024, 128, 10000, handle) == LIBRA_OK);
+    assert(libra_spawnable_host_advance(host, 0, 0) == LIBRA_OK);
+    assert(libra_spawnable_host_fire_game_signal(host, "spawn") == LIBRA_OK);
+    assert(libra_spawnable_host_fire_game_signal(host, "spawn") == LIBRA_OK);
+    auto spawned = std::vector<LibraSpawnableHostEvent>{};
+    for (;;) {
+        auto item = LibraSpawnableHostEvent{};
+        auto has = uint32_t{};
+        assert(libra_spawnable_host_next_event(host, &item, &has) == LIBRA_OK);
+        if (!has) break;
+        if (item.kind == 1) spawned.push_back(item);
+    }
+    assert(spawned.size() == 2 && spawned[0].instanceId != spawned[1].instanceId);
+    auto generation = uint64_t{};
+    assert(libra_spawnable_debug_generation(host, &generation) == LIBRA_OK && generation != 0);
+    assert(libra_spawnable_debug_attach(foreign, generation, nullptr, 0, "") == LIBRA_INVALID_HANDLE);
+    auto verify = [&](const LibraSpawnableHostEvent* child, double time) {
+        auto invitation = std::string("a3b102031405060708090a0b0c0d0e0");
+        invitation += child ? "2" : "1";
+        assert(invitation.size() == 32);
+        auto pipe = CreateNamedPipeA(("\\\\.\\pipe\\LiberaFx.ExecutionDebug." + invitation).c_str(),
+            PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
+            PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_NOWAIT | PIPE_REJECT_REMOTE_CLIENTS, 1, 4096, 4096, 0, nullptr);
+        assert(pipe != INVALID_HANDLE_VALUE);
+        assert(libra_spawnable_debug_attach(host, generation, child ? child->containerId : nullptr,
+            child ? child->instanceId : 0, invitation.c_str()) == LIBRA_OK);
+        auto until = [](auto predicate) {
+            auto end = std::chrono::steady_clock::now() + std::chrono::seconds(4);
+            while (!predicate()) {
+                assert(std::chrono::steady_clock::now() < end);
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            }
+        };
+        until([&] { return ConnectNamedPipe(pipe, nullptr) || GetLastError() == ERROR_PIPE_CONNECTED; });
+        auto exchange = [&](uint8_t op) {
+            auto command = std::array<uint8_t, 32>{};
+            auto frame = std::array<uint8_t, 984>{};
+            std::memcpy(command.data(), "LFD2", 4);
+            command[4] = op;
+            for (auto i = 0u; i < 8; ++i) command[8 + i] = static_cast<uint8_t>(hash >> (8 * i));
+            auto count = DWORD{};
+            assert(WriteFile(pipe, command.data(), static_cast<DWORD>(command.size()), &count, nullptr) && count == command.size());
+            until([&] { return PeekNamedPipe(pipe, nullptr, 0, nullptr, &count, nullptr) && count >= frame.size(); });
+            assert(ReadFile(pipe, frame.data(), static_cast<DWORD>(frame.size()), &count, nullptr) && count == frame.size());
+            return frame;
+        };
+        auto attached = exchange(1);
+        assert(attached[5] == 0 && attached[952] == static_cast<uint8_t>(generation));
+        assert(attached[960] == (child ? static_cast<uint8_t>(child->instanceId) : 0));
+        if (child) assert(std::memcmp(attached.data() + 968, child->containerId, 16) == 0);
+        assert(exchange(4)[5] == 0);
+        assert(libra_spawnable_debug_submit(host, 0, time, .01, nullptr, 0, nullptr, nullptr) == LIBRA_OK);
+        until([&] { return exchange(0)[4] == 2; });
+        auto count = uint64_t{};
+        assert(libra_spawnable_host_active_count(host, &count) == LIBRA_BUSY);
+        assert(libra_spawnable_host_fire_game_signal(host, "spawn") == LIBRA_BUSY);
+        assert(libra_spawnable_debug_submit(host, 0, time, .01, nullptr, 0, nullptr, nullptr) == LIBRA_BUSY);
+        assert(exchange(5)[5] == 0);
+        until([&] { return exchange(0)[4] == 2; });
+        CloseHandle(pipe); // Lose the editor while the real worker is paused.
+        auto work = static_cast<LibraResult>(LIBRA_NOT_READY);
+        until([&] { return libra_spawnable_debug_poll(host, &work) == LIBRA_OK; });
+        assert(work == LIBRA_OK);
+        assert(libra_spawnable_debug_detach(host) == LIBRA_OK);
+        assert(libra_spawnable_host_active_count(host, &count) == LIBRA_OK && count == 2);
+    };
+    verify(nullptr, .1);
+    verify(&spawned[0], .2);
+    assert(libra_spawnable_host_force_terminate(host, 1, spawned[0].containerId, spawned[0].instanceId) == LIBRA_OK);
+    assert(libra_spawnable_debug_attach(host, generation, spawned[0].containerId, spawned[0].instanceId, "") == LIBRA_INVALID_HANDLE);
+    assert(libra_spawnable_host_release(host) == LIBRA_OK && libra_spawnable_host_release(foreign) == LIBRA_OK);
+}
+#endif
+
+static void verifyRawLogicalQuality(const std::filesystem::path& directory)
+{
+    const auto bytes = readCompilerFixture(directory, "AuthoredQuality.lfxb");
+    const auto ids = readCompilerFixture(directory, "AuthoredQuality.ids");
+    assert(ids.size() >= 96);
+    auto program = LibraProgram{};
+    auto instance = LibraInstance{};
+    assert(libra_program_create(bytes.data(), bytes.size(), &program) == LIBRA_OK);
+    assert(libra_instance_create(program, &instance) == LIBRA_OK);
+    auto bindings = std::array<LibraBinding, 2>{};
+    assert(libra_bind_value(instance, ids.data() + 32, &bindings[0]) == LIBRA_OK);
+    assert(libra_bind_value(instance, ids.data() + 80, &bindings[1]) == LIBRA_OK);
+    for (auto frame = 0u; frame < 2; ++frame) {
+        auto time = static_cast<double>(frame);
+        auto values = std::array<LibraValue, 2>{};
+        assert(libra_instance_set_quality(instance, 1, frame ? 2 : 0, 0, frame + 1) == LIBRA_OK);
+        assert(libra_evaluate(instance, time, bindings.data(), 2, values.data()) == LIBRA_OK);
+        assert(libra_dispatch_signal(instance, ids.data(), time, 10000) == LIBRA_OK);
+        assert(libra_values_read(instance, bindings.data(), 2, values.data()) == LIBRA_OK);
+        assert(values[0].x == frame && values[1].x == (frame + 1) * 2);
+    }
+    assert(libra_instance_release(instance) == LIBRA_OK);
+    assert(libra_program_release(program) == LIBRA_OK);
+}
+
 int main()
 {
 #if defined(_MSC_VER) && defined(_DEBUG)
@@ -346,6 +569,14 @@ int main()
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
     verifyEffectLifetime();
+    if (auto fixtureDirectory = std::getenv("LIBERAFX_INT32_FIXTURE_DIR"))
+        verifyInt32InteropFixture(std::filesystem::path{fixtureDirectory});
+    if (auto fixtures = std::getenv("LIBERAFX_DEBUG_QUALITY_FIXTURE_DIR"))
+        verifyRawLogicalQuality(fixtures);
+#if defined(_WIN32)
+    if (auto fixtures = std::getenv("LIBERAFX_DEBUG_PACKAGE_FIXTURE_DIR"))
+        verifyPackageDebugger(fixtures);
+#endif
     if (auto bytecodePath = std::getenv("LIBERAFX_CONDITIONAL_BYTECODE")) {
         auto stream = std::ifstream{bytecodePath, std::ios::binary};
         auto bytes = std::vector<std::uint8_t>(
@@ -667,6 +898,18 @@ int main()
     auto atlas = LibraAtlasFrame{};
     assert(libra_sample_sprite_atlas(17.9, 4, 4, &atlas) == LIBRA_OK && atlas.frameIndex == 1 &&
            atlas.u == 0.25f && atlas.v == 0 && atlas.width == 0.25f);
+    assert(libra_sample_sprite_rect(42, 0.125f, 0.25f, 0.5f, 0.25f, &atlas) == LIBRA_OK &&
+           atlas.frameIndex == 42 && atlas.u == 0.125f && atlas.v == 0.25f &&
+           atlas.width == 0.5f && atlas.height == 0.25f);
+    assert(libra_sample_sprite_rect(0, 0.9f, 0, 0.2f, 1, &atlas) == LIBRA_INVALID_ARGUMENT);
+    auto durations = std::array<double, 3>{{1.0, 2.0, 1.0}};
+    auto sequenceFrame = std::uint32_t{};
+    assert(libra_sample_sprite_sequence(-1, 0.25, 4, durations.data(), 3, 1, 2, 0, 1,
+        &sequenceFrame) == LIBRA_OK && sequenceFrame == 1);
+    assert(libra_sample_sprite_sequence(2, 0, 4, durations.data(), 3, 1, 2, 1, 0,
+        &sequenceFrame) == LIBRA_OK && sequenceFrame == 2);
+    assert(libra_sample_sprite_sequence(-1, 0, 4, durations.data(), 3, 2, 1, 1, 1,
+        &sequenceFrame) == LIBRA_INVALID_ARGUMENT);
     assert(libra_sample_sprite_atlas(-1, 4, 4, &atlas) == LIBRA_OK && atlas.frameIndex == 15);
     auto quad = std::array<LibraSpriteVertex, 4>{};
     assert(libra_make_sprite_quad(&atlas, 2, 4, quad.data()) == LIBRA_OK &&

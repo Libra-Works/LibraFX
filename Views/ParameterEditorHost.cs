@@ -90,12 +90,25 @@ public sealed class ParameterEditorHost : ContentControl
         publish.Bind(IsVisibleProperty, new Binding(nameof(parameter.ShowPublish)));
         publish.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.PublishHint)));
         publish.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.PublishHint)));
+        var browseResource = CreateActionButton("BrowseResourceParameterButton", EditorIcon.Open);
+        browseResource.Bind(IsVisibleProperty, new Binding(nameof(parameter.IsResourceParameter)));
+        browseResource.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.BrowseResourceHint)));
+        browseResource.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.BrowseResourceHint)));
+        browseResource.Click += (_, _) => parameter.OpenResourceBrowser(
+            TopLevel.GetTopLevel(browseResource) as Window);
+        var revealResource = CreateActionButton("RevealResourceParameterButton", EditorIcon.Frame);
+        revealResource.Bind(IsVisibleProperty, new Binding(nameof(parameter.IsResourceParameter)));
+        revealResource.Bind(IsEnabledProperty, new Binding(nameof(parameter.CanRevealResource)));
+        revealResource.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.RevealResourceHint)));
+        revealResource.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.RevealResourceHint)));
+        revealResource.Click += (_, _) => parameter.RevealResource(
+            TopLevel.GetTopLevel(revealResource) as Window);
         var actions = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
             Spacing = 2,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Children = { publish, disconnect, reset }
+            Children = { browseResource, revealResource, publish, disconnect, reset }
         };
         var row = new Grid
         {

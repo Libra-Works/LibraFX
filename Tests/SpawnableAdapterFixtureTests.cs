@@ -42,7 +42,8 @@ internal static class SpawnableAdapterFixtureTests
         File.WriteAllBytes(Path.Combine(output, "GameIo.lfxp"), SpawnableGroupPackageBinary.Serialize(package));
         File.WriteAllText(Path.Combine(output, "GameIo.identities.json"), JsonSerializer.Serialize(new
         {
-            template = template.Id, rootDraw = rootDraw.Id, captureDraw = captureDraw.Id, liveDraw = liveDraw.Id
+            template = template.Id, rootDraw = rootDraw.Id, captureDraw = captureDraw.Id, liveDraw = liveDraw.Id,
+            spawnSignal = signal.Id
         }));
         var rootGpuGraph = new GraphWorkspaceViewModel(new UndoRedoManager()) { AutoDestroyWhenIdle = false };
         rootGpuGraph.CreateNode(new("OnStart"));

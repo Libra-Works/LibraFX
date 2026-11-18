@@ -21,7 +21,22 @@ enum class ELibraRuntimeResult : uint8
     UnknownCustomNode,
     InvalidHandle,
     InstructionBudgetExceeded,
-    CounterOverflow = 17
+    CounterOverflow = 17,
+    ArithmeticOverflow = 18
+};
+
+UENUM(BlueprintType)
+enum class ELibraValueType : uint8
+{
+    None = 0,
+    Float = 1,
+    Int32 = 2,
+    Vector2 = 3,
+    Vector3 = 4,
+    Vector4 = 5,
+    Color = 6,
+    Enum = 7,
+    Unknown = 255
 };
 
 UENUM(BlueprintType)
@@ -40,7 +55,8 @@ enum class ELibraSpawnableHostEventKind : uint8
     Spawn = 1,
     Stop = 2,
     Destroy = 3,
-    Signal = 4
+    Signal = 4,
+    ForceTerminated = 5
 };
 
 UENUM(BlueprintType)

@@ -1,6 +1,7 @@
 using LiberaFx.Services;
 using LiberaFx.Services.Compilation;
 using LiberaFx.Models.Graph;
+using LiberaFx.Models.Resources;
 
 return await Converter.RunAsync(args);
 
@@ -25,6 +26,7 @@ internal static class Converter
             var output = Path.GetFullPath(args[2]);
             var force = false;
             var embedded = false;
+            string? resourceMap = null, bindingSnapshot = null, targetEngine = null, targetProject = null;
             var libraries = new List<GroupAssetLibrary>();
             for (var index = 3; index < args.Length; index++)
             {
@@ -32,6 +34,14 @@ internal static class Converter
                 {
                     case "--force": force = true; break;
                     case "--embedded-groups": embedded = true; break;
+                    case "--resource-map" when index + 1 < args.Length && resourceMap is null:
+                        resourceMap = Path.GetFullPath(args[++index]); break;
+                    case "--binding-snapshot" when index + 1 < args.Length && bindingSnapshot is null:
+                        bindingSnapshot = Path.GetFullPath(args[++index]); break;
+                    case "--target-engine" when index + 1 < args.Length && targetEngine is null:
+                        targetEngine = args[++index]; break;
+                    case "--target-project" when index + 1 < args.Length && targetProject is null:
+                        targetProject = args[++index]; break;
                     case "--groups" when index + 1 < args.Length && !args[index + 1].StartsWith("--", StringComparison.Ordinal):
                         libraries.Add(new GroupAssetLibrary(Path.GetFullPath(args[++index])));
                         break;
@@ -42,9 +52,20 @@ internal static class Converter
                     default: Usage(Console.Error); return 2;
                 }
             }
+            ExportOptions? export = null;
+            if (resourceMap is not null || bindingSnapshot is not null || targetEngine is not null || targetProject is not null)
+            {
+                if (args[0] != "convert" || bindingSnapshot is null ||
+                    string.IsNullOrWhiteSpace(targetEngine) || !Guid.TryParse(targetProject, out var projectId) ||
+                    projectId == Guid.Empty || !Path.GetExtension(output).Equals(".lfxrm", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Resource manifest export requires convert, .lfxrm, --binding-snapshot, --target-engine and --target-project; --resource-map is optional when the project stores its identity document.");
+                export = new(resourceMap, bindingSnapshot, new(targetEngine, projectId));
+            }
+            else if (Path.GetExtension(output).Equals(".lfxrm", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Resource manifest export requires explicit mapping, snapshot and target project options.");
             var resolver = new GroupCompilationResolver(libraries, embedded);
             if (args[0] == "convert")
-                return await ConvertAsync(input, output, force, resolver) ? 0 : 1;
+                return await ConvertAsync(input, output, force, resolver, export) ? 0 : 1;
             if (!Directory.Exists(input))
             {
                 Console.Error.WriteLine($"Input directory not found: {input}");
@@ -71,7 +92,7 @@ internal static class Converter
             }
             return failed ? 1 : 0;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or InvalidDataException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or InvalidDataException or System.Text.Json.JsonException)
         {
             Console.Error.WriteLine(ex.Message);
             return 1;
@@ -80,15 +101,20 @@ internal static class Converter
 
     private static void Usage(TextWriter writer)
     {
-        writer.WriteLine("Usage: LiberaFxConverter convert <input.lfxproj> <output.lfxb|output.lfxp> [options]");
+        writer.WriteLine("Usage: LiberaFxConverter convert <input.lfxproj> <output.lfxb|output.lfxp|output.lfxrm> [options]");
         writer.WriteLine("       LiberaFxConverter batch <input-directory> <output-directory> [options]");
         writer.WriteLine("Options: --force  --groups <directory> (repeatable)  --nodes <directory> (repeatable)  --embedded-groups");
         writer.WriteLine("Linked groups use the latest library versions by default. --embedded-groups explicitly uses frozen embedded versions.");
         writer.WriteLine("Source projects and group libraries are never modified.");
         writer.WriteLine("Use .lfxp for effect packages with lifecycle or runtime Signal timeline keys. .lfxb remains raw bytecode.");
+        writer.WriteLine("Mapped .lfxrm: [--resource-map <file>] --binding-snapshot <file> --target-engine <engine> --target-project <guid>");
+        writer.WriteLine("The project identity document is used unless an identical --resource-map is supplied. Snapshot assertions are not live verification.");
     }
 
-    private static async Task<bool> ConvertAsync(string input, string output, bool force, GroupCompilationResolver resolver)
+    private sealed record ExportOptions(string? ResourceMap, string Snapshot, EngineProjectIdentity Project);
+
+    private static async Task<bool> ConvertAsync(string input, string output, bool force, GroupCompilationResolver resolver,
+        ExportOptions? export = null)
     {
         string? temporary = null;
         try
@@ -96,13 +122,42 @@ internal static class Converter
             if (string.Equals(input, output, OperatingSystem.IsWindows()
                     ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                 throw new IOException("Input and output must be different files.");
+            var pathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            if (export is not null && (string.Equals(output, export.ResourceMap, pathComparison) ||
+                string.Equals(output, export.Snapshot, pathComparison)))
+                throw new IOException("Output must not overwrite the resource map or binding snapshot.");
             await using var stream = File.OpenRead(input);
             var project = await ProjectDocumentReader.LoadAsync(stream);
             GpuParticleEditorService.RejectGpu(project.Graph);
+            if (export is null && (project.Graph.ResourceIdentities is not null ||
+                                   ResourceIdentityExport.HasEmbeddedMetadata(project.Graph)))
+                throw new InvalidDataException("This project contains portable resource identities; use explicit .lfxrm mapping export. Mapped .lfxb/.lfxp export is not implemented.");
             var graph = resolver.Resolve(project.Graph);
-            var bytes = Path.GetExtension(output).Equals(".lfxp", StringComparison.OrdinalIgnoreCase)
-                ? SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(graph))
-                : VfxProgram.Compile(graph).ToBinary();
+            if (export is null && (graph.ResourceIdentities is not null ||
+                                   ResourceIdentityExport.HasEmbeddedMetadata(graph)))
+                throw new InvalidDataException("This project contains portable resource identities; use explicit .lfxrm mapping export. Mapped .lfxb/.lfxp export is not implemented.");
+            byte[] bytes;
+            if (export is not null)
+            {
+                var map = project.Graph.ResourceIdentities;
+                if (export.ResourceMap is { } resourceMapPath)
+                {
+                    using var mapStream = File.OpenRead(resourceMapPath);
+                    var supplied = ResourceIdentityStore.Read(mapStream);
+                    if (map is not null && !ResourceIdentityStore.ContentEquals(map, supplied))
+                        throw new InvalidDataException("The external resource map conflicts with the identity document saved in the project.");
+                    map = supplied;
+                }
+                if (map is null)
+                    throw new InvalidDataException("The project has no registered resource identity document; register explicit IDs and project bindings in the editor or supply --resource-map.");
+                using var snapshotStream = File.OpenRead(export.Snapshot);
+                var probe = ResourceIdentitySnapshotProbe.Read(snapshotStream);
+                bytes = ResourceIdentityExport.CreateManifest(graph, map, export.Project, probe);
+            }
+            else
+                bytes = Path.GetExtension(output).Equals(".lfxp", StringComparison.OrdinalIgnoreCase)
+                    ? SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(graph))
+                    : VfxProgram.Compile(graph).ToBinary();
             var directory = Path.GetDirectoryName(output)!;
             Directory.CreateDirectory(directory);
             if (!force && File.Exists(output)) throw new IOException($"Output already exists: {output}");

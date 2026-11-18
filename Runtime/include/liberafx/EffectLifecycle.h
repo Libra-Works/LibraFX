@@ -38,6 +38,8 @@ public:
     // The host schedules opaque continuations and delivers them after updating
     // to their timestamp. Pending continuations prevent natural finish.
     Result schedule(double time, std::uint64_t token) noexcept;
+    // Owner-thread scoped cancellation, without running a continuation.
+    Result cancelScheduled(std::uint64_t token) noexcept;
     Result nextScheduled(ScheduledEvent& out, bool& hasEvent) const noexcept;
     Result takeScheduled(ScheduledEvent& out, bool& hasEvent) noexcept;
     // Signal continuations use this effect's local clock and retain the effect

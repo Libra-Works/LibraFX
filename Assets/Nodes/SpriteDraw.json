@@ -28,6 +28,7 @@
     { "id": "rows", "name": "Rows", "type": "int", "defaultValue": 1 },
     { "id": "fps", "name": "Frames / second", "type": "float", "defaultValue": 12 },
     { "id": "playing", "name": "Animate", "type": "bool", "defaultValue": false },
-    { "id": "billboard", "name": "Billboard", "type": "bool", "defaultValue": true }
+    { "id": "billboard", "name": "Billboard", "type": "bool", "defaultValue": true },
+    { "id": "spriteData", "name": "Sprite animation data", "type": "spriteData", "defaultValue": {} }
   ]
 }

@@ -1,3 +1,6 @@
+using System.Text.Json;
+using LiberaFx.Models.Resources;
+
 namespace LiberaFx.Models.Graph;
 
 public sealed record GraphSnapshot(
@@ -6,9 +9,13 @@ public sealed record GraphSnapshot(
     IReadOnlyList<GroupExposedItem>? ExposedItems = null)
 {
     public bool AutoDestroyWhenIdle { get; init; } = true;
+    // Resource identities are document state, not editor preferences. Keeping them on the
+    // root snapshot makes edits participate in the same undo tree as graph/material edits.
+    public ResourceIdentityDocument? ResourceIdentities { get; init; }
 
     public static bool ContentEquals(GraphSnapshot left, GraphSnapshot right) =>
         left.AutoDestroyWhenIdle == right.AutoDestroyWhenIdle &&
+        ResourceIdentitiesEqual(left.ResourceIdentities, right.ResourceIdentities) &&
         GroupExposedItems.Equal(left.ExposedItems, right.ExposedItems) &&
         left.Nodes.Count == right.Nodes.Count &&
         left.Nodes.Zip(right.Nodes).All(pair =>
@@ -24,6 +31,15 @@ public sealed record GraphSnapshot(
              pair.First.ChildGraph is not null && pair.Second.ChildGraph is not null &&
              ContentEquals(pair.First.ChildGraph, pair.Second.ChildGraph))) &&
         left.Connections.SequenceEqual(right.Connections);
+
+    private static bool ResourceIdentitiesEqual(ResourceIdentityDocument? left, ResourceIdentityDocument? right)
+    {
+        if (ReferenceEquals(left, right)) return true;
+        if (left is null || right is null) return false;
+        // JsonElement is immutable and the serializer normalizes its raw whitespace. The
+        // ordered arrays are intentionally compared as serialized: their order is persisted.
+        return JsonSerializer.Serialize(left) == JsonSerializer.Serialize(right);
+    }
 
     public static bool EquivalentIgnoringIds(GraphSnapshot left, GraphSnapshot right)
     {

@@ -1,0 +1,55 @@
+Layered sprite composition
+==========================
+
+SpriteComposition stores authoring JSON in the compositionData string. It is
+independent of existing SpriteDraw and SpriteAnimation nodes and their version
+1 flipbook metadata. The compiler resolves engine resources using the original
+graph node, then emits one ordinary sprite draw per visible part. Each draw ID
+is derived from the owning graph node ID and persistent part ID, so asset
+remapping and track reordering do not change it.
+
+The draw's spriteAnimation.version is 2. The cells and frame sequence have the
+same pixel/UV conventions as version 1. Version 2 additionally uses
+durationFrames (the common composition length), drawOrder (back to front, not
+depth), and keys (frame, x, y, rotationDegrees, scaleX and scaleY, with stable
+IDs). Its draws are not billboards. Times are fractional FPS ticks. The cell
+and pose of a shorter part hold until the common clip wraps or stops. Keys
+interpolate componentwise, including signed scales and unwrapped degrees. A
+mirror transition can pass through zero even though a key cannot specify zero.
+One pixel maps to one owner-local unit before applying keyed scale; the pivot
+is the center of the selected rectangle. The atlas UVs use a top-left origin.
+
+Native sampling uses caller-owned arrays and no engine SDK. The Unity adapter
+uses the native C ABI, a centered unit quad and MeshRenderer.sortingOrder.
+Unreal uses the shared native sampler, a centered 100-unit XY plane and
+TranslucencySortPriority. Use a transparent sprite material for stacked parts;
+opaque materials do not participate in transparent ordering. Unreal package
+playback uses the existing `builtin:sprite` explicit material binding (or a
+slot-0 override), with Texture, AtlasRect and Tint/Color parameters. The Unreal
+editor preview has its own existing translucent sprite material. Use updated
+engine adapters and Unity native plugin; adapters that only support metadata
+version 1 reject the new draw instead of discarding its transforms.
+
+Acceptance fixtures
+-------------------
+
+Generate with CommentImageSmokeTests --sprite-composition <absolute-directory>.
+The same compiler-produced package and expectations are used for:
+
+* Standalone Unity interop tests: put the native DLL on PATH and set
+  LIBERAFX_SPRITE_COMPOSITION_FIXTURE_DIR.
+* Unity Editor: executeMethod
+  LiberaFx.Unity.Editor.LiberaFxAuthoredRuntimeVerification.RunSpriteCompositionBatch
+  with LIBERAFX_VERIFICATION_PROJECT and LIBERAFX_SPRITE_COMPOSITION_FIXTURE_DIR
+  pointing at isolated absolute paths. Checks actual renderer transforms,
+  order, atlas uniforms and owner transform on the packaged playback path.
+* Unreal Editor: Automation RunTests Libra.Editor.Preview.CpuRootFixture with
+  -LibraPreviewCpuFixture=<absolute-directory>. Checks actual mesh components,
+  local transforms, sort priorities, sequence indexes and atlas material
+  uniforms via live-preview rendering.
+* Unreal packaged game playback: Automation RunTests
+  Libra.Runtime.SpriteComposition.GamePackage with
+  -LibraSpriteCompositionFixture=<absolute-directory>. The editor automation
+  runner creates a game world, plays the package through ULibraEffectComponent,
+  checks both real mesh components and their materials at five fixed times,
+  then verifies that Stop removes both meshes without removing the owner root.

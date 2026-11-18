@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "typeId": "4a94e882-39e8-4efb-92c7-180000000041",
+  "namespace": "LiberaFx",
+  "name": "HostQualityComparison",
+  "values": [
+    { "value": 0, "name": "Equal" },
+    { "value": 1, "name": "NotEqual" },
+    { "value": 2, "name": "Less" },
+    { "value": 3, "name": "LessOrEqual" },
+    { "value": 4, "name": "Greater" },
+    { "value": 5, "name": "GreaterOrEqual" }
+  ]
+}

@@ -1,0 +1,227 @@
+Scoped lifecycle / authored phases (#37 / #38)
+
+Core API
+--------
+SpawnableHost::notifyEndRequest(scope, userSignalNodeId) dispatches one actual
+signal arrival per call. The node ID explicitly identifies the user's logic;
+this is not requestNaturalEnd(), OwnerDestroy, Stop, or a hidden End policy.
+The effect scope targets the root; the instance scope targets one exact
+(template container UUID, instance ID). Targeted GeneratorPool::dispatchSignal
+is also available. Notifications require a started, evaluated, live target.
+
+SpawnableHost::forceTerminate(scope) never dispatches End, OwnerDestroy or
+natural Destroy. Effect scope clears the root's deferred/scheduled work, every
+child pool's deferred signals and spawn commands, child metadata, pending
+routes, and pending host/GameIO events. One ForceTerminated (numeric kind 5)
+event with zero container/instance identifies whole-effect render invalidation.
+Root values become unavailable and advance returns NotReady.
+
+Instance scope purges only that instance's queued lifecycle/signal notices,
+deferred work and any not-yet-fired captured Destroy-route continuations owned
+by its source instance ID, even if the source retired naturally. It emits one
+ForceTerminated notice with that exact identity if work/notices were removed.
+Other instances, even in the same template, remain intact. Existing childValue
+rejects the retired identity. Duplicate/retired issued IDs succeed without
+replay; never-issued IDs are InvalidHandle. Malformed/zero scopes at the Host
+boundary are InvalidArgument.
+
+Current packages are flat: the compiler rejects nested Spawnable Groups.
+Destroy-route destinations and work already routed into the parent are siblings
+or parent-owned work, not owned descendants. There is no invented parent-child
+relationship. Whole-effect scope includes all generated children. A future
+nested format must carry explicit ownership before adding descendant traversal.
+
+Scheduling and precedence
+-------------------------
+All SpawnableHost calls remain owner-thread-only (not thread-safe). Its jobs
+complete synchronously inside each operation. Reentrant lifecycle operations
+return Busy. GeneratorPool force APIs similarly return Busy while executing;
+no work/state is freed until the job boundary. A caller receiving Busy must
+retry at the next boundary; there is no cross-thread request mailbox.
+Force notices use the last evaluated root age (zero before start). This API has
+no future-timestamp command queue or backdated simulation/undo.
+
+The adapter orders commands at a tick: force before EndRequest, natural end,
+advance, and pending-event consumption. Within this ordering, force removes
+queued natural events and prevents future dispatch. Requests after a completed
+dispatch cannot undo already executed user/game side effects. Duplicate force
+does not dispatch another completion notice. Instance force reserves a cleanup
+event slot before mutation; QueueRejected changes nothing, so drain events and
+retry before advancing. Whole-effect force replaces all queued host notices
+with its single whole-effect invalidation and cannot overflow that queue.
+
+Instance force does not run the root auto-idle policy in the cancellation call.
+A later normal advance retains the package's existing AutoDestroyWhenIdle
+policy; use AutoDestroyWhenIdle=false for an explicitly controlled root.
+Manual Stop/Reset and natural Lifetime behavior are unchanged.
+
+Caller-owned composition
+------------------------
+PhaseClock holds an arbitrary caller-defined phase ID, revision, overall age
+and phase-local time. reset/enter explicitly restart only this clock; no state,
+random stream, child, Instance, or Lifetime is implicitly reset. enter can
+restart the same phase. advance is monotonic; seek requires explicit reset.
+The caller selects which phase's signal graph to dispatch.
+
+LoopClock independently counts half-open intervals [start,end), exposing
+phaseTime, loopTime, loopIndex, cumulative boundaryCount, boundariesCrossed,
+and completion. Long jumps are O(1); no per-boundary/node allocations occur.
+The caller explicitly chooses whether/how many boundary signals to dispatch;
+one output still has one destination. Use authored Sequence for fan-out.
+At finite completion loopIndex is the one-past-last count and loopTime is the
+last interval's length. Further advances report zero additional boundaries.
+No count/length/curve creates an implicit Lifetime or phase transition.
+
+Zero count completes immediately without a boundary. Bounded zero-length loops
+complete immediately with all count boundaries reported once on first advance.
+Unbounded zero-length loops are rejected rather than entering an infinite event
+storm. Nonfinite/backwards time, unrepresentable finite deadlines, and boundary
+counter overflow fail visibly, without mutating state/output.
+
+FutureBoundaryArm captures the cumulative boundary count at request time.
+First advance the same LoopClock to the request age, THEN arm it. A boundary at
+that age or earlier does not satisfy the arm. A strictly later boundary consumes
+it once; reset of that clock invalidates it. A completed loop cannot arm because
+there is no future boundary. The caller must handle this case explicitly, e.g.
+select End now rather than waiting forever. EndRequestState counts independent
+arrivals without automatically coalescing them or selecting an End policy.
+
+Example in tests/PhasePrimitivesTests.cpp: one caller-owned PhaseClock selects
+Start (10), Loop (20), End (30); loop begins at overall age 1 with length 2.
+Request at age 5 arms AFTER boundary 2, so End is selected at age 7, not 5.
+The same API also demonstrates immediate End on request. Neither destroys the
+instance after End: finish/stop/force remains an explicit host decision.
+ScopedTerminationTests::singleInstancePhaseDispatch additionally uses one real
+GeneratorPool instance and native signal entries for Start, Loop and End. The
+caller selects the entries with PhaseClock/LoopClock/FutureBoundaryArm, checks
+which signals actually ran, and explicitly forces the still-live instance.
+The low-level composition API only gates Signal dispatch. Authored Current Phase
+with typed Enum selection additionally uses the existing lazy parameter guards,
+so inactive parameter branches are skipped by the evaluator.
+
+Authored graph contract
+-----------------------
+Current Phase is the typed LifecyclePhase enum: Start=0, Loop=1, End=2.
+Phase Time reads the phase-local clock globally, without inheriting a consumer's
+lazy guard. Enter Start/Loop/End terminal Signals request a transition at the next
+actual evaluation boundary, never by mutating the currently executing graph.
+The phase start timestamp is the request time; reentering the same phase restarts
+only that clock. No transition resets values, RNG, children or Life Time.
+
+Loop Clock exposes a Vector4: interval time, zero-based interval index, cumulative
+boundary count, completed 0/1. Its time input defaults to instance age; connect
+Phase Time for a phase-local loop. Length/count/bounded are captured initially or
+on explicit Reset. Long jumps emit one aggregate boundary event, not an event
+storm. Arm ignores boundaries at or before the arrival; a completed clock cannot
+arm. Rewind resets/disarms the clock. Numeric failure does not commit progression.
+
+The shipped Start/Loop/End group exposes start/loop/end lengths, loop count and
+bounded 0/1 without Spawnables or Life Time. Its external End Request is
+deliberately Loop-only and waits for a strictly future boundary. End Complete
+does not destroy the instance. Reset the instance to replay this single-pass
+convenience group, or clone its graph to author another policy.
+
+Force Current and Force Effect are authored terminal Signals. They record a
+boundary command, suppress subsequent Signal work in that scope and never
+reentrantly free running work. A separate unguarded Enter End is required when an
+external immediate End request must also work outside a guarded Loop branch.
+
+These nodes select LFXB v11. Instructions remain 256 bytes; custom/logical guards
+move to byte 44 to avoid overlapping input-default lanes. Ordinary guards remain
+at byte 112. Supported old versions keep their old layouts; no LFXP field was
+added for phase state. Runtime state starts in Start on fresh initialization.
+
+Verification
+------------
+Tests/Program.cs:
+  --authored-lifecycle <absolute isolated directory>
+Set LIBERAFX_LIFECYCLE_FIXTURE_DIR to that directory, then run the existing
+liberafx_scoped_termination_tests target. Real compiler-produced fixtures cover
+authored Force, phase transitions/reentry, future-boundary/reset behavior and the
+shipped parameterized preset. The authoring checks include persistence, copy,
+Undo/Redo and exposed parameter editing. Lower-level primitive/host/backpressure
+cases remain in liberafx_phase_primitives_tests and scoped termination tests.
+The separate liberafx_interop_scoped_termination_tests target takes the existing
+isolated Fireworks fixture folder (Fireworks.lfxp + Fireworks.native-fixture).
+
+Actual engine acceptance:
+  Unity LiberaFxAuthoredRuntimeVerification.RunBatch, with
+  LIBERAFX_VERIFICATION_PROJECT, LIBERAFX_LIFECYCLE_FIXTURE_DIR and
+  LIBERAFX_QUALITY_FIXTURE_DIR pointing to isolated verification data.
+  Unreal Libra.Runtime.Lifecycle.AuthoredPhaseRender, with
+  -LibraLifecycleFixture=<same compiler-produced lifecycle fixture directory>.
+These exercise the same PhasePresetRender.lfxp through real engine components:
+Start red, Loop green, End blue, position changes, one retained instance and no
+implicit lifetime after End. Unity checks camera pixels. Unreal checks the real
+mesh, dynamic material and transforms, then explicit ForceEffect cleanup. Its
+private model binding supplies a tint-capable material without modifying the
+engine's Cube asset; the default Cube material does not expose Color/Tint.
+
+Public API / adapter integration
+--------------------------------------------------------
+Interop.h exports these additive ABI-1 calls (existing POD sizes unchanged):
+  libra_spawnable_host_force_terminate(host, scopeKind, containerId, instance)
+  libra_spawnable_host_notify_end_request(host, scopeKind, containerId, instance,
+                                         userSignalNodeId)
+scopeKind 0=effect (null/zero container and zero instance); 1=one instance
+(nonzero big-endian container UUID plus issued instance). Other/malformed scopes
+are rejected, not widened. Both calls check the host's creating thread and
+return Busy on foreign threads. Existing host APIs retain their owner-thread
+contract; this does not add a worker-thread request mailbox.
+
+NativeSpawnableHost exposes ForceTerminate, ForceTerminateChild,
+NotifyEndRequest and NotifyChildEndRequest. SpawnableHostEvent.Kind remains
+uint for compatibility, with an additional typed EventKind property and
+SpawnableHostEventKind.ForceTerminated=5.
+
+Unity LiberaFxSpawnableComponent and Unreal ULibraEffectComponent (the existing
+public whole-effect owner) expose those same four operations. UE forwards to
+its existing internal Spawnable playback component; authors do not need to
+add another component. The scoped instance argument in Blueprint preserves
+opaque 64-bit event ID bits, including a signed representation. The old pure
+bytecode UE path has no package lifecycle; whole-effect force rejects it with
+UnsupportedBinary, rather than silently aliasing to manual Stop.
+
+Successful force removes the adapter's exact scope immediately even if an old
+terminal notice was already popped by a reentrant batch. Kind 5 is forwarded
+unchanged (no synthetic Destroy/Stop); root invalidation releases all CPU draw
+and GPU scopes, child invalidation only (container,instance). Unity uses existing
+scope Dispose (deactivate hierarchy, StopSimulation and GPU Dispose). UE uses
+the existing exact RenderState::Stop or destroys the whole RenderState; these
+paths stop/destroy their GPU components. Binding maps/payload files are untouched.
+GPU resource retirement/fences remain the existing adapter implementation;
+no pending GPU buffer is prematurely freed by introducing another path.
+
+Both adapters invalidate already-popped stale target notices during nested
+event callbacks, without dropping other siblings. Root force stops ticking and
+marks completion before forwarding its event. Duplicate force does not invent
+another event. Restart and manual cleanup of a forced host are supported.
+
+Engine checks:
+  Unity Editor LiberaFxScopedForceVerification.Run(package, bindings,
+      repeatableRootSpawnSignalGuid, requireGpu)
+    explicitly accepts an isolated package and bindings; no asset import,
+    application launch, global time, or editor setting changes. It creates only
+    its own temporary owner object. Supply a package whose given root signal
+    spawns one child per arrival. It checks exact sibling/root scope retention,
+    identity/event kind, GPU Stop/Dispose, duplicate force, restart and force
+    inside an event callback.
+  Existing UE Libra.Runtime.Spawnable.GameIoRendering now checks public scoped
+    force retains the root and sibling draw objects, then effect force/restart.
+  Existing UE Libra.Runtime.Spawnable.GpuFixture and RootGpuFixture now check
+    child/root GPU force and restart using their existing fixture arguments.
+LiberaFxAuthoredRuntimeVerification.RunBatch additionally loads the real authored
+Force packages into actual Unity components and verifies exact scope retention,
+Force event kind, restart and the single-instance phase preset. It requires the
+explicit isolated project and lifecycle/quality fixture environment variables.
+These scope/clock checks do not claim new GPU pixel/fence measurements.
+
+Integration boundaries
+----------------------
+SpawnableHost still accepts only its previously supported typed package
+bytecode (it has not gained standalone scalar-v1 hosting by this change).
+Core owns no engine/render submission. GPU retirement/fences remain adapter
+responsibilities. Host-thread request marshalling is not provided by the scoped
+force API; a worker caller gets Busy and must use its host's command boundary.
+Host reconstruction plus explicit Phase/Loop reset is the reset/seek route;
+no live SpawnableHost seek API is invented.

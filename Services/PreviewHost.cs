@@ -75,7 +75,7 @@ public sealed class PreviewHost : IDisposable
                 _assets = model.PreviewAssets;
                 model.ActiveGraphProvider.PropertyChanged += OnActiveGraphChanged;
                 model.Playback.StateChanged += OnPlaybackChanged;
-                AttachGraph(model.ActiveGraphProvider.Graph);
+                AttachGraph(model.ActiveGraphProvider.Graph.Document);
                 Publish();
             });
         }
@@ -101,7 +101,9 @@ public sealed class PreviewHost : IDisposable
     private void OnActiveGraphChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(ActiveGraphProvider.Graph) || _model is null) return;
-        AttachGraph(_model.ActiveGraphProvider.Graph);
+        var document = _model.ActiveGraphProvider.Graph.Document;
+        if (ReferenceEquals(_graph, document)) return;
+        AttachGraph(document);
         OnHistoryChanged(null, EventArgs.Empty);
     }
 
@@ -160,7 +162,8 @@ public sealed class PreviewHost : IDisposable
 
     private void OnPreviewSignalRequested(object? sender, Guid nodeId)
     {
-        if (_graph is null || !ReferenceEquals(sender, _graph) || _model is null) return;
+        if (_graph is null || sender is not GraphWorkspaceViewModel source ||
+            !ReferenceEquals(source.Document, _graph) || _model is null) return;
         var node = _graph.Nodes.FirstOrDefault(node => node.Id == nodeId);
         if (node is null || !_graph.CanSendPreviewSignal(node))
         {

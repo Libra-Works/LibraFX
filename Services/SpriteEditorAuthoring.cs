@@ -26,11 +26,12 @@ public sealed record SpriteEditorSettings(int Columns, int Rows, double Fps, int
 public static class SpriteEditorAuthoring
 {
     public static GraphNodeViewModel Apply(GraphWorkspaceViewModel graph, GraphNodeViewModel? target,
-        EngineAsset asset, SpriteEditorSettings settings)
+        EngineAsset asset, SpriteEditorSettings settings, SpriteAnimationData? spriteData = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(asset);
         settings.Validate();
+        spriteData?.Validate();
         if (!string.Equals(asset.AssetClass, "texture", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Select an engine texture.", nameof(asset));
         var schema = RenderNodeSchema.Encode(asset);
@@ -39,12 +40,13 @@ public static class SpriteEditorAuthoring
             Value("assetPath", "string", asset.Path), Value("materialSchema", "string", schema),
             Value("columns", "int", settings.Columns), Value("rows", "int", settings.Rows),
             Value("fps", "float", settings.Fps), Value("frame", "float", settings.Playing ? -1d : settings.Frame),
-            Value("playing", "bool", settings.Playing)
+            Value("playing", "bool", settings.Playing),
+            new("spriteData", "spriteData", JsonSerializer.SerializeToElement(spriteData))
         };
         if (target is null)
         {
             var definition = graph.AvailableNodeDefinitions.Single(item =>
-                item.TypeName == (settings.Playing ? "SpriteAnimation" : "SpriteDraw"));
+                item.TypeName == (settings.Playing || spriteData is not null ? "SpriteAnimation" : "SpriteDraw"));
             var index = graph.Nodes.Count;
             graph.ApplyPlan(new LiberaGraphEditPlan(
                 [new("sprite", definition.Kind, asset.Name, 80 + index % 4 * 280, 80 + index / 4 * 160, values)], []));

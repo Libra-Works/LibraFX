@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using LiberaFx.Models.Graph;
+using LiberaFx.Models.Resources;
 
 namespace LiberaFx.Services.Compilation;
 
@@ -68,7 +69,8 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
         return new Guid(digest.AsSpan(0, 16), bigEndian: true);
     }
 
-    public static SpawnableGroupPackage Compile(GraphSnapshot graph, bool includePreviewSignalKeys = false)
+    public static SpawnableGroupPackage Compile(GraphSnapshot graph, bool includePreviewSignalKeys = false,
+        IRenderResourceBindingContext? resourceContext = null)
     {
         RejectTemplateGameIo(graph, withinTemplate: false);
         VfxProgram.ValidateForCompilation(graph);
@@ -147,7 +149,9 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
                         if (!double.IsFinite(seconds) || seconds < 0)
                             throw new InvalidDataException($"Spawnable '{node.Name}' Life Time must be nonnegative finite seconds.");
                     }
-                    var childProgram = VfxProgram.CompileForPackage(child, out var render);
+                    var childResourceContext = ScopedRenderResourceBindingContext.UnderGroup(resourceContext, node.Id);
+                    var childProgram = VfxProgram.CompileForPackage(child, out var render,
+                        resourceContext: childResourceContext);
                     if (childProgram.GameIoPorts.Count != 0)
                         throw new InvalidDataException(
                             $"Spawnable Group '{node.Name}' cannot host named Game I/O in its template program. " +
@@ -188,7 +192,8 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
         var parentWithSignalInputs = LowerSignalInputs(flatParent, out var signalInputTypes, out var signalInputProxies);
         var signalRoutes = CreateSignalRoutes(flatParent, signalInputProxies);
         var parentProgram = VfxProgram.CompileForPackage(
-            RemoveLocalRoutes(parentWithSignalInputs, routedDelays), out var rootRender, signalInputTypes);
+            RemoveLocalRoutes(parentWithSignalInputs, routedDelays), out var rootRender, signalInputTypes,
+            resourceContext);
         return new(parentProgram.ToPackageBinary(), templates.AsReadOnly())
         {
             AutoDestroyWhenIdle = graph.AutoDestroyWhenIdle,
@@ -406,6 +411,77 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
             if (GpuParticleEditorService.IsGpu(node.Kind)) yield return node;
             else if (node.ChildGraph is { } child && node.Kind != GraphNodeKind.SpawnableGroup)
                 foreach (var nested in CollectGpu(child)) yield return nested;
+        }
+    }
+
+    public static class ScopedRenderResourceBindingContext
+    {
+        public static IRenderResourceBindingContext? UnderGroup(
+            IRenderResourceBindingContext? context, Guid groupNodeId)
+        {
+            if (context is null) return null;
+            if (groupNodeId == Guid.Empty) throw new ArgumentException("Group ID must not be empty.", nameof(groupNodeId));
+            return new Scope(context, [groupNodeId]);
+        }
+
+        private sealed class Scope(IRenderResourceBindingContext inner, IReadOnlyList<Guid> prefix)
+            : IRenderResourceBindingContext
+        {
+            public IReadOnlyList<Guid> GetInstancePath(Guid nodeId)
+            {
+                var innerPath = inner.GetInstancePath(nodeId);
+                return innerPath.Count > 0 ? innerPath : Combine(Array.Empty<Guid>());
+            }
+
+            public IReadOnlyList<Guid> GetInstancePath(Guid nodeId, IReadOnlyList<Guid> localPath)
+            {
+                var innerPath = inner.GetInstancePath(nodeId);
+                return innerPath.Count > 0 ? innerPath : Combine(nodeId, localPath);
+            }
+
+            public bool HasResourceUse(Guid nodeId, string location) =>
+                HasResourceUse(nodeId, location, Array.Empty<Guid>());
+
+            public bool HasResourceUse(Guid nodeId, string location, IReadOnlyList<Guid> instancePath) =>
+                inner.HasResourceUse(nodeId, location, Combine(nodeId, instancePath));
+
+            public void ValidateRenderNode(Guid nodeId, IEnumerable<(string Id, string Kind, int Slot)> parameters) =>
+                ValidateRenderNode(nodeId, parameters, Array.Empty<Guid>());
+
+            public void ValidateRenderNode(Guid nodeId, IEnumerable<(string Id, string Kind, int Slot)> parameters,
+                IReadOnlyList<Guid> instancePath) =>
+                inner.ValidateRenderNode(nodeId, parameters, Combine(nodeId, instancePath));
+
+            public string ResolvePath(Guid nodeId, string location, string kind, string legacyValue) =>
+                ResolvePath(nodeId, location, kind, legacyValue, Array.Empty<Guid>());
+
+            public string ResolvePath(Guid nodeId, string location, string kind, string legacyValue,
+                IReadOnlyList<Guid> instancePath) =>
+                inner.ResolvePath(nodeId, location, kind, legacyValue, Combine(nodeId, instancePath));
+
+            public (string Name, int Association, int Index)? ResolveParameter(
+                Guid nodeId, string pinId, int slot, string kind) =>
+                ResolveParameter(nodeId, pinId, slot, kind, Array.Empty<Guid>());
+
+            public (string Name, int Association, int Index)? ResolveParameter(
+                Guid nodeId, string pinId, int slot, string kind, IReadOnlyList<Guid> instancePath) =>
+                inner.ResolveParameter(nodeId, pinId, slot, kind, Combine(nodeId, instancePath));
+
+            private IReadOnlyList<Guid> Combine(Guid nodeId, IReadOnlyList<Guid>? path)
+            {
+                var boundPath = inner.GetInstancePath(nodeId);
+                if (boundPath.Count > 0) return boundPath;
+                var combined = prefix.Concat(path ?? Array.Empty<Guid>()).ToArray();
+                ResourceIdentityScope.Validate(combined);
+                return combined;
+            }
+
+            private IReadOnlyList<Guid> Combine(IReadOnlyList<Guid>? path)
+            {
+                var combined = prefix.Concat(path ?? Array.Empty<Guid>()).ToArray();
+                ResourceIdentityScope.Validate(combined);
+                return combined;
+            }
         }
     }
 }

@@ -25,6 +25,8 @@ namespace LiberaFx.Unity
         [SerializeField] private string defaultNode = LiberaFxSampleProgram.GainId;
         [SerializeField] private int defaultInputSlot = 1, defaultComponent = 0;
         [SerializeField] private float defaultGain = 0.2f;
+        [SerializeField, Tooltip("Explicit Unity quality index to LIBERA FX tier mapping. Unmapped levels remain Unknown.")]
+        private HostQualityTier[] qualityTierMapping = Array.Empty<HostQualityTier>();
 
         private NativeInstance instance;
         private uint defaultBinding;
@@ -38,6 +40,7 @@ namespace LiberaFx.Unity
         private double elapsed;
         private bool sample;
         private bool hasTimeContextApi = true;
+        private bool debuggerAttached, debugPending;
         private readonly int colorProperty = Shader.PropertyToID("_Color");
         private readonly int textureProperty = Shader.PropertyToID("_MainTex");
         private readonly int atlasProperty = Shader.PropertyToID("_AtlasRect");
@@ -76,8 +79,30 @@ namespace LiberaFx.Unity
             sample = true;
         }
         public NativeResult SetDefaultGain(double gain) =>
-            instance == null || defaultBinding == 0
+            debugPending ? NativeResult.Busy : instance == null || defaultBinding == 0
                 ? NativeResult.NotReady : instance.SetParameter(defaultBinding, gain);
+
+        public NativeResult AttachExecutionDebugger(string invitation)
+        {
+            if (instance == null) return NativeResult.NotReady;
+            if (Application.platform != RuntimePlatform.WindowsEditor &&
+                Application.platform != RuntimePlatform.WindowsPlayer) return NativeResult.UnsupportedBinary;
+            if (debuggerAttached) return NativeResult.Busy;
+            try
+            {
+                var result = instance.AttachExecutionDebugger(invitation);
+                debuggerAttached = result == NativeResult.Ok;
+                return result;
+            }
+            catch (EntryPointNotFoundException) { return NativeResult.UnsupportedBinary; }
+        }
+
+        public void DetachExecutionDebugger()
+        {
+            if (!debuggerAttached) return;
+            instance.DetachExecutionDebugger();
+            debuggerAttached = debugPending = false;
+        }
 
         private void OnEnable()
         {
@@ -143,6 +168,14 @@ namespace LiberaFx.Unity
         private void Update()
         {
             if (instance == null) return;
+            if (debugPending)
+            {
+                var completed = instance.FinishDebugEvaluation(bindings, values);
+                if (completed == NativeResult.Busy) return;
+                debugPending = false;
+                ApplyEvaluation(completed);
+                return;
+            }
             var frameDelta = Time.deltaTime;
             elapsed += frameDelta;
             if (hasTimeContextApi)
@@ -159,7 +192,25 @@ namespace LiberaFx.Unity
                 }
                 catch (EntryPointNotFoundException) { hasTimeContextApi = false; }
             }
-            var result = instance.Evaluate(sample ? elapsed % 2.0 : elapsed, bindings, values);
+            var time = sample ? elapsed % 2.0 : elapsed;
+            var qualityResult = instance.SetHostQuality(UnityHostQuality.Read(qualityTierMapping, (ulong)Time.frameCount));
+            if (qualityResult != NativeResult.Ok)
+            {
+                ApplyEvaluation(qualityResult);
+                return;
+            }
+            if (debuggerAttached)
+            {
+                var scheduled = instance.ScheduleDebugEvaluation(time);
+                debugPending = scheduled == NativeResult.Ok;
+                if (!debugPending) ApplyEvaluation(scheduled);
+                return;
+            }
+            ApplyEvaluation(instance.Evaluate(time, bindings, values));
+        }
+
+        private void ApplyEvaluation(NativeResult result)
+        {
             if (result != NativeResult.Ok)
             {
                 Debug.LogError("LiberaFx evaluation failed: " + result, this);
@@ -215,6 +266,7 @@ namespace LiberaFx.Unity
             !double.IsNaN(value) && value >= -float.MaxValue && value <= float.MaxValue;
         private void OnDisable()
         {
+            DetachExecutionDebugger();
             instance?.Dispose();
             instance = null;
             defaultBinding = 0;

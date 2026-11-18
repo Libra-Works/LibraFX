@@ -270,7 +270,8 @@ auto ULibraEditorConnectionComponent::ConnectToEditor() -> bool
     hello->SetStringField(TEXT("role"), TEXT("editor"));
     hello->SetNumberField(TEXT("version"), 1);
     auto capabilities = TArray<TSharedPtr<FJsonValue>>{};
-    for (const auto& capability : {TEXT("profiling"), TEXT("values"), TEXT("assets"), TEXT("rendering"), TEXT("thumbnails")})
+    for (const auto& capability : {TEXT("profiling"), TEXT("values"), TEXT("assets"), TEXT("rendering"),
+        TEXT("thumbnails"), TEXT("resourceIdentity")})
         capabilities.Add(MakeShared<FJsonValueString>(capability));
 #if WITH_EDITOR
     if (EditorGpuConfigHandler) capabilities.Add(MakeShared<FJsonValueString>(TEXT("gpuParticles")));
@@ -377,7 +378,10 @@ auto ULibraEditorConnectionComponent::ApplyMessage(TConstArrayView<uint8> messag
             QueueEditorMessage(TEXT("{\"type\":\"asset_result\",\"error\":\"Invalid scene request JSON.\"}"));
             return true;
         }
-        if (type == TEXT("asset_catalog") || type == TEXT("asset_details") || type == TEXT("asset_thumbnail"))
+        if (type == TEXT("asset_catalog") || type == TEXT("asset_details") || type == TEXT("asset_thumbnail") ||
+            type == TEXT("resource_identity_project") || type == TEXT("resource_identity_probe") ||
+            type == TEXT("resource_identity_schema") ||
+            type == TEXT("resource_identity_deliver"))
         {
             if (EditorAssetRequestHandler)
             {

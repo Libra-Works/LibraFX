@@ -4,6 +4,8 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("LiberaFx.Unity.Contracts")]
+
 namespace LiberaFx.Unity
 {
     public enum NativeResult : int
@@ -11,12 +13,23 @@ namespace LiberaFx.Unity
         Ok, InvalidArgument, InvalidBinary, UnsupportedBinary, InsufficientWork,
         Busy, QueueRejected, NotReady, NodeNotFound, DivideByZero, NonFinite,
         InvalidValueType, UnknownCustomNode, InvalidHandle, InstructionBudgetExceeded,
-        OutOfMemory, InternalError, CounterOverflow = 17
+        OutOfMemory, InternalError, CounterOverflow = 17, ArithmeticOverflow = 18
+    }
+
+    public enum NativeValueType : int
+    {
+        None = 0, Float = 1, Int32 = 2, Vector2 = 3, Vector3 = 4,
+        Vector4 = 5, Color = 6, Enum = 7, Unknown = 255
     }
 
     public enum SpawnableTemplatePayloadKind : uint
     {
         RenderConfiguration, GpuContainers, GpuPrograms = 2
+    }
+
+    public enum SpawnableHostEventKind : uint
+    {
+        Spawn = 1, Stop = 2, Destroy = 3, Signal = 4, ForceTerminated = 5
     }
 
     [StructLayout(LayoutKind.Explicit, Pack = 8, Size = 40)]
@@ -67,6 +80,7 @@ namespace LiberaFx.Unity
     public sealed class SpawnableHostEvent
     {
         public uint Kind { get; }
+        public SpawnableHostEventKind EventKind => (SpawnableHostEventKind)Kind;
         public byte[] ContainerId { get; }
         public ulong InstanceId { get; }
         public double Time { get; }
@@ -205,6 +219,21 @@ namespace LiberaFx.Unity
         internal static extern NativeResult libra_bind_parameter(
             ulong instance, byte* id, uint slot, uint component, out uint binding);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_value_type(
+            ulong instance, uint binding, out NativeValueType type);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_parameter_type(
+            ulong instance, uint binding, out NativeValueType type);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_value_read_int32(
+            ulong instance, uint binding, out int value);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_parameter_get_int32(
+            ulong instance, uint binding, out int value);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_parameter_set_int32(
+            ulong instance, uint binding, int value);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_parameter_get(ulong instance, uint binding, out double value);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_parameter_set(ulong instance, uint binding, double value);
@@ -237,6 +266,19 @@ namespace LiberaFx.Unity
         internal static extern NativeResult libra_sample_sprite_atlas(
             double frame, uint columns, uint rows, out AtlasFrame atlas);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_sample_sprite_rect(
+            uint frameIndex, float u, float v, float width, float height, out AtlasFrame atlas);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_sample_sprite_sequence(
+            double frameInput, double elapsedSeconds, double fps, double* durationFrames,
+            uint frameCount, uint startFrame, uint endFrame, uint loop, uint playing,
+            out uint frameIndex);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_sample_sprite_composition(
+            double elapsedSeconds, double fps, double durationFrames, uint loop,
+            double* durations, uint frameCount, double* keys, uint keyCount,
+            out uint frameIndex, double* pose);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_make_sprite_quad(
             in AtlasFrame atlas, float width, float height, SpriteVertex* vertices);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
@@ -247,6 +289,12 @@ namespace LiberaFx.Unity
         internal static extern NativeResult libra_spawnable_host_release(ulong host);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_advance(ulong host, double time, double frameDelta);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_set_quality(
+            ulong host, byte availability, byte tier, byte source, ulong frameSerial);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_instance_set_quality(
+            ulong instance, byte availability, byte tier, byte source, ulong frameSerial);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_dispatch_signal(ulong host, byte* nodeId);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
@@ -260,6 +308,12 @@ namespace LiberaFx.Unity
         internal static extern NativeResult libra_spawnable_host_request_natural_end(ulong host);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_stop(ulong host);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_force_terminate(
+            ulong host, uint scopeKind, byte* containerId, ulong instance);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_notify_end_request(
+            ulong host, uint scopeKind, byte* containerId, ulong instance, byte* userSignalNodeId);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_root_value(
             ulong host, byte* nodeId, out NativeValue value);
@@ -334,7 +388,7 @@ namespace LiberaFx.Unity
         }
     }
 
-    public sealed unsafe class NativeInstance : IDisposable
+    public sealed unsafe partial class NativeInstance : IDisposable
     {
         private ulong handle;
         internal NativeInstance(ulong program)
@@ -350,7 +404,7 @@ namespace LiberaFx.Unity
             }
         }
 
-            public class NativeSpawnableHostBase : IDisposable
+            public partial class NativeSpawnableHostBase : IDisposable
             {
                 private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
                 private ulong handle;
@@ -381,6 +435,10 @@ namespace LiberaFx.Unity
 
                 public NativeResult Advance(double time, double frameDelta) =>
                     Native.libra_spawnable_host_advance(Alive, time, frameDelta);
+
+                public NativeResult SetHostQuality(HostQualitySnapshot snapshot) =>
+                    Native.libra_spawnable_host_set_quality(Alive, (byte)snapshot.Availability,
+                        (byte)snapshot.Tier, (byte)snapshot.Source, snapshot.FrameSerial);
 
                 public NativeResult DispatchSignal(string nodeGuid)
                 {
@@ -416,14 +474,52 @@ namespace LiberaFx.Unity
                 public NativeResult RequestNaturalEnd() => Native.libra_spawnable_host_request_natural_end(Alive);
                 public NativeResult Stop() => Native.libra_spawnable_host_stop(Alive);
 
-                public NativeResult ReadRootValue(string nodeGuid, out NativeValue value)
+                // Owner-thread only; native returns Busy on another thread.
+                public NativeResult ForceTerminate() =>
+                    Native.libra_spawnable_host_force_terminate(Alive, 0, null, 0);
+
+                public NativeResult ForceTerminateChild(byte[] containerId, ulong instance)
                 {
-                    var id = new NativeSignal(nodeGuid).Id;
+                    if (containerId == null || containerId.Length != 16 || instance == 0)
+                        return NativeResult.InvalidArgument;
+                    fixed (byte* container = containerId)
+                        return Native.libra_spawnable_host_force_terminate(Alive, 1, container, instance);
+                }
+
+                public NativeResult NotifyEndRequest(string userSignalNodeGuid)
+                {
+                    if (!Guid.TryParse(userSignalNodeGuid, out var guid) || guid == Guid.Empty)
+                        return NativeResult.InvalidArgument;
+                    var id = new NativeSignal(userSignalNodeGuid).Id;
+                    fixed (byte* node = id)
+                        return Native.libra_spawnable_host_notify_end_request(Alive, 0, null, 0, node);
+                }
+
+                public NativeResult NotifyChildEndRequest(byte[] containerId, ulong instance,
+                    string userSignalNodeGuid)
+                {
+                    if (containerId == null || containerId.Length != 16 || instance == 0 ||
+                        !Guid.TryParse(userSignalNodeGuid, out var guid) || guid == Guid.Empty)
+                        return NativeResult.InvalidArgument;
+                    var id = new NativeSignal(userSignalNodeGuid).Id;
+                    fixed (byte* container = containerId)
+                    fixed (byte* node = id)
+                        return Native.libra_spawnable_host_notify_end_request(Alive, 1, container, instance, node);
+                }
+
+                public NativeResult ReadRootValue(string nodeGuid, out NativeValue value)
+                    => ReadRootValue(new NativeSignal(nodeGuid).Id, out value);
+
+                internal NativeResult ReadRootValue(byte[] id, out NativeValue value)
+                {
                     fixed (byte* pointer = id)
                         return Native.libra_spawnable_host_root_value(Alive, pointer, out value);
                 }
 
                 public NativeResult ReadChildValue(byte[] containerId, ulong instance, string nodeGuid,
+                    out NativeValue value) => ReadChildValue(containerId, instance, new NativeSignal(nodeGuid).Id, out value);
+
+                internal NativeResult ReadChildValue(byte[] containerId, ulong instance, byte[] id,
                     out NativeValue value)
                 {
                     if (containerId == null || containerId.Length != 16)
@@ -431,7 +527,6 @@ namespace LiberaFx.Unity
                         value = default;
                         return NativeResult.InvalidArgument;
                     }
-                    var id = new NativeSignal(nodeGuid).Id;
                     fixed (byte* container = containerId)
                     fixed (byte* node = id)
                         return Native.libra_spawnable_host_child_value(Alive, container, instance, node, out value);
@@ -593,8 +688,21 @@ namespace LiberaFx.Unity
         }
         public NativeResult SetParameter(uint binding, double value) =>
             Native.libra_parameter_set(Alive, binding, value);
+        public NativeResult GetValueType(uint binding, out NativeValueType type) =>
+            Native.libra_value_type(Alive, binding, out type);
+        public NativeResult GetParameterType(uint binding, out NativeValueType type) =>
+            Native.libra_parameter_type(Alive, binding, out type);
+        public NativeResult ReadInt32(uint binding, out int value) =>
+            Native.libra_value_read_int32(Alive, binding, out value);
+        public NativeResult GetParameterInt32(uint binding, out int value) =>
+            Native.libra_parameter_get_int32(Alive, binding, out value);
+        public NativeResult SetParameterInt32(uint binding, int value) =>
+            Native.libra_parameter_set_int32(Alive, binding, value);
         public NativeResult SetTimeContext(double effectTime, double frameDelta) =>
             Native.libra_instance_set_time_context(Alive, effectTime, frameDelta);
+        public NativeResult SetHostQuality(HostQualitySnapshot snapshot) =>
+            Native.libra_instance_set_quality(Alive, (byte)snapshot.Availability,
+                (byte)snapshot.Tier, (byte)snapshot.Source, snapshot.FrameSerial);
         public NativeResult GetParameter(uint binding, out double value) =>
             Native.libra_parameter_get(Alive, binding, out value);
         // Caller caches both arrays. Pinning blittable PODs avoids array marshalling
@@ -648,6 +756,39 @@ namespace LiberaFx.Unity
         }
         public static NativeResult SampleAtlas(double frame, uint columns, uint rows, out AtlasFrame atlas) =>
             Native.libra_sample_sprite_atlas(frame, columns, rows, out atlas);
+        public static NativeResult SampleRect(uint frameIndex, float u, float v, float width, float height,
+            out AtlasFrame atlas) => Native.libra_sample_sprite_rect(frameIndex, u, v, width, height, out atlas);
+        public static unsafe NativeResult SampleSpriteSequence(double frameInput, double elapsedSeconds, double fps,
+            double[] durationFrames, uint startFrame, uint endFrame, bool loop, bool playing, out uint frameIndex)
+        {
+            if (durationFrames == null || durationFrames.Length == 0 || durationFrames.Length > 4096)
+            {
+                frameIndex = 0;
+                return NativeResult.InvalidArgument;
+            }
+            fixed (double* durations = durationFrames)
+                return Native.libra_sample_sprite_sequence(frameInput, elapsedSeconds, fps, durations,
+                    (uint)durationFrames.Length, startFrame, endFrame, loop ? 1u : 0u,
+                    playing ? 1u : 0u, out frameIndex);
+        }
+        public static unsafe NativeResult SampleSpriteComposition(double elapsedSeconds, double fps,
+            double durationFrames, bool loop, double[] durations, double[] keys, out uint frameIndex,
+            out (double x, double y, double rotation, double sx, double sy) pose)
+        {
+            double* output = stackalloc double[5];
+            pose = default;
+            frameIndex = 0;
+            if (durations == null || keys == null || keys.Length % 6 != 0)
+                return NativeResult.InvalidArgument;
+            fixed (double* d = durations, k = keys)
+            {
+                var result = Native.libra_sample_sprite_composition(elapsedSeconds, fps, durationFrames,
+                    loop ? 1u : 0u, d, (uint)durations.Length, k, (uint)(keys.Length / 6), out frameIndex, output);
+                if (result == NativeResult.Ok) pose = (output[0], output[1], output[2], output[3], output[4]);
+                return result;
+            }
+        }
+
         public static NativeResult MakeQuad(in AtlasFrame atlas, float width, float height, SpriteVertex[] vertices)
         {
             if (vertices == null || vertices.Length < 4) return NativeResult.InvalidArgument;

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
@@ -15,15 +16,16 @@ public partial class SpriteEditorWindow : Window
     private readonly SpriteEditorViewModel _model = null!;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(33) };
     private readonly Stopwatch _clock = Stopwatch.StartNew();
+    private bool _initialAsset;
 
     public SpriteEditorWindow()
     {
         InitializeComponent();
     }
 
-    public SpriteEditorWindow(MainViewModel main) : this()
+    public SpriteEditorWindow(MainViewModel main, bool loadSelected = true) : this()
     {
-        _model = new SpriteEditorViewModel(main);
+        _model = new SpriteEditorViewModel(main, loadSelected);
         DataContext = _model;
         _model.PropertyChanged += ModelChanged;
         _model.Catalog.PropertyChanged += ModelChanged;
@@ -31,7 +33,8 @@ public partial class SpriteEditorWindow : Window
         Opened += (_, _) =>
         {
             _model.Catalog.RefreshPeers();
-            if (_model.Catalog.SelectedPeer is not null) _ = _model.Catalog.SearchCommand.ExecuteAsync(null);
+            if (!_initialAsset && _model.Catalog.SelectedPeer is not null)
+                _ = _model.Catalog.SearchCommand.ExecuteAsync(null);
             _timer.Start();
         };
         Closed += (_, _) =>
@@ -43,16 +46,102 @@ public partial class SpriteEditorWindow : Window
         };
     }
 
+    internal bool SelectInitialAsset(Guid peerId, EngineAsset asset)
+    {
+        if (IsVisible || !string.Equals(asset.AssetClass, "texture", StringComparison.OrdinalIgnoreCase))
+            return false;
+        var catalog = _model.Catalog;
+        catalog.RefreshPeers();
+        var peer = catalog.Peers.FirstOrDefault(candidate => candidate.ClientId == peerId);
+        if (peer is null) return false;
+        catalog.SelectedPeer = peer;
+        catalog.Assets.Clear();
+        catalog.Assets.Add(asset);
+        catalog.SelectedAsset = asset;
+        _initialAsset = true;
+        return true;
+    }
+
     private void ModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (sender == _model && e.PropertyName is nameof(SpriteEditorViewModel.Playing) or nameof(SpriteEditorViewModel.Frame))
             _clock.Restart();
         Atlas.InvalidateVisual();
         FramePreview.InvalidateVisual();
+        CompositionPreview.InvalidateVisual();
+        Timeline.Refresh();
     }
 
     private void Tick(object? sender, EventArgs e) => _model.Tick(_clock.Elapsed.TotalSeconds);
     private void OnLoadSelected(object? sender, RoutedEventArgs e) => _model.LoadSelected();
+    private void OnUseEnginePreview(object? sender, RoutedEventArgs e) => _model.ClearSourceImage();
+    private void OnAddCell(object? sender, RoutedEventArgs e) => _model.AddCell();
+    private void OnDeleteCell(object? sender, RoutedEventArgs e) => _model.RemoveCell();
+    private void OnAddFrame(object? sender, RoutedEventArgs e) => _model.AddFrame();
+    private void OnCellDoubleTapped(object? sender, Avalonia.Input.TappedEventArgs e) => _model.AddFrame();
+    private void OnDuplicateFrame(object? sender, RoutedEventArgs e) => _model.DuplicateFrame();
+    private void OnDeleteFrame(object? sender, RoutedEventArgs e) => _model.RemoveFrame();
+    private void OnFrameUp(object? sender, RoutedEventArgs e) => _model.MoveFrame(-1);
+    private void OnFrameDown(object? sender, RoutedEventArgs e) => _model.MoveFrame(1);
+    private void OnPreviousFrame(object? sender, RoutedEventArgs e) =>
+        _model.SelectFrame(Math.Max(0, _model.PreviewFrame - 1));
+    private void OnNextFrame(object? sender, RoutedEventArgs e) =>
+        _model.SelectFrame(Math.Min(Math.Max(0, _model.Frames.Count - 1), _model.PreviewFrame + 1));
+    private void OnTogglePlayback(object? sender, RoutedEventArgs e) => _model.Playing = !_model.Playing;
+    private void OnResetZoom(object? sender, RoutedEventArgs e) { Atlas.ResetZoom(); CompositionPreview.ResetZoom(); }
+    private void OnAddPart(object? sender, RoutedEventArgs e) => _model.AddPart();
+    private void OnRemovePart(object? sender, RoutedEventArgs e) => _model.RemovePart();
+    private void OnPartBackward(object? sender, RoutedEventArgs e) => _model.MovePart(-1);
+    private void OnPartForward(object? sender, RoutedEventArgs e) => _model.MovePart(1);
+    private void OnSetKey(object? sender, RoutedEventArgs e) => _model.SetTransformKey();
+    private void OnDeleteKey(object? sender, RoutedEventArgs e) => _model.RemoveTransformKey();
+    private void OnAuthoringTabChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (AuthoringTabs?.SelectedIndex == 1 && PartProperties is not null) PartProperties.IsExpanded = true;
+    }
+
+    private async void OnAutoFlipbook(object? sender, RoutedEventArgs e)
+    {
+        if (!_model.CanDrawCells || !_model.TryGridSize(out _, out _))
+        {
+            _model.GenerateGridFlipbook();
+            return;
+        }
+        if (_model.Frames.Count > 0)
+        {
+            var text = LocalizationService.Shared;
+            var dialog = new Window
+            {
+                Title = text.Get("Sprite.AutoFlipbook"), Width = 480, SizeToContent = SizeToContent.Height,
+                CanResize = false, ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+            var cancel = new Button { Content = text.Get("Sprite.Cancel") };
+            var confirm = new Button { Content = text.Get("Sprite.ReplaceTimeline") };
+            cancel.Click += (_, _) => dialog.Close(false);
+            confirm.Click += (_, _) => dialog.Close(true);
+            dialog.Content = new StackPanel
+            {
+                Margin = new Avalonia.Thickness(18), Spacing = 14,
+                Children =
+                {
+                    new TextBlock { Text = text.Get("Sprite.ReplaceTimelineNotice", _model.Frames.Count),
+                        TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                    new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 8,
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right, Children = { cancel, confirm } }
+                }
+            };
+            if (!await dialog.ShowDialog<bool>(this)) return;
+        }
+        _model.GenerateGridFlipbook();
+    }
+    private void OnScrub(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (sender is Slider { IsFocused: false, IsPointerOver: false } ||
+            _model is null || _model.Frames.Count == 0) return;
+        if (_model is not null)
+            _model.SelectFrame(Math.Clamp((int)Math.Round(e.NewValue), 0, _model.Frames.Count - 1));
+    }
+
     private async void OnOpenLocal(object? sender, RoutedEventArgs e)
     {
         try

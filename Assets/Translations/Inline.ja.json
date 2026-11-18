@@ -1,0 +1,10 @@
+{
+  "Inline.Toggle": "編集可能な子グラフを展開／折りたたむ",
+  "Inline.Maximize": "子グラフを全画面で開く（パンくずから戻る）",
+  "Inline.Resize": "子グラフの表示サイズを変更",
+  "Inline.Disconnect": "選択ノードの接続を切断",
+  "Inline.Locked": "読み取り専用：親グループがロックされているか、ライブラリを利用できません。",
+  "Inline.MissingGraph": "子グラフが存在しないか、この場所では開けません。",
+  "Inline.ExternalEditorUnavailable": "このノードの専用エディターを開くホストが接続されていません。",
+  "Inline.History.Presentation": "子グラフのサイズ変更／展開"
+}

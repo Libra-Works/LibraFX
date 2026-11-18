@@ -2,8 +2,16 @@ using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
 using System.IO.Pipes;
+using System.Net;
+using System.Net.Sockets;
+using System.Net.WebSockets;
+using System.Security.Cryptography;
+using Avalonia;
+using Avalonia.Threading;
+using LiberaFx;
 using LiberaFx.Services;
 using LiberaFx.Models.Graph;
+using LiberaFx.Models.Resources;
 using LiberaFx.ViewModels;
 
 internal static class AssetSceneProtocolTests
@@ -13,8 +21,157 @@ internal static class AssetSceneProtocolTests
         VerifyConnectionInvitation();
         VerifyGpuScenes();
         VerifyQueriesAsync().GetAwaiter().GetResult();
+        RunWithDispatcher(VerifyResourceIdentityAuthoringLoopbackAsync());
         VerifyAssetWindowRequestLifetimeAsync().GetAwaiter().GetResult();
         VerifyLocalDiscoveryAsync().GetAwaiter().GetResult();
+    }
+
+    private static async Task VerifyResourceIdentityAuthoringLoopbackAsync()
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+        var projectId = Guid.NewGuid();
+        var main = new MainViewModel();
+        using var portProbe = new TcpListener(IPAddress.Loopback, 0);
+        portProbe.Start();
+        var port = ((IPEndPoint)portProbe.LocalEndpoint).Port;
+        portProbe.Stop();
+        using var preview = new PreviewHost(port);
+        using var socket = new ClientWebSocket();
+        socket.Options.SetRequestHeader("X-LiberaFx-Preview-Token", preview.AccessToken);
+        socket.Options.RemoteCertificateValidationCallback = (_, certificate, _, _) =>
+            certificate is not null && string.Equals(
+                Convert.ToHexString(SHA256.HashData(certificate.GetRawCertData())),
+                preview.Fingerprint, StringComparison.OrdinalIgnoreCase);
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        Task? editor = null;
+        Guid peer = Guid.Empty;
+        try
+        {
+            await preview.StartAsync(main);
+            await socket.ConnectAsync(new Uri($"wss://127.0.0.1:{port}/preview?protocol=3"), stop.Token);
+            await socket.SendAsync(Encoding.UTF8.GetBytes(
+                """{"type":"hello","engine":"Unity","role":"editor","version":1,"capabilities":["resourceIdentity"],"viewerName":"Unity loopback"}"""),
+                WebSocketMessageType.Text, true, stop.Token);
+            editor = FakeUnityEditorLoopAsync(socket, projectId, stop.Token);
+            for (var attempt = 0; attempt < 200 && main.PreviewTelemetry.Clients().Count == 0; attempt++)
+                await Task.Delay(10, stop.Token);
+            peer = main.PreviewTelemetry.Clients().Single().ClientId;
+
+            var node = RenderNodeAuthoring.CreateModel(main.Graph,
+                new EngineAsset("/Game/Legacy/Model.Model", "Legacy model", "model", "Unity"));
+            using var pane = new ResourceIdentityPaneViewModel(main);
+            await pane.RefreshProjectCommand.ExecuteAsync(null);
+            Require(pane.ProjectState?.Project == new EngineProjectIdentity("Unity", projectId),
+                "The authoring pane must acquire the selected editor's persistent project identity.");
+            pane.SelectedTargetNode = pane.TargetNodes.Single(target => target.Id == node.Id);
+            pane.SelectedLocation = pane.Locations.Single(location => location.Id == "assetPath");
+            pane.ResourceName = "Registered model";
+            pane.ResourceKind = "model";
+            pane.BindingValue = "a".PadLeft(32, '0') + ":12345";
+            await pane.RegisterAndAssignCommand.ExecuteAsync(null);
+
+            var identity = main.Graph.ResourceIdentities;
+            if (identity is not { Resources.Count: 1, ResourceBindings.Count: 1, Uses.Count: 1 })
+                throw new InvalidOperationException(
+                    $"The UI did not persist its resource identity and graph use (status: '{pane.Status}', " +
+                    $"CanRegister: {pane.CanRegister}, project status: '{pane.ProjectState?.Status}', " +
+                    $"target: '{pane.SelectedTargetNode?.Id}', location: '{pane.SelectedLocation?.Id}').");
+            Require(identity.Uses[0].NodeId == node.Id && identity.Uses[0].Location == "assetPath" &&
+                identity.Uses[0].ResourceId == identity.Resources[0].Id &&
+                main.Graph.GetNode(node.Id).Parameters!.Single(parameter => parameter.Id == "assetPath")
+                    .Value.GetString() == "/Game/Legacy/Model.Model",
+                "The UI must query an explicit opaque binding, create an identity/use and preserve the original graph value.");
+
+            await pane.DeliverUnityBindingsCommand.ExecuteAsync(null);
+            Require(pane.Status.Contains("Assets/LiberaFx/LiberaFxBindings.asset", StringComparison.Ordinal),
+                "The UI delivery command must receive confirmation of the Unity binding asset path.");
+            main.Graph.History.Undo();
+            Require(main.Graph.ResourceIdentities is null &&
+                main.Graph.GetNode(node.Id).Parameters!.Single(parameter => parameter.Id == "assetPath")
+                    .Value.GetString() == "/Game/Legacy/Model.Model",
+                "Undoing a migrated identity use must retain the legacy graph value.");
+            main.Graph.History.Redo();
+            Require(main.Graph.ResourceIdentities?.Uses.Single().ResourceId == identity.Resources[0].Id,
+                "Redo must restore the exact resource identity and use.");
+        }
+        finally
+        {
+            stop.Cancel();
+            socket.Abort();
+            if (editor is not null)
+                try { await editor; }
+                catch (OperationCanceledException) { }
+                catch (WebSocketException) { }
+                catch (ObjectDisposedException) { }
+            await preview.StopAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            if (peer != Guid.Empty) main.PreviewAssets.Disconnect(peer);
+            main.DisposeStorageFiles();
+        }
+
+        static async Task FakeUnityEditorLoopAsync(ClientWebSocket client, Guid project, CancellationToken cancellationToken)
+        {
+            var buffer = new byte[2 * 1024 * 1024];
+            while (!cancellationToken.IsCancellationRequested && client.State == WebSocketState.Open)
+            {
+                var length = 0;
+                WebSocketReceiveResult result;
+                do
+                {
+                    result = await client.ReceiveAsync(new ArraySegment<byte>(buffer, length, buffer.Length - length),
+                        cancellationToken);
+                    if (result.MessageType == WebSocketMessageType.Close) return;
+                    length += result.Count;
+                    if (length == buffer.Length) return;
+                } while (!result.EndOfMessage);
+                if (result.MessageType != WebSocketMessageType.Binary || length < CompiledPreviewProtocol.HeaderSize ||
+                    BinaryPrimitives.ReadUInt16LittleEndian(buffer.AsSpan(6)) != (ushort)CompiledPreviewKind.Scene)
+                    continue;
+                var payloadLength = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(buffer.AsSpan(44)));
+                if (payloadLength <= 0 || payloadLength != length - CompiledPreviewProtocol.HeaderSize) continue;
+                using var command = JsonDocument.Parse(buffer.AsMemory(CompiledPreviewProtocol.HeaderSize, payloadLength));
+                var root = command.RootElement;
+                var type = root.GetProperty("type").GetString();
+                if (type is not ("resource_identity_project" or "resource_identity_probe" or
+                    "resource_identity_deliver")) continue;
+                var requestId = root.GetProperty("requestId").GetGuid();
+                object response = type switch
+                {
+                    "resource_identity_project" => new
+                    {
+                        type = "resource_identity_result", requestId,
+                        operation = root.GetProperty("operation").GetString(),
+                        status = "Ready", projectState = "Ready",
+                        project = new { engine = "Unity", projectId = project.ToString("D") },
+                        detail = "Unity test project is ready."
+                    },
+                    "resource_identity_probe" => Probe(root, requestId, project),
+                    "resource_identity_deliver" => new
+                    {
+                        type = "resource_identity_result", requestId, operation = "deliver",
+                        status = "Resolved", assetPath = "Assets/LiberaFx/LiberaFxBindings.asset"
+                    },
+                    _ => throw new InvalidOperationException("Unexpected resource identity request.")
+                };
+                await client.SendAsync(JsonSerializer.SerializeToUtf8Bytes(response),
+                    WebSocketMessageType.Text, true, cancellationToken);
+            }
+
+            static object Probe(JsonElement request, Guid requestId, Guid project)
+            {
+                var binding = request.GetProperty("binding");
+                Require(binding.GetProperty("format").GetString() == "unity.asset-guid-local-id.v1" &&
+                    binding.GetProperty("value").GetString() == "0000000000000000000000000000000a:12345",
+                    "Resource registration must probe the exact author-supplied Unity GUID/local-file-ID binding.");
+                return new
+                {
+                    type = "resource_identity_result", requestId, operation = "probe",
+                    status = "Resolved", actualKind = "model",
+                    project = new { engine = "Unity", projectId = project.ToString("D") },
+                    detail = "Exact Unity object resolved."
+                };
+            }
+        }
     }
 
     private static async Task VerifyLocalDiscoveryAsync()
@@ -210,4 +367,20 @@ internal static class AssetSceneProtocolTests
     }
 
     private static void Require(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
+
+    private static void RunWithDispatcher(Task task, int timeoutSeconds = 35)
+    {
+        if (!task.IsCompleted)
+        {
+            var frame = new DispatcherFrame();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+            using var registration = timeout.Token.Register(() =>
+                Dispatcher.UIThread.Post(() => frame.Continue = false));
+            _ = task.ContinueWith(_ =>
+                Dispatcher.UIThread.Post(() => frame.Continue = false), TaskScheduler.Default);
+            Dispatcher.UIThread.PushFrame(frame);
+        }
+        if (!task.IsCompleted) throw new TimeoutException("Resource identity preview loopback timed out.");
+        task.GetAwaiter().GetResult();
+    }
 }

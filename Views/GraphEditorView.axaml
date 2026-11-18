@@ -11,7 +11,8 @@
     </UserControl.Resources>
     <Grid RowDefinitions="Auto,*,Auto">
         <Border Grid.Row="0" Padding="6,3" Background="{DynamicResource EffectSurfaceBrush}"
-                BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="0,0,0,1">
+                BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="0,0,0,1"
+                IsVisible="{Binding !IsInlineWorkspace}">
             <ItemsControl ItemsSource="{Binding Breadcrumbs}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -39,6 +40,9 @@
                 Background="{DynamicResource EffectSurfaceBrush}"
                 BorderBrush="{DynamicResource EffectBorderBrush}"
                 BorderThickness="0,1,0,0">
+            <StackPanel Spacing="3">
+            <TextBlock Text="{DynamicResource Text.Inline.Locked}" IsVisible="{Binding IsReadOnly}"
+                       TextWrapping="Wrap" />
             <StackPanel Orientation="Horizontal" Spacing="6">
                 <views:IconButton Icon="ZoomOut" ToolTip.Tip="{DynamicResource Text.Editor.ZoomOut}"
                         AutomationProperties.Name="{DynamicResource Text.Editor.ZoomOut}" Click="OnZoomOutClick" />
@@ -63,9 +67,27 @@
                 <views:IconButton Icon="Group" ToolTip.Tip="{DynamicResource Text.Editor.Group}"
                         AutomationProperties.Name="{DynamicResource Text.Editor.Group}" Click="OnGroupSelectionClick"
                         IsEnabled="{Binding HasSelection}" />
+                <views:IconButton Icon="Disconnect" IsEnabled="{Binding HasSelection}"
+                                  ToolTip.Tip="{DynamicResource Text.Inline.Disconnect}"
+                                  AutomationProperties.Name="{DynamicResource Text.Inline.Disconnect}">
+                    <Button.Flyout>
+                        <Flyout>
+                            <ItemsControl ItemsSource="{Binding SelectedConnections}" MaxWidth="380">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="vm:GraphConnectionViewModel">
+                                        <Button Content="{Binding Description}" Tag="{Binding}"
+                                                Click="OnDisconnectConnectionClick"
+                                                HorizontalAlignment="Stretch" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Flyout>
+                    </Button.Flyout>
+                </views:IconButton>
                 <TextBlock Text="{Binding ConnectionStatus}"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            </StackPanel>
             </StackPanel>
         </Border>
 
@@ -80,6 +102,7 @@
                       VerticalScrollBarVisibility="Auto">
             <Grid x:Name="ZoomHost" HorizontalAlignment="Left" VerticalAlignment="Top">
             <Grid x:Name="GraphCanvas"
+                  IsEnabled="{Binding !IsReadOnly}"
                   Width="1600"
                   Height="1000"
                   HorizontalAlignment="Left"

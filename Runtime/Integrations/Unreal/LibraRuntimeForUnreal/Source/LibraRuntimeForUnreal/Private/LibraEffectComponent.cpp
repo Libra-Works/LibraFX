@@ -4,6 +4,9 @@
 #include "LibraNativeState.h"
 #include "LibraTaskScheduler.h"
 #include "LibraCpuProfiler.h"
+#include "LibraExecutionDebugAdapter.h"
+#include "LibraQualityContext.h"
+#include "EngineGlobals.h"
 #include "Engine/World.h"
 
 struct FLibraEffectState final
@@ -16,8 +19,46 @@ struct FLibraEffectState final
     FLibraTaskScheduler scheduler;
     double requestedTime = 0;
     bool pending = false;
+#if PLATFORM_WINDOWS
+    TUniquePtr<liberafx::host::WindowsExecutionDebugClient> executionDebug;
+#endif
+    bool signalJob = false;
+    liberafx::Job evaluationJob = nullptr;
+    void* evaluationData = nullptr;
+    liberafx::Result evaluationResult = liberafx::Result::NotReady;
 
-    ~FLibraEffectState() { Wait(); }
+    static bool EnqueueEvaluation(void* context, liberafx::Job job, void* data) noexcept
+    {
+        auto& state = *static_cast<FLibraEffectState*>(context);
+        state.evaluationJob = job;
+        state.evaluationData = data;
+        auto scheduler = state.scheduler.GetScheduler();
+        return scheduler.enqueue(scheduler.context, [](void* payload) noexcept
+        {
+            auto& item = *static_cast<FLibraEffectState*>(payload);
+            item.evaluationJob(item.evaluationData);
+            item.evaluationResult = item.instance.result();
+            if (item.evaluationResult == liberafx::Result::Ok)
+                item.evaluationResult = item.instance.dispatchGeneratedSignals(10000);
+        }, &state);
+    }
+    liberafx::SignalHandle debugSignal;
+    size_t debugSignalBudget = 0;
+    liberafx::Result debugSignalResult = liberafx::Result::NotReady;
+
+    ~FLibraEffectState() { DetachDebugger(); Wait(); }
+    void DetachDebugger()
+    {
+#if PLATFORM_WINDOWS
+        if (executionDebug)
+        {
+            executionDebug->stop();
+            Wait();
+            instance.setDebugHooks({});
+            executionDebug.Reset();
+        }
+#endif
+    }
     void Wait()
     {
         scheduler.Wait();
@@ -33,18 +74,21 @@ auto CreateLibraState(TSharedPtr<const FCompiledLibraProgram, ESPMode::ThreadSaf
 {
     if (compiled->result != liberafx::Result::Ok) return ToLibraResult(compiled->result);
     auto workBytes = compiled->program.workBytes();
+    auto workCount = workBytes / sizeof(double) + (workBytes % sizeof(double) != 0 ? 1u : 0u);
     auto defaultsCount = compiled->program.parameterValueCount();
     auto workAlignment = compiled->program.workAlignment();
     auto defaultsAlignment = compiled->program.defaultsAlignment();
     if (workAlignment == 0 || workAlignment > 64 || defaultsAlignment == 0 || defaultsAlignment > 64)
         return ELibraRuntimeResult::InvalidArgument;
-    if (maximumWorkingBytes <= 0 || workBytes > static_cast<uint64>(maximumWorkingBytes) ||
-        defaultsCount > (static_cast<uint64>(maximumWorkingBytes) - workBytes) / sizeof(double) ||
-        workBytes / sizeof(double) > MAX_int32 || defaultsCount > MAX_int32)
+    if (maximumWorkingBytes <= 0 || workCount > MAX_int32 || defaultsCount > MAX_int32)
+        return ELibraRuntimeResult::InsufficientWork;
+    auto allocatedWorkBytes = workCount * sizeof(double);
+    if (allocatedWorkBytes > static_cast<uint64>(maximumWorkingBytes) ||
+        defaultsCount > (static_cast<uint64>(maximumWorkingBytes) - allocatedWorkBytes) / sizeof(double))
         return ELibraRuntimeResult::InsufficientWork;
     auto state = MakeShared<FLibraEffectState, ESPMode::NotThreadSafe>();
     state->compiled = MoveTemp(compiled);
-    state->work.SetNumZeroed(static_cast<int32>(workBytes / sizeof(double)));
+    state->work.SetNumZeroed(static_cast<int32>(workCount));
     state->defaults.SetNumZeroed(static_cast<int32>(defaultsCount));
     if ((state->work.Num() != 0 && reinterpret_cast<UPTRINT>(state->work.GetData()) % workAlignment != 0) ||
         (state->defaults.Num() != 0 && reinterpret_cast<UPTRINT>(state->defaults.GetData()) % defaultsAlignment != 0))
@@ -68,6 +112,53 @@ ULibraEffectComponent::ULibraEffectComponent()
 }
 
 ULibraEffectComponent::~ULibraEffectComponent() = default;
+
+auto ULibraEffectComponent::AttachExecutionDebugger(const FString& invitation) -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+#if PLATFORM_WINDOWS
+    if (Package) return AttachPackageDebugger(GetPackageDebuggerGeneration(), FGuid{}, 0, invitation);
+    auto ready = EnsureState();
+    if (ready != ELibraRuntimeResult::Ok) return ready;
+    auto& state = *NativeState;
+    if (state.pending || state.executionDebug) return ELibraRuntimeResult::Busy;
+    auto& bytes = state.compiled->bytecode;
+    auto candidate = MakeUnique<liberafx::host::WindowsExecutionDebugClient>(
+        liberafx::host::ExecutionDebugProtocol::programIdentity(bytes.GetData(), bytes.Num()));
+    auto result = state.instance.setDebugHooks(candidate->hooks());
+    if (result != liberafx::Result::Ok) return ToLibraResult(result);
+    if (!candidate->start(TCHAR_TO_UTF8(*invitation)))
+    {
+        state.instance.setDebugHooks({});
+        return ELibraRuntimeResult::InvalidArgument;
+    }
+    state.executionDebug = MoveTemp(candidate);
+    return ELibraRuntimeResult::Ok;
+#else
+    return ELibraRuntimeResult::UnsupportedBinary;
+#endif
+}
+
+void ULibraEffectComponent::DetachExecutionDebugger()
+{
+    check(IsInGameThread());
+    if (Package && PackagePlayback)
+    {
+        PackagePlayback->DetachExecutionDebugger();
+        SyncPackageState();
+        return;
+    }
+    if (NativeState) NativeState->DetachDebugger();
+}
+
+void ULibraEffectComponent::AttachLocalDebugger()
+{
+#if WITH_EDITORONLY_DATA
+    auto invitation = MoveTemp(LocalDebuggerInvitation);
+    LocalDebuggerInvitation.Reset();
+    LastResult = AttachExecutionDebugger(invitation.TrimStartAndEnd());
+#endif
+}
 
 void ULibraEffectComponent::BeginPlay()
 {
@@ -189,7 +280,11 @@ auto ULibraEffectComponent::Play(bool bRestart) -> ELibraRuntimeResult
     }
     if (bRestart)
     {
-        if (NativeState) NativeState->Wait();
+        if (NativeState && NativeState->pending)
+        {
+            NativeState->DetachDebugger();
+            NativeState->Wait();
+        }
         TimeSeconds = 0;
     }
     auto result = EnsureState();
@@ -256,10 +351,17 @@ auto ULibraEffectComponent::QueueEvaluation(double timeSeconds, double frameDelt
     auto& state = *NativeState;
     if (state.pending) return LastResult = ELibraRuntimeResult::Busy;
     state.requestedTime = timeSeconds;
+    state.signalJob = false;
     auto contextResult = timeSeconds >= 0 ? state.instance.setTimeContext(timeSeconds, frameDelta) :
         state.instance.clearTimeContext();
     if (contextResult != liberafx::Result::Ok) return LastResult = ToLibraResult(contextResult);
-    auto nativeResult = state.instance.updateAsync(timeSeconds, state.scheduler.GetScheduler());
+    auto quality = liberafx::HostQualitySnapshot{};
+    auto qualityResult = ReadLibraQualitySnapshot(GFrameCounter, quality);
+    if (qualityResult == liberafx::Result::Busy) return LastResult = ToLibraResult(qualityResult);
+    qualityResult = state.instance.setHostQuality(quality);
+    if (qualityResult != liberafx::Result::Ok) return LastResult = ToLibraResult(qualityResult);
+    auto scheduler = liberafx::JobScheduler{&FLibraEffectState::EnqueueEvaluation, &state};
+    auto nativeResult = state.instance.updateAsync(timeSeconds, scheduler);
     LastResult = ToLibraResult(nativeResult);
     if (nativeResult == liberafx::Result::Ok)
     {
@@ -287,6 +389,11 @@ void ULibraEffectComponent::TickComponent(float deltaTime, ELevelTick tickType, 
     }
     if (bIsPlaying)
     {
+#if PLATFORM_WINDOWS
+        // Do not accumulate game/preview time while a debug worker is in flight.
+        if (NativeState && NativeState->executionDebug && NativeState->pending &&
+            !NativeState->scheduler.IsCompleted()) return;
+#endif
         auto next = TimeSeconds + static_cast<double>(deltaTime) * PlayRate;
         if (!FMath::IsFinite(next) || !FMath::IsFinite(PlayRate) || PlayRate < 0)
         {
@@ -302,7 +409,8 @@ void ULibraEffectComponent::TickComponent(float deltaTime, ELevelTick tickType, 
     if (NativeState && NativeState->pending)
     {
         if (!NativeState->scheduler.IsCompleted()) return;
-        auto result = ToLibraResult(NativeState->instance.result());
+        auto nativeResult = NativeState->signalJob ? NativeState->debugSignalResult : NativeState->evaluationResult;
+        auto result = ToLibraResult(nativeResult);
         auto completedTime = NativeState->requestedTime;
         NativeState->Wait();
         if (!Effect || NativeState->compiled != Effect->GetCompiledProgram())
@@ -407,6 +515,33 @@ auto ULibraEffectComponent::ReadBoundValue(const FLibraValueHandle& handle, FVec
     return result;
 }
 
+auto ULibraEffectComponent::GetValueType(FGuid nodeId, ELibraValueType& valueType) -> ELibraRuntimeResult
+{
+    valueType = ELibraValueType::Unknown;
+    auto handle = FLibraValueHandle{};
+    auto result = BindValue(nodeId, handle);
+    if (result != ELibraRuntimeResult::Ok) return result;
+    auto type = liberafx::ValueType::None;
+    result = ToLibraResult(NativeState->compiled->program.valueType(handle.native.nodeIndex, type));
+    if (result == ELibraRuntimeResult::Ok) valueType = static_cast<ELibraValueType>(type);
+    return result;
+}
+
+auto ULibraEffectComponent::ReadBoundInt32Value(const FLibraValueHandle& handle, int32& value) const -> ELibraRuntimeResult
+{
+    value = 0;
+    if (handle.owner.Get() != this || !HasCurrentState()) return ELibraRuntimeResult::InvalidHandle;
+    if (NativeState->pending) return ELibraRuntimeResult::Busy;
+    return ToLibraResult(NativeState->instance.valueInt32(handle.native, value));
+}
+
+auto ULibraEffectComponent::SetBoundInt32Parameter(const FLibraParameterHandle& handle, int32 value) -> ELibraRuntimeResult
+{
+    if (handle.owner.Get() != this || !HasCurrentState()) return ELibraRuntimeResult::InvalidHandle;
+    if (NativeState->pending) return ELibraRuntimeResult::Busy;
+    return ToLibraResult(NativeState->instance.setParameterInt32(handle.native, value));
+}
+
 auto ULibraEffectComponent::ReadBoundParameter(const FLibraParameterHandle& handle, double& value) const -> ELibraRuntimeResult
 {
     value = 0;
@@ -428,6 +563,24 @@ auto ULibraEffectComponent::DispatchSignal(const FLibraSignalHandle& handle, int
     if (instructionBudget <= 0) return ELibraRuntimeResult::InvalidArgument;
     auto state = NativeState;
     if (state->pending) return ELibraRuntimeResult::Busy;
+#if PLATFORM_WINDOWS
+    if (state->executionDebug)
+    {
+        state->requestedTime = LastEvaluatedTimeSeconds;
+        state->debugSignal = handle.native;
+        state->debugSignalBudget = static_cast<size_t>(instructionBudget);
+        auto scheduler = state->scheduler.GetScheduler();
+        auto execute = [](void* data) noexcept
+        {
+            auto& job = *static_cast<FLibraEffectState*>(data);
+            job.debugSignalResult = job.instance.dispatchSignal(job.debugSignal, job.requestedTime, job.debugSignalBudget);
+        };
+        if (!scheduler.enqueue(scheduler.context, execute, state.Get())) return ELibraRuntimeResult::QueueRejected;
+        state->signalJob = state->pending = true;
+        SetComponentTickEnabled(true);
+        return ELibraRuntimeResult::Ok; // Completion follows OnEvaluationCompleted.
+    }
+#endif
     return ToLibraResult(state->instance.dispatchSignal(handle.native, LastEvaluatedTimeSeconds,
         static_cast<size_t>(instructionBudget)));
 }

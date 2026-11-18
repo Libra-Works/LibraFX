@@ -89,11 +89,17 @@ internal static class PreviewProtocolTests
                 throw new InvalidOperationException("A new v2 preview client did not receive a full snapshot.");
             var id = await Dispatcher.UIThread.InvokeAsync(() => model.Graph.CreateNode(GraphNodeKind.Float).Id);
             using var created = await ReceiveAsync(socket, token);
-            var sequence = created.RootElement.GetProperty("sequence").GetInt64();
+            await Dispatcher.UIThread.InvokeAsync(() => model.Graph.CreateNode(GraphNodeKind.GraphGroup));
+            using var grouped = await ReceiveAsync(socket, token);
+            var sequence = grouped.RootElement.GetProperty("sequence").GetInt64();
+            var beforeInlineFocus = sequence;
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
+                var document = model.ActiveDocument!.Workspace;
+                var group = document.Nodes.Single(node => node.Definition.Kind == GraphNodeKind.GraphGroup);
+                document.OpenInlineGraph(group).ActivateEditingWorkspace();
                 for (var value = 1; value <= 40; value++)
-                    model.Graph.SetParameter(model.Graph.GetNode(id), "value", JsonSerializer.SerializeToElement((double)value));
+                    document.SetParameter(document.GetNode(id), "value", JsonSerializer.SerializeToElement((double)value));
             });
             while (true)
             {
@@ -106,6 +112,8 @@ internal static class PreviewProtocolTests
                 if (root.GetProperty("changes").EnumerateArray().Any(change => change.GetProperty("value").GetDouble() == 40))
                     break;
             }
+            if (sequence != beforeInlineFocus + 40)
+                throw new InvalidOperationException("Inline focus reset or republished an unchanged preview document.");
             await socket.SendAsync(Encoding.UTF8.GetBytes("""{"type":"resync"}"""), WebSocketMessageType.Text, true, token);
             using var resync = await ReceiveAsync(socket, token);
             if (resync.RootElement.GetProperty("type").GetString() != "snapshot" ||

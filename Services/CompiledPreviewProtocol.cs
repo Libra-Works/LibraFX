@@ -35,7 +35,10 @@ public static class CompiledPreviewProtocol
             using var json = JsonDocument.Parse(utf8Json.ToArray(), new JsonDocumentOptions { MaxDepth = 32 });
             if (json.RootElement.ValueKind != JsonValueKind.Object ||
                 !json.RootElement.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String ||
-                type.GetString() is not ("asset_catalog" or "asset_details" or "asset_thumbnail" or "render_config" or "gpu_config" or "reconnect"))
+                type.GetString() is not ("asset_catalog" or "asset_details" or "asset_thumbnail" or
+                    "resource_identity_project" or "resource_identity_probe" or "resource_identity_schema" or
+                    "resource_identity_deliver" or
+                    "render_config" or "gpu_config" or "reconnect"))
                 throw new ArgumentException("Unknown scene command.");
             ValidateUniqueProperties(json.RootElement);
         }

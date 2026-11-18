@@ -115,6 +115,7 @@
   "Messages.Tool.Timeline": "Timeline",
   "Messages.Tool.Curves": "F-Curve",
   "Messages.ResourcesUnavailable": "Asset browsing and engine asset integration are not implemented yet.",
+  "Messages.AssetSelectionStale": "The caller selection changed or the engine peer is no longer available. Reopen the asset browser from the intended parameter.",
   "Messages.TimelineUnavailable": "Timeline editing is not implemented yet. Timeline data will be represented by the underlying graph.",
   "Messages.Error.NodesNotInGraph": "Both nodes must belong to this graph.",
   "Messages.Error.SelfConnection": "A node cannot connect to itself.",

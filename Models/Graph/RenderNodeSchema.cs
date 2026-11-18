@@ -23,7 +23,7 @@ public static class RenderNodeSchema
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public static bool IsRenderNode(GraphNodeDefinition definition) =>
-        definition.TypeName is "ModelDraw" or "SpriteDraw" or "SpriteAnimation";
+        definition.TypeName is "ModelDraw" or "SpriteDraw" or "SpriteAnimation" or "SpriteComposition";
 
     public static string Encode(EngineAsset asset)
     {

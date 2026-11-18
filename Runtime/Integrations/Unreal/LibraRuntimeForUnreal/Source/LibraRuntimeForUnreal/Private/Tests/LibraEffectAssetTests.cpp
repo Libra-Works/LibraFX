@@ -10,6 +10,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
+#include "Misc/ScopeExit.h"
 #include <array>
 
 namespace {
@@ -456,6 +457,114 @@ bool FLibraTransactionalEffectTest::RunTest(const FString& parameters)
     auto value = double{};
     TestEqual(TEXT("Original binding remains usable"), component->ReadBoundParameter(handle, value), ELibraRuntimeResult::Ok);
     TestEqual(TEXT("Original overrides remain intact"), value, 7.0);
+    component->Stop();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraInt32FixtureTest,
+    "Libra.Runtime.Binding.Int32Fixture", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraInt32FixtureTest::RunTest(const FString&)
+{
+    auto directory = FString{};
+    if (!FParse::Value(FCommandLine::Get(), TEXT("LibraInt32Fixture="), directory) || directory.IsEmpty())
+    {
+        AddInfo(TEXT("Int32Fixture requires an explicit compiler-produced fixture directory."));
+        return true;
+    }
+    auto bytes = TArray<uint8>{};
+    if (!TestTrue(TEXT("Int32 fixture loads"),
+        FFileHelper::LoadFileToArray(bytes, *(directory / TEXT("Int32Add.lfxb"))))) return false;
+    auto asset = NewObject<ULibraEffectAsset>();
+    if (!TestEqual(TEXT("Typed v10 bytecode imports"), asset->SetBytecode(bytes), ELibraRuntimeResult::Ok))
+        return false;
+    auto findNode = [&bytes](uint8 opcode, int32 occurrence = 0)
+    {
+        auto count = static_cast<uint32>(bytes[8]) | (static_cast<uint32>(bytes[9]) << 8) |
+            (static_cast<uint32>(bytes[10]) << 16) | (static_cast<uint32>(bytes[11]) << 24);
+        for (auto index = uint32{}; index < count; ++index)
+        {
+            auto offset = 16 + index * 256;
+            if (bytes[offset + 16] != opcode || occurrence-- != 0) continue;
+            auto id = FGuid{};
+            FGuid::ParseExact(BytesToHex(bytes.GetData() + offset, 16), EGuidFormats::Digits, id);
+            return id;
+        }
+        return FGuid{};
+    };
+    auto leftId = findNode(48);
+    auto rightId = findNode(48, 1);
+    auto outputId = findNode(49);
+    if (!TestTrue(TEXT("Compiler node identities resolve"),
+        leftId.IsValid() && rightId.IsValid() && outputId.IsValid())) return false;
+    auto init = UWorld::InitializationValues().AllowAudioPlayback(false).RequiresHitProxies(false)
+        .CreatePhysicsScene(false).CreateNavigation(false).CreateAISystem(false)
+        .ShouldSimulatePhysics(false).SetTransactional(false);
+    auto world = UWorld::CreateWorld(EWorldType::Game, false, FName(TEXT("LibraInt32World")),
+        nullptr, true, ERHIFeatureLevel::Num, &init);
+    if (!TestNotNull(TEXT("Isolated Int32 game world"), world)) return false;
+    ON_SCOPE_EXIT { world->DestroyWorld(false); };
+    auto actor = world->SpawnActor<AActor>();
+    if (!TestNotNull(TEXT("Int32 component actor"), actor)) return false;
+    auto component = NewObject<ULibraEffectComponent>(actor);
+    component->bAutoPlay = false;
+    actor->AddInstanceComponent(component);
+    component->RegisterComponent();
+    if (!TestEqual(TEXT("Component loads Int32 effect"), component->SetEffect(asset), ELibraRuntimeResult::Ok))
+        return false;
+    auto type = ELibraValueType::Unknown;
+    TestEqual(TEXT("Output type query"), component->GetValueType(outputId, type), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Output is semantically Int32"), type, ELibraValueType::Int32);
+    auto left = FLibraParameterHandle{};
+    auto right = FLibraParameterHandle{};
+    auto output = FLibraValueHandle{};
+    TestEqual(TEXT("Bind left"), component->BindParameter(leftId, left), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Bind right"), component->BindParameter(rightId, right), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Bind output"), component->BindValue(outputId, output), ELibraRuntimeResult::Ok);
+    auto evaluate = [component]()
+    {
+        auto result = component->EvaluateAtTime(0);
+        if (result != ELibraRuntimeResult::Ok) return result;
+        auto deadline = FPlatformTime::Seconds() + 5.0;
+        while (component->IsEvaluationPending() && FPlatformTime::Seconds() < deadline)
+        {
+            component->TickComponent(0, LEVELTICK_All, nullptr);
+            FPlatformProcess::Sleep(0.001f);
+        }
+        return component->IsEvaluationPending() ? ELibraRuntimeResult::Busy : component->LastResult;
+    };
+    auto value = int32{};
+    TestEqual(TEXT("Evaluate compiler Int32 add"), evaluate(), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Read exact Int32"), component->ReadBoundInt32Value(output, value), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Exact Int32 sum"), value, 17);
+    TestEqual(TEXT("Fractional writes are rejected"), component->SetBoundParameter(left, 1.5),
+        ELibraRuntimeResult::InvalidValueType);
+    TestEqual(TEXT("Full-range typed write"), component->SetBoundInt32Parameter(left, MAX_int32),
+        ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Typed right write"), component->SetBoundInt32Parameter(right, 1), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Overflow reaches the public component"), evaluate(), ELibraRuntimeResult::ArithmeticOverflow);
+    auto foreign = NewObject<ULibraEffectComponent>();
+    TestEqual(TEXT("Foreign component rejects the typed handle"), foreign->SetBoundInt32Parameter(left, 0),
+        ELibraRuntimeResult::InvalidHandle);
+    if (!TestTrue(TEXT("Mixed conversion/custom fixture loads"),
+        FFileHelper::LoadFileToArray(bytes, *(directory / TEXT("Mixed.lfxb"))))) return false;
+    auto mixed = NewObject<ULibraEffectAsset>();
+    TestEqual(TEXT("v10 Float custom node binding imports"), mixed->SetBytecode(bytes), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Component loads explicit conversions"), component->SetEffect(mixed), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Old typed handles are rejected"), component->SetBoundInt32Parameter(left, 0),
+        ELibraRuntimeResult::InvalidHandle);
+    auto absoluteId = findNode(40);
+    TestTrue(TEXT("Mixed fixture contains the real custom Abs opcode"), absoluteId.IsValid());
+    TestEqual(TEXT("Mixed output type query"), component->GetValueType(absoluteId, type), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Explicit conversion retains Float semantics"), type, ELibraValueType::Float);
+    TestEqual(TEXT("Mixed fixture evaluates"), evaluate(), ELibraRuntimeResult::Ok);
+    auto converted = double{};
+    TestTrue(TEXT("Explicit truncation and the Float custom node execute exactly"),
+        component->GetScalar(absoluteId, converted) && converted == 3.0);
+    auto mixedOutput = FLibraValueHandle{};
+    TestEqual(TEXT("Bind mixed output"), component->BindValue(absoluteId, mixedOutput), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Float output rejects an Int32 read"), component->ReadBoundInt32Value(mixedOutput, value),
+        ELibraRuntimeResult::InvalidValueType);
     component->Stop();
     return true;
 }

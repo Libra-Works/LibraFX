@@ -81,7 +81,25 @@ bool FLibraSpawnableGpuFixtureTest::RunTest(const FString&)
     component->Stop();
     TestEqual(TEXT("Stop releases the remaining GPU"), component->LastResult, ELibraRuntimeResult::Ok);
     TestEqual(TEXT("No GPU instances survive Stop"), component->GetGpuInstanceCount(), 0);
-    component->Play();
+    TestEqual(TEXT("GPU force fixture restarts"), component->Play(), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("EndRequest dispatches the user's spawn entry, not natural end"),
+        component->NotifyEndRequest(start), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Two children before scoped GPU force"), component->GetGpuInstanceCount(), 2);
+    if (TestEqual(TEXT("Finite GPU fixture has one template"), static_cast<int32>(metadata.templates.size()), 1))
+    {
+        auto containerId = FGuid{};
+        FGuid::ParseExact(BytesToHex(metadata.templates[0].containerId.data(), 16), EGuidFormats::Digits, containerId);
+        TestEqual(TEXT("Scoped force interrupts first GPU owner"),
+            component->ForceTerminateChild(containerId, 1), ELibraRuntimeResult::Ok);
+        TestEqual(TEXT("Sibling GPU scope remains alive"), component->GetGpuInstanceCount(), 1);
+        TestEqual(TEXT("Duplicate scoped force does not release sibling"),
+            component->ForceTerminateChild(containerId, 1), ELibraRuntimeResult::Ok);
+        TestEqual(TEXT("Sibling still owns one GPU"), component->GetGpuInstanceCount(), 1);
+    }
+    TestEqual(TEXT("Whole-effect GPU force"), component->ForceTerminate(), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("No child GPU survives force"), component->GetGpuInstanceCount(), 0);
+    TestTrue(TEXT("Forced GPU root is finished"), component->bRootFinished && !component->bIsPlaying);
+    TestEqual(TEXT("Fresh GPU playback after force"), component->Play(), ELibraRuntimeResult::Ok);
     component->DestroyComponent();
     emitters.Reset();
     actor->GetComponents(emitters);
@@ -145,6 +163,14 @@ bool FLibraSpawnableRootGpuFixtureTest::RunTest(const FString&)
     TestEqual(TEXT("Natural end retires root GPU"), component->RequestNaturalEnd(), ELibraRuntimeResult::Ok);
     TestTrue(TEXT("Manual root naturally finishes"), component->bRootFinished);
     TestEqual(TEXT("No GPU scope survives root completion"), component->GetGpuInstanceCount(), 0);
+    component->Stop();
+    TestEqual(TEXT("Root GPU force fixture restarts"), component->Play(), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Root GPU exists before force"), component->GetGpuInstanceCount(), 1);
+    TestEqual(TEXT("Whole-effect force immediately retires root GPU"),
+        component->ForceTerminate(), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Root GPU no longer renders after force"), component->GetGpuInstanceCount(), 0);
+    TestTrue(TEXT("Root force disables playback"), component->bRootFinished && !component->bIsPlaying);
+    TestEqual(TEXT("Duplicate root GPU force succeeds"), component->ForceTerminate(), ELibraRuntimeResult::Ok);
     component->Stop();
     world->DestroyWorld(false);
     return true;

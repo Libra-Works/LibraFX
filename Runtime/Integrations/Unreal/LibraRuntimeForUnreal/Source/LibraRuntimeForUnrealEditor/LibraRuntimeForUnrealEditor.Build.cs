@@ -11,5 +11,7 @@ public class LibraRuntimeForUnrealEditor : ModuleRules
             "AdvancedPreviewScene", "ToolMenus", "ApplicationCore", "RenderCore", "RHI",
             "LibraRuntimeCore", "LibraRuntimeForUnreal", "LibraGpuRuntime"
         });
+        if (Target.Platform == UnrealTargetPlatform.Win64)
+            PublicSystemLibraries.Add("Advapi32.lib");
     }
 }

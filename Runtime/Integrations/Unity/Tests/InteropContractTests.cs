@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Text;
+using System.Globalization;
 
 namespace LiberaFx.Unity.Tests
 {
@@ -12,8 +14,58 @@ namespace LiberaFx.Unity.Tests
         private static void Main()
         {
             Run();
+#if NET8_0
+            var fixtureDirectory = Environment.GetEnvironmentVariable("LIBERAFX_SPRITE_COMPOSITION_FIXTURE_DIR");
+            if (!string.IsNullOrEmpty(fixtureDirectory)) VerifyCompiledSpriteComposition(fixtureDirectory);
+#endif
             Console.WriteLine("LiberaFx POD layout, P/Invoke and allocation contracts passed.");
         }
+
+#if NET8_0
+        private static void VerifyCompiledSpriteComposition(string directory)
+        {
+            using var host = new NativeSpawnableHost(File.ReadAllBytes(Path.Combine(directory, "composition.lfxp")));
+            using var scene = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(Path.Combine(directory, "render-config.json")));
+            using var expected = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(Path.Combine(directory, "expected.json")));
+            foreach (var draw in scene.RootElement.GetProperty("nodes").EnumerateArray())
+            {
+                var drawId = draw.GetProperty("nodeId").GetGuid();
+                var clip = draw.GetProperty("spriteAnimation");
+                var frames = clip.GetProperty("frames");
+                var durations = new double[frames.GetArrayLength()];
+                for (var index = 0; index < durations.Length; index++)
+                    durations[index] = frames[index].GetProperty("durationFrames").GetDouble();
+                var keys = new System.Collections.Generic.List<double>();
+                foreach (var key in clip.GetProperty("keys").EnumerateArray())
+                    foreach (var name in new[] { "frame", "x", "y", "rotationDegrees", "scaleX", "scaleY" })
+                        keys.Add(key.GetProperty(name).GetDouble());
+                var keyArray = keys.ToArray();
+                foreach (var frame in expected.RootElement.GetProperty("frames").EnumerateArray())
+                foreach (var part in frame.GetProperty("nodes").EnumerateArray())
+                {
+                    if (part.GetProperty("nodeId").GetGuid() != drawId) continue;
+                    Assert(NativeInstance.SampleSpriteComposition(frame.GetProperty("timeSeconds").GetDouble(),
+                        clip.GetProperty("fps").GetDouble(), clip.GetProperty("durationFrames").GetDouble(),
+                        clip.GetProperty("loop").GetBoolean(), durations, keyArray, out var selected, out var pose) == NativeResult.Ok);
+                    var cell = clip.GetProperty("cells")[frames[(int)selected].GetProperty("cellIndex").GetInt32()];
+                    double Value(string name, int index) => part.GetProperty(name)[index].GetDouble();
+                    Assert(selected == part.GetProperty("frameIndex").GetUInt32() &&
+                        pose.x == Value("position", 0) && pose.y == Value("position", 1) &&
+                        pose.rotation == Value("rotation", 2) &&
+                        pose.sx * cell.GetProperty("width").GetInt32() / 100 == Value("scale", 0) &&
+                        pose.sy * cell.GetProperty("height").GetInt32() / 100 == Value("scale", 1));
+                }
+                for (var index = 0; index < 100; index++)
+                    Assert(NativeInstance.SampleSpriteComposition(0, 2, 4, true, durations, keyArray, out _, out _) == NativeResult.Ok);
+                var allocated = GC.GetAllocatedBytesForCurrentThread();
+                for (var index = 0; index < 10000; index++)
+                    Assert(NativeInstance.SampleSpriteComposition(0, 2, 4, true, durations, keyArray, out _, out _) == NativeResult.Ok);
+                Assert(GC.GetAllocatedBytesForCurrentThread() == allocated);
+            }
+            Assert(host.Advance(0, 0) == NativeResult.Ok);
+            Console.WriteLine("Compiled sprite package and v2 native pose/rectangle fixture parity passed.");
+        }
+#endif
 #if UNITY_EDITOR
         [UnityEditor.MenuItem("LiberaFx/Verify native ABI contracts")]
 #endif
@@ -118,6 +170,9 @@ namespace LiberaFx.Unity.Tests
                 UnityEngine.Debug.Log("LiberaFx compiler-generated Signal interop contract passed.");
 #endif
             }
+            var int32Fixtures = Environment.GetEnvironmentVariable("LIBERAFX_INT32_FIXTURE_DIR");
+            if (!string.IsNullOrEmpty(int32Fixtures))
+                VerifyInt32InteropFixtures(int32Fixtures);
             var spawnableFixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_SPAWNABLE_FIXTURE");
             if (!string.IsNullOrEmpty(spawnableFixture))
                 VerifySpawnableHost(spawnableFixture);
@@ -127,6 +182,87 @@ namespace LiberaFx.Unity.Tests
             var gameIoFixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_GAMEIO_FIXTURE");
             if (!string.IsNullOrEmpty(gameIoFixture))
                 VerifyGameIoPortNames(gameIoFixture);
+        }
+
+        private static int ReadInt32LittleEndian(byte[] bytes, int offset)
+        {
+            return bytes[offset] | bytes[offset + 1] << 8 |
+                bytes[offset + 2] << 16 | bytes[offset + 3] << 24;
+        }
+
+        private static string CompilerNodeGuid(byte[] bytes, byte opcode, int occurrence = 0)
+        {
+            Assert(bytes != null && bytes.Length >= 16 && bytes[4] == 10 && bytes[5] == 0);
+            var count = ReadInt32LittleEndian(bytes, 8);
+            Assert(count >= 0);
+            for (var index = 0; index < count; ++index)
+            {
+                var offset = 16 + index * 256;
+                if (bytes[offset + 16] != opcode) continue;
+                if (occurrence-- != 0) continue;
+                var text = new StringBuilder(32);
+                for (var lane = 0; lane < 16; ++lane)
+                    text.Append(bytes[offset + lane].ToString("x2", CultureInfo.InvariantCulture));
+                return Guid.ParseExact(text.ToString(), "N").ToString("D");
+            }
+            throw new InvalidOperationException("Compiler fixture is missing the requested opcode.");
+        }
+
+        private static void VerifyInt32InteropFixtures(string directory)
+        {
+            var addBytes = File.ReadAllBytes(Path.Combine(directory, "Int32Add.lfxb"));
+            using (var program = new NativeProgram(addBytes))
+            using (var instance = program.CreateInstance())
+            {
+                var output = instance.BindValue(CompilerNodeGuid(addBytes, 49));
+                Assert(instance.GetValueType(output, out var outputType) == NativeResult.Ok &&
+                    outputType == NativeValueType.Int32);
+                var left = instance.BindParameter(CompilerNodeGuid(addBytes, 48, 0));
+                var right = instance.BindParameter(CompilerNodeGuid(addBytes, 48, 1));
+                Assert(instance.GetParameterType(left, out var parameterType) == NativeResult.Ok &&
+                    parameterType == NativeValueType.Int32);
+                Assert(instance.GetParameterInt32(left, out var initial) == NativeResult.Ok && initial == 14);
+                Assert(instance.SetParameter(left, 1.5) == NativeResult.InvalidValueType);
+                Assert(instance.SetParameterInt32(left, int.MaxValue) == NativeResult.Ok);
+                Assert(instance.SetParameterInt32(right, 1) == NativeResult.Ok);
+                var values = new NativeValue[1];
+                Assert(instance.Evaluate(0, new[] { output }, values) == NativeResult.ArithmeticOverflow);
+                Assert(instance.ReadInt32(output, out _) == NativeResult.ArithmeticOverflow);
+            }
+
+            var conversionBytes = File.ReadAllBytes(Path.Combine(directory, "Conversions.lfxb"));
+            using (var program = new NativeProgram(conversionBytes))
+            using (var instance = program.CreateInstance())
+            {
+                var toInt = instance.BindValue(CompilerNodeGuid(conversionBytes, 53));
+                var toFloat = instance.BindValue(CompilerNodeGuid(conversionBytes, 54));
+                Assert(instance.GetValueType(toInt, out var intType) == NativeResult.Ok &&
+                    intType == NativeValueType.Int32);
+                Assert(instance.GetValueType(toFloat, out var floatType) == NativeResult.Ok &&
+                    floatType == NativeValueType.Float);
+                var source = instance.BindParameter(CompilerNodeGuid(conversionBytes, 1));
+                Assert(instance.GetParameterType(source, out var sourceType) == NativeResult.Ok &&
+                    sourceType == NativeValueType.Float);
+                Assert(instance.SetParameterInt32(source, 3) == NativeResult.InvalidValueType);
+                var values = new NativeValue[2];
+                Assert(instance.Evaluate(0, new[] { toInt, toFloat }, values) == NativeResult.Ok);
+                Assert(instance.ReadInt32(toInt, out var converted) == NativeResult.Ok && converted == 3);
+                Assert(values[1].X == 3);
+                Assert(instance.SetParameter(source, 2147483648.0) == NativeResult.Ok);
+                Assert(instance.Evaluate(0, new[] { toInt }, values) == NativeResult.ArithmeticOverflow);
+                Assert(instance.SetParameter(source, double.NaN) == NativeResult.NonFinite);
+            }
+
+            var divideBytes = File.ReadAllBytes(Path.Combine(directory, "Int32Divide.lfxb"));
+            using (var program = new NativeProgram(divideBytes))
+            using (var instance = program.CreateInstance())
+            {
+                var divisor = instance.BindParameter(CompilerNodeGuid(divideBytes, 48, 1));
+                Assert(instance.SetParameterInt32(divisor, 0) == NativeResult.Ok);
+                var quotient = instance.BindValue(CompilerNodeGuid(divideBytes, 52));
+                Assert(instance.Evaluate(0, new[] { quotient }, new NativeValue[1]) ==
+                    NativeResult.DivideByZero);
+            }
         }
 
         private static unsafe void VerifyGameIoPortNames(string fixture)

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "typeId": "4a94e882-39e8-4efb-92c7-180000000021",
+  "namespace": "LiberaFx",
+  "kind": "PhaseTime",
+  "name": "Phase Time",
+  "displayNameKey": "Lifecycle.PhaseTime",
+  "descriptionKey": "Lifecycle.PhaseHelp",
+  "group": "Lifecycle",
+  "groupNameKey": "Editor.NodeGroup.Lifecycle",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "inputPorts": []
+}

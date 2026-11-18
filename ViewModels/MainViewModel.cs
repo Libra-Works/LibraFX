@@ -168,8 +168,8 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
-    public GraphWorkspaceViewModel Graph => ActiveDocument?.Workspace
-        ?? throw new InvalidOperationException("There is no active document.");
+    public GraphWorkspaceViewModel Graph => ActiveDocument is not null ? ActiveGraphProvider.Graph
+        : throw new InvalidOperationException("There is no active document.");
 
     public ActiveGraphProvider ActiveGraphProvider { get; }
 
@@ -237,6 +237,10 @@ public partial class MainViewModel : ViewModelBase
             CanClose = false
         };
         ActiveGraphProvider = new ActiveGraphProvider(initialWorkspace);
+        ActiveGraphProvider.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ActiveGraphProvider.Graph)) OnPropertyChanged(nameof(Graph));
+        };
         Extensions = new EditorExtensionHost(ActiveGraphProvider, builtIns: [new GitVersionControlProvider()]);
         _dockFactory = new DockFactory(ActiveGraphProvider, initialDocument, this);
         Layout = _dockFactory.CreateLayout();
@@ -604,7 +608,7 @@ public partial class MainViewModel : ViewModelBase
         }
 
         ActiveDocument = document;
-        ActiveGraphProvider.SetGraph(document.Workspace);
+        ActiveGraphProvider.SetGraph(document.Workspace.ActiveEditingWorkspace);
         document.Workspace.History.StateChanged += OnHistoryStateChanged;
         UndoCommand?.NotifyCanExecuteChanged();
         RedoCommand?.NotifyCanExecuteChanged();
@@ -621,6 +625,11 @@ public partial class MainViewModel : ViewModelBase
             workspace.InitializeFromSnapshot(GraphDefaults.CreateEffect());
         }
         workspace.History.ActionPerformed += message => Log.Add("Edit", message);
+        workspace.EditingWorkspaceActivated += (_, editing) =>
+        {
+            if (ReferenceEquals(ActiveDocument?.Workspace, workspace))
+                ActiveGraphProvider.SetGraph(editing);
+        };
         workspace.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(GraphWorkspaceViewModel.ConnectionStatus) && !workspace.IsRefreshingLocalizedText)
@@ -634,6 +643,7 @@ public partial class MainViewModel : ViewModelBase
     public void DisposeStorageFiles()
     {
         CloseChatWindow();
+        DisposeAssetBrowser();
         Extensions.Dispose();
         Playback.Dispose();
         GroupAssets.Dispose();

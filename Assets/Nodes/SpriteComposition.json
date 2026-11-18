@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "typeId": "5bf459b5-77aa-4ec5-a704-cc59df700004",
+  "namespace": "LiberaFx",
+  "kind": "SpriteComposition",
+  "name": "Sprite Composition",
+  "displayNameKey": "Assets.SpriteComposition",
+  "groupNameKey": "Assets.Rendering",
+  "group": "Rendering",
+  "portType": "RenderInstance",
+  "portCategory": "Parameter",
+  "inputPorts": [
+    { "id": "tint", "name": "Tint", "portType": "FloatX4" }
+  ],
+  "parameters": [
+    { "id": "assetPath", "name": "Texture", "type": "string", "defaultValue": "" },
+    { "id": "materialSchema", "name": "Material schema", "type": "string", "defaultValue": "[]" },
+    { "id": "compositionData", "name": "Composition data", "type": "string", "defaultValue": "" },
+    { "id": "tint", "name": "Tint", "type": "vector4", "defaultValue": [1, 1, 1, 1] }
+  ]
+}

@@ -22,6 +22,7 @@
   "Asset.Close": "閉じる",
   "Asset.SelectPeer": "問い合わせ先の Unreal エディターを選択してください。",
   "Asset.NoPeer": "対応する Unreal エディターが接続されていません。",
+  "Asset.PeerDisconnected": "選択した Unreal エディターは切断されています。",
   "Asset.Results": "{0} 件のアセット · {1}–{2}",
   "Asset.RequestTimedOut": "アセット要求がタイムアウトしたか、キャンセルされました。",
   "Asset.RequestFailed": "アセット要求に失敗しました: {0}",

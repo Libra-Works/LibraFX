@@ -198,6 +198,14 @@ auto EffectLifecycle::schedule(double time, std::uint64_t token) noexcept -> Res
     return scheduled_.schedule(time, token);
 }
 
+auto EffectLifecycle::cancelScheduled(std::uint64_t token) noexcept -> Result
+{
+    if (!token) return Result::InvalidArgument;
+    if (phase_ == Phase::Busy) return Result::Busy;
+    scheduled_.cancel(token);
+    return Result::Ok;
+}
+
 auto EffectLifecycle::nextScheduled(ScheduledEvent& out, bool& hasEvent) const noexcept -> Result
 {
     if (phase_ == Phase::Busy) return Result::Busy;

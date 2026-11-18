@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "typeId": "e9778c40-209b-4ce8-918d-35c000000005",
+  "namespace": "LiberaFx",
+  "kind": "LoopClock",
+  "name": "Loop Clock",
+  "displayNameKey": "Lifecycle.LoopClock",
+  "descriptionKey": "Lifecycle.LoopClockHelp",
+  "group": "Lifecycle",
+  "groupNameKey": "Editor.NodeGroup.Lifecycle",
+  "portType": "FloatX4",
+  "portCategory": "Parameter",
+  "inputPorts": [
+    { "id": "time", "name": "Time (-1: instance age)", "portType": "Float", "category": "Parameter", "defaultValue": -1 },
+    { "id": "length", "name": "Interval", "portType": "Float", "category": "Parameter", "defaultValue": 1 },
+    { "id": "count", "name": "Count", "portType": "Float", "category": "Parameter", "defaultValue": 0 },
+    { "id": "bounded", "name": "Limit count (0/1)", "portType": "Float", "category": "Parameter", "defaultValue": 0 },
+    { "id": "arm", "name": "Arm next boundary", "portType": "Signal", "category": "Signal" },
+    { "id": "reset", "name": "Reset", "portType": "Signal", "category": "Signal" }
+  ],
+  "outputPorts": [
+    { "id": "value", "name": "Time / Index / Boundaries / Complete", "portType": "FloatX4", "category": "Parameter" },
+    { "id": "boundary", "name": "Boundary", "portType": "Signal", "category": "Signal" },
+    { "id": "complete", "name": "Complete", "portType": "Signal", "category": "Signal" },
+    { "id": "armedBoundary", "name": "Next boundary after request", "portType": "Signal", "category": "Signal" }
+  ],
+  "parameters": [
+    { "id": "length", "name": "Interval", "type": "float", "defaultValue": 1 },
+    { "id": "count", "name": "Count", "type": "float", "defaultValue": 0 },
+    { "id": "bounded", "name": "Limit count (0/1)", "type": "float", "defaultValue": 0 }
+  ]
+}

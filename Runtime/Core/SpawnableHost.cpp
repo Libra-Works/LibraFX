@@ -1,4 +1,6 @@
 #include "liberafx/SpawnableHost.h"
+#include "liberafx/host/SpawnableDebugJob.h"
+#include <atomic>
 #include "liberafx/BuiltinSignals.h"
 #include "liberafx/EffectLifecycle.h"
 
@@ -22,7 +24,12 @@ constexpr auto customInstructionBytes = std::size_t{256};
 struct AlignedBuffer final {
     void* data = nullptr;
     std::size_t alignment = 16;
-    ~AlignedBuffer() { if (data) ::operator delete(data, std::align_val_t{alignment}); }
+    ~AlignedBuffer() { release(); }
+    void release() noexcept
+    {
+        if (data) ::operator delete(data, std::align_val_t{alignment});
+        data = nullptr;
+    }
     AlignedBuffer() = default;
     AlignedBuffer(const AlignedBuffer&) = delete;
     AlignedBuffer& operator=(const AlignedBuffer&) = delete;
@@ -51,11 +58,25 @@ auto sameId(const std::uint8_t left[16], const std::uint8_t right[16]) noexcept 
     return std::memcmp(left, right, 16) == 0;
 }
 
+struct OwnerOperation final {
+    bool& busy;
+    explicit OwnerOperation(bool& value) noexcept : busy(value) { busy = true; }
+    ~OwnerOperation() { busy = false; }
+};
+
+auto validScope(const SpawnableScope& scope) noexcept -> bool
+{
+    if (scope.kind == SpawnableScopeKind::Effect)
+        return !scope.instanceId && !isNonzero(scope.containerId);
+    return scope.kind == SpawnableScopeKind::Instance &&
+        scope.instanceId && isNonzero(scope.containerId);
+}
+
 auto bytecodeInstructionBytes(const std::vector<std::uint8_t>& bytes,
                               std::size_t& size) noexcept -> Result
 {
     if (bytes.size() < bytecodeHeaderBytes || std::memcmp(bytes.data(), "LFXB", 4) != 0 ||
-        bytes[4] < 2 || bytes[4] > 9 || bytes[5] != 0 || bytes[6] != 1 || bytes[7] != 0)
+        bytes[4] < 2 || bytes[4] > 11 || bytes[5] != 0 || bytes[6] != 1 || bytes[7] != 0)
         return Result::InvalidBinary;
     if (bytes[4] == 2) {
         if (bytes[12] != typedInstructionBytes || bytes[13] != 0 ||
@@ -163,6 +184,27 @@ auto passthroughDescriptor(CustomNodeDescriptor& out) noexcept -> void
 }
 }
 
+void host::SpawnableDebugJob::run(void* self) noexcept
+{
+    auto& job = *static_cast<SpawnableDebugJob*>(self);
+    const auto& request = job.request_;
+    try {
+        switch (request.operation) {
+        case SpawnableDebugOperation::Advance: job.result_ = job.host_.advance(request.time, request.frameDelta); break;
+        case SpawnableDebugOperation::Signal: job.result_ = job.host_.dispatchSignal(request.node.data()); break;
+        case SpawnableDebugOperation::GameSignal: job.result_ = job.host_.fireGameSignal(request.name.data()); break;
+        case SpawnableDebugOperation::NaturalEnd: job.result_ = job.host_.requestNaturalEnd(); break;
+        case SpawnableDebugOperation::NotifyEnd: job.result_ = job.host_.notifyEndRequest(request.scope, request.node.data()); break;
+        default: job.result_ = Result::InvalidArgument; break;
+        }
+    } catch (const std::bad_alloc&) {
+        job.result_ = Result::InsufficientWork;
+    } catch (...) {
+        job.result_ = Result::NotReady;
+    }
+    job.done_.store(true, std::memory_order_release);
+}
+
 struct SpawnableHost::Impl final {
     struct InstanceInfo final {
         GeneratorInstanceId id = 0;
@@ -193,6 +235,7 @@ struct SpawnableHost::Impl final {
     struct ScheduledRoute final {
         std::uint64_t token = 0;
         CapturedRoute continuation;
+        GeneratorInstanceId sourceInstanceId = 0;
     };
     struct OwnerNotice final {
         std::array<std::uint8_t, 16> containerId{};
@@ -209,7 +252,7 @@ struct SpawnableHost::Impl final {
     Program parentProgram;
     AlignedBuffer rootWork;
     AlignedBuffer rootDefaults;
-    Instance rootInstance;
+    std::optional<Instance> rootInstance;
     std::unique_ptr<NamedIo> gameIo;
     std::optional<EffectLifecycle> lifecycle;
     std::vector<NamedIoPort> gameIoPorts;
@@ -221,13 +264,17 @@ struct SpawnableHost::Impl final {
     double time = -1;
     double rootAge = 0;
     double frameDelta = 0;
+    HostQualitySnapshot quality{};
     std::uint64_t nextToken = 1;
+    std::uint64_t debugGeneration = 0;
     bool started = false;
     bool rootEnding = false;
     bool rootFinished = false;
     bool rootStopped = false;
     bool rootDestroySent = false;
     bool pendingPump = false;
+    bool operationActive = false;
+    bool rootForced = false;
     Result failure = Result::Ok;
 
     Impl(SpawnablePackage value, const SpawnableHostOptions& configuration)
@@ -273,10 +320,10 @@ struct SpawnableHost::Impl final {
     auto readRoot(const std::uint8_t nodeId[16], double out[4], std::uint8_t& width) -> Result
     {
         auto handle = ValueHandle{};
-        auto result = rootInstance.bindValue(nodeId, handle);
+        auto result = rootInstance->bindValue(nodeId, handle);
         if (result != Result::Ok) return result;
         width = handle.componentCount;
-        return rootInstance.value(handle, out);
+        return rootInstance->value(handle, out);
     }
 
     auto readChild(TemplateState& state, GeneratorInstanceId instance,
@@ -330,6 +377,8 @@ struct SpawnableHost::Impl final {
     auto applyCaptures(TemplateState& state, GeneratorInstanceId id,
                        const std::optional<std::vector<SpawnablePackageCapture>>& inputs,
                        bool live) -> Result;
+    auto forceTerminate(const SpawnableScope& scope) -> Result;
+    auto applyAuthoredForce() -> Result;
 };
 
 auto SpawnableHost::Impl::initialize() -> Result
@@ -508,17 +557,20 @@ auto SpawnableHost::Impl::initialize() -> Result
     if (result != Result::Ok) return result;
     result = rootDefaults.allocate(defaultsCount * sizeof(double), parentProgram.defaultsAlignment());
     if (result != Result::Ok) return result;
-    result = rootInstance.initialize(parentProgram, static_cast<double*>(rootWork.data),
+    rootInstance.emplace();
+    result = rootInstance->initialize(parentProgram, static_cast<double*>(rootWork.data),
         (workBytes + sizeof(double) - 1) / sizeof(double),
         static_cast<double*>(rootDefaults.data), defaultsCount);
     if (result != Result::Ok) return result;
+    result = rootInstance->enableForceRequests();
+    if (result != Result::Ok) return result;
     if (!gameIoPorts.empty()) {
-        result = NamedIo::create(rootInstance, gameIoPorts.data(), gameIoPorts.size(),
+        result = NamedIo::create(*rootInstance, gameIoPorts.data(), gameIoPorts.size(),
             options.eventCapacity, gameIo);
         if (result != Result::Ok) return result;
-        lifecycle.emplace(rootInstance, *gameIo);
+        lifecycle.emplace(*rootInstance, *gameIo);
     } else {
-        lifecycle.emplace(rootInstance);
+        lifecycle.emplace(*rootInstance);
     }
     return Result::Ok;
 }
@@ -544,7 +596,9 @@ auto SpawnableHost::Impl::applyCaptures(
 auto SpawnableHost::Impl::startRoot(double initialFrameDelta) -> Result
 {
     if (started) return Result::Ok;
-    auto result = rootInstance.setTimeContext(0, initialFrameDelta);
+    auto result = rootInstance->setHostQuality(quality);
+    if (result != Result::Ok) return result;
+    result = rootInstance->setTimeContext(0, initialFrameDelta);
     if (result != Result::Ok) return result;
     auto sample = LifetimeSample{};
     const auto* startNode = packageData.onStartNodeId
@@ -567,7 +621,9 @@ auto SpawnableHost::Impl::evaluateParent(double at) -> Result
 {
     if (!std::isfinite(at) || at < rootAge) return Result::InvalidArgument;
     if (at == rootAge) return Result::Ok;
-    auto result = rootInstance.setTimeContext(at, frameDelta);
+    auto result = rootInstance->setHostQuality(quality);
+    if (result != Result::Ok) return result;
+    result = rootInstance->setTimeContext(at, frameDelta);
     if (result != Result::Ok) return result;
     if (rootEnding) {
         result = lifecycle->drain(at);
@@ -587,6 +643,8 @@ auto SpawnableHost::Impl::evaluateFrame(double at) -> Result
 {
     auto result = evaluateParent(at);
     if (result != Result::Ok) return result;
+    result = applyAuthoredForce();
+    if (result != Result::Ok || rootForced) return result;
     auto evaluated = std::vector<OwnerNotice>{};
     for (auto round = 0u; round < 128; ++round) {
         auto foundPending = false;
@@ -605,12 +663,15 @@ auto SpawnableHost::Impl::evaluateFrame(double at) -> Result
                 if (alreadyEvaluated) continue;
                 foundPending = true;
                 evaluated.push_back({state.data->containerId, id});
+                result = state.pool->setHostQuality(id, quality);
+                if (result != Result::Ok) return result;
                 result = state.pool->setTimeContext(id, at, frameDelta);
                 if (result == Result::Ok)
                     result = applyCaptures(state, id, state.data->liveInputs, true);
                 if (result == Result::Ok) result = state.pool->evaluate(id, at);
                 if (result == Result::Ok) result = pump(at);
                 if (result != Result::Ok) return result;
+                if (rootForced) return Result::Ok;
             }
         }
         if (!foundPending) return Result::Ok;
@@ -637,7 +698,9 @@ auto SpawnableHost::Impl::processPoolEvent(TemplateState& state, const Generator
                                             double at) -> Result
 {
     if (event.kind == GeneratorEventKind::Spawn) {
-        auto result = state.pool->setTimeContext(event.instanceId, event.startTime, frameDelta);
+        auto result = state.pool->setHostQuality(event.instanceId, quality);
+        if (result != Result::Ok) return result;
+        result = state.pool->setTimeContext(event.instanceId, event.startTime, frameDelta);
         if (result == Result::Ok)
             result = applyCaptures(state, event.instanceId, state.data->capturedInputs, false);
         if (result == Result::Ok)
@@ -704,7 +767,7 @@ auto SpawnableHost::Impl::processPoolEvent(TemplateState& state, const Generator
                 const auto due = expiry + values[0];
                 result = lifecycle->schedule(due, token);
                 if (result != Result::Ok) return result;
-                scheduledRoutes.push_back({token, std::move(frozen)});
+                scheduledRoutes.push_back({token, std::move(frozen), event.instanceId});
             } else {
                 result = spawnRoute(frozen, expiry);
                 if (result != Result::Ok) return result;
@@ -743,6 +806,8 @@ auto SpawnableHost::Impl::pump(double at) -> Result
         return result;
     };
     for (auto round = 0u; round < 128; ++round) {
+        auto controlResult = applyAuthoredForce();
+        if (controlResult != Result::Ok || rootForced) return fail(controlResult);
         auto progress = false;
         for (auto& statePointer : templates) {
             auto& state = *statePointer;
@@ -759,6 +824,8 @@ auto SpawnableHost::Impl::pump(double at) -> Result
                 progress = true;
                 result = processPoolEvent(state, event, at);
                 if (result != Result::Ok) return fail(result);
+                controlResult = applyAuthoredForce();
+                if (controlResult != Result::Ok || rootForced) return fail(controlResult);
             }
             while (eventCount < events.size()) {
                 auto signal = GeneratorSignalEvent{};
@@ -769,14 +836,14 @@ auto SpawnableHost::Impl::pump(double at) -> Result
                 if (result != Result::Ok) return fail(result);
                 result = evaluateParent(signal.time);
                 if (result != Result::Ok) return fail(result);
-                result = rootInstance.setTimeContext(signal.time, frameDelta);
+                result = rootInstance->setTimeContext(signal.time, frameDelta);
                 if (result != Result::Ok) return fail(result);
                 result = lifecycle->validateSignalTime(signal.time);
                 if (result != Result::Ok) return fail(result);
                 for (const auto& route : packageData.signalRoutes) {
                     if (!sameId(route.sourceContainerId.data(), signal.containerId) ||
                         !sameId(route.sourceNodeId.data(), signal.nodeId)) continue;
-                    result = rootInstance.dispatchSignal(route.targetNodeId.data(), signal.time,
+                    result = rootInstance->dispatchSignal(route.targetNodeId.data(), signal.time,
                                                          options.instructionBudget);
                     if (result != Result::Ok) return fail(result);
                 }
@@ -843,6 +910,7 @@ auto SpawnableHost::Impl::nextScheduledTime(double& out) -> Result
 auto SpawnableHost::Impl::dispatchScheduled(double at) -> Result
 {
     for (auto round = 0u; round < 128; ++round) {
+        if (rootForced) return Result::Ok;
         auto scheduled = ScheduledEvent{};
         auto hasScheduled = false;
         auto result = lifecycle->takeScheduled(scheduled, hasScheduled);
@@ -896,7 +964,7 @@ auto SpawnableHost::Impl::dispatchScheduled(double at) -> Result
 
 auto SpawnableHost::Impl::notifyOwnerDestroy(double at) -> Result
 {
-    if (!rootEnding) return Result::Ok;
+    if (!rootEnding || rootForced) return Result::Ok;
     for (auto round = 0u; round < 128; ++round) {
         auto pending = std::vector<OwnerNotice>{};
         for (const auto& statePointer : templates) {
@@ -976,9 +1044,12 @@ auto SpawnableHost::Impl::finishIfQuiescent() -> Result
 auto SpawnableHost::advance(double at, double delta) -> Result
 {
     auto& host = *impl_;
+    if (host.operationActive) return Result::Busy;
+    auto operation = OwnerOperation(host.operationActive);
     if (!std::isfinite(at) || at < 0 || (host.time >= 0 && at < host.time) || at < host.rootAge ||
         !std::isfinite(delta) || delta < 0)
         return Result::InvalidArgument;
+    if (host.rootForced) return Result::NotReady;
     if (host.failure != Result::Ok) return host.failure;
     if (host.rootStopped) return Result::NotReady;
     try {
@@ -1037,17 +1108,41 @@ auto SpawnableHost::advance(double at, double delta) -> Result
     }
 }
 
+auto SpawnableHost::setHostQuality(const HostQualitySnapshot& snapshot) -> Result
+{
+    if (impl_->operationActive) return Result::Busy;
+    if (impl_->rootForced || !impl_->rootInstance) return Result::NotReady;
+    if (static_cast<unsigned>(snapshot.availability) >
+            static_cast<unsigned>(HostQualityAvailability::Unsupported) ||
+        (snapshot.availability == HostQualityAvailability::Known &&
+            (static_cast<unsigned>(snapshot.tier) > static_cast<unsigned>(HostQualityTier::Cinematic) ||
+             static_cast<unsigned>(snapshot.source) > static_cast<unsigned>(HostQualitySource::PlatformPolicy))))
+        return Result::InvalidValueType;
+    auto result = impl_->rootInstance->setHostQuality(snapshot);
+    if (result != Result::Ok) return result;
+    for (auto& state : impl_->templates)
+        for (const auto& instance : state->instances)
+        {
+            result = state->pool->setHostQuality(instance.id, snapshot);
+            if (result != Result::Ok) return result;
+        }
+    impl_->quality = snapshot;
+    return Result::Ok;
+}
+
 auto SpawnableHost::dispatchSignal(const std::uint8_t nodeId[16]) -> Result
 {
     auto& host = *impl_;
+    if (host.operationActive) return Result::Busy;
+    auto operation = OwnerOperation(host.operationActive);
     if (!nodeId || !isNonzero(nodeId)) return Result::InvalidArgument;
     if (!host.started || host.rootEnding || host.rootFinished || host.rootStopped)
         return Result::NotReady;
     if (host.failure != Result::Ok) return host.failure;
-    auto result = host.rootInstance.setTimeContext(host.rootAge, host.frameDelta);
+    auto result = host.rootInstance->setTimeContext(host.rootAge, host.frameDelta);
     if (result == Result::Ok) result = host.lifecycle->validateSignalTime(host.rootAge);
     if (result == Result::Ok)
-        result = host.rootInstance.dispatchSignal(nodeId, host.rootAge, host.options.instructionBudget);
+        result = host.rootInstance->dispatchSignal(nodeId, host.rootAge, host.options.instructionBudget);
     if (result == Result::Ok) result = host.pump(host.rootAge);
     if (result == Result::Ok) result = host.dispatchScheduled(host.rootAge);
     if (result == Result::Ok) result = host.beginAutoEnd(host.rootAge);
@@ -1060,11 +1155,13 @@ auto SpawnableHost::dispatchSignal(const std::uint8_t nodeId[16]) -> Result
 auto SpawnableHost::fireGameSignal(const char* name) -> Result
 {
     auto& host = *impl_;
+    if (host.operationActive) return Result::Busy;
+    auto operation = OwnerOperation(host.operationActive);
     if (!host.gameIo) return Result::NotReady;
     if (!host.started || host.rootEnding || host.rootFinished || host.rootStopped)
         return Result::NotReady;
     if (host.failure != Result::Ok) return host.failure;
-    auto result = host.rootInstance.setTimeContext(host.rootAge, host.frameDelta);
+    auto result = host.rootInstance->setTimeContext(host.rootAge, host.frameDelta);
     if (result == Result::Ok) result = host.lifecycle->validateSignalTime(host.rootAge);
     if (result == Result::Ok)
         result = host.gameIo->fireSignal(name, host.rootAge, host.options.instructionBudget);
@@ -1091,6 +1188,8 @@ auto SpawnableHost::setOwnerMatrix(const double* values, std::size_t width) -> R
 auto SpawnableHost::requestNaturalEnd() -> Result
 {
     auto& host = *impl_;
+    if (host.operationActive) return Result::Busy;
+    auto operation = OwnerOperation(host.operationActive);
     if (!host.started || host.rootStopped) return Result::NotReady;
     if (host.failure != Result::Ok) return host.failure;
     if (host.rootEnding || host.rootFinished) return Result::Ok;
@@ -1107,6 +1206,8 @@ auto SpawnableHost::requestNaturalEnd() -> Result
 auto SpawnableHost::stop() -> Result
 {
     auto& host = *impl_;
+    if (host.operationActive) return Result::Busy;
+    auto operation = OwnerOperation(host.operationActive);
     if (host.rootStopped) return Result::NotReady;
     for (const auto& state : host.templates) {
         auto result = state->pool->reset();
@@ -1124,10 +1225,191 @@ auto SpawnableHost::stop() -> Result
     return Result::Ok;
 }
 
+auto SpawnableHost::notifyEndRequest(const SpawnableScope& scope,
+                                     const std::uint8_t nodeId[16]) -> Result
+{
+    auto& host = *impl_;
+    if (!validScope(scope) || !nodeId || !isNonzero(nodeId)) return Result::InvalidArgument;
+    if (host.operationActive) return Result::Busy;
+    // The existing root signal API owns its own guard and routes actual work.
+    if (scope.kind == SpawnableScopeKind::Effect) return dispatchSignal(nodeId);
+    auto operation = OwnerOperation(host.operationActive);
+    if (!host.started || host.rootStopped || host.rootFinished) return Result::NotReady;
+    if (host.failure != Result::Ok) return host.failure;
+    auto state = host.findTemplate(scope.containerId);
+    if (!state || !host.findInstance(*state, scope.instanceId)) return Result::InvalidHandle;
+    auto result = state->pool->dispatchSignal(scope.instanceId, nodeId, host.rootAge,
+                                              host.options.instructionBudget);
+    if (result == Result::Ok) result = host.pump(host.rootAge);
+    if (result == Result::Ok) result = host.dispatchScheduled(host.rootAge);
+    if (result == Result::Ok) result = host.beginAutoEnd(host.rootAge);
+    if (result == Result::Ok) result = host.notifyOwnerDestroy(host.rootAge);
+    if (result == Result::Ok) result = host.finishIfQuiescent();
+    if (result == Result::QueueRejected) host.pendingPump = true;
+    else if (result != Result::Ok && result != Result::InvalidHandle &&
+             result != Result::InvalidArgument && result != Result::NotReady)
+        host.failure = result;
+    return result;
+}
+
+auto SpawnableHost::forceTerminate(const SpawnableScope& scope) -> Result
+{
+    auto& host = *impl_;
+    if (!validScope(scope)) return Result::InvalidArgument;
+    if (host.operationActive) return Result::Busy;
+    auto operation = OwnerOperation(host.operationActive);
+    return host.forceTerminate(scope);
+}
+
+auto SpawnableHost::Impl::applyAuthoredForce() -> Result
+{
+    if (rootForced) return Result::Ok;
+    auto forceScope = std::uint8_t{};
+    auto result = rootInstance ? rootInstance->pendingForceRequest(forceScope) : Result::Ok;
+    if (result != Result::Ok) return result;
+    if (forceScope != 0) return forceTerminate({});
+    for (auto& state : templates)
+    {
+        for (auto index = std::size_t{}; index < state->instances.size();)
+        {
+            auto id = state->instances[index].id;
+            result = state->pool->pendingForceRequest(id, forceScope);
+            if (result != Result::Ok) return result;
+            if (forceScope == 2) return forceTerminate({});
+            if (forceScope == 0) { ++index; continue; }
+            auto scope = SpawnableScope{};
+            scope.kind = SpawnableScopeKind::Instance;
+            std::memcpy(scope.containerId, state->data->containerId.data(), 16);
+            scope.instanceId = id;
+            result = forceTerminate(scope);
+            if (result != Result::Ok) return result;
+        }
+    }
+    return Result::Ok;
+}
+
+auto SpawnableHost::Impl::forceTerminate(const SpawnableScope& scope) -> Result
+{
+    auto& host = *this;
+    auto at = host.started ? host.rootAge : 0;
+    if (scope.kind == SpawnableScopeKind::Effect) {
+        if (host.rootForced) return Result::Ok;
+        // No asynchronous pool job can exist here: pools are private and all
+        // evaluations complete inline inside guarded owner operations.
+        if (host.started && !host.rootFinished && !host.rootStopped) {
+            auto result = host.lifecycle->stop();
+            if (result != Result::Ok) return result;
+        }
+        for (auto& state : host.templates) {
+            auto result = state->pool->forceTerminateAll();
+            if (result != Result::Ok) return result;
+            state->instances.clear();
+        }
+        host.scheduledRoutes.clear();
+        host.ownerNotices.clear();
+        if (host.gameIo) {
+            auto ignored = NamedIoEvent{};
+            while (host.gameIo->popEvent(ignored)) {}
+        }
+        // Release facades before the instance and its caller-owned storage.
+        // Even a failed first start can have initialized custom/deferred state.
+        host.lifecycle.reset();
+        host.gameIo.reset();
+        host.rootInstance.reset();
+        host.rootDefaults.release();
+        host.rootWork.release();
+        host.eventHead = host.eventCount = 0;
+        host.pendingPump = false;
+        host.rootStopped = host.rootFinished = host.rootForced = true;
+        return host.appendEvent(SpawnableHostEventKind::ForceTerminated, nullptr, 0, at, 0);
+    }
+
+    auto state = host.findTemplate(scope.containerId);
+    if (!state) return Result::InvalidHandle;
+    auto active = host.findInstance(*state, scope.instanceId) != nullptr;
+    auto ownsPending = [&](const Impl::ScheduledRoute& item) {
+        return item.sourceInstanceId == scope.instanceId && item.continuation.route &&
+            sameId(item.continuation.route->sourceContainerId.data(), scope.containerId);
+    };
+    auto hasPending = std::any_of(host.scheduledRoutes.begin(), host.scheduledRoutes.end(), ownsPending);
+    auto matches = [&](const SpawnableHostEvent& event) {
+        return event.instanceId == scope.instanceId && sameId(event.containerId, scope.containerId) &&
+            event.kind != SpawnableHostEventKind::ForceTerminated;
+    };
+    auto removed = std::size_t{};
+    for (auto index = std::size_t{}; index < host.eventCount; ++index)
+        if (matches(host.events[(host.eventHead + index) % host.events.size()])) ++removed;
+    if ((active || removed || hasPending) && host.eventCount - removed == host.events.size())
+        return Result::QueueRejected;
+    auto result = state->pool->forceTerminate(scope.instanceId);
+    if (result != Result::Ok) return result;
+    for (const auto& item : host.scheduledRoutes) {
+        if (!ownsPending(item)) continue;
+        // Host's guard establishes the lifecycle job boundary before any purge.
+        result = host.lifecycle->cancelScheduled(item.token);
+        if (result != Result::Ok) return result;
+    }
+    host.scheduledRoutes.erase(std::remove_if(host.scheduledRoutes.begin(), host.scheduledRoutes.end(),
+        ownsPending), host.scheduledRoutes.end());
+    auto kept = std::size_t{};
+    for (auto index = std::size_t{}; index < host.eventCount; ++index) {
+        const auto& event = host.events[(host.eventHead + index) % host.events.size()];
+        if (matches(event)) continue;
+        if (kept != index) host.events[(host.eventHead + kept) % host.events.size()] = event;
+        ++kept;
+    }
+    host.eventCount = kept;
+    state->instances.erase(std::remove_if(state->instances.begin(), state->instances.end(),
+        [&](const auto& item) { return item.id == scope.instanceId; }), state->instances.end());
+    host.ownerNotices.erase(std::remove_if(host.ownerNotices.begin(), host.ownerNotices.end(),
+        [&](const auto& item) {
+            return item.instanceId == scope.instanceId && sameId(item.containerId.data(), scope.containerId);
+        }), host.ownerNotices.end());
+    // Do not pump: that could execute unrelated natural routes while cancelling.
+    // Root auto-end is deliberately left to a subsequent normal advance.
+    return active || removed || hasPending
+        ? host.appendEvent(SpawnableHostEventKind::ForceTerminated, scope.containerId,
+                           scope.instanceId, at, 0)
+        : Result::Ok;
+}
+
+auto SpawnableHost::debugGeneration() const noexcept -> std::uint64_t
+{
+    return impl_->debugGeneration;
+}
+
+auto SpawnableHost::debugTarget(const SpawnableScope& scope, SpawnableDebugTarget& out) noexcept -> Result
+{
+    out = {};
+    if (!validScope(scope)) return Result::InvalidArgument;
+    if (scope.kind == SpawnableScopeKind::Effect) {
+        if (!impl_->rootInstance || impl_->rootFinished || impl_->rootForced) return Result::NotReady;
+    } else {
+        auto state = impl_->findTemplate(scope.containerId);
+        if (!state || !impl_->findInstance(*state, scope.instanceId)) return Result::InvalidHandle;
+    }
+    out = {impl_->debugGeneration, scope};
+    return Result::Ok;
+}
+
+auto SpawnableHost::setDebugHooks(const SpawnableDebugTarget& target, const ExecutionDebugHooks& hooks) noexcept -> Result
+{
+    if (!target.hostGeneration || target.hostGeneration != impl_->debugGeneration) return Result::InvalidHandle;
+    if (!validScope(target.scope)) return Result::InvalidArgument;
+    if (target.scope.kind == SpawnableScopeKind::Effect) {
+        if (!impl_->rootInstance || (hooks.beforeNode && (impl_->rootFinished || impl_->rootForced))) return Result::NotReady;
+        return impl_->rootInstance->setDebugHooks(hooks);
+    }
+    auto state = impl_->findTemplate(target.scope.containerId);
+    if (!state || !impl_->findInstance(*state, target.scope.instanceId)) return Result::InvalidHandle;
+    return state->pool->setDebugHooks(target.scope.instanceId, hooks);
+}
+
 auto SpawnableHost::rootValue(const std::uint8_t nodeId[16], double out[4],
                               std::uint8_t& width) const -> Result
 {
     if (!nodeId || !out) return Result::InvalidArgument;
+    if (impl_->rootForced) return Result::NotReady;
     return impl_->readRoot(nodeId, out, width);
 }
 
@@ -1180,6 +1462,12 @@ auto SpawnableHost::create(SpawnablePackage package, const SpawnableHostOptions&
     out.reset();
     try {
         auto impl = std::make_unique<Impl>(std::move(package), options);
+        static auto generation = std::atomic<std::uint64_t>{1};
+        auto next = generation.load(std::memory_order_relaxed);
+        do {
+            if (next == UINT64_MAX) return Result::CounterOverflow;
+        } while (!generation.compare_exchange_weak(next, next + 1, std::memory_order_relaxed));
+        impl->debugGeneration = next;
         auto result = impl->initialize();
         if (result != Result::Ok) return result;
         out.reset(new SpawnableHost(std::move(impl)));

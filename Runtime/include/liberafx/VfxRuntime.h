@@ -5,6 +5,8 @@
 #include <cstdint>
 #include "liberafx/platform/JobScheduler.h"
 #include "liberafx/platform/Profiler.h"
+#include "liberafx/ExecutionDebugHooks.h"
+#include "liberafx/HostSignalContext.h"
 
 #ifndef LIBRA_RUNTIME_CORE_API
 #define LIBRA_RUNTIME_CORE_API
@@ -12,23 +14,15 @@
 
 namespace liberafx {
 
-enum class Result : std::uint8_t {
-    Ok,
-    InvalidArgument,
-    InvalidBinary,
-    UnsupportedBinary,
-    InsufficientWork,
-    Busy,
-    QueueRejected,
-    NotReady,
-    NodeNotFound,
-    DivideByZero,
-    NonFinite,
-    InvalidValueType,
-    UnknownCustomNode,
-    InvalidHandle,
-    InstructionBudgetExceeded,
-    CounterOverflow = 17
+enum class ValueType : std::uint8_t {
+    None = 0,
+    Float = 1,
+    Int32 = 2,
+    Vector2 = 3,
+    Vector3 = 4,
+    Vector4 = 5,
+    Color = 6,
+    Enum = 7
 };
 
 enum class CustomExecution : std::uint8_t { Parameter = 1, Signal = 2 };
@@ -84,6 +78,10 @@ struct CustomNodeInvocation final {
     bool hasTimeContext = false;
     bool deferSignal = false;
     double delaySeconds = 0;
+    // A terminal request is consumed by the owning host after signal execution.
+    std::uint8_t forceScope = 0;
+    std::uint8_t enterPhase = 0;
+    const SignalPayload* signalPayload = nullptr;
 };
 
 struct CustomNodeBinding final {
@@ -124,6 +122,9 @@ struct LogicalNodeInvocation final {
     std::uint64_t eventTick = 0;
     std::uint8_t signalInputSlot = 0xff;
     std::uint64_t emittedBranches = 0;
+    double time = 0;
+    const HostQualitySnapshot* quality = nullptr;
+    bool captureSignalValue = false;
 };
 
 struct LogicalQueuedSignal final {
@@ -198,6 +199,7 @@ public:
     std::size_t parameterValueCount() const noexcept;
     // Defaults contain doubles and need at least defaultsAlignment() alignment.
     std::size_t defaultsAlignment() const noexcept;
+    Result valueType(std::size_t instructionIndex, ValueType& out) const noexcept;
     std::size_t bindingCount() const noexcept { return version_ >= 3 && bindings_ != nullptr ? nodeCount_ : 0; }
     std::uint16_t version() const noexcept { return version_; }
     std::size_t gameIoPortCount() const noexcept { return gameIoPortCount_; }
@@ -215,6 +217,7 @@ private:
     std::size_t signalStackOffset_ = 0;
     std::size_t signalStackCapacity_ = 0;
     std::size_t gameIoMetadataOffset_ = 0;
+    std::size_t valueTypeMetadataOffset_ = 0;
     std::uint16_t gameIoPortCount_ = 0;
     std::size_t enumBranchMetadataOffset_ = 0;
     std::size_t enumSelectRecordsOffset_ = 0;
@@ -230,6 +233,7 @@ private:
     std::size_t logicalEventMaskOffset_ = 0;
     std::size_t logicalDirtyOffset_ = 0;
     std::size_t logicalQueueOffset_ = 0;
+    std::size_t signalPayloadQueueOffset_ = 0;
     std::size_t logicalQueueCapacity_ = 0;
     std::uint16_t logicalInstructionCount_ = 0;
     std::uint32_t logicalSignalRouteCount_ = 0;
@@ -241,6 +245,10 @@ public:
     // Owner thread only, not during evaluation/signal dispatch. Context and
     // callback code must outlive this Instance, including native state cleanup.
     Result setProfiling(const ProfilingHooks& profiling) noexcept;
+    // Attach after initialize, while idle. Currently limited to unguarded pure
+    // numeric programs; unsupported control/stateful nodes are rejected.
+    // Hooks and their context must outlive the job. Detach before reinitializing.
+    Result setDebugHooks(const ExecutionDebugHooks& hooks) noexcept;
     // Call control/read methods from one owner thread; the scheduler runs parameter callbacks on a worker.
     // Work is owned by the caller, must satisfy Program::workAlignment(), and must
     // remain alive until all jobs complete. Optional defaults must satisfy
@@ -254,12 +262,17 @@ public:
                          std::uint8_t component, ParameterHandle& out) const noexcept;
     Result bindSignal(const std::uint8_t nodeId[16], SignalHandle& out) const noexcept;
     Result value(const ValueHandle& handle, double out[4]) const noexcept;
+    Result valueInt32(const ValueHandle& handle, std::int32_t& out) const noexcept;
     Result parameter(const ParameterHandle& handle, double& out) const noexcept;
     Result setParameter(const ParameterHandle& handle, double value) noexcept;
+    Result setParameterInt32(const ParameterHandle& handle, std::int32_t value) noexcept;
     // Set before each evaluation. Values are supplied by the effect host;
     // frameDelta is the game's frame delta, not an internal scheduler substep.
     Result setTimeContext(double effectTime, double frameDelta) noexcept;
     Result clearTimeContext() noexcept;
+    Result setHostQuality(const HostQualitySnapshot& snapshot) noexcept;
+    Result enableForceRequests() noexcept;
+    Result pendingForceRequest(std::uint8_t& scope) const noexcept;
     Result updateAsync(double time, Enqueue enqueue, void* queueContext) noexcept;
     Result updateAsync(double time, const JobScheduler& scheduler) noexcept
     {
@@ -298,6 +311,13 @@ private:
     enum class Phase : std::uint8_t { Idle, Running, Complete };
     static void run(void* context) noexcept;
     Result evaluate(bool pureRefresh = false, const bool* dirty = nullptr) noexcept;
+    Result beforeDebugNode(std::uint32_t index) noexcept;
+    Result debugResolvedInputs(std::uint32_t index, double time,
+        const double* inputs, const std::uint8_t* widths,
+        const std::uint8_t* colorFlags = nullptr,
+        const std::uint8_t* signalSource = nullptr) noexcept;
+    Result debugEnumSelect(std::uint32_t index, std::uint32_t selector,
+        std::uint32_t selectedSource, const std::uint8_t* selectedDefaults) noexcept;
     Result updateBranchClocks(std::uint32_t guardId, bool& active) noexcept;
     bool isBranchActive(std::uint32_t guardId) const noexcept;
     Result dispatchSignalInternal(const SignalHandle& entry, double time,
@@ -319,6 +339,11 @@ private:
     double* stateWork_ = nullptr;
     std::size_t initializedStateCount_ = 0;
     bool dispatching_ = false;
+    bool forceRequestsEnabled_ = false;
+    std::uint8_t forceScope_ = 0;
+    std::uint8_t currentPhase_ = 0, pendingPhase_ = 0;
+    double phaseStartTime_ = 0, pendingPhaseTime_ = 0;
+    HostQualitySnapshot quality_{};
     DeferredSignal* deferredSignals_ = nullptr;
     std::size_t deferredCapacity_ = 0;
     std::size_t deferredCount_ = 0;
@@ -333,6 +358,7 @@ private:
     Result result_ = Result::NotReady;
     std::uint64_t updateSerial_ = 0;
     ProfilingHooks profiling_;
+    ExecutionDebugHooks debugging_;
     std::atomic<Phase> phase_{Phase::Idle};
 };
 

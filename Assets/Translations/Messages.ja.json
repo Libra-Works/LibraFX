@@ -115,6 +115,7 @@
   "Messages.Tool.Timeline": "タイムライン",
   "Messages.Tool.Curves": "F-Curve",
   "Messages.ResourcesUnavailable": "アセットの参照とエンジンアセットの統合は、まだ実装されていません。",
+  "Messages.AssetSelectionStale": "呼び出し元の選択が変更されたか、エンジン接続が利用できなくなりました。対象パラメーターからアセットブラウザーを開き直してください。",
   "Messages.TimelineUnavailable": "タイムライン編集は、まだ実装されていません。タイムラインのデータは基盤となるグラフで表現されます。",
   "Messages.Error.NodesNotInGraph": "両方のノードがこのグラフに属している必要があります。",
   "Messages.Error.SelfConnection": "ノードを自分自身に接続することはできません。",

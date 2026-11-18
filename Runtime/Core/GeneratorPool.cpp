@@ -56,6 +56,21 @@ struct SpawnCommand final {
     double time = 0;
     std::size_t count = 0;
 };
+
+// In-place stable ring filtering, including a wrapped/full queue.
+template<class T, class Predicate>
+void removeQueued(std::vector<T>& queue, std::size_t head, std::size_t& count,
+                  Predicate remove) noexcept
+{
+    auto kept = std::size_t{};
+    for (auto index = std::size_t{}; index < count; ++index) {
+        const auto& item = queue[(head + index) % queue.size()];
+        if (remove(item)) continue;
+        if (kept != index) queue[(head + kept) % queue.size()] = item;
+        ++kept;
+    }
+    count = kept;
+}
 }
 
 struct GeneratorPool::Impl final {
@@ -225,6 +240,7 @@ auto GeneratorPool::spawn(double time, const GeneratorCapture* captures, std::si
             slot->observerOwner = impl_.get();
             result = slot->instance->setSignalObserver(&Impl::observeSignal, slot);
         }
+        if (result == Result::Ok) result = slot->instance->enableForceRequests();
         if (result == Result::Ok && impl_->lifecycle.enableDeferredSignals)
         {
             result = slot->instance->setDeferredSignalStorage(slot->deferred.data(), slot->deferred.size());
@@ -285,6 +301,48 @@ auto GeneratorPool::stop(GeneratorInstanceId id) noexcept -> Result
     impl_->rejectEnqueues = true;
     lock.unlock();
     slot->instance.reset();
+    lock.lock();
+    impl_->rejectEnqueues = false;
+    impl_->executing = false;
+    return Result::Ok;
+}
+
+auto GeneratorPool::forceTerminate(GeneratorInstanceId id) noexcept -> Result
+{
+    auto lock = std::unique_lock<std::mutex>(impl_->mutex);
+    if (impl_->executing) return Result::Busy;
+    if (!id || (impl_->nextId && id >= impl_->nextId)) return Result::InvalidHandle;
+    auto slot = impl_->find(id);
+    // Purge even after natural retirement: host may not have routed the notice.
+    removeQueued(impl_->events, impl_->eventHead, impl_->eventCount,
+        [id](const auto& event) { return event.instanceId == id; });
+    removeQueued(impl_->signalEvents, impl_->signalEventHead, impl_->signalEventCount,
+        [id](const auto& event) { return event.instanceId == id; });
+    if (!slot) return Result::Ok;
+    slot->id = 0;
+    --impl_->active;
+    impl_->executing = true;
+    impl_->rejectEnqueues = true;
+    lock.unlock();
+    slot->instance.reset();
+    lock.lock();
+    impl_->rejectEnqueues = false;
+    impl_->executing = false;
+    return Result::Ok;
+}
+
+auto GeneratorPool::forceTerminateAll() noexcept -> Result
+{
+    auto lock = std::unique_lock<std::mutex>(impl_->mutex);
+    if (impl_->executing) return Result::Busy;
+    impl_->executing = true;
+    impl_->rejectEnqueues = true;
+    impl_->active = 0;
+    impl_->eventCount = impl_->signalEventCount = 0;
+    impl_->commandHead = impl_->commandCount = 0;
+    for (auto& slot : impl_->slots) slot->id = 0;
+    lock.unlock();
+    for (auto& slot : impl_->slots) slot->instance.reset();
     lock.lock();
     impl_->rejectEnqueues = false;
     impl_->executing = false;
@@ -405,6 +463,9 @@ auto GeneratorPool::start(GeneratorInstanceId id) noexcept -> Result
     if (status != Result::Ok) return status;
     slot->sampleReady = true;
     slot->sampledAge = 0;
+    auto forceScope = std::uint8_t{};
+    status = slot->instance->pendingForceRequest(forceScope);
+    if (status != Result::Ok || forceScope != 0) return status;
     if (impl_->lifecycle.hasLife && duration[0] == 0)
     {
         slot->expired = true;
@@ -441,6 +502,15 @@ auto GeneratorPool::finalize(GeneratorInstanceId id) noexcept -> Result
     impl_->rejectEnqueues = false;
     impl_->executing = false;
     return Result::Ok;
+}
+
+auto GeneratorPool::pendingForceRequest(GeneratorInstanceId id, std::uint8_t& scope) const noexcept -> Result
+{
+    auto lock = std::lock_guard<std::mutex>(impl_->mutex);
+    if (impl_->executing) return Result::Busy;
+    auto slot = impl_->find(id);
+    if (!slot) return Result::InvalidHandle;
+    return slot->instance->pendingForceRequest(scope);
 }
 
 auto GeneratorPool::reset() noexcept -> Result
@@ -580,6 +650,37 @@ auto GeneratorPool::dispatchSignal(const std::uint8_t nodeId[16], double time,
     return result;
 }
 
+auto GeneratorPool::dispatchSignal(GeneratorInstanceId id, const std::uint8_t nodeId[16],
+                                   double time, std::size_t instructionBudget) noexcept -> Result
+{
+    if (!nodeId || !std::isfinite(time) || !instructionBudget || instructionBudget > 10000)
+        return Result::InvalidArgument;
+    auto lock = std::unique_lock<std::mutex>(impl_->mutex);
+    if (impl_->executing) return Result::Busy;
+    auto slot = impl_->find(id);
+    if (!slot) return Result::InvalidHandle;
+    if (!slot->started || !slot->sampleReady || slot->expiring) return Result::NotReady;
+    if (slot->startResult != Result::Ok) return slot->startResult;
+    if (time != slot->start + slot->sampledAge) return Result::InvalidArgument;
+    slot->signalTime = slot->sampledAge;
+    slot->signalEffectTime = time;
+    impl_->executing = true;
+    lock.unlock();
+    auto result = slot->instance->dispatchSignal(nodeId, slot->signalTime, instructionBudget);
+    lock.lock();
+    impl_->executing = false;
+    return result;
+}
+
+auto GeneratorPool::setHostQuality(GeneratorInstanceId id, const HostQualitySnapshot& snapshot) noexcept -> Result
+{
+    auto lock = std::lock_guard<std::mutex>(impl_->mutex);
+    if (impl_->executing) return Result::Busy;
+    auto slot = impl_->find(id);
+    if (slot == nullptr) return Result::InvalidHandle;
+    return slot->instance->setHostQuality(snapshot);
+}
+
 auto GeneratorPool::setTimeContext(GeneratorInstanceId id, double effectTime, double frameDelta) noexcept -> Result
 {
     auto lock = std::lock_guard<std::mutex>(impl_->mutex);
@@ -649,6 +750,9 @@ auto GeneratorPool::evaluate(GeneratorInstanceId id, double time) noexcept -> Re
         slot->sampledAge = age;
         slot->sampleReady = true;
     }
+    auto forceScope = std::uint8_t{};
+    if (result == Result::Ok) result = slot->instance->pendingForceRequest(forceScope);
+    if (result != Result::Ok || forceScope != 0) return result;
     if (result == Result::Ok && impl_->lifecycleConfigured && impl_->lifecycle.hasLife &&
         sample.expired) {
         slot->expired = true;
@@ -799,6 +903,15 @@ auto GeneratorPool::lifetime(GeneratorInstanceId id, LifetimeSample& out) noexce
     if (!slot) return Result::InvalidHandle;
     if (!slot->sampleReady) return Result::NotReady;
     return slot->lifetime.sample(slot->sampledAge, out);
+}
+
+auto GeneratorPool::setDebugHooks(GeneratorInstanceId id, const ExecutionDebugHooks& hooks) noexcept -> Result
+{
+    auto lock = std::lock_guard<std::mutex>(impl_->mutex);
+    if (impl_->executing) return Result::Busy;
+    auto slot = impl_->find(id);
+    if (!slot || (hooks.beforeNode && (slot->expired || slot->destroyPublished))) return Result::InvalidHandle;
+    return slot->instance->setDebugHooks(hooks);
 }
 
 auto GeneratorPool::value(GeneratorInstanceId id, const std::uint8_t nodeId[16],

@@ -5,6 +5,34 @@
              x:DataType="vm:PreviewPaneViewModel">
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="12" Spacing="8">
+            <TextBlock Text="{DynamicResource Text.ExecutionDebug.Title}" FontWeight="SemiBold" />
+            <TextBlock Text="{DynamicResource Text.ExecutionDebug.Help}" TextWrapping="Wrap" />
+            <CheckBox Content="{DynamicResource Text.ExecutionDebug.Package}" IsChecked="{Binding Main.ExecutionDebugger.PackageMode}" />
+            <WrapPanel>
+                <Button Content="{DynamicResource Text.ExecutionDebug.Start}" Command="{Binding Main.ExecutionDebugger.StartCommand}" />
+                <Button Content="{DynamicResource Text.ExecutionDebug.Disconnect}" Command="{Binding Main.ExecutionDebugger.DisconnectCommand}" />
+            </WrapPanel>
+            <TextBlock Text="{Binding Main.ExecutionDebugger.Status}" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding Main.ExecutionDebugger.Target}" TextWrapping="Wrap" />
+            <TextBox Text="{Binding Main.ExecutionDebugger.Invitation, Mode=OneWay}" IsReadOnly="True"
+                     PlaceholderText="{DynamicResource Text.ExecutionDebug.Invitation}" />
+            <WrapPanel>
+                <Button Content="{DynamicResource Text.ExecutionDebug.Toggle}" Command="{Binding Main.ExecutionDebugger.BreakpointCommand}" />
+                <Button Content="{DynamicResource Text.ExecutionDebug.Pause}" Command="{Binding Main.ExecutionDebugger.PauseCommand}" />
+                <Button Content="{DynamicResource Text.ExecutionDebug.Step}" Command="{Binding Main.ExecutionDebugger.StepCommand}" />
+                <Button Content="{DynamicResource Text.ExecutionDebug.Resume}" Command="{Binding Main.ExecutionDebugger.ResumeCommand}" />
+                <Button Content="{DynamicResource Text.ExecutionDebug.Locate}" Command="{Binding Main.ExecutionDebugger.LocateCommand}" />
+            </WrapPanel>
+            <TextBlock Text="{Binding Main.ExecutionDebugger.Breakpoints}" />
+            <TextBlock Text="{Binding Main.ExecutionDebugger.CurrentNode}" TextWrapping="Wrap" />
+            <ItemsControl ItemsSource="{Binding Main.ExecutionDebugger.Inputs}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Separator />
             <TextBlock Text="{DynamicResource Text.Panels.PreviewTransport}" FontWeight="SemiBold" />
             <TextBlock Text="{Binding Main.PreviewStatus}" TextWrapping="Wrap" />
             <StackPanel Orientation="Horizontal" Spacing="6">

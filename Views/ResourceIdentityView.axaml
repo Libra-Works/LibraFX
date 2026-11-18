@@ -1,0 +1,119 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:LiberaFx.ViewModels"
+             x:Class="LiberaFx.Views.ResourceIdentityView"
+             x:DataType="vm:ResourceIdentityPaneViewModel">
+    <ScrollViewer>
+        <StackPanel Margin="16" Spacing="12">
+            <TextBlock Text="{DynamicResource Text.Resources.IdentityIntro}" TextWrapping="Wrap" />
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                <ComboBox ItemsSource="{Binding Peers}" SelectedItem="{Binding SelectedPeer}"
+                          AutomationProperties.Name="{DynamicResource Text.Resources.IdentityEditor}" />
+                <Button Grid.Column="1" Command="{Binding RefreshPeersCommand}"
+                        Content="{DynamicResource Text.Editor.Refresh}" />
+                <Button Grid.Column="2" Command="{Binding RefreshProjectCommand}"
+                        Content="{DynamicResource Text.Resources.IdentityRefreshProject}" />
+            </Grid>
+            <Border Padding="10" BorderThickness="1" BorderBrush="{DynamicResource EffectBorderBrush}" CornerRadius="4">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="{Binding ProjectStatus}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding ProjectIdText}" TextWrapping="Wrap"
+                               FontFamily="Consolas" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Command="{Binding InitializeProjectCommand}"
+                                Content="{DynamicResource Text.Resources.IdentityInitialize}" />
+                        <Button Command="{Binding KeepProjectCommand}"
+                                Content="{DynamicResource Text.Resources.IdentityKeep}" />
+                        <CheckBox IsChecked="{Binding ConfirmFork}"
+                                  Content="{DynamicResource Text.Resources.IdentityConfirmFork}" />
+                        <Button Command="{Binding ForkProjectCommand}"
+                                Content="{DynamicResource Text.Resources.IdentityFork}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="{DynamicResource Text.Resources.IdentityRegister}" FontWeight="SemiBold" />
+                    <TextBox Text="{Binding ResourceName, UpdateSourceTrigger=PropertyChanged}"
+                             PlaceholderText="{DynamicResource Text.Resources.IdentityResourceName}"
+                             AutomationProperties.Name="{DynamicResource Text.Resources.IdentityResourceName}" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <ComboBox ItemsSource="{Binding ResourceKinds}" SelectedItem="{Binding ResourceKind}"
+                                  AutomationProperties.Name="{DynamicResource Text.Resources.IdentityResourceKind}" />
+                        <TextBox Grid.Column="1" Text="{Binding BindingFormat}" IsReadOnly="True"
+                                 AutomationProperties.Name="{DynamicResource Text.Resources.IdentityBindingFormat}" />
+                    </Grid>
+                    <TextBox Text="{Binding BindingValue, UpdateSourceTrigger=PropertyChanged}"
+                             PlaceholderText="{DynamicResource Text.Resources.IdentityBindingValue}"
+                             AutomationProperties.Name="{DynamicResource Text.Resources.IdentityBindingValue}" />
+                    <TextBlock Text="{DynamicResource Text.Resources.IdentityBindingValueHelp}"
+                               TextWrapping="Wrap" />
+                    <Button Command="{Binding ProbeCommand}" Content="{DynamicResource Text.Resources.IdentityProbe}" />
+                    <TextBlock Text="{DynamicResource Text.Resources.IdentityLegacyNotice}" TextWrapping="Wrap" />
+                    <ComboBox ItemsSource="{Binding TargetNodes}" SelectedItem="{Binding SelectedTargetNode}"
+                              DisplayMemberBinding="{Binding Label}"
+                              AutomationProperties.Name="{DynamicResource Text.Resources.IdentityTargetNode}" />
+                    <ComboBox ItemsSource="{Binding Locations}" SelectedItem="{Binding SelectedLocation}"
+                              DisplayMemberBinding="{Binding Label}"
+                              AutomationProperties.Name="{DynamicResource Text.Resources.IdentityLocation}" />
+                    <TextBlock Text="{DynamicResource Text.Resources.IdentityLegacyValue}" />
+                    <TextBox Text="{Binding LegacyValue}" IsReadOnly="True" TextWrapping="Wrap" />
+                    <CheckBox IsChecked="{Binding ReplaceExistingUse}"
+                              Content="{DynamicResource Text.Resources.IdentityReplaceConfirm}" />
+                    <Button Command="{Binding RegisterAndAssignCommand}"
+                            Content="{DynamicResource Text.Resources.IdentityRegisterAssign}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="8">
+                    <TextBlock Text="{DynamicResource Text.Resources.IdentityRegisteredHeader}" FontWeight="SemiBold" />
+                    <ListBox ItemsSource="{Binding RegisteredResources}" SelectedItem="{Binding SelectedResource}"
+                             MinHeight="130">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:RegisteredResourceOption">
+                                <StackPanel Margin="4">
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding Kind}" />
+                                    <TextBlock Text="{Binding Id}" FontSize="11"
+                                               Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Button Command="{Binding AssignExistingCommand}"
+                            Content="{DynamicResource Text.Resources.IdentityAssignExisting}" />
+                    <TextBlock Text="{DynamicResource Text.Resources.IdentityParameterNotice}" TextWrapping="Wrap" />
+                    <Button Command="{Binding ReadMaterialSchemaCommand}"
+                            Content="{DynamicResource Text.Resources.IdentityReadSchema}" />
+                    <ComboBox ItemsSource="{Binding EngineParameters}" SelectedItem="{Binding SelectedEngineParameter}"
+                              DisplayMemberBinding="{Binding Name}"
+                              AutomationProperties.Name="{DynamicResource Text.Resources.IdentityEngineProperty}" />
+                    <ComboBox ItemsSource="{Binding GraphParameters}" SelectedItem="{Binding SelectedGraphParameter}"
+                              DisplayMemberBinding="{Binding Name}"
+                              AutomationProperties.Name="{DynamicResource Text.Resources.IdentityGraphPin}" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <TextBox Text="{Binding ParameterName, UpdateSourceTrigger=PropertyChanged}"
+                                 PlaceholderText="{DynamicResource Text.Resources.IdentityParameterName}" />
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding ParameterKinds}"
+                                  SelectedItem="{Binding ParameterKind}" />
+                    </Grid>
+                    <TextBox Text="{Binding ParameterBindingName, UpdateSourceTrigger=PropertyChanged}"
+                             PlaceholderText="{DynamicResource Text.Resources.IdentityParameterBindingName}" />
+                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6">
+                        <TextBox Text="{Binding ParameterDefaultJson}" PlaceholderText="{DynamicResource Text.Resources.IdentityDefault}" />
+                        <TextBox Grid.Column="1" Text="{Binding ParameterMinimumJson}" PlaceholderText="{DynamicResource Text.Resources.IdentityMinimum}" />
+                        <TextBox Grid.Column="2" Text="{Binding ParameterMaximumJson}" PlaceholderText="{DynamicResource Text.Resources.IdentityMaximum}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <ComboBox ItemsSource="{Binding ParameterAssociations}" SelectedItem="{Binding ParameterAssociation}" />
+                        <TextBox Grid.Column="1" Text="{Binding ParameterIndex}" PlaceholderText="{DynamicResource Text.Resources.IdentityParameterIndex}" />
+                    </Grid>
+                    <Button Command="{Binding RegisterParameterCommand}"
+                            Content="{DynamicResource Text.Resources.IdentityRegisterParameter}" />
+                    <Button Command="{Binding DeliverUnityBindingsCommand}"
+                            Content="{DynamicResource Text.Resources.IdentityDeliverUnity}" />
+                </StackPanel>
+            </Grid>
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

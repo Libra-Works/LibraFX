@@ -10,6 +10,9 @@ public static class GraphLogicalSchema
     public static readonly Guid SignalAndTypeId = Guid.Parse("e9778c40-209b-4ce8-918d-35c000000002");
     public static readonly Guid SignalOrTypeId = Guid.Parse("e9778c40-209b-4ce8-918d-35c000000003");
     public static readonly Guid SignalToNumberTypeId = Guid.Parse("e9778c40-209b-4ce8-918d-35c000000004");
+    public static readonly Guid LoopClockTypeId = Guid.Parse("e9778c40-209b-4ce8-918d-35c000000005");
+    public static readonly Guid QualityBranchTypeId = Guid.Parse("e9778c40-209b-4ce8-918d-35c000000006");
+    public static readonly Guid SignalCaptureTypeId = Guid.Parse("e9778c40-209b-4ce8-918d-35c000000007");
     public static readonly Guid CompareOperatorTypeId = Guid.Parse("e9778c40-209b-4ce8-918d-35c000000010");
     public static readonly Guid CompareModeTypeId = Guid.Parse("e9778c40-209b-4ce8-918d-35c000000011");
     public static readonly Guid SignalAndModeTypeId = Guid.Parse("e9778c40-209b-4ce8-918d-35c000000012");
@@ -50,22 +53,53 @@ public static class GraphLogicalSchema
     public static bool IsAnd(GraphNodeKind kind) => kind.Value == SignalAndTypeId.ToString("D");
     public static bool IsOr(GraphNodeKind kind) => kind.Value == SignalOrTypeId.ToString("D");
     public static bool IsSignalToNumber(GraphNodeKind kind) => kind.Value == SignalToNumberTypeId.ToString("D");
+    public static bool IsLoopClock(GraphNodeKind kind) => kind.Value == "LoopClock";
+    public static bool IsQualityBranch(GraphNodeKind kind) => kind.Value == "QualityBranch";
+    public static bool IsSignalCapture(GraphNodeKind kind) => kind.Value == "SignalCaptureVector4";
     public static bool IsLogical(GraphNodeKind kind) =>
-        IsCompare(kind) || IsAnd(kind) || IsOr(kind) || IsSignalToNumber(kind);
+        IsCompare(kind) || IsAnd(kind) || IsOr(kind) || IsSignalToNumber(kind) || IsLoopClock(kind) ||
+        IsQualityBranch(kind) || IsSignalCapture(kind);
 
     public static bool IsCompare(GraphNodeDefinition definition) => definition.TypeId == CompareTypeId;
     public static bool IsAnd(GraphNodeDefinition definition) => definition.TypeId == SignalAndTypeId;
     public static bool IsOr(GraphNodeDefinition definition) => definition.TypeId == SignalOrTypeId;
     public static bool IsSignalToNumber(GraphNodeDefinition definition) => definition.TypeId == SignalToNumberTypeId;
+    public static bool IsLoopClock(GraphNodeDefinition definition) => definition.TypeId == LoopClockTypeId;
+    public static bool IsQualityBranch(GraphNodeDefinition definition) => definition.TypeId == QualityBranchTypeId;
+    public static bool IsSignalCapture(GraphNodeDefinition definition) => definition.TypeId == SignalCaptureTypeId;
     public static bool IsLogical(GraphNodeDefinition definition) =>
-        IsCompare(definition) || IsAnd(definition) || IsOr(definition) || IsSignalToNumber(definition);
+        IsCompare(definition) || IsAnd(definition) || IsOr(definition) || IsSignalToNumber(definition) ||
+        IsLoopClock(definition) || IsQualityBranch(definition) || IsSignalCapture(definition);
 
     public static void ValidateNodeParameters(GraphNodeDefinition definition,
         IReadOnlyList<NodeParameterSnapshot>? nodeParameters)
     {
         if (!IsLogical(definition)) return;
+        if (IsLoopClock(definition))
+        {
+            var ids = new[] { "length", "count", "bounded" };
+            if (definition.Parameters.Count != ids.Length ||
+                definition.Parameters.Any(parameter => !ids.Contains(parameter.Id) || parameter.Type != "float") ||
+                nodeParameters?.Any(parameter => !ids.Contains(parameter.Id) || parameter.Type != "float") == true)
+                throw new InvalidDataException("Loop Clock has an invalid parameter schema.");
+            foreach (var parameter in definition.Parameters)
+            {
+                var value = nodeParameters?.SingleOrDefault(item => item.Id == parameter.Id)?.Value ?? parameter.DefaultValue;
+                if (!NodeParameter.IsValidValue("float", value) || !value.TryGetDouble(out var number) ||
+                    !double.IsFinite(number) || number < 0 ||
+                    parameter.Id == "count" && (number > 9007199254740991d || Math.Truncate(number) != number) ||
+                    parameter.Id == "bounded" && number != 0 && number != 1)
+                    throw new InvalidDataException($"Loop Clock has an invalid '{parameter.Id}' value.");
+            }
+            return;
+        }
 
         var expectedParameters = new List<(string Id, string Type, int Minimum, int Maximum)>();
+        if (IsQualityBranch(definition))
+        {
+            expectedParameters.Add(("comparison", "enum:4a94e882-39e8-4efb-92c7-180000000041", 0, 5));
+            expectedParameters.Add(("tier", "enum:4a94e882-39e8-4efb-92c7-180000000040", 0, 4));
+        }
         if (IsCompare(definition))
         {
             expectedParameters.Add((OperationParameterId, $"enum:{CompareOperatorTypeId:D}", 0, 5));
@@ -101,6 +135,9 @@ public static class GraphLogicalSchema
         IReadOnlyList<NodeParameterSnapshot>? nodeParameters)
     {
         ValidateNodeParameters(definition, nodeParameters);
+        if (IsQualityBranch(definition))
+            return (uint)ParameterValue(definition, nodeParameters, "comparison") |
+                ((uint)ParameterValue(definition, nodeParameters, "tier") << 8);
         if (IsCompare(definition))
         {
             var operation = ParameterValue(definition, nodeParameters, OperationParameterId);

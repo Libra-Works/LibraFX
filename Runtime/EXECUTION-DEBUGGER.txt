@@ -1,0 +1,104 @@
+Execution debugging (#56)
+
+Instance::setDebugHooks attaches an optional pre-node callback after initialization.
+The setter rejects pending jobs. Visits capture only actual executed nodes;
+conditional cases expose only the selector and selected input. Custom and
+logical operands are captured after resolution, before invocation.
+
+ExecutionDebugger owns no graph/engine objects and uses caller-owned bounded
+breakpoint storage. Construct and control it on the owner thread; execute the
+Instance job on one separate worker. An attached debugger refuses owner-thread
+execution rather than blocking the game/UI thread. The actual evaluator calls the
+hook before each executed node, copying its resolved numeric operands, connection
+flags, semantic numeric/Color/Int32 kind and evaluation time. Snapshots include
+defaults/overrides and selected source lanes, not guesses from an editor graph.
+They do not yet include all authored configuration fields, material data or objects.
+
+A breakpoint/pause retains the live worker call stack. Resume(singleStep=true)
+executes the paused node once and stops before the next node; there is no replay.
+The Instance remains Busy/NotReady while paused, so callers cannot read partial
+outputs, mutate parameters, change hooks or reinitialize its work buffers. Hook
+errors abort evaluation and propagate through Instance::result.
+
+Each wait has a finite configurable timeout (default 30 seconds; maximum 5 minutes).
+Close wakes a paused worker; Busy means its callback has not returned yet. Always
+close, join the job, detach hooks, then destroy/reinitialize the Instance, program,
+buffers or debugger. Do not destroy a debugger just because it is between callbacks.
+No hook/context lifetime is transferred. Evaluation profiling includes pause time;
+disable profiling when it is not meaningful for a debug session.
+
+Verification:
+  managed selector --debugger-fixtures <absolute isolated directory>
+  managed selector --int32 with LIBERAFX_INT32_FIXTURE_DIR set
+  native liberafx_execution_debugger_tests
+  native liberafx_execution_debugger_runtime_tests
+Set LIBERAFX_DEBUG_FIXTURE_DIR and LIBERAFX_INT32_FIXTURE_DIR for the last target.
+The runtime test executes real compiler output, checks pre-execution inputs and
+overrides, steps into a dependent node, resumes and aborts a live job. CTest marks
+the fixture-dependent cases skipped (77), not passed, if their fixture roots are absent.
+
+Windows authoring workflow (standalone CPU bytecode)
+--------------------------------------------------
+Load the same .lfxb revision that was exported from the active graph. In LIBERA
+FX, open Engine Connection > Runtime debugger, select any node and toggle its
+breakpoint, then start a local debugger. Copy the temporary invitation:
+
+* Unity: enter Play mode and select the LiberaFxRenderer instance. Paste the
+  invitation in the Inspector's LIBERA FX Runtime Debugger and click Attach.
+* Unreal: in the PIE instance select its LibraEffectComponent, paste the
+  invitation in Local Debugger Invitation, then click Attach Local Debugger.
+  Before Play or when between evaluations, AttachExecutionDebugger is also
+  available from owner-thread Blueprint/C++. A running component can return
+  Busy; pause playback and wait until the current evaluation finishes, attach,
+  then resume playback on that component.
+
+The editor samples the latest real visit, marks its node and unambiguous
+incoming edges, and shows operand values when stopped. Step pauses BEFORE the
+next actual visit, not the next authored node. Disconnect releases a suspended
+worker; the existing stack is not replayed. A pause times out after 30 seconds.
+The invitation expires after two minutes if unused, stays in memory only,
+and the named-pipe listener is opt-in and CurrentUserOnly. It is separate from
+the Preview and MCP services; no access tokens, asset bytes, or external
+requests are used. The bytecode identity field checks revision alignment and is
+not the authentication mechanism. Changing the active document or editing
+its graph closes the session rather than showing stale values.
+
+Package workflow
+----------------
+Select “Match a compiled Spawnable package” before starting the editor session.
+Use the unchanged package compiled from the active graph, and attach to a
+playing Unity LiberaFxSpawnableComponent or Unreal LibraSpawnableComponent.
+Choose the root by leaving the child fields unset, or copy the container UUID
+and instance ID from this playback's Spawn event. Unity's Inspector captures
+the playback generation with “Select current playback”; Blueprint/C++ users
+pass GetDebuggerGeneration()/GetPackageDebuggerGeneration() to AttachPackageDebugger
+or AttachExecutionDebugger as appropriate. Unreal LibraEffectComponent forwards
+both root and child selection to its package playback component.
+
+For engine acceptance use the compiler-produced GameIo.lfxp fixture: spawn two
+children, attach to the first, set a breakpoint inside its graph, then advance
+while retaining the last rendered frame. Verify the pane's exact child identity
+and inputs, Step, then disconnect while stopped. Ensure game/editor input and
+rendering stayed responsive; verify both child scopes complete their queued
+work and no extra Spawn or Signal event is emitted. Repeat for root, try the
+old generation after restart, and destroy the owning component while paused.
+GPU execution and timeline debugging are not part of this path.
+
+Native focused verification: in addition to scalar/Int32/Enum fixtures, set
+LIBERAFX_DEBUG_PACKAGE_FIXTURE_DIR to `--spawnable-adapter-fixtures` output
+(GameIo.lfxp), LIBERAFX_DEBUG_QUALITY_FIXTURE_DIR to `--authored-quality`, and
+LIBERAFX_DEBUG_PHASE_FIXTURE_DIR to `--authored-lifecycle`. Run
+`ctest -C Debug --output-on-failure -R "execution_debugger|^liberafx_interop_tests$"`.
+
+Automated actual-engine acceptance:
+  Unity LiberaFxPackageDebuggerVerification.RunBatch, with
+  LIBERAFX_VERIFICATION_PROJECT and LIBERAFX_LIFECYCLE_FIXTURE_DIR.
+  Use the rendered Editor (not -nographics). It verifies exact child targeting,
+  responsive Update/Busy handling and destruction while paused, then a rendered
+  root retaining its mesh, material, transform and camera pixels across Update.
+  Unreal Libra.Runtime.Debugger.PackageWorker, with
+  -LibraDebuggerFixture=<the compiler-produced lifecycle fixture directory>,
+  verifies actual component child pause, owner responsiveness and destruction.
+Both use opt-in private local named pipes created by the tests, not an external
+editor/service. These ran against the actual engine integrations; native fixture
+tests additionally cover stepping, disconnect/resume and stale target rejection.

@@ -1,0 +1,63 @@
+{
+  "FormatVersion": 5,
+  "Id": "37000000-0000-4000-8000-000000000001",
+  "Name": "Start / Loop / End",
+  "Revision": 1,
+  "Locked": true,
+  "Graph": {
+    "Nodes": [
+      { "Id": "37010000-0000-4000-8000-000000000001", "Kind": "CurrentPhase", "Name": "Instance Phase", "X": 0, "Y": 0, "PortType": "enum:4a94e882-39e8-4efb-92c7-180000000030", "PortCategory": "Parameter" },
+      { "Id": "37010000-0000-4000-8000-000000000002", "Kind": "PhaseTime", "Name": "Phase Time", "X": 0, "Y": 180, "PortType": "Float", "PortCategory": "Parameter" },
+      { "Id": "37010000-0000-4000-8000-000000000003", "Kind": "GroupInputFloat", "Name": "Start Length", "X": 0, "Y": 360, "PortType": "Float", "PortCategory": "Parameter", "Parameters": [{ "Id": "value", "Type": "float", "Value": 1 }] },
+      { "Id": "37010000-0000-4000-8000-000000000004", "Kind": "GroupInputFloat", "Name": "Loop Length", "X": 0, "Y": 540, "PortType": "Float", "PortCategory": "Parameter", "Parameters": [{ "Id": "value", "Type": "float", "Value": 1 }] },
+      { "Id": "37010000-0000-4000-8000-000000000005", "Kind": "GroupInputFloat", "Name": "Loop Count", "X": 0, "Y": 720, "PortType": "Float", "PortCategory": "Parameter", "Parameters": [{ "Id": "value", "Type": "float", "Value": 3 }] },
+      { "Id": "37010000-0000-4000-8000-000000000006", "Kind": "GroupInputFloat", "Name": "Limit Loop Count", "X": 0, "Y": 900, "PortType": "Float", "PortCategory": "Parameter", "Parameters": [{ "Id": "value", "Type": "float", "Value": 1 }] },
+      { "Id": "37010000-0000-4000-8000-000000000007", "Kind": "GroupInputFloat", "Name": "End Length", "X": 0, "Y": 1080, "PortType": "Float", "PortCategory": "Parameter", "Parameters": [{ "Id": "value", "Type": "float", "Value": 1 }] },
+      { "Id": "37010000-0000-4000-8000-000000000008", "Kind": "GroupInputSignal", "Name": "End Request (Loop only)", "X": 0, "Y": 1260, "PortType": "Signal", "PortCategory": "Signal" },
+      { "Id": "37010000-0000-4000-8000-000000000009", "Kind": "e9778c40-209b-4ce8-918d-35c000000001", "Name": "Start Complete", "X": 350, "Y": 180, "PortType": "Float", "PortCategory": "Parameter", "Parameters": [{ "Id": "operation", "Type": "enum:e9778c40-209b-4ce8-918d-35c000000010", "Value": 4 }, { "Id": "mode", "Type": "enum:e9778c40-209b-4ce8-918d-35c000000011", "Value": 1 }] },
+      { "Id": "37010000-0000-4000-8000-000000000010", "Kind": "EnterLoop", "Name": "Enter Loop", "X": 700, "Y": 0, "PortType": "Signal", "PortCategory": "Signal" },
+      { "Id": "37010000-0000-4000-8000-000000000011", "Kind": "LoopClock", "Name": "Loop Clock", "X": 350, "Y": 540, "PortType": "FloatX4", "PortCategory": "Parameter" },
+      { "Id": "37010000-0000-4000-8000-000000000012", "Kind": "EnterEnd", "Name": "Enter End", "X": 700, "Y": 540, "PortType": "Signal", "PortCategory": "Signal" },
+      { "Id": "37010000-0000-4000-8000-000000000013", "Kind": "e9778c40-209b-4ce8-918d-35c000000001", "Name": "End Complete", "X": 350, "Y": 1080, "PortType": "Float", "PortCategory": "Parameter", "Parameters": [{ "Id": "operation", "Type": "enum:e9778c40-209b-4ce8-918d-35c000000010", "Value": 4 }, { "Id": "mode", "Type": "enum:e9778c40-209b-4ce8-918d-35c000000011", "Value": 0 }] },
+      { "Id": "37010000-0000-4000-8000-000000000014", "Kind": "ComposeVector4", "Name": "Start Data", "X": 700, "Y": 180, "PortType": "FloatX4", "PortCategory": "Parameter" },
+      { "Id": "37010000-0000-4000-8000-000000000015", "Kind": "ComposeVector4", "Name": "End Data", "X": 700, "Y": 1080, "PortType": "FloatX4", "PortCategory": "Parameter" },
+      { "Id": "37010000-0000-4000-8000-000000000016", "Kind": "EnumSelectFloatX4_4a94e88239e84efb92c7180000000030", "Name": "Active Phase Only", "X": 1050, "Y": 360, "PortType": "FloatX4", "PortCategory": "Parameter" },
+      { "Id": "37010000-0000-4000-8000-000000000017", "Kind": "GroupOutputVector4", "Name": "Time / Index / Boundaries / Complete", "X": 1400, "Y": 360, "PortType": "FloatX4", "PortCategory": "Parameter" },
+      { "Id": "37010000-0000-4000-8000-000000000018", "Kind": "GroupOutputFloat", "Name": "Phase Time", "X": 1400, "Y": 540, "PortType": "Float", "PortCategory": "Parameter" },
+      { "Id": "37010000-0000-4000-8000-000000000019", "Kind": "GroupOutputSignal", "Name": "End Complete (no implicit destruction)", "X": 1400, "Y": 1080, "PortType": "Signal", "PortCategory": "Signal" }
+    ],
+    "Connections": [
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000001", "TargetNodeId": "37010000-0000-4000-8000-000000000016", "SourcePortId": "phase", "TargetPortId": "selector" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000002", "TargetNodeId": "37010000-0000-4000-8000-000000000009", "TargetPortId": "a" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000003", "TargetNodeId": "37010000-0000-4000-8000-000000000009", "TargetPortId": "b" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000009", "TargetNodeId": "37010000-0000-4000-8000-000000000010", "SourcePortId": "event", "TargetPortId": "signal" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000002", "TargetNodeId": "37010000-0000-4000-8000-000000000011", "TargetPortId": "time" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000004", "TargetNodeId": "37010000-0000-4000-8000-000000000011", "TargetPortId": "length" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000005", "TargetNodeId": "37010000-0000-4000-8000-000000000011", "TargetPortId": "count" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000006", "TargetNodeId": "37010000-0000-4000-8000-000000000011", "TargetPortId": "bounded" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000008", "TargetNodeId": "37010000-0000-4000-8000-000000000011", "TargetPortId": "arm" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000011", "TargetNodeId": "37010000-0000-4000-8000-000000000012", "SourcePortId": "complete", "TargetPortId": "signal" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000011", "TargetNodeId": "37010000-0000-4000-8000-000000000012", "SourcePortId": "armedBoundary", "TargetPortId": "signal" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000002", "TargetNodeId": "37010000-0000-4000-8000-000000000013", "TargetPortId": "a" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000007", "TargetNodeId": "37010000-0000-4000-8000-000000000013", "TargetPortId": "b" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000002", "TargetNodeId": "37010000-0000-4000-8000-000000000014", "TargetPortId": "r" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000009", "TargetNodeId": "37010000-0000-4000-8000-000000000014", "SourcePortId": "condition", "TargetPortId": "a" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000002", "TargetNodeId": "37010000-0000-4000-8000-000000000015", "TargetPortId": "r" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000013", "TargetNodeId": "37010000-0000-4000-8000-000000000015", "SourcePortId": "condition", "TargetPortId": "a" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000014", "TargetNodeId": "37010000-0000-4000-8000-000000000016", "SourcePortId": "value", "TargetPortId": "case_0" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000011", "TargetNodeId": "37010000-0000-4000-8000-000000000016", "SourcePortId": "value", "TargetPortId": "case_1" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000015", "TargetNodeId": "37010000-0000-4000-8000-000000000016", "SourcePortId": "value", "TargetPortId": "case_2" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000016", "TargetNodeId": "37010000-0000-4000-8000-000000000017" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000002", "TargetNodeId": "37010000-0000-4000-8000-000000000018" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000013", "TargetNodeId": "37010000-0000-4000-8000-000000000019", "SourcePortId": "event" }
+    ],
+    "ExposedItems": [
+      { "Id": "3701ffff-0000-4000-8000-000000000001", "Name": "Start Length", "Description": "Seconds; one start interval.", "Category": "Lifecycle", "Order": 0, "Editor": "parameter", "Targets": [{ "NodeId": "37010000-0000-4000-8000-000000000003", "ParameterId": "value" }] },
+      { "Id": "3701ffff-0000-4000-8000-000000000002", "Name": "Loop Length", "Description": "Seconds per interval. Zero requires a bounded count.", "Category": "Lifecycle", "Order": 1, "Editor": "parameter", "Targets": [{ "NodeId": "37010000-0000-4000-8000-000000000004", "ParameterId": "value" }] },
+      { "Id": "3701ffff-0000-4000-8000-000000000003", "Name": "Loop Count", "Description": "Nonnegative whole intervals; captured at Loop entry.", "Category": "Lifecycle", "Order": 2, "Editor": "parameter", "Targets": [{ "NodeId": "37010000-0000-4000-8000-000000000005", "ParameterId": "value" }] },
+      { "Id": "3701ffff-0000-4000-8000-000000000004", "Name": "Limit Loop Count", "Description": "1: bounded; 0: wait for an external End Request during Loop.", "Category": "Lifecycle", "Order": 3, "Editor": "parameter", "Targets": [{ "NodeId": "37010000-0000-4000-8000-000000000006", "ParameterId": "value" }] },
+      { "Id": "3701ffff-0000-4000-8000-000000000005", "Name": "End Length", "Description": "Seconds until End Complete. Does not set Life Time.", "Category": "Lifecycle", "Order": 4, "Editor": "parameter", "Targets": [{ "NodeId": "37010000-0000-4000-8000-000000000007", "ParameterId": "value" }] }
+    ],
+    "AutoDestroyWhenIdle": false
+  }
+}

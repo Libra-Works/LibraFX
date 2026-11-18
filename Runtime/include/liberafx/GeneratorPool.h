@@ -76,6 +76,15 @@ public:
     Result finalize(GeneratorInstanceId id) noexcept;
     Result stop(GeneratorInstanceId id) noexcept;
     Result reset() noexcept;
+    // Force is distinct from Stop/Destroy. Owner-thread, job boundary only;
+    // Busy never frees running work. No lifecycle callback or Stop event runs.
+    // Purges the target's queued lifecycle/signal events, including unpublished
+    // natural Destroy, and releases deferred signals with its instance storage.
+    // Already retired issued IDs succeed; unknown/zero IDs are rejected.
+    Result forceTerminate(GeneratorInstanceId id) noexcept;
+    // Also discards queued spawn commands. Other pools are not affected.
+    Result forceTerminateAll() noexcept;
+    Result pendingForceRequest(GeneratorInstanceId id, std::uint8_t& scope) const noexcept;
     // Apply host-selected Live lanes to one instance before evaluate. CaptureAtSpawn
     // lanes must not be passed here; their values stay fixed from spawn.
     Result setLive(GeneratorInstanceId id, const GeneratorCapture* values,
@@ -88,7 +97,13 @@ public:
     // Broadcast a parent signal to every started, non-expiring instance.
     Result dispatchSignal(const std::uint8_t nodeId[16], double time,
                          std::size_t instructionBudget) noexcept;
+    // Targeted notification: every call is one arrival; never sets lifetime or
+    // invokes ownerDestroy. time must equal the last evaluated effect time.
+    Result dispatchSignal(GeneratorInstanceId id, const std::uint8_t nodeId[16],
+                          double time, std::size_t instructionBudget) noexcept;
     Result setTimeContext(GeneratorInstanceId id, double effectTime, double frameDelta) noexcept;
+    Result setHostQuality(GeneratorInstanceId id, const HostQualitySnapshot& snapshot) noexcept;
+    Result setDebugHooks(GeneratorInstanceId id, const ExecutionDebugHooks& hooks) noexcept;
     // Deferred-signal lifecycles require monotonic evaluation without skipping
     // their next due time. Other lifecycles retain random-access evaluation.
     Result evaluate(GeneratorInstanceId id, double time) noexcept;

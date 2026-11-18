@@ -10,14 +10,14 @@
         <views:GraphPortBrushConverter x:Key="PortBrushConverter" />
     </UserControl.Resources>
     <Grid>
-    <Border x:Name="NodeBody" Width="240" IsVisible="{Binding !IsComment}"
+    <Border x:Name="NodeBody" Width="{Binding RenderedWidth}" IsVisible="{Binding !IsComment}"
             Background="{DynamicResource EffectSurfaceBrush}"
             BorderBrush="{Binding BorderBrush}"
             ToolTip.Tip="{Binding DiagnosticText}"
             AutomationProperties.HelpText="{Binding DiagnosticText}"
             BorderThickness="2"
             CornerRadius="4">
-        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
             <Border Grid.Row="0"
                     x:Name="NodeHeader"
                     Padding="8"
@@ -29,8 +29,14 @@
                     PointerReleased="OnHeaderPointerReleased"
                     PointerCaptureLost="OnHeaderPointerCaptureLost">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Right" Text="▶" IsVisible="{Binding IsGraphGroup}"
-                               Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" IsVisible="{Binding IsGraphGroup}">
+                        <views:IconButton Icon="Group" Click="OnToggleInlineClick"
+                                          ToolTip.Tip="{DynamicResource Text.Inline.Toggle}"
+                                          AutomationProperties.Name="{DynamicResource Text.Inline.Toggle}" />
+                        <views:IconButton Icon="Frame" Click="OnMaximizeInlineClick"
+                                          ToolTip.Tip="{DynamicResource Text.Inline.Maximize}"
+                                          AutomationProperties.Name="{DynamicResource Text.Inline.Maximize}" />
+                    </StackPanel>
                     <ToggleButton x:Name="DetailsToggle" DockPanel.Dock="Right"
                                   Width="22" Height="20" Padding="0"
                                   IsVisible="{Binding HasParameters}"
@@ -203,6 +209,17 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </Border>
+            <Grid Grid.Row="5" IsVisible="{Binding IsInlineExpanded}" RowDefinitions="*,Auto">
+                <views:InlineGraphHost Height="{Binding InlineHeight}" ClipToBounds="True" />
+                <Border Grid.Row="1" HorizontalAlignment="Right" Padding="6,1" Background="Transparent"
+                        Cursor="BottomRightCorner"
+                        ToolTip.Tip="{DynamicResource Text.Inline.Resize}"
+                        AutomationProperties.Name="{DynamicResource Text.Inline.Resize}"
+                        PointerPressed="OnResizePressed" PointerMoved="OnResizeMoved"
+                        PointerReleased="OnResizeReleased" PointerCaptureLost="OnResizeCaptureLost">
+                    <TextBlock Text="◢" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                </Border>
+            </Grid>
         </Grid>
     </Border>
     <Border IsVisible="{Binding IsComment}" Width="{Binding CommentWidth}" Height="{Binding CommentHeight}"

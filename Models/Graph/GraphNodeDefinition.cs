@@ -103,6 +103,7 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700001")] = "ModelDraw",
         [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700002")] = "SpriteDraw",
         [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700003")] = "SpriteAnimation",
+        [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700004")] = "SpriteComposition",
         [Guid.Parse("19aa71e5-b3c7-453d-860e-baad3b9d0fc4")] = "Float",
         [Guid.Parse("d98eb6f5-ee2e-432a-9450-09e44dcc42e3")] = "FloatX2",
         [Guid.Parse("7ef61949-53c4-41fb-aabd-840b0a4680f7")] = "FloatX3",
@@ -127,12 +128,24 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("1774de17-a97b-4e31-b200-000000000015")] = "GroupOutputColor",
         [Guid.Parse("1774de17-a97b-4e31-b200-000000000016")] = "GroupOutputSignal",
         [Guid.Parse("1774de17-a97b-4e31-b200-000000000017")] = "GroupOutputMatrix",
+        [Guid.Parse("1774de17-a97b-4e31-b200-000000000018")] = "GroupInputInt32",
+        [Guid.Parse("1774de17-a97b-4e31-b200-000000000019")] = "GroupOutputInt32",
         [Guid.Parse("f43ba0db-ea8c-4c27-93ec-2da000000001")] = "InputProperty",
         [Guid.Parse("f43ba0db-ea8c-4c27-93ec-2da000000002")] = "InputSignal",
         [Guid.Parse("f43ba0db-ea8c-4c27-93ec-2da000000003")] = "OutputProperty",
         [Guid.Parse("f43ba0db-ea8c-4c27-93ec-2da000000004")] = "OutputSignal",
         [Guid.Parse("7ff078d2-dce1-42b0-93fb-b40200000001")] = "GameIoRuntimeOutputSignal",
         [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000001")] = "LifeTime",
+        [Guid.Parse("4a94e882-39e8-4efb-92c7-180000000011")] = "ForceCurrent",
+        [Guid.Parse("4a94e882-39e8-4efb-92c7-180000000012")] = "ForceEffect",
+        [Guid.Parse("4a94e882-39e8-4efb-92c7-180000000020")] = "CurrentPhase",
+        [Guid.Parse("4a94e882-39e8-4efb-92c7-180000000021")] = "PhaseTime",
+        [Guid.Parse("4a94e882-39e8-4efb-92c7-180000000022")] = "EnterStart",
+        [Guid.Parse("4a94e882-39e8-4efb-92c7-180000000023")] = "EnterLoop",
+        [Guid.Parse("4a94e882-39e8-4efb-92c7-180000000024")] = "EnterEnd",
+        [Guid.Parse("e9778c40-209b-4ce8-918d-35c000000005")] = "LoopClock",
+        [Guid.Parse("e9778c40-209b-4ce8-918d-35c000000006")] = "QualityBranch",
+        [Guid.Parse("e9778c40-209b-4ce8-918d-35c000000007")] = "SignalCaptureVector4",
         [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e0")] = "InstanceAge",
         [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e1")] = "InstanceRemaining",
         [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e2")] = "InstanceNormalizedAge",
@@ -191,6 +204,12 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000027")] = "MaskVector4",
         [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000028")] = "ColorToVector4",
         [Guid.Parse("2c5e5bb8-117b-4a01-9a01-000000000029")] = "Vector4ToColor",
+        [Guid.Parse("bc2bc610-42ce-4b6a-9fd2-000000000001")] = "Int32Add",
+        [Guid.Parse("bc2bc610-42ce-4b6a-9fd2-000000000002")] = "Int32Subtract",
+        [Guid.Parse("bc2bc610-42ce-4b6a-9fd2-000000000003")] = "Int32Multiply",
+        [Guid.Parse("bc2bc610-42ce-4b6a-9fd2-000000000004")] = "Int32Divide",
+        [Guid.Parse("bc2bc610-42ce-4b6a-9fd2-000000000005")] = "FloatToInt32",
+        [Guid.Parse("bc2bc610-42ce-4b6a-9fd2-000000000006")] = "Int32ToFloat",
         [Guid.Parse("74305ac1-91b2-4c33-8d44-000000000001")] = "Abs",
         [Guid.Parse("74305ac1-91b2-4c33-8d44-000000000002")] = "Floor",
         [Guid.Parse("74305ac1-91b2-4c33-8d44-000000000003")] = "Round",
@@ -499,7 +518,8 @@ public sealed record GraphNodeDefinition(
                     throw new InvalidDataException("Signal output ports must use the Signal type.");
                 outputs.Add(new GraphOutputPortDefinition(port.Id!, port.Name, port.PortType, portCategory));
             }
-            if (outputs.Count == 0 && node.TypeId != Guid.Parse("57980d8e-701f-443c-91f6-8db56a09d2fc") &&
+            if (outputs.Count == 0 && node.Runtime?.Execution != "signal" &&
+                node.TypeId != Guid.Parse("57980d8e-701f-443c-91f6-8db56a09d2fc") &&
                 !(BuiltInIds.TryGetValue(node.TypeId, out var builtInKind) &&
                   (GroupBoundarySchema.IsOutput(new GraphNodeKind(builtInKind)) ||
                    builtInKind is "OutputProperty" or "OutputSignal" or "SpawnOutputSignal")))
@@ -568,9 +588,7 @@ public sealed record GraphNodeDefinition(
                 runtimeFile.Execution is not ("parameter" or "signal") ||
                 (runtimeFile.Execution == "parameter" &&
                  (inputs?.Any(port => port.Category == GraphPortCategory.Signal) == true ||
-                  outputs?.Any(port => port.Category == GraphPortCategory.Signal) == true)) ||
-                (runtimeFile.Execution == "signal" &&
-                 outputs?.Any(port => port.Category == GraphPortCategory.Signal) != true))
+                  outputs?.Any(port => port.Category == GraphPortCategory.Signal) == true)))
                 throw new InvalidDataException("Invalid custom runtime declaration.");
             var dataInputCount = inputs?.Count(port => port.Category == GraphPortCategory.Parameter) ?? 0;
             var signalInputCount = inputs?.Count(port => port.Category == GraphPortCategory.Signal) ?? 0;
@@ -581,7 +599,7 @@ public sealed record GraphNodeDefinition(
                  (dataOutputCount != 1 || signalOutputCount != 0 ||
                   !IsRuntimeNumericType(outputs!.Single(port => port.Category == GraphPortCategory.Parameter).PortType ?? node.PortType))) ||
                 (runtimeFile.Execution == "signal" &&
-                 (dataOutputCount != 0 || signalOutputCount is < 1 or > 4)))
+                 (dataOutputCount != 0 || signalOutputCount > 4)))
                 throw new InvalidDataException("Custom runtime ports do not match the execution declaration.");
             runtime = new GraphRuntimeDefinition(runtimeFile.Kind, runtimeFile.AbiVersion, runtimeFile.Execution);
         }

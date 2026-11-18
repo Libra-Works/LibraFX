@@ -42,6 +42,13 @@
     <Compile Include="..\..\Services\Compilation\SpawnableGroupPackageBinary.cs" Link="Services\SpawnableGroupPackageBinary.cs" />
     <Compile Include="..\..\Services\Compilation\SignalTimelineLowering.cs" Link="Services\SignalTimelineLowering.cs" />
     <Compile Include="..\..\Services\Compilation\RenderProgramBindings.cs" Link="Services\RenderProgramBindings.cs" />
+    <Compile Include="..\..\Services\SpriteAnimationData.cs" Link="Services\SpriteAnimationData.cs" />
+    <Compile Include="..\..\Services\SpriteCompositionData.cs" Link="Services\SpriteCompositionData.cs" />
+    <Compile Include="..\..\Models\Resources\ResourceIdentity.cs" Link="Models\Resources\ResourceIdentity.cs" />
+    <Compile Include="..\..\Models\Graph\GraphValueType.cs" Link="Models\Graph\GraphValueType.cs" />
+    <Compile Include="..\..\Services\ResourceIdentityResolver.cs" Link="Services\ResourceIdentityResolver.cs" />
+    <Compile Include="..\..\Services\ResourceIdentitySnapshot.cs" Link="Services\ResourceIdentitySnapshot.cs" />
+    <Compile Include="..\..\Services\ResourceIdentityExport.cs" Link="Services\ResourceIdentityExport.cs" />
     <Compile Include="..\..\Services\EngineAsset.cs" Link="Services\EngineAsset.cs" />
     <Compile Include="..\..\Services\EngineAssetPath.cs" Link="Services\EngineAssetPath.cs" />
     <EmbeddedResource Include="..\..\Assets\Nodes\*.json" LogicalName="LiberaFx.Assets.Nodes.%(Filename)%(Extension)" />

@@ -15,6 +15,7 @@ internal static class GroupBoundaryTests
 {
     public static void Run()
     {
+        InlineGroupTests.Run();
         VerifyNumericBoundary();
         VerifySignalBoundary();
         VerifyTypedDefaults();

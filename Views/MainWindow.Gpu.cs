@@ -23,7 +23,7 @@ public partial class MainWindow
     private void AttachGpuGraph()
     {
         if (_gpuGraph is not null) _gpuGraph.GpuEditorRequested -= OnGpuRequested;
-        _gpuGraph = _gpuActive?.Graph;
+        _gpuGraph = _gpuActive?.Graph.Document;
         if (_gpuGraph is not null) _gpuGraph.GpuEditorRequested += OnGpuRequested;
     }
     private void OnGpuRequested(object? sender, Guid container)

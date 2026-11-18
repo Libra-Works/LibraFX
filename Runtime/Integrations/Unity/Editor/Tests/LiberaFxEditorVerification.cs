@@ -59,6 +59,7 @@ namespace LiberaFx.Unity.Editor
                 proof.Add("native_pinvoke_and_marshal_contracts=PASS");
                 VerifyLifetime();
                 proof.Add("native_effect_lifetime_start_advance_drain_finish_stop=PASS");
+                VerifySpritePayloadMetadata();
                 var shader = Shader.Find("LiberaFx/Atlas Unlit");
                 Assert(shader, "LiberaFx shader was not imported.");
                 AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(shader), ImportAssetOptions.ForceSynchronousImport);
@@ -306,6 +307,49 @@ namespace LiberaFx.Unity.Editor
             }
             finally { Cleanup(target, owner); }
         }
+        private static void VerifySpritePayloadMetadata()
+        {
+            var type = typeof(LiberaFxSpawnableComponent).Assembly.GetType("LiberaFx.Unity.LiberaFxUnityBindingLookup", true);
+            var parse = type.GetMethod("ParseRender", BindingFlags.Static | BindingFlags.NonPublic);
+            string Input(string id, int width, string defaults) =>
+                "{\"id\":\"" + id + "\",\"width\":" + width + ",\"defaults\":[" + defaults +
+                "],\"sourceNodeId\":null,\"materialParameter\":null}";
+            var inputs = Input("position", 3, "0,0,0") + "," + Input("rotation", 3, "0,0,0") + "," +
+                Input("scale", 3, "1,1,1") + "," + Input("tint", 4, "1,1,1,1");
+            string Scene(string kind, string animation, string extraInputs = "") =>
+                "{\"type\":\"render_config\",\"nodes\":[{\"nodeId\":\"00000000-0000-0000-0000-000000000001\"," +
+                "\"kind\":\"" + kind + "\",\"assetPath\":\"fixture\",\"inputs\":[" + inputs + extraInputs +
+                "],\"spriteAnimation\": " + animation + "}]}";
+            Array Read(string json) => (Array)parse.Invoke(null, new object[] { System.Text.Encoding.UTF8.GetBytes(json) });
+            Assert(Read(Scene("model", "null")).Length == 1, "Null animation broke a model payload.");
+            var spriteInputs = "," + Input("frame", 1, "-1") + "," + Input("columns", 1, "4") + "," +
+                Input("rows", 1, "2") + "," + Input("fps", 1, "10") + "," + Input("playing", 1, "1");
+            Assert(Read(Scene("sprite", "null", spriteInputs)).Length == 1, "Legacy grid sprite payload was rejected.");
+            Assert(Read(Scene("sprite", "null", spriteInputs).Replace(",\"spriteAnimation\": null", "")).Length == 1,
+                "Legacy sprite payloads without animation metadata were rejected.");
+            var animation = "{\"version\":1,\"textureWidth\":256,\"textureHeight\":128,\"fps\":10," +
+                "\"startFrame\":0,\"endFrame\":0,\"loop\":true,\"cells\":[{" +
+                "\"id\":\"00000000-0000-0000-0000-000000000002\",\"name\":\"Arbitrary\"," +
+                "\"x\":13,\"y\":9,\"width\":41,\"height\":27,\"u\":0.05078125,\"v\":0.0703125," +
+                "\"uvWidth\":0.16015625,\"uvHeight\":0.2109375}],\"frames\":[{" +
+                "\"id\":\"00000000-0000-0000-0000-000000000003\"," +
+                "\"cellId\":\"00000000-0000-0000-0000-000000000002\",\"cellIndex\":0,\"durationFrames\":2}]}";
+            var node = Read(Scene("sprite", animation, spriteInputs)).GetValue(0);
+            Assert(node.GetType().GetField("spriteAnimation").GetValue(node) != null,
+                "Declared arbitrary rectangle metadata was discarded.");
+            foreach (var invalid in new[] { "{}", animation.Replace("\"version\":1", "\"version\":-1") })
+            {
+                try
+                {
+                    Read(Scene("sprite", invalid, spriteInputs));
+                    throw new InvalidOperationException("Unsupported sprite animation metadata was accepted.");
+                }
+                catch (TargetInvocationException error) when (error.InnerException is InvalidOperationException &&
+                    error.InnerException.Message.StartsWith("Sprite animation metadata", StringComparison.Ordinal)) { }
+            }
+            proof.Add("sprite_payload_null_legacy_arbitrary_and_invalid_version=PASS");
+        }
+
         private static void Render(GameObject target, string name)
         {
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null)
@@ -332,7 +376,9 @@ namespace LiberaFx.Unity.Editor
                 readback.Apply();
                 var center = readback.GetPixel(32, 32);
                 Assert(Mathf.Max(center.r, Mathf.Max(center.g, center.b)) > 0.01f,
-                    "Rendered framebuffer contains only background.");
+                    $"Rendered framebuffer contains only background: active={target.activeInHierarchy}, " +
+                    $"renderer={target.GetComponent<MeshRenderer>().enabled}, bounds={target.GetComponent<MeshRenderer>().bounds}, " +
+                    $"scene={target.scene.isLoaded}, pipeline={GraphicsSettings.currentRenderPipeline}, center={center}.");
                 File.WriteAllBytes(Path.Combine(Project, name + ".png"), readback.EncodeToPNG());
                 proof.Add(name + "_render=PASS center=" + center);
             }

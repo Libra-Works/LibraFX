@@ -21,6 +21,8 @@ public sealed class GraphSceneLayer : Control
     private static readonly Pen SignalOrderPen = new(ThemeSettingsService.EditorBrush("GraphSignal"), 1);
     private static readonly IBrush SignalOrderBackground = ThemeSettingsService.EditorBrush("CurveBackground");
     private static readonly IBrush SignalOrderForeground = ThemeSettingsService.EditorBrush("GraphSignal");
+    private static readonly IBrush DebugBrush = ThemeSettingsService.EditorBrush("GraphSignal");
+    private static readonly Pen DebugFlowPen = new(DebugBrush, 5);
 
     private readonly HashSet<GraphConnectionViewModel> _observedConnections = [];
     private GraphWorkspaceViewModel? _workspace;
@@ -101,13 +103,24 @@ public sealed class GraphSceneLayer : Control
         }
         foreach (var connection in _workspace.Connections.Where(item => item.SignalOrder > 0))
             DrawSignalOrder(context, connection);
+        foreach (var node in _workspace.Nodes)
+        {
+            var active = node.Id == _workspace.ExecutionDebugFrame?.Node;
+            var breakpoint = _workspace.ExecutionDebugBreakpoints.Contains(node.Id);
+            if (!active && !breakpoint) continue;
+            var corner = new Point(node.DisplayX, node.DisplayY) + _graphOrigin;
+            if (active)
+                context.DrawLine(DebugFlowPen, corner + new Vector(0, -4),
+                    corner + new Vector(node.RenderedWidth, -4));
+            if (breakpoint)
+                context.DrawEllipse(DebugBrush, null, corner + new Vector(-8, 8), 5, 5);
+        }
 
         if (_workspace.PendingOutputNode is { } source && _workspace.ConnectionPreviewPoint is { } end)
         {
             var start = new Point(
-                source.DisplayX + GraphNodeViewModel.NodeWidth - GraphNodeViewModel.PortHorizontalOffset + _graphOrigin.X,
-                source.DisplayY + GraphNodeViewModel.PortCenterOffset +
-                source.OutputPortOffset(_workspace.PendingOutputPortId) + _graphOrigin.Y);
+                source.DisplayX + source.OutputAnchor(_workspace.PendingOutputPortId).X + _graphOrigin.X,
+                source.DisplayY + source.OutputAnchor(_workspace.PendingOutputPortId).Y + _graphOrigin.Y);
             DrawConnection(context, start, end + _graphOrigin,
                 source.Definition.GetOutputPortCategory(_workspace.PendingOutputPortId));
         }
@@ -138,8 +151,21 @@ public sealed class GraphSceneLayer : Control
 
     private void DrawConnection(DrawingContext context, GraphConnectionViewModel connection)
     {
+        var isSignal = connection.Source.Definition.GetOutputPortCategory(connection.SourcePortId) ==
+            Models.Graph.GraphPortCategory.Signal;
+        var current = _workspace?.ExecutionDebugFrame;
+        // A selected signal predecessor is not necessarily the last executed
+        // node (parameter refreshes can occur in between signal visits).
+        var active = current is not null && connection.Target.Id == current.Node &&
+            (isSignal ? connection.Source.Id == current.SignalSource :
+                current.Inputs.Any(input => input.Source == connection.Source.Id)) &&
+            // Avoid reporting an ambiguous pair of parallel authored routes
+            // as two actual traversals when the wire only identifies endpoints.
+            _workspace!.Connections.Count(other => other.Source == connection.Source &&
+                other.Target == connection.Target &&
+                (other.Source.Definition.GetOutputPortCategory(other.SourcePortId) == Models.Graph.GraphPortCategory.Signal) == isSignal) == 1;
         DrawConnection(context, connection.StartPoint + _graphOrigin, connection.EndPoint + _graphOrigin,
-            connection.Source.Definition.GetOutputPortCategory(connection.SourcePortId));
+            connection.Source.Definition.GetOutputPortCategory(connection.SourcePortId), active);
     }
 
     private void DrawSignalOrder(DrawingContext context, GraphConnectionViewModel connection)
@@ -160,7 +186,8 @@ public sealed class GraphSceneLayer : Control
         context.DrawText(text, new Point(point.X - text.Width / 2, point.Y - text.Height / 2));
     }
 
-    private static void DrawConnection(DrawingContext context, Point start, Point end, Models.Graph.GraphPortCategory category)
+    private static void DrawConnection(DrawingContext context, Point start, Point end, Models.Graph.GraphPortCategory category,
+        bool debugFlow = false)
     {
         var controlOffset = Math.Max(48, Math.Abs(end.X - start.X) * 0.5);
         var geometry = new StreamGeometry();
@@ -178,14 +205,15 @@ public sealed class GraphSceneLayer : Control
         var pen = category == Models.Graph.GraphPortCategory.Signal
             ? SignalConnectionPen
             : ParameterConnectionPen;
-        context.DrawGeometry(null, pen, geometry);
+        context.DrawGeometry(null, debugFlow ? DebugFlowPen : pen, geometry);
     }
 
     private void OnWorkspacePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(GraphWorkspaceViewModel.ConnectionPreviewPoint) or
             nameof(GraphWorkspaceViewModel.PendingOutputNode) or
-            nameof(GraphWorkspaceViewModel.PendingOutputPortId))
+            nameof(GraphWorkspaceViewModel.PendingOutputPortId) or
+            nameof(GraphWorkspaceViewModel.ExecutionDebugFrame))
         {
             InvalidateVisual();
         }

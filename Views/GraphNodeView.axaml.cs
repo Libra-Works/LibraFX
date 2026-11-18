@@ -41,6 +41,7 @@ public partial class GraphNodeView : UserControl
     public GraphNodeView()
     {
         InitializeComponent();
+        LayoutUpdated += (_, _) => UpdatePortAnchors();
         SizeChanged += (_, _) =>
         {
             if (DataContext is not GraphNodeViewModel node) return;
@@ -48,6 +49,29 @@ public partial class GraphNodeView : UserControl
             var editor = this.FindAncestorOfType<GraphEditorView>();
             if (editor is not null) Dispatcher.UIThread.Post(editor.UpdateCanvasExtent);
         };
+    }
+
+    private void UpdatePortAnchors()
+    {
+        if (DataContext is not GraphNodeViewModel node) return;
+        var inputs = new Dictionary<string, Point>();
+        var outputs = new Dictionary<string, Point>();
+        foreach (var port in this.GetVisualDescendants().OfType<Control>().Where(control =>
+            control.IsEffectivelyVisible && ReferenceEquals(control.FindAncestorOfType<GraphNodeView>(), this)))
+        {
+            var input = port.Tag is GraphInputPortDefinition || port.Tag is "InputPort";
+            var output = port.Tag is GraphOutputPortDefinition || port.Tag is "OutputPort";
+            if (!input && !output) continue;
+            if (port.TranslatePoint(new Point(port.Bounds.Width / 2, port.Bounds.Height / 2), this) is not { } center) continue;
+            var id = port.Tag switch
+            {
+                GraphInputPortDefinition definition => definition.Id,
+                GraphOutputPortDefinition definition => definition.Id,
+                _ => ""
+            };
+            (input ? inputs : outputs)[id] = center;
+        }
+        node.SetPortAnchors(inputs, outputs);
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -347,6 +371,12 @@ public partial class GraphNodeView : UserControl
     private void OnNodePointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (e.Handled) return;
+        if (e.Source is Visual source &&
+            source.GetSelfAndVisualAncestors().OfType<GraphEditorView>().FirstOrDefault() is { } sourceEditor &&
+            !ReferenceEquals(sourceEditor, this.FindAncestorOfType<GraphEditorView>())) return;
+        if (e.Source is Visual origin &&
+            origin.GetSelfAndVisualAncestors().OfType<GraphNodeView>().FirstOrDefault() is { } nearest &&
+            !ReferenceEquals(nearest, this)) return;
         if (DataContext is not GraphNodeViewModel node ||
             !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
@@ -418,7 +448,7 @@ public partial class GraphNodeView : UserControl
         e.Pointer.Capture(null);
         try
         {
-            graph.MoveNodes(positions);
+            graph.RunAuthoringAction(() => graph.MoveNodes(positions));
         }
         finally
         {
@@ -448,15 +478,15 @@ public partial class GraphNodeView : UserControl
 
     private void OnResizePressed(object? sender, PointerPressedEventArgs e)
     {
-        if (DataContext is not GraphNodeViewModel { IsComment: true } node ||
+        if (DataContext is not GraphNodeViewModel node || (!node.IsComment && !node.IsInlineExpanded) ||
             sender is not Control handle || !e.GetCurrentPoint(handle).Properties.IsLeftButtonPressed ||
             this.FindAncestorOfType<GraphEditorView>() is not { } editor) return;
         node.SelectCommand.Execute(null);
         _resizeNode = node;
         _resizeEditor = editor;
         _resizeStart = e.GetPosition(editor);
-        _resizeWidth = node.CommentWidth;
-        _resizeHeight = node.CommentHeight;
+        _resizeWidth = node.IsComment ? node.CommentWidth : node.InlineWidth;
+        _resizeHeight = node.IsComment ? node.CommentHeight : node.InlineHeight;
         _resizeRevision = node.Workspace.History.CurrentNodeId;
         e.Pointer.Capture(handle);
         e.Handled = true;
@@ -466,27 +496,36 @@ public partial class GraphNodeView : UserControl
     {
         if (_resizeNode is not { } node || _resizeEditor is not { } editor) return;
         var delta = (e.GetPosition(editor) - _resizeStart) / editor.DebugZoom;
-        node.PreviewCommentSize(_resizeWidth + delta.X, _resizeHeight + delta.Y);
+        if (node.IsComment) node.PreviewCommentSize(_resizeWidth + delta.X, _resizeHeight + delta.Y);
+        else node.PreviewInlineSize(_resizeWidth + delta.X, _resizeHeight + delta.Y);
         e.Handled = true;
     }
 
     private void OnResizeReleased(object? sender, PointerReleasedEventArgs e)
     {
         if (_resizeNode is not { } node) return;
-        var width = node.CommentWidth;
-        var height = node.CommentHeight;
+        var width = node.IsComment ? node.CommentWidth : node.InlineWidth;
+        var height = node.IsComment ? node.CommentHeight : node.InlineHeight;
         _resizeNode = null;
         _resizeEditor = null;
-        node.CancelCommentSize();
+        if (node.IsComment) node.CancelCommentSize();
+        else node.CancelInlineSize();
         e.Pointer.Capture(null);
         if (node.Workspace.History.CurrentNodeId == _resizeRevision)
-            node.Workspace.SetCommentSize(node, width, height);
+        {
+            node.Workspace.RunAuthoringAction(() =>
+            {
+                if (node.IsComment) node.Workspace.SetCommentSize(node, width, height);
+                else node.Workspace.SetInlinePresentation(node, true, width, height);
+            });
+        }
         e.Handled = true;
     }
 
     private void OnResizeCaptureLost(object? sender, PointerCaptureLostEventArgs e)
     {
-        _resizeNode?.CancelCommentSize();
+        if (_resizeNode is { IsComment: true } comment) comment.CancelCommentSize();
+        else _resizeNode?.CancelInlineSize();
         _resizeNode = null;
         _resizeEditor = null;
     }
@@ -545,7 +584,7 @@ public partial class GraphNodeView : UserControl
 
         var moved = _connectionMoved;
         var position = e.GetPosition(canvas);
-        var target = moved ? FindInputAt(canvas, position) : null;
+        var target = moved ? FindInputAt(canvas, position, source.Workspace) : null;
         _connectionSource = null;
         var sourcePortId = _connectionSourcePortId;
         _connectionSourcePortId = null;
@@ -553,7 +592,8 @@ public partial class GraphNodeView : UserControl
         e.Pointer.Capture(null);
         if (target is { } input)
         {
-            input.Node.Workspace.CompleteConnection(input.Node, input.PortId, sourcePortId);
+            input.Node.Workspace.RunAuthoringAction(() =>
+                input.Node.Workspace.CompleteConnection(input.Node, input.PortId, sourcePortId));
         }
         else if (moved)
         {
@@ -567,14 +607,16 @@ public partial class GraphNodeView : UserControl
     {
         if (DataContext is GraphNodeViewModel node &&
             sender is Button { Tag: GraphInputPortDefinition port })
-            node.Workspace.CompleteConnection(node, port.Id);
+            node.Workspace.RunAuthoringAction(() => node.Workspace.CompleteConnection(node, port.Id));
     }
 
-    private static (GraphNodeViewModel Node, string? PortId)? FindInputAt(Grid canvas, Point position)
+    private static (GraphNodeViewModel Node, string? PortId)? FindInputAt(
+        Grid canvas, Point position, GraphWorkspaceViewModel workspace)
     {
         foreach (var button in canvas.GetVisualDescendants().OfType<Button>().Reverse())
         {
             if (!button.IsEffectivelyVisible ||
+                button.FindAncestorOfType<GraphEditorView>()?.DataContext != workspace ||
                 button.TranslatePoint(default, canvas) is not { } origin)
             {
                 continue;
@@ -592,6 +634,20 @@ public partial class GraphNodeView : UserControl
         }
 
         return null;
+    }
+
+    private void OnToggleInlineClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is GraphNodeViewModel node)
+            node.Workspace.RunAuthoringAction(() =>
+                node.Workspace.SetInlinePresentation(node, !node.IsInlineExpanded, node.InlineWidth, node.InlineHeight));
+        e.Handled = true;
+    }
+
+    private void OnMaximizeInlineClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is GraphNodeViewModel node) node.Workspace.MaximizeInlineGraph(node);
+        e.Handled = true;
     }
 
     private void OnOutputPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)

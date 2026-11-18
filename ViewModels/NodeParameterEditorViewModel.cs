@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Avalonia.Controls;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -16,6 +17,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     private readonly GroupExposedItem? _exposed;
     private readonly string? _exposedDescriptionKey;
     private readonly Func<bool> _isCurrentInspectorTarget;
+    private readonly AssetBrowserCoordinator? _assetBrowser;
     private string _status = string.Empty;
 
     public string Name => _exposed is { Category.Length: > 0 } item
@@ -30,6 +32,22 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         connection.Target == _node && (connection.TargetPortId == Id ||
         connection.TargetPortId is null && _node.HasLegacyInput && _node.Definition.Parameters.Count == 1));
     public bool HasConnection => InputConnection is not null;
+    public bool IsResourceParameter => _assetBrowser is not null && _exposed is null && Type == "string" &&
+        ResourceAssignment.TargetForParameter(_node, Id) is not null;
+    public bool CanRevealResource
+    {
+        get
+        {
+            if (!IsResourceParameter || Value.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(Value.GetString())) return false;
+            try
+            {
+                EngineAssetPath.Validate(Value.GetString()!);
+                return true;
+            }
+            catch (ArgumentException) { return false; }
+        }
+    }
     public bool CanReset => (_exposed is null || IsCurrentInspectorTarget()) && (_graph.Nodes.Contains(_node) ||
         _exposed is not null && ReferenceEquals(_graph.ContainingSpawnable, _node)) && (_exposed is { } item
         ? _node.GroupOverrides?.Any(value => value.ItemId == item.Id) == true
@@ -41,6 +59,8 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     public string DisconnectHint => LocalizationService.Shared.Get("Panels.DisconnectParameter", Name);
     public string ResetHint => LocalizationService.Shared.Get("Panels.ResetParameter", Name);
     public string PublishHint => LocalizationService.Shared.Get("Panels.PublishGroupParameter", Name);
+    public string BrowseResourceHint => LocalizationService.Shared.Get("Resources.BrowseParameter");
+    public string RevealResourceHint => LocalizationService.Shared.Get("Resources.RevealParameter");
     public NodeParameterEditorDefinition? Editor => _definition.Editor;
     public bool IsEnabled
     {
@@ -110,13 +130,14 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
 
     public NodeParameterEditorViewModel(GraphWorkspaceViewModel graph, GraphNodeViewModel node,
         NodeParameterDefinition definition, GroupExposedItem? exposed = null, Func<bool>? isCurrentInspectorTarget = null,
-        string? exposedDescriptionKey = null)
+        string? exposedDescriptionKey = null, AssetBrowserCoordinator? assetBrowser = null)
     {
         _graph = graph;
         _node = node;
         _definition = definition;
         _exposed = exposed;
         _exposedDescriptionKey = exposedDescriptionKey;
+        _assetBrowser = assetBrowser;
         _isCurrentInspectorTarget = isCurrentInspectorTarget ?? (() =>
             _graph.Nodes.Contains(_node) && ReferenceEquals(_graph.SelectedNode, _node));
         DisconnectCommand = new RelayCommand(() =>
@@ -207,6 +228,45 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     internal bool TrySetInspectorValue(JsonElement value) =>
         IsCurrentInspectorTarget() && SetValue(value);
 
+    public void OpenResourceBrowser(Window? owner = null)
+    {
+        if (!IsResourceParameter || !IsCurrentInspectorTarget() || _assetBrowser is null) return;
+        if (_assetBrowser.MainDocumentFor(_graph) is not { } document)
+        {
+            Status = "Messages.AssetSelectionStale";
+            return;
+        }
+        var target = ResourceAssignment.TargetForParameter(_node, Id);
+        var assetClass = ResourceAssignment.AssetClassForParameter(_node, Id);
+        if (target is null || assetClass is null) return;
+        if (_assetBrowser.BeginForParameter(
+                document, _graph, _node, Id, target, assetClass,
+                IsCurrentInspectorTarget) is null)
+        {
+            Status = "Messages.AssetSelectionStale";
+            return;
+        }
+        _assetBrowser.Open(owner);
+    }
+
+    public void RevealResource(Window? owner = null)
+    {
+        if (!CanRevealResource || !IsCurrentInspectorTarget() || _assetBrowser is null ||
+            _assetBrowser.MainDocumentFor(_graph) is not { } document ||
+            ResourceAssignment.TargetForParameter(_node, Id) is not { } target ||
+            ResourceAssignment.AssetClassForParameter(_node, Id) is not { } assetClass) return;
+        var path = Value.GetString()!;
+        var request = _assetBrowser.BeginForParameter(document, _graph, _node, Id, target, assetClass,
+            IsCurrentInspectorTarget, revealOnly: true);
+        if (request is null)
+        {
+            Status = "Messages.AssetSelectionStale";
+            return;
+        }
+        _assetBrowser.Open(owner);
+        _ = _assetBrowser.RevealAsync(request, path);
+    }
+
     public void SetColor(Color color) => SetValue(JsonSerializer.SerializeToElement(
         new[] { color.R / 255.0, color.G / 255.0, color.B / 255.0, color.A / 255.0 }));
     public void SetColor(RgbaColor color) => SetValue(JsonSerializer.SerializeToElement(color.Components));
@@ -219,6 +279,10 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(DisplayValue));
         OnPropertyChanged(nameof(IsEnabled));
         OnPropertyChanged(nameof(HasConnection));
+        OnPropertyChanged(nameof(IsResourceParameter));
+        OnPropertyChanged(nameof(CanRevealResource));
+        OnPropertyChanged(nameof(BrowseResourceHint));
+        OnPropertyChanged(nameof(RevealResourceHint));
         OnPropertyChanged(nameof(CanReset));
         OnPropertyChanged(nameof(DisconnectHint));
         OnPropertyChanged(nameof(ResetHint));

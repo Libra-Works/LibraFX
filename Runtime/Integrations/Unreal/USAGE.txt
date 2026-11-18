@@ -86,6 +86,9 @@ Standalone bytecode compatibility
   Read results in OnEvaluationCompleted, before the next worker evaluation starts.
   BindValue / BindParameter / BindSignal resolve UUIDs once. ReadBoundValue,
   ReadBoundParameter, SetBoundParameter and DispatchSignal use those handles.
+  GetValueType reports the semantic output type, including bytecode-v10 Int32.
+  Use ReadBoundInt32Value and SetBoundInt32Parameter for exact integer access.
+  Float/Int32 conversions remain authored nodes; overflow reports ArithmeticOverflow.
   Rebind after changing an effect, reimporting, stopping/recreating its instance,
   or registering new native node types. Cross-instance/stale handles are rejected.
   Parameter overrides are per instance; asset bytecode is never modified.

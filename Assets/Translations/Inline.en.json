@@ -1,0 +1,10 @@
+{
+  "Inline.Toggle": "Expand / collapse editable child graph",
+  "Inline.Maximize": "Open child graph full size (use breadcrumbs to return)",
+  "Inline.Resize": "Resize child graph view",
+  "Inline.Disconnect": "Disconnect an edge of the selected nodes",
+  "Inline.Locked": "Read-only: a containing group is locked or its library is unavailable.",
+  "Inline.MissingGraph": "The child graph no longer exists or cannot be opened here.",
+  "Inline.ExternalEditorUnavailable": "No host is connected for this node's dedicated editor.",
+  "Inline.History.Presentation": "Resize / expand child graph"
+}

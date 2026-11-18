@@ -30,6 +30,10 @@ Unix visibility must also hide symbols compiled into the static runtime.
 
 Unity installation (Unity 2021.3+ APIs; verified against 6000.2.6f1 assemblies)
 ----------------------------------------------------------------------------
+Unity 7 alpha verification of these Built-In RP sample shaders requires
+-enable-builtin-rp-fallback on the isolated Editor command line. A successful
+shader compile without that fallback does not prove that Camera.Render drew.
+
 1. Copy Runtime and Editor folders from this directory into Assets\LiberaFx.
    Keep both asmdef files: the runtime asmdef enables unsafe pointer pinning.
    No third-party packages, network service, scene synchronization or reverse

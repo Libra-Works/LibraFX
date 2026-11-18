@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Project;
+using LiberaFx.Models.Resources;
 using LiberaFx.ViewModels;
 
 namespace LiberaFx.Services;
@@ -26,6 +27,8 @@ public sealed class ProjectFileService
 
         var snapshot = workspace.CreateSnapshot();
         GraphValidator.ValidateDocument(snapshot);
+        if (snapshot.ResourceIdentities is { } resourceIdentities)
+            ResourceIdentityStore.Validate(resourceIdentities);
         var history = workspace.History.CreateSnapshot();
         var document = new LiberaFxProjectDocument
         {
@@ -52,7 +55,8 @@ public sealed class ProjectFileService
                     connection.SourcePortId))
                 .ToList(),
             AutoDestroyWhenIdle = snapshot.AutoDestroyWhenIdle,
-            History = history
+            History = history,
+            ResourceIdentities = snapshot.ResourceIdentities
         };
 
         await JsonSerializer.SerializeAsync(stream, document, SerializerOptions);

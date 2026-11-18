@@ -1,4 +1,5 @@
 using System.Text.Json;
+using LiberaFx.Models.Resources;
 
 namespace LiberaFx.Services;
 
@@ -10,7 +11,8 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
     private readonly Dictionary<Guid, PendingRequest> _pending = [];
     private readonly Dictionary<Guid, JsonElement> _renderStatus = [];
     private readonly Dictionary<Guid, JsonElement> _gpuStatus = [];
-    private sealed record PendingRequest(Guid Peer, string Operation, TaskCompletionSource<JsonElement> Completion);
+    private sealed record PendingRequest(Guid Peer, string Operation, string Capability, string ResultType,
+        TaskCompletionSource<JsonElement> Completion);
 
     public bool Supports(Guid id, string capability = "assets") => telemetry.Clients().Any(peer =>
         peer.ClientId == id && peer.Protocol == 3 && peer.Role == "editor" && peer.Capabilities.Contains(capability));
@@ -76,19 +78,151 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
         _ = await RequestAsync("reconnect", clientId, request => new { type = "reconnect", requestId = request });
     }
 
-    private async Task<JsonElement> RequestAsync(string operation, Guid? clientId, Func<Guid, object> command)
+    public async Task<EngineProjectConnectionState> EngineProjectAsync(Guid clientId, string operation = "status")
     {
-        var peer = SelectPeer(clientId);
+        if (operation is not ("status" or "initialize" or "keep" or "fork"))
+            throw new ArgumentException("Unsupported project identity operation.", nameof(operation));
+        var response = await RequestAsync(operation, clientId, "resourceIdentity", "resource_identity_result",
+            request => new { type = "resource_identity_project", requestId = request, operation });
+        var status = RequiredText(response, "status", 64);
+        var projectState = response.TryGetProperty("projectState", out var stateValue) &&
+            stateValue.ValueKind == JsonValueKind.String ? stateValue.GetString() : status;
+        EngineProjectIdentity? project = null;
+        if (response.TryGetProperty("project", out var projectValue) && projectValue.ValueKind == JsonValueKind.Object)
+        {
+            var engine = RequiredText(projectValue, "engine", 64);
+            var peer = telemetry.Clients(clientId).Single();
+            if (!string.Equals(peer.Engine, engine, StringComparison.Ordinal))
+                throw new InvalidDataException("Editor project engine does not match the connected peer.");
+            var projectIdText = projectValue.TryGetProperty("projectId", out var idValue) &&
+                idValue.ValueKind == JsonValueKind.String ? idValue.GetString() : null;
+            if (Guid.TryParseExact(projectIdText, "D", out var projectId) && projectId != Guid.Empty)
+                project = new EngineProjectIdentity(engine, projectId);
+            else if (!string.Equals(projectState, "Unregistered", StringComparison.Ordinal))
+                throw new InvalidDataException("Editor returned an invalid engine project GUID.");
+        }
+        var detail = response.TryGetProperty("detail", out var detailValue) &&
+            detailValue.ValueKind == JsonValueKind.String ? detailValue.GetString() : null;
+        return new(project, projectState ?? status, status, detail);
+    }
+
+    public async Task<ResourceProbeResult> ProbeResourceAsync(Guid clientId, EngineProjectIdentity project,
+        OpaqueBinding binding)
+    {
+        ValidateProjectRequest(clientId, project);
+        ValidateOpaqueBinding(binding);
+        var response = await RequestAsync("probe", clientId, "resourceIdentity", "resource_identity_result",
+            request => new
+            {
+                type = "resource_identity_probe", requestId = request, projectId = project.ProjectId.ToString("D"),
+                binding = new { binding.Format, binding.Value }
+            });
+        return ParseProbe(response, project);
+    }
+
+    public async Task<ResourceProbeResult> ProbeParameterAsync(Guid clientId, EngineProjectIdentity project,
+        OpaqueBinding resourceBinding, OpaqueBinding parameterBinding)
+    {
+        ValidateProjectRequest(clientId, project);
+        ValidateOpaqueBinding(resourceBinding);
+        ValidateOpaqueBinding(parameterBinding);
+        var response = await RequestAsync("probe", clientId, "resourceIdentity", "resource_identity_result",
+            request => new
+            {
+                type = "resource_identity_probe", requestId = request, projectId = project.ProjectId.ToString("D"),
+                resourceBinding = new { resourceBinding.Format, resourceBinding.Value },
+                parameterBinding = new { parameterBinding.Format, parameterBinding.Value }
+            });
+        return ParseProbe(response, project);
+    }
+
+    public async Task<IReadOnlyList<EngineMaterialParameterMetadata>> MaterialSchemaAsync(Guid clientId,
+        EngineProjectIdentity project, OpaqueBinding materialBinding)
+    {
+        ValidateProjectRequest(clientId, project);
+        ValidateOpaqueBinding(materialBinding);
+        var response = await RequestAsync("schema", clientId, "resourceIdentity", "resource_identity_result",
+            request => new
+            {
+                type = "resource_identity_schema", requestId = request,
+                projectId = project.ProjectId.ToString("D"),
+                resourceBinding = new { materialBinding.Format, materialBinding.Value }
+            });
+        if (ParseProbe(response, project).Status != ResourceResolutionStatus.Resolved)
+        {
+            var status = response.TryGetProperty("status", out var state) ? state.ToString() : "QueryFailure";
+            var detail = response.TryGetProperty("detail", out var message) ? message.GetString() : null;
+            throw new InvalidOperationException(detail ?? $"Could not read material parameter schema: {status}.");
+        }
+        if (!response.TryGetProperty("parameters", out var array) || array.ValueKind != JsonValueKind.Array ||
+            array.GetArrayLength() > 256)
+            throw new InvalidDataException("Editor returned an invalid material parameter schema.");
+        var result = new List<EngineMaterialParameterMetadata>();
+        var seen = new HashSet<(string, int, int)>();
+        foreach (var item in array.EnumerateArray())
+        {
+            var name = RequiredText(item, "name", 256);
+            var kind = RequiredText(item, "kind", 32);
+            if (kind is not ("scalar" or "vector" or "texture"))
+                throw new InvalidDataException("Editor returned an unsupported material parameter type.");
+            var association = item.GetProperty("association").GetInt32();
+            var index = item.GetProperty("index").GetInt32();
+            if (association is < 0 or > 2 || index is < -1 or > 65535 ||
+                !seen.Add((name, association, index)))
+                throw new InvalidDataException("Editor returned duplicate or invalid material parameter locators.");
+            var defaultValue = ParseSchemaJson(item, "defaultValueJson", required: true)!.Value;
+            var minimum = ParseSchemaJson(item, "minimumJson", required: false);
+            var maximum = ParseSchemaJson(item, "maximumJson", required: false);
+            var definition = new MaterialParameterDefinition(Guid.NewGuid(), kind, name,
+                defaultValue, minimum, maximum);
+            ResourceIdentityStore.Validate(new ResourceIdentityDocument(1,
+                [new ResourceDefinition(Guid.NewGuid(), "material", "Schema", [definition])], [], [], [], []));
+            result.Add(new(name, kind, defaultValue, minimum, maximum, association, index));
+        }
+        return result.AsReadOnly();
+    }
+
+    public async Task<string?> DeliverUnityBindingsAsync(Guid clientId, EngineProjectIdentity project,
+        IReadOnlyList<UnityRuntimeBindingDelivery> resources)
+    {
+        ValidateProjectRequest(clientId, project);
+        if (project.Engine != "Unity") throw new ArgumentException("Unity binding delivery requires a Unity project.");
+        if (resources is null || resources.Count is < 1 or > 256)
+            throw new ArgumentException("Unity binding delivery must include 1..256 resources.");
+        var response = await RequestAsync("deliver", clientId, "resourceIdentity", "resource_identity_result",
+            request => new
+            {
+                type = "resource_identity_deliver", requestId = request,
+                projectId = project.ProjectId.ToString("D"), resources
+            });
+        var status = RequiredText(response, "status", 64);
+        if (status != nameof(ResourceResolutionStatus.Resolved))
+            throw new InvalidOperationException(response.TryGetProperty("detail", out var detail) &&
+                detail.ValueKind == JsonValueKind.String ? detail.GetString() : $"Unity binding delivery failed: {status}.");
+        return response.TryGetProperty("assetPath", out var path) && path.ValueKind == JsonValueKind.String
+            ? path.GetString() : null;
+    }
+
+    private async Task<JsonElement> RequestAsync(string operation, Guid? clientId, Func<Guid, object> command) =>
+        await RequestAsync(operation, clientId, "assets", "asset_result", command);
+
+    private async Task<JsonElement> RequestAsync(string operation, Guid? clientId, string capability,
+        string resultType, Func<Guid, object> command)
+    {
+        var peer = SelectPeer(clientId, capability);
         var requestId = Guid.NewGuid();
         var completion = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_sync)
         {
             if (_pending.Count >= 16) throw new InvalidOperationException("Asset request queue is full.");
-            _pending.Add(requestId, new(peer, operation, completion));
+            _pending.Add(requestId, new(peer, operation, capability, resultType, completion));
         }
         try
         {
-            await telemetry.SceneControlAsync(JsonSerializer.SerializeToUtf8Bytes(command(requestId), JsonOptions), peer);
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(command(requestId), JsonOptions);
+            if (bytes.Length > CompiledPreviewProtocol.MaxSceneBytes - CompiledPreviewProtocol.HeaderSize)
+                throw new InvalidDataException("Resource identity request exceeds the preview message limit.");
+            await telemetry.SceneControlAsync(bytes, peer, capability);
             var reply = await completion.Task.WaitAsync(TimeSpan.FromSeconds(20));
             if (reply.TryGetProperty("error", out var error) && error.ValueKind != JsonValueKind.Null)
                 throw new InvalidOperationException(error.GetString() ?? "Engine asset operation failed.");
@@ -100,7 +234,7 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
     public bool Receive(Guid peer, ReadOnlyMemory<byte> json)
     {
         if (json.Length is 0 or > CompiledPreviewProtocol.MaxSceneBytes ||
-            !Supports(peer) && !Supports(peer, "gpuParticles")) return false;
+            !Supports(peer) && !Supports(peer, "gpuParticles") && !Supports(peer, "resourceIdentity")) return false;
         try
         {
             _ = new System.Text.UTF8Encoding(false, true).GetString(json.Span);
@@ -135,7 +269,11 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
                 }
                 return true;
             }
-            if (!Supports(peer)) return false;
+            if (type == "resource_identity_result")
+            {
+                if (!Supports(peer, "resourceIdentity")) return false;
+            }
+            else if (!Supports(peer)) return false;
             if (type == "render_status")
             {
                 if (!Supports(peer, "rendering") || root.GetProperty("programSequence").GetInt64() < 0 ||
@@ -145,12 +283,14 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
                 lock (_sync) _renderStatus[peer] = root.Clone();
                 return true;
             }
-            if (type != "asset_result" || !Guid.TryParseExact(root.GetProperty("requestId").GetString(), "D", out var id))
+            if (type is not ("asset_result" or "resource_identity_result") ||
+                !Guid.TryParseExact(root.GetProperty("requestId").GetString(), "D", out var id))
                 return false;
             PendingRequest? pending;
             lock (_sync) _pending.TryGetValue(id, out pending);
             if (pending is null) return true;
-            if (pending.Peer != peer || pending.Operation != root.GetProperty("operation").GetString()) return false;
+            if (pending.Peer != peer || pending.Operation != root.GetProperty("operation").GetString() ||
+                pending.ResultType != type || !Supports(peer, pending.Capability)) return false;
             pending.Completion.TrySetResult(root.Clone());
             return true;
         }
@@ -183,6 +323,72 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
     }
 
     public static void ValidateAssetPath(string path) => EngineAssetPath.Validate(path);
+
+    private void ValidateProjectRequest(Guid clientId, EngineProjectIdentity project)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        if (project.ProjectId == Guid.Empty || project.Engine is not ("Unity" or "Unreal"))
+            throw new ArgumentException("A verified Unity or Unreal project identity is required.", nameof(project));
+        var peer = telemetry.Clients(clientId).SingleOrDefault();
+        if (peer is null || !Supports(clientId, "resourceIdentity") ||
+            !string.Equals(peer.Engine, project.Engine, StringComparison.Ordinal))
+            throw new InvalidOperationException("Selected editor is disconnected or belongs to a different engine.");
+    }
+
+    private static void ValidateOpaqueBinding(OpaqueBinding binding)
+    {
+        if (binding is null || string.IsNullOrWhiteSpace(binding.Format) || binding.Format.Length > 256 ||
+            string.IsNullOrWhiteSpace(binding.Value) || binding.Value.Length > 4096 ||
+            binding.Format.Any(char.IsControl) || binding.Value.Any(char.IsControl))
+            throw new ArgumentException("Opaque resource binding is invalid.", nameof(binding));
+    }
+
+    private static ResourceProbeResult ParseProbe(JsonElement response, EngineProjectIdentity expectedProject)
+    {
+        if (!response.TryGetProperty("project", out var project) || project.ValueKind != JsonValueKind.Object ||
+            project.GetProperty("engine").GetString() != expectedProject.Engine ||
+            !Guid.TryParseExact(project.GetProperty("projectId").GetString(), "D", out var projectId) ||
+            projectId != expectedProject.ProjectId)
+            return new(ResourceResolutionStatus.Offline, Detail: "The active editor project differs from the selected project.");
+        var statusText = RequiredText(response, "status", 64);
+        if (!Enum.TryParse<ResourceResolutionStatus>(statusText, out var status) ||
+            status is ResourceResolutionStatus.Unregistered)
+            return new(ResourceResolutionStatus.QueryFailure, Detail: "Editor returned an unsupported probe state.");
+        var actualKind = response.TryGetProperty("actualKind", out var actual) && actual.ValueKind == JsonValueKind.String
+            ? actual.GetString() : null;
+        var detail = response.TryGetProperty("detail", out var detailValue) && detailValue.ValueKind == JsonValueKind.String
+            ? detailValue.GetString() : null;
+        if (status == ResourceResolutionStatus.Resolved && string.IsNullOrWhiteSpace(actualKind))
+            return new(ResourceResolutionStatus.QueryFailure, Detail: "Resolved probe omitted the actual resource kind.");
+        return new(status, actualKind, detail);
+    }
+
+    private static string RequiredText(JsonElement value, string name, int maximum)
+    {
+        var text = value.GetProperty(name).GetString();
+        if (string.IsNullOrWhiteSpace(text) || text.Length > maximum || text.Any(char.IsControl))
+            throw new InvalidDataException($"Editor response has invalid '{name}'.");
+        return text;
+    }
+
+    private static JsonElement? ParseSchemaJson(JsonElement item, string field, bool required)
+    {
+        if (!item.TryGetProperty(field, out var value) || value.ValueKind == JsonValueKind.Null)
+        {
+            if (required) throw new InvalidDataException($"Editor omitted material schema '{field}'.");
+            return null;
+        }
+        if (value.ValueKind != JsonValueKind.String)
+            throw new InvalidDataException($"Editor returned invalid material schema '{field}'.");
+        if (!required && string.IsNullOrWhiteSpace(value.GetString())) return null;
+        try
+        {
+            using var parsed = JsonDocument.Parse(value.GetString() ?? "");
+            return parsed.RootElement.Clone();
+        }
+        catch (JsonException exception)
+        { throw new InvalidDataException($"Editor returned malformed material schema '{field}'.", exception); }
+    }
 
     private static EngineAsset ParseAsset(JsonElement value)
     {

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "typeId": "4a94e882-39e8-4efb-92c7-180000000020",
+  "namespace": "LiberaFx",
+  "kind": "CurrentPhase",
+  "name": "Current Phase",
+  "displayNameKey": "Lifecycle.CurrentPhase",
+  "descriptionKey": "Lifecycle.PhaseHelp",
+  "group": "Lifecycle",
+  "groupNameKey": "Editor.NodeGroup.Lifecycle",
+  "portType": "enum:4a94e882-39e8-4efb-92c7-180000000030",
+  "portCategory": "Parameter",
+  "inputPorts": [],
+  "outputPorts": [
+    { "id": "phase", "name": "Phase", "portType": "enum:4a94e882-39e8-4efb-92c7-180000000030", "category": "Parameter" }
+  ]
+}

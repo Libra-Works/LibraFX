@@ -111,6 +111,20 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult RequestNaturalEnd();
 
+    // Package path: no author-added internal Spawnable component is required.
+    // Plain bytecode evaluation has no scoped lifecycle and is rejected.
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
+    ELibraRuntimeResult ForceTerminate();
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
+    ELibraRuntimeResult ForceTerminateChild(FGuid containerId, int64 instanceId);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Signals")
+    ELibraRuntimeResult NotifyEndRequest(FGuid userSignalNodeId);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Signals")
+    ELibraRuntimeResult NotifyChildEndRequest(FGuid containerId, int64 instanceId, FGuid userSignalNodeId);
+
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Signals")
     ELibraRuntimeResult DispatchNodeSignal(FGuid nodeId);
 
@@ -148,6 +162,25 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult EvaluateAtTime(double evaluationTimeSeconds);
 
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Debugger")
+    ELibraRuntimeResult AttachExecutionDebugger(const FString& invitation);
+    UFUNCTION(BlueprintPure, Category = "Libra Runtime|Debugger")
+    int64 GetPackageDebuggerGeneration() const;
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Debugger")
+    ELibraRuntimeResult AttachPackageDebugger(int64 generation, FGuid containerId, int64 instanceId, const FString& invitation);
+
+    UFUNCTION(BlueprintCallable, CallInEditor, Category = "Libra Runtime|Debugger")
+    void DetachExecutionDebugger();
+
+#if WITH_EDITORONLY_DATA
+    // Never serialized or placed in the editor transaction history.
+    UPROPERTY(EditInstanceOnly, Transient, NonTransactional, Category = "Libra Runtime|Debugger")
+    FString LocalDebuggerInvitation;
+#endif
+
+    UFUNCTION(CallInEditor, Category = "Libra Runtime|Debugger")
+    void AttachLocalDebugger();
+
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult SetParameterComponent(FGuid nodeId, double value,
         ELibraParameterInput input = ELibraParameterInput::A, int32 component = 0);
@@ -164,6 +197,15 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Binding")
     ELibraRuntimeResult ReadBoundValue(const FLibraValueHandle& handle, FVector4& value, int32& componentCount) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Binding")
+    ELibraRuntimeResult GetValueType(FGuid nodeId, ELibraValueType& valueType);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Binding")
+    ELibraRuntimeResult ReadBoundInt32Value(const FLibraValueHandle& handle, int32& value) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Binding")
+    ELibraRuntimeResult SetBoundInt32Parameter(const FLibraParameterHandle& handle, int32 value);
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Binding")
     ELibraRuntimeResult SetBoundParameter(const FLibraParameterHandle& handle, double value);

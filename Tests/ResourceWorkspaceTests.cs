@@ -131,7 +131,8 @@ public static class ResourceWorkspaceTests
                 Require(model.Entries.Any(resource => resource.Group?.Id == group.Id), "Returning to Groups must restore project resources.");
                 model.SelectedEntry = model.Entries.Single(resource => resource.Group?.Id == group.Id);
                 Require(main.TeamProfiles.Save(null, projectName + " other", Path.Combine(root, "other")), main.TeamProfiles.Status);
-                Require(model.SelectedEntry is null && model.Entries.Count == 0 && !model.CanUse,
+                Require(model.SelectedEntry is null &&
+                        model.Entries.All(resource => resource.Group?.Origin == GroupAssetOrigin.Standard) && !model.CanUse,
                     "Switching projects must clear stale Group actions.");
             }
             finally { window.Close(); }

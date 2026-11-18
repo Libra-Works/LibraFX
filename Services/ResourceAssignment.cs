@@ -12,6 +12,29 @@ public sealed record ResourceAssignmentTarget(Guid NodeId, ResourceTargetKind Ki
 
 public static class ResourceAssignment
 {
+    public static ResourceAssignmentTarget? TargetForParameter(GraphNodeViewModel node, string parameterId)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentException.ThrowIfNullOrWhiteSpace(parameterId);
+        if (!RenderNodeSchema.IsRenderNode(node.Definition)) return null;
+        if (parameterId == "assetPath")
+            return new(node.Id, ResourceTargetKind.RenderAsset, parameterId,
+                LocalizationService.Shared.Get("Resources.RenderTarget", node.Name));
+        var parameter = RenderNodeSchema.Read(node.Definition, node.Parameters)
+            .FirstOrDefault(candidate => candidate.Id == parameterId && candidate.Kind == "texture");
+        return parameter is null ? null : new(node.Id, ResourceTargetKind.MaterialTexture, parameter.Id,
+            LocalizationService.Shared.Get("Resources.MaterialTarget",
+                parameter.Slot, parameter.Name, parameter.Association, parameter.Index));
+    }
+
+    public static string? AssetClassForParameter(GraphNodeViewModel node, string parameterId)
+    {
+        if (TargetForParameter(node, parameterId) is not { } target) return null;
+        return target.Kind == ResourceTargetKind.RenderAsset
+            ? node.Definition.TypeName == "ModelDraw" ? "model" : "texture"
+            : "texture";
+    }
+
     public static IReadOnlyList<ResourceAssignmentTarget> Targets(GraphNodeViewModel node, EngineAsset asset)
     {
         var targets = new List<ResourceAssignmentTarget>();

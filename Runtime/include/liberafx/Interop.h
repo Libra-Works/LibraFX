@@ -41,8 +41,14 @@ enum {
     LIBRA_INVALID_VALUE_TYPE = 11, LIBRA_UNKNOWN_CUSTOM_NODE = 12,
     LIBRA_INVALID_HANDLE = 13, LIBRA_INSTRUCTION_BUDGET_EXCEEDED = 14,
     LIBRA_OUT_OF_MEMORY = 15, LIBRA_INTERNAL_ERROR = 16,
-    LIBRA_COUNTER_OVERFLOW = 17
+    LIBRA_COUNTER_OVERFLOW = 17, LIBRA_ARITHMETIC_OVERFLOW = 18
 };
+typedef enum LibraValueType {
+    LIBRA_VALUE_TYPE_NONE = 0, LIBRA_VALUE_TYPE_FLOAT = 1, LIBRA_VALUE_TYPE_INT32 = 2,
+    LIBRA_VALUE_TYPE_VECTOR2 = 3, LIBRA_VALUE_TYPE_VECTOR3 = 4,
+    LIBRA_VALUE_TYPE_VECTOR4 = 5, LIBRA_VALUE_TYPE_COLOR = 6,
+    LIBRA_VALUE_TYPE_ENUM = 7, LIBRA_VALUE_TYPE_UNKNOWN = 255
+} LibraValueType;
 enum { LIBRA_GENERATOR_SPAWN = 1, LIBRA_GENERATOR_STOP = 2, LIBRA_GENERATOR_DESTROY = 3 };
 
 /* These are host ABI records, not packed bytecode/wire overlays. Preserve the
@@ -233,11 +239,23 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_instance_release(LibraIns
 /* Set before each evaluation for Effect Age and Delta Time nodes. */
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_instance_set_time_context(
     LibraInstance instance, double effectTime, double frameDelta);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_instance_set_quality(
+    LibraInstance instance, uint8_t availability, uint8_t tier, uint8_t source, uint64_t frameSerial);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_bind_value(
     LibraInstance instance, const uint8_t nodeId[16], LibraBinding* outBinding);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_bind_parameter(
     LibraInstance instance, const uint8_t nodeId[16], uint32_t inputSlot,
     uint32_t component, LibraBinding* outBinding);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_value_type(
+    LibraInstance instance, LibraBinding binding, LibraValueType* outType);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_parameter_type(
+    LibraInstance instance, LibraBinding binding, LibraValueType* outType);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_value_read_int32(
+    LibraInstance instance, LibraBinding binding, int32_t* outValue);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_parameter_get_int32(
+    LibraInstance instance, LibraBinding binding, int32_t* outValue);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_parameter_set_int32(
+    LibraInstance instance, LibraBinding binding, int32_t value);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_parameter_get(
     LibraInstance instance, LibraBinding binding, double* outValue);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_parameter_set(
@@ -297,6 +315,19 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_finish(LibraInstan
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_stop(LibraInstance instance);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_sample_sprite_atlas(
     double frame, uint32_t columns, uint32_t rows, LibraAtlasFrame* outFrame);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_sample_sprite_rect(
+    uint32_t frameIndex, float u, float v, float width, float height, LibraAtlasFrame* outFrame);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_sample_sprite_sequence(
+    double frameInput, double elapsedSeconds, double fps, const double* durationFrames,
+    uint32_t frameCount, uint32_t startFrame, uint32_t endFrame, uint32_t loop,
+    uint32_t playing, uint32_t* outFrameIndex);
+/* Each key has six doubles: frame, x, y, Z rotation (degrees), sx, sy.
+   The caller owns all buffers. outPose has five doubles in the same order as
+   the key after frame. Clip duration is shared across visible draws. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_sample_sprite_composition(
+    double elapsedSeconds, double fps, double durationFrames, uint32_t loop,
+    const double* cellDurations, uint32_t frameCount, const double* keys, uint32_t keyCount,
+    uint32_t* outFrameIndex, double outPose[5]);
 /* Top-left-origin UVs; four vertices in TL, TR, BR, BL order. */
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_make_sprite_quad(
     const LibraAtlasFrame* frame, float width, float height, LibraSpriteVertex outVertices[4]);
@@ -419,8 +450,22 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_game_io_next_event(
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_game_io_next_event_v2(
     LibraInstance instance, LibraGameIoEventV2* outEvent, uint32_t* hasEvent);
 
+typedef enum LibraSpawnableScopeKind {
+    LIBRA_SPAWNABLE_SCOPE_EFFECT = 0,
+    LIBRA_SPAWNABLE_SCOPE_INSTANCE = 1
+} LibraSpawnableScopeKind;
+
+typedef enum LibraSpawnableHostEventKind {
+    LIBRA_SPAWNABLE_EVENT_SPAWN = 1,
+    LIBRA_SPAWNABLE_EVENT_STOP = 2,
+    LIBRA_SPAWNABLE_EVENT_DESTROY = 3,
+    LIBRA_SPAWNABLE_EVENT_SIGNAL = 4,
+    LIBRA_SPAWNABLE_EVENT_FORCE_TERMINATED = 5
+} LibraSpawnableHostEventKind;
+
 /* Engine-neutral owner-thread host for versioned LFXP Spawnable packages.
-   Event kind values are 1=Spawn, 2=Stop, 3=natural Destroy, 4=local Signal.
+   Event kind values are 1=Spawn, 2=Stop, 3=natural Destroy, 4=local Signal,
+   5=ForceTerminated (never natural Destroy).
    QueueRejected is recoverable: drain events and retry advance at the same time. */
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_create(
     const uint8_t* bytes, uint64_t byteCount, uint32_t maxActivePerTemplate,
@@ -438,10 +483,30 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_game_p
     LibraSpawnableHostHandle host, const char* name, const double* values, uint32_t width);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_owner_matrix(
     LibraSpawnableHostHandle host, const double values[16]);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_quality(
+    LibraSpawnableHostHandle host, uint8_t availability, uint8_t tier, uint8_t source, uint64_t frameSerial);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_request_natural_end(
     LibraSpawnableHostHandle host);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_stop(
     LibraSpawnableHostHandle host);
+/* Additive ABI-1 APIs. Call on the thread that created this host; other threads
+   return Busy. Not an asynchronous request mailbox. EFFECT requires instance=0
+   and null/zero containerId; INSTANCE requires a nonzero 16-byte big-endian
+   container UUID and issued instance ID. Invalid scope arguments are rejected.
+   Force runs at the completed job boundary, purges pending target work and
+   publishes kind 5. Zero container/instance on that event means release ALL
+   root/child render/GPU scopes. Otherwise release only the exact identity.
+   Duplicate force succeeds without a second event. QueueRejected is atomic:
+   drain unrelated notices, retry force BEFORE another advance. Already delivered
+   side effects are not undone; order force before EndRequest/advance per tick. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_force_terminate(
+    LibraSpawnableHostHandle host, uint32_t scopeKind, const uint8_t containerId[16],
+    LibraGeneratorInstance instance);
+/* Notification only: each call dispatches one arrival to userSignalNodeId.
+   No natural end, fixed phase mode, Lifetime change, or implicit Destroy. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_notify_end_request(
+    LibraSpawnableHostHandle host, uint32_t scopeKind, const uint8_t containerId[16],
+    LibraGeneratorInstance instance, const uint8_t userSignalNodeId[16]);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_root_value(
     LibraSpawnableHostHandle host, const uint8_t nodeId[16], LibraValue* outValue);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_child_value(

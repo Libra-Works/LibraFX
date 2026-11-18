@@ -15,7 +15,6 @@ public partial class MainWindow : Window
     private McpWindow? _mcpWindow;
     private PreviewProfilerWindow? _profilerWindow;
     private PreviewConnectionsWindow? _connectionsWindow;
-    private EngineAssetsWindow? _contentWindow;
     private SpriteEditorWindow? _spriteEditorWindow;
     private LocalProjectsWindow? _localProjectsWindow;
     private ProblemsWindow? _problemsWindow;
@@ -48,8 +47,18 @@ public partial class MainWindow : Window
             if (DataContext is MainViewModel model) model.WindowLayouts.SaveWorkspace();
         };
         Closed += (_, _) => DetachGroupEvents();
+        Closed += (_, _) => DisposeSharedAssetBrowser();
+        Closed += (_, _) =>
+        {
+            if (DataContext is MainViewModel model) model.CloseLiveGameWindow();
+        };
         PositionChanged += (_, _) => RememberNormalWindowBounds();
         SizeChanged += (_, _) => RememberNormalWindowBounds();
+    }
+
+    private void OnLiveGameClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel model) model.ShowLiveGameWindow(this);
     }
 
     private void RememberNormalWindowBounds()
@@ -204,11 +213,7 @@ public partial class MainWindow : Window
 
     private void OnContentClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel model) return;
-        if (_contentWindow is not null) { _contentWindow.Activate(); return; }
-        _contentWindow = new EngineAssetsWindow(model);
-        _contentWindow.Closed += (_, _) => _contentWindow = null;
-        _contentWindow.Show(this);
+        OpenSharedAssetBrowser();
     }
 
     private void OnSpriteEditorClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -218,6 +223,26 @@ public partial class MainWindow : Window
         _spriteEditorWindow = new SpriteEditorWindow(model);
         _spriteEditorWindow.Closed += (_, _) => _spriteEditorWindow = null;
         _spriteEditorWindow.Show(this);
+    }
+
+    internal bool OpenSpriteEditorForAsset(Guid peerId, EngineAsset asset)
+    {
+        if (DataContext is not MainViewModel model) return false;
+        if (_spriteEditorWindow is not null)
+        {
+            _spriteEditorWindow.Activate();
+            return false;
+        }
+        var window = new SpriteEditorWindow(model, loadSelected: false);
+        if (!window.SelectInitialAsset(peerId, asset))
+        {
+            window.Close();
+            return false;
+        }
+        _spriteEditorWindow = window;
+        window.Closed += (_, _) => _spriteEditorWindow = null;
+        window.Show(this);
+        return true;
     }
 
     private void OnLocalProjectsClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

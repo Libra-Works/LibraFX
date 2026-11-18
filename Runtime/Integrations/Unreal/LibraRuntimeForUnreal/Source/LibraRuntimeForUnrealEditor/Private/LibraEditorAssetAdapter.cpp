@@ -1,4 +1,5 @@
 #include "LibraEditorAssetAdapter.h"
+#include "LibraEditorResourceIdentityAdapter.h"
 
 #include "AssetRegistry/AssetData.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -299,6 +300,10 @@ FString FLibraEditorAssetAdapter::ProcessRequest(const FString& requestText)
         error = TEXT("Invalid asset request UUID.");
     else if (!request->TryGetStringField(TEXT("type"), type))
         error = TEXT("Asset request type is required.");
+    else if (type == TEXT("resource_identity_project") || type == TEXT("resource_identity_probe") ||
+        type == TEXT("resource_identity_schema") ||
+        type == TEXT("resource_identity_deliver"))
+        return FLibraEditorResourceIdentityAdapter::ProcessRequest(requestText);
     else if (type == TEXT("asset_catalog"))
     {
         operation = TEXT("catalog");

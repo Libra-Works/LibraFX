@@ -13,6 +13,7 @@ public sealed class NodePropertiesPaneViewModel : Tool
 {
     private readonly ActiveGraphProvider _activeGraph;
     private readonly EditorPlayback? _playback;
+    private readonly AssetBrowserCoordinator? _assetBrowser;
     private GraphWorkspaceViewModel _graph;
     private GraphNodeViewModel? _node;
     private long _selectionGeneration;
@@ -90,10 +91,12 @@ public sealed class NodePropertiesPaneViewModel : Tool
         }
     }
 
-    public NodePropertiesPaneViewModel(ActiveGraphProvider activeGraph, EditorPlayback? playback = null)
+    public NodePropertiesPaneViewModel(ActiveGraphProvider activeGraph, EditorPlayback? playback = null,
+        AssetBrowserCoordinator? assetBrowser = null)
     {
         _activeGraph = activeGraph;
         _playback = playback;
+        _assetBrowser = assetBrowser;
         _graph = activeGraph.Graph;
         SaveGroupCommand = new RelayCommand(() => RunGroupAction(_graph.SaveSelectedGroupAsset),
             () => CanManageGroup && _graph.GroupAssets?.HasLibraryDirectory == true &&
@@ -230,11 +233,13 @@ public sealed class NodePropertiesPaneViewModel : Tool
         var selectedNode = _node;
         foreach (var definition in _node.Definition.Parameters.Where(parameter =>
                      !_node.IsGpuParticle &&
-                     (!RenderNodeSchema.IsRenderNode(_node.Definition) || parameter.Id != "materialSchema")))
+                     (!RenderNodeSchema.IsRenderNode(_node.Definition) ||
+                         parameter.Id is not ("materialSchema" or "spriteData" or "compositionData"))))
         {
             Parameters.Add(new NodeParameterEditorViewModel(graph, selectedNode, definition, isCurrentInspectorTarget: () =>
                 selectionGeneration == _selectionGeneration &&
-                ReferenceEquals(_activeGraph.Graph, graph) && graph.IsCurrentInspectorTarget(selectedNode)));
+                ReferenceEquals(_activeGraph.Graph, graph) && graph.IsCurrentInspectorTarget(selectedNode),
+                assetBrowser: _assetBrowser));
         }
         if (_node.ChildGraph is not { } child) return;
         foreach (var item in (child.ExposedItems ?? []).OrderBy(item => item.Order))
@@ -286,7 +291,7 @@ public sealed class NodePropertiesPaneViewModel : Tool
             Parameters.Add(new NodeParameterEditorViewModel(graph, selectedNode, display, item, () =>
                 selectionGeneration == _selectionGeneration &&
                 ReferenceEquals(_activeGraph.Graph, graph) && graph.IsCurrentInspectorTarget(selectedNode),
-                itemMetadata?.DescriptionKey));
+                itemMetadata?.DescriptionKey, _assetBrowser));
         }
         OnPropertyChanged(nameof(GroupExposedDiagnostics));
     }

@@ -192,6 +192,24 @@ bool FLibraSpawnableGameIoRenderTest::RunTest(const FString&)
     TestTrue(TEXT("Root finishes after child scopes drain"), component->bRootFinished);
     TestEqual(TEXT("Natural root end removes root and child rendering"), component->GetRenderObjectCount(), 0);
     component->Stop();
+    TestEqual(TEXT("Force fixture restarts on the public whole-effect component"),
+        component->Play(), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("First force-test child"), component->FireGameSignal(TEXT("spawn")), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Second force-test child"), component->FireGameSignal(TEXT("spawn")), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Force test has root and two child render scopes"), component->GetRenderObjectCount(), 5);
+    auto templateId = FGuid{};
+    FGuid::Parse(ids->GetStringField(TEXT("template")), templateId);
+    TestEqual(TEXT("Force one exact child"), component->ForceTerminateChild(templateId, 1), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Force retains root and sibling rendering"), component->GetRenderObjectCount(), 3);
+    TestEqual(TEXT("Duplicate child force is idempotent"), component->ForceTerminateChild(templateId, 1), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Duplicate does not touch the sibling"), component->GetRenderObjectCount(), 3);
+    TestEqual(TEXT("Public whole-effect force"), component->ForceTerminate(), ELibraRuntimeResult::Ok);
+    TestTrue(TEXT("Force marks the public owner finished and not playing"),
+        component->bRootFinished && !component->bIsPlaying);
+    TestEqual(TEXT("Whole-effect force releases root and every child"), component->GetRenderObjectCount(), 0);
+    TestEqual(TEXT("Whole-effect force duplicate"), component->ForceTerminate(), ELibraRuntimeResult::Ok);
+    TestEqual(TEXT("Public Play restarts after force"), component->Play(), ELibraRuntimeResult::Ok);
+    component->Stop();
     world->DestroyWorld(false);
     return true;
 }

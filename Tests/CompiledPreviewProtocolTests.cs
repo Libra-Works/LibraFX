@@ -48,8 +48,10 @@ internal static class CompiledPreviewProtocolTests
         var switched = sender.Prepare(Publication(11, "b", edited))!;
         Require(switched.Kind == CompiledPreviewKind.Program, "Document switches require a program.");
         sender.Sent(switched);
-        graph.CreateNode(GraphNodeKind.Int32);
-        var invalid = graph.CreateSnapshot();
+        var invalid = edited with
+        {
+            Connections = [.. edited.Connections, new(Guid.NewGuid(), edited.Nodes[0].Id, null)]
+        };
         var failure = sender.Prepare(Publication(12, "b", invalid))!;
         Require(failure.Kind == CompiledPreviewKind.CompileError && failure.Bytes.Length <= 48 + 4096,
             "Compiler failures must produce bounded diagnostics.");
@@ -256,7 +258,8 @@ internal static class CompiledPreviewProtocolTests
             await Dispatcher.UIThread.InvokeAsync(() => model.Graph.CreateNode(GraphNodeKind.Float));
             var edit = await ReceiveAsync(socket, token);
             Require(U16(edit, 6) == 1, "Graph edit must send a program.");
-            await Dispatcher.UIThread.InvokeAsync(() => model.Graph.CreateNode(GraphNodeKind.Int32));
+            await Dispatcher.UIThread.InvokeAsync(() => model.Graph.CreateNode(
+                GraphNodeDefinition.Core.Single(definition => definition.Name == "Bool").Kind));
             var failure = await ReceiveAsync(socket, token);
             Require(U16(failure, 6) == 3, "Unsupported node must send a compile error.");
             await socket.SendAsync(Encoding.UTF8.GetBytes("""{"type":"resync"}"""), WebSocketMessageType.Text, true, token);

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "typeId": "4a94e882-39e8-4efb-92c7-180000000024",
+  "namespace": "LiberaFx",
+  "kind": "EnterEnd",
+  "name": "Enter End",
+  "displayNameKey": "Lifecycle.EnterEnd",
+  "descriptionKey": "Lifecycle.PhaseHelp",
+  "group": "Lifecycle",
+  "groupNameKey": "Editor.NodeGroup.Lifecycle",
+  "portType": "Signal",
+  "portCategory": "Signal",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "signal" },
+  "inputPorts": [{ "id": "signal", "name": "Signal", "portType": "Signal", "category": "Signal" }],
+  "outputPorts": []
+}

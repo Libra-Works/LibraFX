@@ -1,0 +1,87 @@
+Host quality and authored value Signals (#40)
+============================================
+
+Quality Branch compares the host snapshot on each Signal arrival and emits only
+whenTrue or whenFalse. Its numeric value is the last comparison result (0 or 1).
+The comparison and requested tier are saved typed enum parameters. Graph edits,
+named connections, copy, project persistence and Undo/Redo use the normal graph
+commands; no engine SDK type is stored in the graph.
+
+Quality is an explicit host snapshot, immutable during a job, published at the
+next game tick/job boundary. Unprovided returns NotReady; Unknown/Unsupported and
+invalid tiers return InvalidValueType. There is no implicit default quality.
+Low/Medium/High/Ultra/Cinematic are ordered 0..4. Equal/not-equal and ordered
+comparisons select exactly one callback; the other is never invoked. HostPolicy,
+EngineEffects and PlatformPolicy identify the provenance, not interchangeable
+unvalidated engine values.
+
+The Unreal ReadLibraQualitySnapshot adapter is game-thread-only, snapshots
+Scalability::GetQualityLevels().EffectsQuality (0..4) and an explicit host frame
+serial. Public ULibraEffectComponent playback publishes it before initial package
+evaluation and subsequent jobs through its existing internal execution owner.
+Custom/out-of-range engine values stay Unknown and fail when compared; programs
+that do not use quality do not acquire an invented quality dependency.
+
+Unity publishes QualitySettings.GetQualityLevel on its main thread. Because
+quality levels and names are project-defined, its renderer/package component
+requires an explicit index-to-HostQualityTier mapping. An unmapped index remains
+Unknown, not Low or a guessed normalized tier. NativeInstance and
+NativeSpawnableHost also expose SetHostQuality for explicit host policies.
+
+Instance, GeneratorPool and SpawnableHost accept snapshots only between jobs
+and Signal deliveries. New children inherit the current host snapshot. The
+additive ABI-1 calls libra_instance_set_quality and
+libra_spawnable_host_set_quality pass availability/tier/source bytes and an
+unsigned 64-bit frame serial. This is a copied snapshot, not an engine pointer.
+
+SignalPayload owns up to 16 fields and is copied with a delivery. Field IDs are
+nonzero stable 16-byte identifiers, not display names. Scalar/vector/color use
+finite double components; Int32 uses an actual int32 value; Boolean is 0 or 1.
+No conversion is implicit. Missing fields and type mismatch are distinct errors.
+Unused components must be zero; duplicate IDs and capacity overflow fail without
+changing the payload. Hosts retain the copied event until its scheduled callback
+finishes, and must not mutate a delivery while a consumer reads it. No borrowed
+engine, schema or graph pointers are stored and no per-field allocation occurs.
+Capture Signal Value (Vector4) is the authored contract currently implemented:
+one finite, unitless Vector4, identified by that capture node's persistent UUID.
+Height/normal/color are not implicit meanings; authors compose numeric lanes
+explicitly and use explicit Color conversions. Scalar/vector/color/Int32/Boolean
+primitive fields are NOT all exposed as authored capture nodes.
+
+Each immediate FIFO arrival owns its captured context. Two arrivals at the same
+node may carry different values. Before a consumer executes, the runtime restores
+that arrival's values and refreshes only supported stateless numeric dependents.
+Later captures cannot overwrite earlier queued arrivals. Recapturing the same
+source replaces that source's field; a seventeenth distinct source fails visibly.
+Queue sidecar storage is included in caller-owned Program work requirements and
+is reserved only for programs that contain an authored capture.
+
+Implicit transport through Delay, asynchronous host messages or another instance
+is not implemented. Delay with a captured context returns UnsupportedBinary
+instead of silently dropping it. Explicit numeric Spawn inputs retain their
+existing separate capture contract. Signals without values retain their behavior.
+
+These authored nodes use LFXB v11 (256-byte instructions plus typed metadata).
+Custom/logical branch guards use byte 44 in v11, leaving all four numeric default
+slots intact; ordinary instructions and earlier versions retain byte 112.
+Legacy supported formats remain readable; the SignalPayload C++ class itself is
+not serialized as an ABI/wire layout.
+
+Verification:
+  managed --authored-quality <absolute isolated fixture directory>
+  LIBERAFX_QUALITY_FIXTURE_DIR=<same directory>
+  native liberafx_host_signal_context_tests
+The real compiler output exercises true/false selection, Unprovided/Unknown/
+Unsupported errors, two queued values (1 then 2), typed debugger captures and
+actual SpawnableHost package initialization. Unity
+LiberaFxAuthoredRuntimeVerification.RunBatch additionally exercises its actual
+quality provider and compiled package through the native plugin.
+Unreal Libra.Runtime.Quality.AuthoredComponent, supplied with
+-LibraQualityFixture=<the same compiler-produced directory>, exercises the
+public ULibraEffectComponent, actual EffectsQuality selection and FIFO value 2.
+Libra.Runtime.Quality.GameThreadSnapshot covers the engine snapshot boundary.
+Raw C ABI evaluation and standalone Unreal evaluation also drain generated
+Signals before publishing values; repeated evaluation must not retain a pending
+dispatch flag. Package hosts retain their own dispatch loop.
+
+This is a local C++ API, not a byte-layout transport or serialized wire format.

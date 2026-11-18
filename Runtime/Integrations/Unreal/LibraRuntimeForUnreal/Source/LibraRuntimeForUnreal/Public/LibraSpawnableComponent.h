@@ -8,6 +8,7 @@
 namespace liberafx { class SpawnableHost; }
 class ULibraSpawnableAsset;
 class FLibraSpawnableRenderState;
+class FLibraSpawnableDebugState;
 
 USTRUCT(BlueprintType)
 struct FLibraSpawnableAssetBinding
@@ -90,6 +91,21 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult RequestNaturalEnd();
 
+    // Force never dispatches natural Destroy or an automatic End phase.
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
+    ELibraRuntimeResult ForceTerminate();
+
+    // InstanceId is an opaque 64-bit identity; preserve event bits, including sign.
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
+    ELibraRuntimeResult ForceTerminateChild(FGuid containerId, int64 instanceId);
+
+    // User-authored signal entry; this notification does not select End policy.
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Signals")
+    ELibraRuntimeResult NotifyEndRequest(FGuid userSignalNodeId);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Signals")
+    ELibraRuntimeResult NotifyChildEndRequest(FGuid containerId, int64 instanceId, FGuid userSignalNodeId);
+
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult Stop();
 
@@ -118,6 +134,28 @@ public:
     UFUNCTION(BlueprintPure, Category = "Libra Runtime|Rendering")
     int32 GetGpuInstanceCount() const;
 
+    UFUNCTION(BlueprintPure, Category = "Libra Runtime|Debugger")
+    int64 GetDebuggerGeneration() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Debugger")
+    ELibraRuntimeResult AttachExecutionDebugger(int64 generation, FGuid containerId, int64 instanceId, const FString& invitation);
+
+    UFUNCTION(CallInEditor, Category = "Libra Runtime|Debugger")
+    void AttachLocalDebugger();
+
+    UFUNCTION(BlueprintCallable, CallInEditor, Category = "Libra Runtime|Debugger")
+    void DetachExecutionDebugger();
+    bool HasPendingDebugWork() const { return DebugJobPending(); }
+
+#if WITH_EDITORONLY_DATA
+    UPROPERTY(EditInstanceOnly, Transient, NonTransactional, Category = "Libra Runtime|Debugger")
+    FString LocalDebuggerInvitation;
+    UPROPERTY(EditInstanceOnly, Transient, NonTransactional, Category = "Libra Runtime|Debugger")
+    FGuid DebugContainerId;
+    UPROPERTY(EditInstanceOnly, Transient, NonTransactional, Category = "Libra Runtime|Debugger")
+    int64 DebugInstanceId = 0;
+#endif
+
     virtual void TickComponent(float deltaTime, ELevelTick tickType,
         FActorComponentTickFunction* tickFunction) override;
     virtual void BeginDestroy() override;
@@ -128,12 +166,23 @@ protected:
     virtual void OnComponentDestroyed(bool bDestroyingHierarchy) override;
 
 private:
+    ELibraRuntimeResult ForceTerminateScope(FGuid containerId, int64 instanceId, bool wholeEffect);
+    ELibraRuntimeResult NotifyEndRequestScope(FGuid containerId, int64 instanceId,
+        FGuid userSignalNodeId, bool wholeEffect);
     ELibraRuntimeResult Report(ELibraRuntimeResult result);
     void DrainEvents();
     void ReleaseHost();
     bool RefreshRendering();
+    bool DebugJobPending() const;
+    void TickDebugger(float deltaTime);
+    void ReleaseDebugger();
     TUniquePtr<liberafx::SpawnableHost> NativeHost;
     TUniquePtr<FLibraSpawnableRenderState> RenderState;
+    TUniquePtr<FLibraSpawnableDebugState> DebugState;
+    uint64 DebugPackageIdentity = 0;
     uint64 HostGeneration = 0;
     bool bStopping = false;
+    bool bForceTerminated = false;
+    int32 EventDrainDepth = 0;
+    TMap<FGuid, TSet<int64>> CancelledBatchScopes;
 };

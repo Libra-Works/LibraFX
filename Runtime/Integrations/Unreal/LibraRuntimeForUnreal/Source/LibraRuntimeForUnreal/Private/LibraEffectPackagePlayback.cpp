@@ -71,7 +71,23 @@ void ULibraEffectComponent::SyncPackageState()
     LastError = PackagePlayback->LastError;
     // The public component is the only tick owner, including after callbacks.
     PackagePlayback->SetComponentTickEnabled(false);
-    SetComponentTickEnabled(bIsPlaying);
+    SetComponentTickEnabled(bIsPlaying || PackagePlayback->HasPendingDebugWork());
+}
+
+int64 ULibraEffectComponent::GetPackageDebuggerGeneration() const
+{
+    check(IsInGameThread());
+    return PackagePlayback ? PackagePlayback->GetDebuggerGeneration() : 0;
+}
+
+auto ULibraEffectComponent::AttachPackageDebugger(int64 generation, FGuid containerId,
+    int64 instanceId, const FString& invitation) -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    if (!PackagePlayback) return ELibraRuntimeResult::NotReady;
+    auto result = PackagePlayback->AttachExecutionDebugger(generation, containerId, instanceId, invitation);
+    SyncPackageState();
+    return result;
 }
 
 void ULibraEffectComponent::ReleasePackagePlayback()
@@ -113,6 +129,48 @@ auto ULibraEffectComponent::RequestNaturalEnd() -> ELibraRuntimeResult
     if (!Package || !PackagePlayback) return LastResult = ELibraRuntimeResult::NotReady;
     auto playback = PackagePlayback;
     auto result = playback->RequestNaturalEnd();
+    if (PackagePlayback == playback) SyncPackageState();
+    return LastResult = result;
+}
+
+auto ULibraEffectComponent::ForceTerminate() -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    if (!Package || !PackagePlayback)
+        return LastResult = Effect ? ELibraRuntimeResult::UnsupportedBinary : ELibraRuntimeResult::NotReady;
+    auto playback = PackagePlayback;
+    auto result = playback->ForceTerminate();
+    if (PackagePlayback == playback) SyncPackageState();
+    return LastResult = result;
+}
+
+auto ULibraEffectComponent::ForceTerminateChild(FGuid containerId, int64 instanceId) -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    if (!Package || !PackagePlayback) return LastResult = ELibraRuntimeResult::NotReady;
+    auto playback = PackagePlayback;
+    auto result = playback->ForceTerminateChild(containerId, instanceId);
+    if (PackagePlayback == playback) SyncPackageState();
+    return LastResult = result;
+}
+
+auto ULibraEffectComponent::NotifyEndRequest(FGuid userSignalNodeId) -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    if (!Package || !PackagePlayback) return LastResult = ELibraRuntimeResult::NotReady;
+    auto playback = PackagePlayback;
+    auto result = playback->NotifyEndRequest(userSignalNodeId);
+    if (PackagePlayback == playback) SyncPackageState();
+    return LastResult = result;
+}
+
+auto ULibraEffectComponent::NotifyChildEndRequest(FGuid containerId, int64 instanceId,
+    FGuid userSignalNodeId) -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    if (!Package || !PackagePlayback) return LastResult = ELibraRuntimeResult::NotReady;
+    auto playback = PackagePlayback;
+    auto result = playback->NotifyChildEndRequest(containerId, instanceId, userSignalNodeId);
     if (PackagePlayback == playback) SyncPackageState();
     return LastResult = result;
 }

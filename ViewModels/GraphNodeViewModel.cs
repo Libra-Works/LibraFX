@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Media;
 using System.Globalization;
 using System.Text.Json;
@@ -42,7 +43,7 @@ public sealed class GraphNodeViewModel : ObservableObject
     public FCurveSnapshot? Curve => _curve;
     public IReadOnlyList<SignalTimelineKey>? SignalKeys => _signalKeys;
     public IReadOnlyList<NodeParameterSnapshot>? Parameters => _parameters;
-    public GraphSnapshot? ChildGraph { get; }
+    public GraphSnapshot? ChildGraph { get; private set; }
     public IReadOnlyList<GroupInstanceValue>? GroupOverrides { get; private set; }
     public GroupAssetReference? GroupAsset { get; private set; }
     public bool IsGraphGroup => ChildGraph is not null;
@@ -87,7 +88,55 @@ public sealed class GraphNodeViewModel : ObservableObject
     }
     public double CommentWidth => _previewWidth ?? CommentNumber("width", 360, 180, 4000);
     public double CommentHeight => _previewHeight ?? CommentNumber("height", 200, 80, 4000);
-    public double RenderedWidth => IsComment ? CommentWidth : NodeWidth;
+    internal const string InlineExpandedId = "editor.inline.expanded";
+    internal const string InlineWidthId = "editor.inline.width";
+    internal const string InlineHeightId = "editor.inline.height";
+    public bool IsInlineExpanded => IsGraphGroup && Parameters?.FirstOrDefault(p =>
+        p.Id == InlineExpandedId && p.Type == "bool")?.Value.ValueKind == JsonValueKind.True;
+    public double InlineWidth => _previewWidth ?? InlineNumber(InlineWidthId, 640, 420, 2400);
+    public double InlineHeight => _previewHeight ?? InlineNumber(InlineHeightId, 380, 260, 1600);
+    public double RenderedWidth => IsComment ? CommentWidth : IsInlineExpanded ? InlineWidth : NodeWidth;
+
+    private double InlineNumber(string id, double fallback, double min, double max)
+    {
+        var parameter = Parameters?.FirstOrDefault(p => p.Id == id && p.Type == "float");
+        return parameter?.Value.ValueKind == JsonValueKind.Number &&
+            parameter.Value.TryGetDouble(out var number) && double.IsFinite(number)
+            ? Math.Clamp(number, min, max) : fallback;
+    }
+
+    internal void SetChildGraphValue(GraphSnapshot? graph)
+    {
+        if (ReferenceEquals(ChildGraph, graph)) return;
+        ChildGraph = graph;
+        RefreshEffectiveDefinition();
+        OnPropertyChanged(nameof(ChildGraph));
+        OnPropertyChanged(nameof(ShowGroupHint));
+        OnPropertyChanged(nameof(HasPorts));
+        RefreshLifecyclePresentation();
+    }
+
+    internal void PreviewInlineSize(double width, double height)
+    {
+        _previewWidth = Math.Clamp(width, 420, 2400);
+        _previewHeight = Math.Clamp(height, 260, 1600);
+        RefreshInlinePresentation();
+    }
+
+    internal void CancelInlineSize()
+    {
+        _previewWidth = null;
+        _previewHeight = null;
+        RefreshInlinePresentation();
+    }
+
+    private void RefreshInlinePresentation()
+    {
+        OnPropertyChanged(nameof(IsInlineExpanded));
+        OnPropertyChanged(nameof(InlineWidth));
+        OnPropertyChanged(nameof(InlineHeight));
+        OnPropertyChanged(nameof(RenderedWidth));
+    }
     public string CommentText
     {
         get => IsComment && Definition.Parameters.FirstOrDefault(item => item.Id == "text") is { } definition
@@ -101,6 +150,28 @@ public sealed class GraphNodeViewModel : ObservableObject
     public bool HasParameters => InlineParameters.Count > 0;
     public IReadOnlyList<NodeParameterEditorViewModel> InlineParameters { get; private set; }
     internal double RenderedHeight { get; set; } = 80;
+    private Dictionary<string, Point> _inputAnchors = [];
+    private Dictionary<string, Point> _outputAnchors = [];
+    internal Point InputAnchor(string? id) => _inputAnchors.GetValueOrDefault(id ?? "",
+        new Point(PortHorizontalOffset, PortCenterOffset + InputPortOffset(id)));
+    internal Point OutputAnchor(string? id) => _outputAnchors.GetValueOrDefault(id ?? "",
+        new Point(RenderedWidth - PortHorizontalOffset, PortCenterOffset + OutputPortOffset(id)));
+    private double InputPortOffset(string? id)
+    {
+        for (var index = 0; index < InputPorts.Count; index++)
+            if (InputPorts[index].Id == id) return 5 + index * 24;
+        return 0;
+    }
+
+    internal void SetPortAnchors(Dictionary<string, Point> inputs, Dictionary<string, Point> outputs)
+    {
+        if (inputs.Count == _inputAnchors.Count && outputs.Count == _outputAnchors.Count &&
+            inputs.All(pair => _inputAnchors.TryGetValue(pair.Key, out var point) && point == pair.Value) &&
+            outputs.All(pair => _outputAnchors.TryGetValue(pair.Key, out var point) && point == pair.Value)) return;
+        _inputAnchors = inputs;
+        _outputAnchors = outputs;
+        OnPropertyChanged("PortGeometry");
+    }
 
     public bool IsDetailsExpanded
     {
@@ -280,6 +351,7 @@ public sealed class GraphNodeViewModel : ObservableObject
             OnPropertyChanged(nameof(CommentWidth));
             OnPropertyChanged(nameof(CommentHeight));
             OnPropertyChanged(nameof(RenderedWidth));
+            RefreshInlinePresentation();
             RefreshLifecyclePresentation();
             _workspace.RefreshTypeDiagnostics();
         }
@@ -354,7 +426,8 @@ public sealed class GraphNodeViewModel : ObservableObject
             (!IsSequence || parameter.Id != SequenceSchema.OutputCountParameter) &&
             (!IsComment || parameter.Id != "image") &&
             (!RenderNodeSchema.IsRenderNode(definition) ||
-             parameter.Id != "materialSchema" && !parameter.Id.StartsWith("material_", StringComparison.Ordinal))).ToArray();
+                 parameter.Id is not ("materialSchema" or "spriteData" or "compositionData") &&
+                 !parameter.Id.StartsWith("material_", StringComparison.Ordinal))).ToArray();
 
     internal void SetGroupAssetValue(GroupAssetReference? value)
     {

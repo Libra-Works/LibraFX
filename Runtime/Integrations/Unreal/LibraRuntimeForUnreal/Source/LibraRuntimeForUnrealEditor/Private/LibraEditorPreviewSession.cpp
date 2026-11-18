@@ -1,4 +1,5 @@
 #include "LibraEditorPreviewSession.h"
+#include "Misc/App.h"
 
 #include "AdvancedPreviewScene.h"
 #include "AdvancedPreviewSceneModule.h"
@@ -445,6 +446,14 @@ void FLibraEditorPreviewSession::Start()
     bPreviewRequested = enabled;
     bOpenRequested = enabled;
     bEngineReady = GIsRunning;
+    viewerEndpoint.Start(FApp::GetProjectName());
+    GConfig->GetBool(PreviewSettingsSection, TEXT("AutoConnect"), bAutoConnect, GEditorPerProjectIni);
+    if (bAutoConnect)
+    {
+        bPreviewRequested = true;
+        bOpenRequested = true;
+        if (bEngineReady) DiscoverLibra();
+    }
     postEngineInit = PostEngineInitDelegate().AddRaw(this, &FLibraEditorPreviewSession::HandlePostEngineInit);
     preExit = FCoreDelegates::OnPreExit.AddRaw(this, &FLibraEditorPreviewSession::Stop);
     FGlobalTabmanager::Get()->RegisterNomadTabSpawner(tabId,
@@ -534,7 +543,8 @@ void FLibraEditorPreviewSession::PollDiscovery()
     discoveredPeers = MoveTemp(peers);
     if (!error.IsEmpty()) connectionNotice = MoveTemp(error);
     else if (discoveredPeers.Num() == 1) SelectDiscoveredPeer(discoveredPeers[0].pipeName);
-    else connectionNotice = TEXT("Multiple Libra instances found. Select one explicitly.");
+    else connectionNotice = discoveredPeers.IsEmpty() ? TEXT("No Libra instance found. Search again or paste connection information.") :
+        TEXT("Multiple Libra instances found. Select one explicitly.");
 }
 
 void FLibraEditorPreviewSession::SelectDiscoveredPeer(const FString& pipeName)
@@ -614,6 +624,7 @@ TSharedRef<SDockTab> FLibraEditorPreviewSession::SpawnPreviewTab(const FSpawnTab
 void FLibraEditorPreviewSession::HandlePostEngineInit()
 {
     bEngineReady = true;
+    if (bAutoConnect && !discovery) DiscoverLibra();
 }
 
 TSharedRef<SWidget> FLibraEditorPreviewSession::BuildPreviewContent()
@@ -699,6 +710,18 @@ TSharedRef<SWidget> FLibraEditorPreviewSession::BuildPreviewContent()
                     .ToolTipText(FText::FromString(TEXT("Find a running Libra instance on this PC and connect securely.")))
                     .IsEnabled_Lambda([this] { return !discovery || !discovery->IsRunning(); })
                     .OnClicked_Lambda([this] { DiscoverLibra(); return FReply::Handled(); })
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(8, 0, 0, 0)
+                [
+                    SNew(SCheckBox)
+                    .IsChecked_Lambda([this] { return bAutoConnect ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+                    .OnCheckStateChanged_Lambda([this](ECheckBoxState value)
+                    {
+                        bAutoConnect = value == ECheckBoxState::Checked;
+                        GConfig->SetBool(PreviewSettingsSection, TEXT("AutoConnect"), bAutoConnect, GEditorPerProjectIni);
+                        GConfig->Flush(false, GEditorPerProjectIni);
+                    })
+                    [SNew(STextBlock).Text(FText::FromString(TEXT("Connect on startup")))]
                 ]
                 + SHorizontalBox::Slot().AutoWidth().Padding(8, 0, 0, 0)
                 [
@@ -794,6 +817,10 @@ void FLibraEditorPreviewSession::SavePreviewProfile()
 
 bool FLibraEditorPreviewSession::Tick(float deltaTime)
 {
+    viewerEndpoint.SetConnected(connection.IsValid() && connection->bIsConnected);
+    auto incomingInvitation = FString{};
+    if (viewerEndpoint.TakeInvitation(incomingInvitation) && AcceptConnectionInvitation(incomingInvitation))
+        bOpenRequested = true;
     PollDiscovery();
     if (!bEngineReady || !bPreviewRequested) return true;
     if (!world.IsValid())
@@ -1001,8 +1028,133 @@ void FLibraEditorPreviewSession::ConfigureScene(const FString& json, int64 progr
         node.kind = kind;
         node.assetPath = assetPath;
         object->TryGetBoolField(TEXT("billboard"), node.billboard);
+        if (kind == TEXT("sprite"))
+        {
+            const TSharedPtr<FJsonObject>* animationObject = nullptr;
+            if (object->TryGetObjectField(TEXT("spriteAnimation"), animationObject))
+            {
+                auto& animation = node.spriteAnimation;
+                auto version = int32{};
+                auto textureWidth = int32{}, textureHeight = int32{};
+                const TArray<TSharedPtr<FJsonValue>>* cells = nullptr;
+                const TArray<TSharedPtr<FJsonValue>>* frames = nullptr;
+                if (!animationObject || !*animationObject ||
+                    !ReadInteger(*animationObject, TEXT("version"), version) || (version != 1 && version != 2) ||
+                    !ReadInteger(*animationObject, TEXT("textureWidth"), textureWidth) ||
+                    !ReadInteger(*animationObject, TEXT("textureHeight"), textureHeight) ||
+                    textureWidth < 1 || textureWidth > 8192 || textureHeight < 1 || textureHeight > 8192 ||
+                    !(*animationObject)->TryGetNumberField(TEXT("fps"), animation.fps) ||
+                    !FMath::IsFinite(animation.fps) || animation.fps <= 0 || animation.fps > 10000 ||
+                    !ReadInteger(*animationObject, TEXT("startFrame"), animation.startFrame) ||
+                    !ReadInteger(*animationObject, TEXT("endFrame"), animation.endFrame) ||
+                    !(*animationObject)->TryGetBoolField(TEXT("loop"), animation.loop) ||
+                    !(*animationObject)->TryGetArrayField(TEXT("cells"), cells) ||
+                    cells->Num() < 1 || cells->Num() > 512 ||
+                    !(*animationObject)->TryGetArrayField(TEXT("frames"), frames) ||
+                    frames->Num() < 1 || frames->Num() > 4096 ||
+                    animation.startFrame < 0 || animation.endFrame < animation.startFrame ||
+                    animation.endFrame >= frames->Num())
+                {
+                    sceneErrors.Add(TEXT("Sprite animation metadata is missing, unsupported or out of range."));
+                    continue;
+                }
+                animation.present = true;
+                animation.version = version;
+                auto cellIds = TSet<FGuid>{};
+                auto names = TSet<FString>{};
+                auto invalid = false;
+                for (const auto& cellValue : *cells)
+                {
+                    auto cellObject = cellValue.IsValid() ? cellValue->AsObject() : nullptr;
+                    auto cell = FSpriteCell{};
+                    auto cellId = FString{};
+                    auto u = double{}, v = double{}, uvWidth = double{}, uvHeight = double{};
+                    if (!cellObject.IsValid() ||
+                        !cellObject->TryGetStringField(TEXT("id"), cellId) || !FGuid::Parse(cellId, cell.id) ||
+                        !cell.id.IsValid() || !cellObject->TryGetStringField(TEXT("name"), cell.name) ||
+                        cell.name.TrimStartAndEnd().IsEmpty() || cell.name.Len() > 80 ||
+                        names.Contains(cell.name.TrimStartAndEnd().ToLower()) ||
+                        !ReadInteger(cellObject, TEXT("x"), cell.x) ||
+                        !ReadInteger(cellObject, TEXT("y"), cell.y) ||
+                        !ReadInteger(cellObject, TEXT("width"), cell.pixelWidth) ||
+                        !ReadInteger(cellObject, TEXT("height"), cell.pixelHeight) ||
+                        cell.x < 0 || cell.y < 0 || cell.pixelWidth <= 0 || cell.pixelHeight <= 0 ||
+                        static_cast<int64>(cell.x) + cell.pixelWidth > textureWidth ||
+                        static_cast<int64>(cell.y) + cell.pixelHeight > textureHeight ||
+                        !cellObject->TryGetNumberField(TEXT("u"), u) ||
+                        !cellObject->TryGetNumberField(TEXT("v"), v) ||
+                        !cellObject->TryGetNumberField(TEXT("uvWidth"), uvWidth) ||
+                        !cellObject->TryGetNumberField(TEXT("uvHeight"), uvHeight) ||
+                        !FMath::IsFinite(u) || !FMath::IsFinite(v) ||
+                        !FMath::IsFinite(uvWidth) || !FMath::IsFinite(uvHeight) ||
+                        FMath::Abs(u - static_cast<double>(cell.x) / textureWidth) > 1e-9 ||
+                        FMath::Abs(v - static_cast<double>(cell.y) / textureHeight) > 1e-9 ||
+                        FMath::Abs(uvWidth - static_cast<double>(cell.pixelWidth) / textureWidth) > 1e-9 ||
+                        FMath::Abs(uvHeight - static_cast<double>(cell.pixelHeight) / textureHeight) > 1e-9 ||
+                        cellIds.Contains(cell.id))
+                    {
+                        invalid = true;
+                        break;
+                    }
+                    names.Add(cell.name.TrimStartAndEnd().ToLower());
+                    cellIds.Add(cell.id);
+                    cell.u = static_cast<float>(u);
+                    cell.v = static_cast<float>(v);
+                    cell.width = static_cast<float>(uvWidth);
+                    cell.height = static_cast<float>(uvHeight);
+                    animation.cells.Add(cell);
+                }
+                if (invalid)
+                {
+                    sceneErrors.Add(TEXT("Sprite animation contains an invalid or duplicate pixel/UV rectangle."));
+                    continue;
+                }
+                auto frameIds = TSet<FGuid>{};
+                for (const auto& frameValue : *frames)
+                {
+                    auto frameObject = frameValue.IsValid() ? frameValue->AsObject() : nullptr;
+                    auto frame = FSpriteFrame{};
+                    auto frameId = FString{}, cellId = FString{};
+                    if (!frameObject.IsValid() ||
+                        !frameObject->TryGetStringField(TEXT("id"), frameId) || !FGuid::Parse(frameId, frame.id) ||
+                        !frame.id.IsValid() || frameIds.Contains(frame.id) ||
+                        !frameObject->TryGetStringField(TEXT("cellId"), cellId) || !FGuid::Parse(cellId, frame.cellId) ||
+                        !frame.cellId.IsValid() ||
+                        !frameObject->TryGetNumberField(TEXT("durationFrames"), frame.durationFrames) ||
+                        !FMath::IsFinite(frame.durationFrames) || frame.durationFrames <= 0 ||
+                        frame.durationFrames > 1000000)
+                    {
+                        invalid = true;
+                        break;
+                    }
+                    frame.cellIndex = animation.cells.IndexOfByPredicate(
+                        [&](const auto& cell) { return cell.id == frame.cellId; });
+                    if (frame.cellIndex == INDEX_NONE)
+                    {
+                        invalid = true;
+                        break;
+                    }
+                    frameIds.Add(frame.id);
+                    animation.durations.Add(frame.durationFrames);
+                    animation.frames.Add(frame);
+                }
+                if (invalid)
+                {
+                    sceneErrors.Add(TEXT("Sprite animation contains an invalid frame reference or duration."));
+                    continue;
+                }
+                if (version == 2 && !animation.composition.Read(*animationObject, animation.fps, animation.loop,
+                    animation.durations, animation.startFrame, animation.endFrame, node.billboard))
+                {
+                    sceneErrors.Add(TEXT("Invalid layered sprite clock, order or pose keys."));
+                    continue;
+                }
+            }
+        }
         auto component = NewObject<UStaticMeshComponent>(previewActor.Get(), NAME_None, RF_Transient);
         component->SetStaticMesh(mesh);
+        if (node.spriteAnimation.version == 2)
+            component->SetTranslucentSortPriority(node.spriteAnimation.composition.Order);
         component->SetupAttachment(rootComponent);
         node.component.Reset(component);
         if (component->GetNumMaterials() <= 0)
@@ -1415,7 +1567,8 @@ FString FLibraEditorPreviewSession::UpdateScene(int64 programSequence, double ti
             if (!toCamera.IsNearlyZero())
                 transform.SetRotation(FQuat::FindBetweenNormals(FVector::UpVector, toCamera.GetSafeNormal()));
         }
-        if (currentProgram && nodeRendered) node.component->SetRelativeTransform(transform);
+        if (currentProgram && nodeRendered && node.spriteAnimation.version != 2)
+            node.component->SetRelativeTransform(transform);
         auto tint = values.FindRef(TEXT("tint"));
         if (values.Contains(TEXT("tint")))
             for (auto& material : node.materials)
@@ -1446,31 +1599,65 @@ FString FLibraEditorPreviewSession::UpdateScene(int64 programSequence, double ti
             auto frameConnected = false;
             for (const auto& input : node.inputs)
                 if (input.id == TEXT("frame") && input.hasBinding) frameConnected = true;
-            auto automaticFrame = !frameConnected && frameValue < 0;
-            if (automaticFrame)
-            {
-                auto fps = values.Contains(TEXT("fps")) ? values.FindRef(TEXT("fps")).X : 0.0;
-                auto playing = values.Contains(TEXT("playing")) ? values.FindRef(TEXT("playing")).X : 1.0;
-                frameValue = playing > 0 ? timeSeconds * FMath::Max(0.0, fps) : 0.0;
-            }
-            auto columnsValue = values.Contains(TEXT("columns")) ? values.FindRef(TEXT("columns")).X : 1.0;
-            auto rowsValue = values.Contains(TEXT("rows")) ? values.FindRef(TEXT("rows")).X : 1.0;
-            if (!FMath::IsFinite(columnsValue) || !FMath::IsFinite(rowsValue) || columnsValue < 1 ||
-                rowsValue < 1 || columnsValue > MAX_uint32 || rowsValue > MAX_uint32)
-            {
-                addError(TEXT("Invalid sprite atlas dimensions."));
-                continue;
-            }
-            if (FMath::FloorToDouble(columnsValue) != columnsValue || FMath::FloorToDouble(rowsValue) != rowsValue)
-            {
-                addError(TEXT("Sprite atlas dimensions must be integers."));
-                continue;
-            }
+            auto playing = values.Contains(TEXT("playing")) ? values.FindRef(TEXT("playing")).X >= 0.5 : true;
             auto atlas = liberafx::AtlasFrame{};
-            if (!liberafx::sampleSpriteAtlas(frameValue, static_cast<uint32>(columnsValue),
-                static_cast<uint32>(rowsValue), atlas))
+            auto sampled = false;
+            if (node.spriteAnimation.present)
             {
-                addError(TEXT("Sprite atlas frame could not be sampled."));
+                if (frameConnected && frameValue < 0)
+                {
+                    addError(TEXT("Connected sprite frame input must be a non-negative sequence index."));
+                    continue;
+                }
+                auto sequenceFrame = uint32{};
+                auto keyedPose = liberafx::SpritePose{};
+                sampled = node.spriteAnimation.version == 2
+                    ? node.spriteAnimation.composition.Sample(timeSeconds, node.spriteAnimation.fps,
+                        node.spriteAnimation.loop, node.spriteAnimation.durations, sequenceFrame, keyedPose)
+                    : liberafx::sampleSpriteSequence(frameValue, timeSeconds,
+                    node.spriteAnimation.fps, node.spriteAnimation.durations.GetData(),
+                    static_cast<uint32>(node.spriteAnimation.durations.Num()),
+                    static_cast<uint32>(node.spriteAnimation.startFrame),
+                    static_cast<uint32>(node.spriteAnimation.endFrame), node.spriteAnimation.loop,
+                    playing, sequenceFrame);
+                sampled = sampled && node.spriteAnimation.frames.IsValidIndex(sequenceFrame);
+                if (sampled)
+                {
+                    const auto& frame = node.spriteAnimation.frames[sequenceFrame];
+                    const auto& cell = node.spriteAnimation.cells[frame.cellIndex];
+                    sampled = liberafx::sampleSpriteRect(sequenceFrame, cell.u, cell.v, cell.width, cell.height, atlas);
+                    if (sampled && nodeRendered && node.spriteAnimation.version == 2)
+                        node.component->SetRelativeTransform(FLibraSpriteCompositionRender::Transform(
+                            keyedPose, cell.pixelWidth, cell.pixelHeight));
+                }
+            }
+            else
+            {
+                auto automaticFrame = !frameConnected && frameValue < 0;
+                if (automaticFrame)
+                    frameValue = playing ? timeSeconds * FMath::Max(0.0,
+                        values.Contains(TEXT("fps")) ? values.FindRef(TEXT("fps")).X : 0.0) : 0.0;
+                auto columnsValue = values.Contains(TEXT("columns")) ? values.FindRef(TEXT("columns")).X : 1.0;
+                auto rowsValue = values.Contains(TEXT("rows")) ? values.FindRef(TEXT("rows")).X : 1.0;
+                if (!FMath::IsFinite(columnsValue) || !FMath::IsFinite(rowsValue) || columnsValue < 1 ||
+                    rowsValue < 1 || columnsValue > MAX_uint32 || rowsValue > MAX_uint32)
+                {
+                    addError(TEXT("Invalid sprite atlas dimensions."));
+                    continue;
+                }
+                if (FMath::FloorToDouble(columnsValue) != columnsValue || FMath::FloorToDouble(rowsValue) != rowsValue)
+                {
+                    addError(TEXT("Sprite atlas dimensions must be integers."));
+                    continue;
+                }
+                sampled = liberafx::sampleSpriteAtlas(frameValue, static_cast<uint32>(columnsValue),
+                    static_cast<uint32>(rowsValue), atlas);
+            }
+            if (!sampled)
+            {
+                addError(node.spriteAnimation.present
+                    ? TEXT("Arbitrary sprite sequence rectangle could not be sampled.")
+                    : TEXT("Sprite atlas frame could not be sampled."));
                 continue;
             }
             node.frame = atlas.frameIndex;
@@ -1517,6 +1704,7 @@ FString FLibraEditorPreviewSession::UpdateScene(int64 programSequence, double ti
 
 void FLibraEditorPreviewSession::Stop()
 {
+    viewerEndpoint.Stop();
     discovery.Reset();
     discoveredPeers.Reset();
     bStarted = false;
@@ -1862,6 +2050,11 @@ bool FLibraPreviewCpuFixtureTest::RunTest(const FString&)
             if (vector(TEXT("rotation"), rotation) && !node->billboard)
                 TestTrue(TEXT("Actual native rotation matches Root Euler-degree bindings"),
                     node->component->GetRelativeRotation().Quaternion().Equals(FRotator(rotation.Y, rotation.Z, rotation.X).Quaternion(), 0.0001));
+            auto drawOrder = int32{}, sequenceFrame = int32{};
+            if (ReadInteger(object, TEXT("drawOrder"), drawOrder))
+                TestEqual(TEXT("Actual native translucency sort priority"), node->component->TranslucencySortPriority, drawOrder);
+            if (ReadInteger(object, TEXT("frameIndex"), sequenceFrame))
+                TestEqual(TEXT("Actual composition sequence index"), node->frame, static_cast<uint32>(sequenceFrame));
             const TArray<TSharedPtr<FJsonValue>>* parameters = nullptr;
             if (object->TryGetArrayField(TEXT("parameters"), parameters))
                 for (const auto& parameterValue : *parameters)

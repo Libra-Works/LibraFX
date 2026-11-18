@@ -193,6 +193,8 @@ namespace LiberaFx.Unity
                 }
                 else filter.sharedMesh = prepared.mesh;
                 meshRenderer.sharedMaterials = prepared.materials;
+                if (prepared.spriteAnimation?.version == 2)
+                    meshRenderer.sortingOrder = prepared.spriteAnimation.drawOrder;
                 var instance = new LiberaFxRenderNodeInstance(prepared, gameObject.transform,
                     meshRenderer, ownedMesh);
                 instance.SetStaticTextures();
@@ -217,19 +219,22 @@ namespace LiberaFx.Unity
             var position = Value("position");
             var rotation = Value("rotation");
             var scale = Value("scale");
-            nodeTransform.localPosition = new Vector3(position.x, position.y, position.z);
-            nodeTransform.localScale = new Vector3(scale.x, scale.y, scale.z);
-            var euler = definition.worldRotation
-                ? Quaternion.AngleAxis(rotation.z, Vector3.forward) *
-                  Quaternion.AngleAxis(-rotation.y, Vector3.up) *
-                  Quaternion.AngleAxis(-rotation.x, Vector3.right)
-                : Quaternion.Euler(rotation.x, rotation.y, rotation.z);
-            nodeTransform.localRotation = euler;
-            if (definition.billboard)
+            if (definition.spriteAnimation?.version != 2)
             {
-                if (!definition.billboardCamera)
-                    throw new InvalidOperationException("Billboard camera was destroyed while the effect was running.");
-                nodeTransform.rotation = definition.billboardCamera.transform.rotation * euler;
+                nodeTransform.localPosition = new Vector3(position.x, position.y, position.z);
+                nodeTransform.localScale = new Vector3(scale.x, scale.y, scale.z);
+                var euler = definition.worldRotation
+                    ? Quaternion.AngleAxis(rotation.z, Vector3.forward) *
+                      Quaternion.AngleAxis(-rotation.y, Vector3.up) *
+                      Quaternion.AngleAxis(-rotation.x, Vector3.right)
+                    : Quaternion.Euler(rotation.x, rotation.y, rotation.z);
+                nodeTransform.localRotation = euler;
+                if (definition.billboard)
+                {
+                    if (!definition.billboardCamera)
+                        throw new InvalidOperationException("Billboard camera was destroyed while the effect was running.");
+                    nodeTransform.rotation = definition.billboardCamera.transform.rotation * euler;
+                }
             }
 
             var tint = Value("tint");
@@ -251,12 +256,46 @@ namespace LiberaFx.Unity
             if (definition.isSprite)
             {
                 double frame = Value("frame").x;
-                var columns = (uint)StaticValue("columns");
-                var rows = (uint)StaticValue("rows");
-                var fps = StaticValue("fps");
                 var playing = StaticValue("playing") >= 0.5;
-                if (frame == -1) frame = playing ? Math.Floor(localTime * fps) : 0;
-                var result = NativeInstance.SampleAtlas(frame, columns, rows, out var atlas);
+                AtlasFrame atlas;
+                NativeResult result;
+                if (definition.spriteAnimation is { } animation)
+                {
+                    uint sequenceFrame;
+                    if (animation.version == 2)
+                    {
+                        result = NativeInstance.SampleSpriteComposition(localTime, animation.fps, animation.durationFrames,
+                            animation.loop, definition.spriteDurations, definition.spriteKeys, out sequenceFrame, out var pose);
+                        if (result != NativeResult.Ok || sequenceFrame >= animation.frames.Length)
+                            throw new InvalidOperationException("Layered sprite sampling failed: " + result);
+                        var selected = animation.cells[animation.frames[sequenceFrame].cellIndex];
+                        nodeTransform.localPosition = new Vector3((float)pose.x, (float)pose.y, 0);
+                        nodeTransform.localRotation = Quaternion.AngleAxis((float)pose.rotation, Vector3.forward);
+                        nodeTransform.localScale = new Vector3((float)(pose.sx * selected.width), (float)(pose.sy * selected.height), 1);
+                    }
+                    else
+                    {
+                        if (definition.frameConnected && frame < 0)
+                            throw new InvalidOperationException("Connected Sprite Frame input must be a non-negative sequence index.");
+                        result = NativeInstance.SampleSpriteSequence(frame, localTime, animation.fps,
+                            definition.spriteDurations, (uint)animation.startFrame, (uint)animation.endFrame,
+                            animation.loop, playing, out sequenceFrame);
+                        if (result != NativeResult.Ok || sequenceFrame >= animation.frames.Length)
+                            throw new InvalidOperationException("Sprite sequence sampling failed: " + result);
+                    }
+                    var cell = animation.cells[animation.frames[sequenceFrame].cellIndex];
+                    result = NativeInstance.SampleRect(sequenceFrame, (float)cell.u, (float)cell.v,
+                        (float)cell.uvWidth, (float)cell.uvHeight, out atlas);
+                }
+                else
+                {
+                    var columns = (uint)StaticValue("columns");
+                    var rows = (uint)StaticValue("rows");
+                    var fps = StaticValue("fps");
+                    if (frame == -1 && !definition.frameConnected)
+                        frame = playing ? Math.Floor(localTime * fps) : 0;
+                    result = NativeInstance.SampleAtlas(frame, columns, rows, out atlas);
+                }
                 if (result != NativeResult.Ok)
                     throw new InvalidOperationException("Sprite atlas sampling failed: " + result);
                 propertyBlocks[0].SetVector("_AtlasRect",
@@ -287,8 +326,8 @@ namespace LiberaFx.Unity
             }
             NativeResult result;
             NativeValue value;
-            if (rootScope) result = host.ReadRootValue(input.sourceNodeId, out value);
-            else result = host.ReadChildValue(containerId, instanceId, input.sourceNodeId, out value);
+            if (rootScope) result = host.ReadRootValue(input.sourceNodeBytes, out value);
+            else result = host.ReadChildValue(containerId, instanceId, input.sourceNodeBytes, out value);
             if (result != NativeResult.Ok)
                 throw new InvalidOperationException("Could not read render source " + input.sourceNodeId + ": " + result);
             if (value.ComponentCount > 4 || input.sourceComponent + input.width > value.ComponentCount)

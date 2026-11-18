@@ -1,11 +1,12 @@
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
+using LiberaFx.Models.Resources;
 
 namespace LiberaFx.Models.Project;
 
 public sealed record LiberaFxProjectDocument
 {
-    public int FormatVersion { get; init; } = 12;
+    public int FormatVersion { get; init; } = 13;
 
     public bool AutoDestroyWhenIdle { get; init; } = true;
 
@@ -14,6 +15,10 @@ public sealed record LiberaFxProjectDocument
     public List<LiberaFxProjectConnection>? Connections { get; init; } = [];
 
     public UndoRedoHistorySnapshot? History { get; init; }
+
+    // The top-level copy mirrors the current graph state. History entries carry their own
+    // resource identity documents inside GraphSnapshot so undo/redo restores mappings too.
+    public ResourceIdentityDocument? ResourceIdentities { get; init; }
 }
 
 public sealed record LiberaFxProjectNode(

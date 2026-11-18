@@ -10,7 +10,7 @@ using LiberaFx.Services;
 
 namespace LiberaFx.ViewModels;
 
-public sealed class GraphWorkspaceViewModel : ObservableObject
+public sealed partial class GraphWorkspaceViewModel : ObservableObject
 {
     public event EventHandler<Guid>? GpuEditorRequested;
     public event EventHandler<Guid>? GpuProgramChanged;
@@ -28,7 +28,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             SetConnectionStatus("Editor.SignalSend.InstanceTargetRequired");
             return;
         }
-        if (PreviewSignalRequested is not { } requested)
+        if (_document.PreviewSignalRequested is not { } requested)
         {
             SetConnectionStatus("Editor.SignalSend.CompiledClientRequired");
             return;
@@ -39,9 +39,11 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     private Dictionary<Guid, string> _publishedGpuStates = [];
     public void OpenGpuEditor(GraphNodeViewModel node)
     {
-        if (Nodes.Contains(node) && node.IsGpuParticle) GpuEditorRequested?.Invoke(this, node.Id);
+        if (!Nodes.Contains(node) || !node.IsGpuParticle) return;
+        if (_document.GpuEditorRequested is { } requested) requested.Invoke(this, node.Id);
+        else SetConnectionStatus("Inline.ExternalEditorUnavailable");
     }
-    internal void NotifyGpuProgramChanged(Guid nodeId) => GpuProgramChanged?.Invoke(this, nodeId);
+    internal void NotifyGpuProgramChanged(Guid nodeId) => _document.GpuProgramChanged?.Invoke(this, nodeId);
     private const int MaxGraphDepth = 12;
     private readonly UndoRedoManager _history;
     public GroupAssetCatalog? GroupAssets { get; }
@@ -118,7 +120,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         {
             var before = CreateSnapshot();
             if (before.AutoDestroyWhenIdle == value) return;
-            _history.Execute(new ReplaceGraphSnapshotCommand(this, before,
+            ExecuteEdit(new ReplaceGraphSnapshotCommand(this, before,
                 before with { AutoDestroyWhenIdle = value },
                 LocalizationService.Shared.Get("Messages.History.AutoDestroyWhenIdle")));
         }
@@ -191,14 +193,39 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
     public GraphWorkspaceViewModel(UndoRedoManager history, GroupAssetCatalog? groupAssets = null,
         NodeDefinitionCatalog? nodeDefinitions = null)
+        : this(history, groupAssets, nodeDefinitions, null, [])
+    {
+    }
+
+    private GraphWorkspaceViewModel(UndoRedoManager history, GroupAssetCatalog? groupAssets,
+        NodeDefinitionCatalog? nodeDefinitions, GraphWorkspaceViewModel? document, IReadOnlyList<Guid> path)
     {
         _history = history;
-        _history.StateChanged += (_, _) =>
+        _document = document ?? this;
+        _graphPath.AddRange(path);
+        if (document is not null) _rootSnapshot = document._rootSnapshot;
+        if (document is null) _history.StateChanged += (_, _) =>
         {
             PublishGpuChanges();
             RefreshContainingSpawnable();
+            RefreshInlineReadOnlyState();
         };
         GroupAssets = groupAssets;
+        if (document is null && groupAssets is not null)
+        {
+            var weakDocument = new WeakReference<GraphWorkspaceViewModel>(this);
+            EventHandler? changed = null;
+            changed = (_, _) =>
+            {
+                if (weakDocument.TryGetTarget(out var graph))
+                {
+                    if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) graph.RefreshInlineReadOnlyState();
+                    else Avalonia.Threading.Dispatcher.UIThread.Post(graph.RefreshInlineReadOnlyState);
+                }
+                else groupAssets.Changed -= changed;
+            };
+            groupAssets.Changed += changed;
+        }
         NodeDefinitions = nodeDefinitions;
         if (nodeDefinitions is not null)
         {
@@ -219,7 +246,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             RefreshTypeDiagnostics();
             RefreshSignalOrder();
         };
-        _history.Configure(CreateSnapshot, RestoreFromHistory, ValidateSnapshot);
+        if (document is null) _history.Configure(CreateSnapshot, RestoreFromHistory, ValidateSnapshot);
         MessageLocalization.Observe(this, static graph => graph.RefreshLocalizedText());
     }
 
@@ -399,7 +426,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                     nodesByOldId[connection.SourceNodeId].ChildGraph, connection.SourcePortId)));
         }
 
-        _history.Execute(new CompositeUndoableCommand(LocalizationService.Shared.Get("Messages.History.PasteNodes"), commands));
+        ExecuteEdit(new CompositeUndoableCommand(LocalizationService.Shared.Get("Messages.History.PasteNodes"), commands));
         _nextNodeIndex += snapshot.Nodes.Count;
         SetSelection(snapshot.Nodes.Select(node => nodesByOldId[node.Id]));
         SetConnectionStatus("Messages.NodesPasted", snapshot.Nodes.Count);
@@ -413,7 +440,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             return;
         }
 
-        _history.Execute(new CompositeUndoableCommand(
+        ExecuteEdit(new CompositeUndoableCommand(
             LocalizationService.Shared.Get("Messages.History.DeleteNodes"),
             selected.Select(node => new DeleteGraphNodeCommand(this, node))));
     }
@@ -428,7 +455,12 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
     public GraphSnapshot CreateSnapshot()
     {
-        var current = CreateCurrentSnapshot() with { AutoDestroyWhenIdle = GetCurrentGraph().AutoDestroyWhenIdle };
+        if (!ReferenceEquals(_document, this)) return _document.CreateSnapshot();
+        var current = CreateCurrentSnapshot() with
+        {
+            AutoDestroyWhenIdle = GetCurrentGraph().AutoDestroyWhenIdle,
+            ResourceIdentities = _rootSnapshot.ResourceIdentities
+        };
         _rootSnapshot = ReplaceGraph(_rootSnapshot, _graphPath, 0, current);
         return _rootSnapshot;
     }
@@ -524,6 +556,12 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
     public bool EnterGraph(GraphNodeViewModel node)
     {
+        if (!ReferenceEquals(_document, this)) return MaximizeInlineGraph(node);
+        return EnterGraphCore(node, inspectLocked: false);
+    }
+
+    private bool EnterGraphCore(GraphNodeViewModel node, bool inspectLocked)
+    {
         if (!Nodes.Contains(node) || node.ChildGraph is null || _graphPath.Count >= MaxGraphDepth) return false;
         if (node.GroupAsset is { } reference)
         {
@@ -531,12 +569,11 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             {
                 var asset = GroupAssets?.Load(reference.Id)
                     ?? throw new InvalidOperationException("The group library is unavailable.");
-                if (asset.Locked)
+                if (asset.Locked && !inspectLocked)
                 {
                     SetConnectionStatus("Messages.GroupLocked");
                     return false;
                 }
-
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
                                        InvalidOperationException or ArgumentException)
@@ -564,7 +601,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         var displayName = LocalizationService.Shared.GetOrDefault(catalog.Metadata(asset.Id)?.NameKey, asset.Name);
         var node = new GraphNodeViewModel(this, definition, displayName, x, y,
             childGraph: CloneGraph(asset.Graph), groupAsset: reference);
-        _history.Execute(new AddGraphNodeCommand(this, node, Nodes.Count));
+        ExecuteEdit(new AddGraphNodeCommand(this, node, Nodes.Count));
         SelectNode(node);
         SetConnectionStatus("Messages.GroupAdded", asset.Name, asset.Revision);
         return node;
@@ -572,6 +609,9 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
     public void SaveSelectedGroupAsset()
     {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        _document.CreateSnapshot();
+        EnsurePathEditable();
         if (SelectedNode is not { IsGraphGroup: true } node || node.ChildGraph is null)
             throw new InvalidOperationException("Select one Graph Group to save.");
         var catalog = GroupAssets ?? throw new InvalidOperationException("The group library is unavailable.");
@@ -585,13 +625,16 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         }
         else asset = catalog.Library().Create(node.Name, node.ChildGraph);
         var current = new GroupAssetReference(asset.Id, asset.Revision, asset.Locked);
-        _history.Execute(new SetGroupAssetCommand(node, node.GroupAsset, current));
+        ExecuteEdit(new SetGroupAssetCommand(node, node.GroupAsset, current));
         catalog.Refresh();
         SetConnectionStatus("Messages.GroupSaved", asset.Name, asset.Revision);
     }
 
     public GroupAsset CloneSelectedStandardGroupToProject()
     {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        _document.CreateSnapshot();
+        EnsurePathEditable();
         if (SelectedNode is not { IsGraphGroup: true, GroupAsset: { } reference } node)
             throw new InvalidOperationException("Select a standard Graph Group to clone.");
         var catalog = GroupAssets ?? throw new InvalidOperationException("The group library is unavailable.");
@@ -599,7 +642,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         if (asset.Origin != GroupAssetOrigin.Standard)
             throw new InvalidOperationException("Only a standard group asset can be cloned with this operation.");
         var clone = catalog.CloneToProject(asset.Id, node.Name);
-        _history.Execute(new SetGroupAssetCommand(node, node.GroupAsset,
+        ExecuteEdit(new SetGroupAssetCommand(node, node.GroupAsset,
             new GroupAssetReference(clone.Id, clone.Revision, clone.Locked)));
         catalog.Refresh();
         SetConnectionStatus("Messages.GroupSaved", clone.Name, clone.Revision);
@@ -608,6 +651,9 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
     public void ToggleSelectedGroupAssetLock()
     {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        _document.CreateSnapshot();
+        EnsurePathEditable();
         if (SelectedNode?.GroupAsset is not { } reference)
             throw new InvalidOperationException("Select a saved group asset.");
         var catalog = GroupAssets ?? throw new InvalidOperationException("The group library is unavailable.");
@@ -786,7 +832,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     {
         if (!GraphSnapshot.ContentEquals(prepared.Before, CreateSnapshot()))
             throw new InvalidOperationException("The graph changed; check for updates again.");
-        _history.Execute(new ReplaceGraphSnapshotCommand(this, prepared.Before, prepared.After));
+        ExecuteEdit(new ReplaceGraphSnapshotCommand(this, prepared.Before, prepared.After));
         SetConnectionStatus("Messages.LinkedGroupsUpdated", prepared.Count);
         return prepared.Count;
     }
@@ -858,7 +904,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         var group = new GraphNodeViewModel(this, definition, definition.Name, minX, minY, childGraph: child);
         var commands = selected.Select(node => (IUndoableCommand)new DeleteGraphNodeCommand(this, node)).ToList();
         commands.Add(new AddGraphNodeCommand(this, group, Nodes.Count));
-        _history.Execute(new CompositeUndoableCommand(LocalizationService.Shared.Get("Messages.History.GroupNodes"), commands));
+        ExecuteEdit(new CompositeUndoableCommand(LocalizationService.Shared.Get("Messages.History.GroupNodes"), commands));
         SetConnectionStatus("Messages.NodesGrouped", selected.Length);
         return true;
     }
@@ -874,6 +920,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     private void RefreshBreadcrumbs()
     {
         OnPropertyChanged(nameof(IsRootGraph));
+        OnPropertyChanged(nameof(IsReadOnly));
         Breadcrumbs.Clear();
         Breadcrumbs.Add(new GraphBreadcrumb(LocalizationService.Shared.Get("Messages.Top"), 0));
         var graph = _rootSnapshot;
@@ -912,6 +959,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
     public void InitializeFromSnapshot(GraphSnapshot snapshot)
     {
+        if (IsInlineWorkspace) throw new InvalidOperationException("Initialize the document, not an inline view.");
         if (Nodes.Count != 0 || Connections.Count != 0 || _history.CanUndo || _history.CanRedo)
         {
             throw new InvalidOperationException("A graph can only be initialized once while empty.");
@@ -962,9 +1010,10 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         RestoreCurrentGraph(graph);
         RefreshBreadcrumbs();
         SetConnectionStatus("Messages.HistoryRestored");
+        SynchronizeInlineWorkspaces(snapshot);
     }
 
-    internal void RestoreSnapshotForCommand(GraphSnapshot snapshot) => RestoreFromHistory(snapshot);
+    internal void RestoreSnapshotForCommand(GraphSnapshot snapshot) => _document.RestoreFromHistory(snapshot);
 
     private bool IsCurrentGraphSpawnable
     {
@@ -1188,7 +1237,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         GraphValidator.Validate(new GraphSnapshot(
             current.Nodes.Concat(plannedNodes).ToArray(),
             current.Connections.Concat(plannedConnections).ToArray()));
-        _history.Execute(new CompositeUndoableCommand("Apply graph plan", commands));
+        ExecuteEdit(new CompositeUndoableCommand("Apply graph plan", commands));
         _nextNodeIndex += plan.Nodes.Count;
         return CreateCurrentSnapshot();
     }
@@ -1350,7 +1399,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             return false;
         }
 
-        _history.Execute(new AddGraphConnectionCommand(this, source, target,
+        ExecuteEdit(new AddGraphConnectionCommand(this, source, target,
             targetPortId: targetPortId, sourcePortId: sourcePortId));
         error = null;
         return true;
@@ -1360,7 +1409,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
     {
         if (Connections.Contains(connection))
         {
-            _history.Execute(new RemoveGraphConnectionCommand(this, connection));
+            ExecuteEdit(new RemoveGraphConnectionCommand(this, connection));
             SetConnectionStatus("Messages.ConnectionRemoved");
         }
     }
@@ -1410,6 +1459,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
     public void MoveNode(GraphNodeViewModel node, double x, double y)
     {
+        if (!Nodes.Contains(node)) throw new InvalidOperationException("The node is not in this graph.");
+        if (!double.IsFinite(x) || !double.IsFinite(y)) throw new ArgumentException("A finite position is required.");
         if (node.X == x && node.Y == y)
         {
             return;
@@ -1422,7 +1473,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             MoveNodes(GetMoveTargets([node]).Select(item => (item, item.X + dx, item.Y + dy)));
             return;
         }
-        _history.Execute(new MoveGraphNodeCommand(node, node.X, node.Y, x, y));
+        ExecuteEdit(new MoveGraphNodeCommand(node, node.X, node.Y, x, y));
     }
 
     public IReadOnlyList<GraphNodeViewModel> GetMoveTargets(IEnumerable<GraphNodeViewModel> selection)
@@ -1455,18 +1506,19 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             .ToArray();
         if (commands.Length > 0)
         {
-            _history.Execute(new CompositeUndoableCommand(LocalizationService.Shared.Get("Messages.History.MoveNodes"), commands));
+            ExecuteEdit(new CompositeUndoableCommand(LocalizationService.Shared.Get("Messages.History.MoveNodes"), commands));
         }
     }
 
     public void RenameNode(GraphNodeViewModel node, string name)
     {
+        if (!Nodes.Contains(node)) throw new InvalidOperationException("The node is not in this graph.");
         if (node.Name == name)
         {
             return;
         }
 
-        _history.Execute(new RenameGraphNodeCommand(node, node.Name, name));
+        ExecuteEdit(new RenameGraphNodeCommand(node, node.Name, name));
     }
 
     public void SetCurve(GraphNodeViewModel node, FCurveSnapshot curve, string description)
@@ -1482,7 +1534,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             return;
         }
 
-        _history.Execute(new SetFCurveCommand(node, node.Curve, curve, description));
+        ExecuteEdit(new SetFCurveCommand(node, node.Curve, curve, description));
     }
 
     public void SetSignalKeys(GraphNodeViewModel node, IReadOnlyList<SignalTimelineKey> keys, string description)
@@ -1491,7 +1543,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             throw new InvalidOperationException("Select a Signal entry in this graph.");
         SignalTimeline.Validate(node.BaseDefinition.Kind, keys);
         if (!SignalTimeline.Equal(node.SignalKeys, keys))
-            _history.Execute(new SetSignalKeysCommand(node, node.SignalKeys, keys.ToArray(), description));
+            ExecuteEdit(new SetSignalKeysCommand(node, node.SignalKeys, keys.ToArray(), description));
     }
 
     public bool CanPublishGroupParameter(GraphNodeViewModel node, string parameterId)
@@ -1558,7 +1610,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         GroupExposedItems.Validate(items);
         var after = ReplaceGraph(before, _graphPath, 0, parent with { ExposedItems = items });
         ValidateSnapshot(after);
-        _history.Execute(new ReplaceGraphSnapshotCommand(this, before, after,
+        ExecuteEdit(new ReplaceGraphSnapshotCommand(this, before, after,
             LocalizationService.Shared.Get("Messages.History.PublishGroupParameter")));
         return item.Id;
     }
@@ -1614,7 +1666,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         var after = ReplaceGraph(before, _graphPath, 0, candidateGraph);
         ValidateSnapshot(after);
         if (GraphSnapshot.ContentEquals(before, after)) return;
-        _history.Execute(new ReplaceGraphSnapshotCommand(this, before, after,
+        ExecuteEdit(new ReplaceGraphSnapshotCommand(this, before, after,
             LocalizationService.Shared.Get("Messages.History.ConfigureGroupParameter")));
     }
 
@@ -1660,7 +1712,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         GraphValidator.Validate(materialized);
         if (!ReferenceEquals(ContainingSpawnable, node))
         {
-            _history.Execute(new SetGroupOverridesCommand(node, node.GroupOverrides, values));
+            ExecuteEdit(new SetGroupOverridesCommand(node, node.GroupOverrides, values));
             return;
         }
         var updated = parent with
@@ -1669,8 +1721,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         };
         var after = ReplaceGraph(before, path, 0, updated);
         ValidateSnapshot(after);
-        _history.Execute(new ReplaceGraphSnapshotCommand(this, before, after,
-            LocalizationService.Shared.Get("Messages.History.GroupInstanceValue")));
+        ExecuteEdit(new ReplaceGraphSnapshotCommand(this, before, after,
+            LocalizationService.Shared.Get("Messages.History.GroupInstanceValue")), containingInstanceValue: true);
     }
 
     public void ResetGroupInstanceValue(GraphNodeViewModel node, Guid itemId)
@@ -1718,7 +1770,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 (IUndoableCommand)new RemoveGraphConnectionCommand(this, connection)));
         }
         commands.Add(new SetNodeParametersCommand(node, node.Parameters, parameters.AsReadOnly(), definition.Name));
-        _history.Execute(commands.Count == 1 ? commands[0] :
+        ExecuteEdit(commands.Count == 1 ? commands[0] :
             new CompositeUndoableCommand(LocalizationService.Shared.Get("Editor.Sequence.EditOutputs"), commands));
     }
 
@@ -1763,7 +1815,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
                 commands.Add(new RemoveGraphConnectionCommand(this, connection));
         }
         if (commands.Count != 0)
-            _history.Execute(new CompositeUndoableCommand("Assign engine asset", commands));
+            ExecuteEdit(new CompositeUndoableCommand("Assign engine asset", commands));
 
         static void SetValue(List<NodeParameterSnapshot> parameters, string id, string type, JsonElement value)
         {
@@ -1799,7 +1851,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
         var oldWidth = node.GetParameterValue(node.Definition.Parameters.Single(item => item.Id == "width")).GetDouble();
         var oldHeight = node.GetParameterValue(node.Definition.Parameters.Single(item => item.Id == "height")).GetDouble();
         if (oldWidth == width && oldHeight == height) return;
-        _history.Execute(new SetNodeParametersCommand(node, node.Parameters, values.AsReadOnly(), LocalizationService.Shared.Get("Messages.History.CommentSize")));
+        ExecuteEdit(new SetNodeParametersCommand(node, node.Parameters, values.AsReadOnly(), LocalizationService.Shared.Get("Messages.History.CommentSize")));
     }
 
     public GraphNodeViewModel CreateNode(GraphNodeKind kind, double? x = null, double? y = null, bool isPolymorphic = false)
@@ -1823,7 +1875,7 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
             id: nodeId,
             parameters: GpuParticleEditorService.IsGpu(kind) ? GpuParticleEditorService.InitialParameters(nodeId) : null,
             isPolymorphic: isPolymorphic);
-        _history.Execute(new AddGraphNodeCommand(this, node, Nodes.Count));
+        ExecuteEdit(new AddGraphNodeCommand(this, node, Nodes.Count));
         return node;
     }
 
@@ -1886,7 +1938,8 @@ public sealed class GraphWorkspaceViewModel : ObservableObject
 
     public void DeleteNode(GraphNodeViewModel node)
     {
-        _history.Execute(new DeleteGraphNodeCommand(this, node));
+        if (!Nodes.Contains(node)) throw new InvalidOperationException("The node is not in this graph.");
+        ExecuteEdit(new DeleteGraphNodeCommand(this, node));
     }
 
     internal void AddNode(GraphNodeViewModel node, int index)

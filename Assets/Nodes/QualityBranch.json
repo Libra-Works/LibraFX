@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "typeId": "e9778c40-209b-4ce8-918d-35c000000006",
+  "namespace": "LiberaFx",
+  "kind": "QualityBranch",
+  "name": "Quality Branch",
+  "displayNameKey": "Lifecycle.QualityBranch",
+  "descriptionKey": "Lifecycle.QualityHelp",
+  "group": "Logic",
+  "groupNameKey": "Editor.NodeGroup.Logic",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "inputPorts": [{ "id": "signal", "name": "Signal", "portType": "Signal", "category": "Signal" }],
+  "outputPorts": [
+    { "id": "condition", "name": "Last comparison (0/1)", "portType": "Float", "category": "Parameter" },
+    { "id": "whenTrue", "name": "True", "portType": "Signal", "category": "Signal" },
+    { "id": "whenFalse", "name": "False", "portType": "Signal", "category": "Signal" }
+  ],
+  "parameters": [
+    { "id": "comparison", "name": "Comparison", "type": "enum:4a94e882-39e8-4efb-92c7-180000000041", "defaultValue": 5 },
+    { "id": "tier", "name": "Quality tier", "type": "enum:4a94e882-39e8-4efb-92c7-180000000040", "defaultValue": 2 }
+  ]
+}

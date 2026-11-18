@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "typeId": "4a94e882-39e8-4efb-92c7-180000000040",
+  "namespace": "LiberaFx",
+  "name": "HostQualityTier",
+  "values": [
+    { "value": 0, "name": "Low" },
+    { "value": 1, "name": "Medium" },
+    { "value": 2, "name": "High" },
+    { "value": 3, "name": "Ultra" },
+    { "value": 4, "name": "Cinematic" }
+  ]
+}

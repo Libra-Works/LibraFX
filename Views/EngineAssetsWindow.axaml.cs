@@ -8,7 +8,9 @@ namespace LiberaFx.Views;
 public partial class EngineAssetsWindow : Window
 {
     private MainViewModel? _main;
+    private AssetBrowserCoordinator? _coordinator;
     private EngineAssetsWindowViewModel? _viewModel;
+    private ResourceIdentityPaneViewModel? _resourceIdentityViewModel;
 
     public EngineAssetsWindow()
     {
@@ -18,7 +20,12 @@ public partial class EngineAssetsWindow : Window
         Closed += OnClosed;
     }
 
-    public EngineAssetsWindow(MainViewModel main) : this() => InitializeModel(main);
+    public EngineAssetsWindow(MainViewModel main) : this()
+    {
+        InitializeModel(main);
+        _ = main.AssetBrowser.BeginForCurrentSelection();
+    }
+    public EngineAssetsWindow(AssetBrowserCoordinator coordinator) : this() => InitializeModel(coordinator);
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
@@ -28,18 +35,30 @@ public partial class EngineAssetsWindow : Window
     private void InitializeModel(MainViewModel main)
     {
         ArgumentNullException.ThrowIfNull(main);
-        if (ReferenceEquals(_main, main)) return;
-        _viewModel?.Dispose();
         _main = main;
-        _viewModel = new EngineAssetsWindowViewModel(main);
+        InitializeModel(main.AssetBrowser);
+    }
+
+    private void InitializeModel(AssetBrowserCoordinator coordinator)
+    {
+        ArgumentNullException.ThrowIfNull(coordinator);
+        if (ReferenceEquals(_coordinator, coordinator)) return;
+        _coordinator = coordinator;
+        _main = coordinator.ViewModel.Main;
+        _viewModel = coordinator.ViewModel;
         DataContext = _viewModel;
+        coordinator.RegisterWindow(this);
     }
 
     private void OnOpened(object? sender, EventArgs e)
     {
         if (_viewModel is not { } viewModel) return;
+        _resourceIdentityViewModel?.Dispose();
+        _resourceIdentityViewModel = new ResourceIdentityPaneViewModel(viewModel.Main);
+        ResourceIdentityPane.DataContext = _resourceIdentityViewModel;
         viewModel.RefreshPeers();
-        if (viewModel.SelectedPeer is not null) _ = viewModel.SearchCommand.ExecuteAsync(null);
+        if (viewModel.SelectedPeer is not null && _coordinator?.Request?.RevealOnly != true)
+            _ = viewModel.SearchCommand.ExecuteAsync(null);
     }
 
     private async void OnReconnectClick(object? sender, RoutedEventArgs e)
@@ -60,10 +79,28 @@ public partial class EngineAssetsWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         DataContextChanged -= OnDataContextChanged;
-        _viewModel?.Dispose();
+        _coordinator?.WindowClosed(this);
+        _resourceIdentityViewModel?.Dispose();
+        _resourceIdentityViewModel = null;
+        ResourceIdentityPane.DataContext = null;
         _viewModel = null;
+        _coordinator = null;
         _main = null;
     }
 
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
+
+    private void OnOpenSpriteEditor(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel is not { SelectedPeer: { } peer, SelectedAsset: { } asset } model) return;
+        if (string.Equals(asset.AssetClass, "texture", StringComparison.OrdinalIgnoreCase))
+            for (var owner = Owner; owner is not null; owner = owner.Owner)
+                if (owner is MainWindow main && ReferenceEquals(main.DataContext, _main))
+                {
+                    if (!main.OpenSpriteEditorForAsset(peer.ClientId, asset))
+                        model.SetCallerError(LocalizationService.Shared.Get("Sprite.SourceNotOpened"));
+                    return;
+                }
+        model.SetCallerError(LocalizationService.Shared.Get("Sprite.SourceNotOpened"));
+    }
 }

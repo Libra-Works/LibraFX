@@ -1,0 +1,74 @@
+#56 integration points in the parent-owned VfxRuntime.cpp / VfxRuntime.h
+
+The editor and the Unity/Unreal stand-alone owners consume the existing
+Instance::setDebugHooks ABI. The following wiring is needed to remove the
+current numerical-only rejection without reading inactive branch values.
+
+1. VfxRuntime.h, Instance private declarations, next to beforeDebugNode:
+     Result debugResolvedInputs(std::uint32_t index, double time,
+         const double* inputs, const std::uint8_t* widths,
+         const std::uint8_t* colorFlags = nullptr,
+         const std::uint8_t* signalSource = nullptr) noexcept;
+     Result debugEnumSelect(std::uint32_t index, std::uint32_t selector,
+         std::uint32_t selectedSource, const std::uint8_t* selectedDefaults) noexcept;
+   VfxRuntime.cpp, immediately after Instance::beforeDebugNode (outside the
+   anonymous namespace, inside liberafx):
+     #include "ExecutionDebugCapture.inl"
+
+2. Instance::setDebugHooks: retain Busy and uninitialized guards; remove the
+   branchGuardCount_ and opcode rejects. Program.load already validates opcodes,
+   descriptor arities and widths. Attach only on the owner, before enqueueing.
+
+3. Instance::beforeDebugNode: in both the legacy and typed slot loops, if
+   source != noInput, copy the first 16 instruction bytes from
+   instruction(program_->bytes_, program_->version_, source) to value.sourceNodeId.
+   For enumValueOpcode use width 1 and DebugValueKind::Int32; for Curve,
+   BranchTime, CurrentPhase and PhaseTime use count=0. Don't use the ordinary
+   slot extractor for custom*, logicalEventSignalOpcode, or enumSelectOpcode.
+
+4. Instance::evaluate: in the typed loop keep the existing beforeDebugNode
+   call AFTER the branch active check, but skip the common call for
+   customParameterOpcode, customSignalOpcode, logicalEventSignalOpcode,
+   enumSelectOpcode. The custom signal placeholder in the update loop is not
+   an executed node. Immediately before the custom parameter function invoke
+     auto debugStatus = debugResolvedInputs(index, time_, inputs.data(), inputWidths.data(),
+         descriptor->inputIsColor);
+     if (debugStatus != Result::Ok) return debugStatus;
+   For logical update invoke the same just before descriptor->update, with
+   nullptr colors. Do not hook internal commit callbacks a second time.
+   For enumSelect invoke, immediately BEFORE the output lane copy and AFTER
+   sourceIndex/defaultValues are chosen:
+     auto debugStatus = debugEnumSelect(index, selector, sourceIndex, defaultValues);
+     if (debugStatus != Result::Ok) return debugStatus;
+   Do not resolve unselected cases, even when the editor asks for inputs.
+
+5. Instance::dispatchSignalV9: call debugResolvedInputs in each branch just
+   before onSignal/function, after its existing input loop; index is
+   event.nodeIndex, time is time_, colors null for logical and
+   customDescriptor->inputIsColor for custom. The optional final argument is
+   the exact predecessor instruction bytes, or nullptr for root/generated
+   events. To retain predecessor without changing work size, use the
+   previously reserved uint16 of LogicalQueuedSignal (maxNodes=10000), encode
+   sourceIndex+1 for appendRoutes -> enqueue and zero for root/generated.
+   Decode with instruction(program_->bytes_, program_->version_, event.reserved-1).
+   Do not fabricate a predecessor by taking the last observed node: late
+   parameter refresh and branching can intervene.
+
+6. Instance::dispatchSignalInternal (< v9): same debugResolvedInputs call
+   after the existing operand loop, before writing outputs or invoking the
+   descriptor, using dispatch time. For exact flow record the direct
+   selectBranch parent. Fan-out entries currently hold one uint32 target;
+   pack target in low 16 and source+1 in high 16 when pushing and unpack when
+   popping (all validated indices are <10000, and stack stride stays 4).
+   Use nullptr predecessor for the root. Breakpoint cancellation is returned
+   unchanged to scheduler owners; disconnect normally calls detach(), which
+   lets the paused evaluator continue the same stack without replay.
+
+Native acceptance after wiring:
+  set LIBERAFX_DEBUG_FIXTURE_DIR to the --debugger-fixtures output directory
+  set LIBERAFX_INT32_FIXTURE_DIR to --int32 fixture output
+  set LIBERAFX_DEBUG_BRANCH_FIXTURE_DIR to --runtime-enum-branches output
+  ctest --test-dir <isolated-native-build> --output-on-failure -R execution_debugger
+The guarded test sets a breakpoint on both an inactive divide-by-zero and the
+selected Enum node, and asserts the inactive node is never invoked and the
+selected value is 9.

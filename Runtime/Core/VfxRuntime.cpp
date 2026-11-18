@@ -29,6 +29,22 @@ constexpr auto enumValueOpcode = std::uint8_t{43};
 constexpr auto enumSelectOpcode = std::uint8_t{44};
 constexpr auto branchTimeOpcode = std::uint8_t{45};
 constexpr auto logicalEventSignalOpcode = std::uint8_t{47};
+constexpr auto currentPhaseOpcode = std::uint8_t{55};
+constexpr auto phaseTimeOpcode = std::uint8_t{56};
+
+constexpr auto isEnumSourceOpcode(std::uint8_t opcode) noexcept -> bool
+{
+    return opcode == enumValueOpcode || opcode == currentPhaseOpcode;
+}
+
+auto branchGuard(const std::uint8_t* current, std::uint16_t version) noexcept -> std::uint32_t;
+constexpr auto int32Opcode = std::uint8_t{48};
+constexpr auto int32AddOpcode = std::uint8_t{49};
+constexpr auto int32SubtractOpcode = std::uint8_t{50};
+constexpr auto int32MultiplyOpcode = std::uint8_t{51};
+constexpr auto int32DivideOpcode = std::uint8_t{52};
+constexpr auto floatToInt32Opcode = std::uint8_t{53};
+constexpr auto int32ToFloatOpcode = std::uint8_t{54};
 constexpr auto customMaxPorts = std::uint8_t{4};
 constexpr auto enumBranchHeaderSize = std::size_t{16};
 constexpr auto enumValueRecordSize = std::size_t{24};
@@ -36,6 +52,8 @@ constexpr auto enumSelectRecordSize = std::size_t{68};
 constexpr auto enumCaseRecordSize = std::size_t{40};
 constexpr auto enumGuardRecordSize = std::size_t{40};
 constexpr auto logicalEventHeaderSize = std::size_t{16};
+constexpr auto valueTypeHeaderSize = std::size_t{8};
+constexpr auto valueTypeRecordSize = std::size_t{8};
 constexpr auto logicalInstructionRecordSize = std::size_t{32};
 constexpr auto logicalSignalRouteRecordSize = std::size_t{12};
 constexpr auto customWorkAlignment = std::size_t{16};
@@ -52,6 +70,22 @@ constexpr auto logicalOrTypeId = std::array<std::uint8_t, 16>{
 constexpr auto logicalSignalToNumberTypeId = std::array<std::uint8_t, 16>{
     0xe9, 0x77, 0x8c, 0x40, 0x20, 0x9b, 0x4c, 0xe8,
     0x91, 0x8d, 0x35, 0xc0, 0x00, 0x00, 0x00, 0x04};
+constexpr auto logicalLoopClockTypeId = std::array<std::uint8_t, 16>{
+    0xe9, 0x77, 0x8c, 0x40, 0x20, 0x9b, 0x4c, 0xe8,
+    0x91, 0x8d, 0x35, 0xc0, 0x00, 0x00, 0x00, 0x05};
+constexpr auto logicalQualityBranchTypeId = std::array<std::uint8_t, 16>{
+    0xe9, 0x77, 0x8c, 0x40, 0x20, 0x9b, 0x4c, 0xe8,
+    0x91, 0x8d, 0x35, 0xc0, 0x00, 0x00, 0x00, 0x06};
+constexpr auto logicalSignalCaptureTypeId = std::array<std::uint8_t, 16>{
+    0xe9, 0x77, 0x8c, 0x40, 0x20, 0x9b, 0x4c, 0xe8,
+    0x91, 0x8d, 0x35, 0xc0, 0x00, 0x00, 0x00, 0x07};
+constexpr auto valueTypeFloat = std::uint8_t{1};
+constexpr auto valueTypeInt32 = std::uint8_t{2};
+constexpr auto valueTypeVector2 = std::uint8_t{3};
+constexpr auto valueTypeVector3 = std::uint8_t{4};
+constexpr auto valueTypeVector4 = std::uint8_t{5};
+constexpr auto valueTypeColor = std::uint8_t{6};
+constexpr auto valueTypeEnum = std::uint8_t{7};
 std::atomic<std::uint64_t> nextProgramGeneration{1};
 std::atomic<std::uint64_t> nextInstanceGeneration{1};
 static_assert(sizeof(double) == 8 && std::numeric_limits<double>::is_iec559,
@@ -70,6 +104,14 @@ auto read32(const std::uint8_t* bytes) noexcept -> std::uint32_t
 {
     return std::uint32_t{bytes[0]} | (std::uint32_t{bytes[1]} << 8) |
            (std::uint32_t{bytes[2]} << 16) | (std::uint32_t{bytes[3]} << 24);
+}
+
+auto branchGuard(const std::uint8_t* current, std::uint16_t version) noexcept -> std::uint32_t
+{
+    auto opcode = current[16];
+    auto customLayout = opcode == customParameterOpcode || opcode == customSignalOpcode ||
+        opcode == logicalEventSignalOpcode;
+    return read32(current + (version >= 11 && customLayout ? 44 : 112));
 }
 
 auto read64(const std::uint8_t* bytes) noexcept -> std::uint64_t
@@ -239,7 +281,7 @@ auto validGameIoMetadata(const std::uint8_t* data, std::size_t size,
 }
 
 auto validEnumBranchMetadata(const std::uint8_t* data, std::size_t size,
-                             std::size_t offset, std::uint32_t instructionCount,
+                             std::size_t offset, std::uint16_t version, std::uint32_t instructionCount,
                              std::size_t& metadataEnd, std::size_t& selectRecordsOffset,
                              std::size_t& guardRecordsOffset, std::size_t& guardValuesOffset,
                              std::uint16_t& enumValueCount, std::uint16_t& enumSelectCount,
@@ -272,14 +314,14 @@ auto validEnumBranchMetadata(const std::uint8_t* data, std::size_t size,
         auto nodeIndex = read32(record);
         if (nodeIndex >= instructionCount) return false;
         auto current = instruction(data, 3, nodeIndex);
-        if (current[16] != enumValueOpcode || std::memcmp(current + 96, record + 4, 16) != 0)
+        if (!isEnumSourceOpcode(current[16]) || std::memcmp(current + 96, record + 4, 16) != 0)
             return false;
         auto sourceIndex = read32(current + 24);
         if (sourceIndex != noInput)
         {
             if (sourceIndex >= nodeIndex) return false;
             auto source = instruction(data, 3, sourceIndex);
-            if (source[16] != enumValueOpcode || std::memcmp(source + 96, record + 4, 16) != 0)
+            if (!isEnumSourceOpcode(source[16]) || std::memcmp(source + 96, record + 4, 16) != 0)
                 return false;
         }
         for (auto prior = 0u; prior < index; ++prior)
@@ -305,7 +347,7 @@ auto validEnumBranchMetadata(const std::uint8_t* data, std::size_t size,
         auto current = instruction(data, 3, nodeIndex);
         auto selector = instruction(data, 3, selectorIndex);
         if (current[16] != enumSelectOpcode || current[17] != outputWidth ||
-            read32(current + 24) != selectorIndex || selector[16] != enumValueOpcode ||
+            read32(current + 24) != selectorIndex || !isEnumSourceOpcode(selector[16]) ||
             std::memcmp(current + 96, record + 12, 16) != 0 ||
             std::memcmp(selector + 96, record + 12, 16) != 0)
             return false;
@@ -349,7 +391,7 @@ auto validEnumBranchMetadata(const std::uint8_t* data, std::size_t size,
                 (metadataEnd - (offset + excludedOffset)) / 4)
             return false;
         auto selector = instruction(data, 3, selectorIndex);
-        if (selector[16] != enumValueOpcode || std::memcmp(selector + 96, record + 4, 16) != 0)
+        if (!isEnumSourceOpcode(selector[16]) || std::memcmp(selector + 96, record + 4, 16) != 0)
             return false;
         for (auto caseIndex = 0u; caseIndex < caseCount; ++caseIndex)
             for (auto prior = 0u; prior < caseIndex; ++prior)
@@ -378,9 +420,9 @@ auto validEnumBranchMetadata(const std::uint8_t* data, std::size_t size,
     {
         auto current = instruction(data, 3, index);
         auto opcode = current[16];
-        if (opcode == enumValueOpcode) ++observedEnumValues;
+        if (isEnumSourceOpcode(opcode)) ++observedEnumValues;
         if (opcode == enumSelectOpcode) ++observedEnumSelects;
-        auto guardId = read32(current + 112);
+        auto guardId = branchGuard(current, version);
         if (guardId != noInput && guardId >= guardCount) return false;
         if (opcode == branchTimeOpcode && guardId == noInput) return false;
     }
@@ -433,6 +475,13 @@ auto validLogicalConfiguration(const std::uint8_t* typeId, std::uint32_t configu
         return configuration == 0;
     if (std::memcmp(typeId, logicalSignalToNumberTypeId.data(), 16) == 0)
         return (configuration & 0xffffff00u) == 0 && (configuration & 0xffu) <= 2;
+    if (std::memcmp(typeId, logicalLoopClockTypeId.data(), 16) == 0)
+        return configuration == 0;
+    if (std::memcmp(typeId, logicalQualityBranchTypeId.data(), 16) == 0)
+        return (configuration & 0xffff0000u) == 0 && (configuration & 0xffu) <= 5 &&
+            ((configuration >> 8u) & 0xffu) <= 4;
+    if (std::memcmp(typeId, logicalSignalCaptureTypeId.data(), 16) == 0)
+        return configuration == 0;
     return false;
 }
 
@@ -491,8 +540,11 @@ auto validLogicalEventMetadata(const std::uint8_t* data, std::size_t size,
             return false;
         auto registeredType = false;
         auto descriptor = findLogicalDescriptor(record + 4, abiVersion, registeredType);
-        auto expectedParameterCount = std::memcmp(record + 4, logicalCompareTypeId.data(), 16) == 0 ? 2 :
-            std::memcmp(record + 4, logicalOrTypeId.data(), 16) == 0 ? 0 :
+        auto expectedParameterCount = std::memcmp(record + 4, logicalCompareTypeId.data(), 16) == 0 ||
+            std::memcmp(record + 4, logicalQualityBranchTypeId.data(), 16) == 0 ? 2 :
+            std::memcmp(record + 4, logicalOrTypeId.data(), 16) == 0 ||
+                std::memcmp(record + 4, logicalLoopClockTypeId.data(), 16) == 0 ||
+                std::memcmp(record + 4, logicalSignalCaptureTypeId.data(), 16) == 0 ? 0 :
             std::memcmp(record + 4, logicalAndTypeId.data(), 16) == 0 ||
                 std::memcmp(record + 4, logicalSignalToNumberTypeId.data(), 16) == 0 ? 1 : 0xff;
         if (descriptor == nullptr || !validLogicalDescriptor(*descriptor) ||
@@ -682,12 +734,36 @@ auto typedInputWidth(std::uint32_t input, std::uint8_t width) noexcept -> bool
     return input == noInput ? width == 0 : width >= 1 && width <= 4;
 }
 
+auto validInt32(double value) noexcept -> bool
+{
+    return std::isfinite(value) && std::trunc(value) == value &&
+        value >= std::numeric_limits<std::int32_t>::min() &&
+        value <= std::numeric_limits<std::int32_t>::max();
+}
+
+auto int32FromDouble(double value, std::int32_t& result) noexcept -> Result
+{
+    if (!std::isfinite(value)) return Result::NonFinite;
+    if (!validInt32(value)) return Result::InvalidValueType;
+    result = static_cast<std::int32_t>(value);
+    return Result::Ok;
+}
+
 auto requiredInputWidths(std::uint8_t opcode, std::uint8_t outputWidth,
                          std::uint8_t& inputAWidth, std::uint8_t& inputBWidth,
                          bool& requiresA, bool& requiresB) noexcept -> bool
 {
     requiresA = false;
     requiresB = false;
+    if (opcode == int32Opcode)
+        return outputWidth == 1 && inputAWidth <= 1 && inputBWidth == 0;
+    if (opcode >= int32AddOpcode && opcode <= int32DivideOpcode)
+        return outputWidth == 1 && inputAWidth == 1 && inputBWidth == 1;
+    if (opcode == floatToInt32Opcode || opcode == int32ToFloatOpcode)
+    {
+        requiresA = true;
+        return outputWidth == 1 && inputAWidth == 1 && inputBWidth == 0;
+    }
     if (opcode == 1)
     {
         return outputWidth == 1 && inputAWidth <= 1 && inputBWidth == 0;
@@ -803,6 +879,268 @@ auto validTypedInstruction(const std::uint8_t* current, std::uint32_t index) noe
     return true;
 }
 
+auto valueTypeWidth(std::uint8_t type) noexcept -> std::uint8_t
+{
+    switch (type)
+    {
+    case valueTypeFloat:
+    case valueTypeInt32:
+    case valueTypeEnum: return 1;
+    case valueTypeVector2: return 2;
+    case valueTypeVector3: return 3;
+    case valueTypeVector4:
+    case valueTypeColor: return 4;
+    default: return 0;
+    }
+}
+
+auto typeForShape(std::uint8_t width, bool color) noexcept -> std::uint8_t
+{
+    if (color) return width == 4 ? valueTypeColor : 0;
+    switch (width)
+    {
+    case 1: return valueTypeFloat;
+    case 2: return valueTypeVector2;
+    case 3: return valueTypeVector3;
+    case 4: return valueTypeVector4;
+    default: return 0;
+    }
+}
+
+auto valueTypeRecord(const std::uint8_t* data, std::size_t offset,
+                     std::uint32_t index) noexcept -> const std::uint8_t*
+{
+    return data + offset + valueTypeHeaderSize + std::size_t{index} * valueTypeRecordSize;
+}
+
+auto validValueTypeMetadata(const std::uint8_t* data, std::size_t binarySize,
+                            std::size_t offset, std::uint32_t instructionCount) noexcept -> bool
+{
+    if (offset > binarySize || binarySize - offset < valueTypeHeaderSize ||
+        std::memcmp(data + offset, "LFTY", 4) != 0 ||
+        read16(data + offset + 4) != 1 || read16(data + offset + 6) != valueTypeRecordSize ||
+        std::size_t{instructionCount} >
+            (binarySize - offset - valueTypeHeaderSize) / valueTypeRecordSize ||
+        offset + valueTypeHeaderSize + std::size_t{instructionCount} * valueTypeRecordSize != binarySize)
+        return false;
+
+    auto expectedInputs = [&](std::uint8_t opcode, std::uint8_t outputType,
+                              std::uint8_t outputWidth, std::uint8_t& count,
+                              std::array<std::uint8_t, 4>& types) noexcept -> bool {
+        count = 0;
+        types = {};
+        auto set = [&](std::uint8_t input, std::uint8_t type) noexcept {
+            if (input >= types.size() || type == 0) return false;
+            types[input] = type;
+            count = static_cast<std::uint8_t>(input + 1);
+            return true;
+        };
+        if (opcode == 1 || (opcode >= 7 && opcode <= 10) || opcode == int32Opcode)
+            return set(0, outputType);
+        if (opcode == 2 || opcode == curveOpcode || opcode == branchTimeOpcode ||
+            opcode == currentPhaseOpcode || opcode == phaseTimeOpcode)
+            return true;
+        if ((opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22) ||
+            (opcode >= int32AddOpcode && opcode <= int32DivideOpcode))
+            return set(0, outputType) && set(1, outputType);
+        if (opcode >= 23 && opcode <= 25)
+            return set(0, valueTypeFloat);
+        if (opcode >= 26 && opcode <= 28)
+            return set(0, outputType);
+        if (opcode >= 29 && opcode <= 34)
+        {
+            auto inputType = opcode <= 30 ? valueTypeVector2 :
+                opcode <= 32 ? valueTypeVector3 : valueTypeVector4;
+            return set(0, inputType);
+        }
+        if (opcode >= 35 && opcode <= 37)
+            return set(0, valueTypeVector4);
+        if (opcode == 38) return set(0, valueTypeColor);
+        if (opcode == 39) return set(0, valueTypeVector4);
+        if (opcode == enumValueOpcode) return set(0, valueTypeEnum);
+        if (opcode == enumSelectOpcode) return set(0, valueTypeEnum);
+        if (opcode == floatToInt32Opcode) return set(0, valueTypeFloat);
+        if (opcode == int32ToFloatOpcode) return set(0, valueTypeInt32);
+        return opcode == customParameterOpcode || opcode == customSignalOpcode ||
+            opcode == logicalEventSignalOpcode;
+    };
+
+    for (auto index = 0u; index < instructionCount; ++index)
+    {
+        auto current = instruction(data, 10, index);
+        auto record = valueTypeRecord(data, offset, index);
+        auto opcode = current[16];
+        auto outputType = record[0];
+        auto inputCount = record[1];
+        auto outputWidth = current[17];
+        if (inputCount > 4 || record[6] != 0 || record[7] != 0)
+            return false;
+        auto isCustom = opcode == customParameterOpcode || opcode == customSignalOpcode;
+        auto isLogical = opcode == logicalEventSignalOpcode;
+        if (isCustom)
+        {
+            auto expectedOutput = opcode == customSignalOpcode ? 0 :
+                typeForShape(outputWidth, (current[20] & 1) != 0);
+            if (outputType != expectedOutput || inputCount != current[18]) return false;
+        }
+        else if (isLogical)
+        {
+            if (outputType != typeForShape(outputWidth, false) || inputCount != current[18]) return false;
+        }
+        else if (opcode == enumSelectOpcode)
+        {
+            if (valueTypeWidth(outputType) != outputWidth ||
+                outputType == valueTypeEnum || outputType == 0 || inputCount != 1 ||
+                record[2] != valueTypeEnum)
+                return false;
+        }
+        else
+        {
+            std::uint8_t requiredCount = 0;
+            auto requiredTypes = std::array<std::uint8_t, 4>{};
+            if (!expectedInputs(opcode, outputType, outputWidth, requiredCount, requiredTypes) ||
+                inputCount != requiredCount)
+                return false;
+            auto requiredOutput = opcode == 1 || opcode == 2 || (opcode >= 3 && opcode <= 6) ||
+                opcode == curveOpcode || opcode == branchTimeOpcode || opcode == phaseTimeOpcode ||
+                opcode == int32ToFloatOpcode ? valueTypeFloat :
+                opcode == int32Opcode || (opcode >= int32AddOpcode && opcode <= int32DivideOpcode) ||
+                opcode == floatToInt32Opcode ? valueTypeInt32 :
+                isEnumSourceOpcode(opcode) ? valueTypeEnum :
+                opcode == 10 ? valueTypeColor :
+                opcode == 7 || opcode == 11 || opcode == 12 || opcode == 13 || opcode == 14 ||
+                    opcode == 26 || opcode == 33 || opcode == 35 ? valueTypeVector2 :
+                opcode == 8 || (opcode >= 15 && opcode <= 18) || opcode == 27 ||
+                    opcode == 29 || opcode == 34 || opcode == 36 ? valueTypeVector3 :
+                opcode == 9 || (opcode >= 19 && opcode <= 22) || opcode == 28 ||
+                    opcode == 30 || opcode == 32 || opcode == 37 || opcode == 38 ? valueTypeVector4 :
+                opcode == 39 ? valueTypeColor :
+                opcode == 23 ? valueTypeVector2 :
+                opcode == 24 ? valueTypeVector3 :
+                opcode == 25 ? valueTypeVector4 :
+                opcode == 31 ? valueTypeVector2 :
+                opcode == 40 ? outputType : 0;
+            if (outputType != requiredOutput) return false;
+            if (valueTypeWidth(outputType) != outputWidth ||
+                (((current[20] & 1) != 0) != (outputType == valueTypeColor)))
+                return false;
+            for (auto input = 0u; input < requiredCount; ++input)
+                if (record[2 + input] != requiredTypes[input]) return false;
+        }
+
+        for (auto input = 0u; input < inputCount; ++input)
+        {
+            auto type = record[2 + input];
+            auto width = valueTypeWidth(type);
+            if (width == 0) return false;
+            if (isCustom || isLogical)
+            {
+                auto inputRecord = current + 48 + input * 8;
+                auto sourceIndex = read32(inputRecord);
+                auto sourceWidth = inputRecord[4];
+                auto color = inputRecord[6] != 0;
+                if (type != typeForShape(sourceWidth == 0 ? width : sourceWidth, color) ||
+                    (isLogical && (type == valueTypeColor || type == valueTypeEnum)))
+                    return false;
+                if (sourceIndex != noInput)
+                {
+                    if (sourceIndex >= index) return false;
+                    auto sourceOpcode = instruction(data, 10, sourceIndex)[16];
+                    auto sourceType = sourceOpcode >= 26 && sourceOpcode <= 28 ? valueTypeFloat :
+                        valueTypeRecord(data, offset, sourceIndex)[0];
+                    if (sourceType != type) return false;
+                }
+                auto defaults = current + 80 + input * 32;
+                for (auto lane = 0u; lane < width; ++lane)
+                {
+                    auto value = readDouble(defaults + lane * 8);
+                    if (!std::isfinite(value) || (type == valueTypeInt32 && !validInt32(value)))
+                        return false;
+                }
+            }
+            else
+            {
+                auto sourceIndex = input == 0 ? read32(current + 24) :
+                    input == 1 ? read32(current + 28) : noInput;
+                auto sourceComponent = input == 0 ? current[21] :
+                    input == 1 ? current[22] : 0;
+                if (sourceIndex != noInput)
+                {
+                    if (sourceIndex >= index) return false;
+                    auto source = instruction(data, 10, sourceIndex);
+                    auto sourceType = valueTypeRecord(data, offset, sourceIndex)[0];
+                    if (source[16] >= 26 && source[16] <= 28) sourceType = valueTypeFloat;
+                    if (sourceType != type) return false;
+                }
+                auto defaults = current + (input == 0 ? 32 : 64);
+                for (auto lane = 0u; lane < width; ++lane)
+                {
+                    auto value = readDouble(defaults + lane * 8);
+                    if (!std::isfinite(value) || (type == valueTypeInt32 && !validInt32(value)))
+                        return false;
+                }
+                if (type == valueTypeEnum && sourceIndex != noInput)
+                {
+                    auto source = instruction(data, 10, sourceIndex);
+                    if (!isEnumSourceOpcode(source[16]) ||
+                        std::memcmp(current + 96, source + 96, 16) != 0)
+                        return false;
+                }
+                if (sourceIndex == noInput && input == 0 && current[16] == floatToInt32Opcode)
+                {
+                    // This conversion is intentionally connection-only; it must not
+                    // turn an implicit Float default into an Int32 value.
+                    return false;
+                }
+                (void)sourceComponent;
+            }
+        }
+        for (auto input = inputCount; input < 4; ++input)
+            if (record[2 + input] != 0) return false;
+    }
+    return true;
+}
+
+auto validEnumSelectValueTypes(const std::uint8_t* data, std::size_t valueTypeOffset,
+                               std::size_t enumMetadataOffset,
+                               std::size_t selectRecordsOffset, std::uint16_t selectCount,
+                               std::uint32_t instructionCount) noexcept -> bool
+{
+    for (auto index = 0u; index < selectCount; ++index)
+    {
+        auto record = data + selectRecordsOffset + std::size_t{index} * enumSelectRecordSize;
+        auto nodeIndex = read32(record);
+        if (nodeIndex >= instructionCount) return false;
+        auto outputType = valueTypeRecord(data, valueTypeOffset, nodeIndex)[0];
+        auto defaultSource = read32(record + 8);
+        if (defaultSource != noInput &&
+            (defaultSource >= nodeIndex ||
+             valueTypeRecord(data, valueTypeOffset, defaultSource)[0] != outputType))
+            return false;
+        auto outputWidth = record[28];
+        if (outputType == valueTypeInt32)
+            for (auto lane = 0u; lane < outputWidth; ++lane)
+                if (!validInt32(readDouble(record + 36 + lane * 8))) return false;
+
+        auto caseCount = record[29];
+        auto casesOffset = read32(record + 32);
+        for (auto caseIndex = 0u; caseIndex < caseCount; ++caseIndex)
+        {
+            auto branch = data + enumMetadataOffset + casesOffset +
+                std::size_t{caseIndex} * enumCaseRecordSize;
+            auto source = read32(branch + 4);
+            if (source != noInput &&
+                (source >= nodeIndex ||
+                 valueTypeRecord(data, valueTypeOffset, source)[0] != outputType))
+                return false;
+            if (outputType == valueTypeInt32)
+                for (auto lane = 0u; lane < outputWidth; ++lane)
+                    if (!validInt32(readDouble(branch + 8 + lane * 8))) return false;
+        }
+    }
+    return true;
+}
+
 auto validCurveInstruction(const std::uint8_t* current, std::uint16_t version) noexcept -> bool
 {
     if (current[16] != curveOpcode || current[17] != 1 || current[18] != 0 ||
@@ -897,7 +1235,7 @@ auto Program::load(const void* bytes, std::size_t size, Program& out,
     auto data = static_cast<const std::uint8_t*>(bytes);
     if (std::memcmp(data, "LFXB", 4) != 0) return Result::InvalidBinary;
     auto version = read16(data + 4);
-    if (version >= 4 && version <= 9)
+    if (version >= 4 && version <= 11)
         return load(bytes, size, nullptr, 0, nullptr, 0, out, profiling);
     if (version != 1 && version != 2) return Result::UnsupportedBinary;
     if (data[6] != 1) return Result::UnsupportedBinary;
@@ -959,6 +1297,7 @@ auto Program::load(const void* bytes, std::size_t size, Program& out,
     out.signalStackOffset_ = 0;
     out.signalStackCapacity_ = 0;
     out.gameIoMetadataOffset_ = 0;
+    out.valueTypeMetadataOffset_ = 0;
     out.gameIoPortCount_ = 0;
     out.enumBranchMetadataOffset_ = 0;
     out.enumSelectRecordsOffset_ = 0;
@@ -974,6 +1313,7 @@ auto Program::load(const void* bytes, std::size_t size, Program& out,
     out.logicalEventMaskOffset_ = 0;
     out.logicalDirtyOffset_ = 0;
     out.logicalQueueOffset_ = 0;
+    out.signalPayloadQueueOffset_ = 0;
     out.logicalQueueCapacity_ = 0;
     out.logicalInstructionCount_ = 0;
     out.logicalSignalRouteCount_ = 0;
@@ -990,7 +1330,7 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
     auto data = static_cast<const std::uint8_t*>(bytes);
     if (std::memcmp(data, "LFXB", 4) != 0) return Result::InvalidBinary;
     auto version = read16(data + 4);
-    if (version < 3 || version > 9) return load(bytes, size, out, profiling);
+    if (version < 3 || version > 11) return load(bytes, size, out, profiling);
     out.enumBranchMetadataOffset_ = 0;
     out.enumSelectRecordsOffset_ = 0;
     out.enumGuardRecordsOffset_ = 0;
@@ -1009,6 +1349,8 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
     out.logicalInstructionCount_ = 0;
     out.logicalSignalRouteCount_ = 0;
     out.gameIoMetadataOffset_ = 0;
+    out.valueTypeMetadataOffset_ = 0;
+    out.signalPayloadQueueOffset_ = 0;
     out.gameIoPortCount_ = 0;
     auto profileScope = ProfileScope(profiling, ProfileEvent::Load);
     if (size < typedHeaderSize) return Result::InvalidBinary;
@@ -1016,8 +1358,23 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
     if (data[7] != 0 || read16(data + 12) != customInstructionSize || read16(data + 14) != 0)
         return Result::InvalidBinary;
     auto count = read32(data + 8);
+    if (count > maxNodes) return Result::InvalidBinary;
+    auto binarySize = size;
+    auto valueTypeMetadataOffset = std::size_t{0};
+    if (version >= 10)
+    {
+        auto valueTypeMetadataSize = valueTypeHeaderSize +
+            std::size_t{count} * valueTypeRecordSize;
+        if (binarySize < valueTypeMetadataSize) return Result::InvalidBinary;
+        valueTypeMetadataOffset = binarySize - valueTypeMetadataSize;
+        if (std::memcmp(data + valueTypeMetadataOffset, "LFTY", 4) != 0 ||
+            read16(data + valueTypeMetadataOffset + 4) != 1 ||
+            read16(data + valueTypeMetadataOffset + 6) != valueTypeRecordSize)
+            return Result::InvalidBinary;
+        size = valueTypeMetadataOffset;
+    }
     auto instructionBytes = typedHeaderSize + std::size_t{count} * customInstructionSize;
-    if (count > maxNodes || size < instructionBytes ||
+    if (size < instructionBytes ||
         (version == 3 && size != instructionBytes))
         return Result::InvalidBinary;
     auto hasCustomNodes = false;
@@ -1043,7 +1400,7 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
              (descriptor.outputWidth < 1 || descriptor.outputWidth > 4 || descriptor.branchCount != 0)) ||
             (descriptor.execution == CustomExecution::Signal &&
              (descriptor.outputWidth != 0 || descriptor.outputIsColor ||
-              descriptor.branchCount < 1 || descriptor.branchCount > customMaxPorts)) ||
+              descriptor.branchCount > customMaxPorts)) ||
             (descriptor.execution != CustomExecution::Parameter &&
              descriptor.execution != CustomExecution::Signal) ||
             (descriptor.outputIsColor && descriptor.outputWidth != 4))
@@ -1090,6 +1447,7 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
     };
     auto valuesSize = std::size_t{count} * 4 * sizeof(double);
     auto totalWorkBytes = valuesSize;
+    auto needsSignalPayloads = false;
     auto curveDataBytes = std::size_t{0};
     for (auto index = std::uint32_t{0}; index < count; ++index)
     {
@@ -1136,7 +1494,8 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
             totalCurveKeys += curveKeyCount;
             continue;
         }
-        if (opcode >= 1 && opcode <= 39)
+        if ((opcode >= 1 && opcode <= 39) ||
+            (version >= 10 && opcode >= int32Opcode && opcode <= int32ToFloatOpcode))
         {
             if (!validTypedInstruction(current, index)) return Result::InvalidBinary;
             auto inputA = read32(current + 24);
@@ -1155,6 +1514,24 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
             for (auto byte = typedInstructionSize; byte < customInstructionSize; ++byte)
                 if (!(version >= 8 && byte >= 112 && byte < 116) && current[byte] != 0)
                     return Result::InvalidBinary;
+            continue;
+        }
+        if (opcode == currentPhaseOpcode || opcode == phaseTimeOpcode)
+        {
+            if (version < 11 || current[17] != 1 || current[18] != 0 || current[19] != 0 ||
+                current[20] != 0 || current[21] != 0 || current[22] != 0 || current[23] != 0 ||
+                read32(current + 24) != noInput || read32(current + 28) != noInput)
+                return Result::InvalidBinary;
+            constexpr auto phaseEnum = std::array<std::uint8_t, 16>{
+                0x4a, 0x94, 0xe8, 0x82, 0x39, 0xe8, 0x4e, 0xfb,
+                0x92, 0xc7, 0x18, 0, 0, 0, 0, 0x30};
+            for (auto byte = 32u; byte < customInstructionSize; ++byte)
+            {
+                if (byte >= 112 && byte < 116) continue;
+                auto expected = opcode == currentPhaseOpcode && byte >= 96 && byte < 112
+                    ? phaseEnum[byte - 96] : std::uint8_t{};
+                if (current[byte] != expected) return Result::InvalidBinary;
+            }
             continue;
         }
         if (opcode == enumValueOpcode || opcode == enumSelectOpcode || opcode == branchTimeOpcode)
@@ -1177,7 +1554,7 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
             else if (opcode == enumSelectOpcode)
             {
                 if (current[17] < 1 || current[17] > 4 || current[18] != 1 ||
-                    inputA == noInput || instruction(data, 3, inputA)[16] != enumValueOpcode)
+                    inputA == noInput || !isEnumSourceOpcode(instruction(data, 3, inputA)[16]))
                     return Result::InvalidBinary;
             }
             else if (current[17] != 1 || current[18] != 0 || inputA != noInput ||
@@ -1195,7 +1572,7 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
         {
             if (version < 9 || current[18] > customMaxPorts || current[19] > customMaxPorts ||
                 current[20] != 0 || current[21] != 0 || current[22] != 0 || current[23] != 0 ||
-                read32(current + 44) != 0 || read32(current + 40) == 0)
+                (version < 11 && read32(current + 44) != 0) || read32(current + 40) == 0)
                 return Result::InvalidBinary;
             auto registeredType = false;
             auto descriptor = findLogicalDescriptor(current + 24, read32(current + 40), registeredType);
@@ -1204,6 +1581,11 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
             if (!validLogicalDescriptor(*descriptor) || descriptor->inputCount != current[18] ||
                 descriptor->outputWidth != current[17] || descriptor->signalBranchCount != current[19])
                 return Result::UnsupportedBinary;
+            if (std::memcmp(current + 24, logicalSignalCaptureTypeId.data(), 16) == 0)
+            {
+                if (version < 11) return Result::UnsupportedBinary;
+                needsSignalPayloads = true;
+            }
             auto alignedStateOffset = std::size_t{0};
             if (!alignUp(totalWorkBytes, descriptor->stateAlignment, alignedStateOffset) ||
                 descriptor->stateBytes > std::numeric_limits<std::size_t>::max() - alignedStateOffset)
@@ -1252,8 +1634,9 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
                 }
                 else if (target != noInput) return Result::InvalidBinary;
             }
-            for (auto byte = 116u; byte < 208; ++byte)
-                if (current[byte] != 0) return Result::InvalidBinary;
+            if (version < 11)
+                for (auto byte = 116u; byte < 208; ++byte)
+                    if (current[byte] != 0) return Result::InvalidBinary;
             if (version < 5)
                 for (auto byte = 224u; byte < customInstructionSize; ++byte)
                     if (current[byte] != 0) return Result::InvalidBinary;
@@ -1265,10 +1648,10 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
         auto branchCount = current[19];
         auto outputWidth = current[17];
         if (inputCount > customMaxPorts || (current[20] & 0xfe) != 0 || current[21] != 0 ||
-            current[22] != 0 || current[23] != 0 || read32(current + 44) != 0 ||
+            current[22] != 0 || current[23] != 0 || (version < 11 && read32(current + 44) != 0) ||
             read32(current + 40) == 0 ||
             (opcode == customParameterOpcode && (outputWidth < 1 || outputWidth > 4 || branchCount != 0)) ||
-            (opcode == customSignalOpcode && (outputWidth != 0 || branchCount < 1 || branchCount > customMaxPorts ||
+            (opcode == customSignalOpcode && (outputWidth != 0 || branchCount > customMaxPorts ||
                                                current[20] != 0)))
             return Result::InvalidBinary;
         if (version < 5 || opcode != customSignalOpcode)
@@ -1391,7 +1774,7 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
             std::uint16_t enumSelectCount = 0;
             std::uint16_t enumGuardCount = 0;
             auto enumMetadataOffset = routeDataOffset + routeBytes;
-            if (!validEnumBranchMetadata(data, size, enumMetadataOffset, count, enumMetadataEnd,
+            if (!validEnumBranchMetadata(data, size, enumMetadataOffset, version, count, enumMetadataEnd,
                     enumSelectRecordsOffset, enumGuardRecordsOffset, enumGuardValuesOffset,
                     enumValueCount, enumSelectCount, enumGuardCount))
                 return Result::InvalidBinary;
@@ -1498,6 +1881,11 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
     }
     if (version < 5 && routeDataOffset != size)
         return Result::InvalidBinary;
+    if (version >= 10 &&
+        (!validValueTypeMetadata(data, binarySize, valueTypeMetadataOffset, count) ||
+         !validEnumSelectValueTypes(data, valueTypeMetadataOffset, out.enumBranchMetadataOffset_,
+             out.enumSelectRecordsOffset_, out.enumSelectCount_, count)))
+        return Result::InvalidBinary;
     auto stackOffset = totalWorkBytes;
     auto logicalQueueCapacity = std::size_t{0};
     if (version >= 9)
@@ -1510,6 +1898,16 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
                 std::numeric_limits<std::size_t>::max() - stackOffset)
             return Result::InvalidBinary;
         totalWorkBytes = stackOffset + logicalQueueCapacity * sizeof(LogicalQueuedSignal);
+        if (needsSignalPayloads)
+        {
+            auto payloadOffset = std::size_t{};
+            if (!alignUp(totalWorkBytes, alignof(SignalPayload), payloadOffset) ||
+                logicalQueueCapacity > (std::numeric_limits<std::size_t>::max() - payloadOffset) /
+                    sizeof(SignalPayload))
+                return Result::InvalidBinary;
+            out.signalPayloadQueueOffset_ = payloadOffset;
+            totalWorkBytes = payloadOffset + logicalQueueCapacity * sizeof(SignalPayload);
+        }
     }
     else if (routeBytes != 0)
     {
@@ -1587,6 +1985,7 @@ auto Program::load(const void* bytes, std::size_t size, const CustomNodeDescript
     out.signalStackCapacity_ = version >= 9 ? logicalQueueCapacity : routeBytes / 4;
     out.gameIoPortCount_ = version >= 6 ?
         (out.gameIoMetadataOffset_ != 0 ? read16(data + out.gameIoMetadataOffset_ + 4) : 0) : 0;
+    out.valueTypeMetadataOffset_ = valueTypeMetadataOffset;
     out.branchClockOffset_ = branchClockOffset;
     out.logicalEventMaskOffset_ = logicalEventMaskOffset;
     out.logicalDirtyOffset_ = logicalDirtyOffset;
@@ -1643,6 +2042,51 @@ auto Program::parameterValueCount() const noexcept -> std::size_t
     return std::size_t{nodeCount_} * (version_ == 1 ? 2 : version_ == 2 ? 8 : 16);
 }
 
+auto Program::valueType(std::size_t instructionIndex, ValueType& out) const noexcept -> Result
+{
+    if (bytes_ == nullptr || instructionIndex >= nodeCount_) return Result::InvalidArgument;
+    if (version_ >= 10)
+    {
+        auto type = valueTypeRecord(bytes_, valueTypeMetadataOffset_,
+            static_cast<std::uint32_t>(instructionIndex))[0];
+        if (type > valueTypeEnum) return Result::InvalidBinary;
+        out = static_cast<ValueType>(type);
+        return Result::Ok;
+    }
+
+    auto current = instruction(bytes_, version_, static_cast<std::uint32_t>(instructionIndex));
+    auto opcode = current[16];
+    if (isEnumSourceOpcode(opcode))
+    {
+        out = ValueType::Enum;
+        return Result::Ok;
+    }
+    if (opcode == customSignalOpcode)
+    {
+        out = ValueType::None;
+        return Result::Ok;
+    }
+    if (opcode == customParameterOpcode && bindings_ != nullptr &&
+        bindings_[instructionIndex].descriptor != nullptr)
+    {
+        auto descriptor = bindings_[instructionIndex].descriptor;
+        auto type = typeForShape(descriptor->outputWidth, descriptor->outputIsColor);
+        if (type == 0) return Result::InvalidValueType;
+        out = static_cast<ValueType>(type);
+        return Result::Ok;
+    }
+    if (version_ == 1)
+    {
+        if (opcode < 1 || opcode > 6) return Result::InvalidValueType;
+        out = ValueType::Float;
+        return Result::Ok;
+    }
+    auto type = typeForShape(current[17], (current[20] & 1) != 0);
+    if (type == 0) return Result::InvalidValueType;
+    out = static_cast<ValueType>(type);
+    return Result::Ok;
+}
+
 auto Program::defaultsAlignment() const noexcept -> std::size_t
 {
     return alignof(double);
@@ -1656,7 +2100,7 @@ auto Instance::initialize(const Program& program, double* work, std::size_t work
 auto Instance::initialize(const Program& program, double* work, std::size_t workCount,
                           double* defaults, std::size_t defaultsCount) noexcept -> Result
 {
-    if (dispatching_) return Result::Busy;
+    if (dispatching_ || debugging_.beforeNode != nullptr) return Result::Busy;
     if (phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
     auto profileScope = ProfileScope(profiling_, ProfileEvent::Initialize);
     auto workBytes = program.workBytes();
@@ -1684,7 +2128,8 @@ auto Instance::initialize(const Program& program, double* work, std::size_t work
                 defaults[index * 2] = readDouble(current + 28);
                 defaults[index * 2 + 1] = readDouble(current + 36);
             }
-            else if (program.version_ == 2 || current[16] <= 39 || current[16] == curveOpcode)
+            else if (program.version_ == 2 || current[16] <= 39 || current[16] == curveOpcode ||
+                     (current[16] >= int32Opcode && current[16] <= int32ToFloatOpcode))
                 for (auto lane = 0u; lane < 8; ++lane)
                     defaults[index * (program.version_ >= 3 ? 16 : 8) + lane] =
                         readDouble(current + (lane < 4 ? 32 + lane * 8 : 64 + (lane - 4) * 8));
@@ -1748,6 +2193,11 @@ auto Instance::initialize(const Program& program, double* work, std::size_t work
     logicalQueueCount_ = 0;
     generatedQueueSeeded_ = false;
     generatedSignalsPending_ = false;
+    forceRequestsEnabled_ = false;
+    forceScope_ = 0;
+    currentPhase_ = pendingPhase_ = 0;
+    phaseStartTime_ = pendingPhaseTime_ = 0;
+    quality_ = {};
     pendingTimeContext_ = false;
     evaluatedTimeContext_ = false;
     result_ = Result::NotReady;
@@ -1767,6 +2217,68 @@ auto Instance::setProfiling(const ProfilingHooks& profiling) noexcept -> Result
     profiling_ = profiling;
     return Result::Ok;
 }
+
+auto Instance::setDebugHooks(const ExecutionDebugHooks& hooks) noexcept -> Result
+{
+    if (dispatching_ || phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
+    if (hooks.beforeNode != nullptr && program_ == nullptr) return Result::NotReady;
+    debugging_ = hooks;
+    return Result::Ok;
+}
+
+auto Instance::beforeDebugNode(std::uint32_t index) noexcept -> Result
+{
+    if (debugging_.beforeNode == nullptr) return Result::Ok;
+    auto current = instruction(program_->bytes_, program_->version_, index);
+    auto opcode = current[16];
+    auto values = std::array<DebugInputValue, 2>{};
+    auto count = opcode == 2 || opcode == curveOpcode || opcode == branchTimeOpcode ||
+        opcode == currentPhaseOpcode || opcode == phaseTimeOpcode ? std::size_t{} :
+        ((opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22) ||
+            (opcode >= int32AddOpcode && opcode <= int32DivideOpcode)) ? std::size_t{2} : std::size_t{1};
+    for (auto slot = std::size_t{}; slot < count; ++slot)
+    {
+        auto& value = values[slot];
+        value.slot = static_cast<std::uint8_t>(slot);
+        value.kind = DebugValueKind::Numeric;
+        if (program_->version_ == 1)
+        {
+            auto source = read32(current + 20 + slot * 4);
+            value.width = 1;
+            value.connected = source != noInput;
+            if (value.connected)
+                std::memcpy(value.sourceNodeId, instruction(program_->bytes_, 1, source), 16);
+            value.components[0] = value.connected ? work_[source] :
+                defaults_ != nullptr ? defaults_[index * 2 + slot] : readDouble(current + 28 + slot * 8);
+            continue;
+        }
+        auto source = read32(current + 24 + slot * 4);
+        value.connected = source != noInput;
+        if (value.connected)
+            std::memcpy(value.sourceNodeId, instruction(program_->bytes_, program_->version_, source), 16);
+        value.width = current[17];
+        if (opcode == enumValueOpcode) value.kind = DebugValueKind::Int32;
+        if (opcode >= 23 && opcode <= 25) value.width = 1;
+        if (opcode >= 29 && opcode <= 34) value.width = opcode <= 30 ? 2 : opcode <= 32 ? 3 : 4;
+        if (opcode >= 35 && opcode <= 39) value.width = 4;
+        if (value.width == 4 && (opcode == 10 || opcode == 38 || (current[20] & (2u << slot)) != 0))
+            value.kind = DebugValueKind::Color;
+        if (program_->version_ >= 10)
+        {
+            auto type = valueTypeRecord(program_->bytes_, program_->valueTypeMetadataOffset_, index)[2 + slot];
+            value.width = valueTypeWidth(type);
+            value.kind = type == valueTypeInt32 || type == valueTypeEnum ? DebugValueKind::Int32 :
+                type == valueTypeColor ? DebugValueKind::Color : DebugValueKind::Numeric;
+        }
+        for (auto lane = 0u; lane < value.width; ++lane)
+            value.components[lane] = value.connected ? work_[source * 4 + current[21 + slot] + lane] :
+                defaults_ != nullptr ? defaults_[index * (program_->version_ >= 3 ? 16 : 8) + slot * 4 + lane] :
+                readDouble(current + 32 + slot * 32 + lane * 8);
+    }
+    return debugging_.beforeNode(debugging_.context, {current, values.data(), count, time_});
+}
+
+#include "ExecutionDebugCapture.inl"
 
 void Instance::cleanupStates() noexcept
 {
@@ -1829,8 +2341,13 @@ auto Instance::bindParameter(const std::uint8_t nodeId[16], std::uint8_t inputSl
                         (opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22)) laneCount = width;
                     else if (opcode == 29 || opcode == 30 || opcode == 32) laneCount = 1;
                     else if (opcode >= 35 && opcode <= 37) laneCount = width;
+                    else if (opcode == int32Opcode ||
+                             (opcode >= int32AddOpcode && opcode <= int32DivideOpcode) ||
+                             opcode == floatToInt32Opcode || opcode == int32ToFloatOpcode) laneCount = 1;
                 }
                 else if ((opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22)) laneCount = width;
+                else if (inputSlot == 1 && opcode >= int32AddOpcode && opcode <= int32DivideOpcode)
+                    laneCount = 1;
             }
             if (component >= laneCount) return Result::InvalidValueType;
             out = {program_, generation_, program_->generation_, index, inputSlot, component};
@@ -1877,6 +2394,19 @@ auto Instance::value(const ValueHandle& handle, double out[4]) const noexcept ->
     return Result::Ok;
 }
 
+auto Instance::valueInt32(const ValueHandle& handle, std::int32_t& out) const noexcept -> Result
+{
+    auto values = std::array<double, 4>{};
+    auto status = value(handle, values.data());
+    if (status != Result::Ok) return status;
+    auto type = ValueType::None;
+    status = program_->valueType(handle.nodeIndex, type);
+    if (status != Result::Ok) return status;
+    if (type != ValueType::Int32 || handle.componentCount != 1)
+        return Result::InvalidValueType;
+    return int32FromDouble(values[0], out);
+}
+
 auto Instance::parameter(const ParameterHandle& handle, double& out) const noexcept -> Result
 {
     auto profileScope = ProfileScope(profiling_, ProfileEvent::ReadParameter, handle.nodeIndex, profiling_.accessors);
@@ -1910,9 +2440,13 @@ auto Instance::parameter(const ParameterHandle& handle, double& out) const noexc
                 (opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22)) laneCount = width;
             else if (opcode == 29 || opcode == 30 || opcode == 32) laneCount = 1;
             else if (opcode >= 35 && opcode <= 37) laneCount = width;
+            else if (opcode == int32Opcode ||
+                     (opcode >= int32AddOpcode && opcode <= int32DivideOpcode) ||
+                     opcode == floatToInt32Opcode || opcode == int32ToFloatOpcode) laneCount = 1;
         }
         else if (handle.inputSlot == 1 &&
-                 ((opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22))) laneCount = width;
+                 ((opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22) ||
+                  (opcode >= int32AddOpcode && opcode <= int32DivideOpcode))) laneCount = width;
         valid = handle.inputSlot <= 1 && handle.component < laneCount;
     }
     if (!valid) return Result::InvalidHandle;
@@ -1944,6 +2478,11 @@ auto Instance::setParameter(const ParameterHandle& handle, double value) noexcep
         return Result::InvalidHandle;
     if (!std::isfinite(value)) return Result::NonFinite;
     auto node = instruction(program_->bytes_, program_->version_, handle.nodeIndex);
+    if (program_->version_ >= 10 && handle.inputSlot < 4 &&
+        valueTypeRecord(program_->bytes_, program_->valueTypeMetadataOffset_, handle.nodeIndex)
+                [2 + handle.inputSlot] == valueTypeInt32 &&
+        !validInt32(value))
+        return Result::InvalidValueType;
     if (node[16] == enumValueOpcode &&
         (handle.inputSlot != 0 || handle.component != 0 || std::trunc(value) != value ||
          value < std::numeric_limits<std::int32_t>::min() ||
@@ -1978,9 +2517,13 @@ auto Instance::setParameter(const ParameterHandle& handle, double value) noexcep
                 (opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22)) laneCount = width;
             else if (opcode == 29 || opcode == 30 || opcode == 32) laneCount = 1;
             else if (opcode >= 35 && opcode <= 37) laneCount = width;
+            else if (opcode == int32Opcode ||
+                     (opcode >= int32AddOpcode && opcode <= int32DivideOpcode) ||
+                     opcode == floatToInt32Opcode || opcode == int32ToFloatOpcode) laneCount = 1;
         }
         else if (handle.inputSlot == 1 &&
-                 ((opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22))) laneCount = width;
+                 ((opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22) ||
+                  (opcode >= int32AddOpcode && opcode <= int32DivideOpcode))) laneCount = width;
         if (handle.inputSlot > 1 || handle.component >= laneCount) return Result::InvalidHandle;
         if (program_->version_ == 1)
             defaults_[handle.nodeIndex * 2 + handle.inputSlot] = value;
@@ -1988,6 +2531,34 @@ auto Instance::setParameter(const ParameterHandle& handle, double value) noexcep
             defaults_[handle.nodeIndex * (program_->version_ >= 3 ? 16 : 8) +
                 handle.inputSlot * 4 + handle.component] = value;
     }
+    return Result::Ok;
+}
+
+auto Instance::setParameterInt32(const ParameterHandle& handle, std::int32_t value) noexcept -> Result
+{
+    auto currentValue = 0.0;
+    auto status = parameter(handle, currentValue);
+    if (status != Result::Ok) return status;
+    if (program_ == nullptr || program_->version_ < 10 || handle.inputSlot >= 4 ||
+        valueTypeRecord(program_->bytes_, program_->valueTypeMetadataOffset_, handle.nodeIndex)
+            [2 + handle.inputSlot] != valueTypeInt32)
+        return Result::InvalidValueType;
+    return setParameter(handle, static_cast<double>(value));
+}
+
+auto Instance::setHostQuality(const HostQualitySnapshot& snapshot) noexcept -> Result
+{
+    if (dispatching_ || phase_.load(std::memory_order_acquire) == Phase::Running ||
+        generatedSignalsPending_ || logicalQueueCount_ != 0)
+        return Result::Busy;
+    if (!program_) return Result::InvalidArgument;
+    if (static_cast<unsigned>(snapshot.availability) >
+            static_cast<unsigned>(HostQualityAvailability::Unsupported) ||
+        (snapshot.availability == HostQualityAvailability::Known &&
+            (static_cast<unsigned>(snapshot.tier) > static_cast<unsigned>(HostQualityTier::Cinematic) ||
+             static_cast<unsigned>(snapshot.source) > static_cast<unsigned>(HostQualitySource::PlatformPolicy))))
+        return Result::InvalidValueType;
+    quality_ = snapshot;
     return Result::Ok;
 }
 
@@ -2051,6 +2622,11 @@ auto Instance::setParameter(const std::uint8_t nodeId[16], std::uint8_t inputSlo
         auto current = instruction(program_->bytes_, program_->version_, index);
         if (std::memcmp(current, nodeId, 16) != 0) continue;
         auto opcode = current[16];
+        if (program_->version_ >= 10 &&
+            valueTypeRecord(program_->bytes_, program_->valueTypeMetadataOffset_, index)
+                [2 + inputSlot] == valueTypeInt32 &&
+            !validInt32(value))
+            return Result::InvalidValueType;
         if (program_->version_ >= 3 &&
             (opcode == customParameterOpcode || opcode == customSignalOpcode))
         {
@@ -2078,9 +2654,14 @@ auto Instance::setParameter(const std::uint8_t nodeId[16], std::uint8_t inputSlo
             else if ((opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22)) laneCount = width;
             else if (opcode == 29 || opcode == 30 || opcode == 32) laneCount = 1;
             else if (opcode >= 35 && opcode <= 37) laneCount = width;
+            else if (opcode == int32Opcode ||
+                     (opcode >= int32AddOpcode && opcode <= int32DivideOpcode) ||
+                     opcode == floatToInt32Opcode || opcode == int32ToFloatOpcode) laneCount = 1;
         }
         else if ((opcode >= 3 && opcode <= 6) || (opcode >= 11 && opcode <= 22))
             laneCount = width;
+        else if (inputSlot == 1 && opcode >= int32AddOpcode && opcode <= int32DivideOpcode)
+            laneCount = 1;
         if (component >= laneCount) return Result::InvalidValueType;
         if (opcode >= 26 && opcode <= 28)
         {
@@ -2116,6 +2697,21 @@ auto Instance::setSignalObserver(SignalObserver observer, void* context) noexcep
     if (observer != nullptr && context == nullptr) return Result::InvalidArgument;
     signalObserver_ = observer;
     signalObserverContext_ = context;
+    return Result::Ok;
+}
+
+auto Instance::enableForceRequests() noexcept -> Result
+{
+    if (dispatching_ || phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
+    if (!program_) return Result::NotReady;
+    forceRequestsEnabled_ = true;
+    return Result::Ok;
+}
+
+auto Instance::pendingForceRequest(std::uint8_t& scope) const noexcept -> Result
+{
+    if (dispatching_ || phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
+    scope = forceScope_;
     return Result::Ok;
 }
 
@@ -2298,10 +2894,14 @@ auto Instance::dispatchSignalV9(const SignalHandle& entry, double time,
     if (program_->logicalQueueCapacity_ == 0) return Result::InvalidBinary;
     auto queue = reinterpret_cast<LogicalQueuedSignal*>(
         reinterpret_cast<std::uint8_t*>(work_) + program_->logicalQueueOffset_);
+    auto payloadQueue = program_->signalPayloadQueueOffset_ == 0 ? nullptr :
+        reinterpret_cast<SignalPayload*>(reinterpret_cast<std::uint8_t*>(work_) +
+            program_->signalPayloadQueueOffset_);
     if (resumeBranch >= 0)
         queue[0] = {entry.nodeIndex, static_cast<std::uint8_t>(resumeBranch), 2, 0};
     else
         queue[0] = {entry.nodeIndex, 0, 1, 0};
+    if (payloadQueue != nullptr) payloadQueue[0] = {};
     logicalQueueHead_ = 0;
     logicalQueueCount_ = 1;
     time_ = time;
@@ -2318,10 +2918,16 @@ auto Instance::drainLogicalSignals(std::size_t maxInstructions, bool seedGenerat
     if (status != Result::Ok) return status;
     auto queue = reinterpret_cast<LogicalQueuedSignal*>(
         reinterpret_cast<std::uint8_t*>(work_) + program_->logicalQueueOffset_);
-    auto enqueue = [&](std::uint32_t nodeIndex, std::uint8_t inputSlot, std::uint8_t isRoot) noexcept -> Result {
+    auto payloadQueue = program_->signalPayloadQueueOffset_ == 0 ? nullptr :
+        reinterpret_cast<SignalPayload*>(reinterpret_cast<std::uint8_t*>(work_) +
+            program_->signalPayloadQueueOffset_);
+    auto activePayload = SignalPayload{};
+    auto enqueue = [&](std::uint32_t nodeIndex, std::uint8_t inputSlot, std::uint8_t isRoot,
+                       std::uint32_t sourceIndex) noexcept -> Result {
         if (logicalQueueCount_ >= program_->logicalQueueCapacity_) return Result::InstructionBudgetExceeded;
         auto tail = (logicalQueueHead_ + logicalQueueCount_) % program_->logicalQueueCapacity_;
-        queue[tail] = {nodeIndex, inputSlot, isRoot, 0};
+        queue[tail] = {nodeIndex, inputSlot, isRoot, static_cast<std::uint16_t>(sourceIndex + 1)};
+        if (payloadQueue != nullptr) payloadQueue[tail] = activePayload;
         ++logicalQueueCount_;
         return Result::Ok;
     };
@@ -2362,7 +2968,7 @@ auto Instance::drainLogicalSignals(std::size_t maxInstructions, bool seedGenerat
             auto record = program_->bytes_ + program_->logicalSignalRoutesOffset_ +
                 routeIndex * logicalSignalRouteRecordSize;
             if (read32(record) != sourceIndex || record[4] != branch) break;
-            auto result = enqueue(read32(record + 8), record[5], 0);
+            auto result = enqueue(read32(record + 8), record[5], 0, sourceIndex);
             if (result != Result::Ok) return result;
             ++routeIndex;
         }
@@ -2419,6 +3025,21 @@ auto Instance::drainLogicalSignals(std::size_t maxInstructions, bool seedGenerat
     {
         if (visited >= maxInstructions) return Result::InstructionBudgetExceeded;
         auto event = queue[logicalQueueHead_];
+        activePayload = payloadQueue == nullptr ? SignalPayload{} : payloadQueue[logicalQueueHead_];
+        for (auto fieldIndex = std::size_t{}; fieldIndex < activePayload.size(); ++fieldIndex)
+        {
+            auto field = activePayload.field(fieldIndex);
+            auto sourceIndex = 0u;
+            for (; sourceIndex < program_->nodeCount_; ++sourceIndex)
+                if (std::memcmp(instruction(program_->bytes_, 3, sourceIndex), field->id.data(), 16) == 0)
+                    break;
+            if (sourceIndex == program_->nodeCount_ || field->kind != SignalValueKind::Vector4)
+                return Result::InvalidBinary;
+            std::copy_n(field->components, 4, work_ + sourceIndex * 4);
+            (reinterpret_cast<std::uint8_t*>(work_) + program_->logicalDirtyOffset_)[sourceIndex] = 1;
+        }
+        status = refreshDirtyPure();
+        if (status != Result::Ok) return status;
         auto current = instruction(program_->bytes_, 3, event.nodeIndex);
         if (event.isRoot == 2)
         {
@@ -2433,7 +3054,7 @@ auto Instance::drainLogicalSignals(std::size_t maxInstructions, bool seedGenerat
             continue;
         }
         ++visited;
-        auto guardId = read32(current + 112);
+        auto guardId = branchGuard(current, program_->version_);
         if (guardId != noInput && !isBranchActive(guardId))
         {
             --logicalQueueCount_;
@@ -2445,12 +3066,6 @@ auto Instance::drainLogicalSignals(std::size_t maxInstructions, bool seedGenerat
             return Result::InvalidBinary;
         if (event.isRoot == 1 && current[16] != customSignalOpcode)
             return Result::InvalidValueType;
-        if (signalObserver_ != nullptr)
-        {
-            status = signalObserver_(signalObserverContext_, current);
-            if (status != Result::Ok) return status;
-        }
-
         auto maxFanout = std::size_t{0};
         auto logicalDescriptor = program_->bindings_[event.nodeIndex].logicalDescriptor;
         auto customDescriptor = program_->bindings_[event.nodeIndex].descriptor;
@@ -2499,7 +3114,7 @@ auto Instance::drainLogicalSignals(std::size_t maxInstructions, bool seedGenerat
                 inputs.data(), inputCount, inputWidths.data(), work_ + event.nodeIndex * 4, outputWidth,
                 state, logicalDescriptor->stateBytes,
                 0,
-                evaluationSerial_, event.inputSlot, 0};
+                evaluationSerial_, event.inputSlot, 0, time_, &quality_};
             auto record = static_cast<const std::uint8_t*>(nullptr);
             for (auto logicalIndex = 0u; logicalIndex < program_->logicalInstructionCount_; ++logicalIndex)
             {
@@ -2509,6 +3124,14 @@ auto Instance::drainLogicalSignals(std::size_t maxInstructions, bool seedGenerat
             }
             if (record == nullptr) return Result::InvalidBinary;
             invocation.configuration = read32(record + 24);
+            status = debugResolvedInputs(event.nodeIndex, time_, inputs.data(), inputWidths.data(), nullptr,
+                event.reserved == 0 ? nullptr : instruction(program_->bytes_, 3, event.reserved - 1));
+            if (status != Result::Ok) return status;
+            if (signalObserver_ != nullptr)
+            {
+                status = signalObserver_(signalObserverContext_, current);
+                if (status != Result::Ok) return status;
+            }
             status = logicalDescriptor->onSignal(invocation);
             if (status != Result::Ok) return status;
             auto validBranches = logicalDescriptor->signalBranchCount == 0 ? std::uint64_t{0} :
@@ -2517,6 +3140,16 @@ auto Instance::drainLogicalSignals(std::size_t maxInstructions, bool seedGenerat
                 return Result::InvalidValueType;
             for (auto lane = 0u; lane < outputWidth; ++lane)
                 if (!std::isfinite(work_[event.nodeIndex * 4 + lane])) return Result::NonFinite;
+            if (invocation.captureSignalValue)
+            {
+                if (payloadQueue == nullptr || outputWidth != 4) return Result::UnsupportedBinary;
+                auto field = SignalFieldValue{};
+                std::copy_n(current, 16, field.id.data());
+                field.kind = SignalValueKind::Vector4;
+                std::copy_n(work_ + event.nodeIndex * 4, 4, field.components);
+                status = activePayload.set(field);
+                if (status != Result::Ok) return status;
+            }
             auto dirty = reinterpret_cast<std::uint8_t*>(work_) + program_->logicalDirtyOffset_;
             dirty[event.nodeIndex] = 1;
             --logicalQueueCount_;
@@ -2548,8 +3181,41 @@ auto Instance::drainLogicalSignals(std::size_t maxInstructions, bool seedGenerat
                 inputs.data(), inputCount, inputWidths.data(), nullptr, 0,
                 constants.data(), std::size_t{inputCount} * 4, state, customDescriptor->stateBytes,
                 time_, 0xff, customDescriptor->context, effectTime_, frameDelta_, evaluatedTimeContext_};
+            invocation.signalPayload = &activePayload;
+            status = debugResolvedInputs(event.nodeIndex, time_, inputs.data(), inputWidths.data(),
+                customDescriptor->inputIsColor,
+                event.reserved == 0 ? nullptr : instruction(program_->bytes_, 3, event.reserved - 1));
+            if (status != Result::Ok) return status;
+            if (signalObserver_ != nullptr)
+            {
+                status = signalObserver_(signalObserverContext_, current);
+                if (status != Result::Ok) return status;
+            }
             status = customDescriptor->function(invocation);
             if (status != Result::Ok) return status;
+            if (invocation.deferSignal && activePayload.size() != 0)
+                return Result::UnsupportedBinary;
+            if (invocation.enterPhase != 0)
+            {
+                if (invocation.enterPhase > 3) return Result::InvalidArgument;
+                pendingPhase_ = invocation.enterPhase;
+                pendingPhaseTime_ = time_;
+            }
+            if (invocation.forceScope != 0)
+            {
+                if (!forceRequestsEnabled_) return Result::UnsupportedBinary;
+                if (invocation.forceScope > 2) return Result::InvalidArgument;
+                forceScope_ = invocation.forceScope;
+                deferredCount_ = logicalQueueCount_ = 0;
+                generatedQueueSeeded_ = generatedSignalsPending_ = false;
+                return Result::Ok;
+            }
+            if (current[19] == 0)
+            {
+                --logicalQueueCount_;
+                logicalQueueHead_ = (logicalQueueHead_ + 1) % program_->logicalQueueCapacity_;
+                continue;
+            }
             if (invocation.deferSignal)
             {
                 auto usesBranchTime = guardId != noInput;
@@ -2616,15 +3282,20 @@ auto Instance::refreshDirtyPure() noexcept -> Result
         auto opcode = current[16];
         if (dirty[index] || opcode == customSignalOpcode)
             continue;
-        auto guardId = read32(current + 112);
+        auto guardId = branchGuard(current, program_->version_);
         if (guardId != noInput && !isBranchActive(guardId)) continue;
         auto depends = false;
         if (opcode == customParameterOpcode || opcode == logicalEventSignalOpcode)
         {
             for (auto input = 0u; input < current[18]; ++input)
                 depends = depends || sourceIsDirty(read32(current + 48 + input * 8));
-            if (depends && (opcode == logicalEventSignalOpcode ||
-                !isLatePureBuiltin(program_->bindings_[index].descriptor)))
+            if (depends && opcode == logicalEventSignalOpcode)
+            {
+                if (std::memcmp(current + 24, logicalSignalCaptureTypeId.data(), 16) != 0)
+                    return Result::UnsupportedBinary;
+                continue;
+            }
+            if (depends && !isLatePureBuiltin(program_->bindings_[index].descriptor))
                 return Result::UnsupportedBinary;
         }
         else if (opcode == enumValueOpcode)
@@ -2674,7 +3345,7 @@ auto Instance::dispatchSignalInternal(const SignalHandle& entry, double time,
     auto entryInstruction = instruction(program_->bytes_, 3, index);
     if (entryInstruction[16] != customSignalOpcode)
         return Result::InvalidValueType;
-    if (program_->version_ >= 8 && !isBranchActive(read32(entryInstruction + 112)))
+    if (program_->version_ >= 8 && !isBranchActive(branchGuard(entryInstruction, program_->version_)))
         return resumeBranch >= 0 ? Result::NotReady : Result::Ok;
     if (program_->version_ >= 9)
         return dispatchSignalV9(entry, time, maxInstructions, resumeBranch);
@@ -2688,6 +3359,7 @@ auto Instance::dispatchSignalInternal(const SignalHandle& entry, double time,
     dispatching_ = true;
     auto visited = std::size_t{0};
     auto pending = std::size_t{0};
+    auto predecessor = noInput;
     auto stack = reinterpret_cast<std::uint8_t*>(work_) + program_->signalStackOffset_;
     auto selectBranch = [&](const std::uint8_t* current, unsigned branch) noexcept -> Result {
         if (branch >= current[19]) return Result::InvalidValueType;
@@ -2700,9 +3372,11 @@ auto Instance::dispatchSignalInternal(const SignalHandle& entry, double time,
             {
                 auto target = read32(program_->bytes_ + program_->signalRoutesOffset_ +
                     offset + std::size_t{extra - 1} * 4);
-                std::memcpy(stack + pending++ * sizeof(target), &target, sizeof(target));
+                auto packed = target | ((index + 1) << 16);
+                std::memcpy(stack + pending++ * sizeof(packed), &packed, sizeof(packed));
             }
         }
+        predecessor = index;
         index = read32(current + 208 + branch * 4);
         return Result::Ok;
     };
@@ -2715,12 +3389,15 @@ auto Instance::dispatchSignalInternal(const SignalHandle& entry, double time,
     {
         if (index == noInput)
         {
-            std::memcpy(&index, stack + --pending * sizeof(index), sizeof(index));
+            auto packed = std::uint32_t{};
+            std::memcpy(&packed, stack + --pending * sizeof(packed), sizeof(packed));
+            index = packed & 0xffff;
+            predecessor = (packed >> 16) - 1;
             continue;
         }
         if (++visited > maxInstructions) return Result::InstructionBudgetExceeded;
         auto current = instruction(program_->bytes_, 3, index);
-        if (program_->version_ >= 8 && !isBranchActive(read32(current + 112)))
+        if (program_->version_ >= 8 && !isBranchActive(branchGuard(current, program_->version_)))
         {
             index = noInput;
             continue;
@@ -2729,11 +3406,6 @@ auto Instance::dispatchSignalInternal(const SignalHandle& entry, double time,
         auto descriptor = program_->bindings_[index].descriptor;
         if (descriptor == nullptr || descriptor->execution != CustomExecution::Signal)
             return Result::UnknownCustomNode;
-        if (signalObserver_ != nullptr)
-        {
-            status = signalObserver_(signalObserverContext_, current);
-            if (status != Result::Ok) return status;
-        }
         alignas(customWorkAlignment) auto inputs = std::array<double, customMaxPorts * 4>{};
         auto inputWidths = std::array<std::uint8_t, customMaxPorts>{};
         alignas(customWorkAlignment) auto constants = std::array<double, customMaxPorts * 4>{};
@@ -2753,6 +3425,14 @@ auto Instance::dispatchSignalInternal(const SignalHandle& entry, double time,
         }
         auto state = reinterpret_cast<std::uint8_t*>(work_) +
             stateOffset(program_->bindings_, index);
+        status = debugResolvedInputs(index, time, inputs.data(), inputWidths.data(), descriptor->inputIsColor,
+            predecessor == noInput ? nullptr : instruction(program_->bytes_, 3, predecessor));
+        if (status != Result::Ok) return status;
+        if (signalObserver_ != nullptr)
+        {
+            status = signalObserver_(signalObserverContext_, current);
+            if (status != Result::Ok) return status;
+        }
         for (auto lane = 0u; lane < current[17]; ++lane) work_[index * 4 + lane] = 0;
         auto invocation = CustomNodeInvocation{
             inputs.data(), current[18], inputWidths.data(), nullptr, 0,
@@ -2761,10 +3441,29 @@ auto Instance::dispatchSignalInternal(const SignalHandle& entry, double time,
             effectTime_, frameDelta_, evaluatedTimeContext_};
         status = descriptor->function(invocation);
         if (status != Result::Ok) return status;
+        if (invocation.enterPhase != 0)
+        {
+            if (invocation.enterPhase > 3) return Result::InvalidArgument;
+            pendingPhase_ = invocation.enterPhase;
+            pendingPhaseTime_ = time;
+        }
+        if (invocation.forceScope != 0)
+        {
+            if (!forceRequestsEnabled_) return Result::UnsupportedBinary;
+            if (invocation.forceScope > 2) return Result::InvalidArgument;
+            forceScope_ = invocation.forceScope;
+            deferredCount_ = 0;
+            return Result::Ok;
+        }
+        if (current[19] == 0)
+        {
+            index = noInput;
+            continue;
+        }
         if (invocation.selectedBranch >= current[19]) return Result::InvalidValueType;
         if (invocation.deferSignal)
         {
-            auto guardId = program_->version_ >= 8 ? read32(current + 112) : noInput;
+            auto guardId = program_->version_ >= 8 ? branchGuard(current, program_->version_) : noInput;
             auto usesBranchTime = guardId != noInput;
             auto baseTime = time;
             if (usesBranchTime)
@@ -2796,6 +3495,12 @@ auto Instance::dispatchSignalInternal(const SignalHandle& entry, double time,
 void Instance::run(void* context) noexcept
 {
     auto instance = static_cast<Instance*>(context);
+    if (instance->pendingPhase_ != 0)
+    {
+        instance->currentPhase_ = instance->pendingPhase_ - 1;
+        instance->phaseStartTime_ = instance->pendingPhaseTime_;
+        instance->pendingPhase_ = 0;
+    }
     instance->result_ = instance->evaluate();
     if (instance->program_->version_ >= 9)
     {
@@ -2808,7 +3513,7 @@ void Instance::run(void* context) noexcept
                     std::size_t{logicalIndex} * logicalInstructionRecordSize;
                 auto nodeIndex = read32(record);
                 auto current = instruction(instance->program_->bytes_, 3, nodeIndex);
-                if (!instance->isBranchActive(read32(current + 112)))
+                if (!instance->isBranchActive(branchGuard(current, instance->program_->version_)))
                     continue;
                 auto binding = instance->program_->bindings_[nodeIndex];
                 if (binding.logicalDescriptor == nullptr || binding.logicalDescriptor->commit == nullptr)
@@ -2818,11 +3523,11 @@ void Instance::run(void* context) noexcept
                 auto invocation = LogicalNodeInvocation{
                     nullptr, 0, nullptr, instance->work_ + nodeIndex * 4,
                     binding.logicalDescriptor->outputWidth, state, binding.logicalDescriptor->stateBytes,
-                    read32(record + 24), instance->pendingEvaluationSerial_, 0xff, 0};
+                    read32(record + 24), instance->pendingEvaluationSerial_, 0xff, 0, instance->time_};
                 binding.logicalDescriptor->commit(invocation);
             }
             instance->evaluationSerial_ = instance->pendingEvaluationSerial_;
-            instance->generatedSignalsPending_ = true;
+            instance->generatedSignalsPending_ = instance->program_->logicalInstructionCount_ != 0;
         }
         else
         {
@@ -2958,6 +3663,8 @@ auto Instance::evaluate(bool pureRefresh, const bool* dirty) noexcept -> Result
         for (auto index = std::uint32_t{0}; index < program_->nodeCount_; ++index)
         {
             auto current = instruction(program_->bytes_, 1, index);
+            auto debugStatus = beforeDebugNode(index);
+            if (debugStatus != Result::Ok) return debugStatus;
             auto nodeScope = ProfileScope(profiling_, ProfileEvent::Node, index, profiling_.nodes);
             auto aIndex = read32(current + 20);
             auto bIndex = read32(current + 24);
@@ -3010,7 +3717,7 @@ auto Instance::evaluate(bool pureRefresh, const bool* dirty) noexcept -> Result
                 opcode == logicalEventSignalOpcode)
                 continue;
         }
-        auto guardId = program_->version_ >= 8 ? read32(current + 112) : noInput;
+        auto guardId = program_->version_ >= 8 ? branchGuard(current, program_->version_) : noInput;
         if (guardId != noInput)
         {
             if (pureRefresh)
@@ -3024,6 +3731,12 @@ auto Instance::evaluate(bool pureRefresh, const bool* dirty) noexcept -> Result
                 if (clockStatus != Result::Ok) return clockStatus;
                 if (!active) continue;
             }
+        }
+        if (opcode != customParameterOpcode && opcode != customSignalOpcode &&
+            opcode != logicalEventSignalOpcode && opcode != enumSelectOpcode)
+        {
+            auto debugStatus = beforeDebugNode(index);
+            if (debugStatus != Result::Ok) return debugStatus;
         }
         auto nodeScope = ProfileScope(profiling_, ProfileEvent::Node, index,
             profiling_.nodes && opcode != customSignalOpcode);
@@ -3058,6 +3771,9 @@ auto Instance::evaluate(bool pureRefresh, const bool* dirty) noexcept -> Result
                 constants.data(), std::size_t{current[18]} * 4,
                 state, descriptor->stateBytes, time_, 0xff, descriptor->context,
                 effectTime_, frameDelta_, evaluatedTimeContext_};
+            auto debugStatus = debugResolvedInputs(index, time_, inputs.data(), inputWidths.data(),
+                descriptor->inputIsColor);
+            if (debugStatus != Result::Ok) return debugStatus;
             auto status = descriptor->function(invocation);
             if (status != Result::Ok) return status;
             for (auto lane = 0u; lane < current[17]; ++lane)
@@ -3098,7 +3814,9 @@ auto Instance::evaluate(bool pureRefresh, const bool* dirty) noexcept -> Result
             auto invocation = LogicalNodeInvocation{
                 inputs.data(), current[18], inputWidths.data(), work_ + index * 4, current[17],
                 state, descriptor->stateBytes, read32(record + 24), pendingEvaluationSerial_,
-                0xff, 0};
+                0xff, 0, time_};
+            auto debugStatus = debugResolvedInputs(index, time_, inputs.data(), inputWidths.data());
+            if (debugStatus != Result::Ok) return debugStatus;
             auto status = descriptor->update(invocation);
             if (status != Result::Ok) return status;
             auto validBranches = descriptor->signalBranchCount == 0 ? std::uint64_t{0} :
@@ -3109,6 +3827,13 @@ auto Instance::evaluate(bool pureRefresh, const bool* dirty) noexcept -> Result
                 if (!std::isfinite(work_[index * 4 + lane])) return Result::NonFinite;
             auto eventMasks = reinterpret_cast<std::uint8_t*>(work_) + program_->logicalEventMaskOffset_;
             write64(eventMasks + std::size_t{index} * sizeof(std::uint64_t), invocation.emittedBranches);
+            continue;
+        }
+        if (opcode == currentPhaseOpcode || opcode == phaseTimeOpcode)
+        {
+            if (time_ < phaseStartTime_) return Result::InvalidArgument;
+            work_[index * 4] = opcode == currentPhaseOpcode
+                ? static_cast<double>(currentPhase_) : time_ - phaseStartTime_;
             continue;
         }
         if (opcode == enumValueOpcode)
@@ -3171,6 +3896,8 @@ auto Instance::evaluate(bool pureRefresh, const bool* dirty) noexcept -> Result
                 sourceIndex = read32(selectRecord + 8);
                 defaultValues = selectRecord + 36;
             }
+            auto debugStatus = debugEnumSelect(index, selector, sourceIndex, defaultValues);
+            if (debugStatus != Result::Ok) return debugStatus;
             for (auto lane = 0u; lane < current[17]; ++lane)
                 work_[index * 4 + lane] = sourceIndex == noInput ?
                     readDouble(defaultValues + lane * 8) :
@@ -3211,6 +3938,57 @@ auto Instance::evaluate(bool pureRefresh, const bool* dirty) noexcept -> Result
                     defaults_[index * (program_->version_ >= 3 ? 16 : 8) + 4 + lane]) :
                 work_[bIndex * 4 + current[22] + lane];
         };
+        if (opcode >= int32Opcode && opcode <= int32ToFloatOpcode)
+        {
+            auto a = valueA(0);
+            if (opcode == floatToInt32Opcode)
+            {
+                if (!std::isfinite(a)) return Result::NonFinite;
+                auto truncated = std::trunc(a);
+                if (truncated < std::numeric_limits<std::int32_t>::min() ||
+                    truncated > std::numeric_limits<std::int32_t>::max())
+                    return Result::ArithmeticOverflow;
+                work_[base] = truncated;
+                continue;
+            }
+            auto integerA = std::int32_t{};
+            auto status = int32FromDouble(a, integerA);
+            if (status != Result::Ok) return status;
+            if (opcode == int32Opcode)
+            {
+                work_[base] = integerA;
+                continue;
+            }
+            if (opcode == int32ToFloatOpcode)
+            {
+                work_[base] = static_cast<double>(integerA);
+                continue;
+            }
+            auto integerB = std::int32_t{};
+            status = int32FromDouble(valueB(0), integerB);
+            if (status != Result::Ok) return status;
+            if (opcode == int32DivideOpcode)
+            {
+                if (integerB == 0) return Result::DivideByZero;
+                if (integerA == std::numeric_limits<std::int32_t>::min() && integerB == -1)
+                    return Result::ArithmeticOverflow;
+                work_[base] = integerA / integerB;
+                continue;
+            }
+            auto result = std::int64_t{};
+            if (opcode == int32AddOpcode)
+                result = std::int64_t{integerA} + integerB;
+            else if (opcode == int32SubtractOpcode)
+                result = std::int64_t{integerA} - integerB;
+            else if (opcode == int32MultiplyOpcode)
+                result = std::int64_t{integerA} * integerB;
+            else return Result::UnsupportedBinary;
+            if (result < std::numeric_limits<std::int32_t>::min() ||
+                result > std::numeric_limits<std::int32_t>::max())
+                return Result::ArithmeticOverflow;
+            work_[base] = static_cast<double>(result);
+            continue;
+        }
         if (opcode == 1 || opcode == 7 || opcode == 8 || opcode == 9 || opcode == 10)
         {
             for (auto lane = 0u; lane < outputWidth; ++lane) work_[base + lane] = valueA(lane);

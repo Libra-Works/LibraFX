@@ -81,10 +81,12 @@
                         <Button Command="{Binding SaveMetadataCommand}" Content="{DynamicResource Text.Asset.SaveMetadata}" />
                         <Button Command="{Binding AddModelCommand}" Content="{DynamicResource Text.Asset.AddModel}" />
                         <Button Command="{Binding AddSpriteCommand}" Content="{DynamicResource Text.Asset.AddSprite}" />
+                        <Button Click="OnOpenSpriteEditor" Content="{DynamicResource Text.Sprite.OpenFromAsset}" />
                     </StackPanel>
                     <TextBlock Text="{DynamicResource Text.Resources.Target}" />
                     <ComboBox x:Name="AssignmentTargetPicker" ItemsSource="{Binding AssignmentTargets}"
                               SelectedItem="{Binding SelectedAssignmentTarget}"
+                              IsEnabled="{Binding CanSelectAssignmentTarget}"
                               AutomationProperties.Name="{DynamicResource Text.Resources.Target}" />
                     <TextBlock Text="{Binding AssignmentHint}" TextWrapping="Wrap" />
                     <Button x:Name="AssignResourceButton" Command="{Binding AssignCommand}"
@@ -99,8 +101,93 @@
         </StackPanel>
     </Grid>
     </TabItem>
+    <TabItem Header="{DynamicResource Text.Resources.Roots}">
+        <Grid Margin="16" RowDefinitions="Auto,*,Auto,Auto,Auto" RowSpacing="10">
+            <TextBlock Text="{Binding CallerHint}" TextWrapping="Wrap" />
+            <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="12">
+                <Border Padding="10" BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="1" CornerRadius="4">
+                    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
+                        <TextBlock Text="{DynamicResource Text.Resources.VirtualRoot}" FontWeight="SemiBold" />
+                        <TextBlock Grid.Row="1" Text="{Binding SelectedPeer.Label}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                        <ListBox Grid.Row="2" ItemsSource="{Binding VirtualRootEntries}"
+                                 SelectedItem="{Binding SelectedVirtualRootEntry}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="services:AssetBrowserRootEntry">
+                                    <StackPanel Margin="4">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Path}" FontSize="11"
+                                                   Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+                <Border Grid.Column="1" Padding="10" BorderBrush="{DynamicResource EffectBorderBrush}"
+                        BorderThickness="1" CornerRadius="4">
+                    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto" RowSpacing="8">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <TextBlock Text="{DynamicResource Text.Resources.PhysicalRoot}" FontWeight="SemiBold" />
+                            <Button Grid.Column="1" Command="{Binding RefreshPhysicalRootCommand}"
+                                    Content="{DynamicResource Text.Resources.RefreshRoot}" />
+                        </Grid>
+                        <TextBlock Grid.Row="1" Text="{Binding PhysicalRootLabel}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                        <TextBlock Grid.Row="2" Text="{Binding PhysicalFolderLabel}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                        <ListBox Grid.Row="3" ItemsSource="{Binding PhysicalRootEntries}"
+                                 SelectedItem="{Binding SelectedPhysicalRootEntry}" IsEnabled="{Binding HasPhysicalRoot}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="services:AssetBrowserRootEntry">
+                                    <Grid ColumnDefinitions="Auto,*" Margin="4" ColumnSpacing="8">
+                                        <TextBlock Text="{Binding KindLabel}" />
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding Path}" FontSize="11"
+                                                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <Grid Grid.Row="4" ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
+                            <Button Command="{Binding NavigatePhysicalUpCommand}"
+                                    Content="{DynamicResource Text.Resources.NavigateUp}" />
+                            <Button Grid.Column="1" Command="{Binding OpenPhysicalFolderCommand}"
+                                    Content="{DynamicResource Text.Resources.OpenFolder}"
+                                    IsEnabled="{Binding CanOpenSelectedPhysicalFolder}" />
+                            <TextBox Text="{Binding PhysicalFolderName, UpdateSourceTrigger=PropertyChanged}"
+                                     PlaceholderText="{DynamicResource Text.Resources.FolderName}"
+                                     IsEnabled="{Binding HasPhysicalRoot}" Grid.Column="2" />
+                            <Button Grid.Column="3" Command="{Binding CreatePhysicalFolderCommand}"
+                                    Content="{DynamicResource Text.Resources.CreateFolder}" />
+                        </Grid>
+                        <TextBlock Grid.Row="5" Text="{Binding PhysicalRootStatus}" TextWrapping="Wrap" />
+                    </Grid>
+                </Border>
+            </Grid>
+            <TextBlock Grid.Row="2" Text="{Binding SelectedAssetReference.Identity}" TextWrapping="Wrap"
+                       IsVisible="{Binding HasSelectedAssetReference}" />
+            <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <ComboBox x:Name="RootAssignmentTargetPicker" Grid.Column="0" ItemsSource="{Binding AssignmentTargets}"
+                          SelectedItem="{Binding SelectedAssignmentTarget}"
+                          IsEnabled="{Binding CanSelectAssignmentTarget}"
+                          AutomationProperties.Name="{DynamicResource Text.Resources.Target}" />
+                <TextBlock Grid.Column="1" Text="{Binding AssignmentHint}" TextWrapping="Wrap"
+                           VerticalAlignment="Center" />
+                <Button Grid.Column="2" Command="{Binding AssignCommand}"
+                        Content="{DynamicResource Text.Asset.Assign}" />
+            </Grid>
+            <TextBlock Grid.Row="4" Text="{Binding Status}" TextWrapping="Wrap"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+        </Grid>
+    </TabItem>
     <TabItem Header="{DynamicResource Text.Resources.ProjectAndLocal}">
         <views:ProjectResourcesView DataContext="{Binding ProjectResources}" />
+    </TabItem>
+    <TabItem Header="{DynamicResource Text.Resources.IdentityTitle}">
+        <views:ResourceIdentityView x:Name="ResourceIdentityPane" />
     </TabItem>
     <TabItem Header="{DynamicResource Text.References.Title}">
         <views:AssetReferencesView DataContext="{Binding References}" />

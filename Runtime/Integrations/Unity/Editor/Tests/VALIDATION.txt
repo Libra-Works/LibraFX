@@ -134,6 +134,42 @@ Spawnable CPU lifecycle and material-property mapping:
 Player builds/IL2CPP, consoles, and non-Windows Unity plugins remain unverified.
 No user project or Editor settings were used.
 
+Unity resource identity adapter/runtime delivery verification
+=============================================================
+
+LiberaFxResourceIdentityVerification.RunBatch exercises the real Unity Editor
+AssetDatabase, the adapter's JSON request entry point, and the runtime
+LiberaFxUnityBindingLookup. It creates a temporary Texture2D and Material,
+checks project status/initialization, stable GUID/local-file-ID probes, shader
+schema and parameter probes, wrong-project/format/type failures, rename
+persistence, explicit binding delivery, and runtime resolution of the delivered
+texture, material and authored parameter name.
+
+Run only in a dedicated validation project. Set
+LIBERAFX_VERIFICATION_PROJECT to that project's exact absolute path. The
+verification refuses to run from a different project, refuses to overwrite an
+existing Assets/LiberaFx/LiberaFxBindings.asset or
+resource-identity-verification.txt, and never chooses a project-clone policy.
+If the dedicated project has no identity yet, it explicitly initializes one;
+that project identity asset and Library marker remain after the check. The
+temporary fixture assets and the newly-created binding asset are deleted.
+
+The project must contain the LIBERA FX Unity Runtime and Editor sources and the
+LiberaFx/Atlas Unlit shader. Use a unique Editor log path:
+
+  $env:LIBERAFX_VERIFICATION_PROJECT = (Resolve-Path "<dedicated project>").Path
+  & "<Unity Editor>\Unity.exe" -batchmode -quit `
+    -projectPath "$env:LIBERAFX_VERIFICATION_PROJECT" `
+    -executeMethod LiberaFx.Unity.Editor.LiberaFxResourceIdentityVerification.RunBatch `
+    -logFile "<unique local log path>"
+
+The Unity check emits resource-identity-verification.txt under that dedicated
+project. It validates the actual runtime lookup with the adapter-generated
+opaque identity. The managed ResourceIdentityScopedPackageTests separately
+checks compiler output canonicalization against the binding-asset delivery
+GUID/local-file-ID key and Unity authored-parameter-name contract. This is not
+a player/IL2CPP build or a rendered-pixels test.
+
 Spawnable event/GPU scheduling regressions:
   Unity 7000.0.0a16 actual Play Mode and D3D11 checks passed. A synthetic
   kind-4 event is routed through the production event-batch handler and retains

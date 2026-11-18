@@ -3,12 +3,13 @@ using System.Text.Json.Serialization;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Project;
+using LiberaFx.Models.Resources;
 
 namespace LiberaFx.Services;
 
 public static class ProjectDocumentReader
 {
-    public const int CurrentFormatVersion = 12;
+    public const int CurrentFormatVersion = 13;
     private static readonly JsonSerializerOptions Options = new()
     {
         Converters = { new JsonStringEnumConverter() }
@@ -39,8 +40,11 @@ public static class ProjectDocumentReader
                 connection.TargetPortId, connection.SourcePortId)).ToArray();
         var graph = new GraphSnapshot(nodes, connections)
         {
-            AutoDestroyWhenIdle = document.AutoDestroyWhenIdle
+            AutoDestroyWhenIdle = document.AutoDestroyWhenIdle,
+            ResourceIdentities = document.ResourceIdentities
         };
+        if (document.ResourceIdentities is { } resourceIdentities)
+            ResourceIdentityStore.Validate(resourceIdentities);
         ValidateGraph(graph);
         if (document.FormatVersion >= 2 && document.History is null)
             throw new InvalidDataException("The project file is missing its history timeline.");
@@ -78,5 +82,7 @@ public static class ProjectDocumentReader
         {
             throw new InvalidDataException("The project contains an incomplete graph snapshot.", ex);
         }
+        if (snapshot.ResourceIdentities is { } resourceIdentities)
+            ResourceIdentityStore.Validate(resourceIdentities);
     }
 }

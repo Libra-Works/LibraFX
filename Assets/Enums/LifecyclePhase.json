@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "typeId": "4a94e882-39e8-4efb-92c7-180000000030",
+  "namespace": "LiberaFx",
+  "name": "LifecyclePhase",
+  "values": [
+    { "value": 0, "name": "Start", "displayNameKey": "Lifecycle.Start" },
+    { "value": 1, "name": "Loop", "displayNameKey": "Lifecycle.Loop" },
+    { "value": 2, "name": "End", "displayNameKey": "Lifecycle.End" }
+  ]
+}

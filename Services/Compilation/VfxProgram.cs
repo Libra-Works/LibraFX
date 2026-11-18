@@ -18,7 +18,10 @@ public enum VfxOpcode : byte
     Vector3ToVector4 = 32, Vector4ToVector2 = 33, Vector4ToVector3 = 34,
     MaskVector2 = 35, MaskVector3 = 36, MaskVector4 = 37,
     ColorToVector4 = 38, Vector4ToColor = 39, FCurve = 42,
-    EnumValue = 43, EnumSelect = 44, BranchTime = 45, LogicalEventSignal = 47
+    EnumValue = 43, EnumSelect = 44, BranchTime = 45, LogicalEventSignal = 47,
+    Int32 = 48, Int32Add = 49, Int32Subtract = 50, Int32Multiply = 51,
+    Int32Divide = 52, FloatToInt32 = 53, Int32ToFloat = 54,
+    CurrentPhase = 55, PhaseTime = 56
 }
 
 public readonly record struct VfxInstruction(
@@ -28,6 +31,8 @@ public readonly record struct VfxTypedInstruction(
     Guid NodeId, VfxOpcode Opcode, int OutputWidth, int InputAWidth, int InputBWidth, byte TypeFlags,
     int InputASourceComponent, int InputBSourceComponent, int InputA, int InputB,
     double[] DefaultA, double[] DefaultB, int BranchGuardId = -1);
+
+public readonly record struct VfxNodeValueTypes(GraphValueType OutputType, GraphValueType[] InputTypes);
 
 public readonly record struct VfxEnumValueInstruction(Guid NodeId, Guid TypeId, int InputIndex, int DefaultValue);
 public readonly record struct VfxEnumCaseTarget(int Value, int SourceIndex, double[] DefaultValue);
@@ -64,6 +69,8 @@ public sealed class VfxProgram
     private const int GameIoPortRecordSize = 72;
     private const int EnumBranchHeaderSize = 16;
     private const int LogicalEventHeaderSize = 16;
+    private const int ValueTypeHeaderSize = 8;
+    private const int ValueTypeRecordSize = 8;
     private sealed class BranchGuardBuilder(Guid selectorNodeId, Guid enumTypeId)
     {
         public Guid SelectorNodeId { get; } = selectorNodeId;
@@ -80,6 +87,7 @@ public sealed class VfxProgram
     private readonly VfxBranchGuard[] _branchGuards;
     private readonly VfxLogicalInstruction[] _logicalInstructions;
     private readonly VfxLogicalSignalRoute[] _logicalSignalRoutes;
+    private readonly VfxNodeValueTypes[] _valueTypes;
     private readonly VfxCurveInstruction[] _curveInstructions;
     private readonly GameIoPort[] _gameIoPorts;
     private readonly ushort _version;
@@ -92,6 +100,7 @@ public sealed class VfxProgram
     public IReadOnlyList<VfxBranchGuard> BranchGuards { get; }
     public IReadOnlyList<VfxLogicalInstruction> LogicalInstructions { get; }
     public IReadOnlyList<VfxLogicalSignalRoute> LogicalSignalRoutes { get; }
+    public IReadOnlyList<VfxNodeValueTypes> ValueTypes { get; }
     public IReadOnlyList<VfxCurveInstruction> CurveInstructions { get; }
     public IReadOnlyList<GameIoPort> GameIoPorts { get; }
     public ushort BinaryVersion => _version;
@@ -106,7 +115,8 @@ public sealed class VfxProgram
         VfxEnumSelectInstruction[]? enumSelectInstructions = null,
         VfxBranchGuard[]? branchGuards = null,
         VfxLogicalInstruction[]? logicalInstructions = null,
-        VfxLogicalSignalRoute[]? logicalSignalRoutes = null)
+        VfxLogicalSignalRoute[]? logicalSignalRoutes = null,
+        VfxNodeValueTypes[]? valueTypes = null)
     {
         _instructions = instructions;
         _typedInstructions = typedInstructions;
@@ -116,6 +126,7 @@ public sealed class VfxProgram
         _branchGuards = branchGuards ?? [];
         _logicalInstructions = logicalInstructions ?? [];
         _logicalSignalRoutes = logicalSignalRoutes ?? [];
+        _valueTypes = valueTypes ?? [];
         _curveInstructions = curveInstructions;
         _gameIoPorts = gameIoPorts?.ToArray() ?? [];
         _version = version;
@@ -127,11 +138,15 @@ public sealed class VfxProgram
         BranchGuards = Array.AsReadOnly(_branchGuards);
         LogicalInstructions = Array.AsReadOnly(_logicalInstructions);
         LogicalSignalRoutes = Array.AsReadOnly(_logicalSignalRoutes);
+        ValueTypes = Array.AsReadOnly(_valueTypes);
         CurveInstructions = Array.AsReadOnly(curveInstructions);
         GameIoPorts = Array.AsReadOnly(_gameIoPorts);
     }
 
-    public static VfxProgram Compile(GraphSnapshot graph)
+    public static VfxProgram Compile(GraphSnapshot graph) => Compile(graph, out _);
+
+    public static VfxProgram Compile(GraphSnapshot graph, out byte[] renderConfiguration,
+        IRenderResourceBindingContext? resourceContext = null)
     {
         ValidateForCompilation(graph);
         if (Flatten(graph).Any(node => node.SignalKeys?.Any(key => key.Mode == SignalTimelineMode.Runtime) == true))
@@ -146,7 +161,7 @@ public sealed class VfxProgram
             SpawnableGroupSchema.IsSignalOutput(node.Kind) || node.Kind.Value is "LifeTime" or "OnStart" or
                 "InstanceRemaining" or "InstanceNormalizedAge" or "OwnerDestroy" or "OnDestroy" or "Delay"))
             throw new InvalidDataException("Lifecycle and Spawn boundary nodes require a Spawnable Group package.");
-        return CompileForPackage(graph);
+        return CompileForPackage(graph, out renderConfiguration, resourceContext: resourceContext);
     }
 
     internal static VfxProgram CompileForPackage(GraphSnapshot graph,
@@ -154,7 +169,8 @@ public sealed class VfxProgram
         CompileForPackage(graph, out _, signalTypeOverrides);
 
     internal static VfxProgram CompileForPackage(GraphSnapshot graph, out byte[] renderConfiguration,
-        IReadOnlyDictionary<Guid, Guid>? signalTypeOverrides = null)
+        IReadOnlyDictionary<Guid, Guid>? signalTypeOverrides = null,
+        IRenderResourceBindingContext? resourceContext = null)
     {
         ValidateForCompilation(graph);
         graph = GroupExposedItems.Materialize(graph);
@@ -188,7 +204,7 @@ public sealed class VfxProgram
                 throw new InvalidDataException($"Matrix Game I/O port '{port.Name}' did not lower to four rows.");
             return port with { RuntimeNodeIds = outputs.Select(output => output.NodeId).ToArray() };
         }).ToArray();
-        renderConfiguration = RenderProgramBindings.CreateScene(graph, 0);
+        renderConfiguration = RenderProgramBindings.CreateScene(graph, 0, resourceContext);
         graph = SequenceSchema.Lower(graph);
         var nodes = Flatten(graph)
             .Where(node => node.Kind != GraphNodeKind.Comment && node.Kind != GraphNodeKind.GraphGroup &&
@@ -202,6 +218,7 @@ public sealed class VfxProgram
                               node.Kind == GraphNodeKind.SpawnableGroup || node.Kind == GraphNodeKind.Signal ||
                               GraphEnumBranchSchema.TryGetValueDefinition(node.Kind, out _) ||
                               GraphEnumBranchSchema.TryGetSelector(node.Kind, out _, out _, out _) ||
+                              node.Kind.Value is "CurrentPhase" or "PhaseTime" ||
                               GraphLogicalSchema.IsLogical(definitions[node.Kind])))
             return CompileWithCustomNodes(graph, nodes, definitions, gameIoPorts, signalTypeOverrides);
         foreach (var node in nodes)
@@ -273,6 +290,17 @@ public sealed class VfxProgram
                 return value.EnumerateArray().Select(item => item.GetDouble()).ToArray();
             }
 
+            int IntParameter(string id)
+            {
+                var parameter = definition.Parameters.FirstOrDefault(item => item.Id == id && item.Type == "int")
+                    ?? throw new InvalidDataException($"Node '{node.Name}' is missing Int32 parameter '{id}'.");
+                var value = node.Parameters?.FirstOrDefault(item => item.Id == id && item.Type == "int")?.Value
+                    ?? parameter.DefaultValue;
+                if (!NodeParameter.IsValidValue("int", value) || !value.TryGetInt32(out var number))
+                    throw new InvalidDataException($"Node '{node.Name}' has an invalid Int32 parameter '{id}'.");
+                return number;
+            }
+
             int Input(string? port, int expectedWidth, out int sourceComponent, out bool sourceIsColor)
             {
                 sourceComponent = 0;
@@ -302,7 +330,13 @@ public sealed class VfxProgram
                 return indices[source.Id];
             }
 
-            if (opcode == VfxOpcode.FCurve)
+            if (opcode == VfxOpcode.Int32)
+            {
+                defaultA[0] = IntParameter("value");
+                inputA = Input(null, 1, out inputASourceComponent, out inputAIsColor);
+                inputAWidth = inputA < 0 ? 0 : 1;
+            }
+            else if (opcode == VfxOpcode.FCurve)
             {
                 if (node.Curve is null) throw new InvalidDataException($"Node '{node.Name}' has no F-Curve data.");
                 curveCode.Add(new VfxCurveInstruction(node.Id, node.Curve.Keys.ToArray()));
@@ -327,9 +361,11 @@ public sealed class VfxProgram
             else if (IsArithmetic(opcode))
             {
                 var width = outputWidth;
-                var parameterType = width == 1 ? null : $"vector{width}";
-                double[] defaultsA = parameterType is null ? [Parameter("a")] : VectorParameter("a", width);
-                double[] defaultsB = parameterType is null ? [Parameter("b")] : VectorParameter("b", width);
+                var integerArithmetic = IsInt32Arithmetic(opcode);
+                double[] defaultsA = integerArithmetic ? [IntParameter("a")] :
+                    width == 1 ? [Parameter("a")] : VectorParameter("a", width);
+                double[] defaultsB = integerArithmetic ? [IntParameter("b")] :
+                    width == 1 ? [Parameter("b")] : VectorParameter("b", width);
                 Array.Copy(defaultsA, defaultA, defaultsA.Length);
                 Array.Copy(defaultsB, defaultB, defaultsB.Length);
                 inputA = Input("a", width, out inputASourceComponent, out inputAIsColor);
@@ -364,11 +400,16 @@ public sealed class VfxProgram
         }
 
         ValidateCurveBudget(curveCode);
-        var version = gameIoPorts.Count != 0 ? (ushort)7 :
+        var valueTypes = order.Select((node, index) =>
+            CreateValueTypes(typedCode[index].Opcode, node, definitions[node.Kind])).ToArray();
+        var hasInt32 = valueTypes.Any(item => item.OutputType == GraphValueType.Int32 ||
+            item.InputTypes.Contains(GraphValueType.Int32));
+        var version = hasInt32 ? (ushort)10 : gameIoPorts.Count != 0 ? (ushort)7 :
             curveCode.Count != 0 ? (ushort)4 : needsTyped ? (ushort)2 : (ushort)1;
         var legacy = typedCode.Select(item => new VfxInstruction(item.NodeId, item.Opcode, item.InputA, item.InputB,
             item.DefaultA[0], item.DefaultB[0])).ToArray();
-        return new VfxProgram(legacy, typedCode, [], curveCode.ToArray(), version, gameIoPorts);
+        return new VfxProgram(legacy, typedCode, [], curveCode.ToArray(), version, gameIoPorts,
+            valueTypes: valueTypes);
     }
 
     private static VfxProgram CompileWithCustomNodes(
@@ -449,6 +490,7 @@ public sealed class VfxProgram
                 {
                     if (!propagatedNodes.Add(branchNodeId)) continue;
                     if (selectorAncestors.Contains(branchNodeId)) continue;
+                    if (byId[branchNodeId].Kind.Value is "CurrentPhase" or "PhaseTime") continue;
                     if (!guardsByNode.TryGetValue(branchNodeId, out var nodeGuards))
                         guardsByNode.Add(branchNodeId, nodeGuards = []);
                     if (!nodeGuards.TryGetValue(selectorNode.Id, out var guard))
@@ -579,13 +621,14 @@ public sealed class VfxProgram
         {
             var definition = effective[node.Id];
             var isEventValue = GraphLogicalSchema.IsAnd(definition) || GraphLogicalSchema.IsOr(definition) ||
-                GraphLogicalSchema.IsSignalToNumber(definition);
+                GraphLogicalSchema.IsSignalToNumber(definition) || GraphLogicalSchema.IsSignalCapture(definition) ||
+                GraphLogicalSchema.IsQualityBranch(definition) || GraphLogicalSchema.IsLoopClock(definition);
             var dependsOnEventValue = incoming[node.Id].Any(edge =>
                 lateValues.Contains(edge.SourceNodeId) &&
                 effective[edge.SourceNodeId].GetOutputPortCategory(edge.SourcePortId) == GraphPortCategory.Parameter &&
                 definition.GetInputPortCategory(edge.TargetPortId) == GraphPortCategory.Parameter);
             if (dependsOnEventValue &&
-                (GraphLogicalSchema.IsLogical(definition) ||
+                (GraphLogicalSchema.IsLogical(definition) && !GraphLogicalSchema.IsSignalCapture(definition) ||
                  definition.Runtime is { Execution: "parameter" } && !SupportsLateRefresh(definition)))
                 throw new InvalidDataException(
                     $"Node '{node.Name}' cannot consume a same-update Signal-derived value: " +
@@ -634,6 +677,15 @@ public sealed class VfxProgram
         {
             var node = order[index];
             var definition = effective[node.Id];
+            if (node.Kind.Value is "CurrentPhase" or "PhaseTime")
+            {
+                var phase = node.Kind.Value == "CurrentPhase";
+                typedCode[index] = new(node.Id, phase ? VfxOpcode.CurrentPhase : VfxOpcode.PhaseTime,
+                    1, 0, 0, 0, 0, 0, -1, -1, new double[4], new double[4]);
+                if (phase)
+                    enumValueCode.Add(new(node.Id, Guid.Parse("4a94e882-39e8-4efb-92c7-180000000030"), -1, 0));
+                continue;
+            }
             if (GraphEnumBranchSchema.TryGetValueDefinition(node.Kind, out var enumValueDefinition))
             {
                 if (!GraphEnumDefinition.TryGetTypeId(enumValueDefinition.PortType, out var enumTypeId))
@@ -723,23 +775,31 @@ public sealed class VfxProgram
                 var signalOutputs = (definition.OutputPorts ?? [])
                     .Where(port => definition.GetOutputPortCategory(port.Id) == GraphPortCategory.Signal)
                     .ToArray();
-                var expectedNumericInputs = GraphLogicalSchema.IsCompare(definition) ? 2 : 0;
+                var loopClock = GraphLogicalSchema.IsLoopClock(definition);
+                var qualityBranch = GraphLogicalSchema.IsQualityBranch(definition);
+                var signalCapture = GraphLogicalSchema.IsSignalCapture(definition);
+                var expectedNumericInputs = signalCapture ? 1 : loopClock ? 4 : GraphLogicalSchema.IsCompare(definition) ? 2 : 0;
                 var expectedSignalInputs = GraphLogicalSchema.IsAnd(definition) ||
                     GraphLogicalSchema.IsOr(definition) ? 3 :
-                    GraphLogicalSchema.IsSignalToNumber(definition) ? 2 : 0;
-                var expectedBranches = GraphLogicalSchema.IsCompare(definition) ||
+                    qualityBranch || signalCapture ? 1 :
+                    GraphLogicalSchema.IsSignalToNumber(definition) || loopClock ? 2 : 0;
+                var expectedBranches = qualityBranch ? 2 : signalCapture ? 1 : loopClock ? 3 : GraphLogicalSchema.IsCompare(definition) ||
                     GraphLogicalSchema.IsAnd(definition) || GraphLogicalSchema.IsOr(definition) ? 1 : 0;
-                var expectedNumericInputIds = GraphLogicalSchema.IsCompare(definition)
+                var expectedNumericInputIds = signalCapture ? new[] { "value" } : loopClock ? new[] { "time", "length", "count", "bounded" } :
+                    GraphLogicalSchema.IsCompare(definition)
                     ? GraphLogicalSchema.CompareInputPortIds : Array.Empty<string>();
-                var expectedSignalInputIds = GraphLogicalSchema.IsAnd(definition) ||
+                var expectedSignalInputIds = qualityBranch || signalCapture ? new[] { "signal" } :
+                    loopClock ? new[] { "arm", "reset" } : GraphLogicalSchema.IsAnd(definition) ||
                     GraphLogicalSchema.IsOr(definition) ? GraphLogicalSchema.GateSignalInputPortIds :
-                    GraphLogicalSchema.IsSignalToNumber(definition)
+                    GraphLogicalSchema.IsSignalToNumber(definition) || loopClock
                         ? GraphLogicalSchema.SignalToNumberInputPortIds : Array.Empty<string>();
-                var expectedParameterOutputId = GraphLogicalSchema.IsCompare(definition)
+                var expectedParameterOutputId = GraphLogicalSchema.IsCompare(definition) || qualityBranch
                     ? GraphLogicalSchema.ConditionOutput :
-                    GraphLogicalSchema.IsSignalToNumber(definition)
+                    GraphLogicalSchema.IsSignalToNumber(definition) || loopClock || signalCapture
                         ? GraphLogicalSchema.ValueOutput : GraphLogicalSchema.PulseOutput;
-                var expectedSignalOutputIds = expectedBranches == 0 ? Array.Empty<string>() :
+                var expectedSignalOutputIds = qualityBranch ? new[] { "whenTrue", "whenFalse" } :
+                    signalCapture ? new[] { "signal" } : loopClock ? new[] { "boundary", "complete", "armedBoundary" } :
+                    expectedBranches == 0 ? Array.Empty<string>() :
                     new[] { GraphLogicalSchema.IsCompare(definition)
                         ? GraphLogicalSchema.EventOutput : GraphLogicalSchema.SignalOutput };
                 if (inputPorts.Length != expectedNumericInputs ||
@@ -749,7 +809,7 @@ public sealed class VfxProgram
                     !signalInputs.Select(port => port.Id).SequenceEqual(expectedSignalInputIds) ||
                     parameterOutputs[0].Id != expectedParameterOutputId ||
                     !signalOutputs.Select(port => port.Id).SequenceEqual(expectedSignalOutputIds) ||
-                    definition.GetOutputPortType(parameterOutputs[0].Id) != "Float" ||
+                    definition.GetOutputPortType(parameterOutputs[0].Id) != (loopClock || signalCapture ? "FloatX4" : "Float") ||
                     signalInputs.Any(port => definition.GetInputPortType(port.Id) != "Signal"))
                     throw new InvalidDataException($"Logical node '{node.Name}' has an unsupported port layout.");
 
@@ -757,20 +817,28 @@ public sealed class VfxProgram
                 for (var inputIndex = 0; inputIndex < inputPorts.Length; inputIndex++)
                 {
                     var port = inputPorts[inputIndex];
-                    if (definition.GetInputPortType(port.Id) != "Float")
-                        throw new InvalidDataException($"Logical input '{port.Id}' must be Float.");
-                    var source = Input(node, definition, port.Id, 1, out var sourceComponent, out var sourceColor);
+                    var inputType = signalCapture ? "FloatX4" : "Float";
+                    var inputWidth = signalCapture ? 4 : 1;
+                    if (definition.GetInputPortType(port.Id) != inputType)
+                        throw new InvalidDataException($"Logical input '{port.Id}' must be {inputType}.");
+                    var source = Input(node, definition, port.Id, inputWidth, out var sourceComponent, out var sourceColor);
                     if (sourceColor)
                         throw new InvalidDataException($"Logical input '{port.Id}' cannot be Color.");
-                    var value = port.DefaultValue;
+                    var parameter = definition.Parameters.FirstOrDefault(item => item.Id == port.Id && item.Type == "float");
+                    var value = parameter is null ? port.DefaultValue :
+                        node.Parameters?.SingleOrDefault(item => item.Id == port.Id)?.Value ?? parameter.DefaultValue;
                     var defaults = new double[4];
                     if (value is { } defaultValue)
                     {
-                        if (!NodeParameter.IsValidValue("float", defaultValue) ||
-                            !defaultValue.TryGetDouble(out defaults[0]) || !double.IsFinite(defaults[0]))
+                        if (!NodeParameter.IsValidValue(signalCapture ? "vector4" : "float", defaultValue))
                             throw new InvalidDataException($"Logical input '{port.Id}' has an invalid default.");
+                        if (signalCapture)
+                            defaultValue.EnumerateArray().Select(item => item.GetDouble()).ToArray().CopyTo(defaults, 0);
+                        else defaults[0] = defaultValue.GetDouble();
+                        if (defaults.Any(item => !double.IsFinite(item)))
+                            throw new InvalidDataException($"Logical input '{port.Id}' has a nonfinite default.");
                     }
-                    logicalInputs[inputIndex] = new(source, source < 0 ? 0 : 1,
+                    logicalInputs[inputIndex] = new(source, source < 0 ? 0 : inputWidth,
                         sourceComponent, false, defaults);
                 }
 
@@ -826,7 +894,7 @@ public sealed class VfxProgram
                 var signalOutputs = (definition.OutputPorts ?? []).Where(port =>
                     definition.GetOutputPortCategory(port.Id) == GraphPortCategory.Signal).ToArray();
                 if (inputPorts.Length > 4 || signalInputs.Length > 1 ||
-                    (isSignal ? parameterOutputs.Length != 0 || signalOutputs.Length is < 1 or > 4 :
+                    (isSignal ? parameterOutputs.Length != 0 || signalOutputs.Length > 4 :
                         signalInputs.Length != 0 || signalOutputs.Length != 0 || parameterOutputs.Length != 1))
                     throw new InvalidDataException($"Custom node '{node.Name}' has unsupported port layout.");
                 var customOutputWidth = isSignal ? 0 : Width(definition.GetOutputPortType(parameterOutputs[0].Id)!);
@@ -945,7 +1013,24 @@ public sealed class VfxProgram
                 return value.EnumerateArray().Select(item => item.GetDouble()).ToArray();
             }
 
-            if (opcode == VfxOpcode.FCurve)
+            int IntParameter(string id)
+            {
+                var parameter = definition.Parameters.FirstOrDefault(item => item.Id == id && item.Type == "int")
+                    ?? throw new InvalidDataException($"Node '{node.Name}' is missing Int32 parameter '{id}'.");
+                var value = node.Parameters?.FirstOrDefault(item => item.Id == id && item.Type == "int")?.Value
+                    ?? parameter.DefaultValue;
+                if (!NodeParameter.IsValidValue("int", value) || !value.TryGetInt32(out var number))
+                    throw new InvalidDataException($"Node '{node.Name}' has an invalid Int32 parameter '{id}'.");
+                return number;
+            }
+
+            if (opcode == VfxOpcode.Int32)
+            {
+                defaultA[0] = IntParameter("value");
+                inputA = Input(node, definition, null, 1, out inputASourceComponent, out inputAIsColor);
+                inputAWidth = inputA < 0 ? 0 : 1;
+            }
+            else if (opcode == VfxOpcode.FCurve)
             {
                 if (node.Curve is null) throw new InvalidDataException($"Node '{node.Name}' has no F-Curve data.");
                 curveCode.Add(new VfxCurveInstruction(node.Id, node.Curve.Keys.ToArray()));
@@ -967,8 +1052,11 @@ public sealed class VfxProgram
             else if (IsArithmetic(opcode))
             {
                 var width = outputWidth;
-                var defaultsA = width == 1 ? [Parameter("a")] : VectorParameter("a", width);
-                var defaultsB = width == 1 ? [Parameter("b")] : VectorParameter("b", width);
+                var integerArithmetic = IsInt32Arithmetic(opcode);
+                var defaultsA = integerArithmetic ? [IntParameter("a")] :
+                    width == 1 ? [Parameter("a")] : VectorParameter("a", width);
+                var defaultsB = integerArithmetic ? [IntParameter("b")] :
+                    width == 1 ? [Parameter("b")] : VectorParameter("b", width);
                 Array.Copy(defaultsA, defaultA, defaultsA.Length);
                 Array.Copy(defaultsB, defaultB, defaultsB.Length);
                 inputA = Input(node, definition, "a", width, out inputASourceComponent, out inputAIsColor);
@@ -1024,13 +1112,25 @@ public sealed class VfxProgram
         if (extraRoutes > MaxSignalRoutes) throw new InvalidDataException("The graph contains too many Signal routes.");
         if (logicalSignalRoutes.Count > MaxSignalRoutes)
             throw new InvalidDataException("The graph contains too many logical Signal routes.");
+        var valueTypes = order.Select((node, index) =>
+            CreateValueTypes(typedCode[index].Opcode, node, effective[node.Id])).ToArray();
+        if (typedCode.Select((instruction, index) => (instruction, index))
+            .Any(item => ((byte)item.instruction.Opcode is 40 or 41) &&
+                (valueTypes[item.index].OutputType == GraphValueType.Int32 ||
+                 valueTypes[item.index].InputTypes.Contains(GraphValueType.Int32))))
+            throw new InvalidDataException(
+                "Custom runtime ABI v1 does not carry semantic numeric types; Int32 custom ports are unsupported.");
+        var hasInt32 = valueTypes.Any(item => item.OutputType == GraphValueType.Int32 ||
+            item.InputTypes.Contains(GraphValueType.Int32));
         var hasEnumBranches = enumValueCode.Count != 0 || enumSelectCode.Count != 0 || branchGuards.Count != 0;
-        var version = logicalCode.Count != 0 ? (ushort)9 :
+        var version = nodes.Any(node => node.Kind.Value is "CurrentPhase" or "PhaseTime" or
+            "EnterStart" or "EnterLoop" or "EnterEnd" or "LoopClock" or "QualityBranch" or "SignalCaptureVector4") ? (ushort)11 :
+            hasInt32 ? (ushort)10 : logicalCode.Count != 0 ? (ushort)9 :
             hasEnumBranches ? (ushort)8 : gameIoPorts.Count != 0 ? (ushort)7 :
             extraRoutes != 0 ? (ushort)5 : curveCode.Count != 0 ? (ushort)4 : (ushort)3;
         return new VfxProgram(legacy, typedCode, customCode.ToArray(), curveCode.ToArray(),
             version, gameIoPorts, enumValueCode.ToArray(), enumSelectCode.ToArray(), branchGuards.ToArray(),
-            logicalCode.ToArray(), logicalSignalRoutes.ToArray());
+            logicalCode.ToArray(), logicalSignalRoutes.ToArray(), valueTypes);
     }
 
     internal byte[] ToPackageBinary() => _version == 1
@@ -1069,8 +1169,9 @@ public sealed class VfxProgram
         var gameIoBytes = _version >= 6 ? CreateGameIoMetadata(_gameIoPorts) : [];
         var enumBranchBytes = _version >= 8 ? CreateEnumBranchMetadata() : [];
         var logicalEventBytes = _version >= 9 ? CreateLogicalEventMetadata() : [];
+        var valueTypeBytes = _version >= 10 ? CreateValueTypeMetadata() : [];
         var typedBytes = new byte[checked(instructionBytes + curveBytes + routeBytes +
-            enumBranchBytes.Length + gameIoBytes.Length + logicalEventBytes.Length)];
+            enumBranchBytes.Length + gameIoBytes.Length + logicalEventBytes.Length + valueTypeBytes.Length)];
         "LFXB"u8.CopyTo(typedBytes);
         BinaryPrimitives.WriteUInt16LittleEndian(typedBytes.AsSpan(4), _version);
         typedBytes[6] = 1;
@@ -1110,7 +1211,7 @@ public sealed class VfxProgram
                 }
                 for (var input = custom.Inputs.Length; input < 4; input++)
                     BinaryPrimitives.WriteInt32LittleEndian(span[(48 + input * 8)..], -1);
-                BinaryPrimitives.WriteInt32LittleEndian(span[112..], instruction.BranchGuardId);
+                BinaryPrimitives.WriteInt32LittleEndian(span[(_version >= 11 ? 44 : 112)..], instruction.BranchGuardId);
                 for (var branch = 0; branch < 4; branch++)
                 {
                     BinaryPrimitives.WriteInt32LittleEndian(span[(208 + branch * 4)..],
@@ -1171,7 +1272,31 @@ public sealed class VfxProgram
         gameIoBytes.CopyTo(typedBytes, instructionBytes + curveBytes + routeBytes + enumBranchBytes.Length);
         logicalEventBytes.CopyTo(typedBytes, instructionBytes + curveBytes + routeBytes +
             enumBranchBytes.Length + gameIoBytes.Length);
+        valueTypeBytes.CopyTo(typedBytes, instructionBytes + curveBytes + routeBytes +
+            enumBranchBytes.Length + gameIoBytes.Length + logicalEventBytes.Length);
         return typedBytes;
+    }
+
+    private byte[] CreateValueTypeMetadata()
+    {
+        if (_valueTypes.Length != _typedInstructions.Length)
+            throw new InvalidDataException("Int32 bytecode requires one explicit value-type record per instruction.");
+        var bytes = new byte[checked(ValueTypeHeaderSize + _valueTypes.Length * ValueTypeRecordSize)];
+        "LFTY"u8.CopyTo(bytes);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(4), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(6), ValueTypeRecordSize);
+        var offset = ValueTypeHeaderSize;
+        foreach (var item in _valueTypes)
+        {
+            if (item.InputTypes.Length > 4)
+                throw new InvalidDataException("An instruction has too many typed numeric inputs.");
+            bytes[offset] = (byte)item.OutputType;
+            bytes[offset + 1] = checked((byte)item.InputTypes.Length);
+            for (var input = 0; input < item.InputTypes.Length; input++)
+                bytes[offset + 2 + input] = (byte)item.InputTypes[input];
+            offset += ValueTypeRecordSize;
+        }
+        return bytes;
     }
 
     private byte[] CreateLogicalEventMetadata()
@@ -1349,6 +1474,7 @@ public sealed class VfxProgram
     {
         var sourceWidth = opcode switch
         {
+            VfxOpcode.FloatToInt32 or VfxOpcode.Int32ToFloat => 1,
             VfxOpcode.ScalarToVector2 or VfxOpcode.ScalarToVector3 or VfxOpcode.ScalarToVector4 => 1,
             VfxOpcode.Vector2ToVector3 or VfxOpcode.Vector2ToVector4 => 2,
             VfxOpcode.Vector3ToVector2 or VfxOpcode.Vector3ToVector4 => 3,
@@ -1483,23 +1609,96 @@ public sealed class VfxProgram
 
     private static int Width(string portType) => portType switch
     {
-        "Float" => 1, "FloatX2" => 2, "FloatX3" => 3, "FloatX4" or "Color" => 4,
+        "Float" or "Int32" => 1, "FloatX2" => 2, "FloatX3" => 3, "FloatX4" or "Color" => 4,
         _ when GraphEnumBranchSchema.IsEnumPort(portType) => 1,
         _ => throw new InvalidDataException($"Port type '{portType}' is not supported by the runtime.")
     };
 
     private static bool IsArithmetic(VfxOpcode opcode) =>
         (byte)opcode >= (byte)VfxOpcode.Add && (byte)opcode <= (byte)VfxOpcode.Divide ||
-        (byte)opcode >= (byte)VfxOpcode.AddVector2 && (byte)opcode <= (byte)VfxOpcode.DivideVector4;
+        (byte)opcode >= (byte)VfxOpcode.AddVector2 && (byte)opcode <= (byte)VfxOpcode.DivideVector4 ||
+        IsInt32Arithmetic(opcode);
+
+    private static bool IsInt32Arithmetic(VfxOpcode opcode) =>
+        opcode is VfxOpcode.Int32Add or VfxOpcode.Int32Subtract or
+            VfxOpcode.Int32Multiply or VfxOpcode.Int32Divide;
 
     private static bool IsSingleInput(VfxOpcode opcode) =>
-        (byte)opcode >= (byte)VfxOpcode.ScalarToVector2 && (byte)opcode <= (byte)VfxOpcode.Vector4ToColor;
+        (byte)opcode >= (byte)VfxOpcode.ScalarToVector2 && (byte)opcode <= (byte)VfxOpcode.Vector4ToColor ||
+        opcode is VfxOpcode.FloatToInt32 or VfxOpcode.Int32ToFloat;
+
+    private static VfxNodeValueTypes CreateValueTypes(
+        VfxOpcode opcode, GraphNodeSnapshot node, GraphNodeDefinition definition)
+    {
+        GraphValueType PortType(string? type, string description)
+        {
+            if (!GraphValueTypeSchema.TryGetValueType(type, out var valueType))
+                throw new InvalidDataException($"Node '{node.Name}' has unsupported {description} type '{type}'.");
+            return valueType;
+        }
+
+        var parameterInputs = (definition.InputPorts ?? [])
+            .Where(port => definition.GetInputPortCategory(port.Id) == GraphPortCategory.Parameter)
+            .ToArray();
+        var parameterOutputs = (definition.OutputPorts ?? [])
+            .Where(port => definition.GetOutputPortCategory(port.Id) == GraphPortCategory.Parameter)
+            .ToArray();
+        var outputType = definition.Runtime?.Execution == "signal" ||
+            parameterOutputs.Length == 0 && definition.OutputPorts is not null
+                ? GraphValueType.None
+                : PortType(parameterOutputs.FirstOrDefault()?.PortType ?? node.PortType, "output");
+        outputType = opcode switch
+        {
+            VfxOpcode.BreakVector2 => GraphValueType.Vector2,
+            VfxOpcode.BreakVector3 => GraphValueType.Vector3,
+            VfxOpcode.BreakVector4 => GraphValueType.Vector4,
+            _ => outputType
+        };
+
+        string? InputPort(int index) => definition.InputPorts is null ? null :
+            index < parameterInputs.Length ? parameterInputs[index].Id : null;
+        string?[] inputPortIds = opcode switch
+        {
+            VfxOpcode.Time or VfxOpcode.FCurve or VfxOpcode.BranchTime => [],
+            VfxOpcode.EnumValue => ["value"],
+            VfxOpcode.EnumSelect => ["selector"],
+            VfxOpcode.Int32 => [InputPort(0)],
+            VfxOpcode.Int32Add or VfxOpcode.Int32Subtract or VfxOpcode.Int32Multiply or
+                VfxOpcode.Int32Divide => ["a", "b"],
+            VfxOpcode.FloatToInt32 or VfxOpcode.Int32ToFloat => ["a"],
+            _ when opcode is VfxOpcode.LogicalEventSignal => parameterInputs.Select(port => (string?)port.Id).ToArray(),
+            _ when (byte)opcode == 40 || (byte)opcode == 41 =>
+                parameterInputs.Select(port => (string?)port.Id).ToArray(),
+            _ when IsArithmetic(opcode) => ["a", "b"],
+            _ when opcode == VfxOpcode.Scalar ||
+                   opcode is VfxOpcode.Vector2 or VfxOpcode.Vector3 or VfxOpcode.Vector4 or VfxOpcode.Color =>
+                [InputPort(0)],
+            _ when IsSingleInput(opcode) ||
+                   opcode is VfxOpcode.BreakVector2 or VfxOpcode.BreakVector3 or VfxOpcode.BreakVector4 =>
+                ["a"],
+            _ => []
+        };
+        var inputTypes = inputPortIds.Select(portId =>
+        {
+            var type = portId is null
+                ? definition.GetInputPortType(null) ?? node.PortType
+                : definition.GetInputPortType(portId);
+            return PortType(type, "input");
+        }).ToArray();
+        if (inputTypes.Length > 4)
+            throw new InvalidDataException($"Node '{node.Name}' has too many numeric inputs.");
+        return new(outputType, inputTypes);
+    }
 
     private static bool TryOpcode(string kind, out VfxOpcode opcode)
     {
         opcode = kind switch
         {
             "Float" or "SpawnInputFloat" => VfxOpcode.Scalar, "Time" => VfxOpcode.Time,
+            "Int32" => VfxOpcode.Int32,
+            "Int32Add" => VfxOpcode.Int32Add, "Int32Subtract" => VfxOpcode.Int32Subtract,
+            "Int32Multiply" => VfxOpcode.Int32Multiply, "Int32Divide" => VfxOpcode.Int32Divide,
+            "FloatToInt32" => VfxOpcode.FloatToInt32, "Int32ToFloat" => VfxOpcode.Int32ToFloat,
             "Add" => VfxOpcode.Add, "Subtract" => VfxOpcode.Subtract,
             "Multiply" => VfxOpcode.Multiply, "Divide" => VfxOpcode.Divide,
             "FloatX2" or "SpawnInputVector2" => VfxOpcode.Vector2, "FloatX3" or "SpawnInputVector3" => VfxOpcode.Vector3,

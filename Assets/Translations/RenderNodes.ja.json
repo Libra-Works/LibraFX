@@ -2,5 +2,6 @@
   "Assets.ModelDraw": "モデル描画",
   "Assets.SpriteDraw": "スプライト描画",
   "Assets.SpriteAnimation": "スプライトアニメーション",
+  "Assets.SpriteComposition": "スプライト合成",
   "Assets.Rendering": "描画"
 }

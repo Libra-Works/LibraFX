@@ -18,14 +18,13 @@ public sealed class GraphConnectionViewModel : ObservableObject
     public string? SignalOrderHelp => SignalOrder == 0 ? null :
         LocalizationService.Shared.Get("Editor.SignalExecutionOrderHelp");
 
-    public double StartX => Source.DisplayX + GraphNodeViewModel.NodeWidth - GraphNodeViewModel.PortHorizontalOffset;
+    public double StartX => Source.DisplayX + Source.OutputAnchor(SourcePortId).X;
 
-    public double StartY => Source.DisplayY + GraphNodeViewModel.PortCenterOffset + Source.OutputPortOffset(SourcePortId);
+    public double StartY => Source.DisplayY + Source.OutputAnchor(SourcePortId).Y;
 
-    public double EndX => Target.DisplayX + GraphNodeViewModel.PortHorizontalOffset;
+    public double EndX => Target.DisplayX + Target.InputAnchor(TargetPortId).X;
 
-    public double EndY => Target.DisplayY + GraphNodeViewModel.PortCenterOffset +
-        InputOffset();
+    public double EndY => Target.DisplayY + Target.InputAnchor(TargetPortId).Y;
 
     public Point StartPoint => new(StartX, StartY);
 
@@ -82,7 +81,9 @@ public sealed class GraphConnectionViewModel : ObservableObject
             OnPropertyChanged(nameof(Description));
         }
 
-        if (e.PropertyName is nameof(GraphNodeViewModel.DisplayX) or nameof(GraphNodeViewModel.DisplayY))
+        if (e.PropertyName is nameof(GraphNodeViewModel.DisplayX) or nameof(GraphNodeViewModel.DisplayY) or
+            nameof(GraphNodeViewModel.RenderedWidth) or nameof(GraphNodeViewModel.InputPorts) or
+            nameof(GraphNodeViewModel.OutputPorts) or "PortGeometry")
         {
             OnPropertyChanged(nameof(StartX));
             OnPropertyChanged(nameof(StartY));
@@ -91,13 +92,6 @@ public sealed class GraphConnectionViewModel : ObservableObject
             OnPropertyChanged(nameof(StartPoint));
             OnPropertyChanged(nameof(EndPoint));
         }
-    }
-
-    private double InputOffset()
-    {
-        for (var index = 0; index < Target.InputPorts.Count; index++)
-            if (Target.InputPorts[index].Id == TargetPortId) return 5 + index * 24;
-        return 0;
     }
 
 }

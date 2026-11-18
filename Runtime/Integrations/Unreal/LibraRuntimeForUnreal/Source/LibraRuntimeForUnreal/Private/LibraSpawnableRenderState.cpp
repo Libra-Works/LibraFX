@@ -20,6 +20,7 @@
 #include "Serialization/JsonWriter.h"
 #include "UObject/StrongObjectPtr.h"
 #include "liberafx/SceneBindings.h"
+#include "LibraSpriteCompositionRender.h"
 #include "liberafx/SpawnablePackage.h"
 
 namespace {
@@ -75,15 +76,46 @@ struct FInput
     bool bMaterial = false;
 };
 
+struct FSpriteCell
+{
+    FGuid Id;
+    int32 PixelWidth = 0, PixelHeight = 0;
+    float U = 0, V = 0, Width = 0, Height = 0;
+};
+
+struct FSpriteFrame
+{
+    FGuid Id, CellId;
+    int32 CellIndex = INDEX_NONE;
+    double DurationFrames = 0;
+};
+
+struct FSpriteAnimation
+{
+    bool bPresent = false, bLoop = true;
+    int32 TextureWidth = 0, TextureHeight = 0, StartFrame = 0, EndFrame = 0;
+    double Fps = 0;
+    int32 Version = 0;
+    FLibraSpriteCompositionRender Composition;
+    TArray<FSpriteCell> Cells;
+    TArray<FSpriteFrame> Frames;
+    TArray<double> Durations;
+};
+
 struct FDraw
 {
     FGuid Id;
     bool bSprite = false, bBillboard = false;
+    FSpriteAnimation SpriteAnimation;
     TStrongObjectPtr<UStaticMesh> Mesh;
     TArray<TStrongObjectPtr<UMaterialInterface>> Materials;
     struct FTexture { int32 Slot; FMaterialParameterInfo Parameter; TStrongObjectPtr<UTexture> Texture; };
     TArray<FTexture> Textures;
     TArray<FInput> Inputs;
+    // Draws are evaluated synchronously on the game thread; reuse definition
+    // scratch across every instance rather than building a map in each tick.
+    TMap<FString, FVector4> Values;
+    TArray<TPair<int32, FName>> TintTargets;
 };
 
 struct FDefinition
@@ -140,6 +172,101 @@ struct FLibraSpawnableRenderState::FImpl
         return true;
     }
 
+    bool ReadSpriteAnimation(const TSharedPtr<FJsonObject>& object, FSpriteAnimation& animation, bool billboard)
+    {
+        const TSharedPtr<FJsonObject>* data = nullptr;
+        if (!object->TryGetObjectField(TEXT("spriteAnimation"), data)) return true;
+        animation.bPresent = true;
+        auto version = int32{}, start = int32{}, end = int32{};
+        auto fps = double{};
+        auto cells = static_cast<const TArray<TSharedPtr<FJsonValue>>*>(nullptr);
+        auto frames = static_cast<const TArray<TSharedPtr<FJsonValue>>*>(nullptr);
+        if (!Integer(*data, TEXT("version"), version) || (version != 1 && version != 2) ||
+            !Integer(*data, TEXT("textureWidth"), animation.TextureWidth) ||
+            !Integer(*data, TEXT("textureHeight"), animation.TextureHeight) ||
+            animation.TextureWidth < 1 || animation.TextureWidth > 8192 ||
+            animation.TextureHeight < 1 || animation.TextureHeight > 8192 ||
+            !(*data)->TryGetNumberField(TEXT("fps"), fps) || !FMath::IsFinite(fps) ||
+            fps <= 0 || fps > 10000 || !Integer(*data, TEXT("startFrame"), start) ||
+            !Integer(*data, TEXT("endFrame"), end) ||
+            !(*data)->TryGetBoolField(TEXT("loop"), animation.bLoop) ||
+            !(*data)->TryGetArrayField(TEXT("cells"), cells) || cells->Num() < 1 || cells->Num() > 512 ||
+            !(*data)->TryGetArrayField(TEXT("frames"), frames) || frames->Num() < 1 || frames->Num() > 4096)
+            return Fail(TEXT("Sprite animation metadata is missing, unsupported or out of range."));
+        animation.Fps = fps;
+        animation.Version = version;
+        animation.StartFrame = start;
+        animation.EndFrame = end;
+        if (start < 0 || end < start || end >= frames->Num())
+            return Fail(TEXT("Sprite playback range is outside its frame sequence."));
+
+        auto cellIds = TSet<FGuid>{};
+        auto names = TSet<FString>{};
+        for (const auto& value : *cells)
+        {
+            auto cellObject = value.IsValid() && value->Type == EJson::Object ? value->AsObject() : nullptr;
+            auto cell = FSpriteCell{};
+            auto identity = FString{}, name = FString{};
+            auto x = int32{}, y = int32{}, width = int32{}, height = int32{};
+            auto u = double{}, v = double{}, uvWidth = double{}, uvHeight = double{};
+            if (!cellObject || !cellObject->TryGetStringField(TEXT("id"), identity) ||
+                !FGuid::Parse(identity, cell.Id) || !cell.Id.IsValid() ||
+                !cellObject->TryGetStringField(TEXT("name"), name) || name.TrimStartAndEnd().IsEmpty() ||
+                name.Len() > 80 || names.Contains(name.TrimStartAndEnd().ToLower()) ||
+                !Integer(cellObject, TEXT("x"), x) || !Integer(cellObject, TEXT("y"), y) ||
+                !Integer(cellObject, TEXT("width"), width) || !Integer(cellObject, TEXT("height"), height) ||
+                x < 0 || y < 0 || width <= 0 || height <= 0 ||
+                static_cast<int64>(x) + width > animation.TextureWidth ||
+                static_cast<int64>(y) + height > animation.TextureHeight ||
+                !cellObject->TryGetNumberField(TEXT("u"), u) ||
+                !cellObject->TryGetNumberField(TEXT("v"), v) ||
+                !cellObject->TryGetNumberField(TEXT("uvWidth"), uvWidth) ||
+                !cellObject->TryGetNumberField(TEXT("uvHeight"), uvHeight) ||
+                !FMath::IsFinite(u) || !FMath::IsFinite(v) ||
+                !FMath::IsFinite(uvWidth) || !FMath::IsFinite(uvHeight) ||
+                FMath::Abs(u - static_cast<double>(x) / animation.TextureWidth) > 1e-9 ||
+                FMath::Abs(v - static_cast<double>(y) / animation.TextureHeight) > 1e-9 ||
+                FMath::Abs(uvWidth - static_cast<double>(width) / animation.TextureWidth) > 1e-9 ||
+                FMath::Abs(uvHeight - static_cast<double>(height) / animation.TextureHeight) > 1e-9 ||
+                cellIds.Contains(cell.Id))
+                return Fail(TEXT("Sprite animation contains an invalid or duplicate pixel/UV rectangle."));
+            names.Add(name.TrimStartAndEnd().ToLower());
+            cellIds.Add(cell.Id);
+            cell.U = static_cast<float>(u);
+            cell.V = static_cast<float>(v);
+            cell.Width = static_cast<float>(uvWidth);
+            cell.Height = static_cast<float>(uvHeight);
+            cell.PixelWidth = width;
+            cell.PixelHeight = height;
+            animation.Cells.Add(cell);
+        }
+
+        auto frameIds = TSet<FGuid>{};
+        for (const auto& value : *frames)
+        {
+            auto frameObject = value.IsValid() && value->Type == EJson::Object ? value->AsObject() : nullptr;
+            auto frame = FSpriteFrame{};
+            auto identity = FString{}, cellIdentity = FString{};
+            if (!frameObject || !frameObject->TryGetStringField(TEXT("id"), identity) ||
+                !FGuid::Parse(identity, frame.Id) || !frame.Id.IsValid() || frameIds.Contains(frame.Id) ||
+                !frameObject->TryGetStringField(TEXT("cellId"), cellIdentity) ||
+                !FGuid::Parse(cellIdentity, frame.CellId) || !frame.CellId.IsValid() ||
+                !frameObject->TryGetNumberField(TEXT("durationFrames"), frame.DurationFrames) ||
+                !FMath::IsFinite(frame.DurationFrames) || frame.DurationFrames <= 0 ||
+                frame.DurationFrames > 1000000)
+                return Fail(TEXT("Sprite animation contains an invalid frame identity or duration."));
+            frame.CellIndex = animation.Cells.IndexOfByPredicate(
+                [&](const auto& cell) { return cell.Id == frame.CellId; });
+            if (frame.CellIndex == INDEX_NONE)
+                return Fail(TEXT("Sprite animation frame references a missing stable cell ID."));
+            frameIds.Add(frame.Id);
+            animation.Durations.Add(frame.DurationFrames);
+            animation.Frames.Add(frame);
+        }
+        return version != 2 || animation.Composition.Read(*data, fps, animation.bLoop,
+            animation.Durations, start, end, billboard) || Fail(TEXT("Invalid layered sprite clock, order or pose keys."));
+    }
+
     bool ReadDraws(const std::vector<std::uint8_t>& bytes, FDefinition& definition)
     {
         if (bytes.empty()) return true;
@@ -165,6 +292,7 @@ struct FLibraSpawnableRenderState::FImpl
             ids.Add(draw.Id);
             draw.bSprite = kind == TEXT("sprite");
             object->TryGetBoolField(TEXT("billboard"), draw.bBillboard);
+            if (draw.bSprite && !ReadSpriteAnimation(object, draw.SpriteAnimation, draw.bBillboard)) return false;
             draw.Mesh.Reset(Resolve<UStaticMesh>(draw.bSprite ? TEXT("/Engine/BasicShapes/Plane.Plane") : asset));
             if (!draw.Mesh.IsValid() || draw.Mesh->GetStaticMaterials().Num() < 1 ||
                 draw.Mesh->GetStaticMaterials().Num() > 256)
@@ -190,7 +318,8 @@ struct FLibraSpawnableRenderState::FImpl
             {
                 if (!slots.Contains(0)) draw.Materials[0].Reset(Resolve<UMaterialInterface>(TEXT("builtin:sprite")));
                 auto texture = Resolve<UTexture>(asset);
-                if (!texture || !draw.Materials[0].IsValid() ||
+                if (!texture) return Fail(TEXT("Missing sprite Texture binding: ") + asset);
+                if (!draw.Materials[0].IsValid() ||
                     !HasParameter(draw.Materials[0].Get(), FMaterialParameterInfo(TEXT("Texture")), TEXT("texture")) ||
                     !HasParameter(draw.Materials[0].Get(), FMaterialParameterInfo(TEXT("AtlasRect")), TEXT("vector")))
                     return Fail(TEXT("Sprites require a Texture binding and a material exposing Texture and AtlasRect."));
@@ -242,8 +371,15 @@ struct FLibraSpawnableRenderState::FImpl
                     !HasParameter(draw.Materials[0].Get(), FMaterialParameterInfo(TEXT("Tint")), TEXT("vector")) &&
                     !HasParameter(draw.Materials[0].Get(), FMaterialParameterInfo(TEXT("Color")), TEXT("vector")))
                     return Fail(TEXT("Tint requires a material exposing Tint or Color."));
+                draw.Values.Add(input.Id, input.Defaults);
                 draw.Inputs.Add(MoveTemp(input));
             }
+            for (auto slot = 0; slot < draw.Materials.Num(); ++slot)
+                for (const auto name : {TEXT("Tint"), TEXT("Color")})
+                    if (HasParameter(draw.Materials[slot].Get(), FMaterialParameterInfo(name), TEXT("vector")) &&
+                        !draw.Inputs.ContainsByPredicate([&](const auto& input)
+                            { return input.bMaterial && input.Slot == slot && input.Parameter.Name == FName(name); }))
+                        draw.TintTargets.Emplace(slot, FName(name));
             const TArray<TSharedPtr<FJsonValue>>* textures = nullptr;
             if (!object->TryGetArrayField(TEXT("textures"), textures) || textures->Num() > 256)
                 return Fail(TEXT("Invalid texture overrides."));
@@ -371,6 +507,8 @@ struct FLibraSpawnableRenderState::FImpl
             component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
             component->SetupAttachment(actor->GetRootComponent());
             component->SetStaticMesh(draw.Mesh.Get());
+            if (draw.SpriteAnimation.Version == 2)
+                component->SetTranslucentSortPriority(draw.SpriteAnimation.Composition.Order);
             component->SetVisibility(false);
             component->ComponentTags.Add(TEXT("LibraSpawnableRenderer"));
             component->ComponentTags.Add(FName(*draw.Id.ToString()));
@@ -409,11 +547,11 @@ struct FLibraSpawnableRenderState::FImpl
         {
             for (auto index = 0; index < instance->Draws.Num(); ++index)
             {
-                const auto& draw = instance->Definition->Draws[index];
+                auto& draw = instance->Definition->Draws[index];
                 auto component = instance->Draws[index].Get();
                 if (!IsValid(component) || !component->IsRegistered())
                     return Fail(TEXT("An owned renderer was destroyed externally."));
-                auto values = TMap<FString, FVector4>{};
+                auto& values = draw.Values;
                 for (const auto& input : draw.Inputs)
                 {
                     auto value = input.Defaults;
@@ -429,7 +567,7 @@ struct FLibraSpawnableRenderState::FImpl
                         for (auto lane = 0; lane < input.Width; ++lane) value[lane] = source[input.Component + lane];
                     }
                     if (!Finite(value)) return Fail(TEXT("Renderer received a non-finite value."));
-                    values.Add(input.Id, value);
+                    values.FindChecked(input.Id) = value;
                     if (input.bMaterial)
                     {
                         auto material = CastChecked<UMaterialInstanceDynamic>(component->GetMaterial(input.Slot));
@@ -437,9 +575,13 @@ struct FLibraSpawnableRenderState::FImpl
                         else material->SetVectorParameterValueByInfo(input.Parameter, FLinearColor(value.X, value.Y, value.Z, value.W));
                     }
                 }
-                auto position = values.FindRef(TEXT("position"));
-                auto rotation = values.FindRef(TEXT("rotation"));
-                auto scale = values.Contains(TEXT("scale")) ? values[TEXT("scale")] : FVector4(1, 1, 1, 0);
+                static const auto positionId = FString(TEXT("position")), rotationId = FString(TEXT("rotation")),
+                    scaleId = FString(TEXT("scale")), frameId = FString(TEXT("frame")), playingId = FString(TEXT("playing")),
+                    fpsId = FString(TEXT("fps")), columnsId = FString(TEXT("columns")), rowsId = FString(TEXT("rows")),
+                    tintId = FString(TEXT("tint"));
+                auto position = values.FindRef(positionId);
+                auto rotation = values.FindRef(rotationId);
+                auto scale = values.Contains(scaleId) ? values[scaleId] : FVector4(1, 1, 1, 0);
                 auto pose = FTransform(FRotator(rotation.Y, rotation.Z, rotation.X),
                     FVector(position.X, position.Y, position.Z), FVector(scale.X, scale.Y, scale.Z));
                 if (draw.bSprite)
@@ -454,28 +596,56 @@ struct FLibraSpawnableRenderState::FImpl
                                 pose.SetRotation(Owner.GetOwner()->GetActorQuat().Inverse() *
                                     FQuat::FindBetweenNormals(FVector::UpVector, direction.GetSafeNormal()));
                         }
-                    auto frame = values.FindRef(TEXT("frame")).X;
-                    if (frame < 0 && values.FindRef(TEXT("playing")).X != 0)
-                        frame = (time - instance->Started) * values.FindRef(TEXT("fps")).X;
-                    auto columns = values.FindRef(TEXT("columns")).X, rows = values.FindRef(TEXT("rows")).X;
+                    auto frame = values.FindRef(frameId).X;
+                    auto frameConnected = draw.Inputs.ContainsByPredicate(
+                        [](const auto& input) { return input.Id == TEXT("frame") && input.Source.IsValid(); });
                     auto atlas = liberafx::AtlasFrame{};
-                    if (columns < 1 || columns > MAX_uint32 || rows < 1 || rows > MAX_uint32 ||
-                        FMath::FloorToDouble(columns) != columns || FMath::FloorToDouble(rows) != rows ||
-                        !liberafx::sampleSpriteAtlas(frame, uint32(columns), uint32(rows), atlas))
-                        return Fail(TEXT("Invalid sprite atlas settings."));
+                    if (draw.SpriteAnimation.bPresent)
+                    {
+                        if (frameConnected && frame < 0)
+                            return Fail(TEXT("Connected Sprite Frame input must be a non-negative sequence index."));
+                        auto sequenceFrame = uint32{};
+                        auto elapsed = time - instance->Started;
+                        auto keyedPose = liberafx::SpritePose{};
+                        const auto sampled = draw.SpriteAnimation.Version == 2
+                            ? draw.SpriteAnimation.Composition.Sample(elapsed, draw.SpriteAnimation.Fps,
+                                draw.SpriteAnimation.bLoop, draw.SpriteAnimation.Durations, sequenceFrame, keyedPose)
+                            : liberafx::sampleSpriteSequence(frame, elapsed, draw.SpriteAnimation.Fps,
+                            draw.SpriteAnimation.Durations.GetData(),
+                            static_cast<uint32>(draw.SpriteAnimation.Durations.Num()),
+                            static_cast<uint32>(draw.SpriteAnimation.StartFrame),
+                            static_cast<uint32>(draw.SpriteAnimation.EndFrame),
+                            draw.SpriteAnimation.bLoop, values.FindRef(playingId).X >= 0.5,
+                            sequenceFrame);
+                        if (!sampled || !draw.SpriteAnimation.Frames.IsValidIndex(sequenceFrame))
+                            return Fail(TEXT("Invalid sprite animation sequence or playback time."));
+                        const auto& cell = draw.SpriteAnimation.Cells[
+                            draw.SpriteAnimation.Frames[sequenceFrame].CellIndex];
+                        if (draw.SpriteAnimation.Version == 2)
+                            pose = FLibraSpriteCompositionRender::Transform(keyedPose, cell.PixelWidth, cell.PixelHeight);
+                        if (!liberafx::sampleSpriteRect(sequenceFrame, cell.U, cell.V,
+                                cell.Width, cell.Height, atlas))
+                            return Fail(TEXT("Invalid arbitrary sprite UV rectangle."));
+                    }
+                    else
+                    {
+                        if (frame < 0 && !frameConnected && values.FindRef(playingId).X >= 0.5)
+                            frame = (time - instance->Started) * values.FindRef(fpsId).X;
+                        auto columns = values.FindRef(columnsId).X, rows = values.FindRef(rowsId).X;
+                        if (columns < 1 || columns > MAX_uint32 || rows < 1 || rows > MAX_uint32 ||
+                            FMath::FloorToDouble(columns) != columns || FMath::FloorToDouble(rows) != rows ||
+                            !liberafx::sampleSpriteAtlas(frame, uint32(columns), uint32(rows), atlas))
+                            return Fail(TEXT("Invalid legacy sprite atlas settings."));
+                    }
                     CastChecked<UMaterialInstanceDynamic>(component->GetMaterial(0))->SetVectorParameterValue(
                         TEXT("AtlasRect"), FLinearColor(atlas.uvRect[0], atlas.uvRect[1], atlas.uvRect[2], atlas.uvRect[3]));
                 }
                 component->SetRelativeTransform(pose);
-                if (auto tint = values.Find(TEXT("tint")))
-                    for (auto slot = 0; slot < draw.Materials.Num(); ++slot)
+                if (auto tint = values.Find(tintId))
+                    for (const auto& target : draw.TintTargets)
                     {
-                        auto material = CastChecked<UMaterialInstanceDynamic>(component->GetMaterial(slot));
-                        for (const auto name : {TEXT("Tint"), TEXT("Color")})
-                            if (HasParameter(draw.Materials[slot].Get(), FMaterialParameterInfo(name), TEXT("vector")) &&
-                                !draw.Inputs.ContainsByPredicate([&](const auto& input)
-                                    { return input.bMaterial && input.Slot == slot && input.Parameter.Name == FName(name); }))
-                                material->SetVectorParameterValue(name, FLinearColor(tint->X, tint->Y, tint->Z, tint->W));
+                        auto material = CastChecked<UMaterialInstanceDynamic>(component->GetMaterial(target.Key));
+                        material->SetVectorParameterValue(target.Value, FLinearColor(tint->X, tint->Y, tint->Z, tint->W));
                     }
                 component->SetVisibility(true);
             }

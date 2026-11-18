@@ -24,8 +24,54 @@ namespace LiberaFx.Unity
         public LiberaFxRenderMaterialPayload[] materials;
         public LiberaFxRenderInputPayload[] inputs;
         public LiberaFxRenderTexturePayload[] textures;
+        public LiberaFxRenderSpriteAnimationPayload spriteAnimation;
+        public bool __liberafxHasSpriteAnimation;
         public bool billboard;
         public string rotationConvention;
+    }
+
+    [Serializable] internal sealed class LiberaFxRenderSpriteAnimationPayload
+    {
+        public int version;
+        public int textureWidth;
+        public int textureHeight;
+        public double fps;
+        public int startFrame;
+        public int endFrame;
+        public bool loop;
+        public LiberaFxRenderSpriteCellPayload[] cells;
+        public LiberaFxRenderSpriteFramePayload[] frames;
+        public double durationFrames;
+        public int drawOrder;
+        public LiberaFxRenderSpriteKeyPayload[] keys;
+    }
+
+    [Serializable] internal sealed class LiberaFxRenderSpriteKeyPayload
+    {
+        public string id;
+        public double frame, x, y, rotationDegrees, scaleX, scaleY;
+    }
+
+    [Serializable] internal sealed class LiberaFxRenderSpriteCellPayload
+    {
+        public string id;
+        public string name;
+        public int x;
+        public int y;
+        public int width;
+        public int height;
+        public double u;
+        public double v;
+        public double uvWidth;
+        public double uvHeight;
+    }
+
+    [Serializable] internal sealed class LiberaFxRenderSpriteFramePayload
+    {
+        public string id;
+        public string cellId;
+        public int cellIndex;
+        public double durationFrames;
     }
 
     [Serializable] internal sealed class LiberaFxRenderMaterialPayload
@@ -39,6 +85,7 @@ namespace LiberaFx.Unity
         public string id;
         public int width;
         public string sourceNodeId;
+        [NonSerialized] public byte[] sourceNodeBytes;
         public int sourceComponent;
         public double[] defaults;
         public LiberaFxMaterialParameterPayload materialParameter;
@@ -111,6 +158,7 @@ namespace LiberaFx.Unity
     {
         public string nodeId;
         public bool isSprite;
+        public bool frameConnected;
         public bool billboard;
         public bool worldRotation;
         public Mesh mesh;
@@ -121,6 +169,9 @@ namespace LiberaFx.Unity
         public Camera billboardCamera;
         public LiberaFxRenderInputPayload[] inputs;
         public LiberaFxPreparedTextureParameter[] textures;
+        public LiberaFxRenderSpriteAnimationPayload spriteAnimation;
+        public double[] spriteKeys;
+        public double[] spriteDurations;
     }
 
     internal sealed class LiberaFxPreparedTextureParameter
@@ -331,6 +382,8 @@ namespace LiberaFx.Unity
             {
                 nodeId = node.nodeId,
                 isSprite = isSprite,
+                frameConnected = (node.inputs ?? Array.Empty<LiberaFxRenderInputPayload>())
+                    .Any(input => input.id == "frame" && !string.IsNullOrEmpty(input.sourceNodeId)),
                 billboard = node.billboard,
                 worldRotation = node.rotationConvention == "liberafx-world",
                 mesh = asset.mesh,
@@ -340,7 +393,12 @@ namespace LiberaFx.Unity
                 materialParameterPropertyNames = materialParameterPropertyNames,
                 billboardCamera = node.billboard ? Camera.main : null,
                 inputs = node.inputs ?? Array.Empty<LiberaFxRenderInputPayload>(),
-                textures = textureParameters.ToArray()
+                textures = textureParameters.ToArray(),
+                spriteAnimation = node.spriteAnimation,
+                spriteKeys = node.spriteAnimation?.version == 2 ? node.spriteAnimation.keys.SelectMany(key =>
+                    new[] { key.frame, key.x, key.y, key.rotationDegrees, key.scaleX, key.scaleY }).ToArray() : null,
+                spriteDurations = node.spriteAnimation?.frames?.Select(frame => frame.durationFrames).ToArray()
+                    ?? Array.Empty<double>()
             };
         }
 
@@ -472,6 +530,10 @@ namespace LiberaFx.Unity
                 var json = Encoding.UTF8.GetString(bytes).Replace("\"materialParameter\":null",
                     "\"materialParameter\":{\"name\":\"" + NullMaterialParameterSentinel +
                     "\",\"kind\":\"" + NullMaterialParameterSentinel + "\"}");
+                // JsonUtility materializes explicit null class fields as empty objects.
+                json = System.Text.RegularExpressions.Regex.Replace(json, @"""spriteAnimation""\s*:\s*\{",
+                    "\"__liberafxHasSpriteAnimation\":true,\"spriteAnimation\":{",
+                    System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
                 payload = JsonUtility.FromJson<LiberaFxRenderPayload>(json);
             }
             catch (Exception error) { throw new InvalidOperationException("Render configuration JSON is malformed.", error); }
@@ -485,12 +547,14 @@ namespace LiberaFx.Unity
                     string.IsNullOrWhiteSpace(node.assetPath) || node.assetPath.Length > 512)
                     throw new InvalidOperationException("Render configuration contains an invalid node identity, kind or asset.");
                 node.nodeId = id;
+                if (!node.__liberafxHasSpriteAnimation) node.spriteAnimation = null;
                 foreach (var input in node.inputs ?? Array.Empty<LiberaFxRenderInputPayload>())
                     if (input != null && input.materialParameter != null &&
                         input.materialParameter.name == NullMaterialParameterSentinel &&
                         input.materialParameter.kind == NullMaterialParameterSentinel)
                         input.materialParameter = null;
                 ValidateInputs(node);
+                ValidateSpriteAnimation(node);
                 if ((node.materials?.Length ?? 0) > 256 || (node.textures?.Length ?? 0) > 256)
                     throw new InvalidOperationException("Render node material metadata exceeds the supported bound.");
             }
@@ -516,6 +580,8 @@ namespace LiberaFx.Unity
                     throw new InvalidOperationException("Render input '" + input.id + "' has an invalid source component.");
                 if (!string.IsNullOrEmpty(input.sourceNodeId) && !TryCanonicalGuid(input.sourceNodeId, out _))
                     throw new InvalidOperationException("Render input '" + input.id + "' has an invalid source node GUID.");
+                if (!string.IsNullOrEmpty(input.sourceNodeId))
+                    input.sourceNodeBytes = new NativeSignal(input.sourceNodeId).Id;
                 foreach (var lane in input.defaults)
                     if (!IsFiniteFloat(lane))
                         throw new InvalidOperationException("Render node default exceeds finite Unity float range.");
@@ -531,12 +597,12 @@ namespace LiberaFx.Unity
                 var rows = StaticInput(node, "rows", 1);
                 var fps = StaticInput(node, "fps", 1);
                 StaticInput(node, "playing", 1);
-                if (columns.sourceNodeId != null || rows.sourceNodeId != null || fps.sourceNodeId != null ||
-                    StaticInput(node, "playing", 1).sourceNodeId != null ||
-                    columns.defaults[0] < 1 || columns.defaults[0] > 65536 ||
+                if (!string.IsNullOrEmpty(columns.sourceNodeId) || !string.IsNullOrEmpty(rows.sourceNodeId) ||
+                    !string.IsNullOrEmpty(fps.sourceNodeId) || !string.IsNullOrEmpty(StaticInput(node, "playing", 1).sourceNodeId) ||
+                    node.spriteAnimation == null && (columns.defaults[0] < 1 || columns.defaults[0] > 65536 ||
                     rows.defaults[0] < 1 || rows.defaults[0] > 65536 || fps.defaults[0] < 0 ||
                     Math.Floor(columns.defaults[0]) != columns.defaults[0] ||
-                    Math.Floor(rows.defaults[0]) != rows.defaults[0] ||
+                    Math.Floor(rows.defaults[0]) != rows.defaults[0]) ||
                     (StaticInput(node, "playing", 1).defaults[0] != 0 &&
                      StaticInput(node, "playing", 1).defaults[0] != 1))
                     throw new InvalidOperationException("Sprite atlas settings are unsupported or invalid.");
@@ -544,6 +610,76 @@ namespace LiberaFx.Unity
             foreach (var input in node.inputs)
                 if (!IsStandardInput(input.id) && input.materialParameter == null)
                     throw new InvalidOperationException("Unsupported render input '" + input.id + "'.");
+        }
+
+        private static void ValidateSpriteAnimation(LiberaFxRenderNodePayload node)
+        {
+            var data = node.spriteAnimation;
+            if (data == null) return;
+            if (node.kind != "sprite" || data.version != 1 && data.version != 2 ||
+                data.textureWidth < 1 || data.textureWidth > 8192 ||
+                data.textureHeight < 1 || data.textureHeight > 8192 ||
+                !IsFiniteFloat(data.fps) || data.fps <= 0 || data.fps > 10000 ||
+                data.cells == null || data.cells.Length < 1 || data.cells.Length > 512 ||
+                data.frames == null || data.frames.Length < 1 || data.frames.Length > 4096 ||
+                data.startFrame < 0 || data.endFrame < data.startFrame || data.endFrame >= data.frames.Length)
+                throw new InvalidOperationException("Sprite animation metadata is missing, unsupported or out of range.");
+            var cells = new Dictionary<string, LiberaFxRenderSpriteCellPayload>(StringComparer.Ordinal);
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var cell in data.cells)
+            {
+                if (cell == null || !TryCanonicalGuid(cell.id, out var id) ||
+                    string.IsNullOrWhiteSpace(cell.name) || cell.name.Length > 80 ||
+                    !names.Add(cell.name.Trim()) || cell.x < 0 || cell.y < 0 ||
+                    cell.width <= 0 || cell.height <= 0 ||
+                    (long)cell.x + cell.width > data.textureWidth ||
+                    (long)cell.y + cell.height > data.textureHeight ||
+                    !IsFiniteFloat(cell.u) || !IsFiniteFloat(cell.v) ||
+                    !IsFiniteFloat(cell.uvWidth) || !IsFiniteFloat(cell.uvHeight) ||
+                    Math.Abs(cell.u - (double)cell.x / data.textureWidth) > 1e-9 ||
+                    Math.Abs(cell.v - (double)cell.y / data.textureHeight) > 1e-9 ||
+                    Math.Abs(cell.uvWidth - (double)cell.width / data.textureWidth) > 1e-9 ||
+                    Math.Abs(cell.uvHeight - (double)cell.height / data.textureHeight) > 1e-9 ||
+                    !cells.TryAdd(id, cell))
+                    throw new InvalidOperationException("Sprite animation contains an invalid or duplicate pixel/UV cell.");
+                cell.id = id;
+            }
+            var frameIds = new HashSet<string>(StringComparer.Ordinal);
+            var duration = 0d;
+            foreach (var frame in data.frames)
+            {
+                if (frame == null || !TryCanonicalGuid(frame.id, out var frameId) ||
+                    !frameIds.Add(frameId) || !TryCanonicalGuid(frame.cellId, out var cellId) ||
+                    !cells.ContainsKey(cellId) || frame.cellIndex < 0 ||
+                    frame.cellIndex >= data.cells.Length || data.cells[frame.cellIndex].id != cellId ||
+                    !IsFiniteFloat(frame.durationFrames) ||
+                    frame.durationFrames <= 0 || frame.durationFrames > 1_000_000)
+                    throw new InvalidOperationException("Sprite animation contains a missing cell reference or invalid frame timing.");
+                frame.id = frameId;
+                frame.cellId = cellId;
+                duration += frame.durationFrames;
+            }
+            if (data.version == 2)
+            {
+                if (node.billboard || data.startFrame != 0 || data.endFrame != data.frames.Length - 1 ||
+                    !IsFiniteFloat(data.durationFrames) || data.durationFrames < Math.Max(1, duration) ||
+                    data.durationFrames > 4_096_000_000d || data.drawOrder < 0 || data.drawOrder >= 32 ||
+                    data.keys == null || data.keys.Length > 256)
+                    throw new InvalidOperationException("Layered sprite clip bounds or draw order are invalid.");
+                var keyIds = new HashSet<string>(StringComparer.Ordinal);
+                var previous = -1d;
+                bool Bounded(double value) => IsFiniteFloat(value) && Math.Abs(value) <= 1_000_000;
+                bool ValidScale(double value) => IsFiniteFloat(value) && value != 0 && Math.Abs(value) <= 10_000;
+                foreach (var key in data.keys)
+                {
+                    if (key == null || !TryCanonicalGuid(key.id, out var keyId) || !keyIds.Add(keyId) ||
+                        !IsFiniteFloat(key.frame) || key.frame < 0 || key.frame <= previous || key.frame > data.durationFrames ||
+                        !Bounded(key.x) || !Bounded(key.y) || !Bounded(key.rotationDegrees) ||
+                        !ValidScale(key.scaleX) || !ValidScale(key.scaleY))
+                        throw new InvalidOperationException("Layered sprite pose key is invalid.");
+                    previous = key.frame;
+                }
+            }
         }
 
         private static bool IsStandardInput(string id) =>

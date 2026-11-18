@@ -299,7 +299,49 @@ auto makeGameIoOutputSignalDescriptor() noexcept -> CustomNodeDescriptor
     return descriptor;
 }
 
-const std::array<CustomNodeDescriptor, 71> descriptors = {
+template<std::uint8_t scope>
+auto requestForce(CustomNodeInvocation& call) noexcept -> Result
+{
+    call.forceScope = scope;
+    return Result::Ok;
+}
+
+template<std::uint8_t scope>
+auto makeForceDescriptor() noexcept -> CustomNodeDescriptor
+{
+    auto descriptor = CustomNodeDescriptor{};
+    const auto id = std::array<std::uint8_t, 16>{
+        0x4a, 0x94, 0xe8, 0x82, 0x39, 0xe8, 0x4e, 0xfb,
+        0x92, 0xc7, 0x18, 0, 0, 0, 0, static_cast<std::uint8_t>(0x10 + scope)};
+    std::copy(id.begin(), id.end(), descriptor.typeId);
+    descriptor.abiVersion = 1;
+    descriptor.execution = CustomExecution::Signal;
+    descriptor.function = requestForce<scope>;
+    return descriptor;
+}
+
+template<std::uint8_t phase>
+auto requestPhase(CustomNodeInvocation& call) noexcept -> Result
+{
+    call.enterPhase = phase;
+    return Result::Ok;
+}
+
+template<std::uint8_t phase>
+auto makePhaseDescriptor() noexcept -> CustomNodeDescriptor
+{
+    auto descriptor = CustomNodeDescriptor{};
+    const auto id = std::array<std::uint8_t, 16>{
+        0x4a, 0x94, 0xe8, 0x82, 0x39, 0xe8, 0x4e, 0xfb,
+        0x92, 0xc7, 0x18, 0, 0, 0, 0, static_cast<std::uint8_t>(0x21 + phase)};
+    std::copy(id.begin(), id.end(), descriptor.typeId);
+    descriptor.abiVersion = 1;
+    descriptor.execution = CustomExecution::Signal;
+    descriptor.function = requestPhase<phase>;
+    return descriptor;
+}
+
+const std::array<CustomNodeDescriptor, 76> descriptors = {
     makeDescriptor<Op::Abs, 1>(1, 1, 1), makeDescriptor<Op::Floor, 1>(2, 2, 1),
     makeDescriptor<Op::Round, 1>(3, 1, 1), makeDescriptor<Op::Sign, 1>(4, 1, 1),
     makeDescriptor<Op::Sqrt, 1>(5, 1, 1), makeDescriptor<Op::Pow, 1>(6, 2, 1),
@@ -344,7 +386,9 @@ const std::array<CustomNodeDescriptor, 71> descriptors = {
     makeMatrixDescriptor<MatrixOp::OrderedTransformRow, 4, 0>(15, 4, 3),
     makeMatrixDescriptor<MatrixOp::OrderedTransformRow, 4, 1>(16, 4, 3),
     makeMatrixDescriptor<MatrixOp::OrderedTransformRow, 4, 2>(17, 4, 3),
-    makeMatrixDescriptor<MatrixOp::OrderedTransformRow, 4, 3>(18, 4, 3)
+    makeMatrixDescriptor<MatrixOp::OrderedTransformRow, 4, 3>(18, 4, 3),
+    makeForceDescriptor<1>(), makeForceDescriptor<2>(),
+    makePhaseDescriptor<1>(), makePhaseDescriptor<2>(), makePhaseDescriptor<3>()
 };
 }
 

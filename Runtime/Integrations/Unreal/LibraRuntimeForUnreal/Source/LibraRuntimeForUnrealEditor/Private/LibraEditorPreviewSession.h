@@ -4,6 +4,8 @@
 #include "Containers/Ticker.h"
 #include "LibraRuntimeHandles.h"
 #include "LibraPreviewDiscovery.h"
+#include "LibraSpriteCompositionRender.h"
+#include "LibraViewerEndpoint.h"
 #include "UObject/StrongObjectPtr.h"
 
 class UWorld;
@@ -71,12 +73,37 @@ private:
         bool hasBinding = false;
         TArray<double> defaults;
     };
+    struct FSpriteCell
+    {
+        FGuid id;
+        FString name;
+        int32 x = 0, y = 0, pixelWidth = 0, pixelHeight = 0;
+        float u = 0, v = 0, width = 0, height = 0;
+    };
+    struct FSpriteFrame
+    {
+        FGuid id, cellId;
+        int32 cellIndex = INDEX_NONE;
+        double durationFrames = 0;
+    };
+    struct FSpriteAnimation
+    {
+        bool present = false, loop = true;
+        int32 startFrame = 0, endFrame = 0;
+        double fps = 0;
+        int32 version = 0;
+        FLibraSpriteCompositionRender composition;
+        TArray<FSpriteCell> cells;
+        TArray<FSpriteFrame> frames;
+        TArray<double> durations;
+    };
     struct FRenderNode
     {
         FGuid id;
         FString kind;
         FString assetPath;
         bool billboard = false;
+        FSpriteAnimation spriteAnimation;
         uint32 frame = 0;
         FVector4 uvRect = FVector4(0, 0, 1, 1);
         TStrongObjectPtr<UStaticMeshComponent> component;
@@ -99,6 +126,7 @@ private:
     TUniquePtr<FLibraEditorGpuPreview> gpuPreview;
     TUniquePtr<FLibraPreviewConnectionInvitation> pendingConnection;
     TUniquePtr<FLibraPreviewDiscovery> discovery;
+    FLibraViewerEndpoint viewerEndpoint;
     TArray<FLibraPreviewDiscoveryCandidate> discoveredPeers;
     FString connectionNotice;
     TArray<FRenderNode> renderNodes;
@@ -119,6 +147,7 @@ private:
     bool bEngineReady = false;
     bool bPreviewRequested = false;
     bool bTransportRequested = false;
+    bool bAutoConnect = false;
     int32 previousPreviewProfileIndex = INDEX_NONE;
     FString previousPreviewProfileName;
 };

@@ -12,6 +12,9 @@ internal static class AssetAuthoringTests
         VerifyMaterialAssociationDelivery();
         VerifySpriteModes();
         VerifyLocalMetadata();
+        VerifyProjectAssetRoot();
+        VerifyCallerTargetBinding();
+        VerifyCallerTargetBinding(inline: true);
     }
 
     private static void VerifyMaterialAssociationDelivery()
@@ -74,6 +77,12 @@ internal static class AssetAuthoringTests
             throw new InvalidOperationException("Scalar/vector pins or texture property descriptors were not generated correctly.");
 
         var node = RenderNodeAuthoring.CreateModel(graph, asset);
+        var textureParameterId = described.Single(item => item.Kind == "texture").Id;
+        var textureTarget = ResourceAssignment.TargetForParameter(node, textureParameterId);
+        if (textureTarget is not { Kind: ResourceTargetKind.MaterialTexture } ||
+            textureTarget.Id != textureParameterId ||
+            ResourceAssignment.AssetClassForParameter(node, textureTarget.Id) != "texture")
+            throw new InvalidOperationException("A material texture parameter did not expose a typed resource target.");
         var opacity = node.InputPorts.Single(port => port.Name == "Opacity");
         var tint = node.InputPorts.Single(port => port.Name == "GlowTint");
         var scalarSource = graph.CreateNode(GraphNodeKind.Float);
@@ -177,6 +186,184 @@ internal static class AssetAuthoringTests
         finally
         {
             if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static void VerifyProjectAssetRoot()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "liberafx-asset-root-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var projectPath = Path.Combine(directory, "Test.lfxproj");
+        try
+        {
+            File.WriteAllText(projectPath, "{}");
+            var root = ProjectAssetRoot.FromProjectFileKey(new Uri(projectPath).AbsoluteUri);
+            if (root is null || !Path.GetFullPath(root).Equals(Path.GetFullPath(directory),
+                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) ||
+                ProjectAssetRoot.FromProjectFileKey(null) is not null)
+                throw new InvalidOperationException("The physical root was not derived from the saved .lfxproj URI.");
+
+            var created = ProjectAssetRoot.CreateFolder(root, AssetBrowserRootKind.PhysicalProject, "Textures");
+            if (!Directory.Exists(created) || ProjectAssetRoot.List(root).All(entry =>
+                    entry.Name != "Textures" || !entry.IsDirectory))
+                throw new InvalidOperationException("A project-root folder was not created and surfaced in the listing.");
+            var nested = ProjectAssetRoot.CreateFolder(root, AssetBrowserRootKind.PhysicalProject,
+                "Nested", "Textures");
+            if (!Directory.Exists(nested) || ProjectAssetRoot.List(root, "Textures").All(entry =>
+                    entry.Name != "Nested" || !entry.IsDirectory))
+                throw new InvalidOperationException("A nested project folder escaped the physical-root listing.");
+            var peer = Guid.NewGuid();
+            var engineAsset = new EngineAsset("/Game/Textures/T_Test.T_Test", "T_Test", "texture", "Unreal");
+            var virtualReference = new AssetBrowserRootEntry(AssetBrowserRootKind.VirtualEngine,
+                engineAsset.Name, engineAsset.Path, false, engineAsset, peer).Reference;
+            var physicalReference = new AssetBrowserRootEntry(AssetBrowserRootKind.PhysicalProject,
+                "T_Local.png", Path.Combine("Textures", "T_Local.png"), false, ProjectRoot: root).Reference;
+            if (virtualReference is not { Root: AssetBrowserRootKind.VirtualEngine, SessionPeerId: var boundPeer } ||
+                boundPeer != peer || physicalReference is not
+                    { Root: AssetBrowserRootKind.PhysicalProject, ProjectRoot: var boundRoot } ||
+                boundRoot != root)
+                throw new InvalidOperationException("Browser selection did not retain typed root and caller context.");
+
+            try
+            {
+                ProjectAssetRoot.CreateFolder(root, AssetBrowserRootKind.VirtualEngine, "NeverCreate");
+                throw new InvalidOperationException("A physical folder operation was accepted for the virtual root.");
+            }
+            catch (InvalidOperationException exception) when (
+                exception.Message.Contains("physical project root", StringComparison.OrdinalIgnoreCase)) { }
+
+            try
+            {
+                ProjectAssetRoot.CreateFolder(root, AssetBrowserRootKind.PhysicalProject, "..");
+                throw new InvalidOperationException("A path traversal folder name was accepted.");
+            }
+            catch (ArgumentException) { }
+
+            try
+            {
+                ProjectAssetRoot.CreateFolder(root, AssetBrowserRootKind.PhysicalProject, "Escape", "..");
+                throw new InvalidOperationException("A traversal parent folder escaped the physical root.");
+            }
+            catch (UnauthorizedAccessException) { }
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static void VerifyCallerTargetBinding(bool inline = false)
+    {
+        var main = new MainViewModel();
+        var peerId = Guid.NewGuid();
+        var sentFrames = 0;
+        main.PreviewTelemetry.Connect(peerId, 3, _ =>
+        {
+            sentFrames++;
+            return Task.CompletedTask;
+        });
+        try
+        {
+            var hello = JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                type = "hello",
+                version = 1,
+                engine = "Unreal",
+                role = "editor",
+                capabilities = new[] { "assets" }
+            });
+            if (!main.PreviewTelemetry.Receive(peerId, hello))
+                throw new InvalidOperationException("The in-memory asset peer fixture was rejected.");
+            main.RefreshPreviewConnections();
+
+            var coordinator = main.AssetBrowser;
+            var sharedViewModel = coordinator.ViewModel;
+            if (sharedViewModel.SelectedPeer?.ClientId != peerId)
+                throw new InvalidOperationException("The in-memory asset peer was not selected.");
+
+            var document = main.ActiveDocument
+                ?? throw new InvalidOperationException("The test main view model has no active document.");
+            var graph = document.Workspace;
+            if (inline)
+            {
+                graph = graph.OpenInlineGraph(graph.CreateNode(GraphNodeKind.GraphGroup));
+                graph.ActivateEditingWorkspace();
+            }
+            var sourceAsset = new EngineAsset("/Game/Meshes/SM_Binding.SM_Binding",
+                "SM_Binding", "model", "Unreal");
+            var selectedAsset = new EngineAsset("/Game/Meshes/SM_Selected.SM_Selected",
+                "SM_Selected", "model", "Unreal");
+            var firstNode = RenderNodeAuthoring.CreateModel(graph, sourceAsset);
+            var secondNode = RenderNodeAuthoring.CreateModel(graph,
+                new EngineAsset("/Game/Meshes/SM_Other.SM_Other", "SM_Other", "model", "Unreal"));
+
+            ResourceAssignmentTarget TargetFor(GraphNodeViewModel node) =>
+                ResourceAssignment.TargetForParameter(node, "assetPath")
+                ?? throw new InvalidOperationException("The model asset parameter did not expose a caller target.");
+
+            AssetSelectionRequest BeginFor(GraphNodeViewModel node)
+            {
+                graph.SelectNode(node);
+                var target = TargetFor(node);
+                var request = coordinator.BeginForParameter(document, graph, node, "assetPath",
+                    target, "model", static () => true)
+                    ?? throw new InvalidOperationException("A current resource parameter did not bind to the browser.");
+                if (!coordinator.IsCurrent(request, peerId))
+                    throw new InvalidOperationException("A freshly captured resource target was unexpectedly stale.");
+                return request;
+            }
+
+            bool TryApply(ResourceAssignmentTarget target) =>
+                coordinator.TrySelect(selectedAsset,
+                    new AssetBrowserAssetReference(AssetBrowserRootKind.VirtualEngine,
+                        selectedAsset.Engine, selectedAsset.Path, peerId),
+                    peerId, target, out _);
+
+            var documentBound = BeginFor(firstNode);
+            main.NewDocumentCommand.Execute(null);
+            if (TryApply(TargetFor(firstNode)) || !documentBound.IsStale)
+                throw new InvalidOperationException("A resource selection applied after switching documents.");
+            main.ActivateDocument(document);
+
+            var nodeBound = BeginFor(firstNode);
+            graph.SelectNode(secondNode);
+            if (TryApply(TargetFor(firstNode)) || !nodeBound.IsStale)
+                throw new InvalidOperationException("A resource selection applied after switching nodes.");
+
+            var parameterBound = BeginFor(firstNode);
+            graph.SetParameter(firstNode, "assetPath",
+                JsonSerializer.SerializeToElement("/Game/Meshes/SM_Changed.SM_Changed"));
+            if (TryApply(TargetFor(firstNode)) || !parameterBound.IsStale)
+                throw new InvalidOperationException("A resource selection applied after its parameter value changed.");
+
+            var replacedCaller = BeginFor(firstNode);
+            graph.SelectNode(secondNode);
+            var receiverCalled = false;
+            var otherCaller = coordinator.BeginForOtherWindow(document, graph, secondNode,
+                static () => true, _ =>
+                {
+                    receiverCalled = true;
+                    return true;
+                }, "model")
+                ?? throw new InvalidOperationException("A second caller was not bound to the shared browser.");
+            if (!replacedCaller.IsStale || coordinator.IsCurrent(replacedCaller, peerId))
+                throw new InvalidOperationException("Replacing a caller left its previous target current.");
+
+            graph.SelectNode(null);
+            if (coordinator.BeginForCurrentSelection() is not null ||
+                coordinator.Request is not null || !otherCaller.IsStale ||
+                TryApply(TargetFor(secondNode)) || receiverCalled)
+                throw new InvalidOperationException("Clearing the active caller left a stale selection applicable.");
+
+            if (!ReferenceEquals(sharedViewModel, coordinator.ViewModel))
+                throw new InvalidOperationException("Caller replacement discarded the MainViewModel-owned shared VM.");
+            if (sentFrames != 0)
+                throw new InvalidOperationException("The caller-binding source test unexpectedly sent a preview request.");
+        }
+        finally
+        {
+            main.DisposeAssetBrowser();
+            main.PreviewTelemetry.Disconnect(peerId);
         }
     }
 

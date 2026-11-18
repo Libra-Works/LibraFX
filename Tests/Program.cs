@@ -12,9 +12,135 @@ using LiberaFx.Views;
 
 internal static class Program
 {
+    private static void InitializeIsolatedUi()
+    {
+        var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
+        if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root))
+            throw new ArgumentException("Use an isolated absolute data root.");
+        AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+    }
+
     [STAThread]
     private static void Main(string[] args)
     {
+        try { MainCore(args); }
+        finally { CompleteTestApplication(); }
+    }
+
+    private static void CompleteTestApplication()
+    {
+        if (Application.Current is not App app) return;
+        var field = typeof(App).GetField("_crashReports", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (field?.GetValue(app) is not LiberaFx.Services.CrashReportLifecycle reports) return;
+        reports.CompleteCleanExit();
+        reports.Dispose();
+        field.SetValue(app, null);
+    }
+
+    private static void MainCore(string[] args)
+    {
+        if (args is ["--authored-quality", var qualityFixtureDirectory])
+        {
+            InitializeIsolatedUi();
+            AuthoredQualityTests.Run(qualityFixtureDirectory);
+            return;
+        }
+        if (args is ["--live-game-fixtures", var liveFixtureDirectory])
+        {
+            InitializeIsolatedUi();
+            LiveGameSessionFixtures.Run(liveFixtureDirectory);
+            return;
+        }
+        if (args is ["--authored-lifecycle", var lifecycleFixtureDirectory])
+        {
+            InitializeIsolatedUi();
+            AuthoredLifecycleTests.Run(lifecycleFixtureDirectory);
+            return;
+        }
+        if (args is ["--inline-groups-ui"])
+        {
+            var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
+            if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root))
+                throw new ArgumentException("Use an isolated absolute data root.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            InlineGroupInterfaceTests.Run();
+            return;
+        }
+        if (args is ["--debugger-fixtures", var debuggerFixtureDirectory])
+        {
+            InitializeIsolatedUi();
+            ExecutionDebuggerFixtures.Write(debuggerFixtureDirectory);
+            return;
+        }
+        if (args is ["--int32"])
+        {
+            InitializeIsolatedUi();
+            LiberaFx.Tests.Int32CompilationTests.Run();
+            return;
+        }
+        if (args is ["--inline-groups"])
+        {
+            var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
+            if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root))
+                throw new ArgumentException("Use an isolated absolute data root.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            InlineGroupTests.Run();
+            return;
+        }
+        if (args is ["--resource-identity"])
+        {
+            InitializeIsolatedUi();
+            ResourceIdentityTests.Run();
+            ResourceIdentityExportTests.Run();
+            ResourceIdentityConverterTests.Run();
+            ResourceIdentityProjectHistoryTests.Run();
+            ResourceIdentityScopedPackageTests.Run();
+            return;
+        }
+        if (args is ["--extension-host", var sampleDirectory])
+        {
+            var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
+            if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root) || !Path.IsPathFullyQualified(sampleDirectory))
+                throw new ArgumentException("Use isolated absolute data/sample paths.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            ExtensionHostTests.Run(sampleDirectory);
+            return;
+        }
+        if (args is ["--graph-revision-diff"])
+        {
+            InitializeIsolatedUi();
+            GraphRevisionDiffTests.Run();
+            return;
+        }
+        if (args is ["--crash-reports"])
+        {
+            var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
+            if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root))
+                throw new ArgumentException("Use an isolated absolute data root.");
+            CrashReport48SourceTests.RunAsync().GetAwaiter().GetResult();
+            return;
+        }
+        if (args is ["--chat-adapters"])
+        {
+            var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
+            if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root))
+                throw new ArgumentException("Use an isolated absolute data root.");
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            var task = ChatSourceTests.RunAsync();
+            var frame = new Avalonia.Threading.DispatcherFrame();
+            var timedOut = false;
+            using var timeout = Avalonia.Threading.DispatcherTimer.RunOnce(() =>
+            {
+                timedOut = true;
+                frame.Continue = false;
+            }, TimeSpan.FromSeconds(60));
+            _ = task.ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(() => frame.Continue = false),
+                TaskScheduler.Default);
+            if (!task.IsCompleted) Avalonia.Threading.Dispatcher.UIThread.PushFrame(frame);
+            if (timedOut) throw new TimeoutException("Chat source checks timed out.");
+            task.GetAwaiter().GetResult();
+            return;
+        }
         if (args.Length is 1 or 2 && args[0] == "--logical-signals")
         {
             var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
@@ -266,6 +392,7 @@ internal static class Program
         try { Run(args); }
         finally
         {
+            CompleteTestApplication();
             if (Directory.Exists(dataRoot)) Directory.Delete(dataRoot, recursive: true);
         }
     }
@@ -306,6 +433,12 @@ internal static class Program
         {
             MatrixNodeTests.Run(args.Length == 2 ? args[1] : null);
             Console.WriteLine("Matrix node authoring, persistence, compilation and fixture export checks passed.");
+            return;
+        }
+        if (args.Length is 1 or 2 && args[0] == "--sprite-composition")
+        {
+            SpriteCompositionTests.Run(args.Length == 2 ? args[1] : null);
+            Console.WriteLine("Sprite composition authoring, timing, persistence and package checks passed.");
             return;
         }
         if (args.Length is 1 or 2 && args[0] == "--sprite-editor")

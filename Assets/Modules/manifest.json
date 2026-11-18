@@ -1,5 +1,25 @@
 [
   {
+    "id": "37000000-0000-4000-8000-000000000001",
+    "nameKey": "Lifecycle.PresetName",
+    "descriptionKey": "Lifecycle.PresetDescription",
+    "categoryKey": "Editor.NodeGroup.Lifecycle",
+    "phaseKey": "Lifecycle.PresetPhases",
+    "unitsKey": "Lifecycle.PresetUnits",
+    "inputsKey": "Lifecycle.PresetInputs",
+    "outputsKey": "Lifecycle.PresetOutputs",
+    "stateKey": "Lifecycle.PresetState",
+    "backendKey": "Modules.Backend.GenericPortable",
+    "keywords": ["start", "loop", "end", "phase", "lifecycle", "開始", "ループ", "終了"],
+    "parameters": [
+      { "itemId": "3701ffff-0000-4000-8000-000000000001", "nameKey": "Lifecycle.StartLength", "descriptionKey": "Lifecycle.StartLengthHelp" },
+      { "itemId": "3701ffff-0000-4000-8000-000000000002", "nameKey": "Lifecycle.LoopLength", "descriptionKey": "Lifecycle.LoopLengthHelp" },
+      { "itemId": "3701ffff-0000-4000-8000-000000000003", "nameKey": "Lifecycle.LoopCount", "descriptionKey": "Lifecycle.LoopCountHelp" },
+      { "itemId": "3701ffff-0000-4000-8000-000000000004", "nameKey": "Lifecycle.LimitCount", "descriptionKey": "Lifecycle.LimitCountHelp" },
+      { "itemId": "3701ffff-0000-4000-8000-000000000005", "nameKey": "Lifecycle.EndLength", "descriptionKey": "Lifecycle.EndLengthHelp" }
+    ]
+  },
+  {
     "id": "29000000-0000-4000-8000-000000000001",
     "nameKey": "Modules.PositionStep.Name",
     "descriptionKey": "Modules.PositionStep.Description",

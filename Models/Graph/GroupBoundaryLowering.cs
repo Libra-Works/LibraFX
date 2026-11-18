@@ -48,6 +48,7 @@ public static class GroupBoundaryLowering
                     "FloatX2" => GraphNodeKind.FloatX2,
                     "FloatX3" => GraphNodeKind.FloatX3,
                     "FloatX4" => GraphNodeKind.FloatX4,
+                    "Int32" => GraphNodeKind.Int32,
                     "Color" => GraphNodeDefinition.All.Single(item => item.TypeName == "Color" &&
                         item.Namespace == "LiberaFx").Kind,
                     "Signal" => GraphNodeKind.Signal,
