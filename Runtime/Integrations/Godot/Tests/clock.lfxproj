@@ -1,0 +1,24 @@
+{
+  "FormatVersion": 1,
+  "Nodes": [
+    {
+      "Id": "416910d7-f3d0-4d52-a4d3-359e12c23b41",
+      "Name": "Elapsed time",
+      "Kind": "Time",
+      "X": 0,
+      "Y": 0,
+      "Parameters": []
+    },
+    {
+      "Id": "d316826d-e06c-454d-a652-b3a36f0188a6",
+      "Name": "Fixed position",
+      "Kind": "FloatX3",
+      "X": 100,
+      "Y": 0,
+      "Parameters": [
+        { "Id": "value", "Type": "vector3", "Value": [1, 2, 3] }
+      ]
+    }
+  ],
+  "Connections": []
+}

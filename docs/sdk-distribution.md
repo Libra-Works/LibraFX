@@ -3,7 +3,11 @@
 The SDKs still live in this repository. `Libra-Works/ForUnity` and
 `Libra-Works/ForUnreal` have **not** been created or migrated by this tooling.
 Repository creation, history migration, removal of the originals, releases and
-pushes require a separate approved migration. Godot is not implemented.
+pushes require a separate approved migration.
+
+Godot has an initial Windows x86-64 GDExtension for standalone CPU programs.
+See `Runtime\Integrations\Godot\USAGE.txt` for the separate build and smoke
+test. The SDK staging script below still targets Unity and Unreal only.
 
 ## Reproducible local staging
 

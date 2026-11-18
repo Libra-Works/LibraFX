@@ -1,0 +1,54 @@
+LIBERA FX for Godot 4.7
+======================
+
+This Windows x86-64 GDExtension embeds the same portable C++ Core Runtime
+used by the other integrations. It plays standalone .lfxb programs (pure
+v1 scalar or v2 typed bytecode). No .NET runtime is required in Godot.
+
+Build from an x64 Visual Studio developer shell with CMake, Ninja, Python,
+and a separate godot-cpp checkout that provides the 4.7 API:
+
+  cmake -S Runtime\Integrations\Godot -B C:\LiberaBuild\Godot -G Ninja -DCMAKE_BUILD_TYPE=Release -DGODOT_CPP_DIR=C:\src\godot-cpp
+  cmake --build C:\LiberaBuild\Godot
+
+Copy liberafx.gdextension and bin\liberafx_godot.dll into your Godot project
+with that relative layout; open the project in Godot to discover the
+extension. Add a LibraEffectPlayer node. Keep the .lfxb under res:// (include
+*.lfxb in the Godot export preset's non-resource file filter). A packaged
+game does not need the .lfxproj, the Converter, or a copy of godot-cpp.
+
+Convert a graph offline using the authoring repository:
+
+  dotnet run --project Tools\Converter -- convert path\input.lfxproj path\effect.lfxb
+
+Play from GDScript on the main thread after the player has entered the tree:
+
+  var result: int = $LibraEffectPlayer.play(FileAccess.get_file_as_bytes("res://effect.lfxb"))
+  if result != 0:
+      push_error("LIBERA FX could not play the effect: %d" % result)
+
+The player advances automatically with Godot's process clock. For deterministic
+stepping, call set_process(false) after play and then advance(delta_seconds).
+play and advance return numeric Core Result codes (0 = Ok; see
+Runtime\include\liberafx\LbRuntimeResult.h). An optional duration in seconds
+limits playback; the default -1 runs until stop or scene removal. A failed
+play call preserves the current effect. Each player owns its own storage.
+read_value(node_uuid) returns the evaluated lanes as PackedFloat64Array, or
+an empty array if the player is stopped or the UUID has no value. Use these
+values to drive Godot properties from your scene script.
+
+Headless smoke test:
+
+1. Copy Tests\project.godot and Tests\smoke.gd to a new scratch Godot project.
+2. Copy the .gdextension and DLL into the scratch project as above.
+3. Use the Converter to convert Tests\clock.lfxproj to clock.lfxb in the
+   scratch project.
+4. Run the Godot 4.7 console executable with:
+   --headless --path C:\LiberaBuild\Smoke --script res://smoke.gd --quit-after 120
+   Expect "PASS: Godot GDExtension executed converter-produced LIBERA FX bytecode".
+
+The initial adapter does not import .lfxp packages, wire Game I/O, render
+effects directly, resolve engine assets, execute GPU particle programs, or
+connect to the live preview editor. Unsupported bytecode is rejected. Windows
+x86-64 headless runtime was exercised with Godot 4.7.2; exported games and
+other platforms are not yet verified.
