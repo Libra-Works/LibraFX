@@ -39,6 +39,12 @@ internal static class Program
 
     private static void MainCore(string[] args)
     {
+        if (args is ["--operator-skill"])
+        {
+            InitializeIsolatedUi();
+            OperatorSkillTests.Run();
+            return;
+        }
         if (args is ["--mcp-project-files"])
         {
             InitializeIsolatedUi();
@@ -654,6 +660,7 @@ internal static class Program
         GroupLibraryTests.Run();
         Console.WriteLine("Project profile and group library checks passed.");
         EditorInterfaceTests.Run();
+        OperatorSkillTests.Run();
         MaterialAuthoringTests.Run();
         Console.WriteLine("Inspector actions and English/Japanese localization checks passed.");
         ProjectNodeCatalogTests.Run();

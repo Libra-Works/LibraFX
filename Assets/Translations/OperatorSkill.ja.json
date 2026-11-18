@@ -1,0 +1,13 @@
+{
+  "OperatorSkill.Title": "AI 操作用スキル",
+  "OperatorSkill.Help": "このエディタに同梱された、英語のエフェクト制作手順です。AI クライアントのスキル用ディレクトリに導入後、スキルを再読み込みしてください。MCP 接続設定は別途行います。",
+  "OperatorSkill.BundledPath": "同梱 SKILL.md",
+  "OperatorSkill.CopyPath": "同梱スキルのパスをコピー",
+  "OperatorSkill.Destination": "クライアントのスキル用ディレクトリ（絶対パス・liberafx-operator は自動で追加）",
+  "OperatorSkill.Replace": "既存の SKILL.md をバックアップして置き換える",
+  "OperatorSkill.Install": "導入 / 更新",
+  "OperatorSkill.Installed": "導入しました: {0}",
+  "OperatorSkill.Updated": "更新しました: {0}\n以前のスキルのバックアップ: {1}",
+  "OperatorSkill.Current": "すでに最新です: {0}",
+  "OperatorSkill.Failed": "操作用スキルを導入できませんでした: {0}"
+}

@@ -1,0 +1,13 @@
+{
+  "OperatorSkill.Title": "AI operator skill",
+  "OperatorSkill.Help": "English effect-authoring instructions bundled with this editor. Install into your AI client's skills directory, then reload its skills. MCP connection settings are configured separately.",
+  "OperatorSkill.BundledPath": "Bundled SKILL.md",
+  "OperatorSkill.CopyPath": "Copy bundled skill path",
+  "OperatorSkill.Destination": "Client skills directory (absolute path; the liberafx-operator subfolder is added)",
+  "OperatorSkill.Replace": "Replace existing SKILL.md and keep a backup",
+  "OperatorSkill.Install": "Install / update",
+  "OperatorSkill.Installed": "Installed: {0}",
+  "OperatorSkill.Updated": "Updated: {0}\nPrevious skill backup: {1}",
+  "OperatorSkill.Current": "Already up to date: {0}",
+  "OperatorSkill.Failed": "Could not install the operator skill: {0}"
+}

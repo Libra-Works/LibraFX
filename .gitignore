@@ -13,6 +13,7 @@ TestResults/
 .github/skills/
 *.md
 !/docs/**/*.md
+!/Skills/**/*.md
 .mcp.json
 .vscode/mcp.json
 Assets/Inspectors/

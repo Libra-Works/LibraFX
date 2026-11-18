@@ -31,6 +31,7 @@
     <None Update="Assets\Inspectors\*.dll" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Samples\*.lfxproj" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Samples\*.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Skills\**\*.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

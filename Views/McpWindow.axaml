@@ -5,7 +5,7 @@
         x:Class="LiberaFx.Views.McpWindow"
         x:DataType="vm:MainViewModel"
         Title="{DynamicResource Text.Panels.McpConnectionTitle}"
-        Width="580" Height="360" MinWidth="420" MinHeight="280"
+        Width="680" Height="670" MinWidth="460" MinHeight="360"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
     <ScrollViewer>
@@ -25,6 +25,25 @@
             <CheckBox Content="{DynamicResource Text.Panels.ShowToken}" IsCheckedChanged="OnShowTokenChanged" />
             <TextBlock Text="{DynamicResource Text.Panels.McpSecurityNotice}"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" TextWrapping="Wrap" />
+            <Separator Margin="0,8" />
+            <TextBlock Text="{DynamicResource Text.OperatorSkill.Title}" FontSize="18" FontWeight="SemiBold" />
+            <TextBlock Text="{DynamicResource Text.OperatorSkill.Help}" TextWrapping="Wrap" />
+            <TextBlock Text="{DynamicResource Text.OperatorSkill.BundledPath}" />
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBox x:Name="OperatorSkillPathBox" IsReadOnly="True"
+                         AutomationProperties.Name="{DynamicResource Text.OperatorSkill.BundledPath}" />
+                <views:IconButton x:Name="CopyOperatorSkillPathButton" Grid.Column="1" Icon="Copy"
+                                  Click="OnCopyOperatorSkillPathClick"
+                                  ToolTip.Tip="{DynamicResource Text.OperatorSkill.CopyPath}"
+                                  AutomationProperties.Name="{DynamicResource Text.OperatorSkill.CopyPath}" />
+            </Grid>
+            <TextBlock Text="{DynamicResource Text.OperatorSkill.Destination}" TextWrapping="Wrap" />
+            <TextBox x:Name="OperatorSkillsDirectoryBox"
+                     AutomationProperties.Name="{DynamicResource Text.OperatorSkill.Destination}" />
+            <CheckBox x:Name="ReplaceOperatorSkillBox" Content="{DynamicResource Text.OperatorSkill.Replace}" />
+            <Button x:Name="InstallOperatorSkillButton" Content="{DynamicResource Text.OperatorSkill.Install}"
+                    Click="OnInstallOperatorSkillClick" HorizontalAlignment="Left" />
+            <TextBlock x:Name="OperatorSkillStatus" TextWrapping="Wrap" />
         </StackPanel>
     </ScrollViewer>
 </Window>
