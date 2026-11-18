@@ -1,10 +1,9 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:LiberaFx.ViewModels"
         x:Class="LiberaFx.Views.WindowLayoutsWindow"
-        x:DataType="vm:WindowLayoutsViewModel"
-        Title="{DynamicResource Text.Layouts.Title}" Width="620" Height="400"
-        MinWidth="480" MinHeight="340" WindowStartupLocation="CenterOwner">
+        x:DataType="vm:WindowLayoutsViewModel">
+    <ScrollViewer>
     <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
         <TextBlock Text="{DynamicResource Text.Layouts.Hint}" TextWrapping="Wrap" Margin="0,0,0,14" />
         <ComboBox Grid.Row="1" ItemsSource="{Binding Choices}" SelectedItem="{Binding Selected}" HorizontalAlignment="Stretch">
@@ -25,7 +24,7 @@
         <TextBlock Grid.Row="4" Text="{Binding Status}" TextWrapping="Wrap" Margin="0,12" />
         <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
             <Button Content="{DynamicResource Text.Layouts.RestoreDefault}" Command="{Binding RestoreDefaultCommand}" />
-            <Button Content="{DynamicResource Text.Layouts.Close}" Click="OnCloseClick" />
         </StackPanel>
     </Grid>
-</Window>
+    </ScrollViewer>
+</UserControl>

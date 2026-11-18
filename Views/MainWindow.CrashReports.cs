@@ -9,14 +9,14 @@ public partial class MainWindow
     private CrashDraftStore? _crashDrafts;
     private CrashReportsWindow? _crashReportsWindow;
 
-    public void ConfigureCrashReports(CrashDraftStore drafts)
+    public void ConfigureCrashReports(CrashDraftStore drafts) => _crashDrafts = drafts;
+
+    internal void ShowRecoveredCrashReports()
     {
-        _crashDrafts = drafts;
-        Opened += (_, _) =>
+        if (IsVisible && _crashDrafts?.TryClaimStartupPrompt() == true)
         {
-            if (drafts.TryClaimStartupPrompt())
-                OnCrashReportsClick(this, new RoutedEventArgs());
-        };
+            OnCrashReportsClick(this, new RoutedEventArgs());
+        }
     }
 
     private void OnCrashReportsClick(object? sender, RoutedEventArgs e)

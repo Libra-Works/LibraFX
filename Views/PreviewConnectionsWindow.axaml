@@ -1,9 +1,7 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:services="using:LiberaFx.Services"
         x:Class="LiberaFx.Views.PreviewConnectionsWindow"
-        Title="{DynamicResource Text.Connections.Title}"
-        Width="940" Height="560" MinWidth="640" MinHeight="400"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
   <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="16" RowSpacing="12">
     <TextBlock Text="{DynamicResource Text.Connections.Hint}" TextWrapping="Wrap" />
@@ -50,4 +48,4 @@
               Content="{DynamicResource Text.Connections.Reconnect}" />
     </Grid>
   </Grid>
-</Window>
+</UserControl>

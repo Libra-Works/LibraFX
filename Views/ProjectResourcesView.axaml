@@ -27,7 +27,7 @@
                         <StackPanel Margin="4">
                             <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                             <TextBlock Text="{Binding KindLabel}" />
-                            <TextBlock Text="{Binding Origin}" TextWrapping="Wrap" FontSize="11"
+                            <TextBlock Text="{Binding Origin}" TextWrapping="Wrap"
                                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
                         </StackPanel>
                     </DataTemplate>

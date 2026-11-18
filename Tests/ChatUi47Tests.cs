@@ -22,7 +22,8 @@ internal static class ChatUi47Tests
         var main = new MainViewModel(host.AccessToken, mcpEndpoint: host.ActualEndpoint);
         var adapter = new SyntheticAdapter();
         main.Extensions.RegisterBuiltIn(adapter);
-        var window = new ChatWindow(main);
+        using var window = new ChatWindow(main);
+        var chatHost = new Window { Content = window, Width = 820, Height = 820 };
         try
         {
             await host.StartAsync(main.ActiveGraphProvider);
@@ -35,7 +36,7 @@ internal static class ChatUi47Tests
                 }
                 catch (HttpRequestException) { }
             }
-            window.Show();
+            chatHost.Show();
             await Task.Delay(250); // Allow initial control bindings/layout to settle.
             var input = Field<TextBox>(window, "_input");
             var send = Field<Button>(window, "_send");
@@ -131,7 +132,7 @@ internal static class ChatUi47Tests
         }
         finally
         {
-            window.Close();
+            chatHost.Close();
             await host.StopAsync();
             main.Extensions.Dispose();
         }

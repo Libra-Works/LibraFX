@@ -237,9 +237,10 @@ internal static class PreviewTelemetryTests
         var savedSettings = new PreviewProfilerSettings(false, true, 1400);
         new PreviewProfilerSettingsService(settingsPath).Save(savedSettings);
         var window = new PreviewProfilerWindow(new PreviewProfilerSettingsService(settingsPath)) { DataContext = model };
+        var host = new Window { Content = window, Width = 1380, Height = 880 };
         var language = LocalizationService.Shared;
         var original = language.SelectedLanguage;
-        window.Show();
+        host.Show();
         try
         {
             Refresh(window);
@@ -267,7 +268,8 @@ internal static class PreviewTelemetryTests
             {
                 language.SelectedLanguage = language.Languages.Single(l => l.Id == code);
                 Dispatcher.UIThread.RunJobs();
-                Require(window.Title == language.Get("Profiler.Title") &&
+                Require(((DockFactory)model.Layout.Factory!).Tools.Single(tool => tool.Id == "PreviewProfiler").Title ==
+                        language.Get("Profiler.Title") &&
                     window.FindControl<Button>("StartButton")!.Content?.ToString() == language.Get("Profiler.Start"),
                     "Profiler controls and title must be localized live.");
             }
@@ -281,7 +283,7 @@ internal static class PreviewTelemetryTests
         }
         finally
         {
-            window.Close();
+            host.Close();
             language.SelectedLanguage = original;
             Directory.Delete(settingsDirectory, recursive: true);
         }

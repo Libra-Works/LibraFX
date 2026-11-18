@@ -4,17 +4,22 @@ using LiberaFx.ViewModels;
 
 namespace LiberaFx.Views;
 
-public partial class ProblemsWindow : Window
+public partial class ProblemsWindow : UserControl
 {
     private ActiveGraphProvider? _provider;
 
     public ProblemsWindow()
     {
         InitializeComponent();
-        Closed += (_, _) =>
+        AttachedToVisualTree += (_, _) =>
+        {
+            if (_provider is null) return;
+            _provider.PropertyChanged += OnActiveGraphChanged;
+            DataContext = _provider.Graph;
+        };
+        DetachedFromVisualTree += (_, _) =>
         {
             if (_provider is not null) _provider.PropertyChanged -= OnActiveGraphChanged;
-            _provider = null;
             DataContext = null;
         };
     }
@@ -22,8 +27,6 @@ public partial class ProblemsWindow : Window
     public ProblemsWindow(MainViewModel main) : this()
     {
         _provider = main.ActiveGraphProvider;
-        _provider.PropertyChanged += OnActiveGraphChanged;
-        DataContext = _provider.Graph;
     }
 
     private void OnActiveGraphChanged(object? sender, PropertyChangedEventArgs e)

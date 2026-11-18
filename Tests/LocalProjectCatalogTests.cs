@@ -38,6 +38,5 @@ internal static class LocalProjectCatalogTests
         }
         catch (ArgumentException) { }
         var window = new LiberaFx.Views.LocalProjectsWindow();
-        window.Close();
     }
 }

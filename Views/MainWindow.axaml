@@ -51,7 +51,7 @@
             </MenuItem>
             <MenuItem Header="{DynamicResource Text.Editor.Edit}">
                 <MenuItem Header="{DynamicResource Text.Search.Title}" Click="OnAnythingSearchClick" />
-                <MenuItem Header="{DynamicResource Text.Vcs.Title}" Click="OnRevisionHistoryClick" />
+                <MenuItem Header="{DynamicResource Text.Vcs.Title}" Tag="RevisionHistory" Click="OnDockPanelClick" />
                 <MenuItem Header="{DynamicResource Text.Editor.Undo}"
                           Command="{Binding UndoCommand}">
                     <MenuItem.Icon><views:EditorIconView Icon="Undo" /></MenuItem.Icon>
@@ -67,20 +67,20 @@
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="{DynamicResource Text.Editor.View}">
-                <MenuItem Header="{DynamicResource Text.Chat.Title}" Click="OnChatClick" />
-                <MenuItem Header="{DynamicResource Text.LiveGame.Title}" Click="OnLiveGameClick" />
+                <MenuItem Header="{DynamicResource Text.Chat.Title}" Tag="Chat" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.LiveGame.Title}" Tag="LiveGame" Click="OnDockPanelClick" />
                 <MenuItem Header="{DynamicResource Text.Crash.Title}" Click="OnCrashReportsClick" />
-                <MenuItem Header="{DynamicResource Text.Editor.Log}" Click="OnLogClick">
+                <MenuItem Header="{DynamicResource Text.Editor.Log}" Tag="Log" Click="OnDockPanelClick">
                     <MenuItem.Icon><views:EditorIconView Icon="Info" /></MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="{DynamicResource Text.Editor.Mcp}" Click="OnMcpClick">
+                <MenuItem Header="{DynamicResource Text.Editor.Mcp}" Tag="Mcp" Click="OnDockPanelClick">
                     <MenuItem.Icon><views:EditorIconView Icon="Link" /></MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="{DynamicResource Text.Profiler.Title}" Click="OnProfilerClick" />
-                <MenuItem Header="{DynamicResource Text.Connections.Title}" Click="OnConnectionsClick" />
-                <MenuItem Header="{DynamicResource Text.Asset.Title}" Click="OnContentClick" />
-                <MenuItem Header="{DynamicResource Text.Sprite.Title}" Click="OnSpriteEditorClick" />
-                <MenuItem Header="{DynamicResource Text.Library.Title}" Click="OnLocalProjectsClick" />
+                <MenuItem Header="{DynamicResource Text.Profiler.Title}" Tag="PreviewProfiler" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Connections.Title}" Tag="PreviewConnections" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Asset.Title}" Tag="Content" Click="OnContentClick" />
+                <MenuItem Header="{DynamicResource Text.Sprite.Title}" Tag="SpriteEditor" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Library.Title}" Tag="LocalProjects" Click="OnDockPanelClick" />
             </MenuItem>
             <MenuItem x:Name="WindowMenu" Header="{DynamicResource Text.Layouts.Window}">
                 <MenuItem Header="{DynamicResource Text.Messages.Tool.Outliner}" Tag="Outliner" Click="OnDockPanelClick" />
@@ -95,19 +95,23 @@
                 <MenuItem Header="{DynamicResource Text.Messages.Tool.Timeline}" Tag="Timeline" Click="OnDockPanelClick" />
                 <MenuItem Header="{DynamicResource Text.Messages.Tool.Curves}" Tag="Curves" Click="OnDockPanelClick" />
                 <Separator />
-                <MenuItem Header="{DynamicResource Text.Editor.Log}" Click="OnLogClick" />
-                <MenuItem Header="{DynamicResource Text.Editor.Mcp}" Click="OnMcpClick" />
-                <MenuItem Header="{DynamicResource Text.Profiler.Title}" Click="OnProfilerClick" />
-                <MenuItem Header="{DynamicResource Text.Connections.Title}" Click="OnConnectionsClick" />
-                <MenuItem Header="{DynamicResource Text.Asset.Title}" Click="OnContentClick" />
-                <MenuItem Header="{DynamicResource Text.Sprite.Title}" Click="OnSpriteEditorClick" />
-                <MenuItem Header="{DynamicResource Text.Library.Title}" Click="OnLocalProjectsClick" />
-                <MenuItem Header="{DynamicResource Text.Messages.GraphProblemsTitle}" Click="OnProblemsClick" />
+                <MenuItem Header="{DynamicResource Text.Editor.Log}" Tag="Log" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Editor.Mcp}" Tag="Mcp" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Profiler.Title}" Tag="PreviewProfiler" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Connections.Title}" Tag="PreviewConnections" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Asset.Title}" Tag="Content" Click="OnContentClick" />
+                <MenuItem Header="{DynamicResource Text.Sprite.Title}" Tag="SpriteEditor" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Library.Title}" Tag="LocalProjects" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Messages.GraphProblemsTitle}" Tag="Problems" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Vcs.Title}" Tag="RevisionHistory" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Chat.Title}" Tag="Chat" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.LiveGame.Title}" Tag="LiveGame" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Layouts.Title}" Tag="LayoutPresets" Click="OnDockPanelClick" />
                 <Separator />
                 <MenuItem Header="{DynamicResource Text.Layouts.Menu}">
                     <MenuItem Header="{DynamicResource Text.Layouts.RestoreDefault}" Click="OnRestoreDefaultLayoutClick" />
-                    <MenuItem Header="{DynamicResource Text.Layouts.Save}" Click="OnWindowLayoutsClick" />
-                    <MenuItem Header="{DynamicResource Text.Layouts.Manage}" Click="OnWindowLayoutsClick" />
+                    <MenuItem Header="{DynamicResource Text.Layouts.Save}" Tag="LayoutPresets" Click="OnDockPanelClick" />
+                    <MenuItem Header="{DynamicResource Text.Layouts.Manage}" Tag="LayoutPresets" Click="OnDockPanelClick" />
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="{DynamicResource Text.Editor.Help}">
@@ -129,7 +133,7 @@
 
         <Border Grid.Row="2" Classes="editor-bar" BorderThickness="0,1,0,0">
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-                <Button Classes="editor-tool" Content="{Binding PreviewConnectionSummary}" Click="OnConnectionsClick"
+                <Button Classes="editor-tool" Content="{Binding PreviewConnectionSummary}" Tag="PreviewConnections" Click="OnDockPanelClick"
                         Padding="6,3" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                     <TextBlock Classes="editor-label" Text="{Binding FileStatus}" TextWrapping="Wrap" />

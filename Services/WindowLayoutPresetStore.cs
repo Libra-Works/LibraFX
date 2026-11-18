@@ -9,7 +9,9 @@ public sealed class WindowLayoutPresetStore
     private static readonly string[] RequiredPaneIds =
         ["Outliner", "NodeList", "Resources", "Properties", "EngineConnection", "History", "Timeline", "Curves"];
     public static readonly string[] PaneIds =
-        [.. RequiredPaneIds, "Properties2", "Properties3", "Properties4"];
+        [.. RequiredPaneIds, "Properties2", "Properties3", "Properties4", "SpriteEditor",
+            "Log", "Mcp", "PreviewProfiler", "PreviewConnections", "LocalProjects", "Problems", "Content",
+            "RevisionHistory", "Chat", "LiveGame", "LayoutPresets"];
     private static readonly HashSet<string> AllowedPanes = new(PaneIds, StringComparer.Ordinal);
     private static readonly HashSet<string> Sides = new(["Left", "Right", "Top", "Bottom"], StringComparer.Ordinal);
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, MaxDepth = 48 };

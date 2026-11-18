@@ -12,7 +12,7 @@ using LiberaFx.ViewModels;
 namespace LiberaFx.Views;
 
 /// <summary>Session-only chat: no keys, transcripts or tool results are persisted or logged.</summary>
-public sealed partial class ChatWindow : Window
+public sealed partial class ChatWindow : UserControl, IDisposable
 {
     private readonly MainViewModel _main;
     private readonly ComboBox _adapters = new() { HorizontalAlignment = HorizontalAlignment.Stretch };
@@ -27,7 +27,8 @@ public sealed partial class ChatWindow : Window
     private readonly TextBox _transcript = new()
     {
         IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap,
-        HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch
+        HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch,
+        MinHeight = 120, MaxHeight = 300
     };
     private readonly TextBox _input = new() { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 65 };
     private readonly CheckBox _share = new();
@@ -59,12 +60,6 @@ public sealed partial class ChatWindow : Window
     public ChatWindow(MainViewModel main)
     {
         _main = main;
-        Title = Text("Title");
-        Width = 820;
-        Height = 820;
-        MinWidth = 540;
-        MinHeight = 520;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
         _connect.Content = Text("Connect");
         _disconnect.Content = Text("Disconnect");
         _send.Content = Text("Send");
@@ -100,13 +95,13 @@ public sealed partial class ChatWindow : Window
                 new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _send, _cancel, _explainSelection } }
             }
         };
-        var grid = new Grid { Margin = new Thickness(12), RowDefinitions = new RowDefinitions("Auto,*,Auto"), RowSpacing = 8 };
+        var grid = new Grid { Margin = new Thickness(12), MinHeight = 600, RowDefinitions = new RowDefinitions("Auto,*,Auto"), RowSpacing = 8 };
         grid.Children.Add(top);
         Grid.SetRow(_transcript, 1);
         grid.Children.Add(_transcript);
         Grid.SetRow(bottom, 2);
         grid.Children.Add(bottom);
-        Content = grid;
+        Content = new ScrollViewer { Content = grid };
         _connect.Click += async (_, _) => await ConnectAsync();
         _disconnect.Click += (_, _) => Disconnect("Offline");
         _cancel.Click += (_, _) => Disconnect("Cancelled");
@@ -123,17 +118,26 @@ public sealed partial class ChatWindow : Window
         };
         _main.Extensions.ChatAdapters.CollectionChanged += OnAdaptersChanged;
         _heartbeat.Tick += async (_, _) => await HeartbeatAsync();
-        Closed += (_, _) =>
-        {
-            _closed = true;
-            _heartbeat.Stop();
-            _main.Extensions.ChatAdapters.CollectionChanged -= OnAdaptersChanged;
-            Disconnect("Offline");
-            _key.Text = "";
-        };
         ReloadAdapters();
         SetStatus("Offline");
         Refresh();
+    }
+
+    internal void EndSession()
+    {
+        Disconnect("Offline");
+        _key.Text = "";
+    }
+
+    public void Dispose()
+    {
+        if (_closed)
+        {
+            return;
+        }
+        _closed = true;
+        _main.Extensions.ChatAdapters.CollectionChanged -= OnAdaptersChanged;
+        EndSession();
     }
 
     private static Control Label(string key, Control control)
@@ -394,7 +398,7 @@ public sealed partial class ChatWindow : Window
         reject.Click += (_, _) => dialog.Close(false);
         using var registration = cancellation.Register(() =>
             Dispatcher.UIThread.Post(() => { if (ReferenceEquals(_confirmation, dialog)) dialog.Close(false); }));
-        try { return await dialog.ShowDialog<bool>(this); }
+        try { return TopLevel.GetTopLevel(this) is Window owner && await dialog.ShowDialog<bool>(owner); }
         finally { if (ReferenceEquals(_confirmation, dialog)) _confirmation = null; }
     }
 

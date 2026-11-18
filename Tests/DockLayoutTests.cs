@@ -315,7 +315,32 @@ internal static class DockLayoutTests
         {
             var document = main.ActiveDocument;
             var tools = factory.Tools.ToArray();
-            foreach (var tool in tools) factory.CloseDockable(tool);
+            factory.ApplyLayout(factory.DefaultLayout);
+            var sprite = tools.OfType<SpriteEditorPaneViewModel>().Single();
+            var timeline = tools.Single(tool => tool.Id == "Timeline");
+            Check(factory.ShowTool(sprite.Id), "Sprite editor did not open.");
+            Dispatcher.UIThread.RunJobs();
+            var spriteHost = factory.FindRoot(sprite)?.Window?.Host as Window;
+            spriteHost?.UpdateLayout();
+            var spriteView = spriteHost?.GetVisualDescendants().OfType<SpriteEditorView>().SingleOrDefault();
+            Check(spriteView is { Bounds.Width: > 700, Bounds.Height: > 400 },
+                $"Sprite editor did not have a usable viewport: host={spriteHost?.Bounds}, view={spriteView?.Bounds}.");
+            var editor = sprite.Editor;
+            factory.MoveDockable((IDock)sprite.Owner!, (IDock)timeline.Owner!, sprite, timeline);
+            Check(factory.ShowTool(sprite.Id), "Redocked sprite editor did not reopen.");
+            Dispatcher.UIThread.RunJobs();
+            Check(factory.FindRoot(sprite) == main.Layout && ReferenceEquals(sprite.Editor, editor),
+                "Redocking the sprite editor lost its authoring state or returned it to a floating window.");
+            var spriteLayout = factory.CaptureLayout();
+            factory.ApplyLayout(factory.DefaultLayout);
+            factory.ApplyLayout(spriteLayout);
+            Check(factory.FindRoot(sprite) == main.Layout && ReferenceEquals(sprite.Editor, editor),
+                "A saved sprite dock location did not survive restoring the preset.");
+            factory.ApplyLayout(factory.DefaultLayout);
+            foreach (var tool in tools)
+            {
+                factory.CloseDockable(tool);
+            }
             factory.ApplyLayout(factory.CaptureLayout());
             var nodeListItem = window.FindControl<MenuItem>("WindowMenu")!.Items.OfType<MenuItem>()
                 .Single(item => item.Tag is "NodeList");

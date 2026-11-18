@@ -647,8 +647,15 @@ public partial class MainViewModel : ViewModelBase
         {
             inspector.Dispose();
         }
+        foreach (var spriteEditor in _dockFactory.Tools.OfType<SpriteEditorPaneViewModel>())
+        {
+            spriteEditor.Dispose();
+        }
         _executionDebugger?.Dispose();
-        CloseChatWindow();
+        foreach (var pane in _dockFactory.Tools.OfType<EditorWorkPaneViewModel>())
+        {
+            pane.ReleaseView();
+        }
         DisposeAssetBrowser();
         Extensions.Dispose();
         Playback.Dispose();

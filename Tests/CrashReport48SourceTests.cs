@@ -14,6 +14,11 @@ internal static class CrashReport48SourceTests
         Environment.SetEnvironmentVariable("LIBERAFX_DATA_ROOT", isolated);
         try
         {
+            var setup = new StartupSetupState();
+            Require(setup.IsPending, "A fresh profile did not offer first-run setup.");
+            setup.Complete();
+            Require(!new StartupSetupState().IsPending, "Completed setup was shown on another launch.");
+
             CrashReportSafety.Validate(new("Safe link", "See https://example.invalid/issues/1"));
             using var store = new CrashDraftStore();
             store.Start();

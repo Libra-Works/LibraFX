@@ -9,7 +9,7 @@ using LiberaFx.ViewModels;
 
 namespace LiberaFx.Views;
 
-public sealed class RevisionHistoryWindow : Window
+public sealed class RevisionHistoryWindow : UserControl
 {
     private readonly MainViewModel _main;
     private readonly string? _file;
@@ -24,7 +24,7 @@ public sealed class RevisionHistoryWindow : Window
     private readonly TextBlock _scope = new();
     private GraphSnapshot? _beforeGraph, _afterGraph;
     private IReadOnlyList<GraphNodeDifference> _differences = [];
-    private readonly CancellationTokenSource _lifetime = new();
+    private CancellationTokenSource? _lifetime;
     private bool _busy;
     private sealed record Choice(string? Revision, string Label)
     { public override string ToString() => Label; }
@@ -38,10 +38,6 @@ public sealed class RevisionHistoryWindow : Window
         if (Uri.TryCreate(_document?.FileKey, UriKind.Absolute, out var uri) && uri.IsFile)
             _file = uri.LocalPath;
         var text = LocalizationService.Shared;
-        Title = text.Get("Vcs.Title");
-        Width = 1100;
-        Height = 720;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
         _provider.ItemsSource = main.Extensions.VersionControlProviders;
         _provider.DisplayMemberBinding = new Avalonia.Data.Binding("Name");
         _provider.SelectedIndex = _provider.ItemCount > 0 ? 0 : -1;
@@ -54,16 +50,16 @@ public sealed class RevisionHistoryWindow : Window
         var compare = new Button { Content = text.Get("Vcs.Compare") };
         refresh.Click += async (_, _) => await LoadHistoryAsync();
         compare.Click += async (_, _) => await CompareAsync();
-        var controls = new StackPanel
+        var controls = new WrapPanel
         {
-            Orientation = Orientation.Horizontal, Spacing = 8,
+            Orientation = Orientation.Horizontal,
             Children = { _provider, refresh, _before, _after, compare }
         };
         var graphs = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*") };
         graphs.Children.Add(_left);
         Grid.SetColumn(_right, 1);
         graphs.Children.Add(_right);
-        var root = new Grid { Margin = new Thickness(12), RowDefinitions = new RowDefinitions("Auto,Auto,*,150,Auto"), RowSpacing = 8 };
+        var root = new Grid { Margin = new Thickness(12), MinHeight = 500, RowDefinitions = new RowDefinitions("Auto,Auto,*,150,Auto"), RowSpacing = 8 };
         root.Children.Add(controls);
         Grid.SetRow(_scope, 1);
         root.Children.Add(_scope);
@@ -73,7 +69,7 @@ public sealed class RevisionHistoryWindow : Window
         root.Children.Add(_changes);
         Grid.SetRow(_status, 4);
         root.Children.Add(_status);
-        Content = root;
+        Content = new ScrollViewer { Content = root };
         _provider.SelectionChanged += (_, _) =>
         {
             _before.ItemsSource = null;
@@ -89,18 +85,30 @@ public sealed class RevisionHistoryWindow : Window
             if (_changes.SelectedItem is ChangeChoice choice)
                 ShowScope(choice.Difference.Path.Split('/').SkipLast(1).Select(Guid.Parse).ToArray());
         };
-        Closed += (_, _) => { _lifetime.Cancel(); _lifetime.Dispose(); };
+        AttachedToVisualTree += (_, _) => _lifetime = new CancellationTokenSource();
+        DetachedFromVisualTree += (_, _) =>
+        {
+            _lifetime?.Cancel();
+            _lifetime?.Dispose();
+            _lifetime = null;
+        };
         _status.Text = _file is null ? text.Get("Vcs.SaveFirst") : _file;
     }
 
     private async Task LoadHistoryAsync()
     {
-        if (_busy || _file is null || _provider.SelectedItem is not IVersionControlProvider provider) return;
+        if (_busy || _file is null || _lifetime is not { } lifetime ||
+            _provider.SelectedItem is not IVersionControlProvider provider)
+        {
+            return;
+        }
+        var token = lifetime.Token;
         _busy = true;
         _provider.IsEnabled = false;
         try
         {
-            var revisions = await provider.GetHistoryAsync(_file, _lifetime.Token);
+            var revisions = await provider.GetHistoryAsync(_file, token);
+            token.ThrowIfCancellationRequested();
             if (!_main.Extensions.VersionControlProviders.Contains(provider))
                 throw new InvalidOperationException("The selected provider was disabled.");
             var choices = revisions.Take(100).Select(revision =>
@@ -118,15 +126,20 @@ public sealed class RevisionHistoryWindow : Window
 
     private async Task CompareAsync()
     {
-        if (_busy || _file is null || _document is null ||
+        if (_busy || _file is null || _document is null || _lifetime is not { } lifetime ||
             _provider.SelectedItem is not IVersionControlProvider provider ||
-            _before.SelectedItem is not Choice a || _after.SelectedItem is not Choice b) return;
+            _before.SelectedItem is not Choice a || _after.SelectedItem is not Choice b)
+        {
+            return;
+        }
+        var token = lifetime.Token;
         _busy = true;
         _provider.IsEnabled = false;
         try
         {
-            var before = await ReadAsync(a, provider);
-            var after = await ReadAsync(b, provider);
+            var before = await ReadAsync(a, provider, token);
+            var after = await ReadAsync(b, provider, token);
+            token.ThrowIfCancellationRequested();
             if (!_main.Extensions.VersionControlProviders.Contains(provider))
                 throw new InvalidOperationException("The selected provider was disabled.");
             _beforeGraph = before;
@@ -170,14 +183,14 @@ public sealed class RevisionHistoryWindow : Window
         _scope.Text = ScopeLabel(path);
     }
 
-    private async Task<GraphSnapshot> ReadAsync(Choice choice, IVersionControlProvider provider)
+    private async Task<GraphSnapshot> ReadAsync(Choice choice, IVersionControlProvider provider, CancellationToken token)
     {
         if (choice.Revision is null)
         {
             if (!_main.Documents.Contains(_document!)) throw new InvalidOperationException("The document was closed.");
             return _document!.Workspace.CreateSnapshot();
         }
-        var bytes = await provider.ReadRevisionAsync(_file!, choice.Revision, _lifetime.Token);
+        var bytes = await provider.ReadRevisionAsync(_file!, choice.Revision, token);
         if (bytes.Length > 16 * 1024 * 1024) throw new InvalidDataException("Revision exceeds 16 MiB.");
         using var stream = new MemoryStream(bytes, writable: false);
         return (await new ProjectFileService().LoadAsync(stream)).Graph;

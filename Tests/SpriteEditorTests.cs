@@ -257,24 +257,25 @@ internal static class SpriteEditorTests
                 throw new Exception("A stale sprite draft was applied after graph history changed.");
         }
         graph.SelectNode(node);
-        var window = new SpriteEditorWindow(main);
+        using var model = new SpriteEditorViewModel(main);
+        var editor = new SpriteEditorView { DataContext = model };
+        var window = new Window { Width = 1380, Height = 860, Content = editor };
         window.Show();
         try
         {
-            var model = (SpriteEditorViewModel)window.DataContext!;
             var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVQIHWP8DwQMQMD4HwgYgAAAV9UH+14vURUAAAAASUVORK5CYII=");
             using var stream = new MemoryStream(png);
             model.SetLocalPreview(new Bitmap(stream));
             model.SelectFrame(0);
             Dispatcher.UIThread.RunJobs();
-            var atlas = window.FindControl<SpriteAtlasPreview>("Atlas")!;
-            var frame = window.FindControl<SpriteAtlasPreview>("FramePreview")!;
+            var atlas = editor.FindControl<SpriteAtlasPreview>("Atlas")!;
+            var frame = editor.FindControl<SpriteAtlasPreview>("FramePreview")!;
             if (atlas.Bounds.Width <= 0 || frame.Bounds.Width <= 0 || model.PreviewFrame != 0 ||
                 model.SourceBitmap?.PixelSize.Width != 2 || model.Cells.Count != 1 || model.Frames.Count != 1)
                 throw new Exception("Sprite source image, arbitrary cell preview or frame selection was not available.");
             using var bitmap = new RenderTargetBitmap(new PixelSize((int)atlas.Bounds.Width, (int)atlas.Bounds.Height));
             bitmap.Render(atlas);
-            VerifyGridAndParts(window, model, graph);
+            VerifyGridAndParts(editor, model, graph);
         }
         finally
         {
@@ -283,7 +284,7 @@ internal static class SpriteEditorTests
         }
     }
 
-    private static void VerifyGridAndParts(SpriteEditorWindow window, SpriteEditorViewModel model, GraphWorkspaceViewModel graph)
+    private static void VerifyGridAndParts(SpriteEditorView window, SpriteEditorViewModel model, GraphWorkspaceViewModel graph)
     {
         var source = new WriteableBitmap(new PixelSize(2, 2), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Opaque);
         using (var buffer = source.Lock())
@@ -404,7 +405,7 @@ internal static class SpriteEditorTests
         finally { Marshal.FreeHGlobal(pixel); }
     }
 
-    private static void Drag(Control control, Window window, Point start, Point end)
+    private static void Drag(Control control, Control window, Point start, Point end)
     {
         var from = control.TranslatePoint(start, window)!.Value;
         var to = control.TranslatePoint(end, window)!.Value;

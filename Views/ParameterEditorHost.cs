@@ -100,15 +100,13 @@ public sealed class ParameterEditorHost : ContentControl
         browseResource.Bind(IsVisibleProperty, new Binding(nameof(parameter.IsResourceParameter)));
         browseResource.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.BrowseResourceHint)));
         browseResource.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.BrowseResourceHint)));
-        browseResource.Click += (_, _) => parameter.OpenResourceBrowser(
-            TopLevel.GetTopLevel(browseResource) as Window);
+        browseResource.Click += (_, _) => parameter.OpenResourceBrowser();
         var revealResource = CreateActionButton("RevealResourceParameterButton", EditorIcon.Frame);
         revealResource.Bind(IsVisibleProperty, new Binding(nameof(parameter.IsResourceParameter)));
         revealResource.Bind(IsEnabledProperty, new Binding(nameof(parameter.CanRevealResource)));
         revealResource.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.RevealResourceHint)));
         revealResource.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.RevealResourceHint)));
-        revealResource.Click += (_, _) => parameter.RevealResource(
-            TopLevel.GetTopLevel(revealResource) as Window);
+        revealResource.Click += (_, _) => parameter.RevealResource();
         var actions = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,

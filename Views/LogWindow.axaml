@@ -1,10 +1,9 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:LiberaFx.ViewModels"
         xmlns:views="using:LiberaFx.Views"
         x:Class="LiberaFx.Views.LogWindow"
         KeyDown="OnLogKeyDown"
-        Title="{DynamicResource Text.Panels.LogTitle}" Width="980" Height="600" MinWidth="600" MinHeight="300"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
     <Grid x:Name="LogContent" x:DataType="vm:LogViewerViewModel" RowDefinitions="Auto,*,Auto">
         <Border Padding="10" Background="{DynamicResource EffectSurfaceBrush}"
@@ -41,7 +40,7 @@
             </Grid>
         </Border>
         <TextBox x:Name="LogText" Grid.Row="1" Margin="8" Text="{Binding VisibleText, Mode=OneWay}"
-                 IsReadOnly="True" AcceptsReturn="True" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="13"
+                 IsReadOnly="True" AcceptsReturn="True" FontFamily="Cascadia Mono,Consolas,monospace"
                  ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto"
                  AutomationProperties.Name="{DynamicResource Text.Panels.EditorActivity}" />
         <StackPanel Grid.Row="2" Margin="10,0,10,8" Spacing="3">
@@ -52,4 +51,4 @@
             <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
         </StackPanel>
     </Grid>
-</Window>
+</UserControl>

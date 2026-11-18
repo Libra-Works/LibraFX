@@ -5,7 +5,7 @@ using LiberaFx.ViewModels;
 
 namespace LiberaFx.Views;
 
-public partial class EngineAssetsWindow : Window
+public partial class EngineAssetsWindow : UserControl
 {
     private MainViewModel? _main;
     private AssetBrowserCoordinator? _coordinator;
@@ -15,9 +15,11 @@ public partial class EngineAssetsWindow : Window
     public EngineAssetsWindow()
     {
         InitializeComponent();
+        // The identity tab's compiled bindings must not inherit the browser's view model before Opened.
+        ResourceIdentityPane.DataContext = null;
         DataContextChanged += OnDataContextChanged;
-        Opened += OnOpened;
-        Closed += OnClosed;
+        AttachedToVisualTree += OnOpened;
+        DetachedFromVisualTree += OnClosed;
     }
 
     public EngineAssetsWindow(MainViewModel main) : this()
@@ -47,7 +49,6 @@ public partial class EngineAssetsWindow : Window
         _main = coordinator.ViewModel.Main;
         _viewModel = coordinator.ViewModel;
         DataContext = _viewModel;
-        coordinator.RegisterWindow(this);
     }
 
     private void OnOpened(object? sender, EventArgs e)
@@ -78,29 +79,17 @@ public partial class EngineAssetsWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
-        DataContextChanged -= OnDataContextChanged;
-        _coordinator?.WindowClosed(this);
         _resourceIdentityViewModel?.Dispose();
         _resourceIdentityViewModel = null;
         ResourceIdentityPane.DataContext = null;
-        _viewModel = null;
-        _coordinator = null;
-        _main = null;
     }
-
-    private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
 
     private void OnOpenSpriteEditor(object? sender, RoutedEventArgs e)
     {
         if (_viewModel is not { SelectedPeer: { } peer, SelectedAsset: { } asset } model) return;
-        if (string.Equals(asset.AssetClass, "texture", StringComparison.OrdinalIgnoreCase))
-            for (var owner = Owner; owner is not null; owner = owner.Owner)
-                if (owner is MainWindow main && ReferenceEquals(main.DataContext, _main))
-                {
-                    if (!main.OpenSpriteEditorForAsset(peer.ClientId, asset))
-                        model.SetCallerError(LocalizationService.Shared.Get("Sprite.SourceNotOpened"));
-                    return;
-                }
-        model.SetCallerError(LocalizationService.Shared.Get("Sprite.SourceNotOpened"));
+        if (_main?.OpenSpriteEditorForAsset(peer.ClientId, asset) != true)
+        {
+            model.SetCallerError(LocalizationService.Shared.Get("Sprite.SourceNotOpened"));
+        }
     }
 }

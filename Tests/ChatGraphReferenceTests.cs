@@ -42,8 +42,9 @@ internal static class ChatGraphReferenceTests
         var revision = graph.History.CurrentNodeId;
         var framed = 0;
         graph.FrameSelectionRequested += (_, _) => framed++;
-        var window = new ChatWindow(main);
-        window.Show();
+        using var window = new ChatWindow(main);
+        var host = new Window { Content = window, Width = 820, Height = 820 };
+        host.Show();
         Dispatcher.UIThread.RunJobs();
         try
         {
@@ -102,7 +103,7 @@ internal static class ChatGraphReferenceTests
         }
         finally
         {
-            window.Close();
+            host.Close();
             main.DisposeStorageFiles();
         }
         Console.WriteLine("Chat reference scope, document identity, deleted targets and transient UI navigation passed.");

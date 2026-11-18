@@ -11,25 +11,7 @@ namespace LiberaFx.Views;
 
 public partial class MainWindow : Window
 {
-    private LogWindow? _logWindow;
-    private McpWindow? _mcpWindow;
-    private PreviewProfilerWindow? _profilerWindow;
-    private PreviewConnectionsWindow? _connectionsWindow;
-    private SpriteEditorWindow? _spriteEditorWindow;
-    private LocalProjectsWindow? _localProjectsWindow;
-    private ProblemsWindow? _problemsWindow;
-    private WindowLayoutsWindow? _windowLayoutsWindow;
     private AnythingSearchWindow? _anythingSearchWindow;
-    private RevisionHistoryWindow? _revisionHistoryWindow;
-
-    private void OnRevisionHistoryClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (DataContext is not MainViewModel model) return;
-        if (_revisionHistoryWindow is not null) { _revisionHistoryWindow.Activate(); return; }
-        _revisionHistoryWindow = new RevisionHistoryWindow(model);
-        _revisionHistoryWindow.Closed += (_, _) => _revisionHistoryWindow = null;
-        _revisionHistoryWindow.Show(this);
-    }
     private LayoutWindowBounds? _normalLayoutBounds;
     private MainViewModel? _groupModel;
     private bool _checkingGroupUpdates;
@@ -49,17 +31,8 @@ public partial class MainWindow : Window
         };
         Closed += (_, _) => DetachGroupEvents();
         Closed += (_, _) => DisposeSharedAssetBrowser();
-        Closed += (_, _) =>
-        {
-            if (DataContext is MainViewModel model) model.CloseLiveGameWindow();
-        };
         PositionChanged += (_, _) => RememberNormalWindowBounds();
         SizeChanged += (_, _) => RememberNormalWindowBounds();
-    }
-
-    private void OnLiveGameClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (DataContext is MainViewModel model) model.ShowLiveGameWindow(this);
     }
 
     private void RememberNormalWindowBounds()
@@ -113,25 +86,7 @@ public partial class MainWindow : Window
 
     private void OnDockPanelClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (DataContext is MainViewModel model && sender is MenuItem { Tag: string id }) model.ShowDockPanel(id);
-    }
-
-    private void OnProblemsClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (DataContext is not MainViewModel model) return;
-        if (_problemsWindow is not null) { _problemsWindow.Activate(); return; }
-        _problemsWindow = new ProblemsWindow(model);
-        _problemsWindow.Closed += (_, _) => _problemsWindow = null;
-        _problemsWindow.Show(this);
-    }
-
-    private void OnWindowLayoutsClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (DataContext is not MainViewModel model) return;
-        if (_windowLayoutsWindow is not null) { _windowLayoutsWindow.Activate(); return; }
-        _windowLayoutsWindow = new WindowLayoutsWindow(model.WindowLayouts);
-        _windowLayoutsWindow.Closed += (_, _) => _windowLayoutsWindow = null;
-        _windowLayoutsWindow.Show(this);
+        if (DataContext is MainViewModel model && sender is Control { Tag: string id }) model.ShowDockPanel(id);
     }
 
     private void OnRestoreDefaultLayoutClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -168,9 +123,9 @@ public partial class MainWindow : Window
             AnythingSearchWindow.Item("window/assets", "Search.Panel", LocalizationService.Shared.Get("Asset.Title"),
                 "", () => OnContentClick(null, new Avalonia.Interactivity.RoutedEventArgs()), "assets"),
             AnythingSearchWindow.Item("window/sprite", "Search.Panel", LocalizationService.Shared.Get("Sprite.Title"),
-                "", () => OnSpriteEditorClick(null, new Avalonia.Interactivity.RoutedEventArgs()), "sprite"),
+                "", () => model.ShowDockPanel("SpriteEditor"), "sprite"),
             AnythingSearchWindow.Item("window/log", "Search.Panel", LocalizationService.Shared.Get("Editor.Log"),
-                "", () => OnLogClick(null, new Avalonia.Interactivity.RoutedEventArgs()), "log")
+                "", () => model.ShowDockPanel("Log"), "log")
         };
         if (SharedAssetBrowserViewModel is { } assets)
         {
@@ -208,89 +163,9 @@ public partial class MainWindow : Window
     private async void OnAboutClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
         await new AboutWindow().ShowDialog(this);
 
-    private void OnLogClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_logWindow is not null)
-        {
-            _logWindow.Activate();
-            return;
-        }
-
-        _logWindow = new LogWindow { DataContext = DataContext };
-        _logWindow.Closed += (_, _) => _logWindow = null;
-        _logWindow.Show(this);
-    }
-
-    private void OnMcpClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_mcpWindow is not null)
-        {
-            _mcpWindow.Activate();
-            return;
-        }
-
-        _mcpWindow = new McpWindow { DataContext = DataContext };
-        _mcpWindow.Closed += (_, _) => _mcpWindow = null;
-        _mcpWindow.Show(this);
-    }
-
-    private void OnProfilerClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_profilerWindow is not null) { _profilerWindow.Activate(); return; }
-        _profilerWindow = new PreviewProfilerWindow { DataContext = DataContext };
-        _profilerWindow.Closed += (_, _) => _profilerWindow = null;
-        _profilerWindow.Show(this);
-    }
-
-    private void OnConnectionsClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_connectionsWindow is not null) { _connectionsWindow.Activate(); return; }
-        _connectionsWindow = new PreviewConnectionsWindow { DataContext = DataContext };
-        _connectionsWindow.Closed += (_, _) => _connectionsWindow = null;
-        _connectionsWindow.Show(this);
-    }
-
     private void OnContentClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         OpenSharedAssetBrowser();
-    }
-
-    private void OnSpriteEditorClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (DataContext is not MainViewModel model) return;
-        if (_spriteEditorWindow is not null) { _spriteEditorWindow.Activate(); return; }
-        _spriteEditorWindow = new SpriteEditorWindow(model);
-        _spriteEditorWindow.Closed += (_, _) => _spriteEditorWindow = null;
-        _spriteEditorWindow.Show(this);
-    }
-
-    internal bool OpenSpriteEditorForAsset(Guid peerId, EngineAsset asset)
-    {
-        if (DataContext is not MainViewModel model) return false;
-        if (_spriteEditorWindow is not null)
-        {
-            _spriteEditorWindow.Activate();
-            return false;
-        }
-        var window = new SpriteEditorWindow(model, loadSelected: false);
-        if (!window.SelectInitialAsset(peerId, asset))
-        {
-            window.Close();
-            return false;
-        }
-        _spriteEditorWindow = window;
-        window.Closed += (_, _) => _spriteEditorWindow = null;
-        window.Show(this);
-        return true;
-    }
-
-    private void OnLocalProjectsClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (DataContext is not MainViewModel model) return;
-        if (_localProjectsWindow is not null) { _localProjectsWindow.Activate(); return; }
-        _localProjectsWindow = new LocalProjectsWindow(model);
-        _localProjectsWindow.Closed += (_, _) => _localProjectsWindow = null;
-        _localProjectsWindow.Show(this);
     }
 
     private async void OnCloseDocumentClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

@@ -39,6 +39,12 @@ internal static class Program
 
     private static void MainCore(string[] args)
     {
+        if (args is ["--editor-appearance-audit", var outputDirectory])
+        {
+            InitializeIsolatedUi();
+            EditorAppearanceAudit.Capture(outputDirectory);
+            return;
+        }
         if (args is ["--source-batch-contracts"])
         {
             InitializeIsolatedUi();

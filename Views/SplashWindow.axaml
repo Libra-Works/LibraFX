@@ -3,7 +3,6 @@
         xmlns:views="using:LiberaFx.Views"
         x:Class="LiberaFx.Views.SplashWindow"
         Width="720" Height="390" CanResize="False" ShowInTaskbar="False"
-        WindowDecorations="None" WindowStartupLocation="CenterOwner"
-        Background="#10121D">
+        WindowDecorations="None" WindowStartupLocation="CenterOwner">
     <views:SplashArtwork />
 </Window>

@@ -12,7 +12,7 @@ using LiberaFx.ViewModels;
 namespace LiberaFx.Views;
 
 /// <summary>Actual game editing UI; never routes to PreviewHost or auto-discovers games.</summary>
-public sealed class LiveGameWindow : Window
+public sealed class LiveGameWindow : UserControl, IDisposable
 {
     private readonly LiveGameWindowViewModel model;
     private readonly Func<CancellationToken, Task<string?>> chooseDirectory;
@@ -37,8 +37,6 @@ public sealed class LiveGameWindow : Window
         this.model = model;
         this.chooseDirectory = chooseDirectory ?? PickDirectoryAsync;
         DataContext = model;
-        Width = 820; Height = 620; MinWidth = 580; MinHeight = 440;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
         directory.Bind(TextBox.TextProperty, new Binding(nameof(model.EndpointDirectory)) { Mode = BindingMode.TwoWay });
         consent.Bind(CheckBox.IsCheckedProperty, new Binding(nameof(model.Consent)) { Mode = BindingMode.TwoWay });
         instances.ItemsSource = model.Instances;
@@ -67,7 +65,7 @@ public sealed class LiveGameWindow : Window
         var content = new Grid { Margin = new Thickness(12), RowDefinitions = new RowDefinitions("Auto,*,Auto"), RowSpacing = 10 };
         content.Children.Add(top); Grid.SetRow(instances, 1); content.Children.Add(instances);
         Grid.SetRow(bottom, 2); content.Children.Add(bottom);
-        Content = content;
+        Content = new ScrollViewer { Content = content };
         browse.Click += async (_, _) =>
         {
             if (model.Busy) return;
@@ -81,20 +79,31 @@ public sealed class LiveGameWindow : Window
         };
         model.PropertyChanged += ModelChanged;
         LocalizationService.Shared.LanguageChanged += LanguageChanged;
-        Closed += (_, _) =>
-        {
-            lifetime.Cancel();
-            model.Dispose();
-            model.PropertyChanged -= ModelChanged;
-            LocalizationService.Shared.LanguageChanged -= LanguageChanged;
-            lifetime.Dispose();
-            DataContext = null;
-        };
         RefreshLabels();
     }
+    internal void EndSession() => model.Consent = false;
+
+    public void Dispose()
+    {
+        if (DataContext is null)
+        {
+            return;
+        }
+        lifetime.Cancel();
+        model.PropertyChanged -= ModelChanged;
+        LocalizationService.Shared.LanguageChanged -= LanguageChanged;
+        model.Dispose();
+        lifetime.Dispose();
+        DataContext = null;
+    }
+
     private async Task<string?> PickDirectoryAsync(CancellationToken token)
     {
-        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions {
+        if (TopLevel.GetTopLevel(this) is not { } host)
+        {
+            return null;
+        }
+        var folders = await host.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions {
             Title = Text("ChooseDirectory"), AllowMultiple = false }).WaitAsync(token);
         return folders.Count == 1 ? folders[0].TryGetLocalPath() : null;
     }
@@ -106,7 +115,6 @@ public sealed class LiveGameWindow : Window
     private void LanguageChanged(object? sender, EventArgs args) { RefreshLabels(); model.RefreshLocalizedText(); }
     private void RefreshLabels()
     {
-        Title = Text("Title");
         explanation.Text = Text("Explanation"); directoryLabel.Text = Text("Directory");
         restartNotice.Text = Text("RestartNotice"); targetLabel.Text = Text("Targets");
         browse.Content = Text("ChooseDirectory"); connect.Content = Text("Connect"); disconnect.Content = Text("Disconnect");

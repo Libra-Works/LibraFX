@@ -7,59 +7,51 @@ using Avalonia.Platform.Storage;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using LiberaFx.ViewModels;
 
 namespace LiberaFx.Views;
 
-public partial class SpriteEditorWindow : Window
+public partial class SpriteEditorView : UserControl
 {
-    private readonly SpriteEditorViewModel _model = null!;
+    private SpriteEditorViewModel _model = null!;
+    private SpriteEditorViewModel? _attachedModel;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(33) };
     private readonly Stopwatch _clock = Stopwatch.StartNew();
-    private bool _initialAsset;
-
-    public SpriteEditorWindow()
+    public SpriteEditorView()
     {
         InitializeComponent();
-    }
-
-    public SpriteEditorWindow(MainViewModel main, bool loadSelected = true) : this()
-    {
-        _model = new SpriteEditorViewModel(main, loadSelected);
-        DataContext = _model;
-        _model.PropertyChanged += ModelChanged;
-        _model.Catalog.PropertyChanged += ModelChanged;
         _timer.Tick += Tick;
-        Opened += (_, _) =>
+        AttachedToVisualTree += (_, _) => AttachModel();
+        DetachedFromVisualTree += (_, _) => DetachModel();
+        DataContextChanged += (_, _) =>
         {
-            _model.Catalog.RefreshPeers();
-            if (!_initialAsset && _model.Catalog.SelectedPeer is not null)
-                _ = _model.Catalog.SearchCommand.ExecuteAsync(null);
-            _timer.Start();
-        };
-        Closed += (_, _) =>
-        {
-            _timer.Stop();
-            _model.PropertyChanged -= ModelChanged;
-            _model.Catalog.PropertyChanged -= ModelChanged;
-            _model.Dispose();
+            if (this.IsAttachedToVisualTree()) AttachModel();
         };
     }
 
-    internal bool SelectInitialAsset(Guid peerId, EngineAsset asset)
+    private void AttachModel()
     {
-        if (IsVisible || !string.Equals(asset.AssetClass, "texture", StringComparison.OrdinalIgnoreCase))
-            return false;
-        var catalog = _model.Catalog;
-        catalog.RefreshPeers();
-        var peer = catalog.Peers.FirstOrDefault(candidate => candidate.ClientId == peerId);
-        if (peer is null) return false;
-        catalog.SelectedPeer = peer;
-        catalog.Assets.Clear();
-        catalog.Assets.Add(asset);
-        catalog.SelectedAsset = asset;
-        _initialAsset = true;
-        return true;
+        if (ReferenceEquals(_attachedModel, DataContext)) return;
+        DetachModel();
+        if (DataContext is SpriteEditorViewModel model)
+        {
+            _attachedModel = _model = model;
+            model.PropertyChanged += ModelChanged;
+            model.Catalog.PropertyChanged += ModelChanged;
+            model.InitializeCatalog();
+            _clock.Restart();
+            _timer.Start();
+        }
+    }
+
+    private void DetachModel()
+    {
+        _timer.Stop();
+        if (_attachedModel is not { } model) return;
+        model.PropertyChanged -= ModelChanged;
+        model.Catalog.PropertyChanged -= ModelChanged;
+        _attachedModel = null;
     }
 
     private void ModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -130,7 +122,7 @@ public partial class SpriteEditorWindow : Window
                         HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right, Children = { cancel, confirm } }
                 }
             };
-            if (!await dialog.ShowDialog<bool>(this)) return;
+            if (TopLevel.GetTopLevel(this) is not Window owner || !await dialog.ShowDialog<bool>(owner)) return;
         }
         _model.GenerateGridFlipbook();
     }
@@ -146,7 +138,8 @@ public partial class SpriteEditorWindow : Window
     {
         try
         {
-            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            if (TopLevel.GetTopLevel(this) is not { StorageProvider: { } storage }) return;
+            var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
             {
                 Title = LocalizationService.Shared.Get("Sprite.OpenLocal"),
                 AllowMultiple = false,
@@ -177,5 +170,4 @@ public partial class SpriteEditorWindow : Window
     }
     private void OnApplySelected(object? sender, RoutedEventArgs e) => _model.Apply(true);
     private void OnCreate(object? sender, RoutedEventArgs e) => _model.Apply(false);
-    private void OnClose(object? sender, RoutedEventArgs e) => Close();
 }

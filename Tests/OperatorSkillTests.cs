@@ -25,7 +25,8 @@ internal static class OperatorSkillTests
         var localization = LocalizationService.Shared;
         var originalLanguage = localization.SelectedLanguage;
         var window = new McpWindow();
-        window.Show();
+        var host = new Window { Content = window, Width = 680, Height = 670 };
+        host.Show();
         try
         {
             var destination = window.FindControl<TextBox>("OperatorSkillsDirectoryBox")!;
@@ -69,7 +70,7 @@ internal static class OperatorSkillTests
         }
         finally
         {
-            window.Close();
+            host.Close();
             localization.SelectedLanguage = originalLanguage;
             Directory.Delete(root, recursive: true);
         }

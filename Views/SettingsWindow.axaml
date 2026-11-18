@@ -225,7 +225,7 @@
                                               ColumnSpacing="8" RowSpacing="3">
                                             <StackPanel Grid.Row="0" Grid.Column="0" Spacing="2">
                                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                                                <TextBlock Text="{Binding Id}" FontSize="11" />
+                                                <TextBlock Text="{Binding Id}" />
                                             </StackPanel>
                                             <TextBlock Grid.Column="1" Text="{Binding Version}"
                                                        VerticalAlignment="Center" />

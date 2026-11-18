@@ -6,7 +6,7 @@ using LiberaFx.ViewModels;
 
 namespace LiberaFx.Views;
 
-public partial class McpWindow : Window
+public partial class McpWindow : UserControl
 {
     public McpWindow()
     {
@@ -16,7 +16,7 @@ public partial class McpWindow : Window
 
     private async void OnCopyOperatorSkillPathClick(object? sender, RoutedEventArgs e)
     {
-        if (Clipboard is not { } clipboard) return;
+        if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return;
         try { await clipboard.SetTextAsync(OperatorSkillPackage.BundledSkillPath); }
         catch (Exception ex) { OperatorSkillStatus.Text = LocalizationService.Shared.Get("OperatorSkill.Failed", ex.Message); }
     }
@@ -47,7 +47,7 @@ public partial class McpWindow : Window
 
     private async void OnCopyTokenClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is MainViewModel model && Clipboard is { } clipboard)
+        if (DataContext is MainViewModel model && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
         {
             try { await clipboard.SetTextAsync(model.McpAccessToken); }
             catch (Exception ex) { System.Diagnostics.Trace.TraceWarning("Clipboard copy failed: {0}", ex.Message); }

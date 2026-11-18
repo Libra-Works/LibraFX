@@ -7,7 +7,9 @@ public partial class MainWindow
     private void OpenSharedAssetBrowser()
     {
         if (DataContext is MainViewModel main)
-            main.AssetBrowser.OpenForCurrentSelection(this);
+        {
+            main.AssetBrowser.OpenForCurrentSelection();
+        }
     }
 
     internal EngineAssetsWindowViewModel? SharedAssetBrowserViewModel =>

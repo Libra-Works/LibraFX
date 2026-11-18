@@ -7,22 +7,33 @@ using LiberaFx.ViewModels;
 
 namespace LiberaFx.Views;
 
-public partial class PreviewConnectionsWindow : Window
+public partial class PreviewConnectionsWindow : UserControl
 {
     private readonly DispatcherTimer _refresh = new() { Interval = TimeSpan.FromSeconds(1) };
     private string _signature = "";
     private bool _busy;
     private bool _refreshing;
     private Guid? _selectedId;
-    private readonly CancellationTokenSource _stop = new();
+    private CancellationTokenSource? _stop;
     private readonly ViewerDiscovery _discovery = new();
     private bool _discovering;
     public PreviewConnectionsWindow()
     {
         InitializeComponent();
         _refresh.Tick += (_, _) => Refresh();
-        Opened += (_, _) => { Refresh(); _refresh.Start(); };
-        Closed += (_, _) => { _refresh.Stop(); _stop.Cancel(); };
+        AttachedToVisualTree += (_, _) =>
+        {
+            _stop = new();
+            Refresh();
+            _refresh.Start();
+        };
+        DetachedFromVisualTree += (_, _) =>
+        {
+            _refresh.Stop();
+            _stop?.Cancel();
+            _stop?.Dispose();
+            _stop = null;
+        };
     }
 
     private void OnAvailableViewerChanged(object? sender, SelectionChangedEventArgs e) =>
@@ -30,15 +41,15 @@ public partial class PreviewConnectionsWindow : Window
 
     private async void OnFindViewers(object? sender, RoutedEventArgs e)
     {
-        if (_discovering) return;
+        if (_discovering || _stop is not { Token: var cancellation }) return;
         _discovering = true;
         FindViewersButton.IsEnabled = ConnectViewerButton.IsEnabled = false;
         AvailableViewers.ItemsSource = null;
         DiscoveryStatus.Text = LocalizationService.Shared.Get("Connections.FindingViewers");
         try
         {
-            var viewers = await _discovery.DiscoverAsync(_stop.Token);
-            if (_stop.IsCancellationRequested) return;
+            var viewers = await _discovery.DiscoverAsync(cancellation);
+            if (cancellation.IsCancellationRequested) return;
             AvailableViewers.ItemsSource = viewers;
             AvailableViewers.SelectedIndex = viewers.Count == 1 ? 0 : -1;
             DiscoveryStatus.Text = LocalizationService.Shared.Get(viewers.Count == 0
@@ -46,7 +57,7 @@ public partial class PreviewConnectionsWindow : Window
         }
         catch (OperationCanceledException)
         {
-            if (!_stop.IsCancellationRequested)
+            if (!cancellation.IsCancellationRequested)
                 DiscoveryStatus.Text = LocalizationService.Shared.Get("Connections.ViewerTimeout");
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
@@ -61,7 +72,7 @@ public partial class PreviewConnectionsWindow : Window
 
     private async void OnConnectViewer(object? sender, RoutedEventArgs e)
     {
-        if (_discovering || AvailableViewers.SelectedItem is not AvailableViewer viewer ||
+        if (_discovering || _stop is not { Token: var cancellation } || AvailableViewers.SelectedItem is not AvailableViewer viewer ||
             DataContext is not MainViewModel model) return;
         _discovering = true;
         FindViewersButton.IsEnabled = ConnectViewerButton.IsEnabled = false;
@@ -69,13 +80,13 @@ public partial class PreviewConnectionsWindow : Window
         {
             var invitation = PreviewConnectionInvitation.Create(model.PreviewEndpoint,
                 model.PreviewAccessToken, model.PreviewFingerprint);
-            await _discovery.ConnectAsync(viewer, invitation, _stop.Token);
+            await _discovery.ConnectAsync(viewer, invitation, cancellation);
             DiscoveryStatus.Text = LocalizationService.Shared.Get("Connections.ViewerQueued");
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
             InvalidDataException or OperationCanceledException or System.ComponentModel.Win32Exception)
         {
-            if (!_stop.IsCancellationRequested)
+            if (!cancellation.IsCancellationRequested)
                 DiscoveryStatus.Text = LocalizationService.Shared.Get("Connections.ViewerFailed", exception.Message);
         }
         finally
@@ -177,7 +188,7 @@ public partial class PreviewConnectionsWindow : Window
 
     private async void OnCopyConnection(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel model || Clipboard is not { } clipboard) return;
+        if (DataContext is not MainViewModel model || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return;
         try
         {
             var invitation = PreviewConnectionInvitation.Create(model.PreviewEndpoint,

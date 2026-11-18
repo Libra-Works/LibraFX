@@ -24,7 +24,7 @@
             <Button Grid.Column="3" Command="{Binding ClearFoldersCommand}" Content="{DynamicResource Text.References.ClearFolders}" />
         </Grid>
         <StackPanel Grid.Row="2" Spacing="4">
-            <TextBlock Text="{Binding Coverage}" TextWrapping="Wrap" FontSize="11"
+            <TextBlock Text="{Binding Coverage}" TextWrapping="Wrap"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <Expander Header="{DynamicResource Text.References.RegisteredFolders}" IsVisible="{Binding HasFolders}">
                 <ScrollViewer MaxHeight="90">
@@ -44,7 +44,7 @@
                         <DataTemplate x:DataType="vm:AssetReferenceRow">
                             <StackPanel Margin="4">
                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding Summary}" FontSize="11" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
                             </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>

@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json;
-using Avalonia.Controls;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -235,7 +234,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     internal bool TrySetInspectorValue(JsonElement value) =>
         IsCurrentInspectorTarget() && SetValue(value);
 
-    public void OpenResourceBrowser(Window? owner = null)
+    public void OpenResourceBrowser()
     {
         if (!IsResourceParameter || !IsCurrentInspectorTarget() || _assetBrowser is null) return;
         if (_assetBrowser.MainDocumentFor(_graph) is not { } document)
@@ -253,10 +252,10 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
             Status = "Messages.AssetSelectionStale";
             return;
         }
-        _assetBrowser.Open(owner);
+        _assetBrowser.Open();
     }
 
-    public void RevealResource(Window? owner = null)
+    public void RevealResource()
     {
         if (!CanRevealResource || !IsCurrentInspectorTarget() || _assetBrowser is null ||
             _assetBrowser.MainDocumentFor(_graph) is not { } document ||
@@ -270,7 +269,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
             Status = "Messages.AssetSelectionStale";
             return;
         }
-        _assetBrowser.Open(owner);
+        _assetBrowser.Open();
         _ = _assetBrowser.RevealAsync(request, path);
     }
 

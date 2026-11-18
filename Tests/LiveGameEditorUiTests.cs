@@ -41,8 +41,9 @@ internal static class LiveGameEditorUiTests
             return new(graph.CreateSnapshot(), "Active edited document");
         }, TimeSpan.FromSeconds(2));
         var picks = 0;
-        var window = new LiveGameWindow(model, _ => { ++picks; return Task.FromResult<string?>(game.Directory); });
-        window.Show();
+        using var window = new LiveGameWindow(model, _ => { ++picks; return Task.FromResult<string?>(game.Directory); });
+        var host = new Window { Content = window, Width = 820, Height = 620 };
+        host.Show();
         try
         {
             await Task.Delay(100);
@@ -127,7 +128,7 @@ internal static class LiveGameEditorUiTests
             Require(picks == 1, "UI performed unsolicited endpoint selection.");
             Console.WriteLine("PASS live editor: real Avalonia browse/connect/list/select/apply/cancel commands; compiler graph conversion; isolated spool; rejection protects previous playback; finite timeout; no engine/network launched.");
         }
-        finally { window.Close(); }
+        finally { host.Close(); window.Dispose(); }
         return;
         T Find<T>(string name) where T : Control => window.GetLogicalDescendants().OfType<T>().Single(control => control.Name == name);
         void Connect(GraphNodeViewModel source, GraphNodeViewModel target, string port)

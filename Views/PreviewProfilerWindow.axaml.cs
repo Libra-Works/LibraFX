@@ -8,7 +8,7 @@ using LiberaFx.ViewModels;
 
 namespace LiberaFx.Views;
 
-public partial class PreviewProfilerWindow : Window
+public partial class PreviewProfilerWindow : UserControl
 {
     private readonly DispatcherTimer _refresh = new() { Interval = TimeSpan.FromMilliseconds(100) };
     private readonly PreviewProfilerSettingsService _settings;
@@ -62,13 +62,13 @@ public partial class PreviewProfilerWindow : Window
         };
         RenderSelected();
         _refresh.Tick += (_, _) => Refresh();
-        Opened += (_, _) =>
+        AttachedToVisualTree += (_, _) =>
         {
             LocalizationService.Shared.LanguageChanged += OnLanguageChanged;
             Refresh();
             _refresh.Start();
         };
-        Closed += (_, _) =>
+        DetachedFromVisualTree += (_, _) =>
         {
             _refresh.Stop();
             LocalizationService.Shared.LanguageChanged -= OnLanguageChanged;

@@ -276,6 +276,30 @@ public sealed class SpriteEditorViewModel : ObservableObject, IDisposable
         if (loadSelected) LoadSelected();
     }
 
+    private bool _catalogInitialized;
+
+    internal void InitializeCatalog()
+    {
+        Catalog.RefreshPeers();
+        if (_catalogInitialized) return;
+        _catalogInitialized = true;
+        if (Catalog.SelectedPeer is not null) _ = Catalog.SearchCommand.ExecuteAsync(null);
+    }
+
+    internal bool SelectInitialAsset(Guid peerId, EngineAsset asset)
+    {
+        if (!string.Equals(asset.AssetClass, "texture", StringComparison.OrdinalIgnoreCase)) return false;
+        Catalog.RefreshPeers();
+        var peer = Catalog.Peers.FirstOrDefault(candidate => candidate.ClientId == peerId);
+        if (peer is null) return false;
+        Catalog.SelectedPeer = peer;
+        Catalog.Assets.Clear();
+        Catalog.Assets.Add(asset);
+        Catalog.SelectedAsset = asset;
+        _catalogInitialized = true;
+        return true;
+    }
+
     private void CaptureContext()
     {
         if (_graph is not null)

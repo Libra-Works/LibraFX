@@ -16,6 +16,7 @@ public sealed partial class DockFactory
     private readonly Dictionary<IDockable, IDock> _hiddenHomes = new();
     private readonly Dictionary<IDockable, double> _homeProportions = new();
     private readonly Dictionary<IDockWindow, IHostWindow> _preservedHosts = new();
+    private readonly HashSet<string> _openedTools = new(StringComparer.Ordinal);
 
     public IReadOnlyList<IDockable> Tools => _localizedTools.Select(t => t.Tool).ToArray();
     public WindowLayoutSnapshot DefaultLayout => _defaultLayout;
@@ -66,12 +67,17 @@ public sealed partial class DockFactory
                 _hiddenHomes[dockable] = owner;
         }
         base.HideDockable(dockable);
+        if (dockable is EditorWorkPaneViewModel pane)
+        {
+            pane.OnHidden();
+        }
     }
 
     public bool ShowTool(string id)
     {
         var tool = Tools.FirstOrDefault(t => t.Id == id);
         if (tool is null) return false;
+        var firstOpen = _openedTools.Add(id) && FindRoot(tool) is null && !_hiddenHomes.ContainsKey(tool);
         var roots = Roots().ToArray();
         var pinnedRoot = roots.FirstOrDefault(r => PinnedLists(r).Any(p => p.Items?.Contains(tool) == true));
         if (pinnedRoot is not null)
@@ -111,7 +117,62 @@ public sealed partial class DockFactory
         }
         SetActiveDockable(tool);
         SetFocusedDockable(_layoutRoot, tool);
+        if (firstOpen && DefaultHostWindowLocator is not null)
+        {
+            FloatSpaciousTool(tool);
+        }
         FindRoot(tool)?.Window?.Host?.SetActive();
+        return true;
+    }
+
+    private void FloatSpaciousTool(IDockable tool)
+    {
+        var (width, height) = tool.Id switch
+        {
+            "SpriteEditor" => (1280, 800),
+            "Content" or "PreviewProfiler" or "RevisionHistory" => (1160, 740),
+            "Chat" or "LiveGame" => (840, 720),
+            _ => (0, 0)
+        };
+        if (width == 0 || _main.WindowLayouts.CaptureMainWindow?.Invoke() is not { } mainBounds)
+        {
+            return;
+        }
+
+        var bounds = new LayoutWindowBounds
+        {
+            Width = width, Height = height, X = mainBounds.X + 32, Y = mainBounds.Y + 48
+        };
+        bounds = _main.WindowLayouts.ClampFloatingWindow?.Invoke(bounds) ?? bounds;
+        FloatDockable(tool, new DockWindowOptions { ShowInTaskbar = false });
+        if (FindRoot(tool)?.Window is not { } window)
+        {
+            return;
+        }
+        window.X = bounds.X;
+        window.Y = bounds.Y;
+        window.Width = bounds.Width;
+        window.Height = bounds.Height;
+        window.Host?.SetPosition(bounds.X, bounds.Y);
+        window.Host?.SetSize(bounds.Width, bounds.Height);
+    }
+
+    public override bool OnWindowClosing(IDockWindow? window)
+    {
+        if (!base.OnWindowClosing(window))
+        {
+            return false;
+        }
+        if (window is null)
+        {
+            return true;
+        }
+
+        foreach (var pane in Tools.OfType<EditorWorkPaneViewModel>().Where(pane =>
+                     ReferenceEquals(FindRoot(pane)?.Window, window)))
+        {
+            pane.OnHidden();
+        }
         return true;
     }
 
@@ -175,7 +236,7 @@ public sealed partial class DockFactory
         }
     }
 
-    private IRootDock? FindRoot(IDockable tool) =>
+    internal IRootDock? FindRoot(IDockable tool) =>
         Roots().FirstOrDefault(r => Traverse(r).Contains(tool));
 
     private static IEnumerable<(string Side, IList<IDockable>? Items)> PinnedLists(IRootDock root)
@@ -508,9 +569,13 @@ public sealed partial class DockFactory
         }
         foreach (var tool in Tools)
         {
-            _paneHomes.TryAdd(tool.Id, tool is NodePropertiesPaneViewModel
-                ? _paneHomes.GetValueOrDefault("Properties") ?? fallback
-                : fallback);
+            var home = tool switch
+            {
+                NodePropertiesPaneViewModel => _paneHomes.GetValueOrDefault("Properties"),
+                SpriteEditorPaneViewModel or EditorWorkPaneViewModel => _paneHomes.GetValueOrDefault("Timeline"),
+                _ => null
+            };
+            _paneHomes.TryAdd(tool.Id, home ?? fallback);
             if (_layoutRoot.HiddenDockables?.Contains(tool) == true) tool.OriginalOwner = _paneHomes[tool.Id];
         }
         foreach (var (dock, active) in dockActives)

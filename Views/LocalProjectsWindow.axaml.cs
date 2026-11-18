@@ -7,7 +7,7 @@ using System.Text.Json;
 
 namespace LiberaFx.Views;
 
-public partial class LocalProjectsWindow : Window
+public partial class LocalProjectsWindow : UserControl
 {
     private MainViewModel? _main;
     private CancellationTokenSource? _load;
@@ -18,8 +18,9 @@ public partial class LocalProjectsWindow : Window
     public LocalProjectsWindow()
     {
         InitializeComponent();
-        Opened += async (_, _) =>
+        AttachedToVisualTree += async (_, _) =>
         {
+            _closed = false;
             try
             {
                 Folder.Text = File.Exists(SettingsFile)
@@ -30,7 +31,7 @@ public partial class LocalProjectsWindow : Window
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
             { Status.Text = e.Message; }
         };
-        Closed += (_, _) =>
+        DetachedFromVisualTree += (_, _) =>
         {
             _closed = true;
             _load?.Cancel();
@@ -41,7 +42,8 @@ public partial class LocalProjectsWindow : Window
 
     private async void OnChooseFolder(object? sender, RoutedEventArgs e)
     {
-        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        if (TopLevel.GetTopLevel(this) is not { StorageProvider: { } storage }) return;
+        var folders = await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
             Title = LocalizationService.Shared.Get("Library.ChooseFolder"), AllowMultiple = false
         });

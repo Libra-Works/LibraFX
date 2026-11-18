@@ -3,15 +3,14 @@
         xmlns:views="using:LiberaFx.Views"
         x:Class="LiberaFx.Views.AboutWindow"
         Title="{DynamicResource Text.Panels.AboutTitle}" Width="560" Height="440" CanResize="False"
-        ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
-        Background="#10121D">
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner">
     <Grid RowDefinitions="Auto,*,Auto">
         <Viewbox Stretch="Uniform" HorizontalAlignment="Stretch">
             <views:SplashArtwork />
         </Viewbox>
         <StackPanel Grid.Row="1" Margin="26,18,26,10" Spacing="6">
-            <TextBlock Text="LIBERA FX" FontSize="18" FontWeight="SemiBold" Foreground="#F1F1FA" />
-            <TextBlock x:Name="VersionText" Foreground="#B6B7CC" />
+            <TextBlock Text="LIBERA FX" FontSize="18" FontWeight="SemiBold" />
+            <TextBlock x:Name="VersionText" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
         </StackPanel>
         <views:IconButton Grid.Row="2" Icon="Close"
                           ToolTip.Tip="{DynamicResource Text.Panels.Close}"

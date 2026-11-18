@@ -1,4 +1,3 @@
-using Avalonia.Controls;
 using System.Text.Json;
 using LiberaFx.Models.Graph;
 using LiberaFx.Views;
@@ -44,7 +43,6 @@ public sealed class AssetBrowserCoordinator : IDisposable
 {
     private readonly MainViewModel _main;
     private GraphWorkspaceViewModel? _observedGraph;
-    private EngineAssetsWindow? _window;
     private bool _disposed;
 
     public EngineAssetsWindowViewModel ViewModel { get; }
@@ -124,19 +122,20 @@ public sealed class AssetBrowserCoordinator : IDisposable
 
     public bool OpenForOtherWindow(GraphDocumentViewModel document, GraphWorkspaceViewModel graph,
         GraphNodeViewModel node, Func<bool> isCurrent,
-        Func<AssetBrowserAssetReference, bool> receiveSelection, string? assetClass = null,
-        Window? owner = null)
+        Func<AssetBrowserAssetReference, bool> receiveSelection, string? assetClass = null)
     {
         if (BeginForOtherWindow(document, graph, node, isCurrent, receiveSelection, assetClass) is null)
+        {
             return false;
-        Open(owner);
+        }
+        Open();
         return true;
     }
 
-    public void OpenForCurrentSelection(Window? owner = null)
+    public void OpenForCurrentSelection()
     {
         _ = BeginForCurrentSelection();
-        Open(owner);
+        Open();
     }
 
     public GraphDocumentViewModel? MainDocumentFor(GraphWorkspaceViewModel graph) =>
@@ -300,30 +299,22 @@ public sealed class AssetBrowserCoordinator : IDisposable
         }
     }
 
-    public void Open(Window? owner = null)
+    public void Open()
     {
-        if (_disposed) return;
-        if (Request is null) _ = BeginForCurrentSelection();
-        if (_window is null) _window = new EngineAssetsWindow(this);
-        if (_window.IsVisible)
+        if (_disposed)
         {
-            _window.Activate();
-            if (Request?.RevealOnly != true && ViewModel.SelectedPeer is not null)
-                _ = ViewModel.SearchCommand.ExecuteAsync(null);
             return;
         }
-        if (owner is not null) _window.Show(owner);
-        else _window.Show();
-    }
-
-    internal void RegisterWindow(EngineAssetsWindow window)
-    {
-        if (_window is null) _window = window;
-    }
-
-    internal void WindowClosed(EngineAssetsWindow window)
-    {
-        if (ReferenceEquals(_window, window)) _window = null;
+        if (Request is null)
+        {
+            _ = BeginForCurrentSelection();
+        }
+        _main.ShowDockPanel("Content");
+        if (Request?.RevealOnly != true && ViewModel.SelectedPeer is not null &&
+            ViewModel.SearchCommand.CanExecute(null))
+        {
+            _ = ViewModel.SearchCommand.ExecuteAsync(null);
+        }
     }
 
     private void Begin(AssetSelectionRequest request)
@@ -367,8 +358,6 @@ public sealed class AssetBrowserCoordinator : IDisposable
         _disposed = true;
         _main.PropertyChanged -= OnMainPropertyChanged;
         DetachGraph();
-        _window?.Close();
-        _window = null;
         ViewModel.Dispose();
     }
 }

@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:LiberaFx.ViewModels"
+        xmlns:views="using:LiberaFx.Views"
+        x:Class="LiberaFx.Views.StartupSetupWindow"
+        x:DataType="vm:MainViewModel"
+        Title="{DynamicResource Text.Editor.StartupSetupTitle}" Width="480"
+        MaxHeight="600" SizeToContent="Height" CanResize="False" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource EffectWindowBackgroundBrush}">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="24" Spacing="12">
+            <TextBlock Text="{DynamicResource Text.Editor.StartupSetupTitle}" FontSize="21" FontWeight="SemiBold" />
+            <TextBlock Text="{DynamicResource Text.Editor.ColorScheme}" FontWeight="SemiBold" />
+            <ComboBox x:Name="ColorSchemePicker" ItemsSource="{Binding ColorSchemes}"
+                      HorizontalAlignment="Stretch"
+                      AutomationProperties.Name="{DynamicResource Text.Editor.ColorScheme}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate><views:LocalizedOptionText Value="{ReflectionBinding}" /></DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Text="{DynamicResource Text.Editor.StartupSetupAppearanceHint}" TextWrapping="Wrap" />
+            <Separator />
+            <TextBlock Text="{DynamicResource Text.Editor.StartupSetupCrashHeading}" FontWeight="SemiBold" />
+            <TextBlock Text="{DynamicResource Text.Editor.StartupSetupCrashHint}" TextWrapping="Wrap" />
+            <Button Content="{DynamicResource Text.Crash.Title}" Click="OnCrashReportsClick" />
+            <TextBlock x:Name="SetupStatus" TextWrapping="Wrap" IsVisible="False"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <Button x:Name="ContinueButton" Content="{DynamicResource Text.Editor.StartupSetupContinue}" Click="OnContinueClick"
+                    IsDefault="True" HorizontalAlignment="Right" />
+        </StackPanel>
+    </ScrollViewer>
+</Window>

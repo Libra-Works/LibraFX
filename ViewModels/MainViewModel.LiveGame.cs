@@ -1,4 +1,3 @@
-using Avalonia.Controls;
 using Avalonia.Threading;
 using LiberaFx.Services;
 using LiberaFx.Views;
@@ -7,11 +6,9 @@ namespace LiberaFx.ViewModels;
 
 public partial class MainViewModel
 {
-    private LiveGameWindow? liveGameWindow;
-    public void ShowLiveGameWindow(Window owner)
+    internal LiveGameWindow CreateLiveGameView()
     {
         Dispatcher.UIThread.VerifyAccess();
-        if (liveGameWindow is not null) { liveGameWindow.Activate(); return; }
         var model = new LiveGameWindowViewModel(() =>
         {
             Dispatcher.UIThread.VerifyAccess();
@@ -22,9 +19,6 @@ public partial class MainViewModel
             return new LiveGameGraphSource(document.Workspace.CreateSnapshot(), document.FileName,
                 TeamProfiles.Active.GroupDirectory);
         });
-        liveGameWindow = new LiveGameWindow(model);
-        liveGameWindow.Closed += (_, _) => liveGameWindow = null;
-        liveGameWindow.Show(owner);
+        return new LiveGameWindow(model);
     }
-    public void CloseLiveGameWindow() => liveGameWindow?.Close();
 }

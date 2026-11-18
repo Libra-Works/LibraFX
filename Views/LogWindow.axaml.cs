@@ -5,23 +5,30 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.VisualTree;
 using LiberaFx.Services;
 using LiberaFx.ViewModels;
 
 namespace LiberaFx.Views;
 
-public partial class LogWindow : Window
+public partial class LogWindow : UserControl
 {
     private LogViewerViewModel? _viewer;
     public LogWindow()
     {
         InitializeComponent();
-        Closed += (_, _) => { DetachViewer(); DataContext = null; };
+        AttachedToVisualTree += (_, _) => AttachViewer();
+        DetachedFromVisualTree += (_, _) => DetachViewer();
     }
 
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
+        if (this.IsAttachedToVisualTree()) AttachViewer();
+    }
+
+    private void AttachViewer()
+    {
         if (LogContent is null) return;
         DetachViewer();
         if (DataContext is not MainViewModel model) return;
@@ -106,7 +113,8 @@ public partial class LogWindow : Window
         if (viewer is null) return;
         try
         {
-            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            if (TopLevel.GetTopLevel(this) is not { StorageProvider: { } storage }) return;
+            var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
             {
                 Title = LocalizationService.Shared.Get(visible ? "Logs.SaveVisible" : "Logs.SaveAll"),
                 SuggestedFileName = "LiberaFx.log",

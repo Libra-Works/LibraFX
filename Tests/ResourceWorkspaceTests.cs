@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services;
@@ -204,6 +205,7 @@ public static class ResourceWorkspaceTests
         }
         try
         {
+            VerifyOwnedEngineWindow(main);
             Connect(peer);
             var graph = main.Graph;
             var gpu = GpuParticleEditorService.Create(graph);
@@ -213,7 +215,8 @@ public static class ResourceWorkspaceTests
             graph.SelectNode(gpu);
             using var browser = new EngineAssetsWindowViewModel(main);
             var window = new EngineAssetsWindow { DataContext = browser };
-            window.Show();
+            var host = new Window { Content = window, Width = 1200, Height = 800 };
+            host.Show();
             try
             {
                 Complete(browser.SearchCommand.ExecuteAsync(null));
@@ -248,7 +251,7 @@ public static class ResourceWorkspaceTests
                 Require(browser.SelectedAsset is null && browser.Thumbnail is null && browser.Assets.Count == 0,
                     "Switching engine peers must clear asset selection, details and thumbnails.");
             }
-            finally { window.Close(); }
+            finally { host.Close(); }
         }
         finally
         {
@@ -257,6 +260,44 @@ public static class ResourceWorkspaceTests
             main.PreviewTelemetry.Disconnect(peer);
             main.PreviewTelemetry.Disconnect(otherPeer);
             main.DisposeStorageFiles();
+        }
+    }
+
+    private static void VerifyOwnedEngineWindow(MainViewModel main)
+    {
+        var castFailed = false;
+        void Observe(object? sender, System.Runtime.ExceptionServices.FirstChanceExceptionEventArgs args)
+        {
+            if (args.Exception is InvalidCastException error &&
+                error.Message.Contains(nameof(EngineAssetsWindowViewModel), StringComparison.Ordinal) &&
+                error.Message.Contains(nameof(ResourceIdentityPaneViewModel), StringComparison.Ordinal))
+            {
+                castFailed = true;
+            }
+        }
+
+        var owner = new MainWindow { DataContext = main };
+        AppDomain.CurrentDomain.FirstChanceException += Observe;
+        try
+        {
+            owner.Show();
+            main.AssetBrowser.OpenForCurrentSelection();
+            Dispatcher.UIThread.RunJobs();
+            var hosts = main.Layout.Windows?.Select(window => window.Host).OfType<Window>() ?? [];
+            var browser = hosts.Prepend(owner).SelectMany(window => window.GetVisualDescendants())
+                .OfType<EngineAssetsWindow>().Single();
+            Require(!castFailed &&
+                    browser.FindControl<ResourceIdentityView>("ResourceIdentityPane")?.DataContext is ResourceIdentityPaneViewModel,
+                "The resource identity tab inherited the asset browser's view model during startup.");
+        }
+        finally
+        {
+            AppDomain.CurrentDomain.FirstChanceException -= Observe;
+            foreach (var window in main.Layout.Windows?.ToArray() ?? [])
+            {
+                window.Host?.Exit();
+            }
+            owner.Close();
         }
     }
 

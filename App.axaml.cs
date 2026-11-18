@@ -50,19 +50,29 @@ public partial class App : Application
             {
                 DataContext = viewModel,
             };
-            window.ConfigureCrashReports(_crashReports!.Drafts);
+            var crashDrafts = _crashReports!.Drafts;
+            var startupSetup = new StartupSetupState();
+            window.ConfigureCrashReports(crashDrafts);
             var startupProject = desktop.Args is { Length: 1 } args &&
                 Path.GetExtension(args[0]).Equals(ProjectFileService.FileExtension, StringComparison.OrdinalIgnoreCase)
                 ? args[0] : null;
             window.Opened += async (_, _) =>
             {
                 viewModel.SetStorageProvider(window.StorageProvider);
-                var splash = new SplashWindow();
-                splash.Show(window);
-                DispatcherTimer.RunOnce(() =>
+                if (startupSetup.IsPending)
                 {
-                    if (splash.IsVisible) splash.Close();
-                }, TimeSpan.FromMilliseconds(500));
+                    await new StartupSetupWindow(viewModel, startupSetup, crashDrafts).ShowDialog(window);
+                }
+                else
+                {
+                    var splash = new SplashWindow();
+                    splash.Show(window);
+                    DispatcherTimer.RunOnce(() =>
+                    {
+                        if (splash.IsVisible) splash.Close();
+                    }, TimeSpan.FromMilliseconds(500));
+                }
+                window.ShowRecoveredCrashReports();
                 if (startupProject is not null)
                 {
                     var path = startupProject;

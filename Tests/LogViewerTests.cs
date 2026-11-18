@@ -57,16 +57,17 @@ internal static class LogViewerTests
 
         var model = new MainViewModel();
         model.Log.Add("Test", "Selectable plain log text");
-        var window = new LogWindow { DataContext = model };
+        var view = new LogWindow { DataContext = model };
+        var window = new Window { Content = view, Width = 980, Height = 600 };
         try
         {
             window.Show();
             Dispatcher.UIThread.RunJobs();
-            var text = window.FindControl<TextBox>("LogText")!;
+            var text = view.FindControl<TextBox>("LogText")!;
             if (!text.IsReadOnly || text.Text?.Contains("Selectable plain log text") != true ||
-                window.FindControl<Grid>("LogContent")!.DataContext is not LogViewerViewModel state)
+                view.FindControl<Grid>("LogContent")!.DataContext is not LogViewerViewModel state)
                 throw new InvalidOperationException("The log window does not expose a selectable plain text log.");
-            window.FindControl<TextBox>("SearchBox")!.Text = "plain";
+            view.FindControl<TextBox>("SearchBox")!.Text = "plain";
             Dispatcher.UIThread.RunJobs();
             if (state.SearchText != "plain" || text.SelectedText != "plain")
                 throw new InvalidOperationException("Log search did not select its match in the actual text area.");

@@ -72,7 +72,7 @@
                                 <StackPanel Margin="4">
                                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                                     <TextBlock Text="{Binding Kind}" />
-                                    <TextBlock Text="{Binding Id}" FontSize="11"
+                                    <TextBlock Text="{Binding Id}"
                                                Foreground="{DynamicResource EffectMutedForegroundBrush}" />
                                 </StackPanel>
                             </DataTemplate>

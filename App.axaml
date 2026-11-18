@@ -49,6 +49,12 @@
         <DataTemplate DataType="vm:NodePropertiesPaneViewModel">
             <views:NodePropertiesView />
         </DataTemplate>
+        <DataTemplate DataType="vm:SpriteEditorPaneViewModel">
+            <views:SpriteEditorView DataContext="{Binding Editor}" />
+        </DataTemplate>
+        <DataTemplate DataType="vm:EditorWorkPaneViewModel">
+            <ContentControl Content="{Binding View}" />
+        </DataTemplate>
         <DataTemplate DataType="vm:HistoryPaneViewModel">
             <views:HistoryView />
         </DataTemplate>

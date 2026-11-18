@@ -3,6 +3,8 @@ using Dock.Model.Core;
 using Dock.Model.Mvvm;
 using Dock.Model.Mvvm.Controls;
 using LiberaFx.Services;
+using LiberaFx.Views;
+using Avalonia.Controls;
 
 namespace LiberaFx.ViewModels;
 
@@ -90,6 +92,23 @@ public sealed partial class DockFactory : Factory
             };
             _localizedTools.Add((inspector, key));
         }
+        var spriteEditor = new SpriteEditorPaneViewModel(_main)
+        {
+            Id = "SpriteEditor",
+            Title = LocalizationService.Shared.Get("Sprite.Title")
+        };
+        _localizedTools.Add((spriteEditor, "Sprite.Title"));
+        AddWorkPane("Log", "Panels.LogTitle", () => new LogWindow { DataContext = _main });
+        AddWorkPane("Mcp", "Panels.McpConnectionTitle", () => new McpWindow { DataContext = _main });
+        AddWorkPane("PreviewProfiler", "Profiler.Title", () => new PreviewProfilerWindow { DataContext = _main });
+        AddWorkPane("PreviewConnections", "Connections.Title", () => new PreviewConnectionsWindow { DataContext = _main });
+        AddWorkPane("LocalProjects", "Library.Title", () => new LocalProjectsWindow(_main));
+        AddWorkPane("Problems", "Messages.GraphProblemsTitle", () => new ProblemsWindow(_main));
+        AddWorkPane("Content", "Asset.Title", () => new EngineAssetsWindow(_main.AssetBrowser));
+        AddWorkPane("Chat", "Chat.Title", () => new ChatWindow(_main), retainView: true);
+        AddWorkPane("LiveGame", "LiveGame.Title", _main.CreateLiveGameView, retainView: true);
+        AddWorkPane("RevisionHistory", "Vcs.Title", () => new RevisionHistoryWindow(_main));
+        AddWorkPane("LayoutPresets", "Layouts.Title", () => new WindowLayoutsWindow(_main.WindowLayouts));
 
         var leftDock = new ProportionalDock
         {
@@ -179,6 +198,11 @@ public sealed partial class DockFactory : Factory
         rootDock.ActiveDockable = mainLayout;
         rootDock.VisibleDockables = CreateList<IDockable>(mainLayout);
         RememberLayout(rootDock);
+        _paneHomes[spriteEditor.Id] = _paneHomes[timeline.Id];
+        foreach (var pane in Tools.OfType<EditorWorkPaneViewModel>())
+        {
+            _paneHomes[pane.Id] = _paneHomes[timeline.Id];
+        }
         foreach (var inspector in _localizedTools.Select(entry => entry.Tool).OfType<NodePropertiesPaneViewModel>())
         {
             _paneHomes.TryAdd(inspector.Id, _paneHomes[properties.Id]);
@@ -191,4 +215,11 @@ public sealed partial class DockFactory : Factory
         foreach (var (tool, key) in _localizedTools)
             tool.Title = LocalizationService.Shared.Get(key);
     }
+
+    private void AddWorkPane(string id, string key, Func<Control> createView, bool retainView = false) =>
+        _localizedTools.Add((new EditorWorkPaneViewModel(createView, retainView)
+        {
+            Id = id,
+            Title = LocalizationService.Shared.Get(key)
+        }, key));
 }

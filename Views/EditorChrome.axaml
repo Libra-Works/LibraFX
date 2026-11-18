@@ -2,9 +2,23 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Styles.Resources>
         <CornerRadius x:Key="EditorChromeCornerRadius">6</CornerRadius>
+        <x:Double x:Key="EditorBodyFontSize">14</x:Double>
         <SolidColorBrush x:Key="EditorChromeDividerBrush"
                          Color="{DynamicResource SystemBaseMediumLowColor}" Opacity="0.55" />
     </Styles.Resources>
+
+    <Style Selector=":is(Window)">
+        <Setter Property="Background" Value="{DynamicResource EffectWindowBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource EffectForegroundBrush}" />
+        <Setter Property="FontSize" Value="{DynamicResource EditorBodyFontSize}" />
+    </Style>
+    <Style Selector="TabItem">
+        <Setter Property="FontSize" Value="{DynamicResource EditorBodyFontSize}" />
+    </Style>
+    <Style Selector="ListBox, Expander">
+        <Setter Property="Background" Value="{DynamicResource EffectSurfaceBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource EffectForegroundBrush}" />
+    </Style>
 
     <Style Selector="Border.editor-bar">
         <Setter Property="Background" Value="{DynamicResource EffectSurfaceBrush}" />
@@ -20,7 +34,6 @@
     </Style>
     <Style Selector="TextBlock.editor-label">
         <Setter Property="Foreground" Value="{DynamicResource EffectMutedForegroundBrush}" />
-        <Setter Property="FontSize" Value="12" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="TextBlock.editor-heading">

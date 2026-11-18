@@ -1,10 +1,8 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:services="using:LiberaFx.Services"
         xmlns:views="using:LiberaFx.Views"
         x:Class="LiberaFx.Views.PreviewProfilerWindow"
-        Title="{DynamicResource Text.Profiler.Title}" Width="1380" Height="880"
-        MinWidth="700" MinHeight="460" WindowStartupLocation="CenterOwner"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
     <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="8">
         <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="5">
@@ -12,7 +10,7 @@
                       AutomationProperties.Name="{DynamicResource Text.Profiler.Peer}" />
             <TextBlock x:Name="PeerStatus" Grid.Column="1" VerticalAlignment="Center" TextWrapping="Wrap" />
             <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{DynamicResource Text.Profiler.CapabilityNotice}" TextWrapping="Wrap"
-                       Foreground="{DynamicResource EffectMutedForegroundBrush}" FontSize="11" />
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
         </Grid>
         <WrapPanel Grid.Row="1">
             <Button x:Name="StartButton" Content="{DynamicResource Text.Profiler.Start}" Click="OnStart" Margin="0,0,8,0" />
@@ -47,7 +45,7 @@
                     </UniformGrid>
                     <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
                         <StackPanel><TextBlock Text="{DynamicResource Text.Profiler.HistoryTitle}" FontWeight="SemiBold" />
-                            <TextBlock Text="{DynamicResource Text.Profiler.HistoryHelp}" FontSize="11"
+                            <TextBlock Text="{DynamicResource Text.Profiler.HistoryHelp}"
                                        Foreground="{DynamicResource EffectMutedForegroundBrush}" TextWrapping="Wrap" /></StackPanel>
                         <CheckBox x:Name="LiveCheck" Grid.Column="1" Content="{DynamicResource Text.Profiler.Live}" IsChecked="True"
                                   IsCheckedChanged="OnHistoryModeChanged" />
@@ -69,7 +67,7 @@
                     </Grid>
                     <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="12">
                         <StackPanel><TextBlock x:Name="SelectedSampleStatus" FontWeight="SemiBold" />
-                            <TextBlock Text="{DynamicResource Text.Profiler.CostHelp}" TextWrapping="Wrap" FontSize="11"
+                            <TextBlock Text="{DynamicResource Text.Profiler.CostHelp}" TextWrapping="Wrap"
                                        Foreground="{DynamicResource EffectMutedForegroundBrush}" /></StackPanel>
                         <ComboBox x:Name="CostMode" Grid.Column="1" SelectedIndex="1" SelectionChanged="OnCostModeChanged">
                             <ComboBoxItem Content="{DynamicResource Text.Profiler.IntervalCosts}" />
@@ -147,4 +145,4 @@
         </TabControl>
         <TextBlock x:Name="ControlStatus" Grid.Row="4" TextWrapping="Wrap" />
     </Grid>
-</Window>
+</UserControl>
