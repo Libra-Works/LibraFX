@@ -7,7 +7,8 @@ public enum CommentFormat { Text, Markdown, Html }
 public sealed record CommentSpan(string Text, bool Bold = false, bool Italic = false, bool Code = false,
     bool Strike = false, string? Link = null);
 public sealed record CommentBlock(IReadOnlyList<CommentSpan> Spans, int Heading = 0, string Prefix = "",
-    bool? Checked = null, int TaskOffset = -1);
+    bool? Checked = null, int TaskOffset = -1, CommentTable? Table = null);
+public sealed record CommentTable(IReadOnlyList<IReadOnlyList<IReadOnlyList<CommentSpan>>> Rows);
 
 public static class CommentMarkup
 {
@@ -46,9 +47,11 @@ public static class CommentMarkup
         var blocks = new List<CommentBlock>();
         var offset = 0;
         var code = false;
-        foreach (var raw in source.Split('\n'))
+        var lines = source.Split('\n');
+        for (var index = 0; index < lines.Length; index++)
         {
             if (blocks.Count >= 256) { blocks.Add(new([new("\u2026")])); break; }
+            var raw = lines[index];
             var line = raw.TrimEnd('\r');
             if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
                 code = !code;
@@ -57,6 +60,13 @@ public static class CommentMarkup
             else if (Task.Match(line) is { Success: true } task)
                 blocks.Add(new(ParseInline(task.Groups["text"].Value), Checked: task.Groups["state"].Value != " ",
                     TaskOffset: offset + task.Groups["state"].Index));
+            else if (TryReadTable(lines, index, out var end, out var table))
+            {
+                blocks.Add(new([], Table: table));
+                for (; index < end; index++)
+                    offset += lines[index].Length + 1;
+                raw = lines[index];
+            }
             else
             {
                 var heading = 0;
@@ -74,6 +84,65 @@ public static class CommentMarkup
             offset += raw.Length + 1;
         }
         return blocks;
+    }
+
+    private static bool TryReadTable(string[] lines, int start, out int end, out CommentTable? table)
+    {
+        end = start;
+        table = null;
+        if (start + 1 >= lines.Length || SplitCells(lines[start]) is not { Length: >= 1 and <= 16 } header ||
+            SplitCells(lines[start + 1]) is not { } separators || separators.Length != header.Length ||
+            separators.Any(cell => cell.Trim(':') is not { Length: >= 3 } dashes || dashes.Any(c => c != '-')))
+        {
+            return false;
+        }
+
+        var rows = new List<IReadOnlyList<IReadOnlyList<CommentSpan>>> { header.Select(ParseInline).ToArray() };
+        end = start + 1;
+        while (end + 1 < lines.Length && rows.Count < 64 &&
+               !lines[end + 1].TrimStart().StartsWith("```", StringComparison.Ordinal) &&
+               !Task.IsMatch(lines[end + 1].TrimEnd('\r')) &&
+               SplitCells(lines[end + 1]) is { } cells)
+        {
+            rows.Add(Enumerable.Range(0, header.Length).Select(i => ParseInline(cells.ElementAtOrDefault(i) ?? "")).ToArray());
+            end++;
+        }
+        table = new(rows);
+        return true;
+    }
+
+    private static string[]? SplitCells(string line)
+    {
+        line = line.Trim();
+        var cells = new List<string>();
+        var cell = new System.Text.StringBuilder();
+        var inCode = false;
+        var hasDelimiter = false;
+        var endsWithDelimiter = false;
+        for (var i = 0; i < line.Length; i++)
+        {
+            var c = line[i];
+            endsWithDelimiter = false;
+            if (c == '\\' && i + 1 < line.Length && line[i + 1] == '|')
+            {
+                cell.Append(line[++i]);
+            }
+            else if (c == '|' && !inCode)
+            {
+                hasDelimiter = true;
+                endsWithDelimiter = true;
+                if (i != 0) cells.Add(cell.ToString().Trim());
+                cell.Clear();
+            }
+            else
+            {
+                if (c == '`') inCode = !inCode;
+                cell.Append(c);
+            }
+        }
+        if (!hasDelimiter) return null;
+        if (!endsWithDelimiter) cells.Add(cell.ToString().Trim());
+        return cells.ToArray();
     }
 
     private static IReadOnlyList<CommentSpan> ParseInline(string line)

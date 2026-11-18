@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Input;
 using LiberaFx.ViewModels;
 using LiberaFx.Services;
 
@@ -20,6 +21,18 @@ public partial class NodePropertiesView : UserControl
     }
 
     private void OnLanguageChanged(object? sender, EventArgs e) => RefreshLocalizedText();
+
+    private void OnTogglePinClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is NodePropertiesPaneViewModel pane) pane.TogglePin();
+    }
+
+    private void OnParameterDividerDrag(object? sender, VectorEventArgs e)
+    {
+        var column = ParameterHeader.ColumnDefinitions[0];
+        column.Width = new GridLength(Math.Clamp(column.Width.Value + e.Vector.X, 64, 320));
+        ParameterList.SetValue(ParameterEditorHost.LabelColumnWidthProperty, column.Width);
+    }
 
     private void RefreshLocalizedText()
     {

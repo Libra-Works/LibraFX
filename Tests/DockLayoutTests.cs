@@ -25,7 +25,38 @@ internal static class DockLayoutTests
         VerifyTopologyRoundtrip();
         VerifyPresetsAndFailures();
         VerifyGeometryAndMenu();
+        VerifyIndependentInspectors();
         VerifyHostedWindowReopening();
+    }
+
+    private static void VerifyIndependentInspectors()
+    {
+        var main = new MainViewModel();
+        try
+        {
+            var factory = Factory(main);
+            var inspectors = factory.Tools.OfType<NodePropertiesPaneViewModel>().ToArray();
+            Check(inspectors.Length == 4 && inspectors.Skip(1).All(pane => !Walk(main.Layout).Contains(pane)),
+                "Additional inspectors must be available without changing the default layout.");
+            var graph = main.Graph;
+            var first = graph.CreateNode(GraphNodeKind.Float);
+            var second = graph.CreateNode(GraphNodeKind.Float);
+            graph.SelectNode(first);
+            inspectors[0].TogglePin();
+            Check(factory.ShowTool("Properties2"), "The second inspector could not be opened.");
+            graph.SelectNode(second);
+            inspectors[1].TogglePin();
+            var firstValue = inspectors[0].Parameters.Single(parameter => parameter.Id == "value");
+            var secondValue = inspectors[1].Parameters.Single(parameter => parameter.Id == "value");
+            firstValue.ValueText = "12";
+            Check(firstValue.ValueText == "12" && secondValue.ValueText != "12",
+                "A locked inspector edited the active selection instead of its own node.");
+            graph.SelectNode(first);
+            graph.DeleteSelectedNodeCommand.Execute(null);
+            Check(!inspectors[0].IsPinned && inspectors[1].IsPinned,
+                "Deleting a node did not release only the inspector locked to it.");
+        }
+        finally { main.DisposeStorageFiles(); }
     }
 
     private static void Check(bool condition, string message)

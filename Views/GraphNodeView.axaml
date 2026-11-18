@@ -250,7 +250,7 @@
                                Foreground="{DynamicResource EffectForegroundBrush}" />
                 </DockPanel>
             </Border>
-            <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+            <Grid x:Name="CommentBody" Grid.Row="1" ColumnDefinitions="*,Auto">
                 <TextBox x:Name="CommentSource" Margin="8" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="4096"
                          Text="{Binding CommentText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                          PlaceholderText="{DynamicResource Text.Panels.WriteComment}" VerticalContentAlignment="Top" />

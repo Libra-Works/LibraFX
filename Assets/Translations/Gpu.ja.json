@@ -38,6 +38,8 @@
   "Gpu.ReadAttribute": "属性を読む",
   "Gpu.ReadUniform": "Uniformを読む",
   "Gpu.Output": "出力",
+  "Gpu.OutputAttributeTarget": "属性へ書き込み: {0}",
+  "Gpu.OutputTargetCount": "{0} 件の接続先",
   "Gpu.Attribute.Position": "位置 (Position)",
   "Gpu.Attribute.Velocity": "速度 (Velocity)",
   "Gpu.Attribute.Color": "色 (Color)",

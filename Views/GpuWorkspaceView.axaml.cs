@@ -38,7 +38,7 @@ public partial class GpuWorkspaceView : UserControl
     private readonly Action<TimeSpan> _renderFrame;
 
     private sealed class NodeVisual(GpuNode model, Border border, TextBlock title, Button output, Button[] inputs,
-        TextBlock outputLabel, TextBlock[] inputLabels)
+        TextBlock outputLabel, TextBlock destinationLabel, TextBlock[] inputLabels)
     {
         public GpuNode Model = model;
         public readonly Border Border = border;
@@ -46,6 +46,7 @@ public partial class GpuWorkspaceView : UserControl
         public readonly Button Output = output;
         public readonly Button[] Inputs = inputs;
         public readonly TextBlock OutputLabel = outputLabel;
+        public readonly TextBlock DestinationLabel = destinationLabel;
         public readonly TextBlock[] InputLabels = inputLabels;
         public readonly TranslateTransform Translation = new();
         public readonly List<WireVisual> Wires = [];
@@ -512,10 +513,14 @@ public partial class GpuWorkspaceView : UserControl
                 var outputLabel = PortLabel();
                 outputLabel.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right;
                 var outputRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+                outputRow.Background = Brushes.Transparent;
                 outputRow.Children.Add(outputLabel);
                 Grid.SetColumn(output, 1);
                 outputRow.Children.Add(output);
                 panel.Children.Add(outputRow);
+                var destinationLabel = PortLabel();
+                destinationLabel.Margin = new Thickness(4, 0, 4, 0);
+                panel.Children.Add(destinationLabel);
                 var inputs = new Button[GpuOperationRegistry.Operations[n.Op].MaxInputs];
                 var inputLabels = new TextBlock[inputs.Length];
                 for (var i = 0; i < inputs.Length; i++)
@@ -542,7 +547,7 @@ public partial class GpuWorkspaceView : UserControl
                     Background = this.FindResource("EffectSurfaceBrush") as IBrush ?? Brushes.DimGray,
                     BorderThickness = new Thickness(1), Tag = n.Id, Cursor = new Cursor(StandardCursorType.SizeAll)
                 };
-                var visual = new NodeVisual(n, border, title, output, inputs, outputLabel, inputLabels)
+                var visual = new NodeVisual(n, border, title, output, inputs, outputLabel, destinationLabel, inputLabels)
                 { CanvasOrigin = _viewport.Origin };
                 border.RenderTransform = visual.Translation;
                 _nodeVisuals.Add(n.Id, visual);
@@ -588,12 +593,35 @@ public partial class GpuWorkspaceView : UserControl
                     }
             _anchorsDirty = true;
         }
+        var destinations = _wireVisuals.ToLookup(wire => wire.Source.Model.Id);
+        var modelsById = k.Nodes.ToDictionary(node => node.Id);
+        var writes = k.Writes.ToLookup(write => write.Value);
         foreach (var n in k.Nodes)
         {
             var visual = _nodeVisuals[n.Id];
             visual.Model = n;
             visual.Title.Text = NodeDisplayName(n);
-            visual.OutputLabel.Text = OutputDisplayName(n) + " : " + n.Type;
+            var targets = destinations[n.Id].Select(wire =>
+            {
+                var target = modelsById[wire.Target.Model.Id];
+                var input = GpuOperationRegistry.GetDefaultInputs(target.Op, target.Type).ElementAtOrDefault(wire.Input);
+                return $"{NodeDisplayName(target)} / {InputDisplayName(input?.Id ?? "input")}";
+            }).Concat(writes[n.Id].Select(write =>
+                LocalizationService.Shared.Get("Gpu.OutputAttributeTarget", AttributeDisplayName(write.Attribute)))).ToArray();
+            var outputText = $"{OutputDisplayName(n)} : {n.Type}";
+            visual.OutputLabel.Text = outputText;
+            visual.DestinationLabel.IsVisible = targets.Length != 0;
+            visual.DestinationLabel.Text = targets.Length switch
+            {
+                0 => "",
+                1 => $"→ {targets[0]}",
+                _ => $"→ {LocalizationService.Shared.Get("Gpu.OutputTargetCount", targets.Length)}"
+            };
+            var outputDetails = targets.Length == 0 ? outputText : outputText + Environment.NewLine +
+                string.Join(Environment.NewLine, targets.Select(target => $"→ {target}"));
+            ToolTip.SetTip(visual.Output, outputDetails);
+            if (visual.OutputLabel.Parent is Control outputRow) ToolTip.SetTip(outputRow, outputDetails);
+            Avalonia.Automation.AutomationProperties.SetName(visual.Output, outputDetails);
             visual.Output.Foreground = TypeBrush(n.Type);
             for (var i = 0; i < visual.Inputs.Length; i++)
             {

@@ -20,6 +20,12 @@ namespace LiberaFx.Views;
 
 public sealed class ParameterEditorHost : ContentControl
 {
+    public static readonly AttachedProperty<GridLength> LabelColumnWidthProperty =
+        AvaloniaProperty.RegisterAttached<ParameterEditorHost, Control, GridLength>(
+            "LabelColumnWidth", new GridLength(124), inherits: true);
+
+    public bool PreserveEditorWidth { get; set; }
+
     private readonly List<RadioButton> _booleanOptions = [];
     private readonly List<TextBlock> _scrubLabels = [];
     private TextBlock? _missingEditorMessage;
@@ -119,6 +125,11 @@ public sealed class ParameterEditorHost : ContentControl
             MinHeight = 28,
             Children = { label, editor, actions, status, missing }
         };
+        row.ColumnDefinitions[0].Bind(ColumnDefinition.WidthProperty, this.GetObservable(LabelColumnWidthProperty));
+        if (PreserveEditorWidth)
+        {
+            row.ColumnDefinitions[1].MinWidth = 144;
+        }
         Grid.SetColumn(editor, 1);
         Grid.SetColumn(actions, 2);
         Grid.SetColumn(status, 1);

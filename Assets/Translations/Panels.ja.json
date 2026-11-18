@@ -1,4 +1,7 @@
 {
+  "Panels.InspectorLock": "このノードにインスペクターを固定",
+  "Panels.InspectorUnlock": "固定を解除してグラフの選択に追従",
+  "Panels.InspectorResize": "ドラッグしてパラメーター列の幅を調整",
   "Panels.AboutTitle": "LIBERA FX について",
   "Panels.Version": "バージョン {0}",
   "Panels.Unknown": "不明",

@@ -643,6 +643,10 @@ public partial class MainViewModel : ViewModelBase
 
     public void DisposeStorageFiles()
     {
+        foreach (var inspector in _dockFactory.Tools.OfType<NodePropertiesPaneViewModel>())
+        {
+            inspector.Dispose();
+        }
         _executionDebugger?.Dispose();
         CloseChatWindow();
         DisposeAssetBrowser();

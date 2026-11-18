@@ -79,6 +79,17 @@ public sealed partial class DockFactory : Factory
             (history, "Messages.Tool.History"),
             (timeline, "Messages.Tool.Timeline"),
             (curves, "Messages.Tool.Curves")]);
+        for (var slot = 2; slot <= 4; slot++)
+        {
+            var id = $"Properties{slot}";
+            var key = $"Messages.Tool.{id}";
+            var inspector = new NodePropertiesPaneViewModel(_activeGraph, _main.Playback, _main.AssetBrowser)
+            {
+                Id = id,
+                Title = LocalizationService.Shared.Get(key)
+            };
+            _localizedTools.Add((inspector, key));
+        }
 
         var leftDock = new ProportionalDock
         {
@@ -168,6 +179,10 @@ public sealed partial class DockFactory : Factory
         rootDock.ActiveDockable = mainLayout;
         rootDock.VisibleDockables = CreateList<IDockable>(mainLayout);
         RememberLayout(rootDock);
+        foreach (var inspector in _localizedTools.Select(entry => entry.Tool).OfType<NodePropertiesPaneViewModel>())
+        {
+            _paneHomes.TryAdd(inspector.Id, _paneHomes[properties.Id]);
+        }
         return rootDock;
     }
 

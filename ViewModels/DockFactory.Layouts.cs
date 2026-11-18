@@ -508,7 +508,9 @@ public sealed partial class DockFactory
         }
         foreach (var tool in Tools)
         {
-            if (!_paneHomes.ContainsKey(tool.Id)) _paneHomes[tool.Id] = fallback;
+            _paneHomes.TryAdd(tool.Id, tool is NodePropertiesPaneViewModel
+                ? _paneHomes.GetValueOrDefault("Properties") ?? fallback
+                : fallback);
             if (_layoutRoot.HiddenDockables?.Contains(tool) == true) tool.OriginalOwner = _paneHomes[tool.Id];
         }
         foreach (var (dock, active) in dockActives)

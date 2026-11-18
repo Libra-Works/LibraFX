@@ -6,8 +6,10 @@ namespace LiberaFx.Services;
 public sealed class WindowLayoutPresetStore
 {
     public const int MaximumPresets = 32;
-    public static readonly string[] PaneIds =
+    private static readonly string[] RequiredPaneIds =
         ["Outliner", "NodeList", "Resources", "Properties", "EngineConnection", "History", "Timeline", "Curves"];
+    public static readonly string[] PaneIds =
+        [.. RequiredPaneIds, "Properties2", "Properties3", "Properties4"];
     private static readonly HashSet<string> AllowedPanes = new(PaneIds, StringComparer.Ordinal);
     private static readonly HashSet<string> Sides = new(["Left", "Right", "Top", "Bottom"], StringComparer.Ordinal);
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, MaxDepth = 48 };
@@ -157,8 +159,8 @@ public sealed class WindowLayoutPresetStore
             ValidateBounds(window.Bounds);
         }
         if (snapshot.MainWindow is not null) ValidateBounds(snapshot.MainWindow);
-        if (documentAnchors != 1 || seen.Count != AllowedPanes.Count)
-            throw new InvalidDataException("Layout must contain the document area and every pane exactly once.");
+        if (documentAnchors != 1 || !RequiredPaneIds.All(seen.Contains))
+            throw new InvalidDataException("Layout must contain the document area and every required pane exactly once.");
         if (hiddenHomes.Any(id => !snapshot.Hidden.Contains(id)))
             throw new InvalidDataException("A visible pane has a hidden pane home.");
     }

@@ -131,7 +131,9 @@ public sealed class AnythingSearchWindow : Window
         foreach (var (id, label) in new[]
                  {
                      ("Outliner", "Outliner"), ("NodeList", "NodeList"), ("Resources", "Resources"),
-                     ("Properties", "Properties"), ("EngineConnection", "EngineConnection"),
+                     ("Properties", "Properties"), ("Properties2", "Properties2"),
+                     ("Properties3", "Properties3"), ("Properties4", "Properties4"),
+                     ("EngineConnection", "EngineConnection"),
                      ("History", "History"), ("Timeline", "Timeline"), ("Curves", "Curves")
                  })
             yield return Item("panel/" + id, "Search.Panel", text.Get("Messages.Tool." + label), "",

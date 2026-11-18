@@ -17,6 +17,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     private readonly GroupExposedItem? _exposed;
     private readonly string? _exposedDescriptionKey;
     private readonly Func<bool> _isCurrentInspectorTarget;
+    private readonly bool _hasInspectorTargetGuard;
     private readonly AssetBrowserCoordinator? _assetBrowser;
     private string _status = string.Empty;
 
@@ -141,22 +142,25 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         _exposed = exposed;
         _exposedDescriptionKey = exposedDescriptionKey;
         _assetBrowser = assetBrowser;
+        _hasInspectorTargetGuard = isCurrentInspectorTarget is not null;
         _isCurrentInspectorTarget = isCurrentInspectorTarget ?? (() =>
             _graph.Nodes.Contains(_node) && ReferenceEquals(_graph.SelectedNode, _node));
         DisconnectCommand = new RelayCommand(() =>
         {
+            if (_hasInspectorTargetGuard && !IsCurrentInspectorTarget()) return;
             if (InputConnection is { } connection) _graph.DisconnectConnection(connection);
             Refresh();
         }, () => HasConnection);
         ResetCommand = new RelayCommand(() =>
         {
-            if (_exposed is not null && !IsCurrentInspectorTarget()) return;
+            if ((_hasInspectorTargetGuard || _exposed is not null) && !IsCurrentInspectorTarget()) return;
             if (_exposed is { } item) _graph.ResetGroupInstanceValue(_node, item.Id);
             else SetValue(_definition.DefaultValue);
             Refresh();
         }, () => CanReset);
         PublishCommand = new RelayCommand(() =>
         {
+            if (_hasInspectorTargetGuard && !IsCurrentInspectorTarget()) return;
             try { _graph.PublishGroupParameter(_node, Id); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
                                        InvalidOperationException or ArgumentException)
@@ -226,7 +230,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     }
 
     internal bool IsCurrentInspectorTarget() =>
-        _isCurrentInspectorTarget() && _graph.IsCurrentInspectorTarget(_node);
+        _isCurrentInspectorTarget();
 
     internal bool TrySetInspectorValue(JsonElement value) =>
         IsCurrentInspectorTarget() && SetValue(value);
@@ -329,7 +333,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
 
     private bool SetValue(JsonElement value)
     {
-        if (_exposed is not null && !IsCurrentInspectorTarget()) return false;
+        if ((_hasInspectorTargetGuard || _exposed is not null) && !IsCurrentInspectorTarget()) return false;
         try
         {
             if (_exposed is { } item)

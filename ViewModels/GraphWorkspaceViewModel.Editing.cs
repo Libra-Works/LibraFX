@@ -323,8 +323,8 @@ public sealed partial class GraphWorkspaceViewModel
             throw new InvalidOperationException("The comment size is invalid.");
         }
 
-        width = Math.Clamp(width, 180, 4000);
-        height = Math.Clamp(height, 80, 4000);
+        width = Math.Clamp(width, 180, GraphNodeViewModel.MaxCommentSize);
+        height = Math.Clamp(height, 80, GraphNodeViewModel.MaxCommentSize);
         var values = node.Parameters?.ToList() ?? [];
         foreach (var (id, value) in new[] { ("width", width), ("height", height) })
         {
@@ -350,6 +350,30 @@ public sealed partial class GraphWorkspaceViewModel
     }
 
     public GraphNodeViewModel CreateNode(GraphNodeKind kind, double? x = null, double? y = null, bool isPolymorphic = false)
+        => CreateNodeCore(kind, x, y, isPolymorphic);
+
+    public GraphNodeViewModel CreateCommentAroundSelection(double fallbackX, double fallbackY)
+    {
+        var selection = SelectedNodes.ToArray();
+        if (selection.Length == 0)
+        {
+            return CreateNode(GraphNodeKind.Comment, fallbackX, fallbackY);
+        }
+
+        const double padding = 32;
+        var left = selection.Min(node => node.X) - padding;
+        var top = selection.Min(node => node.Y) - padding - 32;
+        var right = selection.Max(node => node.X + node.RenderedWidth) + padding;
+        var bottom = selection.Max(node => node.Y + (node.IsComment ? node.CommentHeight : node.RenderedHeight)) + padding;
+        return CreateNodeCore(GraphNodeKind.Comment, left, top, false,
+        [
+            new("width", "float", JsonSerializer.SerializeToElement(Math.Clamp(right - left, 180, GraphNodeViewModel.MaxCommentSize))),
+            new("height", "float", JsonSerializer.SerializeToElement(Math.Clamp(bottom - top, 100, GraphNodeViewModel.MaxCommentSize)))
+        ]);
+    }
+
+    private GraphNodeViewModel CreateNodeCore(GraphNodeKind kind, double? x, double? y, bool isPolymorphic,
+        IReadOnlyList<NodeParameterSnapshot>? parameters = null)
     {
         if ((kind == GraphNodeKind.GraphGroup || kind == GraphNodeKind.SpawnableGroup) && _graphPath.Count >= MaxGraphDepth)
         {
@@ -374,7 +398,7 @@ public sealed partial class GraphWorkspaceViewModel
             x ?? 80 + (index % 4) * 280,
             y ?? 80 + (index / 4) * 160,
             id: nodeId,
-            parameters: GpuParticleEditorService.IsGpu(kind) ? GpuParticleEditorService.InitialParameters(nodeId) : null,
+            parameters: GpuParticleEditorService.IsGpu(kind) ? GpuParticleEditorService.InitialParameters(nodeId) : parameters,
             isPolymorphic: isPolymorphic);
         ExecuteEdit(new AddGraphNodeCommand(this, node, Nodes.Count));
         return node;

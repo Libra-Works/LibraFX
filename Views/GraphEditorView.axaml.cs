@@ -20,6 +20,7 @@ public partial class GraphEditorView : UserControl
 {
     private bool _isPanning;
     private bool _panMoved;
+    private bool _panCanMove;
     private MouseButton _panButton;
     private Point _panStart;
     private Vector _panOffset;
@@ -55,7 +56,25 @@ public partial class GraphEditorView : UserControl
         AddHandler(InputElement.PointerPressedEvent, (_, e) =>
         {
             if (OwnsInput(e.Source) && DataContext is GraphWorkspaceViewModel graph)
+            {
                 graph.ActivateEditingWorkspace();
+                var point = e.GetCurrentPoint(GraphCanvas);
+                var hitNode = FindHitNode(e.Source);
+                if (!graph.IsReadOnly && point.Properties.IsRightButtonPressed && hitNode?.IsBlankCommentArea(e) == true)
+                {
+                    Focus();
+                    _pastePosition = ToGraphPoint(e.GetPosition(GraphCanvas));
+                    NewSpawnableGroupMenu.IsVisible = true;
+                    BeginViewportPan(e, MouseButton.Right,
+                        ShortcutService.Shared.GraphPanButton is "Right" or "Right + Middle");
+                }
+                else if (point.Properties.IsLeftButtonPressed && hitNode?.ShouldFocusGraphOnBlankComment(e) == true)
+                {
+                    Focus();
+                    _lastGraphPointer = ToGraphPoint(point.Position);
+                    e.Handled = true;
+                }
+            }
         }, RoutingStrategies.Tunnel);
         // A wheel reaching an inline scroll limit must not scroll/zoom the outer editor.
         AddHandler(InputElement.PointerWheelChangedEvent, (_, e) =>
@@ -329,14 +348,17 @@ public partial class GraphEditorView : UserControl
         }
 
         _pastePosition = ToGraphPoint(e.GetPosition(GraphCanvas));
-        var hitNode = (e.Source as Visual)?.GetSelfAndVisualAncestors().OfType<GraphNodeView>()
-            .FirstOrDefault(view => ReferenceEquals(view.FindAncestorOfType<GraphEditorView>(), this));
+        var hitNode = FindHitNode(e.Source);
         NewSpawnableGroupMenu.IsVisible = hitNode is null;
-        if (hitNode?.DataContext is GraphNodeViewModel node && !node.IsSelected)
+        if (hitNode?.DataContext is GraphNodeViewModel node && !node.IsSelected && graph.SelectedNodes.Count < 2)
         {
             graph.SelectNode(node);
         }
     }
+
+    private GraphNodeView? FindHitNode(object? source) =>
+        (source as Visual)?.GetSelfAndVisualAncestors().OfType<GraphNodeView>()
+            .FirstOrDefault(view => ReferenceEquals(view.FindAncestorOfType<GraphEditorView>(), this));
 
     private async void OnCopyClick(object? sender, RoutedEventArgs e) => await CopySelectionAsync(false);
 
@@ -349,7 +371,7 @@ public partial class GraphEditorView : UserControl
         if (DataContext is not GraphWorkspaceViewModel graph) return;
         graph.RunAuthoringAction(() =>
         {
-            var node = graph.CreateNode(GraphNodeKind.Comment, _pastePosition.X, _pastePosition.Y);
+            var node = graph.CreateCommentAroundSelection(_pastePosition.X, _pastePosition.Y);
             graph.SelectNode(node);
         });
     }
@@ -379,6 +401,11 @@ public partial class GraphEditorView : UserControl
         }
 
         var shortcuts = ShortcutService.Shared;
+        if (shortcuts.Matches("graph.search", e) && e.Source is Visual source &&
+            source.GetSelfAndVisualAncestors().OfType<TextBox>().Any())
+        {
+            return;
+        }
         if (graph.IsReadOnly && new[] { "graph.cut", "graph.paste", "graph.delete", "graph.group", "graph.search" }
             .Any(id => shortcuts.Matches(id, e)))
         {
@@ -599,9 +626,15 @@ public partial class GraphEditorView : UserControl
             return;
         }
 
+        BeginViewportPan(e, right ? MouseButton.Right : MouseButton.Middle, true);
+    }
+
+    private void BeginViewportPan(PointerPressedEventArgs e, MouseButton button, bool canMove)
+    {
         _isPanning = true;
         _panMoved = false;
-        _panButton = right ? MouseButton.Right : MouseButton.Middle;
+        _panCanMove = canMove;
+        _panButton = button;
         _panStart = e.GetPosition(GraphScrollViewer);
         _panOffset = GraphScrollViewer.Offset;
         e.Pointer.Capture(GraphScrollViewer);
@@ -627,6 +660,11 @@ public partial class GraphEditorView : UserControl
         if (Math.Abs(position.X - _panStart.X) >= 4 || Math.Abs(position.Y - _panStart.Y) >= 4)
             _panMoved = true;
         if (!_panMoved) return;
+        if (!_panCanMove)
+        {
+            e.Handled = true;
+            return;
+        }
         var shiftX = target.X < 200 ? OriginStep : 0;
         var shiftY = target.Y < 200 ? OriginStep : 0;
         if (shiftX > 0 || shiftY > 0)
@@ -659,6 +697,11 @@ public partial class GraphEditorView : UserControl
     private void OnViewportPointerWheelChanged(object? sender, PointerWheelEventArgs e)
     {
         if (!OwnsInput(e.Source)) return;
+        if (e.Delta.Y != 0 && FindHitNode(e.Source)?.TryScrollComment(e) == true)
+        {
+            e.Handled = true;
+            return;
+        }
         if (e.Delta.Y == 0 ||
             (ShortcutService.Shared.GraphZoomModifier == "Control" &&
              !e.KeyModifiers.HasFlag(KeyModifiers.Control)))

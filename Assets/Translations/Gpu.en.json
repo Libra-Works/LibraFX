@@ -38,6 +38,8 @@
   "Gpu.ReadAttribute": "Read Attribute",
   "Gpu.ReadUniform": "Read Uniform",
   "Gpu.Output": "output",
+  "Gpu.OutputAttributeTarget": "Write attribute: {0}",
+  "Gpu.OutputTargetCount": "{0} destinations",
   "Gpu.Attribute.Position": "Position",
   "Gpu.Attribute.Velocity": "Velocity",
   "Gpu.Attribute.Color": "Color",

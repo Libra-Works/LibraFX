@@ -92,8 +92,9 @@ public sealed class GraphNodeViewModel : ObservableObject
             if (OutputPorts[index].Id == portId) return 5 + index * 24;
         return 0;
     }
-    public double CommentWidth => _previewWidth ?? CommentNumber("width", 360, 180, 4000);
-    public double CommentHeight => _previewHeight ?? CommentNumber("height", 200, 80, 4000);
+    internal const double MaxCommentSize = 1_000_000;
+    public double CommentWidth => _previewWidth ?? CommentNumber("width", 360, 180, MaxCommentSize);
+    public double CommentHeight => _previewHeight ?? CommentNumber("height", 200, 80, MaxCommentSize);
     internal const string InlineExpandedId = "editor.inline.expanded";
     internal const string InlineWidthId = "editor.inline.width";
     internal const string InlineHeightId = "editor.inline.height";
@@ -453,8 +454,8 @@ public sealed class GraphNodeViewModel : ObservableObject
 
     internal void PreviewCommentSize(double width, double height)
     {
-        SetProperty(ref _previewWidth, Math.Clamp(width, 180, 4000), nameof(CommentWidth));
-        SetProperty(ref _previewHeight, Math.Clamp(height, 80, 4000), nameof(CommentHeight));
+        SetProperty(ref _previewWidth, Math.Clamp(width, 180, MaxCommentSize), nameof(CommentWidth));
+        SetProperty(ref _previewHeight, Math.Clamp(height, 80, MaxCommentSize), nameof(CommentHeight));
         OnPropertyChanged(nameof(RenderedWidth));
     }
 

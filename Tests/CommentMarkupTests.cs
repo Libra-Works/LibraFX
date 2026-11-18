@@ -75,5 +75,34 @@ internal static class CommentMarkupTests
         {
             window.Close();
         }
+        VerifyTableAndEnclosingComment();
+    }
+
+    private static void VerifyTableAndEnclosingComment()
+    {
+        const string markdown = "| **Name** | Value |\r\n| --- | :---: |\r\n| A\\|B | `C|D` |\r\n- [ ] Keep | this task";
+        var blocks = CommentMarkup.Parse(markdown, CommentFormat.Markdown);
+        if (blocks.Count != 2 || blocks[0].Table is not { Rows.Count: 2 } table ||
+            !table.Rows[0][0].Single().Bold || table.Rows[1][0].Single().Text != "A|B" ||
+            table.Rows[1][1].Single() is not { Code: true, Text: "C|D" } ||
+            CommentMarkup.ToggleTask(markdown, blocks[1].TaskOffset, true) != markdown.Replace("[ ]", "[x]") ||
+            CommentMarkup.Parse($"```\n{markdown}\n```", CommentFormat.Markdown).Any(block => block.Table is not null))
+        {
+            throw new InvalidOperationException("Markdown table parsing lost columns, inline formatting or task offsets.");
+        }
+
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var first = graph.CreateNode(GraphNodeKind.Comment, -200, -100);
+        var last = graph.CreateNode(GraphNodeKind.Comment, 4200, 600);
+        graph.SetSelection([first, last]);
+        var enclosing = graph.CreateCommentAroundSelection(0, 0);
+        if (enclosing.X >= first.X || enclosing.Y >= first.Y ||
+            enclosing.X + enclosing.CommentWidth <= last.X + last.CommentWidth ||
+            enclosing.Y + enclosing.CommentHeight <= last.Y + last.CommentHeight ||
+            !graph.History.Undo() || graph.Nodes.Count != 2 || !graph.History.Redo() ||
+            graph.GetNode(enclosing.Id).CommentWidth != enclosing.CommentWidth)
+        {
+            throw new InvalidOperationException("The selected graph bounds were not enclosed in a single undoable edit.");
+        }
     }
 }

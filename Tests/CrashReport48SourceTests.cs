@@ -23,6 +23,12 @@ internal static class CrashReport48SourceTests
                 @"ghp_SYNTHETICSECRET C:\Users\Private\source.cs project-confidential"));
             var managed = store.Recover().Single();
             Require(managed.Kind == "ManagedException", "Managed classification missing.");
+            Require(store.TryClaimStartupPrompt(), "A new draft did not claim the startup prompt.");
+            using (var restarted = new CrashDraftStore())
+            {
+                Require(!restarted.TryClaimStartupPrompt() && restarted.Recover().Single().Id == managed.Id,
+                    "An acknowledged draft prompted again or was no longer readable.");
+            }
             var allLocal = string.Join("\n", Directory.GetFiles(Path.Combine(isolated, "LiberaFx", "CrashDrafts"))
                 .Select(File.ReadAllText));
             Require(!allLocal.Contains("SYNTHETICSECRET") && !allLocal.Contains("Private") &&
@@ -33,6 +39,7 @@ internal static class CrashReport48SourceTests
             var unclean = store.Recover().Single();
             Require(unclean.Kind == "UncleanTermination" && unclean.Body.Contains("Cause is unknown"),
                 "Unclean termination must not be diagnosed as native crash.");
+            Require(store.TryClaimStartupPrompt(), "An earlier acknowledgement suppressed a different draft.");
             store.Delete(unclean);
             using (var clean = new CrashDraftStore()) { clean.Start(); clean.CompleteCleanExit(); }
             Require(store.Recover().Count == 0, "Clean exit generated a draft.");

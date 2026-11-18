@@ -14,7 +14,7 @@ public partial class MainWindow
         _crashDrafts = drafts;
         Opened += (_, _) =>
         {
-            if (drafts.Recover().Count > 0 || drafts.Status.Length > 0)
+            if (drafts.TryClaimStartupPrompt())
                 OnCrashReportsClick(this, new RoutedEventArgs());
         };
     }

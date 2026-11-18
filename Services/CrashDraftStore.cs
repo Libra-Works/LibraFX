@@ -81,6 +81,7 @@ public sealed class CrashDraftStore : IDisposable
                         if (!File.Exists(path)) Save(NewDraft("UncleanTermination") with { Id = id });
                         File.Delete(marker);
                     }
+
                     catch (IOException ex) when ((ex.HResult & 0xffff) is 32 or 33 or 11) { }
                     catch { Status = "Crash.StorageFailed"; }
                 }
@@ -97,6 +98,26 @@ public sealed class CrashDraftStore : IDisposable
             catch { Status = "Crash.StorageFailed"; }
             return result;
         }
+    }
+
+    public bool TryClaimStartupPrompt()
+    {
+        var show = false;
+        foreach (var draft in Recover().Where(draft => draft.Delivery != "Sent"))
+        {
+            var marker = DraftPath(draft.Id) + ".shown";
+            try
+            {
+                using var claimed = new FileStream(marker, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                show = true;
+            }
+            catch (IOException) when (File.Exists(marker)) { }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Status = "Crash.StorageFailed";
+            }
+        }
+        return show;
     }
 
     private static CrashDraft NewDraft(string kind) => new(1, Guid.NewGuid(), kind,
@@ -151,6 +172,7 @@ public sealed class CrashDraftStore : IDisposable
                 foreach (var temporary in Directory.EnumerateFiles(_root, $"{draft.Id:N}.*.tmp"))
                     File.Delete(temporary);
             File.Delete(DraftPath(draft.Id));
+            File.Delete(DraftPath(draft.Id) + ".shown");
         }
     }
 

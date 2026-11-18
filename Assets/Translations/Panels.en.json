@@ -1,4 +1,7 @@
 {
+  "Panels.InspectorLock": "Lock inspector to this node",
+  "Panels.InspectorUnlock": "Follow graph selection",
+  "Panels.InspectorResize": "Drag to resize parameter columns",
   "Panels.AboutTitle": "About LIBERA FX",
   "Panels.Version": "Version {0}",
   "Panels.Unknown": "unknown",

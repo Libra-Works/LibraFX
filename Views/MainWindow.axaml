@@ -19,7 +19,7 @@
 
     <Grid RowDefinitions="Auto,*,Auto">
         <Border Grid.Row="0" Classes="editor-bar" BorderThickness="0,0,0,1">
-        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+        <Grid>
         <Menu>
             <MenuItem Header="{DynamicResource Text.Editor.File}">
                 <MenuItem Header="{DynamicResource Text.Editor.New}"
@@ -87,6 +87,9 @@
                 <MenuItem Header="{DynamicResource Text.Messages.Tool.NodeList}" Tag="NodeList" Click="OnDockPanelClick" />
                 <MenuItem Header="{DynamicResource Text.Messages.Tool.Resources}" Tag="Resources" Click="OnDockPanelClick" />
                 <MenuItem Header="{DynamicResource Text.Messages.Tool.Properties}" Tag="Properties" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Messages.Tool.Properties2}" Tag="Properties2" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Messages.Tool.Properties3}" Tag="Properties3" Click="OnDockPanelClick" />
+                <MenuItem Header="{DynamicResource Text.Messages.Tool.Properties4}" Tag="Properties4" Click="OnDockPanelClick" />
                 <MenuItem Header="{DynamicResource Text.Messages.Tool.EngineConnection}" Tag="EngineConnection" Click="OnDockPanelClick" />
                 <MenuItem Header="{DynamicResource Text.Messages.Tool.History}" Tag="History" Click="OnDockPanelClick" />
                 <MenuItem Header="{DynamicResource Text.Messages.Tool.Timeline}" Tag="Timeline" Click="OnDockPanelClick" />
@@ -117,7 +120,6 @@
                 </MenuItem>
             </MenuItem>
         </Menu>
-        <views:PlaybackTransport Grid.Column="1" DataContext="{Binding Playback}" />
         </Grid>
         </Border>
 

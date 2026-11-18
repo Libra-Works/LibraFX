@@ -155,6 +155,51 @@ public partial class GraphNodeView : UserControl
         EditCommentButton.Icon = _editingComment ? Models.Appearance.EditorIcon.Check : Models.Appearance.EditorIcon.Settings;
     }
 
+    internal bool IsBlankCommentArea(PointerEventArgs e)
+    {
+        if (DataContext is not GraphNodeViewModel { IsComment: true } ||
+            !new Rect(CommentBody.Bounds.Size).Contains(e.GetPosition(CommentBody)) ||
+            e.Source is not Visual source ||
+            source.GetSelfAndVisualAncestors().Any(visual => visual is ScrollBar or CheckBox))
+        {
+            return false;
+        }
+
+        if (CommentSource.IsVisible && CommentSource.FindDescendantOfType<Avalonia.Controls.Presenters.TextPresenter>() is { } text &&
+            !string.IsNullOrWhiteSpace(CommentSource.Text))
+        {
+            return !text.TextLayout.HitTestPoint(e.GetPosition(text)).IsInside;
+        }
+
+        return !CommentPreview.IsVisible ||
+            !source.GetSelfAndVisualAncestors().TakeWhile(visual => visual != CommentPreview)
+                .OfType<TextBlock>().Any(label => label.TextLayout.HitTestPoint(e.GetPosition(label)).IsInside);
+    }
+
+    internal bool ShouldFocusGraphOnBlankComment(PointerPressedEventArgs e) =>
+        !_editingComment && CommentSource.IsVisible && !string.IsNullOrWhiteSpace(CommentSource.Text) &&
+        IsBlankCommentArea(e);
+
+    internal bool TryScrollComment(PointerWheelEventArgs e)
+    {
+        if (DataContext is not GraphNodeViewModel { IsComment: true } ||
+            !new Rect(CommentBody.Bounds.Size).Contains(e.GetPosition(CommentBody)))
+        {
+            return false;
+        }
+
+        var viewer = CommentSource.IsVisible ? CommentSource.FindDescendantOfType<ScrollViewer>()
+            : CommentPreview.Content as ScrollViewer;
+        if (viewer is null || viewer.Extent.Height <= viewer.Viewport.Height)
+        {
+            return false;
+        }
+
+        viewer.Offset = new Vector(viewer.Offset.X,
+            Math.Clamp(viewer.Offset.Y - e.Delta.Y * 48, 0, viewer.Extent.Height - viewer.Viewport.Height));
+        return true;
+    }
+
     private void OnEditCommentClick(object? sender, RoutedEventArgs e)
     {
         if (_editingComment && _imageNode is { } node) node.CommentText = CommentSource.Text ?? "";
