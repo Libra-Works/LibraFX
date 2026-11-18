@@ -643,6 +643,7 @@ public partial class MainViewModel : ViewModelBase
 
     public void DisposeStorageFiles()
     {
+        _executionDebugger?.Dispose();
         CloseChatWindow();
         DisposeAssetBrowser();
         Extensions.Dispose();

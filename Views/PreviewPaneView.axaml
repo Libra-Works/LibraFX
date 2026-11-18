@@ -39,7 +39,15 @@
             </WrapPanel>
             <TextBlock Text="{Binding Main.ExecutionDebugger.Breakpoints}" />
             <TextBlock Text="{Binding Main.ExecutionDebugger.CurrentNode}" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding Main.ExecutionDebugger.CurrentSignalSource}" TextWrapping="Wrap" />
             <ItemsControl ItemsSource="{Binding Main.ExecutionDebugger.Inputs}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <ItemsControl ItemsSource="{Binding Main.ExecutionDebugger.AuthoredParameters}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="x:String">
                         <TextBlock Text="{Binding}" TextWrapping="Wrap" />

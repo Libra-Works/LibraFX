@@ -1,6 +1,6 @@
 {
   "ExecutionDebug.Title": "Runtime debugger",
-  "ExecutionDebug.Help": "Select a graph node to set a breakpoint. Start a local session, then paste the invitation into the Unity or Unreal runtime component using the same compiled effect.",
+  "ExecutionDebug.Help": "Set breakpoints before starting a local session. Paste the invitation into the Unity or Unreal component using the same compiled effect. Stops apply only to the selected effect's CPU execution; GPU instructions cannot be stepped.",
   "ExecutionDebug.Start": "Start local debugger",
   "ExecutionDebug.Package": "Match a compiled Spawnable package",
   "ExecutionDebug.Root": "Package root (playback {0})",
@@ -23,7 +23,7 @@
   "ExecutionDebug.Complete": "Runtime evaluation complete.",
   "ExecutionDebug.CannotStart": "Could not compile the graph or open a local debugger session.",
   "ExecutionDebug.Disconnected": "Runtime disconnected or invitation expired.",
-  "ExecutionDebug.Mismatch": "Runtime bytecode does not match this graph revision. Export and load the same standalone effect.",
+  "ExecutionDebug.Mismatch": "Runtime bytes do not match this graph revision. Re-export it and select the matching standalone or Spawnable package mode.",
   "ExecutionDebug.Revision": "Graph changed. Debugger disconnected; export and load the new revision before reconnecting.",
   "ExecutionDebug.Limit": "A session supports up to 128 breakpoints.",
   "ExecutionDebug.Rejected": "Debugger command rejected (result {0}).",
@@ -35,5 +35,8 @@
   "ExecutionDebug.Int32": "Int32",
   "ExecutionDebug.Unavailable": "Not evaluated",
   "ExecutionDebug.Connected": "Connected",
-  "ExecutionDebug.Default": "Default / override"
+  "ExecutionDebug.Default": "Default / override",
+  "ExecutionDebug.CommandPending": "Waiting for the runtime to acknowledge the command…",
+  "ExecutionDebug.SignalSource": "Signal from {0}",
+  "ExecutionDebug.AuthoredParameter": "Saved parameter · {0}: {1}"
 }

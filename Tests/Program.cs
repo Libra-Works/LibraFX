@@ -593,6 +593,7 @@ internal static class Program
             McpParameterTests.Run();
             PreviewAssetMcpTests.Run();
             ProjectFileMcpTests.Run();
+            ExecutionDebugPaneTests.Run();
             EditorInterfaceTests.VerifyParameterRows();
             Console.WriteLine("Preview protocol, native telemetry UI and MCP parameter checks passed.");
             return;

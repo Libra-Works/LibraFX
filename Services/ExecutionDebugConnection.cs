@@ -35,7 +35,8 @@ internal sealed class ExecutionDebugConnection : IDisposable
 
     public bool Send(ExecutionDebugCommand command, Guid id = default) => _commands.Writer.TryWrite((command, id));
 
-    public async Task RunAsync(IReadOnlyCollection<Guid> breakpoints, Action<ExecutionDebugFrame> report)
+    public async Task RunAsync(IReadOnlyCollection<Guid> breakpoints,
+        Action<ExecutionDebugCommand, ExecutionDebugFrame> report)
     {
         var cancellation = _stop.Token;
         try
@@ -62,19 +63,27 @@ internal sealed class ExecutionDebugConnection : IDisposable
             }
 
             var hello = await Exchange(ExecutionDebugCommand.Poll).ConfigureAwait(false);
-            if (hello.Result != 0) { report(hello); return; }
+            if (hello.Result != 0)
+            {
+                report(ExecutionDebugCommand.Poll, hello);
+                return;
+            }
             foreach (var id in breakpoints)
             {
                 var added = await Exchange(ExecutionDebugCommand.AddBreakpoint, id).ConfigureAwait(false);
-                if (added.Result != 0) { report(added); return; }
+                if (added.Result != 0)
+                {
+                    report(ExecutionDebugCommand.AddBreakpoint, added);
+                    return;
+                }
             }
             var attached = await Exchange(ExecutionDebugCommand.Attach).ConfigureAwait(false);
-            report(attached);
+            report(ExecutionDebugCommand.Attach, attached);
             if (attached.Result != 0) return;
             while (!cancellation.IsCancellationRequested)
             {
                 var next = _commands.Reader.TryRead(out var item) ? item : (ExecutionDebugCommand.Poll, Guid.Empty);
-                report(await Exchange(next.Item1, next.Item2).ConfigureAwait(false));
+                report(next.Item1, await Exchange(next.Item1, next.Item2).ConfigureAwait(false));
                 if (next.Item1 == ExecutionDebugCommand.Poll)
                     await Task.Delay(50, cancellation).ConfigureAwait(false);
             }

@@ -1,6 +1,6 @@
 {
   "ExecutionDebug.Title": "ランタイムデバッガー",
-  "ExecutionDebug.Help": "グラフでノードを選択してブレークポイントを設定します。ローカルセッションを開始し、同じコンパイル済みエフェクトを使う Unity または Unreal のコンポーネントに招待コードを貼り付けます。",
+  "ExecutionDebug.Help": "ブレークポイントを設定してからローカルセッションを開始します。同じコンパイル済みエフェクトを使う Unity または Unreal のコンポーネントに招待コードを貼り付けます。停止するのは対象エフェクトの CPU 実行だけで、GPU 命令はステップ実行できません。",
   "ExecutionDebug.Start": "ローカルデバッガーを開始",
   "ExecutionDebug.Package": "コンパイル済み Spawnable パッケージに接続",
   "ExecutionDebug.Root": "パッケージのルート（再生世代 {0}）",
@@ -23,7 +23,7 @@
   "ExecutionDebug.Complete": "ランタイムの評価が完了しました。",
   "ExecutionDebug.CannotStart": "グラフをコンパイルできないか、ローカルデバッガーを開けませんでした。",
   "ExecutionDebug.Disconnected": "ランタイムが切断されたか、招待コードの有効期限が切れました。",
-  "ExecutionDebug.Mismatch": "ランタイムのバイトコードがグラフのリビジョンと一致しません。同じ単体エフェクトを書き出して読み込んでください。",
+  "ExecutionDebug.Mismatch": "ランタイムのデータがグラフのリビジョンと一致しません。再書き出しし、単体エフェクトまたは Spawnable パッケージに合うモードを選択してください。",
   "ExecutionDebug.Revision": "グラフが変更されたため切断しました。新しいリビジョンを書き出して読み込み、再接続してください。",
   "ExecutionDebug.Limit": "ブレークポイントは 128 件まで設定できます。",
   "ExecutionDebug.Rejected": "デバッガーがコマンドを拒否しました（結果 {0}）。",
@@ -35,5 +35,8 @@
   "ExecutionDebug.Int32": "Int32",
   "ExecutionDebug.Unavailable": "未評価",
   "ExecutionDebug.Connected": "接続済み",
-  "ExecutionDebug.Default": "既定値 / 上書き値"
+  "ExecutionDebug.Default": "既定値 / 上書き値",
+  "ExecutionDebug.CommandPending": "ランタイムからのコマンド応答を待っています…",
+  "ExecutionDebug.SignalSource": "発火元: {0}",
+  "ExecutionDebug.AuthoredParameter": "保存パラメーター · {0}: {1}"
 }
