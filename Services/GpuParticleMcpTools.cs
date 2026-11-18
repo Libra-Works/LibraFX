@@ -42,7 +42,7 @@ public sealed class GpuParticleMcpTools
             nodeId = "node / write / flow ID", sourceId = "connection source node ID", input = "zero-based input / flow index",
             position = "{x,y}", write = "{id,attribute,value}", text = "DSL",
             flow = "{id,kind,kernel?,resource?}", capacity = "uint",
-            resource = "{id,kind,width,height}", assetPath = "Engine asset object path or explicit builtin:white",
+            resource = "{id,kind,width,height,flowMap?}", assetPath = "Engine asset reference or builtin:white for billboards. For FlowMap2D select a Texture2D; linear RG data is recommended.",
             material = "Billboard material preset for renderer action", sizeScale = "Finite draw-size multiplier in (0,10000]"
         }
     });

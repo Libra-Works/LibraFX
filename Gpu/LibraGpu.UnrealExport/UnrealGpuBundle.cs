@@ -46,7 +46,7 @@ public static class UnrealGpuExporter
         ArgumentNullException.ThrowIfNull(program);
         ArgumentNullException.ThrowIfNull(texturePaths);
         var compiled = GpuCompiler.Compile(program);
-        var diagnostics = GpuBackendCapabilities.Unreal.Validate(compiled);
+        var diagnostics = GpuBackendRegistry.BuiltIn.Validate(GpuBackendCapabilities.Unreal.Id, compiled);
         if (diagnostics.Count != 0)
         {
             throw new NotSupportedException(string.Join(" ", diagnostics.Select(diagnostic => diagnostic.Message)));

@@ -114,7 +114,10 @@ internal static partial class Program
                 Enum.GetValues<LibraGpu.Core.GpuInstructionOpcode>().Where(op =>
                     op != LibraGpu.Core.GpuInstructionOpcode.SampleFlowMap),
                 [LibraGpu.Core.ResourceKind.Texture2D], 256, 256UL * 1024 * 1024);
-            var unsupported = limited.Validate(compiled);
+            var registry = new LibraGpu.Core.GpuBackendRegistry([limited]);
+            var unsupported = registry.Validate(limited.Id, compiled);
+            Check(registry.Validate("missing-host", compiled).Single().Code == "BackendUnknown",
+                "Unregistered backends are rejected instead of falling back to an engine profile");
             Check(unsupported.Any(d => d.Code == "BackendResource" && d.Message.Contains("wind map/flow")) &&
                 unsupported.Any(d => d.Code == "BackendOpcode" && d.KernelId == "k" && d.NodeId is not null && d.Span is not null),
                 "A custom backend must reject unsupported resources and identify the authored operation");

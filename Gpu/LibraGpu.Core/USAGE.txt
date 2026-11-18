@@ -85,8 +85,9 @@ Safe independent text frontend, same typed IR:
   Node diagnostics and emitted shader line maps retain original text spans.
   GpuSamples.CreateEmitter() includes spawn, gravity, motion and lifetime fade.
 
-Optional future fixed-interpreter export:
-  RegisterKernels contain immutable typed SSA instructions; no interpreter ships.
+Fixed-interpreter export:
+  RegisterKernels contain immutable typed SSA instructions. There is no
+  interpreter in the managed compiler; Unreal has an engine-side interpreter.
   CompiledRegisterKernel.SerializeLittleEndian() exports bounded POD packets.
   Header64: LGPK@0, version1@4, instructionStride64@8, count@12,
     registers@16, stage@20, particleStride80@24, uniformSize48@28,
@@ -128,10 +129,12 @@ Both accept v1 opcodes 0–41 and Texture2D/FlowMap2D. Unreal also budgets
 register scratch and packet storage and caps registers at 256 per kernel.
 
 For a new host, define a GpuBackendCapabilities profile alongside the adapter.
-In its delivery tool, compile canonical IR and call the selected profile's
-Validate before serializing native assets. Unsupported opcode, resource,
-ABI and budget produce diagnostics without falling back. This is authoring
-preflight, not a native plugin ABI: importers independently validate version,
+In its delivery tool, pass the profile to GpuBackendRegistry and validate the
+compiled canonical IR by backend ID before emitting packets or lowering to
+shaders. Registries are immutable and always include the two built-in profiles;
+duplicate IDs are rejected and unknown IDs return a diagnostic. Unsupported
+opcode, resource, ABI and budget produce diagnostics without falling back.
+This is authoring registration, not a native plugin ABI: importers independently validate version,
 bounds, bindings and layout before replacing a live program. Resolve
 resources on the owning engine thread using explicit bindings and embed
 compiled assets in packaged builds; never require the original source path.

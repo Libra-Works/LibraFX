@@ -45,6 +45,14 @@ public static class GpuProgramDeliveryService
         {
             var state = GpuParticleEditorService.ReadState(node);
             var compiled = GpuParticleEditorService.Compile(state);
+            if (format == ShaderFormat.Usf)
+            {
+                RequireBackendSupport(node.Id, compiled, GpuBackendCapabilities.Unreal);
+            }
+            else if (format == ShaderFormat.UnityCompute)
+            {
+                RequireBackendSupport(node.Id, compiled, GpuBackendCapabilities.Unity);
+            }
             return CreateDelivery(node.Id, state, compiled, programSequence, format);
         }).ToArray();
     }
@@ -59,13 +67,7 @@ public static class GpuProgramDeliveryService
         {
             var state = GpuParticleEditorService.ReadState(node);
             var compiled = GpuParticleEditorService.Compile(state);
-            var diagnostics = GpuBackendCapabilities.Unreal.Validate(compiled)
-                .Concat(GpuBackendCapabilities.Unity.Validate(compiled)).ToArray();
-            if (diagnostics.Length != 0)
-            {
-                throw new InvalidDataException($"GPU node '{node.Id:D}': " +
-                    string.Join(" ", diagnostics.Select(diagnostic => diagnostic.Message)));
-            }
+            RequireBackendSupport(node.Id, compiled, GpuBackendCapabilities.Unreal, GpuBackendCapabilities.Unity);
             foreach (var resource in compiled.Resources)
                 if (!state.ResourceAssetPaths.TryGetValue(resource.Id, out var assetPath) ||
                     string.IsNullOrWhiteSpace(assetPath))
@@ -78,6 +80,17 @@ public static class GpuProgramDeliveryService
                 compiled.ExportMetadataJson(ShaderFormat.UnityCompute), unityShader.Text);
         }).ToArray();
         return JsonSerializer.SerializeToUtf8Bytes(new GpuExecutablePayload(1, programs), PayloadJson);
+    }
+
+    private static void RequireBackendSupport(Guid nodeId, CompiledGpuProgram program,
+        params GpuBackendCapabilities[] targets)
+    {
+        var diagnostics = targets.SelectMany(target => GpuBackendRegistry.BuiltIn.Validate(target.Id, program)).ToArray();
+        if (diagnostics.Length != 0)
+        {
+            throw new InvalidDataException($"GPU node '{nodeId:D}': " +
+                string.Join(" ", diagnostics.Select(diagnostic => diagnostic.Message)));
+        }
     }
 
     private static GpuProgramDelivery CreateDelivery(Guid nodeId, GpuEditorState state,
