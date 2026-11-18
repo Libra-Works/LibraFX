@@ -171,8 +171,47 @@ try {
             [IO.File]::Copy($file.FullName, $destination)
         }
     }
+    $moduleIncludedSources = @(
+        'LbVfxProgram.cpp',
+        'LbVfxInstance.cpp',
+        'LbVfxInstanceSignals.cpp',
+        'LbVfxInstanceEvaluation.cpp',
+        'LbLivePreview.cpp',
+        'LbBuiltinNodes.cpp',
+        'LbBuiltinMathNodes.cpp',
+        'LbBuiltinMatrixNodes.cpp',
+        'LbBuiltinSignalNodes.cpp',
+        'LbBuiltinTimeNodes.cpp',
+        'LbMatrixMath.cpp',
+        'LbDelayNode.cpp',
+        'LbGeneratorPool.cpp',
+        'LbGeneratorPoolEvaluation.cpp',
+        'LbNamedIo.cpp',
+        'LbNamedIoProperties.cpp',
+        'LbNamedIoExecution.cpp',
+        'LbNamedIoEvents.cpp',
+        'LbEffectLifecycle.cpp',
+        'LbSpawnablePackage.cpp',
+        'LbSpawnableHost.cpp',
+        'LbSpawnableHostExecution.cpp',
+        'LbSpawnableHostScheduling.cpp',
+        'LbSpawnableHostApi.cpp',
+        'LbLogicalNodes.cpp',
+        'LbInstanceSession.cpp',
+        'LbPhasePrimitives.cpp'
+    )
+    $excludedInteropSources = @(
+        'LbInterop.cpp',
+        'LbInteropInstance.cpp',
+        'LbInteropEffectLifecycle.cpp',
+        'LbInteropGameIo.cpp',
+        'LbInteropSprite.cpp',
+        'LbInteropGeneratorPool.cpp',
+        'LbInteropSpawnableHost.cpp',
+        'LbInteropSession.cpp'
+    )
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $coreRoot 'Core') -Filter '*.cpp' -File -Recurse) {
-        if ($file.Name -in @('LbVfxProgram.cpp', 'LbVfxInstance.cpp', 'LbBuiltinNodes.cpp', 'LbDelayNode.cpp', 'LbLogicalNodes.cpp', 'LbLivePreview.cpp', 'LbInterop.cpp', 'LbInteropGeneratorPool.cpp', 'LbInteropSpawnableHost.cpp', 'LbSpawnableHost.cpp') -and
+        if (($file.Name -in $moduleIncludedSources -or $file.Name -in $excludedInteropSources) -and
             $file.DirectoryName -eq (Join-Path $coreRoot 'Core'))
         {
             continue

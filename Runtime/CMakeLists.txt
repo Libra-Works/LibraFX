@@ -18,6 +18,9 @@ add_library(liberafx_runtime STATIC
     Core/LbGeneratorPool.cpp
     Core/LbGeneratorPoolEvaluation.cpp
     Core/LbNamedIo.cpp
+    Core/LbNamedIoProperties.cpp
+    Core/LbNamedIoExecution.cpp
+    Core/LbNamedIoEvents.cpp
     Core/LbEffectLifecycle.cpp
     Core/LbSpawnablePackage.cpp
     Core/LbSpawnableHost.cpp
