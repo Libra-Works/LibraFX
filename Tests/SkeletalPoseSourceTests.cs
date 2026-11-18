@@ -7,7 +7,7 @@ namespace LiberaFx.Tests;
 
 internal static class SkeletalPoseSourceTests
 {
-    public static void Run()
+    public static void Run(string? fixtureDirectory = null)
     {
         var source = Node("Source",
             ("target", "enum:b0af61d2-29f6-4cc9-a71e-000000000202", 1),
@@ -117,6 +117,34 @@ internal static class SkeletalPoseSourceTests
 
         Require(!SkeletalPoseSchema.TryDecodePortName("__LFXS1M_not-a-descriptor", out _, out _),
             "Malformed source metadata must not be interpreted as a different target.");
+        if (fixtureDirectory is not null) WriteEngineFixtures(fixtureDirectory);
+    }
+
+    private static void WriteEngineFixtures(string directory)
+    {
+        var nodes = new List<GraphNodeSnapshot>();
+        var connections = new List<GraphConnectionSnapshot>();
+        foreach (var target in new[] { "Owner", "Registered" })
+        foreach (var (space, index) in new[] { ("BoneLocal", 0), ("Component", 1), ("World", 2) })
+        {
+            var source = Node("Source",
+                ("target", "enum:b0af61d2-29f6-4cc9-a71e-000000000202", target == "Owner" ? 0 : 1),
+                ("key", "string", target == "Owner" ? "" : "hero.skeleton"),
+                ("bone", "string", "hand_r"),
+                ("space", "enum:b0af61d2-29f6-4cc9-a71e-000000000203", index));
+            var matrix = Node("OutputProperty", ("name", "string", target + space),
+                ("valueType", "enum:1e309707-1fa0-4d38-aed9-42d000000001", 5));
+            var valid = Node("OutputProperty", ("name", "string", target + space + "Valid"),
+                ("valueType", "enum:1e309707-1fa0-4d38-aed9-42d000000001", 0));
+            nodes.AddRange([source, matrix, valid]);
+            connections.Add(new(source.Id, matrix.Id, "value", "value"));
+            connections.Add(new(source.Id, valid.Id, "value", "valid"));
+        }
+        var package = SpawnableGroupPackage.Compile(new GraphSnapshot(nodes, connections)
+            { AutoDestroyWhenIdle = false });
+        Directory.CreateDirectory(directory);
+        File.WriteAllBytes(Path.Combine(directory, "AnimatedSkeletalSpaces.lfxp"),
+            SpawnableGroupPackageBinary.Serialize(package));
     }
 
     private static GraphNodeSnapshot Node(string kind, params (string Id, string Type, object Value)[] values)

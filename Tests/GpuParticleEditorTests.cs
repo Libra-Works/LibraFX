@@ -2,6 +2,7 @@ using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Avalonia.Platform;
+using Avalonia.LogicalTree;
 using ModelContextProtocol;
 using LibraGpu.Core;
 using LiberaFx.Models.Commands;
@@ -254,6 +255,18 @@ internal static class GpuParticleEditorTests
         var view = new GpuWorkspaceView();
         view.Open(graph, other.Id);
         Check(view.Workspace!.Kernel is null && view.IsVisible, "Actual flow view opens");
+        var flowLabels = view.FindControl<StackPanel>("FlowPanel")!.GetLogicalDescendants()
+            .OfType<TextBlock>().Select(block => block.Text ?? "").ToArray();
+        Check(new[] { "spawnStep", "updateStep", "renderStep" }.All(id =>
+                flowLabels.Any(text => text.Contains(id, StringComparison.Ordinal))),
+            "The actual flow view identifies every authored step");
+        Check(flowLabels.Any(text => text.Contains("spawnStep", StringComparison.Ordinal) &&
+                text.Contains("updateStep", StringComparison.Ordinal) &&
+                text.Contains("Position", StringComparison.Ordinal) &&
+                text.Contains("not observed execution", StringComparison.Ordinal)) &&
+            flowLabels.Any(text => text.Contains("emitterPosition", StringComparison.Ordinal) &&
+                text.Contains("external host uniform", StringComparison.Ordinal)),
+            "The actual flow view distinguishes static cross-flow dependencies from external uniforms and runtime traces");
         view.Workspace.EnterKernel(view.Workspace.State.Program.Kernels[0].Id);
         Check(view.FindControl<Avalonia.Controls.Canvas>("NodeCanvas")!.Children.Count > 0, "Actual visual graph nodes");
         foreach (var (language, expected) in new[] { ("en", "Kernel Graph"), ("ja", "カーネルグラフ") })

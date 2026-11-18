@@ -43,7 +43,8 @@ internal static class Program
         {
             InitializeIsolatedUi();
             LiberaFx.Tests.GameIoCompilationTests.Run();
-            LiberaFx.Tests.SkeletalPoseSourceTests.Run();
+            LiberaFx.Tests.SkeletalPoseSourceTests.Run(
+                Environment.GetEnvironmentVariable("LIBERAFX_SKELETAL_FIXTURES"));
             PreviewDebugDrawTests.Run();
             GraphRevisionDiffTests.Run();
             PreviewAcknowledgementTests.Run();

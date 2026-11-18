@@ -92,6 +92,13 @@ internal static class PreviewDebugDrawTests
         Directory.CreateDirectory(fixtureDirectory);
         File.WriteAllBytes(Path.Combine(fixtureDirectory, "preview.lfxp"),
             SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(graph, options: VfxCompileOptions.LiveTransfer)));
+        var engineModel = model with { Parameters = model.Parameters!.Select(parameter =>
+            parameter.Id == "assetPath" ? parameter with
+            { Value = JsonSerializer.SerializeToElement("/Engine/BasicShapes/Cube.Cube") } : parameter).ToArray() };
+        var engineGraph = graph with
+        { Nodes = graph.Nodes.Select(node => node.Id == model.Id ? engineModel : node).ToArray() };
+        File.WriteAllBytes(Path.Combine(fixtureDirectory, "engine-preview.lfxp"),
+            SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(engineGraph, options: VfxCompileOptions.LiveTransfer)));
         var textGraph = graph with
         {
             Nodes = graph.Nodes.Where(node => node.Id != model.Id).ToArray(),
