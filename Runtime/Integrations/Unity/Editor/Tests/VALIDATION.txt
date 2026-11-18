@@ -181,3 +181,17 @@ Spawnable event/GPU scheduling regressions:
   buffer remain unchanged. Root completion is checked before rendering/GPU
   updates, and the completion frame issues no extra GPU dispatch. The existing
   Game I/O rendering Play Mode check also passed after event-batch changes.
+
+Instance Game I/O in Unity 7 Play Mode:
+  Run the editor smoke runner with --source-batch-contracts and set
+  LIBERAFX_INSTANCE_GAMEIO_FIXTURES to the absolute output directory for
+  InstanceGameIo.lfxp and InstanceGameIo.container. Set
+  LIBERAFX_INSTANCE_GAMEIO_FIXTURE to the absolute path of InstanceGameIo.lfxp
+  and LIBERAFX_VERIFICATION_PROJECT to the dedicated Unity project.
+  Use -executeMethod LiberaFx.Unity.Editor.LiberaFxSourceBatchAcceptanceVerification.RunInstanceGameIoPlayModeBatch
+  with -batchmode -force-d3d11, without -quit;
+  the callback exits the editor after leaving Play Mode.
+  Unity 7000.0.0a16 / Direct3D 11 passed with two live sibling instances,
+  isolated scalar and 16-lane Matrix values, and targeted ping/pong after
+  normal game-loop advancement. The result is recorded in
+  source-batch-instance-gameio-playmode-result.txt.

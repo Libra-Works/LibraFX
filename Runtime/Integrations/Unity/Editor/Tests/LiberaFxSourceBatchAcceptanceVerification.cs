@@ -19,6 +19,9 @@ namespace LiberaFx.Unity.Editor
         private const string DebugPlayPending = "LiberaFx.SourceBatchDebugDraw.Pending";
         private const string DebugPlayResult = "LiberaFx.SourceBatchDebugDraw.Result";
         private const string DebugPlayStarted = "LiberaFx.SourceBatchDebugDraw.Started";
+        private const string InstanceGameIoPlayPending = "LiberaFx.SourceBatchGameIo.Pending";
+        private const string InstanceGameIoPlayResult = "LiberaFx.SourceBatchGameIo.Result";
+        private const string InstanceGameIoResultFile = "source-batch-instance-gameio-playmode-result.txt";
         private const string SkeletalPlayActive = "LiberaFx.SourceBatchSkeletalPlay.Active";
         private const string SkeletalPlayFinished = "LiberaFx.SourceBatchSkeletalPlay.Finished";
         private const string SkeletalPlayExitCode = "LiberaFx.SourceBatchSkeletalPlay.ExitCode";
@@ -66,6 +69,8 @@ namespace LiberaFx.Unity.Editor
             EditorApplication.update += CheckDebugPlayModeTimeout;
             EditorApplication.playModeStateChanged -= SkeletalPlayModeChanged;
             EditorApplication.playModeStateChanged += SkeletalPlayModeChanged;
+            EditorApplication.playModeStateChanged -= InstanceGameIoPlayModeChanged;
+            EditorApplication.playModeStateChanged += InstanceGameIoPlayModeChanged;
         }
 
         public static void RunDebugDrawPayloadBatch()
@@ -791,9 +796,80 @@ namespace LiberaFx.Unity.Editor
             }
         }
 
+        public static void RunInstanceGameIoPlayModeBatch()
+        {
+            RequireIsolatedProject();
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode,
+                "The isolated Editor is already changing Play Mode.");
+            var resultPath = Path.Combine(ProjectRoot, InstanceGameIoResultFile);
+            if (File.Exists(resultPath))
+            {
+                File.Delete(resultPath);
+            }
+            SessionState.SetBool(InstanceGameIoPlayPending, true);
+            SessionState.SetInt(InstanceGameIoPlayResult, 2);
+            RegisterDebugPlayModeCallbacks();
+            EditorApplication.EnterPlaymode();
+        }
+
+        private static void InstanceGameIoPlayModeChanged(PlayModeStateChange state)
+        {
+            if (!SessionState.GetBool(InstanceGameIoPlayPending, false))
+            {
+                return;
+            }
+            if (state == PlayModeStateChange.EnteredPlayMode)
+            {
+                var test = VerifyInstanceGameIo(InstanceGameIoResultFile, advanceInPlayMode: true);
+                EditorApplication.update += AdvanceTest;
+
+                void AdvanceTest()
+                {
+                    try
+                    {
+                        if (test.MoveNext())
+                        {
+                            return;
+                        }
+                        SessionState.SetInt(InstanceGameIoPlayResult, 0);
+                    }
+                    catch (Exception error)
+                    {
+                        File.WriteAllText(Path.Combine(ProjectRoot, InstanceGameIoResultFile), "FAIL\n" + error);
+                        Debug.LogException(error);
+                    }
+                    EditorApplication.update -= AdvanceTest;
+                    test.Dispose();
+                    EditorApplication.ExitPlaymode();
+                }
+            }
+            else if (state == PlayModeStateChange.EnteredEditMode)
+            {
+                SessionState.SetBool(InstanceGameIoPlayPending, false);
+                EditorApplication.Exit(SessionState.GetInt(InstanceGameIoPlayResult, 2));
+            }
+        }
+
         public static void RunInstanceGameIoEditorBatch()
         {
             RequireIsolatedProject();
+            const string resultFile = "source-batch-instance-gameio-result.txt";
+            try
+            {
+                using var test = VerifyInstanceGameIo(resultFile, advanceInPlayMode: false);
+                Require(!test.MoveNext(), "Edit Mode verification must complete synchronously.");
+            }
+            catch (Exception error)
+            {
+                File.WriteAllText(Path.Combine(ProjectRoot, resultFile), "FAIL\n" + error);
+                Debug.LogException(error);
+                EditorApplication.Exit(2);
+            }
+        }
+
+        private static IEnumerator<object> VerifyInstanceGameIo(string resultFile, bool advanceInPlayMode)
+        {
+            Require(!advanceInPlayMode || Application.isPlaying, "Run this check only in actual Unity Play Mode.");
             var fixture = Environment.GetEnvironmentVariable("LIBERAFX_INSTANCE_GAMEIO_FIXTURE");
             Require(Path.IsPathRooted(fixture ?? "") && File.Exists(fixture),
                 "Supply compiler-produced InstanceGameIo.lfxp.");
@@ -810,7 +886,7 @@ namespace LiberaFx.Unity.Editor
             LiberaFxSpawnableComponent component = null;
             var hostEvents = new List<SpawnableHostEvent>();
             var ioEvents = new List<GameIoEvent>();
-            var resultPath = Path.Combine(ProjectRoot, "source-batch-instance-gameio-result.txt");
+            var resultPath = Path.Combine(ProjectRoot, resultFile);
             try
             {
                 package.SetPackageBytes(File.ReadAllBytes(fixture));
@@ -859,15 +935,29 @@ namespace LiberaFx.Unity.Editor
                     "matrix", secondMatrix) == NativeResult.Ok,
                     "A scoped speed or Matrix input update was rejected.");
 
-                var lateUpdate = typeof(LiberaFxSpawnableComponent).GetMethod("LateUpdate",
-                    BindingFlags.Instance | BindingFlags.NonPublic);
-                var elapsed = typeof(LiberaFxSpawnableComponent).GetField("elapsed",
-                    BindingFlags.Instance | BindingFlags.NonPublic);
-                Require(lateUpdate != null && elapsed != null,
-                    "Could not locate the component's Unity frame-advance hook.");
                 ioEvents.Clear();
-                elapsed.SetValue(component, 1d - (double)Time.deltaTime);
-                lateUpdate.Invoke(component, null);
+                if (advanceInPlayMode)
+                {
+                    var targetTime = Time.timeAsDouble + 1;
+                    var deadline = EditorApplication.timeSinceStartup + 15;
+                    while (Time.timeAsDouble < targetTime)
+                    {
+                        Require(EditorApplication.timeSinceStartup < deadline,
+                            "Unity Play Mode did not advance one second before the deadline.");
+                        yield return null;
+                    }
+                }
+                else
+                {
+                    var lateUpdate = typeof(LiberaFxSpawnableComponent).GetMethod("LateUpdate",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    var elapsed = typeof(LiberaFxSpawnableComponent).GetField("elapsed",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Require(lateUpdate != null && elapsed != null,
+                        "Could not locate the component's Unity frame-advance hook.");
+                    elapsed.SetValue(component, 1d - (double)Time.deltaTime);
+                    lateUpdate.Invoke(component, null);
+                }
                 Require(string.IsNullOrEmpty(component.LastError),
                     "Advancing the instance package failed: " + component.LastError);
 
@@ -897,7 +987,8 @@ namespace LiberaFx.Unity.Editor
                 Require(component.Stop() == NativeResult.Ok, "Instance Game I/O cleanup Stop failed.");
                 File.WriteAllText(resultPath,
                     "PASS: compiler fixture sibling targets; scoped speed/result and 16-lane matrix/matrixResult; targeted ping/pong\n");
-                Debug.Log("PASS source-batch instance Game I/O acceptance.");
+                Debug.Log("PASS source-batch instance Game I/O acceptance (" +
+                    (advanceInPlayMode ? "Play Mode" : "Edit Mode") + ").");
 
                 void VerifyProperty(SpawnableHostEvent target, ulong generation, string name, double[] expected)
                 {
@@ -910,12 +1001,6 @@ namespace LiberaFx.Unity.Editor
                             "Scoped instance property '" + name + "' differed at lane " + lane + ".");
                 }
 
-            }
-            catch (Exception error)
-            {
-                File.WriteAllText(resultPath, "FAIL\n" + error);
-                Debug.LogException(error);
-                EditorApplication.Exit(2);
             }
             finally
             {
