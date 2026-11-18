@@ -248,22 +248,83 @@ public partial class GpuWorkspaceView : UserControl
     {
         var vm = Workspace!;
         FlowPanel.Children.Clear();
-        for (var i = 0; i < vm.State.Program.Flow.Count; i++)
+        var map = GpuFlowVisualization.Create(vm.State);
+        FlowPanel.Children.Add(new TextBlock
         {
-            var index = i; var flow = vm.State.Program.Flow[i];
-            if (i != 0) FlowPanel.Children.Add(new TextBlock { Text = "↓", HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center });
+            Text = map.Summary,
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 640,
+            Foreground = ThemeSettingsService.EditorBrush("GraphParameter")
+        });
+        for (var i = 0; i < map.Steps.Count; i++)
+        {
+            var step = map.Steps[i];
+            var index = step.Index;
+            var flow = step.Flow;
+            if (i != 0)
+                FlowPanel.Children.Add(new TextBlock
+                {
+                    Text = "↓ declared flow-list order · not a runtime trace / 保存された順序 · 実行トレースではありません",
+                    TextWrapping = TextWrapping.Wrap,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                    Foreground = ThemeSettingsService.EditorBrush("CurveAxis")
+                });
             var panel = new StackPanel { Spacing = 6 };
-            panel.Children.Add(new TextBlock { Text = $"{i + 1}. {flow.Kind}  ·  {flow.Id}" });
-            if (flow.Kernel is { } kernel)
-                panel.Children.Add(Button("Open kernel / カーネルを開く", () => { _selection = null; vm.EnterKernel(kernel); }));
-            else
+            panel.Children.Add(new TextBlock
             {
-                panel.Children.Add(new TextBlock { Text = "Billboard source pass · engine execution pending", TextWrapping = TextWrapping.Wrap });
+                Text = $"{index + 1}. {flow.Kind}  ·  {flow.Id}",
+                TextWrapping = TextWrapping.Wrap,
+                FontWeight = FontWeight.SemiBold
+            });
+            if (step.CompiledMetadata is not null)
+                panel.Children.Add(new TextBlock
+                {
+                    Text = $"Compiled source reference · {step.CompiledMetadata.Kind} / ソースコンパイル済み",
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = ThemeSettingsService.EditorBrush("GraphSignal")
+                });
+            if ((flow.Kind is FlowKind.Spawn or FlowKind.Update) && step.Kernel is { } kernel)
+            {
+                panel.Children.Add(new TextBlock
+                {
+                    Text = $"Kernel: {kernel.Id} · {kernel.Stage} / カーネル",
+                    TextWrapping = TextWrapping.Wrap
+                });
+                panel.Children.Add(Button("Open kernel / カーネルを開く", () =>
+                {
+                    _selection = null;
+                    vm.EnterKernel(kernel.Id);
+                }));
+            }
+            else if (flow.Kind == FlowKind.RenderBillboard)
+            {
+                if (flow.Kernel is not null)
+                {
+                    panel.Children.Add(new TextBlock
+                    {
+                        Text = $"Unexpected kernel reference: {flow.Kernel} / 想定外のカーネル参照",
+                        TextWrapping = TextWrapping.Wrap,
+                        Foreground = ThemeSettingsService.EditorBrush("GraphSignal")
+                    });
+                    if (step.Kernel is { } referencedKernel)
+                        panel.Children.Add(Button("Inspect referenced kernel / 参照カーネルを確認", () =>
+                        {
+                            _selection = null;
+                            vm.EnterKernel(referencedKernel.Id);
+                        }));
+                }
+                panel.Children.Add(new TextBlock
+                {
+                    Text = "Billboard source binding · engine-side rendering is pending / 描画実行はエンジン側で未対応",
+                    TextWrapping = TextWrapping.Wrap
+                });
                 var texture = new ComboBox
                 {
                     ItemsSource = vm.State.Program.Resources.Where(r => r.Kind == ResourceKind.Texture2D).Select(r => r.Id).ToArray(),
                     SelectedItem = flow.Resource
                 };
+                Avalonia.Automation.AutomationProperties.SetName(
+                    texture, "Billboard texture resource / ビルボードのテクスチャリソース");
                 texture.SelectionChanged += (_, _) =>
                 {
                     if (texture.SelectedItem is string resource && resource != flow.Resource)
@@ -271,10 +332,39 @@ public partial class GpuWorkspaceView : UserControl
                 };
                 panel.Children.Add(texture);
             }
+            else if (flow.Kernel is { } kernelId)
+            {
+                panel.Children.Add(new TextBlock
+                {
+                    Text = $"Kernel reference: {kernelId} / カーネル参照",
+                    TextWrapping = TextWrapping.Wrap
+                });
+                if (step.Kernel is { } referencedKernel)
+                    panel.Children.Add(Button("Inspect referenced kernel / 参照カーネルを確認 (unsupported binding)", () =>
+                    {
+                        _selection = null;
+                        vm.EnterKernel(referencedKernel.Id);
+                    }));
+            }
+
+            AddFlowPorts(panel, "Inputs / 入力ポート", step.Inputs);
+            AddFlowPorts(panel, "Outputs / 出力ポート", step.Outputs);
+            foreach (var reason in step.UnsupportedReasons)
+                panel.Children.Add(new TextBlock
+                {
+                    Text = "Unsupported relationship / 未対応: " + reason,
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = ThemeSettingsService.EditorBrush("GraphSignal")
+                });
+
             var actions = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 5 };
             var up = Button("↑", () => vm.Edit(new() { Action = "flow-move", NodeId = flow.Id, Input = index - 1 }));
+            Avalonia.Automation.AutomationProperties.SetName(up, "Move flow earlier / フローを前へ移動");
+            ToolTip.SetTip(up, "Move earlier in the authored flow list / 保存されたフロー順を前へ");
             up.IsEnabled = i > 0;
             var down = Button("↓", () => vm.Edit(new() { Action = "flow-move", NodeId = flow.Id, Input = index + 1 }));
+            Avalonia.Automation.AutomationProperties.SetName(down, "Move flow later / フローを後へ移動");
+            ToolTip.SetTip(down, "Move later in the authored flow list / 保存されたフロー順を後へ");
             down.IsEnabled = i + 1 < vm.State.Program.Flow.Count;
             actions.Children.Add(up); actions.Children.Add(down);
             actions.Children.Add(Button("Remove / 削除", () => vm.Edit(new() { Action = "flow-remove", NodeId = flow.Id })));
@@ -287,9 +377,106 @@ public partial class GpuWorkspaceView : UserControl
             };
             border.PointerPressed += (_, e) =>
             {
-                if (e.ClickCount >= 2 && flow.Kernel is { } id) { _selection = null; vm.EnterKernel(id); e.Handled = true; }
+                if (e.ClickCount >= 2 && (flow.Kind is FlowKind.Spawn or FlowKind.Update) &&
+                    step.Kernel is { } kernel)
+                {
+                    _selection = null;
+                    vm.EnterKernel(kernel.Id);
+                    e.Handled = true;
+                }
             };
             FlowPanel.Children.Add(border);
+        }
+
+        var relationTitle = new TextBlock
+        {
+            Text = "Cross-flow parameter relationships / フロー間パラメーター関係",
+            TextWrapping = TextWrapping.Wrap,
+            FontWeight = FontWeight.SemiBold,
+            Margin = new Thickness(0, 10, 0, 2)
+        };
+        FlowPanel.Children.Add(relationTitle);
+        if (map.Transfers.Count == 0)
+            FlowPanel.Children.Add(new TextBlock
+            {
+                Text = "No authored cross-flow attribute write/read match. Host uniforms are external inputs, not flow-to-flow transfers. / フロー間で一致する属性の書き込み・読み取りはありません。Uniform は外部入力です。",
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 640,
+                Foreground = ThemeSettingsService.EditorBrush("CurveAxis")
+            });
+        foreach (var transfer in map.Transfers)
+        {
+            var producer = map.Steps[transfer.ProducerIndex];
+            var consumer = map.Steps[transfer.ConsumerIndex];
+            var transferText =
+                $"{producer.Index + 1}. {producer.Flow.Kind} ({transfer.ProducerFlowId}) → " +
+                $"{consumer.Index + 1}. {consumer.Flow.Kind} ({transfer.ConsumerFlowId})\n" +
+                $"{transfer.Attribute} : {transfer.TypeLabel} · write {string.Join(", ", transfer.ProducerWriteIds)} " +
+                $"(value node {string.Join(", ", transfer.ProducerValueNodeIds)}) → " +
+                $"read {string.Join(", ", transfer.ConsumerIds)}\n" +
+                (transfer.IsTypeCompatible ? "Static attribute dependency · not observed execution / 静的依存関係 · 実行観測ではありません"
+                    : "Type mismatch or unresolved declaration / 型不一致または宣言未解決") +
+                (transfer.ProducerPrecedesConsumer
+                    ? ""
+                    : "\nAuthored producer appears after consumer; transfer order is not valid / 出力側が入力側より後のため、順序は無効です");
+            FlowPanel.Children.Add(new Border
+            {
+                Child = new TextBlock { Text = transferText, TextWrapping = TextWrapping.Wrap, MaxWidth = 640 },
+                Padding = new Thickness(10),
+                BorderThickness = new Thickness(1),
+                BorderBrush = transfer.IsTypeCompatible
+                    ? ThemeSettingsService.EditorBrush("GraphParameter")
+                    : ThemeSettingsService.EditorBrush("GraphSignal"),
+                Background = this.FindResource("EffectSurfaceBrush") as IBrush ?? Brushes.DimGray
+            });
+        }
+
+        if (map.Diagnostics.Count > 0)
+        {
+            FlowPanel.Children.Add(new TextBlock
+            {
+                Text = "Source validation / compilation diagnostics · no runtime execution is implied",
+                TextWrapping = TextWrapping.Wrap,
+                FontWeight = FontWeight.SemiBold,
+                Margin = new Thickness(0, 8, 0, 0)
+            });
+            foreach (var diagnostic in map.Diagnostics.Take(8))
+                FlowPanel.Children.Add(new TextBlock
+                {
+                    Text = $"{diagnostic.Code}: {diagnostic.Message}",
+                    TextWrapping = TextWrapping.Wrap,
+                    MaxWidth = 640,
+                    Foreground = ThemeSettingsService.EditorBrush("GraphSignal")
+                });
+            if (map.Diagnostics.Count > 8)
+                FlowPanel.Children.Add(new TextBlock { Text = $"… {map.Diagnostics.Count - 8} more diagnostics" });
+        }
+    }
+    private static void AddFlowPorts(StackPanel panel, string heading, IReadOnlyList<GpuFlowPort> ports)
+    {
+        panel.Children.Add(new TextBlock { Text = heading, FontWeight = FontWeight.SemiBold });
+        if (ports.Count == 0)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = "No authored ports / ポートなし",
+                Foreground = ThemeSettingsService.EditorBrush("CurveAxis")
+            });
+            return;
+        }
+        foreach (var port in ports)
+        {
+            var prefix = port.Direction == GpuFlowPortDirection.Input ? "IN" : "OUT";
+            var row = new TextBlock
+            {
+                Text = $"{prefix} · {port.Name} : {port.TypeLabel}\n{port.Detail}",
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = port.IsTypeCompatible
+                    ? ThemeSettingsService.EditorBrush("GraphParameter")
+                    : ThemeSettingsService.EditorBrush("GraphSignal")
+            };
+            ToolTip.SetTip(row, port.Detail);
+            panel.Children.Add(row);
         }
     }
     private void BuildGraph()

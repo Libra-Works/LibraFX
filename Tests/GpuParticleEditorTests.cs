@@ -16,6 +16,66 @@ namespace LiberaFx.Tests;
 internal static class GpuParticleEditorTests
 {
     private static void Check(bool value, string message) { if (!value) throw new Exception(message); }
+    private static void VerifyFlowVisualization()
+    {
+        var program = GpuSamples.CreateEmitter();
+        var map = GpuFlowVisualization.Create(new() { Program = program });
+        Check(map.SourceCompiled && map.Steps.Count == program.Flow.Count &&
+            map.Steps.All(step => step.CompiledMetadata is not null),
+            "Flow map uses the compiled source metadata while preserving authored flow steps");
+        Check(map.Steps.Single(step => step.Flow.Id == "spawnStep").Inputs.Any(port =>
+                port.Name == "emitterPosition" && port.Detail.Contains("external host uniform")) &&
+            map.Transfers.Any(transfer => transfer.ProducerFlowId == "spawnStep" &&
+                transfer.ConsumerFlowId == "updateStep" && transfer.Attribute == "Position" &&
+                transfer.IsTypeCompatible && transfer.ProducerPrecedesConsumer),
+            "Flow map distinguishes host uniforms and projects real attribute producer/consumer ports");
+        Check(map.Transfers.All(transfer => transfer.ConsumerFlowId != "renderStep"),
+            "Billboard rendering is not assigned invented particle-attribute consumers");
+
+        var updateKernel = program.Kernels.Single(kernel => kernel.Id == "update");
+        var disconnectedRead = new GpuNode
+        {
+            Id = "unusedSizeRead",
+            Op = GpuOp.ReadAttribute,
+            Type = GpuType.Float2,
+            Attribute = "Size"
+        };
+        var withDisconnectedRead = program with
+        {
+            Kernels = program.Kernels.Select(kernel => kernel.Id == updateKernel.Id
+                ? kernel with { Nodes = [.. kernel.Nodes, disconnectedRead] }
+                : kernel).ToList()
+        };
+        var disconnectedMap = GpuFlowVisualization.Create(new() { Program = withDisconnectedRead });
+        Check(disconnectedMap.Steps.Single(step => step.Flow.Id == "updateStep").Inputs.Any(port =>
+                port.Name == "Size" && !port.IsReachableFromWrite) &&
+            disconnectedMap.Transfers.All(transfer => transfer.Attribute != "Size"),
+            "Unconnected reads are inspectable but do not fabricate cross-flow transfers");
+
+        var reversed = GpuFlowVisualization.Create(new()
+        {
+            Program = program with { Flow = [program.Flow[1], program.Flow[0], program.Flow[2]] }
+        });
+        Check(!reversed.SourceCompiled &&
+            reversed.Transfers.Any(transfer => transfer.Attribute == "Position" &&
+                transfer.ProducerFlowId == "spawnStep" && transfer.ConsumerFlowId == "updateStep" &&
+                !transfer.ProducerPrecedesConsumer),
+            "Invalid authored order retains the real dependency and flags its direction rather than inventing execution");
+
+        var unsupported = GpuFlowVisualization.Create(new()
+        {
+            Program = program with
+            {
+                Flow = program.Flow.Select(flow => flow.Id == "renderStep"
+                    ? flow with { Kind = FlowKind.ComputePass }
+                    : flow).ToList()
+            }
+        });
+        var unsupportedStep = unsupported.Steps.Single(step => step.Flow.Id == "renderStep");
+        Check(!unsupported.SourceCompiled && unsupportedStep.UnsupportedReasons.Count > 0 &&
+            unsupportedStep.Inputs.Any(port => port.Name == "billboardTexture"),
+            "Unsupported flow relationships and their authored resource bindings remain inspectable");
+    }
     private static void VerifyDefaultLayout(GraphNodeViewModel container)
     {
         var state = GpuParticleEditorService.ReadState(container);
@@ -80,6 +140,7 @@ internal static class GpuParticleEditorTests
     }
     public static void Run()
     {
+        VerifyFlowVisualization();
         var history = new UndoRedoManager();
         var graph = new GraphWorkspaceViewModel(history);
         var container = GpuParticleEditorService.Create(graph);
