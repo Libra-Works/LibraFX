@@ -42,6 +42,7 @@ internal static class AuthoredLifecycleTests
                 throw new Exception("Force signals did not survive project persistence.");
             var package = SpawnableGroupPackage.Compile(snapshot);
             File.WriteAllBytes(Path.Combine(directory, kind + ".lfxp"), SpawnableGroupPackageBinary.Serialize(package));
+            File.WriteAllBytes(Path.Combine(directory, kind + ".lfxproj"), stream.ToArray());
             File.WriteAllText(Path.Combine(directory, kind + ".json"), JsonSerializer.Serialize(new
             {
                 spawn = spawn.Id, childForce = childForceId, rootForce = rootForce.Id

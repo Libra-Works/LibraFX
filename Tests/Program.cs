@@ -104,6 +104,12 @@ internal static class Program
             AuthoredQualityTests.Run(qualityFixtureDirectory);
             return;
         }
+        if (args is ["--lifecycle-authoring-ui"])
+        {
+            InitializeIsolatedUi();
+            LifecycleAuthoringInterfaceTests.Run();
+            return;
+        }
         if (args is ["--live-game-fixtures", var liveFixtureDirectory])
         {
             InitializeIsolatedUi();

@@ -175,12 +175,33 @@ internal static class GroupExposedInterfaceTests
                 if (!result.RootElement.TryGetProperty("result", out var value) ||
                     value.TryGetProperty("isError", out var error) && error.GetBoolean())
                     throw new InvalidOperationException("The MCP server rejected the group edit.");
+                using var force = await Send(new
+                {
+                    jsonrpc = "2.0", id = 4, method = "tools/call",
+                    @params = new
+                    {
+                        name = "libera_graph_create_node",
+                        arguments = new { kind = "ForceEffect" }
+                    }
+                });
+                if (!force.RootElement.TryGetProperty("result", out var forceValue) ||
+                    forceValue.TryGetProperty("isError", out var forceError) && forceError.GetBoolean())
+                {
+                    throw new InvalidOperationException("The MCP server rejected authored Force creation.");
+                }
             });
             while (!request.IsCompleted) Pump(window);
             request.GetAwaiter().GetResult();
             if (graph.GetNode(groupId).GroupOverrides?.Single().Components.Single().Value?.GetDouble() != 8 ||
                 graph.GetNode(groupId).ChildGraph!.ExposedItems!.Single().Description != configured.Description)
                 throw new InvalidOperationException("The MCP server did not apply the group edit.");
+            var forceId = graph.Nodes.Single(node => node.Definition.Kind.Value == "ForceEffect").Id;
+            if (!graph.History.Undo() || graph.Nodes.Any(node => node.Id == forceId) ||
+                !graph.History.Redo() || graph.GetNode(forceId).Definition.Kind.Value != "ForceEffect" ||
+                !graph.History.Undo())
+            {
+                throw new InvalidOperationException("MCP Force creation must be one reversible graph edit.");
+            }
         }
         finally { Task.Run(host.StopAsync).GetAwaiter().GetResult(); }
     }

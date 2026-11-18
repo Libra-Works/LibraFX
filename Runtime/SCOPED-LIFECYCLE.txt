@@ -143,6 +143,13 @@ Undo/Redo and exposed parameter editing. Lower-level primitive/host/backpressure
 cases remain in liberafx_phase_primitives_tests and scoped termination tests.
 The separate liberafx_interop_scoped_termination_tests target takes the existing
 isolated Fireworks fixture folder (Fireworks.lfxp + Fireworks.native-fixture).
+CTest runs it when LIBERAFX_FORCE_FIXTURE_DIR names that folder; without the
+fixture it reports skipped. It verifies that Force, EndRequest and advance from
+a foreign thread return Busy even when no debugger is attached.
+--lifecycle-authoring-ui checks actual EN/JA Billboard/phase Group textboxes,
+quality comparison controls and Force inspector presentation. Group exposed
+interface tests also create Force Effect over authenticated local MCP and check
+Undo/Redo without starting runtime instances.
 
 Actual engine acceptance:
   Unity LiberaFxAuthoredRuntimeVerification.RunBatch, with
