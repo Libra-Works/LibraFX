@@ -1,0 +1,14 @@
+{
+  "Search.Title": "Search anything",
+  "Search.Hint": "Search graphs, nodes, assets, commands and panels...",
+  "Search.Empty": "No matching items.",
+  "Search.Keys": "Up/Down: select   Enter: open or run   Esc: cancel. Asset results insert library Groups.",
+  "Search.Graph": "Graph",
+  "Search.Node": "Node",
+  "Search.Asset": "Asset",
+  "Search.Group": "Group",
+  "Search.GroupDetail": "Reusable graph group · Revision {0}",
+  "Search.Command": "Command",
+  "Search.Panel": "Panel",
+  "Messages.Shortcut.search.anything": "Search anything"
+}

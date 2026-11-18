@@ -1,0 +1,14 @@
+{
+  "Search.Title": "エニシング検索",
+  "Search.Hint": "グラフ・ノード・アセット・コマンド・パネルを検索...",
+  "Search.Empty": "一致する項目がありません。",
+  "Search.Keys": "上下: 選択   Enter: 開く・実行   Esc: キャンセル。アセットの候補からライブラリのGroupを追加できます。",
+  "Search.Graph": "グラフ",
+  "Search.Node": "ノード",
+  "Search.Asset": "アセット",
+  "Search.Group": "グループ",
+  "Search.GroupDetail": "再利用できるグラフグループ · リビジョン {0}",
+  "Search.Command": "コマンド",
+  "Search.Panel": "パネル",
+  "Messages.Shortcut.search.anything": "エニシング検索"
+}

@@ -19,6 +19,7 @@ public partial class MainWindow : Window
     private LocalProjectsWindow? _localProjectsWindow;
     private ProblemsWindow? _problemsWindow;
     private WindowLayoutsWindow? _windowLayoutsWindow;
+    private AnythingSearchWindow? _anythingSearchWindow;
     private RevisionHistoryWindow? _revisionHistoryWindow;
 
     private void OnRevisionHistoryClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -141,7 +142,12 @@ public partial class MainWindow : Window
     private void OnMainKeyDown(object? sender, KeyEventArgs e)
     {
         if (DataContext is not MainViewModel model) return;
-        if (model.Shortcuts.Matches("undo", e) && model.UndoCommand.CanExecute(null))
+        if (model.Shortcuts.Matches("search.anything", e))
+        {
+            OnAnythingSearchClick(sender, e);
+            e.Handled = true;
+        }
+        else if (model.Shortcuts.Matches("undo", e) && model.UndoCommand.CanExecute(null))
         {
             model.UndoCommand.Execute(null);
             e.Handled = true;
@@ -151,6 +157,39 @@ public partial class MainWindow : Window
             model.RedoCommand.Execute(null);
             e.Handled = true;
         }
+    }
+
+    private async void OnAnythingSearchClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model) return;
+        if (_anythingSearchWindow is not null) { _anythingSearchWindow.Activate(); return; }
+        var additional = new List<AnythingSearchItem>
+        {
+            AnythingSearchWindow.Item("window/assets", "Search.Panel", LocalizationService.Shared.Get("Asset.Title"),
+                "", () => OnContentClick(null, new Avalonia.Interactivity.RoutedEventArgs()), "assets"),
+            AnythingSearchWindow.Item("window/sprite", "Search.Panel", LocalizationService.Shared.Get("Sprite.Title"),
+                "", () => OnSpriteEditorClick(null, new Avalonia.Interactivity.RoutedEventArgs()), "sprite"),
+            AnythingSearchWindow.Item("window/log", "Search.Panel", LocalizationService.Shared.Get("Editor.Log"),
+                "", () => OnLogClick(null, new Avalonia.Interactivity.RoutedEventArgs()), "log")
+        };
+        if (SharedAssetBrowserViewModel is { } assets)
+        {
+            var peerId = assets.SelectedPeer?.ClientId;
+            var peerLabel = assets.SelectedPeer?.Label ?? "";
+            foreach (var asset in assets.Assets.ToArray())
+                additional.Add(AnythingSearchWindow.Item("engine-asset/" + peerId + "/" + asset.Path, "Search.Asset",
+                    asset.Name, peerLabel + " / " + asset.Path, () =>
+                    {
+                        OnContentClick(null, new Avalonia.Interactivity.RoutedEventArgs());
+                        if (SharedAssetBrowserViewModel is { } current &&
+                            current.SelectedPeer?.ClientId == peerId && current.Assets.Contains(asset))
+                            current.SelectedAsset = asset;
+                    }));
+        }
+        var window = new AnythingSearchWindow(model, additional);
+        _anythingSearchWindow = window;
+        try { await window.ShowDialog(this); }
+        finally { _anythingSearchWindow = null; }
     }
 
     private async void OnSettingsClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

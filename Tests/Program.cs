@@ -112,6 +112,12 @@ internal static class Program
             ViewerDiscoveryTests.RunAsync().GetAwaiter().GetResult();
             return;
         }
+        if (args is ["--anything-search"])
+        {
+            InitializeIsolatedUi();
+            AnythingSearchTests.Run();
+            return;
+        }
         if (args is ["--extension-host", var sampleDirectory])
         {
             var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");
