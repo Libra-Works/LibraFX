@@ -293,7 +293,8 @@ namespace LiberaFx.Unity.Editor
             {
                 Require(Application.isPlaying, "SOURCE player-loop test left Play Mode unexpectedly.");
                 Require(EditorApplication.timeSinceStartup < skeletalPlayDeadline,
-                    "Timed out waiting for actual PlayMode SOURCE outputs.");
+                    "Timed out waiting for actual PlayMode SOURCE outputs in phase " + skeletalPlayPhase +
+                    " after " + skeletalPlayFramesInPhase + " output frames.");
                 Require(string.IsNullOrEmpty(skeletalPlayError), skeletalPlayError);
                 CommitSkeletalPlayFrame();
 
@@ -314,7 +315,9 @@ namespace LiberaFx.Unity.Editor
                     skeletalPlayOwnerRig.target.enabled = false;
                     AdvanceSkeletalPlayPhase();
                 }
-                else if (skeletalPlayPhase == 2 && skeletalPlayFramesInPhase >= 2)
+                // OutputProperty emits only on change. Once both targets are invalid,
+                // there is no second frame of change events to wait for.
+                else if (skeletalPlayPhase == 2 && skeletalPlayFramesInPhase >= 1)
                 {
                     FinishSkeletalPlayMode(null);
                 }
