@@ -33,6 +33,18 @@ internal static class InlineGroupInterfaceTests
             Invoke("Inline.Toggle");
             Pump(window);
             Require(root.GetNode(groupId).IsInlineExpanded, "The bound expand action did not run.");
+            var resizeName = LocalizationService.Shared.Get("Inline.Resize");
+            var grip = editor.GetVisualDescendants().OfType<Border>().Single(control =>
+                control.IsEffectivelyVisible && AutomationProperties.GetName(control) == resizeName);
+            var initialWidth = root.GetNode(groupId).InlineWidth;
+            var initialHeight = root.GetNode(groupId).InlineHeight;
+            Drag(grip, window, new Point(grip.Bounds.Width / 2, grip.Bounds.Height / 2), new Vector(88, 52));
+            Require(root.GetNode(groupId).InlineWidth > initialWidth &&
+                root.GetNode(groupId).InlineHeight > initialHeight, "The visible resize grip did not resize the group.");
+            main.UndoCommand.Execute(null);
+            Pump(window);
+            Require(root.GetNode(groupId).InlineWidth == initialWidth &&
+                root.GetNode(groupId).InlineHeight == initialHeight, "Undo did not restore the inline canvas size.");
             var inline = editor.GetVisualDescendants().OfType<GraphEditorView>()
                 .Single(view => view.DataContext is GraphWorkspaceViewModel { IsInlineWorkspace: true });
             var child = (GraphWorkspaceViewModel)inline.DataContext!;
@@ -48,6 +60,21 @@ internal static class InlineGroupInterfaceTests
             Require(ReferenceEquals(main.ActiveGraphProvider.Graph, child) &&
                 child.SelectedNode?.Id == scalarId && ReferenceEquals(editor.DataContext, root),
                 "Real child input did not select its own workspace while retaining the parent canvas.");
+            var edit = LiberaFxMcpTools.CreateNode(main.ActiveGraphProvider, "Float", 150, 100);
+            var deadline = System.Diagnostics.Stopwatch.StartNew();
+            while (!edit.IsCompleted && deadline.Elapsed < TimeSpan.FromSeconds(5))
+            {
+                Pump(window);
+            }
+            edit.WaitAsync(TimeSpan.Zero).GetAwaiter().GetResult();
+            Require(child.Nodes.Count == 2 && rootNodeIds.SetEquals(root.Nodes.Select(node => node.Id)),
+                "MCP creation did not edit the focused inline canvas exclusively.");
+            main.UndoCommand.Execute(null);
+            Pump(window);
+            Require(child.Nodes.Single().Id == scalarId, "Shared Undo did not remove the MCP edit.");
+            nodeView = editor.GetVisualDescendants().OfType<GraphNodeView>()
+                .Single(view => view.DataContext is GraphNodeViewModel node && node.Id == scalarId);
+            Click(nodeView, window);
             var handle = window.TryGetPlatformHandle()!.Handle;
             SendMessage(handle, 0x0100, 0x2e, 0);
             SendMessage(handle, 0x0101, 0x2e, 0);
@@ -93,17 +120,31 @@ internal static class InlineGroupInterfaceTests
     }
 
     private static void Click(Control control, Window window)
+        => Drag(control, window, new Point(Math.Min(90, control.Bounds.Width / 2), 16), default);
+
+    private static void Drag(Control control, Window window, Point start, Vector delta)
     {
-        var point = control.PointToScreen(new Point(Math.Min(90, control.Bounds.Width / 2), 16));
-        var client = new NativePoint { X = point.X, Y = point.Y };
         var handle = window.TryGetPlatformHandle()!.Handle;
-        Require(ScreenToClient(handle, ref client), "The isolated window has no native input coordinates.");
-        var position = (nint)((client.Y << 16) | (client.X & 0xffff));
-        SendMessage(handle, 0x0200, 0, position);
-        SendMessage(handle, 0x0201, 1, position);
+        var from = Position(start);
+        var to = Position(start + delta);
+        SendMessage(handle, 0x0200, 0, from);
+        SendMessage(handle, 0x0201, 1, from);
         Pump(window);
-        SendMessage(handle, 0x0202, 0, position);
+        if (from != to)
+        {
+            SendMessage(handle, 0x0200, 1, to);
+            Pump(window);
+        }
+        SendMessage(handle, 0x0202, 0, to);
         Pump(window);
+
+        nint Position(Point relative)
+        {
+            var point = control.PointToScreen(relative);
+            var client = new NativePoint { X = point.X, Y = point.Y };
+            Require(ScreenToClient(handle, ref client), "The isolated window has no native input coordinates.");
+            return (nint)((client.Y << 16) | (client.X & 0xffff));
+        }
     }
 
     private static void Require(bool condition, string message)
