@@ -2,16 +2,24 @@
 #include "LibraDebugDrawScope.h"
 #include "LibraLiveGameSession.h"
 #include "LibraEffectComponent.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Dom/JsonObject.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
+#include "Engine/SceneCapture2D.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "GameFramework/Actor.h"
+#include "ImageUtils.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
+#include "Misc/Paths.h"
 #include "Misc/ScopeExit.h"
+#include "RenderingThread.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
@@ -111,6 +119,204 @@ bool FLibraDebugLiveDisconnectTest::RunTest(const FString&)
     auto* next = session->Resolve(completion.instance);
     TestTrue(TEXT("Future scopes cannot resurrect disconnected debug"), next && next->bIsPlaying && next->GetRenderObjectCount() == 0);
     session->ShutdownAndForceDestroy(); // explicit isolated test teardown only
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraDebugEngineAssetPreviewTest, "Libra.Editor.DebugDraw.EngineAssetPreview",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraDebugEngineAssetPreviewTest::RunTest(const FString&)
+{
+    auto previewFixture = FString{}, distributionFixture = FString{};
+    auto previewBytes = TArray<uint8>{}, distributionBytes = TArray<uint8>{};
+    if (!FParse::Value(FCommandLine::Get(), TEXT("LibraDebugFixture="), previewFixture) ||
+        !FParse::Value(FCommandLine::Get(), TEXT("LibraDebugDistributionFixture="), distributionFixture) ||
+        !FFileHelper::LoadFileToArray(previewBytes, *previewFixture) ||
+        !FFileHelper::LoadFileToArray(distributionBytes, *distributionFixture))
+    {
+        AddError(TEXT("Supply isolated engine-preview.lfxp and distribution.lfxp fixtures."));
+        return false;
+    }
+
+    auto init = UWorld::InitializationValues().AllowAudioPlayback(false).RequiresHitProxies(false)
+        .CreatePhysicsScene(false).CreateNavigation(false).CreateAISystem(false)
+        .ShouldSimulatePhysics(false).SetTransactional(false);
+    auto* world = UWorld::CreateWorld(EWorldType::Game, false, NAME_None, nullptr, true, ERHIFeatureLevel::Num, &init);
+    if (!TestNotNull(TEXT("Isolated engine-asset debug world"), world)) return false;
+    GEngine->CreateNewWorldContext(EWorldType::Game).SetCurrentWorld(world);
+    ON_SCOPE_EXIT { GEngine->DestroyWorldContext(world); world->DestroyWorld(false); };
+
+    auto* owner = world->SpawnActor<AActor>();
+    auto session = FLibraLiveGameSession::Create(true, owner, {});
+    if (!TestTrue(TEXT("Development live session"), !!session)) return false;
+    auto request = liberafx::RequestId{};
+    if (!TestEqual(TEXT("Submit compiler debug package"),
+        session->SubmitCreate(previewBytes, TEXT("engine debug preview"), request), liberafx::Result::Ok))
+        return false;
+    session->Process();
+    auto completion = FLibraLiveGameSession::FCompletion{};
+    if (!TestTrue(TEXT("Engine preview package executes"),
+        session->TakeCompletion(request, completion) == liberafx::Result::Ok &&
+        completion.result == liberafx::Result::Ok))
+    {
+        AddError(completion.error);
+        session->ShutdownAndForceDestroy();
+        return false;
+    }
+
+    auto* playback = session->Resolve(completion.instance);
+    if (!TestNotNull(TEXT("Live package component"), playback)) return false;
+    auto* playbackOwner = playback->GetOwner();
+    auto meshes = TArray<UStaticMeshComponent*>{};
+    auto labels = TArray<UTextRenderComponent*>{};
+    playbackOwner->GetComponents(meshes);
+    playbackOwner->GetComponents(labels);
+    if (!TestTrue(TEXT("Compiler debug model and text reach real engine components"),
+        meshes.Num() == 1 && labels.Num() == 1 && meshes[0]->GetStaticMesh() &&
+        meshes[0]->GetStaticMesh()->GetPathName() == TEXT("/Engine/BasicShapes/Cube.Cube")))
+    {
+        session->ShutdownAndForceDestroy();
+        return false;
+    }
+
+    auto capture = world->SpawnActor<ASceneCapture2D>();
+    auto target = NewObject<UTextureRenderTarget2D>(capture);
+    target->ClearColor = FLinearColor::Black;
+    target->InitCustomFormat(128, 128, PF_B8G8R8A8, true);
+    target->UpdateResourceImmediate();
+    auto* camera = capture->GetCaptureComponent2D();
+    camera->TextureTarget = target;
+    camera->bCaptureEveryFrame = false;
+    camera->bCaptureOnMovement = false;
+    camera->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+    camera->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
+    camera->ShowFlags.SetFog(false);
+    camera->ShowFlags.SetAtmosphere(false);
+    camera->ShowFlags.SetLighting(false);
+    camera->ShowFlags.SetPostProcessing(false);
+
+    auto capturePixels = [&](UPrimitiveComponent* primitive, const TCHAR* suffix)
+    {
+        camera->ClearShowOnlyComponents();
+        camera->ShowOnlyComponent(primitive);
+        const auto forward = primitive->GetForwardVector();
+        const auto isText = Cast<UTextRenderComponent>(primitive) != nullptr;
+        const auto distance = isText ? 30.0 : 350.0;
+        camera->FOVAngle = isText ? 10.0f : 90.0f;
+        const auto directions = TArray<FVector>{
+            forward, -forward, primitive->GetRightVector(), -primitive->GetRightVector(),
+            primitive->GetUpVector(), -primitive->GetUpVector()
+        };
+        auto pixels = TArray<FColor>{};
+        auto visiblePixels = int32{};
+        for (const auto& direction : directions)
+        {
+            capture->SetActorLocation(primitive->GetComponentLocation() + direction * distance);
+            capture->SetActorRotation((-direction).Rotation());
+            world->SendAllEndOfFrameUpdates();
+            camera->CaptureScene();
+            FlushRenderingCommands();
+            if (!target->GameThread_GetRenderTargetResource()->ReadPixels(pixels) ||
+                pixels.Num() != 128 * 128)
+                continue;
+            visiblePixels = pixels.FilterByPredicate([](const auto& pixel)
+            {
+                return pixel.R > 12 || pixel.G > 12 || pixel.B > 12;
+            }).Num();
+            if (visiblePixels > 0) break;
+        }
+        if (visiblePixels == 0) return false;
+        auto png = TArray64<uint8>{};
+        FImageUtils::PNGCompressImageArray(128, 128, pixels, png);
+        const auto outputDirectory = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("LibraAcceptance"));
+        IFileManager::Get().MakeDirectory(*outputDirectory, true);
+        const auto outputPath = FPaths::Combine(outputDirectory,
+            FGuid::NewGuid().ToString(EGuidFormats::Digits) + suffix + TEXT(".png"));
+        return FFileHelper::SaveArrayToFile(png, *outputPath);
+    };
+    if (!TestTrue(TEXT("Engine Cube produces actual SceneCapture pixels"),
+        capturePixels(meshes[0], TEXT("-debug-model"))) ||
+        !TestTrue(TEXT("World debug text produces actual SceneCapture pixels"),
+            capturePixels(labels[0], TEXT("-debug-text"))))
+    {
+        session->ShutdownAndForceDestroy();
+        return false;
+    }
+
+    auto stale = completion.instance;
+    ++stale.generation;
+    TestEqual(TEXT("Wrong generation cannot retire debug scope"),
+        session->ClearPreviewDebugDraw(stale), liberafx::Result::InvalidHandle);
+    meshes.Reset();
+    labels.Reset();
+    playbackOwner->GetComponents(meshes);
+    playbackOwner->GetComponents(labels);
+    TestTrue(TEXT("Wrong generation leaves real model and text alive"), meshes.Num() == 1 && labels.Num() == 1);
+    TestEqual(TEXT("Debug-only disconnect retires the scope"),
+        session->DisconnectPreviewDebugDraw(), liberafx::Result::Ok);
+    meshes.Reset();
+    labels.Reset();
+    playbackOwner->GetComponents(meshes);
+    playbackOwner->GetComponents(labels);
+    TestTrue(TEXT("Disconnect destroys both actual world components"), meshes.IsEmpty() && labels.IsEmpty());
+    TestTrue(TEXT("Disconnect preserves normal effect playback"),
+        session->Resolve(completion.instance) == playback && playback->bIsPlaying);
+
+    if (!TestEqual(TEXT("Submit a new preview after disconnect"),
+        session->SubmitCreate(previewBytes, TEXT("after disconnect"), request), liberafx::Result::Ok))
+    {
+        session->ShutdownAndForceDestroy();
+        return false;
+    }
+    session->Process();
+    auto nextCompletion = FLibraLiveGameSession::FCompletion{};
+    if (!TestTrue(TEXT("New normal playback remains available"),
+        session->TakeCompletion(request, nextCompletion) == liberafx::Result::Ok &&
+        nextCompletion.result == liberafx::Result::Ok))
+    {
+        session->ShutdownAndForceDestroy();
+        return false;
+    }
+    auto* nextPlayback = session->Resolve(nextCompletion.instance);
+    meshes.Reset();
+    labels.Reset();
+    if (nextPlayback) nextPlayback->GetOwner()->GetComponents(meshes);
+    if (nextPlayback) nextPlayback->GetOwner()->GetComponents(labels);
+    TestTrue(TEXT("Disconnected preview does not resurrect debug components"),
+        nextPlayback && nextPlayback->bIsPlaying && meshes.IsEmpty() && labels.IsEmpty());
+    session->ShutdownAndForceDestroy();
+
+    auto* distributionOwner = world->SpawnActor<AActor>();
+    auto distribution = FLibraLiveGameSession::Create(true, distributionOwner, {});
+    if (!TestTrue(TEXT("Distribution session"), !!distribution)) return false;
+    if (!TestEqual(TEXT("Submit compiler distribution package"),
+        distribution->SubmitCreate(distributionBytes, TEXT("distribution"), request), liberafx::Result::Ok))
+    {
+        distribution->ShutdownAndForceDestroy();
+        return false;
+    }
+    distribution->Process();
+    auto distributionCompletion = FLibraLiveGameSession::FCompletion{};
+    if (!TestTrue(TEXT("Distribution package executes"),
+        distribution->TakeCompletion(request, distributionCompletion) == liberafx::Result::Ok &&
+        distributionCompletion.result == liberafx::Result::Ok))
+    {
+        AddError(distributionCompletion.error);
+        distribution->ShutdownAndForceDestroy();
+        return false;
+    }
+    auto* distributionPlayback = distribution->Resolve(distributionCompletion.instance);
+    auto* distributionPlaybackOwner = distributionPlayback ? distributionPlayback->GetOwner() : nullptr;
+    meshes.Reset();
+    labels.Reset();
+    if (distributionPlaybackOwner)
+    {
+        distributionPlaybackOwner->GetComponents(meshes);
+        distributionPlaybackOwner->GetComponents(labels);
+    }
+    TestTrue(TEXT("Distribution has no preview-only debug model or text"),
+        distributionPlayback && meshes.IsEmpty() && labels.IsEmpty());
+    distribution->ShutdownAndForceDestroy();
     return true;
 }
 #endif
