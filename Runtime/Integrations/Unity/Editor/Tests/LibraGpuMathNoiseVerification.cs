@@ -168,11 +168,13 @@ namespace LiberaFx.Unity.Editor
                         CheckVector(value, c.expected, math.absoluteTolerance, math.relativeTolerance, c.kernelId + " case " + i);
                     }
                 }
+                VerifyFlowMap(runtime, material);
                 runtime.Dispose();
                 File.WriteAllText(Output("math-noise-verification.txt"), "PASS\nUnity: " + Application.unityVersion +
                     "\nDevice: " + SystemInfo.graphicsDeviceName + "\nAPI: " + SystemInfo.graphicsDeviceType +
                     "\nNoise cases: " + noise.cases.Length + "\nMath cases: " + math.cases.Length +
-                    "\nMath kernels: " + groups.Count + "\nNoise guards: passed\nCurl divergence: " + divergence + "\n");
+                    "\nMath kernels: " + groups.Count + "\nNoise guards: passed\nCurl divergence: " + divergence +
+                    "\nFlowMap UV, world axes, bilinear filtering and clamping: passed\n");
                 EditorApplication.Exit(0);
             }
             catch (Exception e)
@@ -186,6 +188,50 @@ namespace LiberaFx.Unity.Editor
                 if (emitter != null) UnityEngine.Object.DestroyImmediate(emitter);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
                 foreach (var text in temporaryMetadata) UnityEngine.Object.DestroyImmediate(text);
+            }
+        }
+
+        private static void VerifyFlowMap(LibraGpuParticleRuntime runtime, Material material)
+        {
+            var field = new Texture2D(2, 2, TextureFormat.RGBA32, false, true)
+            {
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Repeat
+            };
+            try
+            {
+                field.SetPixels(new[] { Color.red, Color.green, Color.black, Color.white });
+                field.Apply();
+                runtime.Configure(LoadShader("flowmap"), LoadText("flowmap.metadata.json"), material,
+                    new[] { new LibraGpuTextureBinding { resourceId = "wind", texture = field } });
+                var inputs = new[]
+                {
+                    new[] { -.5f, -2f, .8f }, new[] { -.5f, 2f, -.8f },
+                    new[] { -.5f, 0f, .8f }, new[] { .5f, .5f, -.8f }
+                };
+                var expected = new[]
+                {
+                    new[] { -1f, 1f, 0f, 100f }, new[] { 1f, -1f, 0f, 100f },
+                    new[] { 0f, 0f, 0f, 100f }, new[] { 1f, 1f, 0f, 100f }
+                };
+                var particles = new LibraGpuParticle[runtime.Capacity];
+                for (var index = 0; index < inputs.Length; ++index)
+                {
+                    particles[index] = Particle(inputs[index], (uint)index);
+                }
+                TestBuffer(runtime).SetData(particles);
+                runtime.Step(0, 0, 0, Vector3.zero);
+                runtime.ReadbackForDiagnostics(particles);
+                for (var index = 0; index < inputs.Length; ++index)
+                {
+                    Require(particles[index].alive == 1, "FlowMap unexpectedly killed particle " + index);
+                    CheckVector(particles[index].velocityLifetime, expected[index], .02f, 0, "FlowMap world case " + index);
+                    CheckVector(particles[index].sizeRotation, new[] { -1f, -1f }, .02f, 0, "FlowMap UV case " + index);
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(field);
             }
         }
     }

@@ -14,7 +14,10 @@ substituting white. Play On Enable configures and starts automatically.
 Flow maps sample RG and decode [0,1] to [-1,1]. Float2 inputs are UVs; Float3
 inputs use the resource's configured world-axis pair and bounds. Any Texture2D
 can be assigned; disable sRGB for vector data when possible. The runtime binds
-each flow-map texture only to compute kernels that reference it.
+each flow-map texture only to compute kernels that reference it. Flow-map
+sampling is bilinear and clamps at the edge, independently of the texture's
+filter and wrap settings. Regenerate and reimport existing compute assets to
+pick up the sampler change.
 Assets/Libra GPU/Reimport generated shaders and metadata reimports selected
 assets after editing. In the Editor Configure checks the actual compute source
 SHA-256 against sourceHash; deployed builds cannot inspect source and must
@@ -64,12 +67,15 @@ executeMethod test for automatic component updates, camera rendering, hot
 reconfiguration, disable/reenable, destruction and deferred retirement.
 Editor/Tests/LibraGpuMathNoiseVerification.cs compares real GPU math and noise
 outputs with the Core reference fixtures, including finite guards and curl
-divergence. Generate those fixtures with:
+divergence. It also checks FlowMap UV and world sampling on the GPU using a
+point/repeat texture to verify that those texture settings do not affect the
+result. Generate those fixtures with:
 
   dotnet run --project Gpu\LibraGpu.Core.Tests -- --export <output-directory>
 
 Copy noise.compute, noise.metadata.json, noise.reference.json,
 noiseguards.compute, noiseguards.metadata.json, math.compute,
-math.metadata.json and math.reference.json into
+math.metadata.json, math.reference.json, flowmap.compute, and
+flowmap.metadata.json into
 Assets\LibraFXGPUValidation\Fixtures, then run the test's Run executeMethod.
 Its particle uploads and readbacks are test-only, not production simulation.

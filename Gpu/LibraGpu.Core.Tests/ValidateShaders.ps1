@@ -27,7 +27,7 @@ try {
     $owned.Add((Join-Path $output 'noise.reference.json'))
     $owned.Add((Join-Path $output 'math.reference.json'))
     $owned.Add((Join-Path $output 'LibraGpuSupport.hlsl'))
-    foreach ($name in @('sample', 'allops', 'noise', 'noiseguards', 'math')) {
+    foreach ($name in @('sample', 'allops', 'noise', 'noiseguards', 'math', 'flowmap')) {
         foreach ($extension in @('hlsl', 'usf', 'compute', 'json', 'metadata.json', 'entries')) {
             $owned.Add((Join-Path $output "$name.$extension"))
         }

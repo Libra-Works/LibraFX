@@ -46,6 +46,11 @@ internal static partial class ShaderEmitter
         }
         if (p.Resources.Count > 0 && format != ShaderFormat.UnityCompute)
             Write($"SamplerState LibraGpuSampler : register(s{b.SamplerRegisterBase});");
+        const string unityFlowMapSampler = "LibraGpu_linear_clamp_sampler";
+        if (format == ShaderFormat.UnityCompute && p.Resources.Any(resource => resource.Kind == ResourceKind.FlowMap2D))
+        {
+            Write($"SamplerState {unityFlowMapSampler};");
+        }
         var resourceIndices = p.Resources.Select((resource, index) => (resource.Id, Index: index))
             .ToDictionary(x => x.Id, x => x.Index, StringComparer.Ordinal);
         for (int i = 0; i < p.Resources.Count; i++)
@@ -53,8 +58,7 @@ internal static partial class ShaderEmitter
             var resource = p.Resources[i];
             if (resource.Kind != ResourceKind.FlowMap2D) continue;
             var settings = resource.FlowMap!;
-            var samplerName = format == ShaderFormat.UnityCompute ? $"samplerLibraGpuTexture_{i:D4}" : "LibraGpuSampler";
-            if (format == ShaderFormat.UnityCompute) Write($"SamplerState {samplerName};");
+            var samplerName = format == ShaderFormat.UnityCompute ? unityFlowMapSampler : "LibraGpuSampler";
             var u = "xyz"[(int)settings.AxisU].ToString();
             var v = "xyz"[(int)settings.AxisV].ToString();
             var minimumU = ((float)settings.WorldMinimumU).ToString("R", CultureInfo.InvariantCulture);

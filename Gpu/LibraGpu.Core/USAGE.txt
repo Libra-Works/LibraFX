@@ -53,7 +53,10 @@ Stores preserve other attributes and spare slots during Update.
 Flow v1: at most one Spawn, at most one Update, then RenderBillboard step(s).
 RenderBillboard binds a declared Texture2D; an engine backend consumes the GPU
 buffer directly. FlowMap2D is a declared Texture2D interpreted as a vector
-field by SampleFlowMap. Compute code does not render or perform CPU per-particle work.
+field by SampleFlowMap. Unity's generated ComputeShader and Unreal's
+interpreter use bilinear clamp sampling at mip 0 regardless of asset-side
+filter/wrap settings; linear RG texture data is recommended. Compute code
+does not render or perform CPU per-particle work.
 RenderStartTexture, ComputePass, storage textures and arbitrary buffers are
 reserved with explicit unsupported diagnostics. Texture2D dimensions 0,0 mean
 external; otherwise both dimensions must be positive and bounded.

@@ -130,6 +130,10 @@ internal static partial class Program
             Check(source.Contains("SampleFlowMapWorld_0000") && source.Contains("position.y, position.x") &&
                 source.Contains("rg * 2.0f - 1.0f") && source.Contains("LibraGpuTurbulence"),
                 "Generated shader projects world coordinates and preserves existing turbulence support");
+            var unitySource = compiled.EmitUnityCompute().Text;
+            Check(unitySource.Contains("SampleLevel(LibraGpu_linear_clamp_sampler,") &&
+                !unitySource.Contains("samplerLibraGpuTexture_"),
+                "Unity FlowMap sampling uses a dedicated linear-clamp sampler instead of borrowing the texture sampler");
             using var metadataDocument = JsonDocument.Parse(compiled.ExportMetadataJson());
             var metadata = metadataDocument.RootElement;
             Check(metadata.GetProperty("resources")[0].GetProperty("kind").GetString() == "FlowMap2D" &&

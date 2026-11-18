@@ -270,7 +270,8 @@ internal static partial class Program
             {
                 Directory.CreateDirectory(args[1]);
                 foreach (var (name, p) in new[] { ("sample", GpuSamples.CreateEmitter()), ("allops", AllOps()),
-                    ("noise",GpuSamples.CreateNoiseProbe()),("noiseguards",GpuSamples.CreateNoiseGuardProbe()),("math",GpuSamples.CreateMathProbe()) })
+                    ("noise",GpuSamples.CreateNoiseProbe()),("noiseguards",GpuSamples.CreateNoiseGuardProbe()),
+                    ("math",GpuSamples.CreateMathProbe()),("flowmap",FlowMapProbe()) })
                 {
                     var c = GpuCompiler.Compile(p);
                     File.WriteAllText(Path.Combine(args[1], name + ".hlsl"), c.EmitHlslInclude().Text);
@@ -288,6 +289,38 @@ internal static partial class Program
         }
         catch (Exception e) { Console.Error.WriteLine(e); return 1; }
     }
+
+    private static GpuProgram FlowMapProbe()
+    {
+        var resources = new List<ResourceDeclaration>
+        {
+            new()
+            {
+                Id = "wind",
+                Kind = ResourceKind.FlowMap2D,
+                Width = 2,
+                Height = 2,
+                FlowMap = new()
+                {
+                    AxisU = GpuAxis.Y, AxisV = GpuAxis.X,
+                    WorldMinimumU = -1, WorldMaximumU = 1,
+                    WorldMinimumV = -1, WorldMaximumV = 1
+                }
+            }
+        };
+        var kernel = GpuDsl.Compile("""
+            @Velocity = sampleFlowMap("wind", @Position);
+            @Size = sampleFlowMap("wind", float2(0.25, 0.75));
+            """, "wind-update", KernelStage.Update, resources: resources);
+        return One() with
+        {
+            Id = "flow-map-probe",
+            Resources = resources,
+            Kernels = [kernel],
+            Flow = [new() { Id = "update", Kind = FlowKind.Update, Kernel = kernel.Id }]
+        };
+    }
+
     private static GpuProgram AllOps()
     {
         var k = GpuDsl.Compile("""
