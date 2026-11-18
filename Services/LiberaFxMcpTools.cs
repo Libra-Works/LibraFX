@@ -10,7 +10,7 @@ using ModelContextProtocol.Server;
 
 namespace LiberaFx.Services;
 
-public sealed record LiberaFxMcpPlanNode(string Key, string Kind, string Name, double X, double Y,
+public sealed record LiberaFxMcpPlanNode(string Key, string Kind, string Name, double? X = null, double? Y = null,
     bool? IsPolymorphic = null);
 public sealed record LiberaFxMcpPlanConnection(
     string SourceKey, string TargetKey, string? TargetPortId = null, string? SourcePortId = null);
@@ -133,17 +133,26 @@ public sealed class LiberaFxMcpTools
         await ChatMcpExecution.InvokeAsync(() => JsonSerializer.Serialize(activeGraph.Graph.AvailableNodeDefinitions, JsonOptions));
 
     [McpServerTool(Name = "libera_graph_create_node", Destructive = false, OpenWorld = false)]
-    [Description("Create one editable node in the active graph, including one Spawnable Group container. This never creates a runtime instance. Family base kinds are polymorphic by default.")]
+    [Description("Create one editable node. layout='flow' appends to the right without viewport wrapping when coordinates are omitted; default compact preserves legacy placement. Explicit coordinates are always retained. For connected batches prefer apply_plan with layout='flow'. This never creates a runtime instance.")]
     public static async Task<string> CreateNode(
         ActiveGraphProvider activeGraph,
         [Description("Node kind from libera_graph_list_node_types, for example Float or Signal.")] string kind,
         [Description("Optional horizontal position.")] double? x = null,
         [Description("Optional vertical position.")] double? y = null,
-        [Description("Override the family default; false creates an explicitly typed legacy node.")] bool? isPolymorphic = null) =>
+        [Description("Override the family default; false creates an explicitly typed legacy node.")] bool? isPolymorphic = null,
+        [Description("compact (legacy default), flow, or manual.")] string layout = "compact") =>
         await ChatMcpExecution.InvokeAsync(() =>
         {
             ValidatePosition(x, y);
             var graph = activeGraph.Graph;
+            GraphLayoutMode mode;
+            try { mode = GraphFlowLayout.ParseMode(layout); }
+            catch (ArgumentException ex) { throw new McpException(ex.Message); }
+            if (mode == GraphLayoutMode.Flow && x is null && y is null)
+            {
+                x = graph.Nodes.Select(node => GraphFlowLayout.Bounds(node).Right + 160).DefaultIfEmpty(80).Max();
+                y = graph.Nodes.Select(node => node.Y).DefaultIfEmpty(80).Min();
+            }
             var parsed = ParseKind(kind, graph);
             var node = graph.CreateNode(parsed, x, y, isPolymorphic ?? GraphPolymorphism.TryFamily(parsed, out _));
             return SerializeNode(graph, node.Id);
@@ -506,11 +515,12 @@ public sealed class LiberaFxMcpTools
         });
 
     [McpServerTool(Name = "libera_graph_apply_plan", Destructive = false, OpenWorld = false)]
-    [Description("Add a set of nodes and connections in one undoable edit. Connection keys refer only to nodes in this plan; existing nodes are not changed.")]
+    [Description("Add nodes and connections in one undoable edit. layout='flow' uses dependency order, node dimensions and ports without viewport wrapping; omit x/y for automatic positions. Explicit x/y pairs are fixed. compact is an explicit four-column alternative. Default manual requires x/y and preserves existing behavior. Existing nodes never move; connection keys refer only to this plan.")]
     public static async Task<string> ApplyGraphPlan(
         ActiveGraphProvider activeGraph,
-        [Description("Nodes with unique keys, a kind from libera_graph_list_node_types, name, and x/y coordinates.")] IReadOnlyList<LiberaFxMcpPlanNode> nodes,
-        [Description("Connections between sourceKey and targetKey from this plan; use an empty array for none.")] IReadOnlyList<LiberaFxMcpPlanConnection> connections) =>
+        [Description("Nodes with unique keys, kind and name. Omit x/y for automatic flow/compact layout; provide both to fix a position.")] IReadOnlyList<LiberaFxMcpPlanNode> nodes,
+        [Description("Connections between sourceKey and targetKey from this plan; use an empty array for none.")] IReadOnlyList<LiberaFxMcpPlanConnection> connections,
+        string layout = "manual") =>
         await ChatMcpExecution.InvokeAsync(() =>
         {
             if (nodes is null || connections is null)
@@ -518,15 +528,22 @@ public sealed class LiberaFxMcpTools
             if (nodes.Any(node => node is null) || connections.Any(connection => connection is null))
                 throw new McpException("Plan arrays must not contain null entries.");
 
+            GraphLayoutMode mode;
+            try { mode = GraphFlowLayout.ParseMode(layout); }
+            catch (ArgumentException ex) { throw new McpException(ex.Message); }
             var plan = new LiberaGraphEditPlan(
                 nodes.Select(node =>
                 {
                     var kind = ParseKind(node.Kind, activeGraph.Graph);
-                    return new LiberaGraphNodeSpec(node.Key, kind, node.Name, node.X, node.Y,
-                        IsPolymorphic: node.IsPolymorphic ?? GraphPolymorphism.TryFamily(kind, out _));
+                    if (node.X.HasValue != node.Y.HasValue ||
+                        mode == GraphLayoutMode.Manual && node.X is null)
+                        throw new McpException("Provide both x/y, or omit both with layout='flow' or 'compact'.");
+                    return new LiberaGraphNodeSpec(node.Key, kind, node.Name, node.X ?? 0, node.Y ?? 0,
+                        IsPolymorphic: node.IsPolymorphic ?? GraphPolymorphism.TryFamily(kind, out _),
+                        IsPositionFixed: node.X is not null);
                 }).ToArray(),
                 connections.Select(connection => new LiberaGraphConnectionSpec(
-                    connection.SourceKey, connection.TargetKey, connection.TargetPortId, connection.SourcePortId)).ToArray());
+                    connection.SourceKey, connection.TargetKey, connection.TargetPortId, connection.SourcePortId)).ToArray(), mode);
             try
             {
                 var graph = activeGraph.Graph;

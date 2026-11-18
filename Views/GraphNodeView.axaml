@@ -51,6 +51,7 @@
                         </Grid>
                     </ToggleButton>
                     <TextBlock Text="{Binding Name}"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}"
                                Foreground="{DynamicResource EffectForegroundBrush}"
                                FontWeight="SemiBold" />
                 </DockPanel>

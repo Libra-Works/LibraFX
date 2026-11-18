@@ -23,12 +23,13 @@ public sealed class ChatMcpClient : IDisposable
         "libera_graph_describe_group", "libera_graph_describe_spawnable",
         "libera_graph_create_node", "libera_graph_connect_nodes", "libera_graph_rename_node",
         "libera_graph_move_node", "libera_graph_set_parameter", "libera_graph_delete_node",
-        "libera_graph_apply_plan", "libera_graph_enter", "libera_graph_up"
+        "libera_graph_apply_plan", "libera_graph_enter", "libera_graph_up",
+        "libera_graph_preview_layout", "libera_graph_apply_layout"
     };
 
     public static bool NeedsConfirmation(string name) => name is not
         ("libera_graph_read" or "libera_graph_list_node_types" or
-         "libera_graph_describe_group" or "libera_graph_describe_spawnable");
+         "libera_graph_describe_group" or "libera_graph_describe_spawnable" or "libera_graph_preview_layout");
 
     public ChatMcpClient(string endpoint, string token)
     {

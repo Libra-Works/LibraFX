@@ -39,10 +39,17 @@ internal static class Program
 
     private static void MainCore(string[] args)
     {
+        if (args is ["--authoring-batch"])
+        {
+            InitializeIsolatedUi();
+            GraphFlowLayoutTests.Run();
+            return;
+        }
         if (args is ["--operator-skill"])
         {
             InitializeIsolatedUi();
             OperatorSkillTests.Run();
+            GraphFlowLayoutTests.Run();
             return;
         }
         if (args is ["--mcp-project-files"])

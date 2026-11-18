@@ -45,6 +45,7 @@ public sealed class McpHost
         var mcp = builder.Services.AddMcpServer()
             .WithHttpTransport(options => options.Stateless = true)
             .WithTools<LiberaFxMcpTools>()
+            .WithTools<GraphLayoutMcpTools>()
             .WithTools<AssetMcpTools>()
             .WithTools<GpuParticleMcpTools>()
             .WithTools<GraphDebugTools>();

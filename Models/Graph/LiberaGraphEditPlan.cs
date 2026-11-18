@@ -5,7 +5,10 @@ namespace LiberaFx.Models.Graph;
 /// </summary>
 public sealed record LiberaGraphEditPlan(
     IReadOnlyList<LiberaGraphNodeSpec> Nodes,
-    IReadOnlyList<LiberaGraphConnectionSpec> Connections);
+    IReadOnlyList<LiberaGraphConnectionSpec> Connections,
+    GraphLayoutMode Layout = GraphLayoutMode.Manual);
+
+public enum GraphLayoutMode { Manual, Flow, Compact }
 
 public sealed record LiberaGraphNodeSpec(
     string Key,
@@ -14,7 +17,8 @@ public sealed record LiberaGraphNodeSpec(
     double X,
     double Y,
     IReadOnlyList<NodeParameterSnapshot>? Parameters = null,
-    bool IsPolymorphic = false);
+    bool IsPolymorphic = false,
+    bool IsPositionFixed = false);
 
 /// <summary>Connects two node keys declared in the same graph plan.</summary>
 public sealed record LiberaGraphConnectionSpec(

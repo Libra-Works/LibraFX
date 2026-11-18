@@ -71,6 +71,18 @@ user-facing labels.
   `libera_graph_rename_node` according to their discovered schemas.
 - For an additive batch, prefer `libera_graph_apply_plan`: it produces one
   undoable edit, and connection keys refer only to nodes declared in that plan.
+- Prefer `layout: "flow"` for generated plans and omit x/y for nodes that may be
+  positioned automatically. This follows dependencies left to right without
+  wrapping to fit the screen. Explicit x/y pairs are fixed; existing graph
+  nodes do not move. `layout: "compact"` is an explicit four-column alternative;
+  the legacy `manual` plan mode requires coordinates.
+- For existing nodes, call `libera_graph_preview_layout` with explicit `nodeIds`
+  from the active editing level. Inspect positions, deltas and warnings before
+  calling `libera_graph_apply_layout` with its `previewId`. Include immutable
+  targets in `fixedNodeIds`. Stale previews are rejected. Unselected nodes and
+  comment frames stay fixed; comments are not automatically resized.
+- Frame all / Frame selected and pan/zoom change the view, not node positions.
+  Do not rearrange a wide graph just to fit one screen.
 - Parameter values are actual JSON values, not JSON serialized into a string.
   Obtain parameter IDs, types, enum options and defaults from node definitions.
 - Preserve `sourcePortId` and `targetPortId`. A multi-output node's outputs are

@@ -113,6 +113,7 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
         (Nodes.Contains(node) || ReferenceEquals(ContainingSpawnable, node));
 
     public bool IsRootGraph => _graphPath.Count == 0;
+    public IReadOnlyList<Guid> CurrentGraphPath => _graphPath.ToArray();
 
     public bool AutoDestroyWhenIdle
     {
@@ -1104,6 +1105,7 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(plan.Nodes);
         ArgumentNullException.ThrowIfNull(plan.Connections);
+        if (!Enum.IsDefined(plan.Layout)) throw new ArgumentException("Unknown graph layout mode.");
         if (plan.Nodes.Count == 0)
         {
             throw new ArgumentException("A graph plan must contain at least one node.", nameof(plan));
@@ -1220,6 +1222,15 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
                 source.Id, target.Id, targetPortId, sourcePortId));
         }
 
+        if (plan.Layout != GraphLayoutMode.Manual)
+        {
+            var additions = nodesByKey.Values.ToArray();
+            var pinned = plan.Nodes.Where(spec => spec.IsPositionFixed).Select(spec => nodesByKey[spec.Key].Id).ToHashSet();
+            var top = Nodes.Count == 0 ? 80 : Nodes.Max(node => GraphFlowLayout.Bounds(node).Bottom) + 80;
+            var moves = GraphFlowLayout.Arrange(additions, plannedConnections, Nodes.ToArray(), pinned,
+                plan.Layout, new Point(80, top));
+            foreach (var move in moves) nodesByKey.Values.First(node => node.Id == move.NodeId).SetPosition(move.X, move.Y);
+        }
         var current = CreateCurrentSnapshot();
         var plannedNodes = nodesByKey.Values.Select(node => new GraphNodeSnapshot(
             node.Id,
