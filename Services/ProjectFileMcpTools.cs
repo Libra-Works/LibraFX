@@ -10,6 +10,34 @@ namespace LiberaFx.Services;
 [McpServerToolType]
 public sealed class ProjectFileMcpTools
 {
+    [McpServerTool(Name = "libera_graph_status", ReadOnly = true, OpenWorld = false)]
+    [Description("Read the current document path (null for unsaved documents), graph breadcrumbs, editor problems and undo/redo availability. Unavailable to graph-scoped chat requests.")]
+    public static Task<string> Status(MainViewModel documents)
+    {
+        ChatMcpExecution.RequireProjectFileAccess();
+        return ChatMcpExecution.InvokeAsync(() =>
+        {
+            var document = documents.ActiveDocument ?? throw new McpException("No document is open.");
+            var graph = document.Workspace;
+            var path = graph.CurrentGraphPath;
+            return JsonSerializer.Serialize(new
+            {
+                documentId = document.Id,
+                documentPath = Uri.TryCreate(document.FileKey, UriKind.Absolute, out var uri) && uri.IsFile ? uri.LocalPath : null,
+                fileName = document.FileName,
+                isDirty = document.IsDirty,
+                isReadOnly = graph.IsReadOnly,
+                breadcrumbs = graph.Breadcrumbs.Select(crumb => new
+                {
+                    name = crumb.Name, depth = crumb.Depth,
+                    nodeId = crumb.Depth > 0 && crumb.Depth <= path.Count ? (Guid?)path[crumb.Depth - 1] : null
+                }),
+                problems = graph.TypeProblems.Select(problem => new { nodeId = problem.Node.Id, message = problem.Message }),
+                canUndo = graph.History.CanUndo, canRedo = graph.History.CanRedo
+            });
+        });
+    }
+
     [McpServerTool(Name = "libera_graph_open_project", Destructive = false, OpenWorld = false)]
     [Description("Open and activate an absolute local .lfxproj path without a file dialog. Preserves other open documents and their unsaved edits. Reopening an already open file activates it without discarding changes. Validates the project and restores its full history. Unavailable to graph-scoped chat requests.")]
     public static Task<string> Open(MainViewModel documents,

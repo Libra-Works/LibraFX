@@ -113,7 +113,7 @@ public sealed class GraphDebugTools
     internal static GraphEditorView FindView(ActiveGraphProvider provider)
     {
         if (Environment.GetEnvironmentVariable("LIBERAFX_MCP_DEBUG") != "1")
-            throw new McpException("Graph UI debugging is disabled. Start LIBERA FX with LIBERAFX_MCP_DEBUG=1 to enable it.");
+            throw new McpException("This opt-in UI automation tool is disabled. Use libera_graph_* tools for semantic graph editing, or restart an isolated LIBERA FX session with LIBERAFX_MCP_DEBUG=1 for viewport inspection and UI input.");
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
             throw new McpException("The desktop UI is unavailable.");
         return desktop.Windows.SelectMany(window => window.GetVisualDescendants().OfType<GraphEditorView>())

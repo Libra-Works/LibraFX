@@ -36,7 +36,7 @@ Converterでは既存の `--nodes <ディレクトリ>` で同じ定義を読み
 接続時・問題一覧・コンパイル時には、未登録、候補1件、複数候補を区別します。
 複数候補ではノードと出力を明示的に選びます。変換チェーンの自動探索は行いません。
 非アクティブなプロジェクトのノードを、編集時の候補として提示しません。
-MCPの `libera_graph_list_node_types` も `conversions` を含む定義を返します。
+MCPの `libera_graph_list_node_types` は既定で概要を返します。`kinds` または `query` で対象を絞り、`summaryOnly: false` を指定すると `conversions` を含む定義を取得できます。
 
 Matrix、Color、Quaternion、Vector4は別の型です。登録がなければ、幅が一致しても
 接続できません。ColorとVector4は専用の明示変換ノードを使用します。

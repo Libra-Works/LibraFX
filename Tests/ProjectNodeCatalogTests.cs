@@ -105,7 +105,7 @@ internal static class ProjectNodeCatalogTests
                 if (!GraphSnapshot.ContentEquals(bothProjects, loaded.Graph))
                     throw new InvalidOperationException("A graph containing retained project types could not round-trip.");
             }
-            var listTypes = LiberaFxMcpTools.ListNodeTypes(provider);
+            var listTypes = LiberaFxMcpTools.ListNodeTypes(provider, kinds: [firstType.ToString("D"), secondType.ToString("D")]);
             WaitFor(() => listTypes.IsCompleted);
             using (var types = JsonDocument.Parse(listTypes.GetAwaiter().GetResult()))
             {

@@ -104,7 +104,8 @@ internal static class LogicalSignalTests
             "Project save/load changed logical modes, types or named connections.");
 
         var provider = new ActiveGraphProvider(workspace);
-        var nodeTypesTask = LiberaFxMcpTools.ListNodeTypes(provider);
+        var nodeTypesTask = LiberaFxMcpTools.ListNodeTypes(provider, summaryOnly: false,
+            kinds: [GraphLogicalSchema.CompareTypeId.ToString("D"), SignalToNumberDefinition.Kind.Value]);
         Dispatcher.UIThread.RunJobs();
         var nodeTypes = nodeTypesTask.GetAwaiter().GetResult();
         Require(nodeTypes.Contains(GraphLogicalSchema.CompareTypeId.ToString("D"), StringComparison.Ordinal) &&

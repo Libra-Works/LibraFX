@@ -423,7 +423,7 @@ public sealed class GraphNodeViewModel : ObservableObject
         RefreshLocalizedText();
     }
 
-    private static GraphNodeDefinition EffectiveDefinition(GraphNodeDefinition definition,
+    internal static GraphNodeDefinition EffectiveDefinition(GraphNodeDefinition definition,
         IReadOnlyList<NodeParameterSnapshot>? parameters, GraphSnapshot? childGraph) =>
         GroupBoundarySchema.Effective(SpawnableGroupSchema.Effective(
             SequenceSchema.Effective(GameIoSchema.Effective(

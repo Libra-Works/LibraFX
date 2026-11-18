@@ -29,6 +29,7 @@ public sealed class GpuParticleMcpTools
         flowKinds = new[] { "Spawn", "Update", "RenderBillboard" },
         futureUnsupported = new[] { "RenderStartTexture", "ComputePass", "Quaternion" },
         resourceKinds = Enum.GetNames<ResourceKind>(),
+        backendCapabilities = new[] { GpuBackendCapabilities.Unreal, GpuBackendCapabilities.Unity },
         textGrammar = "Restricted original typed DSL: let, @Attribute assignment, param(\"deltaTime\"), float2/3/4 constructors, registered math. Not VEX/HLSL.",
         editActions = new[] { "add", "remove", "update", "move", "connect", "disconnect", "write", "write-remove",
             "text", "draft", "discard-draft", "capacity", "flow-add", "flow-remove", "flow-move", "flow-update", "resource", "renderer" },
@@ -47,7 +48,9 @@ public sealed class GpuParticleMcpTools
     });
 
     [McpServerTool(Name = "gpu_create_particle"), Description("Create a persistent GPU Particle CPU container with valid Spawn/Update/Billboard starter IR. Returns stable node ID; no GPU execution.")]
-    public static async Task<string> Create(ActiveGraphProvider activeGraph, double x = 80, double y = 80) =>
+    public static async Task<string> Create(ActiveGraphProvider activeGraph,
+        [Description("Horizontal graph coordinate.")] double x = 80,
+        [Description("Vertical graph coordinate.")] double y = 80) =>
         await OnUi(() =>
         {
             var node = GpuParticleEditorService.Create(activeGraph.Graph, x, y);
@@ -55,15 +58,19 @@ public sealed class GpuParticleMcpTools
         });
 
     [McpServerTool(Name = "gpu_read_program"), Description("Read one GPU Particle's portable IR, authoring positions/text drafts and node/kernel/span diagnostics in the active graph.")]
-    public static async Task<string> Read(ActiveGraphProvider activeGraph, string nodeId) =>
+    public static async Task<string> Read(ActiveGraphProvider activeGraph,
+        [Description("GUID of a GPU container node in the active graph.")] string nodeId) =>
         await OnUi(() =>
         {
             var state = GpuParticleEditorService.ReadState(activeGraph.Graph.GetNode(Guid.Parse(nodeId)));
             return Json(new { nodeId, state, diagnostics = GpuParticleEditorService.Diagnostics(state) });
         });
 
-    [McpServerTool(Name = "gpu_apply_plan"), Description("Apply bounded JSON array of GPU edits atomically as one undo operation to one active-graph GPU container. Invalid typed visual graphs may be retained; requireValid rejects the entire plan. Failed text replacement preserves original IR plus draft diagnostics.")]
-    public static async Task<string> ApplyPlan(ActiveGraphProvider activeGraph, string nodeId, string editsJson, bool requireValid = false) =>
+    [McpServerTool(Name = "gpu_apply_plan"), Description("Apply a bounded JSON array of GPU edits as one undo operation. Read editSchema from gpu_describe before constructing the plan. Invalid typed visual graphs may be retained; requireValid rejects the entire plan. Failed text replacement preserves original IR plus draft diagnostics.")]
+    public static async Task<string> ApplyPlan(ActiveGraphProvider activeGraph,
+        [Description("GUID of a GPU container node in the active graph.")] string nodeId,
+        [Description("JSON string containing an array of edit objects matching gpu_describe's editSchema.")] string editsJson,
+        [Description("Reject the whole plan if its typed visual graph cannot compile.")] bool requireValid = false) =>
         await OnUi(() =>
         {
             if (System.Text.Encoding.UTF8.GetByteCount(editsJson) > GpuParticleEditorService.MaxStateBytes)
@@ -75,7 +82,10 @@ public sealed class GpuParticleMcpTools
         });
 
     [McpServerTool(Name = "gpu_compile"), Description("Validate/compile one GPU Particle for SourceExport only. Returns node-specific errors, hashes and export metadata; source included only if requested. Does not execute GPU or send unknown engine commands.")]
-    public static async Task<string> Compile(ActiveGraphProvider activeGraph, string nodeId, string format = "usf", bool includeSource = false) =>
+    public static async Task<string> Compile(ActiveGraphProvider activeGraph,
+        [Description("GUID of a GPU container node in the active graph.")] string nodeId,
+        [Description("Shader format: usf, hlsl, or compute.")] string format = "usf",
+        [Description("Include generated shader text in addition to metadata.")] bool includeSource = false) =>
         await OnUi(() =>
         {
             var state = GpuParticleEditorService.ReadState(activeGraph.Graph.GetNode(Guid.Parse(nodeId)));
@@ -96,7 +106,9 @@ public sealed class GpuParticleMcpTools
         });
 
     [McpServerTool(Name = "gpu_export_source"), Description("Return explicitly requested IR/shader source and matching metadata for caller-chosen export. Does not write unsolicited files, execute GPU, or publish anything.")]
-    public static async Task<string> Export(ActiveGraphProvider activeGraph, string nodeId, string format = "json") =>
+    public static async Task<string> Export(ActiveGraphProvider activeGraph,
+        [Description("GUID of a GPU container node in the active graph.")] string nodeId,
+        [Description("Output format: json for IR, or usf, hlsl, or compute for shader source.")] string format = "json") =>
         await OnUi(() =>
         {
             var state = GpuParticleEditorService.ReadState(activeGraph.Graph.GetNode(Guid.Parse(nodeId)));
@@ -109,7 +121,9 @@ public sealed class GpuParticleMcpTools
         });
 
     [McpServerTool(Name = "gpu_export_bundle"), Description("Explicitly request one GPU Particle source delivery bundle: canonical IR, matching USF/metadata and Core LGPK packets, UI texture path metadata and caller programSequence. SourceExport only, not runtime execution.")]
-    public static async Task<string> ExportBundle(ActiveGraphProvider activeGraph, string nodeId, long programSequence = 0) =>
+    public static async Task<string> ExportBundle(ActiveGraphProvider activeGraph,
+        [Description("GUID of a GPU container node in the active graph.")] string nodeId,
+        [Description("Caller-provided sequence number for delivery metadata.")] long programSequence = 0) =>
         await OnUi(() =>
         {
             var node = activeGraph.Graph.CreateCurrentSnapshot().Nodes.Single(n => n.Id == Guid.Parse(nodeId));
@@ -118,7 +132,8 @@ public sealed class GpuParticleMcpTools
         });
 
     [McpServerTool(Name = "gpu_open_workspace"), Description("Open the dedicated GPU workspace overlay for one active-graph GPU Particle, preserving CPU document and dock layout. This authoring mode does not execute GPU.")]
-    public static async Task<string> Open(ActiveGraphProvider activeGraph, string nodeId) =>
+    public static async Task<string> Open(ActiveGraphProvider activeGraph,
+        [Description("GUID of a GPU container node in the active graph.")] string nodeId) =>
         await OnUi(() =>
         {
             var node = activeGraph.Graph.GetNode(Guid.Parse(nodeId));

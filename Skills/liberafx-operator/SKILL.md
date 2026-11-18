@@ -61,7 +61,8 @@ unsaved changes; it is **not** a reload-from-disk operation.
 
 ## Inspect before editing
 
-Read `libera_graph_read` and `libera_graph_list_node_types` before changing the
+Read `libera_graph_read` and use `libera_graph_list_node_types` with `query` or
+`group` before changing the
 graph. Preserve unrelated nodes, connections, names, values and document tabs.
 Use readable node names in explanations; UUIDs are tool identifiers, not useful
 user-facing labels.
