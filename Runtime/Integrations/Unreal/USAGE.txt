@@ -51,6 +51,31 @@ Compiler verification
   The -NoLink check is compilation only; it does not validate linking, execution
   or a console SDK. Perform the final Unreal build and execution check with MSVC.
 
+Graph-authored ModelDraw Cube verification
+  Generate Cube.lfxproj and Cube.lfxp with the isolated --model-draw fixture
+  selector described in the Unity USAGE.txt. The same compiler-produced package
+  is consumed by both adapters; it is not the handcrafted native cube program.
+  Run Automation RunTests Libra.Editor.ModelDraw.CubePackage with
+    -LibraModelDrawFixture=C:\isolated\cube-fixture
+  using a rendering-capable Editor (not NullRHI). It checks the public
+  ULibraEffectComponent, actual mesh/transform/material values and camera pixels,
+  and writes Cube.Unreal.png beside the fixture.
+  To also create a persistent demo in a dedicated project, explicitly pass
+    -LibraModelDrawSaveDemo
+    -LibraModelDrawVerificationProject=C:\isolated\YourProject.uproject
+  This refuses existing sample assets/maps and writes
+  /Game/LiberaFxModelDrawSample/Cube. Open that map and press Play.
+  In a subsequent Editor process, run
+  Automation RunTests Libra.Editor.ModelDraw.SavedScenePlay with only the
+  verification-project argument to check map reload and automatic Play without
+  access to the original compiler fixture directory.
+  The map contains a public LibraEffectActor, embedded package, project-local
+  bindings/material and PlayerStart; the engine's Cube asset is not modified.
+  /Game/LiberaFxSamples/Cube.Cube is an explicit sample lookup alias bound to
+  /Engine/BasicShapes/Cube.Cube here, not a confirmed portable asset identity.
+  Mesh size/world units remain engine-native (Unity Cube 1 unit, UE Cube 100 cm);
+  the two demonstration cameras are placed accordingly.
+
 Engine version compatibility
   Keep one shared plugin source for UE 5.7, 5.8 and 5.9. Use engine version
   guards only where APIs differ; do not maintain a separate source fork per SDK.

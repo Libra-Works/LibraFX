@@ -39,6 +39,12 @@ internal static class Program
 
     private static void MainCore(string[] args)
     {
+        if (args is ["--model-draw", var modelFixtureDirectory])
+        {
+            InitializeIsolatedUi();
+            ModelDrawTests.Run(modelFixtureDirectory);
+            return;
+        }
         if (args is ["--authored-quality", var qualityFixtureDirectory])
         {
             InitializeIsolatedUi();

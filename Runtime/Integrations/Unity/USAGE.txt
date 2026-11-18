@@ -28,6 +28,32 @@ scalar evaluate/default/read cycles allocate or reallocate no native heap.
 liberafx_runtime remains a static C++ library; only the bridge is a shared DLL.
 Unix visibility must also hide symbols compiled into the static runtime.
 
+Graph-authored ModelDraw Cube verification
+-----------------------------------------
+The older "Native cube sample" menu uses a handcrafted program. To exercise
+asset-based node creation, project save/load and the actual graph compiler:
+  Set LIBERAFX_DATA_ROOT to an absolute isolated application-data directory.
+  dotnet run --project Tests\CommentImageSmokeTests.csproj -- --model-draw C:\isolated\cube-fixture
+Use isolated build output when another editor/build is using the repository.
+This writes Cube.lfxproj and Cube.lfxp. Open the former in LIBERA FX to inspect
+the Color connection and the ModelDraw rotation/scale defaults.
+
+After installing this Unity adapter and a Release native library in a dedicated
+project, set LIBERAFX_VERIFICATION_PROJECT to that absolute project directory
+and LIBERAFX_MODEL_DRAW_FIXTURE_DIR to the fixture directory. Run Unity with
+-batchmode -quit -executeMethod LiberaFx.Unity.Editor.LiberaFxModelDrawVerification.RunBatch
+(also use the rendering flags above where required; do not use -nographics).
+The check renders camera pixels, writes Cube.Unity.png locally, and creates
+Assets\LiberaFxModelDrawSample\Cube.unity with persistent package/binding assets.
+It refuses to overwrite an existing sample folder. Reopen that scene and press
+Play; VerifySavedScene is a separate guarded entrypoint for reloading it.
+
+The sample's /Game/LiberaFxSamples/Cube.Cube is an explicit legacy lookup alias,
+not a Unity asset path or a portable resource ID. CubeBindings maps it to
+Unity's built-in Cube mesh and maps the material's Color input to _Color.
+The Unreal verification binds the same sample lookup key independently.
+There is no automatic cross-project asset-identity inference in this demo.
+
 Unity installation (Unity 2021.3+ APIs; verified against 6000.2.6f1 assemblies)
 ----------------------------------------------------------------------------
 Unity 7 alpha verification of these Built-In RP sample shaders requires
