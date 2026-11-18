@@ -16,6 +16,7 @@ public:
     bool Update(double time, bool rootFinished);
     int32 DrawCount() const;
     int32 GpuCount() const;
+    void ClearPreviewDebugDraw();
 
 private:
     struct FImpl;

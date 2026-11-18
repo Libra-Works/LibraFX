@@ -42,6 +42,9 @@ public:
     // Local owner-thread borrow only; never send UObject addresses over transport.
     auto Resolve(liberafx::InstanceId target) const -> ULibraEffectComponent*;
     auto GetSessionId() const -> liberafx::SessionId;
+    auto ClearPreviewDebugDraw(liberafx::InstanceId target) -> liberafx::Result;
+    auto DisconnectPreviewDebugDraw() -> liberafx::Result;
+    auto AttachPreviewDebugDraw() -> liberafx::Result;
     auto Close() -> liberafx::Result;
     // Explicit owner teardown: force destroys live components, cancels queued
     // operations into consumable failure completions, rejects further work.

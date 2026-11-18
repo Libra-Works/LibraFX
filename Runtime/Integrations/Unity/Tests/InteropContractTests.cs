@@ -17,11 +17,31 @@ namespace LiberaFx.Unity.Tests
 #if NET8_0
             var fixtureDirectory = Environment.GetEnvironmentVariable("LIBERAFX_SPRITE_COMPOSITION_FIXTURE_DIR");
             if (!string.IsNullOrEmpty(fixtureDirectory)) VerifyCompiledSpriteComposition(fixtureDirectory);
+            var instanceDirectory = Environment.GetEnvironmentVariable("LIBERAFX_INSTANCE_GAMEIO_FIXTURES");
+            if (!string.IsNullOrEmpty(instanceDirectory)) VerifyInstanceGameIo(instanceDirectory);
 #endif
             Console.WriteLine("LiberaFx POD layout, P/Invoke and allocation contracts passed.");
         }
 
 #if NET8_0
+        private static void VerifyInstanceGameIo(string directory)
+        {
+            using var host = new NativeSpawnableHost(File.ReadAllBytes(Path.Combine(directory, "InstanceGameIo.lfxp")));
+            var container = File.ReadAllBytes(Path.Combine(directory, "InstanceGameIo.container"));
+            Assert(host.Advance(0, 0) == NativeResult.Ok && host.FireGameSignal("spawn") == NativeResult.Ok);
+            Assert(host.PopEvent(out var spawned) == NativeResult.Ok && spawned != null && spawned.InstanceId != 0);
+            Assert(host.GetInstanceTarget(container, spawned.InstanceId, out var generation) == NativeResult.Ok);
+            Assert(host.SetInstanceProperty(generation, container, spawned.InstanceId, "speed", new[] { 17d }) == NativeResult.Ok);
+            Assert(host.Advance(1, 1) == NativeResult.Ok &&
+                host.GetInstanceProperty(generation, container, spawned.InstanceId, "result", out var values) == NativeResult.Ok &&
+                values.Length == 1 && values[0] == 17);
+            Assert(host.FireInstanceSignal(generation, container, spawned.InstanceId, "ping") == NativeResult.Ok &&
+                host.PopGameIoEvent(out var signal) == NativeResult.Ok && signal != null &&
+                signal.InstanceId == spawned.InstanceId && signal.PortName == "pong");
+            Assert(host.SetInstanceProperty(generation, container, spawned.InstanceId, "speed\0wrong", new[] { 5d }) ==
+                NativeResult.InvalidArgument);
+        }
+
         private static void VerifyCompiledSpriteComposition(string directory)
         {
             using var host = new NativeSpawnableHost(File.ReadAllBytes(Path.Combine(directory, "composition.lfxp")));

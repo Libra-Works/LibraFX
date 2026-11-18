@@ -39,6 +39,23 @@ internal static class Program
 
     private static void MainCore(string[] args)
     {
+        if (args is ["--source-batch-contracts"])
+        {
+            InitializeIsolatedUi();
+            LiberaFx.Tests.GameIoCompilationTests.Run();
+            LiberaFx.Tests.SkeletalPoseSourceTests.Run();
+            PreviewDebugDrawTests.Run();
+            GraphRevisionDiffTests.Run();
+            PreviewAcknowledgementTests.Run();
+            DocumentationCaptureTests.Run();
+            return;
+        }
+        if (args is ["--preview-debug"] or ["--preview-debug", _])
+        {
+            InitializeIsolatedUi();
+            PreviewDebugDrawTests.Run(args.Length == 2 ? args[1] : null);
+            return;
+        }
         if (args is ["--authoring-batch"])
         {
             InitializeIsolatedUi();
@@ -350,6 +367,9 @@ internal static class Program
                 throw new ArgumentException("Set isolated LIBERAFX_DATA_ROOT for Game I/O regression.");
             AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
             LiberaFx.Tests.GameIoCompilationTests.Run();
+            PreviewAcknowledgementTests.Run();
+            DocumentationCaptureTests.Run();
+            LiberaFx.Tests.SkeletalPoseSourceTests.Run();
             Console.WriteLine("Game I/O graph, metadata, signal lowering and package regressions passed.");
             return;
         }

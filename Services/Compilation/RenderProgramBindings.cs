@@ -11,13 +11,28 @@ public static class RenderProgramBindings
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     public static bool IsRenderNode(GraphNodeKind kind) => GraphNodeDefinition.All.Any(definition =>
-        definition.Kind == kind && definition.TypeName is "ModelDraw" or "SpriteDraw" or "SpriteAnimation" or "SpriteComposition");
+        definition.Kind == kind && definition.TypeName is "ModelDraw" or "SpriteDraw" or "SpriteAnimation" or "SpriteComposition")
+        || PreviewDebugDraw.IsDebugNode(kind);
 
     public static byte[] CreateScene(GraphSnapshot graph, long programSequence,
-        IRenderResourceBindingContext? resourceContext = null)
+        IRenderResourceBindingContext? resourceContext = null, VfxCompileOptions? options = null) =>
+        CreateSceneCore(graph, programSequence, resourceContext, options, allowSourceMetadata: false);
+
+    internal static byte[] CreateSceneForPackage(GraphSnapshot graph, long programSequence,
+        IRenderResourceBindingContext? resourceContext = null, VfxCompileOptions? options = null) =>
+        CreateSceneCore(graph, programSequence, resourceContext, options, allowSourceMetadata: true);
+
+    private static byte[] CreateSceneCore(GraphSnapshot graph, long programSequence,
+        IRenderResourceBindingContext? resourceContext, VfxCompileOptions? options, bool allowSourceMetadata)
     {
+        if (SkeletalPoseSchema.ContainsAuthoredSource(graph) ||
+            !allowSourceMetadata && SkeletalPoseSchema.ContainsSource(graph))
+            throw new NotSupportedException(
+                "Desktop render_scene evaluation cannot resolve SOURCE skeletal poses; use Unity or Unreal Spawnable package playback.");
+        if (options?.IncludePreviewDebugDraw != true) graph = PreviewDebugDraw.Strip(graph);
         var instanceScopes = CollectInstanceScopes(graph);
         graph = GroupExposedItems.Materialize(graph);
+        graph = SkeletalPoseSchema.Lower(graph);
         graph = GraphPolymorphism.Lower(GroupBoundaryLowering.Lower(graph));
         var nodes = Flatten(graph).ToDictionary(node => node.Id);
         var connections = Connections(graph).ToLookup(connection => connection.TargetNodeId);
@@ -35,6 +50,13 @@ public static class RenderProgramBindings
         {
             var localPath = instanceScopes.GetValueOrDefault(node.Id) ?? Array.Empty<Guid>();
             var instancePath = resourceContext?.GetInstancePath(node.Id, localPath) ?? localPath;
+            if (PreviewDebugDraw.IsDebugNode(node.Kind))
+            {
+                if (!PreviewDebugDraw.Enabled(node)) continue;
+                if (renderNodes.Count >= 128) throw new InvalidDataException("A render scope supports at most 128 draws.");
+                renderNodes.Add(PreviewDebugDraw.CreateDraw(node, nodes, connections, resourceContext, instancePath));
+                continue;
+            }
             var definition = RenderNodeSchema.Effective(GraphNodeDefinition.All.Single(item => item.Kind == node.Kind), node.Parameters);
             JsonElement Parameter(string id)
             {

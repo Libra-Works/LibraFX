@@ -70,6 +70,7 @@ public static class GameIoCompilationTests
         RequireInvalidMessage(() => SpawnableGroupPackage.Compile(new GraphSnapshot([templateWithGameIo], [])),
             "Spawn Input/Output", "Named Game I/O inside a Spawnable template must be rejected with guidance.");
         VerifyMatrixPorts();
+        VerifyInstancePorts();
 
         var duplicate = graph with
         {
@@ -120,6 +121,41 @@ public static class GameIoCompilationTests
     private static string PortShape(GameIoPort port) =>
         $"{port.NodeId:D}:{port.Name}:{port.Kind}:{port.Width}:{port.IsColor}:" +
         string.Join(",", port.RuntimeNodeIds ?? []);
+
+    private static void VerifyInstancePorts()
+    {
+        var input = Node(new GraphNodeKind("InstanceInputProperty"), ("name", "speed"));
+        var output = Node(new GraphNodeKind("InstanceOutputProperty"), ("name", "result"));
+        var signal = Node(new GraphNodeKind("InstanceInputSignal"), ("name", "ping"));
+        var response = Node(new GraphNodeKind("InstanceOutputSignal"), ("name", "pong"));
+        var matrix = Node(new GraphNodeKind("InstanceInputProperty"), ("name", "matrix"), ("valueType", 5));
+        var matrixOutput = Node(new GraphNodeKind("InstanceOutputProperty"), ("name", "matrixResult"), ("valueType", 5));
+        var child = new GraphSnapshot([input, output, signal, response, matrix, matrixOutput],
+            [new(input.Id, output.Id, "value", "value"), new(signal.Id, response.Id, "signal", "then"),
+             new(matrix.Id, matrixOutput.Id, "value", "value")]);
+        var spawnable = Node(GraphNodeKind.SpawnableGroup) with { ChildGraph = child };
+        var spawn = Node(GraphNodeKind.InputSignal, ("name", "spawn"));
+        var graph = new GraphSnapshot([spawn, spawnable], [new(spawn.Id, spawnable.Id, "spawn", "then")])
+            { AutoDestroyWhenIdle = false };
+        GraphValidator.ValidateDocument(graph);
+        var package = SpawnableGroupPackage.Compile(graph);
+        Require(package.GameIoPorts.Count == 1 && package.GameIoPorts[0].Name == "spawn" &&
+            package.Templates.Count == 1 && package.Templates[0].Bytecode.Length > 0,
+            "Dedicated instance ports must compile inside a template without leaking into shared root I/O.");
+        RequireInvalid(() => GraphValidator.ValidateDocument(new GraphSnapshot([input], [])),
+            "Instance ports must not be accepted as shared document-root ports.");
+        RequireInvalid(() => VfxProgram.Compile(new GraphSnapshot([input], [])),
+            "The public standalone compiler must not bypass instance-only placement.");
+        var nested = Node(GraphNodeKind.GraphGroup) with { ChildGraph = child };
+        RequireInvalid(() => GraphValidator.ValidateDocument(new GraphSnapshot(
+            [spawnable with { ChildGraph = new GraphSnapshot([nested], []) }], [])),
+            "Instance I/O must remain directly inside its Spawnable scope.");
+        var folder = Environment.GetEnvironmentVariable("LIBERAFX_INSTANCE_GAMEIO_FIXTURES");
+        if (string.IsNullOrWhiteSpace(folder)) return;
+        Directory.CreateDirectory(folder);
+        File.WriteAllBytes(Path.Combine(folder, "InstanceGameIo.lfxp"), SpawnableGroupPackageBinary.Serialize(package));
+        File.WriteAllBytes(Path.Combine(folder, "InstanceGameIo.container"), spawnable.Id.ToByteArray(bigEndian: true));
+    }
 
     private static GraphNodeSnapshot Node(GraphNodeKind kind, params (string Id, object Value)[] values)
     {

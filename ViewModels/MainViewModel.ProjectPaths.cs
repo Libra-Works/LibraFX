@@ -7,6 +7,12 @@ public partial class MainViewModel
 {
     private readonly SemaphoreSlim _projectPathGate = new(1, 1);
 
+    internal async Task OpenStartupProjectAsync(string path)
+    {
+        try { await OpenLocalProjectAsync(path); }
+        catch (Exception ex) { SetFileStatus("Messages.OpenProjectFailed", ex.Message); }
+    }
+
     public async Task<GraphDocumentViewModel> OpenLocalProjectAsync(string path)
     {
         Dispatcher.UIThread.VerifyAccess();

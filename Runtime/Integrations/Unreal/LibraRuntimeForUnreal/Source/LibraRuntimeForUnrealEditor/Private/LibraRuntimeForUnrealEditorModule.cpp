@@ -3,6 +3,7 @@
 #include "LibraAssetTypeActions.h"
 #include "LibraEditorPreviewSession.h"
 #include "LibraEffectAsset.h"
+#include "LibraSourceProjectDetails.h"
 #include "LibraSpawnableAsset.h"
 #include "LibraSpawnableAssetDetails.h"
 #include "PropertyEditorModule.h"
@@ -26,6 +27,8 @@ public:
         auto& propertyEditor = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
         propertyEditor.RegisterCustomClassLayout("LibraSpawnableAsset",
             FOnGetDetailCustomizationInstance::CreateStatic(&FLibraSpawnableAssetDetails::MakeInstance));
+        propertyEditor.RegisterCustomClassLayout("LibraEffectAsset",
+            FOnGetDetailCustomizationInstance::CreateStatic(&FLibraEffectAssetDetails::MakeInstance));
         propertyEditor.NotifyCustomizationModuleChanged();
         preview.Start();
     }
@@ -38,6 +41,7 @@ public:
         if (auto* propertyEditor = FModuleManager::GetModulePtr<FPropertyEditorModule>("PropertyEditor"))
         {
             propertyEditor->UnregisterCustomClassLayout("LibraSpawnableAsset");
+            propertyEditor->UnregisterCustomClassLayout("LibraEffectAsset");
             propertyEditor->NotifyCustomizationModuleChanged();
         }
     }

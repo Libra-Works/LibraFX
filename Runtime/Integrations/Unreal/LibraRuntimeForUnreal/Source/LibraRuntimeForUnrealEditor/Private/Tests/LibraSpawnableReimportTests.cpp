@@ -3,9 +3,11 @@
 #include "LibraSpawnableAsset.h"
 #include "LibraSpawnableFactory.h"
 #include "LibraEffectAsset.h"
+#include "../LibraSourceProjectDetails.h"
 #include "AssetToolsModule.h"
 #include "IAssetTypeActions.h"
 #include "EditorFramework/AssetImportData.h"
+#include "Engine/StaticMesh.h"
 #include "HAL/FileManager.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
@@ -13,6 +15,34 @@
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeExit.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraSourceProjectPathTest,
+    "Libra.Editor.Resources.SourceProjectPath",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraSourceProjectPathTest::RunTest(const FString&)
+{
+    const auto directory = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir());
+    IFileManager::Get().MakeDirectory(*directory, true);
+    const auto source = FPaths::CreateTempFilename(*directory, TEXT("Libra source "), TEXT(".lfxproj"));
+    ON_SCOPE_EXIT { IFileManager::Get().Delete(*source); };
+    auto path = FString{};
+    auto error = FText{};
+    TestFalse(TEXT("Reject a relative path"), LibraSourceProject::ValidatePath(TEXT("relative.lfxproj"), path, error));
+    TestFalse(TEXT("Reject a compiled path"), LibraSourceProject::ValidatePath(
+        FPaths::ChangeExtension(source, TEXT("lfxp")), path, error));
+    TestFalse(TEXT("Reject a quoted path"), LibraSourceProject::ValidatePath(
+        FString::Printf(TEXT("\"%s\""), *source), path, error));
+    TestFalse(TEXT("Reject a network path without opening it"), LibraSourceProject::ValidatePath(
+        TEXT("//host/share/project.lfxproj"), path, error));
+    TestFalse(TEXT("Reject a missing local file"), LibraSourceProject::ValidatePath(source, path, error));
+    if (!TestTrue(TEXT("Write an isolated source placeholder"), FFileHelper::SaveStringToFile(TEXT("{}"), *source)))
+        return false;
+    TestTrue(TEXT("Accept an existing local .lfxproj, including spaces"),
+        LibraSourceProject::ValidatePath(source, path, error));
+    TestTrue(TEXT("The actual source path is returned"), FPaths::IsSamePath(source, path));
+    return true;
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraAssetFilterTest,
     "Libra.Editor.Spawnable.AssetFilters",
@@ -70,6 +100,25 @@ bool FLibraSpawnableReimportTest::RunTest(const FString&)
     if (!TestNotNull(TEXT("Factory imports a package"), asset)) return false;
     TestTrue(TEXT("Imported binary is embedded"), TArray<uint8>(asset->GetPackageBytes()) == bytes);
     if (!TestNotNull(TEXT("Import metadata exists"), asset->AssetImportData.Get())) return false;
+    const auto projectPath = FPaths::ChangeExtension(sourcePath, TEXT("lfxproj"));
+    asset->SourceProjectPath.FilePath = projectPath;
+    auto keys = TArray<FLibraPackageResourceOverride>{};
+    auto detail = FString{};
+    if (!TestTrue(TEXT("Read embedded renderer resource keys"), asset->GetPackageResourceKeys(keys, detail)))
+    {
+        AddError(detail);
+        return false;
+    }
+    const auto* model = keys.FindByPredicate([](const auto& key) { return key.Kind == ELibraPackageResourceKind::Model; });
+    UStaticMesh* replacement = nullptr;
+    if (model)
+    {
+        replacement = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+        if (!TestNotNull(TEXT("Persistent test mesh"), replacement) ||
+            !TestTrue(TEXT("Accept matching model override"),
+                asset->SetResourceOverride(model->Identity, model->Kind, replacement, detail)))
+            return false;
+    }
 
     auto updated = bytes;
     // LFXP v1 stores AutoDestroyWhenIdle immediately after its 24-byte header.
@@ -82,6 +131,11 @@ bool FLibraSpawnableReimportTest::RunTest(const FString&)
     TestTrue(TEXT("Editor reimport manager reloads from source"),
         FReimportManager::Instance()->Reimport(asset, false, false));
     TestTrue(TEXT("Reimport replaces the embedded binary"), TArray<uint8>(asset->GetPackageBytes()) == updated);
+    TestEqual(TEXT("Reimport preserves the independent .lfxproj link"), asset->SourceProjectPath.FilePath, projectPath);
+    TestTrue(TEXT("The binary is still the import source"),
+        FPaths::IsSamePath(asset->AssetImportData->GetFirstFilename(), sourcePath));
+    if (model)
+        TestTrue(TEXT("Reimport preserves the override"), asset->FindResourceOverride(model->Identity, model->Kind) == replacement);
 
     auto invalid = updated;
     invalid[0] = 0;
@@ -89,6 +143,13 @@ bool FLibraSpawnableReimportTest::RunTest(const FString&)
         return false;
     TestTrue(TEXT("Malformed source fails reimport"), factory->Reimport(asset) == EReimportResult::Failed);
     TestTrue(TEXT("Failed reimport preserves binary"), TArray<uint8>(asset->GetPackageBytes()) == updated);
+    if (model)
+    {
+        TestTrue(TEXT("Failed reimport preserves the override"), asset->FindResourceOverride(model->Identity, model->Kind) == replacement);
+        TestTrue(TEXT("Clearing a model override restores source lookup"),
+            asset->SetResourceOverride(model->Identity, model->Kind, nullptr, detail) &&
+            !asset->FindResourceOverride(model->Identity, model->Kind));
+    }
 
     IFileManager::Get().Delete(*sourcePath);
     TestTrue(TEXT("Missing source fails reimport"), factory->Reimport(asset) == EReimportResult::Failed);

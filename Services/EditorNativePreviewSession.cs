@@ -58,16 +58,20 @@ public sealed class EditorNativePreviewSession : IDisposable
         return path;
     }
 
-    public EditorNativePreviewSession(GraphSnapshot graph, string? nativeLibraryPath = null)
+    public EditorNativePreviewSession(GraphSnapshot graph, string? nativeLibraryPath = null,
+        VfxCompileOptions? options = null)
     {
         VfxProgram.ValidateForCompilation(graph);
+        if (SkeletalPoseSchema.ContainsSource(graph))
+            throw new NotSupportedException(
+                "Editor-native live preview cannot capture engine skeletal poses. SOURCE is currently supported only during Unity or Unreal Spawnable package playback.");
         _graph = graph;
         _hasSignalKeys = SignalTimeline.ContainsKeys(graph);
         _library = ResolveLibraryPath(nativeLibraryPath);
         if (ContainsGpu(graph))
             throw new NotSupportedException("Editor-native lifecycle preview cannot yet combine GPU particle containers with Spawnable lifecycles. Preview GPU graphs separately; no GPU payload will be silently discarded.");
-        _package = SpawnableGroupPackage.Compile(graph, includePreviewSignalKeys: true);
-        _rootRender = RenderProgramBindings.CreateScene(WithoutTemplates(graph), 0);
+        _package = SpawnableGroupPackage.Compile(graph, includePreviewSignalKeys: true, options: options);
+        _rootRender = RenderProgramBindings.CreateScene(WithoutTemplates(graph), 0, options: options);
         try { _native = new EditorNativeHostSession(_package, _library); }
         catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or EntryPointNotFoundException)
         {
@@ -135,6 +139,9 @@ public sealed class EditorNativePreviewSession : IDisposable
             Append(template.RenderConfiguration, instance.Container, instance.Instance,
                 _native.InstanceStartTime(instance.Container, instance.Instance), nodes);
         }
+        if (playback?.DebugDrawStopped == true)
+            for (var index = nodes.Count - 1; index >= 0; --index)
+                if (nodes[index]?["previewOnly"]?.GetValue<bool>() == true) nodes.RemoveAt(index);
         if (nodes.Count > 128) throw new InvalidDataException("Editor-native preview exceeds the 128 evaluated-renderer limit.");
         var result = new JsonObject
         {

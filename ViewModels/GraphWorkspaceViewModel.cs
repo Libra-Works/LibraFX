@@ -1949,8 +1949,10 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
         if (rootDestroyCount != 0 && (owner is not null ||
             Nodes.Count(node => node.Definition.Kind.Value == "OnDestroy") + rootDestroyCount > 1))
             throw new InvalidOperationException(LocalizationService.Shared.Get("Messages.OnDestroyPlacement"));
-        if (additions.Any(GameIoSchema.IsNode) && owner is not null)
+        if (additions.Any(kind => GameIoSchema.IsNode(kind) && !GameIoSchema.IsInstanceNode(kind)) && owner is not null)
             throw new InvalidOperationException("Game I/O nodes must be placed directly in the root graph.");
+        if (additions.Any(GameIoSchema.IsInstanceNode) && owner?.Kind != GraphNodeKind.SpawnableGroup)
+            throw new InvalidOperationException("Instance Game I/O nodes must be placed directly inside a Spawnable Group.");
         if (additions.Any(kind => GroupBoundarySchema.IsInput(kind) || GroupBoundarySchema.IsOutput(kind)) &&
             owner?.Kind != GraphNodeKind.GraphGroup)
             throw new InvalidOperationException("Group boundary nodes must be placed directly inside a Graph Group.");

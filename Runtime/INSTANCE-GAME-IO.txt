@@ -1,0 +1,45 @@
+INSTANCE GAME I/O
+================
+
+Shared Input/Output Property and Signal nodes remain root-scoped. Their existing
+behavior does not change. Dedicated Instance Input/Output Property and Signal
+nodes belong directly inside a Spawnable Group. Names are unique per template,
+not global across pools. They support Float, FloatX2/3/4, Color and Matrix, using
+the existing explicit numeric Game I/O representation. Int32 is not coerced.
+
+Use the Spawn event's container UUID and opaque instance ID to acquire a target
+with SpawnableHost::debugTarget (Instance scope), or the additive C ABI
+libra_spawnable_host_instance_target. Keep the returned host generation with that
+identity. IDs are not pointers or slot indices. Cross-host generations, retired
+IDs and a recreated host are rejected; never retry against another instance.
+
+setInstanceProperty / set_instance_property updates only the selected instance's
+unconnected defaults. Inputs initially use existing typed defaults: zero numeric
+lanes and identity Matrix. A successful set becomes visible at the next completed
+evaluation, not retroactively during an executing job. Read last-evaluated input
+or output values with instanceProperty / get_instance_property. A read before an
+initial successful evaluation may report NotReady. Reads are explicit; child
+property-change events are not synthesized.
+
+fireInstanceSignal / fire_instance_signal sends one arrival at the current
+evaluated effect time to exactly that instance. It does not broadcast or request
+natural destruction. Instance Output Signal produces the normal scoped host
+Signal event AND a Game I/O event containing containerId, instanceId and a
+template-local portIndex. Resolve names with instancePortName or
+copy_instance_game_io_port_name, not the root port table. Drain both bounded
+queues and retry a QueueRejected advance at the same time. Force/Stop clears
+undelivered instance I/O notices; an ordinary natural-end notice already queued
+still identifies the historical instance, not a new live target.
+
+All facade calls are owner-thread/job-boundary operations, not a worker mailbox.
+Unity exposes matching methods on NativeSpawnableHost and the playback component.
+Unreal exposes them on the public ULibraEffectComponent, forwarding internally;
+Blueprint int64 fields preserve unsigned identity bits. Targeted signal delivery
+returns Busy while an execution debugger owns evaluation, rather than blocking
+the engine thread. This is separate from asynchronous creation/destruction.
+
+Authoring uses four stable node type IDs and existing version-7+ typed Game I/O
+metadata inside template bytecode. No incompatible record layout is introduced.
+Old shared nodes remain forbidden inside templates. Existing v1-v11 bytecode
+readers retain their compatibility rules; an older host that forbids template
+Game I/O will explicitly reject a new package instead of silently broadcasting.

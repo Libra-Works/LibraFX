@@ -1,0 +1,4 @@
+{
+  "Connections.ProgramAckPending": "{0}: program #{1} sent; waiting for remote confirmation.",
+  "Connections.ProgramAcknowledged": "{0}: remote status confirmed program #{1} receipt (not rendering success)."
+}

@@ -1,0 +1,7 @@
+{
+  "Editor.Node.InstanceInputProperty": "インスタンス入力プロパティ",
+  "Editor.Node.InstanceOutputProperty": "インスタンス出力プロパティ",
+  "Editor.Node.InstanceInputSignal": "インスタンス入力Signal",
+  "Editor.Node.InstanceOutputSignal": "インスタンス出力Signal",
+  "Editor.NodeGroup.InstanceGameIO": "インスタンス別ゲームI/O"
+}

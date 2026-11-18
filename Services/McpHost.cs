@@ -53,6 +53,7 @@ public sealed class McpHost
         {
             builder.Services.AddSingleton(documents);
             mcp.WithTools<ProjectFileMcpTools>();
+            mcp.WithTools<GraphDocumentationMcpTools>();
         }
 
         var app = builder.Build();

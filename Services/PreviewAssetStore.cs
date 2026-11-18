@@ -267,6 +267,7 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
                         root.GetProperty("programSequence").GetInt64() >= previous.GetProperty("programSequence").GetInt64())
                         _gpuStatus[peer] = root.Clone();
                 }
+                telemetry.AcknowledgeProgram(peer, root.GetProperty("programSequence").GetInt64());
                 return true;
             }
             if (type == "resource_identity_result")
@@ -280,7 +281,13 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
                     !double.IsFinite(root.GetProperty("timeSeconds").GetDouble()) ||
                     root.GetProperty("nodes").GetArrayLength() > 128 ||
                     root.GetProperty("errors").GetArrayLength() > 128) return false;
-                lock (_sync) _renderStatus[peer] = root.Clone();
+                lock (_sync)
+                {
+                    if (!_renderStatus.TryGetValue(peer, out var previous) ||
+                        root.GetProperty("programSequence").GetInt64() >= previous.GetProperty("programSequence").GetInt64())
+                        _renderStatus[peer] = root.Clone();
+                }
+                telemetry.AcknowledgeProgram(peer, root.GetProperty("programSequence").GetInt64());
                 return true;
             }
             if (type is not ("asset_result" or "resource_identity_result") ||

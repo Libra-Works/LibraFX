@@ -1,0 +1,15 @@
+{
+  "DebugDraw.Active": "プレビュー専用・有効（転送オプションの許可が必要）",
+  "DebugDraw.Disabled": "プレビュー専用・無効",
+  "DebugDraw.Text": "デバッグテキスト［プレビュー専用］",
+  "DebugDraw.Model": "デバッグモデル［プレビュー専用］",
+  "DebugDraw.Group": "デバッグ（プレビュー専用）",
+  "DebugDraw.Matrix": "ワールド行列",
+  "DebugDraw.Visible": "表示（0/1）",
+  "DebugDraw.Enabled": "有効（ライブ転送時のみ）",
+  "DebugDraw.Content": "テキスト",
+  "DebugDraw.Size": "ワールドサイズ",
+  "DebugDraw.Asset": "モデルアセット",
+  "DebugDraw.Transfer": "ライブプレビューにデバッグテキスト／モデルを含める（既定 OFF）",
+  "DebugDraw.Help": "ワールド空間の行列を観測する描画専用ノードです（行列の未接続時は単位行列）。配布出力からはデバッグ描画・文字列・専用アセットを必ず除去します。無効ノードもグラフ上には残ります。"
+}

@@ -23,7 +23,7 @@ namespace LiberaFx.Unity
         [Serializable] public sealed class Command
         {
             public int protocol = 1;
-            public string session, sequence, operation, target, packageBase64, label, policy;
+            public string session, sequence, operation, target, packageBase64, label, policy, debugOwner;
         }
         [Serializable] public sealed class Instance
         {
@@ -42,6 +42,7 @@ namespace LiberaFx.Unity
             public int protocol = 1;
             public string session, engine = "Unity", transport = "isolated-local-spool";
             public string supportedUpdate = "restart-root-render-v1-v2";
+            public string debugDisconnect = "debug-lease-v1";
             public int process;
         }
         private ulong lastSequence;
@@ -49,6 +50,7 @@ namespace LiberaFx.Unity
         private SessionRequestId waitingRequest;
         private bool hasWaiting;
         private string identity;
+        private LiberaFx.Transport.LiveGameDebugLease debugLease;
 
         // Explicit setup for NEW inactive isolated test owner only.
         public void Configure(bool optIn, string privateSessionRoot, LiberaFxUnityBindingAsset bindings)
@@ -73,6 +75,8 @@ namespace LiberaFx.Unity
                 hasWaiting = false;
                 waiting = null;
                 identity = Session.Id.High.ToString("x16") + Session.Id.Low.ToString("x16");
+                debugLease = new LiberaFx.Transport.LiveGameDebugLease(identity);
+                Session.DisconnectPreviewDebugDraw(); // legacy transfers cannot enable debug
                 EndpointDirectory = Path.Combine(isolatedSessionRoot, "unity-" + identity);
                 Directory.CreateDirectory(EndpointDirectory);
                 Publish("endpoint.json", JsonUtility.ToJson(new Descriptor {
@@ -114,6 +118,27 @@ namespace LiberaFx.Unity
                 lastSequence = sequence;
                 if (command.operation == "list")
                 { Reply(command, NativeResult.Ok, null); return; }
+                if (command.operation == "debug-attach")
+                {
+                    if (!LiberaFx.Transport.LiveGameDebugLease.Valid(command.debugOwner))
+                    { Reply(command, NativeResult.InvalidArgument, "Invalid debug transfer owner."); return; }
+                    var clear = Session.DisconnectPreviewDebugDraw();
+                    var attached = clear == NativeResult.Ok ? Session.AttachPreviewDebugDraw() : clear;
+                    if (attached == NativeResult.Ok) debugLease.Attach(command.session, command.debugOwner);
+                    Reply(command, attached, attached == NativeResult.Ok ? null : "Debug transfer attach failed.");
+                    return;
+                }
+                if (command.operation == "debug-disconnect")
+                {
+                    if (!debugLease.Matches(command.session, command.debugOwner))
+                    { Reply(command, NativeResult.InvalidHandle, "Stale debug transfer owner; no playback was modified."); return; }
+                    var cleared = Session.DisconnectPreviewDebugDraw();
+                    if (cleared == NativeResult.Ok) debugLease.Detach(command.session, command.debugOwner);
+                    Reply(command, cleared, cleared == NativeResult.Ok ? null : "Debug cleanup failed.");
+                    return;
+                }
+                if (!debugLease.AllowsMutation(command.session, command.debugOwner))
+                { Reply(command, NativeResult.InvalidHandle, "Stale debug transfer owner; reconnect explicitly."); return; }
                 var target = default(SessionInstanceId);
                 if (command.operation != "create" && !TryTarget(command.target, out target))
                 { Reply(command, NativeResult.InvalidHandle, "Invalid selected target."); return; }

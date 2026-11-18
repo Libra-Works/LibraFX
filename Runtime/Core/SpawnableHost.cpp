@@ -259,6 +259,9 @@ struct SpawnableHost::Impl final {
     std::vector<SpawnableHostEvent> events;
     std::size_t eventHead = 0;
     std::size_t eventCount = 0;
+    std::vector<NamedIoEvent> childGameEvents;
+    std::size_t childGameHead = 0;
+    std::size_t childGameCount = 0;
     std::vector<OwnerNotice> ownerNotices;
     std::vector<ScheduledRoute> scheduledRoutes;
     double time = -1;
@@ -278,7 +281,8 @@ struct SpawnableHost::Impl final {
     Result failure = Result::Ok;
 
     Impl(SpawnablePackage value, const SpawnableHostOptions& configuration)
-        : packageData(std::move(value)), options(configuration), events(configuration.eventCapacity) {}
+        : packageData(std::move(value)), options(configuration), events(configuration.eventCapacity),
+          childGameEvents(configuration.eventCapacity) {}
 
     auto findTemplate(const std::uint8_t id[16]) noexcept -> TemplateState*
     {
@@ -291,6 +295,34 @@ struct SpawnableHost::Impl final {
     {
         for (auto& instance : state.instances) if (instance.id == id) return &instance;
         return nullptr;
+    }
+
+    auto findPort(TemplateState& state, const char* name, NamedIoKind kind,
+                  ProgramGameIoPort& out) const noexcept -> bool
+    {
+        if (!name) return false;
+        auto length = std::size_t{};
+        while (length <= 128 && name[length]) ++length;
+        if (!length || length > 128) return false;
+        for (auto index = std::size_t{}; index < state.program.gameIoPortCount(); ++index) {
+            auto port = ProgramGameIoPort{};
+            if (state.program.gameIoPort(index, port) && port.kind == static_cast<std::uint8_t>(kind) &&
+                std::strcmp(port.name, name) == 0) { out = port; return true; }
+        }
+        return false;
+    }
+
+    void discardChildGameEvents(const SpawnableScope& scope) noexcept
+    {
+        auto retained = std::size_t{};
+        for (auto index = std::size_t{}; index < childGameCount; ++index) {
+            const auto event = childGameEvents[(childGameHead + index) % childGameEvents.size()];
+            if (scope.kind == SpawnableScopeKind::Effect ||
+                (event.identity.instanceId == scope.instanceId &&
+                 sameId(event.identity.containerId, scope.containerId))) continue;
+            childGameEvents[(childGameHead + retained++) % childGameEvents.size()] = event;
+        }
+        childGameCount = retained;
     }
 
     auto activeCount() const noexcept -> std::size_t
@@ -399,7 +431,15 @@ auto SpawnableHost::Impl::initialize() -> Result
         state->data = &data;
         result = loadProgram(data.bytecode, nullptr, 0, state->bindings, state->program);
         if (result != Result::Ok) return result;
-        if (state->program.gameIoPortCount() != 0) return Result::InvalidBinary;
+        for (auto index = std::size_t{}; index < state->program.gameIoPortCount(); ++index) {
+            auto port = ProgramGameIoPort{};
+            if (!state->program.gameIoPort(index, port) || port.kind > 3) return Result::InvalidBinary;
+            if (port.kind == static_cast<std::uint8_t>(NamedIoKind::OutputSignal)) {
+                auto id = std::array<std::uint8_t, 16>{};
+                std::memcpy(id.data(), port.nodeId, 16);
+                state->outputIds.push_back(id);
+            }
+        }
 
         auto maxCaptureLanes = std::size_t{16};
         const auto extended = data.inputs.size() > 4 ||
@@ -428,9 +468,11 @@ auto SpawnableHost::Impl::initialize() -> Result
         result = state->pool->configureLifecycle(lifecycleConfig);
         if (result != Result::Ok) return result;
         if (data.signalOutputs && !data.signalOutputs->empty()) {
-            state->outputIds.reserve(data.signalOutputs->size());
+            state->outputIds.reserve(state->outputIds.size() + data.signalOutputs->size());
             for (const auto& port : *data.signalOutputs)
                 state->outputIds.push_back(port.templateNodeId);
+        }
+        if (!state->outputIds.empty()) {
             result = state->pool->setSignalOutputs(
                 reinterpret_cast<const std::uint8_t*>(state->outputIds.data()), state->outputIds.size());
             if (result != Result::Ok) return result;
@@ -827,10 +869,23 @@ auto SpawnableHost::Impl::pump(double at) -> Result
                 controlResult = applyAuthoredForce();
                 if (controlResult != Result::Ok || rootForced) return fail(controlResult);
             }
-            while (eventCount < events.size()) {
+            while (eventCount < events.size() && childGameCount < childGameEvents.size()) {
                 auto signal = GeneratorSignalEvent{};
                 if (!state.pool->popSignalEvent(signal)) break;
                 progress = true;
+                for (auto index = std::size_t{}; index < state.program.gameIoPortCount(); ++index) {
+                    auto port = ProgramGameIoPort{};
+                    if (!state.program.gameIoPort(index, port) ||
+                        port.kind != static_cast<std::uint8_t>(NamedIoKind::OutputSignal) ||
+                        !sameId(port.nodeId, signal.nodeId)) continue;
+                    auto& event = childGameEvents[(childGameHead + childGameCount++) % childGameEvents.size()];
+                    event = {};
+                    std::memcpy(event.identity.containerId, signal.containerId, 16);
+                    event.identity.instanceId = signal.instanceId;
+                    event.portIndex = static_cast<std::uint32_t>(index);
+                    event.kind = NamedIoKind::OutputSignal;
+                    break;
+                }
                 result = appendEvent(SpawnableHostEventKind::Signal, signal.containerId,
                     signal.instanceId, signal.time, signal.seed, signal.nodeId);
                 if (result != Result::Ok) return fail(result);
@@ -848,7 +903,7 @@ auto SpawnableHost::Impl::pump(double at) -> Result
                     if (result != Result::Ok) return fail(result);
                 }
             }
-            if (eventCount == events.size() &&
+            if ((eventCount == events.size() || childGameCount == childGameEvents.size()) &&
                 (state.pool->pendingEventCount() || state.pool->pendingSignalEventCount()))
                 return fail(Result::QueueRejected);
         }
@@ -1180,6 +1235,83 @@ auto SpawnableHost::setGameProperty(const char* name, const double* values,
     return impl_->gameIo ? impl_->gameIo->setProperty(name, values, width) : Result::NotReady;
 }
 
+auto SpawnableHost::setInstanceProperty(const SpawnableDebugTarget& target, const char* name,
+                                        const double* values, std::size_t width) -> Result
+{
+    auto& host = *impl_;
+    if (host.operationActive) return Result::Busy;
+    if (!target.hostGeneration || target.hostGeneration != host.debugGeneration ||
+        !validScope(target.scope) || target.scope.kind != SpawnableScopeKind::Instance)
+        return Result::InvalidHandle;
+    auto state = host.findTemplate(target.scope.containerId);
+    if (!state || !host.findInstance(*state, target.scope.instanceId)) return Result::InvalidHandle;
+    auto port = ProgramGameIoPort{};
+    if (!host.findPort(*state, name, NamedIoKind::InputProperty, port)) return Result::NodeNotFound;
+    if (!values || width != port.width) return Result::InvalidValueType;
+    auto captures = std::array<GeneratorCapture, 16>{};
+    for (auto lane = std::size_t{}; lane < width; ++lane) {
+        auto row = width == 16 ? lane / 4 : 0;
+        const auto* id = row ? port.additionalNodeIds[row - 1] : port.nodeId;
+        std::memcpy(captures[lane].nodeId, id, 16);
+        captures[lane].component = static_cast<std::uint8_t>(width == 16 ? lane % 4 : lane);
+        captures[lane].value = values[lane];
+    }
+    return state->pool->setLive(target.scope.instanceId, captures.data(), width);
+}
+
+auto SpawnableHost::instanceProperty(const SpawnableDebugTarget& target, const char* name,
+                                     double values[16], std::uint8_t& width) -> Result
+{
+    if (impl_->operationActive) return Result::Busy;
+    if (!values) return Result::InvalidArgument;
+    if (!target.hostGeneration || target.hostGeneration != impl_->debugGeneration ||
+        !validScope(target.scope) || target.scope.kind != SpawnableScopeKind::Instance)
+        return Result::InvalidHandle;
+    auto state = impl_->findTemplate(target.scope.containerId);
+    if (!state || !impl_->findInstance(*state, target.scope.instanceId)) return Result::InvalidHandle;
+    auto port = ProgramGameIoPort{};
+    if (!impl_->findPort(*state, name, NamedIoKind::OutputProperty, port) &&
+        !impl_->findPort(*state, name, NamedIoKind::InputProperty, port)) return Result::NodeNotFound;
+    auto resultValues = std::array<double, 16>{};
+    auto rows = port.width == 16 ? 4u : 1u;
+    for (auto row = 0u; row < rows; ++row) {
+        auto rowWidth = std::uint8_t{};
+        const auto* id = row ? port.additionalNodeIds[row - 1] : port.nodeId;
+        auto result = state->pool->value(target.scope.instanceId, id,
+            resultValues.data() + row * 4, rowWidth);
+        if (result != Result::Ok) return result;
+        if (rowWidth != (port.width == 16 ? 4 : port.width)) return Result::InvalidValueType;
+    }
+    std::copy_n(resultValues.data(), port.width, values);
+    width = port.width;
+    return Result::Ok;
+}
+
+auto SpawnableHost::fireInstanceSignal(const SpawnableDebugTarget& target, const char* name) -> Result
+{
+    if (impl_->operationActive) return Result::Busy;
+    if (!target.hostGeneration || target.hostGeneration != impl_->debugGeneration ||
+        !validScope(target.scope) || target.scope.kind != SpawnableScopeKind::Instance)
+        return Result::InvalidHandle;
+    auto state = impl_->findTemplate(target.scope.containerId);
+    if (!state || !impl_->findInstance(*state, target.scope.instanceId)) return Result::InvalidHandle;
+    auto port = ProgramGameIoPort{};
+    if (!impl_->findPort(*state, name, NamedIoKind::InputSignal, port)) return Result::NodeNotFound;
+    return notifyEndRequest(target.scope, port.nodeId);
+}
+
+auto SpawnableHost::instancePortName(const std::uint8_t containerId[16], std::size_t index,
+                                     const char*& name) const noexcept -> Result
+{
+    if (!containerId) return Result::InvalidArgument;
+    auto state = impl_->findTemplate(containerId);
+    if (!state) return Result::InvalidHandle;
+    auto port = ProgramGameIoPort{};
+    if (!state->program.gameIoPort(index, port)) return Result::InvalidArgument;
+    name = port.name;
+    return Result::Ok;
+}
+
 auto SpawnableHost::setOwnerMatrix(const double* values, std::size_t width) -> Result
 {
     return impl_->gameIo ? impl_->gameIo->setOwnerMatrix(values, width) : Result::NotReady;
@@ -1221,6 +1353,7 @@ auto SpawnableHost::stop() -> Result
     }
     host.scheduledRoutes.clear();
     host.ownerNotices.clear();
+    host.discardChildGameEvents({});
     host.rootStopped = true;
     return Result::Ok;
 }
@@ -1274,6 +1407,8 @@ auto SpawnableHost::Impl::applyAuthoredForce() -> Result
         {
             auto id = state->instances[index].id;
             result = state->pool->pendingForceRequest(id, forceScope);
+            // Reset retires slots before queued Stop events clear host bookkeeping.
+            if (result == Result::InvalidHandle) { ++index; continue; }
             if (result != Result::Ok) return result;
             if (forceScope == 2) return forceTerminate({});
             if (forceScope == 0) { ++index; continue; }
@@ -1319,6 +1454,7 @@ auto SpawnableHost::Impl::forceTerminate(const SpawnableScope& scope) -> Result
         host.rootDefaults.release();
         host.rootWork.release();
         host.eventHead = host.eventCount = 0;
+        host.discardChildGameEvents(scope);
         host.pendingPump = false;
         host.rootStopped = host.rootFinished = host.rootForced = true;
         return host.appendEvent(SpawnableHostEventKind::ForceTerminated, nullptr, 0, at, 0);
@@ -1343,6 +1479,7 @@ auto SpawnableHost::Impl::forceTerminate(const SpawnableScope& scope) -> Result
         return Result::QueueRejected;
     auto result = state->pool->forceTerminate(scope.instanceId);
     if (result != Result::Ok) return result;
+    host.discardChildGameEvents(scope);
     for (const auto& item : host.scheduledRoutes) {
         if (!ownsPending(item)) continue;
         // Host's guard establishes the lifecycle job boundary before any purge.
@@ -1435,7 +1572,12 @@ auto SpawnableHost::popEvent(SpawnableHostEvent& out) noexcept -> bool
 
 auto SpawnableHost::popGameIoEvent(NamedIoEvent& out) noexcept -> bool
 {
-    return impl_->gameIo && impl_->gameIo->popEvent(out);
+    if (impl_->gameIo && impl_->gameIo->popEvent(out)) return true;
+    if (!impl_->childGameCount) return false;
+    out = impl_->childGameEvents[impl_->childGameHead];
+    impl_->childGameHead = (impl_->childGameHead + 1) % impl_->childGameEvents.size();
+    --impl_->childGameCount;
+    return true;
 }
 
 auto SpawnableHost::activeCount() const noexcept -> std::size_t

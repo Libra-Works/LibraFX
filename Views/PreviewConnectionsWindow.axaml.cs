@@ -104,6 +104,10 @@ public partial class PreviewConnectionsWindow : Window
         ReconnectButton.IsEnabled = !_busy && _selectedId is { } id && model.PreviewAssets.Supports(id);
         if (peers.Count == 0) Status.Text = LocalizationService.Shared.Get("Connections.Disconnected");
         var feedback = new List<string>();
+        foreach (var peer in peers.Where(peer => peer.SentProgramSequence.HasValue))
+            feedback.Add(LocalizationService.Shared.Get(peer.AwaitingProgramAcknowledgement
+                    ? "Connections.ProgramAckPending" : "Connections.ProgramAcknowledged",
+                peer.ViewerName ?? peer.Engine ?? peer.ClientId.ToString(), peer.SentProgramSequence!.Value));
         foreach (var peer in peers.Where(peer => model.PreviewAssets.Supports(peer.ClientId, "rendering")))
         {
             try

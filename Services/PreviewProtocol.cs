@@ -17,6 +17,7 @@ public sealed class PreviewPublication(long sequence, string documentId, GraphSn
     public PreviewPlaybackState? Playback { get; } = playback;
     public IReadOnlyList<PreviewSignalRequest> SignalRequests { get; init; } = [];
     public long SignalRequestSequence { get; init; }
+    public bool IncludePreviewDebugDraw { get; init; }
     public byte[] LegacyPayload => _legacy.Value;
 }
 

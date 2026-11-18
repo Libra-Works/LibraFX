@@ -90,6 +90,7 @@ namespace LiberaFx.Unity.Editor
             var pixels = new Texture2D(128, 128, TextureFormat.RGBA32, false);
             var previousTarget = RenderTexture.active;
             LiberaFxLiveGameSession session = null;
+            var debugOwner = "";
             try
             {
                 var serialized = new SerializedObject(bindings);
@@ -180,9 +181,26 @@ namespace LiberaFx.Unity.Editor
                     session.Process();
                     Require(session.TakeCompletion(destroy, out destroyed) == NativeResult.Ok &&
                         destroyed.Result == NativeResult.InvalidHandle, "Old generation targeted reused engine slot.");
+                    Require(session.ClearPreviewDebugDraw(done.Instance) == NativeResult.InvalidHandle,
+                        "Stale generation cleared another instance's debug.");
                 }
                 Require(workerFailure == 0, "Worker destroy rejected.");
                 Require(Send("list", null, null).instances.Length == 1, "Live selection list leaked destroyed instances.");
+                var elapsed = replacement.ElapsedTime;
+                var scopes = replacement.ActiveRenderScopeCount;
+                debugOwner = new string('a', 32);
+                Require(Send("debug-attach", null, null).result == "Ok", "Debug lease attach failed.");
+                debugOwner = new string('b', 32);
+                Require(Send("debug-attach", null, null).result == "Ok", "Debug lease takeover failed.");
+                debugOwner = new string('a', 32);
+                Require(Send("debug-disconnect", null, null).result == "InvalidHandle" &&
+                    Send("replace", created.target, after).result == "InvalidHandle", "Old window changed a new transfer.");
+                debugOwner = new string('b', 32);
+                Require(Send("debug-disconnect", null, null).result == "Ok", "Debug cleanup was not acknowledged.");
+                Require(session.ResolveComponent(live.Id) == replacement && replacement.ElapsedTime == elapsed &&
+                    replacement.ActiveRenderScopeCount == scopes &&
+                    replacement.GetComponentsInChildren<MeshRenderer>().Length == 1,
+                    "Debug disconnect stopped/reset normal playback or removed ordinary renderers.");
                 Require(session.Close() == NativeResult.NotReady && session.ResolveComponent(live.Id) == replacement,
                     "Graceful close silently converted lifetime into forced termination.");
                 // A separate bounded session verifies queued requests and
@@ -217,7 +235,7 @@ namespace LiberaFx.Unity.Editor
                     var descriptor = JsonUtility.FromJson<LiberaFxLiveGameEndpoint.Response>(
                         File.ReadAllText(Path.Combine(endpoint.EndpointDirectory, "endpoint.json")));
                     var command = new LiberaFxLiveGameEndpoint.Command { session = descriptor.session,
-                        sequence = DateTime.UtcNow.Ticks.ToString(), operation = operation, target = selected,
+                        sequence = DateTime.UtcNow.Ticks.ToString(), operation = operation, target = selected, debugOwner = debugOwner,
                         packageBase64 = package == null ? null : Convert.ToBase64String(package), label = "live fixture", policy = "restart" };
                     File.WriteAllText(Path.Combine(endpoint.EndpointDirectory, "request.json"), JsonUtility.ToJson(command));
                     endpoint.Pump(); endpoint.Pump();

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "typeId": "65a9b50f-23dd-47bc-b845-1d89bf630001",
+  "namespace": "LiberaFx",
+  "kind": "InstanceInputProperty",
+  "name": "Instance Input Property",
+  "displayNameKey": "Editor.Node.InstanceInputProperty",
+  "groupNameKey": "Editor.NodeGroup.InstanceGameIO",
+  "group": "Instance Game I/O",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "outputPorts": [
+    { "id": "value", "name": "Value", "portType": "Float", "category": "Parameter" }
+  ],
+  "parameters": [
+    { "id": "name", "name": "Name", "displayNameKey": "Editor.Parameter.Name", "type": "string", "defaultValue": "" },
+    { "id": "valueType", "name": "Type", "displayNameKey": "Editor.Parameter.Type", "type": "enum:1e309707-1fa0-4d38-aed9-42d000000001", "defaultValue": 0 }
+  ]
+}

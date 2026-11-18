@@ -6,6 +6,12 @@
 
 ## 既存資料
 
+- [入門](getting-started.md)
+- [寿命の考え方](lifetime.md)
+- [小さな実例](small-example.md)
+- [文書用グラフ撮影と更新](documentation-capture.md)
+- [SDKの導入と配布準備](sdk-distribution.md)
+
 - [イントロダクション](../イントロダクション.md)
 - [概要書](../概要書.md)
 - [Unity連携](../Runtime/Integrations/Unity/USAGE.txt)
@@ -23,8 +29,8 @@
 - [数値比較・論理Signal・Signalから数値への変換](logical-signals.md)
 
 これらはリポジトリ内で読むためのリンクです。既存の構想・仕様と実装済みの範囲を
-整理した「入門」「寿命の考え方」「小さな実例」の整備は、[#60](https://github.com/Libra-Works/LibraFX/issues/60)
-で追跡します。文書・画像の自動更新とPagesへの公開は、まだ実装済みではありません。
+整理した最初の三ページと、同梱サンプルに限定した撮影APIを用意しています。
+実画面はこの文書だけでは生成されず、文書・画像の自動更新とPagesへの公開も未実装です。
 
 ## 更新方針
 

@@ -70,8 +70,10 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
     }
 
     public static SpawnableGroupPackage Compile(GraphSnapshot graph, bool includePreviewSignalKeys = false,
-        IRenderResourceBindingContext? resourceContext = null)
+        IRenderResourceBindingContext? resourceContext = null, VfxCompileOptions? options = null)
     {
+        VfxProgram.ValidateForCompilation(graph);
+        if (options?.IncludePreviewDebugDraw != true) graph = PreviewDebugDraw.Strip(graph);
         RejectTemplateGameIo(graph, withinTemplate: false);
         VfxProgram.ValidateForCompilation(graph);
         graph = GroupExposedItems.Materialize(graph);
@@ -97,6 +99,8 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
         {
             foreach (var node in current.Nodes)
             {
+                if (GameIoSchema.IsInstanceNode(node.Kind) && !directTemplate)
+                    throw new InvalidDataException("Instance Game I/O must be directly inside a Spawnable Group.");
                 if (SpawnableGroupSchema.IsInput(node.Kind) && !directTemplate)
                     throw new InvalidDataException("Spawn input nodes must be directly inside a Spawnable Group.");
                 if ((SpawnableGroupSchema.IsSignalInput(node.Kind) ||
@@ -151,11 +155,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
                     }
                     var childResourceContext = ScopedRenderResourceBindingContext.UnderGroup(resourceContext, node.Id);
                     var childProgram = VfxProgram.CompileForPackage(child, out var render,
-                        resourceContext: childResourceContext);
-                    if (childProgram.GameIoPorts.Count != 0)
-                        throw new InvalidDataException(
-                            $"Spawnable Group '{node.Name}' cannot host named Game I/O in its template program. " +
-                            "Use Spawn Input/Output for template data, or place named Game I/O at the effect root.");
+                        resourceContext: childResourceContext, options: options);
                     var bytecode = childProgram.ToPackageBinary();
                     var gpu = CollectGpu(child).ToArray();
                     var outputs = child.Nodes.Where(item => SpawnableGroupSchema.IsOutput(item.Kind))
@@ -193,7 +193,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
         var signalRoutes = CreateSignalRoutes(flatParent, signalInputProxies);
         var parentProgram = VfxProgram.CompileForPackage(
             RemoveLocalRoutes(parentWithSignalInputs, routedDelays), out var rootRender, signalInputTypes,
-            resourceContext);
+            resourceContext, options);
         return new(parentProgram.ToPackageBinary(), templates.AsReadOnly())
         {
             AutoDestroyWhenIdle = graph.AutoDestroyWhenIdle,
@@ -216,7 +216,11 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
         foreach (var node in graph.Nodes)
         {
             if (node is null) continue;
-            if (withinTemplate && GameIoSchema.IsNode(node.Kind))
+            if (withinTemplate && SkeletalPoseSchema.IsSource(node.Kind))
+                throw new InvalidDataException(
+                    $"SOURCE node '{node.Name}' is not supported inside a Spawnable Group template. " +
+                    "SOURCE adapters currently publish effect-root inputs only; template pose capture requires instance-scoped support.");
+            if (withinTemplate && GameIoSchema.IsNode(node.Kind) && !GameIoSchema.IsInstanceNode(node.Kind))
                 throw new InvalidDataException(
                     $"Spawnable Group template '{node.Name}' cannot contain named Game I/O. " +
                     "Use Spawn Input/Output for template data, or place named Game I/O at the effect root.");

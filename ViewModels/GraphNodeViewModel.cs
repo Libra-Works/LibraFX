@@ -49,6 +49,10 @@ public sealed class GraphNodeViewModel : ObservableObject
     public bool IsGraphGroup => ChildGraph is not null;
     public bool IsSpawnableGroup => Definition.Kind == GraphNodeKind.SpawnableGroup;
     public bool IsSequence => SequenceSchema.IsSequence(Definition.Kind);
+    public bool IsPreviewDebugDraw => Definition.Kind.Value is "DebugText" or "DebugModel";
+    public string PreviewDebugDrawStatus => !IsPreviewDebugDraw ? string.Empty :
+        LocalizationService.Shared.Get(Parameters?.FirstOrDefault(item => item.Id == "enabled")?.Value.GetBoolean() == false
+            ? "DebugDraw.Disabled" : "DebugDraw.Active");
     public bool IsPreviewSignal => SignalTimeline.Supports(BaseDefinition.Kind);
     public bool CanSendPreviewSignal => _workspace.CanSendPreviewSignal(this);
     public string PreviewSignalSendHelp => LocalizationService.Shared.Get(CanSendPreviewSignal
@@ -76,7 +80,9 @@ public sealed class GraphNodeViewModel : ObservableObject
     public bool ShowPortType => Definition.Kind != GraphNodeKind.GraphGroup;
     public bool HasLegacyInput => HasPorts && Definition.InputPorts is null;
     public bool HasCustomInputs => HasPorts && Definition.InputPorts is { Count: > 0 };
-    public IReadOnlyList<GraphInputPortDefinition> InputPorts => Definition.InputPorts ?? [];
+    public IReadOnlyList<GraphInputPortDefinition> InputPorts => !IsPreviewDebugDraw ? Definition.InputPorts ?? [] :
+        (Definition.InputPorts ?? []).Select(port => port with { Name = LocalizationService.Shared.Get(
+            port.Id == "matrix" ? "DebugDraw.Matrix" : "DebugDraw.Visible") }).ToArray();
     public bool HasLegacyOutput => HasPorts && Definition.OutputPorts is null;
     public bool HasCustomOutputs => HasPorts && Definition.OutputPorts is { Count: > 0 };
     public IReadOnlyList<GraphOutputPortDefinition> OutputPorts => Definition.OutputPorts ?? [];
@@ -212,15 +218,18 @@ public sealed class GraphNodeViewModel : ObservableObject
         .Where(text => !string.IsNullOrEmpty(text)));
     internal void RefreshLocalizedText()
     {
+        if (IsPreviewDebugDraw) OnPropertyChanged(nameof(InputPorts));
         OnPropertyChanged(nameof(Description));
         OnPropertyChanged(nameof(HeaderHelp));
         OnPropertyChanged(nameof(LifecycleRoleLabel));
         OnPropertyChanged(nameof(LifecycleSummary));
         OnPropertyChanged(nameof(LifecycleSummaryHelp));
         OnPropertyChanged(nameof(PreviewSignalSendHelp));
+        OnPropertyChanged(nameof(PreviewDebugDrawStatus));
     }
     internal void RefreshLifecyclePresentation()
     {
+        OnPropertyChanged(nameof(PreviewDebugDrawStatus));
         OnPropertyChanged(nameof(LifecycleSummary));
         OnPropertyChanged(nameof(LifecycleSummaryHelp));
     }

@@ -23,6 +23,7 @@ public static class CompiledPreviewProtocol
     public const int MaxControlBytes = 4096;
     public const int MaxSceneBytes = 1024 * 1024;
     private static readonly ConditionalWeakTable<GraphSnapshot, Lazy<Compilation>> Cache = new();
+    private static readonly ConditionalWeakTable<GraphSnapshot, Lazy<Compilation>> DebugCache = new();
 
     private sealed record Compilation(byte[]? Bytes, byte[]? Error);
 
@@ -91,12 +92,13 @@ public static class CompiledPreviewProtocol
         return bytes;
     }
 
-    private static Compilation Compile(GraphSnapshot graph)
+    private static Compilation Compile(GraphSnapshot graph, bool debugDraw)
     {
         try
         {
             GpuPreviewScene.Validate(graph);
-            var bytes = VfxProgram.Compile(graph).ToBinary();
+            var bytes = VfxProgram.Compile(graph, out _,
+                options: new VfxCompileOptions { IncludePreviewDebugDraw = debugDraw }).ToBinary();
             if (bytes.Length == 0 || bytes.Length > MaxProgramBytes)
                 throw new InvalidDataException("Compiled program exceeds the live preview size limit.");
             return new(bytes, null);
@@ -111,8 +113,10 @@ public static class CompiledPreviewProtocol
 
     internal static CompiledPreviewMessage Create(PreviewPublication publication, bool playback, ulong baseSequence)
     {
-        var result = playback ? null : Cache.GetValue(publication.Graph,
-            graph => new Lazy<Compilation>(() => Compile(graph), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+        var cache = publication.IncludePreviewDebugDraw ? DebugCache : Cache;
+        var result = playback ? null : cache.GetValue(publication.Graph,
+            graph => new Lazy<Compilation>(() => Compile(graph, publication.IncludePreviewDebugDraw),
+                LazyThreadSafetyMode.ExecutionAndPublication)).Value;
         var kind = playback ? CompiledPreviewKind.Playback :
             result!.Bytes is not null ? CompiledPreviewKind.Program : CompiledPreviewKind.CompileError;
         var payload = result?.Bytes ?? result?.Error ?? [];
@@ -157,6 +161,7 @@ public sealed class CompiledPreviewSender : IDisposable
     private EditorNativePreviewSession? _native;
     private GraphSnapshot? _nativeGraph;
     private string? _nativeDocument;
+    private bool _nativeDebugDraw;
     private readonly string? _nativeLibraryPath;
     private GraphSnapshot? _signalGraph;
     private string? _signalDocument;
@@ -175,13 +180,17 @@ public sealed class CompiledPreviewSender : IDisposable
             _signalSequence = publication.SignalRequestSequence;
         }
         if (_native is not null && (_nativeDocument != publication.DocumentId ||
-            !ReferenceEquals(_nativeGraph, publication.Graph))) ReleaseNative();
+            !ReferenceEquals(_nativeGraph, publication.Graph) ||
+            _nativeDebugDraw != publication.IncludePreviewDebugDraw)) ReleaseNative();
         if (!forceSnapshot && _failed is not null && _failed.DocumentId == publication.DocumentId &&
             ReferenceEquals(_failed.Graph, publication.Graph) &&
+            _failed.IncludePreviewDebugDraw == publication.IncludePreviewDebugDraw &&
             _failed.Playback?.SignalEpoch == publication.Playback?.SignalEpoch &&
             _failed.SignalRequestSequence == publication.SignalRequestSequence) return null;
         var playback = !forceSnapshot && _good is not null && _lastSent < publication.Sequence &&
-            _good.DocumentId == publication.DocumentId && ReferenceEquals(_good.Graph, publication.Graph);
+            _good.DocumentId == publication.DocumentId && ReferenceEquals(_good.Graph, publication.Graph) &&
+            _good.IncludePreviewDebugDraw == publication.IncludePreviewDebugDraw &&
+            _good.Playback?.DebugDrawStopped == publication.Playback?.DebugDrawStopped;
         if (_native is not null || EditorNativePreviewSession.RequiresNative(publication.Graph) ||
             publication.SignalRequests.Count > 0)
         {
@@ -189,7 +198,9 @@ public sealed class CompiledPreviewSender : IDisposable
             {
                 if (_native is null)
                 {
-                    _native = new EditorNativePreviewSession(publication.Graph, _nativeLibraryPath);
+                    _native = new EditorNativePreviewSession(publication.Graph, _nativeLibraryPath,
+                        new VfxCompileOptions { IncludePreviewDebugDraw = publication.IncludePreviewDebugDraw });
+                    _nativeDebugDraw = publication.IncludePreviewDebugDraw;
                     _nativeGraph = publication.Graph;
                     _nativeDocument = publication.DocumentId;
                 }

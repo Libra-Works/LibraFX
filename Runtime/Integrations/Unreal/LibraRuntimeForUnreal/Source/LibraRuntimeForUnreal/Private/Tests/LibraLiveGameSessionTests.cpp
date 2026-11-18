@@ -69,6 +69,7 @@ bool FLibraLiveGameSessionTest::RunTest(const FString&)
     { endpoint->StopEndpoint(); return false; }
     auto* session = endpoint->GetSession();
     auto sequence = uint64{};
+    auto debugOwner = FString{};
     auto send = [&](const FString& operation, const FString& target, const TArray<uint8>& bytes) {
         auto descriptorText = FString{};
         FFileHelper::LoadFileToString(descriptorText, *FPaths::Combine(endpoint->EndpointDirectory, TEXT("endpoint.json")));
@@ -80,6 +81,7 @@ bool FLibraLiveGameSessionTest::RunTest(const FString&)
         command->SetStringField(TEXT("session"), descriptor->GetStringField(TEXT("session")));
         command->SetStringField(TEXT("sequence"), LexToString(++sequence));
         command->SetStringField(TEXT("operation"), operation);
+        command->SetStringField(TEXT("debugOwner"), debugOwner);
         command->SetStringField(TEXT("target"), target);
         command->SetStringField(TEXT("packageBase64"), FBase64::Encode(bytes));
         command->SetStringField(TEXT("label"), TEXT("Compiler live fixture"));
@@ -153,8 +155,23 @@ bool FLibraLiveGameSessionTest::RunTest(const FString&)
         session->SubmitDestroy(done.instance, destroy); session->Process();
         TestTrue(TEXT("Stale generation is rejected"), session->TakeCompletion(destroy, destroyed) == liberafx::Result::Ok &&
             destroyed.result == liberafx::Result::InvalidHandle);
+        TestTrue(TEXT("Stale generation cannot clear another playback's debug"),
+            session->ClearPreviewDebugDraw(done.instance) == liberafx::Result::InvalidHandle);
     }
     TestEqual(TEXT("Worker destroy submissions"), failures.load(), 0);
+    auto* connectedPlayback = session->Resolve(id);
+    auto normalRenderCount = connectedPlayback->GetRenderObjectCount();
+    debugOwner = TEXT("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    TestEqual(TEXT("Explicit debug lease attach"), send(TEXT("debug-attach"), {}, {})->GetStringField(TEXT("result")), FString(TEXT("Ok")));
+    debugOwner = TEXT("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    TestEqual(TEXT("New window can explicitly take ownership"), send(TEXT("debug-attach"), {}, {})->GetStringField(TEXT("result")), FString(TEXT("Ok")));
+    debugOwner = TEXT("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    TestEqual(TEXT("Old disconnect cannot clear newer transfer"), send(TEXT("debug-disconnect"), {}, {})->GetStringField(TEXT("result")), FString(TEXT("InvalidHandle")));
+    TestEqual(TEXT("Old replacement cannot resurrect debug"), send(TEXT("replace"), selected, after)->GetStringField(TEXT("result")), FString(TEXT("InvalidHandle")));
+    debugOwner = TEXT("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    TestEqual(TEXT("Debug-only disconnect acknowledged"), send(TEXT("debug-disconnect"), {}, {})->GetStringField(TEXT("result")), FString(TEXT("Ok")));
+    TestTrue(TEXT("Debug disconnect preserves ordinary component and renderers"),
+        session->Resolve(id) == connectedPlayback && connectedPlayback->GetRenderObjectCount() == normalRenderCount);
     TestTrue(TEXT("Graceful close does not force old lifetime"), session->Close() == liberafx::Result::NotReady && session->Resolve(id));
     auto destroy = liberafx::RequestId{};
     session->SubmitDestroy(id, destroy); session->Process();

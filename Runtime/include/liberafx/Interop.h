@@ -481,6 +481,28 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_fire_game_
     LibraSpawnableHostHandle host, const char* name);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_game_property(
     LibraSpawnableHostHandle host, const char* name, const double* values, uint32_t width);
+/* Instance ports are distinct from shared root Game I/O. Acquire generation
+   for a live (container,instance) target; include it in all subsequent calls.
+   Values are 1..4 lanes or a row-major 16-lane matrix. Set takes effect at the
+   next evaluation; get reads the last completed evaluation. Signals deliver
+   only to this instance. Output signals use next_game_io_event with nonzero
+   containerId/instanceId; resolve their portIndex using the instance name API.
+   Owner-thread only; no implicit broadcast or cross-host fallback. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_instance_target(
+    LibraSpawnableHostHandle host, const uint8_t containerId[16],
+    LibraGeneratorInstance instance, uint64_t* outGeneration);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_instance_property(
+    LibraSpawnableHostHandle host, uint64_t generation, const uint8_t containerId[16],
+    LibraGeneratorInstance instance, const char* name, const double* values, uint32_t width);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_get_instance_property(
+    LibraSpawnableHostHandle host, uint64_t generation, const uint8_t containerId[16],
+    LibraGeneratorInstance instance, const char* name, double values[16], uint32_t* outWidth);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_fire_instance_signal(
+    LibraSpawnableHostHandle host, uint64_t generation, const uint8_t containerId[16],
+    LibraGeneratorInstance instance, const char* name);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_copy_instance_game_io_port_name(
+    LibraSpawnableHostHandle host, const uint8_t containerId[16], uint32_t index,
+    uint8_t* destination, uint64_t capacity, uint64_t* outByteCount);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_owner_matrix(
     LibraSpawnableHostHandle host, const double values[16]);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_quality(

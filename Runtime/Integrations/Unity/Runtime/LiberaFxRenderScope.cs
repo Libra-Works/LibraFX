@@ -11,6 +11,7 @@ namespace LiberaFx.Unity
         private readonly ulong instanceId;
         private readonly double startTime;
         private readonly List<LiberaFxRenderNodeInstance> renderNodes = new List<LiberaFxRenderNodeInstance>();
+        private readonly List<LiberaFxDebugDrawInstance> debugDraws = new List<LiberaFxDebugDrawInstance>();
         private readonly List<LibraGpuParticleRuntime> gpuPrograms = new List<LibraGpuParticleRuntime>();
         private GameObject scopeObject;
         private double previousLocalTime;
@@ -27,7 +28,7 @@ namespace LiberaFx.Unity
 
         public static LiberaFxRenderScope CreatePending(Transform owner,
             LiberaFxPreparedScope prepared, bool isRoot, byte[] containerId,
-            ulong instanceId, double startTime, ulong seed)
+            ulong instanceId, double startTime, ulong seed, bool suppressDebugDraw = false)
         {
             var scope = new LiberaFxRenderScope(isRoot, containerId, instanceId, startTime);
             try
@@ -41,7 +42,12 @@ namespace LiberaFx.Unity
                 scope.scopeObject.transform.SetParent(owner, false);
                 scope.scopeObject.SetActive(false);
                 foreach (var node in prepared.renderNodes)
-                    scope.renderNodes.Add(LiberaFxRenderNodeInstance.Create(scope.scopeObject.transform, node));
+                    if (node.debugDraw != null)
+                    {
+                        if (!suppressDebugDraw)
+                            scope.debugDraws.Add(LiberaFxDebugDrawInstance.Create(node, instanceId, scope.scopeObject.scene));
+                    }
+                    else scope.renderNodes.Add(LiberaFxRenderNodeInstance.Create(scope.scopeObject.transform, node));
                 foreach (var gpu in prepared.gpuPrograms)
                 {
                     var gpuObject = new GameObject("Libera FX GPU " + gpu.nodeId);
@@ -104,6 +110,8 @@ namespace LiberaFx.Unity
             var localTime = LocalTime(effectTime);
             foreach (var node in renderNodes)
                 node.Update(host, rootScope, containerId, instanceId, localTime);
+            foreach (var draw in debugDraws)
+                draw.Update(host, rootScope, containerId, instanceId);
             previousLocalTime = localTime;
         }
 
@@ -113,6 +121,12 @@ namespace LiberaFx.Unity
             if (double.IsNaN(value) || double.IsInfinity(value) || value < -1e-8)
                 throw new InvalidOperationException("Render scope local time is invalid.");
             return Math.Max(0, value);
+        }
+
+        public void ClearPreviewDebugDraw()
+        {
+            foreach (var draw in debugDraws) draw.Dispose();
+            debugDraws.Clear();
         }
 
         public void Dispose()
@@ -127,6 +141,8 @@ namespace LiberaFx.Unity
                 gpu.Dispose();
             }
             foreach (var node in renderNodes) node.Dispose();
+            foreach (var draw in debugDraws) draw.Dispose();
+            debugDraws.Clear();
             renderNodes.Clear();
             gpuPrograms.Clear();
             if (scopeObject) DestroyOwned(scopeObject);

@@ -39,6 +39,8 @@ private:
     void Reply(const FString& sequence, liberafx::Result result, const FString& error, const FString& target = {});
     TUniquePtr<FLibraLiveGameSession> session;
     FString identity, waitingSequence;
+    FString debugOwner;
+    bool debugOwnerRequired = false;
     liberafx::RequestId waitingRequest{};
     uint64 lastSequence = 0;
     bool hasWaiting = false;

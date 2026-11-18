@@ -22,7 +22,13 @@ public static class GameIoSchema
     private const string PropertyTypeEnum = "enum:1e309707-1fa0-4d38-aed9-42d000000001";
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
-    public static bool IsNode(GraphNodeKind kind) => kind.Value is
+    public static bool IsInstanceNode(GraphNodeKind kind) => kind.Value is
+        "InstanceInputProperty" or "InstanceInputSignal" or "InstanceOutputProperty" or "InstanceOutputSignal";
+
+    public static GraphNodeKind SharedKind(GraphNodeKind kind) => IsInstanceNode(kind)
+        ? new GraphNodeKind(kind.Value["Instance".Length..]) : kind;
+
+    public static bool IsNode(GraphNodeKind kind) => IsInstanceNode(kind) || kind.Value is
         "InputProperty" or "InputSignal" or "OutputProperty" or "OutputSignal" or "OwnerMatrix";
 
     public static bool IsInternalOutputSignal(GraphNodeKind kind) =>
@@ -31,7 +37,7 @@ public static class GameIoSchema
     public static GraphNodeDefinition Effective(GraphNodeDefinition definition,
         IReadOnlyList<NodeParameterSnapshot>? nodeParameters)
     {
-        var kind = definition.Kind;
+        var kind = SharedKind(definition.Kind);
         if (kind != GraphNodeKind.InputProperty && kind != GraphNodeKind.OutputProperty)
             return definition;
 
@@ -49,7 +55,8 @@ public static class GameIoSchema
     public static JsonElement? ValueTypeValue(GraphNodeDefinition definition,
         IReadOnlyList<NodeParameterSnapshot>? nodeParameters)
     {
-        if (definition.Kind != GraphNodeKind.InputProperty && definition.Kind != GraphNodeKind.OutputProperty)
+        var kind = SharedKind(definition.Kind);
+        if (kind != GraphNodeKind.InputProperty && kind != GraphNodeKind.OutputProperty)
             return null;
         var parameter = definition.Parameters.Single(item => item.Id == TypeParameterId);
         return nodeParameters?.FirstOrDefault(item =>
@@ -69,7 +76,8 @@ public static class GameIoSchema
         var nameText = name.GetString()!;
         if (nameText.Length != 0) ValidateName(nameText);
 
-        if (definition.Kind == GraphNodeKind.InputProperty || definition.Kind == GraphNodeKind.OutputProperty)
+        var kind = SharedKind(definition.Kind);
+        if (kind == GraphNodeKind.InputProperty || kind == GraphNodeKind.OutputProperty)
             _ = PropertyType(definition, nodeParameters);
     }
 
@@ -84,9 +92,10 @@ public static class GameIoSchema
         {
             if (!IsNode(node.Kind)) return node;
             if (node.Kind.Value == "OwnerMatrix") return node;
-            if (node.Kind == GraphNodeKind.InputSignal)
+            var sharedKind = SharedKind(node.Kind);
+            if (sharedKind == GraphNodeKind.InputSignal)
                 return node with { Kind = GraphNodeKind.Signal, PortType = "Signal", PortCategory = GraphPortCategory.Signal };
-            if (node.Kind == GraphNodeKind.OutputSignal)
+            if (sharedKind == GraphNodeKind.OutputSignal)
                 return node with
                 {
                     Kind = new GraphNodeKind("GameIoRuntimeOutputSignal"),
@@ -95,7 +104,7 @@ public static class GameIoSchema
                 };
 
             var valueType = PropertyType(definitions[node.Kind], node.Parameters);
-            if (valueType == "Matrix") return node;
+            if (valueType == "Matrix") return node with { Kind = sharedKind };
             var typeName = valueType switch
             {
                 "Float" => "Float",
@@ -120,8 +129,8 @@ public static class GameIoSchema
         var originals = graph.Nodes.ToDictionary(item => item.Id);
         var connections = graph.Connections.Select(edge =>
         {
-            var sourceKind = originals[edge.SourceNodeId].Kind;
-            var targetKind = originals[edge.TargetNodeId].Kind;
+            var sourceKind = SharedKind(originals[edge.SourceNodeId].Kind);
+            var targetKind = SharedKind(originals[edge.TargetNodeId].Kind);
             var sourcePort = sourceKind == GraphNodeKind.InputSignal ||
                 sourceKind == GraphNodeKind.InputProperty &&
                 PropertyType(definitions[sourceKind], originals[edge.SourceNodeId].Parameters) != "Matrix" ||
@@ -161,7 +170,7 @@ public static class GameIoSchema
             ValidateName(text);
             if (!names.Add(text))
                 throw new InvalidDataException($"Game I/O port name '{text}' must be unique.");
-            var kind = node.Kind.Value switch
+            var kind = SharedKind(node.Kind).Value switch
             {
                 "InputProperty" => GameIoPortKind.InputProperty,
                 "InputSignal" => GameIoPortKind.InputSignal,
@@ -210,7 +219,7 @@ public static class GameIoSchema
     {
         foreach (var node in graph.Nodes)
         {
-            if (IsNode(node.Kind) && !isRoot)
+            if (IsNode(node.Kind) && !IsInstanceNode(node.Kind) && !isRoot)
                 throw new InvalidDataException("Game I/O nodes must be directly in the root graph.");
             if (node.ChildGraph is { } child) ValidateLocations(child, false);
         }

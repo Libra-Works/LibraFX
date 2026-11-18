@@ -16,6 +16,7 @@ public sealed record PreviewPlaybackState(bool Playing, double Frame, double Fra
     public double? SignalStartSeconds { get; init; }
     public long LoopCount { get; init; }
     public bool IncludeSignalStart { get; init; }
+    public bool DebugDrawStopped { get; init; }
 }
 
 public sealed class EditorPlayback : ObservableObject, IDisposable
@@ -37,6 +38,7 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
     private long _loopCount;
     private bool _includeSignalStart = true;
     private bool _hasStarted;
+    private bool _debugDrawStopped;
 
     public event EventHandler? StateChanged;
     public IRelayCommand PlayPauseCommand { get; }
@@ -98,7 +100,7 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
     {
         SignalEpoch = _signalEpoch, ForwardSeconds = _forwardSeconds,
         SeekTimeSeconds = _seekTime, SignalStartSeconds = _signalStart, LoopCount = _loopCount,
-        IncludeSignalStart = _includeSignalStart
+        IncludeSignalStart = _includeSignalStart, DebugDrawStopped = _debugDrawStopped
     };
 
     public double DisplayUnits(double timeSeconds) => _showSeconds ? timeSeconds : timeSeconds * _fps;
@@ -125,6 +127,7 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
         PlayPauseCommand = new RelayCommand(() => { if (_playing) Pause(); else Play(); });
         StopCommand = new RelayCommand(() =>
         {
+            _debugDrawStopped = true;
             Pause();
             SetFrame(_start);
             MarkSeek(restart: true);
@@ -143,6 +146,7 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
     public void Play()
     {
         if (_playing) return;
+        _debugDrawStopped = false;
         if (Frame >= _end) { SetFrame(_start); MarkSeek(restart: true); }
         _signalStart ??= TimeSeconds;
         _hasStarted = true;
@@ -186,6 +190,7 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
 
     private void StepForward()
     {
+        _debugDrawStopped = false;
         Pause();
         var next = Math.Min(_end, Math.Floor(Frame) + 1);
         if (next <= Frame) return;
@@ -199,6 +204,7 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
 
     private void MarkSeek(bool restart = false)
     {
+        if (!restart) _debugDrawStopped = false;
         ++_signalEpoch;
         _forwardSeconds = 0;
         _seekTime = TimeSeconds;

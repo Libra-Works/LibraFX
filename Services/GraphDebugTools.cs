@@ -110,7 +110,7 @@ public sealed class GraphDebugTools
         });
     }
 
-    private static GraphEditorView FindView(ActiveGraphProvider provider)
+    internal static GraphEditorView FindView(ActiveGraphProvider provider)
     {
         if (Environment.GetEnvironmentVariable("LIBERAFX_MCP_DEBUG") != "1")
             throw new McpException("Graph UI debugging is disabled. Start LIBERA FX with LIBERAFX_MCP_DEBUG=1 to enable it.");

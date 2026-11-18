@@ -6,7 +6,7 @@ using UnityEngine;
 namespace LiberaFx.Unity
 {
     [DisallowMultipleComponent]
-    public sealed class LiberaFxSpawnableComponent : MonoBehaviour
+    public sealed partial class LiberaFxSpawnableComponent : MonoBehaviour
     {
         private const uint SpawnEvent = 1;
         private const uint StopEvent = 2;
@@ -35,6 +35,9 @@ namespace LiberaFx.Unity
         private double elapsed;
         private bool rootFinished;
         private bool effectForced;
+        private bool sourceInitialAdvancePending;
+        private readonly List<LiberaFxSkeletalPoseSourcePorts> skeletalPoseSources =
+            new List<LiberaFxSkeletalPoseSourcePorts>();
         private int ownerThreadId;
         private bool debugging, debugPending, debugAdvance;
         private double debugTime, debugDelta;
@@ -52,7 +55,8 @@ namespace LiberaFx.Unity
         public NativeResult AttachExecutionDebugger(ulong generation, byte[] container, ulong instance, string invitation)
         {
             if (host == null) return NativeResult.NotReady;
-            if (ownerThreadId != System.Threading.Thread.CurrentThread.ManagedThreadId || eventDrainDepth != 0 || debugging)
+            if (ownerThreadId != System.Threading.Thread.CurrentThread.ManagedThreadId || eventDrainDepth != 0 ||
+                debugging || sourceInitialAdvancePending)
                 return NativeResult.Busy;
             if (Application.platform != RuntimePlatform.WindowsEditor && Application.platform != RuntimePlatform.WindowsPlayer)
                 return NativeResult.UnsupportedBinary;
@@ -119,10 +123,43 @@ namespace LiberaFx.Unity
             if (playOnEnable) Play();
         }
 
-        private void Update()
+        // The default Unity Animator has completed its pose evaluation before
+        // LateUpdate. Copy Source matrices here before queueing worker evaluation.
+        private void LateUpdate()
         {
             var current = host;
             if (current == null || rootFinished) return;
+            if (sourceInitialAdvancePending)
+            {
+                if (!PublishSkeletalPoseSources(current)) return;
+                var quality = current.SetHostQuality(
+                    UnityHostQuality.Read(qualityTierMapping, (ulong)Time.frameCount));
+                if (quality != NativeResult.Ok)
+                {
+                    FailPlayback(quality, "Publishing host quality failed: " + quality + ".", current);
+                    enabled = false;
+                    return;
+                }
+                var startResult = NativeResult.QueueRejected;
+                for (var attempt = 0; attempt < 16; ++attempt)
+                {
+                    startResult = current.Advance(0, 0);
+                    DrainEvents(current);
+                    if (host != current || effectForced) return;
+                    if (startResult != NativeResult.QueueRejected) break;
+                }
+                if (startResult != NativeResult.Ok)
+                {
+                    FailPlayback(startResult,
+                        "Native Spawnable initialization failed: " + startResult + ".", current);
+                    enabled = false;
+                    return;
+                }
+                sourceInitialAdvancePending = false;
+                rootRenderScope.Initialize(current, 0);
+                FinishFrame(current);
+                return;
+            }
             if (debugging) { UpdateDebugger(current); return; }
             var frameDelta = (double)Time.deltaTime;
             var rate = (double)playRate;
@@ -133,6 +170,7 @@ namespace LiberaFx.Unity
                 return;
             }
 
+            if (!PublishSkeletalPoseSources(current)) return;
             elapsed += frameDelta * rate;
             var qualityResult = current.SetHostQuality(UnityHostQuality.Read(qualityTierMapping, (ulong)Time.frameCount));
             if (qualityResult != NativeResult.Ok)
@@ -197,6 +235,7 @@ namespace LiberaFx.Unity
                 FailPlayback(NativeResult.InvalidArgument, "Invalid debugger playback time.", current);
                 return;
             }
+            if (!PublishSkeletalPoseSources(current)) return;
             var status = current.SetHostQuality(UnityHostQuality.Read(qualityTierMapping, (ulong)Time.frameCount));
             if (status == NativeResult.Ok) status = current.SubmitDebugger(0, debugTime, debugDelta);
             if (status == NativeResult.Ok) { debugPending = debugAdvance = true; debugRetries = 0; }
@@ -223,6 +262,19 @@ namespace LiberaFx.Unity
                 FailPlayback(NativeResult.InternalError, "Unity render update failed: " + error.Message, current);
                 enabled = false;
             }
+        }
+
+        private bool PublishSkeletalPoseSources(NativeSpawnableHost current)
+        {
+            foreach (var source in skeletalPoseSources)
+            {
+                var result = source.Publish(this, current);
+                if (result == NativeResult.Ok) continue;
+                FailPlayback(result, "Publishing SOURCE pose inputs failed: " + result + ".", current);
+                enabled = false;
+                return false;
+            }
+            return true;
         }
 
         public NativeResult Play(bool restart = true)
@@ -252,14 +304,24 @@ namespace LiberaFx.Unity
                 elapsed = 0;
                 rootFinished = false;
                 effectForced = false;
+                sourceInitialAdvancePending = false;
+                skeletalPoseSources.Clear();
                 cancelledBatchScopes.Clear();
                 LastError = null;
                 templateDefinitions.Clear();
                 foreach (var pair in plan.templates) templateDefinitions.Add(pair.Key, pair.Value);
                 rootRenderScope = LiberaFxRenderScope.CreatePending(transform, plan.root,
-                    true, null, 0, 0, plan.bindings.RootGpuSeed);
+                    true, null, 0, 0, plan.bindings.RootGpuSeed, suppressPreviewDebugDraw);
 
                 var current = host;
+                if (!LiberaFxSkeletalPoseSourcePorts.TryRead(current,
+                    out var sourceInputs, out var sourceError))
+                    throw new InvalidOperationException("LiberaFx: " + sourceError);
+                skeletalPoseSources.AddRange(sourceInputs);
+                sourceInitialAdvancePending = skeletalPoseSources.Count != 0;
+                if (sourceInitialAdvancePending)
+                    return NativeResult.Ok;
+
                 NativeInstance.Check(current.SetHostQuality(
                     UnityHostQuality.Read(qualityTierMapping, (ulong)Time.frameCount)));
                 var result = NativeResult.QueueRejected;
@@ -411,6 +473,34 @@ namespace LiberaFx.Unity
             if (current == null) return NativeResult.NotReady;
             var result = current.SetOwnerMatrix(values);
             return result == NativeResult.Ok ? result : Report(result, "Owner matrix update failed: " + result + ".");
+        }
+
+        public NativeResult GetInstanceTarget(byte[] container, ulong instance, out ulong generation)
+        {
+            generation = 0;
+            return host == null ? NativeResult.NotReady : host.GetInstanceTarget(container, instance, out generation);
+        }
+
+        public NativeResult SetInstanceProperty(ulong generation, byte[] container, ulong instance,
+            string name, double[] values) => host == null ? NativeResult.NotReady :
+            host.SetInstanceProperty(generation, container, instance, name, values);
+
+        public NativeResult GetInstanceProperty(ulong generation, byte[] container, ulong instance,
+            string name, out double[] values)
+        {
+            values = null;
+            return host == null ? NativeResult.NotReady :
+                host.GetInstanceProperty(generation, container, instance, name, out values);
+        }
+
+        public NativeResult FireInstanceSignal(ulong generation, byte[] container, ulong instance, string name)
+        {
+            var current = host;
+            if (current == null) return NativeResult.NotReady;
+            if (debugging) return NativeResult.Busy;
+            var result = current.FireInstanceSignal(generation, container, instance, name);
+            DrainEvents(current);
+            return host != current ? NativeResult.Ok : result;
         }
 
         public NativeResult ReadRootValue(string nodeGuid, out NativeValue value)
@@ -649,7 +739,7 @@ namespace LiberaFx.Unity
                 if (instanceScopes.ContainsKey(scopeKey))
                     throw new InvalidOperationException("Duplicate active Spawn event for instance " + item.InstanceId + ".");
                 var scope = LiberaFxRenderScope.CreatePending(transform, definition, false,
-                    item.ContainerId, item.InstanceId, item.Time, item.Seed);
+                    item.ContainerId, item.InstanceId, item.Time, item.Seed, suppressPreviewDebugDraw);
                 try
                 {
                     scope.Initialize(current, elapsed);
@@ -712,6 +802,8 @@ namespace LiberaFx.Unity
             ReleaseAllScopes();
             candidate?.Dispose();
             templateDefinitions.Clear();
+            skeletalPoseSources.Clear();
+            sourceInitialAdvancePending = false;
             rootFinished = false;
             effectForced = false;
             elapsed = 0;
@@ -729,6 +821,8 @@ namespace LiberaFx.Unity
             }
             ReleaseAllScopes();
             templateDefinitions.Clear();
+            skeletalPoseSources.Clear();
+            sourceInitialAdvancePending = false;
             current?.Dispose();
             elapsed = 0;
             rootFinished = false;

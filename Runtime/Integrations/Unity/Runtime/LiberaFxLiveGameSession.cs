@@ -67,6 +67,7 @@ namespace LiberaFx.Unity
         private long queuedBytes, activeBytes;
         private ulong sequence;
         private bool closing, closed, processing;
+        private bool suppressPreviewDebugDraw;
         public SessionId Id { get; }
         public const int MaximumPackageBytes = 16 * 1024 * 1024;
 
@@ -203,6 +204,7 @@ namespace LiberaFx.Unity
                 candidate.Asset = ScriptableObject.CreateInstance<LiberaFxSpawnableAsset>();
                 candidate.Asset.SetPackageBytes(item.Bytes); // exclusively owned request copy
                 candidate.Component = candidate.Owner.AddComponent<LiberaFxSpawnableComponent>();
+                if (suppressPreviewDebugDraw) candidate.Component.ClearPreviewDebugDraw();
                 var result = candidate.Component.ConfigureForSession(candidate.Asset, bindings);
                 if (result == NativeResult.Ok) result = candidate.Component.Play();
                 if (result != NativeResult.Ok)
@@ -241,11 +243,38 @@ namespace LiberaFx.Unity
         public LiberaFxSpawnableComponent ResolveComponent(SessionInstanceId id)
         { RequireOwner(); return Find(id)?.Playback.Component; }
 
+        public NativeResult ClearPreviewDebugDraw(SessionInstanceId target)
+        {
+            RequireOwner();
+            if (processing) return NativeResult.Busy;
+            var slot = Find(target); // session + incarnation + exact slot generation
+            if (slot == null) return NativeResult.InvalidHandle;
+            if (slot.Playback.Component) slot.Playback.Component.ClearPreviewDebugDraw();
+            return NativeResult.Ok;
+        }
+        public NativeResult DisconnectPreviewDebugDraw()
+        {
+            RequireOwner();
+            if (processing) return NativeResult.Busy;
+            suppressPreviewDebugDraw = true; // also covers queued/future creates/replaces
+            foreach (var live in List()) ClearPreviewDebugDraw(live.Id);
+            return NativeResult.Ok;
+        }
+        public NativeResult AttachPreviewDebugDraw()
+        {
+            RequireOwner();
+            if (processing || closing || closed) return NativeResult.NotReady;
+            // Existing cleared scopes stay cleared. Only a new transfer can
+            // create fresh debug resources; never resurrect cached components.
+            suppressPreviewDebugDraw = false;
+            return NativeResult.Ok;
+        }
         /// <summary>Stops accepting creates/replaces. Never converts natural lifetime to force termination.</summary>
         public NativeResult Close()
         {
             RequireOwner();
             if (processing) return NativeResult.Busy;
+            DisconnectPreviewDebugDraw();
             lock (gate)
             {
                 closing = true;

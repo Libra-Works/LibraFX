@@ -59,6 +59,13 @@ public:
     Result dispatchSignal(const std::uint8_t nodeId[16]);
     Result fireGameSignal(const char* name);
     Result setGameProperty(const char* name, const double* values, std::size_t width);
+    Result setInstanceProperty(const SpawnableDebugTarget& target, const char* name,
+                               const double* values, std::size_t width);
+    Result instanceProperty(const SpawnableDebugTarget& target, const char* name,
+                            double values[16], std::uint8_t& width);
+    Result fireInstanceSignal(const SpawnableDebugTarget& target, const char* name);
+    Result instancePortName(const std::uint8_t containerId[16], std::size_t index,
+                            const char*& name) const noexcept;
     Result setOwnerMatrix(const double* values, std::size_t width);
     Result setHostQuality(const HostQualitySnapshot& snapshot);
     Result requestNaturalEnd();

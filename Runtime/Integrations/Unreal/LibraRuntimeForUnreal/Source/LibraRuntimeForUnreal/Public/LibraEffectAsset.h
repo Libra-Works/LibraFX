@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "LibraRuntimeTypes.h"
+#include "UObject/SoftObjectPath.h"
 #include "LibraEffectAsset.generated.h"
 
 class FCompiledLibraProgram;
@@ -35,6 +36,9 @@ public:
 #if WITH_EDITORONLY_DATA
     UPROPERTY(VisibleAnywhere, Instanced, Category = "Import Settings")
     TObjectPtr<UAssetImportData> AssetImportData;
+
+    UPROPERTY(EditAnywhere, Category = "LIBERA FX Source", meta = (FilePathFilter = "lfxproj"))
+    FFilePath SourceProjectPath;
 #endif
 
 private:

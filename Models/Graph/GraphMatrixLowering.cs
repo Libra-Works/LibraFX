@@ -249,6 +249,14 @@ public static class GraphMatrixLowering
             {
                 if (IsMatrixNode(original[edge.TargetNodeId])) continue;
                 var source = outputs[(edge.SourceNodeId, edge.SourcePortId)];
+                if (original[edge.TargetNodeId].Kind.Value is "DebugText" or "DebugModel" &&
+                    edge.TargetPortId == "matrix")
+                {
+                    if (source.Count != 4) throw new InvalidDataException("Debug world Matrix requires four rows.");
+                    for (var row = 0; row < 4; row++)
+                        edges.Add(new(source[row].NodeId, edge.TargetNodeId, $"row{row}", source[row].PortId));
+                    continue;
+                }
                 if (source.Count != 1)
                     throw new InvalidDataException("A Matrix output requires a Matrix-aware input.");
                 edges.Add(new(source[0].NodeId, edge.TargetNodeId, edge.TargetPortId, source[0].PortId));

@@ -17,6 +17,7 @@ class LIBRARUNTIMEFORUNREAL_API ULibraEffectComponent : public UActorComponent
     GENERATED_BODY()
 
 public:
+    void ClearPreviewDebugDraw();
     ULibraEffectComponent();
     virtual ~ULibraEffectComponent() override;
 
@@ -134,6 +135,20 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Game I/O")
     ELibraRuntimeResult SetGameProperty(const FString& name, const TArray<double>& values);
 
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Instance Game I/O")
+    ELibraRuntimeResult GetInstanceTarget(FGuid containerId, int64 instanceId, int64& generation);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Instance Game I/O")
+    ELibraRuntimeResult SetInstanceProperty(int64 generation, FGuid containerId, int64 instanceId,
+        const FString& name, const TArray<double>& values);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Instance Game I/O")
+    ELibraRuntimeResult GetInstanceProperty(int64 generation, FGuid containerId, int64 instanceId,
+        const FString& name, TArray<double>& values);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Instance Game I/O")
+    ELibraRuntimeResult FireInstanceSignal(int64 generation, FGuid containerId, int64 instanceId, const FString& name);
+
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Game I/O")
     ELibraRuntimeResult SetOwnerMatrix(const TArray<double>& values);
 
@@ -240,6 +255,7 @@ protected:
     virtual void OnComponentDestroyed(bool bDestroyingHierarchy) override;
 
 private:
+    bool bSuppressPreviewDebugDraw = false;
     ELibraRuntimeResult PlayPackage(bool bRestart);
     ELibraRuntimeResult ReportPackageError(ELibraRuntimeResult result, const FString& message);
     void SyncPackageState();

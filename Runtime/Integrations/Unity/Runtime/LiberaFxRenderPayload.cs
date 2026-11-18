@@ -28,6 +28,10 @@ namespace LiberaFx.Unity
         public bool __liberafxHasSpriteAnimation;
         public bool billboard;
         public string rotationConvention;
+        public bool previewOnly;
+        public int debugVersion;
+        public string text;
+        public double size;
     }
 
     [Serializable] internal sealed class LiberaFxRenderSpriteAnimationPayload
@@ -156,6 +160,7 @@ namespace LiberaFx.Unity
 
     internal sealed class LiberaFxPreparedRenderNode
     {
+        public LiberaFxRenderNodePayload debugDraw;
         public string nodeId;
         public bool isSprite;
         public bool frameConnected;
@@ -274,6 +279,23 @@ namespace LiberaFx.Unity
 
         private LiberaFxPreparedRenderNode ResolveRenderNode(LiberaFxRenderNodePayload node)
         {
+            if (node.kind == "debugText" || node.kind == "debugModel")
+            {
+                Mesh debugMesh = null;
+                var debugMaterials = Array.Empty<Material>();
+                if (node.kind == "debugModel")
+                {
+                    if (!renderAssets.TryGetValue(node.assetPath, out var model) || !model.mesh)
+                        throw new InvalidOperationException("Debug Model requires a bound Unity Mesh: " + node.assetPath);
+                    debugMesh = model.mesh;
+                    debugMaterials = model.defaultMaterials;
+                    if (debugMaterials == null || debugMaterials.Length != debugMesh.subMeshCount ||
+                        debugMaterials.Any(item => !item))
+                        throw new InvalidOperationException("Debug Model requires explicit material bindings for every submesh.");
+                }
+                return new LiberaFxPreparedRenderNode { nodeId = node.nodeId, debugDraw = node,
+                    inputs = node.inputs, mesh = debugMesh, materials = debugMaterials };
+            }
             if (!renderAssets.TryGetValue(node.assetPath, out var asset))
                 throw new InvalidOperationException("No Unity asset binding exists for render asset '" + node.assetPath + "'.");
             var isSprite = node.kind == "sprite";
@@ -543,8 +565,9 @@ namespace LiberaFx.Unity
             foreach (var node in payload.nodes)
             {
                 if (node == null || !TryCanonicalGuid(node.nodeId, out var id) ||
-                    !ids.Add(id) || (node.kind != "model" && node.kind != "sprite") ||
-                    string.IsNullOrWhiteSpace(node.assetPath) || node.assetPath.Length > 512)
+                    !ids.Add(id) || (node.kind != "model" && node.kind != "sprite" &&
+                        node.kind != "debugText" && node.kind != "debugModel") ||
+                    node.kind != "debugText" && (string.IsNullOrWhiteSpace(node.assetPath) || node.assetPath.Length > 512))
                     throw new InvalidOperationException("Render configuration contains an invalid node identity, kind or asset.");
                 node.nodeId = id;
                 if (!node.__liberafxHasSpriteAnimation) node.spriteAnimation = null;
@@ -585,6 +608,17 @@ namespace LiberaFx.Unity
                 foreach (var lane in input.defaults)
                     if (!IsFiniteFloat(lane))
                         throw new InvalidOperationException("Render node default exceeds finite Unity float range.");
+            }
+            if (node.kind == "debugText" || node.kind == "debugModel")
+            {
+                if (!node.previewOnly || node.debugVersion != 1 || !IsFiniteFloat(node.size) ||
+                    node.size <= 0 || node.size > 10000 || node.inputs.Length != 5 ||
+                    node.kind == "debugText" && (node.text == null ||
+                        Encoding.UTF8.GetByteCount(node.text) > 1024 || node.text.IndexOf('\0') >= 0))
+                    throw new InvalidOperationException("Unsupported preview-only Debug draw descriptor.");
+                for (var row = 0; row < 4; ++row) RequireInput(node, "row" + row, 4);
+                RequireInput(node, "visible", 1);
+                return;
             }
             RequireInput(node, "position", 3);
             RequireInput(node, "rotation", 3);

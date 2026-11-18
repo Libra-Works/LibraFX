@@ -1741,6 +1741,102 @@ LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_quality(
     });
 }
 
+LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_instance_target(
+    LibraSpawnableHostHandle host, const uint8_t containerId[16],
+    LibraGeneratorInstance instance, uint64_t* outGeneration)
+{
+    if (!containerId || !outGeneration) return LIBRA_INVALID_ARGUMENT;
+    *outGeneration = 0;
+    return guardedSpawnable(host, [&]() -> LibraResult {
+        auto native = findSpawnableHost(host);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        auto scope = liberafx::SpawnableScope{};
+        scope.kind = liberafx::SpawnableScopeKind::Instance;
+        std::memcpy(scope.containerId, containerId, 16);
+        scope.instanceId = instance;
+        auto target = liberafx::SpawnableDebugTarget{};
+        auto result = native->debugTarget(scope, target);
+        if (result == liberafx::Result::Ok) *outGeneration = target.hostGeneration;
+        return toLibraResult(result);
+    });
+}
+
+LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_instance_property(
+    LibraSpawnableHostHandle host, uint64_t generation, const uint8_t containerId[16],
+    LibraGeneratorInstance instance, const char* name, const double* values, uint32_t width)
+{
+    if (!containerId || !name || !values) return LIBRA_INVALID_ARGUMENT;
+    return guardedSpawnable(host, [&]() -> LibraResult {
+        auto native = findSpawnableHost(host);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        auto target = liberafx::SpawnableDebugTarget{};
+        target.hostGeneration = generation;
+        target.scope.kind = liberafx::SpawnableScopeKind::Instance;
+        std::memcpy(target.scope.containerId, containerId, 16);
+        target.scope.instanceId = instance;
+        return toLibraResult(native->setInstanceProperty(target, name, values, width));
+    });
+}
+
+LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_get_instance_property(
+    LibraSpawnableHostHandle host, uint64_t generation, const uint8_t containerId[16],
+    LibraGeneratorInstance instance, const char* name, double values[16], uint32_t* outWidth)
+{
+    if (!containerId || !name || !values || !outWidth) return LIBRA_INVALID_ARGUMENT;
+    *outWidth = 0;
+    return guardedSpawnable(host, [&]() -> LibraResult {
+        auto native = findSpawnableHost(host);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        auto target = liberafx::SpawnableDebugTarget{};
+        target.hostGeneration = generation;
+        target.scope.kind = liberafx::SpawnableScopeKind::Instance;
+        std::memcpy(target.scope.containerId, containerId, 16);
+        target.scope.instanceId = instance;
+        auto width = uint8_t{};
+        auto result = native->instanceProperty(target, name, values, width);
+        if (result == liberafx::Result::Ok) *outWidth = width;
+        return toLibraResult(result);
+    });
+}
+
+LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_fire_instance_signal(
+    LibraSpawnableHostHandle host, uint64_t generation, const uint8_t containerId[16],
+    LibraGeneratorInstance instance, const char* name)
+{
+    if (!containerId || !name) return LIBRA_INVALID_ARGUMENT;
+    return guardedSpawnable(host, [&]() -> LibraResult {
+        auto native = findSpawnableHost(host);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        auto target = liberafx::SpawnableDebugTarget{};
+        target.hostGeneration = generation;
+        target.scope.kind = liberafx::SpawnableScopeKind::Instance;
+        std::memcpy(target.scope.containerId, containerId, 16);
+        target.scope.instanceId = instance;
+        return toLibraResult(native->fireInstanceSignal(target, name));
+    }, true);
+}
+
+LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_copy_instance_game_io_port_name(
+    LibraSpawnableHostHandle host, const uint8_t containerId[16], uint32_t index,
+    uint8_t* destination, uint64_t capacity, uint64_t* outByteCount)
+{
+    if (!containerId || !outByteCount || (!destination && capacity)) return LIBRA_INVALID_ARGUMENT;
+    *outByteCount = 0;
+    return guardedSpawnable(host, [&]() -> LibraResult {
+        auto native = findSpawnableHost(host);
+        if (!native) return LIBRA_INVALID_HANDLE;
+        auto name = static_cast<const char*>(nullptr);
+        auto result = native->instancePortName(containerId, index, name);
+        if (result != liberafx::Result::Ok) return toLibraResult(result);
+        const auto size = std::strlen(name);
+        *outByteCount = size;
+        if (!destination) return LIBRA_OK;
+        if (capacity < size) return LIBRA_INSUFFICIENT_WORK;
+        std::memcpy(destination, name, size);
+        return LIBRA_OK;
+    });
+}
+
 LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_owner_matrix(
     LibraSpawnableHostHandle host, const double values[16])
 {

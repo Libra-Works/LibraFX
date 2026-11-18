@@ -8,14 +8,17 @@ public sealed record LiveGameGraphSource(GraphSnapshot Graph, string Name, strin
 
 public static class LiveGameGraphCompiler
 {
-    public static byte[] Compile(LiveGameGraphSource source)
+    public static byte[] Compile(LiveGameGraphSource source, VfxCompileOptions? options = null)
     {
         var libraries = string.IsNullOrWhiteSpace(source.GroupDirectory)
             ? Array.Empty<GroupAssetLibrary>() : [new GroupAssetLibrary(source.GroupDirectory)];
         var graph = new GroupCompilationResolver(libraries).Resolve(source.Graph);
+        if (SkeletalPoseSchema.ContainsSource(graph))
+            throw new NotSupportedException(
+                "Live game transfer does not support SOURCE skeletal poses; SOURCE requires Unity or Unreal Spawnable package playback.");
         // Use the SAME package compiler/converter as saved .lfxp, not a bespoke
         // parameter patch or preview payload. Never mutate the source/history.
-        var package = SpawnableGroupPackage.Compile(graph);
+        var package = SpawnableGroupPackage.Compile(graph, options: options);
         if (package.AutoDestroyWhenIdle || package.HasDeferredSignals || package.HasChildDeferredSignals ||
             package.OnStartNodeId is not null || package.OnDestroyNodeId is not null ||
             package.Templates.Count != 0 || package.DestroyRoutes.Count != 0 ||

@@ -51,7 +51,10 @@ public partial class App : Application
                 DataContext = viewModel,
             };
             window.ConfigureCrashReports(_crashReports!.Drafts);
-            window.Opened += (_, _) =>
+            var startupProject = desktop.Args is { Length: 1 } args &&
+                Path.GetExtension(args[0]).Equals(ProjectFileService.FileExtension, StringComparison.OrdinalIgnoreCase)
+                ? args[0] : null;
+            window.Opened += async (_, _) =>
             {
                 viewModel.SetStorageProvider(window.StorageProvider);
                 var splash = new SplashWindow();
@@ -60,6 +63,12 @@ public partial class App : Application
                 {
                     if (splash.IsVisible) splash.Close();
                 }, TimeSpan.FromMilliseconds(500));
+                if (startupProject is not null)
+                {
+                    var path = startupProject;
+                    startupProject = null;
+                    await viewModel.OpenStartupProjectAsync(path);
+                }
             };
             desktop.MainWindow = window;
             window.Closing += (_, e) =>

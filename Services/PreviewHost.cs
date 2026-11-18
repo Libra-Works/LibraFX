@@ -75,6 +75,7 @@ public sealed class PreviewHost : IDisposable
                 _assets = model.PreviewAssets;
                 model.ActiveGraphProvider.PropertyChanged += OnActiveGraphChanged;
                 model.Playback.StateChanged += OnPlaybackChanged;
+                model.PropertyChanged += OnPreviewOptionsChanged;
                 AttachGraph(model.ActiveGraphProvider.Graph.Document);
                 Publish();
             });
@@ -126,6 +127,7 @@ public sealed class PreviewHost : IDisposable
 
     private void DetachGraph()
     {
+        if (_model is not null) _model.PropertyChanged -= OnPreviewOptionsChanged;
         if (_model is not null) _model.ActiveGraphProvider.PropertyChanged -= OnActiveGraphChanged;
         if (_model is not null) _model.Playback.StateChanged -= OnPlaybackChanged;
         if (_graph is not null)
@@ -133,6 +135,7 @@ public sealed class PreviewHost : IDisposable
             _graph.History.StateChanged -= OnHistoryChanged;
             _graph.PreviewSignalRequested -= OnPreviewSignalRequested;
         }
+
         lock (_sync)
         {
             _signalRequests.Clear();
@@ -140,6 +143,11 @@ public sealed class PreviewHost : IDisposable
         }
         _model = null;
         _graph = null;
+    }
+
+    private void OnPreviewOptionsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.IncludePreviewDebugDraw)) Publish();
     }
 
     private void OnHistoryChanged(object? sender, EventArgs e)
@@ -210,7 +218,8 @@ public sealed class PreviewHost : IDisposable
                 reusePlayback ? _latest?.Playback : _model.Playback.Snapshot)
             {
                 SignalRequests = _signalRequests.ToArray(),
-                SignalRequestSequence = _signalRequestSequence
+                SignalRequestSequence = _signalRequestSequence,
+                IncludePreviewDebugDraw = _model.IncludePreviewDebugDraw
             };
             _latest = publication;
             foreach (var client in _clients.Values) client.Channel.Writer.TryWrite(publication);
@@ -310,11 +319,15 @@ public sealed class PreviewHost : IDisposable
             {
                 var message = compiled.Prepare(publication, force);
                 if (message is null) continue;
+                if (message.Kind == CompiledPreviewKind.Program)
+                    _telemetry?.ExpectProgramAcknowledgement(id, publication.Sequence);
                 await SendSerializedAsync(socket, client, message.Bytes, WebSocketMessageType.Binary, cancellation);
                 if ((message.Kind == CompiledPreviewKind.Program || message.EvaluatedRenderScene is not null) &&
                     _assets?.Supports(id, "rendering") == true)
                 {
-                    var scene = message.EvaluatedRenderScene ?? RenderProgramBindings.CreateScene(publication.Graph, publication.Sequence);
+                    var scene = message.EvaluatedRenderScene ?? RenderProgramBindings.CreateScene(publication.Graph, publication.Sequence,
+                        options: new VfxCompileOptions { IncludePreviewDebugDraw = publication.IncludePreviewDebugDraw &&
+                            publication.Playback?.DebugDrawStopped != true });
                     await SendSerializedAsync(socket, client, CompiledPreviewProtocol.CreateScene(scene),
                         WebSocketMessageType.Binary, cancellation);
                 }

@@ -1,6 +1,8 @@
 #include "LibraSpawnableRenderState.h"
+#include "LibraDebugDrawScope.h"
 
 #include "LibraSpawnableComponent.h"
+#include "LibraSpawnableAsset.h"
 #include "LibraGpuEffectAsset.h"
 #include "LibraGpuEffectComponent.h"
 #include "Camera/PlayerCameraManager.h"
@@ -120,6 +122,8 @@ struct FDraw
 
 struct FDefinition
 {
+    TSharedPtr<FJsonObject> DebugConfiguration;
+    int32 DebugCount = 0;
     TArray<FDraw> Draws;
     TArray<TStrongObjectPtr<ULibraGpuEffectAsset>> Gpu;
     uint64 GpuBytes = 0;
@@ -127,6 +131,7 @@ struct FDefinition
 
 struct FInstance
 {
+    TUniquePtr<FLibraDebugDrawScope> Debug;
     FGuid Container;
     int64 Id = 0;
     double Started = 0, Previous = 0;
@@ -152,10 +157,14 @@ struct FLibraSpawnableRenderState::FImpl
     explicit FImpl(ULibraSpawnableComponent& owner) : Owner(owner) {}
     bool Fail(const FString& message) { Owner.LastError = message; return false; }
 
-    template<class T> T* Resolve(const FString& identity)
+    template<class T> T* Resolve(const FString& identity, ELibraPackageResourceKind kind,
+        bool bAllowPackageOverride = true)
     {
         for (const auto& binding : Owner.AssetBindings)
             if (binding.Identity == identity) return Cast<T>(binding.Asset);
+        if (bAllowPackageOverride && Owner.Package)
+            if (auto* asset = Owner.Package->FindResourceOverride(identity, kind))
+                return Cast<T>(asset);
         if (!FPackageName::IsValidObjectPath(identity)) return nullptr;
         return LoadObject<T>(nullptr, *identity);
     }
@@ -284,6 +293,16 @@ struct FLibraSpawnableRenderState::FImpl
             auto object = item.IsValid() && item->Type == EJson::Object ? item->AsObject() : nullptr;
             auto draw = FDraw{};
             auto id = FString{}, kind = FString{}, asset = FString{};
+            if (object && object->TryGetStringField(TEXT("kind"), kind) &&
+                (kind == TEXT("debugText") || kind == TEXT("debugModel")))
+            {
+                if (!object->TryGetStringField(TEXT("nodeId"), id) || !FGuid::Parse(id, draw.Id) ||
+                    !draw.Id.IsValid() || ids.Contains(draw.Id)) return Fail(TEXT("Invalid Debug renderer identity."));
+                ids.Add(draw.Id);
+                definition.DebugConfiguration = root;
+                ++definition.DebugCount;
+                continue;
+            }
             if (!object || !object->TryGetStringField(TEXT("nodeId"), id) || !FGuid::Parse(id, draw.Id) ||
                 !draw.Id.IsValid() || ids.Contains(draw.Id) ||
                 !object->TryGetStringField(TEXT("kind"), kind) || (kind != TEXT("model") && kind != TEXT("sprite")) ||
@@ -293,7 +312,9 @@ struct FLibraSpawnableRenderState::FImpl
             draw.bSprite = kind == TEXT("sprite");
             object->TryGetBoolField(TEXT("billboard"), draw.bBillboard);
             if (draw.bSprite && !ReadSpriteAnimation(object, draw.SpriteAnimation, draw.bBillboard)) return false;
-            draw.Mesh.Reset(Resolve<UStaticMesh>(draw.bSprite ? TEXT("/Engine/BasicShapes/Plane.Plane") : asset));
+            using EKind = ELibraPackageResourceKind;
+            draw.Mesh.Reset(Resolve<UStaticMesh>(draw.bSprite ? TEXT("/Engine/BasicShapes/Plane.Plane") : asset,
+                EKind::Model, !draw.bSprite));
             if (!draw.Mesh.IsValid() || draw.Mesh->GetStaticMaterials().Num() < 1 ||
                 draw.Mesh->GetStaticMaterials().Num() > 256)
                 return Fail(TEXT("Missing StaticMesh binding: ") + asset);
@@ -311,13 +332,14 @@ struct FLibraSpawnableRenderState::FImpl
                     slots.Contains(slot) || !material->TryGetStringField(TEXT("path"), identity))
                     return Fail(TEXT("Invalid material slot or identity."));
                 slots.Add(slot);
-                draw.Materials[slot].Reset(Resolve<UMaterialInterface>(identity));
+                draw.Materials[slot].Reset(Resolve<UMaterialInterface>(identity, EKind::Material));
                 if (!draw.Materials[slot].IsValid()) return Fail(TEXT("Missing Material binding: ") + identity);
             }
             if (draw.bSprite)
             {
-                if (!slots.Contains(0)) draw.Materials[0].Reset(Resolve<UMaterialInterface>(TEXT("builtin:sprite")));
-                auto texture = Resolve<UTexture>(asset);
+                if (!slots.Contains(0)) draw.Materials[0].Reset(
+                    Resolve<UMaterialInterface>(TEXT("builtin:sprite"), EKind::Material));
+                auto texture = Resolve<UTexture>(asset, EKind::Texture);
                 if (!texture) return Fail(TEXT("Missing sprite Texture binding: ") + asset);
                 if (!draw.Materials[0].IsValid() ||
                     !HasParameter(draw.Materials[0].Get(), FMaterialParameterInfo(TEXT("Texture")), TEXT("texture")) ||
@@ -392,7 +414,7 @@ struct FLibraSpawnableRenderState::FImpl
                     !textureObject->TryGetStringField(TEXT("path"), path) || !draw.Materials.IsValidIndex(texture.Slot) ||
                     !HasParameter(draw.Materials[texture.Slot].Get(), texture.Parameter, TEXT("texture")))
                     return Fail(TEXT("Requested material texture parameter is unavailable."));
-                texture.Texture.Reset(Resolve<UTexture>(path));
+                texture.Texture.Reset(Resolve<UTexture>(path, EKind::Texture));
                 if (!texture.Texture.IsValid()) return Fail(TEXT("Missing Texture binding: ") + path);
                 draw.Textures.Add(MoveTemp(texture));
             }
@@ -449,7 +471,7 @@ struct FLibraSpawnableRenderState::FImpl
                 if (!entry.Value || !entry.Value->TryGetString(identity))
                     return Fail(TEXT("Invalid GPU resource identity."));
                 if (identity == TEXT("builtin:white")) continue;
-                auto texture = Resolve<UTexture2D>(identity);
+                auto texture = Resolve<UTexture2D>(identity, ELibraPackageResourceKind::Texture);
                 if (!texture) return Fail(TEXT("Missing GPU Texture2D binding: ") + identity);
                 entry.Value = MakeShared<FJsonValueString>(texture->GetPathName());
             }
@@ -488,9 +510,9 @@ struct FLibraSpawnableRenderState::FImpl
         {
             if (instance->Container == container && instance->Id == id)
                 return Fail(TEXT("Duplicate engine instance identity."));
-            count += instance->Draws.Num();
+            count += instance->Draws.Num() + (instance->Debug ? instance->Debug->Count() : 0);
         }
-        if (count + (*definition)->Draws.Num() > 4096 ||
+        if (count + (*definition)->Draws.Num() + (Owner.IsPreviewDebugDrawSuppressed() ? 0 : (*definition)->DebugCount) > 4096 ||
             (*definition)->GpuBytes > ULibraGpuEffectAsset::MaximumGpuBytes - GpuBytes)
             return Fail(TEXT("Active renderer or aggregate GPU memory budget exceeded."));
         auto actor = Owner.GetOwner();
@@ -499,6 +521,19 @@ struct FLibraSpawnableRenderState::FImpl
         instance->Container = container; instance->Id = id;
         instance->Started = instance->Previous = time;
         instance->Definition = definition->Get();
+        if (instance->Definition->DebugConfiguration && !Owner.IsPreviewDebugDrawSuppressed())
+        {
+            instance->Debug = MakeUnique<FLibraDebugDrawScope>();
+            auto error = FString{};
+            if (!instance->Debug->Configure(*instance->Definition->DebugConfiguration, *actor,
+                [this, container, id](FGuid source, FVector4& value, int32& width)
+                {
+                    return container.IsValid() ? Owner.ReadChildValue(container, id, source, value, width) :
+                        Owner.ReadRootValue(source, value, width);
+                }, [this](const FString& identity)
+                { return Resolve<UStaticMesh>(identity, ELibraPackageResourceKind::Model); }, 1, error))
+                return Fail(error);
+        }
         for (const auto& draw : instance->Definition->Draws)
         {
             auto component = TStrongObjectPtr<UStaticMeshComponent>(
@@ -545,6 +580,11 @@ struct FLibraSpawnableRenderState::FImpl
     {
         for (const auto& instance : Instances)
         {
+            if (instance->Debug)
+            {
+                auto error = FString{};
+                if (!instance->Debug->Update(1, error)) return Fail(error);
+            }
             for (auto index = 0; index < instance->Draws.Num(); ++index)
             {
                 auto& draw = instance->Definition->Draws[index];
@@ -720,8 +760,15 @@ bool FLibraSpawnableRenderState::Update(double time, bool rootFinished)
 int32 FLibraSpawnableRenderState::DrawCount() const
 {
     auto count = 0;
-    for (const auto& instance : Impl->Instances) count += instance->Draws.Num();
+    for (const auto& instance : Impl->Instances)
+        count += instance->Draws.Num() + (instance->Debug ? instance->Debug->Count() : 0);
     return count;
+}
+
+void FLibraSpawnableRenderState::ClearPreviewDebugDraw()
+{
+    check(IsInGameThread());
+    for (auto& instance : Impl->Instances) instance->Debug.Reset();
 }
 
 int32 FLibraSpawnableRenderState::GpuCount() const

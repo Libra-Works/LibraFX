@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "typeId": "b0af61d2-29f6-4cc9-a71e-000000000203",
+  "namespace": "LiberaFx",
+  "name": "SourceSpace",
+  "values": [
+    { "value": 0, "name": "BoneLocal", "displayNameKey": "Matrix.Source.Space.BoneLocal" },
+    { "value": 1, "name": "Component", "displayNameKey": "Matrix.Source.Space.Component" },
+    { "value": 2, "name": "World", "displayNameKey": "Matrix.Source.Space.World" }
+  ]
+}

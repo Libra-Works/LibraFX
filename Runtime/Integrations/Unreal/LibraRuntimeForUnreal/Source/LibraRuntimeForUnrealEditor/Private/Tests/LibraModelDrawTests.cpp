@@ -110,7 +110,22 @@ bool FLibraModelDrawTest::RunTest(const FString& parameters)
     material->PostEditChange();
     auto cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
     if (!TestNotNull(TEXT("Actual engine Cube"), cube)) return false;
-    if (!materialAnimation) component->AssetBindings.Add({TEXT("/Game/LiberaFxSamples/Cube.Cube"), cube});
+    if (!materialAnimation)
+    {
+        const auto key = FString(TEXT("/Game/LiberaFxSamples/Cube.Cube"));
+        auto detail = FString{};
+        if (!TestTrue(TEXT("Package-owned model override accepts the compiler delivery key"),
+            asset->SetResourceOverride(key, ELibraPackageResourceKind::Model, cube, detail)))
+        {
+            AddError(detail);
+            return false;
+        }
+        TestFalse(TEXT("Reject a material at the model key without replacing the mesh"),
+            asset->SetResourceOverride(key, ELibraPackageResourceKind::Model, material, detail));
+        TestFalse(TEXT("Reject an unknown model key"),
+            asset->SetResourceOverride(key + TEXT("_Unknown"), ELibraPackageResourceKind::Model, cube, detail));
+        TestTrue(TEXT("Resource edit preserves compiled bytes"), TArray<uint8>(asset->GetPackageBytes()) == bytes);
+    }
     auto materialKey = materialAnimation
         ? TEXT("/Game/LiberaFxMaterialSample/PulseMaterial.PulseMaterial") : TEXT("builtin:unlit-color");
     component->AssetBindings.Add({materialKey, material});

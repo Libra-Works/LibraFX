@@ -1,0 +1,15 @@
+{
+  "DebugDraw.Active": "PREVIEW ONLY · enabled (requires transfer opt-in)",
+  "DebugDraw.Disabled": "PREVIEW ONLY · disabled",
+  "DebugDraw.Text": "Debug Text [PREVIEW ONLY]",
+  "DebugDraw.Model": "Debug Model [PREVIEW ONLY]",
+  "DebugDraw.Group": "Debug (Preview Only)",
+  "DebugDraw.Matrix": "World Matrix",
+  "DebugDraw.Visible": "Visible (0/1)",
+  "DebugDraw.Enabled": "Enabled (live transfer only)",
+  "DebugDraw.Content": "Text",
+  "DebugDraw.Size": "World size",
+  "DebugDraw.Asset": "Model asset",
+  "DebugDraw.Transfer": "Include Debug Text / Model in live preview (OFF by default)",
+  "DebugDraw.Help": "World-space Matrix observers only (unconnected Matrix = identity). Distribution export always strips debug draws, text and debug-only assets. Disabled nodes remain visible in the graph."
+}

@@ -14,6 +14,7 @@ public readonly record struct GraphNodeKind(string Value)
     public static GraphNodeKind Int32 => new("Int32");
     public static GraphNodeKind Signal => new("Signal");
     public static GraphNodeKind Sequence => new("Sequence");
+    public static GraphNodeKind Source => new("Source");
     public static GraphNodeKind InputProperty => new("InputProperty");
     public static GraphNodeKind InputSignal => new("InputSignal");
     public static GraphNodeKind OutputProperty => new("OutputProperty");
@@ -99,6 +100,8 @@ public sealed record GraphNodeDefinition(
     private static readonly JsonSerializerOptions SerializerOptions = new() { PropertyNameCaseInsensitive = true };
     private static readonly Dictionary<Guid, string> BuiltInIds = new()
     {
+        [Guid.Parse("65db6000-5d15-4f11-83da-650000000001")] = "DebugText",
+        [Guid.Parse("65db6000-5d15-4f11-83da-650000000002")] = "DebugModel",
         [Guid.Parse("57980d8e-701f-443c-91f6-8db56a09d2fc")] = "GpuParticle",
         [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700001")] = "ModelDraw",
         [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700002")] = "SpriteDraw",
@@ -131,6 +134,10 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("1774de17-a97b-4e31-b200-000000000018")] = "GroupInputInt32",
         [Guid.Parse("1774de17-a97b-4e31-b200-000000000019")] = "GroupOutputInt32",
         [Guid.Parse("f43ba0db-ea8c-4c27-93ec-2da000000001")] = "InputProperty",
+        [Guid.Parse("65a9b50f-23dd-47bc-b845-1d89bf630001")] = "InstanceInputProperty",
+        [Guid.Parse("65a9b50f-23dd-47bc-b845-1d89bf630002")] = "InstanceOutputProperty",
+        [Guid.Parse("65a9b50f-23dd-47bc-b845-1d89bf630003")] = "InstanceInputSignal",
+        [Guid.Parse("65a9b50f-23dd-47bc-b845-1d89bf630004")] = "InstanceOutputSignal",
         [Guid.Parse("f43ba0db-ea8c-4c27-93ec-2da000000002")] = "InputSignal",
         [Guid.Parse("f43ba0db-ea8c-4c27-93ec-2da000000003")] = "OutputProperty",
         [Guid.Parse("f43ba0db-ea8c-4c27-93ec-2da000000004")] = "OutputSignal",
@@ -268,6 +275,7 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000109")] = "RotatePoint",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000010a")] = "TranslatePoint",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000010b")] = "OwnerMatrix",
+        [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000010c")] = "Source",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000001")] = "MatrixRuntimeTransformRow0",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000002")] = "MatrixRuntimeTransformRow1",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000003")] = "MatrixRuntimeTransformRow2",
@@ -522,7 +530,8 @@ public sealed record GraphNodeDefinition(
                 node.TypeId != Guid.Parse("57980d8e-701f-443c-91f6-8db56a09d2fc") &&
                 !(BuiltInIds.TryGetValue(node.TypeId, out var builtInKind) &&
                   (GroupBoundarySchema.IsOutput(new GraphNodeKind(builtInKind)) ||
-                   builtInKind is "OutputProperty" or "OutputSignal" or "SpawnOutputSignal")))
+                   builtInKind is "OutputProperty" or "OutputSignal" or "SpawnOutputSignal" or
+                       "InstanceOutputProperty" or "InstanceOutputSignal" or "DebugText" or "DebugModel")))
                 throw new InvalidDataException("Output port definitions must not be empty.");
         }
         var parameterIds = new HashSet<string>(StringComparer.Ordinal);

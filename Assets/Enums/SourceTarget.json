@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "typeId": "b0af61d2-29f6-4cc9-a71e-000000000202",
+  "namespace": "LiberaFx",
+  "name": "SourceTarget",
+  "values": [
+    { "value": 0, "name": "Owner", "displayNameKey": "Matrix.Source.Target.Owner" },
+    { "value": 1, "name": "RegisteredKey", "displayNameKey": "Matrix.Source.Target.RegisteredKey" }
+  ]
+}

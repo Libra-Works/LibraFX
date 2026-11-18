@@ -20,7 +20,9 @@ public sealed record PreviewPeer(Guid ClientId, int Protocol, string? Engine, st
     IReadOnlyList<string> Capabilities, PreviewProfile? Profile, PreviewValues? Values,
     bool ProfilePending, PreviewProfileControl? RequestedProfile, IReadOnlyList<Guid> WatchedNodes,
     string? ViewerName = null, string? EngineVersion = null, string? Platform = null,
-    string? RemoteAddress = null, DateTimeOffset ConnectedAt = default, DateTimeOffset LastReceivedAt = default);
+    string? RemoteAddress = null, DateTimeOffset ConnectedAt = default, DateTimeOffset LastReceivedAt = default,
+    long? SentProgramSequence = null, long? AcknowledgedProgramSequence = null,
+    bool AwaitingProgramAcknowledgement = false);
 
 // Host-scoped, bounded and independent of the UI dispatcher. Only complete snapshots are published.
 public sealed class PreviewTelemetryStore
@@ -48,6 +50,8 @@ public sealed class PreviewTelemetryStore
         public string? RemoteAddress;
         public readonly DateTimeOffset ConnectedAt = DateTimeOffset.UtcNow;
         public DateTimeOffset LastReceivedAt = DateTimeOffset.UtcNow;
+        public long? SentProgramSequence;
+        public long? AcknowledgedProgramSequence;
     }
 
     private sealed class PendingProfile(long sequence, ulong id, int total, ulong dropped)
@@ -84,8 +88,30 @@ public sealed class PreviewTelemetryStore
                 return new PreviewPeer(pair.Key, p.Protocol, p.Engine, p.Role,
                     System.Array.AsReadOnly(p.Capabilities), p.Profile, p.Values, p.Pending is not null,
                     p.RequestedProfile, p.WatchedNodes, p.ViewerName, p.EngineVersion, p.Platform,
-                    p.RemoteAddress, p.ConnectedAt, p.LastReceivedAt);
+                    p.RemoteAddress, p.ConnectedAt, p.LastReceivedAt,
+                    p.SentProgramSequence, p.AcknowledgedProgramSequence,
+                    p.SentProgramSequence is { } sent && p.AcknowledgedProgramSequence != sent);
             }).ToArray();
+        }
+    }
+
+    public void ExpectProgramAcknowledgement(Guid id, long sequence)
+    {
+        if (sequence < 0) throw new ArgumentOutOfRangeException(nameof(sequence));
+        lock (_sync)
+        {
+            if (_peers.TryGetValue(id, out var peer) &&
+                (peer.SentProgramSequence is null || sequence >= peer.SentProgramSequence))
+                peer.SentProgramSequence = sequence;
+        }
+    }
+
+    public void AcknowledgeProgram(Guid id, long sequence)
+    {
+        lock (_sync)
+        {
+            if (_peers.TryGetValue(id, out var peer) && peer.SentProgramSequence == sequence)
+                peer.AcknowledgedProgramSequence = sequence;
         }
     }
 
@@ -202,6 +228,7 @@ public sealed class PreviewTelemetryStore
         {
             peer.Profile = new(sequence, id, dropped, pending.Metrics.AsReadOnly());
             peer.Pending = null;
+            if (peer.SentProgramSequence == sequence) peer.AcknowledgedProgramSequence = sequence;
         }
         return true;
     }
@@ -223,6 +250,7 @@ public sealed class PreviewTelemetryStore
         }
         if (peer.Values is { } previous && sequence < previous.ProgramSequence) return false;
         peer.Values = new(sequence, time, parsed.AsReadOnly());
+        if (peer.SentProgramSequence == sequence) peer.AcknowledgedProgramSequence = sequence;
         return true;
     }
 

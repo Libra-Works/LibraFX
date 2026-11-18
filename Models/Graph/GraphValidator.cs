@@ -25,8 +25,13 @@ public static class GraphValidator
         var effectiveDefinitions = new Dictionary<Guid, GraphNodeDefinition>();
         foreach (var node in snapshot.Nodes)
         {
-            if (node is not null && GameIoSchema.IsNode(node.Kind) && depth != 0)
-                throw new InvalidDataException("Game I/O nodes must be directly in the root graph.");
+            if (node is not null && GameIoSchema.IsNode(node.Kind) && !GameIoSchema.IsInstanceNode(node.Kind) && depth != 0)
+                throw new InvalidDataException(insideSpawnable
+                    ? "Shared Game I/O nodes must be in the root graph. Use dedicated Instance Input/Output nodes or Spawn Input/Output boundaries inside a Spawnable Group."
+                    : "Game I/O nodes must be directly in the root graph.");
+            if (node is not null && GameIoSchema.IsInstanceNode(node.Kind) &&
+                (isDocumentRoot || depth != 0 && parentKind != GraphNodeKind.SpawnableGroup))
+                throw new InvalidDataException("Instance Game I/O nodes must be directly inside a Spawnable Group.");
             if (insideSpawnable && node is not null && node.Kind == GraphNodeKind.SpawnableGroup)
                 throw new InvalidDataException("Nested Spawnable Groups are not supported.");
             if (node is not null && (isDocumentRoot || parentKind is not null && parentKind != GraphNodeKind.GraphGroup) &&

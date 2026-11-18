@@ -63,6 +63,7 @@ struct FLibraLiveGameSession::FImpl final
     uint64 sequence = 0, queuedBytes = 0, activeBytes = 0, maxOwnedBytes = 0;
     uint32 requestCapacity = 0;
     bool closing = false, closed = false, processing = false;
+    bool suppressPreviewDebugDraw = false;
 
     auto Find(liberafx::InstanceId target) const -> FSlot*
     {
@@ -129,6 +130,7 @@ struct FLibraLiveGameSession::FImpl final
             candidateActor->AttachToActor(owner.Get(), FAttachmentTransformRules::KeepWorldTransform);
         candidate->component.Reset(NewObject<ULibraEffectComponent>(candidateActor, NAME_None, RF_Transient));
         auto* component = candidate->component.Get();
+        if (suppressPreviewDebugDraw) component->ClearPreviewDebugDraw();
         component->bAutoPlay = false;
         component->Package = candidate->asset.Get();
         component->AssetBindings = bindings;
@@ -284,11 +286,36 @@ auto FLibraLiveGameSession::List() const -> TArray<FLiveInstance>
     }
     return result;
 }
+auto FLibraLiveGameSession::ClearPreviewDebugDraw(liberafx::InstanceId target) -> liberafx::Result
+{
+    if (!IsInGameThread()) return liberafx::Result::InvalidArgument;
+    if (impl->processing) return liberafx::Result::Busy;
+    auto* slot = impl->Find(target); // exact session, incarnation, generation
+    if (!slot) return liberafx::Result::InvalidHandle;
+    if (IsValid(slot->playback->component.Get())) slot->playback->component->ClearPreviewDebugDraw();
+    return liberafx::Result::Ok;
+}
+auto FLibraLiveGameSession::DisconnectPreviewDebugDraw() -> liberafx::Result
+{
+    if (!IsInGameThread()) return liberafx::Result::InvalidArgument;
+    if (impl->processing) return liberafx::Result::Busy;
+    impl->suppressPreviewDebugDraw = true;
+    for (const auto& live : List()) ClearPreviewDebugDraw(live.id);
+    return liberafx::Result::Ok;
+}
+auto FLibraLiveGameSession::AttachPreviewDebugDraw() -> liberafx::Result
+{
+    if (!IsInGameThread()) return liberafx::Result::InvalidArgument;
+    if (impl->processing || impl->closing || impl->closed) return liberafx::Result::NotReady;
+    impl->suppressPreviewDebugDraw = false; // cleared instances are never resurrected
+    return liberafx::Result::Ok;
+}
 auto FLibraLiveGameSession::Close() -> liberafx::Result
 {
     if (!IsInGameThread()) return liberafx::Result::InvalidArgument;
     auto& state = *impl;
     if (state.processing) return liberafx::Result::Busy;
+    DisconnectPreviewDebugDraw();
     auto lock = std::lock_guard<std::mutex>(state.gate);
     state.closing = true;
     for (const auto& slot : state.slots) if (slot.playback) return liberafx::Result::NotReady;

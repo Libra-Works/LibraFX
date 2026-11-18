@@ -27,7 +27,7 @@ public:
             path += ch;
         }
         if (invitation[32] != '\0') return false;
-        stop_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        stop_ = CreateEventW(nullptr, 1, 0, nullptr);
         if (!stop_) return false;
         running_.store(true, std::memory_order_release);
         // Construction failure propagates to the host's error boundary.
@@ -65,13 +65,13 @@ private:
             {
                 if (GetLastError() != ERROR_IO_PENDING) return false;
                 HANDLE wait[] = {stop_, event};
-                if (WaitForMultipleObjects(2, wait, FALSE, static_cast<DWORD>(deadline - now)) != WAIT_OBJECT_0 + 1)
+                if (WaitForMultipleObjects(2, wait, 0, static_cast<DWORD>(deadline - now)) != WAIT_OBJECT_0 + 1)
                 {
                     CancelIoEx(pipe, &operation);
-                    GetOverlappedResult(pipe, &operation, &count, TRUE);
+                    GetOverlappedResult(pipe, &operation, &count, 1);
                     return false;
                 }
-                if (!GetOverlappedResult(pipe, &operation, &count, FALSE)) return false;
+                if (!GetOverlappedResult(pipe, &operation, &count, 0)) return false;
             }
             if (!count || count > length) return false;
             length -= count;
@@ -84,7 +84,7 @@ private:
         auto pipe = CreateFileA(path, GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING,
             FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION, nullptr);
         if (pipe == INVALID_HANDLE_VALUE) return;
-        auto event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        auto event = CreateEventW(nullptr, 1, 0, nullptr);
         if (event)
         {
             auto command = ExecutionDebugProtocol::Command{};

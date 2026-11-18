@@ -1,0 +1,7 @@
+{
+  "Editor.Node.InstanceInputProperty": "Instance Input Property",
+  "Editor.Node.InstanceOutputProperty": "Instance Output Property",
+  "Editor.Node.InstanceInputSignal": "Instance Input Signal",
+  "Editor.Node.InstanceOutputSignal": "Instance Output Signal",
+  "Editor.NodeGroup.InstanceGameIO": "Instance Game I/O"
+}

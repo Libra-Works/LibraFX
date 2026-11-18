@@ -1,0 +1,4 @@
+{
+  "Connections.ProgramAckPending": "{0}: プログラム #{1} を送信済み。接続先の受信確認を待っています。",
+  "Connections.ProgramAcknowledged": "{0}: プログラム #{1} の受信を接続先の状態通知で確認しました（描画成功の判定とは別です）。"
+}

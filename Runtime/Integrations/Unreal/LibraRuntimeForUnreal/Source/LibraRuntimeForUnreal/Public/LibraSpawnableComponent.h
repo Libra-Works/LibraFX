@@ -9,6 +9,34 @@ namespace liberafx { class SpawnableHost; }
 class ULibraSpawnableAsset;
 class FLibraSpawnableRenderState;
 class FLibraSpawnableDebugState;
+class FLibraSkeletalPoseRuntime;
+
+// Keep deletion of these private runtime types out of the UHT-generated
+// vtable-helper translation unit, where only forward declarations are visible.
+struct FLibraSpawnableHostDeleter
+{
+    void operator()(liberafx::SpawnableHost* value) const;
+};
+
+struct FLibraSpawnableRenderStateDeleter
+{
+    void operator()(FLibraSpawnableRenderState* value) const;
+};
+
+struct FLibraSpawnableDebugStateDeleter
+{
+    void operator()(FLibraSpawnableDebugState* value) const;
+};
+
+struct FLibraSkeletalPoseRuntimeDeleter
+{
+    void operator()(FLibraSkeletalPoseRuntime* value) const;
+};
+
+using FLibraSpawnableHostPtr = TUniquePtr<liberafx::SpawnableHost, FLibraSpawnableHostDeleter>;
+using FLibraSpawnableRenderStatePtr = TUniquePtr<FLibraSpawnableRenderState, FLibraSpawnableRenderStateDeleter>;
+using FLibraSpawnableDebugStatePtr = TUniquePtr<FLibraSpawnableDebugState, FLibraSpawnableDebugStateDeleter>;
+using FLibraSkeletalPoseRuntimePtr = TUniquePtr<FLibraSkeletalPoseRuntime, FLibraSkeletalPoseRuntimeDeleter>;
 
 USTRUCT(BlueprintType)
 struct FLibraSpawnableAssetBinding
@@ -28,6 +56,8 @@ class LIBRARUNTIMEFORUNREAL_API ULibraSpawnableComponent : public UActorComponen
     GENERATED_BODY()
 
 public:
+    void ClearPreviewDebugDraw();
+    bool IsPreviewDebugDrawSuppressed() const { return bSuppressPreviewDebugDraw; }
     ULibraSpawnableComponent();
     virtual ~ULibraSpawnableComponent() override;
 
@@ -118,6 +148,20 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Game I/O")
     ELibraRuntimeResult SetGameProperty(const FString& name, const TArray<double>& values);
 
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Instance Game I/O")
+    ELibraRuntimeResult GetInstanceTarget(FGuid containerId, int64 instanceId, int64& generation);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Instance Game I/O")
+    ELibraRuntimeResult SetInstanceProperty(int64 generation, FGuid containerId, int64 instanceId,
+        const FString& name, const TArray<double>& values);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Instance Game I/O")
+    ELibraRuntimeResult GetInstanceProperty(int64 generation, FGuid containerId, int64 instanceId,
+        const FString& name, TArray<double>& values);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Instance Game I/O")
+    ELibraRuntimeResult FireInstanceSignal(int64 generation, FGuid containerId, int64 instanceId, const FString& name);
+
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Game I/O")
     ELibraRuntimeResult SetOwnerMatrix(const TArray<double>& values);
 
@@ -166,6 +210,7 @@ protected:
     virtual void OnComponentDestroyed(bool bDestroyingHierarchy) override;
 
 private:
+    bool bSuppressPreviewDebugDraw = false;
     ELibraRuntimeResult ForceTerminateScope(FGuid containerId, int64 instanceId, bool wholeEffect);
     ELibraRuntimeResult NotifyEndRequestScope(FGuid containerId, int64 instanceId,
         FGuid userSignalNodeId, bool wholeEffect);
@@ -176,12 +221,14 @@ private:
     bool DebugJobPending() const;
     void TickDebugger(float deltaTime);
     void ReleaseDebugger();
-    TUniquePtr<liberafx::SpawnableHost> NativeHost;
-    TUniquePtr<FLibraSpawnableRenderState> RenderState;
-    TUniquePtr<FLibraSpawnableDebugState> DebugState;
+    FLibraSpawnableHostPtr NativeHost;
+    FLibraSpawnableRenderStatePtr RenderState;
+    FLibraSpawnableDebugStatePtr DebugState;
+    FLibraSkeletalPoseRuntimePtr SkeletalPoseState;
     uint64 DebugPackageIdentity = 0;
     uint64 HostGeneration = 0;
     bool bStopping = false;
+    bool bSourceInitialAdvancePending = false;
     bool bForceTerminated = false;
     int32 EventDrainDepth = 0;
     TMap<FGuid, TSet<int64>> CancelledBatchScopes;

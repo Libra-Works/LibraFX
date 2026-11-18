@@ -55,6 +55,7 @@ auto ULibraEffectComponent::PlayPackage(bool bRestart) -> ELibraRuntimeResult
     playback->EventCapacity = EventCapacity;
     playback->InstructionBudget = PackageInstructionBudget;
     playback->PlayRate = PlayRate;
+    if (bSuppressPreviewDebugDraw) playback->ClearPreviewDebugDraw();
     auto result = playback->Play(restart);
     if (PackagePlayback != playback) return LastResult;
     SyncPackageState();
@@ -207,6 +208,42 @@ auto ULibraEffectComponent::SetOwnerMatrix(const TArray<double>& values) -> ELib
     check(IsInGameThread());
     if (!Package || !PackagePlayback) return LastResult = ELibraRuntimeResult::NotReady;
     return LastResult = PackagePlayback->SetOwnerMatrix(values);
+}
+
+auto ULibraEffectComponent::GetInstanceTarget(FGuid containerId, int64 instanceId, int64& generation) -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    generation = 0;
+    return Package && PackagePlayback ? PackagePlayback->GetInstanceTarget(containerId, instanceId, generation)
+        : ELibraRuntimeResult::NotReady;
+}
+
+auto ULibraEffectComponent::SetInstanceProperty(int64 generation, FGuid containerId, int64 instanceId,
+    const FString& name, const TArray<double>& values) -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    return Package && PackagePlayback ? PackagePlayback->SetInstanceProperty(generation, containerId, instanceId, name, values)
+        : ELibraRuntimeResult::NotReady;
+}
+
+auto ULibraEffectComponent::GetInstanceProperty(int64 generation, FGuid containerId, int64 instanceId,
+    const FString& name, TArray<double>& values) -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    values.Reset();
+    return Package && PackagePlayback ? PackagePlayback->GetInstanceProperty(generation, containerId, instanceId, name, values)
+        : ELibraRuntimeResult::NotReady;
+}
+
+auto ULibraEffectComponent::FireInstanceSignal(int64 generation, FGuid containerId, int64 instanceId,
+    const FString& name) -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    if (!Package || !PackagePlayback) return ELibraRuntimeResult::NotReady;
+    auto playback = PackagePlayback;
+    auto result = playback->FireInstanceSignal(generation, containerId, instanceId, name);
+    if (PackagePlayback == playback) SyncPackageState();
+    return LastResult = result;
 }
 
 auto ULibraEffectComponent::ReadRootValue(FGuid nodeId, FVector4& value, int32& componentCount) const -> ELibraRuntimeResult

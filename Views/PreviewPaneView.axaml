@@ -34,6 +34,9 @@
             </ItemsControl>
             <Separator />
             <TextBlock Text="{DynamicResource Text.Panels.PreviewTransport}" FontWeight="SemiBold" />
+            <CheckBox Content="{DynamicResource Text.DebugDraw.Transfer}"
+                      IsChecked="{Binding Main.IncludePreviewDebugDraw, Mode=TwoWay}" />
+            <TextBlock Text="{DynamicResource Text.DebugDraw.Help}" TextWrapping="Wrap" />
             <TextBlock Text="{Binding Main.PreviewStatus}" TextWrapping="Wrap" />
             <StackPanel Orientation="Horizontal" Spacing="6">
                 <TextBlock Text="{DynamicResource Text.Panels.ConnectedClients}" />

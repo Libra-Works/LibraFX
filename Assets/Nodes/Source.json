@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "typeId": "b0af61d2-29f6-4cc9-a71e-00000000010c",
+  "namespace": "LiberaFx",
+  "kind": "Source",
+  "name": "Source",
+  "displayNameKey": "Matrix.Node.Source",
+  "descriptionKey": "Matrix.NodeHelp.Source",
+  "groupNameKey": "Matrix.Group",
+  "group": "Matrices / Transforms",
+  "portType": "Matrix",
+  "portCategory": "Parameter",
+  "outputPorts": [
+    { "id": "value", "name": "Matrix", "portType": "Matrix", "category": "Parameter" },
+    { "id": "valid", "name": "Valid", "portType": "Float", "category": "Parameter" }
+  ],
+  "parameters": [
+    { "id": "target", "name": "Target", "displayNameKey": "Matrix.Source.Target", "type": "enum:b0af61d2-29f6-4cc9-a71e-000000000202", "defaultValue": 0 },
+    { "id": "key", "name": "Registered key", "displayNameKey": "Matrix.Source.Key", "type": "string", "defaultValue": "" },
+    { "id": "bone", "name": "Bone path", "displayNameKey": "Matrix.Source.Bone", "type": "string", "defaultValue": "" },
+    { "id": "space", "name": "Space", "displayNameKey": "Matrix.Source.Space", "type": "enum:b0af61d2-29f6-4cc9-a71e-000000000203", "defaultValue": 0 }
+  ]
+}

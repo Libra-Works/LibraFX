@@ -6,6 +6,7 @@
 #include "LibraNativeState.h"
 #include "LibraSpawnableAsset.h"
 #include "LibraSpawnableRenderState.h"
+#include "LibraSkeletalPoseRuntime.h"
 #include "LibraQualityContext.h"
 #include "EngineGlobals.h"
 #include "liberafx/SpawnableHost.h"
@@ -76,6 +77,26 @@ public:
 #endif
 };
 
+void FLibraSpawnableHostDeleter::operator()(liberafx::SpawnableHost* value) const
+{
+    delete value;
+}
+
+void FLibraSpawnableRenderStateDeleter::operator()(FLibraSpawnableRenderState* value) const
+{
+    delete value;
+}
+
+void FLibraSpawnableDebugStateDeleter::operator()(FLibraSpawnableDebugState* value) const
+{
+    delete value;
+}
+
+void FLibraSkeletalPoseRuntimeDeleter::operator()(FLibraSkeletalPoseRuntime* value) const
+{
+    delete value;
+}
+
 ULibraSpawnableComponent::~ULibraSpawnableComponent() = default;
 
 int64 ULibraSpawnableComponent::GetDebuggerGeneration() const
@@ -90,6 +111,7 @@ auto ULibraSpawnableComponent::AttachExecutionDebugger(int64 generation, FGuid c
     check(IsInGameThread());
 #if PLATFORM_WINDOWS
     if (!NativeHost) return ELibraRuntimeResult::NotReady;
+    if (bSourceInitialAdvancePending) return ELibraRuntimeResult::Busy;
     if (DebugState || EventDrainDepth) return ELibraRuntimeResult::Busy;
     if (generation <= 0 || static_cast<uint64>(generation) != NativeHost->debugGeneration())
         return ELibraRuntimeResult::InvalidHandle;
@@ -104,7 +126,8 @@ auto ULibraSpawnableComponent::AttachExecutionDebugger(int64 generation, FGuid c
     auto target = liberafx::SpawnableDebugTarget{};
     auto result = NativeHost->debugTarget(scope, target);
     if (result != liberafx::Result::Ok) return ToLibraResult(result);
-    auto candidate = MakeUnique<FLibraSpawnableDebugState>(*NativeHost, target, DebugPackageIdentity);
+    auto candidate = FLibraSpawnableDebugStatePtr(
+        new FLibraSpawnableDebugState(*NativeHost, target, DebugPackageIdentity));
     result = NativeHost->setDebugHooks(target, candidate->client.hooks());
     if (result != liberafx::Result::Ok) return ToLibraResult(result);
     candidate->hooked = true;
@@ -203,7 +226,7 @@ auto ULibraSpawnableComponent::Play(bool bRestart) -> ELibraRuntimeResult
     auto result = liberafx::loadSpawnablePackage(packageBytes.GetData(), packageBytes.Num(), package);
     if (result != liberafx::Result::Ok) return Report(ToLibraResult(result));
     LastError.Reset();
-    auto rendering = MakeUnique<FLibraSpawnableRenderState>(*this);
+    auto rendering = FLibraSpawnableRenderStatePtr(new FLibraSpawnableRenderState(*this));
     if (!rendering->Prepare(package)) return Report(ELibraRuntimeResult::UnsupportedBinary);
     auto options = liberafx::SpawnableHostOptions{};
     options.maxActivePerTemplate = static_cast<std::size_t>(FMath::Max(1, MaxActivePerTemplate));
@@ -219,6 +242,19 @@ auto ULibraSpawnableComponent::Play(bool bRestart) -> ELibraRuntimeResult
 #endif
     ++HostGeneration;
     RenderState = MoveTemp(rendering);
+    SkeletalPoseState = FLibraSkeletalPoseRuntimePtr(new FLibraSkeletalPoseRuntime());
+    auto tickPrerequisites = TArray<UActorComponent*>{};
+    if (!SkeletalPoseState->Initialize(*NativeHost, GetOwner(), tickPrerequisites))
+    {
+        ReleaseHost();
+        return Report(ELibraRuntimeResult::InvalidArgument);
+    }
+    bSourceInitialAdvancePending = SkeletalPoseState->HasSources();
+    if (bSourceInitialAdvancePending)
+    {
+        PrimaryComponentTick.TickGroup = TG_PostUpdateWork;
+        SkeletalPoseState->AddTickPrerequisites(*this);
+    }
     if (!RenderState->Spawn(FGuid{}, 0, 0, 0))
     {
         ReleaseHost();
@@ -233,6 +269,11 @@ auto ULibraSpawnableComponent::Play(bool bRestart) -> ELibraRuntimeResult
 
     auto* current = NativeHost.Get();
     auto generation = HostGeneration;
+    if (bSourceInitialAdvancePending)
+    {
+        LastResult = ELibraRuntimeResult::Ok;
+        return LastResult;
+    }
     result = PublishLibraQuality(*current);
     if (result == liberafx::Result::Ok) result = current->advance(0, 0);
     DrainEvents();
@@ -496,6 +537,82 @@ auto ULibraSpawnableComponent::SetOwnerMatrix(const TArray<double>& values) -> E
     return Report(ToLibraResult(NativeHost->setOwnerMatrix(values.GetData(), values.Num())));
 }
 
+auto ULibraSpawnableComponent::GetInstanceTarget(FGuid containerId, int64 instanceId, int64& generation) -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    generation = 0;
+    if (!NativeHost) return ELibraRuntimeResult::NotReady;
+    if (DebugJobPending()) return ELibraRuntimeResult::Busy;
+    auto scope = liberafx::SpawnableScope{};
+    scope.kind = liberafx::SpawnableScopeKind::Instance;
+    LibraNodeIdBytes(containerId, scope.containerId);
+    scope.instanceId = static_cast<uint64>(instanceId);
+    auto target = liberafx::SpawnableDebugTarget{};
+    auto result = NativeHost->debugTarget(scope, target);
+    if (result == liberafx::Result::Ok) generation = static_cast<int64>(target.hostGeneration);
+    return ToLibraResult(result);
+}
+
+auto ULibraSpawnableComponent::SetInstanceProperty(int64 generation, FGuid containerId, int64 instanceId,
+    const FString& name, const TArray<double>& values) -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    if (name.Len() != FCString::Strlen(*name)) return ELibraRuntimeResult::InvalidArgument;
+    if (!NativeHost) return ELibraRuntimeResult::NotReady;
+    if (DebugJobPending()) return ELibraRuntimeResult::Busy;
+    auto target = liberafx::SpawnableDebugTarget{};
+    target.hostGeneration = static_cast<uint64>(generation);
+    target.scope.kind = liberafx::SpawnableScopeKind::Instance;
+    LibraNodeIdBytes(containerId, target.scope.containerId);
+    target.scope.instanceId = static_cast<uint64>(instanceId);
+    auto utf8 = FTCHARToUTF8(*name);
+    return ToLibraResult(NativeHost->setInstanceProperty(target, utf8.Get(), values.GetData(), values.Num()));
+}
+
+auto ULibraSpawnableComponent::GetInstanceProperty(int64 generation, FGuid containerId, int64 instanceId,
+    const FString& name, TArray<double>& values) -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    values.Reset();
+    if (name.Len() != FCString::Strlen(*name)) return ELibraRuntimeResult::InvalidArgument;
+    if (!NativeHost) return ELibraRuntimeResult::NotReady;
+    if (DebugJobPending()) return ELibraRuntimeResult::Busy;
+    auto target = liberafx::SpawnableDebugTarget{};
+    target.hostGeneration = static_cast<uint64>(generation);
+    target.scope.kind = liberafx::SpawnableScopeKind::Instance;
+    LibraNodeIdBytes(containerId, target.scope.containerId);
+    target.scope.instanceId = static_cast<uint64>(instanceId);
+    auto utf8 = FTCHARToUTF8(*name);
+    auto lanes = std::array<double, 16>{};
+    auto width = uint8{};
+    auto result = NativeHost->instanceProperty(target, utf8.Get(), lanes.data(), width);
+    if (result == liberafx::Result::Ok) values.Append(lanes.data(), width);
+    return ToLibraResult(result);
+}
+
+auto ULibraSpawnableComponent::FireInstanceSignal(int64 generation, FGuid containerId, int64 instanceId,
+    const FString& name) -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    if (name.Len() != FCString::Strlen(*name)) return ELibraRuntimeResult::InvalidArgument;
+    if (!NativeHost) return ELibraRuntimeResult::NotReady;
+    if (DebugJobPending()) return ELibraRuntimeResult::Busy;
+#if PLATFORM_WINDOWS
+    if (DebugState) return ELibraRuntimeResult::Busy;
+#endif
+    auto target = liberafx::SpawnableDebugTarget{};
+    target.hostGeneration = static_cast<uint64>(generation);
+    target.scope.kind = liberafx::SpawnableScopeKind::Instance;
+    LibraNodeIdBytes(containerId, target.scope.containerId);
+    target.scope.instanceId = static_cast<uint64>(instanceId);
+    auto utf8 = FTCHARToUTF8(*name);
+    auto ownerGeneration = HostGeneration;
+    auto result = NativeHost->fireInstanceSignal(target, utf8.Get());
+    DrainEvents();
+    if (ownerGeneration != HostGeneration || !RefreshRendering()) return LastResult;
+    return Report(ToLibraResult(result));
+}
+
 auto ULibraSpawnableComponent::ReadRootValue(FGuid nodeId, FVector4& value,
     int32& componentCount) const -> ELibraRuntimeResult
 {
@@ -584,7 +701,9 @@ void ULibraSpawnableComponent::TickDebugger(float deltaTime)
         Report(ELibraRuntimeResult::InvalidArgument);
         return;
     }
-    auto result = PublishLibraQuality(*NativeHost);
+    auto result = SkeletalPoseState
+        ? SkeletalPoseState->Publish(*NativeHost, GetOwner()) : liberafx::Result::Ok;
+    if (result == liberafx::Result::Ok) result = PublishLibraQuality(*NativeHost);
     state->attempts = 0;
     if (result == liberafx::Result::Ok) result = state->Submit(request);
     if (result != liberafx::Result::Ok)
@@ -617,8 +736,36 @@ void ULibraSpawnableComponent::TickComponent(float deltaTime, ELevelTick tickTyp
         Report(ELibraRuntimeResult::NonFinite);
         return;
     }
+    if (bSourceInitialAdvancePending)
+    {
+        auto result = SkeletalPoseState
+            ? SkeletalPoseState->Publish(*current, GetOwner())
+            : liberafx::Result::NotReady;
+        if (result == liberafx::Result::Ok) result = PublishLibraQuality(*current);
+        if (result == liberafx::Result::Ok) result = current->advance(0, 0);
+        DrainEvents();
+        if (HostGeneration != generation || bForceTerminated) return;
+        for (auto attempt = 0; result == liberafx::Result::QueueRejected && attempt < 16; ++attempt)
+        {
+            result = current->advance(0, 0);
+            DrainEvents();
+            if (HostGeneration != generation || bForceTerminated) return;
+        }
+        if (result != liberafx::Result::Ok)
+        {
+            ReleaseHost();
+            Report(ToLibraResult(result));
+            return;
+        }
+        bSourceInitialAdvancePending = false;
+        if (!RefreshRendering()) return;
+        LastResult = ELibraRuntimeResult::Ok;
+        return;
+    }
     TimeSeconds = nextTime;
-    auto result = PublishLibraQuality(*current);
+    auto result = SkeletalPoseState
+        ? SkeletalPoseState->Publish(*current, GetOwner()) : liberafx::Result::Ok;
+    if (result == liberafx::Result::Ok) result = PublishLibraQuality(*current);
     if (result == liberafx::Result::Ok) result = current->advance(TimeSeconds, deltaTime);
     DrainEvents();
     if (HostGeneration != generation) return;
@@ -710,7 +857,13 @@ void ULibraSpawnableComponent::DrainEvents()
         gameIoEvent.bIsColor = ioEvent.isColor;
         gameIoEvent.Values.Append(ioEvent.values, ioEvent.width);
         const auto& ports = NativeHost->package().gameIoPorts;
-        if (ioEvent.portIndex < ports.size())
+        if (ioEvent.identity.instanceId != 0) {
+            auto name = static_cast<const char*>(nullptr);
+            if (NativeHost->instancePortName(ioEvent.identity.containerId, ioEvent.portIndex, name) == liberafx::Result::Ok)
+                gameIoEvent.PortName = UTF8_TO_TCHAR(name);
+            else invalidPortIndex = true;
+        }
+        else if (ioEvent.portIndex < ports.size())
             gameIoEvent.PortName = UTF8_TO_TCHAR(ports[ioEvent.portIndex].name.c_str());
         else
             invalidPortIndex = true;
@@ -775,6 +928,10 @@ void ULibraSpawnableComponent::ReleaseHost()
 {
     ++HostGeneration;
     ReleaseDebugger();
+    if (SkeletalPoseState) SkeletalPoseState->RemoveTickPrerequisites(*this);
+    SkeletalPoseState.Reset();
+    bSourceInitialAdvancePending = false;
+    PrimaryComponentTick.TickGroup = TG_PrePhysics;
     RenderState.Reset();
     NativeHost.Reset();
     bIsPlaying = false;

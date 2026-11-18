@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "typeId": "65db6000-5d15-4f11-83da-650000000002",
+  "namespace": "LiberaFx",
+  "kind": "DebugModel",
+  "name": "Debug Model (Preview Only)",
+  "displayNameKey": "DebugDraw.Model",
+  "descriptionKey": "DebugDraw.Help",
+  "groupNameKey": "DebugDraw.Group",
+  "group": "Debug (Preview Only)",
+  "portType": "RenderInstance",
+  "portCategory": "Parameter",
+  "outputPorts": [],
+  "inputPorts": [
+    { "id": "matrix", "name": "World Matrix", "displayNameKey": "DebugDraw.Matrix", "portType": "Matrix" },
+    { "id": "visible", "name": "Visible (0/1)", "displayNameKey": "DebugDraw.Visible", "portType": "Float" }
+  ],
+  "parameters": [
+    { "id": "enabled", "name": "Enabled (live transfer only)", "displayNameKey": "DebugDraw.Enabled", "type": "bool", "defaultValue": true },
+    { "id": "assetPath", "name": "Model asset", "displayNameKey": "DebugDraw.Asset", "type": "string", "defaultValue": "" },
+    { "id": "size", "name": "World size multiplier", "displayNameKey": "DebugDraw.Size", "type": "float", "defaultValue": 1 },
+    { "id": "visible", "name": "Visible (0/1)", "displayNameKey": "DebugDraw.Visible", "type": "float", "defaultValue": 1 }
+  ]
+}

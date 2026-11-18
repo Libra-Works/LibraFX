@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 namespace LiberaFx.Services;
 
 public sealed record LiveGameEndpoint(int Protocol, string Session, string Engine, string Transport,
-    string SupportedUpdate, int Process);
+    string SupportedUpdate, int Process, string? DebugDisconnect = null);
 public sealed record LiveGameInstance(string Target, string Label, bool Finished, int RenderCount);
 public sealed record LiveGameResponse(int Protocol, string Session, string Sequence, string Result,
     string? Error, string? Target, LiveGameInstance[] Instances);
@@ -25,7 +25,12 @@ public sealed class LiveGameSpoolClient : IDisposable
     private readonly SemaphoreSlim operation = new(1, 1);
     private readonly string directory;
     private long sequence;
-    private bool disposed;
+    private volatile bool disposed, closing;
+    private readonly string debugOwner = Guid.NewGuid().ToString("N");
+    private readonly object disconnectGate = new();
+    private Task<LiveGameResponse?>? disconnect;
+    public bool SupportsDebugDisconnect => Endpoint.DebugDisconnect == "debug-lease-v1";
+    public Task DebugDisconnectCompletion => (Task?)disconnect ?? Task.CompletedTask;
     public LiveGameEndpoint Endpoint { get; }
     public bool RequiresRefresh { get; private set; }
     public TimeSpan Timeout { get; }
@@ -33,8 +38,14 @@ public sealed class LiveGameSpoolClient : IDisposable
     private LiveGameSpoolClient(string directory, LiveGameEndpoint endpoint, TimeSpan timeout)
     { this.directory = directory; Endpoint = endpoint; Timeout = timeout; }
 
-    public static async Task<LiveGameSpoolClient> ConnectAsync(string selectedDirectory,
-        CancellationToken cancellationToken, TimeSpan? timeout = null)
+    public static Task<LiveGameSpoolClient> ConnectAsync(string selectedDirectory,
+        CancellationToken cancellationToken, TimeSpan? timeout = null) =>
+        ConnectOwnedAsync(selectedDirectory, cancellationToken, timeout, _ => { });
+
+    // The window takes ownership BEFORE any attach can be published, so closing
+    // during the initial handshake also exposes/awaits its exact cleanup task.
+    internal static async Task<LiveGameSpoolClient> ConnectOwnedAsync(string selectedDirectory,
+        CancellationToken cancellationToken, TimeSpan? timeout, Action<LiveGameSpoolClient> takeOwnership)
     {
         var duration = timeout ?? TimeSpan.FromSeconds(10);
         if (duration < TimeSpan.FromMilliseconds(50) || duration > TimeSpan.FromMinutes(2))
@@ -51,7 +62,20 @@ public sealed class LiveGameSpoolClient : IDisposable
         deadline.CancelAfter(duration);
         var endpoint = await ReadAsync<LiveGameEndpoint>(Path.Combine(path, "endpoint.json"), 16 * 1024, deadline.Token);
         ValidateEndpoint(endpoint);
-        return new LiveGameSpoolClient(path, endpoint, duration);
+        var client = new LiveGameSpoolClient(path, endpoint, duration);
+        try
+        {
+            deadline.Token.ThrowIfCancellationRequested();
+            takeOwnership(client);
+            if (client.SupportsDebugDisconnect)
+            {
+                var attached = await client.SendAsync("debug-attach", null, null, deadline.Token);
+                if (attached.Result != "Ok")
+                    throw new IOException("Debug transfer attach rejected: " + attached.Result + "; " + attached.Error);
+            }
+            return client;
+        }
+        catch { client.Dispose(); throw; }
     }
 
     public Task<LiveGameResponse> ListAsync(CancellationToken cancellationToken) =>
@@ -67,6 +91,7 @@ public sealed class LiveGameSpoolClient : IDisposable
     private async Task<LiveGameResponse> SendAsync(string kind, string? target, byte[]? bytes, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
+        ObjectDisposedException.ThrowIf(closing && kind != "debug-disconnect", this);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(Timeout);
         var token = deadline.Token;
@@ -77,6 +102,7 @@ public sealed class LiveGameSpoolClient : IDisposable
         try
         {
             ObjectDisposedException.ThrowIf(disposed, this);
+            ObjectDisposedException.ThrowIf(closing && kind != "debug-disconnect", this);
             AssertNotLinked(directory);
             var current = await ReadAsync<LiveGameEndpoint>(Path.Combine(directory, "endpoint.json"), 16 * 1024, token);
             if (current != Endpoint)
@@ -90,6 +116,10 @@ public sealed class LiveGameSpoolClient : IDisposable
             await using var lease = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite,
                 FileShare.None, 1, FileOptions.DeleteOnClose);
             var requestPath = Path.Combine(directory, "request.json");
+            // A cancelled, published replace may still be pending in the game.
+            // Cleanup waits finitely; it never overwrites or removes that request.
+            if (kind == "debug-disconnect")
+                while (File.Exists(requestPath)) await Task.Delay(30, token);
             if (File.Exists(requestPath)) throw new IOException("Endpoint has an outstanding command. Wait for the game, then refresh; do not overwrite it.");
             var next = Math.Max(DateTime.UtcNow.Ticks, checked(sequence + 1));
             sequence = next;
@@ -98,6 +128,7 @@ public sealed class LiveGameSpoolClient : IDisposable
             {
                 protocol = 1, session = Endpoint.Session, sequence = requestSequence,
                 operation = kind, target, policy = kind == "replace" ? "restart" : null,
+                debugOwner = SupportsDebugDisconnect ? debugOwner : null,
                 packageBase64 = bytes is null ? null : Convert.ToBase64String(bytes)
             };
             await using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None,
@@ -148,6 +179,8 @@ public sealed class LiveGameSpoolClient : IDisposable
             endpoint.Engine is not ("Unity" or "Unreal") || endpoint.Process <= 0 ||
             endpoint.SupportedUpdate != "restart-root-render-v1-v2")
             throw new InvalidDataException("Unsupported or malformed development endpoint descriptor.");
+        if (endpoint.DebugDisconnect is not (null or "debug-lease-v1"))
+            throw new InvalidDataException("Unsupported debug cleanup capability.");
     }
     private static void ValidateResponse(LiveGameResponse response)
     {
@@ -186,7 +219,31 @@ public sealed class LiveGameSpoolClient : IDisposable
             if ((File.Exists(item) || Directory.Exists(item)) && (File.GetAttributes(item) & FileAttributes.ReparsePoint) != 0)
                 throw new IOException("Linked isolated endpoints are not supported.");
     }
-    // Cancellation belongs to the window operation. Do not dispose the semaphore
-    // while an in-flight asynchronous method still owns it.
-    public void Dispose() => disposed = true;
+    public Task<LiveGameResponse?> DisconnectDebugAsync()
+    {
+        lock (disconnectGate)
+        {
+            closing = true; // reject subsequent mutations before asynchronous cleanup
+            return disconnect ??= DisconnectCoreAsync();
+        }
+    }
+    private async Task<LiveGameResponse?> DisconnectCoreAsync()
+    {
+        try
+        {
+            if (!SupportsDebugDisconnect) return null; // explicitly unsupported, not an acknowledgement
+            var response = await SendAsync("debug-disconnect", null, null, CancellationToken.None);
+            if (response.Result != "Ok")
+                throw new IOException("Debug cleanup rejected: " + response.Result + "; " + response.Error);
+            return response;
+        }
+        finally { disposed = true; }
+    }
+    // Does not stop playback, destroy targets or dispose an in-flight semaphore.
+    // Hosts can await DebugDisconnectCompletion to establish acknowledgement.
+    public void Dispose()
+    {
+        _ = DisconnectDebugAsync().ContinueWith(task => { _ = task.Exception; },
+            CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+    }
 }

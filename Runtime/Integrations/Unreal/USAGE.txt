@@ -115,6 +115,40 @@ Import and use
   and legacy-compatible classes, but are hidden from Add Component. A package
   component owns its helpers and is their sole tick owner.
 
+Imported asset inspector
+  Open the imported .lfxp asset in the Content Browser. Under LIBERA FX Resource
+  Overrides, choose a Static Mesh, Texture2D or Material for a key listed from
+  the package's delivered root and child render data (including packaged GPU
+  textures). A key is exactly the delivered identity plus its kind; replacing a
+  key affects every use of that key in this package. This is a local UE binding,
+  not a portable mapping or an edit to the source graph. Save the uasset and
+  restart playback. Existing component AssetBindings have priority; clear a
+  conflicting component binding to use the package's choice. Clearing the asset
+  picker restores normal lookup. A replacement must still satisfy the existing
+  runtime checks (e.g. mesh slots, material parameter locators and sprite atlas
+  material contract). The editor validates identity and asset class before
+  recording a change. It does not infer a new material parameter mapping.
+  Overrides are serialized as asset references for cooking. Reimport does not
+  overwrite them or change the source project link. If export changes a key,
+  refresh the list and clear the old override explicitly; it is not guessed or
+  transferred to another key. The compiled payload is not rewritten by edits.
+  A raw .lfxb contains bytecode only; use a resource-bearing .lfxp for these
+  controls. Standalone .lfxgpu keeps its existing dedicated import workflow.
+
+  On either .lfxp or .lfxb, set the editor-only Source Project Path to the
+  original local .lfxproj, then use Open LIBERA FX. This path is independent of
+  the reimport filename; the .lfxproj is never embedded or changed. On Windows,
+  set LIBERAFX_EDITOR_EXECUTABLE to the full path of a current LiberaFx.exe
+  before starting Unreal Editor, or register that executable as the .lfxproj
+  file handler. Otherwise the action uses the platform file association (Linux
+  requires xdg-open and association success is reported by the OS). If LIBERA FX
+  is already running, open the source in its existing window; the standalone
+  singleton does not forward new launch arguments to that instance.
+
+  Automation source: Libra.Editor.Resources.SourceProjectPath (no launch),
+  Libra.Editor.Spawnable.ReimportFixture with -LibraSpawnableFixture=<Cube.lfxp>,
+  and Libra.Editor.ModelDraw.CubePackage with the compiler fixture above.
+
 Standalone bytecode compatibility
   Convert an editor graph to .lfxb, then import that file into Unreal.
   Add a Libra Effect component to an actor and set its Effect asset.

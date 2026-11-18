@@ -300,6 +300,21 @@ namespace LiberaFx.Unity
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_fire_game_signal(ulong host, byte* name);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_instance_target(
+            ulong host, byte* container, ulong instance, out ulong generation);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_set_instance_property(
+            ulong host, ulong generation, byte* container, ulong instance, byte* name, double* values, uint width);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_get_instance_property(
+            ulong host, ulong generation, byte* container, ulong instance, byte* name, double* values, out uint width);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_fire_instance_signal(
+            ulong host, ulong generation, byte* container, ulong instance, byte* name);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_copy_instance_game_io_port_name(
+            ulong host, byte* container, uint index, byte* destination, ulong capacity, out ulong byteCount);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_set_game_property(
             ulong host, byte* name, double* values, uint width);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
@@ -471,6 +486,78 @@ namespace LiberaFx.Unity
                         return Native.libra_spawnable_host_set_owner_matrix(Alive, lanes);
                 }
 
+                public NativeResult GetInstanceTarget(byte[] container, ulong instance, out ulong generation)
+                {
+                    generation = 0;
+                    if (container == null || container.Length != 16 || instance == 0) return NativeResult.InvalidArgument;
+                    fixed (byte* id = container)
+                        return Native.libra_spawnable_host_instance_target(Alive, id, instance, out generation);
+                }
+
+                public NativeResult SetInstanceProperty(ulong generation, byte[] container, ulong instance,
+                    string name, double[] values)
+                {
+                    if (container == null || container.Length != 16 || name == null ||
+                        name.IndexOf('\0') >= 0 || values == null) return NativeResult.InvalidArgument;
+                    var utf8 = StrictUtf8.GetBytes(name + "\0");
+                    fixed (byte* id = container)
+                    fixed (byte* key = utf8)
+                    fixed (double* lanes = values)
+                        return Native.libra_spawnable_host_set_instance_property(
+                            Alive, generation, id, instance, key, lanes, (uint)values.Length);
+                }
+
+                public NativeResult GetInstanceProperty(ulong generation, byte[] container, ulong instance,
+                    string name, out double[] values)
+                {
+                    values = null;
+                    if (container == null || container.Length != 16 || name == null ||
+                        name.IndexOf('\0') >= 0) return NativeResult.InvalidArgument;
+                    var utf8 = StrictUtf8.GetBytes(name + "\0");
+                    var lanes = new double[16];
+                    NativeResult result;
+                    uint width;
+                    fixed (byte* id = container)
+                    fixed (byte* key = utf8)
+                    fixed (double* output = lanes)
+                        result = Native.libra_spawnable_host_get_instance_property(
+                            Alive, generation, id, instance, key, output, out width);
+                    if (result != NativeResult.Ok) return result;
+                    if (width > 16) return NativeResult.InvalidBinary;
+                    values = new double[width];
+                    Array.Copy(lanes, values, (int)width);
+                    return NativeResult.Ok;
+                }
+
+                public NativeResult FireInstanceSignal(ulong generation, byte[] container, ulong instance, string name)
+                {
+                    if (container == null || container.Length != 16 || name == null ||
+                        name.IndexOf('\0') >= 0) return NativeResult.InvalidArgument;
+                    var utf8 = StrictUtf8.GetBytes(name + "\0");
+                    fixed (byte* id = container)
+                    fixed (byte* key = utf8)
+                        return Native.libra_spawnable_host_fire_instance_signal(Alive, generation, id, instance, key);
+                }
+
+                public NativeResult GetInstanceGameIoPortName(byte[] container, uint index, out string name)
+                {
+                    name = null;
+                    if (container == null || container.Length != 16) return NativeResult.InvalidArgument;
+                    fixed (byte* id = container)
+                    {
+                        var result = Native.libra_spawnable_host_copy_instance_game_io_port_name(
+                            Alive, id, index, null, 0, out var length);
+                        if (result != NativeResult.Ok) return result;
+                        if (length > 128) return NativeResult.InvalidBinary;
+                        var bytes = new byte[(int)length];
+                        fixed (byte* destination = bytes)
+                            result = Native.libra_spawnable_host_copy_instance_game_io_port_name(
+                                Alive, id, index, destination, length, out length);
+                        if (result == NativeResult.Ok) name = StrictUtf8.GetString(bytes);
+                        return result;
+                    }
+                }
+
                 public NativeResult RequestNaturalEnd() => Native.libra_spawnable_host_request_natural_end(Alive);
                 public NativeResult Stop() => Native.libra_spawnable_host_stop(Alive);
 
@@ -555,17 +642,23 @@ namespace LiberaFx.Unity
                     var result = Native.libra_spawnable_host_next_game_io_event(Alive, out var item, out var has);
                     if (result != NativeResult.Ok) { value = null; return result; }
                     if (has == 0) { value = null; return NativeResult.Ok; }
-                    if (!gameIoPortNames.TryGetValue(item.PortIndex, out var portName))
+                    var container = new byte[16];
+                    byte* containerSource = item.ContainerId;
+                    fixed (byte* destination = container)
+                        Buffer.MemoryCopy(containerSource, destination, 16, 16);
+                    string portName;
+                    if (item.InstanceId != 0)
+                    {
+                        result = GetInstanceGameIoPortName(container, item.PortIndex, out portName);
+                        if (result != NativeResult.Ok) { value = null; return result; }
+                    }
+                    else if (!gameIoPortNames.TryGetValue(item.PortIndex, out portName))
                     {
                         result = GetGameIoPortName(item.PortIndex, out portName);
                         if (result != NativeResult.Ok) { value = null; return result; }
                         gameIoPortNames.Add(item.PortIndex, portName);
                     }
-                    var container = new byte[16];
                     var lanes = new double[16];
-                    byte* containerSource = item.ContainerId;
-                    fixed (byte* destination = container)
-                        Buffer.MemoryCopy(containerSource, destination, 16, 16);
                     double* valuesSource = item.Values;
                     fixed (double* destination = lanes)
                         Buffer.MemoryCopy(valuesSource, destination, 16 * sizeof(double), 16 * sizeof(double));

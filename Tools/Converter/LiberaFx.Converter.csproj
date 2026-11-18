@@ -16,6 +16,7 @@
     <Compile Include="..\..\Models\Graph\GraphEnumBranchSchema.cs" Link="Models\GraphEnumBranchSchema.cs" />
     <Compile Include="..\..\Models\Graph\GraphLogicalSchema.cs" Link="Models\GraphLogicalSchema.cs" />
     <Compile Include="..\..\Models\Graph\GameIoSchema.cs" Link="Models\GameIoSchema.cs" />
+    <Compile Include="..\..\Models\Graph\SkeletalPoseSchema.cs" Link="Models\SkeletalPoseSchema.cs" />
     <Compile Include="..\..\Models\Graph\SequenceSchema.cs" Link="Models\SequenceSchema.cs" />
     <Compile Include="..\..\Models\Graph\GroupExposedItem.cs" Link="Models\GroupExposedItem.cs" />
     <Compile Include="..\..\Models\Graph\GraphNodeDefinition.cs" Link="Models\GraphNodeDefinition.cs" />
@@ -42,6 +43,7 @@
     <Compile Include="..\..\Services\Compilation\SpawnableGroupPackageBinary.cs" Link="Services\SpawnableGroupPackageBinary.cs" />
     <Compile Include="..\..\Services\Compilation\SignalTimelineLowering.cs" Link="Services\SignalTimelineLowering.cs" />
     <Compile Include="..\..\Services\Compilation\RenderProgramBindings.cs" Link="Services\RenderProgramBindings.cs" />
+    <Compile Include="..\..\Services\Compilation\PreviewDebugDraw.cs" Link="Services\PreviewDebugDraw.cs" />
     <Compile Include="..\..\Services\SpriteAnimationData.cs" Link="Services\SpriteAnimationData.cs" />
     <Compile Include="..\..\Services\SpriteCompositionData.cs" Link="Services\SpriteCompositionData.cs" />
     <Compile Include="..\..\Models\Resources\ResourceIdentity.cs" Link="Models\Resources\ResourceIdentity.cs" />

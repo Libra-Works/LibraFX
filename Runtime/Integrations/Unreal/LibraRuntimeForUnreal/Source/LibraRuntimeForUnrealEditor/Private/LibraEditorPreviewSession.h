@@ -17,6 +17,7 @@ class SEditorViewport;
 class SWidget;
 struct FLibraPreviewConnectionInvitation;
 class FLibraEditorGpuPreview;
+class FLibraEditorDebugDraw;
 class UMaterialInstanceDynamic;
 class ULibraEffectComponent;
 class ULibraEditorConnectionComponent;
@@ -124,6 +125,7 @@ private:
     TStrongObjectPtr<ULibraEffectComponent> effect;
     TStrongObjectPtr<ULibraEditorConnectionComponent> connection;
     TUniquePtr<FLibraEditorGpuPreview> gpuPreview;
+    TUniquePtr<FLibraEditorDebugDraw> debugDraw;
     TUniquePtr<FLibraPreviewConnectionInvitation> pendingConnection;
     TUniquePtr<FLibraPreviewDiscovery> discovery;
     FLibraViewerEndpoint viewerEndpoint;

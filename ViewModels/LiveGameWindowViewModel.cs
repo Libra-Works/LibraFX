@@ -16,6 +16,8 @@ public sealed class LiveGameWindowViewModel : ObservableObject, IDisposable
     private object?[] statusValues = [];
     private LiveGameInstance? selectedInstance;
     private bool busy, consent, disposed;
+    private long connectionVersion;
+    public Task DebugDisconnectCompletion { get; private set; } = Task.CompletedTask;
     public ObservableCollection<LiveGameInstance> Instances { get; } = [];
     public string EndpointDirectory
     {
@@ -56,19 +58,58 @@ public sealed class LiveGameWindowViewModel : ObservableObject, IDisposable
         DisconnectCommand = new RelayCommand(Disconnect, () => !disposed && !Busy && Connected);
         CancelCommand = new RelayCommand(() => operation?.Cancel(), () => Busy);
     }
-    private async Task ConnectAsync() => await RunAsync(async token =>
+    private async Task ConnectAsync()
     {
-        client?.Dispose();
-        client = null;
-        Instances.Clear();
-        SelectedInstance = null;
-        OnPropertyChanged(nameof(Destination));
-        client = await LiveGameSpoolClient.ConnectAsync(EndpointDirectory, token, timeout);
-        OnPropertyChanged(nameof(Destination));
-        OnPropertyChanged(nameof(Connected));
-        var response = await client.ListAsync(token);
-        Accept(response, "Listed");
-    });
+        Dispatcher.UIThread.VerifyAccess();
+        if (disposed || Busy) return;
+        var version = ++connectionVersion;
+        await RunAsync(async token =>
+        {
+            if (client is { } previous)
+            {
+                DebugDisconnectCompletion = previous.DisconnectDebugAsync();
+                ObserveCleanup(DebugDisconnectCompletion);
+            }
+            client = null;
+            Instances.Clear();
+            SelectedInstance = null;
+            OnPropertyChanged(nameof(Destination));
+            LiveGameSpoolClient connected;
+            try
+            {
+                connected = await LiveGameSpoolClient.ConnectOwnedAsync(EndpointDirectory, token, timeout,
+                    candidate =>
+                    {
+                        token.ThrowIfCancellationRequested();
+                        if (disposed || version != connectionVersion) throw new OperationCanceledException(token);
+                        client = candidate;
+                    });
+            }
+            catch
+            {
+                if (version == connectionVersion && client is { } failed)
+                {
+                    DebugDisconnectCompletion = failed.DebugDisconnectCompletion;
+                    ObserveCleanup(DebugDisconnectCompletion);
+                    client = null;
+                    OnPropertyChanged(nameof(Destination));
+                }
+                throw;
+            }
+            if (disposed || version != connectionVersion || token.IsCancellationRequested)
+            {
+                connected.Dispose();
+                token.ThrowIfCancellationRequested();
+                return;
+            }
+            client = connected;
+            OnPropertyChanged(nameof(Destination));
+            OnPropertyChanged(nameof(Connected));
+            var response = await connected.ListAsync(token);
+            token.ThrowIfCancellationRequested();
+            Accept(response, "Listed");
+        });
+    }
     private async Task RefreshAsync() => await RunAsync(async token => Accept(await client!.ListAsync(token), "Listed"));
     private async Task ApplyAsync() => await RunAsync(async token =>
     {
@@ -76,11 +117,12 @@ public sealed class LiveGameWindowViewModel : ObservableObject, IDisposable
         // Changing active documents later cannot redirect an in-flight update.
         var target = SelectedInstance?.Target ?? throw new InvalidOperationException(Text("SelectTarget"));
         var source = captureActiveGraph();
+        var destination = client ?? throw new InvalidOperationException(Text("Offline"));
         SetStatus("Compiling", source.Name);
         var package = await Task.Run(() => LiveGameGraphCompiler.Compile(source), token).WaitAsync(token);
         token.ThrowIfCancellationRequested();
         SetStatus("Applying", source.Name, target);
-        Accept(await client!.ReplaceAsync(target, package, token), "Applied");
+        Accept(await destination.ReplaceAsync(target, package, token), "Applied");
     });
     private async Task RunAsync(Func<CancellationToken, Task> action)
     {
@@ -89,10 +131,11 @@ public sealed class LiveGameWindowViewModel : ObservableObject, IDisposable
         using var current = new CancellationTokenSource(timeout);
         operation = current;
         Busy = true;
+        var version = connectionVersion;
         try { await action(current.Token); }
-        catch (LiveGameOutcomeUnknownException) { SetStatus("UnknownOutcome"); }
-        catch (OperationCanceledException) { SetStatus("Cancelled"); }
-        catch (Exception error) { SetStatus("Failed", error.Message); }
+        catch (LiveGameOutcomeUnknownException) { if (!disposed && version == connectionVersion) SetStatus("UnknownOutcome"); }
+        catch (OperationCanceledException) { if (!disposed && version == connectionVersion) SetStatus("Cancelled"); }
+        catch (Exception error) { if (!disposed && version == connectionVersion) SetStatus("Failed", error.Message); }
         finally
         {
             operation = null;
@@ -104,6 +147,7 @@ public sealed class LiveGameWindowViewModel : ObservableObject, IDisposable
     }
     private void Accept(LiveGameResponse response, string success)
     {
+        if (disposed || operation?.IsCancellationRequested == true) return;
         var selected = SelectedInstance?.Target;
         Instances.Clear();
         foreach (var instance in response.Instances) Instances.Add(instance);
@@ -118,17 +162,46 @@ public sealed class LiveGameWindowViewModel : ObservableObject, IDisposable
     }
     private void Disconnect()
     {
-        // Closing/cancelling the window never sends an engine destroy command.
+        // Only debug resources are released. No Stop/Destroy/NaturalEnd command.
+        var version = ++connectionVersion;
         operation?.Cancel();
-        client?.Dispose();
+        var detached = client;
         client = null;
         Instances.Clear();
         SelectedInstance = null;
-        SetStatus("Offline");
+        SetStatus(detached is null ? "Offline" : detached.SupportsDebugDisconnect ? "DebugClearing" : "DebugClearUnsupported");
         OnPropertyChanged(nameof(Destination));
         OnPropertyChanged(nameof(Connected)); OnPropertyChanged(nameof(RequiresRefresh));
         NotifyCommands();
+        if (detached is not null)
+        {
+            DebugDisconnectCompletion = DisconnectCapturedAsync(detached, version);
+            ObserveCleanup(DebugDisconnectCompletion);
+        }
     }
+    private async Task DisconnectCapturedAsync(LiveGameSpoolClient detached, long version)
+    {
+        try
+        {
+            var response = await detached.DisconnectDebugAsync();
+            if (!disposed) await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (!disposed && version == connectionVersion)
+                    SetStatus(response is null ? "DebugClearUnsupported" : "DebugCleared");
+            });
+        }
+        catch (Exception error)
+        {
+            if (!disposed) await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (!disposed && version == connectionVersion) SetStatus("DebugClearFailed", error.Message);
+            });
+            throw; // acknowledgement remains observable by the host/test caller
+        }
+    }
+    private static void ObserveCleanup(Task task) =>
+        _ = task.ContinueWith(failed => { _ = failed.Exception; }, CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
     public void Dispose()
     {
         if (disposed) return;

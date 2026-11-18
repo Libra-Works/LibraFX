@@ -146,9 +146,11 @@ public sealed class VfxProgram
     public static VfxProgram Compile(GraphSnapshot graph) => Compile(graph, out _);
 
     public static VfxProgram Compile(GraphSnapshot graph, out byte[] renderConfiguration,
-        IRenderResourceBindingContext? resourceContext = null)
+        IRenderResourceBindingContext? resourceContext = null, VfxCompileOptions? options = null)
     {
         ValidateForCompilation(graph);
+        if (Flatten(graph).Any(node => GameIoSchema.IsInstanceNode(node.Kind)))
+            throw new InvalidDataException("Instance Game I/O requires a Spawnable Group package; export .lfxp.");
         if (Flatten(graph).Any(node => node.SignalKeys?.Any(key => key.Mode == SignalTimelineMode.Runtime) == true))
             throw new InvalidDataException("Runtime Signal timeline keys require a Spawnable Group package; export .lfxp.");
         var starts = graph.Nodes.Where(node => node.Kind.Value == "OnStart").ToArray();
@@ -156,12 +158,15 @@ public sealed class VfxProgram
             graph = graph with { Nodes = graph.Nodes.Where(node => node.Id != starts[0].Id).ToArray() };
         if (ContainsSpawnable(graph))
             throw new InvalidDataException("Compile Spawnable Groups with SpawnableGroupPackage so templates are not discarded.");
+        if (SkeletalPoseSchema.ContainsSource(graph))
+            throw new NotSupportedException(
+                "Raw CPU program compilation cannot resolve SOURCE skeletal poses. Compile a SpawnableGroupPackage for Unity or Unreal package playback.");
         if (Flatten(graph).Any(node => SpawnableGroupSchema.IsInput(node.Kind) ||
             SpawnableGroupSchema.IsOutput(node.Kind) || SpawnableGroupSchema.IsSignalInput(node.Kind) ||
             SpawnableGroupSchema.IsSignalOutput(node.Kind) || node.Kind.Value is "LifeTime" or "OnStart" or
                 "InstanceRemaining" or "InstanceNormalizedAge" or "OwnerDestroy" or "OnDestroy" or "Delay"))
             throw new InvalidDataException("Lifecycle and Spawn boundary nodes require a Spawnable Group package.");
-        return CompileForPackage(graph, out renderConfiguration, resourceContext: resourceContext);
+        return CompileForPackage(graph, out renderConfiguration, resourceContext: resourceContext, options: options);
     }
 
     internal static VfxProgram CompileForPackage(GraphSnapshot graph,
@@ -170,11 +175,14 @@ public sealed class VfxProgram
 
     internal static VfxProgram CompileForPackage(GraphSnapshot graph, out byte[] renderConfiguration,
         IReadOnlyDictionary<Guid, Guid>? signalTypeOverrides = null,
-        IRenderResourceBindingContext? resourceContext = null)
+        IRenderResourceBindingContext? resourceContext = null, VfxCompileOptions? options = null)
     {
         ValidateForCompilation(graph);
+        // Strip terminal observers before lowering; never run reachability pruning.
+        if (options?.IncludePreviewDebugDraw != true) graph = PreviewDebugDraw.Strip(graph);
         graph = GroupExposedItems.Materialize(graph);
         ValidateForCompilation(graph);
+        graph = SkeletalPoseSchema.Lower(graph);
         var lifeNodeId = graph.Nodes.SingleOrDefault(node => node.Kind.Value == "LifeTime")?.Id;
         var (loweredGameIo, gameIoPorts) = GameIoSchema.Lower(graph);
         graph = LowerLifecycle(loweredGameIo, lifeNodeId is not null);
@@ -204,7 +212,7 @@ public sealed class VfxProgram
                 throw new InvalidDataException($"Matrix Game I/O port '{port.Name}' did not lower to four rows.");
             return port with { RuntimeNodeIds = outputs.Select(output => output.NodeId).ToArray() };
         }).ToArray();
-        renderConfiguration = RenderProgramBindings.CreateScene(graph, 0, resourceContext);
+        renderConfiguration = RenderProgramBindings.CreateSceneForPackage(graph, 0, resourceContext, options);
         graph = SequenceSchema.Lower(graph);
         var nodes = Flatten(graph)
             .Where(node => node.Kind != GraphNodeKind.Comment && node.Kind != GraphNodeKind.GraphGroup &&

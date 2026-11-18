@@ -16,6 +16,7 @@
 #include "InputKeyEventArgs.h"
 #include "LibraEditorAssetAdapter.h"
 #include "LibraEditorGpuPreview.h"
+#include "LibraEditorDebugDraw.h"
 #include "LibraPreviewConnectionInvitation.h"
 #include "LibraEffectComponent.h"
 #include "LibraEffectAsset.h"
@@ -589,6 +590,7 @@ void FLibraEditorPreviewSession::ApplyPendingConnection()
 
 void FLibraEditorPreviewSession::DisconnectPreview()
 {
+    if (debugDraw) debugDraw->Clear();
     discovery.Reset();
     discoveredPeers.Reset();
     pendingConnection.Reset();
@@ -881,6 +883,7 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
         effect->RegisterComponent();
         connection.Reset(NewObject<ULibraEditorConnectionComponent>(actor));
         gpuPreview = MakeUnique<FLibraEditorGpuPreview>(actor);
+        debugDraw = MakeUnique<FLibraEditorDebugDraw>();
         connection->Target = effect.Get();
         connection->Host = TEXT("127.0.0.1");
         auto port = int32{8766};
@@ -915,6 +918,7 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
         };
         connection->EditorGpuResetHandler = [this]
         {
+            if (debugDraw) debugDraw->Clear();
             acceptedRenderRootSequence = -1;
             pendingRenderNodes.Reset();
             pendingRenderProgramSequence = -1;
@@ -962,6 +966,7 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
 void FLibraEditorPreviewSession::ConfigureScene(const FString& json, int64 programSequence)
 {
     check(IsInGameThread());
+    if (debugDraw) debugDraw->Clear();
     pendingRenderNodes.Reset();
     pendingRenderProgramSequence = -1;
     sceneErrors.Reset();
@@ -986,6 +991,12 @@ void FLibraEditorPreviewSession::ConfigureScene(const FString& json, int64 progr
         sceneErrors.Add(TEXT("Render configuration must contain at most 128 nodes."));
         return;
     }
+    if (debugDraw)
+    {
+        auto error = FString{};
+        if (!debugDraw->Configure(*root, *previewActor.Get(), *effect.Get(), programSequence, error))
+        { sceneErrors.Add(error); return; }
+    }
     auto byNode = TMap<FGuid, FLibraValueHandle>{};
     auto candidateNodes = TArray<FRenderNode>{};
     auto nodeIds = TSet<FGuid>{};
@@ -997,6 +1008,8 @@ void FLibraEditorPreviewSession::ConfigureScene(const FString& json, int64 progr
         if (!object.IsValid()) { sceneErrors.Add(TEXT("Render node must be an object.")); continue; }
         auto idText = FString{};
         auto kind = FString{};
+        if (object->TryGetStringField(TEXT("kind"), kind) &&
+            (kind == TEXT("debugText") || kind == TEXT("debugModel"))) continue;
         auto assetPath = FString{};
         auto id = FGuid{};
         if (!object->TryGetStringField(TEXT("nodeId"), idText) || !FGuid::Parse(idText, id) || !id.IsValid() ||
@@ -1454,6 +1467,11 @@ FString FLibraEditorPreviewSession::UpdateScene(int64 programSequence, double ti
     if (!effect.IsValid() || !connection.IsValid() ||
         effect->IsEvaluationPending()) return {};
     auto currentProgram = programSequence == renderProgramSequence;
+    if (debugDraw)
+    {
+        auto error = FString{};
+        if (!debugDraw->Update(*effect.Get(), programSequence, error)) sceneErrors.Add(error);
+    }
     for (const auto& node : renderNodes)
         for (const auto& input : node.inputs)
             if (currentProgram && input.hasBinding)
@@ -1723,6 +1741,7 @@ void FLibraEditorPreviewSession::Stop()
     if (ticker.IsValid()) FTSTicker::GetCoreTicker().RemoveTicker(ticker);
     ticker.Reset();
     SavePreviewProfile();
+    debugDraw.Reset();
     gpuPreview.Reset();
     pendingRenderNodes.Reset();
     pendingRenderProgramSequence = -1;

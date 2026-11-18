@@ -67,6 +67,9 @@ auto ULibraLiveGameEndpointComponent::StartEndpoint() -> bool
     session = FLibraLiveGameSession::Create(true, GetOwner(), AssetBindings);
     if (!session) { LastError = TEXT("Live endpoint requires a non-shipping game-thread owner and explicit development opt-in."); return false; }
     lastSequence = 0;
+    debugOwner.Empty();
+    debugOwnerRequired = false;
+    session->DisconnectPreviewDebugDraw();
     hasWaiting = false;
     auto id = session->GetSessionId();
     identity = FString::Printf(TEXT("%016llx%016llx"), static_cast<unsigned long long>(id.high), static_cast<unsigned long long>(id.low));
@@ -79,6 +82,7 @@ auto ULibraLiveGameEndpointComponent::StartEndpoint() -> bool
     descriptor->SetStringField(TEXT("engine"), TEXT("Unreal"));
     descriptor->SetStringField(TEXT("transport"), TEXT("isolated-local-spool"));
     descriptor->SetStringField(TEXT("supportedUpdate"), TEXT("restart-root-render-v1-v2"));
+    descriptor->SetStringField(TEXT("debugDisconnect"), TEXT("debug-lease-v1"));
     descriptor->SetNumberField(TEXT("process"), FPlatformProcess::GetCurrentProcessId());
     Publish(TEXT("endpoint.json"), jsonText(descriptor));
     if (!IFileManager::Get().FileExists(*FPaths::Combine(EndpointDirectory, TEXT("endpoint.json"))))
@@ -151,6 +155,32 @@ void ULibraLiveGameEndpointComponent::PumpEndpoint()
     { Reply(sequenceText, liberafx::Result::InvalidHandle, TEXT("Wrong session/protocol or replayed command.")); return; }
     lastSequence = sequence;
     if (operation == TEXT("list")) { Reply(sequenceText, liberafx::Result::Ok, {}); return; }
+    auto owner = FString{};
+    command->TryGetStringField(TEXT("debugOwner"), owner);
+    auto validOwner = owner.Len() == 32;
+    for (auto character : owner)
+        if (!(character >= '0' && character <= '9') && !(character >= 'a' && character <= 'f')) validOwner = false;
+    if (operation == TEXT("debug-attach"))
+    {
+        if (!validOwner)
+        { Reply(sequenceText, liberafx::Result::InvalidArgument, TEXT("Invalid debug transfer owner.")); return; }
+        auto result = session->DisconnectPreviewDebugDraw();
+        if (result == liberafx::Result::Ok) result = session->AttachPreviewDebugDraw();
+        if (result == liberafx::Result::Ok) { debugOwner = owner; debugOwnerRequired = true; }
+        Reply(sequenceText, result, result == liberafx::Result::Ok ? FString{} : TEXT("Debug attach failed."));
+        return;
+    }
+    if (operation == TEXT("debug-disconnect"))
+    {
+        if (!validOwner || owner != debugOwner)
+        { Reply(sequenceText, liberafx::Result::InvalidHandle, TEXT("Stale debug transfer owner; no playback was modified.")); return; }
+        auto result = session->DisconnectPreviewDebugDraw();
+        if (result == liberafx::Result::Ok) debugOwner.Empty();
+        Reply(sequenceText, result, result == liberafx::Result::Ok ? FString{} : TEXT("Debug cleanup failed."));
+        return;
+    }
+    if ((debugOwnerRequired || !owner.IsEmpty()) && (!validOwner || owner != debugOwner))
+    { Reply(sequenceText, liberafx::Result::InvalidHandle, TEXT("Stale debug transfer owner; reconnect explicitly.")); return; }
     auto target = liberafx::InstanceId{};
     target.session = session->GetSessionId();
     target.incarnation = 1;
