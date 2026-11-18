@@ -195,3 +195,12 @@ Instance Game I/O in Unity 7 Play Mode:
   isolated scalar and 16-lane Matrix values, and targeted ping/pong after
   normal game-loop advancement. The result is recorded in
   source-batch-instance-gameio-playmode-result.txt.
+
+Int32 native interop in Unity 7:
+  Run the editor smoke runner with --int32 and set LIBERAFX_INT32_FIXTURE_DIR
+  to the absolute fixture directory. In the dedicated Unity project, run
+  -batchmode -quit -nographics -executeMethod LiberaFx.Unity.Tests.InteropContractTests.RunInt32Batch
+  with the same environment variable and the native plugin installed.
+  Unity 7000.0.0a16 passed the compiler-produced Int32 arithmetic and explicit
+  conversion contracts, error results, and signed Group-boundary output.
+  This exercises the editor's native plugin, not player or IL2CPP deployment.

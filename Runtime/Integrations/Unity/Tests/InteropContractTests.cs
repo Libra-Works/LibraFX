@@ -228,6 +228,19 @@ namespace LiberaFx.Unity.Tests
             throw new InvalidOperationException("Compiler fixture is missing the requested opcode.");
         }
 
+#if UNITY_EDITOR
+        public static void RunInt32Batch()
+        {
+            var directory = Environment.GetEnvironmentVariable("LIBERAFX_INT32_FIXTURE_DIR");
+            if (string.IsNullOrEmpty(directory) || !Path.IsPathRooted(directory))
+            {
+                throw new InvalidOperationException("Set LIBERAFX_INT32_FIXTURE_DIR to the compiler-produced fixture directory.");
+            }
+            VerifyInt32InteropFixtures(directory);
+            UnityEngine.Debug.Log("PASS Unity Int32 interop, conversions, arithmetic failures and Group boundary.");
+        }
+#endif
+
         private static void VerifyInt32InteropFixtures(string directory)
         {
             var addBytes = File.ReadAllBytes(Path.Combine(directory, "Int32Add.lfxb"));
@@ -282,6 +295,17 @@ namespace LiberaFx.Unity.Tests
                 var quotient = instance.BindValue(CompilerNodeGuid(divideBytes, 52));
                 Assert(instance.Evaluate(0, new[] { quotient }, new NativeValue[1]) ==
                     NativeResult.DivideByZero);
+            }
+
+            var groupBytes = File.ReadAllBytes(Path.Combine(directory, "GroupBoundary.lfxb"));
+            using (var program = new NativeProgram(groupBytes))
+            using (var instance = program.CreateInstance())
+            {
+                var output = instance.BindValue(CompilerNodeGuid(groupBytes, 51));
+                Assert(instance.GetValueType(output, out var outputType) == NativeResult.Ok &&
+                    outputType == NativeValueType.Int32);
+                Assert(instance.Evaluate(0, new[] { output }, new NativeValue[1]) == NativeResult.Ok);
+                Assert(instance.ReadInt32(output, out var result) == NativeResult.Ok && result == -51);
             }
         }
 
