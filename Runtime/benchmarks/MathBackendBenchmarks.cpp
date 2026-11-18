@@ -25,8 +25,8 @@
 namespace {
 using liberafx::math::Arithmetic;
 using liberafx::math::ArithmeticResult;
-using liberafx::math::Matrix4;
-using liberafx::math::Vector3;
+using liberafx::math::LbMatrix;
+using liberafx::math::LbVector;
 using liberafx::math::arithmetic;
 using liberafx::math::decomposeTransform;
 using liberafx::math::invertMatrix;
@@ -47,10 +47,10 @@ struct Vector4
 
 struct VectorInput
 {
-    Vector3 position;
-    Vector3 rotation;
-    Vector3 scale;
-    Matrix4 matrix;
+    LbVector position;
+    LbVector rotation;
+    LbVector scale;
+    LbMatrix matrix;
 };
 
 struct Timing
@@ -239,7 +239,7 @@ auto runVectorBenchmark(const Options& options, std::size_t width, Arithmetic op
     report(operationName(operation), workload, width, options.vectorOperations, timing);
 }
 
-auto matrixChecksum(const std::vector<Matrix4>& values) -> double
+auto matrixChecksum(const std::vector<LbMatrix>& values) -> double
 {
     auto checksum = 0.0;
     for (auto index = std::size_t{0}; index < values.size(); ++index)
@@ -263,12 +263,12 @@ auto makeInputs(std::size_t count) -> std::vector<VectorInput>
     return inputs;
 }
 
-auto verifyInverse(const std::vector<Matrix4>& matrices) -> double
+auto verifyInverse(const std::vector<LbMatrix>& matrices) -> double
 {
     auto maximumError = 0.0;
     for (const auto& matrix : matrices)
     {
-        auto inverse = Matrix4{};
+        auto inverse = LbMatrix{};
         if (!invertMatrix(matrix, inverse)) fail("matrix inverse correctness check failed");
         for (auto row = 0u; row < 4; ++row)
             for (auto column = 0u; column < 4; ++column)
@@ -283,14 +283,14 @@ auto verifyInverse(const std::vector<Matrix4>& matrices) -> double
     return maximumError;
 }
 
-auto verifyDecomposition(const std::vector<Matrix4>& matrices) -> double
+auto verifyDecomposition(const std::vector<LbMatrix>& matrices) -> double
 {
     auto maximumError = 0.0;
     for (const auto& matrix : matrices)
     {
-        auto position = Vector3{};
-        auto rotation = Vector3{};
-        auto scale = Vector3{};
+        auto position = LbVector{};
+        auto rotation = LbVector{};
+        auto scale = LbVector{};
         if (!decomposeTransform(matrix, position, rotation, scale))
             fail("matrix decomposition correctness check failed");
         auto reconstructed = makeTransform(position, rotation, scale);
@@ -518,10 +518,10 @@ auto runMatrixBenchmarks(const Options& options, std::size_t itemCount,
                          const char* workload) -> void
 {
     auto inputs = makeInputs(itemCount);
-    auto positions = std::vector<Vector3>(itemCount);
-    auto rotations = std::vector<Vector3>(itemCount);
-    auto scales = std::vector<Vector3>(itemCount);
-    auto matrices = std::vector<Matrix4>(itemCount);
+    auto positions = std::vector<LbVector>(itemCount);
+    auto rotations = std::vector<LbVector>(itemCount);
+    auto scales = std::vector<LbVector>(itemCount);
+    auto matrices = std::vector<LbMatrix>(itemCount);
 
     runMatrixBenchmark("matrix.make_transform", workload, options.matrixOperations,
         options.sampleCount,
@@ -587,16 +587,16 @@ auto runMatrixBenchmarks(const Options& options, std::size_t itemCount,
             }
         },
         [&] {
-            auto reconstructed = std::vector<Matrix4>(itemCount);
+            auto reconstructed = std::vector<LbMatrix>(itemCount);
             for (auto index = std::size_t{0}; index < itemCount; ++index)
                 reconstructed[index] = makeTransform(positions[index], rotations[index], scales[index]);
             return std::pair{std::abs(matrixChecksum(reconstructed)), verifyDecomposition(matrices)};
         });
 }
 
-auto multiplyReference(const Matrix4& left, const Matrix4& right) -> Matrix4
+auto multiplyReference(const LbMatrix& left, const LbMatrix& right) -> LbMatrix
 {
-    auto result = Matrix4{};
+    auto result = LbMatrix{};
     for (auto row = 0u; row < 4; ++row)
         for (auto column = 0u; column < 4; ++column)
             for (auto inner = 0u; inner < 4; ++inner)
@@ -604,12 +604,12 @@ auto multiplyReference(const Matrix4& left, const Matrix4& right) -> Matrix4
     return result;
 }
 
-auto orderedReference(const Vector3& position, const Vector3& rotation, const Vector3& scale,
-                      std::size_t order) -> Matrix4
+auto orderedReference(const LbVector& position, const LbVector& rotation, const LbVector& scale,
+                      std::size_t order) -> LbMatrix
 {
-    auto translation = Matrix4{1, 0, 0, position[0], 0, 1, 0, position[1],
+    auto translation = LbMatrix{1, 0, 0, position[0], 0, 1, 0, position[1],
                                0, 0, 1, position[2], 0, 0, 0, 1};
-    auto scaling = Matrix4{scale[0], 0, 0, 0, 0, scale[1], 0, 0,
+    auto scaling = LbMatrix{scale[0], 0, 0, 0, 0, scale[1], 0, 0,
                            0, 0, scale[2], 0, 0, 0, 0, 1};
     auto rotationMatrix = makeTransform({}, rotation, {1, 1, 1});
     auto factors = std::array{translation, rotationMatrix, scaling};
@@ -624,8 +624,8 @@ auto runOrderedBenchmarks(const Options& options, std::size_t itemCount,
                           const char* workload) -> void
 {
     auto inputs = makeInputs(itemCount);
-    auto rotations = std::vector<Vector3>(itemCount);
-    auto matrices = std::vector<Matrix4>(itemCount);
+    auto rotations = std::vector<LbVector>(itemCount);
+    auto matrices = std::vector<LbMatrix>(itemCount);
     constexpr auto names = std::array{"matrix.ordered_TRS", "matrix.ordered_TSR",
         "matrix.ordered_RTS", "matrix.ordered_RST", "matrix.ordered_STR", "matrix.ordered_SRT"};
     for (auto order = std::size_t{0}; order < names.size(); ++order)

@@ -1,2 +1,3 @@
 #include "HAL/Platform.h"
-#include "VfxRuntime.cpp"
+#include "VfxProgram.cpp"
+#include "VfxInstance.cpp"

@@ -172,7 +172,11 @@ try {
         }
     }
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $coreRoot 'Core') -Filter '*.cpp' -File -Recurse) {
-        if ($file.Name -in @('VfxRuntime.cpp', 'BuiltinNodes.cpp', 'DelayNode.cpp', 'LogicalNodes.cpp', 'LivePreview.cpp', 'Interop.cpp', 'SpawnableHost.cpp') -and $file.DirectoryName -eq (Join-Path $coreRoot 'Core')) { continue }
+        if ($file.Name -in @('VfxProgram.cpp', 'VfxInstance.cpp', 'BuiltinNodes.cpp', 'DelayNode.cpp', 'LogicalNodes.cpp', 'LivePreview.cpp', 'Interop.cpp', 'SpawnableHost.cpp') -and
+            $file.DirectoryName -eq (Join-Path $coreRoot 'Core'))
+        {
+            continue
+        }
         $relative = [IO.Path]::GetRelativePath($coreRoot, $file.FullName).Replace('\', '/')
         $sha = [Security.Cryptography.SHA256]::Create()
         try { $digest = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($relative)) }

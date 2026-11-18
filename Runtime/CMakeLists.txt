@@ -2,7 +2,25 @@ cmake_minimum_required(VERSION 3.16)
 project(LiberaFxRuntime LANGUAGES CXX)
 
 find_package(Threads REQUIRED)
-add_library(liberafx_runtime STATIC Core/VfxRuntime.cpp Core/LivePreview.cpp Core/BuiltinNodes.cpp Core/DelayNode.cpp Core/GeneratorPool.cpp Core/NamedIo.cpp Core/EffectLifecycle.cpp Core/SpawnablePackage.cpp Core/SpawnableHost.cpp)
+add_library(liberafx_runtime STATIC
+    Core/VfxProgram.cpp
+    Core/VfxInstance.cpp
+    Core/LivePreview.cpp
+    Core/BuiltinNodes.cpp
+    Core/BuiltinMathNodes.cpp
+    Core/BuiltinMatrixNodes.cpp
+    Core/BuiltinSignalNodes.cpp
+    Core/BuiltinTimeNodes.cpp
+    Core/MatrixMath.cpp
+    Core/DelayNode.cpp
+    Core/GeneratorPool.cpp
+    Core/NamedIo.cpp
+    Core/EffectLifecycle.cpp
+    Core/SpawnablePackage.cpp
+    Core/SpawnableHost.cpp
+    Core/SpawnableHostExecution.cpp
+    Core/SpawnableHostScheduling.cpp
+    Core/SpawnableHostApi.cpp)
 target_sources(liberafx_runtime PRIVATE Core/LogicalNodes.cpp)
 target_sources(liberafx_runtime PRIVATE Core/InstanceSession.cpp)
 target_sources(liberafx_runtime PRIVATE Core/PhasePrimitives.cpp)

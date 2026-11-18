@@ -1,4 +1,4 @@
-#56 integration points in the parent-owned VfxRuntime.cpp / VfxRuntime.h
+#56 integration points in the parent-owned VfxInstance.cpp / VfxRuntime.h
 
 The editor and the Unity/Unreal stand-alone owners consume the existing
 Instance::setDebugHooks ABI. The following wiring is needed to remove the
@@ -11,8 +11,7 @@ current numerical-only rejection without reading inactive branch values.
          const std::uint8_t* signalSource = nullptr) noexcept;
      Result debugEnumSelect(std::uint32_t index, std::uint32_t selector,
          std::uint32_t selectedSource, const std::uint8_t* selectedDefaults) noexcept;
-   VfxRuntime.cpp, immediately after Instance::beforeDebugNode (outside the
-   anonymous namespace, inside liberafx):
+   VfxInstance.cpp, immediately after Instance::beforeDebugNode (inside liberafx):
      #include "ExecutionDebugCapture.inl"
 
 2. Instance::setDebugHooks: retain Busy and uninitialized guards; remove the

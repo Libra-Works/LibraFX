@@ -40,7 +40,11 @@ public sealed partial class GraphWorkspaceViewModel
     {
         get
         {
-            if (!_inlinePathExists) return true;
+            if (!_inlinePathExists)
+            {
+                return true;
+            }
+
             try { EnsurePathEditable(); return false; }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
                 InvalidOperationException or ArgumentException) { return true; }
@@ -50,15 +54,24 @@ public sealed partial class GraphWorkspaceViewModel
     private void EnsurePathEditable(bool containingInstanceValue = false)
     {
         if (!_inlinePathExists)
+        {
             throw new InvalidOperationException(LocalizationService.Shared.Get("Inline.MissingGraph"));
+        }
+
         var graph = _document._rootSnapshot;
         for (var index = 0; index < _graphPath.Count; index++)
         {
             var owner = graph.Nodes.FirstOrDefault(node => node.Id == _graphPath[index]);
             if (owner?.ChildGraph is null)
+            {
                 throw new InvalidOperationException(LocalizationService.Shared.Get("Inline.MissingGraph"));
+            }
+
             if (!containingInstanceValue || index != _graphPath.Count - 1)
+            {
                 EnsureAssetUnlocked(owner.GroupAsset);
+            }
+
             graph = owner.ChildGraph;
         }
     }
@@ -100,7 +113,10 @@ public sealed partial class GraphWorkspaceViewModel
     {
         Dispatcher.UIThread.VerifyAccess();
         if (!Nodes.Contains(node) || node.ChildGraph is null || _graphPath.Count >= MaxGraphDepth)
+        {
             throw new InvalidOperationException(LocalizationService.Shared.Get("Inline.MissingGraph"));
+        }
+
         var snapshot = _document.CreateSnapshot();
         var path = _graphPath.Append(node.Id).ToArray();
         var key = string.Join("/", path);
@@ -118,13 +134,20 @@ public sealed partial class GraphWorkspaceViewModel
     public bool MaximizeInlineGraph(GraphNodeViewModel node)
     {
         Dispatcher.UIThread.VerifyAccess();
-        if (!Nodes.Contains(node) || node.ChildGraph is null) return false;
+        if (!Nodes.Contains(node) || node.ChildGraph is null)
+        {
+            return false;
+        }
+
         var path = _graphPath.ToArray();
         _document.NavigateToGraph(0);
         foreach (var id in path.Append(node.Id))
         {
             var target = _document.Nodes.FirstOrDefault(candidate => candidate.Id == id);
-            if (target is null || !_document.EnterGraphCore(target, inspectLocked: true)) return false;
+            if (target is null || !_document.EnterGraphCore(target, inspectLocked: true))
+            {
+                return false;
+            }
         }
         _document.ActivateEditingWorkspace();
         return true;
@@ -133,7 +156,11 @@ public sealed partial class GraphWorkspaceViewModel
     private void AcceptInlineDocument(GraphSnapshot snapshot, GraphWorkspaceViewModel source)
     {
         _rootSnapshot = snapshot;
-        if (!ReferenceEquals(source, this)) ReceiveInlineDocument(snapshot);
+        if (!ReferenceEquals(source, this))
+        {
+            ReceiveInlineDocument(snapshot);
+        }
+
         SynchronizeInlineWorkspaces(snapshot, source);
     }
 
@@ -147,7 +174,10 @@ public sealed partial class GraphWorkspaceViewModel
                 workspace._rootSnapshot = snapshot;
                 workspace.RefreshContainingSpawnable();
             }
-            else workspace.ReceiveInlineDocument(snapshot);
+            else
+            {
+                workspace.ReceiveInlineDocument(snapshot);
+            }
         }
     }
 
@@ -175,7 +205,11 @@ public sealed partial class GraphWorkspaceViewModel
             SelectNode(null);
             OnPropertyChanged(nameof(InspectorNode));
             CancelConnection();
-            if (ReferenceEquals(_document.ActiveEditingWorkspace, this)) _document.ActivateEditingWorkspace();
+            if (ReferenceEquals(_document.ActiveEditingWorkspace, this))
+            {
+                _document.ActivateEditingWorkspace();
+            }
+
             return;
         }
         if (!GraphSnapshot.ContentEquals(previous, graph))
@@ -188,14 +222,23 @@ public sealed partial class GraphWorkspaceViewModel
             if (descendantOnly)
             {
                 foreach (var specification in graph.Nodes)
+                {
                     GetNode(specification.Id).SetChildGraphValue(specification.ChildGraph);
+                }
+
                 var valid = graph.Connections.ToHashSet();
                 foreach (var edge in Connections.Where(edge => !valid.Contains(new GraphConnectionSnapshot(
                     edge.Source.Id, edge.Target.Id, edge.TargetPortId, edge.SourcePortId))).ToArray())
+                {
                     RemoveConnection(edge);
+                }
+
                 RefreshTypeDiagnostics();
             }
-            else RestoreCurrentGraph(graph);
+            else
+            {
+                RestoreCurrentGraph(graph);
+            }
         }
         RefreshBreadcrumbs();
     }
@@ -204,18 +247,34 @@ public sealed partial class GraphWorkspaceViewModel
     {
         OnPropertyChanged(nameof(IsReadOnly));
         foreach (var weak in _inlineWorkspaces.Values.ToArray())
-            if (weak.TryGetTarget(out var workspace)) workspace.OnPropertyChanged(nameof(IsReadOnly));
+        {
+            if (weak.TryGetTarget(out var workspace))
+            {
+                workspace.OnPropertyChanged(nameof(IsReadOnly));
+            }
+        }
     }
 
     public void SetInlinePresentation(GraphNodeViewModel node, bool expanded, double width, double height)
     {
         Dispatcher.UIThread.VerifyAccess();
         if (!Nodes.Contains(node) || !node.IsGraphGroup)
+        {
             throw new InvalidOperationException(LocalizationService.Shared.Get("Inline.MissingGraph"));
-        if (!double.IsFinite(width) || !double.IsFinite(height)) throw new ArgumentException("Invalid inline size.");
+        }
+
+        if (!double.IsFinite(width) || !double.IsFinite(height))
+        {
+            throw new ArgumentException("Invalid inline size.");
+        }
+
         width = Math.Clamp(width, 420, 2400);
         height = Math.Clamp(height, 260, 1600);
-        if (node.IsInlineExpanded == expanded && node.InlineWidth == width && node.InlineHeight == height) return;
+        if (node.IsInlineExpanded == expanded && node.InlineWidth == width && node.InlineHeight == height)
+        {
+            return;
+        }
+
         var values = node.Parameters?.Where(value => value.Id is not
             (GraphNodeViewModel.InlineExpandedId or GraphNodeViewModel.InlineWidthId or GraphNodeViewModel.InlineHeightId))
             .ToList() ?? [];

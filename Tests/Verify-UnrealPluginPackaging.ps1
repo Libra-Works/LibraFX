@@ -20,7 +20,8 @@ try {
         $file = Join-Path $plugin $entry.Path
         if ((Get-FileHash -LiteralPath $file).Hash -ne $entry.Hash) { throw "Incorrect packaged bytes: $($entry.Path)" }
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $plugin 'Source\ThirdParty\LibraRuntimeCore\Core\VfxRuntime.cpp'))) {
+    if (-not (Test-Path -LiteralPath (Join-Path $plugin 'Source\ThirdParty\LibraRuntimeCore\Core\VfxProgram.cpp')) -or
+        -not (Test-Path -LiteralPath (Join-Path $plugin 'Source\ThirdParty\LibraRuntimeCore\Core\VfxInstance.cpp'))) {
         throw 'The packaged plugin depends on external repository source files.'
     }
     $moduleRules = @(Get-ChildItem (Join-Path $plugin 'Source') -Recurse -Filter '*.Build.cs' |
