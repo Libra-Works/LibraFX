@@ -17,8 +17,8 @@ public sealed class EditorIconView : Path
     public EditorIconView()
     {
         Width = Height = 18;
-        Stretch = Stretch.Uniform;
-        StrokeThickness = 1.7;
+        Stretch = Stretch.None;
+        StrokeThickness = 1.65;
         StrokeLineCap = PenLineCap.Round;
         StrokeJoin = PenLineJoin.Round;
         IsHitTestVisible = false;
