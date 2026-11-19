@@ -2,10 +2,10 @@ name: Documentation
 
 on:
   pull_request:
-    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', '.github/workflows/pages.yml']
+    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', '.github/workflows/pages.yml', 'Tools/Generate-NodeReference.py', 'Assets/Nodes/**', 'Assets/Enums/**', 'Assets/Translations/**', 'Assets/Modules/manifest.json']
   push:
     branches: [main]
-    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', '.github/workflows/pages.yml']
+    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', '.github/workflows/pages.yml', 'Tools/Generate-NodeReference.py', 'Assets/Nodes/**', 'Assets/Enums/**', 'Assets/Translations/**', 'Assets/Modules/manifest.json']
   workflow_dispatch:
 
 permissions:
@@ -23,19 +23,23 @@ jobs:
       - name: Stage reviewed documentation
         run: |
           mkdir -p pages-source/{images,ja,_layouts}
-          cp docs/site/{_config.yml,getting-started.md,engine-integration.md} pages-source/
+          cp docs/site/_config.yml pages-source/
           sed 's|\.\./images/afterimage-gate-editor\.png|images/afterimage-gate-editor.png|g' docs/site/index.md > pages-source/index.md
           cp docs/site/_layouts/bilingual.html pages-source/_layouts/
-          cp docs/site/ja/{getting-started.md,engine-integration.md} pages-source/ja/
+          for file in getting-started.md engine-integration.md editor-reference.md authoring.md; do
+            cp "docs/site/$file" pages-source/
+            cp "docs/site/ja/$file" pages-source/ja/
+          done
           sed 's|\.\./\.\./images/afterimage-gate-editor\.png|../images/afterimage-gate-editor.png|g' docs/site/ja/index.md > pages-source/ja/index.md
           cp docs/images/afterimage-gate-editor.png pages-source/images/
+          python3 Tools/Generate-NodeReference.py pages-source
       - uses: actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1
         with:
           source: ./pages-source
           destination: ./pages-output
       - name: Verify the rendered pages
         run: |
-          for file in index.html getting-started.html engine-integration.html; do
+          for file in index.html getting-started.html engine-integration.html editor-reference.html authoring.html node-reference.html; do
             test -s "pages-output/$file"
             test -s "pages-output/ja/$file"
             grep -q '<html lang="en">' "pages-output/$file"
@@ -50,6 +54,14 @@ jobs:
           grep -q 'engine-integration.html' pages-output/index.html
           grep -q 'getting-started.html' pages-output/ja/index.html
           grep -q 'engine-integration.html' pages-output/ja/index.html
+          for lang in '' ja/; do
+            grep -q 'node-reference.html' "pages-output/${lang}index.html"
+            grep -q 'id="node-sequence"' "pages-output/${lang}node-reference.html"
+            grep -q 'id="standard-modules"' "pages-output/${lang}node-reference.html"
+            if grep -Eq 'id="node-(matrixruntime|lifecycleruntime|gameioruntime)' "pages-output/${lang}node-reference.html"; then
+              exit 1
+            fi
+          done
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         with:

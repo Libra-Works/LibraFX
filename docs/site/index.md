@@ -13,6 +13,9 @@ with the standalone converter, and play it through a game-engine integration.
 | Start here | What you will learn |
 | --- | --- |
 | [Getting started](getting-started.md) | Install the editor, open **Afterimage Gate**, and follow the signals that drive it. |
+| [Editor window and panel reference](editor-reference.md) | Find each tool, setting, and dialog in the editor. |
+| [Graph authoring guide](authoring.md) | Connect pins, animate with curves, and manage Spawnable lifetime and Group reuse. |
+| [Built-in node reference](node-reference.md) | Browse the standard nodes by family, with their pins and default settings. |
 | [Engine integration](engine-integration.md) | Install the matching SDK, play a compiled effect, and choose between script actions and native nodes. |
 | [SDK distribution reference](https://github.com/Libra-Works/LibraFX/blob/v2026.11.8/docs/sdk-distribution.md) | Build from source, stage packages, and check engine and platform limits. |
 

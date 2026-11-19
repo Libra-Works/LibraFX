@@ -24,3 +24,9 @@ Distinguish compilation, engine playback, and rendering evidence. Use the
 The [Pages workflow](../.github/workflows/pages.yml) stages an explicit list of
 pages and images. Adding a file here does not add it to the site. Review any
 new public content before adding it to the list.
+
+The workflow generates both built-in node references from catalog definitions,
+enum options, the standard module manifest, translations, and the supplemental explanations in
+[`Tools/Generate-NodeReference.py`](../Tools/Generate-NodeReference.py). Internal
+runtime nodes are excluded. When adding a built-in authoring node, supply
+translated help text or a bilingual supplemental explanation.

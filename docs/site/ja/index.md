@@ -13,6 +13,9 @@ LIBERA FX は、Unity・Unreal Engine・Godot で再生するエフェクトを�
 | ガイド | 内容 |
 | --- | --- |
 | [はじめに](getting-started.md) | エディターを導入し、同梱の **Afterimage Gate** を開いて、エフェクトを動かすシグナルをたどります。 |
+| [ウィンドウとパネルのリファレンス](editor-reference.md) | ツール、設定、ダイアログの開き方と使い方を確認できます。 |
+| [グラフ制作ガイド](authoring.md) | ピンの接続、カーブ、Spawnable の寿命、Group の再利用を説明します。 |
+| [標準ノード図鑑](node-reference.md) | 標準ノードの用途、入出力ピン、設定の既定値を調べられます。 |
 | [ゲームエンジンとの連携](engine-integration.md) | SDK を導入してエフェクトを再生し、スクリプトや独自 C++ ノードで拡張します。 |
 | [SDK 配布リファレンス（英語）](https://github.com/Libra-Works/LibraFX/blob/v2026.11.8/docs/sdk-distribution.md) | ソースからのビルド、パッケージの組み立て、対応環境と検証範囲を確認できます。 |
 
