@@ -40,12 +40,6 @@ public sealed partial class DockFactory : Factory
             Id = "NodeList",
             Title = LocalizationService.Shared.Get("Messages.Tool.NodeList")
         };
-        var resources = new ToolPaneViewModel
-        {
-            Id = "Resources",
-            Title = LocalizationService.Shared.Get("Messages.Tool.Resources"),
-            DescriptionKey = "Messages.ResourcesUnavailable"
-        };
         var properties = new NodePropertiesPaneViewModel(_activeGraph, _main.Playback, _main.AssetBrowser)
         {
             Id = "Properties",
@@ -75,7 +69,6 @@ public sealed partial class DockFactory : Factory
         _localizedTools.AddRange([
             (outliner, "Messages.Tool.Outliner"),
             (nodeList, "Messages.Tool.NodeList"),
-            (resources, "Messages.Tool.Resources"),
             (properties, "Messages.Tool.Properties"),
             (engineConnection, "Messages.Tool.EngineConnection"),
             (history, "Messages.Tool.History"),
@@ -104,8 +97,10 @@ public sealed partial class DockFactory : Factory
         AddWorkPane("PreviewConnections", "Connections.Title", () => new PreviewConnectionsWindow { DataContext = _main });
         AddWorkPane("LocalProjects", "Library.Title", () => new LocalProjectsWindow(_main));
         AddWorkPane("Problems", "Messages.GraphProblemsTitle", () => new ProblemsWindow(_main));
+        var resources = AddWorkPane("Resources", "Messages.Tool.Resources",
+            () => new ProjectResourcesView { DataContext = _main.AssetBrowser.ViewModel.ProjectResources });
         AddWorkPane("Content", "Asset.Title", () => new EngineAssetsWindow(_main.AssetBrowser));
-        var chat = AddWorkPane("Chat", "Chat.Title", () => new ChatWindow(_main), retainView: true);
+        AddWorkPane("Chat", "Chat.Title", () => new ChatWindow(_main), retainView: true);
         AddWorkPane("LiveGame", "LiveGame.Title", _main.CreateLiveGameView, retainView: true);
         AddWorkPane("RevisionHistory", "Vcs.Title", () => new RevisionHistoryWindow(_main));
         AddWorkPane("LayoutPresets", "Layouts.Title", () => new WindowLayoutsWindow(_main.WindowLayouts));
@@ -120,15 +115,15 @@ public sealed partial class DockFactory : Factory
                     Proportion = 0.56,
                     Alignment = Alignment.Right,
                     ActiveDockable = properties,
-                    VisibleDockables = CreateList<IDockable>(properties, history, outliner, nodeList, resources)
+                    VisibleDockables = CreateList<IDockable>(properties, outliner, nodeList)
                 },
                 new ProportionalDockSplitter(),
                 new ToolDock
                 {
                     Proportion = 0.44,
                     Alignment = Alignment.Right,
-                    ActiveDockable = chat,
-                    VisibleDockables = CreateList<IDockable>(chat, engineConnection)
+                    ActiveDockable = resources,
+                    VisibleDockables = CreateList<IDockable>(resources, history, engineConnection)
                 })
         };
 

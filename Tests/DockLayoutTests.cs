@@ -85,6 +85,8 @@ internal static class DockLayoutTests
             var timeline = factory.Tools.Single(t => t.Id == "Timeline");
             var curves = factory.Tools.Single(t => t.Id == "Curves");
             var properties = factory.Tools.Single(t => t.Id == "Properties");
+            var resources = factory.Tools.OfType<EditorWorkPaneViewModel>().Single(t => t.Id == "Resources");
+            var history = factory.Tools.Single(t => t.Id == "History");
             var chat = factory.Tools.Single(t => t.Id == "Chat");
 
             void CheckDefault()
@@ -93,7 +95,7 @@ internal static class DockLayoutTests
                 var canvas = (IDock)main.DocumentsDock.Owner!;
                 Check(columns.Length == 2 && ReferenceEquals(columns[0], canvas) &&
                       columns[1].Proportion < canvas.Proportion,
-                    "The initial graph column must start on the left and have more room than the inspector/chat column.");
+                    "The initial graph column must start on the left and have more room than the Inspector/Resources column.");
                 Check(timeline.Owner is IToolDock { Alignment: Alignment.Bottom } timelineDock &&
                       curves.Owner is IToolDock { Alignment: Alignment.Bottom } curvesDock &&
                       ReferenceEquals(timelineDock, curvesDock) &&
@@ -101,18 +103,26 @@ internal static class DockLayoutTests
                       ReferenceEquals(curvesDock.ActiveDockable, curves) &&
                       curvesDock.VisibleDockables!.Contains(timeline),
                     "F-Curve must be the active bottom pane directly below the graph with Timeline in the same tab group.");
-                Check(properties.Owner is IToolDock propertiesDock && chat.Owner is IToolDock chatDock &&
-                      !ReferenceEquals(propertiesDock, chatDock) && ReferenceEquals(propertiesDock.Owner, chatDock.Owner) &&
+                Check(properties.Owner is IToolDock propertiesDock && resources.Owner is IToolDock resourceDock &&
+                      !ReferenceEquals(propertiesDock, resourceDock) && ReferenceEquals(propertiesDock.Owner, resourceDock.Owner) &&
                       ReferenceEquals(propertiesDock.ActiveDockable, properties) &&
-                      ReferenceEquals(chatDock.ActiveDockable, chat),
-                    "Properties and chat must be visible together on the right.");
+                      ReferenceEquals(resourceDock.ActiveDockable, resources) &&
+                      resourceDock.VisibleDockables?.IndexOf(history) == 1 &&
+                      !Walk(main.Layout).Contains(chat),
+                    "Resources must be active below Properties, with History in the same tab group and Chat hidden.");
             }
 
             CheckDefault();
+            Check(resources.View is ProjectResourcesView resourceView &&
+                  ReferenceEquals(resourceView.DataContext, main.AssetBrowser.ViewModel.ProjectResources),
+                "The default Resources pane must use the active project resource workspace.");
             factory.ShowTool("EngineConnection");
-            factory.CloseDockable(chat);
+            Check(factory.ShowTool("Chat") && Walk(main.Layout).Contains(chat), "Chat must be available on demand.");
+            var withChat = factory.CaptureLayout();
             factory.ApplyLayout(factory.DefaultLayout, showWindows: false);
             CheckDefault();
+            factory.ApplyLayout(withChat, showWindows: false);
+            Check(Walk(main.Layout).Contains(chat), "Saved layouts with Chat must still restore it.");
         }
         finally
         {
@@ -150,8 +160,10 @@ internal static class DockLayoutTests
             Check(history.Undo(), "Cannot restore the initial graph after checking Spawnable creation.");
             var node = document.Workspace.CreateNode(GraphNodeKind.Comment);
             var count = document.Workspace.Nodes.Count;
+            var initiallyDocked = tools.Intersect(Walk(main.Layout)).ToArray();
             foreach (var tool in tools) ((IFactory)factory).CloseDockable((object)tool);
-            Check(main.Layout.HiddenDockables?.Count == 9, "Native tool close must hide all nine initially docked VMs.");
+            Check(initiallyDocked.All(tool => main.Layout.HiddenDockables?.Contains(tool) == true),
+                "Native tool close must hide all initially docked tools.");
             foreach (var tool in tools)
             {
                 Check(factory.ShowTool(tool.Id) && factory.ShowTool(tool.Id), "Closed tool could not be restored twice.");
@@ -221,12 +233,12 @@ internal static class DockLayoutTests
             Check(factory.ShowTool("EngineConnection") && factory.ShowTool("History") && factory.ShowTool("Resources"),
                 "Restored floating/pinned/hidden tool could not be focused.");
             Check(factory.Tools.SequenceEqual(tools), "Roundtrip recreated tools.");
-            factory.CloseDockable(tools.Single(t => t.Id == "Resources"));
+            factory.CloseDockable(tools.Single(t => t.Id == "NodeList"));
             var hiddenLayout = factory.CaptureLayout();
             factory.ApplyLayout(hiddenLayout, showWindows: false);
-            factory.ShowTool("Resources");
-            Check(tools.Single(t => t.Id == "Resources").Owner is IToolDock restoredHome &&
-                  restoredHome.VisibleDockables!.Any(t => t.Id == "NodeList"), "Hidden pane lost its original tab group on roundtrip.");
+            factory.ShowTool("NodeList");
+            Check(tools.Single(t => t.Id == "NodeList").Owner is IToolDock restoredHome &&
+                  restoredHome.VisibleDockables!.Any(t => t.Id == "Properties"), "Hidden pane lost its original tab group on roundtrip.");
             for (var i = 0; i < 30; i++)
                 factory.ApplyLayout(factory.CaptureLayout(), showWindows: false);
             WindowLayoutPresetStore.ValidateSnapshot(factory.CaptureLayout());
@@ -414,8 +426,16 @@ internal static class DockLayoutTests
         {
             var window = new MainWindow { DataContext = main };
             var menu = window.FindControl<MenuItem>("WindowMenu")!;
-            Check(menu.Items.OfType<MenuItem>().Select(m => m.Tag).OfType<string>().Order().SequenceEqual(
+            var inspectors = window.FindControl<MenuItem>("InspectorsMenu")!;
+            var slots = inspectors.Items.OfType<MenuItem>().ToArray();
+            Check(menu.Items.Contains(inspectors) &&
+                  slots.Select(item => item.Header).SequenceEqual(new[] { "1", "2", "3", "4" }) &&
+                  slots.Select(item => item.Tag).SequenceEqual(new[] { "Properties", "Properties2", "Properties3", "Properties4" }),
+                "The Window menu must group Inspector slots 1–4 in order.");
+            Check(menu.Items.OfType<MenuItem>().Concat(slots).Select(m => m.Tag).OfType<string>().Order().SequenceEqual(
                 WindowLayoutPresetStore.PaneIds.Order()), "WINDOW menu does not expose every stable dock pane.");
+            slots[1].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Check(Walk(main.Layout).Any(tool => tool.Id == "Properties2"), "The Inspector submenu did not open its dock pane.");
             var manager = new WindowLayoutsWindow(main.WindowLayouts);
             Check(manager.FindControl<TextBox>("PresetName") is not null, "Preset manager did not load.");
         }

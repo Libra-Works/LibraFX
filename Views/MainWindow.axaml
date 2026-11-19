@@ -86,10 +86,12 @@
                 <MenuItem Header="{DynamicResource Text.Messages.Tool.Outliner}" Tag="Outliner" Click="OnDockPanelClick" />
                 <MenuItem Header="{DynamicResource Text.Messages.Tool.NodeList}" Tag="NodeList" Click="OnDockPanelClick" />
                 <MenuItem Header="{DynamicResource Text.Messages.Tool.Resources}" Tag="Resources" Click="OnDockPanelClick" />
-                <MenuItem Header="{DynamicResource Text.Messages.Tool.Properties}" Tag="Properties" Click="OnDockPanelClick" />
-                <MenuItem Header="{DynamicResource Text.Messages.Tool.Properties2}" Tag="Properties2" Click="OnDockPanelClick" />
-                <MenuItem Header="{DynamicResource Text.Messages.Tool.Properties3}" Tag="Properties3" Click="OnDockPanelClick" />
-                <MenuItem Header="{DynamicResource Text.Messages.Tool.Properties4}" Tag="Properties4" Click="OnDockPanelClick" />
+                <MenuItem x:Name="InspectorsMenu" Header="{DynamicResource Text.Editor.Inspectors}">
+                    <MenuItem Header="1" Tag="Properties" Click="OnDockPanelClick" />
+                    <MenuItem Header="2" Tag="Properties2" Click="OnDockPanelClick" />
+                    <MenuItem Header="3" Tag="Properties3" Click="OnDockPanelClick" />
+                    <MenuItem Header="4" Tag="Properties4" Click="OnDockPanelClick" />
+                </MenuItem>
                 <MenuItem Header="{DynamicResource Text.Messages.Tool.EngineConnection}" Tag="EngineConnection" Click="OnDockPanelClick" />
                 <MenuItem Header="{DynamicResource Text.Messages.Tool.History}" Tag="History" Click="OnDockPanelClick" />
                 <MenuItem Header="{DynamicResource Text.Messages.Tool.Timeline}" Tag="Timeline" Click="OnDockPanelClick" />
