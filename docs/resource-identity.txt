@@ -52,9 +52,8 @@ thread. It does not auto-connect or discover/guess projects.
 Unity binding delivery is an explicit author action. The Editor adapter writes or updates
 Assets/LiberaFx/LiberaFxBindings.asset with the exact resource GUID/local-file-ID bindings
 and registered material parameter bindings, preserving unrelated existing entries. This
-asset is the Unity runtime lookup table; delivery is not evidence that an effect has been
-observed rendering. Unity/Unreal live engine execution and binding application still require
-their respective integration checks.
+asset is the Unity runtime lookup table. A delivery acknowledgement does not mean an effect
+has rendered.
 
 IResourceBindingProbe must query the exact supplied project and return actual kinds; a
 catalog search miss, partial index, or unavailable adapter must not be reported as a verified
@@ -124,6 +123,11 @@ over certificate-pinned WSS, and framebuffer output from a compiled package usin
 mapping. The fixture intentionally names a nonexistent legacy asset. The protocol regression
 requires an explicit diagnostic for a same-path mapping owned by the wrong project.
 
+Unity 7 also verified exact Mesh and Material lookup over certificate-pinned WSS, binding
+delivery, and native playback of a compiled package using those same objects. The fixture
+names nonexistent legacy mesh and material paths and checks the rendered framebuffer.
+This is package playback, not live replacement of a running Unity graph.
+
 For the Unreal integration check, initialize the dedicated project with
 Libra.Editor.Resources.Identity and -LibraInitializeResourceProject, then run
 --unreal-gpu-preview with LIBERAFX_UNREAL_DISCOVERY=1, LIBERAFX_UNREAL_MAPPED_MODEL=1 and
@@ -132,7 +136,15 @@ automation again with -LibraIdentityMappedPackage pointing to that file and a re
 device. In both resource automation runs, pass -LibraResourceProject with the exact isolated
 .uproject path.
 
+For the Unity integration check, set LIBERAFX_UNITY_EDITOR to Unity.exe,
+LIBERAFX_VERIFICATION_PROJECT to the exact isolated Unity project directory, and
+LIBERAFX_RESOURCE_WSS_FIXTURE to a fresh absolute output directory. With an isolated
+LIBERAFX_DATA_ROOT, run CommentImageSmokeTests with --unity-mapped-package. The project
+needs the Unity integration and its native runtime, a D3D11 graphics device, and no existing
+LiberaFxBindings.asset. The test removes the generated fixture and keeps the local log and
+framebuffer capture in the output directory.
+
 Remaining acceptance/verification:
-* Validate the Resource Identity tab and Unity WSS bridge in a Unity Editor with a safe
-  project, including project initialize/clone decisions, missing/type-mismatch responses,
-  parameter schema, and mapped package rendering using the delivered runtime binding asset.
+* Verify the Resource Identity tab against a connected Unity project, including clone
+  decisions and missing/type-mismatch diagnostics. The Unity WSS client does not advertise
+  rendering, and the separate Live Game path does not resolve mapped graph resources.

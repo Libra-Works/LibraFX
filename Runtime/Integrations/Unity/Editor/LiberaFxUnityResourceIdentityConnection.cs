@@ -109,6 +109,16 @@ namespace LiberaFx.Unity
             }
         }
 
+        internal Task ConnectAsync(string previewEndpoint, string previewToken, string fingerprint)
+        {
+            endpoint = previewEndpoint;
+            accessToken = previewToken;
+            certificateFingerprint = fingerprint;
+            return ConnectAsync();
+        }
+
+        internal bool IsConnected => socket?.State == WebSocketState.Open;
+
         private async Task ReceiveLoopAsync(ClientWebSocket client, CancellationToken stop)
         {
             var buffer = new byte[HeaderSize + MaxPayload + 1];

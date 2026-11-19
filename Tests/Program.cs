@@ -576,6 +576,11 @@ internal static class Program
             CompiledPreviewProtocolTests.RunUnrealGpuPreview();
             return;
         }
+        if (args is ["--unity-mapped-package"])
+        {
+            CompiledPreviewProtocolTests.RunUnityMappedPackage();
+            return;
+        }
         if (args is ["--spawnable-group"])
         {
             SpawnableGroupTests.Run();

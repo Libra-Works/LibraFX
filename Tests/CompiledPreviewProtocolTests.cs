@@ -69,6 +69,118 @@ internal static class CompiledPreviewProtocolTests
 
     public static void RunUnrealGpuPreview() => RunWithDispatcher(VerifyUnrealGpuPreviewAsync(), 330);
 
+    public static void RunUnityMappedPackage() => RunWithDispatcher(VerifyUnityMappedPackageAsync(), 210);
+
+    private static async Task VerifyUnityMappedPackageAsync()
+    {
+        string Env(string name) => Environment.GetEnvironmentVariable(name) ??
+            throw new InvalidOperationException("Set " + name + " to an isolated verification path.");
+        var executable = Env("LIBERAFX_UNITY_EDITOR");
+        var projectPath = Env("LIBERAFX_VERIFICATION_PROJECT");
+        var scratch = Env("LIBERAFX_RESOURCE_WSS_FIXTURE");
+        Require(Path.IsPathFullyQualified(executable) && File.Exists(executable) &&
+                Path.IsPathFullyQualified(projectPath) && Directory.Exists(projectPath) &&
+                Path.IsPathFullyQualified(scratch) && !Directory.Exists(scratch) && !File.Exists(scratch),
+            "Use an isolated Unity project and a fresh absolute fixture directory.");
+        Directory.CreateDirectory(scratch);
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        using var host = new PreviewHost(port);
+        var model = new MainViewModel();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(150));
+        var stop = timeout.Token;
+        Process? engine = null;
+        try
+        {
+            await host.StartAsync(model);
+            var start = new ProcessStartInfo(executable) { UseShellExecute = false };
+            foreach (var argument in new[] { "-projectPath", projectPath, "-batchmode", "-force-d3d11",
+                         "-enable-builtin-rp-fallback", "-executeMethod",
+                         "LiberaFx.Unity.Editor.LiberaFxResourceIdentityVerification.RunMappedPackageWssBatch",
+                         "-logFile", Path.Combine(scratch, "unity.log") })
+            {
+                start.ArgumentList.Add(argument);
+            }
+            start.Environment["LIBERAFX_RESOURCE_WSS_ENDPOINT"] = $"wss://127.0.0.1:{port}/preview?protocol=3";
+            start.Environment["LIBERAFX_RESOURCE_WSS_TOKEN"] = host.AccessToken;
+            start.Environment["LIBERAFX_RESOURCE_WSS_FINGERPRINT"] = host.Fingerprint;
+            engine = Process.Start(start) ?? throw new InvalidOperationException("Unity did not start.");
+            var identityPath = Path.Combine(scratch, "unity-bindings.json");
+            Guid? peer = null;
+            while (!engine.HasExited && (!File.Exists(identityPath) || peer is null))
+            {
+                peer = model.PreviewTelemetry.Clients().FirstOrDefault(client =>
+                    client.Engine == "Unity" && client.Role == "editor" &&
+                    client.Capabilities.Contains("resourceIdentity"))?.ClientId;
+                await Task.Delay(50, stop);
+            }
+            Require(!engine.HasExited && peer.HasValue, "Unity did not connect; see the isolated unity.log.");
+            var clientId = peer!.Value;
+            var state = await model.PreviewAssets.EngineProjectAsync(clientId, cancellation: stop);
+            if (state.ProjectState == "Unregistered")
+            {
+                state = await model.PreviewAssets.EngineProjectAsync(clientId, "initialize", stop);
+            }
+            var project = state.Project;
+            Require(state.ProjectState == "Ready" && project is not null,
+                "The isolated Unity project identity is not ready: " + state.ProjectState);
+            using var identities = JsonDocument.Parse(await File.ReadAllTextAsync(identityPath, stop));
+            const string assetFormat = "unity.asset-guid-local-id.v1";
+            const string legacy = "/Game/Test/MissingLegacyModel.MissingLegacyModel";
+            const string legacyMaterial = "/Game/Test/MissingLegacyMaterial.MissingLegacyMaterial";
+            var mesh = new OpaqueBinding(assetFormat, identities.RootElement.GetProperty("mesh").GetString()!);
+            var material = new OpaqueBinding(assetFormat, identities.RootElement.GetProperty("material").GetString()!);
+            var meshId = Guid.NewGuid();
+            var materialId = Guid.NewGuid();
+            var graph = await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                var draw = model.Graph.CreateNode(new("ModelDraw"));
+                model.Graph.AssignRenderAsset(draw, new EngineAsset(legacy, "Legacy mesh", "model", "Unreal",
+                    Materials: [new EngineMaterial(0, legacyMaterial, "Legacy material", [])]));
+                model.Graph.SetResourceIdentityDocument(new ResourceIdentityDocument(1,
+                    [new(meshId, "model", "Mapped cube"), new(materialId, "material", "Mapped material")],
+                    [new(project!, meshId, "model", mesh), new(project!, materialId, "material", material)],
+                    [], [new(draw.Id, "assetPath", meshId), new(draw.Id, "material:0", materialId)], []),
+                    "Map Unity fixture mesh and material");
+                return model.Graph.CreateSnapshot();
+            });
+            var context = await PreviewResourceBindings.ResolveAsync(graph, model.PreviewAssets, clientId, stop);
+            var package = SpawnableGroupPackage.Compile(graph, resourceContext: context);
+            var delivered = await model.PreviewAssets.DeliverUnityBindingsAsync(clientId, project!,
+                [new(meshId, "model", mesh, []), new(materialId, "material", material, [])]);
+            Require(delivered == "Assets/LiberaFx/LiberaFxBindings.asset",
+                "Unity did not acknowledge the actual runtime binding asset.");
+            var temporary = Path.Combine(scratch, "unity-mapped.tmp");
+            await File.WriteAllBytesAsync(temporary, SpawnableGroupPackageBinary.Serialize(package), stop);
+            File.Move(temporary, Path.Combine(scratch, "unity-mapped.lfxp"));
+            await engine.WaitForExitAsync(stop);
+            var proof = Path.Combine(scratch, "unity-result.txt");
+            Require(engine.ExitCode == 0 && File.Exists(proof) &&
+                File.Exists(Path.Combine(scratch, "unity-mapped.png")),
+                "Unity runtime package verification failed; see the isolated unity.log.");
+            Console.Write(await File.ReadAllTextAsync(proof, stop));
+        }
+        finally
+        {
+            await host.StopAsync();
+            if (engine is not null)
+            {
+                if (!engine.HasExited)
+                {
+                    if (!engine.WaitForExit(5000))
+                    {
+                        engine.Kill();
+                    }
+                    await engine.WaitForExitAsync();
+                }
+                engine.Dispose();
+            }
+            await Dispatcher.UIThread.InvokeAsync(model.DisposeStorageFiles);
+        }
+    }
+
     private static async Task VerifyProjectMappedRenderAsync()
     {
         var listener = new TcpListener(IPAddress.Loopback, 0);
