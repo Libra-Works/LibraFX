@@ -144,8 +144,8 @@ auto System::initialize(const CustomNodeDescriptor* registry, std::size_t regist
     {
         callbacks.push_back({this, {}, operation, 0});
         auto descriptor = CustomNodeDescriptor{};
-        auto id = typeId(operation);
-        std::copy(id.begin(), id.end(), descriptor.typeId);
+        auto operationTypeId = typeId(operation);
+        std::copy(operationTypeId.begin(), operationTypeId.end(), descriptor.typeId);
         descriptor.abiVersion = 1;
         descriptor.execution = signal ? CustomExecution::Signal : CustomExecution::Parameter;
         descriptor.inputCount = static_cast<std::uint8_t>(inputs.size());

@@ -124,7 +124,10 @@ The native renderer exposes resetFlexibleHistories() for hosts implementing
 explicit discontinuous seeks. Normal player/debug advances are nonnegative;
 no public forward-seek API is provided here. Rendering failures are reported
 and hide the affected scope instead of leaving a stale ribbon visible.
-This source integration has not been built or exercised in Godot.
+Build against the pinned Godot 4.7 godot-cpp API, including ImageTexture in the
+build profile. A successful extension build verifies compilation, not engine
+playback or rendered pixels. Flexible Plane and CPU particle rendering still
+require visual acceptance in Godot.
 
 ModelDraw supports surface overrides bound while stopped with
 set_material_binding(compiled_identity, Material). clear_material_binding

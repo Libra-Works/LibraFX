@@ -1,13 +1,18 @@
 #include "LibraFlexiblePlaneProxy.h"
 #include "LibraFlexiblePlaneComponent.h"
 #include "Materials/MaterialInterface.h"
+#include "Misc/EngineVersionComparison.h"
 #include "SceneManagement.h"
 #include "SceneView.h"
 
 FLibraFlexiblePlaneProxy::FLibraFlexiblePlaneProxy(const ULibraFlexiblePlaneComponent& component)
     : FPrimitiveSceneProxy(&component), vertices_(component.GetRibbonVertices()),
       indices_(component.GetRibbonIndices()), materialProxy_(component.GetMaterial(0)->GetRenderProxy()),
+#if UE_VERSION_OLDER_THAN(5, 7, 0)
       relevance_(component.GetMaterial(0)->GetRelevance_Concurrent(GetScene().GetFeatureLevel()))
+#else
+      relevance_(component.GetMaterial(0)->GetRelevance_Concurrent(GetScene().GetShaderPlatform()))
+#endif
 {
 }
 

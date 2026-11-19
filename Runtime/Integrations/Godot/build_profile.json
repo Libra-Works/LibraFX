@@ -4,6 +4,7 @@
     "Camera3D",
     "GeometryInstance3D",
     "Image",
+    "ImageTexture",
     "JSON",
     "Marshalls",
     "Mesh",

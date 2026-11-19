@@ -271,7 +271,7 @@ auto FlexiblePlaneRenderer::create(godot::Node3D& parent,
     instance->material_->set_texture(godot::BaseMaterial3D::TEXTURE_ALBEDO, texture);
     instance->material_->set_shading_mode(godot::BaseMaterial3D::SHADING_MODE_UNSHADED);
     instance->material_->set_transparency(godot::BaseMaterial3D::TRANSPARENCY_ALPHA);
-    instance->material_->set_vertex_color_use_as_albedo(true);
+    instance->material_->set_flag(godot::BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
     instance->material_->set_flag(godot::BaseMaterial3D::FLAG_USE_TEXTURE_REPEAT, definition.options.uvMode == 1);
     instance->material_->set_cull_mode(godot::BaseMaterial3D::CULL_DISABLED);
     auto* node = memnew(godot::MeshInstance3D);

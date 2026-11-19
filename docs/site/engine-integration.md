@@ -10,8 +10,8 @@ See [engine and file terms](glossary.md#engine) for SDK, runtime, editable proje
 
 Download the matching SDK from the latest [Preview release](https://github.com/Libra-Works/LibraFX/releases).
 The unified `.lfxb` package workflow below requires the updated editor,
-converter, and SDK from the same source revision; it is not included in that
-published release. Older `.lfxp` packages remain supported by updated SDKs.
+converter, and SDK from the same source revision. Do not mix these with
+2026.11.8 or earlier SDKs. Older `.lfxp` packages remain supported by updated SDKs.
 
 Existing raw-program assets do not automatically become package assets.
 When replacing a legacy raw `.lfxb` with a new package export, import it as a new
@@ -32,6 +32,14 @@ Back up any existing installation before updating. For Unity, keep existing
 plugin registrations. For Godot, preserve any generated `.gdextension.uid`.
 For Unreal, replace the installed folder rather than merging old and new files;
 do not delete through a development junction.
+
+### Verification boundaries
+
+The updated Unreal adapter passed UE 5.7.4 Clang compilation (`-NoLink`),
+MSVC Editor linking, and the isolated legacy raw import-routing automation.
+The Clang check does not verify linking against an MSVC-built engine or a
+console SDK. New CPU particle and Flexible Plane rendered results remain
+unverified; engine compilation and import tests are not visual acceptance.
 
 ## Play a first effect
 

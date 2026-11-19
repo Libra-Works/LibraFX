@@ -101,14 +101,9 @@ auto toReal(double value, godot::real_t& out) -> bool
 
 auto makeWhiteTexture() -> godot::Ref<godot::Texture2D>
 {
-    auto image = godot::Ref<godot::Image>{};
-    image.instantiate();
-    image->create(1, 1, false, godot::Image::FORMAT_RGBA8);
+    auto image = godot::Image::create_empty(1, 1, false, godot::Image::FORMAT_RGBA8);
     image->fill(godot::Color(1, 1, 1, 1));
-    auto texture = godot::Ref<godot::ImageTexture>{};
-    texture.instantiate();
-    texture->set_image(image);
-    return texture;
+    return godot::ImageTexture::create_from_image(image);
 }
 
 template<class Animation>
@@ -862,7 +857,7 @@ auto PackageRenderRenderer::makeCpuRenderable(godot::Node& parent,
     material->set_blend_mode(draw.additive
         ? godot::BaseMaterial3D::BLEND_MODE_ADD
         : godot::BaseMaterial3D::BLEND_MODE_MIX);
-    material->set_vertex_color_use_as_albedo(true);
+    material->set_flag(godot::BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
     material->set_cull_mode(godot::BaseMaterial3D::CULL_DISABLED);
     material->set_billboard_mode(godot::BaseMaterial3D::BILLBOARD_ENABLED);
     material->set_flag(godot::BaseMaterial3D::FLAG_BILLBOARD_KEEP_SCALE, true);

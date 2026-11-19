@@ -880,7 +880,7 @@ struct FLibraSpawnableRenderState::FImpl
                 auto cameraPosition = FVector::ZeroVector;
                 auto* overrideCamera = Owner.EffectCameraOverride.Get();
                 auto* controller = Owner.GetWorld() ? Owner.GetWorld()->GetFirstPlayerController() : nullptr;
-                auto* camera = controller ? controller->PlayerCameraManager : nullptr;
+                auto* camera = controller ? controller->PlayerCameraManager.Get() : nullptr;
                 if (IsValid(overrideCamera))
                 {
                     cameraPosition = overrideCamera->GetComponentLocation();
@@ -1064,7 +1064,7 @@ struct FLibraSpawnableRenderState::FImpl
                 }
                 auto* world = Owner.GetWorld();
                 auto* controller = world ? world->GetFirstPlayerController() : nullptr;
-                auto* camera = controller ? controller->PlayerCameraManager : nullptr;
+                auto* camera = controller ? controller->PlayerCameraManager.Get() : nullptr;
                 auto* overrideCamera = Owner.EffectCameraOverride.Get();
                 if (particleCount != 0 && !IsValid(overrideCamera) && !IsValid(camera))
                 {

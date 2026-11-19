@@ -1,7 +1,7 @@
 #pragma once
 
 #include "DynamicMeshBuilder.h"
-#include "MaterialRelevance.h"
+#include "Materials/MaterialRelevance.h"
 #include "PrimitiveSceneProxy.h"
 
 class ULibraFlexiblePlaneComponent;
