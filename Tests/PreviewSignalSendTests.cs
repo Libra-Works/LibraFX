@@ -33,6 +33,7 @@ internal static class PreviewSignalSendTests
         VerifyScopesAndTranslations();
         RunWithDispatcher(VerifyPublicationsAsync());
         RunWithDispatcher(VerifySendTransportAsync());
+        GodotPackagePreviewTests.Run();
     }
 
     private static void VerifyScopesAndTranslations()
