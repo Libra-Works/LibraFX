@@ -37,6 +37,7 @@ do { $previewPort = Get-LoopbackPort } until ($previewPort -ne $mcpPort)
 $settings = @{
     LIBERAFX_DATA_ROOT = (Join-Path $OutputDirectory 'editor-data')
     LIBERAFX_MCP_DEBUG = '1'
+    LIBERAFX_DEBUG_ISOLATED_INSTANCE = '1'
     LIBERAFX_MCP_DEBUG_PORT = "$mcpPort"
     LIBERAFX_PREVIEW_DEBUG_PORT = "$previewPort"
 }

@@ -1,7 +1,7 @@
 # 入門
 
 LIBERA FXは、値・Signal・寿命をグラフで組み合わせる作者用エディターです。
-**エフェクトの実際の描画は接続先のUnity／Unrealで行います。**
+**エフェクトの実際の描画は接続先のUnity／Unreal／Godotで行います。**
 グラフの画像、コンパイル成功、転送成功だけを「描画確認済み」とは扱いません。
 
 1. 配布されたエディターと対応するランタイムSDKを用意します。
@@ -18,8 +18,9 @@ LIBERA FXは、値・Signal・寿命をグラフで組み合わせる作者用�
 [Unreal手順](../Runtime/Integrations/Unreal/USAGE.txt)、
 [Godot手順](../Runtime/Integrations/Godot/USAGE.txt)を参照してください。
 Unity 7000系での過去の確認とUnity 6での現行機能の確認は別です。
-Godotでは Windows x86-64 で CPU バイトコードの単体再生に対応しています。
-ライブプレビュー、描画、Spawnable パッケージにはまだ対応していません。
+Godotでは Windows x86-64 で CPU バイトコードの単体再生に加え、対応範囲内の
+Spawnable パッケージ、描画、ローカルプレビューを利用できます。
+対応する描画デバイスや機能の制限はGodot手順を参照してください。
 
 編集はUndo／Redoできます。以前の履歴へ戻った後の編集は別の枝になるので、
 別案を試すために元の案を破棄する必要はありません。エニシング検索（既定 `Ctrl+P`）では

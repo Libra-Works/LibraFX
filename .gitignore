@@ -12,6 +12,7 @@ TestResults/
 !.env.example
 .github/skills/
 *.md
+!/README.md
 !/docs/**/*.md
 !/Skills/**/*.md
 .mcp.json
