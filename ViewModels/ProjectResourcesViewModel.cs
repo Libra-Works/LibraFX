@@ -63,6 +63,7 @@ public sealed class ProjectResourcesViewModel : ObservableObject, IDisposable
             if (!SetProperty(ref _selectedEntry, value)) return;
             OnPropertyChanged(nameof(Details));
             OnPropertyChanged(nameof(PreviewOnly));
+            OnPropertyChanged(nameof(CanShowVersionControl));
             OnPropertyChanged(nameof(CanUse));
             OnPropertyChanged(nameof(UseLabel));
             UseCommand.NotifyCanExecuteChanged();
@@ -70,6 +71,8 @@ public sealed class ProjectResourcesViewModel : ObservableObject, IDisposable
         }
     }
     public bool PreviewOnly => SelectedEntry?.PreviewOnly == true;
+    public bool CanShowVersionControl => SelectedEntry is { Path: not null } ||
+        SelectedEntry?.Group is { Origin: not GroupAssetOrigin.Standard } && _main.GroupAssets.HasLibraryDirectory;
     public bool CanUse => !_disposed && SelectedEntry is { } entry && !entry.PreviewOnly &&
         (entry.Group is null || _main.ActiveDocument is not null);
     public string UseLabel => LocalizationService.Shared.Get(SelectedEntry?.Group is not null
@@ -108,6 +111,19 @@ public sealed class ProjectResourcesViewModel : ObservableObject, IDisposable
             model.OnPropertyChanged(nameof(UseLabel));
         });
         Filter();
+    }
+
+    internal (MainViewModel Main, string File, bool CompareGraphs)? VersionControlTarget()
+    {
+        if (SelectedEntry is { Path: { } path } entry)
+        {
+            return (_main, path, !entry.PreviewOnly);
+        }
+        if (SelectedEntry?.Group is { Origin: not GroupAssetOrigin.Standard } group && _main.GroupAssets.HasLibraryDirectory)
+        {
+            return (_main, _main.GroupAssets.Library().PathFor(group.Id), true);
+        }
+        return null;
     }
 
     private void OnCatalogChanged(object? sender, EventArgs e)

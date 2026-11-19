@@ -408,9 +408,8 @@ public sealed class InspectorPluginService : ObservableObject, IDisposable
         VisiblePlugins.Clear();
         _loaded.Clear();
         var manifests = new List<InspectorPluginEntry>();
-        if (!Directory.Exists(_pluginsDirectory)) return;
         string[] directories;
-        try { directories = Directory.GetDirectories(_pluginsDirectory); }
+        try { directories = ExtensionPackagePolicy.DiscoverDirectories(_pluginsDirectory, "Inspectors"); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             AddDiagnostic($"Inspector plugin directory could not be read: {ex.Message}");

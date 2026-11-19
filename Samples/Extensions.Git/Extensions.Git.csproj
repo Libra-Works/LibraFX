@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <BundledPluginFolder>BundledPlugins\Extensions\Git</BundledPluginFolder>
+    <BundledPluginManifest>liberafx-extension.json</BundledPluginManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\LiberaFx.Extensions.Abstractions\LiberaFx.Extensions.Abstractions.csproj" />
+  </ItemGroup>
+  <Import Project="..\BundledPlugin.targets" />
+</Project>

@@ -133,6 +133,11 @@ public sealed class GroupAssetLibrary
     private GroupAsset Read(string path)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return ReadAsset(stream);
+    }
+
+    internal static GroupAsset ReadAsset(Stream stream)
+    {
         if (stream.Length > MaxFileBytes) throw new InvalidDataException("Group asset is too large.");
         GroupAsset asset;
         try
@@ -220,7 +225,7 @@ public sealed class GroupAssetLibrary
         }
     }
 
-    private string PathFor(Guid id)
+    internal string PathFor(Guid id)
     {
         if (id == Guid.Empty) throw new ArgumentException("A group ID is required.", nameof(id));
         return Path.Combine(_directory, id.ToString("N") + FileExtension);

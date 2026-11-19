@@ -21,7 +21,12 @@ public sealed class RevisionHistoryWindow : UserControl
     private readonly RevisionGraphCanvas _left = new();
     private readonly RevisionGraphCanvas _right = new();
     private readonly ListBox _changes = new();
+    private readonly ListBox _workspaceChanges = new() { MaxHeight = 170 };
+    private readonly TextBlock _branch = new();
+    private readonly Button _workspaceRefresh = new();
+    private readonly Button _openForEdit = new();
     private readonly TextBlock _scope = new();
+    private readonly bool _canCompare;
     private GraphSnapshot? _beforeGraph, _afterGraph;
     private IReadOnlyList<GraphNodeDifference> _differences = [];
     private CancellationTokenSource? _lifetime;
@@ -31,12 +36,15 @@ public sealed class RevisionHistoryWindow : UserControl
     private sealed record ChangeChoice(GraphNodeDifference Difference, string Label)
     { public override string ToString() => Label; }
 
-    public RevisionHistoryWindow(MainViewModel main)
+    public RevisionHistoryWindow(MainViewModel main, string? resourceFile = null, bool compareGraphs = true)
     {
         _main = main;
-        _document = main.ActiveDocument;
-        if (Uri.TryCreate(_document?.FileKey, UriKind.Absolute, out var uri) && uri.IsFile)
-            _file = uri.LocalPath;
+        var active = main.ActiveDocument;
+        var activeFile = Uri.TryCreate(active?.FileKey, UriKind.Absolute, out var uri) && uri.IsFile ? uri.LocalPath : null;
+        _file = resourceFile ?? activeFile;
+        _document = resourceFile is null || string.Equals(resourceFile, activeFile,
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) ? active : null;
+        _canCompare = compareGraphs;
         var text = LocalizationService.Shared;
         _provider.ItemsSource = main.Extensions.VersionControlProviders;
         _provider.DisplayMemberBinding = new Avalonia.Data.Binding("Name");
@@ -60,6 +68,10 @@ public sealed class RevisionHistoryWindow : UserControl
         Avalonia.Automation.AutomationProperties.SetName(compare, text.Get("Vcs.Compare"));
         refresh.Click += async (_, _) => await LoadHistoryAsync();
         compare.Click += async (_, _) => await CompareAsync();
+        _workspaceRefresh.Content = text.Get("Vcs.WorkspaceRefresh");
+        _workspaceRefresh.Click += async (_, _) => await RunWorkspaceOperationAsync(openForEdit: false);
+        _openForEdit.Content = text.Get("Vcs.OpenForEdit");
+        _openForEdit.Click += async (_, _) => await RunWorkspaceOperationAsync(openForEdit: true);
         var controls = new Border
         {
             Classes = { "editor-bar" }, BorderThickness = new Thickness(0, 0, 0, 1),
@@ -93,19 +105,37 @@ public sealed class RevisionHistoryWindow : UserControl
         graphs.Children.Add(_left);
         Grid.SetColumn(_right, 1);
         graphs.Children.Add(_right);
-        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*,130,Auto"), RowSpacing = 6 };
+        _before.IsVisible = _after.IsVisible = compare.IsVisible = _canCompare;
+        var workspace = new Expander
+        {
+            Header = text.Get("Vcs.Workspace"),
+            IsExpanded = resourceFile is not null,
+            Margin = new Thickness(10, 0),
+            Content = new StackPanel
+            {
+                Spacing = 6,
+                Children =
+                {
+                    new WrapPanel { ItemSpacing = 6, Children = { _workspaceRefresh, _openForEdit } },
+                    _branch, _workspaceChanges
+                }
+            }
+        };
+        var root = new Grid { RowDefinitions = new RowDefinitions(_canCompare ? "Auto,Auto,Auto,*,130,Auto" : "Auto,Auto,Auto,0,*,Auto"), RowSpacing = 6 };
         root.Children.Add(controls);
+        Grid.SetRow(workspace, 1);
+        root.Children.Add(workspace);
         _scope.Margin = new Thickness(10, 0);
-        Grid.SetRow(_scope, 1);
+        Grid.SetRow(_scope, 2);
         root.Children.Add(_scope);
-        Grid.SetRow(graphs, 2);
+        Grid.SetRow(graphs, 3);
         root.Children.Add(graphs);
         _changes.Margin = new Thickness(10, 0);
-        Grid.SetRow(_changes, 3);
+        Grid.SetRow(_changes, 4);
         root.Children.Add(_changes);
         _status.Margin = new Thickness(10, 0, 10, 8);
         _status.Classes.Add("editor-label");
-        Grid.SetRow(_status, 4);
+        Grid.SetRow(_status, 5);
         root.Children.Add(_status);
         Content = root;
         _provider.SelectionChanged += (_, _) =>
@@ -113,10 +143,15 @@ public sealed class RevisionHistoryWindow : UserControl
             _before.ItemsSource = null;
             _after.ItemsSource = null;
             _changes.ItemsSource = null;
+            _workspaceChanges.ItemsSource = null;
+            _branch.Text = "";
             _beforeGraph = _afterGraph = null;
             _scope.Text = "";
             _left.Show(new([], []), [], true, new([], []));
             _right.Show(new([], []), [], false, new([], []));
+            _status.Text = _file is null ? text.Get("Vcs.SaveFirst") :
+                _provider.SelectedItem is null ? text.Get("Vcs.NoProvider") : _file;
+            UpdateWorkspaceActions();
         };
         _changes.SelectionChanged += (_, _) =>
         {
@@ -130,7 +165,16 @@ public sealed class RevisionHistoryWindow : UserControl
             _lifetime?.Dispose();
             _lifetime = null;
         };
-        _status.Text = _file is null ? text.Get("Vcs.SaveFirst") : _file;
+        _status.Text = _file is null ? text.Get("Vcs.SaveFirst") :
+            _provider.ItemCount == 0 ? text.Get("Vcs.NoProvider") : _file;
+        UpdateWorkspaceActions();
+
+        void UpdateWorkspaceActions()
+        {
+            _workspaceRefresh.IsVisible = _file is not null && _provider.SelectedItem is IVersionControlWorkspaceProvider;
+            _openForEdit.IsVisible = _file is not null && _provider.SelectedItem is IVersionControlEditProvider;
+            workspace.IsVisible = _workspaceRefresh.IsVisible || _openForEdit.IsVisible;
+        }
     }
 
     private async Task LoadHistoryAsync()
@@ -152,19 +196,105 @@ public sealed class RevisionHistoryWindow : UserControl
             var choices = revisions.Take(100).Select(revision =>
                 new Choice(revision.Id, revision.Id[..Math.Min(8, revision.Id.Length)] + " " + revision.Summary)).ToArray();
             _before.ItemsSource = choices;
-            _after.ItemsSource = new[] { new Choice(null, LocalizationService.Shared.Get("Vcs.Working")) }.Concat(choices).ToArray();
+            var text = LocalizationService.Shared;
+            _after.ItemsSource = _canCompare
+                ? new[] { new Choice(null, text.Get(_document is null ? "Vcs.WorkingFile" : "Vcs.Working")) }.Concat(choices).ToArray()
+                : null;
+            if (!_canCompare)
+            {
+                _changes.ItemsSource = choices;
+            }
             _before.SelectedIndex = choices.Length > 0 ? 0 : -1;
-            _after.SelectedIndex = 0;
-            _status.Text = LocalizationService.Shared.Get("Vcs.ReadOnly");
+            _after.SelectedIndex = _canCompare ? 0 : -1;
+            _status.Text = text.Get(_canCompare ? "Vcs.ReadOnly" : "Vcs.HistoryOnly");
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { _status.Text = ex.GetBaseException().Message; }
         finally { _busy = false; _provider.IsEnabled = true; }
     }
 
+    private async Task RunWorkspaceOperationAsync(bool openForEdit)
+    {
+        if (_busy || _file is null || _lifetime is not { } lifetime ||
+            _provider.SelectedItem is not IVersionControlProvider provider)
+        {
+            return;
+        }
+        _busy = true;
+        _provider.IsEnabled = false;
+        var token = lifetime.Token;
+        var text = LocalizationService.Shared;
+        _workspaceRefresh.IsEnabled = _openForEdit.IsEnabled = false;
+        try
+        {
+            if (openForEdit && provider is IVersionControlEditProvider edit)
+            {
+                if (TopLevel.GetTopLevel(this) is not Window owner)
+                {
+                    return;
+                }
+                var cancel = new Button { Content = text.Get("Extensions.Cancel"), IsCancel = true };
+                var accept = new Button { Content = text.Get("Vcs.OpenForEdit") };
+                var dialog = new Window
+                {
+                    Title = text.Get("Vcs.OpenForEdit"), Width = 480, SizeToContent = SizeToContent.Height,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    Content = new StackPanel
+                    {
+                        Margin = new Thickness(16), Spacing = 12,
+                        Children =
+                        {
+                            new TextBlock { Text = text.Get("Vcs.ConfirmEdit", provider.Name, _file), TextWrapping = TextWrapping.Wrap },
+                            new WrapPanel { ItemSpacing = 8, Children = { cancel, accept } }
+                        }
+                    }
+                };
+                cancel.Click += (_, _) => dialog.Close(false);
+                accept.Click += (_, _) => dialog.Close(true);
+                if (!await dialog.ShowDialog<bool>(owner))
+                {
+                    return;
+                }
+                token.ThrowIfCancellationRequested();
+                if (!_main.Extensions.VersionControlProviders.Contains(provider) || !File.Exists(_file))
+                {
+                    throw new InvalidOperationException(text.Get("Vcs.EditUnavailable"));
+                }
+                await edit.OpenForEditAsync(_file, token);
+                token.ThrowIfCancellationRequested();
+                _status.Text = text.Get("Vcs.EditOpened");
+            }
+            if (provider is IVersionControlWorkspaceProvider workspace)
+            {
+                var status = await workspace.GetWorkspaceStatusAsync(_file, token);
+                token.ThrowIfCancellationRequested();
+                if (!_main.Extensions.VersionControlProviders.Contains(provider))
+                {
+                    return;
+                }
+                _branch.Text = text.Get("Vcs.WorkspaceSummary", status.Branch ?? "—", status.Changes.Count);
+                _workspaceChanges.ItemsSource = status.Changes.Select(change =>
+                    $"{(change.PreviousRelativePath is null ? "" : change.PreviousRelativePath + " → ")}{change.RelativePath} · " +
+                    text.Get("Vcs.ChangeColumns", text.Get("Vcs.Change." + change.Staged), text.Get("Vcs.Change." + change.Working)))
+                    .ToArray();
+                if (!openForEdit)
+                {
+                    _status.Text = _file;
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { _status.Text = ex.GetBaseException().Message; }
+        finally
+        {
+            _busy = false;
+            _provider.IsEnabled = _workspaceRefresh.IsEnabled = _openForEdit.IsEnabled = true;
+        }
+    }
+
     private async Task CompareAsync()
     {
-        if (_busy || _file is null || _document is null || _lifetime is not { } lifetime ||
+        if (_busy || !_canCompare || _file is null || _lifetime is not { } lifetime ||
             _provider.SelectedItem is not IVersionControlProvider provider ||
             _before.SelectedItem is not Choice a || _after.SelectedItem is not Choice b)
         {
@@ -225,14 +355,26 @@ public sealed class RevisionHistoryWindow : UserControl
     {
         if (choice.Revision is null)
         {
-            if (!_main.Documents.Contains(_document!)) throw new InvalidOperationException("The document was closed.");
-            return _document!.Workspace.CreateSnapshot();
+            var open = _document is not null && _main.Documents.Contains(_document) ? _document :
+                _main.Documents.FirstOrDefault(document => Uri.TryCreate(document.FileKey, UriKind.Absolute, out var uri) && uri.IsFile &&
+                    string.Equals(uri.LocalPath, _file, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+            if (open is not null)
+            {
+                return open.Workspace.CreateSnapshot();
+            }
+            using var file = File.OpenRead(_file!);
+            return await ReadGraphAsync(file);
         }
         var bytes = await provider.ReadRevisionAsync(_file!, choice.Revision, token);
         if (bytes.Length > 16 * 1024 * 1024) throw new InvalidDataException("Revision exceeds 16 MiB.");
         using var stream = new MemoryStream(bytes, writable: false);
-        return (await new ProjectFileService().LoadAsync(stream)).Graph;
+        return await ReadGraphAsync(stream);
     }
+
+    private async Task<GraphSnapshot> ReadGraphAsync(Stream stream) =>
+        string.Equals(Path.GetExtension(_file), GroupAssetLibrary.FileExtension, StringComparison.OrdinalIgnoreCase)
+            ? GroupAssetLibrary.ReadAsset(stream).Graph
+            : (await new ProjectFileService().LoadAsync(stream)).Graph;
 
     private sealed class RevisionGraphCanvas : Control
     {

@@ -242,7 +242,7 @@ public partial class MainViewModel : ViewModelBase
         {
             if (e.PropertyName == nameof(ActiveGraphProvider.Graph)) OnPropertyChanged(nameof(Graph));
         };
-        Extensions = new EditorExtensionHost(ActiveGraphProvider, builtIns: [new GitVersionControlProvider()]);
+        Extensions = new EditorExtensionHost(ActiveGraphProvider);
         _dockFactory = new DockFactory(ActiveGraphProvider, initialDocument, this);
         Layout = _dockFactory.CreateLayout();
         _dockFactory.InitLayout(Layout);

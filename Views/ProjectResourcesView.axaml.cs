@@ -38,4 +38,20 @@ public partial class ProjectResourcesView : UserControl
         model.Folder = folder;
         await model.RefreshCommand.ExecuteAsync(null);
     }
+
+    private async void OnVersionControl(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not ProjectResourcesViewModel model || model.VersionControlTarget() is not { } target ||
+            TopLevel.GetTopLevel(this) is not Window owner)
+        {
+            return;
+        }
+        var dialog = new Window
+        {
+            Width = 1080, Height = 720, WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Title = LocalizationService.Shared.Get("Vcs.Title") + " — " + Path.GetFileName(target.File),
+            Content = new RevisionHistoryWindow(target.Main, target.File, target.CompareGraphs)
+        };
+        await dialog.ShowDialog(owner);
+    }
 }

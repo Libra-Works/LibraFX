@@ -3,7 +3,7 @@
 The two projects in this directory reference only `LiberaFx.Inspector.Abstractions`
 and Avalonia UI packages. They do not reference the LIBERA FX application or its
 ViewModels. Build each project independently, then add its output folder from
-Settings → Inspectors. The output folder contains `liberafx-inspector.json`,
+Settings → Plugins → Inspectors. The output folder contains `liberafx-inspector.json`,
 the plugin DLL, dependency DLLs and the dependency manifest.
 
 ```powershell

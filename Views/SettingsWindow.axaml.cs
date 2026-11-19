@@ -27,11 +27,18 @@ public partial class SettingsWindow : Window
         Close();
     }
 
-    private async void OnExtensionEnableClick(object? sender, RoutedEventArgs e)
+    private async void OnExtensionToggleClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel model || sender is not Button { Tag: string id }) return;
-        var entry = model.Extensions.Extensions.FirstOrDefault(item => item.Id == id);
-        if (entry is null) return;
+        if (DataContext is not MainViewModel model || sender is not CheckBox { DataContext: EditorExtensionEntry entry } toggle)
+        {
+            return;
+        }
+        toggle.SetCurrentValue(CheckBox.IsCheckedProperty, entry.Enabled);
+        if (entry.Enabled)
+        {
+            model.Extensions.SetEnabled(entry.Id, false, explicitlyTrusted: false);
+            return;
+        }
         var text = LocalizationService.Shared;
         var dialog = new Window
         {
@@ -52,13 +59,10 @@ public partial class SettingsWindow : Window
                 new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { cancel, trust } }
             }
         };
-        if (await dialog.ShowDialog<bool>(this)) model.Extensions.SetEnabled(id, true, explicitlyTrusted: true);
-    }
-
-    private void OnExtensionDisableClick(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is MainViewModel model && sender is Button { Tag: string id })
-            model.Extensions.SetEnabled(id, false, explicitlyTrusted: false);
+        if (await dialog.ShowDialog<bool>(this) && ReferenceEquals(DataContext, model))
+        {
+            model.Extensions.SetEnabled(entry.Id, true, explicitlyTrusted: true);
+        }
     }
 
     private async void OnExtensionRunClick(object? sender, RoutedEventArgs e)
@@ -123,13 +127,15 @@ public partial class SettingsWindow : Window
 
     private async void OnInspectorToggleClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel model || sender is not Button { Tag: string pluginId }) return;
+        if (DataContext is not MainViewModel model || sender is not CheckBox { DataContext: InspectorPluginEntry plugin } toggle)
+        {
+            return;
+        }
         var service = model.InspectorPlugins;
-        var plugin = service.Plugins.FirstOrDefault(item => item.Id == pluginId);
-        if (plugin is null) return;
+        toggle.SetCurrentValue(CheckBox.IsCheckedProperty, plugin.IsEnabled);
         if (plugin.IsEnabled)
         {
-            service.TrySetEnabled(pluginId, false, userConfirmed: false);
+            service.TrySetEnabled(plugin.Id, false, userConfirmed: false);
             return;
         }
         if (!plugin.IsCompatible)
@@ -139,8 +145,10 @@ public partial class SettingsWindow : Window
         }
 
         var dialog = new InspectorTrustDialog(plugin.Name, plugin.Version);
-        if (await dialog.ShowDialog<bool>(this))
-            service.TrySetEnabled(pluginId, true, userConfirmed: true);
+        if (await dialog.ShowDialog<bool>(this) && ReferenceEquals(DataContext, model))
+        {
+            service.TrySetEnabled(plugin.Id, true, userConfirmed: true);
+        }
     }
 
     private void OnInspectorDefaultSelected(object? sender, SelectionChangedEventArgs e)

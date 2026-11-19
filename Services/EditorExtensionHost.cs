@@ -123,10 +123,9 @@ public sealed class EditorExtensionHost : ObservableObject, IDisposable
 
     private void Discover()
     {
-        if (!Directory.Exists(InstallDirectory)) return;
         try
         {
-            foreach (var directory in Directory.GetDirectories(InstallDirectory).Order(StringComparer.Ordinal))
+            foreach (var directory in ExtensionPackagePolicy.DiscoverDirectories(InstallDirectory, "Extensions"))
             {
                 try
                 {

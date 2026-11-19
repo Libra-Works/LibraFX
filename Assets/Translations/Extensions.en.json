@@ -1,5 +1,7 @@
 {
   "Extensions.Title": "Extensions",
+  "Extensions.Plugins": "Plugins",
+  "Extensions.PluginStartupHint": "Installed plugins are off until enabled and trusted. Restart the editor after changing which plugins are enabled.",
   "Extensions.Trust": "Extension DLLs run arbitrary code with your permissions, without a sandbox. Enable only packages you trust. Installation, updates and enablement require a restart. Copy each package folder into the directory below; disabled packages are inspected as data only.",
   "Extensions.Enable": "Trust and enable",
   "Extensions.Disable": "Disable",

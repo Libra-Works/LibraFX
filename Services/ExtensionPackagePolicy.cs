@@ -12,6 +12,13 @@ internal static partial class ExtensionPackagePolicy
 
     internal static bool ValidId(string? id) => id is not null && StableId().IsMatch(id);
 
+    internal static string[] DiscoverDirectories(string userRoot, string bundleCategory)
+    {
+        var bundleRoot = Path.Combine(AppContext.BaseDirectory, "BundledPlugins", bundleCategory);
+        return new[] { userRoot, bundleRoot }.Where(Directory.Exists)
+            .SelectMany(Directory.GetDirectories).Order(StringComparer.Ordinal).ToArray();
+    }
+
     internal static string Fingerprint(string directory, bool recursive = true, bool legacy = false)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);

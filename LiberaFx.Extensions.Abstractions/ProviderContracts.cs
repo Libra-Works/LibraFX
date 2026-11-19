@@ -16,6 +16,24 @@ public interface IVersionControlProvider : IExtensionProvider
     Task<byte[]> ReadRevisionAsync(string localFile, string revision, CancellationToken cancellation);
 }
 
+public enum VcsChangeKind { None, Added, Modified, Deleted, Renamed, Untracked, Conflict, Other }
+
+public sealed record VcsFileChange(string RelativePath, VcsChangeKind Staged, VcsChangeKind Working,
+    string? PreviousRelativePath = null);
+
+public sealed record VcsWorkspaceStatus(string? Branch, IReadOnlyList<VcsFileChange> Changes);
+
+public interface IVersionControlWorkspaceProvider : IVersionControlProvider
+{
+    Task<VcsWorkspaceStatus> GetWorkspaceStatusAsync(string localFile, CancellationToken cancellation);
+}
+
+// Opens the named file for edit in the provider; never replaces its contents.
+public interface IVersionControlEditProvider : IVersionControlProvider
+{
+    Task OpenForEditAsync(string localFile, CancellationToken cancellation);
+}
+
 public sealed record ChatMessage(string Role, string Text, string? ToolCallId = null,
     IReadOnlyList<ChatToolCall>? ToolCalls = null);
 public sealed record ChatTool(string Name, string Description, JsonElement InputSchema);

@@ -48,7 +48,11 @@
                                                IsEnabled="False" IsHitTestVisible="False" />
                     </Border>
                 </Grid>
-                <Button Grid.Row="3" x:Name="UseResourceButton" Command="{Binding UseCommand}" Content="{Binding UseLabel}" />
+                <WrapPanel Grid.Row="3" ItemSpacing="6" LineSpacing="4">
+                    <Button x:Name="UseResourceButton" Command="{Binding UseCommand}" Content="{Binding UseLabel}" />
+                    <Button x:Name="ResourceVersionControlButton" Click="OnVersionControl"
+                            Content="{DynamicResource Text.Vcs.ResourceAction}" IsVisible="{Binding CanShowVersionControl}" />
+                </WrapPanel>
             </Grid>
         </Grid>
         <TextBlock Grid.Row="3" Text="{Binding Status}" TextWrapping="Wrap"

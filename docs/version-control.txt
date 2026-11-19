@@ -1,15 +1,25 @@
 LIBERA FX revision adapters and graphical diff
 
-Edit > Revision history and graph diff opens a read-only comparison for the
-active saved local project. Choose a provider, load history, and choose two
+In Settings > Plugins > Extensions, enable and trust the desired provider,
+then restart the editor. Bundled DLLs are discovered but not run by default.
+The bundled RGB inspector follows the same opt-in flow under Plugins >
+Inspectors; enabling it does not change the default parameter editor.
+
+Edit > Revision history and graph diff opens a comparison for the active saved
+local project. Or select a local file or project group in Resources and choose
+Version control. Choose a provider, load history, and choose two
 revisions or an old revision and the open working document (including its
-unsaved edits). Both root graphs are drawn side by side. Added (+), removed
+unsaved edits) or the selected file on disk. Images have history but not a graph
+comparison. Both root graphs are drawn side by side. Added (+), removed
 (-), and changed (~) nodes are marked; parameter, connection and nested graph
 changes are included in the change list. Nothing is checked out, reverted,
 written to the working file or applied to document history.
 
-The built-in Git provider runs local read-only Git commands, without a shell,
-credential prompts, network fetch, checkout or hooks. Git must be installed.
+The bundled Git extension is an SDK-only DLL, not part of the editor assembly.
+It runs local read-only Git commands, without a shell, credential prompts,
+network fetch, checkout or hooks. Git must be installed. Expand Workspace status
+and refresh to see the branch and repository-relative staged, unstaged, and
+untracked changes. Submodule worktrees are not inspected.
 History is limited to 100 revisions and revision content to 16 MiB; operations
 have finite cancellation timeouts. Git tree paths are not portable asset IDs.
 Select a nested change to compare its parent Group side by side. Readable scope
@@ -25,6 +35,13 @@ returns the original project bytes for that revision. Do not write to the
 working copy. Honor cancellation and return meaningful failures. The provider
 owns backend-specific authentication, command invocation and path mapping;
 no credentials belong in revisions or document files.
+
+Providers may also implement IVersionControlWorkspaceProvider for workspace
+status and IVersionControlEditProvider to open a single file for edit.
+The latter is shown only for providers that implement it and requires user
+confirmation for the named file. It may make a file writable or reserve it but
+must never replace the file's contents. Git does not implement this operation.
+Existing history-only provider DLLs do not need to be rebuilt.
 
 Samples\Extensions.DirectoryHistory is an SDK-only provider with no editor
 assembly reference. It reads manually archived project files from

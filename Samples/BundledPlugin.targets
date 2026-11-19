@@ -1,0 +1,13 @@
+<Project>
+  <Target Name="CollectBundledPlugin"
+          BeforeTargets="_GetCopyToOutputDirectoryItemsFromThisProject;_GetCopyToPublishDirectoryItemsFromThisProject">
+    <ItemGroup>
+      <ContentWithTargetPath Include="$(IntermediateOutputPath)$(TargetFileName)"
+                             TargetPath="$(BundledPluginFolder)\$(TargetFileName)"
+                             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+      <ContentWithTargetPath Include="$(MSBuildProjectDirectory)\$(BundledPluginManifest)"
+                             TargetPath="$(BundledPluginFolder)\$(BundledPluginManifest)"
+                             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+</Project>

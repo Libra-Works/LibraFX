@@ -129,7 +129,7 @@ internal static class InspectorPluginTests
         try
         {
             Dispatcher.UIThread.RunJobs();
-            if (settings.FindControl<TabControl>("SettingsTabs") is not { } tabs ||
+            if (settings.FindControl<TabControl>("PluginSettingsTabs") is not { } tabs ||
                 !tabs.Items.OfType<TabItem>().Any(item =>
                     item.Header?.ToString() == LocalizationService.Shared.Get("Editor.Inspectors")))
                 throw new InvalidOperationException("The Inspector settings tab is not visible.");
@@ -415,13 +415,16 @@ internal static class InspectorPluginTests
         Dispatcher.UIThread.RunJobs();
         var tabs = settings.FindControl<TabControl>("SettingsTabs")!;
         tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(item =>
+            item.Header?.ToString() == LocalizationService.Shared.Get("Extensions.Plugins"));
+        var plugins = settings.FindControl<TabControl>("PluginSettingsTabs")!;
+        plugins.SelectedItem = plugins.Items.OfType<TabItem>().Single(item =>
             item.Header?.ToString() == LocalizationService.Shared.Get("Editor.Inspectors"));
         Dispatcher.UIThread.RunJobs();
 
         void Toggle(string id, bool confirm)
         {
-            var button = settings.GetVisualDescendants().OfType<Button>().Single(item => item.Tag as string == id);
-            Invoke(button);
+            var checkbox = settings.GetVisualDescendants().OfType<CheckBox>().Single(item => item.Tag as string == id);
+            checkbox.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             if (confirm)
             {
                 var dialog = settings.OwnedWindows.Single();

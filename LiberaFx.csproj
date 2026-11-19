@@ -35,6 +35,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="Samples\Extensions.Git\Extensions.Git.csproj"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="Samples\BundledInspector.ColorRgb\BundledInspector.ColorRgb.csproj"
+                      ReferenceOutputAssembly="false" />
     <ProjectReference Include="LiberaFx.Inspector.Abstractions\LiberaFx.Inspector.Abstractions.csproj" />
     <ProjectReference Include="LiberaFx.Extensions.Abstractions\LiberaFx.Extensions.Abstractions.csproj" />
     <ProjectReference Include="Gpu\LibraGpu.Core\LibraGpu.Core.csproj" />

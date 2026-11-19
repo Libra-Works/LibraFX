@@ -204,6 +204,12 @@ internal static class Program
             GraphRevisionDiffTests.Run();
             return;
         }
+        if (args is ["--vcs-workspace"])
+        {
+            InitializeIsolatedUi();
+            ExtensionHostTests.VerifyBundledVcs();
+            return;
+        }
         if (args is ["--crash-reports"])
         {
             var root = Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT");

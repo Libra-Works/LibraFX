@@ -5,13 +5,14 @@ Reference only that assembly from an independent net10.0 project.
 Samples\Extensions.AddComment is a minimal command extension.
 
 Build the sample separately and copy its output folder under the Extensions
-directory shown in Settings > Extensions. Each package needs a
+directory shown in Settings > Plugins > Extensions. Each package needs a
 liberafx-extension.json manifest, an IEditorExtension entry point, and its
 managed dependencies. No editor rebuild is required. Review the manifest,
 trust the package explicitly in Settings, and restart. Changes to package
 contents invalidate approval. Duplicate IDs, API/framework mismatches,
 missing/failed dependencies and dependency cycles prevent loading.
-No install-time or disabled-plugin discovery invokes plugin code.
+No install-time or disabled-plugin discovery invokes plugin code, including
+DLLs in the distribution's BundledPlugins folders.
 apiVersion defaults to an exact compatibility requirement. Optional apiMinimum
 and apiMaximum declare an inclusive supported SDK range; apiVersion must be
 inside that range. Optional targets defaults to ["editor"]; this host requires
@@ -31,7 +32,7 @@ thread. Do not retain context objects or UI state between invocations.
 The existing Inspector SDK API 1 remains binary/source compatible and uses
 the same SDK API version and package approval/fingerprint policy. Its
 liberafx-inspector.json packages, type-specific UI factories, trust preferences
-and Settings > Inspectors remain supported; legacy manifests are not silently
+and Settings > Plugins > Inspectors remain supported; legacy manifests are not silently
 migrated or granted approval. Inspector UI is Avalonia-version-specific;
 command extensions do not need an Avalonia dependency.
 

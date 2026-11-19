@@ -7,7 +7,11 @@ namespace LiberaFx.SampleInspectors.ColorRgb;
 
 public sealed class RgbPlugin : IInspectorPlugin
 {
+#if LIBERAFX_BUNDLED_INSPECTOR
+    public string Id => "liberafx.inspector.color.rgb";
+#else
     public string Id => "sample.color.rgb";
+#endif
     public string Name => "Color RGB Inspector";
     public Version Version => new(1, 0, 0);
     public int ApiVersion => InspectorSdk.ApiVersion;

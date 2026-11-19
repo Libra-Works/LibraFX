@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>LiberaFx.BundledInspector.ColorRgb</AssemblyName>
+    <DefineConstants>$(DefineConstants);LIBERAFX_BUNDLED_INSPECTOR</DefineConstants>
+    <BundledPluginFolder>BundledPlugins\Inspectors\ColorRgb</BundledPluginFolder>
+    <BundledPluginManifest>liberafx-inspector.json</BundledPluginManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\Inspector.ColorRgb\RgbPlugin.cs" Link="RgbPlugin.cs" />
+    <ProjectReference Include="..\..\LiberaFx.Inspector.Abstractions\LiberaFx.Inspector.Abstractions.csproj" />
+    <PackageReference Include="Avalonia" Version="12.1.6" />
+  </ItemGroup>
+  <Import Project="..\BundledPlugin.targets" />
+</Project>

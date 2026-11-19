@@ -4,14 +4,74 @@ using System.Text;
 using System.Text.RegularExpressions;
 using LiberaFx.Extensions.Abstractions;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.OfficialExtensions.Git;
 
-public sealed partial class GitVersionControlProvider : IVersionControlProvider
+public sealed class GitExtension : IEditorExtension
+{
+    public void Register(IExtensionRegistration registration) => registration.AddVersionControlProvider(new GitVersionControlProvider());
+    public void Dispose() { }
+}
+
+internal sealed partial class GitVersionControlProvider : IVersionControlProvider, IVersionControlWorkspaceProvider
 {
     public string Id => "liberafx.git";
     public string Name => "Git";
     [GeneratedRegex("^[a-fA-F0-9]{40}([a-fA-F0-9]{24})?$", RegexOptions.CultureInvariant)]
     private static partial Regex CommitId();
+
+    public async Task<VcsWorkspaceStatus> GetWorkspaceStatusAsync(string localFile, CancellationToken cancellation)
+    {
+        var (directory, _) = Split(localFile);
+        var output = await RunAsync(directory,
+            ["--no-optional-locks", "-c", "core.fsmonitor=false", "status", "--porcelain=v2", "-z",
+                "--branch", "--untracked-files=all", "--ignore-submodules=all"], cancellation);
+        var records = Encoding.UTF8.GetString(output).Split('\0', StringSplitOptions.RemoveEmptyEntries);
+        var changes = new List<VcsFileChange>();
+        string? branch = null;
+        for (var index = 0; index < records.Length; index++)
+        {
+            var record = records[index];
+            if (record.StartsWith("# branch.head ", StringComparison.Ordinal))
+            {
+                branch = record[14..];
+            }
+            else if (record.StartsWith("? ", StringComparison.Ordinal))
+            {
+                changes.Add(new(record[2..], VcsChangeKind.None, VcsChangeKind.Untracked));
+            }
+            else if (record is ['1' or '2' or 'u', ' ', ..])
+            {
+                var fields = record.Split(' ', record[0] switch { '1' => 9, '2' => 10, _ => 11 });
+                if (fields.Length != (record[0] switch { '1' => 9, '2' => 10, _ => 11 }) || fields[1].Length != 2)
+                {
+                    throw new InvalidDataException("Invalid Git status record.");
+                }
+                string? previous = null;
+                if (record[0] == '2')
+                {
+                    if (++index >= records.Length)
+                    {
+                        throw new InvalidDataException("Invalid Git rename record.");
+                    }
+                    previous = records[index];
+                }
+                var conflict = record[0] == 'u';
+                changes.Add(new(fields[^1], conflict ? VcsChangeKind.Conflict : Change(fields[1][0]),
+                    conflict ? VcsChangeKind.Conflict : Change(fields[1][1]), previous));
+            }
+        }
+        return new(branch, changes);
+    }
+
+    private static VcsChangeKind Change(char value) => value switch
+    {
+        '.' => VcsChangeKind.None,
+        'A' => VcsChangeKind.Added,
+        'M' or 'T' => VcsChangeKind.Modified,
+        'D' => VcsChangeKind.Deleted,
+        'R' or 'C' => VcsChangeKind.Renamed,
+        _ => VcsChangeKind.Other
+    };
 
     public async Task<IReadOnlyList<VcsRevision>> GetHistoryAsync(string localFile, CancellationToken cancellation)
     {
