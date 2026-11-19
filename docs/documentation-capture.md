@@ -3,6 +3,19 @@
 Pages publishing remains disabled. No public workflow, repository visibility
 change or automatic upload is installed by this feature.
 
+On Windows, the guarded PowerShell runner starts an existing editor build with
+fresh settings, opens an approved bundled sample over loopback MCP and saves
+only that graph's PNG and metadata to a new local directory:
+
+```powershell
+.\Tools\Capture-PrivateDocumentation.ps1 -EditorExe C:\isolated\LiberaFx.exe `
+  -OutputDirectory C:\isolated\docs-capture -Sample SolarSystem.lfxproj
+```
+
+Use the same display scaling when comparing captures. Review the image and
+metadata before copying an approved image into private documentation; the
+runner never publishes anything.
+
 Start a dedicated editor with an **absolute isolated** `LIBERAFX_DATA_ROOT` and
 `LIBERAFX_MCP_DEBUG=1`. Keep real user documents/settings out of that session.
 Use the same language, theme, window dimensions and display scaling each time.
