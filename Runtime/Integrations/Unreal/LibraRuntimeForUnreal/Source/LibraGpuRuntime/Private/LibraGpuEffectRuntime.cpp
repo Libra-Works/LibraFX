@@ -264,7 +264,7 @@ static void AddLibraGpuBillboardRasterPass(FRDGBuilder& graph,
     auto shaderMap = GetGlobalShaderMap(featureLevel);
     TShaderMapRef<FLibraGpuBillboardVS> vertexShader(shaderMap);
     TShaderMapRef<FLibraGpuBillboardPS> pixelShader(shaderMap);
-    graph.AddPass(RDG_EVENT_NAME("%s.Billboards", *profileName), parameters, ERDGPassFlags::Raster,
+    graph.AddPass(RDG_EVENT_NAME("%s.Billboards", profileName), parameters, ERDGPassFlags::Raster,
         [parameters, vertexShader, pixelShader, rect, count, blend](FRHICommandList& commandList)
         {
             FGraphicsPipelineStateInitializer pipeline;

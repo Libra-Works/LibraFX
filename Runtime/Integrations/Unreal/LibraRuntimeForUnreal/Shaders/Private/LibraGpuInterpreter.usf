@@ -1,5 +1,7 @@
 #include "/Engine/Public/Platform.ush"
+#define LIBRA_GPU_INTERPRETER
 #include "/LibraGpu/Private/LibraGpuSupport.ush"
+#undef LIBRA_GPU_INTERPRETER
 
 struct LibraParticle
 {
@@ -280,7 +282,7 @@ void MainCS(uint3 threadId : SV_DispatchThreadID)
         if (DefaultAge != 0)
             p.positionAge.w += (asuint(DeltaTime) & 0x7f800000u) != 0x7f800000u ? max(DeltaTime, 0) : 0;
     }
-    for (uint n = 0; n < InstructionCount; ++n)
+    [loop] for (uint n = 0; n < InstructionCount; ++n)
     {
         uint4 first = Instructions[4 + n * 4];
         uint4 second = Instructions[5 + n * 4];
@@ -426,9 +428,11 @@ void MainCS(uint3 threadId : SV_DispatchThreadID)
                 float4 bounds = asfloat(immediate);
                 float2 uv = saturate((float2(asfloat(a)[axisU], asfloat(a)[axisV]) - bounds.xy) / bounds.zw);
                 float2 flow = SampleFlowMap(aux, uv).rg * 2.0f - 1.0f;
-                float3 vector = 0;
-                vector[axisU] = flow.x;
-                vector[axisV] = flow.y;
+                // SM5 cannot dynamically write a temporary's lanes in the instruction loop.
+                float3 vector = float3(
+                    axisV == 0 ? flow.y : (axisU == 0 ? flow.x : 0),
+                    axisV == 1 ? flow.y : (axisU == 1 ? flow.x : 0),
+                    axisV == 2 ? flow.y : (axisU == 2 ? flow.x : 0));
                 result = asuint(float4(vector, 0));
             }
         }

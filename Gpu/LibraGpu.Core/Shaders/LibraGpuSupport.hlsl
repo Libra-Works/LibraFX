@@ -79,6 +79,15 @@ float LibraGpuDistance(float4 a, float4 b) { return LibraGpuIsFinite(a) && Libra
 
 // Gradient lattice uses six unit axis directions; convex interpolation bounds value to [-1,1].
 // Quintic interpolation and its exact derivative give a C2 scalar potential.
+// Interpreters inline many noise opcodes in one shader; unrolling nested loops can overwhelm FXC.
+#if defined(LIBRA_GPU_INTERPRETER)
+#define LIBRA_GPU_NOISE_LOOP [loop]
+#define LIBRA_GPU_OCTAVE_LIMIT octaves
+#else
+#define LIBRA_GPU_NOISE_LOOP [unroll]
+#define LIBRA_GPU_OCTAVE_LIMIT 8
+#endif
+
 float3 LibraGpuLatticeGradient(int3 cell, uint seed)
 {
     uint h=LibraGpuHash(uint(cell.x)^LibraGpuHash(uint(cell.y)^0x9e3779b9u)^LibraGpuHash(uint(cell.z)^0x85ebca6bu)^LibraGpuHash(seed));
@@ -97,7 +106,7 @@ float4 LibraGpuGradientNoiseDerivative3D(float3 p, uint seed)
     float3 t=f*f*f*(f*(f*6.0f-15.0f)+10.0f);
     float3 dt=30.0f*f*f*(f-1.0f)*(f-1.0f);
     float value=0.0f; float3 gradient=(float3)0;
-    [unroll] for (int corner=0;corner<8;corner++)
+    LIBRA_GPU_NOISE_LOOP for (int corner=0;corner<8;corner++)
     {
         int3 offset=int3(corner&1,(corner>>1)&1,(corner>>2)&1);
         float3 weights=float3(offset.x!=0?t.x:1.0f-t.x,offset.y!=0?t.y:1.0f-t.y,offset.z!=0?t.z:1.0f-t.z);
@@ -120,7 +129,7 @@ float4 LibraGpuFbmDerivative3D(float3 p, uint seed, int octaves, float gain)
 {
     if (!LibraGpuFractalDomain(p,octaves,gain)) return (float4)0;
     float value=0.0f, amplitude=1.0f, frequency=1.0f, weight=0.0f; float3 gradient=(float3)0;
-    [unroll] for (int octave=0;octave<8;octave++)
+    LIBRA_GPU_NOISE_LOOP for (int octave=0;octave<LIBRA_GPU_OCTAVE_LIMIT;octave++)
     {
         if (octave<octaves)
         {
@@ -136,7 +145,7 @@ float LibraGpuTurbulence(float3 p, uint seed, int octaves, float gain)
 {
     if (!LibraGpuFractalDomain(p,octaves,gain)) return 0.0f;
     float value=0.0f, amplitude=1.0f, frequency=1.0f, weight=0.0f;
-    [unroll] for (int octave=0;octave<8;octave++)
+    LIBRA_GPU_NOISE_LOOP for (int octave=0;octave<LIBRA_GPU_OCTAVE_LIMIT;octave++)
     {
         if (octave<octaves)
         {
@@ -153,7 +162,7 @@ float3 LibraGpuCurlNoise(float3 p, uint seed, int octaves, float gain)
     float3 dy=LibraGpuFbmDerivative3D(p,LibraGpuHash(seed^0x63d83595u),octaves,gain).yzw;
     float3 dz=LibraGpuFbmDerivative3D(p,LibraGpuHash(seed^0xb8d4c729u),octaves,gain).yzw;
     float weight=0.0f, frequencyWeight=0.0f, amplitude=1.0f, frequency=1.0f;
-    [unroll] for (int octave=0;octave<8;octave++)
+    LIBRA_GPU_NOISE_LOOP for (int octave=0;octave<LIBRA_GPU_OCTAVE_LIMIT;octave++)
     {
         if (octave<octaves) { weight+=amplitude; frequencyWeight+=amplitude*frequency; amplitude*=gain; frequency*=2.0f; }
     }
@@ -161,4 +170,6 @@ float3 LibraGpuCurlNoise(float3 p, uint seed, int octaves, float gain)
     // This parameter-only scale (not a position-dependent vector normalization) preserves div(curl)=0.
     return float3(dz.y-dy.z,dx.z-dz.x,dy.x-dx.y)*(weight/(16.0f*frequencyWeight));
 }
+#undef LIBRA_GPU_OCTAVE_LIMIT
+#undef LIBRA_GPU_NOISE_LOOP
 #endif

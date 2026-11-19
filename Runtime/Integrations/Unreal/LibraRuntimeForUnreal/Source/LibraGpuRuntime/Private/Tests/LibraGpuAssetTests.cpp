@@ -57,7 +57,7 @@ FString Bundle(bool invalid)
 FString BillboardBundle()
 {
     auto bundle = Bundle(false).Replace(TEXT("\"resources\":[]"),
-        TEXT("\"resources\":[{\"id\":\"billboardTexture\",\"kind\":\"Texture2D\"}]"));
+        TEXT("\"resources\":[{\"id\":\"billboardTexture\",\"kind\":\"Texture2D\",\"register\":0}]"));
     bundle = bundle.Replace(TEXT("\"textures\":[]"),
         TEXT("\"textures\":[{\"id\":\"billboardTexture\",\"objectPath\":\"builtin:white\"}]"));
     return bundle.Replace(TEXT("\"flow\":[{\"kind\":\"Spawn\",\"kernelId\":\"spawn\"}]"),

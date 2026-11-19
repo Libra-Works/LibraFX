@@ -207,6 +207,12 @@ curl divergence, helper identity, baseline compute/framebuffer and native
 package lifecycle. The staged standalone-game proof above predates this
 extension and does not establish packaged-game execution of noise opcodes.
 
+UE 5.7.4 / D3D11 (SM5) on Radeon RX 6700 XT: the fixed interpreter
+passed the shared helper byte check, canonical math/noise and FlowMap
+readback, and authored emitter and draw Matrix framebuffer tests. The
+Matrix test observed 1024 identity, 640 translated, and 0 dead-particle
+pixels. This is Editor automation, not a packaged-game or console result.
+
 Live-preview owner integration (game thread, module dependency LibraGpuRuntime):
   auto candidate = ULibraGpuEffectAsset::CreateInMemory(owner, compiledBundleJson, error);
   if (!candidate) return; // Keep the previous effect/component unchanged.
