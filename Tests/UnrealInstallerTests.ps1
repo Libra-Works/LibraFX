@@ -9,6 +9,11 @@ $project = Join-Path $root 'Test.uproject'
 [IO.File]::WriteAllText($project, '{}')
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $core = Join-Path $repository 'Runtime\Core'
+$nativeCMake = [IO.File]::ReadAllText((Join-Path $repository 'Runtime\CMakeLists.txt'))
+$interopTarget = [regex]::Match($nativeCMake, 'add_library\(liberafx_native\s+SHARED\b([^)]*)\)')
+$interopSources = @([regex]::Matches($interopTarget.Groups[1].Value, 'Core/[\w./-]+\.cpp') |
+    ForEach-Object { $_.Value.Replace('/', '\') })
+if ($interopSources.Count -eq 0) { throw 'Could not identify standalone C ABI sources.' }
 $installer = Join-Path $repository 'Runtime\Integrations\Unreal\Install-LibraRuntimeForUnreal.ps1'
 & $installer -ProjectPath $project
 
@@ -27,15 +32,15 @@ function Assert-Wrappers {
     foreach ($file in Get-ChildItem -LiteralPath $core -Filter '*.cpp' -File -Recurse) {
         $relative = 'Core\' + [IO.Path]::GetRelativePath($core, $file.FullName)
         $count = if ($includes.ContainsKey($relative)) { $includes[$relative] } else { 0 }
-        $expected = if ($relative -eq 'Core\LbInterop.cpp') { 0 } else { 1 }
+        $expected = if ($relative -in $interopSources) { 0 } else { 1 }
         if ($count -ne $expected) {
             throw "Expected $expected Unreal wrappers for ${relative}; found $count."
         }
-        foreach ($shader in Get-ChildItem -LiteralPath (Join-Path $repository 'Runtime\Integrations\Unreal\LibraRuntimeForUnreal\Shaders') -File -Recurse) {
-            $relative = [IO.Path]::GetRelativePath((Join-Path $repository 'Runtime\Integrations\Unreal\LibraRuntimeForUnreal'), $shader.FullName)
-            if (-not (Test-Path -LiteralPath (Join-Path $root "Plugins\LibraRuntimeForUnreal\$relative") -PathType Leaf)) {
-                throw "Missing installed shader: $relative"
-            }
+    }
+    foreach ($shader in Get-ChildItem -LiteralPath (Join-Path $repository 'Runtime\Integrations\Unreal\LibraRuntimeForUnreal\Shaders') -File -Recurse) {
+        $relative = [IO.Path]::GetRelativePath((Join-Path $repository 'Runtime\Integrations\Unreal\LibraRuntimeForUnreal'), $shader.FullName)
+        if (-not (Test-Path -LiteralPath (Join-Path $root "Plugins\LibraRuntimeForUnreal\$relative") -PathType Leaf)) {
+            throw "Missing installed shader: $relative"
         }
     }
 }
