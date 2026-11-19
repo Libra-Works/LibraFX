@@ -1,5 +1,6 @@
 #include "LibraFlexiblePlaneRenderer.h"
-#include "LibraFlexiblePlaneComponent.h"
+#include "LibraNativeRenderPrimitives.h"
+#include "LibraSpawnableComponent.h"
 #include "Components/SceneComponent.h"
 #include "Dom/JsonObject.h"
 #include "Engine/Texture.h"
@@ -204,8 +205,9 @@ bool FLibraFlexiblePlaneRenderer::Prepare(const TSharedPtr<FJsonObject>& node,
     return true;
 }
 
-bool FLibraFlexiblePlaneRenderer::Create(AActor& actor, USceneComponent& parent,
+bool FLibraFlexiblePlaneRenderer::Create(ULibraSpawnableComponent& owner,
     const FLibraFlexiblePlaneDefinition& definition, UTexture* texture, UMaterialInterface* material,
+    const FTransform& worldTransform,
     FName textureParameter, TUniquePtr<FLibraFlexiblePlaneRenderer>& output, FString& error)
 {
     check(IsInGameThread());
@@ -225,27 +227,20 @@ bool FLibraFlexiblePlaneRenderer::Create(AActor& actor, USceneComponent& parent,
         return false;
     }
     auto renderer = TUniquePtr<FLibraFlexiblePlaneRenderer>(new FLibraFlexiblePlaneRenderer(definition));
-    auto* component = NewObject<ULibraFlexiblePlaneComponent>(&actor);
-    if (!component)
-    {
-        error = TEXT("Could not create Flexible Plane component.");
-        return false;
-    }
-    auto* dynamic = UMaterialInstanceDynamic::Create(material, component);
+    auto* dynamic = UMaterialInstanceDynamic::Create(material, &owner);
     if (!dynamic)
     {
         error = TEXT("Could not create Flexible Plane material.");
         return false;
     }
     dynamic->SetTextureParameterValue(textureParameter, texture);
-    component->SetMaterial(0, dynamic);
-    component->SetMobility(EComponentMobility::Movable);
-    component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-    component->SetCastShadow(false);
-    component->SetupAttachment(&parent);
-    actor.AddInstanceComponent(component);
-    component->RegisterComponent();
-    renderer->component_.Reset(component);
+    renderer->materialInstance_.Reset(dynamic);
+    renderer->primitive_ = MakeUnique<FLibraNativeFlexiblePlanePrimitive>();
+    if (!renderer->primitive_->Create(owner, dynamic, worldTransform))
+    {
+        error = TEXT("Could not register the Flexible Plane native scene primitive.");
+        return false;
+    }
     output = MoveTemp(renderer);
     return true;
 }
@@ -253,23 +248,34 @@ bool FLibraFlexiblePlaneRenderer::Create(AActor& actor, USceneComponent& parent,
 FLibraFlexiblePlaneRenderer::~FLibraFlexiblePlaneRenderer()
 {
     check(IsInGameThread());
-    if (component_.IsValid())
+}
+
+void FLibraFlexiblePlaneRenderer::SetOwnerPresentation(const FTransform& worldTransform, bool visible)
+{
+    check(IsInGameThread());
+    if (primitive_.IsValid())
     {
-        component_->DestroyComponent();
+        primitive_->SetTransform(worldTransform);
+        primitive_->SetVisible(visible);
     }
 }
 
-bool FLibraFlexiblePlaneRenderer::Update(double time, const FVector& cameraWorld,
-    const FLibraFlexiblePlaneRead& read, FLibraFlexiblePlaneHistoryScope& history, FString& error)
+uint64 FLibraFlexiblePlaneRenderer::GetSubmittedBytes() const
+{
+    return primitive_.IsValid() ? primitive_->SubmittedBytes : 0;
+}
+
+bool FLibraFlexiblePlaneRenderer::Update(double time, const FTransform& worldTransform,
+    const FVector& cameraWorld, const FLibraFlexiblePlaneRead& read,
+    FLibraFlexiblePlaneHistoryScope& history, FString& error)
 {
     check(IsInGameThread());
-    if (!component_.IsValid() || !read || cameraWorld.ContainsNaN())
+    if (!primitive_.IsValid() || !materialInstance_.IsValid() || !read || cameraWorld.ContainsNaN())
     {
-        error = TEXT("Flexible Plane has no component, source reader or finite camera.");
+        error = TEXT("Flexible Plane has no native primitive, source reader or finite camera.");
         return false;
     }
-    const auto transform = component_->GetComponentTransform();
-    const auto scale = transform.GetScale3D();
+    const auto scale = worldTransform.GetScale3D();
     const auto determinant = scale.X * scale.Y * scale.Z;
     if (definition_.native.options.facing == 1 &&
         (scale.ContainsNaN() || !FMath::IsFinite(determinant) || FMath::Abs(determinant) < 1e-12))
@@ -277,7 +283,7 @@ bool FLibraFlexiblePlaneRenderer::Update(double time, const FVector& cameraWorld
         error = TEXT("Flexible Plane camera transform is singular.");
         return false;
     }
-    const auto camera = transform.InverseTransformPosition(cameraWorld);
+    const auto camera = worldTransform.InverseTransformPosition(cameraWorld);
     const auto reader = [&read](const liberafx::flexible_adapter::Id& id, double* values,
         std::uint8_t& width) -> LibraResult { return read(id.data(), values, width); };
     const auto result = geometry_.update(definition_.native, history, reader, time,
@@ -287,11 +293,16 @@ bool FLibraFlexiblePlaneRenderer::Update(double time, const FVector& cameraWorld
         error = FString::Printf(TEXT("Flexible Plane native evaluation failed: %d."), result);
         return false;
     }
-    auto vertices = TArray<FDynamicMeshVertex>{};
-    auto indices = TArray<uint32>{};
+    auto& upload = geometryUploadBuffers_[nextGeometryUploadBuffer_];
+    if (!upload.Fence.IsFenceComplete())
+    {
+        upload.Fence.Wait();
+    }
+    upload.Vertices.Reset();
+    upload.Indices.Reset();
     const auto counts = geometry_.counts();
-    vertices.Reserve(static_cast<int32>(counts.vertices));
-    indices.Reserve(static_cast<int32>(counts.indices));
+    upload.Vertices.Reserve(static_cast<int32>(counts.vertices));
+    upload.Indices.Reserve(static_cast<int32>(counts.indices));
     for (auto index = 0u; index < counts.vertices; ++index)
     {
         const auto& vertex = geometry_.vertices()[index];
@@ -322,13 +333,15 @@ bool FLibraFlexiblePlaneRenderer::Update(double time, const FVector& cameraWorld
         {
             normal = FVector3f(0, 0, 1);
         }
-        vertices.Emplace(FVector3f(vertex.x, vertex.y, vertex.z), tangent, normal,
+        upload.Vertices.Emplace(FVector3f(vertex.x, vertex.y, vertex.z), tangent, normal,
             FVector2f(vertex.u, vertex.v), FLinearColor(vertex.r, vertex.g, vertex.b, vertex.a).ToFColor(false));
     }
     for (auto index = 0u; index < counts.indices; ++index)
     {
-        indices.Add(geometry_.indices()[index]);
+        upload.Indices.Add(geometry_.indices()[index]);
     }
-    component_->SetRibbon(MoveTemp(vertices), MoveTemp(indices));
+    primitive_->SetGeometry(upload.Vertices, upload.Indices, upload.Fence, worldTransform);
+    nextGeometryUploadBuffer_ = (nextGeometryUploadBuffer_ + 1) %
+        UE_ARRAY_COUNT(geometryUploadBuffers_);
     return true;
 }

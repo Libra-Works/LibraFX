@@ -584,7 +584,8 @@ namespace LiberaFx.Unity.Editor
         }
 
         private static bool HasMesh(GameObject owner, Mesh mesh) =>
-            owner && owner.GetComponentsInChildren<MeshFilter>().Any(filter => filter.sharedMesh == mesh);
+            owner && owner.GetComponent<LiberaFxSpawnableComponent>().InspectDrawNodes()
+                .SelectMany(node => node.Submissions).Any(draw => draw.enabled && draw.mesh == mesh);
 
         private static bool PreviewTime(LiberaFxUnityResourceIdentityConnection connection, double time)
         {
@@ -633,14 +634,14 @@ namespace LiberaFx.Unity.Editor
             var target = new UnityEngine.RenderTexture(128, 128, 24, RenderTextureFormat.ARGB32);
             var pixels = new Texture2D(128, 128, TextureFormat.RGBA32, false);
             var previous = UnityEngine.RenderTexture.active;
+            var renderer = owner.GetComponent<LiberaFxSpawnableComponent>()
+                .InspectDrawNodes().Single().Submissions.Single();
+            var previousLayer = renderer.layer;
             try
             {
-                var filter = owner.GetComponentsInChildren<MeshFilter>().Single();
-                var renderer = filter.GetComponent<MeshRenderer>();
-                Require(filter.sharedMesh == mesh && renderer && renderer.sharedMaterial == material,
+                Require(renderer.mesh == mesh && renderer.enabled && renderer.material == material,
                     "Mapped package did not instantiate the exact WSS-delivered model and material.");
-                var previousLayer = filter.gameObject.layer;
-                filter.gameObject.layer = 31;
+                renderer.layer = 31;
                 var camera = cameraObject.AddComponent<Camera>();
                 if (UnityEditor.SceneManagement.EditorSceneManager.IsPreviewScene(owner.scene))
                 {
@@ -661,13 +662,13 @@ namespace LiberaFx.Unity.Editor
                 UnityEngine.RenderTexture.active = target;
                 pixels.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
                 pixels.Apply();
-                filter.gameObject.layer = previousLayer;
                 Require(pixels.GetPixels32().Count(pixel => pixel.r > 24 || pixel.g > 24 || pixel.b > 24) > 32,
                     "The WSS-mapped Unity model did not render visible pixels.");
                 File.WriteAllBytes(imagePath, pixels.EncodeToPNG());
             }
             finally
             {
+                renderer.layer = previousLayer;
                 UnityEngine.RenderTexture.active = previous;
                 UnityEngine.Object.DestroyImmediate(cameraObject);
                 UnityEngine.Object.DestroyImmediate(target);

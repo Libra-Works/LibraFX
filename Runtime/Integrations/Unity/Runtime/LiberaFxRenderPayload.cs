@@ -186,6 +186,7 @@ namespace LiberaFx.Unity
         public bool isSprite;
         public bool frameConnected;
         public bool billboard;
+        public Camera billboardCamera;
         public bool worldRotation;
         public Mesh mesh;
         public Texture texture;

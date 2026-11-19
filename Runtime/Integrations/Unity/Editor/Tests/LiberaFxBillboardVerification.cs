@@ -93,19 +93,18 @@ namespace LiberaFx.Unity.Editor
                     Require(component.ActiveRenderScopeCount == 1, "The root scope must remain alive without LifeTime.");
                     foreach (var pose in frame.nodes)
                     {
-                        var renderer = owner.GetComponentsInChildren<MeshRenderer>()
-                            .Single(value => value.gameObject.name == "Libera FX Model " + pose.nodeId);
-                        var transform = renderer.transform;
-                        Require(Vector3.Distance(transform.localPosition, Vector(pose.position)) < 1e-4f,
+                        var draw = component.InspectDrawNodes()
+                            .Single(value => value.nodeId == pose.nodeId);
+                        Require(Vector3.Distance(draw.LocalPosition, Vector(pose.position)) < 1e-4f,
                             "Rendered position differs from the compiler fixture.");
-                        Require(Vector3.Distance(transform.localScale, Vector(pose.scale)) < 1e-4f,
+                        Require(Vector3.Distance(draw.LocalScale, Vector(pose.scale)) < 1e-4f,
                             "Rendered scale differs from the compiler fixture.");
-                        Require(Vector3.Dot(transform.localRotation * Vector3.right, Vector(pose.forward)) > 0.99999f,
+                        Require(Vector3.Dot(draw.LocalRotation * Vector3.right, Vector(pose.forward)) > 0.99999f,
                             "World LookAt forward was changed by Unity Euler ordering or a second billboard rotation.");
-                        Require(Vector3.Dot(transform.localRotation * Vector3.forward, Vector(pose.up)) > 0.99999f,
+                        Require(Vector3.Dot(draw.LocalRotation * Vector3.forward, Vector(pose.up)) > 0.99999f,
                             "Rendered Up/roll differs from the native world-matrix convention.");
                         if (pose.tree)
-                            Require(Vector3.Dot(transform.localRotation * Vector3.forward, Vector3.forward) > 0.99999f,
+                            Require(Vector3.Dot(draw.LocalRotation * Vector3.forward, Vector3.forward) > 0.99999f,
                                 "Tree Billboard did not preserve World Up.");
                     }
                     if (!capturePixels) continue;

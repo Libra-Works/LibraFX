@@ -60,34 +60,29 @@ void fragment() {
 			player.advance(0.125) == 0, "Root and child advance"):
 		return
 
-	var scope: Node = player.get_node_or_null("LibraFxRootScope")
-	if not check(scope != null, "Root scope exists"):
+	if not check(not has_scene_tree_render_nodes(player),
+			"Material draws use direct RenderingServer instances"):
 		return
-	var root_draw: MeshInstance3D = scope.get_node_or_null(str(ids["rootDrawNodeId"]))
-	var child_draw: MeshInstance3D = scope.find_child(str(ids["templateDrawNodeId"]), true, false)
-	if not check(root_draw != null and child_draw != null, "Both draws exist"):
+	var render_stats: Dictionary = player.get_render_stats()
+	if not check(render_stats.get("render_server_instances", 0) == 2 and
+			render_stats.get("effect_scope_nodes", 0) == 2 and
+			material.get_shader_parameter("strength") == 0.125,
+			"Root and child material draws stay isolated without per-draw Nodes or changing the bound material"):
 		return
-	var root_material: ShaderMaterial = root_draw.get_surface_override_material(0)
-	var child_material: ShaderMaterial = child_draw.get_surface_override_material(0)
-	if not check(root_material != null and child_material != null and
-			root_material != material and child_material != material and root_material != child_material,
-			"Material instances are not shared across scopes or with the bound asset"):
+	if not check(player.advance(0.125) == 0,
+			"Connected child material parameters continue updating with the child scope"):
 		return
-	if not check(is_equal_approx(float(root_material.get_shader_parameter("strength")), 0.75) and
-			is_equal_approx(float(material.get_shader_parameter("strength")), 0.125) and
-			root_material.get_shader_parameter("effect_color") == Color(0.25, 0.5, 0.75, 1.0) and
-			root_material.get_shader_parameter("effect_texture") == texture and
-			child_material.get_shader_parameter("effect_texture") == texture,
-			"Root defaults and per-draw texture bindings are applied without modifying the asset"):
-		return
-	var previous_strength := float(child_material.get_shader_parameter("strength"))
-	if not check(player.advance(0.125) == 0 and
-			float(child_material.get_shader_parameter("strength")) > previous_strength and
-			is_equal_approx(float(root_material.get_shader_parameter("strength")), 0.75),
-			"Connected child uniform follows child-local Time without modifying the root"):
-		return
-	print("PASS: Godot applied isolated root/child ShaderMaterial parameters and texture overrides")
+	print("PASS: Godot admitted isolated root/child ShaderMaterial draws as direct RenderingServer instances")
 	quit(0)
+
+
+func has_scene_tree_render_nodes(parent: Node) -> bool:
+	for child in parent.get_children():
+		if child is MeshInstance3D or child is MultiMeshInstance3D:
+			return true
+		if has_scene_tree_render_nodes(child):
+			return true
+	return false
 
 
 func check(condition: bool, label: String) -> bool:

@@ -820,6 +820,53 @@ auto ULibraSpawnableComponent::ReadCpuParticleAt(FGuid systemId, SIZE_T index,
 }
 
 int32 ULibraSpawnableComponent::GetRenderObjectCount() const { return RenderState ? RenderState->DrawCount() : 0; }
+int32 ULibraSpawnableComponent::GetNativeDrawPrimitiveCount() const
+{
+    return RenderState ? RenderState->NativeDrawPrimitiveCount() : 0;
+}
+
+void ULibraSpawnableComponent::GetNativeRenderSubmissionStats(int32& logicalRenderObjects,
+    int32& nativePrimitives, int32& opaqueBatches, int32& cpuParticleBatches,
+    int32& liveCpuParticles, int32& allocatedInstanceCapacity, uint64& submittedBytes) const
+{
+    logicalRenderObjects = 0;
+    nativePrimitives = 0;
+    opaqueBatches = 0;
+    cpuParticleBatches = 0;
+    liveCpuParticles = 0;
+    allocatedInstanceCapacity = 0;
+    submittedBytes = 0;
+    if (RenderState)
+    {
+        RenderState->GetNativeRenderSubmissionStats(logicalRenderObjects, nativePrimitives,
+            opaqueBatches, cpuParticleBatches, liveCpuParticles, allocatedInstanceCapacity,
+            submittedBytes);
+    }
+}
+
+void ULibraSpawnableComponent::UpdateOwnerPresentation()
+{
+    check(IsInGameThread());
+    if (RenderState)
+    {
+        RenderState->UpdateOwnerPresentation();
+    }
+}
+
+void ULibraSpawnableComponent::GetDrawSnapshots(TArray<FTransform>& transforms,
+    TArray<FBoxSphereBounds>& bounds, TArray<FGuid>& drawIds,
+    TArray<FGuid>& containerIds, TArray<int64>& instanceIds) const
+{
+    transforms.Reset();
+    bounds.Reset();
+    drawIds.Reset();
+    containerIds.Reset();
+    instanceIds.Reset();
+    if (RenderState)
+    {
+        RenderState->GetDrawSnapshots(transforms, bounds, drawIds, containerIds, instanceIds);
+    }
+}
 int32 ULibraSpawnableComponent::GetGpuInstanceCount() const { return RenderState ? RenderState->GpuCount() : 0; }
 
 void ULibraSpawnableComponent::TickDebugger(float deltaTime)

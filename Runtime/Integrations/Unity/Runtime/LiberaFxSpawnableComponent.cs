@@ -28,6 +28,8 @@ namespace LiberaFx.Unity
 
         private NativeSpawnableHost host;
         private LiberaFxRenderScope rootRenderScope;
+        private readonly LiberaFxRenderStatisticsCounter renderStatistics =
+            new LiberaFxRenderStatisticsCounter();
         private readonly Dictionary<string, LiberaFxPreparedScope> templateDefinitions =
             new Dictionary<string, LiberaFxPreparedScope>(StringComparer.Ordinal);
         private readonly Dictionary<string, LiberaFxRenderScope> instanceScopes =
@@ -105,6 +107,53 @@ namespace LiberaFx.Unity
         public double ElapsedTime => elapsed;
         public string LastError { get; private set; }
         public int ActiveRenderScopeCount => (rootRenderScope == null ? 0 : 1) + instanceScopes.Count;
+        public LiberaFxRenderStatistics RenderStatistics => renderStatistics.value;
+        internal IEnumerable<LiberaFxDirectRenderNodeInstance> InspectDrawNodes()
+        {
+            if (rootRenderScope != null)
+            {
+                foreach (var node in rootRenderScope.DrawNodes)
+                {
+                    yield return node;
+                }
+            }
+            foreach (var scope in instanceScopes.Values)
+            {
+                foreach (var node in scope.DrawNodes)
+                {
+                    yield return node;
+                }
+            }
+        }
+
+        internal NativeResult InspectCpuParticleCount(byte[] nodeId, out uint count)
+        {
+            count = 0;
+            return host == null ? NativeResult.NotReady : host.CpuParticleCount(nodeId, out count);
+        }
+
+        internal NativeResult InspectCpuParticle(byte[] nodeId, uint index, out NativeCpuParticleSnapshot snapshot)
+        {
+            snapshot = default;
+            return host == null ? NativeResult.NotReady : host.CpuParticleAt(nodeId, index, out snapshot);
+        }
+
+        internal bool TryGetRenderMatrix(string nodeId, ulong instanceId, out Matrix4x4 matrix)
+        {
+            if (instanceId == 0 && rootRenderScope != null)
+            {
+                return rootRenderScope.TryGetRenderMatrix(nodeId, out matrix);
+            }
+            foreach (var scope in instanceScopes.Values)
+            {
+                if (scope.ScopeInstanceId == instanceId && scope.TryGetRenderMatrix(nodeId, out matrix))
+                {
+                    return true;
+                }
+            }
+            matrix = default;
+            return false;
+        }
 
         // Session factory hook: configure a NEW inactive owner before Play.
         // Never mutate an asset shared by another playing component.
@@ -354,6 +403,7 @@ namespace LiberaFx.Unity
                 elapsed = 0;
                 rootFinished = false;
                 effectForced = false;
+                renderStatistics.Reset();
                 sourceInitialAdvancePending = false;
                 skeletalPoseSources.Clear();
                 cancelledBatchScopes.Clear();
@@ -361,7 +411,8 @@ namespace LiberaFx.Unity
                 templateDefinitions.Clear();
                 foreach (var pair in plan.templates) templateDefinitions.Add(pair.Key, pair.Value);
                 rootRenderScope = LiberaFxRenderScope.CreatePending(transform, plan.root,
-                    true, null, 0, 0, plan.bindings.RootGpuSeed, suppressPreviewDebugDraw);
+                    true, null, 0, 0, plan.bindings.RootGpuSeed, suppressPreviewDebugDraw,
+                    renderStatistics);
 
                 var current = host;
                 BindCurrentCamera(current);

@@ -198,7 +198,7 @@ namespace LiberaFx.Unity.Editor
                     "Automatic OnEnable did not spawn Launch at zero.");
                 VerifySignalEventForwarding();
                 VerifyVisibleRenderers();
-                proof.Add("Spawn created Unity mesh objects using borrowed shared assets: PASS");
+                proof.Add("Spawn submitted Unity meshes using borrowed shared assets: PASS");
                 Require(component.GetTemplateCount(out var templates) == NativeResult.Ok && templates == 2 &&
                     component.GetTemplateId(0, out var templateId) == NativeResult.Ok &&
                     component.GetTemplatePayload(templateId, SpawnableTemplatePayloadKind.RenderConfiguration,
@@ -240,7 +240,7 @@ namespace LiberaFx.Unity.Editor
                         if (!component.IsRootFinished) return;
                         Require(waitedForChildren, "Did not observe root waiting for its child.");
                         VerifyNaturalEnd();
-                        Require(target.GetComponentsInChildren<MeshRenderer>().Length == 0,
+                        Require(component.RenderStatistics.activeSubmissions == 0,
                             "Natural scope completion left a visible renderer behind.");
                         proof.Add("Automatic Update, half-rate playback, child draining and exactly-once natural Destroy: PASS");
                         stoppedAt = component.ElapsedTime;
@@ -263,7 +263,7 @@ namespace LiberaFx.Unity.Editor
                     case 8:
                         Require(component.IsRootFinished && component.LastError == null &&
                             component.ActiveRenderScopeCount == 0 &&
-                            target.GetComponentsInChildren<MeshRenderer>(true).Length == 0,
+                            component.RenderStatistics.activeSubmissions == 0,
                             "A large frame crossing a finite lifetime left stale render scopes or failed playback.");
                         Require(HasSameFrameSpawnAndTerminalEvent(),
                             "The large frame did not deliver a Spawn and its terminal event in one native batch.");
@@ -298,7 +298,7 @@ namespace LiberaFx.Unity.Editor
                         Require(component.GetTemplateCount(out _) == NativeResult.NotReady,
                             "Manual Stop retained metadata access to a released host.");
                         VerifyInterrupted();
-                        Require(target.GetComponentsInChildren<MeshRenderer>().Length == 0,
+                        Require(component.RenderStatistics.activeSubmissions == 0,
                             "Manual Stop left a visible renderer behind.");
                         Require(component.FireGameSignal("unused") == NativeResult.NotReady,
                             "Manual Stop retained the native host.");
@@ -497,18 +497,17 @@ namespace LiberaFx.Unity.Editor
 
         private static void VerifyVisibleRenderers()
         {
-            var renderers = target.GetComponentsInChildren<MeshRenderer>();
-            Require(renderers.Length > 0, "Spawn did not create an actual Unity MeshRenderer.");
             var found = false;
-            foreach (var renderer in renderers)
+            foreach (var draw in component.InspectDrawNodes())
             {
-                var filter = renderer.GetComponent<MeshFilter>();
-                if (filter && filter.sharedMesh == sphereMesh && renderer.sharedMaterial == sharedMaterial)
+                foreach (var renderer in draw.Submissions)
                 {
+                    if (!renderer.enabled || renderer.mesh != sphereMesh || renderer.material != sharedMaterial)
+                    {
+                        continue;
+                    }
                     found = true;
-                    var block = new MaterialPropertyBlock();
-                    renderer.GetPropertyBlock(block, 0);
-                    var color = block.GetVector("_Color");
+                    var color = renderer.properties.GetVector("_Color");
                     Require(Math.Abs(color.x - 1) < 0.001 && Math.Abs(color.y - 0.75) < 0.001 &&
                         Math.Abs(color.z - 0.1) < 0.001 && Math.Abs(color.w - 1) < 0.001,
                         "Authored Color was not applied to the mapped Unity _Color property.");

@@ -5,7 +5,8 @@ Separation (no Unity APIs in the C++ Core):
   canonical .lfxb (LFXP) -> owned native SpawnableHost -> package component
   legacy raw LFXB -> owned native Program -> Instance evaluates numeric ports
        -> one libra_evaluate P/Invoke fills cached POD arrays
-       -> MonoBehaviour.Update applies Mesh, renderer, texture and shader changes.
+       -> MonoBehaviour.LateUpdate applies effect-owned render data and matrices.
+       -> one selected Built-in/SRP camera callback submits direct Graphics draws.
 The C++ work/default buffers are NOT Unity GPU buffers. The engine adapter owns
 Mesh allocation, capacity and upload on its main thread. Dynamic quad mode
 reuses a four-vertex array and Mesh vertex buffer, changing it through
@@ -16,14 +17,16 @@ and Texture references are the engine asset handles in this sample.
 
 Build the native plugin
 -----------------------
-Unreleased source addition: FlexiblePlaneDraw is wired into root and Spawnable
-render scopes, with a separate history for each instance and point source.
+FlexiblePlaneDraw is wired into root and Spawnable render scopes, with a
+separate history for each instance and point source. The Unity adapter uses
+owned dynamic geometry and direct per-camera Graphics draws; it borrows the
+bound material and supplies its texture through a property block.
 In RenderAssets, bind the authored texture identity to its Texture and exactly
 one defaultMaterials entry. That Material must expose _MainTex and multiply
 the texture by vertex color. Camera-facing mode requires Camera.main.
-The new source has not been built or observed in Unity; published SDK
-2026.11.8 is unchanged. Disable root AutoDestroyWhenIdle for an indefinitely
-running standalone ribbon/history, or author an explicit lifetime.
+Preview v2026.11.22 includes the prerequisite runtime/API changes. Disable root
+AutoDestroyWhenIdle for an indefinitely running standalone ribbon/history, or
+author an explicit lifetime.
 
 Runtime CMake builds liberafx_native by default. Set LIBERAFX_BUILD_INTEROP=OFF
 when only the static Core library is needed. LIBERAFX_BUILD_TESTS=ON also
@@ -81,7 +84,7 @@ Cube path, /Engine/BasicShapes/Cube.Cube, so it can also be transferred directly
 to the Unreal preview window in that project. Unity explicitly binds this key
 to its own built-in mesh; no Unreal-to-Unity lookup inference is performed.
 
-Unity installation (Unity 2021.3+ APIs; verified against 6000.2.6f1 assemblies)
+Unity installation (Unity 6000.0 package minimum; tested package reference baseline 6000.2.6f1)
 ----------------------------------------------------------------------------
 Unity 7 alpha verification of these Built-In RP sample shaders requires
 -enable-builtin-rp-fallback on the isolated Editor command line. A successful
@@ -220,17 +223,44 @@ delta unchanged. Setting playRate to zero or pausing Unity time holds lifecycle
 time. Natural root completion follows `AutoDestroyWhenIdle`; explicit Stop
 retires instances without natural Destroy.
 
-The component creates actual root/per-instance render scopes. Each model or
-sprite gets a Unity object; CPU numeric values are read from the same native
-root/template instance that drives lifecycle (no second CPU effect is created).
-Shared Mesh/Material assets are borrowed; per-scope objects, sprite meshes,
-property blocks and GPU buffers are owned and released on finish/Stop/restart/
-disable/destroy. Material parameters use MaterialPropertyBlock, not material
-clones. Model material slots and exposed scalar/vector properties are checked
-against the selected Unity Materials. Sprite rendering requires the supported
-atlas properties; billboard sprites require an enabled MainCamera before Play.
-Unsupported render features, material associations or missing shader
-properties are rejected, not ignored.
+Model Draw, grid/sequence Sprite Draw, every layered Sprite composition layer,
+CPU particles and Flexible Plane use direct draws without MeshFilter,
+MeshRenderer or rendering GameObjects. Meshes, materials and textures from
+Unity bindings are borrowed; sprite quads, CPU particle geometry, flexible
+plane geometry and GPU buffers are owned and released on finish/Stop/restart/
+disable/destroy. Material parameters, texture bindings, per-effect tint and
+atlas rectangles use MaterialPropertyBlock state; shared Material assets are
+never mutated or cloned by the ordinary Draw/FlexiblePlane paths. CPU particle
+snapshots come from the same native root/template instance that drives
+lifecycle (no second CPU effect is created). Model material slots and exposed
+scalar/vector properties are checked against the selected Unity Materials.
+Sprite rendering requires the supported atlas properties; billboard sprites
+require an enabled MainCamera before Play. Unsupported render features,
+material associations or missing shader properties are rejected, not ignored.
+
+Direct draws are submitted once per camera by `Camera.onPreCull` for Built-in
+RP (`Graphics.DrawMesh`/`DrawMeshInstanced`), or
+`RenderPipelineManager.beginCameraRendering` for SRPs (`Graphics.RenderMesh`/
+`RenderMeshInstanced`); the adapter never registers both paths at once. Camera
+culling masks/layers and mesh bounds are respected.
+Compatible opaque submissions can instance only when mesh, submesh, material,
+layer and every property-block value match exactly, the material enables
+instancing, the shader does not disable batching, the device supports it,
+and each transform has a finite, strictly positive determinant. Mirrored or
+singular transforms and nonfinite determinants fall back to individual draws.
+All other opaque states use a direct draw. Transparent submissions are never
+instanced. Draws with explicit `drawOrder` are not instanced, even with an
+opaque material. The internal `LiberaFxRenderOrdering` stage sorts visible
+submissions before batching by render queue, authored draw order (default 0),
+transparent camera depth (far to near), then stable submission-lifetime ID.
+Future backends can consume the same keys without changing package formats.
+Unity can re-sort these Graphics calls. Direct submission does not guarantee
+former `Renderer.sortingOrder` behavior for overlapping layers or global
+interleaving with external scene renderers. This is an intentional trade-off
+for eliminating per-layer Renderer components.
+The adapter exposes cumulative `LiberaFxSpawnableComponent.RenderStatistics`
+(active direct submissions, direct draw/instanced calls and dynamic vertex uploads);
+counts are observations, not performance claims.
 
 Each `LiberaFxUnityMaterialBinding` can define `parameterMappings` entries with
 an exact `authoredName` and `unityPropertyName`, for example `Color` ->
@@ -300,16 +330,14 @@ the root graph; Spawnable metadata is per template. The component copies and
 preflights these payloads during Play setup. Use a native plugin exposing the
 matching package and game-I/O C ABI.
 
-Focused engine verification passed in an isolated Unity 7000.0.0a16 project:
-actual CPU root/per-instance renderer creation and updates, named echo output,
-captured/live values across two instances, explicit and natural scope cleanup,
-and authored `Color` -> Unity `_Color` material-property mapping with preflight
-rejections; finite GPU Spawnable dispatch/draw/readback; root GPU
-dispatch/readback/RequestNaturalEnd cleanup; and root GPU auto-idle plus legacy
-authored-GPU rejection. A separate D3D11 test passed fractional GPU spawning,
-independent buffers, local age and per-scope seed on an AMD Radeon RX 6700 XT.
-These tests are not player/IL2CPP, console or cross-platform validation. See
-Editor\Tests\VALIDATION.txt for commands, fixtures, environment and limits.
+Before the object-free renderer migration, a focused Unity 7000.0.0a16 project
+passed CPU root/per-instance renderer updates, named echo output, captured/live
+values across two instances, scope cleanup, and authored `Color` -> Unity
+`_Color` property mapping with preflight rejection cases. GPU Spawnable and
+fractional-spawning checks also passed on D3D11/AMD Radeon RX 6700 XT. These
+earlier tests are not player/IL2CPP,
+console or cross-platform validation. Current direct-draw/Spawnable checks,
+commands, fixtures and limits are recorded in `Editor\Tests\VALIDATION.txt`.
 
 Low-level lifetime API
 ----------------------
@@ -385,8 +413,9 @@ CPU particle Sprite billboards
 Whole-effect CPU packages use LFXP format 4/package 12 with
 `cpuParticleVersion: 1` and a `cpuParticles` render-configuration array.
 Unity resolves each `assetPath` through the existing project-local render asset
-bindings (or the explicit `builtin:white` token). One dynamic mesh and one
-MeshRenderer per CPU emitter carry the particles' individual RGBA and XY size.
+bindings (or the explicit `builtin:white` token). One reusable dynamic mesh,
+owned material and direct draw submission per CPU emitter carry the particles'
+individual RGBA and XY size; no particle or renderer GameObjects are created.
 The bundled `LiberaFx/CPU Particle` shader must be present in Resources; it
 billboards in the rendering camera's view, including when that camera moves
 after the host update. No MainCamera tag is required. The adapter requires
@@ -403,5 +432,11 @@ Property and kind 2 is Signal; read `Width` lanes from X/Y/Z/W. Rendering does
 not consume events. Drain each frame and before Stop/restart; queue capacity
 must accommodate the output from one simulation advance.
 
-CPU Sprite rendering is supported only at the package root. This path was not
-built or pixel-verified for this change.
+CPU Sprite rendering is supported only at the package root. The current
+isolated Editor checks exercised native snapshots, pixels and Stop using
+the released 2026.11.22 bridge in Built-in RP and URP.
+
+Flexible Plane uses the same direct camera submission route. Its native
+geometry generator must be exported by the installed `liberafx_native` plugin;
+the isolated public playback geometry/pixel check is
+`LiberaFx.Unity.Editor.LiberaFxRenderSubmissionVerification.RunFlexiblePackage`.

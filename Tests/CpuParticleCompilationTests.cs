@@ -145,6 +145,29 @@ public static class CpuParticleCompilationTests
         Directory.CreateDirectory(directory);
         File.WriteAllBytes(Path.Combine(directory, "cpu-particles.lfxb"),
             SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(Fixture())));
+        var renderGraph = Fixture();
+        var system = renderGraph.Nodes.Single(Cpu);
+        var child = system.ChildGraph!;
+        var spawn = child.Nodes.Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleSpawn");
+        var velocity = spawn.ChildGraph!.Nodes.Single(node =>
+            CpuParticleSchema.Name(node.Kind) == "CpuParticleSetVelocity");
+        var color = Node("CpuParticleSetColor",
+            Parameter("value", "color", new[] { 1d, 0.1, 0.05, 0.5 }));
+        spawn = spawn with { ChildGraph = spawn.ChildGraph with
+        {
+            Nodes = [.. spawn.ChildGraph.Nodes, color],
+            Connections = [.. spawn.ChildGraph.Connections, new(velocity.Id, color.Id, "signal", "then")]
+        } };
+        system = system with { ChildGraph = child with
+        {
+            Nodes = child.Nodes.Select(node => node.Id == spawn.Id ? spawn : node).ToArray()
+        } };
+        renderGraph = renderGraph with
+        {
+            Nodes = renderGraph.Nodes.Select(node => node.Id == system.Id ? system : node).ToArray()
+        };
+        File.WriteAllBytes(Path.Combine(directory, "cpu-particles-render.lfxb"),
+            SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(renderGraph)));
     }
     private static bool Cpu(GraphNodeSnapshot node) => CpuParticleSchema.IsContainer(node.Kind);
     private static GraphNodeDefinition Definition(string name) => GraphNodeDefinition.All.Single(item => item.TypeName == name);

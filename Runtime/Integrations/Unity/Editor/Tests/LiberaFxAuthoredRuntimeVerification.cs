@@ -42,6 +42,8 @@ namespace LiberaFx.Unity.Editor
             Require(shader, "The Unity atlas shader was not imported.");
             var material = new Material(shader);
             var texture = new Texture2D(64, 32);
+            texture.SetPixels(Enumerable.Repeat(Color.cyan, texture.width * texture.height).ToArray());
+            texture.Apply();
             var bindings = ScriptableObject.CreateInstance<LiberaFxUnityBindingAsset>();
             try
             {
@@ -61,16 +63,22 @@ namespace LiberaFx.Unity.Editor
                 WithComponent(File.ReadAllBytes(Path.Combine(directory, "composition.lfxp")), (owner, component) =>
                 {
                     owner.transform.position = new Vector3(3, -8, 2);
+                    owner.layer = 31;
                     var playResult = component.Play();
                     Require(playResult == NativeResult.Ok,
                         "Exported composition package failed Unity render preflight/startup: " + playResult + ": " + component.LastError);
                     var flags = BindingFlags.Instance | BindingFlags.NonPublic;
                     var elapsed = typeof(LiberaFxSpawnableComponent).GetField("elapsed", flags);
                     var update = typeof(LiberaFxSpawnableComponent).GetMethod("LateUpdate", flags);
-                    var renderers = owner.GetComponentsInChildren<MeshRenderer>();
-                    Require(component.ActiveRenderScopeCount == 1 && renderers.Length == 2,
-                        "Exported package did not initialize one root scope with two real renderers.");
-                    var block = new MaterialPropertyBlock();
+                    var renderers = component.InspectDrawNodes().ToArray();
+                    Require(component.ActiveRenderScopeCount == 1 && renderers.Length == 2 &&
+                        component.RenderStatistics.activeSubmissions == 2 && owner.transform.childCount == 0 &&
+                        !owner.GetComponent<MeshRenderer>() && !owner.GetComponent<MeshFilter>(),
+                        "Exported package did not initialize exactly two object-free layer submissions.");
+                    var firstId = renderers[0].Submissions.Single().stableId;
+                    var secondId = renderers[1].Submissions.Single().stableId;
+                    Require(firstId != 0 && secondId != 0 && firstId != secondId,
+                        "Layers did not receive distinct submission-lifetime identities.");
                     var previousTime = component.ElapsedTime;
                     foreach (var frame in fixture.frames)
                     {
@@ -81,23 +89,26 @@ namespace LiberaFx.Unity.Editor
                             Math.Abs(component.ElapsedTime - frame.timeSeconds) < 1e-8,
                             "Exported package failed its fixed-time update at " + frame.timeSeconds + ": " + component.LastError);
                         previousTime = frame.timeSeconds;
-                        var currentRenderers = owner.GetComponentsInChildren<MeshRenderer>();
+                        var currentRenderers = component.InspectDrawNodes().ToArray();
                         Require(component.ActiveRenderScopeCount == 1 && currentRenderers.Length == 2 &&
-                            renderers.All(renderer => renderer && currentRenderers.Contains(renderer)),
+                            renderers[0].Submissions.Single().stableId == firstId &&
+                            renderers[1].Submissions.Single().stableId == secondId &&
+                            renderers.All(renderer => currentRenderers.Contains(renderer) && renderer.Submissions.Single().enabled),
                             "Forward playback replaced a sprite renderer at " + frame.timeSeconds + ".");
                         foreach (var part in frame.nodes)
                         {
-                            var item = renderers.Single(renderer => renderer.name.EndsWith(part.nodeId, StringComparison.OrdinalIgnoreCase));
+                            var item = renderers.Single(renderer => string.Equals(renderer.nodeId, part.nodeId, StringComparison.OrdinalIgnoreCase));
+                            var submission = item.Submissions.Single();
                             Vector3 Vector(double[] values) => new Vector3((float)values[0], (float)values[1], (float)values[2]);
                             var scale = Vector(part.scale);
                             scale.x *= 100;
                             scale.y *= 100;
-                            Require((item.transform.localPosition - Vector(part.position)).sqrMagnitude < 0.0001f &&
-                                (item.transform.position - owner.transform.TransformPoint(Vector(part.position))).sqrMagnitude < 0.0001f &&
-                                (item.transform.localScale - scale).sqrMagnitude < 0.0001f &&
-                                Quaternion.Angle(item.transform.localRotation, Quaternion.AngleAxis((float)part.rotation[2], Vector3.forward)) < 0.1f &&
-                                item.sortingOrder == part.drawOrder, "Layered sprite pose, root transform or sort order differed.");
-                            item.GetPropertyBlock(block, 0);
+                            Require((item.LocalPosition - Vector(part.position)).sqrMagnitude < 0.0001f &&
+                                ((Vector3)item.worldMatrix.GetColumn(3) - owner.transform.TransformPoint(Vector(part.position))).sqrMagnitude < 0.0001f &&
+                                (item.LocalScale - scale).sqrMagnitude < 0.0001f &&
+                                Quaternion.Angle(item.LocalRotation, Quaternion.AngleAxis((float)part.rotation[2], Vector3.forward)) < 0.1f &&
+                                submission.drawOrder == part.drawOrder, "Layered sprite pose, root transform or sort order differed.");
+                            var block = submission.properties;
                             var size = part.parameters[0].value;
                             var offset = part.parameters[1].value;
                             var expected = new Vector4((float)offset[0], (float)(1 - offset[1] - size[1]), (float)size[0], (float)size[1]);
@@ -105,9 +116,7 @@ namespace LiberaFx.Unity.Editor
                                 block.GetTexture("_MainTex") == texture, "Layered sprite cell was not applied to the actual material property block.");
                         }
                     }
-                    Check(component.Stop());
-                    Require(component.ActiveRenderScopeCount == 0 && owner.GetComponentsInChildren<MeshRenderer>().Length == 0,
-                        "Stopping the exported package did not release its root scope and sprite renderers.");
+                    VerifyCompositionPixelsAndStop(owner, component);
                 }, bindings);
             }
             finally
@@ -116,7 +125,59 @@ namespace LiberaFx.Unity.Editor
                 Object.DestroyImmediate(texture);
                 Object.DestroyImmediate(material);
             }
-            Debug.Log("PASS SpriteComposition: compiled package, keyed renderers, cell-sized geometry, owner transform, draw order and shared loop.");
+            Debug.Log("PASS SpriteComposition: compiled package, two object-free layers, keyed atlas/pose, drawOrder, pixels and Stop.");
+        }
+
+        private static void VerifyCompositionPixelsAndStop(GameObject owner, LiberaFxSpawnableComponent component)
+        {
+            var cameraObject = new GameObject("Authored Sprite verification camera");
+            var camera = cameraObject.AddComponent<Camera>();
+            camera.enabled = false;
+            camera.transform.position = owner.transform.position + Vector3.back * 10;
+            camera.orthographic = true;
+            camera.orthographicSize = 16;
+            camera.cullingMask = 1 << owner.layer;
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = Color.black;
+            var target = new RenderTexture(64, 64, 24);
+            var pixels = new Texture2D(64, 64, TextureFormat.RGBA32, false);
+            var previous = RenderTexture.active;
+            camera.targetTexture = target;
+            try
+            {
+                var before = component.RenderStatistics;
+                var color = Capture();
+                var after = component.RenderStatistics;
+                Require(color.r < 0.1f && color.g > 0.8f && color.b > 0.8f &&
+                    after.drawCalls == before.drawCalls + 2 && after.instancedDrawCalls == before.instancedDrawCalls,
+                    $"Expected cyan atlas pixels and exactly two individual draws, got {color}.");
+                var artifact = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_GEOMETRY_PNG");
+                if (!string.IsNullOrEmpty(artifact))
+                {
+                    File.WriteAllBytes(artifact, pixels.EncodeToPNG());
+                }
+                Check(component.Stop());
+                Require(component.ActiveRenderScopeCount == 0 && component.RenderStatistics.activeSubmissions == 0 &&
+                    owner.transform.childCount == 0 && Capture().maxColorComponent < 0.05f &&
+                    component.RenderStatistics.drawCalls == after.drawCalls,
+                    "Stopping the exported package did not retire the layers or clear their pixels.");
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+                Object.DestroyImmediate(cameraObject);
+                Object.DestroyImmediate(target);
+                Object.DestroyImmediate(pixels);
+            }
+
+            Color Capture()
+            {
+                camera.Render();
+                RenderTexture.active = target;
+                pixels.ReadPixels(new Rect(0, 0, 64, 64), 0, 0);
+                pixels.Apply();
+                return pixels.GetPixel(32, 32);
+            }
         }
 
         public static void RunBatch()

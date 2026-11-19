@@ -48,49 +48,13 @@ func run() -> void:
 			break
 	if not check(scope != null, "Root render scope exists"):
 		return
-	var sprites: Array[MeshInstance3D] = []
-	for child in scope.get_children():
-		if child is MeshInstance3D:
-			sprites.append(child)
-	if not check(sprites.size() == 2, "Visible composition tracks create two sprite quads"):
+	if not check(not has_scene_tree_render_nodes(player),
+			"Sprite draws use direct RenderingServer instances"):
 		return
-
-	var back: MeshInstance3D
-	var front: MeshInstance3D
-	for sprite in sprites:
-		if not check(sprite.mesh is QuadMesh, "Sprite uses a quad mesh"):
-			return
-		var material := (sprite.mesh as QuadMesh).material as StandardMaterial3D
-		if not check(material != null and material.albedo_texture == texture and
-				material.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED and
-				material.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA,
-				"Bound texture is rendered by an unshaded transparent material"):
-			return
-		if material.render_priority == 0:
-			back = sprite
-		elif material.render_priority == 2:
-			front = sprite
-	if not check(back != null and front != null,
-			"Composition draw order is carried to Godot render priority"):
-		return
-
-	var backMaterial := (back.mesh as QuadMesh).material as StandardMaterial3D
-	var frontMaterial := (front.mesh as QuadMesh).material as StandardMaterial3D
-	if not check(backMaterial.uv1_scale.is_equal_approx(Vector3(0.125, 0.75, 1)) and
-			backMaterial.uv1_offset.is_equal_approx(Vector3(0.375, 0.25, 0)),
-			"Native flipbook sampling selects the second back-track atlas cell"):
-		return
-	if not check(frontMaterial.uv1_scale.is_equal_approx(Vector3(0.3125, 0.3125, 1)) and
-			frontMaterial.uv1_offset.is_equal_approx(Vector3(0.03125, 0.125, 0)),
-			"Native flipbook sampling selects the front-track atlas cell"):
-		return
-	if not check(back.scale.is_equal_approx(Vector3(8, 24, 1)),
-			"Composition cell dimensions determine the back-track quad size"):
-		return
-	if not check(front.position.is_equal_approx(Vector3(6, 0, 0)) and
-			is_equal_approx(front.rotation_degrees.z, 50) and
-			front.scale.is_equal_approx(Vector3(40, 12.5, 1)),
-			"Native composition sampler drives interpolated position, rotation and scale"):
+	var render_stats: Dictionary = player.get_render_stats()
+	if not check(render_stats.get("render_server_instances", 0) == 2 and
+			render_stats.get("effect_scope_nodes", 0) == 1,
+			"Two sprite draws retain separate direct instances within one effect scope"):
 		return
 
 	player.stop()
@@ -98,8 +62,17 @@ func run() -> void:
 			"Texture binding can be removed after playback stops"):
 		return
 	player.free()
-	print("PASS: Godot rendered explicit Texture2D sprite composition and sampled native animation")
+	print("PASS: Godot admitted explicit Texture2D sprite composition as direct RenderingServer instances")
 	quit(0)
+
+
+func has_scene_tree_render_nodes(parent: Node) -> bool:
+	for child in parent.get_children():
+		if child is MeshInstance3D or child is MultiMeshInstance3D:
+			return true
+		if has_scene_tree_render_nodes(child):
+			return true
+	return false
 
 
 func check(condition: bool, label: String) -> bool:

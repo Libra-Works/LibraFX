@@ -113,7 +113,8 @@ namespace LiberaFx.Unity
                 if (instanceScopes.ContainsKey(scopeKey))
                     throw new InvalidOperationException("Duplicate active Spawn event for instance " + item.InstanceId + ".");
                 var scope = LiberaFxRenderScope.CreatePending(transform, definition, false,
-                    item.ContainerId, item.InstanceId, item.Time, item.Seed, suppressPreviewDebugDraw);
+                    item.ContainerId, item.InstanceId, item.Time, item.Seed, suppressPreviewDebugDraw,
+                    renderStatistics);
                 try
                 {
                     scope.Initialize(current, elapsed);

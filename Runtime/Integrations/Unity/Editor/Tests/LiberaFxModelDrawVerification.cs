@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -68,12 +69,13 @@ namespace LiberaFx.Unity.Editor
             serialized.ApplyModifiedPropertiesWithoutUndo();
             owner.SetActive(true);
             Require(component.Play() == NativeResult.Ok, "Compiled model failed to play: " + component.LastError);
-            var renderers = owner.GetComponentsInChildren<MeshRenderer>();
-            Require(renderers.Length == 1 && renderers[0].GetComponent<MeshFilter>().sharedMesh == mesh,
-                "The public component did not create exactly one real model renderer.");
-            Require(renderers[0].sharedMaterial == material, "The selected material did not override the model default.");
-            Require((renderers[0].transform.localScale - new Vector3(1, 1.5f, 0.75f)).sqrMagnitude < 0.00001f &&
-                Quaternion.Angle(renderers[0].transform.localRotation, Quaternion.Euler(15, 30, 0)) < 0.01f,
+            var draw = component.InspectDrawNodes().Single();
+            var submission = draw.Submissions.Single();
+            Require(submission.enabled && submission.mesh == mesh,
+                "The public component did not submit the exact model mesh.");
+            Require(submission.material == material, "The selected material did not override the model default.");
+            Require((draw.LocalScale - new Vector3(1, 1.5f, 0.75f)).sqrMagnitude < 0.00001f &&
+                Quaternion.Angle(draw.LocalRotation, Quaternion.Euler(15, 30, 0)) < 0.01f,
                 "Authored scale/rotation did not reach the engine model.");
             var cameraObject = new GameObject("Main Camera");
             cameraObject.tag = "MainCamera";
@@ -104,8 +106,14 @@ namespace LiberaFx.Unity.Editor
                     File.WriteAllBytes(Path.Combine(directory, name + ".Unity" +
                         (materialAnimation ? "." + time : "") + ".png"), pixels.EncodeToPNG());
                 }
-                if (materialAnimation) SampleAnimation(component, renderers[0], Capture);
-                else Capture(0);
+                if (materialAnimation)
+                {
+                    SampleAnimation(component, draw, Capture);
+                }
+                else
+                {
+                    Capture(0);
+                }
             }
             finally
             {
@@ -115,7 +123,7 @@ namespace LiberaFx.Unity.Editor
                 Object.DestroyImmediate(target);
                 component.Stop();
             }
-            Require(owner.GetComponentsInChildren<MeshRenderer>().Length == 0,
+            Require(component.RenderStatistics.activeSubmissions == 0 && !component.InspectDrawNodes().Any(),
                 "Stopping the effect retained its model renderer.");
             AssetDatabase.CreateFolder("Assets", materialAnimation ? "LiberaFxMaterialSample" : "LiberaFxModelDrawSample");
             AssetDatabase.CreateAsset(material, folder + "/" + name + "Material.mat");
@@ -151,14 +159,15 @@ namespace LiberaFx.Unity.Editor
             try
             {
                 Require(component.Play() == NativeResult.Ok, "The saved package/bindings cannot play: " + component.LastError);
-                var renderers = component.GetComponentsInChildren<MeshRenderer>();
-                Require(renderers.Length == 1, "The saved scene did not recreate its model renderer.");
-                if (materialAnimation) SampleAnimation(component, renderers[0]);
+                var draw = component.InspectDrawNodes().Single();
+                Require(draw.Submissions.Single().enabled, "The saved scene did not recreate its model draw.");
+                if (materialAnimation)
+                {
+                    SampleAnimation(component, draw);
+                }
                 else
                 {
-                    var block = new MaterialPropertyBlock();
-                    renderers[0].GetPropertyBlock(block, 0);
-                    var color = block.GetColor("_Color");
+                    var color = draw.Submissions.Single().properties.GetColor("_Color");
                     Require(Mathf.Abs(color.r - 0.15f) < 0.001f && Mathf.Abs(color.g - 0.65f) < 0.001f &&
                         Mathf.Abs(color.b - 1) < 0.001f, "The saved bindings lost the authored Color mapping.");
                 }
@@ -169,23 +178,20 @@ namespace LiberaFx.Unity.Editor
             Debug.Log("LIBERA FX saved ModelDraw scene reload verified.");
         }
 
-        private static void SampleAnimation(LiberaFxSpawnableComponent component, MeshRenderer renderer,
+        private static void SampleAnimation(LiberaFxSpawnableComponent component, LiberaFxDirectRenderNodeInstance draw,
             Action<int> capture = null)
         {
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
             var elapsed = typeof(LiberaFxSpawnableComponent).GetField("elapsed", flags);
             var update = typeof(LiberaFxSpawnableComponent).GetMethod("LateUpdate", flags);
-            var block = new MaterialPropertyBlock();
             foreach (var time in new[] { 0, 1, 2, 4 })
             {
                 elapsed.SetValue(component, time - (double)Time.deltaTime);
                 update.Invoke(component, null);
-                var renderers = component.GetComponentsInChildren<MeshRenderer>();
                 Require(string.IsNullOrEmpty(component.LastError) && Math.Abs(component.ElapsedTime - time) < 1e-8 &&
-                    renderers.Length == 1 && renderers[0] == renderer,
+                    component.InspectDrawNodes().SingleOrDefault() == draw && draw.Submissions.Single().enabled,
                     "Forward animation must retain its model renderer: " + component.LastError);
-                renderer.GetPropertyBlock(block, 0);
-                var actual = block.GetColor("_Color");
+                var actual = draw.Submissions.Single().properties.GetColor("_Color");
                 var expected = (float)(0.5 + 0.5 * Math.Cos(Math.PI / 2 * time));
                 Require(Mathf.Abs(actual.r - expected) < 0.001f && Mathf.Abs(actual.g - expected) < 0.001f &&
                     Mathf.Abs(actual.b - 1) < 0.001f && Mathf.Abs(actual.a - 1) < 0.001f,

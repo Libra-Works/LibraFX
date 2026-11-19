@@ -67,7 +67,7 @@ Logs/results/images remain local; no package installation or sharing is needed.
 This proves real Editor/Unity API and GPU behavior, not player builds, Play Mode
 automatic scheduling/domain reload, console hardware or IL2CPP.
 
-Spawnable CPU render verification:
+Spawnable Draw playback verification:
   Use a dedicated Unity project, a compiler-produced GameIo.lfxp and its
   sibling GameIo.identities.json. Set LIBERAFX_UNITY_GAMEIO_FIXTURE to the
   absolute .lfxp path, then run:
@@ -80,8 +80,65 @@ Spawnable CPU render verification:
   Unity 7000.0.0a16 actual Play Mode result: PASS. Root render follows named
   Game Property updates; Output Property emits the named "echo" port; two
   instances of the same Spawnable preserve captured/live values independently;
-  explicit Stop releases all five owned renderers. Result file:
+  Draw uses five direct submissions and Stop removes them without
+  MeshRenderer/MeshFilter objects. Result file:
   spawnable-render-verification.txt.
+
+Object-free direct renderer migration verification:
+  Dedicated synthetic project: G:\LfxV\p20261120-0129\unity-render-verification.
+  Unity 7000.0.0a16, D3D11, Built-in RP fallback. The focused editor check
+  LiberaFx.Unity.Editor.LiberaFxRenderSubmissionVerification.Run passed:
+  actual framebuffer red pixel; compatible opaque pair submitted as one
+  instanced draw; incompatible property state and transparent geometry stayed
+  on individual draws; camera layer mask and disposal were checked. It reports
+  two direct calls, one instanced. The separate
+  LiberaFx.Unity.Editor.LiberaFxRenderSubmissionVerification.RunCpuParticleLifecycle
+  check passed CPU emitter setup/cleanup with one direct submission and no
+  particle/render GameObjects. The Spawnable Play Mode check above was rerun
+  against the same final adapter sources and passed.
+
+  The released 2026.11.22 win-x64 plugin (9727e45) was copied into the closed
+  isolated projects; no native build was needed. Run `RunCpuPackage` with
+  LIBERAFX_UNITY_CPU_FIXTURE set to the compiler-produced CPU package and
+  `RunFlexiblePackage` with LIBERAFX_UNITY_FLEXIBLE_FIXTURE set to a synthetic
+  package whose root contains the fixed-up XY red-to-green ribbon. Both use
+  public ConfigureForSession/Play/AdvancePreview/Stop, check the native
+  geometry reaching the framebuffer, and can write the PNG to the isolated
+  path in LIBERAFX_UNITY_GEOMETRY_PNG.
+
+  URP 17.7.0 (PC_RPAsset) and Built-in RP were checked on D3D11 in Unity
+  7000.0.0a16. Run the URP project without -noUpm or Built-in fallback;
+  LIBERAFX_UNITY_REQUIRE_SRP=1 prevents an accidental Built-in pass in `Run`
+  and `RunOrdering`. `RunOrdering` checks the pre-batch policy on conflicting
+  draw order and depth, equal-order depth, stable ties, and non-instancing.
+  It reads framebuffer pixels from both layers, counts exactly two draws,
+  and verifies that disposal clears the pixels. It reports (but does not
+  prescribe) the overlap pixel after Unity's own sort. Direct submission is
+  not a substitute for Renderer.sortingOrder or global interleaving with
+  external Renderers. No per-layer Renderer fallback is used.
+  `LiberaFxAuthoredRuntimeVerification.RunSpriteCompositionBatch` also checks
+  the compiled composition's atlas and pose, stable metadata, zero rendering
+  objects, two direct draws, real pixels, and Stop. Supply
+  LIBERAFX_VERIFICATION_PROJECT and LIBERAFX_SPRITE_COMPOSITION_FIXTURE_DIR.
+  Both pixel checks accept LIBERAFX_UNITY_GEOMETRY_PNG as the isolated
+  output path. Unity 6000.0 and player builds were not run.
+
+  `LiberaFxRenderSubmissionVerification.RunInstancingParity` compares every
+  framebuffer pixel for three direct draws against the same candidate set
+  with instancing enabled. All planes use back-face culling; the center plane
+  is mirrored. The fixed path must match the baseline exactly while batching
+  only the two positive transforms. The test also checks matrix-update
+  eligibility for positive, singular and nonfinite determinants. On Unity
+  7000.0.0a16/D3D11 the original mixed batch happened to match these pixels
+  in both pipelines; that observation is not a guarantee for other
+  configurations. Set LIBERAFX_UNITY_PARITY_PNG_PREFIX to an isolated
+  absolute prefix to save the `-direct.png` and `-candidate.png` readbacks.
+
+  The migrated ModelDraw verifier rendered the compiler fixture and reloaded
+  the saved scene. The migrated package debugger verifier checked the paused
+  root's same draw submission, mesh, matrix, color and red framebuffer,
+  alongside Busy/teardown and pipe closure. It explicitly invokes OnDestroy
+  in Edit Mode; ordinary Spawnable Play Mode tests cover automatic callbacks.
 
 Spawnable GPU integration verification:
   Requires a dedicated graphics-enabled project, D3D11, and compiler-produced

@@ -65,13 +65,19 @@ This screen configures rendering but does not display engine playback.
 
 ### Does ordinary Draw create more MeshComponents?
 
-In Unreal, an ordinary Draw creates a `UStaticMeshComponent` per draw node and
-playback instance. Spawnable instances therefore add their own draw components;
-they are not recreated every frame, and do not necessarily need separate Actors.
-CPU Particle Sprite Draw instead uses one `UInstancedStaticMeshComponent` for
-the pool: 1,000 particles do not mean 1,000 MeshComponents. Per-particle transform
-and color data still scale with particle count; this does not remove all CPU,
-memory, overdraw or material costs.
+The published **2026.11.22 Preview** uses Unreal MeshComponents for ordinary
+Draw and one InstancedStaticMeshComponent per CPU particle system, not per
+particle. The renderer migration in newer source removes those draw components:
+the effect host owns native rendering data and compatible batches. Unity uses
+direct drawing, Unreal native primitives/proxies, and Godot RenderingServer
+instances. The effect-level playback Component/Node remains.
+
+Removing scene components does not remove mesh/material resources or guarantee
+one draw call. Different materials, shader parameters and transparent ordering
+can require separate submissions. Particle data, CPU work, memory, overdraw and
+transfer costs still scale with the content. See the
+[engine rendering boundary](engine-integration.md#rendering) before comparing
+the released Preview with a newer source build.
 
 ## Authoring a moving Sprite cloud
 
@@ -101,10 +107,12 @@ age reaches its life is removed before that step's Update.
 The sibling **CPU Particle Sprite Draw** renders the pool as a batch, not one
 engine actor/component per particle. Select a texture explicitly (`builtin:white`
 is an explicit built-in resource), Alpha/Additive and positive draw scale.
-Position and XY size are effect-local; draw scale affects both. Unity uses one
-combined dynamic mesh per emitter; Unreal uses one InstancedStaticMeshComponent;
-Godot uses one MultiMeshInstance3D. Per-particle RGBA and XY size are retained.
-There is no per-particle transparent sorting.
+Position and XY size are effect-local; draw scale affects both. In the migrated
+source, Unity directly submits a reusable combined mesh per emitter, Unreal uses
+native instanced primitives, and Godot bulk-uploads MultiMesh data through
+RenderingServer RIDs. There is no per-particle scene object. Per-particle RGBA
+and XY size are retained; there is no per-particle transparent sorting. These
+renderer changes do not update previously downloaded 2026.11.22 SDKs.
 
 Unreal requires the instanced-RGBA Sprite material documented in its adapter
 `USAGE.txt`; that material is **not supplied** by this implementation. A missing

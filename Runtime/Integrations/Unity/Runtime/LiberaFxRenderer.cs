@@ -35,9 +35,8 @@ namespace LiberaFx.Unity
         private uint[] bindings;
         private NativeValue[] values;
         private Mesh ownedMesh;
-        private MeshFilter meshFilter;
-        private MeshRenderer meshRenderer;
-        private MaterialPropertyBlock properties;
+        private LiberaFxDrawPropertyState properties;
+        private LiberaFxRenderSubmission submission;
         private Vertex[] vertices;
         private double elapsed;
         private bool sample;
@@ -136,22 +135,18 @@ namespace LiberaFx.Unity
                     defaultBinding = instance.BindParameter(defaultNode, (uint)defaultInputSlot, (uint)defaultComponent);
                     NativeInstance.Check(instance.SetParameter(defaultBinding, defaultGain));
                 }
-                meshFilter = GetComponent<MeshFilter>();
-                if (!meshFilter) meshFilter = gameObject.AddComponent<MeshFilter>();
-                meshRenderer = GetComponent<MeshRenderer>();
-                if (!meshRenderer) meshRenderer = gameObject.AddComponent<MeshRenderer>();
-                properties = new MaterialPropertyBlock();
-                meshRenderer.sharedMaterial = material; // Never Renderer.material.
+                properties = new LiberaFxDrawPropertyState(3);
+                var renderMesh = modelMesh;
                 if (sprite)
                 {
                     CreateQuad();
-                    meshFilter.sharedMesh = ownedMesh;
+                    renderMesh = ownedMesh;
                     properties.SetTexture(textureProperty, spriteTexture);
                 }
-                else meshFilter.sharedMesh = modelMesh;
+                submission = new LiberaFxRenderSubmission(properties) { owner = transform };
+                submission.Configure(renderMesh, material, 0, gameObject.layer);
                 elapsed = 0;
                 hasTimeContextApi = true;
-                meshRenderer.enabled = true;
             }
             catch (Exception error)
             {
@@ -248,14 +243,16 @@ namespace LiberaFx.Unity
                 enabled = false;
                 return;
             }
-            properties.SetColor(colorProperty, new Color((float)color.X, (float)color.Y, (float)color.Z, (float)color.W));
+            properties.SetVector(colorProperty,
+                new Vector4((float)color.X, (float)color.Y, (float)color.Z, (float)color.W));
             if (sprite)
             {
                 result = NativeInstance.SampleAtlas(values[2].X * framesPerSecond,
                     (uint)atlasColumns, (uint)atlasRows, out var atlas);
                 if (result != NativeResult.Ok) { enabled = false; return; }
                 // Core UVs are top-left; Unity texture UVs are bottom-left.
-                properties.SetVector(atlasProperty, new Vector4(atlas.U, 1 - atlas.V - atlas.Height, atlas.Width, atlas.Height));
+                properties.SetVector(atlasProperty,
+                    new Vector4(atlas.U, 1 - atlas.V - atlas.Height, atlas.Width, atlas.Height));
                 if (dynamicQuad)
                 {
                     // Same allocated four-vertex capacity for every frame. Mesh
@@ -269,7 +266,9 @@ namespace LiberaFx.Unity
                 }
             }
             else properties.SetVector(atlasProperty, new Vector4(0, 0, 1, 1));
-            meshRenderer.SetPropertyBlock(properties);
+            submission.layer = gameObject.layer;
+            submission.SetMatrix(transform.localToWorldMatrix);
+            submission.enabled = true;
         }
         private static bool UnityFloat(double value) =>
             !double.IsNaN(value) && value >= -float.MaxValue && value <= float.MaxValue;
@@ -279,10 +278,13 @@ namespace LiberaFx.Unity
             instance?.Dispose();
             instance = null;
             defaultBinding = 0;
-            if (meshRenderer) { meshRenderer.SetPropertyBlock(null); meshRenderer.enabled = false; }
+            if (submission != null)
+            {
+                submission.Dispose();
+                submission = null;
+            }
             if (ownedMesh)
             {
-                if (meshFilter && meshFilter.sharedMesh == ownedMesh) meshFilter.sharedMesh = null;
                 Destroy(ownedMesh);
                 ownedMesh = null;
             }

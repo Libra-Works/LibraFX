@@ -129,7 +129,7 @@ namespace LiberaFx.Unity.Editor
                 Require(created.result == "Ok" && !string.IsNullOrEmpty(created.target), "Spool create failed: " + created.error);
                 var live = session.List().Single();
                 var original = session.ResolveComponent(live.Id);
-                Require(original && original.GetComponentsInChildren<MeshRenderer>().Length == 1, "No real playing mesh renderer.");
+                Require(original && original.RenderStatistics.activeSubmissions == 1, "No live mesh draw submission.");
                 foreach (var child in original.GetComponentsInChildren<Transform>(true)) child.gameObject.layer = 31;
                 Require(original.ReadRootValue(ids.position, out var first) == NativeResult.Ok && first.X == 1, "Initial compiler output missing.");
                 Require(Sample(new Vector3(1, 1, 1)).r > 0.5f, "Initial real game renderer produced no expected pixels.");
@@ -167,7 +167,7 @@ namespace LiberaFx.Unity.Editor
                 {
                     Require(session.TakeCompletion(request, out var done) == NativeResult.Ok && done.Result == NativeResult.Ok,
                         "Worker creation failed at SDK boundary.");
-                    Require(session.ResolveComponent(done.Instance).GetComponentsInChildren<MeshRenderer>().Length == 1,
+                    Require(session.ResolveComponent(done.Instance).RenderStatistics.activeSubmissions == 1,
                         "Worker request produced no engine renderer.");
                     var destroy = default(SessionRequestId);
                     var worker = new Thread(() => {
@@ -199,7 +199,7 @@ namespace LiberaFx.Unity.Editor
                 Require(Send("debug-disconnect", null, null).result == "Ok", "Debug cleanup was not acknowledged.");
                 Require(session.ResolveComponent(live.Id) == replacement && replacement.ElapsedTime == elapsed &&
                     replacement.ActiveRenderScopeCount == scopes &&
-                    replacement.GetComponentsInChildren<MeshRenderer>().Length == 1,
+                    replacement.RenderStatistics.activeSubmissions == 1,
                     "Debug disconnect stopped/reset normal playback or removed ordinary renderers.");
                 Require(session.Close() == NativeResult.NotReady && session.ResolveComponent(live.Id) == replacement,
                     "Graceful close silently converted lifetime into forced termination.");

@@ -8,9 +8,14 @@ title: Flexible Plane Draw
 
 Flexible Plane Draw turns ordered points into a textured ribbon, not a flat
 rectangle or a particle simulation. Unity, Unreal and Godot package renderers
-have root and spawned-child wiring. Engine rendering has not been visually
-verified. The earlier **2026.11.8 SDK does not include** these new symbols;
+have root and spawned-child wiring. Newer source uses engine-native rendering
+without a per-Draw scene component. Fixed-point ribbons have rendered-pixel
+coverage in Unity 7 Built-in/URP and Godot 4.7.2; this does not certify every
+history, camera or target-platform combination.
+The earlier **2026.11.8 SDK does not include** these new symbols;
 use matching updated [Preview packages](https://github.com/Libra-Works/LibraFX/releases).
+The published 2026.11.22 archives include the original ribbon implementation,
+not the later renderer migration. See [rendering boundaries](engine-integration.md#rendering).
 
 ## Authoring
 
@@ -125,24 +130,26 @@ color by the Draw bindings **on the copy** before generating; never repeatedly
 multiply the stored history. Apply the same multipliers to list points.
 
 The portable API alone does not submit meshes, manage texture assets, resolve
-instance transforms, or render pixels. The source-integrated engine renderers
-use one dynamic mesh per draw and instance:
+instance transforms, or render pixels. The migrated source renderers own
+reusable geometry per draw/instance without creating a matching scene component:
 
 * Unity requires an explicit texture binding with exactly one material in
   `defaultMaterials[0]`. Its shader must sample `_MainTex` and multiply by
   vertex color. Camera-facing draws use `Camera.main`. Each renderer owns its
-  mesh, GameObject and material clone.
+  mesh and material clone, but no rendering GameObject or MeshRenderer.
 * Unreal requires the explicitly bound authored texture and a material bound
   to `builtin:flexible-plane`. The material must expose a global `Texture`
   parameter and use vertex color. Camera-facing draws use the camera override
-  or player camera fallback. Its `FDynamicMeshBuilder` representation uses
-  8-bit vertex colors and rejects values outside 0–1.
+  or player camera fallback. Native primitive/proxy geometry uses 8-bit vertex
+  colors and rejects values outside 0–1; no FlexiblePlane Component is created.
 * Godot's package renderer resolves the explicitly bound texture and uses a
   vertex-colored, unshaded, transparent `StandardMaterial3D`. Camera-facing
   draws require the player camera or current viewport camera. Root and each
   spawned child own separate histories. Backward time clears history; a host implementing an
   explicit forward seek must call `resetFlexibleHistories()` before updating.
-  The Godot source and `ArrayMesh` build profile wiring are unbuilt and untested.
+  RenderingServer RIDs and reusable dynamic ArrayMesh surfaces replace
+  MeshInstance3D nodes. Surface updates, visibility, owner transforms and Stop
+  have real-render coverage; other backends and exported players remain separate checks.
 
 All engine objects are owner-thread only. Camera-facing draws need a camera
 position converted from world to their own local space; fixed-up draws do not

@@ -227,6 +227,7 @@ namespace LiberaFx.Unity.Editor
             target.name = "Verified native cube";
             target.SetActive(false);
             UnityEngine.Object.DestroyImmediate(target.GetComponent<Collider>());
+            target.GetComponent<MeshRenderer>().enabled = false;
             var owner = target.AddComponent<LiberaFxRenderer>();
             owner.SetupCubeSample(target.GetComponent<MeshFilter>().sharedMesh, material);
             try
@@ -234,19 +235,16 @@ namespace LiberaFx.Unity.Editor
                 Initialize(target, owner);
                 var update = Method(owner, "Update");
                 TimeAt(owner, 0); update();
-                var renderer = target.GetComponent<MeshRenderer>();
-                var block = new MaterialPropertyBlock();
-                renderer.GetPropertyBlock(block);
+                var renderer = (LiberaFxRenderSubmission)Field("submission").GetValue(owner);
+                var block = renderer.properties;
                 var first = block.GetColor("_Color");
                 TimeAt(owner, 1); update();
-                renderer.GetPropertyBlock(block);
                 Assert(Mathf.Abs(target.transform.localPosition.x - 0.2f) < 0.0001f &&
                     Mathf.Abs(block.GetColor("_Color").r - 0.4f) < 0.0001f &&
                     block.GetColor("_Color") != first, "Native cube time/color did not update Unity objects.");
-                Assert(renderer.sharedMaterial == material, "Renderer cloned its material.");
+                Assert(renderer.material == material && renderer.enabled, "Submission lost the shared material.");
                 Assert(owner.SetDefaultGain(0.3) == NativeResult.Ok, "Native default mutation failed.");
                 TimeAt(owner, 1); update();
-                renderer.GetPropertyBlock(block);
                 Assert(Mathf.Abs(target.transform.localPosition.x - 0.3f) < 0.0001f &&
                     Mathf.Abs(block.GetColor("_Color").r - 0.5f) < 0.0001f, "Mutated default did not reach the cube.");
                 proof.Add("cube_transform_material_property_block_defaults=PASS");
@@ -264,23 +262,21 @@ namespace LiberaFx.Unity.Editor
             {
                 Initialize(target, owner);
                 var update = Method(owner, "Update");
-                var renderer = target.GetComponent<MeshRenderer>();
-                var block = new MaterialPropertyBlock();
+                var renderer = (LiberaFxRenderSubmission)Field("submission").GetValue(owner);
+                var block = renderer.properties;
                 TimeAt(owner, 0); update();
-                renderer.GetPropertyBlock(block);
                 var firstRect = block.GetVector("_AtlasRect");
                 Assert((firstRect - new Vector4(0, 0.75f, 0.25f, 0.25f)).sqrMagnitude < 0.00001f,
                     "Native frame zero did not reach the Unity atlas uniform.");
                 TimeAt(owner, 1); update();
-                renderer.GetPropertyBlock(block);
-                Assert(block.GetTexture("_MainTex") == atlas && renderer.sharedMaterial == material,
+                Assert(block.GetTexture("_MainTex") == atlas && renderer.material == material,
                     "Atlas texture/material bindings were not applied.");
                 var rect = block.GetVector("_AtlasRect");
                 Assert((rect - new Vector4(0, 0.25f, 0.25f, 0.25f)).sqrMagnitude < 0.00001f,
                     "Native frame 8 top-left UV was not converted to Unity bottom-left UV.");
                 Assert(rect != firstRect, "Native time did not animate the atlas uniform.");
                 proof.Add((dynamic ? "dynamic_quad" : "static_atlas") + "_atlas_animation=PASS");
-                var mesh = target.GetComponent<MeshFilter>().sharedMesh;
+                var mesh = renderer.mesh;
                 var vertices = mesh.vertices;
                 Assert(mesh.vertexCount == 4 && mesh.GetVertexBufferStride(0) == 20, "Quad buffer format/capacity mismatch.");
                 Assert(Mathf.Abs(vertices[2].y - (dynamic ? 0.7f : 0.5f)) < 0.0001f,
@@ -294,7 +290,7 @@ namespace LiberaFx.Unity.Editor
                 var allocated = GC.GetAllocatedBytesForCurrentThread();
                 for (var i = 0; i < 1000; ++i) update();
                 allocated = GC.GetAllocatedBytesForCurrentThread() - allocated;
-                Assert(target.GetComponent<MeshFilter>().sharedMesh == mesh && mesh.vertexCount == 4 &&
+                Assert(renderer.mesh == mesh && mesh.vertexCount == 4 &&
                     ReferenceEquals(workArray, Field("vertices").GetValue(owner)) &&
                     ReferenceEquals(outputArray, Field("values").GetValue(owner)), "Per-frame storage was replaced.");
                 if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Null)
@@ -375,9 +371,10 @@ namespace LiberaFx.Unity.Editor
                 readback.ReadPixels(new Rect(0, 0, 64, 64), 0, 0);
                 readback.Apply();
                 var center = readback.GetPixel(32, 32);
+                var draw = (LiberaFxRenderSubmission)Field("submission").GetValue(target.GetComponent<LiberaFxRenderer>());
                 Assert(Mathf.Max(center.r, Mathf.Max(center.g, center.b)) > 0.01f,
                     $"Rendered framebuffer contains only background: active={target.activeInHierarchy}, " +
-                    $"renderer={target.GetComponent<MeshRenderer>().enabled}, bounds={target.GetComponent<MeshRenderer>().bounds}, " +
+                    $"submission={draw.enabled}, bounds={draw.worldBounds}, " +
                     $"scene={target.scene.isLoaded}, pipeline={GraphicsSettings.currentRenderPipeline}, center={center}.");
                 File.WriteAllBytes(Path.Combine(Project, name + ".png"), readback.EncodeToPNG());
                 proof.Add(name + "_render=PASS center=" + center);

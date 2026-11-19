@@ -1,6 +1,7 @@
 #include "LibraSpawnableRenderState.h"
 #include "LibraDebugDrawScope.h"
 #include "LibraFlexiblePlaneRenderer.h"
+#include "LibraNativeRenderPrimitives.h"
 
 #include "LibraSpawnableComponent.h"
 #include "LibraSpawnableAsset.h"
@@ -8,7 +9,6 @@
 #include "LibraGpuEffectRuntime.h"
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
-#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Dom/JsonObject.h"
 #include "Engine/StaticMesh.h"
@@ -34,12 +34,27 @@ namespace LibraCpuParticleRendering
 {
 struct FBatch
 {
-    TStrongObjectPtr<UInstancedStaticMeshComponent> Component;
+    TStrongObjectPtr<UMaterialInstanceDynamic> Material;
+    TUniquePtr<FLibraNativeInstancedMeshPrimitive> Primitive;
     TArray<FTransform> Transforms;
-    TArray<FTransform> Growth;
-    TArray<int32> Removed;
     TArray<FLinearColor> Colors;
 };
+}
+
+namespace LibraOpaqueBatching
+{
+auto HasSafePositiveInstanceTransform(const FTransform& worldTransform,
+    const FTransform& primitiveTransform) -> bool
+{
+    const auto worldMatrix = worldTransform.ToMatrixWithScale();
+    const auto relativeTransform = worldTransform.GetRelativeTransform(primitiveTransform);
+    const auto relativeMatrix = relativeTransform.ToMatrixWithScale();
+    const auto worldDeterminant = worldMatrix.Determinant();
+    const auto relativeDeterminant = relativeMatrix.Determinant();
+    return !worldMatrix.ContainsNaN() && !relativeMatrix.ContainsNaN() &&
+        FMath::IsFinite(worldDeterminant) && FMath::IsFinite(relativeDeterminant) &&
+        worldDeterminant > 1e-8 && relativeDeterminant > 1e-8;
+}
 }
 
 namespace {
@@ -124,7 +139,7 @@ struct FSpriteAnimation
 struct FDraw
 {
     FGuid Id;
-    bool bSprite = false, bBillboard = false;
+    bool bSprite = false, bBillboard = false, bOpaqueBatchCandidate = false;
     FSpriteAnimation SpriteAnimation;
     TStrongObjectPtr<UStaticMesh> Mesh;
     TArray<TStrongObjectPtr<UMaterialInterface>> Materials;
@@ -154,6 +169,15 @@ struct FFlexiblePlaneDraw
     TStrongObjectPtr<UMaterialInterface> Material;
 };
 
+struct FDrawBatch
+{
+    FString Key;
+    TArray<int32> DrawIndices;
+    TArray<FTransform> Transforms;
+    TArray<FLinearColor> CustomData;
+    TUniquePtr<FLibraNativeInstancedMeshPrimitive> Primitive;
+};
+
 struct FDefinition
 {
     TSharedPtr<FJsonObject> DebugConfiguration;
@@ -173,8 +197,13 @@ struct FInstance
     FGuid Container;
     int64 Id = 0;
     double Started = 0, Previous = 0;
+    FTransform PresentationRootTransform = FTransform::Identity;
+    bool bHasPresentationRootTransform = false;
     FDefinition* Definition = nullptr;
-    TArray<TStrongObjectPtr<UStaticMeshComponent>> Draws;
+    TArray<TUniquePtr<FLibraNativeMeshPrimitive>> Draws;
+    TArray<FTransform> DrawLocalTransforms;
+    TArray<FDrawBatch> DrawBatches;
+    TArray<TArray<TStrongObjectPtr<UMaterialInstanceDynamic>>> DrawMaterials;
     TArray<LibraCpuParticleRendering::FBatch> CpuDraws;
     TArray<TUniquePtr<FLibraFlexiblePlaneRenderer>> FlexiblePlanes;
     FLibraFlexiblePlaneHistoryScope FlexibleHistory;
@@ -186,20 +215,6 @@ struct FInstance
             if (runtime.IsValid())
             {
                 runtime->Stop();
-            }
-        }
-        for (auto& component : Draws)
-        {
-            if (component.IsValid())
-            {
-                component->DestroyComponent();
-            }
-        }
-        for (auto& system : CpuDraws)
-        {
-            if (system.Component.IsValid())
-            {
-                system.Component->DestroyComponent();
             }
         }
     }
@@ -214,6 +229,55 @@ struct FLibraSpawnableRenderState::FImpl
     uint64 GpuBytes = 0;
     explicit FImpl(ULibraSpawnableComponent& owner) : Owner(owner) {}
     bool Fail(const FString& message) { Owner.LastError = message; return false; }
+
+    FString DrawBatchKey(const FDraw& draw) const
+    {
+        auto key = FString{};
+        key.Appendf(TEXT("%llu;"), static_cast<unsigned long long>(
+            reinterpret_cast<UPTRINT>(draw.Mesh.Get())));
+        for (const auto& material : draw.Materials)
+        {
+            key.Appendf(TEXT("%llu;"), static_cast<unsigned long long>(
+                reinterpret_cast<UPTRINT>(material.Get())));
+        }
+        for (const auto& input : draw.Inputs)
+        {
+            if (!input.bMaterial)
+            {
+                continue;
+            }
+            key.Appendf(TEXT("%d:%s:%d:%d:%s:"), input.Slot, *input.Parameter.Name.ToString(),
+                static_cast<int32>(input.Parameter.Association), input.Parameter.Index, *input.Kind);
+            const auto value = draw.Values.FindRef(input.Id);
+            for (auto lane = 0; lane < 4; ++lane)
+            {
+                const auto laneValue = static_cast<float>(value[lane]);
+                auto bits = uint32{};
+                FMemory::Memcpy(&bits, &laneValue, sizeof(bits));
+                key.Appendf(TEXT("%08x"), bits);
+            }
+            key.AppendChar(TEXT(';'));
+        }
+        for (const auto& target : draw.TintTargets)
+        {
+            key.Appendf(TEXT("%d:%s:"), target.Key, *target.Value.ToString());
+            const auto tint = draw.Values.FindRef(TEXT("tint"));
+            for (auto lane = 0; lane < 4; ++lane)
+            {
+                const auto laneValue = static_cast<float>(tint[lane]);
+                auto bits = uint32{};
+                FMemory::Memcpy(&bits, &laneValue, sizeof(bits));
+                key.Appendf(TEXT("%08x"), bits);
+            }
+            key.AppendChar(TEXT(';'));
+        }
+        for (const auto& texture : draw.Textures)
+        {
+            key.Appendf(TEXT("%d:%s:%llu;"), texture.Slot, *texture.Parameter.Name.ToString(),
+                static_cast<unsigned long long>(reinterpret_cast<UPTRINT>(texture.Texture.Get())));
+        }
+        return key;
+    }
 
     template<class T> T* Resolve(const FString& identity, ELibraPackageResourceKind kind,
         bool bAllowPackageOverride = true)
@@ -565,6 +629,17 @@ struct FLibraSpawnableRenderState::FImpl
                 if (!texture.Texture.IsValid()) return Fail(TEXT("Missing Texture binding: ") + path);
                 draw.Textures.Add(MoveTemp(texture));
             }
+            draw.bOpaqueBatchCandidate = !draw.bSprite && !draw.bBillboard;
+            for (const auto& material : draw.Materials)
+            {
+                const auto blendMode = material->GetBlendMode();
+                if ((blendMode != BLEND_Opaque && blendMode != BLEND_Masked) ||
+                    !material->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes))
+                {
+                    draw.bOpaqueBatchCandidate = false;
+                    break;
+                }
+            }
             definition.Draws.Add(MoveTemp(draw));
         }
         if (bAllowCpuParticles && cpuParticles)
@@ -762,17 +837,22 @@ struct FLibraSpawnableRenderState::FImpl
         instance->Container = container; instance->Id = id;
         instance->Started = instance->Previous = time;
         instance->Definition = definition->Get();
+        auto* root = actor->GetRootComponent();
+        const auto parentTransform = root ? root->GetComponentTransform() : actor->GetActorTransform();
+        instance->PresentationRootTransform = parentTransform;
+        instance->bHasPresentationRootTransform = true;
         for (const auto& plane : instance->Definition->FlexiblePlanes)
         {
-            auto* root = actor->GetRootComponent();
             if (!root)
             {
                 return Fail(TEXT("Flexible Plane rendering requires an actor root component."));
             }
             auto renderer = TUniquePtr<FLibraFlexiblePlaneRenderer>{};
             auto error = FString{};
-            if (!FLibraFlexiblePlaneRenderer::Create(*actor, *root, plane.Definition,
-                plane.Texture.Get(), plane.Material.Get(), FName(TEXT("Texture")), renderer, error))
+            const auto transform = root->GetComponentTransform();
+            if (!FLibraFlexiblePlaneRenderer::Create(Owner, plane.Definition,
+                plane.Texture.Get(), plane.Material.Get(), transform,
+                FName(TEXT("Texture")), renderer, error))
             {
                 return Fail(error);
             }
@@ -780,33 +860,18 @@ struct FLibraSpawnableRenderState::FImpl
         }
         for (const auto& system : instance->Definition->CpuParticles)
         {
-            auto* root = actor->GetRootComponent();
             if (!root)
             {
                 return Fail(TEXT("CPU particle rendering requires an actor root component."));
             }
             auto& batch = instance->CpuDraws.AddDefaulted_GetRef();
-            batch.Component.Reset(NewObject<UInstancedStaticMeshComponent>(actor, NAME_None, RF_Transient));
-            auto* component = batch.Component.Get();
-            component->SetMobility(EComponentMobility::Movable);
-            component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-            component->SetCanEverAffectNavigation(false);
-            component->SetCastShadow(false);
-            component->SetupAttachment(root);
-            component->SetAbsolute(false, true, true);
-            component->SetStaticMesh(system.Mesh.Get());
-            component->NumCustomDataFloats = 4;
-            auto* material = UMaterialInstanceDynamic::Create(system.Material.Get(), component);
+            auto* material = UMaterialInstanceDynamic::Create(system.Material.Get(), &Owner);
             if (!material)
             {
                 return Fail(TEXT("Could not create a CPU particle batch material."));
             }
             material->SetTextureParameterValue(TEXT("Texture"), system.Texture.Get());
-            component->SetMaterial(0, material);
-            component->ComponentTags.Add(TEXT("LibraCpuParticleRenderer"));
-            component->ComponentTags.Add(FName(*system.Id.ToString()));
-            actor->AddInstanceComponent(component);
-            component->RegisterComponent();
+            batch.Material.Reset(material);
         }
         if (instance->Definition->DebugConfiguration && !Owner.IsPreviewDebugDrawSuppressed())
         {
@@ -823,25 +888,34 @@ struct FLibraSpawnableRenderState::FImpl
         }
         for (const auto& draw : instance->Definition->Draws)
         {
-            auto component = TStrongObjectPtr<UStaticMeshComponent>(
-                NewObject<UStaticMeshComponent>(actor, NAME_None, RF_Transient));
-            component->SetMobility(EComponentMobility::Movable);
-            component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-            component->SetupAttachment(actor->GetRootComponent());
-            component->SetStaticMesh(draw.Mesh.Get());
-            if (draw.SpriteAnimation.Version == 2)
-                component->SetTranslucentSortPriority(draw.SpriteAnimation.Composition.Order);
-            component->SetVisibility(false);
-            component->ComponentTags.Add(TEXT("LibraSpawnableRenderer"));
-            component->ComponentTags.Add(FName(*draw.Id.ToString()));
+            auto materialInstances = TArray<TStrongObjectPtr<UMaterialInstanceDynamic>>{};
+            auto materialOverrides = TArray<TObjectPtr<UMaterialInterface>>{};
+            materialInstances.Reserve(draw.Materials.Num());
+            materialOverrides.Reserve(draw.Materials.Num());
             for (auto slot = 0; slot < draw.Materials.Num(); ++slot)
-                component->SetMaterial(slot, UMaterialInstanceDynamic::Create(draw.Materials[slot].Get(), component.Get()));
+            {
+                auto* material = UMaterialInstanceDynamic::Create(draw.Materials[slot].Get(), &Owner);
+                if (!material)
+                {
+                    return Fail(TEXT("Could not create a native Draw material instance."));
+                }
+                materialInstances.Emplace(material);
+                materialOverrides.Add(material);
+            }
             for (const auto& texture : draw.Textures)
-                CastChecked<UMaterialInstanceDynamic>(component->GetMaterial(texture.Slot))
+                materialInstances[texture.Slot].Get()
                     ->SetTextureParameterValueByInfo(texture.Parameter, texture.Texture.Get());
-            actor->AddInstanceComponent(component.Get());
-            component->RegisterComponent();
-            instance->Draws.Add(MoveTemp(component));
+            auto primitive = MakeUnique<FLibraNativeMeshPrimitive>();
+            if (!primitive->Create(Owner, draw.Mesh.Get(), MakeArrayView(materialOverrides),
+                parentTransform,
+                draw.SpriteAnimation.Version == 2 ? draw.SpriteAnimation.Composition.Order : 0,
+                draw.Id, container, id))
+            {
+                return Fail(TEXT("Could not register a native StaticMesh scene primitive."));
+            }
+            instance->DrawMaterials.Add(MoveTemp(materialInstances));
+            instance->Draws.Add(MoveTemp(primitive));
+            instance->DrawLocalTransforms.Add(FTransform::Identity);
         }
         for (auto gpuIndex = 0; gpuIndex < instance->Definition->Gpu.Num(); ++gpuIndex)
         {
@@ -869,6 +943,127 @@ struct FLibraSpawnableRenderState::FImpl
         return true;
     }
 
+    bool UpdateOpaqueDrawBatches(FInstance* instance)
+    {
+        auto* actor = Owner.GetOwner();
+        auto* root = actor ? actor->GetRootComponent() : nullptr;
+        if (!actor)
+        {
+            return Fail(TEXT("Opaque Draw batching lost its actor owner."));
+        }
+        const auto rootTransform = root ? root->GetComponentTransform() : actor->GetActorTransform();
+        const auto visible = !actor->IsHidden() && (!root || root->IsVisible());
+        auto groups = TMap<FString, TArray<int32>>{};
+        for (auto drawIndex = 0; drawIndex < instance->Definition->Draws.Num(); ++drawIndex)
+        {
+            const auto& draw = instance->Definition->Draws[drawIndex];
+            if (draw.bOpaqueBatchCandidate)
+            {
+                const auto worldTransform = instance->DrawLocalTransforms[drawIndex] * rootTransform;
+                if (LibraOpaqueBatching::HasSafePositiveInstanceTransform(worldTransform, rootTransform))
+                {
+                    groups.FindOrAdd(DrawBatchKey(draw)).Add(drawIndex);
+                }
+            }
+        }
+
+        auto previousBatches = MoveTemp(instance->DrawBatches);
+        auto nextBatches = TArray<FDrawBatch>{};
+        auto batchedDraws = TSet<int32>{};
+        for (const auto& entry : groups)
+        {
+            if (entry.Value.Num() < 2)
+            {
+                continue;
+            }
+            auto batch = FDrawBatch{};
+            auto existingIndex = previousBatches.IndexOfByPredicate(
+                [&](const auto& item) { return item.Key == entry.Key; });
+            const auto isNewBatch = existingIndex == INDEX_NONE;
+            if (existingIndex != INDEX_NONE)
+            {
+                batch = MoveTemp(previousBatches[existingIndex]);
+                previousBatches[existingIndex].Key.Reset();
+            }
+            else
+            {
+                batch.Primitive = MakeUnique<FLibraNativeInstancedMeshPrimitive>();
+            }
+            batch.Key = entry.Key;
+            batch.DrawIndices = entry.Value;
+            batch.Transforms.Reset();
+            batch.CustomData.Reset();
+            batch.Transforms.Reserve(entry.Value.Num());
+            batch.CustomData.Reserve(entry.Value.Num());
+            for (const auto drawIndex : entry.Value)
+            {
+                batch.Transforms.Add(instance->DrawLocalTransforms[drawIndex] * rootTransform);
+                batch.CustomData.Add(FLinearColor::Transparent);
+                batchedDraws.Add(drawIndex);
+                instance->Draws[drawIndex].Reset();
+            }
+            auto submitted = false;
+            if (isNewBatch)
+            {
+                const auto representative = entry.Value[0];
+                auto materials = TArray<TObjectPtr<UMaterialInterface>>{};
+                materials.Reserve(instance->DrawMaterials[representative].Num());
+                for (const auto& material : instance->DrawMaterials[representative])
+                {
+                    materials.Add(material.Get());
+                }
+                submitted = batch.Primitive->CreateWithInstances(Owner,
+                    instance->Definition->Draws[representative].Mesh.Get(),
+                    MakeArrayView(materials), MakeArrayView(batch.Transforms),
+                    MakeArrayView(batch.CustomData), rootTransform);
+            }
+            else
+            {
+                submitted = batch.Primitive.IsValid() &&
+                    batch.Primitive->Update(batch.Transforms, batch.CustomData, rootTransform);
+            }
+            if (!submitted)
+            {
+                return Fail(TEXT("Could not update a compatible opaque StaticMesh batch."));
+            }
+            batch.Primitive->SetVisible(visible);
+            nextBatches.Add(MoveTemp(batch));
+        }
+
+        for (auto drawIndex = 0; drawIndex < instance->Definition->Draws.Num(); ++drawIndex)
+        {
+            if (batchedDraws.Contains(drawIndex))
+            {
+                continue;
+            }
+            const auto& draw = instance->Definition->Draws[drawIndex];
+            if (!instance->Draws[drawIndex])
+            {
+                auto materials = TArray<TObjectPtr<UMaterialInterface>>{};
+                materials.Reserve(instance->DrawMaterials[drawIndex].Num());
+                for (const auto& material : instance->DrawMaterials[drawIndex])
+                {
+                    materials.Add(material.Get());
+                }
+                instance->Draws[drawIndex] = MakeUnique<FLibraNativeMeshPrimitive>();
+                if (!instance->Draws[drawIndex]->Create(Owner, draw.Mesh.Get(),
+                    MakeArrayView(materials), instance->DrawLocalTransforms[drawIndex] * rootTransform,
+                    draw.SpriteAnimation.Version == 2 ? draw.SpriteAnimation.Composition.Order : 0,
+                    draw.Id, instance->Container, instance->Id))
+                {
+                    return Fail(TEXT("Could not restore a native primitive for an unbatched Draw."));
+                }
+            }
+            else
+            {
+                instance->Draws[drawIndex]->SetTransform(instance->DrawLocalTransforms[drawIndex] * rootTransform);
+            }
+            instance->Draws[drawIndex]->SetVisible(visible);
+        }
+        instance->DrawBatches = MoveTemp(nextBatches);
+        return true;
+    }
+
     bool Update(double time)
     {
         for (auto& instance : Instances)
@@ -878,6 +1073,13 @@ struct FLibraSpawnableRenderState::FImpl
             {
                 auto& plane = instance->FlexiblePlanes[planeIndex];
                 auto cameraPosition = FVector::ZeroVector;
+                auto* actor = Owner.GetOwner();
+                auto* root = actor ? actor->GetRootComponent() : nullptr;
+                if (!root)
+                {
+                    return Fail(TEXT("Flexible Plane actor root was destroyed externally."));
+                }
+                const auto transform = root->GetComponentTransform();
                 auto* overrideCamera = Owner.EffectCameraOverride.Get();
                 auto* controller = Owner.GetWorld() ? Owner.GetWorld()->GetFirstPlayerController() : nullptr;
                 auto* camera = controller ? controller->PlayerCameraManager.Get() : nullptr;
@@ -894,7 +1096,7 @@ struct FLibraSpawnableRenderState::FImpl
                     return Fail(TEXT("Flexible Plane rendering requires a current effect or player camera."));
                 }
                 auto error = FString{};
-                if (!plane->Update(time - instance->Started, cameraPosition,
+                if (!plane->Update(time - instance->Started, transform, cameraPosition,
                     [this, &instance](const uint8* source, double* output, uint8& width) -> LibraResult
                     {
                         auto id = std::array<uint8, 16>{};
@@ -931,9 +1133,11 @@ struct FLibraSpawnableRenderState::FImpl
             for (auto index = 0; index < instance->Draws.Num(); ++index)
             {
                 auto& draw = instance->Definition->Draws[index];
-                auto component = instance->Draws[index].Get();
-                if (!IsValid(component) || !component->IsRegistered())
-                    return Fail(TEXT("An owned renderer was destroyed externally."));
+                auto* primitive = instance->Draws[index].Get();
+                if ((primitive && !primitive->HasSceneProxy()) ||
+                    (!primitive && !draw.bOpaqueBatchCandidate))
+                    return Fail(TEXT("An owned native scene primitive was removed externally."));
+                auto& materials = instance->DrawMaterials[index];
                 auto& values = draw.Values;
                 for (const auto& input : draw.Inputs)
                 {
@@ -953,7 +1157,7 @@ struct FLibraSpawnableRenderState::FImpl
                     values.FindChecked(input.Id) = value;
                     if (input.bMaterial)
                     {
-                        auto material = CastChecked<UMaterialInstanceDynamic>(component->GetMaterial(input.Slot));
+                        auto* material = materials[input.Slot].Get();
                         if (input.Kind == TEXT("scalar")) material->SetScalarParameterValueByInfo(input.Parameter, value.X);
                         else material->SetVectorParameterValueByInfo(input.Parameter, FLinearColor(value.X, value.Y, value.Z, value.W));
                     }
@@ -1020,17 +1224,31 @@ struct FLibraSpawnableRenderState::FImpl
                             !liberafx::sampleSpriteAtlas(frame, uint32(columns), uint32(rows), atlas))
                             return Fail(TEXT("Invalid legacy sprite atlas settings."));
                     }
-                    CastChecked<UMaterialInstanceDynamic>(component->GetMaterial(0))->SetVectorParameterValue(
+                    materials[0].Get()->SetVectorParameterValue(
                         TEXT("AtlasRect"), FLinearColor(atlas.uvRect[0], atlas.uvRect[1], atlas.uvRect[2], atlas.uvRect[3]));
                 }
-                component->SetRelativeTransform(pose);
                 if (auto tint = values.Find(tintId))
                     for (const auto& target : draw.TintTargets)
                     {
-                        auto material = CastChecked<UMaterialInstanceDynamic>(component->GetMaterial(target.Key));
+                        auto* material = materials[target.Key].Get();
                         material->SetVectorParameterValue(target.Value, FLinearColor(tint->X, tint->Y, tint->Z, tint->W));
                     }
-                component->SetVisibility(true);
+                auto* actor = Owner.GetOwner();
+                auto* root = actor ? actor->GetRootComponent() : nullptr;
+                if (!actor)
+                {
+                    return Fail(TEXT("Native mesh rendering lost its actor owner."));
+                }
+                const auto rootTransform = root ? root->GetComponentTransform() : actor->GetActorTransform();
+                instance->DrawLocalTransforms[index] = pose;
+                if (primitive)
+                {
+                    primitive->SetTransform(pose * rootTransform);
+                }
+            }
+            if (!UpdateOpaqueDrawBatches(instance.Get()))
+            {
+                return false;
             }
             if (instance->CpuDraws.Num() != instance->Definition->CpuParticles.Num())
             {
@@ -1055,12 +1273,11 @@ struct FLibraSpawnableRenderState::FImpl
                     return Fail(TEXT("CPU particle count exceeds the native system capacity limit."));
                 }
                 auto& batch = instance->CpuDraws[systemIndex];
-                auto* component = batch.Component.Get();
                 auto* actor = Owner.GetOwner();
                 auto* root = actor ? actor->GetRootComponent() : nullptr;
-                if (!IsValid(component) || !component->IsRegistered() || !root)
+                if (!batch.Material.IsValid() || !root)
                 {
-                    return Fail(TEXT("An owned CPU particle batch or its actor root was destroyed externally."));
+                    return Fail(TEXT("An owned CPU particle primitive or its actor root was destroyed externally."));
                 }
                 auto* world = Owner.GetWorld();
                 auto* controller = world ? world->GetFirstPlayerController() : nullptr;
@@ -1111,45 +1328,22 @@ struct FLibraSpawnableRenderState::FImpl
                     batch.Colors.Emplace(static_cast<float>(colorR), static_cast<float>(colorG),
                         static_cast<float>(colorB), static_cast<float>(colorA));
                 }
-                const auto previousCount = component->GetInstanceCount();
-                if (count < previousCount)
+                if (!batch.Primitive.IsValid() && !batch.Transforms.IsEmpty())
                 {
-                    batch.Removed.Reset(previousCount - count);
-                    for (auto index = previousCount - 1; index >= count; --index)
+                    batch.Primitive = MakeUnique<FLibraNativeInstancedMeshPrimitive>();
+                    auto materialOverrides = TArray<TObjectPtr<UMaterialInterface>>{
+                        batch.Material.Get()};
+                    if (!batch.Primitive->CreateWithInstances(Owner, system.Mesh.Get(),
+                        MakeArrayView(materialOverrides), MakeArrayView(batch.Transforms),
+                        MakeArrayView(batch.Colors), ownerTransform))
                     {
-                        batch.Removed.Add(index);
-                    }
-                    if (!component->RemoveInstances(batch.Removed, true))
-                    {
-                        return Fail(TEXT("Could not shrink a CPU particle batch."));
+                        return Fail(TEXT("Could not register the initial native CPU particle instances."));
                     }
                 }
-                else if (count > previousCount)
+                else if (batch.Primitive.IsValid() &&
+                    !batch.Primitive->Update(batch.Transforms, batch.Colors, ownerTransform))
                 {
-                    batch.Growth.Reset(count - previousCount);
-                    batch.Growth.Append(batch.Transforms.GetData() + previousCount, count - previousCount);
-                    component->AddInstances(batch.Growth, false, true, false);
-                    if (component->GetInstanceCount() != count)
-                    {
-                        return Fail(TEXT("Could not grow a CPU particle batch."));
-                    }
-                }
-                if (count != 0)
-                {
-                    if (!component->BatchUpdateInstancesTransforms(0, batch.Transforms, true, false, true))
-                    {
-                        return Fail(TEXT("Could not update CPU particle batch transforms."));
-                    }
-                    for (auto index = 0; index < count; ++index)
-                    {
-                        const auto& color = batch.Colors[index];
-                        const float channels[]{color.R, color.G, color.B, color.A};
-                        if (!component->SetCustomData(index, MakeArrayView(channels), false))
-                        {
-                            return Fail(TEXT("Could not update CPU particle batch RGBA."));
-                        }
-                    }
-                    component->MarkRenderInstancesDirty();
+                    return Fail(TEXT("Could not submit CPU particle transforms and RGBA custom data."));
                 }
             }
             auto delta = time - instance->Previous;
@@ -1170,6 +1364,11 @@ struct FLibraSpawnableRenderState::FImpl
                         ? TEXT("GPU draw Matrix binding is invalid.") : gpu->LastError);
                 if (delta > 0) gpu->Tick(static_cast<float>(delta));
             }
+            auto* ownerActor = Owner.GetOwner();
+            auto* ownerRoot = ownerActor ? ownerActor->GetRootComponent() : nullptr;
+            instance->PresentationRootTransform = ownerRoot
+                ? ownerRoot->GetComponentTransform() : ownerActor->GetActorTransform();
+            instance->bHasPresentationRootTransform = true;
             instance->Previous = time;
         }
         return true;
@@ -1230,6 +1429,100 @@ bool FLibraSpawnableRenderState::Update(double time, bool rootFinished)
     return Impl->Update(time);
 }
 
+void FLibraSpawnableRenderState::UpdateOwnerPresentation()
+{
+    check(IsInGameThread());
+    auto* actor = Impl->Owner.GetOwner();
+    if (!actor)
+    {
+        return;
+    }
+    auto* root = actor->GetRootComponent();
+    const auto rootTransform = root ? root->GetComponentTransform() : actor->GetActorTransform();
+    const auto visible = !actor->IsHidden() && (!root || root->IsVisible());
+    for (auto& instance : Impl->Instances)
+    {
+        const auto transformChanged = !instance->bHasPresentationRootTransform ||
+            !instance->PresentationRootTransform.Equals(rootTransform);
+        for (auto drawIndex = 0; drawIndex < instance->Draws.Num(); ++drawIndex)
+        {
+            auto& primitive = instance->Draws[drawIndex];
+            if (primitive)
+            {
+                if (transformChanged)
+                {
+                    primitive->SetTransform(instance->DrawLocalTransforms[drawIndex] * rootTransform);
+                }
+                primitive->SetVisible(visible);
+            }
+        }
+        for (auto& batch : instance->DrawBatches)
+        {
+            if (!batch.Primitive.IsValid())
+            {
+                continue;
+            }
+            if (transformChanged)
+            {
+                batch.Transforms.Reset();
+                batch.CustomData.Reset();
+                batch.Transforms.Reserve(batch.DrawIndices.Num());
+                batch.CustomData.Reserve(batch.DrawIndices.Num());
+                for (const auto drawIndex : batch.DrawIndices)
+                {
+                    batch.Transforms.Add(instance->DrawLocalTransforms[drawIndex] * rootTransform);
+                    batch.CustomData.Add(FLinearColor::Transparent);
+                }
+                if (!batch.Primitive->Update(batch.Transforms, batch.CustomData, rootTransform))
+                {
+                    Impl->Fail(TEXT("Could not update cached opaque batch after owner transform change."));
+                    return;
+                }
+            }
+            batch.Primitive->SetVisible(visible);
+        }
+        if (transformChanged)
+        {
+            for (auto& batch : instance->CpuDraws)
+            {
+                if (!batch.Primitive.IsValid())
+                {
+                    continue;
+                }
+                for (auto& transform : batch.Transforms)
+                {
+                    transform = transform.GetRelativeTransform(instance->PresentationRootTransform) * rootTransform;
+                }
+                if (!batch.Primitive->Update(batch.Transforms, batch.Colors, rootTransform))
+                {
+                    Impl->Fail(TEXT("Could not update cached CPU particle presentation after owner transform change."));
+                    return;
+                }
+            }
+            for (auto& plane : instance->FlexiblePlanes)
+            {
+                plane->SetOwnerPresentation(rootTransform, visible);
+            }
+            instance->PresentationRootTransform = rootTransform;
+            instance->bHasPresentationRootTransform = true;
+        }
+        else
+        {
+            for (auto& batch : instance->CpuDraws)
+            {
+                if (batch.Primitive.IsValid())
+                {
+                    batch.Primitive->SetVisible(visible);
+                }
+            }
+            for (auto& plane : instance->FlexiblePlanes)
+            {
+                plane->SetOwnerPresentation(rootTransform, visible);
+            }
+        }
+    }
+}
+
 int32 FLibraSpawnableRenderState::DrawCount() const
 {
     auto count = 0;
@@ -1245,6 +1538,98 @@ void FLibraSpawnableRenderState::ClearPreviewDebugDraw()
 {
     check(IsInGameThread());
     for (auto& instance : Impl->Instances) instance->Debug.Reset();
+}
+
+int32 FLibraSpawnableRenderState::NativeDrawPrimitiveCount() const
+{
+    auto count = 0;
+    for (const auto& instance : Impl->Instances)
+    {
+        count += instance->DrawBatches.Num();
+        for (const auto& draw : instance->Draws)
+        {
+            count += draw.IsValid() ? 1 : 0;
+        }
+    }
+    return count;
+}
+
+void FLibraSpawnableRenderState::GetNativeRenderSubmissionStats(int32& logicalRenderObjects,
+    int32& nativePrimitives, int32& opaqueBatches, int32& cpuParticleBatches,
+    int32& liveCpuParticles, int32& allocatedInstanceCapacity, uint64& submittedBytes) const
+{
+    logicalRenderObjects = 0;
+    nativePrimitives = 0;
+    opaqueBatches = 0;
+    cpuParticleBatches = 0;
+    liveCpuParticles = 0;
+    allocatedInstanceCapacity = 0;
+    submittedBytes = 0;
+    for (const auto& instance : Impl->Instances)
+    {
+        logicalRenderObjects += instance->Definition->Draws.Num() +
+            instance->Definition->CpuParticles.Num() + instance->Definition->FlexiblePlanes.Num();
+        opaqueBatches += instance->DrawBatches.Num();
+        nativePrimitives += instance->DrawBatches.Num();
+        for (const auto& draw : instance->Draws)
+        {
+            if (draw)
+            {
+                ++nativePrimitives;
+                submittedBytes += draw->SubmittedBytes;
+            }
+        }
+        for (const auto& batch : instance->DrawBatches)
+        {
+            if (batch.Primitive.IsValid())
+            {
+                allocatedInstanceCapacity += batch.Primitive->GetAllocatedInstanceCapacity();
+                submittedBytes += batch.Primitive->SubmittedBytes;
+            }
+        }
+        for (const auto& batch : instance->CpuDraws)
+        {
+            ++cpuParticleBatches;
+            ++nativePrimitives;
+            if (batch.Primitive.IsValid())
+            {
+                liveCpuParticles += batch.Primitive->LiveInstanceCount;
+                allocatedInstanceCapacity += batch.Primitive->GetAllocatedInstanceCapacity();
+                submittedBytes += batch.Primitive->SubmittedBytes;
+            }
+        }
+        nativePrimitives += instance->FlexiblePlanes.Num();
+        for (const auto& plane : instance->FlexiblePlanes)
+        {
+            submittedBytes += plane->GetSubmittedBytes();
+        }
+    }
+}
+
+void FLibraSpawnableRenderState::GetDrawSnapshots(TArray<FTransform>& transforms,
+    TArray<FBoxSphereBounds>& bounds, TArray<FGuid>& drawIds, TArray<FGuid>& containerIds,
+    TArray<int64>& instanceIds) const
+{
+    check(IsInGameThread());
+    transforms.Reset();
+    bounds.Reset();
+    drawIds.Reset();
+    containerIds.Reset();
+    instanceIds.Reset();
+    for (const auto& instance : Impl->Instances)
+    {
+        for (auto drawIndex = 0; drawIndex < instance->Definition->Draws.Num(); ++drawIndex)
+        {
+            const auto& draw = instance->Definition->Draws[drawIndex];
+            const auto worldTransform = instance->DrawLocalTransforms[drawIndex] *
+                instance->PresentationRootTransform;
+            transforms.Add(worldTransform);
+            bounds.Add(draw.Mesh->GetBounds().TransformBy(worldTransform));
+            drawIds.Add(draw.Id);
+            containerIds.Add(instance->Container);
+            instanceIds.Add(instance->Id);
+        }
+    }
 }
 
 int32 FLibraSpawnableRenderState::GpuCount() const

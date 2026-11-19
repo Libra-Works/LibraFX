@@ -135,7 +135,10 @@ namespace LiberaFx.Unity.Editor
                 switch (phase)
                 {
                     case 0:
-                        if (!Near(FindOne(rootDrawId).transform.localPosition.x, 10)) return;
+                        if (!Near(MatrixPosition(rootDrawId, 0).x, 10))
+                        {
+                            return;
+                        }
                         Require(gameIoEvents.Any(item => item.PortName == "echo" &&
                             item.Values.Length > 0 && Near(item.Values[0], 10)),
                             "Root named Output Property 'echo' did not expose its port name and value.");
@@ -145,20 +148,31 @@ namespace LiberaFx.Unity.Editor
                         break;
                     case 1:
                         if (hostEvents.Count(item => item.Kind == 1) < 1 ||
-                            CountNamed(captureDrawId) < 1 || CountNamed(liveDrawId) < 1) return;
+                            component.RenderStatistics.activeSubmissions < 3)
+                        {
+                            return;
+                        }
                         Require(hostEvents[0].ContainerId.SequenceEqual(GuidBytes(templateId)),
                             "The first Spawn event did not identify the expected template.");
-                        Require(Near(FindOne(captureDrawId).transform.localPosition.x, 10) &&
-                            Near(FindOne(liveDrawId).transform.localPosition.x, 10),
+                        var firstInstanceId = hostEvents.First(item => item.Kind == 1).InstanceId;
+                        Require(Near(MatrixPosition(captureDrawId, firstInstanceId).x, 10) &&
+                            Near(MatrixPosition(liveDrawId, firstInstanceId).x, 10),
                             "Captured and live draw values did not begin at the first Game Property value.");
                         Require(component.SetGameProperty("position", new[] { 20d }) == NativeResult.Ok,
                             "Could not update root Game Property 'position'.");
                         Next(2, 1);
                         break;
                     case 2:
-                        if (!Near(FindOne(rootDrawId).transform.localPosition.x, 20) ||
-                            !Near(FindOne(liveDrawId).transform.localPosition.x, 20)) return;
-                        Require(Near(FindOne(captureDrawId).transform.localPosition.x, 10),
+                        if (!Near(MatrixPosition(rootDrawId, 0).x, 20))
+                        {
+                            return;
+                        }
+                        var liveInstanceId = hostEvents.First(item => item.Kind == 1).InstanceId;
+                        if (!Near(MatrixPosition(liveDrawId, liveInstanceId).x, 20))
+                        {
+                            return;
+                        }
+                        Require(Near(MatrixPosition(captureDrawId, liveInstanceId).x, 10),
                             "Captured Spawn Input changed after the root property update.");
                         Require(gameIoEvents.Any(item => item.PortName == "echo" &&
                             item.Values.Length > 0 && Near(item.Values[0], 20)),
@@ -168,24 +182,33 @@ namespace LiberaFx.Unity.Editor
                         Next(3, 1);
                         break;
                     case 3:
-                        if (hostEvents.Count(item => item.Kind == 1) < 2 ||
-                            CountNamed(captureDrawId) < 2 || CountNamed(liveDrawId) < 2) return;
-                        var captures = FindAll(captureDrawId);
-                        var lives = FindAll(liveDrawId);
-                        Require(captures.Count == 2 && lives.Count == 2 &&
-                            captures.Any(item => Near(item.transform.localPosition.x, 10)) &&
-                            captures.Any(item => Near(item.transform.localPosition.x, 20)) &&
-                            lives.All(item => Near(item.transform.localPosition.x, 20)),
+                        var spawnInstances = hostEvents.Where(item => item.Kind == 1).ToArray();
+                        if (spawnInstances.Length < 2 ||
+                            component.RenderStatistics.activeSubmissions < 5)
+                        {
+                            return;
+                        }
+                        var capturePositions = spawnInstances.Select(item =>
+                            MatrixPosition(captureDrawId, item.InstanceId).x).ToArray();
+                        var livePositions = spawnInstances.Select(item =>
+                            MatrixPosition(liveDrawId, item.InstanceId).x).ToArray();
+                        Require(capturePositions.Length == 2 &&
+                            capturePositions.Any(value => Near(value, 10)) &&
+                            capturePositions.Any(value => Near(value, 20)) &&
+                            livePositions.All(value => Near(value, 20)),
                             "Per-instance captured/live input values were not isolated across two Spawn events.");
                         Require(hostEvents[0].InstanceId != hostEvents[1].InstanceId &&
                             hostEvents[0].ContainerId.SequenceEqual(hostEvents[1].ContainerId),
                             "Two Spawn events did not create separate instances of the same template.");
-                        Require(CountRenderers() == 5,
-                            "Expected one root renderer and two renderers per Spawnable instance.");
-                        Require(component.Stop() == NativeResult.Ok && CountRenderers() == 0,
-                            "Explicit Stop left root or per-instance Unity renderers behind.");
+                        Require(CountRenderers() == 0 && CountMeshFilters() == 0 &&
+                            component.RenderStatistics.activeSubmissions == 5,
+                            "Direct Draw scopes created a MeshRenderer/MeshFilter or wrong active submission count.");
+                        Require(component.Stop() == NativeResult.Ok && CountRenderers() == 0 &&
+                            CountMeshFilters() == 0 && component.RenderStatistics.activeSubmissions == 0,
+                            "Explicit Stop left a renderer object or direct submission behind.");
                         WriteProof("Root render follows named Game Property; Output Property emits 'echo'; " +
-                            "captured/live Spawn Inputs remain independent across two instances; Stop releases all five renderers.");
+                            "captured/live Spawn Inputs remain independent across two instances; Draw scopes use five " +
+                            "direct submissions and Stop releases them without MeshRenderer/MeshFilter objects.");
                         Finish(null);
                         break;
                 }
@@ -222,24 +245,15 @@ namespace LiberaFx.Unity.Editor
             return bindingsAsset;
         }
 
-        private static Transform FindOne(string nodeId)
+        private static Vector3 MatrixPosition(string nodeId, ulong instanceId)
         {
-            var values = FindAll(nodeId);
-            Require(values.Count == 1, "Expected exactly one active renderer for node " + nodeId +
-                "; found " + values.Count + ".");
-            return values[0].transform;
+            Require(component.TryGetRenderMatrix(nodeId, instanceId, out var matrix),
+                "Expected a direct render transform for node " + nodeId + " and instance " + instanceId + ".");
+            return matrix.MultiplyPoint3x4(Vector3.zero);
         }
 
-        private static List<GameObject> FindAll(string nodeId)
-        {
-            var name = "Libera FX Model " + nodeId;
-            return target.GetComponentsInChildren<MeshRenderer>()
-                .Where(renderer => renderer.gameObject.name == name)
-                .Select(renderer => renderer.gameObject).ToList();
-        }
-
-        private static int CountNamed(string nodeId) => FindAll(nodeId).Count;
         private static int CountRenderers() => target.GetComponentsInChildren<MeshRenderer>().Length;
+        private static int CountMeshFilters() => target.GetComponentsInChildren<MeshFilter>().Length;
 
         private static byte[] GuidBytes(string value)
         {

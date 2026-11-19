@@ -76,6 +76,8 @@ See [Engine integration](engine-integration.md) for a first playback example.
 | Texture / mesh / material | A texture supplies image data, a mesh describes a shape, and a material controls how a surface looks when drawn. |
 | Sprite / atlas / cell | A sprite is a flat image used for drawing. An atlas packs several images into one texture; a cell is the rectangular part of that texture used for a frame or part. |
 | Rendering / preview | Rendering produces visible pixels. Preview lets you inspect the effect before shipping. A connected preview client or a successful transfer does not prove that the engine drew the effect. |
+| Draw call / batching / instancing | A draw call asks the GPU to draw something. Batching groups compatible work; instancing draws copies of the same mesh using different transforms or other supported per-copy values. Different materials or transparent ordering can prevent grouping. |
+| SceneProxy / Graphics / RenderingServer | Engine-side drawing interfaces used by Unreal, Unity, and Godot respectively. They can accept rendering data without creating a full scene component for every drawn item. Their use alone does not guarantee fewer draw calls or better performance. |
 | Ribbon / point history | A ribbon is a strip joining a sequence of points. A point history records recent positions, so moving one input can leave a trail. [Flexible Plane Draw](flexible-plane-draw.md) turns these points into visible triangles. |
 
 <span id="gpu"></span>
@@ -85,7 +87,10 @@ See [Engine integration](engine-integration.md) for a first playback example.
 | Term | What it means |
 | --- | --- |
 | CPU / GPU | The CPU handles general game and graph execution. The GPU can do many similar calculations in parallel, such as updating the positions of thousands of particles. |
+| Flow / pass | A Flow shows processing stages and their relationships. A pass is one processing step, such as updating particle positions or drawing them. A stage relationship is not a CPU Signal connection. |
 | Kernel / attribute / uniform | A kernel is a calculation run over particles. An attribute is a value stored per particle, such as Velocity. A uniform supplies a common value to the kernel, such as the emitter position or `deltaTime`. |
+| Resource / buffer / render target | A resource is data used by the GPU. A buffer stores values such as particle positions. A render target receives drawing output; a RenderTexture keeps that output in a texture instead of displaying it directly. Not every resource is a render target. |
+| Ping-pong buffers / synchronization | Ping-pong uses two storage areas: read the old state from one and write the new state to the other, then swap their roles. Synchronization ensures later GPU work can safely use earlier results. Automatic resource management in the proposed Resources / Targets editor is future work, not an available feature. |
 | Spawn / Update / billboard | GPU **Spawn** sets initial particle values; **Update** changes them over time. **RenderBillboard** draws the resulting particles as flat shapes facing the camera. GPU Spawn initializes particles; a CPU Spawnable Group creates child graph instances. |
 | Typed DSL / IR / shader | The typed DSL is the small language used to author a GPU kernel. IR is the intermediate representation shared by the graph and text workflows. A shader is code intended to run on the GPU; exported source alone is not a playable effect. |
 

@@ -327,14 +327,16 @@ namespace LiberaFx.Unity
         }
     }
 
-    /// <summary>Owner-thread-only, one dynamic mesh and object per draw and instance.</summary>
+    /// <summary>Owner-thread-only dynamic geometry submitted without a renderer GameObject.</summary>
     internal sealed class LiberaFxFlexiblePlaneRenderer : IDisposable
     {
         private readonly LiberaFxPreparedFlexiblePlane definition;
         private readonly LiberaFxFlexiblePlaneHistoryScope history;
-        private readonly GameObject gameObject;
+        private readonly Transform parent;
         private readonly Mesh mesh;
-        private readonly Material material;
+        private readonly LiberaFxDrawPropertyState propertyState;
+        private readonly LiberaFxRenderSubmission submission;
+        private readonly LiberaFxRenderStatisticsCounter statistics;
         private readonly LiberaFxFlexiblePoint[] points;
         private readonly SpriteVertex[] nativeVertices;
         private readonly uint[] nativeIndices;
@@ -346,7 +348,8 @@ namespace LiberaFx.Unity
         private bool disposed;
 
         internal LiberaFxFlexiblePlaneRenderer(Transform parent, LiberaFxPreparedFlexiblePlane definition,
-            LiberaFxFlexiblePlaneHistoryScope history)
+            LiberaFxFlexiblePlaneHistoryScope history,
+            LiberaFxRenderStatisticsCounter statistics = null)
         {
             if (!parent || definition == null || history == null)
             {
@@ -354,44 +357,42 @@ namespace LiberaFx.Unity
             }
             this.definition = definition;
             this.history = history;
+            this.parent = parent;
+            this.statistics = statistics;
             ownerThread = System.Threading.Thread.CurrentThread.ManagedThreadId;
             var capacity = definition.payload.sourceKind == "history" ? definition.payload.capacity : definition.points.Length;
             points = new LiberaFxFlexiblePoint[capacity];
             nativeVertices = new SpriteVertex[capacity * 2];
             nativeIndices = new uint[(capacity - 1) * 6];
-            GameObject createdObject = null;
             Mesh createdMesh = null;
-            Material createdMaterial = null;
             try
             {
-                createdObject = new GameObject("Flexible Plane");
-                createdObject.transform.SetParent(parent, false);
                 createdMesh = new Mesh { name = "Flexible Plane", indexFormat = IndexFormat.UInt32 };
                 createdMesh.MarkDynamic();
-                var filter = createdObject.AddComponent<MeshFilter>();
-                filter.sharedMesh = createdMesh;
-                var renderer = createdObject.AddComponent<MeshRenderer>();
-                createdMaterial = new Material(definition.material);
-                createdMaterial.SetTexture(definition.textureProperty, definition.texture);
-                renderer.sharedMaterial = createdMaterial;
+                vertices.Capacity = nativeVertices.Length;
+                uv.Capacity = nativeVertices.Length;
+                colors.Capacity = nativeVertices.Length;
+                indices.Capacity = nativeIndices.Length;
+                propertyState = new LiberaFxDrawPropertyState(1);
+                propertyState.SetTexture(Shader.PropertyToID(definition.textureProperty), definition.texture);
+                submission = new LiberaFxRenderSubmission(propertyState, statistics);
+                submission.owner = parent;
+                submission.Configure(createdMesh, definition.material, 0,
+                    parent.gameObject.layer, statistics);
             }
             catch
             {
-                UnityEngine.Object.Destroy(createdObject);
-                UnityEngine.Object.Destroy(createdMesh);
-                UnityEngine.Object.Destroy(createdMaterial);
+                DestroyOwned(createdMesh);
                 throw;
             }
-            gameObject = createdObject;
             mesh = createdMesh;
-            material = createdMaterial;
         }
 
         internal void Update(NativeInstance.NativeSpawnableHostBase host, bool root, byte[] container,
             ulong instance, double time)
         {
             if (System.Threading.Thread.CurrentThread.ManagedThreadId != ownerThread ||
-                disposed || host == null || double.IsNaN(time) || double.IsInfinity(time))
+                disposed || !parent || host == null || double.IsNaN(time) || double.IsInfinity(time))
             {
                 throw new InvalidOperationException("Invalid Flexible Plane renderer state or time.");
             }
@@ -442,12 +443,12 @@ namespace LiberaFx.Unity
                 {
                     throw new InvalidOperationException("Flexible Plane camera is unavailable.");
                 }
-                var determinant = gameObject.transform.localToWorldMatrix.determinant;
+                var determinant = parent.localToWorldMatrix.determinant;
                 if (float.IsNaN(determinant) || float.IsInfinity(determinant) || Math.Abs(determinant) < 1e-12f)
                 {
                     throw new InvalidOperationException("Flexible Plane camera transform is singular.");
                 }
-                camera = gameObject.transform.InverseTransformPoint(definition.camera.transform.position);
+                camera = parent.InverseTransformPoint(definition.camera.transform.position);
             }
             var options = new LiberaFxFlexibleOptions
             {
@@ -464,6 +465,11 @@ namespace LiberaFx.Unity
             if (result != NativeResult.Ok)
             {
                 throw new InvalidOperationException("Flexible Plane geometry failed: " + result);
+            }
+            if (counts.vertices == 0 || counts.indices == 0)
+            {
+                submission.enabled = false;
+                return;
             }
             vertices.Clear();
             uv.Clear();
@@ -487,30 +493,54 @@ namespace LiberaFx.Unity
             mesh.SetTriangles(indices, 0);
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
+            submission.layer = parent.gameObject.layer;
+            submission.SetMatrix(parent.localToWorldMatrix);
+            submission.enabled = true;
+            statistics?.GeometryUpload(vertices.Count);
         }
 
         private Vector4 Read(NativeInstance.NativeSpawnableHostBase host, bool root, byte[] container,
             ulong instance, string id)
         {
             var input = definition.byId[id];
-            var values = new double[4];
             if (string.IsNullOrEmpty(input.sourceNodeId))
             {
-                Array.Copy(input.defaults, values, input.width);
+                var defaults = input.defaults;
+                return new Vector4(
+                    input.width > 0 ? Checked(defaults[0]) : 0,
+                    input.width > 1 ? Checked(defaults[1]) : 0,
+                    input.width > 2 ? Checked(defaults[2]) : 0,
+                    input.width > 3 ? Checked(defaults[3]) : 0);
             }
-            else
+            var result = root ? host.ReadRootValue(input.sourceNodeBytes, out var value)
+                : host.ReadChildValue(container, instance, input.sourceNodeBytes, out value);
+            if (result != NativeResult.Ok || value.ComponentCount > 4 ||
+                input.sourceComponent + input.width > value.ComponentCount)
             {
-                var result = root ? host.ReadRootValue(input.sourceNodeBytes, out var value)
-                    : host.ReadChildValue(container, instance, input.sourceNodeBytes, out value);
-                if (result != NativeResult.Ok || value.ComponentCount > 4 ||
-                    input.sourceComponent + input.width > value.ComponentCount)
-                {
-                    throw new InvalidOperationException("Flexible Plane source read failed: " + result);
-                }
-                var lanes = new[] { value.X, value.Y, value.Z, value.W };
-                Array.Copy(lanes, input.sourceComponent, values, 0, input.width);
+                throw new InvalidOperationException("Flexible Plane source read failed: " + result);
             }
-            return new Vector4(Checked(values[0]), Checked(values[1]), Checked(values[2]), Checked(values[3]));
+            return new Vector4(
+                input.width > 0 ? Checked(Component(value, input.sourceComponent)) : 0,
+                input.width > 1 ? Checked(Component(value, input.sourceComponent + 1)) : 0,
+                input.width > 2 ? Checked(Component(value, input.sourceComponent + 2)) : 0,
+                input.width > 3 ? Checked(Component(value, input.sourceComponent + 3)) : 0);
+        }
+
+        private static double Component(NativeValue value, int component)
+        {
+            if (component == 0)
+            {
+                return value.X;
+            }
+            if (component == 1)
+            {
+                return value.Y;
+            }
+            if (component == 2)
+            {
+                return value.Z;
+            }
+            return value.W;
         }
 
         private static float Checked(double value)
@@ -533,9 +563,24 @@ namespace LiberaFx.Unity
                 return;
             }
             disposed = true;
-            UnityEngine.Object.Destroy(gameObject);
-            UnityEngine.Object.Destroy(mesh);
-            UnityEngine.Object.Destroy(material);
+            submission.Dispose();
+            DestroyOwned(mesh);
+        }
+
+        private static void DestroyOwned(UnityEngine.Object value)
+        {
+            if (!value)
+            {
+                return;
+            }
+            if (Application.isPlaying)
+            {
+                UnityEngine.Object.Destroy(value);
+            }
+            else
+            {
+                UnityEngine.Object.DestroyImmediate(value);
+            }
         }
     }
 }

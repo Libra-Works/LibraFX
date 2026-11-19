@@ -35,11 +35,73 @@ do not delete through a development junction.
 
 ### Verification boundaries
 
-The updated Unreal adapter passed UE 5.7.4 Clang compilation (`-NoLink`),
+The published 2026.11.22 Unreal adapter passed UE 5.7.4 Clang compilation (`-NoLink`),
 MSVC Editor linking, and the isolated legacy raw import-routing automation.
 The Clang check does not verify linking against an MSVC-built engine or a
 console SDK. New CPU particle and Flexible Plane rendered results remain
 unverified; engine compilation and import tests are not visual acceptance.
+
+<span id="rendering"></span>
+
+## Drawing without per-Draw scene components
+
+The renderer migration **after 2026.11.22 is a source change**, not an update to
+that release's archives. Rebuild/install matching adapters before using it.
+The effect-level playback Component/Node remains. Ordinary Model/Sprite Draw,
+CPU Sprite particles and FlexiblePlane use engine-owned rendering resources
+without a MeshComponent, MeshRenderer or MeshInstance3D for each drawn item.
+Engine assets and materials are still used; portable Core does not implement a
+separate graphics engine.
+
+| Adapter | Submission path |
+| --- | --- |
+| Unity | Direct `Graphics` drawing and compatible opaque instancing; reusable CPU/ribbon meshes. |
+| Unreal | Native primitive descriptors and scene proxies; compatible opaque instancing, with separate transparent sorting primitives. |
+| Godot | RenderingServer instance and Mesh/MultiMesh RIDs; bulk particle uploads and reusable ribbon surfaces. |
+
+Batching depends on mesh, material, parameters, transforms and ordering compatibility.
+All three adapters keep mirrored or singular world transforms out of ordinary
+instancing batches to preserve the individual drawing path's face culling.
+Removing scene components does not imply one draw call, no resources, or a
+measured speedup. Lightweight native primitives/RIDs can remain separate where
+required. Existing GPU simulation algorithms are unchanged.
+
+### Unity Sprite ordering limitation
+
+Layered Sprite compositions also use direct submissions, with **no
+MeshRenderer fallback**. `LiberaFxRenderOrdering` retains render queue,
+authored `drawOrder`, camera depth and stable registration identity in an
+independent pre-batch sorting stage. Transparent and explicitly ordered entries
+are not instanced together.
+
+This defines submission order, **not guaranteed global transparent ordering**.
+The tested Built-in/URP Graphics paths may re-sort by depth and do not reproduce
+the old `Renderer.sortingOrder` behavior or interleave reliably with external
+Renderers. Renderer removal is intentional; a future sorting/submission backend
+can consume the retained metadata without changing graph files. That backend
+is not implemented yet.
+
+### Source verification and cost counters
+
+Unity 7000.0.0a16/D3D11 Built-in and URP 17.7 have rendered-pixel coverage for
+ordinary batching, CPU Sprite, fixed-point ribbons and layered Sprite composition,
+including Stop/cleanup. Godot 4.7.2 has real-render coverage for opaque root/child
+batching, CPU Sprite, fixed-point ribbons, held owner transforms/visibility,
+world changes and Stop. These checks do not certify every transparent scene,
+history mode, engine version, graphics backend or shipped player.
+
+Unreal source has UE 5.7.4 Clang compile-only and MSVC linking coverage, plus
+D3D11/SM5 rendered-pixel acceptance for opaque instancing, CPU Sprite RGB/half-alpha,
+fixed-up ribbon vertex colors and clear targets after Stop. A one-sided plane
+also passed three create/remove cycles, including a mirrored transform.
+A NullRHI run alone does not establish rendered pixels. Other RHIs, packaged
+games and console SDKs are not verified; consult the adapter's `USAGE.txt`.
+
+Adapter statistics describe logical draws/particles, batches, native instances
+and submitted/staged data; see each adapter's `USAGE.txt` for exact fields.
+Allocated upload capacity can exceed the live particle count: three live
+particles in a four-record MultiMesh buffer still submit four records.
+Staged bytes are not a measurement of completed GPU transfers or frame time.
 
 ## Play a first effect
 

@@ -15,7 +15,8 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../.." "${CMAKE_CURRENT_BINARY_DIR
 # LibraRuntimeCore includes all five Core/CpuParticles sources via CpuParticles.cmake.
 # The renderer uses SpawnableHost directly and the static Flexible Plane C ABI.
 
-add_library(liberafx_godot SHARED LibraFxGodot.cpp LibraFxGodotRender.cpp LibraFxGodotGpu.cpp
+add_library(liberafx_godot SHARED LibraFxGodot.cpp LibraFxGodotRender.cpp
+    LibraFxGodotRenderSubmission.cpp LibraFxGodotGpu.cpp
     LibraFxGodotFlexiblePlane.cpp)
 target_link_libraries(liberafx_godot PRIVATE godot::cpp LibraRuntimeCore)
 target_compile_features(liberafx_godot PRIVATE cxx_std_17)

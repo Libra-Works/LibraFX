@@ -104,6 +104,10 @@ The `.lfxb` always contains the existing LFXP package envelope, including for
 graphs without children. Engine importers inspect its signature; old raw `.lfxb`
 programs and `.lfxp` packages remain legacy inputs. This requires updated SDKs
 from the same source revision, not the published 2026.11.8 binaries.
+The [2026.11.22 Preview](https://github.com/Libra-Works/LibraFX/releases/tag/v2026.11.22)
+includes the unified exports and the CPU particle, Flexible Plane and Quaternion/
+Random additions. Later renderer and authoring changes in source are not
+retroactive updates to those archives.
 Historical test fixture filenames elsewhere in this document still use `.lfxp`.
 The `.lfxrm` diagnostic resource-mapping manifest is not a second playable binary.
 The updated converter also fixes overlapping custom-input defaults and branch
@@ -111,8 +115,8 @@ metadata. Re-export older custom-node effects from their `.lfxproj` sources;
 the original values cannot be reconstructed from already overwritten bytes.
 The current source supports container 4/package 12 for CPU particles; effects
 without CPU particles retain container 3/package 11. The source compatibility
-manifest's package ceiling describes updated source exports, not an update to
-already published SDK archives. CPU particles, Flexible Plane and Quaternion/
+manifest's package ceiling must match the SDK revision being installed; it does
+not update older downloaded archives. CPU particles, Flexible Plane and Quaternion/
 Random additions have compiler/native regression coverage, but still require
 engine acceptance by integrators. Build results do not establish rendered
 pixels; the bilingual feature guides describe these verification boundaries.
@@ -393,6 +397,30 @@ execution debugging. See its `USAGE.txt` and `LIVE_PREVIEW.txt` for subset and
 rendering-device requirements. Headless playback and real Vulkan GPU execution
 have been exercised on Godot 4.7.2 Windows x86-64; exported players have not
 been verified.
+
+## Component-free rendering in newer source
+
+The renderer migration after 2026.11.22 is not contained in that Preview's
+downloaded SDKs. Matching source builds move ordinary Draw, CPU Sprite and
+FlexiblePlane to direct Unity Graphics submissions, Unreal native
+primitive/proxy descriptors, and Godot RenderingServer Mesh/MultiMesh RIDs.
+Whole-effect playback entry points and engine-native assets remain; portable
+Core and the bytecode/package formats are unchanged by this renderer migration.
+Compatible opaque work can be instanced, while incompatible state and transparent
+draws remain separate. Native rendering resources are still allocated.
+
+Unity layered Sprite composition also removes MeshRenderer fallback, as an
+intentional choice to prioritize component-free drawing. The independent
+pre-batch ordering stage retains authored order, camera depth and stable IDs,
+but direct Graphics submission order does not reproduce global
+`Renderer.sortingOrder` or guarantee interleaving with external Renderers.
+A future sorting/submission backend can use the retained metadata; it is not
+implemented in this revision.
+
+See the [engine integration guide](site/engine-integration.md#rendering)
+and each adapter's `USAGE.txt` for source verification, statistics and limitations.
+Do not treat staging-byte counters as completed GPU transfers or claim a
+speedup from object-count reductions alone.
 
 ## Version and ownership boundary
 

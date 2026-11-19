@@ -49,37 +49,34 @@ func run() -> void:
 			break
 	if not check(root_scope != null, "Root render scope exists"):
 		return
-	var root_draw: MeshInstance3D = root_scope.get_node_or_null(str(identities["rootDrawNodeId"]))
-	if not check(root_draw != null and root_draw.mesh == mesh,
-			"Root draw uses the explicitly bound Mesh"):
-		return
-	if not check(root_draw.position == Vector3.ZERO and
-			root_draw.rotation_degrees == Vector3.ZERO and root_draw.scale == Vector3.ONE,
-			"Root position, rotation and scale defaults are applied"):
-		return
-
-	var template_draw: MeshInstance3D
+	var spawned_scope: Node3D
 	for scope in root_scope.get_children():
-		if scope is MeshInstance3D:
-			continue
-		for draw in scope.get_children():
-			if draw is MeshInstance3D and draw.name == str(identities["templateDrawNodeId"]):
-				template_draw = draw
-				break
-	if not check(template_draw != null and template_draw.mesh == mesh,
-			"Spawned child draw uses its own explicit Mesh scope"):
+		if scope is Node3D:
+			spawned_scope = scope
+			break
+	if not check(spawned_scope != null, "Spawned child effect scope exists"):
 		return
-	if not check(template_draw.position.x > 0.0 and
-			is_equal_approx(template_draw.position.x, template_draw.position.y) and
-			is_equal_approx(template_draw.position.y, template_draw.position.z),
-			"Child position follows the fixture's runtime Time input"):
+	if not check(not has_scene_tree_render_nodes(player),
+			"Draws use direct RenderingServer instances, not per-draw render Nodes"):
 		return
-	if not check(template_draw.rotation_degrees == Vector3.ZERO and template_draw.scale == Vector3.ONE,
-			"Child rotation and scale defaults are applied"):
+	var render_stats: Dictionary = player.get_render_stats()
+	if not check(render_stats.get("render_server_instances", 0) == 2 and
+			render_stats.get("effect_scope_nodes", 0) == 2,
+			"Root and child draws retain two direct instances and only two scope Nodes"):
 		return
+	print("OBS: root/child ModelDraw render submission stats = ", render_stats)
 
-	print("PASS: Godot bound and advanced root/child ModelDraw scopes")
+	print("PASS: Godot bound root/child ModelDraws to direct RenderingServer instances")
 	quit(0)
+
+
+func has_scene_tree_render_nodes(parent: Node) -> bool:
+	for child in parent.get_children():
+		if child is MeshInstance3D or child is MultiMeshInstance3D:
+			return true
+		if has_scene_tree_render_nodes(child):
+			return true
+	return false
 
 
 func check(condition: bool, label: String) -> bool:

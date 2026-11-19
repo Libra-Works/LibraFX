@@ -13,19 +13,32 @@ namespace LiberaFx.Unity
         private readonly List<Vector2> offsets = new List<Vector2>();
         private readonly List<Color> colors = new List<Color>();
         private readonly List<int> indices = new List<int>();
-        private GameObject batch;
-        private MeshRenderer renderer;
+        private readonly Transform parent;
+        private readonly LiberaFxRenderStatisticsCounter statistics;
+        private LiberaFxRenderSubmission submission;
         private Mesh mesh;
         private Material material;
         private bool disposed;
 
-        private LiberaFxCpuParticleRenderInstance(LiberaFxPreparedCpuParticleRenderer definition)
-            => this.definition = definition;
+        private LiberaFxCpuParticleRenderInstance(Transform parent,
+            LiberaFxPreparedCpuParticleRenderer definition,
+            LiberaFxRenderStatisticsCounter statistics)
+        {
+            this.parent = parent;
+            this.definition = definition;
+            this.statistics = statistics;
+            centers.Capacity = 256;
+            uvs.Capacity = 256;
+            offsets.Capacity = 256;
+            colors.Capacity = 256;
+            indices.Capacity = 384;
+        }
 
         public static LiberaFxCpuParticleRenderInstance Create(
-            Transform parent, LiberaFxPreparedCpuParticleRenderer definition)
+            Transform parent, LiberaFxPreparedCpuParticleRenderer definition,
+            LiberaFxRenderStatisticsCounter statistics)
         {
-            var instance = new LiberaFxCpuParticleRenderInstance(definition);
+            var instance = new LiberaFxCpuParticleRenderInstance(parent, definition, statistics);
             try
             {
                 var shader = Resources.Load<Shader>("LiberaFxCpuParticle");
@@ -47,15 +60,10 @@ namespace LiberaFx.Unity
                 instance.material.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
                 instance.material.SetInt("_DstBlend", (int)(definition.additive
                     ? BlendMode.One : BlendMode.OneMinusSrcAlpha));
-                instance.batch = new GameObject("Libera FX CPU Particles " + definition.nodeId);
-                instance.batch.layer = parent.gameObject.layer;
-                instance.batch.transform.SetParent(parent, false);
-                instance.batch.AddComponent<MeshFilter>().sharedMesh = instance.mesh;
-                instance.renderer = instance.batch.AddComponent<MeshRenderer>();
-                instance.renderer.sharedMaterial = instance.material;
-                instance.renderer.shadowCastingMode = ShadowCastingMode.Off;
-                instance.renderer.receiveShadows = false;
-                instance.renderer.enabled = false;
+                instance.submission = new LiberaFxRenderSubmission(null, statistics);
+                instance.submission.owner = parent;
+                instance.submission.Configure(instance.mesh, instance.material, 0,
+                    parent.gameObject.layer, statistics);
                 return instance;
             }
             catch
@@ -67,7 +75,10 @@ namespace LiberaFx.Unity
 
         public void Update(NativeInstance.NativeSpawnableHostBase host)
         {
-            if (disposed || !renderer) throw new ObjectDisposedException(nameof(LiberaFxCpuParticleRenderInstance));
+            if (disposed || !parent)
+            {
+                throw new ObjectDisposedException(nameof(LiberaFxCpuParticleRenderInstance));
+            }
             var result = host.CpuParticleCount(definition.nodeIdBytes, out var count);
             if (result != NativeResult.Ok)
                 throw new InvalidOperationException("Could not read CPU particle count for " + definition.nodeId + ": " + result);
@@ -75,7 +86,7 @@ namespace LiberaFx.Unity
                 throw new InvalidOperationException("CPU particle count exceeds the native system capacity limit.");
             if (count == 0)
             {
-                renderer.enabled = false;
+                submission.enabled = false;
                 return;
             }
 
@@ -84,8 +95,8 @@ namespace LiberaFx.Unity
             offsets.Clear();
             colors.Clear();
             indices.Clear();
-            var localToWorld = batch.transform.localToWorldMatrix;
-            var worldToLocal = batch.transform.worldToLocalMatrix;
+            var localToWorld = parent.localToWorldMatrix;
+            var worldToLocal = parent.worldToLocalMatrix;
             if (localToWorld.determinant == 0)
                 throw new InvalidOperationException("CPU particle batch cannot use a singular owner transform.");
             var ownerWidth = localToWorld.MultiplyVector(Vector3.right).magnitude;
@@ -129,7 +140,10 @@ namespace LiberaFx.Unity
             var bounds = mesh.bounds;
             bounds.Expand(ToFloat(2 * radius));
             mesh.bounds = bounds;
-            renderer.enabled = true;
+            submission.layer = parent.gameObject.layer;
+            submission.SetMatrix(localToWorld);
+            submission.enabled = true;
+            statistics?.GeometryUpload(centers.Count);
         }
 
         private void AddVertex(Vector3 center, Color color, float u, float v, float x, float y)
@@ -153,8 +167,8 @@ namespace LiberaFx.Unity
         {
             if (disposed) return;
             disposed = true;
-            if (renderer) renderer.enabled = false;
-            if (batch) DestroyOwned(batch);
+            if (submission != null) submission.Dispose();
+            submission = null;
             if (mesh) DestroyOwned(mesh);
             if (material) DestroyOwned(material);
         }

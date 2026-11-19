@@ -668,6 +668,12 @@ public:
 
     NodePath get_camera_path() const { return cameraPath_; }
 
+    godot::Dictionary get_render_stats() const
+    {
+        return playback_ && playback_->renderer
+            ? playback_->renderer->renderStats() : godot::Dictionary{};
+    }
+
     void _process(double delta) override
     {
         const auto cpuPlayback = playback_ && playback_->packageHost &&
@@ -710,6 +716,8 @@ protected:
         godot::ClassDB::bind_method(godot::D_METHOD("set_material_binding", "asset_identity", "material"), &LibraEffectPlayer::set_material_binding);
         godot::ClassDB::bind_method(godot::D_METHOD("clear_material_binding", "asset_identity"), &LibraEffectPlayer::clear_material_binding);
         godot::ClassDB::bind_method(godot::D_METHOD("get_gpu_error"), &LibraEffectPlayer::get_gpu_error);
+        godot::ClassDB::bind_method(godot::D_METHOD("get_render_stats"),
+            &LibraEffectPlayer::get_render_stats);
         godot::ClassDB::bind_method(godot::D_METHOD("get_playback_generation"),
             &LibraEffectPlayer::get_playback_generation);
         godot::ClassDB::bind_method(godot::D_METHOD("set_gpu_spawn_per_second", "value"),
@@ -954,6 +962,7 @@ private:
 void initialize(godot::ModuleInitializationLevel level)
 {
     if (level == godot::MODULE_INITIALIZATION_LEVEL_SCENE) {
+        godot::ClassDB::register_internal_class<LibraRenderScopeNode>();
         godot::ClassDB::register_class<LibraEffectPlayer>();
         registerGodotDebugPlayback();
     }

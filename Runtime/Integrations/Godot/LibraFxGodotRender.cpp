@@ -6,8 +6,10 @@
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/image_texture.hpp>
 #include <godot_cpp/classes/json.hpp>
+#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/shader.hpp>
 #include <godot_cpp/classes/viewport.hpp>
+#include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/color.hpp>
@@ -24,7 +26,7 @@
 
 namespace liberafx::godot_adapter {
 
-namespace {
+namespace render_detail {
 
 auto readString(const godot::Dictionary& object, const char* key,
                 godot::String& out, bool required = true) -> bool
@@ -34,6 +36,7 @@ auto readString(const godot::Dictionary& object, const char* key,
         out = godot::String{};
         return true;
     }
+
     if (value.get_type() != godot::Variant::STRING) {
         return false;
     }
@@ -252,6 +255,15 @@ auto readAnimation(const godot::Variant& value,
 }
 
 }
+
+using render_detail::makeWhiteTexture;
+using render_detail::readAnimation;
+using render_detail::readArray;
+using render_detail::readInteger;
+using render_detail::readNumber;
+using render_detail::readString;
+using render_detail::sameId;
+using render_detail::toReal;
 
 PackageRenderRenderer::PackageRenderRenderer(const MeshBindings& meshBindings,
     const TextureBindings& textureBindings)
@@ -780,28 +792,23 @@ auto PackageRenderRenderer::uuidString(const std::uint8_t* bytes) -> godot::Stri
     return godot::String::utf8(text.data());
 }
 
-auto PackageRenderRenderer::makeRenderable(godot::Node& parent, const Draw& draw,
+auto PackageRenderRenderer::makeRenderable(godot::Node3D& parent, const Draw& draw,
     RenderInstance& out) -> Result
 {
-    if (draw.flexiblePlane)
-    {
-        auto* scope = godot::Object::cast_to<godot::Node3D>(&parent);
+    if (draw.flexiblePlane) {
         auto error = godot::String{};
-        if (!scope || !FlexiblePlaneRenderer::create(*scope, draw.flexibleDefinition,
+        if (!FlexiblePlaneRenderer::create(parent, draw.flexibleDefinition,
                 draw.flexibleTexture, out.flexiblePlane, error))
         {
             godot::UtilityFunctions::push_error(error.is_empty()
-                ? godot::String("Flexible Plane scope is not a Node3D.") : error);
+                ? godot::String("Flexible Plane scope is unavailable.") : error);
             return Result::InvalidArgument;
         }
         return Result::Ok;
     }
-    auto node = memnew(godot::MeshInstance3D);
-    node->set_name(godot::String::utf8(draw.nodeName.c_str()));
     if (draw.sprite) {
         auto texture = textureBindings_.find(draw.assetIdentity);
         if (texture == textureBindings_.end() || !texture->second.is_valid()) {
-            node->queue_free();
             return Result::InvalidArgument;
         }
         auto quad = godot::Ref<godot::QuadMesh>{};
@@ -820,32 +827,41 @@ auto PackageRenderRenderer::makeRenderable(godot::Node& parent, const Draw& draw
             material->set_render_priority(draw.animation.drawOrder);
         }
         quad->set_material(material);
-        node->set_mesh(quad);
         out.quad = quad;
         out.material = material;
+        out.mesh = quad;
     } else {
         auto mesh = meshBindings_.find(draw.assetIdentity);
         if (mesh == meshBindings_.end() || !mesh->second.is_valid()) {
-            node->queue_free();
             return Result::InvalidArgument;
         }
-        node->set_mesh(mesh->second);
-        auto result = applyMaterials(*node, draw, out);
+        out.mesh = mesh->second;
+        out.modelBatchCandidate = draw.materials.empty() && draw.parameters.empty();
+        auto result = applyMaterials(out.mesh, draw, out);
         if (result != Result::Ok) {
-            node->queue_free();
             return result;
         }
     }
-    parent.add_child(node);
-    out.node = node;
+    auto* server = godot::RenderingServer::get_singleton();
+    if (!server || out.mesh.is_null()) {
+        return Result::InvalidArgument;
+    }
+    out.instance = OwnedRenderingRid(server->instance_create());
+    if (!out.instance.isValid()) {
+        return Result::InsufficientWork;
+    }
+    server->instance_set_base(out.instance.get(), out.mesh->get_rid());
+    auto world = parent.get_world_3d();
+    server->instance_set_scenario(out.instance.get(),
+        world.is_valid() ? world->get_scenario() : godot::RID{});
+    server->instance_set_transform(out.instance.get(), parent.get_global_transform());
+    server->instance_set_visible(out.instance.get(), false);
     return Result::Ok;
 }
 
-auto PackageRenderRenderer::makeCpuRenderable(godot::Node& parent,
+auto PackageRenderRenderer::makeCpuRenderable(godot::Node3D& parent,
     const CpuParticleDraw& draw, CpuParticleRenderInstance& out) -> Result
 {
-    auto node = memnew(godot::MultiMeshInstance3D);
-    node->set_name(godot::String("LibraFxCpuParticles_") + godot::String::utf8(draw.nodeName.c_str()));
     auto quad = godot::Ref<godot::QuadMesh>{};
     quad.instantiate();
     quad->set_size(godot::Vector2(1, 1));
@@ -862,39 +878,65 @@ auto PackageRenderRenderer::makeCpuRenderable(godot::Node& parent,
     material->set_billboard_mode(godot::BaseMaterial3D::BILLBOARD_ENABLED);
     material->set_flag(godot::BaseMaterial3D::FLAG_BILLBOARD_KEEP_SCALE, true);
     quad->set_material(material);
-    auto multiMesh = godot::Ref<godot::MultiMesh>{};
-    multiMesh.instantiate();
-    multiMesh->set_transform_format(godot::MultiMesh::TRANSFORM_3D);
-    multiMesh->set_use_colors(true);
-    multiMesh->set_mesh(quad);
-    auto result = multiMesh.is_valid() ? Result::Ok : Result::InvalidArgument;
-    if (result != Result::Ok) {
-        node->queue_free();
-        return result;
+    auto* server = godot::RenderingServer::get_singleton();
+    if (!server || quad.is_null()) {
+        return Result::InvalidArgument;
     }
-    node->set_multimesh(multiMesh);
-    node->set_cast_shadows_setting(godot::GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
-    parent.add_child(node);
-    out.node = node;
-    out.multiMesh = multiMesh;
+    out.quad = quad;
+    out.material = material;
+    out.multiMesh = OwnedRenderingRid(server->multimesh_create());
+    if (!out.multiMesh.isValid()) {
+        return Result::InsufficientWork;
+    }
+    server->multimesh_allocate_data(out.multiMesh.get(), 1,
+        godot::RenderingServer::MULTIMESH_TRANSFORM_3D, true, false);
+    server->multimesh_set_mesh(out.multiMesh.get(), quad->get_rid());
+    server->multimesh_set_visible_instances(out.multiMesh.get(), 0);
+    out.instance = OwnedRenderingRid(server->instance_create());
+    if (!out.instance.isValid()) {
+        return Result::InsufficientWork;
+    }
+    server->instance_set_base(out.instance.get(), out.multiMesh.get());
+    auto world = parent.get_world_3d();
+    server->instance_set_scenario(out.instance.get(),
+        world.is_valid() ? world->get_scenario() : godot::RID{});
+    server->instance_set_transform(out.instance.get(), parent.get_global_transform());
+    server->instance_geometry_set_cast_shadows_setting(out.instance.get(),
+        godot::RenderingServer::SHADOW_CASTING_SETTING_OFF);
+    server->instance_set_visible(out.instance.get(), false);
+    out.buffer.resize(16);
+    if (out.buffer.size() != 16) {
+        return Result::InsufficientWork;
+    }
+    out.capacity = 1;
     return Result::Ok;
 }
 
-auto PackageRenderRenderer::applyMaterials(godot::MeshInstance3D& node, const Draw& draw,
+auto PackageRenderRenderer::applyMaterials(godot::Ref<godot::Mesh>& mesh, const Draw& draw,
     RenderInstance& out) -> Result
 {
+    if (draw.materials.empty()) {
+        return Result::Ok;
+    }
+    auto duplicate = godot::Ref<godot::Mesh>(mesh->duplicate());
+    if (duplicate.is_null()) {
+        return Result::InvalidArgument;
+    }
     for (const auto& [slot, material] : draw.materials) {
+        if (slot < 0 || slot >= duplicate->get_surface_count()) {
+            return Result::InvalidArgument;
+        }
         auto needsInstance = std::any_of(draw.parameters.begin(), draw.parameters.end(),
             [slot](const auto& parameter) { return parameter.slot == slot; });
         if (!needsInstance) {
-            node.set_surface_override_material(slot, material);
+            duplicate->surface_set_material(slot, material);
             continue;
         }
         auto instance = godot::Ref<godot::ShaderMaterial>(material->duplicate());
         if (instance.is_null()) {
             return Result::InvalidArgument;
         }
-        node.set_surface_override_material(slot, instance);
+        duplicate->surface_set_material(slot, instance);
         out.shaderMaterials.emplace(slot, instance);
     }
     for (const auto& parameter : draw.parameters) {
@@ -902,6 +944,7 @@ auto PackageRenderRenderer::applyMaterials(godot::MeshInstance3D& node, const Dr
             out.shaderMaterials.at(parameter.slot)->set_shader_parameter(parameter.name, parameter.texture);
         }
     }
+    mesh = duplicate;
     return Result::Ok;
 }
 
@@ -951,7 +994,7 @@ auto PackageRenderRenderer::attach(godot::Node& owner) -> Result
     if (rootDraws_.empty() && rootCpuParticles_.empty() && !anyChildDraws) {
         return Result::Ok;
     }
-    root_ = memnew(godot::Node3D);
+    root_ = memnew(LibraRenderScopeNode);
     auto rootName = godot::String("LibraFxRootScope");
     auto suffix = std::uint64_t{2};
     while (owner.has_node(godot::NodePath(rootName))) {
@@ -959,6 +1002,7 @@ auto PackageRenderRenderer::attach(godot::Node& owner) -> Result
     }
     root_->set_name(rootName);
     owner.add_child(root_);
+    root_->setRenderer(this);
     for (const auto& draw : rootDraws_) {
         auto renderable = RenderInstance{};
         auto result = makeRenderable(*root_, draw, renderable);
@@ -1037,7 +1081,90 @@ auto PackageRenderRenderer::updateValues(SpawnableHost& host, double effectTime)
         child.lastFlexibleTime = localTime;
         child.hasFlexibleTime = true;
     }
+    synchronizePresentation();
     return Result::Ok;
+}
+
+auto PackageRenderRenderer::renderStats() const -> godot::Dictionary
+{
+    auto renderInstances = std::uint64_t{};
+    auto flexibleUpdates = std::uint64_t{};
+    auto allocatedDrawInstances = std::uint64_t{};
+    auto allocatedFlexibleInstances = std::uint64_t{};
+    for (const auto& renderable : rootRenderables_) {
+        if (renderable.flexiblePlane || renderable.instance.isValid()) {
+            ++renderInstances;
+        }
+        if (renderable.instance.isValid()) {
+            ++allocatedDrawInstances;
+        }
+        if (renderable.flexiblePlane) {
+            flexibleUpdates += renderable.flexiblePlane->surfaceUpdates();
+            if (renderable.flexiblePlane->hasAllocatedInstance()) {
+                ++allocatedFlexibleInstances;
+            }
+        }
+    }
+    for (const auto& child : children_) {
+        for (const auto& renderable : child.renderables) {
+            if (renderable.flexiblePlane || renderable.instance.isValid()) {
+                ++renderInstances;
+            }
+            if (renderable.instance.isValid()) {
+                ++allocatedDrawInstances;
+            }
+            if (renderable.flexiblePlane) {
+                flexibleUpdates += renderable.flexiblePlane->surfaceUpdates();
+                if (renderable.flexiblePlane->hasAllocatedInstance()) {
+                    ++allocatedFlexibleInstances;
+                }
+            }
+        }
+    }
+    renderInstances += rootCpuRenderables_.size();
+    auto allocatedCpuInstances = std::uint64_t{};
+    auto allocatedMultiMeshes = std::uint64_t{};
+    for (const auto& renderable : rootCpuRenderables_) {
+        if (renderable.instance.isValid()) {
+            ++allocatedCpuInstances;
+        }
+        if (renderable.multiMesh.isValid()) {
+            ++allocatedMultiMeshes;
+        }
+    }
+    auto modelBatchCount = std::uint64_t{};
+    auto modelBatchMembers = std::uint64_t{};
+    for (const auto& batch : modelBatches_) {
+        if (batch.instance.isValid()) {
+            ++renderInstances;
+            ++modelBatchCount;
+            modelBatchMembers += batch.members.size();
+        }
+        if (batch.multiMesh.isValid()) {
+            ++allocatedMultiMeshes;
+        }
+    }
+    const auto allocatedInstances = allocatedDrawInstances + allocatedFlexibleInstances +
+        allocatedCpuInstances + modelBatchCount;
+    auto scopeNodes = static_cast<std::uint64_t>(root_ ? 1 : 0) + children_.size();
+    auto stats = godot::Dictionary{};
+    stats["render_server_instances"] = static_cast<std::int64_t>(renderInstances);
+    stats["allocated_render_server_instances"] = static_cast<std::int64_t>(allocatedInstances);
+    stats["allocated_draw_instances"] = static_cast<std::int64_t>(allocatedDrawInstances);
+    stats["allocated_flexible_plane_instances"] = static_cast<std::int64_t>(allocatedFlexibleInstances);
+    stats["allocated_cpu_particle_instances"] = static_cast<std::int64_t>(allocatedCpuInstances);
+    stats["allocated_opaque_model_batch_instances"] = static_cast<std::int64_t>(modelBatchCount);
+    stats["allocated_render_server_multimeshes"] = static_cast<std::int64_t>(allocatedMultiMeshes);
+    stats["cpu_multimesh_batches"] = static_cast<std::int64_t>(rootCpuRenderables_.size());
+    stats["opaque_model_multimesh_batches"] = static_cast<std::int64_t>(modelBatchCount);
+    stats["opaque_model_multimesh_members"] = static_cast<std::int64_t>(modelBatchMembers);
+    stats["flexible_plane_surface_updates"] = static_cast<std::int64_t>(flexibleUpdates);
+    stats["effect_scope_nodes"] = static_cast<std::int64_t>(scopeNodes);
+    stats["cpu_multimesh_buffer_uploads"] = static_cast<std::int64_t>(cpuBufferUploads_);
+    stats["cpu_particle_active_records"] = static_cast<std::int64_t>(cpuActiveRecords_);
+    stats["cpu_particle_records_transferred"] = static_cast<std::int64_t>(cpuRecordsTransferred_);
+    stats["cpu_particle_bytes_transferred"] = static_cast<std::int64_t>(cpuBytesTransferred_);
+    return stats;
 }
 
 void PackageRenderRenderer::resetFlexibleHistories()
@@ -1077,6 +1204,43 @@ auto PackageRenderRenderer::currentFlexibleCamera() const -> godot::Camera3D*
     return camera;
 }
 
+auto PackageRenderRenderer::updateCpuBounds(CpuParticleRenderInstance& renderable,
+    const godot::Basis& basis) -> bool
+{
+    const auto determinant = basis.determinant();
+    if (!std::isfinite(determinant) || determinant == 0) {
+        return false;
+    }
+    const auto inverse = basis.inverse();
+    const auto ownerWidth = basis.get_column(0).length();
+    const auto ownerHeight = basis.get_column(1).length();
+    const auto localRadiusFactor = inverse.get_column(0).length() +
+        inverse.get_column(1).length() + inverse.get_column(2).length();
+    auto bounds = godot::AABB{};
+    const auto* values = renderable.buffer.ptr();
+    for (auto index = std::uint32_t{}; index < renderable.activeCount; ++index) {
+        const auto* data = values + static_cast<std::size_t>(index) * 16;
+        const auto center = godot::Vector3(data[3], data[7], data[11]);
+        auto radius = godot::real_t{};
+        if (!toReal(0.5 * std::hypot(static_cast<double>(data[0]) * ownerWidth,
+                static_cast<double>(data[5]) * ownerHeight) * localRadiusFactor, radius)) {
+            return false;
+        }
+        const auto padding = godot::Vector3(radius, radius, radius);
+        const auto particleBounds = godot::AABB(center - padding, padding * 2);
+        bounds = index == 0 ? particleBounds : bounds.merge(particleBounds);
+    }
+    if (renderable.activeCount > 0) {
+        auto* server = godot::RenderingServer::get_singleton();
+        if (!server) {
+            return false;
+        }
+        server->multimesh_set_custom_aabb(renderable.multiMesh.get(), bounds);
+    }
+    renderable.boundsBasis = basis;
+    return true;
+}
+
 auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host) -> Result
 {
     constexpr auto maximumParticles = std::uint32_t{1000000}; // Native system capacity limit.
@@ -1087,9 +1251,10 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host) -> Result
     for (auto index = std::size_t{}; index < rootCpuParticles_.size(); ++index) {
         const auto& draw = rootCpuParticles_[index];
         auto& renderable = rootCpuRenderables_[index];
-        if (!renderable.node || renderable.multiMesh.is_null()) {
+        if (!renderable.instance.isValid() || !renderable.multiMesh.isValid() || !root_) {
             return Result::InvalidBinary;
         }
+        updateInstance(renderable.instance, *root_, godot::Transform3D{});
         auto count = std::size_t{};
         auto result = host.cpuParticleCount(draw.nodeId.data(), count);
         if (result != Result::Ok) {
@@ -1108,24 +1273,27 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host) -> Result
             if (renderable.buffer.size() != bufferSize) {
                 return Result::InsufficientWork;
             }
-            renderable.multiMesh->set_instance_count(static_cast<std::int32_t>(capacity));
+            auto* server = godot::RenderingServer::get_singleton();
+            if (!server) {
+                return Result::InvalidArgument;
+            }
+            server->multimesh_allocate_data(renderable.multiMesh.get(),
+                static_cast<std::int32_t>(capacity),
+                godot::RenderingServer::MULTIMESH_TRANSFORM_3D, true, false);
             renderable.capacity = capacity;
         }
         if (count == 0) {
-            renderable.multiMesh->set_visible_instance_count(0);
+            godot::RenderingServer::get_singleton()->multimesh_set_visible_instances(
+                renderable.multiMesh.get(), 0);
+            renderable.activeCount = 0;
+            renderable.boundsValid = false;
             continue;
         }
         auto* buffer = renderable.buffer.ptrw();
-        const auto basis = renderable.node->get_global_transform().basis;
-        const auto ownerWidth = basis.get_column(0).length();
-        const auto ownerHeight = basis.get_column(1).length();
+        const auto basis = root_->get_global_transform().basis;
         if (!std::isfinite(basis.determinant()) || basis.determinant() == 0) {
             return Result::InvalidArgument;
         }
-        const auto inverse = basis.inverse();
-        const auto localRadiusFactor = inverse.get_column(0).length() +
-            inverse.get_column(1).length() + inverse.get_column(2).length();
-        auto bounds = godot::AABB{};
         for (auto particleIndex = std::size_t{}; particleIndex < count; ++particleIndex) {
             auto snapshot = CpuParticleSnapshot{};
             result = host.cpuParticleAt(draw.nodeId.data(), particleIndex, snapshot);
@@ -1144,19 +1312,23 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host) -> Result
                 }
                 data[field] = static_cast<float>(values[field]);
             }
-            const auto center = godot::Vector3(data[3], data[7], data[11]);
-            auto radius = godot::real_t{};
-            if (!toReal(0.5 * std::hypot(static_cast<double>(data[0]) * ownerWidth,
-                    static_cast<double>(data[5]) * ownerHeight) * localRadiusFactor, radius)) {
-                return Result::NonFinite;
-            }
-            const auto padding = godot::Vector3(radius, radius, radius);
-            const auto particleBounds = godot::AABB(center - padding, padding * 2);
-            bounds = particleIndex == 0 ? particleBounds : bounds.merge(particleBounds);
         }
-        renderable.node->set_custom_aabb(bounds);
-        renderable.multiMesh->set_buffer(renderable.buffer);
-        renderable.multiMesh->set_visible_instance_count(static_cast<std::int32_t>(count));
+        auto* server = godot::RenderingServer::get_singleton();
+        if (!server) {
+            return Result::InvalidArgument;
+        }
+        renderable.activeCount = static_cast<std::uint32_t>(count);
+        renderable.boundsValid = updateCpuBounds(renderable, basis);
+        if (!renderable.boundsValid) {
+            return Result::NonFinite;
+        }
+        server->multimesh_set_buffer(renderable.multiMesh.get(), renderable.buffer);
+        server->multimesh_set_visible_instances(renderable.multiMesh.get(),
+            static_cast<std::int32_t>(count));
+        ++cpuBufferUploads_;
+        cpuActiveRecords_ += count;
+        cpuRecordsTransferred_ += static_cast<std::uint64_t>(renderable.buffer.size()) / instanceStride;
+        cpuBytesTransferred_ += static_cast<std::uint64_t>(renderable.buffer.size()) * sizeof(float);
     }
     return Result::Ok;
 }
@@ -1186,7 +1358,7 @@ auto PackageRenderRenderer::makeScope(godot::Node& parent,
 }
 
 auto PackageRenderRenderer::updateScope(SpawnableHost& host,
-    const std::vector<Draw>& draws, const std::vector<RenderInstance>& renderables,
+    const std::vector<Draw>& draws, std::vector<RenderInstance>& renderables,
     const VisualScope* child, double localTime,
     flexible_adapter::HistoryScope& flexibleHistory, bool& flexibleHidden,
     bool& visibleBeforeFlexibleFailure) -> Result
@@ -1194,25 +1366,32 @@ auto PackageRenderRenderer::updateScope(SpawnableHost& host,
     if (draws.size() != renderables.size()) {
         return Result::InvalidBinary;
     }
+    auto* scopeNode = child ? child->node : root_;
+    if (flexibleHidden && scopeNode) {
+        scopeNode->set_visible(visibleBeforeFlexibleFailure);
+        flexibleHidden = false;
+    }
     flexibleHistory.beginUpdate();
     for (auto index = std::size_t{}; index < draws.size(); ++index) {
         const auto& draw = draws[index];
-        const auto& renderable = renderables[index];
+        auto& renderable = renderables[index];
         if (draw.flexiblePlane)
         {
-            auto* scope = child ? child->node : root_;
             auto* camera = currentFlexibleCamera();
             auto error = godot::String{};
-            if (!scope || !renderable.flexiblePlane ||
-                !renderable.flexiblePlane->update(host,
+            if (!scopeNode || !renderable.flexiblePlane ||
+                !renderable.flexiblePlane->update(*scopeNode, host,
                     child ? child->containerId.data() : nullptr,
                     child ? child->instanceId : 0, localTime, camera, flexibleHistory, error))
             {
-                if (scope && !flexibleHidden)
+                if (scopeNode && !flexibleHidden)
                 {
-                    visibleBeforeFlexibleFailure = scope->is_visible();
-                    scope->set_visible(false);
+                    visibleBeforeFlexibleFailure = scopeNode->is_visible();
+                    scopeNode->set_visible(false);
                     flexibleHidden = true;
+                }
+                if (scopeNode) {
+                    synchronizePresentation();
                 }
                 godot::UtilityFunctions::push_error(error.is_empty()
                     ? godot::String("Flexible Plane render scope is unavailable.") : error);
@@ -1220,7 +1399,7 @@ auto PackageRenderRenderer::updateScope(SpawnableHost& host,
             }
             continue;
         }
-        if (!renderable.node) {
+        if (!scopeNode || renderable.mesh.is_null()) {
             return Result::InvalidBinary;
         }
         auto position = std::array<double, 4>{};
@@ -1247,9 +1426,14 @@ auto PackageRenderRenderer::updateScope(SpawnableHost& host,
                 !toReal(scale[2], s.z)) {
                 return Result::NonFinite;
             }
-            renderable.node->set_position(p);
-            renderable.node->set_rotation_degrees(r);
-            renderable.node->set_scale(s);
+            auto localTransform = godot::Transform3D{};
+            localTransform.basis.set_euler_scale(
+                godot::Vector3(r.x, r.y, r.z) * static_cast<godot::real_t>(0.017453292519943295769),
+                s);
+            localTransform.origin = p;
+            renderable.localTransform = localTransform;
+            renderable.submitted = true;
+            updateInstance(renderable.instance, *scopeNode, localTransform);
             result = updateMaterials(host, draw, renderable, child);
             if (result != Result::Ok) {
                 return result;
@@ -1264,11 +1448,21 @@ auto PackageRenderRenderer::updateScope(SpawnableHost& host,
         auto fpsValue = std::array<double, 4>{};
         auto playingValue = std::array<double, 4>{};
         result = updateInput(host, draw.tint, child, tint);
-        if (result == Result::Ok) result = updateInput(host, draw.frame, child, frameValue);
-        if (result == Result::Ok) result = updateInput(host, draw.columns, child, columnsValue);
-        if (result == Result::Ok) result = updateInput(host, draw.rows, child, rowsValue);
-        if (result == Result::Ok) result = updateInput(host, draw.fps, child, fpsValue);
-        if (result == Result::Ok) result = updateInput(host, draw.playing, child, playingValue);
+        if (result == Result::Ok) {
+            result = updateInput(host, draw.frame, child, frameValue);
+        }
+        if (result == Result::Ok) {
+            result = updateInput(host, draw.columns, child, columnsValue);
+        }
+        if (result == Result::Ok) {
+            result = updateInput(host, draw.rows, child, rowsValue);
+        }
+        if (result == Result::Ok) {
+            result = updateInput(host, draw.fps, child, fpsValue);
+        }
+        if (result == Result::Ok) {
+            result = updateInput(host, draw.playing, child, playingValue);
+        }
         if (result != Result::Ok) {
             return result;
         }
@@ -1303,9 +1497,14 @@ auto PackageRenderRenderer::updateScope(SpawnableHost& host,
                 !toReal(1, s.z)) {
                 return Result::NonFinite;
             }
-            renderable.node->set_position(p);
-            renderable.node->set_rotation_degrees(r);
-            renderable.node->set_scale(s);
+            auto localTransform = godot::Transform3D{};
+            localTransform.basis.set_euler_scale(
+                godot::Vector3(r.x, r.y, r.z) * static_cast<godot::real_t>(0.017453292519943295769),
+                s);
+            localTransform.origin = p;
+            renderable.localTransform = localTransform;
+            renderable.submitted = true;
+            updateInstance(renderable.instance, *scopeNode, localTransform);
         } else {
             auto frame = frameValue[0];
             auto playing = playingValue[0] >= 0.5;
@@ -1359,9 +1558,14 @@ auto PackageRenderRenderer::updateScope(SpawnableHost& host,
                 !toReal(scale[2], s.z)) {
                 return Result::NonFinite;
             }
-            renderable.node->set_position(p);
-            renderable.node->set_rotation_degrees(r);
-            renderable.node->set_scale(s);
+            auto localTransform = godot::Transform3D{};
+            localTransform.basis.set_euler_scale(
+                godot::Vector3(r.x, r.y, r.z) * static_cast<godot::real_t>(0.017453292519943295769),
+                s);
+            localTransform.origin = p;
+            renderable.localTransform = localTransform;
+            renderable.submitted = true;
+            updateInstance(renderable.instance, *scopeNode, localTransform);
         }
 
         auto materialTint = godot::Color{};
@@ -1379,15 +1583,6 @@ auto PackageRenderRenderer::updateScope(SpawnableHost& host,
         renderable.material->set_albedo(materialTint);
         renderable.material->set_uv1_scale(uvScale);
         renderable.material->set_uv1_offset(uvOffset);
-    }
-    if (flexibleHidden)
-    {
-        auto* scope = child ? child->node : root_;
-        if (scope)
-        {
-            scope->set_visible(visibleBeforeFlexibleFailure);
-        }
-        flexibleHidden = false;
     }
     return Result::Ok;
 }
@@ -1482,6 +1677,7 @@ auto PackageRenderRenderer::handleEvent(const SpawnableHostEvent& event, Package
                 }
             }
             children_.clear();
+            modelBatches_.clear();
         } else {
             auto child = findChild(event.containerId, event.instanceId);
             if (child != children_.end()) {
@@ -1522,7 +1718,11 @@ void PackageRenderRenderer::removeChild(std::vector<VisualScope>::iterator child
 
 void PackageRenderRenderer::clear() noexcept
 {
+    if (root_) {
+        root_->setRenderer(nullptr);
+    }
     resetFlexibleHistories();
+    modelBatches_.clear();
     children_.clear();
     rootRenderables_.clear();
     rootCpuRenderables_.clear();

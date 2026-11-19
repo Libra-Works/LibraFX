@@ -1,6 +1,8 @@
 #include "LibraFxGodotFlexiblePlane.h"
 #include <godot_cpp/classes/base_material3d.hpp>
+#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/thread.hpp>
+#include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/color.hpp>
@@ -9,6 +11,7 @@
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/packed_vector3_array.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -256,7 +259,7 @@ auto FlexiblePlaneRenderer::prepare(const godot::Dictionary& node,
     return true;
 }
 
-auto FlexiblePlaneRenderer::create(godot::Node3D& parent,
+auto FlexiblePlaneRenderer::create(godot::Node3D& scope,
     const flexible_adapter::Definition& definition, const godot::Ref<godot::Texture2D>& texture,
     std::unique_ptr<FlexiblePlaneRenderer>& output, godot::String& error) -> bool
 {
@@ -268,50 +271,203 @@ auto FlexiblePlaneRenderer::create(godot::Node3D& parent,
     auto instance = std::unique_ptr<FlexiblePlaneRenderer>(new FlexiblePlaneRenderer(definition));
     instance->mesh_.instantiate();
     instance->material_.instantiate();
+    if (instance->mesh_.is_null() || instance->material_.is_null()) {
+        error = "Godot could not allocate Flexible Plane rendering resources.";
+        return false;
+    }
     instance->material_->set_texture(godot::BaseMaterial3D::TEXTURE_ALBEDO, texture);
     instance->material_->set_shading_mode(godot::BaseMaterial3D::SHADING_MODE_UNSHADED);
     instance->material_->set_transparency(godot::BaseMaterial3D::TRANSPARENCY_ALPHA);
     instance->material_->set_flag(godot::BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
     instance->material_->set_flag(godot::BaseMaterial3D::FLAG_USE_TEXTURE_REPEAT, definition.options.uvMode == 1);
     instance->material_->set_cull_mode(godot::BaseMaterial3D::CULL_DISABLED);
-    auto* node = memnew(godot::MeshInstance3D);
-    node->set_name("Flexible Plane");
-    node->set_mesh(instance->mesh_);
-    node->set_material_override(instance->material_);
-    parent.add_child(node);
-    instance->nodeId_ = node->get_instance_id();
+    auto maximumPoints = definition.history ? definition.capacity
+        : static_cast<std::uint32_t>(definition.points.size());
+    instance->maxVertices_ = maximumPoints * 2;
+    instance->maxIndices_ = (maximumPoints - 1) * 6;
+    instance->vertices_.resize(instance->maxVertices_);
+    instance->uv_.resize(instance->maxVertices_);
+    instance->colors_.resize(instance->maxVertices_);
+    instance->indices_.resize(instance->maxIndices_);
+    if (instance->vertices_.size() != instance->maxVertices_ ||
+        instance->uv_.size() != instance->maxVertices_ ||
+        instance->colors_.size() != instance->maxVertices_ ||
+        instance->indices_.size() != instance->maxIndices_) {
+        error = "Godot could not allocate Flexible Plane geometry buffers.";
+        return false;
+    }
+    auto* server = godot::RenderingServer::get_singleton();
+    if (!server) {
+        error = "Godot RenderingServer is unavailable.";
+        return false;
+    }
+    instance->instance_ = OwnedRenderingRid(server->instance_create());
+    if (!instance->instance_.isValid()) {
+        error = "Godot could not create a Flexible Plane rendering instance.";
+        return false;
+    }
+    server->instance_set_base(instance->instance_.get(), instance->mesh_->get_rid());
+    auto world = scope.get_world_3d();
+    server->instance_set_scenario(instance->instance_.get(),
+        world.is_valid() ? world->get_scenario() : godot::RID{});
+    server->instance_set_transform(instance->instance_.get(), scope.get_global_transform());
+    server->instance_set_visible(instance->instance_.get(), false);
     output = std::move(instance);
+    return true;
+}
+
+auto FlexiblePlaneRenderer::initializeSurface(godot::String& error) -> bool
+{
+    auto arrays = godot::Array{};
+    arrays.resize(godot::Mesh::ARRAY_MAX);
+    arrays[godot::Mesh::ARRAY_VERTEX] = vertices_;
+    arrays[godot::Mesh::ARRAY_TEX_UV] = uv_;
+    arrays[godot::Mesh::ARRAY_COLOR] = colors_;
+    arrays[godot::Mesh::ARRAY_INDEX] = indices_;
+    mesh_->add_surface_from_arrays(godot::Mesh::PRIMITIVE_TRIANGLES, arrays, {},
+        godot::Dictionary{}, godot::Mesh::ARRAY_FLAG_USE_DYNAMIC_UPDATE);
+    if (mesh_->get_surface_count() != 1) {
+        error = "Godot could not create the Flexible Plane dynamic mesh surface.";
+        return false;
+    }
+    mesh_->surface_set_material(0, material_);
+    auto* server = godot::RenderingServer::get_singleton();
+    if (!server) {
+        error = "Godot RenderingServer is unavailable.";
+        return false;
+    }
+    const auto meshFormat = mesh_->surface_get_format(0);
+    const auto serverFormat = godot::BitField<godot::RenderingServer::ArrayFormat>(
+        static_cast<std::int64_t>(meshFormat));
+    vertexStride_ = server->mesh_surface_get_format_vertex_stride(serverFormat,
+        static_cast<std::int32_t>(maxVertices_));
+    attributeStride_ = server->mesh_surface_get_format_attribute_stride(serverFormat,
+        static_cast<std::int32_t>(maxVertices_));
+    indexStride_ = server->mesh_surface_get_format_index_stride(serverFormat,
+        static_cast<std::int32_t>(maxVertices_));
+    vertexOffset_ = server->mesh_surface_get_format_offset(serverFormat,
+        static_cast<std::int32_t>(maxVertices_), godot::Mesh::ARRAY_VERTEX);
+    uvOffset_ = server->mesh_surface_get_format_offset(serverFormat,
+        static_cast<std::int32_t>(maxVertices_), godot::Mesh::ARRAY_TEX_UV);
+    colorOffset_ = server->mesh_surface_get_format_offset(serverFormat,
+        static_cast<std::int32_t>(maxVertices_), godot::Mesh::ARRAY_COLOR);
+    if (vertexStride_ == 0 || attributeStride_ == 0 ||
+        (indexStride_ != 2 && indexStride_ != 4) ||
+        vertexOffset_ + sizeof(godot::Vector3) > vertexStride_ ||
+        uvOffset_ + sizeof(godot::Vector2) > attributeStride_ ||
+        colorOffset_ + 4 > attributeStride_) {
+        error = "Godot returned an unsupported Flexible Plane mesh format.";
+        return false;
+    }
+    vertexBytes_.resize(static_cast<std::int64_t>(vertexStride_) * maxVertices_);
+    attributeBytes_.resize(static_cast<std::int64_t>(attributeStride_) * maxVertices_);
+    indexBytes_.resize(static_cast<std::int64_t>(indexStride_) * maxIndices_);
+    if (vertexBytes_.size() != static_cast<std::int64_t>(vertexStride_) * maxVertices_ ||
+        attributeBytes_.size() != static_cast<std::int64_t>(attributeStride_) * maxVertices_ ||
+        indexBytes_.size() != static_cast<std::int64_t>(indexStride_) * maxIndices_) {
+        error = "Godot could not allocate Flexible Plane upload buffers.";
+        return false;
+    }
+    surfaceInitialized_ = true;
+    return true;
+}
+
+auto FlexiblePlaneRenderer::updateSurface(godot::String& error) -> bool
+{
+    auto* server = godot::RenderingServer::get_singleton();
+    if (!server || !surfaceInitialized_) {
+        error = "Flexible Plane dynamic mesh surface is unavailable.";
+        return false;
+    }
+    auto* vertexData = vertexBytes_.ptrw();
+    auto* attributeData = attributeBytes_.ptrw();
+    auto* indexData = indexBytes_.ptrw();
+    std::memset(vertexData, 0, static_cast<std::size_t>(vertexBytes_.size()));
+    std::memset(attributeData, 0, static_cast<std::size_t>(attributeBytes_.size()));
+    std::memset(indexData, 0, static_cast<std::size_t>(indexBytes_.size()));
+    const auto* vertices = vertices_.ptr();
+    const auto* uvs = uv_.ptr();
+    const auto* colors = colors_.ptr();
+    const auto* indices = indices_.ptr();
+    for (auto index = 0u; index < maxVertices_; ++index) {
+        const auto& vertex = vertices[index];
+        const auto vertexOffset = static_cast<std::size_t>(index) * vertexStride_ + vertexOffset_;
+        std::memcpy(vertexData + vertexOffset, &vertex, sizeof(vertex));
+        const auto& uv = uvs[index];
+        const auto uvOffset = static_cast<std::size_t>(index) * attributeStride_ + uvOffset_;
+        std::memcpy(attributeData + uvOffset, &uv, sizeof(uv));
+        const auto& color = colors[index];
+        const auto colorOffset = static_cast<std::size_t>(index) * attributeStride_ + colorOffset_;
+        const auto packColor = [](float value) {
+            return static_cast<std::uint8_t>(std::clamp(value, 0.0f, 1.0f) * 255.0f);
+        };
+        attributeData[colorOffset] = packColor(color.r);
+        attributeData[colorOffset + 1] = packColor(color.g);
+        attributeData[colorOffset + 2] = packColor(color.b);
+        attributeData[colorOffset + 3] = packColor(color.a);
+    }
+    for (auto index = 0u; index < maxIndices_; ++index) {
+        const auto meshIndex = static_cast<std::uint32_t>(indices[index]);
+        const auto offset = static_cast<std::size_t>(index) * indexStride_;
+        if (indexStride_ == 2) {
+            const auto compactIndex = static_cast<std::uint16_t>(meshIndex);
+            std::memcpy(indexData + offset, &compactIndex, sizeof(compactIndex));
+        } else {
+            std::memcpy(indexData + offset, &meshIndex, sizeof(meshIndex));
+        }
+    }
+    server->mesh_surface_update_vertex_region(mesh_->get_rid(), 0, 0, vertexBytes_);
+    server->mesh_surface_update_attribute_region(mesh_->get_rid(), 0, 0, attributeBytes_);
+    server->mesh_surface_update_index_region(mesh_->get_rid(), 0, 0, indexBytes_);
     return true;
 }
 
 FlexiblePlaneRenderer::~FlexiblePlaneRenderer()
 {
-    if (!godot::Thread::is_main_thread())
-    {
-        godot::UtilityFunctions::push_error("Flexible Plane must be destroyed on the Godot main thread.");
-        return;
-    }
-    if (auto* node = godot::Object::cast_to<godot::MeshInstance3D>(godot::ObjectDB::get_instance(nodeId_)))
-    {
-        node->queue_free();
-    }
+    instance_.reset();
 }
 
-auto FlexiblePlaneRenderer::update(SpawnableHost& host, const std::uint8_t* container,
+void FlexiblePlaneRenderer::synchronize(godot::Node3D& scope, bool enabled, bool exiting)
+{
+    auto* server = godot::RenderingServer::get_singleton();
+    if (!server || !instance_.isValid()) {
+        return;
+    }
+    if (exiting || !scope.is_inside_tree()) {
+        server->instance_set_visible(instance_.get(), false);
+        server->instance_set_scenario(instance_.get(), godot::RID{});
+        return;
+    }
+    auto world = scope.get_world_3d();
+    server->instance_set_scenario(instance_.get(),
+        world.is_valid() ? world->get_scenario() : godot::RID{});
+    server->instance_set_transform(instance_.get(), scope.get_global_transform());
+    server->instance_set_visible(instance_.get(), enabled && hasGeometry_ && scope.is_visible_in_tree());
+}
+
+auto FlexiblePlaneRenderer::update(godot::Node3D& scope, SpawnableHost& host, const std::uint8_t* container,
     std::uint64_t instance, double time, godot::Camera3D* camera,
     flexible_adapter::HistoryScope& history, godot::String& error) -> bool
 {
-    if (!godot::Thread::is_main_thread())
-    {
+    if (!godot::Thread::is_main_thread()) {
         error = "Flexible Plane update must run on the Godot main thread.";
         return false;
     }
-    auto* node = godot::Object::cast_to<godot::MeshInstance3D>(godot::ObjectDB::get_instance(nodeId_));
-    if (!node)
-    {
-        error = "Flexible Plane node is unavailable.";
+    if (!instance_.isValid()) {
+        error = "Flexible Plane RenderingServer instance is unavailable.";
         return false;
     }
+    auto* server = godot::RenderingServer::get_singleton();
+    if (!server) {
+        error = "Godot RenderingServer is unavailable.";
+        return false;
+    }
+    auto world = scope.get_world_3d();
+    server->instance_set_scenario(instance_.get(),
+        world.is_valid() ? world->get_scenario() : godot::RID{});
+    const auto scopeTransform = scope.get_global_transform();
+    server->instance_set_transform(instance_.get(), scopeTransform);
+    server->instance_set_visible(instance_.get(), scope.is_visible_in_tree());
     auto localCamera = godot::Vector3{};
     if (definition_.options.facing == 1)
     {
@@ -320,14 +476,13 @@ auto FlexiblePlaneRenderer::update(SpawnableHost& host, const std::uint8_t* cont
             error = "Flexible Plane requires a camera.";
             return false;
         }
-        const auto transform = node->get_global_transform();
-        const auto determinant = transform.basis.determinant();
+        const auto determinant = scopeTransform.basis.determinant();
         if (!std::isfinite(determinant) || std::abs(determinant) < 1e-12)
         {
             error = "Flexible Plane camera transform is singular.";
             return false;
         }
-        localCamera = transform.affine_inverse().xform(camera->get_global_transform().origin);
+        localCamera = scopeTransform.affine_inverse().xform(camera->get_global_transform().origin);
     }
     const auto read = [&host, container, instance](const flexible_adapter::Id& source,
         double* values, std::uint8_t& width) -> LibraResult {
@@ -346,37 +501,53 @@ auto FlexiblePlaneRenderer::update(SpawnableHost& host, const std::uint8_t* cont
         error = godot::String("Flexible Plane native evaluation failed: ") + godot::String::num_int64(result);
         return false;
     }
-    auto vertices = godot::PackedVector3Array{};
-    auto uv = godot::PackedVector2Array{};
-    auto colors = godot::PackedColorArray{};
-    auto indices = godot::PackedInt32Array{};
     const auto counts = geometry_.counts();
-    vertices.resize(counts.vertices);
-    uv.resize(counts.vertices);
-    colors.resize(counts.vertices);
-    indices.resize(counts.indices);
-    for (auto index = 0u; index < counts.vertices; ++index)
-    {
+    if (counts.vertices > maxVertices_ || counts.indices > maxIndices_) {
+        error = "Flexible Plane geometry exceeded its reserved mesh capacity.";
+        return false;
+    }
+    if (counts.indices == 0) {
+        hasGeometry_ = false;
+        server->instance_set_visible(instance_.get(), false);
+        return true;
+    }
+    auto minimum = godot::Vector3{};
+    auto maximum = godot::Vector3{};
+    for (auto index = 0u; index < maxVertices_; ++index) {
+        vertices_.set(index, godot::Vector3{});
+        uv_.set(index, godot::Vector2{});
+        colors_.set(index, godot::Color(0, 0, 0, 0));
+    }
+    for (auto index = 0u; index < maxIndices_; ++index) {
+        indices_.set(index, 0);
+    }
+    for (auto index = 0u; index < counts.vertices; ++index) {
         const auto& v = geometry_.vertices()[index];
-        vertices.set(index, godot::Vector3(v.x, v.y, v.z));
-        uv.set(index, godot::Vector2(v.u, v.v));
-        colors.set(index, godot::Color(v.r, v.g, v.b, v.a));
+        const auto vertex = godot::Vector3(v.x, v.y, v.z);
+        vertices_.set(index, vertex);
+        uv_.set(index, godot::Vector2(v.u, v.v));
+        colors_.set(index, godot::Color(v.r, v.g, v.b, v.a));
+        minimum.x = index == 0 ? vertex.x : std::min(minimum.x, vertex.x);
+        minimum.y = index == 0 ? vertex.y : std::min(minimum.y, vertex.y);
+        minimum.z = index == 0 ? vertex.z : std::min(minimum.z, vertex.z);
+        maximum.x = index == 0 ? vertex.x : std::max(maximum.x, vertex.x);
+        maximum.y = index == 0 ? vertex.y : std::max(maximum.y, vertex.y);
+        maximum.z = index == 0 ? vertex.z : std::max(maximum.z, vertex.z);
     }
-    for (auto index = 0u; index < counts.indices; ++index)
-    {
-        indices.set(index, static_cast<std::int32_t>(geometry_.indices()[index]));
+    for (auto index = 0u; index < counts.indices; ++index) {
+        indices_.set(index, static_cast<std::int32_t>(geometry_.indices()[index]));
     }
-    auto arrays = godot::Array{};
-    arrays.resize(godot::Mesh::ARRAY_MAX);
-    arrays[godot::Mesh::ARRAY_VERTEX] = vertices;
-    arrays[godot::Mesh::ARRAY_TEX_UV] = uv;
-    arrays[godot::Mesh::ARRAY_COLOR] = colors;
-    arrays[godot::Mesh::ARRAY_INDEX] = indices;
-    mesh_->clear_surfaces();
-    if (counts.indices != 0)
-    {
-        mesh_->add_surface_from_arrays(godot::Mesh::PRIMITIVE_TRIANGLES, arrays);
+    if (surfaceInitialized_) {
+        if (!updateSurface(error)) {
+            return false;
+        }
+    } else if (!initializeSurface(error)) {
+        return false;
     }
+    mesh_->set_custom_aabb(godot::AABB(minimum, maximum - minimum));
+    hasGeometry_ = true;
+    ++surfaceUpdates_;
+    server->instance_set_visible(instance_.get(), scope.is_visible_in_tree());
     return true;
 }
 }

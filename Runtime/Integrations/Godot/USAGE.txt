@@ -7,9 +7,13 @@ Spawnable package envelope, including scalar-only roots. Legacy raw .lfxb
 programs and the legacy .lfxp package input alias remain supported. No
 .NET runtime is required in Godot.
 
-The godot-cpp build profile enables the JSON, Camera3D/Viewport, Node3D and
-MeshInstance3D/Mesh classes used by the adapter. CMake links the existing
-godot::cpp target; no separate graphics SDK library is required.
+The godot-cpp build profile enables JSON, Node3D/World3D, Mesh/ArrayMesh,
+MultiMesh and RenderingServer APIs used by the adapter. CPU package Draws,
+CPU Sprite particles and Flexible Plane use owned RenderingServer instance
+and MultiMesh RIDs rather than per-draw scene-tree render Nodes. The effect
+player and its root/child Node3D transform/visibility scopes remain. GPU
+submission retains its existing path. CMake links godot::cpp; no separate
+graphics SDK library is required.
 
 Build from an x64 Visual Studio developer shell with CMake, Ninja, Python,
 and a separate godot-cpp checkout that provides the 4.7 API:
@@ -86,6 +90,26 @@ Named Game I/O is available for packages:
   through the matching container's port table, never through root indices.
 * read_value(node_uuid) reads root-program node values for either playback
   mode. Spawned child instance values are not currently exposed by this node.
+* get_render_stats() reports this player's current CPU package submissions:
+  render_server_instances, cpu_multimesh_batches, opaque_model_multimesh_batches,
+  opaque_model_multimesh_members, effect_scope_nodes and
+  flexible_plane_surface_updates. `render_server_instances` counts the current
+  direct/batched submission slots, including hidden or not-yet-populated
+  entries; it is not a visible-pixel count. `allocated_render_server_instances`
+  counts every currently owned valid instance RID, including any hidden or
+  fallback RIDs. Its breakdown is `allocated_draw_instances`,
+  `allocated_flexible_plane_instances`, `allocated_cpu_particle_instances`,
+  and `allocated_opaque_model_batch_instances`. The separate
+  `allocated_render_server_multimeshes` counts owned MultiMesh RIDs, not
+  instances. These CPU-renderer counters exclude GPU adapter resources.
+  At present, batching releases the individual fallback instance RIDs; the
+  counters are measured separately rather than assuming this is always true.
+  The cumulative CPU transfer counters are
+  cpu_multimesh_buffer_uploads, cpu_particle_active_records,
+  cpu_particle_records_transferred and cpu_particle_bytes_transferred.
+  Active records sum live particle counts across uploads; transferred records
+  and bytes count the entire capacity-sized submitted buffers, including
+  padding (16 floats per record). These counters do not imply a speedup.
 
 ModelDraw and SpriteDraw/SpriteAnimation/SpriteComposition are supported by the
 CPU package renderer using explicit in-memory Godot resource bindings:
@@ -98,36 +122,62 @@ CPU package renderer using explicit in-memory Godot resource bindings:
 Each identity must exactly match the draw's compiled `assetPath`. Bindings
 must be set while stopped; a missing/invalid resource rejects play_package and
 preserves current playback. Godot does not load assetPath values or substitute
-placeholder resources. Root and spawned-child draws have separate Node3D
-scopes. ModelDraw uses the explicitly bound Mesh; each sprite gets a centered
-quad, an unshaded alpha StandardMaterial3D, the explicitly bound Texture2D,
-and per-draw tint and atlas UV state. Position, rotation, scale, tint, frame
+placeholder resources. Root and spawned-child draws retain separate Node3D
+effect scopes and use owned direct RenderingServer RIDs rather than per-draw
+MeshInstance3D Nodes. Compatible opaque ModelDraws sharing the same Mesh
+resource can share one MultiMesh across root and child scopes. Eligibility is
+conservative: all surfaces must have opaque, non-billboard StandardMaterial3D
+materials without next passes; per-draw overrides and parameters are excluded.
+Special depth, refraction, alpha-antialiasing, render-priority, fixed-size,
+particle-trail and opacity-producing flags are also excluded.
+Transparent, unknown and custom-shader state stays in separate instances.
+Each member must also have a finite, positive effective world-transform
+determinant. Mirrored, singular and nonfinite transforms stay on separate
+instance RIDs so Godot can apply per-instance culling behavior. Materials and
+transforms are rechecked while held, so incompatible changes fall back to
+separate RIDs. A ModelDraw retains its
+bound Mesh resource and makes an effect-owned Mesh copy only when surface
+material overrides/uniforms need isolation. Surface slots, texture uniforms,
+per-draw shader parameters, and the bound asset remain separate. Each sprite
+uses an effect-owned centered QuadMesh, unshaded alpha StandardMaterial3D,
+the explicitly bound Texture2D, and per-draw tint and atlas UV state.
+Draws are not merged across material or uniform state, and transparent order
+is not changed by a custom batching step.
+Position, rotation, scale, tint, frame
 and other numeric sprite inputs are read from the root or matching child
 instance, not from shared/root values. SpriteDraw and SpriteAnimation use
 their atlas settings and the native flipbook sampler; SpriteComposition uses
 the native composition sampler, scope-local elapsed time, cell-sized quads,
 keyed transforms and Godot material render priority. SpriteDraw/SpriteAnimation
 billboarding is enabled by the authored setting. Rotation is applied as
-Godot-local Euler degrees. The root scope is named `LibraFxRootScope`; a
+Godot-local Euler degrees. Direct instances synchronize their composed scope
+transform, scenario and visibility even while the player and SceneTree are
+paused. The nearest Node3D ancestor of the playback Node supplies the owner
+transform and visibility across the intervening non-spatial playback Node.
+Leaving the scene tree still stops playback. The root scope is named
+`LibraFxRootScope`; a
 replacement started before the previous queued scope is freed receives a
 `LibraFxRootScope_<n>` name to avoid ambiguous siblings.
 
-Flexible Plane Draw has source-level integration in this package renderer for
+Flexible Plane Draw is supported in this package renderer for
 root and spawned-child scopes. Bind its compiled texture identity explicitly
 with set_texture_binding before playback; a missing or invalid texture rejects
-the package. Each draw uses one ArrayMesh with an unshaded transparent,
-vertex-colored StandardMaterial3D. Camera-facing ribbons require the player
-camera_path Camera3D or, failing that, the active viewport Camera3D. The debug
-player uses the viewport camera. History is shared by draws of the same source within a
-scope, but never between root and child instances; backwards time clears it.
+the package. Each draw owns one ArrayMesh and direct RenderingServer instance
+with an unshaded transparent, vertex-colored StandardMaterial3D. Camera-facing
+ribbons require the player camera_path Camera3D or, failing that, the active
+viewport Camera3D. The debug player uses the viewport camera. History is shared
+by draws of the same source within a scope, but never between root and child
+instances; backwards time clears it.
 The native renderer exposes resetFlexibleHistories() for hosts implementing
 explicit discontinuous seeks. Normal player/debug advances are nonnegative;
 no public forward-seek API is provided here. Rendering failures are reported
 and hide the affected scope instead of leaving a stale ribbon visible.
-Build against the pinned Godot 4.7 godot-cpp API, including ImageTexture in the
-build profile. A successful extension build verifies compilation, not engine
-playback or rendered pixels. Flexible Plane and CPU particle rendering still
-require visual acceptance in Godot.
+Visibility, owner transform and world scenario are synchronized to its owned
+RenderingServer instance. The playback Node3D scopes are retained; Flexible
+Plane adds no scene-tree Node.
+Geometry and byte buffers are reserved once per effect instance and stay
+bounded by the descriptor's list (up to 64 points) or history capacity (up to
+4096 points); one dynamic ArrayMesh surface is updated in place.
 
 ModelDraw supports surface overrides bound while stopped with
 set_material_binding(compiled_identity, Material). clear_material_binding
@@ -288,7 +338,9 @@ Root/child ModelDraw regression:
    --headless --path C:\LibraBuild\Smoke --script res://model_draw_smoke.gd --quit-after 120
    The test explicitly binds a Godot BoxMesh to
    `/Engine/BasicShapes/Cube.Cube`, checks missing-binding rejection, and
-   verifies separate root/child MeshInstance3D scopes and their transforms.
+   verifies direct root/child server instances, absence of per-draw render
+   Nodes, and effect-scope counts. It does not inspect rendered pixels or
+   directly read back the instance transforms.
 
 Sprite Composition smoke test:
 
@@ -299,31 +351,57 @@ Sprite Composition smoke test:
    along with `Tests\sprite_smoke.gd` and the extension DLL layout.
 3. Run Godot 4.7.2 with:
    --headless --path C:\LibraBuild\Smoke --script res://sprite_smoke.gd --quit-after 120
-   Expect "PASS: Godot rendered explicit Texture2D sprite composition and sampled native animation".
-   The test creates a 64x32 in-memory ImageTexture, binds it to the fixture's
-   texture identity, and checks the live mesh/material, atlas cells, native
-   sampler transforms, draw priority, and binding lifetime rules. It does not
-   capture or assert rendered pixels.
+   Expect "PASS: Godot admitted explicit Texture2D sprite composition as direct RenderingServer instances".
+   The test creates a 64x32 in-memory ImageTexture, checks binding lifetime,
+   advances the animation, and verifies there are two direct instances but no
+   per-draw scene-tree render Nodes. It does not capture or assert rendered
+   pixels.
 
-Windows x86-64 Godot 4.7.2 smokes exercise raw bytecode, package Game I/O,
-SpriteDraw and SpriteAnimation, root/child ModelDraw and material bindings.
-The Vulkan GPU scope smoke checks Matrix placement in the framebuffer,
-FlowMap sampling and emitter retirement. Exported games, a sprite-specific
-child fixture and other Godot platforms remain unverified.
+Existing Windows x86-64 Godot 4.7.2 smokes cover raw bytecode, package Game
+I/O, SpriteDraw and SpriteAnimation. The migration smokes exercise root/child
+ModelDraw and material fixture admission through direct instances, plus
+SpriteComposition playback and direct-instance counts. They do not assert
+shader uniform values, sprite UVs, transforms, or rendered pixels. The Vulkan
+GPU scope smoke checks Matrix placement in the framebuffer, FlowMap sampling
+and emitter retirement; the GPU renderer was not changed or rerun for this
+migration. Exported games, a sprite-specific child fixture and other Godot
+platforms remain unverified.
 
-ModelDraw material override smoke (requires a graphics-enabled Godot run):
+ModelDraw material binding smoke:
 run CommentImageSmokeTests with --spawnable-package-binary in an isolated
 directory, copy the resulting .godot-material.lfxp and .godot-material.ids.json
 as material.lfxp and material.ids.json, and run Tests\material_smoke.gd with
---path <scratch> --script res://material_smoke.gd --quit-after 120.
+--path <scratch> --script res://material_smoke.gd --quit-after 120. It verifies
+material binding admission, root/child direct instance counts and no per-draw
+scene-tree render Nodes; use a graphics-enabled project to assess actual
+surface and uniform output.
+
+Flexible Plane dynamic-mesh smoke:
+
+1. Generate `spawnable.adapter.lfxp` as described in the root/child
+   ModelDraw regression above.
+2. Create an isolated synthetic Flexible Plane package:
+   pwsh -File Runtime\Integrations\Godot\Tests\CreateFlexiblePlaneSmokeFixture.ps1 `
+     -BasePackage C:\LibraBuild\Fixtures\spawnable.adapter.lfxp `
+     -OutputPackage C:\LibraBuild\Smoke\flexible-plane.lfxb
+   Copy `Tests\flexible_plane_render_submission_smoke.gd` to the same scratch
+   Godot project.
+3. Run Godot 4.7.2 with:
+   --headless --path C:\LibraBuild\Smoke --script res://flexible_plane_render_submission_smoke.gd --quit-after 120
+   This checks direct-instance admission, a first dynamic ArrayMesh surface,
+   and a second in-place vertex/attribute/index update. It does not assert
+   pixels or camera-facing/history behavior.
 
 CPU particle Sprite billboards
 ------------------------------
 CPU packages use LFXP format 4/package 12 with `cpuParticleVersion: 1`. Bind
 each `cpuParticles` entry's `assetPath` with `set_texture_binding`, except for
-the explicit `builtin:white` token. Each emitter owns one MultiMeshInstance3D.
-It uploads one reused buffer with per-particle transforms and RGBA; the
-material billboards per view while retaining separate X/Y sizes. Alpha and
+the explicit `builtin:white` token. Each CPU emitter owns one RenderingServer
+MultiMesh RID and one direct instance RID, with no MultiMeshInstance3D Node. It
+reuses a packed upload buffer, grows its capacity geometrically, and uploads
+per-particle transforms and RGBA in one MultiMesh buffer transfer per populated
+emitter update. The material billboards per view while retaining separate X/Y
+sizes. Alpha and
 Additive are supported; transparent sorting is by emitter, not by particle.
 `drawScale` applies to effect-local position and XY size.
 
@@ -336,5 +414,62 @@ may still drain the queue; an empty pop then releases the completed host.
 Explicit Stop or replacement releases that queue, so drain beforehand. The
 renderer does not consume events; size the queue for one simulation advance.
 
-CPU Sprite rendering is supported only at the package root. This path was not
-built or pixel-verified for this change.
+CPU Sprite rendering is supported only at the package root.
+
+For the CPU direct-submission smoke, copy the isolated
+`cpu-particles.lfxb` fixture to the scratch project as `cpu-particles.lfxb`,
+copy `Tests\cpu_render_submission_smoke.gd`, and run:
+
+  --headless --path C:\LibraBuild\Smoke --script res://cpu_render_submission_smoke.gd --quit-after 120
+
+The script reports direct-instance, MultiMesh batch, bulk-upload and
+transferred-record counts, checks that no CPU render Nodes were added, and
+checks Stop cleanup.
+
+Godot RID migration verification
+--------------------------------
+The migration was built against the pinned Godot 4.7 godot-cpp API and run
+with Godot 4.7.2's console executable in an isolated scratch project. The CPU
+fixture reported one direct instance, one CPU batch, two uploads, six active
+records, eight submitted capacity records and 512 submitted bytes.
+
+An earlier Flexible Plane fixture mistakenly replaced a child template rather
+than the root; the earlier headless result did not verify plane updates.
+The corrected fixture targets the root and the headless test now requires two
+actual plane surface updates. Real graphics checks with the Windows OpenGL
+compatibility renderer on an AMD Radeon RX 6700 XT captured CPU Sprite and
+fixed-point plane pixels, their held/paused owner movement, hide/show, world
+swap and Stop. A red-to-green plane gradient checks the dynamic attribute data.
+The world-swap test retains the prior World3D while switching. On this Godot
+4.7.2 build, dropping the only old World3D reference during a SubViewport swap
+also emitted `scenario_remove_viewport_visibility_mask: scenario is null` in
+`Tests\world_swap_control_smoke.gd`, which does not load the extension.
+The real graphics test also checks an opaque root/child batch alongside a
+separate transparent draw, and verifies that a deliberate camera-facing
+plane failure hides all scope entries until a valid update recovers.
+The determinant regression uses an actual one-sided triangle and compares the
+framebuffer against separate direct instances. On that same OpenGL setup, the
+old mixed-parity batch dropped 820 mirrored pixels; the conservative fallback
+matches the direct image pixel-for-pixel. Positive-parity batching also matches
+its direct baseline. The headless determinant check additionally covers zero
+determinants, mixed batches, draw-local scale and double reflections.
+
+To run `Tests\real_graphics_render_smoke.gd`, supply the CPU fixture,
+`adapter.lfxp` and IDs, a root `flexible-plane.lfxb` generated as above,
+`opaque-batch.lfxp` generated by `Tests\CreateOpaqueBatchSmokeFixture.ps1`,
+and `camera-failure-plane.lfxb` generated by the Flexible Plane helper with
+`-CameraFacing -IncludeModel`. Set absolute `LIBERAFX_PIXEL_ARTIFACTS`,
+APPDATA, LOCALAPPDATA and LIBERAFX_DATA_ROOT to isolated directories; use a
+real display and graphics renderer, not --headless. The failure test
+intentionally logs a singular-camera-transform error. Screenshots are
+synthetic test artifacts, not authoring-project data.
+
+For `Tests\determinant_batch_smoke.gd`, also generate
+`opaque-mirrored-local.lfxp` with `CreateOpaqueBatchSmokeFixture.ps1
+-MirrorRootDraw`; the test expects this file, `adapter.lfxp` and its IDs in
+the scratch project. `Tests\mirrored_model_batch_smoke.gd` uses `adapter.lfxp`
+and its IDs, and requires a real display plus `LIBERAFX_PIXEL_ARTIFACTS`.
+
+This is not coverage of all shader uniforms, transparent ordering, UVs,
+history ribbons, camera-facing visual correctness, graphics backends or
+platforms. GPU simulation was not changed or rerun for this migration.

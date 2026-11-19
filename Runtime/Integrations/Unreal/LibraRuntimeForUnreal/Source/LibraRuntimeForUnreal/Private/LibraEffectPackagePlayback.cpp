@@ -76,7 +76,8 @@ void ULibraEffectComponent::SyncPackageState()
     LastError = PackagePlayback->LastError;
     // The public component is the only tick owner, including after callbacks.
     PackagePlayback->SetComponentTickEnabled(false);
-    SetComponentTickEnabled(bIsPlaying || PackagePlayback->HasPendingDebugWork());
+    SetComponentTickEnabled(bIsPlaying || PackagePlayback->HasPendingDebugWork() ||
+        PackagePlayback->GetRenderObjectCount() > 0);
 }
 
 int64 ULibraEffectComponent::GetPackageDebuggerGeneration() const
@@ -281,6 +282,45 @@ auto ULibraEffectComponent::ReadChildValue(FGuid containerId, int64 instanceId, 
 int32 ULibraEffectComponent::GetRenderObjectCount() const
 {
     return PackagePlayback ? PackagePlayback->GetRenderObjectCount() : 0;
+}
+
+int32 ULibraEffectComponent::GetNativeDrawPrimitiveCount() const
+{
+    return PackagePlayback ? PackagePlayback->GetNativeDrawPrimitiveCount() : 0;
+}
+
+void ULibraEffectComponent::GetNativeRenderSubmissionStats(int32& logicalRenderObjects,
+    int32& nativePrimitives, int32& opaqueBatches, int32& cpuParticleBatches,
+    int32& liveCpuParticles, int32& allocatedInstanceCapacity, uint64& submittedBytes) const
+{
+    logicalRenderObjects = 0;
+    nativePrimitives = 0;
+    opaqueBatches = 0;
+    cpuParticleBatches = 0;
+    liveCpuParticles = 0;
+    allocatedInstanceCapacity = 0;
+    submittedBytes = 0;
+    if (PackagePlayback)
+    {
+        PackagePlayback->GetNativeRenderSubmissionStats(logicalRenderObjects, nativePrimitives,
+            opaqueBatches, cpuParticleBatches, liveCpuParticles, allocatedInstanceCapacity,
+            submittedBytes);
+    }
+}
+
+void ULibraEffectComponent::GetDrawSnapshots(TArray<FTransform>& transforms,
+    TArray<FBoxSphereBounds>& bounds, TArray<FGuid>& drawIds,
+    TArray<FGuid>& containerIds, TArray<int64>& instanceIds) const
+{
+    transforms.Reset();
+    bounds.Reset();
+    drawIds.Reset();
+    containerIds.Reset();
+    instanceIds.Reset();
+    if (PackagePlayback)
+    {
+        PackagePlayback->GetDrawSnapshots(transforms, bounds, drawIds, containerIds, instanceIds);
+    }
 }
 
 int32 ULibraEffectComponent::GetGpuInstanceCount() const

@@ -33,8 +33,15 @@ LIBERA FX は、Unity・Unreal Engine・Godot で再生するエフェクトを�
 
 煙・炎などの気体と、水・粘性のある液体の両方を将来の対応対象とします。
 計算方式、CPU／GPU の役割、描画方式は今後設計します。
+対応は **2D を先に実装・検証し、その後に 3D へ拡張する**順序です。
 流体シミュレーションは **未実装で、今回の Preview には含みません**。
 パーティクルや帯状ポリゴンが使えることは、流体ソルバーへの対応を意味しません。
+
+今回の Preview 公開後は、Unity・Unreal・Godot の描画改修、CPU パーティクルの
+Flow 対応と GPU 放出形状の追加、2D フルイド、3D フルイドの順に進めます。
+GPU Flow の先頭で使用リソースと描画先を宣言する案は
+[issue #68](https://github.com/Libra-Works/LibraFX/issues/68) で検討します。
+これは将来の設計案で、現在使える機能ではありません。
 
 [ソースリポジトリ](https://github.com/Libra-Works/LibraFX) ·
 [MIT ライセンス](https://github.com/Libra-Works/LibraFX/blob/main/LICENSE)

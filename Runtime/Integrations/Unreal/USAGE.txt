@@ -15,15 +15,18 @@ Scope
   DNS uses UE's platform socket subsystem; TLS pinning remains connection-local.
   Linux/macOS builds and cross-platform live connections have not been verified.
 
-Flexible Plane (unreleased source)
-  Unreleased source addition: FlexiblePlaneDraw uses one dynamic ribbon mesh per
-  root/Spawnable instance. Bind its authored texture identity to a UTexture and
-  bind "builtin:flexible-plane" to a Material exposing the global Texture
-  parameter and consuming vertex color. There is no material fallback.
+Flexible Plane
+  FlexiblePlaneDraw uses one effect-owned native scene primitive per
+  root/Spawnable instance; it does not create a UMeshComponent. Bind its
+  authored texture identity to a UTexture and bind "builtin:flexible-plane" to
+  a Material exposing the global Texture parameter and consuming vertex color.
+  There is no material fallback.
   Camera-facing mode uses EffectCameraOverride or the first player's camera.
   Fixed-up mode also works without a camera. Ribbon colors must be within 0..1.
-  The new rendering source has not been built or observed in Unreal; the earlier
-  verification statements above do not cover it. SDK 2026.11.8 is unchanged.
+  UE 5.7.4 NullRHI automation checks native descriptor registration, bounds,
+  geometry payload accounting and absence of an ISM Component. NullRHI does not
+  verify pixels or GPU rendering. Separate D3D11/SM5 acceptance verifies red/green
+  vertex-colored pixels and a clear target after Stop for the fixed-up fixture.
 
 Install (PowerShell 7)
   .\Install-LibraRuntimeForUnreal.ps1 -ProjectPath "C:\YourProject\YourProject.uproject"
@@ -213,17 +216,50 @@ Effect package playback
   and per-node profiling flags currently reject explicitly rather than evaluating
   a separate CPU instance or silently ignoring requested behavior.
   The host owns package lifecycle, delayed work and parent/child routing.
-  The component instantiates root and per-child StaticMesh components from
-  render_config and updates them from that exact native instance's values.
-  Spawn creates a scope; Stop releases it. Natural Destroy is a notification,
+  Ordinary Draw, CPU Sprite and FlexiblePlane use effect-owned native
+  FPrimitiveSceneDesc registrations and pre-created scene proxies; none creates
+  a per-Draw, per-emitter or per-plane UPrimitiveComponent. A separate native
+  primitive is retained for each transparent ordinary Draw to preserve engine
+  translucency sorting. Opaque/masked ordinary Draws are instanced together
+  only when their mesh, base materials, material-parameter values, tint values
+  and texture bindings match exactly and the materials support Instanced Static
+  Mesh usage. The batch is one instanced scene primitive, not a claim that one
+  proxy alone reduces draw calls. CPU Sprite emitters use one instanced native
+  primitive each and preserve per-particle RGBA as four instance custom floats.
+  Mesh/material/texture assets remain engine-native.
+  CPU particle billboards require EffectCameraOverride or a current player
+  camera; fail playback explicitly if neither exists. The native descriptor
+  implementation is verified against the public Scene APIs in UE 5.7.4;
+  other engine versions still require their own build/automation validation.
+  GetRenderObjectCount reports logical render objects;
+  GetNativeDrawPrimitiveCount reports ordinary Draw scene primitives; opaque
+  batches report actual compatible instance groups. GetDrawSnapshots exposes
+  ordinary Draw transforms and bounds. GetNativeRenderSubmissionStats separates
+  logical objects, native primitives, opaque batches, CPU batches, live CPU
+  particles, allocated instance capacity and submitted payload bytes. Capacity
+  is the latest observed minimum capacity of the render-thread transform and
+  custom-data staging arrays (and may be zero until the first render update).
+  Two reusable upload slots keep CPU instance and FlexiblePlane geometry arrays
+  alive until their render-thread swaps/copies complete; the instancing proxy
+  retains its engine-side array capacity. Submitted bytes count CPU payloads
+  supplied to Scene/update commands, not completed GPU transfer bytes; the
+  reported total is the latest staged payload per active primitive, not a
+  cumulative frame counter. These diagnostics do not measure render-thread cost
+  or speedup. Spawn creates a
+  scope; Stop releases it. Native proxies,
+  descriptors and strong asset references remain alive through render-thread
+  removal fences. While a cached render scope remains paused, the effect
+  component continues presentation-only updates so actor/root transforms and
+  visibility changes do not require new VFX evaluation.
+  Natural Destroy is a notification,
   not a second destruction. Root completion, explicit Stop, restart and
   component destruction release owned rendering/GPU resources.
   AssetBindings maps opaque identities to engine Mesh/Material/Texture objects.
   Otherwise a valid Unreal soft object path may resolve an engine asset.
   builtin:unlit-color requires an explicit runtime material binding exposing
   the authored Color parameter; no editor-only material is generated at runtime.
-  Shared meshes/materials are never modified. Dynamic material instances are
-  allocated once per render scope, not per frame. Exposed material identities,
+  Shared meshes/materials are never modified. Ordinary Draw dynamic material
+  instances are allocated once per Draw scope, not per frame. Exposed material identities,
   associations and texture overrides are validated before playback.
   Sprites use the engine Plane mesh and a bound builtin:sprite material (or
   explicit material override) exposing Texture and AtlasRect. Tint/Color are
@@ -251,6 +287,22 @@ Effect package playback
   "Automation RunTests Libra.Runtime.Spawnable.ComponentFixture" in Output Log.
   The user also imported Fireworks.lfxp through Content Browser and confirmed
   the resulting LibraSpawnableAsset and source import data in the asset editor.
+  The ordinary Draw fixture was run in the isolated UE 5.7.4 Editor with
+  NullRHI; it verifies zero per-Draw UStaticMeshComponents, native primitive
+  counts, evaluated transform/bounds snapshots, overlapping scopes, paused
+  transform presentation, Stop and natural cleanup. NullRHI does not verify
+  visible pixels, GPU rendering, or console SDK behavior. The native primitive
+  automation verifies CPU instance data/custom RGBA staging, bounds, capacity,
+  payload accounting, FlexiblePlane geometry and no ISM Components.
+  Libra.Runtime.Rendering.OpaqueBatchCompatibility, supplied the isolated
+  opaque-batch .lfxp fixture, observes compatible logical Draws merged into one
+  native opaque batch/primitive and verifies translucent material state is
+  excluded from opaque instancing. Libra.Runtime.Rendering.CpuSpriteNativePrimitive,
+  supplied the compiler-produced CPU particle package, verifies effect-component
+  startup, live CPU particles, one native CPU emitter primitive, capacity/payload
+  stats, no ISM Component and Stop cleanup. It does not verify visible particles
+  or rendered RGBA. NullRHI verifies registration and counters only; it does not
+  prove rendered pixels, material output or visual transparent ordering.
   The focused component fixture additionally exercises actual renderer objects,
   two overlapping instances with independent local clocks, and resource cleanup.
   These lifecycle/rendering fixtures now run through ULibraEffectComponent.
@@ -267,6 +319,30 @@ Effect package playback
   auto-idle rejection; supply -LibraSpawnableRootGpuFixture=<RootGpu.lfxp>, with
   RootGpu.legacy.lfxp beside it. The isolated test project's
   --spawnable-adapter-fixtures command emits these root GPU and game I/O files.
+  Separate UE 5.7.4 D3D11/SM5 RealRhiAcceptance passed actual SceneCapture
+  readback for an instanced opaque batch, CPU Sprite custom RGB/half-alpha, and
+  fixed-up FlexiblePlane red/green vertex colors. Each target became clear
+  after Stop, and all three isolated worlds were torn down. The CPU fixture
+  reported three live particles, one native batch/primitive, capacity three,
+  and 400 latest staged bytes; these bytes are not measured GPU transfer time.
+  A one-sided Plane lifetime variant passed three create/render/remove/clear
+  cycles, including a mirrored transform, followed by world teardown. The
+  earlier post-Stop capture crash no longer reproduces in these checks.
+  Synthetic materials are fully compiled before capture; a shader-manager idle
+  check alone previously allowed black fallback output. The fixed-up fixture
+  lies in XY, so capture it from above with a near plane smaller than its scale.
+  Run "Automation RunTests Libra.Runtime.Rendering.RealRhiAcceptance" with
+  -d3d11, -LibraOpaqueBatchFixture=<opaque-batch.lfxp>,
+  -LibraCpuParticleFixture=<cpu-particles-render.lfxb>, -LibraRhiCpuTinted,
+  -LibraFlexiblePlaneFixture=<root-flexible-plane.lfxb>, and optionally
+  -LibraRealRenderOutput=<absolute-isolated-output-directory>.
+  --cpu-particle-fixture <new-isolated-directory> on the managed smoke executable
+  emits both the ordinary CPU fixture and this authored tinted/half-alpha variant.
+  -LibraRhiPrimitiveLifetimeOnly selects the one-sided lifetime variant without
+  package fixtures. -LibraRhiCpuSpriteOnly selects the CPU fixture alone.
+  These checks do not certify every transparent scene, history mode, platform,
+  RHI, engine version, packaged game or console SDK. Renderer migration is newer
+  source than the published 2026.11.22 archives.
   Run Tests\CommentImageSmokeTests.csproj with
   --spawnable-package-binary <isolated-directory>\spawnable.lfxp to emit the
   finite child fixture. The similarly named spawnable.adapter-gpu.lfxp has a

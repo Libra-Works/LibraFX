@@ -77,6 +77,8 @@ namespace LiberaFx.Unity.Editor
                     Require(clock.Elapsed < TimeSpan.FromSeconds(1), "Owner tick or Busy check blocked.");
 
                     clock.Restart();
+                    typeof(LiberaFxSpawnableComponent).GetMethod("OnDestroy", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .Invoke(component, null);
                     Object.DestroyImmediate(owner); // Keep the controller open until destruction returns.
                     Require(!owner && clock.Elapsed < TimeSpan.FromSeconds(2), "Destroy did not release/join the paused worker.");
                     try
@@ -109,6 +111,7 @@ namespace LiberaFx.Unity.Editor
             var material = new Material(shader);
             var owner = new GameObject("LIBERA FX isolated rendered root debugger");
             owner.SetActive(false);
+            owner.layer = 31;
             var package = ScriptableObject.CreateInstance<LiberaFxSpawnableAsset>();
             var bindings = ScriptableObject.CreateInstance<LiberaFxUnityBindingAsset>();
             var cameraObject = new GameObject("LIBERA FX isolated debugger camera");
@@ -160,18 +163,14 @@ namespace LiberaFx.Unity.Editor
                 elapsed.SetValue(component, -(double)Time.deltaTime);
                 update.Invoke(component, null);
 
-                var renderers = owner.GetComponentsInChildren<MeshRenderer>();
-                Require(renderers.Length == 1 && component.ActiveRenderScopeCount == 1,
-                    "The authored root did not create exactly one live ModelDraw renderer.");
-                var renderer = renderers[0];
-                renderer.gameObject.layer = 31;
-                var filter = renderer.GetComponent<MeshFilter>();
-                Require(renderer.enabled && filter && filter.sharedMesh == mesh && renderer.sharedMaterial == material,
+                var draw = System.Linq.Enumerable.Single(component.InspectDrawNodes());
+                var renderer = System.Linq.Enumerable.Single(draw.Submissions);
+                Require(component.ActiveRenderScopeCount == 1 && renderer.enabled &&
+                    renderer.mesh == mesh && renderer.material == material && renderer.layer == 31,
                     "The root renderer did not bind the built-in cube and test material.");
-                var matrix = renderer.transform.localToWorldMatrix;
-                var properties = new MaterialPropertyBlock();
+                var matrix = draw.worldMatrix;
+                var properties = renderer.properties;
                 var colorId = Shader.PropertyToID("_Color");
-                renderer.GetPropertyBlock(properties, 0);
                 var tint = properties.GetColor(colorId);
                 Require(CountRedPixels() > 32, "The root cube was not visible before attaching the debugger.");
 
@@ -207,11 +206,10 @@ namespace LiberaFx.Unity.Editor
                     Require(component.ForceTerminate() == NativeResult.Busy, "Paused root accepted a conflicting operation.");
                     Require(clock.Elapsed < TimeSpan.FromSeconds(1), "Owner Update or Busy check blocked on the paused root.");
 
-                    var retained = owner.GetComponentsInChildren<MeshRenderer>();
-                    Require(component.ActiveRenderScopeCount == 1 && retained.Length == 1 && retained[0] == renderer &&
-                        renderer.enabled && filter && filter.sharedMesh == mesh && renderer.sharedMaterial == material &&
-                        renderer.transform.localToWorldMatrix.Equals(matrix), "Paused root replaced or changed the renderer snapshot.");
-                    renderer.GetPropertyBlock(properties, 0);
+                    var retained = System.Linq.Enumerable.Single(component.InspectDrawNodes());
+                    Require(component.ActiveRenderScopeCount == 1 && retained == draw &&
+                        renderer.enabled && renderer.mesh == mesh && renderer.material == material &&
+                        retained.worldMatrix.Equals(matrix), "Paused root replaced or changed the renderer snapshot.");
                     Require(properties.GetColor(colorId).Equals(tint) && CountRedPixels() > 32,
                         "Paused root did not retain its material tint and visible red frame.");
                     frame = Exchange(pipe, hash, 0, deadline.Token);
@@ -219,9 +217,13 @@ namespace LiberaFx.Unity.Editor
                     Require(frame[4] == 2, "Owner Update or camera rendering released the root pause.");
 
                     clock.Restart();
+                    // This verification is in Edit Mode, where a manually played
+                    // non-ExecuteAlways MonoBehaviour has no automatic lifecycle.
+                    typeof(LiberaFxSpawnableComponent).GetMethod("OnDestroy", flags).Invoke(component, null);
                     Object.DestroyImmediate(owner); // Keep the controller connected until teardown returns.
-                    Require(!owner && !renderer && clock.Elapsed < TimeSpan.FromSeconds(2),
-                        "Destroy did not release/join the paused root worker and remove its renderer.");
+                    Require(!owner && !renderer.enabled && !renderer.mesh && clock.Elapsed < TimeSpan.FromSeconds(2),
+                        $"Destroy did not release/join the paused root worker and remove its renderer: " +
+                        $"owner alive={!!owner}, draw enabled={renderer.enabled}, mesh alive={!!renderer.mesh}, elapsed={clock.Elapsed}.");
                     try
                     {
                         var eof = pipe.ReadAsync(new byte[1], 0, 1, deadline.Token).GetAwaiter().GetResult();

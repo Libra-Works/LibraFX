@@ -430,6 +430,7 @@ void ULibraEffectComponent::TickComponent(float deltaTime, ELevelTick tickType, 
         auto playback = PackagePlayback;
         playback->PlayRate = PlayRate;
         playback->EffectCameraOverride = EffectCameraOverride;
+        playback->UpdateOwnerPresentation();
         playback->TickComponent(deltaTime, tickType, nullptr);
         if (PackagePlayback == playback)
         {

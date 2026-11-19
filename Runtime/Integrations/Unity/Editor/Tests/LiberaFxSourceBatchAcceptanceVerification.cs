@@ -365,14 +365,14 @@ namespace LiberaFx.Unity.Editor
 
         private static void CaptureSkeletalMarker(string name, bool visible)
         {
-            var renderer = skeletalPlayComponent.GetComponentsInChildren<MeshRenderer>().Single();
+            var renderer = skeletalPlayComponent.InspectDrawNodes().Single();
             var bonePosition = skeletalPlayOwnerRig.hand.position;
             if (visible)
             {
-                Require(Vector3.Distance(renderer.transform.position, bonePosition) < 0.005f,
+                Require(Vector3.Distance(renderer.worldMatrix.GetColumn(3), bonePosition) < 0.005f,
                     "The actual Model Draw transform did not follow the animated bone.");
             }
-            renderer.gameObject.layer = 31;
+            renderer.Submissions.Single().layer = 31;
             var cameraObject = new GameObject("SOURCE acceptance framebuffer camera");
             var camera = cameraObject.AddComponent<Camera>();
             var target = new RenderTexture(128, 128, 24, RenderTextureFormat.ARGB32);
@@ -1220,16 +1220,16 @@ namespace LiberaFx.Unity.Editor
                 modelAsset = CreatePackage(Path.Combine(
                     Environment.GetEnvironmentVariable("LIBERAFX_MODEL_DRAW_FIXTURE_DIR") ?? "", "Cube.lfxp"));
                 var ordinary = Start(modelAsset, modelBindings, "ordinary authored model", scene, out modelOwner);
-                var ordinaryRenderer = modelOwner.GetComponentsInChildren<MeshRenderer>().Single();
+                var ordinaryRenderer = ordinary.InspectDrawNodes().Single();
                 var ordinaryScopeCount = ordinary.ActiveRenderScopeCount;
                 var ordinaryElapsed = ordinary.ElapsedTime;
                 ordinary.ClearPreviewDebugDraw();
                 Require(ordinary.ElapsedTime == ordinaryElapsed &&
                     ordinary.ActiveRenderScopeCount == ordinaryScopeCount &&
-                    modelOwner.GetComponentsInChildren<MeshRenderer>().Single() == ordinaryRenderer,
+                    ordinary.InspectDrawNodes().Single() == ordinaryRenderer,
                     "Disconnect-style debug clear stopped or replaced ordinary ModelDraw playback.");
                 Require(ordinary.Stop() == NativeResult.Ok &&
-                    modelOwner.GetComponentsInChildren<MeshRenderer>().Length == 0,
+                    ordinary.RenderStatistics.activeSubmissions == 0 && !ordinary.InspectDrawNodes().Any(),
                     "Stop did not retire the ordinary ModelDraw renderer.");
 
                 // Scope retirement must release both kinds of debug-owned objects.

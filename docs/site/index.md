@@ -33,8 +33,15 @@ with the standalone converter, and play it through a game-engine integration.
 
 Future work targets both gases such as smoke/fire and liquids such as water or
 viscous fluids. Solver methods, CPU/GPU responsibilities and rendering remain
-undecided. Fluid simulation is **not implemented or included in this Preview**;
+undecided. Development will start with **2D**, verify that implementation, and
+only then extend it to **3D**. Fluid simulation is **not implemented or included in this Preview**;
 particle and ribbon support does not imply a fluid solver.
+
+The agreed order after the current Preview is the coordinated Unity, Unreal and
+Godot rendering migration, CPU particle Flow authoring and GPU emitter shapes,
+then 2D fluids followed by 3D fluids. A proposed Resources / Targets section for
+GPU Flow is tracked in [issue #68](https://github.com/Libra-Works/LibraFX/issues/68);
+it is a future design proposal, not an available feature.
 
 [Source repository](https://github.com/Libra-Works/LibraFX) ·
 [MIT license](https://github.com/Libra-Works/LibraFX/blob/main/LICENSE)

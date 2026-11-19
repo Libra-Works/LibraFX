@@ -66,15 +66,17 @@ setter は置くだけでは実行されません。
 
 ### 通常の Draw では MeshComponent が増える？
 
-Unreal の通常の Draw は、描画ノードと再生インスタンスごとに
-`UStaticMeshComponent` を作ります。Spawnable を増やすと、そのインスタンス分の
-描画 Component も増えます。毎フレーム作り直すわけではなく、
-必ず別の Actor が必要になるわけでもありません。
-一方、CPU Particle Sprite Draw は粒子群を一つの
-`UInstancedStaticMeshComponent` にまとめるため、1,000 粒子を出しても
-MeshComponent が1,000個になる方式ではありません。
-ただし位置・色などの粒子データは粒子数に応じて増え、
-CPU・メモリ・オーバードロー・マテリアルの負荷まで消えるわけではありません。
+公開済みの **2026.11.22 Preview** では、Unreal の通常 Draw に MeshComponent、
+CPU 粒子群ごとに一つの InstancedStaticMeshComponent を使います。
+粒子ごとの Component ではありません。新しいソースの描画移行版では、
+これらの描画 Component を廃止し、エフェクト側が描画データと互換なバッチを所有します。
+Unity は直接描画、Unreal は native primitive／proxy、Godot は RenderingServer の
+instance を使います。エフェクト全体を再生する Component／Node は残します。
+
+Component を消しても、メッシュ・マテリアルのリソースや描画命令までなくなるわけでは
+ありません。マテリアル、パラメーター、透明物の順序によっては描画を分けます。
+粒子データ、CPU・メモリ・転送・オーバードローの負荷も内容に応じて増えます。
+公開版と新しいソース版の違いは[エンジンの描画範囲](engine-integration.md#rendering)を参照してください。
 
 ## Sprite の粒子群を作る
 
@@ -102,9 +104,11 @@ Spawn は生成時の一度、Update は正のシミュレーションステッ�
 同階層の **CPU Particle Sprite Draw** が全粒子をバッチ描画します。粒子ごとの
 actor/component は作りません。テクスチャ（`builtin:white` は明示的な組込リソース）、
 Alpha/Additive、正の描画倍率を指定します。位置・XY サイズは effect-local で、
-描画倍率は双方に適用します。Unity はエミッターごとの動的結合 Mesh、
-Unreal は InstancedStaticMeshComponent、Godot は MultiMeshInstance3D を使います。
-粒子ごとの RGBA・XY サイズを保持しますが、半透明の粒子単位ソートはありません。
+描画倍率は双方に適用します。移行後のソースでは、Unity は再利用する結合 Mesh の
+直接描画、Unreal は native のインスタンス描画、Godot は RenderingServer の
+MultiMesh データ一括転送を使い、粒子ごとのシーンオブジェクトを作りません。
+RGBA・XY サイズを保持しますが、半透明の粒子単位ソートはありません。
+この変更がダウンロード済みの 2026.11.22 SDK に自動反映されることはありません。
 
 Unreal は `USAGE.txt` 記載のインスタンス RGBA 対応 Sprite マテリアルが必要です。
 **そのマテリアル自体は今回同梱していません**。不足・非互換なら明示的に失敗し、

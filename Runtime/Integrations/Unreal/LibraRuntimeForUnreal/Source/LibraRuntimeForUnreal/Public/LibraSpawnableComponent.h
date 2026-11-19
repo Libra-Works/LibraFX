@@ -215,6 +215,15 @@ public:
     int32 GetRenderObjectCount() const;
 
     UFUNCTION(BlueprintPure, Category = "Libra Runtime|Rendering")
+    int32 GetNativeDrawPrimitiveCount() const;
+    void GetNativeRenderSubmissionStats(int32& logicalRenderObjects, int32& nativePrimitives,
+        int32& opaqueBatches, int32& cpuParticleBatches, int32& liveCpuParticles,
+        int32& allocatedInstanceCapacity, uint64& submittedBytes) const;
+    void UpdateOwnerPresentation();
+    void GetDrawSnapshots(TArray<FTransform>& transforms, TArray<FBoxSphereBounds>& bounds,
+        TArray<FGuid>& drawIds, TArray<FGuid>& containerIds, TArray<int64>& instanceIds) const;
+
+    UFUNCTION(BlueprintPure, Category = "Libra Runtime|Rendering")
     int32 GetGpuInstanceCount() const;
 
     UFUNCTION(BlueprintPure, Category = "Libra Runtime|Debugger")
