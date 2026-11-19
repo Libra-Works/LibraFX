@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "name": "LibraDark",
+  "variant": "Dark",
+  "palette": {
+    "region": "#151821",
+    "surface": "#1E222E",
+    "foreground": "#F1F2F8",
+    "mutedForeground": "#9FA6BE",
+    "border": "#2F3547",
+    "accent": "#8A7CFF"
+  },
+  "editorColors": {
+    "GraphMinorGrid": "#1B1F2B",
+    "GraphMajorGrid": "#252A3A",
+    "GraphParameter": "#3EACEF",
+    "GraphSignal": "#F59E56",
+    "NodeBorder": "#3D445B",
+    "NodeSelectedBorder": "#9E92FF",
+    "SelectionFill": "#308A7CFF",
+    "SelectionBorder": "#8A7CFF",
+    "CurveBackground": "#161A24",
+    "CurveGrid": "#232838",
+    "CurveAxis": "#56607A",
+    "CurveLine": "#4FD6B8",
+    "CurveHandle": "#F3B860",
+    "CurveKey": "#F1F2F8",
+    "CurveSelected": "#FFCA5C",
+    "CurveLabel": "#9FA6BE"
+  },
+  "accentColors": {
+    "Blue": "#3EACEF",
+    "Purple": "#8A7CFF",
+    "Teal": "#23C4D7",
+    "Orange": "#F59E56",
+    "Pink": "#E65C9C"
+  }
+}

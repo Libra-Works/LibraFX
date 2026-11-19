@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "name": "MidnightRose",
+  "variant": "Dark",
+  "palette": {
+    "region": "#1A1A2E",
+    "surface": "#16213E",
+    "foreground": "#F0F2F8",
+    "mutedForeground": "#A9B4D0",
+    "border": "#273A69",
+    "accent": "#E94560"
+  },
+  "editorColors": {
+    "GraphMinorGrid": "#20233C",
+    "GraphMajorGrid": "#2B3153",
+    "GraphParameter": "#4EA8DE",
+    "GraphSignal": "#E94560",
+    "NodeBorder": "#364B7D",
+    "NodeSelectedBorder": "#FF5C77",
+    "SelectionFill": "#30E94560",
+    "SelectionBorder": "#E94560",
+    "CurveBackground": "#141526",
+    "CurveGrid": "#252B48",
+    "CurveAxis": "#536493",
+    "CurveLine": "#FF6B81",
+    "CurveHandle": "#F7B731",
+    "CurveKey": "#F0F2F8",
+    "CurveSelected": "#FFD166",
+    "CurveLabel": "#A9B4D0"
+  },
+  "accentColors": {
+    "Blue": "#3A86FF",
+    "Purple": "#9D4EDD",
+    "Teal": "#00B4D8",
+    "Orange": "#F77F00",
+    "Pink": "#E94560"
+  }
+}

@@ -2,10 +2,12 @@ using System.Collections.Specialized;
 using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using LiberaFx.Extensions.Abstractions;
+using LiberaFx.Models.Appearance;
 using LiberaFx.Services;
 using LiberaFx.ViewModels;
 
@@ -15,28 +17,39 @@ namespace LiberaFx.Views;
 public sealed partial class ChatWindow : UserControl, IDisposable
 {
     private readonly MainViewModel _main;
-    private readonly ComboBox _adapters = new() { HorizontalAlignment = HorizontalAlignment.Stretch };
-    private readonly TextBox _endpoint = new() { Text = "http://127.0.0.1:1234/v1/chat/completions" };
-    private readonly TextBox _model = new();
-    private readonly TextBox _key = new() { PasswordChar = '●' };
+    private readonly ComboBox _adapters = new() { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBox _endpoint = new() { Classes = { "editor-field" }, Text = "http://127.0.0.1:1234/v1/chat/completions" };
+    private readonly TextBox _model = new() { Classes = { "editor-field" } };
+    private readonly TextBox _key = new() { Classes = { "editor-field" }, PasswordChar = '●' };
     private readonly Control _endpointRow;
     private readonly Control _modelRow;
     private readonly Control _keyRow;
-    private readonly TextBlock _destination = new() { TextWrapping = TextWrapping.Wrap };
-    private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock _destination = new() { TextWrapping = TextWrapping.Wrap, IsVisible = false };
+    private readonly TextBlock _status = new() { Classes = { "editor-label" }, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+    private readonly Border _infoBadge = new()
+    {
+        Background = Brushes.Transparent, Padding = new Thickness(4), VerticalAlignment = VerticalAlignment.Center,
+        Child = new EditorIconView { Icon = EditorIcon.Info }
+    };
+    private readonly Border _configPanel;
+    private readonly ToggleButton _configToggle = new()
+    {
+        Classes = { "editor-tool" }, IsChecked = false,
+        Content = new EditorIconView { Icon = EditorIcon.Settings }
+    };
     private readonly TextBox _transcript = new()
     {
         IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap,
         HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch,
-        MinHeight = 120, MaxHeight = 300
+        MinHeight = 60
     };
-    private readonly TextBox _input = new() { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 65 };
-    private readonly CheckBox _share = new();
-    private readonly Button _connect = new();
-    private readonly Button _disconnect = new();
-    private readonly Button _send = new();
-    private readonly Button _cancel = new();
-    private readonly Button _clear = new();
+    private readonly TextBox _input = new() { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 46, MaxHeight = 96 };
+    private readonly CheckBox _share = new() { VerticalAlignment = VerticalAlignment.Center };
+    private readonly Button _connect = new IconButton { Classes = { "editor-tool", "transport-primary" }, Icon = EditorIcon.Link };
+    private readonly Button _disconnect = new IconButton { Classes = { "editor-tool" }, Icon = EditorIcon.Disconnect };
+    private readonly Button _send = new IconButton { Classes = { "editor-tool", "transport-primary" }, Icon = EditorIcon.Play };
+    private readonly Button _cancel = new IconButton { Classes = { "editor-tool" }, Icon = EditorIcon.Stop };
+    private readonly Button _clear = new IconButton { Classes = { "editor-tool" }, Icon = EditorIcon.Delete };
     private readonly List<ChatMessage> _messages = [];
     private readonly DispatcherTimer _heartbeat = new() { Interval = TimeSpan.FromSeconds(8) };
     private CancellationTokenSource? _operation;
@@ -60,48 +73,128 @@ public sealed partial class ChatWindow : UserControl, IDisposable
     public ChatWindow(MainViewModel main)
     {
         _main = main;
-        _connect.Content = Text("Connect");
-        _disconnect.Content = Text("Disconnect");
-        _send.Content = Text("Send");
-        _cancel.Content = Text("Cancel");
-        _clear.Content = Text("Clear");
-        _explainSelection.Content = Text("ExplainSelection");
-        _share.Content = Text("Share");
+        ConfigureIconTool(_connect, "Connect");
+        ConfigureIconTool(_disconnect, "Disconnect");
+        ConfigureIconTool(_cancel, "Cancel");
+        ConfigureIconTool(_clear, "Clear");
+        ConfigureIconTool(_configToggle, "Endpoint");
+        ConfigureIconTool(_send, "Send");
+        ConfigureIconTool(_explainSelection, "ExplainSelection");
+        _share.Content = new TextBlock
+        {
+            Text = Text("Share"),
+            TextWrapping = TextWrapping.NoWrap,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        ToolTip.SetTip(_share, Text("Share"));
+        Avalonia.Automation.AutomationProperties.SetName(_share, Text("Share"));
         _share.IsChecked = false;
         _input.PlaceholderText = Text("Input");
         _key.PlaceholderText = Text("Key");
         _model.PlaceholderText = Text("Model");
-        var top = new StackPanel { Spacing = 6 };
-        top.Children.Add(new TextBlock { Text = Text("Explanation"), TextWrapping = TextWrapping.Wrap });
-        top.Children.Add(Label("Adapter", _adapters));
-        top.Children.Add(_endpointRow = Label("Endpoint", _endpoint));
-        top.Children.Add(_modelRow = Label("Model", _model));
-        top.Children.Add(_keyRow = Label("Key", _key));
-        top.Children.Add(_destination);
-        top.Children.Add(_share);
-        top.Children.Add(new StackPanel
+        ToolTip.SetTip(_adapters, Text("Adapter"));
+        Avalonia.Automation.AutomationProperties.SetName(_adapters, Text("Adapter"));
+
+        var headerBar = new Grid
         {
-            Orientation = Orientation.Horizontal, Spacing = 8,
-            Children = { _connect, _disconnect, _clear }
-        });
-        top.Children.Add(_status);
+            ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
+            ColumnSpacing = 6,
+            Children =
+            {
+                _adapters,
+                new Border
+                {
+                    [Grid.ColumnProperty] = 1,
+                    Classes = { "editor-toolbar-group" },
+                    Padding = new Thickness(4, 2),
+                    Child = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center,
+                        Children = { _connect, _disconnect, _clear, new Border { Classes = { "editor-toolbar-divider" } }, _configToggle }
+                    }
+                },
+                new Border
+                {
+                    [Grid.ColumnProperty] = 2,
+                    Child = _infoBadge
+                }
+            }
+        };
+
+        _configPanel = new Border
+        {
+            Classes = { "editor-card" },
+            Padding = new Thickness(8, 6),
+            IsVisible = false,
+            Child = new StackPanel
+            {
+                Spacing = 4,
+                Children =
+                {
+                    (_endpointRow = Label("Endpoint", _endpoint, "URL")),
+                    (_modelRow = Label("Model", _model, Text("Model"))),
+                    (_keyRow = Label("Key", _key, "API Key")),
+                    _destination
+                }
+            }
+        };
+
+        var consentAndStatus = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnSpacing = 8,
+            Children =
+            {
+                _share,
+                new Border { [Grid.ColumnProperty] = 1, MaxWidth = 220, Child = _status }
+            }
+        };
+
+        var top = new StackPanel
+        {
+            Spacing = 6,
+            Children = { headerBar, _configPanel, consentAndStatus }
+        };
+
+        var actionRow = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
+            ColumnSpacing = 6,
+            Children =
+            {
+                _explainSelection,
+                new Border { [Grid.ColumnProperty] = 1, Child = _cancel },
+                new Border { [Grid.ColumnProperty] = 2, Child = _send }
+            }
+        };
+        _explainSelection.HorizontalAlignment = HorizontalAlignment.Left;
+
         var bottom = new StackPanel
         {
             Spacing = 6,
             Children =
             {
-                _input,
                 _nodeReferences,
-                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _send, _cancel, _explainSelection } }
+                _input,
+                actionRow
             }
         };
-        var grid = new Grid { Margin = new Thickness(12), MinHeight = 600, RowDefinitions = new RowDefinitions("Auto,*,Auto"), RowSpacing = 8 };
+
+        var grid = new Grid
+        {
+            Margin = new Thickness(8),
+            RowDefinitions = new RowDefinitions("Auto,*,Auto"),
+            RowSpacing = 6
+        };
         grid.Children.Add(top);
         Grid.SetRow(_transcript, 1);
         grid.Children.Add(_transcript);
         Grid.SetRow(bottom, 2);
         grid.Children.Add(bottom);
-        Content = new ScrollViewer { Content = grid };
+        Content = grid;
+
+        _configToggle.IsCheckedChanged += (_, _) => UpdateConfigVisibility();
         _connect.Click += async (_, _) => await ConnectAsync();
         _disconnect.Click += (_, _) => Disconnect("Offline");
         _cancel.Click += (_, _) => Disconnect("Cancelled");
@@ -123,6 +216,13 @@ public sealed partial class ChatWindow : UserControl, IDisposable
         Refresh();
     }
 
+    private static void ConfigureIconTool(Control control, string key)
+    {
+        var label = Text(key);
+        ToolTip.SetTip(control, label);
+        Avalonia.Automation.AutomationProperties.SetName(control, label);
+    }
+
     internal void EndSession()
     {
         Disconnect("Offline");
@@ -140,10 +240,27 @@ public sealed partial class ChatWindow : UserControl, IDisposable
         EndSession();
     }
 
-    private static Control Label(string key, Control control)
+    private static Control Label(string key, Control control, string shortLabel)
     {
-        Avalonia.Automation.AutomationProperties.SetName(control, Text(key));
-        return new StackPanel { Spacing = 2, Children = { new TextBlock { Text = Text(key) }, control } };
+        var fullText = Text(key);
+        Avalonia.Automation.AutomationProperties.SetName(control, fullText);
+        ToolTip.SetTip(control, fullText);
+        var label = new TextBlock
+        {
+            Classes = { "editor-label" },
+            Text = shortLabel,
+            Width = 68,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
+        ToolTip.SetTip(label, fullText);
+        var row = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+            ColumnSpacing = 6,
+            Children = { label, control }
+        };
+        Grid.SetColumn(control, 1);
+        return row;
     }
 
     private void OnAdaptersChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -169,6 +286,13 @@ public sealed partial class ChatWindow : UserControl, IDisposable
         RefreshDestination();
     }
 
+    private void UpdateConfigVisibility()
+    {
+        var configurable = (_adapters.SelectedItem as Choice)?.Adapter is null;
+        _configToggle.IsVisible = configurable;
+        _configPanel.IsVisible = configurable && _configToggle.IsChecked == true;
+    }
+
     private void RefreshDestination()
     {
         var adapter = (_adapters.SelectedItem as Choice)?.Adapter;
@@ -179,9 +303,16 @@ public sealed partial class ChatWindow : UserControl, IDisposable
         _destination.Text = adapter is null
             ? Text("Destination") + "\n" + (_endpoint.Text ?? "") + " • " + (_model.Text ?? "") + "\n" + Text("CompatiblePrivacy")
             : Text("Destination") + "\n" + adapter.Destination + "\n" + adapter.PrivacyNotice;
+        ToolTip.SetTip(_infoBadge, Text("Explanation") + "\n\n" + _destination.Text);
+        UpdateConfigVisibility();
     }
 
-    private void SetStatus(string key) => _status.Text = Text(key);
+    private void SetStatus(string key)
+    {
+        var text = Text(key);
+        _status.Text = text;
+        ToolTip.SetTip(_status, text);
+    }
 
     private void Refresh()
     {

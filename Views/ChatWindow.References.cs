@@ -11,7 +11,11 @@ namespace LiberaFx.Views;
 public sealed partial class ChatWindow
 {
     private readonly WrapPanel _nodeReferences = new() { Orientation = Orientation.Horizontal };
-    private readonly Button _explainSelection = new();
+    private readonly Button _explainSelection = new IconButton
+    {
+        Classes = { "editor-tool" },
+        Icon = LiberaFx.Models.Appearance.EditorIcon.Help
+    };
     private GraphWorkspaceViewModel? _selectionWorkspace;
     private Guid[] _selectionIds = [];
     private Guid[] _selectionPath = [];

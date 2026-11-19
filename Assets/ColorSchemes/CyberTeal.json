@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "name": "CyberTeal",
+  "variant": "Dark",
+  "palette": {
+    "region": "#222831",
+    "surface": "#393E46",
+    "foreground": "#EEEEEE",
+    "mutedForeground": "#B5BDC8",
+    "border": "#4B525D",
+    "accent": "#00ADB5"
+  },
+  "editorColors": {
+    "GraphMinorGrid": "#28303A",
+    "GraphMajorGrid": "#343E4B",
+    "GraphParameter": "#00ADB5",
+    "GraphSignal": "#FF8C42",
+    "NodeBorder": "#545C68",
+    "NodeSelectedBorder": "#00D2DC",
+    "SelectionFill": "#3000ADB5",
+    "SelectionBorder": "#00ADB5",
+    "CurveBackground": "#1D222A",
+    "CurveGrid": "#313842",
+    "CurveAxis": "#636E7E",
+    "CurveLine": "#00D2DC",
+    "CurveHandle": "#FFB84D",
+    "CurveKey": "#EEEEEE",
+    "CurveSelected": "#FFBD59",
+    "CurveLabel": "#B5BDC8"
+  },
+  "accentColors": {
+    "Blue": "#0096C7",
+    "Purple": "#8764B8",
+    "Teal": "#00ADB5",
+    "Orange": "#FF7B00",
+    "Pink": "#E84A8A"
+  }
+}

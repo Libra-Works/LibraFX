@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "name": "CosmicViolet",
+  "variant": "Dark",
+  "palette": {
+    "region": "#0F0E17",
+    "surface": "#1C1A27",
+    "foreground": "#FFFFFE",
+    "mutedForeground": "#A7A9BE",
+    "border": "#312E43",
+    "accent": "#A786DF"
+  },
+  "editorColors": {
+    "GraphMinorGrid": "#171624",
+    "GraphMajorGrid": "#242236",
+    "GraphParameter": "#7F5AF0",
+    "GraphSignal": "#FF8906",
+    "NodeBorder": "#3D3A54",
+    "NodeSelectedBorder": "#A786DF",
+    "SelectionFill": "#30A786DF",
+    "SelectionBorder": "#A786DF",
+    "CurveBackground": "#0B0A12",
+    "CurveGrid": "#222032",
+    "CurveAxis": "#565372",
+    "CurveLine": "#2CB67D",
+    "CurveHandle": "#FF8906",
+    "CurveKey": "#FFFFFE",
+    "CurveSelected": "#F25F4C",
+    "CurveLabel": "#A7A9BE"
+  },
+  "accentColors": {
+    "Blue": "#5E81F4",
+    "Purple": "#A786DF",
+    "Teal": "#2CB67D",
+    "Orange": "#FF8906",
+    "Pink": "#E53170"
+  }
+}

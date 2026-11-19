@@ -22,13 +22,14 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
 
     public GraphWorkspaceViewModel Graph => _graph;
     public bool HasInspectorTarget => _node is not null;
+    public bool ShowRootEffectSettings => _graph.IsRootGraph && !HasInspectorTarget;
     public bool IsPinned => _pinnedNode is not null;
     public bool CanTogglePin => IsPinned || (_node is not null && _graph.Nodes.Contains(_node));
     public EditorIcon InspectorPinIcon => IsPinned ? EditorIcon.Lock : EditorIcon.Unlock;
     public string InspectorPinHint => LocalizationService.Shared.Get(IsPinned ? "Panels.InspectorUnlock" : "Panels.InspectorLock");
     public bool IsInspectingContainingSpawnable =>
         _node is not null && ReferenceEquals(_node, _graph.ContainingSpawnable) && _graph.SelectedNode is null;
-    public bool ShowSelectedConnections => !IsPinned && !IsInspectingContainingSpawnable;
+    public bool ShowSelectedConnections => !IsPinned && !IsInspectingContainingSpawnable && _graph.SelectedConnections.Count > 0;
     public string InspectorTitle => LocalizationService.Shared.Get(
         IsInspectingContainingSpawnable ? "Panels.ContainingSpawnable" : "Editor.SelectedNode");
     public string InspectorNodeName
@@ -155,6 +156,7 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
     private void OnGraphChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(GraphWorkspaceViewModel.InspectorNode) && !IsPinned) RefreshNode();
+        if (e.PropertyName == nameof(GraphWorkspaceViewModel.IsRootGraph)) OnPropertyChanged(nameof(ShowRootEffectSettings));
         if (e.PropertyName == nameof(GraphWorkspaceViewModel.SelectionCount))
         {
             OnPropertyChanged(nameof(CanPublishCurves));
@@ -193,6 +195,7 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
 
     private void OnConnectionsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        OnPropertyChanged(nameof(ShowSelectedConnections));
         foreach (var parameter in Parameters) parameter.Refresh();
     }
 
@@ -256,6 +259,7 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
         _unavailableExposedItems.Clear();
         OnPropertyChanged(nameof(GroupExposedDiagnostics));
         OnPropertyChanged(nameof(HasInspectorTarget));
+        OnPropertyChanged(nameof(ShowRootEffectSettings));
         OnPropertyChanged(nameof(IsPinned));
         OnPropertyChanged(nameof(CanTogglePin));
         OnPropertyChanged(nameof(InspectorPinIcon));

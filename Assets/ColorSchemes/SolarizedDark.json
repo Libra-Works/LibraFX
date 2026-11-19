@@ -5,34 +5,34 @@
   "palette": {
     "region": "#002B36",
     "surface": "#073642",
-    "foreground": "#839496",
+    "foreground": "#93A1A1",
     "mutedForeground": "#657B83",
-    "border": "#586E75",
+    "border": "#2A545E",
     "accent": "#268BD2"
   },
   "editorColors": {
-    "GraphMinorGrid": "#282E37",
-    "GraphMajorGrid": "#343C47",
-    "GraphParameter": "#4A9EFF",
-    "GraphSignal": "#F4A261",
-    "NodeBorder": "#58616E",
-    "NodeSelectedBorder": "#7AA2F7",
-    "SelectionFill": "#307AA2F7",
-    "SelectionBorder": "#7AA2F7",
-    "CurveBackground": "#20252E",
-    "CurveGrid": "#39414D",
-    "CurveAxis": "#687786",
-    "CurveLine": "#64D7A3",
-    "CurveHandle": "#E5B86A",
-    "CurveKey": "#E9EEF4",
-    "CurveSelected": "#FFBD59",
-    "CurveLabel": "#AEB9C7"
+    "GraphMinorGrid": "#04323E",
+    "GraphMajorGrid": "#0D414F",
+    "GraphParameter": "#268BD2",
+    "GraphSignal": "#CB4B16",
+    "NodeBorder": "#3B6973",
+    "NodeSelectedBorder": "#2AA198",
+    "SelectionFill": "#30268BD2",
+    "SelectionBorder": "#268BD2",
+    "CurveBackground": "#00222B",
+    "CurveGrid": "#0B3D4A",
+    "CurveAxis": "#586E75",
+    "CurveLine": "#2AA198",
+    "CurveHandle": "#B58900",
+    "CurveKey": "#EEE8D5",
+    "CurveSelected": "#CB4B16",
+    "CurveLabel": "#839496"
   },
   "accentColors": {
-    "Blue": "#0078D4",
-    "Purple": "#8764B8",
-    "Teal": "#008272",
-    "Orange": "#D83B01",
-    "Pink": "#C239B3"
+    "Blue": "#268BD2",
+    "Purple": "#6C71C4",
+    "Teal": "#2AA198",
+    "Orange": "#CB4B16",
+    "Pink": "#D33682"
   }
 }

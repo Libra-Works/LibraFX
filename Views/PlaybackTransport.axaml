@@ -5,34 +5,74 @@
              x:Class="LiberaFx.Views.PlaybackTransport"
              x:DataType="services:EditorPlayback"
              x:Name="Transport">
-    <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
-        <views:IconButton Classes="editor-tool" Icon="StepBack" Command="{Binding StepBackCommand}"
-                          IsVisible="{ReflectionBinding ShowFrameTools, ElementName=Transport}"
-                          ToolTip.Tip="{DynamicResource Text.Timeline.StepBack}"
-                          AutomationProperties.Name="{DynamicResource Text.Timeline.StepBack}" />
-        <views:IconButton Classes="editor-tool transport-primary" Classes.playing="{Binding IsPlaying}"
-                          Icon="{Binding PlayIcon}" Command="{Binding PlayPauseCommand}"
-                          ToolTip.Tip="{DynamicResource Text.Timeline.PlayPause}"
-                          AutomationProperties.Name="{DynamicResource Text.Timeline.PlayPause}" />
-        <views:IconButton Classes="editor-tool" Icon="Stop" Command="{Binding StopCommand}"
-                          ToolTip.Tip="{DynamicResource Text.Timeline.Stop}"
-                          AutomationProperties.Name="{DynamicResource Text.Timeline.Stop}" />
-        <views:IconButton Classes="editor-tool" Icon="StepForward" Command="{Binding StepForwardCommand}"
-                          IsVisible="{ReflectionBinding ShowFrameTools, ElementName=Transport}"
-                          ToolTip.Tip="{DynamicResource Text.Timeline.StepForward}"
-                          AutomationProperties.Name="{DynamicResource Text.Timeline.StepForward}" />
-        <Border Classes="editor-card" Width="140" Margin="4,0,0,0" Padding="6,0"
-                VerticalAlignment="Stretch">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="5">
-                <TextBlock Classes="editor-heading" Text="{Binding FrameText}"
-                           HorizontalAlignment="Right" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                           IsVisible="{ReflectionBinding !ShowFrameTools, ElementName=Transport}"
-                           AutomationProperties.Name="{DynamicResource Text.Timeline.CurrentTime}" />
-                <TextBox Classes="editor-field" Text="{Binding FrameText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                         IsVisible="{ReflectionBinding ShowFrameTools, ElementName=Transport}"
-                         AutomationProperties.Name="{DynamicResource Text.Timeline.CurrentTime}" />
-                <TextBlock Grid.Column="1" Classes="editor-label" Text="{Binding TimeUnitLabel}" />
-            </Grid>
+    <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="4" VerticalAlignment="Center">
+        <Border Classes="editor-toolbar-group" Padding="4,2">
+            <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                <views:IconButton Classes="editor-tool" Icon="StepBack" Command="{Binding StepBackCommand}"
+                                  IsVisible="{ReflectionBinding ShowFrameTools, ElementName=Transport}"
+                                  ToolTip.Tip="{DynamicResource Text.Timeline.StepBack}"
+                                  AutomationProperties.Name="{DynamicResource Text.Timeline.StepBack}" />
+                <views:IconButton Classes="editor-tool transport-primary" Classes.playing="{Binding IsPlaying}"
+                                  Icon="{Binding PlayIcon}" Command="{Binding PlayPauseCommand}"
+                                  ToolTip.Tip="{DynamicResource Text.Timeline.PlayPause}"
+                                  AutomationProperties.Name="{DynamicResource Text.Timeline.PlayPause}" />
+                <views:IconButton Classes="editor-tool" Icon="Stop" Command="{Binding StopCommand}"
+                                  ToolTip.Tip="{DynamicResource Text.Timeline.Stop}"
+                                  AutomationProperties.Name="{DynamicResource Text.Timeline.Stop}" />
+                <views:IconButton Classes="editor-tool" Icon="StepForward" Command="{Binding StepForwardCommand}"
+                                  IsVisible="{ReflectionBinding ShowFrameTools, ElementName=Transport}"
+                                  ToolTip.Tip="{DynamicResource Text.Timeline.StepForward}"
+                                  AutomationProperties.Name="{DynamicResource Text.Timeline.StepForward}" />
+                <Border Classes="editor-toolbar-divider" />
+                <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="6" Margin="2,0,4,0" VerticalAlignment="Center">
+                    <TextBlock Classes="editor-heading" Text="{Binding FrameText}"
+                               MinWidth="56" HorizontalAlignment="Right" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                               IsVisible="{ReflectionBinding !ShowFrameTools, ElementName=Transport}"
+                               AutomationProperties.Name="{DynamicResource Text.Timeline.CurrentTime}" />
+                    <TextBox Classes="editor-field" Width="74" TextAlignment="Right"
+                             Text="{Binding FrameText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             IsVisible="{ReflectionBinding ShowFrameTools, ElementName=Transport}"
+                             ToolTip.Tip="{DynamicResource Text.Timeline.CurrentTime}"
+                             AutomationProperties.Name="{DynamicResource Text.Timeline.CurrentTime}" />
+                    <TextBlock Grid.Column="1" Classes="editor-label" Text="{Binding TimeUnitLabel}" />
+                </Grid>
+            </StackPanel>
         </Border>
-    </StackPanel>
+        <Border Classes="editor-toolbar-group"
+                IsVisible="{ReflectionBinding ShowFrameTools, ElementName=Transport}">
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <TextBlock Classes="editor-label" Text="{DynamicResource Text.Timeline.Range}" />
+                <TextBox Classes="editor-field" Width="64" TextAlignment="Right"
+                         ToolTip.Tip="{DynamicResource Text.Timeline.RangeStart}"
+                         AutomationProperties.Name="{DynamicResource Text.Timeline.RangeStart}"
+                         Text="{Binding StartText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                <TextBlock Classes="editor-label" Text="&#8211;" />
+                <TextBox Classes="editor-field" Width="64" TextAlignment="Right"
+                         ToolTip.Tip="{DynamicResource Text.Timeline.RangeEnd}"
+                         AutomationProperties.Name="{DynamicResource Text.Timeline.RangeEnd}"
+                         Text="{Binding EndText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                <Border Classes="editor-toolbar-divider" />
+                <TextBlock Classes="editor-label" Text="{DynamicResource Text.Timeline.Fps}" />
+                <TextBox Classes="editor-field" Width="46" TextAlignment="Right"
+                         ToolTip.Tip="{DynamicResource Text.Timeline.Fps}"
+                         AutomationProperties.Name="{DynamicResource Text.Timeline.Fps}"
+                         Text="{Binding FpsText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            </StackPanel>
+        </Border>
+        <Border Classes="editor-toolbar-group" Padding="4,2"
+                IsVisible="{ReflectionBinding ShowFrameTools, ElementName=Transport}">
+            <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                <ToggleButton Classes="editor-tool" IsChecked="{Binding ShowSeconds}"
+                              ToolTip.Tip="{DynamicResource Text.Timeline.UseSeconds}"
+                              AutomationProperties.Name="{DynamicResource Text.Timeline.UseSeconds}">
+                    <views:EditorIconView Icon="Clock" />
+                </ToggleButton>
+                <ToggleButton Classes="editor-tool" IsChecked="{Binding Loop}"
+                              ToolTip.Tip="{DynamicResource Text.Timeline.Loop}"
+                              AutomationProperties.Name="{DynamicResource Text.Timeline.Loop}">
+                    <views:EditorIconView Icon="Refresh" />
+                </ToggleButton>
+            </StackPanel>
+        </Border>
+    </WrapPanel>
 </UserControl>

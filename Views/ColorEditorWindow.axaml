@@ -11,9 +11,8 @@
                 BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="0,0,0,1">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                 <StackPanel Spacing="2">
-                    <TextBlock Text="{DynamicResource Text.Panels.ColorHeading}" FontSize="18" FontWeight="SemiBold" />
-                    <TextBlock Text="{DynamicResource Text.Panels.ColorEditorSubtitle}"
-                               Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                    <TextBlock Classes="editor-title" Text="{DynamicResource Text.Panels.ColorHeading}" />
+                    <TextBlock Classes="editor-label" Text="{DynamicResource Text.Panels.ColorEditorSubtitle}" />
                 </StackPanel>
                 <Border Grid.Column="1" Width="62" Height="36" CornerRadius="3"
                         BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="1"
@@ -33,12 +32,13 @@
                                IsAlphaEnabled="True" IsAlphaVisible="True" />
                 </Border>
                 <StackPanel Grid.Column="1" Spacing="10">
-                    <StackPanel Spacing="3">
-                        <TextBlock Text="{DynamicResource Text.Panels.RgbaHeading}" FontSize="15" FontWeight="SemiBold" />
-                        <TextBlock Text="{DynamicResource Text.Panels.ColorRangeHelp}"
-                                   Foreground="{DynamicResource EffectMutedForegroundBrush}"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Panels.RgbaHeading}" />
+                        <Border Grid.Column="1" Background="Transparent" Padding="2"
+                                ToolTip.Tip="{DynamicResource Text.Panels.ColorRangeHelp}">
+                            <views:EditorIconView Icon="Info" />
+                        </Border>
+                    </Grid>
                     <Grid ColumnDefinitions="*,*" ColumnSpacing="8" RowDefinitions="Auto,Auto" RowSpacing="8">
                         <StackPanel Spacing="3"><TextBlock Text="R" /><TextBox x:Name="RedBox" LostFocus="OnComponentsEdited" /></StackPanel>
                         <StackPanel Grid.Column="1" Spacing="3"><TextBlock Text="G" /><TextBox x:Name="GreenBox" LostFocus="OnComponentsEdited" /></StackPanel>

@@ -9,8 +9,8 @@
             <views:SplashArtwork />
         </Viewbox>
         <StackPanel Grid.Row="1" Margin="26,18,26,10" Spacing="6">
-            <TextBlock Text="LIBERA FX" FontSize="18" FontWeight="SemiBold" />
-            <TextBlock x:Name="VersionText" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <TextBlock Classes="editor-title" Text="LIBERA FX" />
+            <TextBlock x:Name="VersionText" Classes="editor-label" />
         </StackPanel>
         <views:IconButton Grid.Row="2" Icon="Close"
                           ToolTip.Tip="{DynamicResource Text.Panels.Close}"

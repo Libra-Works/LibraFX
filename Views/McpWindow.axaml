@@ -6,41 +6,62 @@
         x:DataType="vm:MainViewModel"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
     <ScrollViewer>
-        <StackPanel Margin="20" Spacing="8">
-            <TextBlock Text="{DynamicResource Text.Panels.McpConnection}" FontSize="18" FontWeight="SemiBold" />
-            <TextBlock Text="{Binding McpStatus}" TextWrapping="Wrap" />
-            <TextBlock Text="{DynamicResource Text.Panels.StreamableHttpEndpoint}" Margin="0,8,0,0" />
-            <TextBox Text="{Binding McpEndpoint}" IsReadOnly="True" />
-            <TextBlock Text="X-LiberaFx-Token" Margin="0,8,0,0" />
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                <TextBox x:Name="TokenBox" Text="{Binding McpAccessToken}"
-                         IsReadOnly="True" PasswordChar="●" />
-                <views:IconButton Grid.Column="1" Icon="Copy" Click="OnCopyTokenClick"
-                                  ToolTip.Tip="{DynamicResource Text.Panels.CopyAccessToken}"
-                                  AutomationProperties.Name="{DynamicResource Text.Panels.CopyAccessToken}" />
-            </Grid>
-            <CheckBox Content="{DynamicResource Text.Panels.ShowToken}" IsCheckedChanged="OnShowTokenChanged" />
-            <TextBlock Text="{DynamicResource Text.Panels.McpSecurityNotice}"
-                       Foreground="{DynamicResource EffectMutedForegroundBrush}" TextWrapping="Wrap" />
-            <Separator Margin="0,8" />
-            <TextBlock Text="{DynamicResource Text.OperatorSkill.Title}" FontSize="18" FontWeight="SemiBold" />
-            <TextBlock Text="{DynamicResource Text.OperatorSkill.Help}" TextWrapping="Wrap" />
-            <TextBlock Text="{DynamicResource Text.OperatorSkill.BundledPath}" />
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                <TextBox x:Name="OperatorSkillPathBox" IsReadOnly="True"
-                         AutomationProperties.Name="{DynamicResource Text.OperatorSkill.BundledPath}" />
-                <views:IconButton x:Name="CopyOperatorSkillPathButton" Grid.Column="1" Icon="Copy"
-                                  Click="OnCopyOperatorSkillPathClick"
-                                  ToolTip.Tip="{DynamicResource Text.OperatorSkill.CopyPath}"
-                                  AutomationProperties.Name="{DynamicResource Text.OperatorSkill.CopyPath}" />
-            </Grid>
-            <TextBlock Text="{DynamicResource Text.OperatorSkill.Destination}" TextWrapping="Wrap" />
-            <TextBox x:Name="OperatorSkillsDirectoryBox"
-                     AutomationProperties.Name="{DynamicResource Text.OperatorSkill.Destination}" />
-            <CheckBox x:Name="ReplaceOperatorSkillBox" Content="{DynamicResource Text.OperatorSkill.Replace}" />
-            <Button x:Name="InstallOperatorSkillButton" Content="{DynamicResource Text.OperatorSkill.Install}"
-                    Click="OnInstallOperatorSkillClick" HorizontalAlignment="Left" />
-            <TextBlock x:Name="OperatorSkillStatus" TextWrapping="Wrap" />
+        <StackPanel Margin="12" Spacing="10">
+            <Border Classes="editor-card">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <TextBlock Classes="editor-title" Text="{DynamicResource Text.Panels.McpConnection}" />
+                        <Border Grid.Column="1" Background="Transparent" Padding="2"
+                                ToolTip.Tip="{DynamicResource Text.Panels.McpSecurityNotice}">
+                            <views:EditorIconView Icon="Info" />
+                        </Border>
+                    </Grid>
+                    <TextBlock Classes="editor-label" Text="{Binding McpStatus}" TextWrapping="Wrap" />
+                    <TextBlock Classes="editor-label" Text="{DynamicResource Text.Panels.StreamableHttpEndpoint}" />
+                    <TextBox Text="{Binding McpEndpoint}" IsReadOnly="True" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <TextBlock Classes="editor-label" Text="X-LiberaFx-Token" VerticalAlignment="Center" />
+                        <CheckBox Grid.Column="1" Content="{DynamicResource Text.Panels.ShowToken}" IsCheckedChanged="OnShowTokenChanged" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <TextBox x:Name="TokenBox" Text="{Binding McpAccessToken}"
+                                 IsReadOnly="True" PasswordChar="●" />
+                        <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Copy" Click="OnCopyTokenClick"
+                                          ToolTip.Tip="{DynamicResource Text.Panels.CopyAccessToken}"
+                                          AutomationProperties.Name="{DynamicResource Text.Panels.CopyAccessToken}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+            <Border Classes="editor-card">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <TextBlock Classes="editor-title" Text="{DynamicResource Text.OperatorSkill.Title}" />
+                        <Border Grid.Column="1" Background="Transparent" Padding="2"
+                                ToolTip.Tip="{DynamicResource Text.OperatorSkill.Help}">
+                            <views:EditorIconView Icon="Info" />
+                        </Border>
+                    </Grid>
+                    <TextBlock Classes="editor-label" Text="{DynamicResource Text.OperatorSkill.BundledPath}" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <TextBox x:Name="OperatorSkillPathBox" IsReadOnly="True"
+                                 AutomationProperties.Name="{DynamicResource Text.OperatorSkill.BundledPath}" />
+                        <views:IconButton x:Name="CopyOperatorSkillPathButton" Grid.Column="1" Classes="editor-tool" Icon="Copy"
+                                          Click="OnCopyOperatorSkillPathClick"
+                                          ToolTip.Tip="{DynamicResource Text.OperatorSkill.CopyPath}"
+                                          AutomationProperties.Name="{DynamicResource Text.OperatorSkill.CopyPath}" />
+                    </Grid>
+                    <TextBlock Classes="editor-label" Text="{DynamicResource Text.OperatorSkill.Destination}" TextWrapping="Wrap" />
+                    <TextBox x:Name="OperatorSkillsDirectoryBox"
+                             AutomationProperties.Name="{DynamicResource Text.OperatorSkill.Destination}" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <CheckBox x:Name="ReplaceOperatorSkillBox" Content="{DynamicResource Text.OperatorSkill.Replace}" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" x:Name="InstallOperatorSkillButton" Classes="editor-action"
+                                Content="{DynamicResource Text.OperatorSkill.Install}"
+                                Click="OnInstallOperatorSkillClick" />
+                    </Grid>
+                    <TextBlock x:Name="OperatorSkillStatus" Classes="editor-label" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

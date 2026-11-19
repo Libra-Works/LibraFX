@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "name": "MatchaCream",
+  "variant": "Light",
+  "palette": {
+    "region": "#F8F4E1",
+    "surface": "#EAE2C6",
+    "foreground": "#3E2C23",
+    "mutedForeground": "#6E5849",
+    "border": "#CFC4A3",
+    "accent": "#5C7C54"
+  },
+  "editorColors": {
+    "GraphMinorGrid": "#EFEAD2",
+    "GraphMajorGrid": "#DFD6B8",
+    "GraphParameter": "#4B7F6C",
+    "GraphSignal": "#C86D3B",
+    "NodeBorder": "#B8AC88",
+    "NodeSelectedBorder": "#5C7C54",
+    "SelectionFill": "#285C7C54",
+    "SelectionBorder": "#5C7C54",
+    "CurveBackground": "#F3EED9",
+    "CurveGrid": "#DED5B6",
+    "CurveAxis": "#9B8E6E",
+    "CurveLine": "#4A7C59",
+    "CurveHandle": "#C86D3B",
+    "CurveKey": "#3E2C23",
+    "CurveSelected": "#D45D3A",
+    "CurveLabel": "#6E5849"
+  },
+  "accentColors": {
+    "Blue": "#3D738E",
+    "Purple": "#7C5D86",
+    "Teal": "#4A7C59",
+    "Orange": "#C86D3B",
+    "Pink": "#B5566A"
+  }
+}

@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:LiberaFx.ViewModels"
+             xmlns:views="using:LiberaFx.Views"
              x:Class="LiberaFx.Views.PreviewPaneView"
              Classes="editor-inspector"
              x:DataType="vm:PreviewPaneViewModel">
@@ -8,63 +9,110 @@
         <StackPanel Margin="8" Spacing="8">
             <Border Classes="editor-card">
                 <StackPanel Spacing="6">
-                    <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Panels.PreviewTransport}" />
-                    <TextBlock Text="{Binding Main.PreviewStatus}" TextWrapping="Wrap" />
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock Classes="editor-label" Text="{DynamicResource Text.Panels.ConnectedClients}" />
-                        <TextBlock Classes="editor-heading" Text="{Binding Main.PreviewClientCount}" />
-                    </StackPanel>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Panels.PreviewTransport}" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                            <TextBlock Classes="editor-label" Text="{DynamicResource Text.Panels.ConnectedClients}" />
+                            <TextBlock Classes="editor-heading" Text="{Binding Main.PreviewClientCount}" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Classes="editor-label" Text="{Binding Main.PreviewStatus}" TextWrapping="Wrap" />
                     <CheckBox Content="{DynamicResource Text.DebugDraw.Transfer}"
-                              IsChecked="{Binding Main.IncludePreviewDebugDraw, Mode=TwoWay}" />
-                    <TextBlock Classes="editor-label" Text="{DynamicResource Text.DebugDraw.Help}" TextWrapping="Wrap" />
+                              IsChecked="{Binding Main.IncludePreviewDebugDraw, Mode=TwoWay}"
+                              ToolTip.Tip="{DynamicResource Text.DebugDraw.Help}" />
                 </StackPanel>
             </Border>
-            <TextBlock Classes="editor-heading" Text="{DynamicResource Text.ExecutionDebug.Title}" />
-            <TextBlock Text="{DynamicResource Text.ExecutionDebug.Help}" TextWrapping="Wrap" />
-            <CheckBox Content="{DynamicResource Text.ExecutionDebug.Package}" IsChecked="{Binding Main.ExecutionDebugger.PackageMode}" />
-            <WrapPanel>
-                <Button Content="{DynamicResource Text.ExecutionDebug.Start}" Command="{Binding Main.ExecutionDebugger.StartCommand}" />
-                <Button Content="{DynamicResource Text.ExecutionDebug.Disconnect}" Command="{Binding Main.ExecutionDebugger.DisconnectCommand}" />
-            </WrapPanel>
-            <TextBlock Text="{Binding Main.ExecutionDebugger.Status}" TextWrapping="Wrap" />
-            <TextBlock Text="{Binding Main.ExecutionDebugger.Target}" TextWrapping="Wrap" />
-            <TextBox Text="{Binding Main.ExecutionDebugger.Invitation, Mode=OneWay}" IsReadOnly="True"
-                     PlaceholderText="{DynamicResource Text.ExecutionDebug.Invitation}" />
-            <WrapPanel>
-                <Button Content="{DynamicResource Text.ExecutionDebug.Toggle}" Command="{Binding Main.ExecutionDebugger.BreakpointCommand}" />
-                <Button Content="{DynamicResource Text.ExecutionDebug.Pause}" Command="{Binding Main.ExecutionDebugger.PauseCommand}" />
-                <Button Content="{DynamicResource Text.ExecutionDebug.Step}" Command="{Binding Main.ExecutionDebugger.StepCommand}" />
-                <Button Content="{DynamicResource Text.ExecutionDebug.Resume}" Command="{Binding Main.ExecutionDebugger.ResumeCommand}" />
-                <Button Content="{DynamicResource Text.ExecutionDebug.Locate}" Command="{Binding Main.ExecutionDebugger.LocateCommand}" />
-            </WrapPanel>
-            <TextBlock Text="{Binding Main.ExecutionDebugger.Breakpoints}" />
-            <TextBlock Text="{Binding Main.ExecutionDebugger.CurrentNode}" TextWrapping="Wrap" />
-            <TextBlock Text="{Binding Main.ExecutionDebugger.CurrentSignalSource}" TextWrapping="Wrap" />
-            <ItemsControl ItemsSource="{Binding Main.ExecutionDebugger.Inputs}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="x:String">
-                        <TextBlock Text="{Binding}" TextWrapping="Wrap" />
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-            <ItemsControl ItemsSource="{Binding Main.ExecutionDebugger.AuthoredParameters}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="x:String">
-                        <TextBlock Text="{Binding}" TextWrapping="Wrap" />
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-            <Separator />
-            <TextBlock Text="{DynamicResource Text.Panels.PreviewEndpointHelp}" TextWrapping="Wrap" />
-            <TextBox Text="{Binding Main.PreviewEndpoint}" IsReadOnly="True" />
-            <TextBlock Text="X-LiberaFx-Preview-Token" />
-            <TextBox Text="{Binding Main.PreviewAccessToken}" IsReadOnly="True" />
-            <TextBlock Text="{DynamicResource Text.Panels.PreviewFingerprint}" />
-            <TextBox Text="{Binding Main.PreviewFingerprint}" IsReadOnly="True" TextWrapping="Wrap" />
-            <TextBlock Text="{DynamicResource Text.Panels.PreviewSecurityNotice}"
-                       Foreground="{DynamicResource EffectMutedForegroundBrush}" TextWrapping="Wrap" />
-            <TextBlock Text="{DynamicResource Text.Panels.PreviewProtocolNotice}"
-                       Foreground="{DynamicResource EffectMutedForegroundBrush}" TextWrapping="Wrap" />
+            <Border Classes="editor-card">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <TextBlock Classes="editor-heading" Text="{DynamicResource Text.ExecutionDebug.Title}" />
+                        <Border Grid.Column="1" Background="Transparent" Padding="2"
+                                ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Help}">
+                            <views:EditorIconView Icon="Info" />
+                        </Border>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <CheckBox Content="{DynamicResource Text.ExecutionDebug.Package}"
+                                  IsChecked="{Binding Main.ExecutionDebugger.PackageMode}"
+                                  VerticalAlignment="Center" />
+                        <Border Grid.Column="1" Classes="editor-toolbar-group" Padding="4,2">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <views:IconButton Classes="editor-tool transport-primary" Icon="Play"
+                                                  Command="{Binding Main.ExecutionDebugger.StartCommand}"
+                                                  ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Start}"
+                                                  AutomationProperties.Name="{DynamicResource Text.ExecutionDebug.Start}" />
+                                <views:IconButton Classes="editor-tool" Icon="Disconnect"
+                                                  Command="{Binding Main.ExecutionDebugger.DisconnectCommand}"
+                                                  ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Disconnect}"
+                                                  AutomationProperties.Name="{DynamicResource Text.ExecutionDebug.Disconnect}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <Border Classes="editor-toolbar-group" Padding="4,2" HorizontalAlignment="Left">
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <views:IconButton Classes="editor-tool" Icon="Pin"
+                                              Command="{Binding Main.ExecutionDebugger.BreakpointCommand}"
+                                              ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Toggle}"
+                                              AutomationProperties.Name="{DynamicResource Text.ExecutionDebug.Toggle}" />
+                            <Border Classes="editor-toolbar-divider" />
+                            <views:IconButton Classes="editor-tool" Icon="Pause"
+                                              Command="{Binding Main.ExecutionDebugger.PauseCommand}"
+                                              ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Pause}"
+                                              AutomationProperties.Name="{DynamicResource Text.ExecutionDebug.Pause}" />
+                            <views:IconButton Classes="editor-tool" Icon="StepForward"
+                                              Command="{Binding Main.ExecutionDebugger.StepCommand}"
+                                              ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Step}"
+                                              AutomationProperties.Name="{DynamicResource Text.ExecutionDebug.Step}" />
+                            <views:IconButton Classes="editor-tool" Icon="Play"
+                                              Command="{Binding Main.ExecutionDebugger.ResumeCommand}"
+                                              ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Resume}"
+                                              AutomationProperties.Name="{DynamicResource Text.ExecutionDebug.Resume}" />
+                            <Border Classes="editor-toolbar-divider" />
+                            <views:IconButton Classes="editor-tool" Icon="Frame"
+                                              Command="{Binding Main.ExecutionDebugger.LocateCommand}"
+                                              ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Locate}"
+                                              AutomationProperties.Name="{DynamicResource Text.ExecutionDebug.Locate}" />
+                        </StackPanel>
+                    </Border>
+                    <TextBox Text="{Binding Main.ExecutionDebugger.Invitation, Mode=OneWay}" IsReadOnly="True"
+                             PlaceholderText="{DynamicResource Text.ExecutionDebug.Invitation}" />
+                    <TextBlock Classes="editor-label" Text="{Binding Main.ExecutionDebugger.Status}" TextWrapping="Wrap" />
+                    <TextBlock Classes="editor-label" Text="{Binding Main.ExecutionDebugger.Target}" TextWrapping="Wrap"
+                               IsVisible="{Binding Main.ExecutionDebugger.Target, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    <TextBlock Text="{Binding Main.ExecutionDebugger.Breakpoints}"
+                               IsVisible="{Binding Main.ExecutionDebugger.Breakpoints, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    <TextBlock Text="{Binding Main.ExecutionDebugger.CurrentNode}" TextWrapping="Wrap"
+                               IsVisible="{Binding Main.ExecutionDebugger.CurrentNode, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    <TextBlock Text="{Binding Main.ExecutionDebugger.CurrentSignalSource}" TextWrapping="Wrap"
+                               IsVisible="{Binding Main.ExecutionDebugger.CurrentSignalSource, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    <ItemsControl ItemsSource="{Binding Main.ExecutionDebugger.Inputs}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <ItemsControl ItemsSource="{Binding Main.ExecutionDebugger.AuthoredParameters}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+            <Expander Header="{DynamicResource Text.Panels.PreviewEndpointHelp}" IsExpanded="False">
+                <StackPanel Spacing="6" Margin="0,4,0,0">
+                    <TextBox Text="{Binding Main.PreviewEndpoint}" IsReadOnly="True"
+                             ToolTip.Tip="{DynamicResource Text.Panels.PreviewEndpointHelp}" />
+                    <TextBlock Classes="editor-label" Text="X-LiberaFx-Preview-Token" />
+                    <TextBox Text="{Binding Main.PreviewAccessToken}" IsReadOnly="True"
+                             ToolTip.Tip="{DynamicResource Text.Panels.PreviewSecurityNotice}" />
+                    <TextBlock Classes="editor-label" Text="{DynamicResource Text.Panels.PreviewFingerprint}" />
+                    <TextBox Text="{Binding Main.PreviewFingerprint}" IsReadOnly="True" TextWrapping="Wrap"
+                             ToolTip.Tip="{DynamicResource Text.Panels.PreviewProtocolNotice}" />
+                </StackPanel>
+            </Expander>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

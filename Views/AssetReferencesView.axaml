@@ -14,14 +14,26 @@
             <TextBox Grid.Column="1" Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
                      PlaceholderText="{DynamicResource Text.Asset.SearchHint}"
                      AutomationProperties.Name="{DynamicResource Text.Asset.Search}" />
-            <Button Grid.Column="2" Command="{Binding RefreshCommand}" Content="{DynamicResource Text.Editor.Refresh}" />
+            <views:IconButton Grid.Column="2" Classes="editor-tool" Icon="Refresh" Command="{Binding RefreshCommand}"
+                              ToolTip.Tip="{DynamicResource Text.Editor.Refresh}"
+                              AutomationProperties.Name="{DynamicResource Text.Editor.Refresh}" />
         </Grid>
-        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="6">
             <TextBox Text="{Binding Folder}" PlaceholderText="{DynamicResource Text.References.ChooseFolder}"
                      AutomationProperties.Name="{DynamicResource Text.References.ChooseFolder}" />
-            <Button Grid.Column="1" Click="OnChooseFolder" Content="{DynamicResource Text.Library.ChooseFolder}" />
-            <Button Grid.Column="2" Command="{Binding AddFolderCommand}" Content="{DynamicResource Text.References.AddFolder}" />
-            <Button Grid.Column="3" Command="{Binding ClearFoldersCommand}" Content="{DynamicResource Text.References.ClearFolders}" />
+            <Border Grid.Column="1" Classes="editor-toolbar-group" Padding="4,2">
+                <StackPanel Orientation="Horizontal" Spacing="2">
+                    <views:IconButton Classes="editor-tool" Icon="Open" Click="OnChooseFolder"
+                                      ToolTip.Tip="{DynamicResource Text.Library.ChooseFolder}"
+                                      AutomationProperties.Name="{DynamicResource Text.Library.ChooseFolder}" />
+                    <views:IconButton Classes="editor-tool" Icon="Add" Command="{Binding AddFolderCommand}"
+                                      ToolTip.Tip="{DynamicResource Text.References.AddFolder}"
+                                      AutomationProperties.Name="{DynamicResource Text.References.AddFolder}" />
+                    <views:IconButton Classes="editor-tool" Icon="Delete" Command="{Binding ClearFoldersCommand}"
+                                      ToolTip.Tip="{DynamicResource Text.References.ClearFolders}"
+                                      AutomationProperties.Name="{DynamicResource Text.References.ClearFolders}" />
+                </StackPanel>
+            </Border>
         </Grid>
         <StackPanel Grid.Row="2" Spacing="4">
             <TextBlock Text="{Binding Coverage}" TextWrapping="Wrap"

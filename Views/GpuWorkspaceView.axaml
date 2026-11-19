@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:LiberaFx.Views"
              x:Class="LiberaFx.Views.GpuWorkspaceView"
              Background="{DynamicResource EffectWindowBackgroundBrush}"
              Focusable="True" KeyDown="OnKeyDown">
@@ -7,33 +8,58 @@
     <Style Selector="Button"><Setter Property="Padding" Value="8,4" /></Style>
     <Style Selector="TextBox, ComboBox"><Setter Property="MinHeight" Value="26" /></Style>
   </UserControl.Styles>
-  <Grid RowDefinitions="Auto,Auto,*,Auto">
-    <Border Padding="10,8" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource EffectBorderBrush}">
-      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
-        <Button x:Name="BackButton" Click="OnBack" Content="{DynamicResource Text.Gpu.Back}" />
-        <TextBlock x:Name="Breadcrumb" Grid.Column="1" Margin="12,0" VerticalAlignment="Center" />
-        <Button Grid.Column="2" Click="OnUndo" Content="Undo" />
-        <Button Grid.Column="3" Click="OnRedo" Content="Redo" />
-        <Button Grid.Column="4" Click="OnCompile" Content="{DynamicResource Text.Gpu.Compile}" />
-        <Button Grid.Column="5" Click="OnClose" Content="{DynamicResource Text.Gpu.Close}" />
+  <Grid RowDefinitions="Auto,*,Auto">
+    <Border Classes="editor-bar" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+        <views:IconButton x:Name="BackButton" Classes="editor-tool" Icon="Previous" Click="OnBack"
+                          ToolTip.Tip="{DynamicResource Text.Gpu.Back}"
+                          AutomationProperties.Name="{DynamicResource Text.Gpu.Back}" />
+        <TextBlock x:Name="Breadcrumb" Classes="editor-heading" Grid.Column="1" VerticalAlignment="Center" />
+        <Border Grid.Column="2" Classes="editor-toolbar-group" Padding="4,2">
+          <StackPanel Orientation="Horizontal" Spacing="2">
+            <views:IconButton Classes="editor-tool" Icon="Undo" Click="OnUndo"
+                              ToolTip.Tip="{DynamicResource Text.Editor.Undo}"
+                              AutomationProperties.Name="{DynamicResource Text.Editor.Undo}" />
+            <views:IconButton Classes="editor-tool" Icon="Redo" Click="OnRedo"
+                              ToolTip.Tip="{DynamicResource Text.Editor.Redo}"
+                              AutomationProperties.Name="{DynamicResource Text.Editor.Redo}" />
+            <Border Classes="editor-toolbar-divider" />
+            <views:IconButton Classes="editor-tool transport-primary" Icon="Play" Click="OnCompile"
+                              ToolTip.Tip="{DynamicResource Text.Gpu.Compile}"
+                              AutomationProperties.Name="{DynamicResource Text.Gpu.Compile}" />
+            <views:IconButton Classes="editor-tool" Icon="Close" Click="OnClose"
+                              ToolTip.Tip="{DynamicResource Text.Gpu.Close}"
+                              AutomationProperties.Name="{DynamicResource Text.Gpu.Close}" />
+          </StackPanel>
+        </Border>
+        <Border Grid.Column="3" Background="Transparent" Padding="4" VerticalAlignment="Center"
+                ToolTip.Tip="{DynamicResource Text.Gpu.Status}">
+          <views:EditorIconView Icon="Info" />
+        </Border>
       </Grid>
     </Border>
-    <TextBlock Grid.Row="1" Margin="12,6" Text="{DynamicResource Text.Gpu.Status}"
-               Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-    <Grid Grid.Row="2" ColumnDefinitions="190,*,250">
+    <Grid Grid.Row="1" ColumnDefinitions="190,*,250">
       <Border BorderThickness="0,0,1,0" BorderBrush="{DynamicResource EffectBorderBrush}" Padding="8">
         <ScrollViewer><StackPanel Spacing="6">
-          <TextBlock Text="{DynamicResource Text.Gpu.Palette}" />
+          <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Gpu.Palette}" />
           <ComboBox x:Name="TypeChoice" />
           <StackPanel x:Name="Palette" Spacing="3" />
           <Separator />
-          <TextBlock Text="{DynamicResource Text.Gpu.Capacity}" />
-          <TextBox x:Name="Capacity" />
-          <Button Click="OnCapacity" Content="{DynamicResource Text.Gpu.ApplyCapacity}" />
+          <TextBlock Classes="editor-label" Text="{DynamicResource Text.Gpu.Capacity}" />
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+            <TextBox x:Name="Capacity" />
+            <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Check" Click="OnCapacity"
+                              ToolTip.Tip="{DynamicResource Text.Gpu.ApplyCapacity}"
+                              AutomationProperties.Name="{DynamicResource Text.Gpu.ApplyCapacity}" />
+          </Grid>
           <Separator />
-          <ComboBox x:Name="ExportFormat" />
-          <Button Click="OnExport" Content="{DynamicResource Text.Gpu.Export}" />
-          <Button IsEnabled="False" Content="{DynamicResource Text.Gpu.FutureTexture}"
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+            <ComboBox x:Name="ExportFormat" HorizontalAlignment="Stretch" />
+            <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Export" Click="OnExport"
+                              ToolTip.Tip="{DynamicResource Text.Gpu.Export}"
+                              AutomationProperties.Name="{DynamicResource Text.Gpu.Export}" />
+          </Grid>
+          <Button Classes="editor-action" IsEnabled="False" Content="{DynamicResource Text.Gpu.FutureTexture}"
                   ToolTip.Tip="{DynamicResource Text.Gpu.FutureHint}" />
         </StackPanel></ScrollViewer>
       </Border>
@@ -45,13 +71,21 @@
           <TabItem Header="{DynamicResource Text.Gpu.Visual}">
             <Grid RowDefinitions="*,Auto">
               <StackPanel x:Name="KernelToolbar" Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="6">
-                <Button Content="−" Click="OnZoomOut" />
-                <Button x:Name="ZoomLabel" Content="100%" Click="OnResetZoom" />
-                <Button Content="+" Click="OnZoomIn" />
-                <Button x:Name="FrameButton" Content="{DynamicResource Text.Gpu.Frame}" Click="OnFrame" IsEnabled="False" />
-                <Button x:Name="ArrangeButton" Content="{DynamicResource Text.Gpu.Arrange}" Click="OnArrange" />
-                <TextBlock Text="{DynamicResource Text.Gpu.Gestures}" VerticalAlignment="Center"
-                           Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                <views:IconButton Classes="editor-tool" Icon="ZoomOut" Click="OnZoomOut"
+                                  ToolTip.Tip="{DynamicResource Text.Editor.ZoomOut}"
+                                  AutomationProperties.Name="{DynamicResource Text.Editor.ZoomOut}" />
+                <Button x:Name="ZoomLabel" Classes="editor-tool" Content="100%" Click="OnResetZoom" />
+                <views:IconButton Classes="editor-tool" Icon="ZoomIn" Click="OnZoomIn"
+                                  ToolTip.Tip="{DynamicResource Text.Editor.ZoomIn}"
+                                  AutomationProperties.Name="{DynamicResource Text.Editor.ZoomIn}" />
+                <views:IconButton x:Name="FrameButton" Classes="editor-tool" Icon="Frame" Click="OnFrame" IsEnabled="False"
+                                  ToolTip.Tip="{DynamicResource Text.Gpu.Frame}"
+                                  AutomationProperties.Name="{DynamicResource Text.Gpu.Frame}" />
+                <Button x:Name="ArrangeButton" Classes="editor-action" Content="{DynamicResource Text.Gpu.Arrange}" Click="OnArrange" />
+                <Border Background="Transparent" Padding="4" VerticalAlignment="Center"
+                        ToolTip.Tip="{DynamicResource Text.Gpu.Gestures}">
+                  <views:EditorIconView Icon="Info" />
+                </Border>
               </StackPanel>
               <ScrollViewer x:Name="GpuGraphScrollViewer" Focusable="True"
                             HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
@@ -63,14 +97,16 @@
             </Grid>
           </TabItem>
           <TabItem Header="{DynamicResource Text.Gpu.Text}">
-            <Grid RowDefinitions="Auto,*,Auto" Margin="10">
-              <TextBlock TextWrapping="Wrap" Margin="0,0,0,6"
-                         Text="{DynamicResource Text.Gpu.Grammar}" />
-              <TextBox x:Name="KernelText" Grid.Row="1" AcceptsReturn="True" TextWrapping="NoWrap"
+            <Grid RowDefinitions="*,Auto" Margin="10">
+              <TextBox x:Name="KernelText" AcceptsReturn="True" TextWrapping="NoWrap"
                        FontFamily="Consolas" TextChanged="OnTextChanged" />
-              <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
-                <Button Click="OnApplyText" Content="{DynamicResource Text.Gpu.ApplyText}" />
-                <Button Click="OnEmitText" Content="{DynamicResource Text.Gpu.EmitText}" />
+              <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
+                <Button Classes="editor-action" Click="OnApplyText" Content="{DynamicResource Text.Gpu.ApplyText}" />
+                <Button Classes="editor-action" Click="OnEmitText" Content="{DynamicResource Text.Gpu.EmitText}" />
+                <Border Background="Transparent" Padding="4" VerticalAlignment="Center"
+                        ToolTip.Tip="{DynamicResource Text.Gpu.Grammar}">
+                  <views:EditorIconView Icon="Info" />
+                </Border>
               </StackPanel>
             </Grid>
           </TabItem>
@@ -78,19 +114,19 @@
       </Grid>
       <Border Grid.Column="2" Padding="8" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource EffectBorderBrush}">
         <ScrollViewer><StackPanel Spacing="6">
-          <TextBlock Text="{DynamicResource Text.Gpu.Properties}" />
-          <TextBlock x:Name="SelectionLabel" TextWrapping="Wrap" />
+          <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Gpu.Properties}" />
+          <TextBlock x:Name="SelectionLabel" Classes="editor-label" TextWrapping="Wrap" />
           <StackPanel x:Name="NodeInspector" Spacing="5" />
           <Separator />
-          <TextBlock Text="{DynamicResource Text.Gpu.Writes}" />
+          <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Gpu.Writes}" />
           <StackPanel x:Name="WritesPanel" Spacing="4" />
           <StackPanel x:Name="BindingsPanel" Spacing="4" />
           <Separator />
-          <TextBlock Text="{DynamicResource Text.Gpu.Diagnostics}" />
+          <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Gpu.Diagnostics}" />
           <TextBlock x:Name="DiagnosticText" TextWrapping="Wrap" Foreground="#ef7474" />
         </StackPanel></ScrollViewer>
       </Border>
     </Grid>
-    <TextBlock x:Name="Status" Grid.Row="3" Margin="12,6" TextWrapping="Wrap" />
+    <TextBlock x:Name="Status" Grid.Row="2" Classes="editor-label" Margin="12,6" TextWrapping="Wrap" />
   </Grid>
 </UserControl>

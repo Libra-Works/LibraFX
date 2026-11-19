@@ -10,12 +10,14 @@
             Width="{Binding #EditorSurface.Viewport.Width}" Height="{Binding #EditorSurface.Viewport.Height}">
     <Grid RowDefinitions="Auto,*,Auto" RowSpacing="10">
         <StackPanel Orientation="Horizontal" Spacing="8">
-            <TextBlock Text="{DynamicResource Text.Asset.Peer}" VerticalAlignment="Center"/>
+            <TextBlock Classes="editor-label" Text="{DynamicResource Text.Asset.Peer}"/>
             <ComboBox Width="220" ItemsSource="{Binding Catalog.Peers}" SelectedItem="{Binding Catalog.SelectedPeer}"/>
             <TextBox Width="220" PlaceholderText="{DynamicResource Text.Asset.SearchHint}" Text="{Binding Catalog.Query}"/>
-            <Button Content="{DynamicResource Text.Asset.Search}" Command="{Binding Catalog.SearchCommand}"/>
-            <TextBlock Text="{DynamicResource Text.Sprite.TextureDimensions}" VerticalAlignment="Center" Margin="16,0,0,0"/>
-            <TextBlock Text="{Binding TextureDimensions}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+            <views:IconButton Classes="editor-tool transport-primary" Icon="Refresh" Command="{Binding Catalog.SearchCommand}"
+                              ToolTip.Tip="{DynamicResource Text.Asset.Search}"
+                              AutomationProperties.Name="{DynamicResource Text.Asset.Search}"/>
+            <TextBlock Classes="editor-label" Text="{DynamicResource Text.Sprite.TextureDimensions}" Margin="16,0,0,0"/>
+            <TextBlock Classes="editor-heading" Text="{Binding TextureDimensions}" VerticalAlignment="Center"/>
         </StackPanel>
 
         <Grid Grid.Row="1" ColumnDefinitions="240,*,330" ColumnSpacing="12">
@@ -24,78 +26,111 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="services:EngineAsset">
                             <StackPanel Margin="4">
-                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
-                                <TextBlock Text="{Binding Path}" TextWrapping="Wrap"/>
+                                <TextBlock Classes="editor-heading" Text="{Binding Name}"/>
+                                <TextBlock Classes="editor-label" Text="{Binding Path}" TextWrapping="Wrap"/>
                             </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
-                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="5">
-                    <Button Content="{DynamicResource Text.Asset.Previous}" Command="{Binding Catalog.PreviousCommand}"/>
-                    <Button Content="{DynamicResource Text.Asset.Next}" Command="{Binding Catalog.NextCommand}"/>
-                    <TextBlock Text="{Binding Catalog.Total}" VerticalAlignment="Center"/>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                    <views:IconButton Classes="editor-tool" Icon="Previous" Command="{Binding Catalog.PreviousCommand}"
+                                      ToolTip.Tip="{DynamicResource Text.Asset.Previous}"
+                                      AutomationProperties.Name="{DynamicResource Text.Asset.Previous}"/>
+                    <views:IconButton Classes="editor-tool" Icon="Next" Command="{Binding Catalog.NextCommand}"
+                                      ToolTip.Tip="{DynamicResource Text.Asset.Next}"
+                                      AutomationProperties.Name="{DynamicResource Text.Asset.Next}"/>
+                    <TextBlock Classes="editor-label" Text="{Binding Catalog.Total}"/>
                 </StackPanel>
             </Grid>
 
             <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto,Auto" RowSpacing="8">
-                <WrapPanel Orientation="Horizontal">
-                    <CheckBox Content="{DynamicResource Text.Sprite.GridSnap}" IsChecked="{Binding SnapToGrid}" Margin="0,0,10,0"/>
-                    <TextBlock Text="{DynamicResource Text.Sprite.GridSize}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="4">
+                    <CheckBox Content="{DynamicResource Text.Sprite.GridSnap}" IsChecked="{Binding SnapToGrid}" Margin="0,0,6,0"/>
+                    <TextBlock Classes="editor-label" Text="{DynamicResource Text.Sprite.GridSize}"/>
                     <TextBox Width="60" Text="{Binding GridWidth, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip.Tip="{DynamicResource Text.Sprite.GridWidth}"/>
-                    <TextBlock Text=" × " VerticalAlignment="Center"/>
+                    <TextBlock Classes="editor-label" Text="×"/>
                     <TextBox Width="60" Text="{Binding GridHeight, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip.Tip="{DynamicResource Text.Sprite.GridHeight}"/>
-                    <Button Content="{DynamicResource Text.Sprite.AutoFlipbook}" Click="OnAutoFlipbook" Margin="8,0,0,0"/>
+                    <Button Classes="editor-action" Content="{DynamicResource Text.Sprite.AutoFlipbook}" Click="OnAutoFlipbook"/>
                 </WrapPanel>
                 <TabControl x:Name="AuthoringTabs" Grid.Row="1" MinHeight="170" SelectionChanged="OnAuthoringTabChanged">
                     <TabItem Header="{DynamicResource Text.Sprite.CutCells}">
                         <views:SpriteAtlasPreview x:Name="Atlas" MinHeight="140"/>
                     </TabItem>
                     <TabItem Header="{DynamicResource Text.Sprite.ComposeParts}">
-                        <Grid RowDefinitions="*,Auto">
-                            <views:SpriteCompositionPreview x:Name="CompositionPreview" MinHeight="140"/>
-                            <TextBlock Grid.Row="1" Text="{DynamicResource Text.Sprite.CompositionHelp}" TextWrapping="Wrap"/>
-                        </Grid>
+                        <views:SpriteCompositionPreview x:Name="CompositionPreview" MinHeight="140"
+                                                        ToolTip.Tip="{DynamicResource Text.Sprite.CompositionHelp}"/>
                     </TabItem>
                 </TabControl>
-                <WrapPanel Grid.Row="2" Orientation="Horizontal">
-                    <Button Content="{DynamicResource Text.Sprite.OpenLocal}" Click="OnOpenLocal"/>
-                    <Button Content="{DynamicResource Text.Sprite.UseEnginePreview}" Click="OnUseEnginePreview"/>
-                    <Button Content="{DynamicResource Text.Sprite.AddCell}" Click="OnAddCell"/>
-                    <Button Content="{DynamicResource Text.Sprite.ZoomReset}" Click="OnResetZoom"/>
-                    <TextBlock Text="{DynamicResource Text.Sprite.CanvasHelp}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                <WrapPanel Grid.Row="2" Orientation="Horizontal" ItemSpacing="6" LineSpacing="4">
+                    <Border Classes="editor-toolbar-group" Padding="4,2">
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <views:IconButton Classes="editor-tool" Icon="Open" Click="OnOpenLocal"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.OpenLocal}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.OpenLocal}"/>
+                            <views:IconButton Classes="editor-tool" Icon="Link" Click="OnUseEnginePreview"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.UseEnginePreview}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.UseEnginePreview}"/>
+                            <Border Classes="editor-toolbar-divider"/>
+                            <views:IconButton Classes="editor-tool" Icon="Add" Click="OnAddCell"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.AddCell}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.AddCell}"/>
+                            <views:IconButton Classes="editor-tool" Icon="Reset" Click="OnResetZoom"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.ZoomReset}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.ZoomReset}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="Transparent" Padding="4" VerticalAlignment="Center"
+                            ToolTip.Tip="{DynamicResource Text.Sprite.CanvasHelp}">
+                        <views:EditorIconView Icon="Info"/>
+                    </Border>
                 </WrapPanel>
-                <TextBlock Grid.Row="3" Text="{Binding SelectedCellInfo}" TextWrapping="Wrap"/>
+                <TextBlock Grid.Row="3" Classes="editor-label" Text="{Binding SelectedCellInfo}" TextWrapping="Wrap"/>
             </Grid>
 
             <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="8">
-                    <TextBlock Text="{DynamicResource Text.Sprite.FramePreview}" FontWeight="Bold"/>
+                    <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Sprite.FramePreview}"/>
                     <views:SpriteAtlasPreview x:Name="FramePreview" Height="96" IsFramePreview="True"/>
                     <Expander x:Name="PartProperties" Header="{DynamicResource Text.Sprite.PartProperties}" HorizontalAlignment="Stretch">
                     <StackPanel Spacing="6">
                     <TextBox Text="{Binding SelectedPart.Name, UpdateSourceTrigger=PropertyChanged}"/>
                     <CheckBox Content="{DynamicResource Text.Sprite.PartVisible}" IsChecked="{Binding SelectedPart.Visible}"/>
                     <Grid ColumnDefinitions="Auto,*,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="5" RowSpacing="5">
-                        <TextBlock Text="{DynamicResource Text.Sprite.KeyTime}" VerticalAlignment="Center"/>
+                        <TextBlock Classes="editor-label" Text="{DynamicResource Text.Sprite.KeyTime}"/>
                         <TextBox Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding KeyTime, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Grid.Row="1" Text="{DynamicResource Text.Sprite.PartPosition}" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="1" Classes="editor-label" Text="{DynamicResource Text.Sprite.PartPosition}"/>
                         <TextBox Grid.Row="1" Grid.Column="1" PlaceholderText="X" Text="{Binding PositionX}"/>
                         <TextBox Grid.Row="1" Grid.Column="2" PlaceholderText="Y" Text="{Binding PositionY}"/>
-                        <TextBlock Grid.Row="2" Text="{DynamicResource Text.Sprite.PartRotation}" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="2" Classes="editor-label" Text="{DynamicResource Text.Sprite.PartRotation}"/>
                         <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Rotation}"/>
-                        <TextBlock Grid.Row="3" Text="{DynamicResource Text.Sprite.PartScale}" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="3" Classes="editor-label" Text="{DynamicResource Text.Sprite.PartScale}"/>
                         <TextBox Grid.Row="3" Grid.Column="1" PlaceholderText="X" Text="{Binding ScaleX}"/>
                         <TextBox Grid.Row="3" Grid.Column="2" PlaceholderText="Y" Text="{Binding ScaleY}"/>
                     </Grid>
-                    <WrapPanel>
-                        <Button Content="{DynamicResource Text.Sprite.SetKey}" Click="OnSetKey"/>
-                        <Button Content="{DynamicResource Text.Sprite.DeleteKey}" Click="OnDeleteKey"/>
-                    </WrapPanel>
+                    <Border Classes="editor-toolbar-group" Padding="4,2" HorizontalAlignment="Left">
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <views:IconButton Classes="editor-tool" Icon="Add" Click="OnSetKey"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.SetKey}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.SetKey}"/>
+                            <views:IconButton Classes="editor-tool" Icon="Delete" Click="OnDeleteKey"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.DeleteKey}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.DeleteKey}"/>
+                        </StackPanel>
+                    </Border>
                     </StackPanel>
                     </Expander>
-                    <TextBlock Text="{DynamicResource Text.Sprite.Cells}" FontWeight="Bold"/>
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                        <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Sprite.Cells}" VerticalAlignment="Center"/>
+                        <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Delete" Click="OnDeleteCell"
+                                          ToolTip.Tip="{DynamicResource Text.Sprite.DeleteCell}"
+                                          AutomationProperties.Name="{DynamicResource Text.Sprite.DeleteCell}"/>
+                        <Border Grid.Column="2" Background="Transparent" Padding="4" VerticalAlignment="Center"
+                                ToolTip.Tip="{DynamicResource Text.Sprite.DrawHint}">
+                            <views:EditorIconView Icon="Info"/>
+                        </Border>
+                    </Grid>
                     <ListBox x:Name="SpriteCells" ItemsSource="{Binding Cells}" SelectedItem="{Binding SelectedCell}"
                              Height="160" DoubleTapped="OnCellDoubleTapped">
                         <ListBox.ItemTemplate>
@@ -108,8 +143,8 @@
                                         TextureWidth="{ReflectionBinding DataContext.TexturePixelWidth, RelativeSource={RelativeSource AncestorType=Window}}"
                                         TextureHeight="{ReflectionBinding DataContext.TexturePixelHeight, RelativeSource={RelativeSource AncestorType=Window}}"/>
                                     <StackPanel Grid.Column="1">
-                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
-                                        <TextBlock>
+                                        <TextBlock Classes="editor-heading" Text="{Binding Name}"/>
+                                        <TextBlock Classes="editor-label">
                                             <Run Text="{Binding X}"/><Run Text=", "/><Run Text="{Binding Y}"/>
                                             <Run Text=" · "/><Run Text="{Binding Width}"/><Run Text=" × "/><Run Text="{Binding Height}"/>
                                         </TextBlock>
@@ -118,19 +153,15 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
-                        <Button Content="{DynamicResource Text.Sprite.DeleteCell}" Click="OnDeleteCell"/>
-                        <TextBlock Grid.Column="1" Text="{DynamicResource Text.Sprite.DrawHint}" VerticalAlignment="Center" TextWrapping="Wrap"/>
-                    </Grid>
                     <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="5">
-                        <TextBlock Text="{DynamicResource Text.Sprite.CellName}" VerticalAlignment="Center"/>
+                        <TextBlock Classes="editor-label" Text="{DynamicResource Text.Sprite.CellName}"/>
                         <TextBox Grid.Column="1" Text="{Binding CellName, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Grid.Row="1" Text="{DynamicResource Text.Sprite.CellPosition}" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="1" Classes="editor-label" Text="{DynamicResource Text.Sprite.CellPosition}"/>
                         <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="4">
                             <TextBox Width="65" PlaceholderText="X" Text="{Binding CellX, UpdateSourceTrigger=PropertyChanged}"/>
                             <TextBox Width="65" PlaceholderText="Y" Text="{Binding CellY, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
-                        <TextBlock Grid.Row="2" Text="{DynamicResource Text.Sprite.CellSize}" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="2" Classes="editor-label" Text="{DynamicResource Text.Sprite.CellSize}"/>
                         <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="4">
                             <TextBox Width="65" PlaceholderText="W" Text="{Binding CellWidth, UpdateSourceTrigger=PropertyChanged}"/>
                             <TextBox Width="65" PlaceholderText="H" Text="{Binding CellHeight, UpdateSourceTrigger=PropertyChanged}"/>
@@ -138,78 +169,129 @@
                     </Grid>
 
                     <Separator/>
-                    <TextBlock Text="{DynamicResource Text.Sprite.FrameProperties}" FontWeight="Bold"/>
-                    <TextBlock Text="{Binding SelectedFrameInfo}" TextWrapping="Wrap"/>
+                    <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Sprite.FrameProperties}"/>
+                    <TextBlock Classes="editor-label" Text="{Binding SelectedFrameInfo}" TextWrapping="Wrap"/>
                     <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="5">
-                        <TextBlock Text="{DynamicResource Text.Sprite.Fps}" VerticalAlignment="Center"/>
+                        <TextBlock Classes="editor-label" Text="{DynamicResource Text.Sprite.Fps}"/>
                         <TextBox Grid.Column="1" Text="{Binding SequenceFps, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Grid.Row="1" Text="{DynamicResource Text.Sprite.DurationMs}" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="1" Classes="editor-label" Text="{DynamicResource Text.Sprite.DurationMs}"/>
                         <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding DurationMilliseconds, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Grid.Row="2" Text="{DynamicResource Text.Sprite.PlaybackRange}" VerticalAlignment="Center" IsVisible="{Binding !IsComposition}"/>
+                        <TextBlock Grid.Row="2" Classes="editor-label" Text="{DynamicResource Text.Sprite.PlaybackRange}" IsVisible="{Binding !IsComposition}"/>
                         <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="4" IsVisible="{Binding !IsComposition}">
                             <TextBox Width="65" PlaceholderText="{DynamicResource Text.Sprite.RangeStart}" Text="{Binding RangeStart, UpdateSourceTrigger=PropertyChanged}"/>
                             <TextBox Width="65" PlaceholderText="{DynamicResource Text.Sprite.RangeEnd}" Text="{Binding RangeEnd, UpdateSourceTrigger=PropertyChanged}"/>
                         </StackPanel>
-                        <CheckBox Grid.Row="3" Grid.ColumnSpan="2" Content="{DynamicResource Text.Sprite.Loop}"
-                                  IsChecked="{Binding Loop}"/>
+                        <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="12">
+                            <CheckBox Content="{DynamicResource Text.Sprite.Loop}" IsChecked="{Binding Loop}"/>
+                            <CheckBox Content="{DynamicResource Text.Sprite.Playing}" IsChecked="{Binding Playing}"/>
+                        </StackPanel>
                     </Grid>
-                    <CheckBox Content="{DynamicResource Text.Sprite.Playing}" IsChecked="{Binding Playing}"/>
 
                     <Separator/>
-                    <TextBlock Text="{DynamicResource Text.Sprite.LegacyGrid}" FontWeight="Bold" IsVisible="{Binding !IsComposition}"/>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" IsVisible="{Binding !IsComposition}">
+                        <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Sprite.LegacyGrid}"/>
+                        <Border Grid.Column="1" Background="Transparent" Padding="2"
+                                ToolTip.Tip="{DynamicResource Text.Sprite.FrameBindingNotice}">
+                            <views:EditorIconView Icon="Info"/>
+                        </Border>
+                    </Grid>
                     <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="5" IsVisible="{Binding !IsComposition}">
-                        <TextBlock Text="{DynamicResource Text.Asset.Columns}" VerticalAlignment="Center"/>
+                        <TextBlock Classes="editor-label" Text="{DynamicResource Text.Asset.Columns}"/>
                         <TextBox Grid.Column="1" Text="{Binding Catalog.Columns, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Grid.Row="1" Text="{DynamicResource Text.Asset.Rows}" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="1" Classes="editor-label" Text="{DynamicResource Text.Asset.Rows}"/>
                         <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Catalog.Rows, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Grid.Row="2" Text="{DynamicResource Text.Asset.Fps}" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="2" Classes="editor-label" Text="{DynamicResource Text.Asset.Fps}"/>
                         <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Catalog.Fps, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Grid.Row="3" Text="{DynamicResource Text.Sprite.Frame}" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="3" Classes="editor-label" Text="{DynamicResource Text.Sprite.Frame}"/>
                         <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding Frame, UpdateSourceTrigger=PropertyChanged}"/>
                     </Grid>
-                    <TextBlock Text="{DynamicResource Text.Sprite.FrameBindingNotice}" TextWrapping="Wrap" IsVisible="{Binding !IsComposition}"/>
-                    <TextBlock Text="{DynamicResource Text.Sprite.MaterialNotice}" TextWrapping="Wrap"/>
-                    <TextBlock Text="{Binding PreviewSource}" TextWrapping="Wrap"/>
-                    <TextBlock Text="{Binding CatalogStatus}" TextWrapping="Wrap"/>
-                    <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
-                    <Button Content="{DynamicResource Text.Sprite.LoadSelected}" Click="OnLoadSelected"/>
-                    <Button Content="{DynamicResource Text.Asset.SaveMetadata}" Command="{Binding Catalog.SaveMetadataCommand}"/>
-                    <Button Content="{DynamicResource Text.Sprite.ApplySelected}" Click="OnApplySelected"
-                            IsEnabled="{Binding CanApply}"/>
-                    <Button Content="{DynamicResource Text.Sprite.Create}" Click="OnCreate"
-                            IsEnabled="{Binding CanApply}"/>
+                    <TextBlock Classes="editor-label" Text="{Binding PreviewSource}" TextWrapping="Wrap"/>
+                    <TextBlock Classes="editor-label" Text="{Binding CatalogStatus}" TextWrapping="Wrap"/>
+                    <TextBlock Classes="editor-label" Text="{Binding Status}" TextWrapping="Wrap"/>
+                    <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="4">
+                        <Button Classes="editor-action" Content="{DynamicResource Text.Sprite.LoadSelected}" Click="OnLoadSelected"
+                                ToolTip.Tip="{DynamicResource Text.Sprite.MaterialNotice}"/>
+                        <views:IconButton Classes="editor-tool" Icon="Save" Command="{Binding Catalog.SaveMetadataCommand}"
+                                          ToolTip.Tip="{DynamicResource Text.Asset.SaveMetadata}"
+                                          AutomationProperties.Name="{DynamicResource Text.Asset.SaveMetadata}"/>
+                        <Button Classes="editor-action" Content="{DynamicResource Text.Sprite.ApplySelected}" Click="OnApplySelected"
+                                IsEnabled="{Binding CanApply}"/>
+                        <Button Classes="editor-action" Content="{DynamicResource Text.Sprite.Create}" Click="OnCreate"
+                                IsEnabled="{Binding CanApply}"/>
+                    </WrapPanel>
                 </StackPanel>
             </ScrollViewer>
         </Grid>
-        <Border Grid.Row="2" BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="1" Padding="8">
-            <Grid RowDefinitions="Auto,*,Auto,Auto" RowSpacing="4">
-                <WrapPanel>
-                    <TextBlock Text="{DynamicResource Text.Sprite.Timeline}" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0"/>
+        <Border Grid.Row="2" Classes="editor-card" Padding="8,6">
+            <Grid RowDefinitions="Auto,*,Auto" RowSpacing="4">
+                <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="4">
+                    <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Sprite.Timeline}" VerticalAlignment="Center"/>
                     <ComboBox Width="180" ItemsSource="{Binding Parts}" SelectedItem="{Binding SelectedPart}">
                         <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:SpritePartViewModel"><TextBlock Text="{Binding Name}"/></DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
-                    <Button Content="{DynamicResource Text.Sprite.AddPart}" Click="OnAddPart"/>
-                    <Button Content="{DynamicResource Text.Sprite.RemovePart}" Click="OnRemovePart"/>
-                    <Button Content="{DynamicResource Text.Sprite.PartBackward}" Click="OnPartBackward"/>
-                    <Button Content="{DynamicResource Text.Sprite.PartForward}" Click="OnPartForward"/>
+                    <Border Classes="editor-toolbar-group" Padding="4,2">
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <views:IconButton Classes="editor-tool" Icon="Add" Click="OnAddPart"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.AddPart}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.AddPart}"/>
+                            <views:IconButton Classes="editor-tool" Icon="Remove" Click="OnRemovePart"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.RemovePart}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.RemovePart}"/>
+                            <Border Classes="editor-toolbar-divider"/>
+                            <views:IconButton Classes="editor-tool" Icon="Previous" Click="OnPartBackward"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.PartBackward}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.PartBackward}"/>
+                            <views:IconButton Classes="editor-tool" Icon="Next" Click="OnPartForward"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.PartForward}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.PartForward}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="Transparent" Padding="4" VerticalAlignment="Center"
+                            ToolTip.Tip="{DynamicResource Text.Sprite.TimelineHelp}">
+                        <views:EditorIconView Icon="Info"/>
+                    </Border>
                 </WrapPanel>
                 <ScrollViewer Grid.Row="1" MaxHeight="180" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
                     <views:SpriteTimeline x:Name="Timeline"/>
                 </ScrollViewer>
-                <WrapPanel Grid.Row="2" Orientation="Horizontal">
-                    <Button Content="{DynamicResource Text.Sprite.PlayStop}" Click="OnTogglePlayback" Margin="0,0,6,0"/>
-                    <Button Content="{DynamicResource Text.Sprite.PreviousFrame}" Click="OnPreviousFrame"/>
-                    <Button Content="{DynamicResource Text.Sprite.NextFrame}" Click="OnNextFrame" Margin="0,0,8,0"/>
-                    <Button Content="{DynamicResource Text.Sprite.AddToTimeline}" Click="OnAddFrame"/>
-                    <Button x:Name="InsertFrameButton" Content="{DynamicResource Text.Sprite.InsertFrame}" Click="OnInsertFrame"/>
-                    <Button Content="{DynamicResource Text.Sprite.DuplicateFrame}" Click="OnDuplicateFrame"/>
-                    <Button Content="{DynamicResource Text.Sprite.DeleteFrame}" Click="OnDeleteFrame" Margin="0,0,8,0"/>
-                    <Button Content="{DynamicResource Text.Sprite.FrameLeft}" Click="OnFrameUp"/>
-                    <Button Content="{DynamicResource Text.Sprite.FrameRight}" Click="OnFrameDown"/>
+                <WrapPanel Grid.Row="2" Orientation="Horizontal" ItemSpacing="6" LineSpacing="4">
+                    <Border Classes="editor-toolbar-group" Padding="4,2">
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <views:IconButton Classes="editor-tool" Icon="StepBack" Click="OnPreviousFrame"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.PreviousFrame}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.PreviousFrame}"/>
+                            <views:IconButton Classes="editor-tool transport-primary" Icon="Play" Click="OnTogglePlayback"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.PlayStop}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.PlayStop}"/>
+                            <views:IconButton Classes="editor-tool" Icon="StepForward" Click="OnNextFrame"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.NextFrame}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.NextFrame}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Classes="editor-toolbar-group" Padding="4,2">
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <views:IconButton Classes="editor-tool" Icon="Add" Click="OnAddFrame"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.AddToTimeline}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.AddToTimeline}"/>
+                            <Button x:Name="InsertFrameButton" Classes="editor-action" Content="{DynamicResource Text.Sprite.InsertFrame}" Click="OnInsertFrame"/>
+                            <views:IconButton Classes="editor-tool" Icon="Copy" Click="OnDuplicateFrame"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.DuplicateFrame}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.DuplicateFrame}"/>
+                            <views:IconButton Classes="editor-tool" Icon="Delete" Click="OnDeleteFrame"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.DeleteFrame}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.DeleteFrame}"/>
+                            <Border Classes="editor-toolbar-divider"/>
+                            <views:IconButton Classes="editor-tool" Icon="Previous" Click="OnFrameUp"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.FrameLeft}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.FrameLeft}"/>
+                            <views:IconButton Classes="editor-tool" Icon="Next" Click="OnFrameDown"
+                                              ToolTip.Tip="{DynamicResource Text.Sprite.FrameRight}"
+                                              AutomationProperties.Name="{DynamicResource Text.Sprite.FrameRight}"/>
+                        </StackPanel>
+                    </Border>
                 </WrapPanel>
-                <TextBlock Grid.Row="3" Text="{DynamicResource Text.Sprite.TimelineHelp}" TextWrapping="Wrap"/>
             </Grid>
         </Border>
     </Grid>

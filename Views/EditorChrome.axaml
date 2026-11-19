@@ -3,6 +3,8 @@
     <Styles.Resources>
         <CornerRadius x:Key="EditorChromeCornerRadius">6</CornerRadius>
         <x:Double x:Key="EditorBodyFontSize">14</x:Double>
+        <x:Double x:Key="EditorTitleFontSize">16</x:Double>
+        <x:Double x:Key="EditorCaptionFontSize">12</x:Double>
         <SolidColorBrush x:Key="EditorChromeDividerBrush"
                          Color="{DynamicResource SystemBaseMediumLowColor}" Opacity="0.55" />
     </Styles.Resources>
@@ -12,12 +14,13 @@
         <Setter Property="Foreground" Value="{DynamicResource EffectForegroundBrush}" />
         <Setter Property="FontSize" Value="{DynamicResource EditorBodyFontSize}" />
     </Style>
-    <Style Selector="TabItem">
+    <Style Selector="TabItem, Button, TextBox, ComboBox, CheckBox, RadioButton, MenuItem, NumericUpDown">
         <Setter Property="FontSize" Value="{DynamicResource EditorBodyFontSize}" />
     </Style>
     <Style Selector="ListBox, Expander">
         <Setter Property="Background" Value="{DynamicResource EffectSurfaceBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource EffectForegroundBrush}" />
+        <Setter Property="FontSize" Value="{DynamicResource EditorBodyFontSize}" />
     </Style>
 
     <Style Selector="Border.editor-bar">
@@ -32,26 +35,70 @@
         <Setter Property="CornerRadius" Value="{DynamicResource EditorChromeCornerRadius}" />
         <Setter Property="Padding" Value="10" />
     </Style>
+    <Style Selector="Border.editor-toolbar-group">
+        <Setter Property="Background" Value="{DynamicResource EffectWindowBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource EditorChromeDividerBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource EditorChromeCornerRadius}" />
+        <Setter Property="Padding" Value="6,3" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.editor-toolbar-divider">
+        <Setter Property="Width" Value="1" />
+        <Setter Property="Height" Value="18" />
+        <Setter Property="Background" Value="{DynamicResource EditorChromeDividerBrush}" />
+        <Setter Property="Margin" Value="4,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
     <Style Selector="TextBlock.editor-label">
         <Setter Property="Foreground" Value="{DynamicResource EffectMutedForegroundBrush}" />
+        <Setter Property="FontSize" Value="{DynamicResource EditorBodyFontSize}" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="TextBlock.editor-heading">
         <Setter Property="Foreground" Value="{DynamicResource EffectForegroundBrush}" />
+        <Setter Property="FontSize" Value="{DynamicResource EditorBodyFontSize}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.editor-title">
+        <Setter Property="Foreground" Value="{DynamicResource EffectForegroundBrush}" />
+        <Setter Property="FontSize" Value="{DynamicResource EditorTitleFontSize}" />
         <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <Style Selector="Button.editor-tool">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{DynamicResource EditorChromeCornerRadius}" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="Button.editor-tool.transport-primary">
         <Setter Property="Background" Value="{DynamicResource DockApplicationAccentBrushLow}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource EditorChromeDividerBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource EffectForegroundBrush}" />
     </Style>
     <Style Selector="Button.editor-tool.transport-primary.playing">
         <Setter Property="BorderBrush" Value="{DynamicResource DockApplicationAccentBrushIndicator}" />
+    </Style>
+    <Style Selector="ToggleButton.editor-tool">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource EditorChromeCornerRadius}" />
+        <Setter Property="Padding" Value="7" />
+        <Setter Property="MinWidth" Value="32" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ToggleButton.editor-tool:checked">
+        <Setter Property="Background" Value="{DynamicResource DockApplicationAccentBrushLow}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource DockApplicationAccentBrushIndicator}" />
+    </Style>
+    <Style Selector="Button.editor-action">
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Padding" Value="8,3" />
+        <Setter Property="CornerRadius" Value="{DynamicResource EditorChromeCornerRadius}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="TextBox.editor-field, .editor-inspector TextBox">
         <Setter Property="MinHeight" Value="28" />

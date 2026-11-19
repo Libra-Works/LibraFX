@@ -87,6 +87,9 @@ public sealed class IconButton : Button
             EditorIcon.Unpin => "M6.2 2.6H11.8 M11 2.6V7.4L13.4 10.6H11.5 M6.6 7.8L4.6 10.6H7.8 M9 11.8V15.8 M3 3L15 15",
             EditorIcon.Image => "M3.8 2.8H14.2A1.3 1.3 0 0 1 15.5 4.1V13.9A1.3 1.3 0 0 1 14.2 15.2H3.8A1.3 1.3 0 0 1 2.5 13.9V4.1A1.3 1.3 0 0 1 3.8 2.8Z M2.8 13.2L6.8 9.2L10.2 12.6L12.6 10.2L15.2 12.8 M12.6 6.2A1 1 0 1 1 10.6 6.2A1 1 0 1 1 12.6 6.2Z",
             EditorIcon.Link => "M7.5 10.5L10.5 7.5 M6.4 8.2L4.4 10.2A3.1 3.1 0 0 0 8.8 14.6L10.8 12.6 M11.6 9.8L13.6 7.8A3.1 3.1 0 0 0 9.2 3.4L7.2 5.4",
+            EditorIcon.Clock => "M15.6 9A6.6 6.6 0 1 1 2.4 9A6.6 6.6 0 1 1 15.6 9Z M9 5.2V9.2L11.8 11",
+            EditorIcon.SignalPreview => "M8.8 2.4L3.6 9.6H8.4L7.4 15.6L13.2 8.2H8.4Z M14 11.8V15.4 M12.2 13.6H15.8",
+            EditorIcon.SignalRuntime => "M2.6 5.4L6.8 8.2L2.6 11Z M11.6 2.4L7.2 9.6H11.4L10.4 15.6L15.6 8.2H11.4Z",
             _ => throw new ArgumentOutOfRangeException(nameof(Icon))
         });
 }

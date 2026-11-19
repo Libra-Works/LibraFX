@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Avalonia;
 using Avalonia.Media;
+using Avalonia.Media.Immutable;
 using Avalonia.Platform;
 using Avalonia.Styling;
 using LiberaFx.Models.Appearance;
@@ -28,6 +29,8 @@ public sealed class ThemeSettingsService
 
     private static readonly Dictionary<string, SolidColorBrush> EditorBrushes =
         EditorColorKeys.ToDictionary(key => key, _ => new SolidColorBrush());
+    private static readonly Dictionary<string, ImmutableSolidColorBrush> EditorRenderBrushes =
+        EditorColorKeys.ToDictionary(key => key, _ => new ImmutableSolidColorBrush(Colors.Transparent));
 
     private readonly Dictionary<string, SchemeFile> _schemes = new(StringComparer.Ordinal);
     private readonly string _settingsPath = Path.Combine(
@@ -43,12 +46,21 @@ public sealed class ThemeSettingsService
     public static event EventHandler? EditorColorsChanged;
 
     public static IBrush EditorBrush(string name) => EditorBrushes[name];
+    internal static IBrush EditorRenderBrush(string name) => EditorRenderBrushes[name];
 
     public ThemeSettingsService()
     {
         LoadSchemes();
-        ColorSchemes = _schemes.Keys.OrderBy(name => name == "System" ? 0 : 1)
-            .ThenBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
+        ColorSchemes = _schemes.Keys
+            .OrderBy(name => name switch
+            {
+                "LibraDark" => 0,
+                "LibraLight" => 1,
+                "System" => 2,
+                _ => 3
+            })
+            .ThenBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         Current = LoadSettings();
         ApplyToApplication(Current);
     }
@@ -87,12 +99,13 @@ public sealed class ThemeSettingsService
             }
         }
 
-        if (!_schemes.ContainsKey("System"))
+        foreach (var builtin in new[] { "LibraDark", "LibraLight", "System" })
         {
-            using var stream = AssetLoader.Open(new Uri("avares://LiberaFx/Assets/ColorSchemes/System.json"));
+            if (_schemes.ContainsKey(builtin)) continue;
+            using var stream = AssetLoader.Open(new Uri($"avares://LiberaFx/Assets/ColorSchemes/{builtin}.json"));
             var fallback = JsonSerializer.Deserialize<SchemeFile>(stream, SerializerOptions);
             ValidateScheme(fallback);
-            _schemes.Add("System", fallback!);
+            _schemes.Add(builtin, fallback!);
         }
     }
 
@@ -136,7 +149,8 @@ public sealed class ThemeSettingsService
         {
             Trace.TraceWarning("Could not load appearance settings: {0}", ex.Message);
         }
-        return new ThemeSettings("System", AccentPalette.SchemeDefault);
+        var defaultScheme = _schemes.ContainsKey("LibraDark") ? "LibraDark" : "System";
+        return new ThemeSettings(defaultScheme, AccentPalette.SchemeDefault);
     }
 
     private void Save(ThemeSettings settings)
@@ -184,7 +198,9 @@ public sealed class ThemeSettingsService
 
         foreach (var key in EditorColorKeys)
         {
-            EditorBrushes[key].Color = ParseColor(scheme.EditorColors![key]);
+            var color = ParseColor(scheme.EditorColors![key]);
+            EditorBrushes[key].Color = color;
+            EditorRenderBrushes[key] = new ImmutableSolidColorBrush(color);
             resources["Effect" + key + "Brush"] = EditorBrushes[key];
         }
         EditorColorsChanged?.Invoke(this, EventArgs.Empty);

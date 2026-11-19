@@ -7,22 +7,22 @@
         Background="{DynamicResource EffectWindowBackgroundBrush}">
     <Grid RowDefinitions="*,Auto" Margin="24">
         <ScrollViewer>
-            <StackPanel Spacing="12">
-                <TextBlock Text="{DynamicResource Text.Panels.HelpGettingStarted}" FontSize="22" FontWeight="SemiBold" />
+            <StackPanel Spacing="10">
+                <TextBlock Classes="editor-title" Text="{DynamicResource Text.Panels.HelpGettingStarted}" />
                 <TextBlock Text="{DynamicResource Text.Panels.HelpGettingStartedDescription}"
                            TextWrapping="Wrap" />
-                <TextBlock Text="{DynamicResource Text.Panels.HelpEditing}" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Panels.HelpEditing}" />
                 <TextBlock Text="{DynamicResource Text.Panels.HelpEditingDescription}"
                            TextWrapping="Wrap" />
-                <TextBlock Text="{DynamicResource Text.Editor.HelpGroups}" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Editor.HelpGroups}" />
                 <TextBlock Text="{DynamicResource Text.Editor.HelpGroupsDescription}" TextWrapping="Wrap" />
-                <TextBlock Text="{DynamicResource Text.Editor.Language}" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Editor.Language}" />
                 <TextBlock Text="{DynamicResource Text.Editor.HelpLanguageDescription}" TextWrapping="Wrap" />
-                <TextBlock Text="{DynamicResource Text.Panels.HelpConnections}" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Panels.HelpConnections}" />
                 <TextBlock Text="{DynamicResource Text.Panels.HelpConnectionsDescription}"
                            TextWrapping="Wrap" />
-                <TextBlock Text="{DynamicResource Text.Panels.HelpDevelopmentNotice}"
-                           TextWrapping="Wrap" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                <TextBlock Classes="editor-label" Text="{DynamicResource Text.Panels.HelpDevelopmentNotice}"
+                           TextWrapping="Wrap" />
             </StackPanel>
         </ScrollViewer>
         <views:IconButton Grid.Row="1" Icon="Close"

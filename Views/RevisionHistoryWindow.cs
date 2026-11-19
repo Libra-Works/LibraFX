@@ -46,30 +46,68 @@ public sealed class RevisionHistoryWindow : UserControl
         Avalonia.Automation.AutomationProperties.SetName(_after, text.Get("Vcs.After"));
         ToolTip.SetTip(_before, text.Get("Vcs.Before"));
         ToolTip.SetTip(_after, text.Get("Vcs.After"));
-        var refresh = new Button { Content = text.Get("Vcs.History") };
-        var compare = new Button { Content = text.Get("Vcs.Compare") };
+        var refresh = new IconButton
+        {
+            Classes = { "editor-tool" }, Icon = LiberaFx.Models.Appearance.EditorIcon.Refresh
+        };
+        ToolTip.SetTip(refresh, text.Get("Vcs.History"));
+        Avalonia.Automation.AutomationProperties.SetName(refresh, text.Get("Vcs.History"));
+        var compare = new IconButton
+        {
+            Classes = { "editor-tool", "transport-primary" }, Icon = LiberaFx.Models.Appearance.EditorIcon.Check
+        };
+        ToolTip.SetTip(compare, text.Get("Vcs.Compare"));
+        Avalonia.Automation.AutomationProperties.SetName(compare, text.Get("Vcs.Compare"));
         refresh.Click += async (_, _) => await LoadHistoryAsync();
         compare.Click += async (_, _) => await CompareAsync();
-        var controls = new WrapPanel
+        var controls = new Border
         {
-            Orientation = Orientation.Horizontal,
-            Children = { _provider, refresh, _before, _after, compare }
+            Classes = { "editor-bar" }, BorderThickness = new Thickness(0, 0, 0, 1),
+            Child = new WrapPanel
+            {
+                Orientation = Orientation.Horizontal, ItemSpacing = 8, LineSpacing = 4,
+                Children =
+                {
+                    new Border
+                    {
+                        Classes = { "editor-toolbar-group" }, Padding = new Thickness(4, 2),
+                        Child = new StackPanel
+                        {
+                            Orientation = Orientation.Horizontal, Spacing = 4, VerticalAlignment = VerticalAlignment.Center,
+                            Children = { _provider, refresh }
+                        }
+                    },
+                    new Border
+                    {
+                        Classes = { "editor-toolbar-group" }, Padding = new Thickness(4, 2),
+                        Child = new StackPanel
+                        {
+                            Orientation = Orientation.Horizontal, Spacing = 4, VerticalAlignment = VerticalAlignment.Center,
+                            Children = { _before, _after, compare }
+                        }
+                    }
+                }
+            }
         };
         var graphs = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*") };
         graphs.Children.Add(_left);
         Grid.SetColumn(_right, 1);
         graphs.Children.Add(_right);
-        var root = new Grid { Margin = new Thickness(12), MinHeight = 500, RowDefinitions = new RowDefinitions("Auto,Auto,*,150,Auto"), RowSpacing = 8 };
+        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*,130,Auto"), RowSpacing = 6 };
         root.Children.Add(controls);
+        _scope.Margin = new Thickness(10, 0);
         Grid.SetRow(_scope, 1);
         root.Children.Add(_scope);
         Grid.SetRow(graphs, 2);
         root.Children.Add(graphs);
+        _changes.Margin = new Thickness(10, 0);
         Grid.SetRow(_changes, 3);
         root.Children.Add(_changes);
+        _status.Margin = new Thickness(10, 0, 10, 8);
+        _status.Classes.Add("editor-label");
         Grid.SetRow(_status, 4);
         root.Children.Add(_status);
-        Content = new ScrollViewer { Content = root };
+        Content = root;
         _provider.SelectionChanged += (_, _) =>
         {
             _before.ItemsSource = null;

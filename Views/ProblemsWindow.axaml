@@ -1,16 +1,23 @@
 <UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:LiberaFx.ViewModels"
+        xmlns:views="using:LiberaFx.Views"
         x:Class="LiberaFx.Views.ProblemsWindow"
         x:DataType="vm:GraphWorkspaceViewModel"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
-    <Grid RowDefinitions="Auto,*" Margin="12" RowSpacing="8">
-        <TextBlock Text="{DynamicResource Text.Messages.GraphProblemsHelp}" TextWrapping="Wrap" />
+    <Grid RowDefinitions="Auto,*" Margin="10" RowSpacing="6">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+            <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Messages.GraphProblemsTitle}" />
+            <Border Grid.Column="1" Background="Transparent" Padding="2"
+                    ToolTip.Tip="{DynamicResource Text.Messages.GraphProblemsHelp}">
+                <views:EditorIconView Icon="Info" />
+            </Border>
+        </Grid>
         <ScrollViewer Grid.Row="1">
             <ItemsControl ItemsSource="{Binding TypeProblems}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="vm:GraphProblemViewModel">
-                        <Button Command="{Binding SelectCommand}" HorizontalAlignment="Stretch"
+                        <Button Classes="editor-action" Command="{Binding SelectCommand}" HorizontalAlignment="Stretch"
                                 AutomationProperties.Name="{Binding Message}" ToolTip.Tip="{Binding Message}"
                                 Margin="0,2">
                             <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />

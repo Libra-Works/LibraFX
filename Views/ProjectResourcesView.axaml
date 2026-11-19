@@ -13,11 +13,15 @@
             <TextBox Grid.Column="1" Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
                      PlaceholderText="{DynamicResource Text.Asset.SearchHint}"
                      AutomationProperties.Name="{DynamicResource Text.Asset.Search}" />
-            <Button Grid.Column="2" Command="{Binding RefreshCommand}" Content="{DynamicResource Text.Editor.Refresh}" />
+            <views:IconButton Grid.Column="2" Classes="editor-tool" Icon="Refresh" Command="{Binding RefreshCommand}"
+                              ToolTip.Tip="{DynamicResource Text.Editor.Refresh}"
+                              AutomationProperties.Name="{DynamicResource Text.Editor.Refresh}" />
         </Grid>
         <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" IsVisible="{Binding IsLocal}">
             <TextBox Text="{Binding Folder}" AutomationProperties.Name="{DynamicResource Text.Library.ChooseFolder}" />
-            <Button Grid.Column="1" Click="OnChooseFolder" Content="{DynamicResource Text.Library.ChooseFolder}" />
+            <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Open" Click="OnChooseFolder"
+                              ToolTip.Tip="{DynamicResource Text.Library.ChooseFolder}"
+                              AutomationProperties.Name="{DynamicResource Text.Library.ChooseFolder}" />
             <CheckBox Grid.Column="2" IsChecked="{Binding Recursive}" Content="{DynamicResource Text.Resources.Recursive}" />
         </Grid>
         <Grid Grid.Row="2" ColumnDefinitions="2*,3*" ColumnSpacing="12">

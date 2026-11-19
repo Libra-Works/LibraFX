@@ -105,79 +105,60 @@ public sealed partial class DockFactory : Factory
         AddWorkPane("LocalProjects", "Library.Title", () => new LocalProjectsWindow(_main));
         AddWorkPane("Problems", "Messages.GraphProblemsTitle", () => new ProblemsWindow(_main));
         AddWorkPane("Content", "Asset.Title", () => new EngineAssetsWindow(_main.AssetBrowser));
-        AddWorkPane("Chat", "Chat.Title", () => new ChatWindow(_main), retainView: true);
+        var chat = AddWorkPane("Chat", "Chat.Title", () => new ChatWindow(_main), retainView: true);
         AddWorkPane("LiveGame", "LiveGame.Title", _main.CreateLiveGameView, retainView: true);
         AddWorkPane("RevisionHistory", "Vcs.Title", () => new RevisionHistoryWindow(_main));
         AddWorkPane("LayoutPresets", "Layouts.Title", () => new WindowLayoutsWindow(_main.WindowLayouts));
 
-        var leftDock = new ProportionalDock
-        {
-            Proportion = 0.19,
-            Orientation = Orientation.Vertical,
-            VisibleDockables = CreateList<IDockable>(
-                new ToolDock
-                {
-                    Proportion = 0.35,
-                    Alignment = Alignment.Left,
-                    ActiveDockable = outliner,
-                    VisibleDockables = CreateList<IDockable>(outliner)
-                },
-                new ProportionalDockSplitter(),
-                new ToolDock
-                {
-                    Proportion = 0.65,
-                    Alignment = Alignment.Left,
-                    ActiveDockable = nodeList,
-                    VisibleDockables = CreateList<IDockable>(nodeList, resources)
-                })
-        };
-
         var rightDock = new ProportionalDock
         {
-            Proportion = 0.27,
+            Proportion = 0.32,
             Orientation = Orientation.Vertical,
             VisibleDockables = CreateList<IDockable>(
                 new ToolDock
                 {
-                    Proportion = 0.62,
+                    Proportion = 0.56,
                     Alignment = Alignment.Right,
                     ActiveDockable = properties,
-                    VisibleDockables = CreateList<IDockable>(properties, history)
+                    VisibleDockables = CreateList<IDockable>(properties, history, outliner, nodeList, resources)
                 },
                 new ProportionalDockSplitter(),
                 new ToolDock
                 {
-                    Proportion = 0.38,
+                    Proportion = 0.44,
                     Alignment = Alignment.Right,
-                    ActiveDockable = engineConnection,
-                    VisibleDockables = CreateList<IDockable>(engineConnection)
+                    ActiveDockable = chat,
+                    VisibleDockables = CreateList<IDockable>(chat, engineConnection)
                 })
         };
 
         DocumentsDock = new DocumentDock
         {
             Id = "Documents",
+            Proportion = 0.66,
             IsCollapsable = false,
             ActiveDockable = graphDocument,
             VisibleDockables = CreateList<IDockable>(graphDocument),
             CanCreateDocument = false,
         };
 
+        var bottomTimelineAndCurves = new ToolDock
+        {
+            Proportion = 0.34,
+            Alignment = Alignment.Bottom,
+            ActiveDockable = curves,
+            VisibleDockables = CreateList<IDockable>(curves, timeline)
+        };
+
         var graphAndTimeline = new ProportionalDock
         {
-            Proportion = 0.54,
+            Proportion = 0.68,
             Orientation = Orientation.Vertical,
             ActiveDockable = DocumentsDock,
             VisibleDockables = CreateList<IDockable>(
                 DocumentsDock,
                 new ProportionalDockSplitter(),
-                new ToolDock
-                {
-                    Proportion = 0.30,
-                    Alignment = Alignment.Bottom,
-                    ActiveDockable = timeline,
-                    VisibleDockables = CreateList<IDockable>(timeline, curves)
-                })
+                bottomTimelineAndCurves)
         };
 
         var mainLayout = new ProportionalDock
@@ -185,8 +166,6 @@ public sealed partial class DockFactory : Factory
             Orientation = Orientation.Horizontal,
             ActiveDockable = graphAndTimeline,
             VisibleDockables = CreateList<IDockable>(
-                leftDock,
-                new ProportionalDockSplitter(),
                 graphAndTimeline,
                 new ProportionalDockSplitter(),
                 rightDock)
@@ -201,7 +180,7 @@ public sealed partial class DockFactory : Factory
         _paneHomes[spriteEditor.Id] = _paneHomes[timeline.Id];
         foreach (var pane in Tools.OfType<EditorWorkPaneViewModel>())
         {
-            _paneHomes[pane.Id] = _paneHomes[timeline.Id];
+            _paneHomes.TryAdd(pane.Id, _paneHomes[timeline.Id]);
         }
         foreach (var inspector in _localizedTools.Select(entry => entry.Tool).OfType<NodePropertiesPaneViewModel>())
         {
@@ -216,10 +195,14 @@ public sealed partial class DockFactory : Factory
             tool.Title = LocalizationService.Shared.Get(key);
     }
 
-    private void AddWorkPane(string id, string key, Func<Control> createView, bool retainView = false) =>
-        _localizedTools.Add((new EditorWorkPaneViewModel(createView, retainView)
+    private EditorWorkPaneViewModel AddWorkPane(string id, string key, Func<Control> createView, bool retainView = false)
+    {
+        var pane = new EditorWorkPaneViewModel(createView, retainView)
         {
             Id = id,
             Title = LocalizationService.Shared.Get(key)
-        }, key));
+        };
+        _localizedTools.Add((pane, key));
+        return pane;
+    }
 }

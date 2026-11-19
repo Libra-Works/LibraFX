@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "name": "SageForest",
+  "variant": "Dark",
+  "palette": {
+    "region": "#2C3639",
+    "surface": "#3F4E4F",
+    "foreground": "#DCD7C9",
+    "mutedForeground": "#B5B0A1",
+    "border": "#526364",
+    "accent": "#A27B5C"
+  },
+  "editorColors": {
+    "GraphMinorGrid": "#333E41",
+    "GraphMajorGrid": "#414F52",
+    "GraphParameter": "#7FB685",
+    "GraphSignal": "#D49B6A",
+    "NodeBorder": "#5D6F70",
+    "NodeSelectedBorder": "#C89D7C",
+    "SelectionFill": "#30A27B5C",
+    "SelectionBorder": "#C89D7C",
+    "CurveBackground": "#252E31",
+    "CurveGrid": "#3B484B",
+    "CurveAxis": "#6D7E80",
+    "CurveLine": "#8FC996",
+    "CurveHandle": "#D49B6A",
+    "CurveKey": "#DCD7C9",
+    "CurveSelected": "#E8B878",
+    "CurveLabel": "#B5B0A1"
+  },
+  "accentColors": {
+    "Blue": "#5B8E9B",
+    "Purple": "#8F7193",
+    "Teal": "#5F9E8F",
+    "Orange": "#C27D48",
+    "Pink": "#B86B77"
+  }
+}

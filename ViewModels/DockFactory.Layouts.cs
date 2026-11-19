@@ -131,7 +131,7 @@ public sealed partial class DockFactory
         {
             "SpriteEditor" => (1280, 800),
             "Content" or "PreviewProfiler" or "RevisionHistory" => (1160, 740),
-            "Chat" or "LiveGame" => (840, 720),
+            "LiveGame" => (840, 720),
             _ => (0, 0)
         };
         if (width == 0 || _main.WindowLayouts.CaptureMainWindow?.Invoke() is not { } mainBounds)

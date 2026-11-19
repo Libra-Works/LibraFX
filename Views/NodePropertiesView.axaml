@@ -6,68 +6,69 @@
              Classes="editor-inspector"
              x:DataType="vm:NodePropertiesPaneViewModel">
     <Grid RowDefinitions="Auto,*">
-    <Grid ColumnDefinitions="*,Auto" Margin="8,4">
-        <TextBlock Classes="editor-heading" Text="{Binding InspectorTitle}" TextTrimming="CharacterEllipsis"
-                   VerticalAlignment="Center" />
-        <views:IconButton Grid.Column="1" Icon="{Binding InspectorPinIcon}" IsEnabled="{Binding CanTogglePin}"
-                          Click="OnTogglePinClick" ToolTip.Tip="{Binding InspectorPinHint}"
-                          AutomationProperties.Name="{Binding InspectorPinHint}" />
-    </Grid>
+    <Border Classes="editor-bar" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <TextBlock Classes="editor-heading" Text="{Binding InspectorNodeType}"
+                           IsVisible="{Binding HasInspectorTarget}"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <TextBlock Classes="editor-heading" Text="{Binding InspectorTitle}"
+                           IsVisible="{Binding !HasInspectorTarget}"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <TextBlock Classes="editor-label" Text="{DynamicResource Text.Panels.ContainingSpawnable}"
+                           IsVisible="{Binding IsInspectingContainingSpawnable}"
+                           ToolTip.Tip="{DynamicResource Text.Panels.ContainingSpawnableHint}"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+            <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="{Binding InspectorPinIcon}" IsEnabled="{Binding CanTogglePin}"
+                              Click="OnTogglePinClick" ToolTip.Tip="{Binding InspectorPinHint}"
+                              AutomationProperties.Name="{Binding InspectorPinHint}" />
+        </Grid>
+    </Border>
     <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="8" Spacing="6">
         <TextBlock Text="{DynamicResource Text.Editor.SelectNodeHint}"
                    IsVisible="{Binding !HasInspectorTarget}"
                    TextWrapping="Wrap"
                    Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-        <StackPanel IsVisible="{Binding Graph.IsRootGraph}" IsEnabled="{Binding !IsPinned}" Spacing="4">
-            <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Editor.EffectSettings}" />
+        <Border Classes="editor-card" IsVisible="{Binding ShowRootEffectSettings}" IsEnabled="{Binding !IsPinned}" Padding="8,6">
             <CheckBox Content="{DynamicResource Text.Editor.AutoDestroyWhenIdle}"
-                      IsChecked="{Binding Graph.AutoDestroyWhenIdle, Mode=TwoWay}" />
-            <TextBlock Text="{DynamicResource Text.Editor.AutoDestroyWhenIdleHelp}"
-                       TextWrapping="Wrap"
-                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-        </StackPanel>
-        <TextBlock Text="{DynamicResource Text.Panels.ContainingSpawnableHint}"
-                   IsVisible="{Binding IsInspectingContainingSpawnable}" TextWrapping="Wrap"
-                   Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-        <StackPanel IsVisible="{Binding HasInspectorTarget}" Spacing="4">
-            <TextBlock Text="{DynamicResource Text.Editor.Type}"
-                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <TextBlock Text="{Binding InspectorNodeType}"
-                       Foreground="{DynamicResource EffectForegroundBrush}" />
-            <TextBlock Text="{DynamicResource Text.Editor.Name}"
-                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <TextBox Text="{Binding InspectorNodeName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                     IsReadOnly="{Binding IsInspectingContainingSpawnable}" />
-            <Border Classes="editor-card" IsVisible="{Binding CanManageGroup}" Margin="0,8,0,0">
-                <StackPanel Spacing="8">
-                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                      IsChecked="{Binding Graph.AutoDestroyWhenIdle, Mode=TwoWay}"
+                      ToolTip.Tip="{DynamicResource Text.Editor.AutoDestroyWhenIdleHelp}" />
+        </Border>
+        <StackPanel IsVisible="{Binding HasInspectorTarget}" Spacing="6">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                <TextBlock Classes="editor-label" Text="{DynamicResource Text.Editor.Name}" />
+                <TextBox Grid.Column="1" Text="{Binding InspectorNodeName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                         IsReadOnly="{Binding IsInspectingContainingSpawnable}" />
+            </Grid>
+            <Border Classes="editor-toolbar-group" IsVisible="{Binding CanManageGroup}" Padding="6,4"
+                    ToolTip.Tip="{Binding GroupStatus}">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                         <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Editor.GroupAsset}"
                                    VerticalAlignment="Center" />
-                        <views:IconButton x:Name="SaveGroupButton" Classes="editor-tool" Grid.Column="1" Icon="Save"
-                                          IsVisible="{Binding !IsStandardGroup}"
-                                          Command="{Binding SaveGroupCommand}"
-                                          ToolTip.Tip="{DynamicResource Text.Editor.SaveGroup}"
-                                          AutomationProperties.Name="{DynamicResource Text.Editor.SaveGroup}" />
-                        <views:IconButton x:Name="GroupLockButton" Classes="editor-tool" Grid.Column="2" Icon="{Binding GroupLockIcon}"
-                                          IsVisible="{Binding IsProjectLinkedGroup}" Command="{Binding ToggleGroupLockCommand}"
-                                          ToolTip.Tip="{Binding GroupLockHint}" AutomationProperties.Name="{Binding GroupLockHint}" />
-                    </Grid>
-                    <TextBlock Text="{Binding GroupRevision}" IsVisible="{Binding IsLinkedGroup}" />
-                    <TextBlock Text="{Binding GroupStatus}" TextWrapping="Wrap"
-                               Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-                    <TextBlock Text="{Binding StandardGroupDetails}" TextWrapping="Wrap"
-                               IsVisible="{Binding IsStandardGroup}"
-                               Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-                    <Button Content="{DynamicResource Text.Modules.CloneToProject}"
+                        <TextBlock Classes="editor-label" Text="{Binding GroupRevision}"
+                                   IsVisible="{Binding IsLinkedGroup}" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <views:IconButton x:Name="SaveGroupButton" Classes="editor-tool" Grid.Column="1" Icon="Save"
+                                      IsVisible="{Binding !IsStandardGroup}"
+                                      Command="{Binding SaveGroupCommand}"
+                                      ToolTip.Tip="{DynamicResource Text.Editor.SaveGroup}"
+                                      AutomationProperties.Name="{DynamicResource Text.Editor.SaveGroup}" />
+                    <views:IconButton x:Name="GroupLockButton" Classes="editor-tool" Grid.Column="2" Icon="{Binding GroupLockIcon}"
+                                      IsVisible="{Binding IsProjectLinkedGroup}" Command="{Binding ToggleGroupLockCommand}"
+                                      ToolTip.Tip="{Binding GroupLockHint}" AutomationProperties.Name="{Binding GroupLockHint}" />
+                    <Button Grid.Column="3" Classes="editor-action" Content="{DynamicResource Text.Modules.CloneToProject}"
                             IsVisible="{Binding IsStandardGroup}"
                             IsEnabled="{Binding CanCloneGroup}"
-                            Command="{Binding CloneGroupCommand}" />
-                </StackPanel>
+                            Command="{Binding CloneGroupCommand}"
+                            ToolTip.Tip="{Binding StandardGroupDetails}" />
+                </Grid>
             </Border>
-            <Grid x:Name="ParameterHeader" ColumnDefinitions="124,*" ColumnSpacing="6" Margin="0,8,0,0"
+            <Grid x:Name="ParameterHeader" ColumnDefinitions="124,*" ColumnSpacing="6" Margin="0,2,0,0"
                   SizeChanged="OnParameterHeaderSizeChanged">
-                <TextBlock Text="{DynamicResource Text.Editor.Name}" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
+                <TextBlock Classes="editor-label" Text="{DynamicResource Text.Editor.Name}" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
                 <Thumb HorizontalAlignment="Right" Width="8"
                        Cursor="SizeWestEast" DragDelta="OnParameterDividerDrag"
                        ToolTip.Tip="{DynamicResource Text.Panels.InspectorResize}"
@@ -80,7 +81,7 @@
                         </ControlTemplate>
                     </Thumb.Template>
                 </Thumb>
-                <TextBlock Grid.Column="1" Text="{DynamicResource Text.Panels.Value}" />
+                <TextBlock Grid.Column="1" Classes="editor-label" Text="{DynamicResource Text.Panels.Value}" />
             </Grid>
             <ItemsControl x:Name="ParameterList" ItemsSource="{Binding Parameters}">
                 <ItemsControl.ItemTemplate>
@@ -89,38 +90,39 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <Button Content="{DynamicResource Text.Panels.PublishGroupCurves}"
-                    IsVisible="{Binding CanPublishCurves}"
-                    Command="{Binding PublishCurvesCommand}"
-                    ToolTip.Tip="{DynamicResource Text.Panels.PublishGroupCurvesHelp}" />
-            <Button Content="{DynamicResource Text.Panels.EditGroupCurves}"
-                    IsVisible="{Binding CanEditVectorCurves}" Click="OnEditGroupCurvesClick" />
-            <Button Content="{DynamicResource Text.Panels.EditColorCurves}"
-                    IsVisible="{Binding CanEditColorCurves}" Click="OnEditGroupCurvesClick" />
-            <Button Content="{DynamicResource Text.Panels.ConfigureGroupItems}"
-                    IsVisible="{Binding CanConfigureGroupItems}" Click="OnConfigureGroupItemsClick" />
+            <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="4">
+                <Button Classes="editor-action" Content="{DynamicResource Text.Panels.PublishGroupCurves}"
+                        IsVisible="{Binding CanPublishCurves}"
+                        Command="{Binding PublishCurvesCommand}"
+                        ToolTip.Tip="{DynamicResource Text.Panels.PublishGroupCurvesHelp}" />
+                <Button Classes="editor-action" Content="{DynamicResource Text.Panels.EditGroupCurves}"
+                        IsVisible="{Binding CanEditVectorCurves}" Click="OnEditGroupCurvesClick" />
+                <Button Classes="editor-action" Content="{DynamicResource Text.Panels.EditColorCurves}"
+                        IsVisible="{Binding CanEditColorCurves}" Click="OnEditGroupCurvesClick" />
+                <Button Classes="editor-action" Content="{DynamicResource Text.Panels.ConfigureGroupItems}"
+                        IsVisible="{Binding CanConfigureGroupItems}" Click="OnConfigureGroupItemsClick" />
+            </WrapPanel>
             <TextBlock Text="{Binding GroupExposedDiagnostics}" TextWrapping="Wrap"
+                       IsVisible="{Binding GroupExposedDiagnostics, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <TextBlock Text="{Binding PluginStatus}" TextWrapping="Wrap"
-                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <TextBlock Text="{DynamicResource Text.Editor.Connections}" Margin="0,10,0,0"
-                       IsVisible="{Binding ShowSelectedConnections}"
-                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <ItemsControl ItemsSource="{Binding Graph.SelectedConnections}"
-                          IsVisible="{Binding ShowSelectedConnections}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="vm:GraphConnectionViewModel">
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4" Margin="0,2">
-                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap" VerticalAlignment="Center"
-                                       ToolTip.Tip="{Binding SignalOrderHelp}" />
-                            <views:IconButton Grid.Column="1" Icon="Disconnect" Tag="{Binding}"
-                                    ToolTip.Tip="{DynamicResource Text.Editor.Disconnect}"
-                                    AutomationProperties.Name="{DynamicResource Text.Editor.Disconnect}"
-                                    Click="OnDisconnectClick" />
-                        </Grid>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <Expander Header="{DynamicResource Text.Editor.Connections}"
+                      IsVisible="{Binding ShowSelectedConnections}"
+                      IsExpanded="False" Margin="0,4,0,0">
+                <ItemsControl ItemsSource="{Binding Graph.SelectedConnections}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:GraphConnectionViewModel">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4" Margin="0,2">
+                                <TextBlock Text="{Binding Description}" TextWrapping="Wrap" VerticalAlignment="Center"
+                                           ToolTip.Tip="{Binding SignalOrderHelp}" />
+                                <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Disconnect" Tag="{Binding}"
+                                        ToolTip.Tip="{DynamicResource Text.Editor.Disconnect}"
+                                        AutomationProperties.Name="{DynamicResource Text.Editor.Disconnect}"
+                                        Click="OnDisconnectClick" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Expander>
         </StackPanel>
     </StackPanel>
     </ScrollViewer>

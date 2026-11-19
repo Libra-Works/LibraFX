@@ -1,54 +1,64 @@
 <UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:services="using:LiberaFx.Services"
+        xmlns:views="using:LiberaFx.Views"
         x:Class="LiberaFx.Views.PreviewConnectionsWindow"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
-  <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="16" RowSpacing="12">
-    <TextBlock Text="{DynamicResource Text.Connections.Hint}" TextWrapping="Wrap" />
-    <StackPanel Grid.Row="1" Spacing="6">
-      <TextBlock Text="{DynamicResource Text.Connections.ConnectHint}" TextWrapping="Wrap" />
-      <StackPanel Orientation="Horizontal" Spacing="8">
-        <Button x:Name="FindViewersButton" Click="OnFindViewers"
-                Content="{DynamicResource Text.Connections.FindViewers}" />
-        <ComboBox x:Name="AvailableViewers" Width="350" SelectionChanged="OnAvailableViewerChanged"
+  <Grid RowDefinitions="Auto,*,Auto" Margin="12" RowSpacing="8">
+    <StackPanel Spacing="6">
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+        <ComboBox x:Name="AvailableViewers" HorizontalAlignment="Stretch" SelectionChanged="OnAvailableViewerChanged"
+                  ToolTip.Tip="{DynamicResource Text.Connections.ConnectHint}"
                   AutomationProperties.Name="{DynamicResource Text.Connections.AvailableViewers}" />
-        <Button x:Name="ConnectViewerButton" Click="OnConnectViewer" IsEnabled="False"
-                Content="{DynamicResource Text.Connections.ConnectViewer}" />
-      </StackPanel>
-      <TextBlock x:Name="DiscoveryStatus" TextWrapping="Wrap" />
-      <Button x:Name="CopyConnectionButton" Click="OnCopyConnection"
-              Content="{DynamicResource Text.Connections.CopyConnection}"
-              AutomationProperties.Name="{DynamicResource Text.Connections.CopyConnection}"
-              HorizontalAlignment="Left" />
-      <Button Click="OnCopyGodotCertificate"
-              Content="{DynamicResource Text.Connections.CopyGodotCertificate}"
-              HorizontalAlignment="Left" />
-      <TextBlock x:Name="InvitationStatus" TextWrapping="Wrap"
-                 Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-      <TextBlock x:Name="GpuFeedback" TextWrapping="Wrap" />
+        <Border Grid.Column="1" Classes="editor-toolbar-group" Padding="4,2">
+          <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+            <views:IconButton x:Name="FindViewersButton" Classes="editor-tool" Icon="Refresh" Click="OnFindViewers"
+                              ToolTip.Tip="{DynamicResource Text.Connections.FindViewers}"
+                              AutomationProperties.Name="{DynamicResource Text.Connections.FindViewers}" />
+            <views:IconButton x:Name="ConnectViewerButton" Classes="editor-tool transport-primary" Icon="Link" Click="OnConnectViewer" IsEnabled="False"
+                              ToolTip.Tip="{DynamicResource Text.Connections.ConnectViewer}"
+                              AutomationProperties.Name="{DynamicResource Text.Connections.ConnectViewer}" />
+            <Border Classes="editor-toolbar-divider" />
+            <views:IconButton x:Name="CopyConnectionButton" Classes="editor-tool" Icon="Copy" Click="OnCopyConnection"
+                              ToolTip.Tip="{DynamicResource Text.Connections.CopyConnection}"
+                              AutomationProperties.Name="{DynamicResource Text.Connections.CopyConnection}" />
+            <views:IconButton Classes="editor-tool" Icon="Export" Click="OnCopyGodotCertificate"
+                              ToolTip.Tip="{DynamicResource Text.Connections.CopyGodotCertificate}"
+                              AutomationProperties.Name="{DynamicResource Text.Connections.CopyGodotCertificate}" />
+          </StackPanel>
+        </Border>
+        <Border Grid.Column="2" Background="Transparent" Padding="4" VerticalAlignment="Center"
+                ToolTip.Tip="{DynamicResource Text.Connections.Hint}">
+          <views:EditorIconView Icon="Info" />
+        </Border>
+      </Grid>
+      <TextBlock x:Name="DiscoveryStatus" Classes="editor-label" TextWrapping="Wrap" />
+      <TextBlock x:Name="InvitationStatus" Classes="editor-label" TextWrapping="Wrap" />
+      <TextBlock x:Name="GpuFeedback" Classes="editor-label" TextWrapping="Wrap" />
     </StackPanel>
-    <ListBox Grid.Row="2" x:Name="Peers" SelectionChanged="OnSelectionChanged">
+    <ListBox Grid.Row="1" x:Name="Peers" SelectionChanged="OnSelectionChanged">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="services:PreviewPeer">
-          <Grid Margin="8" RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto">
-            <StackPanel Orientation="Horizontal" Spacing="12">
-              <TextBlock Text="{Binding Engine}" FontWeight="Bold" FontSize="18" />
+          <Grid Margin="8,6" RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <TextBlock Classes="editor-title" Text="{Binding Engine}" />
               <TextBlock Text="{Binding EngineVersion}" VerticalAlignment="Center" />
-              <TextBlock Text="{Binding Role}" VerticalAlignment="Center" />
+              <TextBlock Classes="editor-label" Text="{Binding Role}" VerticalAlignment="Center" />
             </StackPanel>
             <TextBlock Grid.Column="1" Text="{Binding Platform}" />
-            <TextBlock Grid.Row="1" Text="{Binding ViewerName}" Margin="0,6" FontSize="15" />
-            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RemoteAddress}" Margin="12,6,0,6" />
-            <TextBlock Grid.Row="2" Text="{Binding ClientId}" Opacity="0.6" />
-            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding ConnectedAt}" Opacity="0.6" />
+            <TextBlock Grid.Row="1" Classes="editor-heading" Text="{Binding ViewerName}" Margin="0,4" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RemoteAddress}" Margin="12,4,0,4" />
+            <TextBlock Grid.Row="2" Classes="editor-label" Text="{Binding ClientId}" />
+            <TextBlock Grid.Row="2" Grid.Column="1" Classes="editor-label" Text="{Binding ConnectedAt}" />
           </Grid>
         </DataTemplate>
       </ListBox.ItemTemplate>
     </ListBox>
-    <Grid Grid.Row="3" ColumnDefinitions="*,Auto">
-      <TextBlock x:Name="Status" VerticalAlignment="Center" TextWrapping="Wrap" />
-      <Button Grid.Column="1" x:Name="ReconnectButton" Click="OnReconnect"
-              Content="{DynamicResource Text.Connections.Reconnect}" />
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+      <TextBlock x:Name="Status" Classes="editor-label" VerticalAlignment="Center" TextWrapping="Wrap" />
+      <views:IconButton Grid.Column="1" x:Name="ReconnectButton" Classes="editor-tool" Icon="Refresh" Click="OnReconnect"
+                        ToolTip.Tip="{DynamicResource Text.Connections.Reconnect}"
+                        AutomationProperties.Name="{DynamicResource Text.Connections.Reconnect}" />
     </Grid>
   </Grid>
 </UserControl>

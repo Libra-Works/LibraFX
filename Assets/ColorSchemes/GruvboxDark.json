@@ -11,28 +11,28 @@
     "accent": "#FABD2F"
   },
   "editorColors": {
-    "GraphMinorGrid": "#282E37",
-    "GraphMajorGrid": "#343C47",
-    "GraphParameter": "#4A9EFF",
-    "GraphSignal": "#F4A261",
-    "NodeBorder": "#58616E",
-    "NodeSelectedBorder": "#7AA2F7",
-    "SelectionFill": "#307AA2F7",
-    "SelectionBorder": "#7AA2F7",
-    "CurveBackground": "#20252E",
-    "CurveGrid": "#39414D",
-    "CurveAxis": "#687786",
-    "CurveLine": "#64D7A3",
-    "CurveHandle": "#E5B86A",
-    "CurveKey": "#E9EEF4",
-    "CurveSelected": "#FFBD59",
-    "CurveLabel": "#AEB9C7"
+    "GraphMinorGrid": "#302E2D",
+    "GraphMajorGrid": "#3C3836",
+    "GraphParameter": "#83A598",
+    "GraphSignal": "#FE8019",
+    "NodeBorder": "#665C54",
+    "NodeSelectedBorder": "#FABD2F",
+    "SelectionFill": "#30FABD2F",
+    "SelectionBorder": "#FABD2F",
+    "CurveBackground": "#1D2021",
+    "CurveGrid": "#32302F",
+    "CurveAxis": "#665C54",
+    "CurveLine": "#B8BB26",
+    "CurveHandle": "#FABD2F",
+    "CurveKey": "#EBDBB2",
+    "CurveSelected": "#FE8019",
+    "CurveLabel": "#A89984"
   },
   "accentColors": {
-    "Blue": "#0078D4",
-    "Purple": "#8764B8",
-    "Teal": "#008272",
-    "Orange": "#D83B01",
-    "Pink": "#C239B3"
+    "Blue": "#83A598",
+    "Purple": "#D3869B",
+    "Teal": "#8EC07C",
+    "Orange": "#FE8019",
+    "Pink": "#FB4934"
   }
 }

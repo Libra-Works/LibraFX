@@ -1,48 +1,38 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:LiberaFx.ViewModels" xmlns:views="using:LiberaFx.Views"
-             x:Class="LiberaFx.Views.TimelineView" x:DataType="vm:TimelineViewModel">
+             x:Class="LiberaFx.Views.TimelineView" x:DataType="vm:TimelineViewModel"
+             Background="{DynamicResource EffectWindowBackgroundBrush}">
     <Grid RowDefinitions="Auto,*,Auto">
         <Border Classes="editor-bar" BorderThickness="0,0,0,1">
-            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                <StackPanel Orientation="Horizontal" Spacing="12">
-                    <StackPanel Orientation="Horizontal" Spacing="3">
-                        <views:PlaybackTransport ShowFrameTools="True" DataContext="{Binding Playback}" />
+            <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
+                <Border Classes="editor-toolbar-group" Padding="4,2">
+                    <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                         <views:IconButton Classes="editor-tool" Icon="Frame" Click="OnFrameAllClick"
                                           ToolTip.Tip="{DynamicResource Text.Panels.FrameAll}"
                                           AutomationProperties.Name="{DynamicResource Text.Panels.FrameAll}" />
+                        <Border Classes="editor-toolbar-divider" />
+                        <views:IconButton x:Name="AddPreviewSignalButton" Classes="editor-tool"
+                                          Icon="SignalPreview" Command="{Binding AddPreviewSignalKeyCommand}"
+                                          ToolTip.Tip="{DynamicResource Text.Timeline.AddPreviewSignal}"
+                                          AutomationProperties.Name="{DynamicResource Text.Timeline.AddPreviewSignal}" />
+                        <views:IconButton x:Name="AddRuntimeSignalButton" Classes="editor-tool"
+                                          Icon="SignalRuntime" Command="{Binding AddRuntimeSignalKeyCommand}"
+                                          ToolTip.Tip="{DynamicResource Text.Timeline.AddRuntimeSignal}"
+                                          AutomationProperties.Name="{DynamicResource Text.Timeline.AddRuntimeSignal}" />
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                        <TextBlock Classes="editor-label" Text="{DynamicResource Text.Timeline.Range}" />
-                        <TextBox Classes="editor-field" Width="78"
-                                 AutomationProperties.Name="{DynamicResource Text.Timeline.RangeStart}"
-                                 Text="{Binding Playback.StartText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
-                        <TextBlock Classes="editor-label" Text="&#8211;" />
-                        <TextBox Classes="editor-field" Width="78"
-                                 AutomationProperties.Name="{DynamicResource Text.Timeline.RangeEnd}"
-                                 Text="{Binding Playback.EndText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
-                        <TextBlock Classes="editor-label" Text="{DynamicResource Text.Timeline.Fps}" Margin="5,0,0,0" />
-                        <TextBox Classes="editor-field" Width="50" AutomationProperties.Name="{DynamicResource Text.Timeline.Fps}"
-                                 Text="{Binding Playback.FpsText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                        <CheckBox Content="{DynamicResource Text.Timeline.UseSeconds}" IsChecked="{Binding Playback.ShowSeconds}"
-                                  VerticalAlignment="Center" />
-                        <CheckBox Content="{DynamicResource Text.Timeline.Loop}" IsChecked="{Binding Playback.Loop}"
-                                  VerticalAlignment="Center" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                        <Button x:Name="AddPreviewSignalButton" Content="{DynamicResource Text.Timeline.AddPreviewSignal}"
-                                Command="{Binding AddPreviewSignalKeyCommand}" />
-                        <Button x:Name="AddRuntimeSignalButton" Content="{DynamicResource Text.Timeline.AddRuntimeSignal}"
-                                Command="{Binding AddRuntimeSignalKeyCommand}" />
-                    </StackPanel>
-                </StackPanel>
-            </ScrollViewer>
+                </Border>
+                <Border Background="Transparent" Padding="4" VerticalAlignment="Center"
+                        ToolTip.Tip="{Binding Status}">
+                    <views:EditorIconView Icon="Info" />
+                </Border>
+            </WrapPanel>
         </Border>
         <Grid Grid.Row="1" ColumnDefinitions="*,180">
-            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-                <views:TimelineCanvas x:Name="Canvas" Height="{Binding CanvasHeight}" />
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                          Background="{DynamicResource EffectCurveBackgroundBrush}">
+                <views:TimelineCanvas x:Name="Canvas" MinHeight="{Binding CanvasHeight}" VerticalAlignment="Stretch"
+                                      HeaderBackground="{DynamicResource EffectSurfaceBrush}" />
             </ScrollViewer>
             <Border Grid.Column="1" Classes="editor-inspector" Padding="8"
                     BorderBrush="{DynamicResource EditorChromeDividerBrush}" BorderThickness="1,0,0,0">
@@ -73,10 +63,7 @@
             </Border>
         </Grid>
         <Border Grid.Row="2" Classes="editor-bar" BorderThickness="0,1,0,0">
-            <StackPanel>
-                <TextBlock Classes="editor-label" Text="{Binding Status}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Classes="editor-label" Text="{Binding Playback.Status}" />
-            </StackPanel>
+            <TextBlock Classes="editor-label" Text="{Binding Status}" TextTrimming="CharacterEllipsis" />
         </Border>
     </Grid>
 </UserControl>

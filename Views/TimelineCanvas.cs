@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Immutable;
 using LiberaFx.Services;
 using LiberaFx.ViewModels;
 
@@ -13,6 +14,8 @@ public sealed class TimelineCanvas : Control
 {
     private const double Header = 28;
     private const double NameWidth = 160;
+    public static readonly StyledProperty<IBrush?> HeaderBackgroundProperty =
+        AvaloniaProperty.Register<TimelineCanvas, IBrush?>(nameof(HeaderBackground));
     private TimelineViewModel? _model;
     private double _start;
     private double _end = 120;
@@ -23,6 +26,14 @@ public sealed class TimelineCanvas : Control
     private double _previewDelta;
     private Guid _revision;
     private Guid? _dragKey;
+
+    static TimelineCanvas() => AffectsRender<TimelineCanvas>(HeaderBackgroundProperty);
+
+    public IBrush? HeaderBackground
+    {
+        get => GetValue(HeaderBackgroundProperty);
+        set => SetValue(HeaderBackgroundProperty, value);
+    }
 
     public TimelineCanvas() { ClipToBounds = true; Focusable = true; }
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -66,10 +77,20 @@ public sealed class TimelineCanvas : Control
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-        context.DrawRectangle(ThemeSettingsService.EditorBrush("CurveBackground"), null, new Rect(Bounds.Size));
+        var background = ThemeSettingsService.EditorRenderBrush("CurveBackground");
+        var surface = HeaderBackground is ISolidColorBrush solid
+            ? new ImmutableSolidColorBrush(solid.Color, solid.Opacity) : HeaderBackground ?? background;
+        context.DrawRectangle(background, null, new Rect(Bounds.Size));
+        context.DrawRectangle(surface, null, new Rect(0, 0, Math.Min(NameWidth, Bounds.Width), Bounds.Height));
+        context.DrawRectangle(surface, null, new Rect(0, 0, Bounds.Width, Math.Min(Header, Bounds.Height)));
         if (_model is null) return;
-        var grid = new Pen(ThemeSettingsService.EditorBrush("CurveGrid"));
-        var label = ThemeSettingsService.EditorBrush("CurveLabel");
+        var grid = new Pen(ThemeSettingsService.EditorRenderBrush("CurveGrid"));
+        var label = ThemeSettingsService.EditorRenderBrush("CurveLabel");
+        var line = ThemeSettingsService.EditorRenderBrush("CurveLine");
+        var selected = ThemeSettingsService.EditorRenderBrush("CurveSelected");
+        var handle = ThemeSettingsService.EditorRenderBrush("CurveHandle");
+        context.DrawLine(grid, new(NameWidth, 0), new(NameWidth, Bounds.Height));
+        context.DrawLine(grid, new(0, Header), new(Bounds.Width, Header));
         var rawStep = 75 / Scale;
         var magnitude = Math.Pow(10, Math.Floor(Math.Log10(rawStep)));
         var step = Math.Ceiling(rawStep / magnitude) * magnitude;
@@ -103,9 +124,8 @@ public sealed class TimelineCanvas : Control
                         geometry.LineTo(center + new Vector(-6, 0));
                         geometry.EndFigure(true);
                     }
-                    context.DrawGeometry(ThemeSettingsService.EditorBrush(
-                        key.Id == _model.SelectedSignalKey?.Id && track == _model.SelectedTrack
-                            ? "CurveSelected" : "CurveLine"), null, shape);
+                    context.DrawGeometry(key.Id == _model.SelectedSignalKey?.Id && track == _model.SelectedTrack
+                        ? selected : line, null, shape);
                 }
                 continue;
             }
@@ -114,13 +134,12 @@ public sealed class TimelineCanvas : Control
             var end = DisplayTime(track.Start + track.Duration) +
                 (ReferenceEquals(track, _drag) && _stretching ? _previewDelta : 0);
             using (context.PushClip(new Rect(NameWidth, Header, Math.Max(0, Bounds.Width - NameWidth), Math.Max(0, Bounds.Height - Header))))
-                context.DrawRectangle(ThemeSettingsService.EditorBrush("CurveLine"),
-                    new Pen(ThemeSettingsService.EditorBrush(track == _model.SelectedTrack ? "CurveSelected" : "CurveHandle")),
+                context.DrawRectangle(line, new Pen(track == _model.SelectedTrack ? selected : handle),
                     new Rect(X(start), y + 5, Math.Max(6, (end - start) * Scale), 21), 3, 3);
         }
         var playhead = X(DisplayTime(_model.Playback.TimeSeconds));
         if (playhead >= NameWidth)
-            context.DrawLine(new Pen(ThemeSettingsService.EditorBrush("CurveSelected"), 2), new(playhead, 0), new(playhead, Bounds.Height));
+            context.DrawLine(new Pen(selected, 2), new(playhead, 0), new(playhead, Bounds.Height));
     }
 
     private static void DrawText(DrawingContext context, string value, Point point, IBrush brush) =>

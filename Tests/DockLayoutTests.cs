@@ -83,30 +83,34 @@ internal static class DockLayoutTests
         {
             var factory = Factory(main);
             var timeline = factory.Tools.Single(t => t.Id == "Timeline");
+            var curves = factory.Tools.Single(t => t.Id == "Curves");
             var properties = factory.Tools.Single(t => t.Id == "Properties");
-            var preview = factory.Tools.Single(t => t.Id == "EngineConnection");
+            var chat = factory.Tools.Single(t => t.Id == "Chat");
 
             void CheckDefault()
             {
                 var columns = ((IDock)main.Layout.VisibleDockables!.Single()).VisibleDockables!.OfType<IDock>().ToArray();
                 var canvas = (IDock)main.DocumentsDock.Owner!;
-                Check(columns.Length == 3 && columns.Contains(canvas) &&
-                      columns.Where(dock => dock != canvas).All(dock => dock.Proportion < canvas.Proportion),
-                    "The initial graph column must have more room than either sidebar.");
+                Check(columns.Length == 2 && ReferenceEquals(columns[0], canvas) &&
+                      columns[1].Proportion < canvas.Proportion,
+                    "The initial graph column must start on the left and have more room than the inspector/chat column.");
                 Check(timeline.Owner is IToolDock { Alignment: Alignment.Bottom } timelineDock &&
-                      ReferenceEquals(timelineDock.ActiveDockable, timeline) &&
-                      ReferenceEquals(timelineDock.Owner, canvas),
-                    "The timeline must be selected directly below the graph.");
-                Check(properties.Owner is IToolDock propertiesDock && preview.Owner is IToolDock previewDock &&
-                      !ReferenceEquals(propertiesDock, previewDock) && ReferenceEquals(propertiesDock.Owner, previewDock.Owner) &&
+                      curves.Owner is IToolDock { Alignment: Alignment.Bottom } curvesDock &&
+                      ReferenceEquals(timelineDock, curvesDock) &&
+                      ReferenceEquals(curvesDock.Owner, canvas) &&
+                      ReferenceEquals(curvesDock.ActiveDockable, curves) &&
+                      curvesDock.VisibleDockables!.Contains(timeline),
+                    "F-Curve must be the active bottom pane directly below the graph with Timeline in the same tab group.");
+                Check(properties.Owner is IToolDock propertiesDock && chat.Owner is IToolDock chatDock &&
+                      !ReferenceEquals(propertiesDock, chatDock) && ReferenceEquals(propertiesDock.Owner, chatDock.Owner) &&
                       ReferenceEquals(propertiesDock.ActiveDockable, properties) &&
-                      ReferenceEquals(previewDock.ActiveDockable, preview),
-                    "Properties and preview connection must be visible together.");
+                      ReferenceEquals(chatDock.ActiveDockable, chat),
+                    "Properties and chat must be visible together on the right.");
             }
 
             CheckDefault();
-            factory.ShowTool("Curves");
-            factory.CloseDockable(preview);
+            factory.ShowTool("EngineConnection");
+            factory.CloseDockable(chat);
             factory.ApplyLayout(factory.DefaultLayout, showWindows: false);
             CheckDefault();
         }
@@ -147,7 +151,7 @@ internal static class DockLayoutTests
             var node = document.Workspace.CreateNode(GraphNodeKind.Comment);
             var count = document.Workspace.Nodes.Count;
             foreach (var tool in tools) ((IFactory)factory).CloseDockable((object)tool);
-            Check(main.Layout.HiddenDockables?.Count == 8, "Native tool close must hide all eight existing VMs.");
+            Check(main.Layout.HiddenDockables?.Count == 9, "Native tool close must hide all nine initially docked VMs.");
             foreach (var tool in tools)
             {
                 Check(factory.ShowTool(tool.Id) && factory.ShowTool(tool.Id), "Closed tool could not be restored twice.");

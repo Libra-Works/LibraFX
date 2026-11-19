@@ -4,55 +4,71 @@
         xmlns:views="using:LiberaFx.Views"
         x:Class="LiberaFx.Views.PreviewProfilerWindow"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
-    <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="8">
-        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="5">
-            <ComboBox x:Name="PeerSelector" SelectionChanged="OnPeerChanged"
+    <Grid Margin="10" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="6">
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+            <ComboBox x:Name="PeerSelector" SelectionChanged="OnPeerChanged" HorizontalAlignment="Stretch"
                       AutomationProperties.Name="{DynamicResource Text.Profiler.Peer}" />
-            <TextBlock x:Name="PeerStatus" Grid.Column="1" VerticalAlignment="Center" TextWrapping="Wrap" />
-            <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{DynamicResource Text.Profiler.CapabilityNotice}" TextWrapping="Wrap"
-                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <TextBlock x:Name="PeerStatus" Grid.Column="1" Classes="editor-label" VerticalAlignment="Center" TextWrapping="Wrap" />
+            <Border Grid.Column="2" Background="Transparent" Padding="4" VerticalAlignment="Center"
+                    ToolTip.Tip="{DynamicResource Text.Profiler.CapabilityNotice}">
+                <views:EditorIconView Icon="Info" />
+            </Border>
         </Grid>
-        <WrapPanel Grid.Row="1">
-            <Button x:Name="StartButton" Content="{DynamicResource Text.Profiler.Start}" Click="OnStart" Margin="0,0,8,0" />
-            <Button x:Name="StopButton" Content="{DynamicResource Text.Profiler.Stop}" Click="OnStop" Margin="0,0,12,0" />
-            <CheckBox x:Name="NodesCheck" Content="{DynamicResource Text.Profiler.Nodes}" IsChecked="True" Margin="0,0,12,0" />
-            <CheckBox x:Name="AccessorsCheck" Content="{DynamicResource Text.Profiler.Accessors}" Margin="0,0,12,0" />
-            <TextBlock Text="{DynamicResource Text.Profiler.Interval}" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <NumericUpDown x:Name="IntervalInput" Minimum="100" Maximum="5000" Value="500" Increment="100" Width="120"
-                           AutomationProperties.Name="{DynamicResource Text.Profiler.Interval}" />
+        <WrapPanel Grid.Row="1" Orientation="Horizontal" ItemSpacing="8" LineSpacing="4">
+            <Border Classes="editor-toolbar-group" Padding="4,2">
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <Button x:Name="StartButton" Classes="editor-action" Content="{DynamicResource Text.Profiler.Start}" Click="OnStart" />
+                    <Button x:Name="StopButton" Classes="editor-action" Content="{DynamicResource Text.Profiler.Stop}" Click="OnStop" />
+                </StackPanel>
+            </Border>
+            <Border Classes="editor-toolbar-group">
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <CheckBox x:Name="NodesCheck" Content="{DynamicResource Text.Profiler.Nodes}" IsChecked="True" />
+                    <CheckBox x:Name="AccessorsCheck" Content="{DynamicResource Text.Profiler.Accessors}" />
+                    <Border Classes="editor-toolbar-divider" />
+                    <TextBlock Classes="editor-label" Text="{DynamicResource Text.Profiler.Interval}" />
+                    <NumericUpDown x:Name="IntervalInput" Minimum="100" Maximum="5000" Value="500" Increment="100" Width="120"
+                                   AutomationProperties.Name="{DynamicResource Text.Profiler.Interval}" />
+                </StackPanel>
+            </Border>
         </WrapPanel>
-        <TextBlock x:Name="CaptureStatus" Grid.Row="2" TextWrapping="Wrap" />
+        <TextBlock x:Name="CaptureStatus" Grid.Row="2" Classes="editor-label" TextWrapping="Wrap" />
         <TabControl Grid.Row="3">
             <TabItem Header="{DynamicResource Text.Profiler.Overview}">
-                <Grid RowDefinitions="Auto,Auto,2*,Auto,3*" RowSpacing="10">
+                <Grid RowDefinitions="Auto,Auto,2*,Auto,3*" RowSpacing="8">
                     <UniformGrid Columns="4">
-                        <Border Margin="0,0,8,0" Padding="12" BorderThickness="0,0,0,3" BorderBrush="#62ADE9">
-                            <StackPanel><TextBlock Text="{DynamicResource Text.Profiler.TotalWork}" />
-                                <TextBlock x:Name="TotalWork" FontSize="24" FontWeight="SemiBold" /></StackPanel>
+                        <Border Margin="0,0,8,0" Padding="10,8" BorderThickness="0,0,0,3" BorderBrush="#62ADE9">
+                            <StackPanel><TextBlock Classes="editor-label" Text="{DynamicResource Text.Profiler.TotalWork}" />
+                                <TextBlock x:Name="TotalWork" Classes="editor-title" /></StackPanel>
                         </Border>
-                        <Border Margin="0,0,8,0" Padding="12" BorderThickness="0,0,0,3" BorderBrush="#D9BA58">
-                            <StackPanel><TextBlock Text="{DynamicResource Text.Profiler.RecordedCalls}" />
-                                <TextBlock x:Name="RecordedCalls" FontSize="24" FontWeight="SemiBold" /></StackPanel>
+                        <Border Margin="0,0,8,0" Padding="10,8" BorderThickness="0,0,0,3" BorderBrush="#D9BA58">
+                            <StackPanel><TextBlock Classes="editor-label" Text="{DynamicResource Text.Profiler.RecordedCalls}" />
+                                <TextBlock x:Name="RecordedCalls" Classes="editor-title" /></StackPanel>
                         </Border>
-                        <Border Margin="0,0,8,0" Padding="12" BorderThickness="0,0,0,3" BorderBrush="#AB8BE2">
-                            <StackPanel><TextBlock Text="{DynamicResource Text.Profiler.PeakInterval}" />
-                                <TextBlock x:Name="PeakInterval" FontSize="24" FontWeight="SemiBold" /></StackPanel>
+                        <Border Margin="0,0,8,0" Padding="10,8" BorderThickness="0,0,0,3" BorderBrush="#AB8BE2">
+                            <StackPanel><TextBlock Classes="editor-label" Text="{DynamicResource Text.Profiler.PeakInterval}" />
+                                <TextBlock x:Name="PeakInterval" Classes="editor-title" /></StackPanel>
                         </Border>
-                        <Border Padding="12" BorderThickness="0,0,0,3" BorderBrush="#6DC991">
-                            <StackPanel><TextBlock Text="{DynamicResource Text.Profiler.HistoryCount}" />
-                                <TextBlock x:Name="HistoryCount" FontSize="24" FontWeight="SemiBold" /></StackPanel>
+                        <Border Padding="10,8" BorderThickness="0,0,0,3" BorderBrush="#6DC991">
+                            <StackPanel><TextBlock Classes="editor-label" Text="{DynamicResource Text.Profiler.HistoryCount}" />
+                                <TextBlock x:Name="HistoryCount" Classes="editor-title" /></StackPanel>
                         </Border>
                     </UniformGrid>
-                    <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
-                        <StackPanel><TextBlock Text="{DynamicResource Text.Profiler.HistoryTitle}" FontWeight="SemiBold" />
-                            <TextBlock Text="{DynamicResource Text.Profiler.HistoryHelp}"
-                                       Foreground="{DynamicResource EffectMutedForegroundBrush}" TextWrapping="Wrap" /></StackPanel>
+                    <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Profiler.HistoryTitle}" />
+                            <Border Background="Transparent" Padding="2" ToolTip.Tip="{DynamicResource Text.Profiler.HistoryHelp}">
+                                <views:EditorIconView Icon="Info" />
+                            </Border>
+                        </StackPanel>
                         <CheckBox x:Name="LiveCheck" Grid.Column="1" Content="{DynamicResource Text.Profiler.Live}" IsChecked="True"
                                   IsCheckedChanged="OnHistoryModeChanged" />
-                        <Button Grid.Column="2" Content="{DynamicResource Text.Profiler.ClearHistory}" Click="OnClearHistory" />
+                        <views:IconButton Grid.Column="2" Classes="editor-tool" Icon="Delete" Click="OnClearHistory"
+                                          ToolTip.Tip="{DynamicResource Text.Profiler.ClearHistory}"
+                                          AutomationProperties.Name="{DynamicResource Text.Profiler.ClearHistory}" />
                     </Grid>
                     <Grid Grid.Row="2" ColumnDefinitions="150,*" ColumnSpacing="12">
-                        <StackPanel Spacing="10" Margin="4,16,0,0">
+                        <StackPanel Spacing="3" Margin="4,4,0,0" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal" Spacing="8"><Border Width="10" Height="10" Background="#D9BA58" /><TextBlock Text="{DynamicResource Text.Profiler.CategoryNodes}" /></StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="8"><Border Width="10" Height="10" Background="#62ADE9" /><TextBlock Text="{DynamicResource Text.Profiler.CategoryEvaluate}" /></StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="8"><Border Width="10" Height="10" Background="#AB8BE2" /><TextBlock Text="{DynamicResource Text.Profiler.CategorySchedule}" /></StackPanel>
@@ -61,14 +77,17 @@
                             <StackPanel Orientation="Horizontal" Spacing="8"><Border Width="10" Height="10" Background="#8895A7" /><TextBlock Text="{DynamicResource Text.Profiler.CategoryOther}" /></StackPanel>
                         </StackPanel>
                         <Border Grid.Column="1" BorderBrush="{DynamicResource EffectMutedForegroundBrush}" BorderThickness="1" CornerRadius="4">
-                            <views:ProfilerHistoryChart x:Name="HistoryChart" MinHeight="150"
+                            <views:ProfilerHistoryChart x:Name="HistoryChart" MinHeight="110"
                                 AutomationProperties.Name="{DynamicResource Text.Profiler.HistoryTitle}" />
                         </Border>
                     </Grid>
-                    <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                        <StackPanel><TextBlock x:Name="SelectedSampleStatus" FontWeight="SemiBold" />
-                            <TextBlock Text="{DynamicResource Text.Profiler.CostHelp}" TextWrapping="Wrap"
-                                       Foreground="{DynamicResource EffectMutedForegroundBrush}" /></StackPanel>
+                    <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <TextBlock x:Name="SelectedSampleStatus" Classes="editor-heading" />
+                            <Border Background="Transparent" Padding="2" ToolTip.Tip="{DynamicResource Text.Profiler.CostHelp}">
+                                <views:EditorIconView Icon="Info" />
+                            </Border>
+                        </StackPanel>
                         <ComboBox x:Name="CostMode" Grid.Column="1" SelectedIndex="1" SelectionChanged="OnCostModeChanged">
                             <ComboBoxItem Content="{DynamicResource Text.Profiler.IntervalCosts}" />
                             <ComboBoxItem Content="{DynamicResource Text.Profiler.CumulativeCosts}" />
@@ -79,11 +98,10 @@
                             <views:ProfilerCostChart x:Name="CostChart"
                                 AutomationProperties.Name="{DynamicResource Text.Profiler.CostTitle}" />
                         </ScrollViewer>
-                        <Border Grid.Column="1" BorderBrush="{DynamicResource EffectMutedForegroundBrush}"
-                                BorderThickness="1" CornerRadius="4" Padding="14">
+                        <Border Grid.Column="1" Classes="editor-card">
                             <ScrollViewer>
-                                <StackPanel Spacing="10">
-                                    <TextBlock Text="{DynamicResource Text.Profiler.DetailTitle}" FontSize="16" FontWeight="SemiBold" />
+                                <StackPanel Spacing="8">
+                                    <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Profiler.DetailTitle}" />
                                     <TextBlock x:Name="CostDetail" TextWrapping="Wrap" />
                                 </StackPanel>
                             </ScrollViewer>
@@ -93,18 +111,18 @@
             </TabItem>
             <TabItem Header="{DynamicResource Text.Profiler.Metrics}">
                 <Grid RowDefinitions="Auto,Auto,*" RowSpacing="5">
-                    <TextBlock x:Name="ProfileStatus" TextWrapping="Wrap" />
-                    <TextBlock Grid.Row="1" Text="{DynamicResource Text.Profiler.Units}" />
+                    <TextBlock x:Name="ProfileStatus" Classes="editor-label" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="1" Classes="editor-label" Text="{DynamicResource Text.Profiler.Units}" />
                     <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                         <Grid MinWidth="1160" RowDefinitions="Auto,*">
                             <Grid ColumnDefinitions="160,290,90,150,150,150,150" Margin="8,4">
-                                <TextBlock Text="{DynamicResource Text.Profiler.Event}" />
-                                <TextBlock Grid.Column="1" Text="{DynamicResource Text.Profiler.Node}" />
-                                <TextBlock Grid.Column="2" Text="{DynamicResource Text.Profiler.Calls}" />
-                                <TextBlock Grid.Column="3" Text="{DynamicResource Text.Profiler.Exclusive}" />
-                                <TextBlock Grid.Column="4" Text="{DynamicResource Text.Profiler.Inclusive}" />
-                                <TextBlock Grid.Column="5" Text="{DynamicResource Text.Profiler.Minimum}" />
-                                <TextBlock Grid.Column="6" Text="{DynamicResource Text.Profiler.Maximum}" />
+                                <TextBlock Classes="editor-label" Text="{DynamicResource Text.Profiler.Event}" />
+                                <TextBlock Grid.Column="1" Classes="editor-label" Text="{DynamicResource Text.Profiler.Node}" />
+                                <TextBlock Grid.Column="2" Classes="editor-label" Text="{DynamicResource Text.Profiler.Calls}" />
+                                <TextBlock Grid.Column="3" Classes="editor-label" Text="{DynamicResource Text.Profiler.Exclusive}" />
+                                <TextBlock Grid.Column="4" Classes="editor-label" Text="{DynamicResource Text.Profiler.Inclusive}" />
+                                <TextBlock Grid.Column="5" Classes="editor-label" Text="{DynamicResource Text.Profiler.Minimum}" />
+                                <TextBlock Grid.Column="6" Classes="editor-label" Text="{DynamicResource Text.Profiler.Maximum}" />
                             </Grid>
                             <ListBox x:Name="MetricList" Grid.Row="1"
                                      AutomationProperties.Name="{DynamicResource Text.Profiler.Metrics}">
@@ -127,22 +145,25 @@
                 </Grid>
             </TabItem>
             <TabItem Header="{DynamicResource Text.Profiler.Values}">
-                <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="8">
-                    <TextBlock Text="{DynamicResource Text.Profiler.WatchHelp}" TextWrapping="Wrap" />
-                    <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                <Grid RowDefinitions="Auto,Auto,*" RowSpacing="6">
+                    <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
                         <TextBox x:Name="WatchInput" PlaceholderText="{DynamicResource Text.Profiler.NodeIds}"
                                  AutomationProperties.Name="{DynamicResource Text.Profiler.NodeIds}" />
-                        <Button x:Name="SelectionButton" Grid.Column="1" Content="{DynamicResource Text.Profiler.UseSelection}" Click="OnUseSelection" />
-                        <Button x:Name="WatchButton" Grid.Column="2" Content="{DynamicResource Text.Profiler.Watch}" Click="OnWatch" />
+                        <Button x:Name="SelectionButton" Grid.Column="1" Classes="editor-action" Content="{DynamicResource Text.Profiler.UseSelection}" Click="OnUseSelection" />
+                        <Button x:Name="WatchButton" Grid.Column="2" Classes="editor-action" Content="{DynamicResource Text.Profiler.Watch}" Click="OnWatch" />
+                        <Border Grid.Column="3" Background="Transparent" Padding="4" VerticalAlignment="Center"
+                                ToolTip.Tip="{DynamicResource Text.Profiler.WatchHelp}">
+                            <views:EditorIconView Icon="Info" />
+                        </Border>
                     </Grid>
-                    <TextBlock x:Name="ValuesStatus" Grid.Row="2" TextWrapping="Wrap" />
-                    <TextBox x:Name="ValuesText" Grid.Row="3" IsReadOnly="True" AcceptsReturn="True"
+                    <TextBlock x:Name="ValuesStatus" Grid.Row="1" Classes="editor-label" TextWrapping="Wrap" />
+                    <TextBox x:Name="ValuesText" Grid.Row="2" IsReadOnly="True" AcceptsReturn="True"
                              FontFamily="Cascadia Mono,Consolas,monospace"
                              ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto"
                              AutomationProperties.Name="{DynamicResource Text.Profiler.Values}" />
                 </Grid>
             </TabItem>
         </TabControl>
-        <TextBlock x:Name="ControlStatus" Grid.Row="4" TextWrapping="Wrap" />
+        <TextBlock x:Name="ControlStatus" Grid.Row="4" Classes="editor-label" TextWrapping="Wrap" />
     </Grid>
 </UserControl>

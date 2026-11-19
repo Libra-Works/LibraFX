@@ -1,35 +1,48 @@
 <UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:services="clr-namespace:LiberaFx.Services"
+        xmlns:views="using:LiberaFx.Views"
         x:Class="LiberaFx.Views.LocalProjectsWindow"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
-  <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="10">
-    <TextBlock Text="{DynamicResource Text.Library.Hint}" TextWrapping="Wrap" />
-    <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto">
-      <TextBlock x:Name="Folder" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-      <Button Grid.Column="1" Margin="8,0" Content="{DynamicResource Text.Library.ChooseFolder}" Click="OnChooseFolder" />
-      <Button Grid.Column="2" Content="{DynamicResource Text.Library.Refresh}" Click="OnRefresh" />
+  <Grid Margin="12" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8">
+    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+      <TextBlock x:Name="Folder" Classes="editor-label" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+      <Border Grid.Column="1" Classes="editor-toolbar-group" Padding="4,2">
+        <StackPanel Orientation="Horizontal" Spacing="2">
+          <views:IconButton Classes="editor-tool" Icon="Open" Click="OnChooseFolder"
+                            ToolTip.Tip="{DynamicResource Text.Library.ChooseFolder}"
+                            AutomationProperties.Name="{DynamicResource Text.Library.ChooseFolder}" />
+          <views:IconButton Classes="editor-tool" Icon="Refresh" Click="OnRefresh"
+                            ToolTip.Tip="{DynamicResource Text.Library.Refresh}"
+                            AutomationProperties.Name="{DynamicResource Text.Library.Refresh}" />
+        </StackPanel>
+      </Border>
+      <Border Grid.Column="2" Background="Transparent" Padding="4" VerticalAlignment="Center"
+              ToolTip.Tip="{DynamicResource Text.Library.Hint}">
+        <views:EditorIconView Icon="Info" />
+      </Border>
     </Grid>
-    <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
       <TextBox x:Name="Query" PlaceholderText="{DynamicResource Text.Library.Search}" TextChanged="OnQueryChanged" />
-      <CheckBox x:Name="Recursive" Grid.Column="1" Margin="12,0" IsChecked="True"
+      <CheckBox x:Name="Recursive" Grid.Column="1" IsChecked="True"
                 Content="{DynamicResource Text.Library.Subfolders}" IsCheckedChanged="OnRecursiveChanged" />
     </Grid>
-    <ListBox x:Name="Projects" Grid.Row="3" DoubleTapped="OnOpenProject">
+    <ListBox x:Name="Projects" Grid.Row="2" DoubleTapped="OnOpenProject">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="services:LocalProjectAsset">
-          <StackPanel Margin="8" Spacing="3">
-            <TextBlock Text="{Binding Name}" FontWeight="Bold" />
-            <TextBlock Text="{Binding Path}" TextTrimming="CharacterEllipsis"
-                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <TextBlock Text="{Binding Modified}" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+          <StackPanel Margin="6,4" Spacing="2">
+            <TextBlock Classes="editor-heading" Text="{Binding Name}" />
+            <TextBlock Classes="editor-label" Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Classes="editor-label" Text="{Binding Modified}" />
           </StackPanel>
         </DataTemplate>
       </ListBox.ItemTemplate>
     </ListBox>
-    <Grid Grid.Row="4" ColumnDefinitions="*,Auto">
-      <TextBlock x:Name="Status" TextWrapping="Wrap" VerticalAlignment="Center" />
-      <Button Grid.Column="1" Content="{DynamicResource Text.Library.Open}" Click="OnOpenProject" />
+    <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+      <TextBlock x:Name="Status" Classes="editor-label" TextWrapping="Wrap" VerticalAlignment="Center" />
+      <views:IconButton Grid.Column="1" Classes="editor-tool transport-primary" Icon="Open" Click="OnOpenProject"
+                        ToolTip.Tip="{DynamicResource Text.Library.Open}"
+                        AutomationProperties.Name="{DynamicResource Text.Library.Open}" />
     </Grid>
   </Grid>
 </UserControl>

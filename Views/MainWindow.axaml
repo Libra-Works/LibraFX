@@ -132,13 +132,14 @@
         <views:GpuWorkspaceView x:Name="GpuWorkspace" Grid.Row="1" IsVisible="False" />
 
         <Border Grid.Row="2" Classes="editor-bar" BorderThickness="0,1,0,0">
-            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-                <Button Classes="editor-tool" Content="{Binding PreviewConnectionSummary}" Tag="PreviewConnections" Click="OnDockPanelClick"
-                        Padding="6,3" />
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                <views:PlaybackTransport ShowFrameTools="True" DataContext="{Binding Playback}" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Classes="editor-label" Text="{Binding FileStatus}" TextWrapping="Wrap" />
-                    <TextBlock Classes="editor-label" Text="{Binding WindowLayouts.Status}" TextWrapping="Wrap" />
+                    <TextBlock Classes="editor-label" Text="{Binding FileStatus}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Classes="editor-label" Text="{Binding WindowLayouts.Status}" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
+                <Button Grid.Column="2" Classes="editor-tool" Content="{Binding PreviewConnectionSummary}"
+                        Tag="PreviewConnections" Click="OnDockPanelClick" Padding="8,4" />
             </Grid>
         </Border>
     </Grid>

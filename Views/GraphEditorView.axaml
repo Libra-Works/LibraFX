@@ -19,8 +19,8 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="vm:GraphBreadcrumb">
                         <StackPanel Orientation="Horizontal" Spacing="4">
-                            <TextBlock Text="›" IsVisible="{Binding HasSeparator}"
-                                       FontSize="18" VerticalAlignment="Center"
+                            <TextBlock Classes="editor-heading" Text="›" IsVisible="{Binding HasSeparator}"
+                                       VerticalAlignment="Center"
                                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
                             <Button Classes="editor-tool" Tag="{Binding Depth}" AutomationProperties.Name="{Binding Name}"
                                     Click="OnBreadcrumbClick" Padding="8,2">

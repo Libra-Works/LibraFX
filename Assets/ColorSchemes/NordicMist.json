@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "name": "NordicMist",
+  "variant": "Light",
+  "palette": {
+    "region": "#F9F7F7",
+    "surface": "#DBE2EF",
+    "foreground": "#112D4E",
+    "mutedForeground": "#4A6484",
+    "border": "#B8C6DE",
+    "accent": "#3F72AF"
+  },
+  "editorColors": {
+    "GraphMinorGrid": "#ECEFF5",
+    "GraphMajorGrid": "#D5DFEE",
+    "GraphParameter": "#2B6CB0",
+    "GraphSignal": "#D96B27",
+    "NodeBorder": "#9CB2D1",
+    "NodeSelectedBorder": "#3F72AF",
+    "SelectionFill": "#283F72AF",
+    "SelectionBorder": "#3F72AF",
+    "CurveBackground": "#F1F4F9",
+    "CurveGrid": "#D3DDEC",
+    "CurveAxis": "#8298B8",
+    "CurveLine": "#1F7A8C",
+    "CurveHandle": "#D96B27",
+    "CurveKey": "#112D4E",
+    "CurveSelected": "#E05A47",
+    "CurveLabel": "#4A6484"
+  },
+  "accentColors": {
+    "Blue": "#3F72AF",
+    "Purple": "#6C5CE7",
+    "Teal": "#008B8B",
+    "Orange": "#D96B27",
+    "Pink": "#C84B79"
+  }
+}

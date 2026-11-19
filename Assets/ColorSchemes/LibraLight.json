@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "name": "LibraLight",
+  "variant": "Light",
+  "palette": {
+    "region": "#F4F5F8",
+    "surface": "#E7E9F0",
+    "foreground": "#181C26",
+    "mutedForeground": "#5A6275",
+    "border": "#C8CEDB",
+    "accent": "#6254E8"
+  },
+  "editorColors": {
+    "GraphMinorGrid": "#EAECEF",
+    "GraphMajorGrid": "#DADEE8",
+    "GraphParameter": "#1D74C6",
+    "GraphSignal": "#D96B27",
+    "NodeBorder": "#AAB3C6",
+    "NodeSelectedBorder": "#6254E8",
+    "SelectionFill": "#286254E8",
+    "SelectionBorder": "#6254E8",
+    "CurveBackground": "#EEF0F5",
+    "CurveGrid": "#D7DCE8",
+    "CurveAxis": "#8A94AA",
+    "CurveLine": "#0D8A7B",
+    "CurveHandle": "#D96B27",
+    "CurveKey": "#181C26",
+    "CurveSelected": "#E05A47",
+    "CurveLabel": "#5A6275"
+  },
+  "accentColors": {
+    "Blue": "#1D74C6",
+    "Purple": "#6254E8",
+    "Teal": "#0D8A7B",
+    "Orange": "#D96B27",
+    "Pink": "#C84B79"
+  }
+}

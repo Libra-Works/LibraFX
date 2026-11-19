@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:LiberaFx.ViewModels"
+        xmlns:services="using:LiberaFx.Services"
         xmlns:views="using:LiberaFx.Views"
         x:Class="LiberaFx.Views.StartupSetupWindow"
         x:DataType="vm:MainViewModel"
@@ -9,24 +10,53 @@
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="24" Spacing="12">
-            <TextBlock Text="{DynamicResource Text.Editor.StartupSetupTitle}" FontSize="21" FontWeight="SemiBold" />
-            <TextBlock Text="{DynamicResource Text.Editor.ColorScheme}" FontWeight="SemiBold" />
+        <StackPanel Margin="20" Spacing="10">
+            <TextBlock Classes="editor-title" Text="{DynamicResource Text.Editor.StartupSetupTitle}" />
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Editor.Language}" />
+                <Border Grid.Column="1" Background="Transparent" Padding="2"
+                        ToolTip.Tip="{DynamicResource Text.Editor.LanguageHint}">
+                    <views:EditorIconView Icon="Info" />
+                </Border>
+            </Grid>
+            <ComboBox x:Name="LanguagePicker" ItemsSource="{Binding Localization.Languages}"
+                      IsEnabled="{Binding Localization.CanChangeLanguage}"
+                      SelectedItem="{Binding Localization.SelectedLanguage, Mode=OneWay}"
+                      SelectionChanged="OnLanguageSelected"
+                      HorizontalAlignment="Stretch"
+                      AutomationProperties.Name="{DynamicResource Text.Editor.Language}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate DataType="services:EditorLanguage">
+                        <TextBlock Text="{Binding Name}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Editor.ColorScheme}" />
+                <Border Grid.Column="1" Background="Transparent" Padding="2"
+                        ToolTip.Tip="{DynamicResource Text.Editor.StartupSetupAppearanceHint}">
+                    <views:EditorIconView Icon="Info" />
+                </Border>
+            </Grid>
             <ComboBox x:Name="ColorSchemePicker" ItemsSource="{Binding ColorSchemes}"
+                      SelectionChanged="OnColorSchemeSelected"
                       HorizontalAlignment="Stretch"
                       AutomationProperties.Name="{DynamicResource Text.Editor.ColorScheme}">
                 <ComboBox.ItemTemplate>
                     <DataTemplate><views:LocalizedOptionText Value="{ReflectionBinding}" /></DataTemplate>
                 </ComboBox.ItemTemplate>
             </ComboBox>
-            <TextBlock Text="{DynamicResource Text.Editor.StartupSetupAppearanceHint}" TextWrapping="Wrap" />
             <Separator />
-            <TextBlock Text="{DynamicResource Text.Editor.StartupSetupCrashHeading}" FontWeight="SemiBold" />
-            <TextBlock Text="{DynamicResource Text.Editor.StartupSetupCrashHint}" TextWrapping="Wrap" />
-            <Button Content="{DynamicResource Text.Crash.Title}" Click="OnCrashReportsClick" />
-            <TextBlock x:Name="SetupStatus" TextWrapping="Wrap" IsVisible="False"
-                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <Button x:Name="ContinueButton" Content="{DynamicResource Text.Editor.StartupSetupContinue}" Click="OnContinueClick"
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Editor.StartupSetupCrashHeading}" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Classes="editor-action" Content="{DynamicResource Text.Crash.Title}" Click="OnCrashReportsClick" />
+                <Border Grid.Column="2" Background="Transparent" Padding="2" VerticalAlignment="Center"
+                        ToolTip.Tip="{DynamicResource Text.Editor.StartupSetupCrashHint}">
+                    <views:EditorIconView Icon="Info" />
+                </Border>
+            </Grid>
+            <TextBlock x:Name="SetupStatus" Classes="editor-label" TextWrapping="Wrap" IsVisible="False" />
+            <Button x:Name="ContinueButton" Classes="editor-action" Content="{DynamicResource Text.Editor.StartupSetupContinue}" Click="OnContinueClick"
                     IsDefault="True" HorizontalAlignment="Right" />
         </StackPanel>
     </ScrollViewer>

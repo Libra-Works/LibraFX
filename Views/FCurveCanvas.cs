@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Immutable;
 using LiberaFx.Models.Graph;
 using LiberaFx.ViewModels;
 using LiberaFx.Services;
@@ -12,13 +13,6 @@ namespace LiberaFx.Views;
 
 public sealed class FCurveCanvas : Control
 {
-    private static readonly IBrush BackgroundBrush = ThemeSettingsService.EditorBrush("CurveBackground");
-    private static readonly Pen GridPen = new(ThemeSettingsService.EditorBrush("CurveGrid"), 1);
-    private static readonly Pen AxisPen = new(ThemeSettingsService.EditorBrush("CurveAxis"), 1);
-    private static readonly Pen HandlePen = new(ThemeSettingsService.EditorBrush("CurveHandle"), 1);
-    private static readonly IBrush KeyBrush = ThemeSettingsService.EditorBrush("CurveKey");
-    private static readonly IBrush SelectedBrush = ThemeSettingsService.EditorBrush("CurveSelected");
-    private static readonly IBrush LabelBrush = ThemeSettingsService.EditorBrush("CurveLabel");
     private CurveEditorViewModel? _model;
     private GraphNodeViewModel? _framedNode;
     private double _scaleX = 5;
@@ -65,7 +59,7 @@ public sealed class FCurveCanvas : Control
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-        context.DrawRectangle(BackgroundBrush, null, new Rect(Bounds.Size));
+        context.DrawRectangle(ThemeSettingsService.EditorRenderBrush("CurveBackground"), null, new Rect(Bounds.Size));
         if (_model?.Node != _framedNode && Bounds.Width > 0 && Bounds.Height > 0)
         {
             _framedNode = _model?.Node;
@@ -76,18 +70,23 @@ public sealed class FCurveCanvas : Control
         DrawGrid(context);
         if (_model is null) return;
         foreach (var display in _model.VisibleCurves.OrderBy(item => ReferenceEquals(item.Node, _model.Node)))
-            DrawCurve(context, display.Curve, new Pen(display.Brush, ReferenceEquals(display.Node, _model.Node) ? 2 : 1.5));
+        {
+            var brush = display.Brush is ISolidColorBrush solid
+                ? new ImmutableSolidColorBrush(solid.Color, solid.Opacity) : display.Brush;
+            DrawCurve(context, display.Curve, new Pen(brush, ReferenceEquals(display.Node, _model.Node) ? 2 : 1.5));
+        }
+        var selected = ThemeSettingsService.EditorRenderBrush("CurveSelected");
         if (_model.Curve is { } curve && _model.VisibleCurves.Any(item => ReferenceEquals(item.Node, _model.Node)))
-            DrawKeys(context, curve);
+            DrawKeys(context, curve, selected);
         if (_model.PlayheadFrame is { } frame)
         {
             var displayTime = _model.Playback?.DisplayUnits(_model.Playback.TimeSeconds) ?? frame;
             var x = _origin.X + displayTime * _scaleX;
-            context.DrawLine(new Pen(SelectedBrush, 1.5), new Point(x, 0), new Point(x, Bounds.Height));
+            context.DrawLine(new Pen(selected, 1.5), new Point(x, 0), new Point(x, Bounds.Height));
         }
         if (_dragMode == DragMode.Select)
-            context.DrawRectangle(ThemeSettingsService.EditorBrush("SelectionFill"),
-                new Pen(ThemeSettingsService.EditorBrush("SelectionBorder")), SelectionRect(_pointerStart, _selectionEnd));
+            context.DrawRectangle(ThemeSettingsService.EditorRenderBrush("SelectionFill"),
+                new Pen(ThemeSettingsService.EditorRenderBrush("SelectionBorder")), SelectionRect(_pointerStart, _selectionEnd));
     }
 
     public void FrameAll()
@@ -130,6 +129,9 @@ public sealed class FCurveCanvas : Control
 
     private void DrawGrid(DrawingContext context)
     {
+        var grid = new Pen(ThemeSettingsService.EditorRenderBrush("CurveGrid"));
+        var axis = new Pen(ThemeSettingsService.EditorRenderBrush("CurveAxis"));
+        var label = ThemeSettingsService.EditorRenderBrush("CurveLabel");
         var stepX = GridStep(_scaleX);
         var stepY = GridStep(_scaleY);
         var left = (0 - _origin.X) / _scaleX;
@@ -139,14 +141,14 @@ public sealed class FCurveCanvas : Control
         for (var value = Math.Ceiling(left / stepX) * stepX; value <= right; value += stepX)
         {
             var x = _origin.X + value * _scaleX;
-            context.DrawLine(Math.Abs(value) < stepX * 0.001 ? AxisPen : GridPen, new Point(x, 0), new Point(x, Bounds.Height));
-            DrawLabel(context, value, new Point(x + 3, 2));
+            context.DrawLine(Math.Abs(value) < stepX * 0.001 ? axis : grid, new Point(x, 0), new Point(x, Bounds.Height));
+            DrawLabel(context, value, new Point(x + 3, 2), label);
         }
         for (var value = Math.Ceiling(bottom / stepY) * stepY; value <= top; value += stepY)
         {
             var y = _origin.Y - value * _scaleY;
-            context.DrawLine(Math.Abs(value) < stepY * 0.001 ? AxisPen : GridPen, new Point(0, y), new Point(Bounds.Width, y));
-            DrawLabel(context, value, new Point(3, y + 2));
+            context.DrawLine(Math.Abs(value) < stepY * 0.001 ? axis : grid, new Point(0, y), new Point(Bounds.Width, y));
+            DrawLabel(context, value, new Point(3, y + 2), label);
         }
     }
 
@@ -158,10 +160,10 @@ public sealed class FCurveCanvas : Control
         return (unit <= 1 ? 1 : unit <= 2 ? 2 : unit <= 5 ? 5 : 10) * magnitude;
     }
 
-    private static void DrawLabel(DrawingContext context, double value, Point point)
+    private static void DrawLabel(DrawingContext context, double value, Point point, IBrush label)
     {
         var text = new FormattedText(value.ToString("0.###", CultureInfo.CurrentCulture),
-            CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Arial"), 10, LabelBrush);
+            CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Arial"), 10, label);
         context.DrawText(text, point);
     }
 
@@ -206,8 +208,10 @@ public sealed class FCurveCanvas : Control
             context.DrawLine(curvePen, ToPoint(Math.Max(leftTime, lastKeyTime), keys[^1].Value), ToPoint(rightTime, keys[^1].Value));
     }
 
-    private void DrawKeys(DrawingContext context, FCurveSnapshot curve)
+    private void DrawKeys(DrawingContext context, FCurveSnapshot curve, IBrush selected)
     {
+        var keyBrush = ThemeSettingsService.EditorRenderBrush("CurveKey");
+        var handlePen = new Pen(ThemeSettingsService.EditorRenderBrush("CurveHandle"));
         foreach (var key in curve.Keys)
         {
             var point = ToPoint(DisplayTime(key.TimeSeconds), key.Value);
@@ -216,18 +220,18 @@ public sealed class FCurveCanvas : Control
             {
                 var index = curve.Keys.ToList().FindIndex(item => item.Id == key.Id);
                 if (index > 0 && curve.Keys[index - 1].Interpolation == CurveInterpolation.Cubic)
-                    DrawHandle(context, point, HandlePoint(key, incoming: true));
+                    DrawHandle(context, point, HandlePoint(key, incoming: true), handlePen, selected);
                 if (index < curve.Keys.Count - 1 && key.Interpolation == CurveInterpolation.Cubic)
-                    DrawHandle(context, point, HandlePoint(key, incoming: false));
+                    DrawHandle(context, point, HandlePoint(key, incoming: false), handlePen, selected);
             }
-            context.DrawEllipse(_model?.IsKeySelected(key.Id) == true ? SelectedBrush : KeyBrush, null, point, 5, 5);
+            context.DrawEllipse(_model?.IsKeySelected(key.Id) == true ? selected : keyBrush, null, point, 5, 5);
         }
     }
 
-    private static void DrawHandle(DrawingContext context, Point key, Point handle)
+    private static void DrawHandle(DrawingContext context, Point key, Point handle, Pen handlePen, IBrush selected)
     {
-        context.DrawLine(HandlePen, key, handle);
-        context.DrawEllipse(SelectedBrush, null, handle, 4, 4);
+        context.DrawLine(handlePen, key, handle);
+        context.DrawEllipse(selected, null, handle, 4, 4);
     }
 
     private Point ToPoint(double displayTime, double value) =>
