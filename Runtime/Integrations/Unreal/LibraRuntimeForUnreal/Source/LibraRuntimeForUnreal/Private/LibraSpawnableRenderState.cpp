@@ -126,6 +126,8 @@ struct FDefinition
     int32 DebugCount = 0;
     TArray<FDraw> Draws;
     TArray<TStrongObjectPtr<ULibraGpuEffectAsset>> Gpu;
+    TArray<FGuid> GpuNodeIds;
+    TMap<FGuid, TArray<FGuid>> GpuDrawTransforms;
     uint64 GpuBytes = 0;
 };
 
@@ -297,6 +299,36 @@ struct FLibraSpawnableRenderState::FImpl
             !root->TryGetStringField(TEXT("type"), type) || type != TEXT("render_config") ||
             !root->TryGetArrayField(TEXT("nodes"), nodes) || nodes->Num() > 128)
             return Fail(TEXT("Invalid render configuration."));
+        const TArray<TSharedPtr<FJsonValue>>* gpuDrawTransforms = nullptr;
+        if (root->TryGetArrayField(TEXT("gpuDrawTransforms"), gpuDrawTransforms))
+        {
+            if (gpuDrawTransforms->Num() > 16)
+                return Fail(TEXT("Render configuration exceeds the 16 GPU draw Matrix binding limit."));
+            for (const auto& value : *gpuDrawTransforms)
+            {
+                auto object = value.IsValid() && value->Type == EJson::Object ? value->AsObject() : nullptr;
+                auto id = FString{};
+                auto nodeId = FGuid{};
+                const TArray<TSharedPtr<FJsonValue>>* rowIds = nullptr;
+                if (!object || !object->TryGetStringField(TEXT("nodeId"), id) ||
+                    !FGuid::Parse(id, nodeId) || !nodeId.IsValid() ||
+                    definition.GpuDrawTransforms.Contains(nodeId) ||
+                    !object->TryGetArrayField(TEXT("rowNodeIds"), rowIds) || rowIds->Num() != 4)
+                    return Fail(TEXT("Invalid or duplicate GPU draw Matrix binding."));
+                auto rows = TArray<FGuid>{};
+                rows.Reserve(4);
+                for (const auto& rowValue : *rowIds)
+                {
+                    auto rowIdText = FString{};
+                    auto rowId = FGuid{};
+                    if (!rowValue.IsValid() || !rowValue->TryGetString(rowIdText) ||
+                        !FGuid::Parse(rowIdText, rowId) || !rowId.IsValid())
+                        return Fail(TEXT("GPU draw Matrix contains an invalid FloatX4 row identity."));
+                    rows.Add(rowId);
+                }
+                definition.GpuDrawTransforms.Add(nodeId, MoveTemp(rows));
+            }
+        }
         auto ids = TSet<FGuid>{};
         for (const auto& item : *nodes)
         {
@@ -454,7 +486,8 @@ struct FLibraSpawnableRenderState::FImpl
             }
         }
         if (bytes.empty())
-            return expected.IsEmpty() || Fail(TEXT("Legacy GPU snapshots are not executable; re-export the source graph."));
+            return (expected.IsEmpty() && definition.GpuDrawTransforms.IsEmpty()) ||
+                Fail(TEXT("GPU containers or draw Matrix bindings have no executable program manifest; re-export the source graph."));
         auto root = TSharedPtr<FJsonObject>{};
         auto reader = TJsonReaderFactory<>::Create(Text(bytes));
         auto version = int32{};
@@ -506,7 +539,41 @@ struct FLibraSpawnableRenderState::FImpl
             definition.GpuBytes += uint64(asset->GetCapacity()) * (80 + registers * 16) + packetBytes;
             if (definition.GpuBytes > ULibraGpuEffectAsset::MaximumGpuBytes)
                 return Fail(TEXT("GPU scope exceeds the 256 MiB budget."));
+            definition.GpuNodeIds.Add(guid);
             definition.Gpu.Add(MoveTemp(asset));
+        }
+        for (const auto& transform : definition.GpuDrawTransforms)
+            if (!definition.GpuNodeIds.Contains(transform.Key))
+                return Fail(TEXT("GPU draw Matrix binding does not match an executable GPU container."));
+        return true;
+    }
+
+    bool ReadGpuDrawTransform(const FDefinition& definition, FGuid nodeId,
+        FGuid container, int64 instance,
+        FMatrix44f& matrix, bool& connected)
+    {
+        const auto* rows = definition.GpuDrawTransforms.Find(nodeId);
+        if (!rows)
+        {
+            matrix = FMatrix44f::Identity;
+            connected = false;
+            return true;
+        }
+        if (!rows || rows->Num() != 4)
+            return Fail(TEXT("GPU draw Matrix binding is incomplete."));
+        connected = true;
+        matrix = FMatrix44f::Identity;
+        for (auto row = 0; row < 4; ++row)
+        {
+            auto value = FVector4{};
+            auto width = int32{};
+            auto result = container.IsValid()
+                ? Owner.ReadChildValue(container, instance, (*rows)[row], value, width)
+                : Owner.ReadRootValue((*rows)[row], value, width);
+            if (result != ELibraRuntimeResult::Ok || width != 4 || !Finite(value))
+                return Fail(TEXT("GPU draw Matrix row could not be read as a finite FloatX4 from its matching scope."));
+            for (auto column = 0; column < 4; ++column)
+                matrix.M[row][column] = static_cast<float>(value[column]);
         }
         return true;
     }
@@ -566,15 +633,25 @@ struct FLibraSpawnableRenderState::FImpl
             component->RegisterComponent();
             instance->Draws.Add(MoveTemp(component));
         }
-        for (const auto& asset : instance->Definition->Gpu)
+        for (auto gpuIndex = 0; gpuIndex < instance->Definition->Gpu.Num(); ++gpuIndex)
         {
+            const auto& asset = instance->Definition->Gpu[gpuIndex];
             auto runtime = TStrongObjectPtr<ULibraGpuEffectRuntime>(
                 NewObject<ULibraGpuEffectRuntime>(actor, NAME_None, RF_Transient));
             runtime->Initialize(actor);
             instance->Gpu.Add(MoveTemp(runtime));
             auto gpu = instance->Gpu.Last().Get();
             if (!gpu->SetEffect(asset.Get()) ||
-                !gpu->ConfigureEmitter(Owner.GpuSpawnPerSecond, static_cast<int32>(seed)) || !gpu->Play())
+                !gpu->ConfigureEmitter(Owner.GpuSpawnPerSecond, static_cast<int32>(seed)))
+                return Fail(TEXT("GPU instance creation failed: ") + gpu->LastError);
+            auto drawTransform = FMatrix44f::Identity;
+            auto connected = false;
+            if (!ReadGpuDrawTransform(*instance->Definition, instance->Definition->GpuNodeIds[gpuIndex],
+                    container, id, drawTransform, connected) ||
+                !gpu->SetDrawTransform(drawTransform, connected))
+                return Fail(gpu->LastError.IsEmpty()
+                    ? TEXT("GPU draw Matrix binding is invalid.") : gpu->LastError);
+            if (!gpu->Play())
                 return Fail(TEXT("GPU instance creation failed: ") + gpu->LastError);
         }
         GpuBytes += instance->Definition->GpuBytes;
@@ -697,16 +774,21 @@ struct FLibraSpawnableRenderState::FImpl
             }
             auto delta = time - instance->Previous;
             if (!FMath::IsFinite(delta) || delta < 0 || delta > MAX_flt) return Fail(TEXT("Invalid GPU local time."));
-            if (delta > 0)
+            for (auto gpuIndex = 0; gpuIndex < instance->Gpu.Num(); ++gpuIndex)
             {
-                for (auto& gpu : instance->Gpu)
+                auto& gpu = instance->Gpu[gpuIndex];
+                if (!gpu.IsValid())
                 {
-                    if (!gpu.IsValid())
-                    {
-                        return Fail(TEXT("An owned GPU runtime was destroyed externally."));
-                    }
-                    gpu->Tick(static_cast<float>(delta));
+                    return Fail(TEXT("An owned GPU runtime was destroyed externally."));
                 }
+                auto drawTransform = FMatrix44f::Identity;
+                auto connected = false;
+                if (!ReadGpuDrawTransform(*instance->Definition, instance->Definition->GpuNodeIds[gpuIndex],
+                        instance->Container, instance->Id, drawTransform, connected) ||
+                    !gpu->SetDrawTransform(drawTransform, connected))
+                    return Fail(gpu->LastError.IsEmpty()
+                        ? TEXT("GPU draw Matrix binding is invalid.") : gpu->LastError);
+                if (delta > 0) gpu->Tick(static_cast<float>(delta));
             }
             instance->Previous = time;
         }

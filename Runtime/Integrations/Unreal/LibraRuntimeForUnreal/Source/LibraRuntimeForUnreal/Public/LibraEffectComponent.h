@@ -11,6 +11,7 @@
 class ULibraEffectAsset;
 class ULibraGpuEffectAsset;
 class ULibraGpuEffectRuntime;
+class UCameraComponent;
 struct FLibraEffectState;
 
 UCLASS(ClassGroup = (Effects), meta = (BlueprintSpawnableComponent, DisplayName = "Libra Effect"))
@@ -73,6 +74,9 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime", meta = (ClampMin = "0.0"))
     double PlayRate = 1;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Libera FX|Playback")
+    TObjectPtr<UCameraComponent> EffectCameraOverride;
 
     UPROPERTY(EditAnywhere, Category = "Libra Runtime", meta = (ClampMin = "1024"))
     int64 MaximumWorkingBytes = 16 * 1024 * 1024;

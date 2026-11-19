@@ -36,6 +36,8 @@ namespace LiberaFx.Unity
         ComputeBuffer particles, args;
         Mesh quad;
         MaterialPropertyBlock properties;
+        Matrix4x4 drawTransform = Matrix4x4.identity;
+        bool drawTransformConnected;
         LibraGpuMetadata program;
         int[] flowKernels;
         Texture[] flowTextures;
@@ -60,7 +62,11 @@ namespace LiberaFx.Unity
             SeedId = Shader.PropertyToID("LibraGpuEmitterSeed"), FrameId = Shader.PropertyToID("LibraGpuFrameIndex"),
             PositionId = Shader.PropertyToID("LibraGpuEmitterPosition"), PaddingId = Shader.PropertyToID("LibraGpuPadding"),
             DrawParticlesId = Shader.PropertyToID("_LibraParticles"), TextureId = Shader.PropertyToID("_MainTex"),
-            SizeScaleId = Shader.PropertyToID("_LibraGpuSizeScale");
+            SizeScaleId = Shader.PropertyToID("_LibraGpuSizeScale"),
+            DrawRow0Id = Shader.PropertyToID("_LibraGpuDrawMatrixRow0"),
+            DrawRow1Id = Shader.PropertyToID("_LibraGpuDrawMatrixRow1"),
+            DrawRow2Id = Shader.PropertyToID("_LibraGpuDrawMatrixRow2"),
+            DrawRow3Id = Shader.PropertyToID("_LibraGpuDrawMatrixRow3");
 
         public void Configure(ComputeShader shader, TextAsset sourceMetadata, Material material, LibraGpuTextureBinding[] bindings)
         {
@@ -152,6 +158,8 @@ namespace LiberaFx.Unity
             flowMapResourceIndices = nextFlowMapResourceIndices; particleId = Shader.PropertyToID(next.particleBuffer);
             properties = new MaterialPropertyBlock();
             properties.SetBuffer(DrawParticlesId, particles);
+            drawTransform = Matrix4x4.identity;
+            drawTransformConnected = false;
             billboardSizeScale = 1;
             cursor = frame = 0; elapsed = spawnFraction = 0;
             RuntimeExecuted = submittedWork = false; DispatchCount = DrawCount = 0;
@@ -226,6 +234,64 @@ namespace LiberaFx.Unity
             billboardSizeScale = sizeScale;
         }
 
+        // The draw transform is deliberately not uploaded to the compute shader:
+        // simulation and spawn continue to operate on the authored particle positions.
+        public void SetDrawTransform(Matrix4x4 matrix, bool connected)
+        {
+            if (connected)
+            {
+                if (!IsFiniteAffine(matrix))
+                    throw new ArgumentException("GPU draw Matrix must be finite and affine so its bounds remain conservative.", nameof(matrix));
+                if (!HasDrawTransformProperties(billboardMaterial))
+                    throw new InvalidOperationException("GPU billboard Material must expose all four _LibraGpuDrawMatrixRow0..Row3 properties for a connected Matrix input.");
+            }
+            drawTransform = connected ? matrix : Matrix4x4.identity;
+            drawTransformConnected = connected;
+        }
+
+        static bool IsFiniteAffine(Matrix4x4 matrix)
+        {
+            for (var row = 0; row < 4; ++row)
+                for (var column = 0; column < 4; ++column)
+                    if (float.IsNaN(matrix[row, column]) || float.IsInfinity(matrix[row, column]))
+                        return false;
+            return Mathf.Abs(matrix.m30) <= 1e-5f && Mathf.Abs(matrix.m31) <= 1e-5f &&
+                Mathf.Abs(matrix.m32) <= 1e-5f && Mathf.Abs(matrix.m33 - 1) <= 1e-5f;
+        }
+
+        internal static bool HasDrawTransformProperties(Material material) =>
+            material && material.HasProperty(DrawRow0Id) && material.HasProperty(DrawRow1Id) &&
+            material.HasProperty(DrawRow2Id) && material.HasProperty(DrawRow3Id);
+
+        static Bounds TransformBounds(Bounds bounds, Matrix4x4 matrix)
+        {
+            var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+            var maximum = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+            var center = bounds.center;
+            var extents = bounds.extents;
+            for (var corner = 0; corner < 8; ++corner)
+            {
+                var point = center + new Vector3(
+                    (corner & 1) == 0 ? -extents.x : extents.x,
+                    (corner & 2) == 0 ? -extents.y : extents.y,
+                    (corner & 4) == 0 ? -extents.z : extents.z);
+                point = matrix.MultiplyPoint3x4(point);
+                minimum = Vector3.Min(minimum, point);
+                maximum = Vector3.Max(maximum, point);
+            }
+            var result = new Bounds();
+            result.SetMinMax(minimum, maximum);
+            return result;
+        }
+
+        static Matrix4x4 RelativeToEmitter(Matrix4x4 matrix, Vector3 emitterPosition)
+        {
+            for (var row = 0; row < 3; ++row)
+                matrix[row, 3] -= matrix[row, 0] * emitterPosition.x +
+                    matrix[row, 1] * emitterPosition.y + matrix[row, 2] * emitterPosition.z;
+            return matrix;
+        }
+
         static Mesh CreateQuad()
         {
             var m = new Mesh { name = "Libra GPU billboard quad" };
@@ -290,7 +356,20 @@ namespace LiberaFx.Unity
                 {
                     properties.SetTexture(TextureId, flowTextures[i]);
                     properties.SetFloat(SizeScaleId, billboardSizeScale);
-                    Graphics.DrawMeshInstancedIndirect(quad, 0, billboardMaterial, new Bounds(emitterPosition, boundsSize), args, 0, properties,
+                    var appliedDrawTransform = drawTransformConnected
+                        ? RelativeToEmitter(drawTransform, emitterPosition)
+                        : Matrix4x4.identity;
+                    if (HasDrawTransformProperties(billboardMaterial))
+                    {
+                        properties.SetVector(DrawRow0Id, appliedDrawTransform.GetRow(0));
+                        properties.SetVector(DrawRow1Id, appliedDrawTransform.GetRow(1));
+                        properties.SetVector(DrawRow2Id, appliedDrawTransform.GetRow(2));
+                        properties.SetVector(DrawRow3Id, appliedDrawTransform.GetRow(3));
+                    }
+                    var bounds = drawTransformConnected
+                        ? TransformBounds(new Bounds(Vector3.zero, boundsSize), drawTransform)
+                        : new Bounds(emitterPosition, boundsSize);
+                    Graphics.DrawMeshInstancedIndirect(quad, 0, billboardMaterial, bounds, args, 0, properties,
                         ShadowCastingMode.Off, false, gameObject.layer, camera);
                     DrawCount++;
                 }
@@ -361,6 +440,8 @@ namespace LiberaFx.Unity
             LibraGpuRetirement.Retire(particles, args, quad, submittedWork);
             particles = null; args = null; quad = null;
             program = null; flowKernels = null; flowTextures = null; properties = null;
+            drawTransform = Matrix4x4.identity;
+            drawTransformConnected = false;
             spawnableStepMode = false;
             DrawCount = 0; submittedWork = false;
         }

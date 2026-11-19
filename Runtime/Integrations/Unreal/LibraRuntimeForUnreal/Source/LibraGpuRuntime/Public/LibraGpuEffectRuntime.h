@@ -48,6 +48,10 @@ public:
 
     bool ConfigureEmitter(float emitterSpawnRate, int32 seed);
 
+    // Updates billboard placement only. Compute dispatches and particle storage
+    // continue to use their original simulation-space positions.
+    bool SetDrawTransform(const FMatrix44f& drawTransform, bool connected);
+
     void LoadSoftEffect();
 
     bool Play();
@@ -78,4 +82,7 @@ private:
     uint32 FrameIndex = 0;
     double Elapsed = 0;
     double SpawnRemainder = 0;
+    FMatrix44f DrawTransform = FMatrix44f::Identity;
+    FMatrix44f AuthoredDrawTransform = FMatrix44f::Identity;
+    bool bHasDrawTransform = false;
 };

@@ -7,6 +7,7 @@
 
 namespace liberafx { class SpawnableHost; }
 class ULibraSpawnableAsset;
+class UCameraComponent;
 class FLibraSpawnableRenderState;
 class FLibraSpawnableDebugState;
 class FLibraSkeletalPoseRuntime;
@@ -78,6 +79,9 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime", meta = (ClampMin = "0.0"))
     double PlayRate = 1;
+
+    UPROPERTY()
+    TObjectPtr<UCameraComponent> EffectCameraOverride;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime", meta = (ClampMin = "1"))
     int32 MaxActivePerTemplate = 32;

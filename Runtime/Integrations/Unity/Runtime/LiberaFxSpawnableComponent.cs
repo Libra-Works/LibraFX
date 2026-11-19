@@ -131,7 +131,7 @@ namespace LiberaFx.Unity
             if (current == null || rootFinished) return;
             if (sourceInitialAdvancePending)
             {
-                if (!PublishSkeletalPoseSources(current)) return;
+                if (!PublishFrameInputs(current)) return;
                 var quality = current.SetHostQuality(
                     UnityHostQuality.Read(qualityTierMapping, (ulong)Time.frameCount));
                 if (quality != NativeResult.Ok)
@@ -170,7 +170,7 @@ namespace LiberaFx.Unity
                 return;
             }
 
-            if (!PublishSkeletalPoseSources(current)) return;
+            if (!PublishFrameInputs(current)) return;
             elapsed += frameDelta * rate;
             var qualityResult = current.SetHostQuality(UnityHostQuality.Read(qualityTierMapping, (ulong)Time.frameCount));
             if (qualityResult != NativeResult.Ok)
@@ -235,7 +235,7 @@ namespace LiberaFx.Unity
                 FailPlayback(NativeResult.InvalidArgument, "Invalid debugger playback time.", current);
                 return;
             }
-            if (!PublishSkeletalPoseSources(current)) return;
+            if (!PublishFrameInputs(current)) return;
             var status = current.SetHostQuality(UnityHostQuality.Read(qualityTierMapping, (ulong)Time.frameCount));
             if (status == NativeResult.Ok) status = current.SubmitDebugger(0, debugTime, debugDelta);
             if (status == NativeResult.Ok) { debugPending = debugAdvance = true; debugRetries = 0; }
@@ -264,8 +264,15 @@ namespace LiberaFx.Unity
             }
         }
 
-        private bool PublishSkeletalPoseSources(NativeSpawnableHost current)
+        private bool PublishFrameInputs(NativeSpawnableHost current)
         {
+            var cameraResult = PublishCurrentCamera(current);
+            if (cameraResult != NativeResult.Ok)
+            {
+                FailPlayback(cameraResult, "Publishing Current Camera failed: " + cameraResult + ".", current);
+                enabled = false;
+                return false;
+            }
             foreach (var source in skeletalPoseSources)
             {
                 var result = source.Publish(this, current);
@@ -314,6 +321,7 @@ namespace LiberaFx.Unity
                     true, null, 0, 0, plan.bindings.RootGpuSeed, suppressPreviewDebugDraw);
 
                 var current = host;
+                BindCurrentCamera(current);
                 if (!LiberaFxSkeletalPoseSourcePorts.TryRead(current,
                     out var sourceInputs, out var sourceError))
                     throw new InvalidOperationException("LiberaFx: " + sourceError);
@@ -322,6 +330,7 @@ namespace LiberaFx.Unity
                 if (sourceInitialAdvancePending)
                     return NativeResult.Ok;
 
+                NativeInstance.Check(PublishCurrentCamera(current));
                 NativeInstance.Check(current.SetHostQuality(
                     UnityHostQuality.Read(qualityTierMapping, (ulong)Time.frameCount)));
                 var result = NativeResult.QueueRejected;

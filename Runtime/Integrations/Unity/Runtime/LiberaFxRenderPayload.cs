@@ -14,6 +14,14 @@ namespace LiberaFx.Unity
         public string type;
         public long programSequence;
         public LiberaFxRenderNodePayload[] nodes;
+        public LiberaFxGpuDrawTransformPayload[] gpuDrawTransforms;
+    }
+
+    [Serializable] internal sealed class LiberaFxGpuDrawTransformPayload
+    {
+        public string nodeId;
+        public string[] rowNodeIds;
+        [NonSerialized] public byte[][] rowNodeBytes;
     }
 
     [Serializable] internal sealed class LiberaFxRenderNodePayload
@@ -192,6 +200,7 @@ namespace LiberaFx.Unity
         public LiberaFxUnityGpuProgramBinding binding;
         public LibraGpuMetadata packageMetadata;
         public float sizeScale;
+        public byte[][] drawMatrixRowNodeBytes;
     }
 
     internal sealed class LiberaFxPreparedScope
@@ -266,14 +275,18 @@ namespace LiberaFx.Unity
         public LiberaFxPreparedScope Prepare(string templateId, byte[] renderBytes,
             byte[] gpuContainerBytes, byte[] gpuProgramBytes)
         {
-            var renderNodes = ParseRender(renderBytes);
+            var renderConfiguration = ParseRender(renderBytes);
+            var renderNodes = renderConfiguration.nodes;
             var authoredGpuIds = ParseGpuContainerIds(gpuContainerBytes);
-            var gpuPrograms = ParseGpuPrograms(gpuProgramBytes, authoredGpuIds);
+            var gpuPrograms = ParseGpuPrograms(gpuProgramBytes, authoredGpuIds,
+                renderConfiguration.gpuDrawTransforms);
             return new LiberaFxPreparedScope
             {
                 templateId = templateId,
                 renderNodes = renderNodes.Select(ResolveRenderNode).ToArray(),
-                gpuPrograms = gpuPrograms.Select(ResolveGpuProgram).ToArray()
+                gpuPrograms = gpuPrograms.Select(program =>
+                    ResolveGpuProgram(program, renderConfiguration.gpuDrawTransforms
+                        .ToDictionary(transform => transform.nodeId, StringComparer.Ordinal))).ToArray()
             };
         }
 
@@ -465,7 +478,8 @@ namespace LiberaFx.Unity
                     authoredName + "'.");
         }
 
-        private LiberaFxPreparedGpuProgram ResolveGpuProgram(LiberaFxGpuManifestProgram program)
+        private LiberaFxPreparedGpuProgram ResolveGpuProgram(LiberaFxGpuManifestProgram program,
+            Dictionary<string, LiberaFxGpuDrawTransformPayload> drawTransforms)
         {
             var nodeId = CanonicalGuid(program.nodeId);
             if (!gpuPrograms.TryGetValue(nodeId, out var binding))
@@ -494,6 +508,10 @@ namespace LiberaFx.Unity
                 float.IsNaN(configured.sizeScale) || float.IsInfinity(configured.sizeScale) ||
                 configured.sizeScale <= 0 || configured.sizeScale > 10000)
                 throw new InvalidOperationException("Unity GPU spawn rate or size scale is invalid for " + nodeId + ".");
+            drawTransforms.TryGetValue(nodeId, out var drawTransform);
+            if (drawTransform != null &&
+                !LibraGpuParticleRuntime.HasDrawTransformProperties(configured.billboardMaterial))
+                throw new InvalidOperationException("Unity GPU billboard Material must expose all four _LibraGpuDrawMatrixRow0..Row3 properties for the connected Matrix input on " + nodeId + ".");
             ValidateGpuTextures(packageMetadata, configured.textures, nodeId);
             var renderBindings = program.unreal.rendererBindings ?? Array.Empty<LiberaFxGpuRendererBinding>();
             var renderFlowCount = 0;
@@ -522,7 +540,8 @@ namespace LiberaFx.Unity
                 nodeId = nodeId,
                 binding = configured,
                 packageMetadata = packageMetadata,
-                sizeScale = sizeScale
+                sizeScale = sizeScale,
+                drawMatrixRowNodeBytes = drawTransform?.rowNodeBytes
             };
         }
 
@@ -542,9 +561,10 @@ namespace LiberaFx.Unity
                     throw new InvalidOperationException("Unity GPU resource '" + resource.id + "' is unbound for " + nodeId + ".");
         }
 
-        private static LiberaFxRenderNodePayload[] ParseRender(byte[] bytes)
+        private static LiberaFxRenderPayload ParseRender(byte[] bytes)
         {
-            if (bytes == null || bytes.Length == 0) return Array.Empty<LiberaFxRenderNodePayload>();
+            if (bytes == null || bytes.Length == 0)
+                return new LiberaFxRenderPayload { nodes = Array.Empty<LiberaFxRenderNodePayload>() };
             if (bytes.Length > 4 * 1024 * 1024) throw new InvalidOperationException("Render configuration exceeds 4 MiB.");
             LiberaFxRenderPayload payload;
             try
@@ -581,7 +601,27 @@ namespace LiberaFx.Unity
                 if ((node.materials?.Length ?? 0) > 256 || (node.textures?.Length ?? 0) > 256)
                     throw new InvalidOperationException("Render node material metadata exceeds the supported bound.");
             }
-            return payload.nodes;
+            var drawTransforms = new Dictionary<string, LiberaFxGpuDrawTransformPayload>(StringComparer.Ordinal);
+            foreach (var transform in payload.gpuDrawTransforms ?? Array.Empty<LiberaFxGpuDrawTransformPayload>())
+            {
+                if (transform == null || !TryCanonicalGuid(transform.nodeId, out var nodeId) ||
+                    !drawTransforms.TryAdd(nodeId, transform) || transform.rowNodeIds == null ||
+                    transform.rowNodeIds.Length != 4)
+                    throw new InvalidOperationException("Render configuration contains an invalid or duplicate GPU draw Matrix binding.");
+                transform.nodeId = nodeId;
+                transform.rowNodeBytes = new byte[4][];
+                for (var row = 0; row < 4; ++row)
+                {
+                    if (!TryCanonicalGuid(transform.rowNodeIds[row], out var rowNodeId))
+                        throw new InvalidOperationException("GPU draw Matrix row " + row + " has an invalid runtime node GUID.");
+                    transform.rowNodeIds[row] = rowNodeId;
+                    transform.rowNodeBytes[row] = new NativeSignal(rowNodeId).Id;
+                }
+            }
+            if (drawTransforms.Count > 16)
+                throw new InvalidOperationException("Render configuration exceeds the 16 GPU draw Matrix binding limit.");
+            payload.gpuDrawTransforms = drawTransforms.Values.ToArray();
+            return payload;
         }
 
         private static void ValidateInputs(LiberaFxRenderNodePayload node)
@@ -754,8 +794,14 @@ namespace LiberaFx.Unity
 
         internal static bool HasGpuContainers(byte[] bytes) => ParseGpuContainerIds(bytes).Count != 0;
 
-        private LiberaFxGpuManifestProgram[] ParseGpuPrograms(byte[] bytes, HashSet<string> authoredIds)
+        private LiberaFxGpuManifestProgram[] ParseGpuPrograms(byte[] bytes, HashSet<string> authoredIds,
+            LiberaFxGpuDrawTransformPayload[] drawTransforms)
         {
+            var transformIds = new HashSet<string>(
+                (drawTransforms ?? Array.Empty<LiberaFxGpuDrawTransformPayload>()).Select(transform => transform.nodeId),
+                StringComparer.Ordinal);
+            if (transformIds.Any(id => !authoredIds.Contains(id)))
+                throw new InvalidOperationException("GPU draw Matrix binding does not match an authored GPU container.");
             if (bytes == null || bytes.Length == 0)
             {
                 if (authoredIds.Count != 0)

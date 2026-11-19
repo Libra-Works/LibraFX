@@ -8,7 +8,11 @@
 #include "LibraSpawnableRenderState.h"
 #include "LibraSkeletalPoseRuntime.h"
 #include "LibraQualityContext.h"
+#include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Engine/World.h"
 #include "EngineGlobals.h"
+#include "GameFramework/PlayerController.h"
 #include "liberafx/LbSpawnableHost.h"
 #include "liberafx/LbSpawnablePackage.h"
 #include "Misc/ScopeExit.h"
@@ -24,6 +28,60 @@ auto PublishLibraQuality(liberafx::SpawnableHost& host) -> liberafx::Result
     auto result = ReadLibraQualitySnapshot(GFrameCounter, snapshot);
     if (result == liberafx::Result::Busy) return result;
     return host.setHostQuality(snapshot);
+}
+
+auto PublishLibraFrameInputs(liberafx::SpawnableHost& host, const ULibraSpawnableComponent& effect)
+    -> liberafx::Result
+{
+    constexpr auto portName = "__LFX_CAMERA_V1";
+    for (const auto& port : host.package().gameIoPorts)
+    {
+        if (port.name != portName || port.kind != static_cast<uint8>(liberafx::NamedIoKind::InputProperty))
+        {
+            continue;
+        }
+        auto position = FVector::ZeroVector;
+        auto valid = false;
+        if (auto* camera = effect.EffectCameraOverride.Get(); IsValid(camera))
+        {
+            position = camera->GetComponentLocation();
+            valid = true;
+        }
+        else if (auto* world = effect.GetWorld(); world && world->IsGameWorld())
+        {
+            auto* owner = effect.GetOwner();
+            auto* player = Cast<APlayerController>(owner);
+            if (!player && owner)
+            {
+                player = Cast<APlayerController>(owner->GetInstigatorController());
+            }
+            if (!player || !player->IsLocalController())
+            {
+                player = nullptr;
+                for (auto iter = world->GetPlayerControllerIterator(); iter; ++iter)
+                {
+                    if (auto* candidate = iter->Get(); candidate && candidate->IsLocalController())
+                    {
+                        player = candidate;
+                        break;
+                    }
+                }
+            }
+            if (player && player->PlayerCameraManager && player->GetViewTarget())
+            {
+                position = player->PlayerCameraManager->GetCameraLocation();
+                valid = true;
+            }
+        }
+        const auto values = std::array<double, 4>{position.X, position.Y, position.Z, valid ? 1.0 : 0.0};
+        auto result = host.setGameProperty(portName, values.data(), values.size());
+        if (result != liberafx::Result::Ok)
+        {
+            return result;
+        }
+        break;
+    }
+    return PublishLibraQuality(host);
 }
 
 auto LibraGuid(const uint8 bytes[16]) -> FGuid
@@ -275,7 +333,7 @@ auto ULibraSpawnableComponent::Play(bool bRestart) -> ELibraRuntimeResult
         LastResult = ELibraRuntimeResult::Ok;
         return LastResult;
     }
-    result = PublishLibraQuality(*current);
+    result = PublishLibraFrameInputs(*current, *this);
     if (result == liberafx::Result::Ok) result = current->advance(0, 0);
     DrainEvents();
     if (HostGeneration != generation) return LastResult;
@@ -704,7 +762,10 @@ void ULibraSpawnableComponent::TickDebugger(float deltaTime)
     }
     auto result = SkeletalPoseState
         ? SkeletalPoseState->Publish(*NativeHost, GetOwner()) : liberafx::Result::Ok;
-    if (result == liberafx::Result::Ok) result = PublishLibraQuality(*NativeHost);
+    if (result == liberafx::Result::Ok)
+    {
+        result = PublishLibraFrameInputs(*NativeHost, *this);
+    }
     state->attempts = 0;
     if (result == liberafx::Result::Ok) result = state->Submit(request);
     if (result != liberafx::Result::Ok)
@@ -743,7 +804,10 @@ void ULibraSpawnableComponent::TickComponent(float deltaTime, ELevelTick tickTyp
         auto result = SkeletalPoseState
             ? SkeletalPoseState->Publish(*current, GetOwner())
             : liberafx::Result::NotReady;
-        if (result == liberafx::Result::Ok) result = PublishLibraQuality(*current);
+        if (result == liberafx::Result::Ok)
+        {
+            result = PublishLibraFrameInputs(*current, *this);
+        }
         if (result == liberafx::Result::Ok) result = current->advance(0, 0);
         DrainEvents();
         if (HostGeneration != generation || bForceTerminated) return;
@@ -767,7 +831,10 @@ void ULibraSpawnableComponent::TickComponent(float deltaTime, ELevelTick tickTyp
     TimeSeconds = nextTime;
     auto result = SkeletalPoseState
         ? SkeletalPoseState->Publish(*current, GetOwner()) : liberafx::Result::Ok;
-    if (result == liberafx::Result::Ok) result = PublishLibraQuality(*current);
+    if (result == liberafx::Result::Ok)
+    {
+        result = PublishLibraFrameInputs(*current, *this);
+    }
     if (result == liberafx::Result::Ok) result = current->advance(TimeSeconds, deltaTime);
     DrainEvents();
     if (HostGeneration != generation) return;

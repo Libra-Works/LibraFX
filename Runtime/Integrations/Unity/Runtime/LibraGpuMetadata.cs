@@ -92,7 +92,16 @@ namespace LiberaFx.Unity
                         throw new ArgumentException("FlowMap2D sampling metadata is invalid.");
                 }
                 else if (r.flowMap != null)
-                    throw new ArgumentException("Texture2D resources cannot carry FlowMap2D settings.");
+                {
+                    // JsonUtility can materialize an omitted nested object.
+                    if (!string.IsNullOrEmpty(r.flowMap.axisU) || !string.IsNullOrEmpty(r.flowMap.axisV) ||
+                        r.flowMap.worldMinimumU != 0 || r.flowMap.worldMaximumU != 0 ||
+                        r.flowMap.worldMinimumV != 0 || r.flowMap.worldMaximumV != 0)
+                    {
+                        throw new ArgumentException("Texture2D resources cannot carry FlowMap2D settings.");
+                    }
+                    r.flowMap = null;
+                }
                 resources.Add(r.id, r);
             }
             foreach (var kernel in m.kernels)
@@ -105,16 +114,23 @@ namespace LiberaFx.Unity
                         throw new ArgumentException("GPU kernel references a missing or invalid FlowMap2D resource.");
             }
             var steps = new HashSet<string>();
-            bool rendered = false;
+            var spawned = false;
+            var updated = false;
+            var rendered = false;
             foreach (var f in m.flow)
             {
                 if (f == null || string.IsNullOrEmpty(f.id) || !steps.Add(f.id))
                     throw new ArgumentException("Invalid or duplicate GPU flow step.");
                 if (f.kind == "Spawn" || f.kind == "Update")
                 {
-                    if (rendered) throw new ArgumentException("Unity billboard rendering must follow all compute flow steps.");
+                    if (rendered || (f.kind == "Spawn" ? spawned || updated : updated))
+                    {
+                        throw new ArgumentException("GPU dispatch flow allows one Spawn before one Update, both before rendering.");
+                    }
                     if (string.IsNullOrEmpty(f.kernelId) || !kernels.TryGetValue(f.kernelId, out var k) || k.stage != f.kind || !string.IsNullOrEmpty(f.resourceId))
                         throw new ArgumentException("GPU flow references a missing or incompatible kernel: " + f.id);
+                    spawned |= f.kind == "Spawn";
+                    updated |= f.kind == "Update";
                 }
                 else if (f.kind == "RenderBillboard")
                 {

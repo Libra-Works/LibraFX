@@ -13,6 +13,8 @@ namespace LiberaFx.Unity
         private readonly List<LiberaFxRenderNodeInstance> renderNodes = new List<LiberaFxRenderNodeInstance>();
         private readonly List<LiberaFxDebugDrawInstance> debugDraws = new List<LiberaFxDebugDrawInstance>();
         private readonly List<LibraGpuParticleRuntime> gpuPrograms = new List<LibraGpuParticleRuntime>();
+        private readonly Dictionary<LibraGpuParticleRuntime, LiberaFxPreparedGpuProgram> gpuDrawTransforms =
+            new Dictionary<LibraGpuParticleRuntime, LiberaFxPreparedGpuProgram>();
         private GameObject scopeObject;
         private double previousLocalTime;
         private bool disposed;
@@ -57,6 +59,7 @@ namespace LiberaFx.Unity
                         gpu.binding.billboardMaterial, gpu.binding.textures,
                         SeedForProgram(seed, gpu.nodeId), gpu.binding.spawnRate, gpu.sizeScale);
                     scope.gpuPrograms.Add(runtime);
+                    scope.gpuDrawTransforms.Add(runtime, gpu);
                 }
                 return scope;
             }
@@ -112,7 +115,37 @@ namespace LiberaFx.Unity
                 node.Update(host, rootScope, containerId, instanceId, localTime);
             foreach (var draw in debugDraws)
                 draw.Update(host, rootScope, containerId, instanceId);
+            foreach (var gpu in gpuPrograms)
+                gpu.SetDrawTransform(ReadDrawTransform(host, rootScope, containerId, instanceId,
+                    gpuDrawTransforms[gpu]), gpuDrawTransforms[gpu].drawMatrixRowNodeBytes != null);
             previousLocalTime = localTime;
+        }
+
+        private static Matrix4x4 ReadDrawTransform(NativeInstance.NativeSpawnableHostBase host,
+            bool root, byte[] container, ulong instance, LiberaFxPreparedGpuProgram program)
+        {
+            if (program.drawMatrixRowNodeBytes == null) return Matrix4x4.identity;
+            if (host == null || program.drawMatrixRowNodeBytes.Length != 4)
+                throw new InvalidOperationException("GPU draw Matrix binding is incomplete.");
+            var matrix = Matrix4x4.identity;
+            for (var row = 0; row < 4; ++row)
+            {
+                NativeValue value;
+                NativeResult result;
+                if (root) result = host.ReadRootValue(program.drawMatrixRowNodeBytes[row], out value);
+                else result = host.ReadChildValue(container, instance,
+                    program.drawMatrixRowNodeBytes[row], out value);
+                if (result != NativeResult.Ok || value.ComponentCount != 4)
+                    throw new InvalidOperationException("GPU draw Matrix row " + row + " could not be read as FloatX4: " + result);
+                if (!LiberaFxUnityBindingLookup.IsFiniteFloat(value.X) ||
+                    !LiberaFxUnityBindingLookup.IsFiniteFloat(value.Y) ||
+                    !LiberaFxUnityBindingLookup.IsFiniteFloat(value.Z) ||
+                    !LiberaFxUnityBindingLookup.IsFiniteFloat(value.W))
+                    throw new InvalidOperationException("GPU draw Matrix contains a non-finite or out-of-range FloatX4 lane.");
+                matrix.SetRow(row, new Vector4((float)value.X, (float)value.Y,
+                    (float)value.Z, (float)value.W));
+            }
+            return matrix;
         }
 
         private double LocalTime(double effectTime)
@@ -145,6 +178,7 @@ namespace LiberaFx.Unity
             debugDraws.Clear();
             renderNodes.Clear();
             gpuPrograms.Clear();
+            gpuDrawTransforms.Clear();
             if (scopeObject) DestroyOwned(scopeObject);
             scopeObject = null;
         }

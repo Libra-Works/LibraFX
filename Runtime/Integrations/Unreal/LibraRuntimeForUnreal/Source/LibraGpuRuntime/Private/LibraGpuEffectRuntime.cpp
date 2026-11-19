@@ -218,6 +218,9 @@ class FLibraGpuBillboardVS : public FGlobalShader
         SHADER_PARAMETER(FVector3f, CameraRight)
         SHADER_PARAMETER(FVector3f, CameraUp)
         SHADER_PARAMETER(float, SizeScale)
+        SHADER_PARAMETER(FVector4f, DrawRow0)
+        SHADER_PARAMETER(FVector4f, DrawRow1)
+        SHADER_PARAMETER(FVector4f, DrawRow2)
     END_SHADER_PARAMETER_STRUCT()
     static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& parameters)
     {
@@ -251,8 +254,13 @@ END_SHADER_PARAMETER_STRUCT()
 static void AddLibraGpuBillboardRasterPass(FRDGBuilder& graph,
     FLibraGpuBillboardPassParameters* parameters, FIntRect rect, int32 count,
     ERHIFeatureLevel::Type featureLevel, const TCHAR* profileName,
-    ELibraGpuBillboardBlend blend = ELibraGpuBillboardBlend::Alpha)
+    ELibraGpuBillboardBlend blend = ELibraGpuBillboardBlend::Alpha,
+    const FMatrix44f* drawTransform = nullptr)
 {
+    auto matrix = drawTransform ? *drawTransform : FMatrix44f::Identity;
+    parameters->VS.DrawRow0 = FVector4f(matrix.M[0][0], matrix.M[0][1], matrix.M[0][2], matrix.M[0][3]);
+    parameters->VS.DrawRow1 = FVector4f(matrix.M[1][0], matrix.M[1][1], matrix.M[1][2], matrix.M[1][3]);
+    parameters->VS.DrawRow2 = FVector4f(matrix.M[2][0], matrix.M[2][1], matrix.M[2][2], matrix.M[2][3]);
     auto shaderMap = GetGlobalShaderMap(featureLevel);
     TShaderMapRef<FLibraGpuBillboardVS> vertexShader(shaderMap);
     TShaderMapRef<FLibraGpuBillboardPS> pixelShader(shaderMap);
@@ -299,6 +307,45 @@ struct FLibraGpuFrame
     FVector3f Position = FVector3f::ZeroVector;
 };
 
+static bool IsFiniteAffineDrawTransform(const FMatrix44f& matrix)
+{
+    for (auto row = 0; row < 4; ++row)
+        for (auto column = 0; column < 4; ++column)
+            if (!FMath::IsFinite(matrix.M[row][column])) return false;
+    return FMath::Abs(matrix.M[3][0]) <= 1e-5f && FMath::Abs(matrix.M[3][1]) <= 1e-5f &&
+        FMath::Abs(matrix.M[3][2]) <= 1e-5f && FMath::Abs(matrix.M[3][3] - 1) <= 1e-5f;
+}
+
+static FMatrix44f RelativeToEmitter(const FMatrix44f& authored, const FVector3f& emitterPosition)
+{
+    auto result = authored;
+    for (auto row = 0; row < 3; ++row)
+        result.M[row][3] -= result.M[row][0] * emitterPosition.X +
+            result.M[row][1] * emitterPosition.Y + result.M[row][2] * emitterPosition.Z;
+    return result;
+}
+
+static bool TransformGpuBounds(const FBox& source, const FMatrix44f& matrix, FBox& result)
+{
+    if (!source.IsValid || !IsFiniteAffineDrawTransform(matrix)) return false;
+    result = FBox(ForceInit);
+    for (auto corner = 0; corner < 8; ++corner)
+    {
+        auto point = FVector3f(
+            (corner & 1) == 0 ? source.Min.X : source.Max.X,
+            (corner & 2) == 0 ? source.Min.Y : source.Max.Y,
+            (corner & 4) == 0 ? source.Min.Z : source.Max.Z);
+        auto transformed = FVector3f(
+            matrix.M[0][0] * point.X + matrix.M[0][1] * point.Y + matrix.M[0][2] * point.Z + matrix.M[0][3],
+            matrix.M[1][0] * point.X + matrix.M[1][1] * point.Y + matrix.M[1][2] * point.Z + matrix.M[1][3],
+            matrix.M[2][0] * point.X + matrix.M[2][1] * point.Y + matrix.M[2][2] * point.Z + matrix.M[2][3]);
+        if (!FMath::IsFinite(transformed.X) || !FMath::IsFinite(transformed.Y) ||
+            !FMath::IsFinite(transformed.Z)) return false;
+        result += FVector(transformed);
+    }
+    return result.IsValid != 0;
+}
+
 struct FLibraGpuRenderTexture
 {
     bool bBuiltinWhite = false;
@@ -320,6 +367,7 @@ struct FLibraGpuState
     TArray<FLibraGpuKernelPacket> Kernels;
     TArray<FLibraGpuFlowStep> Flow;
     TArray<FLibraGpuRenderTexture> Textures;
+    FMatrix44f DrawTransform = FMatrix44f::Identity;
     TRefCountPtr<FRDGPooledBuffer> Particles;
     TRefCountPtr<FRDGPooledBuffer> Registers;
     TArray<TRefCountPtr<FRDGPooledBuffer>> Programs;
@@ -449,7 +497,7 @@ public:
             parameters->PS.BillboardSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
             parameters->PS.RenderTargets[0] = FRenderTargetBinding(output.Texture, ERenderTargetLoadAction::ELoad);
             AddLibraGpuBillboardRasterPass(graph, parameters, output.ViewRect, State->Capacity,
-                view.GetFeatureLevel(), *State->ProfileName, step.BillboardBlend);
+                view.GetFeatureLevel(), *State->ProfileName, step.BillboardBlend, &State->DrawTransform);
         }
         return output;
     }
@@ -486,6 +534,53 @@ bool ULibraGpuEffectRuntime::ConfigureEmitter(float emitterSpawnRate, int32 seed
     }
     SpawnPerSecond = emitterSpawnRate;
     EmitterSeed = seed;
+    LastError.Reset();
+    return true;
+}
+
+bool ULibraGpuEffectRuntime::SetDrawTransform(const FMatrix44f& drawTransform, bool connected)
+{
+    check(IsInGameThread());
+    if (connected && !IsFiniteAffineDrawTransform(drawTransform))
+    {
+        LastError = TEXT("GPU draw Matrix must be finite and affine so its bounds remain conservative.");
+        return false;
+    }
+    auto nextAuthoredTransform = connected ? drawTransform : FMatrix44f::Identity;
+    auto nextDrawTransform = nextAuthoredTransform;
+    if (connected)
+    {
+        auto owner = Owner.Get();
+        if (!owner || owner->GetActorLocation().ContainsNaN())
+        {
+            LastError = TEXT("GPU draw Matrix requires a finite emitter anchor.");
+            return false;
+        }
+        auto anchor = FVector3f(owner->GetActorLocation());
+        if (!FMath::IsFinite(anchor.X) || !FMath::IsFinite(anchor.Y) || !FMath::IsFinite(anchor.Z))
+        {
+            LastError = TEXT("GPU draw Matrix emitter anchor exceeds finite float range.");
+            return false;
+        }
+        nextDrawTransform = RelativeToEmitter(nextAuthoredTransform, anchor);
+        if (!IsFiniteAffineDrawTransform(nextDrawTransform))
+        {
+            LastError = TEXT("GPU draw Matrix relative to its emitter anchor exceeds finite float range.");
+            return false;
+        }
+    }
+    AuthoredDrawTransform = nextAuthoredTransform;
+    DrawTransform = nextDrawTransform;
+    bHasDrawTransform = connected;
+    if (State)
+    {
+        auto state = State;
+        auto nextTransform = DrawTransform;
+        ENQUEUE_RENDER_COMMAND(LibraGpuSetDrawTransform)([state, nextTransform](FRHICommandListImmediate&)
+        {
+            state->DrawTransform = nextTransform;
+        });
+    }
     LastError.Reset();
     return true;
 }
@@ -535,6 +630,7 @@ bool ULibraGpuEffectRuntime::ResetEffect()
     state->ProfileName = GetPathName();
     state->Kernels = Effect->GetKernels();
     state->Flow = Effect->GetFlow();
+    state->DrawTransform = DrawTransform;
     for (const auto& texture : Effect->GetTextures())
     {
         FLibraGpuRenderTexture binding;
@@ -571,11 +667,15 @@ bool ULibraGpuEffectRuntime::GetPreviewBounds(FBox& outBounds) const
 {
     if (!Effect || !LocalPreviewBounds.IsValid ||
         LocalPreviewBounds.Min.ContainsNaN() || LocalPreviewBounds.Max.ContainsNaN() ||
-        !Owner.IsValid() || Owner->GetActorLocation().ContainsNaN() ||
+        !Owner.IsValid() || (!bHasDrawTransform && Owner->GetActorLocation().ContainsNaN()) ||
         LocalPreviewBounds.Min.X > LocalPreviewBounds.Max.X ||
         LocalPreviewBounds.Min.Y > LocalPreviewBounds.Max.Y ||
         LocalPreviewBounds.Min.Z > LocalPreviewBounds.Max.Z) return false;
-    outBounds = LocalPreviewBounds.ShiftBy(Owner->GetActorLocation());
+    if (bHasDrawTransform)
+    {
+        if (!TransformGpuBounds(LocalPreviewBounds, AuthoredDrawTransform, outBounds)) return false;
+    }
+    else outBounds = LocalPreviewBounds.ShiftBy(Owner->GetActorLocation());
     return !outBounds.Min.ContainsNaN() && !outBounds.Max.ContainsNaN();
 }
 
@@ -589,6 +689,9 @@ void ULibraGpuEffectRuntime::Stop()
     State.Reset();
     SpawnCursor = FrameIndex = 0;
     Elapsed = SpawnRemainder = 0;
+    DrawTransform = FMatrix44f::Identity;
+    AuthoredDrawTransform = FMatrix44f::Identity;
+    bHasDrawTransform = false;
 }
 
 void ULibraGpuEffectRuntime::Initialize(AActor* owner)
@@ -933,10 +1036,13 @@ bool FLibraGpuBillboardReadbackTest::RunTest(const FString& parameters)
         return false;
     }
     auto state = TestState(0);
-    int32 litPixels[2]{};
-    ENQUEUE_RENDER_COMMAND(LibraGpuFramebufferTest)([state, &litPixels](FRHICommandListImmediate& commandList)
+    int32 litPixels[3]{}, leftPixels = 0, rightPixels = 0;
+    auto translated = FMatrix44f::Identity;
+    translated.M[0][3] = 0.75f;
+    ENQUEUE_RENDER_COMMAND(LibraGpuFramebufferTest)([state, &litPixels, &leftPixels, &rightPixels, translated](FRHICommandListImmediate& commandList)
     {
-        auto render = [&commandList, state](int32& lit)
+        auto render = [&commandList](const TSharedRef<FLibraGpuState, ESPMode::ThreadSafe>& renderState,
+            int32& lit, int32* left, int32* right, const FMatrix44f& drawTransform)
         {
             FRHIGPUTextureReadback readback(TEXT("LibraGpu.FramebufferProof"));
             FRDGBuilder graph(commandList);
@@ -945,7 +1051,7 @@ bool FLibraGpuBillboardReadbackTest::RunTest(const FString& parameters)
                 TexCreate_RenderTargetable | TexCreate_ShaderResource), TEXT("LibraGpu.TestFramebuffer"));
             AddClearRenderTargetPass(graph, target);
             auto draw = graph.AllocParameters<FLibraGpuBillboardPassParameters>();
-            draw->VS.ParticleData = graph.CreateSRV(graph.RegisterExternalBuffer(state->Particles));
+            draw->VS.ParticleData = graph.CreateSRV(graph.RegisterExternalBuffer(renderState->Particles));
             draw->VS.ViewProjection = FMatrix44f::Identity;
             draw->VS.PreViewTranslation = FVector3f::ZeroVector;
             draw->VS.CameraRight = FVector3f(1, 0, 0);
@@ -955,7 +1061,8 @@ bool FLibraGpuBillboardReadbackTest::RunTest(const FString& parameters)
             draw->PS.BillboardSampler = TStaticSamplerState<SF_Bilinear>::GetRHI();
             draw->PS.RenderTargets[0] = FRenderTargetBinding(target, ERenderTargetLoadAction::ELoad);
             AddLibraGpuBillboardRasterPass(graph, draw, FIntRect(0, 0, 32, 32), 1,
-                GMaxRHIFeatureLevel, TEXT("LibraGpu.TestBillboards"));
+                GMaxRHIFeatureLevel, TEXT("LibraGpu.TestBillboards"),
+                ELibraGpuBillboardBlend::Alpha, &drawTransform);
             AddEnqueueCopyPass(graph, &readback, target);
             graph.Execute();
             readback.Wait(commandList, readback.GetLastCopyGPUMask());
@@ -967,7 +1074,12 @@ bool FLibraGpuBillboardReadbackTest::RunTest(const FString& parameters)
                     for (auto x = 0; x < 32; ++x)
                     {
                         auto pixel = pixels + (y * pitch + x) * 4;
-                        if (pixel[0] > 16 || pixel[1] > 16 || pixel[2] > 16) ++lit;
+                        if (pixel[0] > 16 || pixel[1] > 16 || pixel[2] > 16)
+                        {
+                            ++lit;
+                            if (left && x < 16) ++*left;
+                            if (right && x >= 16) ++*right;
+                        }
                     }
             }
             readback.Unlock();
@@ -976,14 +1088,37 @@ bool FLibraGpuBillboardReadbackTest::RunTest(const FString& parameters)
         frame.SpawnCount = 1;
         frame.Delta = 0.5f;
         state->Dispatch(commandList, frame);
-        render(litPixels[0]);
+        render(state, litPixels[0], nullptr, nullptr, FMatrix44f::Identity);
+        auto anchoredState = TestState(0);
+        auto anchoredFrame = frame;
+        anchoredFrame.Position = FVector3f(10, 0, 0);
+        anchoredState->Dispatch(commandList, anchoredFrame);
+        render(anchoredState, litPixels[1], &leftPixels, &rightPixels,
+            RelativeToEmitter(translated, anchoredFrame.Position));
         state->Dispatch(commandList, frame);
-        render(litPixels[1]);
+        render(state, litPixels[2], nullptr, nullptr, FMatrix44f::Identity);
     });
     FlushRenderingCommands();
     TestTrue(TEXT("GPU billboard vertex/pixel pipeline produced framebuffer pixels"), litPixels[0] > 512);
-    TestEqual(TEXT("Dead particles produce no framebuffer pixels"), litPixels[1], 0);
-    AddInfo(FString::Printf(TEXT("GPU framebuffer proof: live=%d dead=%d nonblack pixels"), litPixels[0], litPixels[1]));
+    TestTrue(TEXT("Connected draw Matrix rebases world-space particles and transforms the draw"), litPixels[1] > 512);
+    TestTrue(TEXT("Translated draw Matrix moves billboard pixels to the expected side"), rightPixels > leftPixels);
+    TestEqual(TEXT("Dead particles produce no framebuffer pixels"), litPixels[2], 0);
+    auto sourceBounds = FBox(FVector(-1), FVector(1));
+    auto rotatedScaled = FMatrix44f::Identity;
+    rotatedScaled.M[0][0] = 0;
+    rotatedScaled.M[0][1] = -1;
+    rotatedScaled.M[1][0] = 2;
+    rotatedScaled.M[1][1] = 0;
+    rotatedScaled.M[0][3] = 0.75f;
+    auto transformedBounds = FBox(ForceInit);
+    TestTrue(TEXT("Affine draw Matrix produces conservative transformed bounds"),
+        TransformGpuBounds(sourceBounds, rotatedScaled, transformedBounds));
+    TestTrue(TEXT("Transformed bounds include authored translation and rotation/scale"),
+        FMath::IsNearlyEqual(transformedBounds.Min.X, -0.25, 1e-5) &&
+        FMath::IsNearlyEqual(transformedBounds.Max.X, 1.75, 1e-5) &&
+        FMath::IsNearlyEqual(transformedBounds.Min.Y, -2.0, 1e-5) &&
+        FMath::IsNearlyEqual(transformedBounds.Max.Y, 2.0, 1e-5));
+    AddInfo(FString::Printf(TEXT("GPU framebuffer proof: identity=%d translated=%d dead=%d pixels"), litPixels[0], litPixels[1], litPixels[2]));
     return true;
 }
 

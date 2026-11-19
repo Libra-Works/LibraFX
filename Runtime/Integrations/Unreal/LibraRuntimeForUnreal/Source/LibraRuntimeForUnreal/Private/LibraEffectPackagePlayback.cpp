@@ -57,6 +57,7 @@ auto ULibraEffectComponent::PlayPackage(bool bRestart) -> ELibraRuntimeResult
     playback->EventCapacity = EventCapacity;
     playback->InstructionBudget = PackageInstructionBudget;
     playback->PlayRate = PlayRate;
+    playback->EffectCameraOverride = EffectCameraOverride;
     if (bSuppressPreviewDebugDraw) playback->ClearPreviewDebugDraw();
     auto result = playback->Play(restart);
     if (PackagePlayback != playback) return LastResult;

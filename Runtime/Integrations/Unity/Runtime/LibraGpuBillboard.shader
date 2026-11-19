@@ -5,6 +5,10 @@ Shader "Libra/GPU Particle Billboard"
         _MainTex ("Texture", 2D) = "white" {}
         [HDR] _Color ("Color", Color) = (1,1,1,1)
         _LibraGpuSizeScale ("Libra GPU Size Scale", Float) = 1
+        _LibraGpuDrawMatrixRow0 ("Libra GPU Draw Matrix Row 0", Vector) = (1,0,0,0)
+        _LibraGpuDrawMatrixRow1 ("Libra GPU Draw Matrix Row 1", Vector) = (0,1,0,0)
+        _LibraGpuDrawMatrixRow2 ("Libra GPU Draw Matrix Row 2", Vector) = (0,0,1,0)
+        _LibraGpuDrawMatrixRow3 ("Libra GPU Draw Matrix Row 3", Vector) = (0,0,0,1)
     }
     SubShader
     {
@@ -24,6 +28,8 @@ Shader "Libra/GPU Particle Billboard"
             sampler2D _MainTex;
             float4 _Color;
             float _LibraGpuSizeScale;
+            float4 _LibraGpuDrawMatrixRow0, _LibraGpuDrawMatrixRow1;
+            float4 _LibraGpuDrawMatrixRow2, _LibraGpuDrawMatrixRow3;
             struct Input { float4 vertex : POSITION; float2 uv : TEXCOORD0; uint instanceID : SV_InstanceID; };
             struct Output { float4 position : SV_POSITION; float2 uv : TEXCOORD0; float4 color : COLOR0; };
             Output vert(Input v)
@@ -36,7 +42,13 @@ Shader "Libra/GPU Particle Billboard"
                 local = float2(c * local.x - s * local.y, s * local.x + c * local.y);
                 float3 right = UNITY_MATRIX_I_V._m00_m10_m20;
                 float3 up = UNITY_MATRIX_I_V._m01_m11_m21;
-                float3 world = p.positionAge.xyz + right * local.x + up * local.y;
+                float4 position = float4(p.positionAge.xyz, 1);
+                float3 center = float3(dot(_LibraGpuDrawMatrixRow0, position),
+                    dot(_LibraGpuDrawMatrixRow1, position), dot(_LibraGpuDrawMatrixRow2, position));
+                float3 offset = right * local.x + up * local.y;
+                offset = float3(dot(_LibraGpuDrawMatrixRow0.xyz, offset),
+                    dot(_LibraGpuDrawMatrixRow1.xyz, offset), dot(_LibraGpuDrawMatrixRow2.xyz, offset));
+                float3 world = center + offset;
                 o.position = mul(UNITY_MATRIX_VP, float4(world, 1));
                 o.uv = v.uv;
                 o.color = p.color * _Color;

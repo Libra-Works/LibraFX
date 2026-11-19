@@ -44,6 +44,17 @@ namespace LiberaFx.Unity.Editor
                     Require(message.severity.ToString() != "Error", "Compute shader import error: " + message.message);
                 var shader = Shader.Find("Libra/GPU Particle Billboard");
                 Require(shader != null && !ShaderUtil.ShaderHasError(shader), "Billboard shader import error");
+                var parsed = LibraGpuMetadata.Parse(metadata.text);
+                Require(parsed.resources[0].flowMap == null,
+                    "Texture2D metadata keeps omitted FlowMap settings absent");
+                RequireMetadataRejection(metadata.text.Replace("\"kind\": \"Texture2D\"",
+                    "\"kind\": \"Texture2D\", \"flowMap\": { \"axisU\": \"X\" }"),
+                    "Texture2D resources", "Texture2D accepted explicit FlowMap settings");
+                Array.Reverse(parsed.flow, 0, 2);
+                RequireMetadataRejection(JsonUtility.ToJson(parsed), "GPU dispatch flow", "Update followed by Spawn was accepted");
+                parsed.flow[1].kind = parsed.flow[0].kind;
+                parsed.flow[1].kernelId = parsed.flow[0].kernelId;
+                RequireMetadataRejection(JsonUtility.ToJson(parsed), "GPU dispatch flow", "Two Update dispatches were accepted");
                 material = new Material(shader) { enableInstancing = true };
                 emitter = new GameObject("GPU verification emitter");
                 var runtime = emitter.AddComponent<LibraGpuParticleRuntime>();
@@ -63,6 +74,19 @@ namespace LiberaFx.Unity.Editor
                         Near(data[i].velocityLifetime.y, 2.019f, "Gravity");
                         Near(data[i].velocityLifetime.w, 2, "Lifetime");
                         Near(data[i].color.w, .95f, "Fade");
+                    }
+
+                    static void RequireMetadataRejection(string json, string expected, string message)
+                    {
+                        try
+                        {
+                            LibraGpuMetadata.Parse(json);
+                        }
+                        catch (ArgumentException exception) when (exception.Message.StartsWith(expected, StringComparison.Ordinal))
+                        {
+                            return;
+                        }
+                        throw new Exception(message);
                     }
                     else Require(data[i].alive == 0, "Spawn range");
                 }
@@ -116,6 +140,29 @@ namespace LiberaFx.Unity.Editor
                 var orange = image.GetPixel(64, 64);
                 File.WriteAllBytes(Output("orange.png"), image.EncodeToPNG());
                 Require(orange.r > .4f && orange.g > .2f && orange.b < orange.r, "Orange GPU framebuffer " + orange);
+                var boundsField = typeof(LibraGpuParticleRuntime).GetField("boundsSize",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                Require(boundsField != null, "GPU draw bounds fixture field is available");
+                boundsField.SetValue(runtime, new Vector3(.2f, .2f, .2f));
+                runtime.SetDrawTransform(Matrix4x4.identity, true);
+                runtime.ResetSimulation();
+                runtime.Step(0, 0, 64, new Vector3(10, 0, 0), camera);
+                runtime.ReadbackForDiagnostics(data);
+                Near(data[0].positionAge.x, 10, "Draw Matrix must not rewrite simulated position");
+                camera.Render();
+                RenderTexture.active = rt; image.ReadPixels(new Rect(0, 0, 128, 128), 0, 0); image.Apply();
+                var matrixPixel = image.GetPixel(64, 64);
+                File.WriteAllBytes(Output("draw-matrix.png"), image.EncodeToPNG());
+                Require(matrixPixel.r > .4f && matrixPixel.g > .2f && matrixPixel.b < matrixPixel.r,
+                    "Connected identity Matrix replaces emitter placement and transforms draw bounds " + matrixPixel);
+                runtime.SetDrawTransform(Matrix4x4.identity, false);
+                runtime.ResetSimulation();
+                runtime.Step(0, 0, 64, new Vector3(10, 0, 0), camera);
+                camera.Render();
+                RenderTexture.active = rt; image.ReadPixels(new Rect(0, 0, 128, 128), 0, 0); image.Apply();
+                var legacyPlacementPixel = image.GetPixel(64, 64);
+                Require(legacyPlacementPixel.r < .1f && legacyPlacementPixel.g < .1f && legacyPlacementPixel.b < .1f,
+                    "Disconnected Matrix preserves legacy world-space emitter placement " + legacyPlacementPixel);
                 string hash = runtime.SourceContentHash;
                 runtime.Configure(blue, blueMetadata, material, bindings);
                 Require(hash != runtime.SourceContentHash && !runtime.RuntimeExecuted, "Hot reload metadata");
