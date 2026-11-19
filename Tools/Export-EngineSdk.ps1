@@ -2,10 +2,12 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('Unity', 'Unreal', 'Godot')]
+    [ValidateSet('Core', 'Unity', 'Unreal', 'Godot')]
     [string] $Engine,
     [Parameter(Mandatory)]
     [string] $OutputDirectory,
+    [ValidatePattern('^[0-9]{4}\.(?:[1-9]|1[0-2])\.[1-9][0-9]*\z')]
+    [string] $BuildVersion,
     [switch] $AllowDirty
 )
 
@@ -38,7 +40,10 @@ $dirty = @(& git -C $repository status --porcelain --untracked-files=normal).Cou
 if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect source changes.' }
 if ($dirty -and -not $AllowDirty) { throw 'Commit source changes first, or explicitly use -AllowDirty for a local development export.' }
 $compatibility = Get-Content -LiteralPath (Join-Path $repository 'SDK\compatibility.json') -Raw | ConvertFrom-Json
-$roots = @('Runtime\Core', 'Runtime\include', "Runtime\Integrations\$Engine")
+$roots = @('Runtime\Core', 'Runtime\include')
+if ($Engine -ne 'Core') {
+    $roots += "Runtime\Integrations\$Engine"
+}
 $files = [Collections.Generic.List[IO.FileInfo]]::new()
 foreach ($relative in $roots) {
     $root = Join-Path $repository $relative
@@ -78,6 +83,9 @@ try {
         uncommittedSource = $dirty
         nativeAbi = $compatibility.nativeAbi
         files = @($entries)
+    }
+    if ($PSBoundParameters.ContainsKey('BuildVersion')) {
+        $manifest['buildVersion'] = $BuildVersion
     }
     [IO.File]::WriteAllText((Join-Path $stage 'sdk-manifest.json'),
         ($manifest | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))

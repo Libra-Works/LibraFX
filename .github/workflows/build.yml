@@ -1,0 +1,205 @@
+name: Build LIBERA FX and SDKs
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Determine build version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      value: ${{ steps.version.outputs.value }}
+    steps:
+      - name: Set year, month and build number
+        id: version
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $headers = @{
+              Authorization = "Bearer $env:GH_TOKEN"
+              Accept = 'application/vnd.github+json'
+              'X-GitHub-Api-Version' = '2022-11-28'
+          }
+          $run = Invoke-RestMethod -Headers $headers -Uri "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          if (-not $run.created_at) {
+              throw 'The workflow run creation timestamp is missing.'
+          }
+          $created = ([DateTimeOffset]$run.created_at).ToOffset([TimeSpan]::FromHours(9))
+          "value=$($created.Year).$($created.Month).$env:GITHUB_RUN_NUMBER" >> $env:GITHUB_OUTPUT
+
+  editor:
+    name: ${{ matrix.name }}
+    needs: version
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: LibraFX-windows-x64
+            runner: windows-2022
+            rid: win-x64
+          - name: LibraFX-macos-arm64
+            runner: macos-15
+            rid: osx-arm64
+          - name: LibraFX-linux-x64
+            runner: ubuntu-24.04
+            rid: linux-x64
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Publish editor and converter
+        shell: pwsh
+        env:
+          TARGET_RID: ${{ matrix.rid }}
+          BUILD_VERSION: ${{ needs.version.outputs.value }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $artifacts = Join-Path $env:RUNNER_TEMP 'editor-artifacts'
+          $package = Join-Path $env:RUNNER_TEMP 'editor-package'
+          if ($env:TARGET_RID -eq 'win-x64') {
+              $package = $artifacts
+          }
+          New-Item -ItemType Directory -Path $artifacts | Out-Null
+          $editor = Join-Path $package 'Editor'
+          if ($env:TARGET_RID -eq 'osx-arm64') {
+              $app = Join-Path $package 'LIBERA FX.app'
+              $editor = Join-Path $app 'Contents/MacOS'
+          }
+          $versionProperties = @("-p:InformationalVersion=$env:BUILD_VERSION", '-p:IncludeSourceRevisionInInformationalVersion=false')
+          dotnet publish LiberaFx.csproj -c Release -r $env:TARGET_RID --self-contained true -o $editor @versionProperties
+          dotnet publish Tools/Converter/LiberaFx.Converter.csproj -c Release -r $env:TARGET_RID --self-contained true -o (Join-Path $package 'Converter') @versionProperties
+          [ordered]@{
+              buildVersion = $env:BUILD_VERSION
+              sourceRevision = $env:GITHUB_SHA
+              runtimeIdentifier = $env:TARGET_RID
+          } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $package 'build-info.json') -Encoding utf8
+          Get-Item -LiteralPath (Join-Path $editor 'BundledPlugins/Extensions/Git/liberafx-extension.json'),
+              (Join-Path $editor 'BundledPlugins/Inspectors/ColorRgb/liberafx-inspector.json') | Out-Null
+          if ($env:TARGET_RID -eq 'osx-arm64') {
+              $plist = Join-Path $app 'Contents/Info.plist'
+              Copy-Item Tools/Packaging/macOS/Info.plist -Destination $plist
+              plutil -replace CFBundleVersion -string $env:GITHUB_RUN_NUMBER $plist
+              plutil -replace CFBundleShortVersionString -string $env:BUILD_VERSION $plist
+              plutil -lint $plist
+              /usr/bin/test -x (Join-Path $editor 'LiberaFx')
+              ditto -c -k --sequesterRsrc --keepParent $package (Join-Path $artifacts "LibraFX-$env:BUILD_VERSION-macos-arm64.zip")
+          }
+          if ($env:TARGET_RID -eq 'linux-x64') {
+              /usr/bin/test -x (Join-Path $editor 'LiberaFx')
+              tar -czf (Join-Path $artifacts "LibraFX-$env:BUILD_VERSION-linux-x64.tar.gz") -C $package Editor Converter build-info.json
+          }
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          name: ${{ matrix.name }}-${{ needs.version.outputs.value }}
+          path: ${{ runner.temp }}/editor-artifacts
+          if-no-files-found: error
+
+  sdk:
+    name: LibraSDK
+    needs: version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Build and test portable Core with Clang
+        run: |
+          cmake -S Runtime -B "$RUNNER_TEMP/core-build" -G Ninja \
+            -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DLIBERAFX_BUILD_TESTS=ON
+          cmake --build "$RUNNER_TEMP/core-build" --parallel 2
+          ctest --test-dir "$RUNNER_TEMP/core-build" --output-on-failure --no-tests=error
+      - name: Stage Core SDK
+        shell: pwsh
+        env:
+          BUILD_VERSION: ${{ needs.version.outputs.value }}
+        run: ./Tools/Export-EngineSdk.ps1 -Engine Core -OutputDirectory (Join-Path $env:RUNNER_TEMP 'LibraSDK') -BuildVersion $env:BUILD_VERSION
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          name: LibraSDK-source-${{ needs.version.outputs.value }}
+          path: ${{ runner.temp }}/LibraSDK
+          if-no-files-found: error
+
+  adapters:
+    name: LibraFor${{ matrix.engine }}
+    needs: version
+    runs-on: windows-2022
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [Unreal, Unity, Godot]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Stage engine SDK sources
+        shell: pwsh
+        env:
+          ENGINE: ${{ matrix.engine }}
+          BUILD_VERSION: ${{ needs.version.outputs.value }}
+        run: |
+          $stage = New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'sdk')
+          ./Tools/Export-EngineSdk.ps1 -Engine $env:ENGINE -OutputDirectory (Join-Path $stage.FullName 'Source') -BuildVersion $env:BUILD_VERSION
+      - name: Verify Unreal plugin copy and update without Unreal Engine
+        if: matrix.engine == 'Unreal'
+        shell: pwsh
+        run: |
+          ./Tests/Verify-UnrealPluginPackaging.ps1
+          $project = Join-Path (New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'unreal-project')).FullName 'Smoke.uproject'
+          Set-Content -LiteralPath $project -Value '{"FileVersion":3,"EngineAssociation":"5.7","Modules":[]}'
+          & (Join-Path $env:RUNNER_TEMP 'sdk/Source/Runtime/Integrations/Unreal/Install-LibraRuntimeForUnreal.ps1') -ProjectPath $project
+      - name: Build Unity Windows x64 native bridge
+        if: matrix.engine == 'Unity'
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $build = Join-Path $env:RUNNER_TEMP 'unity-build'
+          cmake -S (Join-Path $env:RUNNER_TEMP 'sdk/Source/Runtime') -B $build -G 'Visual Studio 17 2022' -A x64
+          cmake --build $build --config Release --target liberafx_native --parallel 2
+          $native = New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'sdk/Native/win-x64')
+          Copy-Item -LiteralPath (Join-Path $build 'Release/liberafx_native.dll') -Destination $native.FullName
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        if: matrix.engine == 'Godot'
+        with:
+          repository: godotengine/godot-cpp
+          ref: 24b9df7a88d40bcaf1f157703d4220185cb71fbf
+          path: .ci/godot-cpp
+          persist-credentials: false
+      - name: Build Godot 4.7 Windows x64 GDExtension
+        if: matrix.engine == 'Godot'
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $build = Join-Path $env:RUNNER_TEMP 'godot-build'
+          $source = Join-Path $env:RUNNER_TEMP 'sdk/Source/Runtime/Integrations/Godot'
+          $godotCpp = Join-Path $env:GITHUB_WORKSPACE '.ci/godot-cpp'
+          cmake -S $source -B $build -G 'Visual Studio 17 2022' -A x64 "-DGODOT_CPP_DIR=$godotCpp"
+          cmake --build $build --config Release --target liberafx_godot --parallel 2
+          $native = New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'sdk/Native/win-x64')
+          $bin = New-Item -ItemType Directory -Path (Join-Path $native.FullName 'bin')
+          Copy-Item -LiteralPath (Join-Path $build 'bin/Release/liberafx_godot.dll') -Destination $bin.FullName
+          Copy-Item -LiteralPath (Join-Path $source 'liberafx.gdextension') -Destination $native.FullName
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          name: LibraFor${{ matrix.engine }}-sdk-${{ needs.version.outputs.value }}
+          path: ${{ runner.temp }}/sdk
+          if-no-files-found: error

@@ -8,11 +8,44 @@ pushes require a separate approved migration.
 Unity, Unreal and the Windows x86-64 Godot GDExtension can all be
 staged locally with the same tool.
 
+## GitHub Actions builds
+
+The **Build LIBERA FX and SDKs** workflow runs on pull requests and pushes to
+`main`. Use **Run workflow** to also retain downloadable artifacts from that run.
+This does not create GitHub Releases, publish to package registries, or push to
+other repositories.
+
+Every build uses `year.month.build` (for example `2026.11.42`). The year
+and month are from the workflow run's creation time in Japan Standard Time,
+and the build number is the GitHub Actions run number. Reruns keep the same
+version. The version appears in artifact names, the editor's About window
+and macOS bundle metadata, and the archive's `build-info.json` (editor) or
+`sdk-manifest.json` (SDK). The JSON also includes the source commit.
+The Unity/Unreal package descriptors, SDK compatibility version, native ABI,
+and file format versions are independent and are not rewritten by the workflow.
+
+| Product | Artifact and CI boundary |
+| --- | --- |
+| LibraFX | Editor and converter for Windows x64, Apple Silicon macOS (unsigned `.app` in a ZIP), and Linux x64 (tar.gz). CI packages them but does not exercise their desktop UI or sign/notarize the macOS app. |
+| LibraSDK | Portable C++ Core sources, public headers, CMake files and compatibility manifest. CI builds Core with Clang and runs the Runtime tests on Linux. |
+| LibraForUnreal | Source SDK. CI verifies the copy installer and update protections without running UnrealBuildTool or Unreal Editor. |
+| LibraForUnity | Source SDK plus the Windows x64 `liberafx_native.dll` under `Native\win-x64`. CI builds the native DLL; it does not run Unity. |
+| LibraForGodot | Source SDK plus the Windows x64 Godot 4.7 descriptor and GDExtension DLL under `Native\win-x64`. CI builds against pinned `godot-cpp` sources; it does not run Godot. |
+
+Engine artifacts keep the source export and its hash manifest in `Source`.
+Native files under `Native` are separate build outputs, not entries in the
+source manifest.
+
+On Linux, extract the inner `LibraFX-<version>-linux-x64.tar.gz` and launch `Editor/LiberaFx`
+from a graphical session with Avalonia's system dependencies installed.
+The tarball preserves executable permissions.
+
 ## Reproducible local staging
 
 From PowerShell 7, export into a **new absolute directory outside the repository**:
 
 ```powershell
+.\Tools\Export-EngineSdk.ps1 -Engine Core -OutputDirectory C:\SdkStaging\LibraSDK
 .\Tools\Export-EngineSdk.ps1 -Engine Unity -OutputDirectory C:\SdkStaging\ForUnity
 .\Tools\Export-EngineSdk.ps1 -Engine Unreal -OutputDirectory C:\SdkStaging\ForUnreal
 .\Tools\Export-EngineSdk.ps1 -Engine Godot -OutputDirectory C:\SdkStaging\ForGodot
