@@ -143,6 +143,10 @@ with a fresh 32-lowercase-hex `debugOwner`; subsequent mutations carry this
 ownership nonce. It is an ownership identity, not a credential. Session and
 monotonic sequence validation remain unchanged.
 
+A newly created Live Game session suppresses debug draws until an explicit
+attachment, even if it receives a preview payload. Attachment applies only to
+new transfers; it does not enable debug draws on instances already playing.
+
 `debug-disconnect` is acknowledged only for the current owner. It clears only
 Debug Text/Model resources for the exact current session/slot/generation, then
 suppresses new debug scopes, including queued creates and future spawned

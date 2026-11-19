@@ -63,7 +63,7 @@ struct FLibraLiveGameSession::FImpl final
     uint64 sequence = 0, queuedBytes = 0, activeBytes = 0, maxOwnedBytes = 0;
     uint32 requestCapacity = 0;
     bool closing = false, closed = false, processing = false;
-    bool suppressPreviewDebugDraw = false;
+    bool suppressPreviewDebugDraw = true;
 
     auto Find(liberafx::InstanceId target) const -> FSlot*
     {

@@ -92,10 +92,30 @@ bool FLibraDebugLiveDisconnectTest::RunTest(const FString&)
     auto* actor = world->SpawnActor<AActor>();
     auto session = FLibraLiveGameSession::Create(true, actor, {});
     if (!TestTrue(TEXT("Development session"), static_cast<bool>(session))) return false;
+    ON_SCOPE_EXIT { session->ShutdownAndForceDestroy(); };
     auto request = liberafx::RequestId{};
+    auto completion = FLibraLiveGameSession::FCompletion{};
+    if (!TestEqual(TEXT("Queue a preview payload before attachment"),
+        session->SubmitCreate(bytes, TEXT("unattached"), request), liberafx::Result::Ok))
+    {
+        return false;
+    }
+    session->Process();
+    if (!TestTrue(TEXT("Unattached package still executes"), session->TakeCompletion(request, completion) ==
+        liberafx::Result::Ok && completion.result == liberafx::Result::Ok))
+    {
+        return false;
+    }
+    auto* unattached = session->Resolve(completion.instance);
+    if (!TestTrue(TEXT("Only attachment can permit debug objects on new transfers"),
+        unattached && unattached->GetRenderObjectCount() == 0 &&
+        session->AttachPreviewDebugDraw() == liberafx::Result::Ok &&
+        unattached->GetRenderObjectCount() == 0))
+    {
+        return false;
+    }
     if (!TestTrue(TEXT("Preview package accepted"), session->SubmitCreate(bytes, TEXT("debug"), request) == liberafx::Result::Ok)) return false;
     session->Process();
-    auto completion = FLibraLiveGameSession::FCompletion{};
     if (!TestTrue(TEXT("Preview package executes"), session->TakeCompletion(request, completion) == liberafx::Result::Ok &&
         completion.result == liberafx::Result::Ok)) return false;
     auto* playback = session->Resolve(completion.instance);
@@ -118,7 +138,6 @@ bool FLibraDebugLiveDisconnectTest::RunTest(const FString&)
         session->TakeCompletion(request, completion) == liberafx::Result::Ok && completion.result == liberafx::Result::Ok);
     auto* next = session->Resolve(completion.instance);
     TestTrue(TEXT("Future scopes cannot resurrect disconnected debug"), next && next->bIsPlaying && next->GetRenderObjectCount() == 0);
-    session->ShutdownAndForceDestroy(); // explicit isolated test teardown only
     return true;
 }
 
@@ -149,6 +168,10 @@ bool FLibraDebugEngineAssetPreviewTest::RunTest(const FString&)
     auto* owner = world->SpawnActor<AActor>();
     auto session = FLibraLiveGameSession::Create(true, owner, {});
     if (!TestTrue(TEXT("Development live session"), !!session)) return false;
+    if (!TestEqual(TEXT("Explicitly attach debug preview"), session->AttachPreviewDebugDraw(), liberafx::Result::Ok))
+    {
+        return false;
+    }
     auto request = liberafx::RequestId{};
     if (!TestEqual(TEXT("Submit compiler debug package"),
         session->SubmitCreate(previewBytes, TEXT("engine debug preview"), request), liberafx::Result::Ok))

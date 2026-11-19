@@ -67,7 +67,7 @@ namespace LiberaFx.Unity
         private long queuedBytes, activeBytes;
         private ulong sequence;
         private bool closing, closed, processing;
-        private bool suppressPreviewDebugDraw;
+        private bool suppressPreviewDebugDraw = true;
         public SessionId Id { get; }
         public const int MaximumPackageBytes = 16 * 1024 * 1024;
 

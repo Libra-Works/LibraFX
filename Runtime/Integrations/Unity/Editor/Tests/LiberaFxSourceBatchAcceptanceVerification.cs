@@ -1061,6 +1061,7 @@ namespace LiberaFx.Unity.Editor
                 textAsset = CreatePackage(textPath);
                 distributionAsset = CreatePackage(distributionPath);
 
+                VerifyDebugTransferOptIn(scene, debugBindings, File.ReadAllBytes(previewPath));
                 var preview = Start(previewAsset, debugBindings, "compiler preview debug package", scene, out previewOwner);
                 var text = Start(textAsset, debugBindings, "compiler text preview package", scene, out textOwner);
                 var labels = Labels(scene);
@@ -1099,16 +1100,16 @@ namespace LiberaFx.Unity.Editor
                 var elapsed = preview.ElapsedTime;
                 var scopes = preview.ActiveRenderScopeCount;
                 preview.ClearPreviewDebugDraw();
-                Require(Labels(scene).Length == 0 && !previewModel.activeInHierarchy && preview.ElapsedTime == elapsed &&
+                Require(Labels(scene).Length == 1 && !previewModel.activeInHierarchy && preview.ElapsedTime == elapsed &&
                     preview.ActiveRenderScopeCount == scopes && !preview.IsRootFinished,
-                    "Disconnect-style debug clear removed normal playback state or retained a preview draw.");
-                Require(preview.Play() == NativeResult.Ok && Labels(scene).Length == 0 &&
+                    "Clearing one instance affected the other instance or retained a preview draw.");
+                Require(preview.Play() == NativeResult.Ok && Labels(scene).Length == 1 &&
                     DebugModels(scene).Length == 0,
                     "Local restart resurrected preview-only draws after disconnect.");
                 Require(preview.Stop() == NativeResult.Ok && preview.ActiveRenderScopeCount == 0,
                     "Stop did not retire the preview scope.");
                 Require(text.Stop() == NativeResult.Ok, "Stop failed for the compiler text-preview package.");
-                Require(Labels(scene).Length == 1, "Text preview Stop retained its label.");
+                Require(Labels(scene).Length == 0, "Text preview Stop retained its label.");
 
                 var distribution = Start(distributionAsset, debugBindings,
                     "compiler distribution package", scene, out distributionOwner);
@@ -1165,6 +1166,48 @@ namespace LiberaFx.Unity.Editor
                 Object.DestroyImmediate(pixels);
                 Object.DestroyImmediate(material);
                 Object.DestroyImmediate(primitive);
+            }
+        }
+
+        private static void VerifyDebugTransferOptIn(UnityEngine.SceneManagement.Scene scene,
+            LiberaFxUnityBindingAsset bindings, byte[] package)
+        {
+            var owner = new GameObject("LIBERA FX debug transfer opt-in acceptance");
+            UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(owner, scene);
+            var session = new LiberaFxLiveGameSession(true, owner.transform, bindings);
+            try
+            {
+                var ordinary = Create();
+                Require(Labels(scene).Length == 0 && DebugModels(scene).Length == 0,
+                    "A session without a debug attachment displayed preview-only content.");
+                Require(session.AttachPreviewDebugDraw() == NativeResult.Ok &&
+                    Labels(scene).Length == 0 && DebugModels(scene).Length == 0,
+                    "Attaching retroactively enabled debug draws on an existing instance.");
+                var transferred = Create();
+                Require(Labels(scene).Length == 1 && DebugModels(scene).Length == 1,
+                    "The attached session did not show the newly transferred debug draws.");
+                Require(session.DisconnectPreviewDebugDraw() == NativeResult.Ok &&
+                    Labels(scene).Length == 0 && DebugModels(scene).Length == 0 &&
+                    session.ResolveComponent(ordinary) && session.ResolveComponent(transferred),
+                    "Debug detach retained draws or removed a playing instance.");
+                Create();
+                Require(Labels(scene).Length == 0 && DebugModels(scene).Length == 0,
+                    "A transfer after detach re-enabled debug draws without opt-in.");
+            }
+            finally
+            {
+                session.ShutdownAndForceDestroy();
+                Object.DestroyImmediate(owner);
+            }
+
+            SessionInstanceId Create()
+            {
+                Require(session.SubmitCreate(package, "debug transfer acceptance", out var request) == NativeResult.Ok,
+                    "Could not queue the preview package.");
+                Require(session.Process() == NativeResult.Ok, "The session could not process the queued package.");
+                Require(session.TakeCompletion(request, out var completion) == NativeResult.Ok &&
+                    completion.Result == NativeResult.Ok, "The session did not accept the preview package.");
+                return completion.Instance;
             }
         }
 
