@@ -3,6 +3,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LiberaFx.Services;
+using LiberaFx.Services.Compilation;
 
 namespace LiberaFx.ViewModels;
 
@@ -16,6 +17,7 @@ public sealed class LiveGameWindowViewModel : ObservableObject, IDisposable
     private object?[] statusValues = [];
     private LiveGameInstance? selectedInstance;
     private bool busy, consent, disposed;
+    private bool includeDebugDraw;
     private long connectionVersion;
     public Task DebugDisconnectCompletion { get; private set; } = Task.CompletedTask;
     public ObservableCollection<LiveGameInstance> Instances { get; } = [];
@@ -33,6 +35,12 @@ public sealed class LiveGameWindowViewModel : ObservableObject, IDisposable
         Text("Destination", client.Endpoint.Engine, client.Endpoint.Process, client.Endpoint.Session);
     public bool Busy { get => busy; private set { if (SetProperty(ref busy, value)) NotifyCommands(); } }
     public bool Connected => client is not null;
+    public bool CanIncludeDebugDraw => Connected && !Busy && Consent && client?.SupportsDebugDisconnect == true;
+    public bool IncludeDebugDraw
+    {
+        get => includeDebugDraw;
+        set => SetProperty(ref includeDebugDraw, value && CanIncludeDebugDraw);
+    }
     public bool RequiresRefresh => client?.RequiresRefresh == true;
     public bool Consent
     {
@@ -62,6 +70,7 @@ public sealed class LiveGameWindowViewModel : ObservableObject, IDisposable
     {
         Dispatcher.UIThread.VerifyAccess();
         if (disposed || Busy) return;
+        IncludeDebugDraw = false;
         var version = ++connectionVersion;
         await RunAsync(async token =>
         {
@@ -118,8 +127,9 @@ public sealed class LiveGameWindowViewModel : ObservableObject, IDisposable
         var target = SelectedInstance?.Target ?? throw new InvalidOperationException(Text("SelectTarget"));
         var source = captureActiveGraph();
         var destination = client ?? throw new InvalidOperationException(Text("Offline"));
+        var options = IncludeDebugDraw && destination.SupportsDebugDisconnect ? VfxCompileOptions.LiveTransfer : null;
         SetStatus("Compiling", source.Name);
-        var package = await Task.Run(() => LiveGameGraphCompiler.Compile(source), token).WaitAsync(token);
+        var package = await Task.Run(() => LiveGameGraphCompiler.Compile(source, options), token).WaitAsync(token);
         token.ThrowIfCancellationRequested();
         SetStatus("Applying", source.Name, target);
         Accept(await destination.ReplaceAsync(target, package, token), "Applied");
@@ -159,12 +169,14 @@ public sealed class LiveGameWindowViewModel : ObservableObject, IDisposable
     {
         ConnectCommand.NotifyCanExecuteChanged(); RefreshCommand.NotifyCanExecuteChanged();
         ApplyCommand.NotifyCanExecuteChanged(); DisconnectCommand.NotifyCanExecuteChanged(); CancelCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanIncludeDebugDraw));
     }
     private void Disconnect()
     {
         // Only debug resources are released. No Stop/Destroy/NaturalEnd command.
         var version = ++connectionVersion;
         operation?.Cancel();
+        IncludeDebugDraw = false;
         var detached = client;
         client = null;
         Instances.Clear();

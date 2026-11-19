@@ -1,4 +1,4 @@
-# #65: preview-transfer-only Debug Text / Debug Model (SOURCE handoff)
+# #65: preview-transfer-only Debug Text / Debug Model
 
 ## Authoring contract
 
@@ -9,7 +9,8 @@ Unconnected World Matrix means the same explicit identity default used by other
 Matrix inputs. There is no screen-space/HUD mode. Text is authored UTF-8 content,
 not an arbitrary runtime string or a formatting/script interpreter.
 
-The node's always-visible EN/JA badge distinguishes enabled from disabled.
+The node's always-visible EN/JA badge distinguishes authored enabled from
+disabled; it does not report whether a remote renderer is currently visible.
 Parameter edits use existing UI-thread workspace commands/history. Node UUIDs,
 pin IDs and parameter IDs are permanent. No existing project/package/bytecode
 version or built-in UUID was replaced.
@@ -70,10 +71,16 @@ Compiler ownership is released. No edits to GameIoSchema, GraphValidator,
 SpawnableHost, Interop, native wrapper or skeletal host implementations were
 made by #65.
 
-## Regression SOURCE and verification limits
+## Regression coverage and verification limits
 
-No build, test, application, engine GUI, external request, commit or push was
-performed. `git diff --check` is static inspection, not compilation.
+The desktop Live Game window was built and driven against real development
+endpoints in Unity 7000.0.0a16 Play Mode and Unreal 5.7.4 PIE (Windows/D3D11).
+Both engines showed the ordinary effect with debug disabled by default, then
+exactly one Text and one Model on opt-in. Applying edited text and world
+Matrix values replaced both draws without duplicates. Opting out and applying
+removed them; disconnect acknowledged debug-only cleanup and preserved the
+same ordinary playback. The engine tests separately cover rendered pixels,
+distribution exclusion, Stop and scope destruction.
 
 Pure contract entry point:
 
@@ -93,7 +100,7 @@ network: it covers the actual Unity transport lease helper, stale owner/session,
 takeover, detached mutation rejection and legacy descriptor compatibility.
 The helper is source-linked only into the contract test project, not the editor.
 
-Other added SOURCE:
+Engine and runtime regressions:
 
 - `Runtime/tests/DebugDrawQueueTests.cpp`: bounds, per-instance identity,
   copied strings, atomic rejection/retry and empty-frame cleanup.
@@ -131,11 +138,10 @@ Build the installed UE plugin against the chosen engine/project (including its
 Clang configuration), then run `Libra.Editor.DebugDraw.WorldAndCleanup` only in
 an isolated project. For Unity, use an isolated project with matching native
 plugin and set `LIBERAFX_DEBUG_DRAW_FIXTURE` to generated `text-preview.lfxp`,
-then invoke the verification entry point. None has been run. Actual glyph
-coverage, rendered pixels, engine versions and interactive authoring remain
-unverified; do not close their acceptance based on source.
+then invoke the verification entry point. Verify visible glyphs, transforms,
+and removal on replacement, stop and disconnect in the target engine.
 
-## Live Game debug-only disconnect (SOURCE)
+## Live Game transfer and debug-only disconnect
 
 The optional protocol-1 descriptor capability is
 `"debugDisconnect":"debug-lease-v1"`. New clients explicitly `debug-attach`
@@ -143,9 +149,14 @@ with a fresh 32-lowercase-hex `debugOwner`; subsequent mutations carry this
 ownership nonce. It is an ownership identity, not a credential. Session and
 monotonic sequence validation remain unchanged.
 
-A newly created Live Game session suppresses debug draws until an explicit
-attachment, even if it receives a preview payload. Attachment applies only to
-new transfers; it does not enable debug draws on instances already playing.
+A newly created Live Game session suppresses debug draws until attachment.
+After connecting to an endpoint that supports `debug-lease-v1`, turn on
+**Include Debug Text / Model on Apply**, select the destination instance and
+apply the active graph. Connecting alone does not compile or transfer debug
+draws. The checkbox starts off for each connection. Uncheck and apply again
+to transfer without observers, or disconnect to clear only the debug draws
+while leaving the ordinary effect running. Older endpoints cannot enable the
+checkbox because they cannot acknowledge debug-only cleanup.
 
 `debug-disconnect` is acknowledged only for the current owner. It clears only
 Debug Text/Model resources for the exact current session/slot/generation, then
@@ -181,13 +192,12 @@ that case; no automatic force-stop of ordinary effects is attempted.
 
 ## Verification boundaries
 
-`LiveGameGraphCompiler.Compile(source, options)` accepts the explicit option but
-does not broaden the existing Restart-only numeric-root compatibility policy.
-The Live Game window still does not opt into debug compilation automatically.
-The explicit debug-only disconnect contract is now wired in SOURCE; its
-compilation, live UI race behavior, engine object cleanup and rendered pixels
-remain unexecuted/unverified. No acceptance awaiting the user's builds or
-engine observations is closed by this source handoff.
+`LiveGameGraphCompiler.Compile(source, options)` accepts explicit debug opt-in
+without broadening the existing Restart-only numeric-root compatibility
+policy. The Live Game window defaults to OFF and is distinct from the Preview
+pane's transfer permission. The automated editor UI regression uses a local
+contract double to test the selected-instance transfer and lease acknowledgment
+independently of the engine acceptance runs above.
 
 ## Files owned/touched by #65
 

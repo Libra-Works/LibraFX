@@ -33,6 +33,11 @@ internal static class LiveGameEditorUiTests
         var draw = graph.CreateNode(new("ModelDraw"));
         graph.SetParameter(draw, "assetPath", JsonSerializer.SerializeToElement("/Engine/BasicShapes/Cube.Cube"));
         Connect(position, draw, "position");
+        const string debugMarker = "LIVE_DEBUG_OPT_IN_PROBE";
+        var debug = graph.CreateNode(new("DebugText"));
+        graph.SetParameter(debug, "text", JsonSerializer.SerializeToElement(debugMarker));
+        var debugModel = graph.CreateNode(new("DebugModel"));
+        graph.SetParameter(debugModel, "assetPath", JsonSerializer.SerializeToElement("/Engine/BasicShapes/Cube.Cube"));
         var initialBytes = LiveGameGraphCompiler.Compile(new(graph.CreateSnapshot(), "initial"));
         await using var game = new IsolatedGameContractDouble(Path.Combine(isolatedRoot, Guid.NewGuid().ToString("N")), initialBytes);
         var captures = 0;
@@ -52,6 +57,7 @@ internal static class LiveGameEditorUiTests
             var apply = Find<Button>("LiveGameApply");
             var refresh = Find<Button>("LiveGameRefresh");
             var cancel = Find<Button>("LiveGameCancel");
+            var includeDebugDraw = Find<CheckBox>("LiveGameIncludeDebugDraw");
             var instances = Find<ListBox>("LiveGameInstances");
             Require(!connect.IsEffectivelyEnabled && !apply.IsEffectivelyEnabled, "No endpoint/consent must not authorize updates.");
             Invoke(browse);
@@ -81,6 +87,8 @@ internal static class LiveGameEditorUiTests
                 "UI did not capture active graph and explicit selected Restart.");
             Require(game.PackageFor(firstTarget).Length > initialBytes.Length &&
                 game.PackageFor(IsolatedGameContractDouble.SecondTarget).SequenceEqual(untouched), "Graph addition did not reach only selected target.");
+            Require(includeDebugDraw.IsEffectivelyEnabled && includeDebugDraw.IsChecked == false &&
+                DebugDrawKinds(firstTarget).Length == 0, "Connecting to a capable endpoint implicitly transferred debug content.");
             Require(GraphSnapshot.ContentEquals(snapshot, graph.CreateSnapshot()), "Compile/apply mutated source graph or history.");
             Require(model.SelectedInstance?.Target == firstTarget, "Refresh after apply lost explicit target.");
             var oldPlayback = game.PackageFor(firstTarget);
@@ -120,16 +128,42 @@ internal static class LiveGameEditorUiTests
             await Wait(() => !File.Exists(Path.Combine(game.Directory, "request.json")), "timeout request drained");
             Invoke(refresh);
             await Wait(() => !model.Busy && !model.RequiresRefresh, "timeout reconciliation");
+            var previousMutations = game.Mutations;
+            includeDebugDraw.IsChecked = true;
+            Invoke(apply);
+            await Wait(() => !model.Busy && game.Mutations == previousMutations + 1, "explicit debug transfer");
+            Require(DebugDrawKinds(firstTarget).Order().SequenceEqual(new[] { "debugModel", "debugText" }) &&
+                game.PackageFor(IsolatedGameContractDouble.SecondTarget).SequenceEqual(untouched),
+                "Debug transfer did not reach only the selected instance.");
+            includeDebugDraw.IsChecked = false;
+            Invoke(apply);
+            await Wait(() => !model.Busy && game.Mutations == previousMutations + 2, "transfer without debug draws");
+            Require(DebugDrawKinds(firstTarget).Length == 0, "Turning off debug transfer did not strip the next package.");
+            includeDebugDraw.IsChecked = true;
+            Invoke(apply);
+            await Wait(() => !model.Busy && game.Mutations == previousMutations + 3, "debug retransfer before disconnect");
             var count = game.Mutations;
             Invoke(Find<Button>("LiveGameDisconnect"));
             await Wait(() => !model.Connected && model.Instances.Count == 0, "UI disconnect");
             Require(game.Mutations == count && game.DestroyRequests == 0, "Disconnect stopped an actual game instance.");
+            await model.DebugDisconnectCompletion;
+            Require(game.DebugDisconnects == 1, "The selected endpoint did not acknowledge debug-only disconnect.");
+            Require(includeDebugDraw.IsChecked == false && !includeDebugDraw.IsEffectivelyEnabled,
+                "Disconnect did not reset the transfer permission.");
             // No directory discovery and no handshake to an unselected game.
             Require(picks == 1, "UI performed unsolicited endpoint selection.");
             Console.WriteLine("PASS live editor: real Avalonia browse/connect/list/select/apply/cancel commands; compiler graph conversion; isolated spool; rejection protects previous playback; finite timeout; no engine/network launched.");
         }
         finally { host.Close(); window.Dispose(); }
         return;
+        string[] DebugDrawKinds(string target)
+        {
+            var package = SpawnableGroupPackageBinary.Deserialize(game.PackageFor(target));
+            using var render = JsonDocument.Parse(package.RootRenderConfiguration);
+            return render.RootElement.GetProperty("nodes").EnumerateArray()
+                .Where(node => node.TryGetProperty("previewOnly", out var flag) && flag.GetBoolean())
+                .Select(node => node.GetProperty("kind").GetString()!).ToArray();
+        }
         T Find<T>(string name) where T : Control => window.GetLogicalDescendants().OfType<T>().Single(control => control.Name == name);
         void Connect(GraphNodeViewModel source, GraphNodeViewModel target, string port)
         {
@@ -164,13 +198,14 @@ internal static class LiveGameEditorUiTests
         private readonly Dictionary<string, byte[]> packages = [];
         private readonly CancellationTokenSource stop = new();
         private readonly Task loop;
-        private int mutations, rejections, destroyRequests;
+        private int mutations, rejections, destroyRequests, debugDisconnects;
         public string Directory { get; }
         public string Session { get; } = Guid.NewGuid().ToString("N");
         public volatile bool PauseResponses, RejectNextReplacement;
         public int Mutations => Volatile.Read(ref mutations);
         public int Rejections => Volatile.Read(ref rejections);
         public int DestroyRequests => Volatile.Read(ref destroyRequests);
+        public int DebugDisconnects => Volatile.Read(ref debugDisconnects);
         public string? LastTarget { get; private set; }
         public string? LastPolicy { get; private set; }
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -180,7 +215,8 @@ internal static class LiveGameEditorUiTests
             System.IO.Directory.CreateDirectory(directory);
             packages.Add(FirstTarget, initial); packages.Add(SecondTarget, initial);
             File.WriteAllText(Path.Combine(directory, "endpoint.json"), JsonSerializer.Serialize(
-                new LiveGameEndpoint(1, Session, "Unity", "isolated-local-spool", "restart-root-render-v1-v2", Environment.ProcessId), Json));
+                new LiveGameEndpoint(1, Session, "Unity", "isolated-local-spool", "restart-root-render-v1-v2",
+                    Environment.ProcessId, "debug-lease-v1"), Json));
             loop = Task.Run(RunAsync);
         }
         public byte[] PackageFor(string target) { lock (gate) return packages[target].ToArray(); }
@@ -189,6 +225,7 @@ internal static class LiveGameEditorUiTests
             try
             {
                 var previous = 0L;
+                string? debugOwner = null;
                 while (!stop.IsCancellationRequested)
                 {
                     var path = Path.Combine(Directory, "request.json");
@@ -202,11 +239,13 @@ internal static class LiveGameEditorUiTests
                     Require(next > previous && root.GetProperty("session").GetString() == Session, "Unscoped/replayed UI request.");
                     previous = next;
                     var operation = root.GetProperty("operation").GetString();
+                    var owner = root.GetProperty("debugOwner").GetString();
                     var target = root.TryGetProperty("target", out var selected) ? selected.GetString() : null;
                     var result = "Ok";
                     var error = string.Empty;
                     if (operation == "replace")
                     {
+                        Require(debugOwner is not null && owner == debugOwner, "Replacement did not carry the attached lease.");
                         LastTarget = target;
                         LastPolicy = root.GetProperty("policy").GetString();
                         var bytes = Convert.FromBase64String(root.GetProperty("packageBase64").GetString()!);
@@ -215,6 +254,17 @@ internal static class LiveGameEditorUiTests
                         if (RejectNextReplacement)
                         { RejectNextReplacement = false; result = "UnsupportedBinary"; error = "Synthetic engine preflight rejection; old component retained."; Interlocked.Increment(ref rejections); }
                         else { lock (gate) packages[target!] = bytes; Interlocked.Increment(ref mutations); }
+                    }
+                    else if (operation == "debug-attach")
+                    {
+                        Require(Guid.TryParseExact(owner, "N", out _), "Missing debug lease identity.");
+                        debugOwner = owner;
+                    }
+                    else if (operation == "debug-disconnect")
+                    {
+                        Require(debugOwner is not null && owner == debugOwner, "Disconnect did not carry the attached lease.");
+                        debugOwner = null;
+                        Interlocked.Increment(ref debugDisconnects);
                     }
                     else if (operation == "destroy") Interlocked.Increment(ref destroyRequests);
                     else Require(operation == "list", "Unexpected editor mutation command.");

@@ -14,6 +14,7 @@
   "LiveGame.Offline": "未接続です。",
   "LiveGame.DebugClearing": "切断しました。Debug 描画だけの解除確認を待っています。通常のゲーム再生は継続します…",
   "LiveGame.DebugCleared": "切断し、Debug 描画の解除を確認しました。通常のゲーム再生は継続しています。",
+  "LiveGame.IncludeDebugDraw": "適用時に Debug Text／Model を含める（既定はオフ）。現在のデバッグ描画を消すには、オフにして再適用するか、切断してください。",
   "LiveGame.DebugClearFailed": "切断しましたが、Debug 描画の解除は未確認です: {0}。通常のゲーム再生は停止していません。",
   "LiveGame.DebugClearUnsupported": "切断しました。この旧接続先は Debug 描画だけの解除確認に未対応です。通常のゲーム再生は停止していません。",
   "LiveGame.Destination": "{0}・プロセス {1}・セッション {2}",

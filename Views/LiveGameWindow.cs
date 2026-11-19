@@ -24,6 +24,7 @@ public sealed class LiveGameWindow : UserControl, IDisposable
     private readonly TextBox directory = new() { Name = "LiveGameDirectory" };
     private readonly Button browse = new() { Name = "LiveGameBrowse" };
     private readonly CheckBox consent = new() { Name = "LiveGameConsent" };
+    private readonly CheckBox includeDebugDraw = new() { Name = "LiveGameIncludeDebugDraw" };
     private readonly Button connect = new() { Name = "LiveGameConnect" };
     private readonly Button disconnect = new() { Name = "LiveGameDisconnect" };
     private readonly Button refresh = new() { Name = "LiveGameRefresh" };
@@ -39,6 +40,8 @@ public sealed class LiveGameWindow : UserControl, IDisposable
         DataContext = model;
         directory.Bind(TextBox.TextProperty, new Binding(nameof(model.EndpointDirectory)) { Mode = BindingMode.TwoWay });
         consent.Bind(CheckBox.IsCheckedProperty, new Binding(nameof(model.Consent)) { Mode = BindingMode.TwoWay });
+        includeDebugDraw.Bind(CheckBox.IsCheckedProperty, new Binding(nameof(model.IncludeDebugDraw)) { Mode = BindingMode.TwoWay });
+        includeDebugDraw.Bind(IsEnabledProperty, new Binding(nameof(model.CanIncludeDebugDraw)));
         instances.ItemsSource = model.Instances;
         instances.Bind(ListBox.SelectedItemProperty, new Binding(nameof(model.SelectedInstance)) { Mode = BindingMode.TwoWay });
         connect.Command = model.ConnectCommand; disconnect.Command = model.DisconnectCommand;
@@ -58,7 +61,7 @@ public sealed class LiveGameWindow : UserControl, IDisposable
         } };
         var bottom = new StackPanel { Spacing = 8, Children =
         {
-            restartNotice,
+            restartNotice, includeDebugDraw,
             new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { apply, cancel } },
             status
         } };
@@ -120,6 +123,8 @@ public sealed class LiveGameWindow : UserControl, IDisposable
         browse.Content = Text("ChooseDirectory"); connect.Content = Text("Connect"); disconnect.Content = Text("Disconnect");
         refresh.Content = Text("Refresh"); apply.Content = Text("Apply"); cancel.Content = Text("Cancel");
         consent.Content = new TextBlock { Text = Text("Consent"), TextWrapping = TextWrapping.Wrap };
+        includeDebugDraw.Content = new TextBlock { Text = Text("IncludeDebugDraw"), TextWrapping = TextWrapping.Wrap };
+        AutomationProperties.SetName(includeDebugDraw, Text("IncludeDebugDraw"));
         AutomationProperties.SetName(directory, Text("Directory"));
         AutomationProperties.SetName(instances, Text("Targets"));
         instances.ItemTemplate = new FuncDataTemplate<LiveGameInstance>((instance, _) => instance is null ? null :

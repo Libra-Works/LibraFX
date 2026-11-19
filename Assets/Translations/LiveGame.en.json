@@ -14,6 +14,7 @@
   "LiveGame.Offline": "Not connected.",
   "LiveGame.DebugClearing": "Disconnected. Waiting for debug-only cleanup; normal game playback continues…",
   "LiveGame.DebugCleared": "Disconnected. Debug draw cleanup acknowledged; normal game playback continues.",
+  "LiveGame.IncludeDebugDraw": "Include Debug Text / Model on Apply (OFF by default). Uncheck and Apply again, or disconnect, to clear current debug draws.",
   "LiveGame.DebugClearFailed": "Disconnected, but debug cleanup is not confirmed: {0}. Normal game playback was not stopped.",
   "LiveGame.DebugClearUnsupported": "Disconnected. This older endpoint cannot acknowledge debug-only cleanup. Normal game playback was not stopped.",
   "LiveGame.Destination": "{0} · process {1} · session {2}",
