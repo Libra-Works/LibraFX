@@ -43,7 +43,36 @@ internal static class ChatUi47Tests
             var connect = Field<Button>(window, "_connect");
             var disconnect = Field<Button>(window, "_disconnect");
             if (input.IsEnabled || send.IsEnabled) throw new Exception("Offline chat was enabled.");
+            var destination = Field<TextBlock>(window, "_destination");
+            if (!destination.IsEffectivelyVisible || destination.Text?.Contains("127.0.0.1:1234") != true)
+            {
+                throw new Exception("The compatible endpoint must be visible with settings collapsed.");
+            }
             Field<ComboBox>(window, "_adapters").SelectedIndex = 1;
+            if (!destination.IsEffectivelyVisible || destination.Text?.Contains(adapter.Destination) != true ||
+                Field<TextBlock>(window, "_privacyDetails").Text?.Contains(adapter.PrivacyNotice) != true)
+            {
+                throw new Exception("The selected adapter must show its destination and privacy notice.");
+            }
+            adapter.Mode = "continue";
+            Invoke(connect);
+            await WaitAsync(() => input.IsEnabled, "MCP connection without sharing consent");
+            if (adapter.Calls != 0)
+            {
+                throw new Exception("Connect sent a provider request before Send.");
+            }
+            input.Text = "Say hello without project data";
+            Invoke(send);
+            await WaitAsync(() => adapter.Continuation is not null && input.IsEnabled, "Chat without sharing consent");
+            var privateRequest = adapter.Continuation!;
+            if (privateRequest.Tools.Count != 0 || privateRequest.Messages.Count != 1 ||
+                privateRequest.Messages[0] is not { Role: "user", Text: "Say hello without project data" })
+            {
+                throw new Exception("The provider received project context without consent.");
+            }
+            Invoke(disconnect);
+            adapter.Continuation = null;
+            adapter.Mode = "edit";
             Field<CheckBox>(window, "_share").IsChecked = true;
             await Task.Delay(100);
             var initialCount = main.Graph.Nodes.Count;

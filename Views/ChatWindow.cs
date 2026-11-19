@@ -24,13 +24,9 @@ public sealed partial class ChatWindow : UserControl, IDisposable
     private readonly Control _endpointRow;
     private readonly Control _modelRow;
     private readonly Control _keyRow;
-    private readonly TextBlock _destination = new() { TextWrapping = TextWrapping.Wrap, IsVisible = false };
+    private readonly TextBlock _destination = new() { TextTrimming = TextTrimming.CharacterEllipsis };
+    private readonly TextBlock _privacyDetails = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _status = new() { Classes = { "editor-label" }, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
-    private readonly Border _infoBadge = new()
-    {
-        Background = Brushes.Transparent, Padding = new Thickness(4), VerticalAlignment = VerticalAlignment.Center,
-        Child = new EditorIconView { Icon = EditorIcon.Info }
-    };
     private readonly Border _configPanel;
     private readonly ToggleButton _configToggle = new()
     {
@@ -98,7 +94,7 @@ public sealed partial class ChatWindow : UserControl, IDisposable
 
         var headerBar = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
             ColumnSpacing = 6,
             Children =
             {
@@ -113,11 +109,6 @@ public sealed partial class ChatWindow : UserControl, IDisposable
                         Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center,
                         Children = { _connect, _disconnect, _clear, new Border { Classes = { "editor-toolbar-divider" } }, _configToggle }
                     }
-                },
-                new Border
-                {
-                    [Grid.ColumnProperty] = 2,
-                    Child = _infoBadge
                 }
             }
         };
@@ -134,8 +125,7 @@ public sealed partial class ChatWindow : UserControl, IDisposable
                 {
                     (_endpointRow = Label("Endpoint", _endpoint, "URL")),
                     (_modelRow = Label("Model", _model, Text("Model"))),
-                    (_keyRow = Label("Key", _key, "API Key")),
-                    _destination
+                    (_keyRow = Label("Key", _key, Text("Key")))
                 }
             }
         };
@@ -154,7 +144,18 @@ public sealed partial class ChatWindow : UserControl, IDisposable
         var top = new StackPanel
         {
             Spacing = 6,
-            Children = { headerBar, _configPanel, consentAndStatus }
+            Children =
+            {
+                headerBar, _configPanel,
+                new Expander
+                {
+                    Header = _destination,
+                    Content = _privacyDetails,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch
+                },
+                consentAndStatus
+            }
         };
 
         var actionRow = new Grid
@@ -300,10 +301,11 @@ public sealed partial class ChatWindow : UserControl, IDisposable
         _endpointRow.IsVisible = _modelRow.IsVisible = _keyRow.IsVisible = configurable;
         _selectedDestination = adapter?.Destination;
         _selectedPrivacy = adapter?.PrivacyNotice;
-        _destination.Text = adapter is null
-            ? Text("Destination") + "\n" + (_endpoint.Text ?? "") + " • " + (_model.Text ?? "") + "\n" + Text("CompatiblePrivacy")
-            : Text("Destination") + "\n" + adapter.Destination + "\n" + adapter.PrivacyNotice;
-        ToolTip.SetTip(_infoBadge, Text("Explanation") + "\n\n" + _destination.Text);
+        var target = adapter is null ? $"{_endpoint.Text} • {_model.Text}" : _selectedDestination;
+        var privacy = adapter is null ? Text("CompatiblePrivacy") : _selectedPrivacy;
+        _destination.Text = $"{Text("Destination")}: {target}";
+        ToolTip.SetTip(_destination, _destination.Text);
+        _privacyDetails.Text = $"{target}\n\n{privacy}\n\n{Text("Explanation")}";
         UpdateConfigVisibility();
     }
 
