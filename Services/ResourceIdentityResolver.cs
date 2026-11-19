@@ -80,6 +80,8 @@ public sealed class ResourceIdentityResolver
 // Bridges explicit mappings into the existing Unreal render_config fields. It never rewrites the graph.
 public sealed class ResourceIdentityRenderContext : IRenderResourceBindingContext
 {
+    internal sealed record UnityPreviewBindingSet(Guid ProjectId, IReadOnlyList<UnityRuntimeBindingDelivery> Resources);
+
     private readonly ResourceIdentityResolver resolver;
     private readonly bool requireMappings;
     private readonly IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> instancePaths;
@@ -94,6 +96,29 @@ public sealed class ResourceIdentityRenderContext : IRenderResourceBindingContex
 
     public IReadOnlyList<Guid> GetInstancePath(Guid nodeId) =>
         instancePaths.TryGetValue(nodeId, out var path) ? path : Array.Empty<Guid>();
+
+    internal UnityPreviewBindingSet UnityPreviewBindings()
+    {
+        if (resolver.Project.Engine != "Unity")
+        {
+            throw new InvalidDataException("Unity preview requires a Unity project identity.");
+        }
+        var document = resolver.Document;
+        var resources = document.Uses.Select(use => use.ResourceId).Distinct().Select(id =>
+        {
+            var resource = document.Resources.Single(item => item.Id == id);
+            var binding = Require(resolver.ResolveResource(id, resource.Kind), id, "Unity preview");
+            var parameters = document.ParameterUses.Where(use => use.ResourceId == id)
+                .Select(use => use.ParameterId).Distinct().Select(parameterId =>
+                {
+                    var parameter = resource.Parameters!.Single(item => item.Id == parameterId);
+                    return new UnityRuntimeParameterBindingDelivery(parameterId, parameter.Name, parameter.Kind,
+                        Require(resolver.ResolveParameter(id, parameterId, parameter.Kind), id, parameter.Name));
+                }).ToArray();
+            return new UnityRuntimeBindingDelivery(id, resource.Kind, binding, parameters);
+        }).ToArray();
+        return new(resolver.Project.ProjectId, resources);
+    }
 
     public bool HasResourceUse(Guid nodeId, string location) =>
         HasResourceUse(nodeId, location, Array.Empty<Guid>());

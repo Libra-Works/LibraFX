@@ -1,6 +1,8 @@
 #if UNITY_EDITOR
 using System;
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -19,6 +21,7 @@ namespace LiberaFx.Unity
     {
         private const int HeaderSize = 48;
         private const int MaxPayload = 1024 * 1024;
+        private const int MaxPreviewFrame = 16 * 1024 * 1024;
         private string endpoint = "wss://127.0.0.1:8766/preview?protocol=3";
         private string accessToken = "";
         private string certificateFingerprint = "";
@@ -26,10 +29,16 @@ namespace LiberaFx.Unity
         private ClientWebSocket socket;
         private CancellationTokenSource cancellation;
         private readonly ConcurrentQueue<byte[]> requests = new ConcurrentQueue<byte[]>();
+        private readonly ConcurrentQueue<byte[]> previewFrames = new ConcurrentQueue<byte[]>();
         private readonly ConcurrentQueue<string> diagnostics = new ConcurrentQueue<string>();
         private readonly SemaphoreSlim sendGate = new SemaphoreSlim(1, 1);
         private bool connecting;
         private bool disposed;
+        private bool showLivePreview;
+        private int queuedPreviewBytes;
+        private LiberaFxUnityWssPreview preview;
+        internal GameObject PreviewObject => preview?.PreviewObject;
+        internal string Status => status;
 
         [MenuItem("Tools/LiberaFx/Resources/Connect to LIBERA FX")]
         private static void Open()
@@ -46,6 +55,10 @@ namespace LiberaFx.Unity
             endpoint = EditorGUILayout.TextField("WSS endpoint", endpoint);
             accessToken = EditorGUILayout.PasswordField("Preview token", accessToken);
             certificateFingerprint = EditorGUILayout.TextField("TLS SHA-256 fingerprint", certificateFingerprint);
+            using (new EditorGUI.DisabledScope(socket != null || connecting))
+            {
+                showLivePreview = EditorGUILayout.ToggleLeft("Render desktop preview in Unity", showLivePreview);
+            }
             EditorGUILayout.Space();
             using (new EditorGUILayout.HorizontalScope())
             {
@@ -59,6 +72,10 @@ namespace LiberaFx.Unity
                 "Copy the Preview WSS endpoint, preview-only token, and SHA-256 certificate fingerprint from LIBERA FX. " +
                 "The certificate is accepted only when its exact fingerprint matches. The token is not persisted.",
                 MessageType.None);
+            if (preview != null)
+            {
+                preview.Draw(GUILayoutUtility.GetRect(200, 240, GUILayout.ExpandWidth(true)));
+            }
         }
 
         private async Task ConnectAsync()
@@ -85,11 +102,23 @@ namespace LiberaFx.Unity
                 candidate.Options.SetRequestHeader("X-LiberaFx-Preview-Token", accessToken);
                 candidate.Options.RemoteCertificateValidationCallback = (sender, certificate, chain, errors) =>
                     certificate != null && FingerprintMatches(certificate, expectedFingerprint);
-                await candidate.ConnectAsync(uri, stop.Token);
+                var connectionUri = showLivePreview
+                    ? new UriBuilder(uri) { Query = "protocol=3&unityPackagePreview=1" }.Uri : uri;
+                await candidate.ConnectAsync(connectionUri, stop.Token);
+                var acceptedCapabilities = showLivePreview
+                    ? "\"resourceIdentity\",\"unityPackagePreview\"" : "\"resourceIdentity\"";
                 var hello = Encoding.UTF8.GetBytes(
                     "{\"type\":\"hello\",\"engine\":\"Unity\",\"role\":\"editor\",\"version\":1," +
-                    "\"capabilities\":[\"resourceIdentity\"],\"viewerName\":\"Unity Editor\"}");
+                    "\"capabilities\":[" + acceptedCapabilities + "],\"viewerName\":\"Unity Editor\"}");
                 await candidate.SendAsync(new ArraySegment<byte>(hello), WebSocketMessageType.Text, true, stop.Token);
+                if (disposed)
+                {
+                    throw new OperationCanceledException();
+                }
+                if (showLivePreview)
+                {
+                    preview = new LiberaFxUnityWssPreview();
+                }
                 socket = candidate;
                 cancellation = stop;
                 connecting = false;
@@ -109,11 +138,13 @@ namespace LiberaFx.Unity
             }
         }
 
-        internal Task ConnectAsync(string previewEndpoint, string previewToken, string fingerprint)
+        internal Task ConnectAsync(string previewEndpoint, string previewToken, string fingerprint,
+            bool enableLivePreview = false)
         {
             endpoint = previewEndpoint;
             accessToken = previewToken;
             certificateFingerprint = fingerprint;
+            showLivePreview = enableLivePreview;
             return ConnectAsync();
         }
 
@@ -121,7 +152,7 @@ namespace LiberaFx.Unity
 
         private async Task ReceiveLoopAsync(ClientWebSocket client, CancellationToken stop)
         {
-            var buffer = new byte[HeaderSize + MaxPayload + 1];
+            var buffer = new byte[MaxPreviewFrame + 1];
             try
             {
                 while (!stop.IsCancellationRequested && client.State == WebSocketState.Open)
@@ -148,17 +179,48 @@ namespace LiberaFx.Unity
                         }
                         requests.Enqueue(payload);
                     }
+                    else if (showLivePreview && messageType == WebSocketMessageType.Binary &&
+                        IsPreviewFrame(buffer.AsSpan(0, length)))
+                    {
+                        if (queuedPreviewBytes + length > MaxPreviewFrame * 2 || previewFrames.Count >= 128)
+                        {
+                            diagnostics.Enqueue("Unity preview queue is full; reconnect to resynchronize.");
+                            return;
+                        }
+                        previewFrames.Enqueue(buffer.AsSpan(0, length).ToArray());
+                        queuedPreviewBytes += length;
+                    }
                 }
             }
             catch (OperationCanceledException) { }
-            catch (Exception exception)
+            catch (Exception)
             {
                 diagnostics.Enqueue("Preview connection failed. Check the endpoint, certificate pin, and editor state.");
             }
             finally
             {
-                diagnostics.Enqueue("Preview connection closed.");
+                if (socket == client)
+                {
+                    Disconnect("Preview connection closed.");
+                }
             }
+        }
+
+        private static bool IsPreviewFrame(ReadOnlySpan<byte> frame)
+        {
+            if (frame.Length < HeaderSize || frame[0] != 'L' || frame[1] != 'F' ||
+                frame[2] != 'X' || frame[3] != 'P' || frame[4] != 1 || frame[5] != 0 ||
+                frame[7] != 0 || BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(44)) != frame.Length - HeaderSize)
+            {
+                return false;
+            }
+            return frame[6] switch
+            {
+                1 => frame.Length > 56 && frame[48] == 'L' && frame[49] == 'F' && frame[50] == 'X' && frame[51] == 'U',
+                2 => frame.Length == HeaderSize,
+                3 => frame.Length <= HeaderSize + 4096,
+                _ => false
+            };
         }
 
         private static bool TryGetIdentityRequest(byte[] frame, int length, out byte[] payload)
@@ -223,6 +285,30 @@ namespace LiberaFx.Unity
                 }
                 _ = SendResponseAsync(client, response, stop.Token);
             }
+            while (previewFrames.TryDequeue(out var frame))
+            {
+                queuedPreviewBytes -= frame.Length;
+                try
+                {
+                    var changed = preview.Apply(frame, out var sequence, out var error);
+                    if (changed || error != null)
+                    {
+                        status = error ?? "Connected · Unity is rendering the desktop preview.";
+                        Repaint();
+                    }
+                    if (sequence != 0)
+                    {
+                        _ = SendResponseAsync(client, "{\"type\":\"package_preview_ack\",\"programSequence\":" +
+                            sequence.ToString(CultureInfo.InvariantCulture) + "}", stop.Token);
+                    }
+                }
+                catch (Exception error)
+                {
+                    preview.Clear();
+                    status = "Unity preview could not apply the package: " + error.Message;
+                    Repaint();
+                }
+            }
         }
 
         private async Task SendResponseAsync(ClientWebSocket client, string response, CancellationToken stop)
@@ -258,6 +344,10 @@ namespace LiberaFx.Unity
             cancellation?.Dispose();
             cancellation = null;
             requests.Clear();
+            previewFrames.Clear();
+            queuedPreviewBytes = 0;
+            preview?.Dispose();
+            preview = null;
             status = message;
             Repaint();
         }

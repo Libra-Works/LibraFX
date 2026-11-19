@@ -82,14 +82,23 @@ instance scope. Unselected legacy values remain unchanged and are NOT portable. 
 delivery populates the Unity runtime binding asset only when requested from the Resource
 Identity tab.
 
-For live protocol-3 rendering, a peer must advertise both rendering and resourceIdentity.
-The host queries that peer's Ready project identity and probes explicitly mapped resources
+For live protocol-3 rendering, the peer must advertise resourceIdentity and its preview
+capability (rendering for Unreal, unityPackagePreview for Unity). The host queries that
+peer's Ready project identity and probes explicitly mapped resources
 and material parameters before sending the replacement. Unmapped legacy uses retain their
 old values; a failed explicit mapping reports a preview error rather than falling back.
 The host rechecks mappings on a new graph snapshot or a peer's resync. This applies to
-Unreal desktop render scenes, including editor-native lifecycle rendering. The Unity
-resource window is an asset-query and binding-delivery peer, not a live scene renderer.
-GPU resource mappings and Godot package preview mappings are not enabled by this path.
+Unreal desktop render scenes, including editor-native lifecycle rendering. In the Unity
+connection window, enable "Render desktop preview in Unity" before connecting. The host
+sends a compiled package and the verified project bindings together. Unity runs it in
+the window's isolated preview scene and applies timeline playback updates. Preview
+bindings are transient; the explicit binding-delivery action is still required to write
+LiberaFxBindings.asset for packaged playback. Mapping errors and disconnects clear the
+Unity preview instead of leaving the prior effect visible.
+
+Unity WSS package preview does not support SOURCE skeletal input or manual Editor Send.
+It is separate from the Unity Live Game path. GPU resource mappings and Godot package
+preview mappings are not enabled by this path.
 
 Headless path (after the owner adds the source links and builds):
   LiberaFxConverter convert effect.lfxproj effect.lfxrm
@@ -123,10 +132,11 @@ over certificate-pinned WSS, and framebuffer output from a compiled package usin
 mapping. The fixture intentionally names a nonexistent legacy asset. The protocol regression
 requires an explicit diagnostic for a same-path mapping owned by the wrong project.
 
-Unity 7 also verified exact Mesh and Material lookup over certificate-pinned WSS, binding
-delivery, and native playback of a compiled package using those same objects. The fixture
-names nonexistent legacy mesh and material paths and checks the rendered framebuffer.
-This is package playback, not live replacement of a running Unity graph.
+Unity 7 also verified certificate-pinned WSS live rendering before and after a graph
+mapping edit, wrong-project rejection and retirement, timeline seeking, and disconnect
+cleanup. The same fixture verifies explicit binding delivery and native package playback.
+It names nonexistent legacy mesh and material paths and checks exact Unity Mesh and
+Material object identity and framebuffer output in both live and package modes.
 
 For the Unreal integration check, initialize the dedicated project with
 Libra.Editor.Resources.Identity and -LibraInitializeResourceProject, then run
@@ -142,9 +152,5 @@ LIBERAFX_RESOURCE_WSS_FIXTURE to a fresh absolute output directory. With an isol
 LIBERAFX_DATA_ROOT, run CommentImageSmokeTests with --unity-mapped-package. The project
 needs the Unity integration and its native runtime, a D3D11 graphics device, and no existing
 LiberaFxBindings.asset. The test removes the generated fixture and keeps the local log and
-framebuffer capture in the output directory.
-
-Remaining acceptance/verification:
-* Verify the Resource Identity tab against a connected Unity project, including clone
-  decisions and missing/type-mismatch diagnostics. The Unity WSS client does not advertise
-  rendering, and the separate Live Game path does not resolve mapped graph resources.
+framebuffer captures in the output directory. This exercises the WSS bridge and runtime,
+not the manual Resource Identity tab workflow.

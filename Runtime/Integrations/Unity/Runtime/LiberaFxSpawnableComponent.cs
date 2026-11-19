@@ -108,13 +108,20 @@ namespace LiberaFx.Unity
 
         // Session factory hook: configure a NEW inactive owner before Play.
         // Never mutate an asset shared by another playing component.
+        private bool manualPreviewTime;
+
         public NativeResult ConfigureForSession(LiberaFxSpawnableAsset package, LiberaFxUnityBindingAsset bindings)
+            => ConfigureForSession(package, bindings, false);
+
+        public NativeResult ConfigureForSession(LiberaFxSpawnableAsset package, LiberaFxUnityBindingAsset bindings,
+            bool useManualPreviewTime)
         {
             UnityInstanceSession.RequireMainThread();
             if (host != null || gameObject.activeInHierarchy) return NativeResult.Busy;
             effect = package;
             engineBindings = bindings;
             playOnEnable = false;
+            manualPreviewTime = useManualPreviewTime;
             return NativeResult.Ok;
         }
 
@@ -128,7 +135,7 @@ namespace LiberaFx.Unity
         private void LateUpdate()
         {
             var current = host;
-            if (current == null || rootFinished) return;
+            if (current == null || rootFinished || manualPreviewTime) return;
             if (sourceInitialAdvancePending)
             {
                 if (!PublishFrameInputs(current)) return;
@@ -170,32 +177,64 @@ namespace LiberaFx.Unity
                 return;
             }
 
-            if (!PublishFrameInputs(current)) return;
-            elapsed += frameDelta * rate;
+            AdvanceFrame(current, elapsed + frameDelta * rate, frameDelta);
+        }
+
+        public NativeResult AdvancePreview(double time)
+        {
+            UnityInstanceSession.RequireMainThread();
+            if (!manualPreviewTime || host == null || debugging || sourceInitialAdvancePending)
+            {
+                return NativeResult.NotReady;
+            }
+            if (double.IsNaN(time) || double.IsInfinity(time) || time < elapsed)
+            {
+                return NativeResult.InvalidArgument;
+            }
+            if (rootFinished || time == elapsed)
+            {
+                return NativeResult.Ok;
+            }
+            return AdvanceFrame(host, time, time - elapsed);
+        }
+
+        private NativeResult AdvanceFrame(NativeSpawnableHost current, double time, double frameDelta)
+        {
+            if (!PublishFrameInputs(current))
+            {
+                return NativeResult.NotReady;
+            }
+            elapsed = time;
             var qualityResult = current.SetHostQuality(UnityHostQuality.Read(qualityTierMapping, (ulong)Time.frameCount));
             if (qualityResult != NativeResult.Ok)
             {
                 FailPlayback(qualityResult, "Publishing host quality failed: " + qualityResult + ".", current);
                 enabled = false;
-                return;
+                return qualityResult;
             }
             var result = NativeResult.QueueRejected;
             for (var attempt = 0; attempt < 16; ++attempt)
             {
                 result = current.Advance(elapsed, frameDelta);
                 DrainEvents(current);
-                if (host != current) return;
-                if (effectForced) return;
-                if (result != NativeResult.QueueRejected) break;
+                if (host != current || effectForced)
+                {
+                    return result;
+                }
+                if (result != NativeResult.QueueRejected)
+                {
+                    break;
+                }
             }
             if (result != NativeResult.Ok)
             {
                 FailPlayback(result, "Native Spawnable advance failed: " + result + ".", current);
                 enabled = false;
-                return;
+                return result;
             }
 
             FinishFrame(current);
+            return NativeResult.Ok;
         }
 
         private void UpdateDebugger(NativeSpawnableHost current)

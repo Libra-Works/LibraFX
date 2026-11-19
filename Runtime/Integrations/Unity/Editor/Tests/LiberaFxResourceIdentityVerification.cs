@@ -483,26 +483,58 @@ namespace LiberaFx.Unity.Editor
                     "Failed to create the isolated resource fixture folder.");
                 directory = "Assets/" + folderName;
                 var mesh = UnityEngine.Object.Instantiate(Resources.GetBuiltinResource<Mesh>("Cube.fbx"));
+                var replacement = UnityEngine.Object.Instantiate(mesh);
+                var vertices = replacement.vertices;
+                for (var index = 0; index < vertices.Length; ++index)
+                {
+                    vertices[index].x *= 2;
+                }
+                replacement.vertices = vertices;
+                replacement.RecalculateBounds();
                 var shader = Shader.Find("Unlit/Color");
                 Require(shader && shader.isSupported, "The Unity graphics device must support Unlit/Color.");
                 var material = new Material(shader);
                 AssetDatabase.CreateAsset(mesh, directory + "/Marker.asset");
+                AssetDatabase.CreateAsset(replacement, directory + "/Replacement.asset");
                 AssetDatabase.CreateAsset(material, directory + "/Marker.mat");
                 AssetDatabase.SaveAssets();
                 var meshIdentity = LiberaFxUnityResourceIdentityAdapter.CreateAssetBinding(mesh);
                 var materialIdentity = LiberaFxUnityResourceIdentityAdapter.CreateAssetBinding(material);
 
                 connection = ScriptableObject.CreateInstance<LiberaFxUnityResourceIdentityConnection>();
-                var connect = connection.ConnectAsync(uri, token, fingerprint);
+                var connect = connection.ConnectAsync(uri, token, fingerprint, enableLivePreview: true);
                 Require(await Task.WhenAny(connect, Task.Delay(15000)) == connect,
                     "Timed out waiting for the real Unity preview connection.");
                 await connect;
                 Require(connection.IsConnected, "Unity resource WSS connection failed.");
-                File.WriteAllText(Path.Combine(scratch, "unity-bindings.json"), JsonUtility.ToJson(new MappedAssets
+                var identityTemp = Path.Combine(scratch, "unity-bindings.tmp");
+                File.WriteAllText(identityTemp, JsonUtility.ToJson(new MappedAssets
                 {
                     mesh = meshIdentity,
+                    replacement = LiberaFxUnityResourceIdentityAdapter.CreateAssetBinding(replacement),
                     material = materialIdentity
                 }));
+                File.Move(identityTemp, Path.Combine(scratch, "unity-bindings.json"));
+                await WaitForPreview(connection, () => HasMesh(connection.PreviewObject, mesh), "initial mapped render");
+                var retired = connection.PreviewObject;
+                VerifyFramebuffer(retired, mesh, material, Path.Combine(scratch, "unity-live-first.png"));
+                File.WriteAllText(Path.Combine(scratch, "unity-live-first.ok"), "");
+                await WaitForPreview(connection, () => !connection.PreviewObject, "wrong-project map to clear the preview");
+                Require(!retired && connection.Status.Contains("Unregistered"),
+                    "Wrong-project mapping did not retire the previous effect with an explicit diagnostic.");
+                File.WriteAllText(Path.Combine(scratch, "unity-live-rejected.ok"), "");
+                await WaitForPreview(connection, () => HasMesh(connection.PreviewObject, replacement), "replacement mapping");
+                Require(!AssetDatabase.LoadMainAssetAtPath(BindingAssetPath),
+                    "Unity live preview wrote to the project binding asset.");
+                VerifyFramebuffer(connection.PreviewObject, replacement, material, Path.Combine(scratch, "unity-live-second.png"));
+                File.WriteAllText(Path.Combine(scratch, "unity-live-second.ok"), "");
+                await WaitForPreview(connection, () => PreviewTime(connection, .25), "forward playback seek");
+                File.WriteAllText(Path.Combine(scratch, "unity-live-seek.ok"), "");
+                var beforeRewind = connection.PreviewObject;
+                await WaitForPreview(connection, () => PreviewTime(connection, 0), "backward playback seek");
+                Require(!beforeRewind && HasMesh(connection.PreviewObject, replacement),
+                    "Rewinding did not rebuild the mapped Unity effect at time zero.");
+                File.WriteAllText(Path.Combine(scratch, "unity-live-rewind.ok"), "");
                 var packagePath = Path.Combine(scratch, "unity-mapped.lfxp");
                 var deadline = DateTime.UtcNow.AddSeconds(35);
                 while (!File.Exists(packagePath) && DateTime.UtcNow < deadline && connection.IsConnected)
@@ -512,9 +544,13 @@ namespace LiberaFx.Unity.Editor
                 Require(File.Exists(packagePath), "The desktop did not publish the WSS-resolved runtime package.");
                 var bindings = AssetDatabase.LoadAssetAtPath<LiberaFxUnityBindingAsset>(BindingAssetPath);
                 Require(bindings, "The actual WSS delivery did not create the runtime binding asset.");
-                VerifyMappedPackage(packagePath, bindings, mesh, material);
+                VerifyMappedPackage(packagePath, bindings, replacement, material);
+                var latest = connection.PreviewObject;
+                UnityEngine.Object.DestroyImmediate(connection);
+                connection = null;
+                Require(!latest, "Disconnect retained the loaded Unity preview effect.");
                 File.WriteAllText(Path.Combine(scratch, "unity-result.txt"),
-                    "PASS: real Unity WSS asset probe and delivery, compiled mapped package, exact mesh/material and framebuffer\n");
+                    "PASS: Unity WSS live mapped render, wrong-project retirement and recovery, binding delivery and mapped package framebuffer\n");
                 result = 0;
             }
             catch (Exception error)
@@ -543,7 +579,28 @@ namespace LiberaFx.Unity.Editor
         private sealed class MappedAssets
         {
             public string mesh;
+            public string replacement;
             public string material;
+        }
+
+        private static bool HasMesh(GameObject owner, Mesh mesh) =>
+            owner && owner.GetComponentsInChildren<MeshFilter>().Any(filter => filter.sharedMesh == mesh);
+
+        private static bool PreviewTime(LiberaFxUnityResourceIdentityConnection connection, double time)
+        {
+            var owner = connection.PreviewObject;
+            return owner && Math.Abs(owner.GetComponent<LiberaFxSpawnableComponent>().ElapsedTime - time) < 1e-8;
+        }
+
+        private static async Task WaitForPreview(LiberaFxUnityResourceIdentityConnection connection,
+            Func<bool> predicate, string operation)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(35);
+            while (!predicate() && DateTime.UtcNow < deadline && connection.IsConnected)
+            {
+                await Task.Delay(50);
+            }
+            Require(predicate(), "Timed out waiting for " + operation + ": " + connection.Status);
         }
 
         private static void VerifyMappedPackage(string path, LiberaFxUnityBindingAsset bindings, Mesh mesh, Material material)
@@ -551,10 +608,6 @@ namespace LiberaFx.Unity.Editor
             var package = ScriptableObject.CreateInstance<LiberaFxSpawnableAsset>();
             var owner = new GameObject("LIBERA FX WSS mapped package");
             owner.SetActive(false);
-            var cameraObject = new GameObject("LIBERA FX WSS framebuffer");
-            var target = new UnityEngine.RenderTexture(128, 128, 24, RenderTextureFormat.ARGB32);
-            var pixels = new Texture2D(128, 128, TextureFormat.RGBA32, false);
-            var previous = UnityEngine.RenderTexture.active;
             try
             {
                 package.SetPackageBytes(File.ReadAllBytes(path));
@@ -563,12 +616,38 @@ namespace LiberaFx.Unity.Editor
                     "Could not configure the actual mapped Unity package.");
                 owner.SetActive(true);
                 Require(effect.Play() == NativeResult.Ok, "Mapped package failed to play: " + effect.LastError);
+                VerifyFramebuffer(owner, mesh, material, Path.Combine(Path.GetDirectoryName(path), "unity-mapped.png"));
+                Require(effect.Stop() == NativeResult.Ok, "Could not stop the mapped Unity package.");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(owner);
+                UnityEngine.Object.DestroyImmediate(package);
+            }
+        }
+
+        private static void VerifyFramebuffer(GameObject owner, Mesh mesh, Material material, string imagePath)
+        {
+            var cameraObject = new GameObject("LIBERA FX WSS framebuffer");
+            UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(cameraObject, owner.scene);
+            var target = new UnityEngine.RenderTexture(128, 128, 24, RenderTextureFormat.ARGB32);
+            var pixels = new Texture2D(128, 128, TextureFormat.RGBA32, false);
+            var previous = UnityEngine.RenderTexture.active;
+            try
+            {
                 var filter = owner.GetComponentsInChildren<MeshFilter>().Single();
                 var renderer = filter.GetComponent<MeshRenderer>();
                 Require(filter.sharedMesh == mesh && renderer && renderer.sharedMaterial == material,
                     "Mapped package did not instantiate the exact WSS-delivered model and material.");
+                var previousLayer = filter.gameObject.layer;
                 filter.gameObject.layer = 31;
                 var camera = cameraObject.AddComponent<Camera>();
+                if (UnityEditor.SceneManagement.EditorSceneManager.IsPreviewScene(owner.scene))
+                {
+                    camera.scene = owner.scene;
+                    camera.overrideSceneCullingMask =
+                        UnityEditor.SceneManagement.EditorSceneManager.GetSceneCullingMask(owner.scene);
+                }
                 camera.enabled = false;
                 camera.orthographic = true;
                 camera.orthographicSize = 2;
@@ -582,19 +661,17 @@ namespace LiberaFx.Unity.Editor
                 UnityEngine.RenderTexture.active = target;
                 pixels.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
                 pixels.Apply();
+                filter.gameObject.layer = previousLayer;
                 Require(pixels.GetPixels32().Count(pixel => pixel.r > 24 || pixel.g > 24 || pixel.b > 24) > 32,
                     "The WSS-mapped Unity model did not render visible pixels.");
-                File.WriteAllBytes(Path.Combine(Path.GetDirectoryName(path), "unity-mapped.png"), pixels.EncodeToPNG());
-                Require(effect.Stop() == NativeResult.Ok, "Could not stop the mapped Unity package.");
+                File.WriteAllBytes(imagePath, pixels.EncodeToPNG());
             }
             finally
             {
                 UnityEngine.RenderTexture.active = previous;
-                UnityEngine.Object.DestroyImmediate(owner);
                 UnityEngine.Object.DestroyImmediate(cameraObject);
                 UnityEngine.Object.DestroyImmediate(target);
                 UnityEngine.Object.DestroyImmediate(pixels);
-                UnityEngine.Object.DestroyImmediate(package);
             }
         }
 

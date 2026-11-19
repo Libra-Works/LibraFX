@@ -431,7 +431,39 @@ namespace LiberaFx.Unity
             });
         }
 
-        private static string DeliverBindings(UnityResourceIdentityRequest request)
+        internal static LiberaFxUnityBindingAsset CreatePreviewBindings(string json)
+        {
+            var stored = AssetDatabase.LoadAssetAtPath<LiberaFxUnityBindingAsset>(
+                "Assets/LiberaFx/LiberaFxBindings.asset");
+            var bindings = stored ? UnityEngine.Object.Instantiate(stored) :
+                ScriptableObject.CreateInstance<LiberaFxUnityBindingAsset>();
+            bindings.hideFlags = HideFlags.HideAndDontSave;
+            try
+            {
+                if (json != "null")
+                {
+                    var request = JsonUtility.FromJson<UnityResourceIdentityRequest>(json) ??
+                        throw new InvalidOperationException("Missing Unity preview binding metadata.");
+                    var reply = DeliverBindings(request, bindings);
+                    if (reply.status != "Resolved")
+                    {
+                        throw new InvalidOperationException(reply.status + ": " + reply.detail);
+                    }
+                }
+                return bindings;
+            }
+            catch
+            {
+                UnityEngine.Object.DestroyImmediate(bindings);
+                throw;
+            }
+        }
+
+        private static string DeliverBindings(UnityResourceIdentityRequest request) =>
+            JsonUtility.ToJson(DeliverBindings(request, null));
+
+        private static UnityResourceIdentityReply DeliverBindings(UnityResourceIdentityRequest request,
+            LiberaFxUnityBindingAsset transientBindings)
         {
             GetProjectIdentity(out var projectId);
             var reply = new UnityResourceIdentityReply
@@ -445,13 +477,13 @@ namespace LiberaFx.Unity
             {
                 reply.status = "Offline";
                 reply.detail = "The selected Unity project identity is not ready in this Editor.";
-                return JsonUtility.ToJson(reply);
+                return reply;
             }
             if (request.resources == null || request.resources.Length is < 1 or > 256)
             {
                 reply.status = "QueryFailure";
                 reply.detail = "Unity binding delivery must include 1..256 resources.";
-                return JsonUtility.ToJson(reply);
+                return reply;
             }
 
             var existingBindingAsset = AssetDatabase.LoadAssetAtPath<LiberaFxUnityBindingAsset>(
@@ -468,33 +500,33 @@ namespace LiberaFx.Unity
                 {
                     reply.status = "QueryFailure";
                     reply.detail = "Unity resource delivery contains an invalid stable ID, kind, or opaque binding.";
-                    return JsonUtility.ToJson(reply);
+                    return reply;
                 }
                 var identity = guid + ":" + localId.ToString(CultureInfo.InvariantCulture);
                 if (!identities.Add(identity))
                 {
                     reply.status = "QueryFailure";
                     reply.detail = "Multiple LIBERA IDs resolve to the same Unity object; resolve the alias explicitly before delivery.";
-                    return JsonUtility.ToJson(reply);
+                    return reply;
                 }
                 var probe = FindAsset(guid, localId, out var asset);
                 if (probe != null || !asset || KindOf(asset) != entry.kind)
                 {
                     reply.status = probe?.status ?? "TypeMismatch";
                     reply.detail = probe?.detail ?? "Unity object's actual type does not match the registered resource kind.";
-                    return JsonUtility.ToJson(reply);
+                    return reply;
                 }
                 if (entry.parameters?.Length > 256)
                 {
                     reply.status = "QueryFailure";
                     reply.detail = "Unity material parameter binding count exceeds 256.";
-                    return JsonUtility.ToJson(reply);
+                    return reply;
                 }
                 if (entry.kind == "material" && !ValidateDeliveredParameters(entry, asset as Material, out var error))
                 {
                     reply.status = "TypeMismatch";
                     reply.detail = error;
-                    return JsonUtility.ToJson(reply);
+                    return reply;
                 }
                 var tintPropertyName = "";
                 if (entry.kind == "material")
@@ -510,23 +542,27 @@ namespace LiberaFx.Unity
                         reply.status = "TypeMismatch";
                         reply.detail = "Unity Material has no supported tint property '" + tintPropertyName +
                             "'. Configure a Material exposing a Color/Vector tint property before delivery.";
-                        return JsonUtility.ToJson(reply);
+                        return reply;
                     }
                 }
                 resolved.Add((entry, asset, identity, tintPropertyName));
             }
 
             const string bindingAssetPath = "Assets/LiberaFx/LiberaFxBindings.asset";
-            EnsureAssetFolders();
-            var bindingAsset = AssetDatabase.LoadAssetAtPath<LiberaFxUnityBindingAsset>(bindingAssetPath);
+            var bindingAsset = transientBindings;
             var created = false;
-            if (!bindingAsset)
+            if (!transientBindings)
             {
-                bindingAsset = ScriptableObject.CreateInstance<LiberaFxUnityBindingAsset>();
-                AssetDatabase.CreateAsset(bindingAsset, bindingAssetPath);
-                created = true;
+                EnsureAssetFolders();
+                bindingAsset = existingBindingAsset;
+                if (!bindingAsset)
+                {
+                    bindingAsset = ScriptableObject.CreateInstance<LiberaFxUnityBindingAsset>();
+                    AssetDatabase.CreateAsset(bindingAsset, bindingAssetPath);
+                    created = true;
+                }
+                Undo.RecordObject(bindingAsset, "Deliver LIBERA FX resource bindings");
             }
-            Undo.RecordObject(bindingAsset, "Deliver LIBERA FX resource bindings");
             var serialized = new SerializedObject(bindingAsset);
             var renderAssets = serialized.FindProperty("renderAssets");
             var materials = serialized.FindProperty("materials");
@@ -560,6 +596,12 @@ namespace LiberaFx.Unity
                     }
                 }
             }
+            if (transientBindings)
+            {
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+                reply.status = "Resolved";
+                return reply;
+            }
             serialized.ApplyModifiedProperties();
             EditorUtility.SetDirty(bindingAsset);
             AssetDatabase.SaveAssets();
@@ -568,7 +610,7 @@ namespace LiberaFx.Unity
             reply.detail = created
                 ? "Created the explicitly requested project-local binding asset; existing graph values were not changed."
                 : "Updated matching entries and preserved unrelated Unity bindings.";
-            return JsonUtility.ToJson(reply);
+            return reply;
         }
 
         private static bool HasTintProperty(Material material, string propertyName)

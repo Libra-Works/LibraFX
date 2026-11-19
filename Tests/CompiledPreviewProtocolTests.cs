@@ -113,7 +113,7 @@ internal static class CompiledPreviewProtocolTests
             {
                 peer = model.PreviewTelemetry.Clients().FirstOrDefault(client =>
                     client.Engine == "Unity" && client.Role == "editor" &&
-                    client.Capabilities.Contains("resourceIdentity"))?.ClientId;
+                    client.Capabilities.Contains("unityPackagePreview"))?.ClientId;
                 await Task.Delay(50, stop);
             }
             Require(!engine.HasExited && peer.HasValue, "Unity did not connect; see the isolated unity.log.");
@@ -131,25 +131,72 @@ internal static class CompiledPreviewProtocolTests
             const string legacy = "/Game/Test/MissingLegacyModel.MissingLegacyModel";
             const string legacyMaterial = "/Game/Test/MissingLegacyMaterial.MissingLegacyMaterial";
             var mesh = new OpaqueBinding(assetFormat, identities.RootElement.GetProperty("mesh").GetString()!);
+            var replacement = new OpaqueBinding(assetFormat, identities.RootElement.GetProperty("replacement").GetString()!);
             var material = new OpaqueBinding(assetFormat, identities.RootElement.GetProperty("material").GetString()!);
             var meshId = Guid.NewGuid();
             var materialId = Guid.NewGuid();
-            var graph = await Dispatcher.UIThread.InvokeAsync(() =>
+            var document = await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 var draw = model.Graph.CreateNode(new("ModelDraw"));
                 model.Graph.AssignRenderAsset(draw, new EngineAsset(legacy, "Legacy mesh", "model", "Unreal",
                     Materials: [new EngineMaterial(0, legacyMaterial, "Legacy material", [])]));
-                model.Graph.SetResourceIdentityDocument(new ResourceIdentityDocument(1,
+                var mappings = new ResourceIdentityDocument(1,
                     [new(meshId, "model", "Mapped cube"), new(materialId, "material", "Mapped material")],
                     [new(project!, meshId, "model", mesh), new(project!, materialId, "material", material)],
-                    [], [new(draw.Id, "assetPath", meshId), new(draw.Id, "material:0", materialId)], []),
-                    "Map Unity fixture mesh and material");
+                    [], [new(draw.Id, "assetPath", meshId), new(draw.Id, "material:0", materialId)], []);
+                model.Graph.SetResourceIdentityDocument(mappings, "Map Unity fixture mesh and material");
+                return mappings;
+            });
+            async Task WaitForUnityAsync(string marker)
+            {
+                var path = Path.Combine(scratch, marker);
+                while (!engine.HasExited && !File.Exists(path))
+                {
+                    await Task.Delay(50, stop);
+                }
+                Require(File.Exists(path), "Unity did not confirm " + marker + "; see the isolated unity.log.");
+            }
+            async Task<long?> WaitForAcknowledgementAsync()
+            {
+                PreviewPeer CurrentPeer() => model.PreviewTelemetry.Clients().Single(item => item.ClientId == clientId);
+                while (!engine.HasExited && CurrentPeer().AwaitingProgramAcknowledgement)
+                {
+                    await Task.Delay(50, stop);
+                }
+                return CurrentPeer().AcknowledgedProgramSequence;
+            }
+            await WaitForUnityAsync("unity-live-first.ok");
+            var firstSequence = await WaitForAcknowledgementAsync();
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                model.Graph.SetResourceIdentityDocument(document with
+                {
+                    ResourceBindings = [new(project! with { ProjectId = Guid.NewGuid() }, meshId, "model", mesh),
+                        new(project!, materialId, "material", material)]
+                }, "Reject a same-path mapping owned by the wrong Unity project");
+            });
+            await WaitForUnityAsync("unity-live-rejected.ok");
+            var graph = await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                model.Graph.SetResourceIdentityDocument(document with
+                {
+                    ResourceBindings = [new(project!, meshId, "model", replacement),
+                        new(project!, materialId, "material", material)]
+                }, "Replace the live Unity model binding");
                 return model.Graph.CreateSnapshot();
             });
+            await WaitForUnityAsync("unity-live-second.ok");
+            var finalSequence = await WaitForAcknowledgementAsync();
+            Require(firstSequence is not null && finalSequence > firstSequence,
+                "Unity did not acknowledge both live preview packages.");
+            await Dispatcher.UIThread.InvokeAsync(() => { model.Playback.TimeSeconds = .25; });
+            await WaitForUnityAsync("unity-live-seek.ok");
+            await Dispatcher.UIThread.InvokeAsync(() => { model.Playback.TimeSeconds = 0; });
+            await WaitForUnityAsync("unity-live-rewind.ok");
             var context = await PreviewResourceBindings.ResolveAsync(graph, model.PreviewAssets, clientId, stop);
             var package = SpawnableGroupPackage.Compile(graph, resourceContext: context);
             var delivered = await model.PreviewAssets.DeliverUnityBindingsAsync(clientId, project!,
-                [new(meshId, "model", mesh, []), new(materialId, "material", material, [])]);
+                [new(meshId, "model", replacement, []), new(materialId, "material", material, [])]);
             Require(delivered == "Assets/LiberaFx/LiberaFxBindings.asset",
                 "Unity did not acknowledge the actual runtime binding asset.");
             var temporary = Path.Combine(scratch, "unity-mapped.tmp");
