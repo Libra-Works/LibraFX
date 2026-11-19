@@ -1,0 +1,31 @@
+AFTERIMAGE GATE
+===============
+
+A short CPU effect authored for an Unreal preview. Ignition opens a violet
+ring of 18 segments. A Sequence sends a second cue through a 0.55-second
+Delay, releasing 12 cyan streaks. Both Spawnable Groups use local Time and
+Life Time; the ring contracts as the afterimages taper away.
+
+Preview in Unreal
+-----------------
+
+1. Open AfterimageGate.lfxproj in LIBERA FX. For editor-native Spawnable
+   preview, use a matching liberafx_native.dll beside the editor or set the
+   absolute LIBERAFX_PREVIEW_NATIVE_LIBRARY path.
+2. Set the LIBERA FX timeline to 60 FPS and End = 144 (2.4 seconds).
+3. In a dedicated Unreal project with the integration installed, open
+   Window > LIBERA FX Preview, then Connect to Libra. Play or scrub in
+   LIBERA FX. The enclosed model draws use Unreal's stock Sphere mesh
+   and the preview's explicit builtin:unlit-color material.
+4. For a still, pause around frames 54-63 (0.90-1.05 seconds). Frame the
+   ring face-on along the Y axis, targeting (0, 0, 160). Turn off the grid
+   for a clean viewport. For a companion editor image, show the root
+   graph at the same time: Ignite > Sequence > Delay > Cyan afterimages.
+
+The editable project can also be converted to an .lfxp package. Standalone
+Unreal playback needs explicit bindings for /Engine/BasicShapes/Sphere.Sphere
+and builtin:unlit-color; the latter is a preview material identifier, not
+an Unreal asset path. The live preview creates its own transient material.
+
+This is a stock-asset sample; no project-specific meshes or textures are
+needed for the live preview.
