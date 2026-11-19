@@ -149,6 +149,14 @@ try {
     if (Test-Path -LiteralPath $usage -PathType Leaf) {
         [IO.File]::Copy($usage, (Join-Path $stage 'USAGE.txt'))
     }
+    $distributionRoot = [IO.Path]::GetDirectoryName($coreRoot)
+    foreach ($name in 'VERSION.json', 'LICENSE') {
+        $source = Join-Path $distributionRoot $name
+        if (Test-Path -LiteralPath $source -PathType Leaf) {
+            Assert-NoLinks $source $distributionRoot
+            [IO.File]::Copy($source, (Join-Path $stage $name))
+        }
+    }
     foreach ($folder in 'Source', 'Resources', 'Shaders') {
         $source = Join-Path $sourceRoot $folder
         if (-not (Test-Path -LiteralPath $source)) { continue }

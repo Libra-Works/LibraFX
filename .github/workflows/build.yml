@@ -179,14 +179,17 @@ jobs:
         run: |
           $stage = New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'sdk')
           ./Tools/Export-EngineSdk.ps1 -Engine $env:ENGINE -OutputDirectory (Join-Path $stage.FullName 'Source') -BuildVersion $env:BUILD_VERSION
-      - name: Verify Unreal plugin copy and update without Unreal Engine
+          Copy-Item -LiteralPath (Join-Path $stage.FullName 'Source/VERSION.json') -Destination $stage.FullName
+      - name: Stage and verify the copy-ready Unreal source plugin
         if: matrix.engine == 'Unreal'
         shell: pwsh
         run: |
-          ./Tests/Verify-UnrealPluginPackaging.ps1
+          ./Tests/Verify-UnrealPluginPackaging.ps1 -UnrealSdkRoot (Join-Path $env:RUNNER_TEMP 'sdk/Source')
           $project = Join-Path (New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'unreal-project')).FullName 'Smoke.uproject'
           Set-Content -LiteralPath $project -Value '{"FileVersion":3,"EngineAssociation":"5.7","Modules":[]}'
           & (Join-Path $env:RUNNER_TEMP 'sdk/Source/Runtime/Integrations/Unreal/Install-LibraRuntimeForUnreal.ps1') -ProjectPath $project
+          $plugin = Join-Path (Split-Path -Parent $project) 'Plugins/LibraRuntimeForUnreal'
+          Move-Item -LiteralPath $plugin -Destination (Join-Path $env:RUNNER_TEMP 'sdk/LibraRuntimeForUnreal')
       - name: Build Unity Windows x64 native bridge
         if: matrix.engine == 'Unity'
         shell: pwsh
@@ -218,9 +221,13 @@ jobs:
           $bin = New-Item -ItemType Directory -Path (Join-Path $native.FullName 'bin')
           Copy-Item -LiteralPath (Join-Path $build 'bin/Release/liberafx_godot.dll') -Destination $bin.FullName
           Copy-Item -LiteralPath (Join-Path $source 'liberafx.gdextension') -Destination $native.FullName
+      - name: Stage copy-ready Unity and Godot folders
+        if: matrix.engine != 'Unreal'
+        shell: pwsh
+        run: ./Tools/Stage-CopyReadyEngineFolder.ps1 -Engine ${{ matrix.engine }} -ArtifactRoot (Join-Path $env:RUNNER_TEMP 'sdk')
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: github.event_name == 'workflow_dispatch'
         with:
-          name: LibraFor${{ matrix.engine }}-sdk-${{ needs.version.outputs.value }}
+          name: LibraFor${{ matrix.engine }}-${{ needs.version.outputs.value }}
           path: ${{ runner.temp }}/sdk
           if-no-files-found: error

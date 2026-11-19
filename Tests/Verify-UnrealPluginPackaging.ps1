@@ -1,4 +1,6 @@
 #Requires -Version 7.0
+param([string] $UnrealSdkRoot)
+
 $ErrorActionPreference = 'Stop'
 $installer = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\Runtime\Integrations\Unreal\Install-LibraRuntimeForUnreal.ps1'))
 $tokens = $null
@@ -23,6 +25,29 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $plugin 'Source\ThirdParty\LibraRuntimeCore\Core\LbVfxProgram.cpp')) -or
         -not (Test-Path -LiteralPath (Join-Path $plugin 'Source\ThirdParty\LibraRuntimeCore\Core\LbVfxInstance.cpp'))) {
         throw 'The packaged plugin depends on external repository source files.'
+    }
+    if ($UnrealSdkRoot) {
+        $exportedInstaller = Join-Path $UnrealSdkRoot 'Runtime\Integrations\Unreal\Install-LibraRuntimeForUnreal.ps1'
+        & $exportedInstaller -ProjectPath $project -Update
+        $copyProject = Join-Path $root 'ManualCopy'
+        [IO.Directory]::CreateDirectory((Join-Path $copyProject 'Plugins')) | Out-Null
+        Copy-Item -LiteralPath $plugin -Destination (Join-Path $copyProject 'Plugins') -Recurse
+        $copy = Join-Path $copyProject 'Plugins\LibraRuntimeForUnreal'
+        foreach ($name in 'VERSION.json', 'LICENSE') {
+            if ((Get-FileHash -LiteralPath (Join-Path $copy $name)).Hash -ne
+                (Get-FileHash -LiteralPath (Join-Path $UnrealSdkRoot $name)).Hash) {
+                throw "Manual copy did not retain the exported $name."
+            }
+        }
+        if (Test-Path -LiteralPath (Join-Path $copy '.libra-core-source-path')) {
+            throw 'The copy-ready plugin must not contain a development link marker.'
+        }
+        $copyManifest = Get-Content -LiteralPath (Join-Path $copy '.libra-install-manifest.json') -Raw | ConvertFrom-Json
+        foreach ($entry in $copyManifest.Files) {
+            if ((Get-FileHash -LiteralPath (Join-Path $copy $entry.Path)).Hash -ne $entry.Hash) {
+                throw "The copied plugin file is missing or changed: $($entry.Path)"
+            }
+        }
     }
     $moduleRules = @(Get-ChildItem (Join-Path $plugin 'Source') -Recurse -Filter '*.Build.cs' |
         ForEach-Object { $_.Name -replace '\.Build\.cs$', '' } | Sort-Object)

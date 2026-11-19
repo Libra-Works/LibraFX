@@ -57,7 +57,11 @@ foreach ($relative in $roots) {
         $files.Add($file)
     }
 }
-foreach ($relative in @('LICENSE', 'Runtime\CMakeLists.txt', 'SDK\compatibility.json', 'docs\sdk-distribution.md')) {
+$extraFiles = @('LICENSE', 'Runtime\CMakeLists.txt', 'SDK\compatibility.json', 'docs\sdk-distribution.md')
+if ($Engine -ne 'Core') {
+    $extraFiles += 'Runtime\examples\CustomNodes\CustomScale.json', 'Runtime\examples\CustomNodes\CustomScaleNode.cpp'
+}
+foreach ($relative in $extraFiles) {
     $file = Get-Item -LiteralPath (Join-Path $repository $relative)
     Assert-NoLinks $file.FullName
     $files.Add($file)
@@ -65,7 +69,7 @@ foreach ($relative in @('LICENSE', 'Runtime\CMakeLists.txt', 'SDK\compatibility.
 $stage = Join-Path $parent ('.liberafx-sdk-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($stage) | Out-Null
 try {
-    $entries = foreach ($file in $files | Sort-Object FullName -Unique) {
+    $entries = @(foreach ($file in $files | Sort-Object FullName -Unique) {
         $relative = [IO.Path]::GetRelativePath($repository, $file.FullName)
         $destination = Join-Path $stage $relative
         [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination)) | Out-Null
@@ -74,21 +78,26 @@ try {
             path = $relative
             sha256 = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant()
         }
-    }
-    $manifest = [ordered]@{
+    })
+    $version = [ordered]@{
         schemaVersion = 1
         engine = $Engine
         sdkVersion = $compatibility.sdkVersion
         sourceRevision = "$revision".Trim()
         uncommittedSource = $dirty
         nativeAbi = $compatibility.nativeAbi
-        files = @($entries)
     }
     if ($PSBoundParameters.ContainsKey('BuildVersion')) {
-        $manifest['buildVersion'] = $BuildVersion
+        $version['buildVersion'] = $BuildVersion
     }
+    $versionPath = Join-Path $stage 'VERSION.json'
+    [IO.File]::WriteAllText($versionPath, ($version | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
+    $version['files'] = $entries + @([ordered]@{
+        path = 'VERSION.json'
+        sha256 = (Get-FileHash -LiteralPath $versionPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    })
     [IO.File]::WriteAllText((Join-Path $stage 'sdk-manifest.json'),
-        ($manifest | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+        ($version | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
     [IO.Directory]::Move($stage, $output)
     Write-Output "Local $Engine SDK source export: $output"
     Write-Output 'No build, engine launch, repository creation, commit, push or upload was performed.'

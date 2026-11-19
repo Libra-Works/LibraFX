@@ -28,13 +28,38 @@ and file format versions are independent and are not rewritten by the workflow.
 | --- | --- |
 | LibraFX | Editor and converter for Windows x64 (MSI or portable ZIP), Apple Silicon macOS (unsigned `.app` in a ZIP), and Linux x64 (tar.gz). CI packages them but does not exercise their desktop UI or sign/notarize the macOS app. |
 | LibraSDK | Portable C++ Core sources, public headers, CMake files and compatibility manifest. CI builds Core with Clang and runs the Runtime tests on Linux. |
-| LibraForUnreal | Source SDK. CI verifies the copy installer and update protections without running UnrealBuildTool or Unreal Editor. |
-| LibraForUnity | Source SDK plus the Windows x64 `liberafx_native.dll` under `Native\win-x64`. CI builds the native DLL; it does not run Unity. |
-| LibraForGodot | Source SDK plus the Windows x64 Godot 4.7 descriptor and GDExtension DLL under `Native\win-x64`. CI builds against pinned `godot-cpp` sources; it does not run Godot. |
+| LibraForUnreal | Copy-ready source plugin plus the source SDK. CI verifies packaging and update protections without running UnrealBuildTool or Unreal Editor. |
+| LibraForUnity | Copy-ready embedded package with the Windows x64 native bridge, plus the source SDK. CI builds the native DLL; it does not run Unity. |
+| LibraForGodot | Copy-ready Windows x64 Godot 4.7 GDExtension, plus the source SDK. CI builds against pinned `godot-cpp` sources; it does not run Godot. |
 
 Engine artifacts keep the source export and its hash manifest in `Source`.
+`VERSION.json` is at the artifact root and records the distribution build and source revision.
 Native files under `Native` are separate build outputs, not entries in the
 source manifest.
+
+### Quick install from an Actions artifact (Windows x64)
+
+Close the engine before copying. Extract the artifact and copy only the folder
+shown below, not the whole archive or the `Source` and `Native` folders.
+Create the destination parent directory if it is missing.
+
+| Artifact | Copy this folder | Destination in your project |
+| --- | --- | --- |
+| LibraForUnity | `works.libra.liberafx` | `Packages/works.libra.liberafx` |
+| LibraForUnreal | `LibraRuntimeForUnreal` | `Plugins/LibraRuntimeForUnreal` |
+| LibraForGodot | `liberafx` | `addons/liberafx` |
+
+Each install folder contains `VERSION.json`. Unreal is source-only and still
+needs the project's Editor target built. Unity and Godot include Windows x64
+native binaries; other platforms need their own builds.
+
+For Unity, remove any previous LIBERA FX package registration and move any
+separately installed native bridge out of the project before importing this
+package to avoid duplicate plugins. Back up existing installations first. For
+an in-place update, preserve Unity-generated `.meta` files for unchanged assets;
+deleting them can break references in scenes and prefabs. In Godot, preserve
+the `.gdextension.uid` file if the editor has generated one. Keep projects'
+own effects and scenes outside the distributed folders.
 
 On Windows, install the MSI (administrator rights required) and open **LIBERA FX**
 from the Start menu, or extract the entire portable ZIP and open `LiberaFx.exe`
@@ -106,7 +131,7 @@ players needs the original `.lfxproj` or the Converter.
 
 ## Unity entry point
 
-In Unity Package Manager, use **Add package from disk** and select
+For a source-only install, in Unity Package Manager use **Add package from disk** and select
 `Runtime\Integrations\Unity\package.json` in the export. This is a local package,
 not an online package registry. The existing runtime/editor asmdefs separate
 editor tooling from player code and enable the unsafe native bridge.
@@ -142,8 +167,16 @@ effect, use a material/shader that supplies the authored properties in that SRP.
 
 ## Unreal entry point
 
-Use the exported adapter's `Install-LibraRuntimeForUnreal.ps1` with an explicit
-`.uproject`. It copies the selected plugin and Core sources into the project;
+From the `LibraForUnreal` artifact, copy the top-level `LibraRuntimeForUnreal`
+folder into `<Project>/Plugins/`. It includes the native Core sources, license,
+and `VERSION.json`; do not copy the raw plugin folder from inside `Source`.
+To update, close Unreal, back up any local changes outside `Plugins`, and replace
+the entire old `LibraRuntimeForUnreal` folder instead of merging files. Do not
+delete through a development link: unlink it first without deleting its target.
+
+For a local source export or a guarded update, use the exported adapter's
+`Install-LibraRuntimeForUnreal.ps1` with an explicit `.uproject`.
+It copies the plugin and Core sources into the project;
 `-Update` protects locally modified files. Prefer copy installation for a release;
 `-Link` is an explicit local development convenience, not a redistributable SDK.
 The installer does not launch Unreal, build, or edit the project's configuration.
