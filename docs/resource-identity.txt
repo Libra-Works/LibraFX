@@ -104,6 +104,12 @@ QueryFailure or TypeMismatch; Resolved requires actualKind. Empty or incomplete 
 are not evidence of absence. Both resource and parameter lookup require exact opaque
 binding equality inside the exact project, after explicit Libera-ID mapping.
 
+Verified in isolated projects: Unity 7 AssetDatabase lookup, rename retaining identity,
+binding delivery and runtime lookup; Unreal 5.7 project-scoped lookup, failure responses,
+material schema and application to a dynamic material instance. Managed checks cover scoped
+clipboard and history behavior, correlated loopback requests, and a real converter process.
+These runs do not establish live desktop-to-engine mapped rendering.
+
 Remaining acceptance/verification:
 * Validate the Resource Identity tab and Unity WSS bridge in a Unity Editor with a safe
   project, including project initialize/clone decisions, missing/type-mismatch responses,
@@ -111,8 +117,3 @@ Remaining acceptance/verification:
 * Validate Unreal live resource/schema queries and runtime binding application in the
   dedicated Unreal project. Unreal schema range/default semantics require an engine check;
   do not infer missing assets from incomplete catalog results.
-* Verify safe copy/paste remapping of external uses and parameters, including nested Group
-  instance paths. Preserve IDs and old node references when a remap is not explicit.
-* Run focused managed loopback/protocol and converter checks with isolated artifacts. The
-  loopback test exercises authoring commands through correlated preview messages, but does
-  not replace a real Unity/Unreal Editor check.
