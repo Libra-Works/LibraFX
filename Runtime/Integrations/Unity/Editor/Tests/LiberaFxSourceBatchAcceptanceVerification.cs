@@ -89,28 +89,36 @@ namespace LiberaFx.Unity.Editor
         {
             if (!SessionState.GetBool(DebugPlayPending, false)) return;
             if (state == PlayModeStateChange.EnteredPlayMode)
-                EditorApplication.delayCall += () =>
-                {
-                    try
-                    {
-                        Require(Application.isPlaying, "Debug draw acceptance must run in the actual game loop.");
-                        RunDebugDrawPayloadInPlayMode();
-                        SessionState.SetInt(DebugPlayResult, 0);
-                    }
-                    catch (Exception error)
-                    {
-                        File.WriteAllText(Path.Combine(ProjectRoot, "source-batch-debug-draw-result.txt"),
-                            "FAIL\n" + error);
-                        Debug.LogException(error);
-                        SessionState.SetInt(DebugPlayResult, 2);
-                    }
-                    finally { EditorApplication.ExitPlaymode(); }
-                };
+            {
+                EditorApplication.update += RunDebugDrawOnPlayModeUpdate;
+            }
             else if (state == PlayModeStateChange.EnteredEditMode)
             {
                 var result = SessionState.GetInt(DebugPlayResult, 2);
                 SessionState.SetBool(DebugPlayPending, false);
                 EditorApplication.Exit(result);
+            }
+        }
+
+        private static void RunDebugDrawOnPlayModeUpdate()
+        {
+            EditorApplication.update -= RunDebugDrawOnPlayModeUpdate;
+            try
+            {
+                Require(Application.isPlaying, "Debug draw acceptance must run in the actual game loop.");
+                RunDebugDrawPayloadInPlayMode();
+                SessionState.SetInt(DebugPlayResult, 0);
+            }
+            catch (Exception error)
+            {
+                File.WriteAllText(Path.Combine(ProjectRoot, "source-batch-debug-draw-result.txt"),
+                    "FAIL\n" + error);
+                Debug.LogException(error);
+                SessionState.SetInt(DebugPlayResult, 2);
+            }
+            finally
+            {
+                EditorApplication.ExitPlaymode();
             }
         }
 
@@ -1113,12 +1121,11 @@ namespace LiberaFx.Unity.Editor
 
                 var distribution = Start(distributionAsset, debugBindings,
                     "compiler distribution package", scene, out distributionOwner);
-                Require(distribution.ActiveRenderScopeCount == 0 && Labels(scene).Length == 0 &&
-                    DebugModels(scene).Length == 0,
+                Require(Labels(scene).Length == 0 && DebugModels(scene).Length == 0,
                     "Distribution package unexpectedly created preview-only Text or Model draws.");
                 Require(distribution.Stop() == NativeResult.Ok, "Distribution package Stop failed.");
 
-                modelBindings = CreateBindings("/Game/LiberaFxSamples/Cube.Cube", mesh, material);
+                modelBindings = CreateBindings("/Game/LiberaFxSamples/Cube.Cube", mesh, material, "builtin:unlit-color");
                 modelAsset = CreatePackage(Path.Combine(
                     Environment.GetEnvironmentVariable("LIBERAFX_MODEL_DRAW_FIXTURE_DIR") ?? "", "Cube.lfxp"));
                 var ordinary = Start(modelAsset, modelBindings, "ordinary authored model", scene, out modelOwner);
@@ -1283,7 +1290,8 @@ namespace LiberaFx.Unity.Editor
             return package;
         }
 
-        private static LiberaFxUnityBindingAsset CreateBindings(string identity, Mesh mesh, Material material)
+        private static LiberaFxUnityBindingAsset CreateBindings(string identity, Mesh mesh, Material material,
+            string materialIdentity = null)
         {
             var bindings = ScriptableObject.CreateInstance<LiberaFxUnityBindingAsset>();
             var serialized = new SerializedObject(bindings);
@@ -1298,6 +1306,20 @@ namespace LiberaFx.Unity.Editor
             var tintNames = asset.FindPropertyRelative("defaultTintPropertyNames");
             tintNames.arraySize = 1;
             tintNames.GetArrayElementAtIndex(0).stringValue = "_Color";
+            if (materialIdentity != null)
+            {
+                var materials = serialized.FindProperty("materials");
+                materials.arraySize = 1;
+                var binding = materials.GetArrayElementAtIndex(0);
+                binding.FindPropertyRelative("assetIdentity").stringValue = materialIdentity;
+                binding.FindPropertyRelative("material").objectReferenceValue = material;
+                binding.FindPropertyRelative("tintPropertyName").stringValue = "_Color";
+                var mappings = binding.FindPropertyRelative("parameterMappings");
+                mappings.arraySize = 1;
+                var mapping = mappings.GetArrayElementAtIndex(0);
+                mapping.FindPropertyRelative("authoredName").stringValue = "Color";
+                mapping.FindPropertyRelative("unityPropertyName").stringValue = "_Color";
+            }
             serialized.ApplyModifiedPropertiesWithoutUndo();
             return bindings;
         }

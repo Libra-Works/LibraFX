@@ -23,6 +23,20 @@ namespace LiberaFx.Unity.Editor
         {
             Require(Math.Abs(actual - expected) < .002f, message + ": " + actual + " expected " + expected);
         }
+
+        static void RequireMetadataRejection(string json, string expected, string message)
+        {
+            try
+            {
+                LibraGpuMetadata.Parse(json);
+            }
+            catch (ArgumentException exception) when (exception.Message.StartsWith(expected, StringComparison.Ordinal))
+            {
+                return;
+            }
+            throw new Exception(message);
+        }
+
         public static void Run()
         {
             string output = Output("verificationresult.txt");
@@ -75,20 +89,10 @@ namespace LiberaFx.Unity.Editor
                         Near(data[i].velocityLifetime.w, 2, "Lifetime");
                         Near(data[i].color.w, .95f, "Fade");
                     }
-
-                    static void RequireMetadataRejection(string json, string expected, string message)
+                    else
                     {
-                        try
-                        {
-                            LibraGpuMetadata.Parse(json);
-                        }
-                        catch (ArgumentException exception) when (exception.Message.StartsWith(expected, StringComparison.Ordinal))
-                        {
-                            return;
-                        }
-                        throw new Exception(message);
+                        Require(data[i].alive == 0, "Spawn range");
                     }
-                    else Require(data[i].alive == 0, "Spawn range");
                 }
                 runtime.Step(2, 0, 0, Vector3.zero);
                 runtime.ReadbackForDiagnostics(data);

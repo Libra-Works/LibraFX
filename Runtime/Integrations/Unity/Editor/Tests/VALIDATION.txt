@@ -90,12 +90,24 @@ Spawnable GPU integration verification:
   LIBERAFX_UNITY_GPU_LEGACY_PACKAGE, LIBERAFX_UNITY_GPU_ROOT_NODE_ID,
   LIBERAFX_UNITY_GPU_ROOT_COMPUTE, LIBERAFX_UNITY_GPU_ROOT_METADATA.
   Run LiberaFx.Unity.Editor.LiberaFxSpawnableGpuIntegrationVerification.Run
-  with -batchmode -force-d3d11 and no -quit. Unity 7000.0.0a16 on Direct3D11
+  with -batchmode -force-d3d11 -enable-builtin-rp-fallback and no -quit.
+  Unity 7000.0.0a16 on Direct3D11
   passed finite GPU Spawnable dispatch, billboard draw and particle readback;
   root GPU Play/Tick/readback/RequestNaturalEnd cleanup; actionable root GPU +
   AutoDestroyWhenIdle rejection; and pre-OnStart rejection of legacy authored
   GPU snapshots without executable payload. Result file:
   spawnable-gpu-integration-verification.txt.
+
+GPU billboard and canonical device verification:
+  In the graphics-enabled Unity 7 alpha fixture, run LibraGpuVerification.Run,
+  LibraGpuPlayModeVerification.Run and LibraGpuMathNoiseVerification.Run
+  separately from LiberaFx.Unity.Editor. Use -batchmode -force-d3d11
+  -enable-builtin-rp-fallback and omit -quit; the tests exit on completion.
+  Set LIBRA_GPU_VERIFICATION_DIR to the isolated results directory.
+  Unity 7000.0.0a16 on AMD Radeon RX 6700 XT passed the orange/blue framebuffer,
+  draw-only Matrix, automatic Play Mode draw and buffer retirement, 54 math
+  cases, 16 noise cases and FlowMap sampling. Without the Built-In RP fallback,
+  compute can pass while the camera framebuffer is blank.
 
 Independent GPU scope verification:
   Import generated Emitter.compute and Emitter.json into
