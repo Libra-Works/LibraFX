@@ -71,9 +71,6 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $true
           $artifacts = Join-Path $env:RUNNER_TEMP 'editor-artifacts'
           $package = Join-Path $env:RUNNER_TEMP 'editor-package'
-          if ($env:TARGET_RID -eq 'win-x64') {
-              $package = $artifacts
-          }
           New-Item -ItemType Directory -Path $artifacts | Out-Null
           $editor = Join-Path $package 'Editor'
           if ($env:TARGET_RID -eq 'osx-arm64') {
@@ -91,6 +88,29 @@ jobs:
           } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $package 'build-info.json') -Encoding utf8
           Get-Item -LiteralPath (Join-Path $editor 'BundledPlugins/Extensions/Git/liberafx-extension.json'),
               (Join-Path $editor 'BundledPlugins/Inspectors/ColorRgb/liberafx-inspector.json') | Out-Null
+          if ($env:TARGET_RID -eq 'win-x64') {
+              $launcher = Join-Path $env:RUNNER_TEMP 'windows-launcher'
+              cmake -S Tools/Packaging/Windows -B $launcher -G 'Visual Studio 17 2022' -A x64
+              cmake --build $launcher --config Release
+              Copy-Item -LiteralPath (Join-Path $launcher 'Release/LiberaFx.exe') -Destination $package
+
+              $publicVersion = [version]$env:BUILD_VERSION
+              $msiYear = $publicVersion.Major - 2000
+              if ($msiYear -lt 0 -or $msiYear -gt 255 -or $publicVersion.Build -gt 65535) {
+                  throw "Build version $env:BUILD_VERSION is outside Windows Installer version limits."
+              }
+              $msiVersion = "$msiYear.$($publicVersion.Minor).$($publicVersion.Build)"
+              dotnet tool restore
+              dotnet wix build Tools/Packaging/Windows/LiberaFx.wxs -arch x64 -pdbtype none `
+                  -bindpath "Payload=$package" -d "MsiVersion=$msiVersion" `
+                  -out (Join-Path $artifacts "LibraFX-$env:BUILD_VERSION-windows-x64.msi")
+              $windowsZip = Join-Path $artifacts "LibraFX-$env:BUILD_VERSION-windows-x64.zip"
+              tar -a -cf $windowsZip -C $package LiberaFx.exe Editor Converter build-info.json LICENSE
+              $zipEntries = tar -tf $windowsZip
+              if ('LiberaFx.exe' -notin $zipEntries -or 'Editor/LiberaFx.exe' -notin $zipEntries) {
+                  throw 'The Windows ZIP must contain a root launcher and the editor payload.'
+              }
+          }
           if ($env:TARGET_RID -eq 'osx-arm64') {
               $plist = Join-Path $app 'Contents/Info.plist'
               Copy-Item Tools/Packaging/macOS/Info.plist -Destination $plist

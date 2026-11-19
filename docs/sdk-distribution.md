@@ -26,7 +26,7 @@ and file format versions are independent and are not rewritten by the workflow.
 
 | Product | Artifact and CI boundary |
 | --- | --- |
-| LibraFX | Editor and converter for Windows x64, Apple Silicon macOS (unsigned `.app` in a ZIP), and Linux x64 (tar.gz). CI packages them but does not exercise their desktop UI or sign/notarize the macOS app. |
+| LibraFX | Editor and converter for Windows x64 (MSI or portable ZIP), Apple Silicon macOS (unsigned `.app` in a ZIP), and Linux x64 (tar.gz). CI packages them but does not exercise their desktop UI or sign/notarize the macOS app. |
 | LibraSDK | Portable C++ Core sources, public headers, CMake files and compatibility manifest. CI builds Core with Clang and runs the Runtime tests on Linux. |
 | LibraForUnreal | Source SDK. CI verifies the copy installer and update protections without running UnrealBuildTool or Unreal Editor. |
 | LibraForUnity | Source SDK plus the Windows x64 `liberafx_native.dll` under `Native\win-x64`. CI builds the native DLL; it does not run Unity. |
@@ -35,6 +35,12 @@ and file format versions are independent and are not rewritten by the workflow.
 Engine artifacts keep the source export and its hash manifest in `Source`.
 Native files under `Native` are separate build outputs, not entries in the
 source manifest.
+
+On Windows, install the MSI (administrator rights required) and open **LIBERA FX**
+from the Start menu, or extract the entire portable ZIP and open `LiberaFx.exe`
+at its root. Keep the `Editor` and `Converter` directories alongside the launcher.
+The Actions artifact ZIP wraps both the MSI and portable ZIP; extract it first
+when downloading from a workflow run.
 
 On Linux, extract the inner `LibraFX-<version>-linux-x64.tar.gz` and launch `Editor/LiberaFx`
 from a graphical session with Avalonia's system dependencies installed.

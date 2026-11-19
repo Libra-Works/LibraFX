@@ -1,0 +1,28 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="LIBERA FX" Manufacturer="Libra Works" Version="$(MsiVersion)"
+           UpgradeCode="A4E1170D-9AC2-42ED-B67A-E39B1B6CC05F" Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of LIBERA FX is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="LIBERA FX" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <Component Id="Launcher" Directory="INSTALLFOLDER" Guid="*">
+      <File Id="LauncherExe" Source="!(bindpath.Payload)\LiberaFx.exe" KeyPath="yes">
+        <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="LIBERA FX"
+                  Advertise="yes" WorkingDirectory="INSTALLFOLDER" />
+      </File>
+    </Component>
+    <ComponentGroup Id="Payload" Directory="INSTALLFOLDER">
+      <Files Include="!(bindpath.Payload)\**">
+        <Exclude Files="!(bindpath.Payload)\LiberaFx.exe" />
+      </Files>
+    </ComponentGroup>
+    <Feature Id="Main" Title="LIBERA FX">
+      <ComponentRef Id="Launcher" />
+      <ComponentGroupRef Id="Payload" />
+    </Feature>
+  </Package>
+</Wix>
