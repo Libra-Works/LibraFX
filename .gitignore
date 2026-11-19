@@ -15,6 +15,11 @@ TestResults/
 !/README.md
 !/docs/**/*.md
 !/Skills/**/*.md
+!/.agents/skills/liberafx-documentation/SKILL.md
+!/.agents/skills/liberafx-issue-delivery/SKILL.md
+!/.agents/skills/liberafx-engine-acceptance/SKILL.md
+!/.agents/skills/liberafx-distribution-ci/SKILL.md
+!/.agents/skills/liberafx-structural-refactoring/SKILL.md
 .mcp.json
 .vscode/mcp.json
 Assets/Inspectors/
