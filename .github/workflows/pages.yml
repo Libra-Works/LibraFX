@@ -22,9 +22,12 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Stage reviewed documentation
         run: |
-          mkdir -p pages-source/images
+          mkdir -p pages-source/{images,ja,_layouts}
           cp docs/site/{_config.yml,getting-started.md,engine-integration.md} pages-source/
           sed 's|\.\./images/afterimage-gate-editor\.png|images/afterimage-gate-editor.png|g' docs/site/index.md > pages-source/index.md
+          cp docs/site/_layouts/bilingual.html pages-source/_layouts/
+          cp docs/site/ja/{getting-started.md,engine-integration.md} pages-source/ja/
+          sed 's|\.\./\.\./images/afterimage-gate-editor\.png|../images/afterimage-gate-editor.png|g' docs/site/ja/index.md > pages-source/ja/index.md
           cp docs/images/afterimage-gate-editor.png pages-source/images/
       - uses: actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1
         with:
@@ -32,11 +35,21 @@ jobs:
           destination: ./pages-output
       - name: Verify the rendered pages
         run: |
-          for file in index.html getting-started.html engine-integration.html images/afterimage-gate-editor.png; do
+          for file in index.html getting-started.html engine-integration.html; do
             test -s "pages-output/$file"
+            test -s "pages-output/ja/$file"
+            grep -q '<html lang="en">' "pages-output/$file"
+            grep -q '<html lang="ja">' "pages-output/ja/$file"
+            route="$file"
+            if [ "$file" = index.html ]; then route=""; fi
+            grep -Fq "href=\"/LibraFX/ja/$route\" hreflang=\"ja\"" "pages-output/$file"
+            grep -Fq "href=\"/LibraFX/$route\" hreflang=\"en\"" "pages-output/ja/$file"
           done
+          test -s pages-output/images/afterimage-gate-editor.png
           grep -q 'getting-started.html' pages-output/index.html
           grep -q 'engine-integration.html' pages-output/index.html
+          grep -q 'getting-started.html' pages-output/ja/index.html
+          grep -q 'engine-integration.html' pages-output/ja/index.html
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         with:

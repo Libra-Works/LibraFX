@@ -1,6 +1,7 @@
 title: LIBERA FX
 description: Author effects in graphs. Play them in-engine.
 lang: en
+url: https://libra-works.github.io
 baseurl: /LibraFX
 theme: jekyll-theme-cayman
 plugins:
@@ -11,4 +12,11 @@ defaults:
   - scope:
       path: ""
     values:
-      layout: default
+      layout: bilingual
+      lang: en
+      description: Author effects in graphs. Play them in-engine.
+  - scope:
+      path: ja
+    values:
+      lang: ja
+      description: グラフでエフェクトを作り、ゲームエンジンで再生する。

@@ -1,8 +1,10 @@
 # LIBERA FX Documentation
 
-Visit the [English documentation site](https://libra-works.github.io/LibraFX/)
-for the current Preview. Its [Markdown sources](site/index.md) are also readable
-directly on GitHub.
+Read the documentation for the current Preview in
+[English](https://libra-works.github.io/LibraFX/) or
+[Japanese](https://libra-works.github.io/LibraFX/ja/).
+The Markdown sources are also available on GitHub:
+[English](site/index.md) and [Japanese](site/ja/index.md).
 
 ## References in this repository
 
@@ -15,7 +17,7 @@ directly on GitHub.
 
 ## Maintaining the site
 
-Update the English site sources when published workflows or support limits change.
+Update both language versions when published workflows or support limits change.
 Distinguish compilation, engine playback, and rendering evidence. Use the
 [documentation capture guide](documentation-capture.md) for sample screenshots.
 

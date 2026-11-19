@@ -15,6 +15,8 @@
 
 <p align="center">
   <a href="https://github.com/Libra-Works/LibraFX/releases">Downloads</a> ·
-  <a href="https://libra-works.github.io/LibraFX/">Documentation</a> ·
+  Documentation:
+  <a href="https://libra-works.github.io/LibraFX/" lang="en">English</a> /
+  <a href="https://libra-works.github.io/LibraFX/ja/" lang="ja">日本語</a> ·
   <a href="LICENSE">MIT License</a>
 </p>
