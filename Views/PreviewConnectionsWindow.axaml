@@ -20,6 +20,9 @@
               Content="{DynamicResource Text.Connections.CopyConnection}"
               AutomationProperties.Name="{DynamicResource Text.Connections.CopyConnection}"
               HorizontalAlignment="Left" />
+      <Button Click="OnCopyGodotCertificate"
+              Content="{DynamicResource Text.Connections.CopyGodotCertificate}"
+              HorizontalAlignment="Left" />
       <TextBlock x:Name="InvitationStatus" TextWrapping="Wrap"
                  Foreground="{DynamicResource EffectMutedForegroundBrush}" />
       <TextBlock x:Name="GpuFeedback" TextWrapping="Wrap" />

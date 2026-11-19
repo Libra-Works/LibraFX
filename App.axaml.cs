@@ -45,7 +45,10 @@ public partial class App : Application
                 _crashReports?.Dispose();
             };
             var viewModel = new MainViewModel(_mcpHost.AccessToken, _previewHost.AccessToken, _previewHost.Fingerprint,
-                _mcpHost.ActualEndpoint, _previewHost.ActualEndpoint, _serverSettings);
+                _mcpHost.ActualEndpoint, _previewHost.ActualEndpoint, _serverSettings)
+            {
+                PreviewPublicCertificatePem = _previewHost.PublicCertificatePem
+            };
             var window = new MainWindow
             {
                 DataContext = viewModel,

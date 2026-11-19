@@ -280,6 +280,9 @@ internal static partial class Program
                     File.WriteAllText(Path.Combine(args[1], name + ".json"), c.CanonicalJson);
                     File.WriteAllText(Path.Combine(args[1], name + ".metadata.json"), c.ExportMetadataJson());
                     File.WriteAllLines(Path.Combine(args[1], name + ".entries"), c.Kernels.Select(k => k.EntryPoint));
+                    if (name is "math" or "noise" or "noiseguards")
+                        foreach (var kernel in c.RegisterKernels)
+                            File.WriteAllBytes(Path.Combine(args[1], $"{name}.{kernel.KernelId}.lgpk"), kernel.SerializeLittleEndian());
                 }
                 ExportReferenceCases(args[1]);
                 File.WriteAllText(Path.Combine(args[1], "LibraGpuSupport.hlsl"), GpuShaderSupport.EmitHlslInclude());

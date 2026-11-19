@@ -63,6 +63,13 @@ public static class GameIoCompilationTests
         Require(package.GameIoPorts.Select(PortShape).SequenceEqual(program.GameIoPorts.Select(PortShape)) &&
                 BinaryPrimitives.ReadUInt16LittleEndian(package.ParentBytecode.AsSpan(4)) == 7,
             "Spawnable package output must preserve root Game I/O metadata.");
+        if (Environment.GetEnvironmentVariable("LIBERAFX_INSTANCE_GAMEIO_FIXTURES") is { Length: > 0 } fixtureDirectory)
+        {
+            Directory.CreateDirectory(fixtureDirectory);
+            var persistentPackage = package with { AutoDestroyWhenIdle = false };
+            File.WriteAllBytes(Path.Combine(fixtureDirectory, "RootGameIo.lfxp"),
+                SpawnableGroupPackageBinary.Serialize(persistentPackage));
+        }
         var spawnableDefinition = GraphNodeDefinition.All.Single(item => item.Kind == GraphNodeKind.SpawnableGroup);
         var templateWithGameIo = new GraphNodeSnapshot(Guid.NewGuid(), spawnableDefinition.Kind,
             spawnableDefinition.Name, 0, 0, spawnableDefinition.PortType, spawnableDefinition.PortCategory,
@@ -71,6 +78,7 @@ public static class GameIoCompilationTests
             "Spawn Input/Output", "Named Game I/O inside a Spawnable template must be rejected with guidance.");
         VerifyMatrixPorts();
         VerifyInstancePorts();
+        VerifyCurrentCamera();
 
         var duplicate = graph with
         {
@@ -91,6 +99,37 @@ public static class GameIoCompilationTests
             ChildGraph: new GraphSnapshot([inputProperty], []));
         RequireInvalid(() => GraphValidator.Validate(new GraphSnapshot([nestedGroup], [])),
             "Game I/O nodes must be rejected below the root graph.");
+    }
+
+    private static void VerifyCurrentCamera()
+    {
+        var camera = Node(new GraphNodeKind("CurrentCamera"));
+        var position = Node(GraphNodeKind.OutputProperty, ("name", "cameraPosition"), ("valueType", 2));
+        var valid = Node(GraphNodeKind.OutputProperty, ("name", "cameraValid"), ("valueType", 0));
+        var graph = new GraphSnapshot([camera, position, valid],
+        [
+            new(camera.Id, position.Id, "value", "position"),
+            new(camera.Id, valid.Id, "value", "valid")
+        ]) { AutoDestroyWhenIdle = false };
+        var package = SpawnableGroupPackage.Compile(graph);
+        var input = package.GameIoPorts.Single(port => port.Name == GameIoSchema.CurrentCameraProperty);
+        Require(input.NodeId == camera.Id && input.Kind == GameIoPortKind.InputProperty && input.Width == 4 &&
+                input.RuntimeNodeIds?.Single() == camera.Id,
+            "Current Camera must bind a single host sample for Position and Valid.");
+        var lowered = GameIoSchema.Lower(graph).Graph;
+        var positionEdge = lowered.Connections.Single(edge => edge.TargetNodeId == position.Id);
+        var validEdge = lowered.Connections.Single(edge => edge.TargetNodeId == valid.Id);
+        Require(lowered.Nodes.Single(node => node.Id == positionEdge.SourceNodeId).Kind.Value == "Vector4ToVector3" &&
+                lowered.Nodes.Single(node => node.Id == validEdge.SourceNodeId).Kind.Value == "BreakVector4" &&
+                validEdge.SourcePortId == "w", "Position must not consume the validity lane.");
+        RequireInvalid(() => SpawnableGroupPackage.Compile(graph with { Nodes = [.. graph.Nodes, Node(camera.Kind)] }),
+            "Current Camera cannot register two samplers.");
+        var fixtureDirectory = Environment.GetEnvironmentVariable("LIBERAFX_INSTANCE_GAMEIO_FIXTURES");
+        if (!string.IsNullOrEmpty(fixtureDirectory))
+        {
+            Directory.CreateDirectory(fixtureDirectory);
+            File.WriteAllBytes(Path.Combine(fixtureDirectory, "CurrentCamera.lfxp"), SpawnableGroupPackageBinary.Serialize(package));
+        }
     }
 
     private static void VerifyMatrixPorts()

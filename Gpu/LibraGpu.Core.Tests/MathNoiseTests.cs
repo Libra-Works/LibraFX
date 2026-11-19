@@ -125,6 +125,19 @@ internal static partial class Program
             Check(unsupported.Any(d => d.Code == "BackendResource" && d.Message.Contains("wind map/flow")) &&
                 unsupported.Any(d => d.Code == "BackendOpcode" && d.KernelId == "k" && d.NodeId is not null && d.Span is not null),
                 "A custom backend must reject unsupported resources and identify the authored operation");
+            var incompatible = new LibraGpu.Core.GpuBackendCapabilities("future-host",
+                LibraGpu.Core.GpuBackendInput.GeneratedShader, 2, [], [], null, 1);
+            var constrained = new LibraGpu.Core.GpuBackendCapabilities("small-host",
+                LibraGpu.Core.GpuBackendInput.RegisterPackets, 1,
+                LibraGpu.Core.GpuBackendCapabilities.Unreal.Opcodes,
+                LibraGpu.Core.GpuBackendCapabilities.Unreal.Resources, 1, compiled.ParticleBufferBytes);
+            var customRegistry = new LibraGpu.Core.GpuBackendRegistry([incompatible, constrained]);
+            Check(customRegistry.Validate(incompatible.Id, compiled).Single().Code == "BackendAbi",
+                "A backend must reject an incompatible ABI before evaluating its capabilities");
+            var capacityDiagnostics = customRegistry.Validate(constrained.Id, compiled);
+            Check(capacityDiagnostics.Any(d => d.Code == "BackendRegisters" && d.KernelId == "k") &&
+                capacityDiagnostics.Any(d => d.Code == "BackendBudget"),
+                "Interpreter admission must charge register scratch and packet storage in addition to particles");
             var instruction = compiled.RegisterKernels.Single().Instructions.Single(i =>
                 i.Opcode == LibraGpu.Core.GpuInstructionOpcode.SampleFlowMap);
             Check(instruction.Type == LibraGpu.Core.GpuType.Float3 && instruction.Aux == 0 &&

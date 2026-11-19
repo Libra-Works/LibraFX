@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "typeId": "b17b0000-0000-4000-8000-000000000102",
+  "namespace": "LiberaFx",
+  "kind": "CurrentCamera",
+  "name": "Current Camera",
+  "displayNameKey": "Modules.CurrentCamera.Name",
+  "group": "Orientation",
+  "groupNameKey": "Modules.Category.Orientation",
+  "portType": "FloatX3",
+  "portCategory": "Parameter",
+  "inputPorts": [],
+  "outputPorts": [
+    { "id": "position", "name": "Position", "displayNameKey": "Modules.Billboard.Parameter.Position.Name", "portType": "FloatX3" },
+    { "id": "valid", "name": "Valid", "displayNameKey": "Modules.CurrentCamera.Valid", "portType": "Float" }
+  ]
+}

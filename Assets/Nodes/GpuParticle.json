@@ -9,7 +9,9 @@
   "group": "GPU",
   "portType": "Float",
   "portCategory": "Parameter",
-  "inputPorts": [],
+  "inputPorts": [
+    { "id": "drawMatrix", "name": "Draw Matrix", "displayNameKey": "Gpu.DrawMatrix", "portType": "Matrix" }
+  ],
   "outputPorts": [],
   "parameters": [
     { "id": "gpuState", "name": "GPU workspace", "type": "gpuState", "defaultValue": {} }

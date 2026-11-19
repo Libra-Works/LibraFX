@@ -1,0 +1,23 @@
+Godot Vulkan canonical math/noise readback
+==========================================
+
+From PowerShell, with .NET 10+ and a Godot 4.7 console executable:
+
+  ./Runtime/Integrations/Godot/Tests/RunGpuCanonical.ps1 `
+    -ArtifactDirectory "$env:TEMP/lfx-godot-canonical-NEW" `
+    -GodotExecutable "C:/path/to/Godot_v4.7.2-stable_win64_console.exe"
+
+The artifact directory must not already exist. Managed sources, restore/build
+outputs, generated fixtures, Godot project and user data are isolated there;
+no shared Godot extension DLL or build directory is used. It generates current
+Core references and LGPK packets, extracts the actual embedded Godot compute
+shader, and dispatches it on a local Vulkan RenderingDevice. A real Vulkan
+device is required; software adapters should not be mistaken for hardware proof.
+The caller may delete the artifact directory after inspection.
+
+The test checks all 54 math cases/18 kernels, 16 noise cases, computed parameter
+guards, alive flags, seed variation and central-difference curl divergence,
+with the same tolerances as the canonical Unreal readback. Unexpected case or
+kernel counts fail, so update the test when the canonical suite expands.
+A nonzero exit indicates failure. A successful direct shader dispatch does not
+test package admission, C++ adapter setup, rendering pixels, or other GPUs.

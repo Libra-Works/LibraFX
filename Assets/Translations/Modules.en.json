@@ -48,6 +48,8 @@
   "Modules.Parameter.Curve": "Effect-Time Curve",
   "Modules.Parameter.CurveDescription": "Authored in seconds and sampled against effect time, not particle normalized age.",
   "Modules.Billboard.Parameter.Position.Name": "World Position",
+  "Modules.CurrentCamera.Name": "Current Camera",
+  "Modules.CurrentCamera.Valid": "Valid",
   "Modules.Billboard.Parameter.Position.Description": "World-space anchor for the mesh. Position and Target must use the same coordinate system.",
   "Modules.Billboard.Parameter.Target.Name": "Target / Camera Position",
   "Modules.Billboard.Parameter.Target.Description": "Explicit world point the mesh faces. Supply the camera position for camera-facing output; no global camera is queried.",

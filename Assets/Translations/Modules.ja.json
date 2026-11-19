@@ -48,6 +48,8 @@
   "Modules.Parameter.Curve": "エフェクト時間カーブ",
   "Modules.Parameter.CurveDescription": "秒単位で編集し、粒子の正規化年齢ではなくエフェクト時間で評価します。",
   "Modules.Billboard.Parameter.Position.Name": "ワールド位置",
+  "Modules.CurrentCamera.Name": "現在のカメラ",
+  "Modules.CurrentCamera.Valid": "有効",
   "Modules.Billboard.Parameter.Position.Description": "メッシュのワールド空間アンカーです。Position と Target は同じ座標系で指定してください。",
   "Modules.Billboard.Parameter.Target.Name": "ターゲット／カメラ位置",
   "Modules.Billboard.Parameter.Target.Description": "メッシュが向く明示的なワールド座標です。カメラ向きにはカメラ位置を渡します。グローバルカメラは検索しません。",

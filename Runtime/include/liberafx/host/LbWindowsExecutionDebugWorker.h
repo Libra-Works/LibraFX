@@ -20,7 +20,16 @@ public:
         auto result = instance_.setDebugHooks(client_.hooks());
         if (result != Result::Ok) return result;
         hooked_ = true;
-        return client_.start(invitation) ? Result::Ok : Result::InvalidArgument;
+        try {
+            if (client_.start(invitation)) return Result::Ok;
+        } catch (...) {
+            instance_.setDebugHooks({});
+            hooked_ = false;
+            return Result::InsufficientWork;
+        }
+        instance_.setDebugHooks({});
+        hooked_ = false;
+        return Result::InvalidArgument;
     }
     Result schedule(double time) noexcept
     {
@@ -28,12 +37,34 @@ public:
         completed_.store(false, std::memory_order_relaxed);
         return instance_.updateAsync(time, enqueue, this);
     }
+    // Stops the pipe and releases a paused evaluator without joining its job.
+    // The existing client uses finite overlapped I/O deadlines.
+    void requestStop() noexcept { client_.stop(); }
+    bool isComplete() const noexcept
+    {
+        return !worker_.joinable() || completed_.load(std::memory_order_acquire);
+    }
+    bool transportRunning() const noexcept { return client_.running(); }
     Result finish() noexcept
     {
         if (!worker_.joinable()) return Result::NotReady;
         if (!completed_.load(std::memory_order_acquire)) return Result::Busy;
         worker_.join();
         return result_;
+    }
+    Result detach() noexcept
+    {
+        requestStop();
+        if (worker_.joinable()) {
+            if (!completed_.load(std::memory_order_acquire)) return Result::Busy;
+            worker_.join();
+        }
+        if (hooked_) {
+            auto result = instance_.setDebugHooks({});
+            if (result != Result::Ok) return result;
+            hooked_ = false;
+        }
+        return Result::Ok;
     }
 private:
     static bool enqueue(void* context, Job job, void* data) noexcept

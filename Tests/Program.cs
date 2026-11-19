@@ -468,6 +468,23 @@ internal static class Program
             SpawnableAdapterFixtureTests.Run(adapterFixturePath);
             return;
         }
+        if (args is ["--godot-breakpoint", var godotExecutable, var godotProject])
+        {
+            GodotBreakpointTests.Run(godotExecutable, godotProject).GetAwaiter().GetResult();
+            return;
+        }
+        if (args is ["--godot-package-preview", var previewExecutable, var extensionDll])
+        {
+            InitializeIsolatedUi();
+            GodotPackagePreviewTests.RunActualGodot(previewExecutable, extensionDll);
+            return;
+        }
+        if (args is ["--godot-package-preview"])
+        {
+            InitializeIsolatedUi();
+            GodotPackagePreviewTests.Run();
+            return;
+        }
         if (args is ["--spawnable-package-binary", var binaryPackagePath])
         {
             if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")) ||

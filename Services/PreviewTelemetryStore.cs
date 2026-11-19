@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace LiberaFx.Services;
@@ -310,6 +311,27 @@ public sealed class PreviewTelemetryStore
                 var ids = Array(root, "nodeIds", 64).EnumerateArray().Select(GuidValue).ToArray();
                 if (ids.Distinct().Count() != ids.Length) throw new InvalidOperationException("Duplicate watch IDs.");
                 break;
+            case "godot_preview_signals":
+                if (root.EnumerateObject().Count() != 5)
+                    throw new InvalidOperationException("Invalid Godot signal control.");
+                var sequence = NonnegativeSequence(root.GetProperty("sequence"));
+                var baseSequence = NonnegativeSequence(root.GetProperty("baseSequence"));
+                var timeSeconds = Finite(root.GetProperty("timeSeconds"));
+                var requests = Array(root, "requests", 32).EnumerateArray().ToArray();
+                if (sequence < 0 || baseSequence < 0 || baseSequence > long.MaxValue - requests.Length ||
+                    timeSeconds is < 0 or > 120 || requests.Length is < 1 or > 32)
+                    throw new InvalidOperationException("Invalid Godot signal control values.");
+                foreach (var request in requests)
+                {
+                    ValidateObject(request);
+                    if (request.EnumerateObject().Count() != 2 ||
+                        NonnegativeSequence(request.GetProperty("sequence")) != ++baseSequence)
+                        throw new InvalidOperationException("Invalid Godot signal request sequence.");
+                    _ = GuidValue(request.GetProperty("nodeId"));
+                }
+                if (baseSequence > sequence)
+                    throw new InvalidOperationException("Godot signal requests exceed their publication sequence.");
+                break;
             default: throw new InvalidOperationException("Unknown preview control.");
         }
     }
@@ -349,6 +371,15 @@ public sealed class PreviewTelemetryStore
     {
         var sequence = value.GetProperty("programSequence").GetInt64();
         if (sequence < 0) throw new InvalidOperationException("Invalid program sequence.");
+        return sequence;
+    }
+    private static long NonnegativeSequence(JsonElement value)
+    {
+        var text = String(value, 19);
+        if (text.Length > 1 && text[0] == '0' ||
+            !long.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var sequence) ||
+            sequence.ToString(CultureInfo.InvariantCulture) != text)
+            throw new InvalidOperationException("Invalid nonnegative sequence.");
         return sequence;
     }
     private static double Finite(JsonElement value)

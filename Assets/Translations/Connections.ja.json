@@ -14,6 +14,8 @@
   "Connections.CopyConnection": "手動接続用の情報をコピー",
   "Connections.ConnectionCopied": "手動接続用にコピーしました。UEの「LIBERA FX Preview」で「Paste Connection」を押してください。",
   "Connections.CopyFailed": "プレビューの接続情報をコピーできませんでした。",
+  "Connections.CopyGodotCertificate": "Godot 用の公開 TLS 証明書をコピー",
+  "Connections.GodotCertificateCopied": "このエディターセッションの公開証明書をコピーしました。",
   "Connections.Disconnected": "プレビュービューワー未接続",
   "Connections.GpuPending": "GPU：実行結果を待っています。",
   "Connections.GpuExecuted": "GPU実行を確認しました（描画ピクセルの検証とは別です）。",

@@ -14,6 +14,14 @@ public static class RenderProgramBindings
         definition.Kind == kind && definition.TypeName is "ModelDraw" or "SpriteDraw" or "SpriteAnimation" or "SpriteComposition")
         || PreviewDebugDraw.IsDebugNode(kind);
 
+    internal static bool HasGpuDrawMatrix(GraphSnapshot graph)
+    {
+        var gpuIds = graph.Nodes.Where(node => GpuParticleEditorService.IsGpu(node.Kind)).Select(node => node.Id).ToHashSet();
+        return graph.Connections.Any(edge => edge.TargetPortId == "drawMatrix" && gpuIds.Contains(edge.TargetNodeId)) ||
+            graph.Nodes.Any(node => node.ChildGraph is { } child && !GpuParticleEditorService.IsGpu(node.Kind) &&
+                HasGpuDrawMatrix(child));
+    }
+
     public static byte[] CreateScene(GraphSnapshot graph, long programSequence,
         IRenderResourceBindingContext? resourceContext = null, VfxCompileOptions? options = null) =>
         CreateSceneCore(graph, programSequence, resourceContext, options, allowSourceMetadata: false);
@@ -33,6 +41,10 @@ public static class RenderProgramBindings
         var instanceScopes = CollectInstanceScopes(graph);
         graph = GroupExposedItems.Materialize(graph);
         graph = SkeletalPoseSchema.Lower(graph);
+        if (GameIoSchema.HasCurrentCamera(graph))
+        {
+            graph = GameIoSchema.Lower(graph).Graph;
+        }
         graph = GraphPolymorphism.Lower(GroupBoundaryLowering.Lower(graph));
         var nodes = Flatten(graph).ToDictionary(node => node.Id);
         var connections = Connections(graph).ToLookup(connection => connection.TargetNodeId);
@@ -45,6 +57,24 @@ public static class RenderProgramBindings
             return incoming.Length == 1 && IsWorldRotation(incoming[0].SourceNodeId, visiting);
         }
         var renderNodes = new List<object>();
+        var gpuDrawTransforms = new List<object>();
+        foreach (var node in nodes.Values.Where(node => GpuParticleEditorService.IsGpu(node.Kind)))
+        {
+            var bindings = connections[node.Id].Where(edge =>
+                edge.TargetPortId?.StartsWith("drawRow", StringComparison.Ordinal) == true).ToArray();
+            if (bindings.Length == 0)
+            {
+                continue;
+            }
+            if (bindings.Length != 4)
+            {
+                throw new InvalidDataException($"GPU Draw Matrix on node '{node.Id}' does not have four row bindings.");
+            }
+            var rowNodeIds = Enumerable.Range(0, 4)
+                .Select(row => bindings.Single(edge => edge.TargetPortId == $"drawRow{row}").SourceNodeId)
+                .ToArray();
+            gpuDrawTransforms.Add(new { nodeId = node.Id, rowNodeIds });
+        }
         var drawIds = nodes.Keys.ToHashSet();
         foreach (var node in nodes.Values.Where(node => IsRenderNode(node.Kind)))
         {
@@ -254,8 +284,11 @@ public static class RenderProgramBindings
                 }
             }
             }
-            var bytes = JsonSerializer.SerializeToUtf8Bytes(
-                new { type = "render_config", programSequence, nodes = renderNodes }, JsonOptions);
+            var bytes = gpuDrawTransforms.Count == 0
+                ? JsonSerializer.SerializeToUtf8Bytes(
+                    new { type = "render_config", programSequence, nodes = renderNodes }, JsonOptions)
+                : JsonSerializer.SerializeToUtf8Bytes(
+                    new { type = "render_config", programSequence, nodes = renderNodes, gpuDrawTransforms }, JsonOptions);
             if (bytes.Length > 4 * 1024 * 1024)
                 throw new InvalidDataException("Render configuration exceeds the 4 MiB engine payload limit.");
             return bytes;
@@ -294,8 +327,8 @@ public static class RenderProgramBindings
     }
 
     private static IEnumerable<GraphNodeSnapshot> Flatten(GraphSnapshot graph) => graph.Nodes.SelectMany(node =>
-        node.KindDomain == "GpuParticle" || node.Kind == GraphNodeKind.SpawnableGroup ? Array.Empty<GraphNodeSnapshot>() :
-        node.ChildGraph is { } child ? Flatten(child) : new[] { node });
+        node.Kind == GraphNodeKind.SpawnableGroup ? Array.Empty<GraphNodeSnapshot>() :
+        !GpuParticleEditorService.IsGpu(node.Kind) && node.ChildGraph is { } child ? Flatten(child) : new[] { node });
     private static IEnumerable<GraphConnectionSnapshot> Connections(GraphSnapshot graph) =>
         graph.Connections.Concat(graph.Nodes.Where(node => node.ChildGraph is not null &&
             !GpuParticleEditorService.IsGpu(node.Kind) && node.Kind != GraphNodeKind.SpawnableGroup).SelectMany(node => Connections(node.ChildGraph!)));

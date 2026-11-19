@@ -1,6 +1,7 @@
 {
   "Gpu.ContainerHint": "GPU Program — double-click to edit",
   "Gpu.Node": "GPU Particle",
+  "Gpu.DrawMatrix": "Draw Matrix",
   "Gpu.Group": "GPU",
   "Gpu.Back": "Back",
   "Gpu.Close": "CPU / Close",

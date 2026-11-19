@@ -19,6 +19,10 @@ public sealed partial class VfxProgram
             graph = graph with { Nodes = graph.Nodes.Where(node => node.Id != starts[0].Id).ToArray() };
         if (ContainsSpawnable(graph))
             throw new InvalidDataException("Compile Spawnable Groups with SpawnableGroupPackage so templates are not discarded.");
+        if (RenderProgramBindings.HasGpuDrawMatrix(graph))
+        {
+            throw new InvalidDataException("A GPU Draw Matrix requires a Spawnable Group package; export .lfxp.");
+        }
         if (SkeletalPoseSchema.ContainsSource(graph))
             throw new NotSupportedException(
                 "Raw CPU program compilation cannot resolve SOURCE skeletal poses. Compile a SpawnableGroupPackage for Unity or Unreal package playback.");

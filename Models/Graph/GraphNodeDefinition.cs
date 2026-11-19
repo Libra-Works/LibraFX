@@ -275,6 +275,7 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000109")] = "RotatePoint",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000010a")] = "TranslatePoint",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000010b")] = "OwnerMatrix",
+        [Guid.Parse("b17b0000-0000-4000-8000-000000000102")] = "CurrentCamera",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-00000000010c")] = "Source",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000001")] = "MatrixRuntimeTransformRow0",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000002")] = "MatrixRuntimeTransformRow1",

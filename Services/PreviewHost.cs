@@ -42,6 +42,7 @@ public sealed class PreviewHost : IDisposable
 
     public string AccessToken { get; } = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
     public string Fingerprint => Convert.ToHexString(SHA256.HashData(_certificate.RawData));
+    public string PublicCertificatePem => _certificate.ExportCertificatePem();
 
     public PreviewHost(int port = Port) => _port = port;
 
@@ -261,7 +262,8 @@ public sealed class PreviewHost : IDisposable
             return;
         }
         var id = Guid.NewGuid();
-        var client = new PreviewClient(version == "3" ? 3 : version == "2" ? 2 : 1);
+        var client = new PreviewClient(version == "3" ? 3 : version == "2" ? 2 : 1,
+            version == "3" && context.Request.Query["godotPackagePreview"] == "1");
         try
         {
             using var socket = await context.WebSockets.AcceptWebSocketAsync();
@@ -311,18 +313,20 @@ public sealed class PreviewHost : IDisposable
     {
         PreviewPublication? baseline = null;
         using var compiled = new CompiledPreviewSender();
+        var godotPackage = new GodotPackagePreviewSender();
         await foreach (var publication in client.Channel.Reader.ReadAllAsync(cancellation))
         {
             // Diff against the last message actually sent, never a dropped pending update.
             var force = Interlocked.Exchange(ref client.ForceSnapshot, 0) != 0;
             if (client.Version == 3)
             {
-                var message = compiled.Prepare(publication, force);
+                var packagePreview = client.PackagePreview || _assets?.Supports(id, "godotPackagePreview") == true;
+                var message = packagePreview ? godotPackage.Prepare(publication, force) : compiled.Prepare(publication, force);
                 if (message is null) continue;
                 if (message.Kind == CompiledPreviewKind.Program)
                     _telemetry?.ExpectProgramAcknowledgement(id, publication.Sequence);
                 await SendSerializedAsync(socket, client, message.Bytes, WebSocketMessageType.Binary, cancellation);
-                if ((message.Kind == CompiledPreviewKind.Program || message.EvaluatedRenderScene is not null) &&
+                if (!packagePreview && (message.Kind == CompiledPreviewKind.Program || message.EvaluatedRenderScene is not null) &&
                     _assets?.Supports(id, "rendering") == true)
                 {
                     var scene = message.EvaluatedRenderScene ?? RenderProgramBindings.CreateScene(publication.Graph, publication.Sequence,
@@ -331,7 +335,7 @@ public sealed class PreviewHost : IDisposable
                     await SendSerializedAsync(socket, client, CompiledPreviewProtocol.CreateScene(scene),
                         WebSocketMessageType.Binary, cancellation);
                 }
-                if (message.Kind == CompiledPreviewKind.Program && _assets?.Supports(id, "gpuParticles") == true)
+                if (!packagePreview && message.Kind == CompiledPreviewKind.Program && _assets?.Supports(id, "gpuParticles") == true)
                 {
                     // Native lifecycle graphs reject GPU mixtures, but must
                     // still explicitly retire the previous document's GPU
@@ -341,7 +345,8 @@ public sealed class PreviewHost : IDisposable
                     await SendSerializedAsync(socket, client, CompiledPreviewProtocol.CreateScene(scene),
                         WebSocketMessageType.Binary, cancellation);
                 }
-                compiled.Sent(message);
+                if (packagePreview) godotPackage.Sent(message);
+                else compiled.Sent(message);
                 continue;
             }
             var payload = client.Version == 2 ? PreviewProtocol.Encode(publication, baseline, force) : publication.LegacyPayload;
@@ -398,12 +403,23 @@ public sealed class PreviewHost : IDisposable
                     !request.RootElement.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String) return;
                 if (type.GetString() != "resync")
                 {
+                    if (type.GetString() == "package_preview_ack" && client.Version == 3 &&
+                        (client.PackagePreview || _assets?.Supports(id, "godotPackagePreview") == true) &&
+                        request.RootElement.EnumerateObject().Count() == 2 &&
+                        request.RootElement.TryGetProperty("programSequence", out var sequence) &&
+                        sequence.TryGetInt64(out var acknowledged) && acknowledged >= 0)
+                    {
+                        _telemetry?.AcknowledgeProgram(id, acknowledged);
+                        UpdateClientCount();
+                        continue;
+                    }
                     if (client.Version != 3 ||
                         (_telemetry?.Receive(id, buffer.AsMemory(0, count)) != true &&
                          _assets?.Receive(id, buffer.AsMemory(0, count)) != true)) return;
                     UpdateClientCount();
                     if (type.GetString() == "hello" &&
-                        (_assets?.Supports(id, "rendering") == true || _assets?.Supports(id, "gpuParticles") == true))
+                        (_assets?.Supports(id, "rendering") == true || _assets?.Supports(id, "gpuParticles") == true ||
+                         !client.PackagePreview && _assets?.Supports(id, "godotPackagePreview") == true))
                     {
                         lock (_sync)
                         {
@@ -424,9 +440,10 @@ public sealed class PreviewHost : IDisposable
         }
     }
 
-    private sealed class PreviewClient(int version)
+    private sealed class PreviewClient(int version, bool packagePreview)
     {
         public int Version { get; } = version;
+        public bool PackagePreview { get; } = packagePreview;
         public int ForceSnapshot;
         public SemaphoreSlim SendGate { get; } = new(1, 1);
         public SemaphoreSlim ControlSlots { get; } = new(16, 16);

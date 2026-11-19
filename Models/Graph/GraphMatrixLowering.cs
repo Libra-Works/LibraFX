@@ -257,6 +257,29 @@ public static class GraphMatrixLowering
                         edges.Add(new(source[row].NodeId, edge.TargetNodeId, $"row{row}", source[row].PortId));
                     continue;
                 }
+                if (original[edge.TargetNodeId].Kind.Value == "GpuParticle" && edge.TargetPortId == "drawMatrix")
+                {
+                    if (source.Count != 4)
+                    {
+                        throw new InvalidDataException("A GPU Draw Matrix requires four rows.");
+                    }
+                    var target = original[edge.TargetNodeId];
+                    var definition = byName["LiberaFx.FloatX4"];
+                    for (var row = 0; row < 4; row++)
+                    {
+                        var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"LiberaFx.gpu-draw.v1:{target.Id:D}:{row}"));
+                        var rowId = new Guid(hash.AsSpan(0, 16));
+                        if (rowId == Guid.Empty || !occupied.Add(rowId))
+                        {
+                            throw new InvalidDataException($"GPU Draw Matrix row ID conflicts at node {target.Id}.");
+                        }
+                        lowered.Add(new(rowId, definition.Kind, $"{target.Name}: draw row {row}",
+                            target.X, target.Y, definition.PortType, definition.PortCategory));
+                        edges.Add(new(source[row].NodeId, rowId, SourcePortId: source[row].PortId));
+                        edges.Add(new(rowId, target.Id, $"drawRow{row}"));
+                    }
+                    continue;
+                }
                 if (source.Count != 1)
                     throw new InvalidDataException("A Matrix output requires a Matrix-aware input.");
                 edges.Add(new(source[0].NodeId, edge.TargetNodeId, edge.TargetPortId, source[0].PortId));

@@ -196,6 +196,29 @@ public partial class PreviewConnectionsWindow : UserControl
             await clipboard.SetTextAsync(invitation);
             InvitationStatus.Text = LocalizationService.Shared.Get("Connections.ConnectionCopied");
         }
+
+        catch (Exception)
+        {
+            InvitationStatus.Text = LocalizationService.Shared.Get("Connections.CopyFailed");
+        }
+    }
+
+    private async void OnCopyGodotCertificate(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
+        {
+            return;
+        }
+        try
+        {
+            if (string.IsNullOrEmpty(model.PreviewPublicCertificatePem))
+            {
+                InvitationStatus.Text = LocalizationService.Shared.Get("Connections.CopyFailed");
+                return;
+            }
+            await clipboard.SetTextAsync(model.PreviewPublicCertificatePem);
+            InvitationStatus.Text = LocalizationService.Shared.Get("Connections.GodotCertificateCopied");
+        }
         catch (Exception)
         {
             InvitationStatus.Text = LocalizationService.Shared.Get("Connections.CopyFailed");

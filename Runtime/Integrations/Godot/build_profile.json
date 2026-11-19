@@ -1,3 +1,33 @@
 {
-  "enabled_classes": ["Node", "OS", "Thread"]
+  "enabled_classes": [
+    "Camera3D",
+    "GeometryInstance3D",
+    "Image",
+    "JSON",
+    "Marshalls",
+    "Mesh",
+    "MeshInstance3D",
+    "MultiMesh",
+    "MultiMeshInstance3D",
+    "Node",
+    "Node3D",
+    "Object",
+    "OS",
+    "QuadMesh",
+    "RDPipelineSpecializationConstant",
+    "RDShaderSource",
+    "RDShaderSPIRV",
+    "RDUniform",
+    "RefCounted",
+    "Resource",
+    "RenderingDevice",
+    "RenderingServer",
+    "Shader",
+    "ShaderMaterial",
+    "StandardMaterial3D",
+    "Thread",
+    "Texture2D",
+    "Viewport",
+    "VisualInstance3D"
+  ]
 }

@@ -1,0 +1,37 @@
+# Godot package live preview
+
+Use an idle, dedicated `LibraEffectPlayer` in the running Godot scene. Configure
+its mesh, texture and material bindings before connecting. Add a Node with
+`liberafx_live_preview.gd`, and keep `liberafx_package_preview.gd` beside it.
+Call `connect_package_local(player, invitation_json, public_certificate_pem)`.
+The invitation and certificate come from the editor's Preview Connections
+window. Treat the invitation as a secret.
+
+The connection uses the existing local WSS protocol and certificate fingerprint.
+The host sends the compiled `.lfxp` package only to peers advertising
+`godotPackagePreview`. Other peers, including `connect_local`, retain the
+existing bytecode preview behavior. The player must expose
+`get_playback_generation()`; without it package connection returns
+`ERR_UNAVAILABLE`. A player already in use is rejected. Do not separately
+play, stop or advance the dedicated player while it is attached.
+
+Program edits replace the package; timeline updates advance it at up to 60
+steps per frame. Backward seeks rebuild it and replay at steps of at most
+1/60 second, with a 120-second limit. Catch-up may therefore lag the editor
+and does not promise frame-exact or deterministic GPU playback. Package
+admission, rendering, resource bindings and GPU support are those of the
+Godot player; missing resources and unsupported features are not substituted.
+Connect `preview_error` and `frame_rejected` to display failures. After the
+package loads, Editor Send dispatches an authored Signal while the root is
+running. Disable Auto Destroy When Idle if the effect starts with no children
+and should wait for a manual Send.
+Send requests are not replayed on reconnect or backward seek. SOURCE skeletal
+poses are not supported. Disconnect stops only playback still owned by the
+preview.
+
+Use matching builds of the editor and Godot extension.
+
+To exercise the real local WSS connection and Editor Send on Windows, set
+LIBERAFX_DATA_ROOT to an isolated absolute directory, then run:
+
+  dotnet run --project Tests\CommentImageSmokeTests.csproj -- --godot-package-preview C:\Godot\godot_console.exe C:\LibraBuild\bin\liberafx_godot.dll

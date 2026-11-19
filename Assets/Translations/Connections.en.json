@@ -14,6 +14,8 @@
   "Connections.CopyConnection": "Copy manual connection information",
   "Connections.ConnectionCopied": "Copied for manual connection. Click Paste Connection in Unreal's LIBERA FX Preview.",
   "Connections.CopyFailed": "Could not copy preview connection information.",
+  "Connections.CopyGodotCertificate": "Copy public TLS certificate for Godot",
+  "Connections.GodotCertificateCopied": "Copied the public certificate for this editor session.",
   "Connections.Disconnected": "No preview viewer connected",
   "Connections.GpuPending": "GPU: waiting for execution feedback.",
   "Connections.GpuExecuted": "GPU execution confirmed (not pixel/readback verification).",

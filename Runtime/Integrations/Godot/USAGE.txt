@@ -3,7 +3,12 @@ LIBERA FX for Godot 4.7
 
 This Windows x86-64 GDExtension embeds the same portable C++ Core Runtime
 used by the other integrations. It plays standalone .lfxb programs (pure
-v1 scalar or v2 typed bytecode). No .NET runtime is required in Godot.
+v1 scalar or v2 typed bytecode) and supported .lfxp Spawnable packages. No
+.NET runtime is required in Godot.
+
+The godot-cpp build profile enables the JSON, Camera3D/Viewport, Node3D and
+MeshInstance3D/Mesh classes used by the adapter. CMake links the existing
+godot::cpp target; no separate graphics SDK library is required.
 
 Build from an x64 Visual Studio developer shell with CMake, Ninja, Python,
 and a separate godot-cpp checkout that provides the 4.7 API:
@@ -13,15 +18,18 @@ and a separate godot-cpp checkout that provides the 4.7 API:
 
 Copy liberafx.gdextension and bin\liberafx_godot.dll into your Godot project
 with that relative layout; open the project in Godot to discover the
-extension. Add a LibraEffectPlayer node. Keep the .lfxb under res:// (include
-*.lfxb in the Godot export preset's non-resource file filter). A packaged
-game does not need the .lfxproj, the Converter, or a copy of godot-cpp.
+extension. Add a LibraEffectPlayer node. Keep .lfxb and .lfxp files under
+res:// (include both extensions in the Godot export preset's non-resource
+file filter). A packaged game does not need the .lfxproj, the Converter, or
+a copy of godot-cpp.
 
-Convert a graph offline using the authoring repository:
+Convert graphs offline using the authoring repository:
 
   dotnet run --project Tools\Converter -- convert path\input.lfxproj path\effect.lfxb
+  dotnet run --project Tools\Converter -- convert path\spawnable.lfxproj path\effect.lfxp
 
-Play from GDScript on the main thread after the player has entered the tree:
+Play .lfxb from GDScript on the main thread after the player has entered the
+tree:
 
   var result: int = $LibraEffectPlayer.play(FileAccess.get_file_as_bytes("res://effect.lfxb"))
   if result != 0:
@@ -37,7 +45,174 @@ read_value(node_uuid) returns the evaluated lanes as PackedFloat64Array, or
 an empty array if the player is stopped or the UUID has no value. Use these
 values to drive Godot properties from your scene script.
 
-Headless smoke test:
+Play a CPU-only Spawnable package with play_package:
+
+  var package := FileAccess.get_file_as_bytes("res://effect.lfxp")
+  var result: int = $LibraEffectPlayer.play_package(package)
+  if result != 0:
+      push_error("LIBERA FX package could not play: %d" % result)
+
+The package is loaded and validated before replacing current playback. The
+player advances its Spawnable lifecycle, children, routing and timing on the
+Godot main thread. An optional duration uses the same -1 / finite-seconds
+convention as play(). .lfxb playback remains unchanged.
+
+Named Game I/O is available for packages:
+
+* get_game_io_ports() returns dictionaries with name, kind, kind_name, width
+  and is_color. Kinds are input_property, input_signal, output_property,
+  output_signal and owner_matrix.
+* set_game_property(name, PackedFloat64Array) and fire_game_signal(name)
+  return Core result codes. set_owner_matrix(PackedFloat64Array) supplies a
+  package's owner-matrix input.
+* dispatch_signal(node_uuid) dispatches an authored root Signal node by UUID;
+  it is separate from the named Game I/O signal input.
+* Connect to game_io_event(event). The event dictionary contains name,
+  kind/kind_name, container_id, instance_id (decimal string), is_color and
+  values (PackedFloat64Array). Events are emitted on the main thread while
+  advancing; an input signal's resulting events are drained on the next
+  advance. Root names use root package port metadata; child names are resolved
+  through the matching container's port table, never through root indices.
+* read_value(node_uuid) reads root-program node values for either playback
+  mode. Spawned child instance values are not currently exposed by this node.
+
+ModelDraw and SpriteDraw/SpriteAnimation/SpriteComposition are supported by the
+CPU package renderer using explicit in-memory Godot resource bindings:
+
+  $LibraEffectPlayer.set_mesh_binding(
+      "/Engine/BasicShapes/Cube.Cube", BoxMesh.new())
+  $LibraEffectPlayer.set_texture_binding(
+      "/Game/FX/T_Atlas.T_Atlas", preload("res://atlas.png"))
+
+Each identity must exactly match the draw's compiled `assetPath`. Bindings
+must be set while stopped; a missing/invalid resource rejects play_package and
+preserves current playback. Godot does not load assetPath values or substitute
+placeholder resources. Root and spawned-child draws have separate Node3D
+scopes. ModelDraw uses the explicitly bound Mesh; each sprite gets a centered
+quad, an unshaded alpha StandardMaterial3D, the explicitly bound Texture2D,
+and per-draw tint and atlas UV state. Position, rotation, scale, tint, frame
+and other numeric sprite inputs are read from the root or matching child
+instance, not from shared/root values. SpriteDraw and SpriteAnimation use
+their atlas settings and the native flipbook sampler; SpriteComposition uses
+the native composition sampler, scope-local elapsed time, cell-sized quads,
+keyed transforms and Godot material render priority. SpriteDraw/SpriteAnimation
+billboarding is enabled by the authored setting. Rotation is applied as
+Godot-local Euler degrees. The root scope is named `LibraFxRootScope`; a
+replacement started before the previous queued scope is freed receives a
+`LibraFxRootScope_<n>` name to avoid ambiguous siblings.
+
+ModelDraw supports surface overrides bound while stopped with
+set_material_binding(compiled_identity, Material). clear_material_binding
+removes the registration. Each material slot addresses the zero-based mesh
+surface. Global scalar/vector/texture parameters require a ShaderMaterial with
+a matching named float, vec4/color or texture uniform. Texture parameter
+identities are bound with set_texture_binding; an empty texture identity
+leaves the shader default unchanged. A draw with parameter overrides gets
+its own material copy, so child values cannot change a sibling, the root,
+or the original Godot resource. Unsupported material-layer associations or
+sprite material overrides are rejected rather than ignored.
+
+SpriteComposition draw order must fit Godot's render-priority range 0–127.
+Other render node kinds and debug draw are rejected. CPU-only packages
+without render payloads remain supported.
+
+GPU package playback
+--------------------
+
+On Forward+ or Mobile with a local RenderingDevice, play_package accepts
+supported root and Spawnable child GPU emitters. Root GPU emitters require
+AutoDestroyWhenIdle to be disabled, as in Unity.
+Godot validates the packaged Unreal-format LGPK v1 register packets and runs
+the embedded compute interpreter (opcodes 0–41, up to 128 registers).
+It never runs shader source supplied by the package. This path synchronously
+reads the simulation buffers back for MultiMesh billboard submission; it
+does not simulate particles on CPU. Use get_gpu_error() for admission or
+dispatch diagnostics. Compatibility and null/headless devices cannot run it.
+
+Each spawned instance owns its particle state and advances on its local time.
+Draw Matrix rows are read from that same scope and affect only billboard
+placement and bounds. Simulation remains emitter-local. The initial limits
+are 16 emitters per scope and 16,384 active particles per player. The default
+emission rate is 100 particles/second; set gpu_spawn_per_second to change it.
+FlowMap2D uses the same explicit set_texture_binding API. Supply readable
+linear RG data. Godot snapshots the base mip at admission and filters it
+with linear clamp on the GPU. The per-player FlowMap budget is 32 MiB.
+
+To check a child GPU effect on a real RenderingDevice, use the package
+fixture exporter below. Copy spawnable.godot-gpu-matrix.lfxp,
+spawnable.godot-flow-map.lfxp and
+Tests\gpu_scope_smoke.gd into the scratch Godot project. Run the Godot console
+executable without --headless, in Forward+ or Mobile:
+
+  --path C:\LiberaBuild\Smoke --script res://gpu_scope_smoke.gd --quit-after 120
+
+Expect "PASS: Godot child GPU dispatch, draw Matrix, retirement and FlowMap".
+This checks dispatch, Draw Matrix placement, billboard framebuffer pixels,
+scope cleanup and both world-coordinate and clamped UV FlowMap sampling.
+
+Run the canonical math/noise device comparison separately. It exports the
+shared CPU references and LGPK packets in a fresh scratch project, then
+dispatches the same embedded Godot compute shader and compares readback:
+
+  Runtime\Integrations\Godot\Tests\RunGpuCanonical.ps1 -ArtifactDirectory C:\LiberaBuild\GodotCanonical -GodotExecutable C:\Godot\godot_console.exe
+
+Local preview and execution debugging
+-------------------------------------
+
+Add a dedicated LibraEffectPlayer and a Node with liberafx_live_preview.gd.
+In the editor's Preview Connections window, copy the manual invitation and
+the public TLS certificate. Pass them to the script's
+connect_local(player, invitation_json, public_certificate_pem). Keep the
+invitation private. The helper connects only to the loopback editor over
+WSS and checks the certificate fingerprint. disconnect_preview() clears the
+session baseline and stops its playback, not independently started effects.
+
+connect_local evaluates standalone LFXB v1/v2 at editor-published
+times. Use read_value() for the evaluated values and get_preview_error()
+for the latest compile error. For package rendering, keep
+liberafx_package_preview.gd beside the transport script and use
+connect_package_local with an idle player and the required resource
+bindings. See LIVE_PREVIEW.txt for the timeline and editor-command limits.
+
+For standalone breakpoints on Windows, add a LibraFxDebugPlayer and call
+start_debug(lfxb_bytes, editor_debug_invitation). This invitation is distinct
+from the preview connection invitation. Use advance(delta) to submit one
+step at a time; poll() reports busy, closing, closed, active, result, time
+and debug_transport_active. Read values with read_value(node_id) after a
+successful step. Call close() and poll until closed to stop without waiting
+in the main loop. The evaluator runs off the Godot main thread.
+
+For package debugging, configure the same mesh, texture and material
+bindings on LibraFxDebugPlayer, then call load_package(lfxp_bytes). Select root
+with container_id="" and instance_id=0, or obtain a child identity by
+advancing and reading next_package_event(). Use the current
+get_debugger_generation() and a fresh execution debug invitation with
+attach_package_debugger(generation, container_id, instance_id, invitation).
+Call poll() regularly to present completed jobs. While a worker is paused,
+the scene keeps the last committed render state. Wait for an idle job before
+reading package values or dispatching signals.
+
+To exercise a real editor breakpoint on Windows, copy
+Tests\breakpoint_smoke.gd beside the DLL in the scratch project. Run with
+isolated LIBERAFX_DATA_ROOT and Godot user data:
+
+  dotnet run --project Tests\CommentImageSmokeTests.csproj -- --godot-breakpoint C:\Godot\godot_console.exe C:\LiberaBuild\Smoke
+
+The test uses the editor's execution debug service and requires an authored
+root breakpoint to pause a real Godot worker and checks that its scene stays
+visible before sending Resume.
+
+The Current Camera graph input is connected only when the package contains
+the reserved hidden input-property port "__LFX_CAMERA_V1" with width 4. Before
+each root advance (including the first), the player writes [x, y, z, 1] from
+the selected Camera3D global position in Godot world units, or [0, 0, 0, 0]
+when no camera is available. Set the player's camera_path NodePath to choose
+an explicit Camera3D; otherwise get_viewport().get_camera_3d() is used. A
+deleted, unresolved or non-Camera3D override falls back to the viewport
+camera. If neither source yields a Camera3D, the zero/invalid sample is used.
+Packages without that exact reserved port are not camera-probed or modified.
+
+Headless .lfxb smoke test:
 
 1. Copy Tests\project.godot and Tests\smoke.gd to a new scratch Godot project.
 2. Copy the .gdextension and DLL into the scratch project as above.
@@ -47,8 +222,68 @@ Headless smoke test:
    --headless --path C:\LiberaBuild\Smoke --script res://smoke.gd --quit-after 120
    Expect "PASS: Godot GDExtension executed converter-produced LIBERA FX bytecode".
 
-The initial adapter does not import .lfxp packages, wire Game I/O, render
-effects directly, resolve engine assets, execute GPU particle programs, or
-connect to the live preview editor. Unsupported bytecode is rejected. Windows
-x86-64 headless runtime was exercised with Godot 4.7.2; exported games and
-other platforms are not yet verified.
+CPU Spawnable / Game I/O regression:
+
+1. Prepare a converter-produced CPU-only `spawnable.lfxp` with a named input
+   property, named input signal and output signal emitted by that input. Keep
+   its root alive between inputs.
+2. Convert `Tests\clock.lfxproj` to `clock.lfxb` in the scratch project; the
+   smoke script uses it to verify reentrant raw-bytecode replacement from an
+   output-signal callback.
+3. Set `LIBERAFX_INSTANCE_GAMEIO_FIXTURES` to an isolated output directory
+   while running the existing `Tests\GameIoCompilationTests` fixture, then
+   copy its compiler-produced `CurrentCamera.lfxp` into the scratch project.
+   Also put a valid package containing a non-empty GPU payload at
+   `res://unsupported_gpu.lfxp`. Copy the extension DLL layout above.
+4. Run Godot 4.7 with:
+   --headless --path C:\LibraBuild\Smoke --script res://package_smoke.gd --quit-after 120
+   Expect "PASS: Godot played CPU .lfxp and routed named Game I/O".
+5. The script checks the fixture's separate `cameraPosition` (3 lanes) and
+   `cameraValid` (1 lane) outputs. It tests a valid explicit Camera3D path,
+   then an invalid path with a current viewport camera (fallback), and then
+   no camera (zero position, validity 0). The camera fixture does not need
+   render or GPU payloads. A GPU package outside the supported subset or
+   lacking a RenderingDevice must not replace a running effect; the script
+   checks UnsupportedBinary (3) or NotReady (7) against unsupported_gpu.lfxp.
+
+Root/child ModelDraw regression:
+
+1. Use an isolated absolute `LIBERAFX_DATA_ROOT` and generate the existing
+   adapter fixture:
+   dotnet run --project Tests\CommentImageSmokeTests.csproj -- --spawnable-package-binary C:\LibraBuild\Fixtures\spawnable.lfxp
+   This writes `spawnable.adapter.lfxp` and `spawnable.adapter.ids.json`.
+2. Copy these to the scratch Godot project as `adapter.lfxp` and
+   `adapter.ids.json`, along with the extension DLL layout. The smoke script
+   uses `rootSignalNodeId` from the generated IDs to spawn the child draw.
+3. Run Godot 4.7 with:
+   --headless --path C:\LibraBuild\Smoke --script res://model_draw_smoke.gd --quit-after 120
+   The test explicitly binds a Godot BoxMesh to
+   `/Engine/BasicShapes/Cube.Cube`, checks missing-binding rejection, and
+   verifies separate root/child MeshInstance3D scopes and their transforms.
+
+Sprite Composition smoke test:
+
+1. Use an isolated absolute `LIBERAFX_DATA_ROOT` and generate the compiler
+   fixture with:
+   dotnet run --project Tests\CommentImageSmokeTests.csproj -- --sprite-composition C:\LibraBuild\Fixtures\GodotSprites
+2. Copy `composition.lfxp` from that directory into the scratch Godot project,
+   along with `Tests\sprite_smoke.gd` and the extension DLL layout.
+3. Run Godot 4.7.2 with:
+   --headless --path C:\LibraBuild\Smoke --script res://sprite_smoke.gd --quit-after 120
+   Expect "PASS: Godot rendered explicit Texture2D sprite composition and sampled native animation".
+   The test creates a 64x32 in-memory ImageTexture, binds it to the fixture's
+   texture identity, and checks the live mesh/material, atlas cells, native
+   sampler transforms, draw priority, and binding lifetime rules. It does not
+   capture or assert rendered pixels.
+
+Windows x86-64 Godot 4.7.2 smokes exercise raw bytecode, package Game I/O,
+SpriteDraw and SpriteAnimation, root/child ModelDraw and material bindings.
+The Vulkan GPU scope smoke checks Matrix placement in the framebuffer,
+FlowMap sampling and emitter retirement. Exported games, a sprite-specific
+child fixture and other Godot platforms remain unverified.
+
+ModelDraw material override smoke (requires a graphics-enabled Godot run):
+run CommentImageSmokeTests with --spawnable-package-binary in an isolated
+directory, copy the resulting .godot-material.lfxp and .godot-material.ids.json
+as material.lfxp and material.ids.json, and run Tests\material_smoke.gd with
+--path <scratch> --script res://material_smoke.gd --quit-after 120.

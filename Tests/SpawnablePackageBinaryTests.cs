@@ -6,6 +6,7 @@ using LiberaFx.Models.Graph;
 using LiberaFx.Services;
 using LiberaFx.Services.Compilation;
 using LiberaFx.ViewModels;
+using LibraGpu.Core;
 
 internal static class SpawnablePackageBinaryTests
 {
@@ -23,15 +24,25 @@ internal static class SpawnablePackageBinaryTests
         File.WriteAllBytes(Path.ChangeExtension(outputPath, ".legacy-v2.lfxp"), VerifyLegacyV2(package));
         File.WriteAllBytes(Path.ChangeExtension(outputPath, ".root.lfxp"), VerifyRootPayloads());
         File.WriteAllBytes(Path.ChangeExtension(outputPath, ".gpu-programs.lfxp"), VerifyGpuPrograms());
+        var godotGpu = new GraphWorkspaceViewModel(new UndoRedoManager()) { AutoDestroyWhenIdle = false };
+        godotGpu.CreateNode(new("GpuParticle"));
+        File.WriteAllBytes(Path.ChangeExtension(outputPath, ".godot-gpu.lfxp"),
+            Verify(SpawnableGroupPackage.Compile(godotGpu.CreateSnapshot())));
+        File.WriteAllBytes(Path.ChangeExtension(outputPath, ".godot-flow-map.lfxp"), Verify(CreateGodotFlowMapFixture()));
         var adapter = CreateAdapterFixture(includeGpu: false);
         File.WriteAllBytes(Path.ChangeExtension(outputPath, ".adapter.lfxp"), Verify(adapter.Package));
         File.WriteAllBytes(Path.ChangeExtension(outputPath, ".adapter.ids.json"), adapter.Identities);
+        var godotMaterial = CreateAdapterFixture(includeGpu: false, includeMaterials: true);
+        File.WriteAllBytes(Path.ChangeExtension(outputPath, ".godot-material.lfxp"), Verify(godotMaterial.Package));
+        File.WriteAllBytes(Path.ChangeExtension(outputPath, ".godot-material.ids.json"), godotMaterial.Identities);
         var adapterGpu = CreateAdapterFixture(includeGpu: true);
         File.WriteAllBytes(Path.ChangeExtension(outputPath, ".adapter-gpu.lfxp"), Verify(adapterGpu.Package));
         File.WriteAllBytes(Path.ChangeExtension(outputPath, ".adapter-gpu.ids.json"), adapterGpu.Identities);
         var gpuSpawnable = CreateGpuSpawnableFixture();
         File.WriteAllBytes(Path.ChangeExtension(outputPath, ".gpu.lfxp"), Verify(gpuSpawnable.Package));
         File.WriteAllBytes(Path.ChangeExtension(outputPath, ".gpu.ids.json"), gpuSpawnable.Identities);
+        var godotGpuMatrix = CreateGpuSpawnableFixture(includeDrawMatrix: true);
+        File.WriteAllBytes(Path.ChangeExtension(outputPath, ".godot-gpu-matrix.lfxp"), Verify(godotGpuMatrix.Package));
         File.WriteAllBytes(Path.ChangeExtension(outputPath, ".template-gameio.lfxp"), CreateTemplateGameIoFixture());
         Console.WriteLine($"Portable Spawnable package v3 executable GPU payloads and v1/v2 compatibility passed ({binary.Length} bytes).");
     }
@@ -168,12 +179,12 @@ internal static class SpawnablePackageBinaryTests
         var ordinary = graph.CreateNode(GraphNodeKind.GraphGroup);
         graph.EnterGraph(ordinary);
         Draw("/Engine/BasicShapes/Cube.Cube");
-        var rootGpu = graph.CreateNode(new("GpuParticle")).Id;
+        var rootGpu = DrawGpu([1, 2, 3]);
         graph.NavigateToGraph(0);
         var template = graph.CreateNode(GraphNodeKind.SpawnableGroup);
         graph.EnterGraph(template);
         Draw("/Engine/BasicShapes/Sphere.Sphere");
-        var childGpu = graph.CreateNode(new("GpuParticle")).Id;
+        var childGpu = DrawGpu([4, 5, 6]);
         graph.NavigateToGraph(0);
         var package = SpawnableGroupPackage.Compile(graph.CreateSnapshot());
         using var rootRender = JsonDocument.Parse(package.RootRenderConfiguration);
@@ -182,7 +193,16 @@ internal static class SpawnablePackageBinaryTests
             package.RootGpuContainers.Select(node => node.Id).SequenceEqual([rootGpu]) &&
             package.Templates.Single().GpuContainers.Select(node => node.Id).SequenceEqual([childGpu]),
             "Root payloads lost ordinary Group contents or included Spawnable template contents.");
-        void VerifySourceIds(byte[] render, byte[] bytecode)
+        Guid DrawGpu(double[] translation)
+        {
+            var transform = graph.CreateNode(new("Transform"));
+            graph.SetParameter(transform, "position", JsonSerializer.SerializeToElement(translation));
+            var gpu = graph.CreateNode(new("GpuParticle"));
+            Require(graph.TryConnectNodes(transform, gpu, out _, "drawMatrix", "value"),
+                "The GPU Draw Matrix pin did not accept a Matrix.");
+            return gpu.Id;
+        }
+        void VerifySourceIds(byte[] render, byte[] bytecode, Guid expectedGpu, byte[] otherBytecode)
         {
             using var scene = JsonDocument.Parse(render);
             foreach (var draw in scene.RootElement.GetProperty("nodes").EnumerateArray())
@@ -193,9 +213,16 @@ internal static class SpawnablePackageBinaryTests
                 Require(bytecode.AsSpan().IndexOf(source.ToByteArray(bigEndian: true)) >= 0,
                     "Render binding references a source missing from its own runtime program.");
             }
+            var transform = scene.RootElement.GetProperty("gpuDrawTransforms").EnumerateArray().Single();
+            var rows = transform.GetProperty("rowNodeIds").EnumerateArray()
+                .Select(row => row.GetGuid().ToByteArray(bigEndian: true)).ToArray();
+            Require(transform.GetProperty("nodeId").GetGuid() == expectedGpu && rows.Length == 4 &&
+                rows.All(row => bytecode.AsSpan().IndexOf(row) >= 0 && otherBytecode.AsSpan().IndexOf(row) < 0),
+                "GPU draw transform rows must only reference the owning program.");
         }
-        VerifySourceIds(package.RootRenderConfiguration, package.ParentBytecode);
-        VerifySourceIds(package.Templates.Single().RenderConfiguration, package.Templates.Single().Bytecode);
+        var templatePackage = package.Templates.Single();
+        VerifySourceIds(package.RootRenderConfiguration, package.ParentBytecode, rootGpu, templatePackage.Bytecode);
+        VerifySourceIds(templatePackage.RenderConfiguration, templatePackage.Bytecode, childGpu, package.ParentBytecode);
         var pending = LiberaFxMcpTools.CompileSpawnable(new ActiveGraphProvider(graph));
         Dispatcher.UIThread.RunJobs();
         using var mcp = JsonDocument.Parse(pending.GetAwaiter().GetResult());
@@ -277,13 +304,23 @@ internal static class SpawnablePackageBinaryTests
         return Verify(package);
     }
 
-    private static (SpawnableGroupPackage Package, byte[] Identities) CreateAdapterFixture(bool includeGpu)
+    private static (SpawnableGroupPackage Package, byte[] Identities) CreateAdapterFixture(bool includeGpu,
+        bool includeMaterials = false)
     {
         var graph = new GraphWorkspaceViewModel(new UndoRedoManager()) { AutoDestroyWhenIdle = false };
         var signal = graph.CreateNode(GraphNodeKind.Signal);
         var rootPosition = graph.CreateNode(GraphNodeKind.FloatX3);
         var rootDraw = graph.CreateNode(new("ModelDraw"));
         graph.SetParameter(rootDraw, "assetPath", JsonSerializer.SerializeToElement("/Engine/BasicShapes/Cube.Cube"));
+        var material = new EngineAsset("/Game/FX/ModelMaterial", "Godot material", "material", "Godot", Materials:
+            [new(0, "/Game/FX/ModelMaterial", "Godot material",
+                [new("strength", "scalar", JsonSerializer.SerializeToElement(0.75)),
+                 new("effect_color", "vector", JsonSerializer.SerializeToElement(new[] { 0.25, 0.5, 0.75, 1 })),
+                 new("effect_texture", "texture", JsonSerializer.SerializeToElement("/Game/FX/MaterialTexture"))])]);
+        if (includeMaterials)
+        {
+            graph.AssignRenderMaterial(rootDraw, material, 0);
+        }
         Require(graph.TryConnectNodes(rootPosition, rootDraw, out _, "position"),
             "Could not connect the adapter fixture's root constant position.");
 
@@ -297,6 +334,13 @@ internal static class SpawnablePackageBinaryTests
         var vector = graph.CreateNode(new("ScalarToVector3"));
         var templateDraw = graph.CreateNode(new("ModelDraw"));
         graph.SetParameter(templateDraw, "assetPath", JsonSerializer.SerializeToElement("/Engine/BasicShapes/Cube.Cube"));
+        if (includeMaterials)
+        {
+            graph.AssignRenderMaterial(templateDraw, material, 0);
+            Require(graph.TryConnectNodes(time, templateDraw, out _,
+                templateDraw.InputPorts.Single(port => port.Name == "strength").Id),
+                "Could not connect the material fixture's child-local strength.");
+        }
         Require(graph.TryConnectNodes(time, vector, out _, "a") &&
             graph.TryConnectNodes(vector, templateDraw, out _, "position"),
             "Could not connect the adapter fixture's template time-to-position chain.");
@@ -336,7 +380,39 @@ internal static class SpawnablePackageBinaryTests
         return SpawnableGroupPackageBinary.Serialize(new SpawnableGroupPackage(rootProgram.ToBinary(), [template]));
     }
 
-    private static (SpawnableGroupPackage Package, byte[] Identities) CreateGpuSpawnableFixture()
+    private static SpawnableGroupPackage CreateGodotFlowMapFixture()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager()) { AutoDestroyWhenIdle = false };
+        var gpu = graph.CreateNode(new("GpuParticle"));
+        var state = GpuParticleEditorService.ReadState(gpu);
+        const string resourceId = "godotFlowMap";
+        var resources = state.Program.Resources.Append(new ResourceDeclaration
+        {
+            Id = resourceId, Kind = ResourceKind.FlowMap2D, Width = 2, Height = 2, FlowMap = new()
+        }).ToList();
+        var spawn = state.Program.Kernels.Single(kernel => kernel.Stage == KernelStage.Spawn);
+        var replacement = GpuDsl.Compile(
+            "@Position = sampleFlowMap(\"godotFlowMap\", float3(0, 0, 1));" +
+            "@Size = sampleFlowMap(\"godotFlowMap\", float2(2, -1));",
+            spawn.Id, spawn.Stage, resources: resources);
+        var paths = new Dictionary<string, string>(state.ResourceAssetPaths)
+        {
+            [resourceId] = "/Game/FX/T_GodotFlow.T_GodotFlow"
+        };
+        graph.SetParameter(gpu, GpuParticleEditorService.ParameterId, JsonSerializer.SerializeToElement(state with
+        {
+            ResourceAssetPaths = paths,
+            Program = state.Program with
+            {
+                Resources = resources,
+                Kernels = state.Program.Kernels.Select(kernel => kernel == spawn ? replacement : kernel).ToList()
+            }
+        }, GpuParticleEditorService.Json));
+        return SpawnableGroupPackage.Compile(graph.CreateSnapshot());
+    }
+
+    private static (SpawnableGroupPackage Package, byte[] Identities) CreateGpuSpawnableFixture(
+        bool includeDrawMatrix = false)
     {
         var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
         var onStart = graph.CreateNode(new("OnStart"));
@@ -347,11 +423,21 @@ internal static class SpawnablePackageBinaryTests
         var lifeTime = graph.CreateNode(new("LifeTime"));
         graph.SetParameter(lifeTime, "seconds", JsonSerializer.SerializeToElement(2d));
         var gpu = graph.CreateNode(new("GpuParticle"));
+        if (includeDrawMatrix)
+        {
+            var transform = graph.CreateNode(new("Transform"));
+            graph.SetParameter(transform, "position", JsonSerializer.SerializeToElement(new[] { 250d, 0, 0 }));
+            Require(graph.TryConnectNodes(transform, gpu, out _, "drawMatrix", "value"),
+                "The Godot GPU fixture could not connect its child Draw Matrix.");
+        }
         graph.NavigateToGraph(0);
         var package = SpawnableGroupPackage.Compile(graph.CreateSnapshot());
         Require(package.OnStartNodeId == onStart.Id && package.RootGpuContainers.Count == 0 &&
             package.Templates.Single().GpuContainers.Select(node => node.Id).SequenceEqual([gpu.Id]),
             "GPU Spawnable fixture must start one finite GPU template and keep root GPU empty.");
+        using var configuration = JsonDocument.Parse(package.Templates.Single().RenderConfiguration);
+        Require(configuration.RootElement.TryGetProperty("gpuDrawTransforms", out _) == includeDrawMatrix,
+            "The GPU Draw Matrix metadata must match whether the pin is connected.");
         var identities = JsonSerializer.SerializeToUtf8Bytes(new
         {
             onStartNodeId = onStart.Id,

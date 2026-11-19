@@ -1,6 +1,7 @@
 {
   "Gpu.ContainerHint": "GPU プログラム — ダブルクリックして編集",
   "Gpu.Node": "GPU パーティクル",
+  "Gpu.DrawMatrix": "描画行列",
   "Gpu.Group": "GPU",
   "Gpu.Back": "戻る",
   "Gpu.Close": "CPU / 閉じる",

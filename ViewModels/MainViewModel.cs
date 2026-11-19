@@ -53,6 +53,7 @@ public partial class MainViewModel : ViewModelBase
     public string PreviewEndpoint { get; }
     public string PreviewAccessToken { get; }
     public string PreviewFingerprint { get; }
+    public string PreviewPublicCertificatePem { get; init; } = "";
     public string PreviewStatus
     {
         get => _previewStatus;
