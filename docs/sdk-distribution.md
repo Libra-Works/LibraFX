@@ -5,7 +5,7 @@ The SDKs still live in this repository. `Libra-Works/ForUnity` and
 Repository creation, history migration, removal of the originals, releases and
 pushes require a separate approved migration.
 
-Unity, Unreal and the initial Windows x86-64 Godot GDExtension can all be
+Unity, Unreal and the Windows x86-64 Godot GDExtension can all be
 staged locally with the same tool.
 
 ## Reproducible local staging
@@ -21,6 +21,9 @@ From PowerShell 7, export into a **new absolute directory outside the repository
 The parent directory must exist. Existing destinations, links and dirty source
 trees are rejected. `-AllowDirty` is only for local development: its manifest
 explicitly records that the source does not match the recorded HEAD exactly.
+On Windows use short paths for the export, engine project and build output.
+MSBuild and Unreal generate deeply nested intermediate paths; a fresh build
+can fail on a long path before any LIBERA FX code runs.
 Each file receives a SHA-256 entry in `sdk-manifest.json`. Generated binaries,
 logs, installation markers and engine build caches are excluded. The export
 never uploads, invokes an engine, builds, or edits an installed project.
@@ -29,6 +32,38 @@ Each export preserves `Runtime\Core`, `Runtime\include`, `Runtime\CMakeLists.txt
 and its engine adapter's relative paths. `SDK\compatibility.json` records the
 shared ABI, bytecode/package ceiling and actual verification boundaries.
 Compiler/editor sources are not runtime dependencies.
+
+## First effect in a new project
+
+Start with a **CPU-only `.lfxp`** with no render assets, GPU programs, or
+editor connection. This separates package loading and game I/O from project
+resource bindings. For a visible second check in Unity or Unreal, use the
+same compiler-produced ModelDraw Cube package described in both adapters'
+`USAGE.txt`; bind its sample mesh/material independently in each engine.
+Generate effects in the authoring repository, not in the exported SDK:
+
+```powershell
+dotnet run --project Tools\Converter -- convert C:\Effects\input.lfxproj C:\Effects\effect.lfxp
+```
+
+| Step | Unity | Unreal | Godot |
+| --- | --- | --- | --- |
+| Install | Add the local package and the matching `liberafx_native` plugin. | Copy-install with the script below into a blank C++ project, then build its Editor target. | Install the built GDExtension descriptor and matching library. |
+| Load | Copy `.lfxp` into Assets and assign the imported asset to `LiberaFxSpawnableComponent`. | Import `.lfxp`, then drag the imported asset into the level. It creates a `LibraEffectActor` with one `Libra Effect` component. | Copy `.lfxp` under `res://`, add `LibraEffectPlayer`, and pass the file bytes to `play_package` after the node enters the tree. |
+| Start | Enter Play mode with Play On Enable set, or call `Play()`. Check `LastError` if startup is rejected. | Start Play In Editor with Auto Play set, or call `Play()` and check its result. | Check `play_package` returns `0` before issuing game I/O. |
+| Drive and observe | Use `SetGameProperty` / `FireGameSignal` and subscribe to `GameIoEventReceived`. | Use `SetGameProperty` / `FireGameSignal` and bind `OnGameIoEvent`. | Use `set_game_property` / `fire_game_signal` and connect `game_io_event`. |
+| Retire | Call `Stop()` or disable the component. | Call `Stop()` or destroy the actor. | Call `stop()` or remove the player from the scene tree. |
+
+Use the exact published port name and lane count from the graph; an ordinary
+internal Signal node is not a named game input. To distinguish an idle effect
+from a failed load, verify an authored output event or value, then stop and
+start the same asset again. Bind resources only when adding draw/GPU nodes;
+those bindings refer to engine assets and belong in the host project.
+
+Unity and Unreal players use the imported, embedded runtime data, not the
+original source file's path. Godot instead reads the compiled file from
+`res://`; include it in the export preset's non-resource filter. None of the
+players needs the original `.lfxproj` or the Converter.
 
 ## Unity entry point
 
@@ -40,17 +75,31 @@ The source-only root asmdef excludes standalone .NET tooling/test sources from
 Unity compilation by default; do not enable `LIBERAFX_STANDALONE_DOTNET_TOOLS`
 in a Unity project. Run those tools through their own .NET projects instead.
 
-Build `liberafx_native` from the exported Runtime CMake project with tests off,
-then install the matching platform native plugin through Unity's plugin importer.
+Build `liberafx_native` from the exported Runtime CMake project with tests off.
+For Windows x64, run from the SDK export root with the Visual Studio C++ tools:
+
+```powershell
+cmake -S Runtime -B C:\SdkBuild\Unity -G "Visual Studio 17 2022" -A x64 -DLIBERAFX_BUILD_TESTS=OFF
+cmake --build C:\SdkBuild\Unity --config Release --target liberafx_native
+```
+
+Copy `C:\SdkBuild\Unity\Release\liberafx_native.dll` to the host project's
+`Assets\Plugins\x86_64`. Check the platform/CPU in Unity's Plugin Inspector,
+including Editor and the intended player target. The local package is
+source-only: adding it to Package Manager does not install the native DLL.
 Do not install a Windows DLL for other target platforms or assume desktop dynamic
 loading is permitted on consoles. See the included `USAGE.txt` and
 `GPU-USAGE.txt` for package import, bindings, initialization, Play, Stop, disposal
 and minimal Cube sample generation using the full authoring repository.
 
 Unity 6000.0 is a **declared package minimum**, not a completed Unity 6 acceptance
-claim. Previous execution evidence covers the 7000-series URP/D3D11 setup only.
+claim. Execution evidence covers the 7000-series editor with D3D11 in URP
+and in the Built-in RP fallback.
 Unity 6, other render pipelines/backends and platform SDKs still need their own
 build/playback/resource-retirement acceptance.
+The ModelDraw Cube uses a Built-in Render Pipeline shader. For that sample on
+Unity 7 alpha, launch the Editor with `-enable-builtin-rp-fallback`; for an SRP
+effect, use a material/shader that supplies the authored properties in that SRP.
 
 ## Unreal entry point
 
@@ -59,6 +108,9 @@ Use the exported adapter's `Install-LibraRuntimeForUnreal.ps1` with an explicit
 `-Update` protects locally modified files. Prefer copy installation for a release;
 `-Link` is an explicit local development convenience, not a redistributable SDK.
 The installer does not launch Unreal, build, or edit the project's configuration.
+For a first Windows install, start from a C++ Blank project and build its
+`<ProjectName>Editor` Win64 Development target after installing the plugin.
+Launch the project only after the build succeeds; the plugin is source-only.
 
 Use **ULibraEffectComponent** as the public whole-effect entry point; internal
 CPU/GPU/Spawnable helpers do not require author-added companion components.
@@ -67,6 +119,24 @@ Play/Stop, instance I/O and lifetime ownership. UE 5.7+ is the current declared
 minimum. Keep the portable Core/Unreal integration Clang-compilable, and use MSVC
 for final Windows Unreal integration verification. This does not certify console
 SDKs, cooking or gameplay merely because a desktop source build succeeds.
+
+## Fresh-project verification on Windows
+
+The local source exports were installed in clean Unity 7000.0.0a16 and
+UE 5.7.4 C++ Blank projects, using D3D11 on an RX 6700 XT. Unity used the
+local package plus a Release DLL built from the export; Unreal used the copy
+installer plus an MSVC Editor build. Both rendered the compiler-produced
+ModelDraw Cube and exercised named Game I/O. Unity also verified `.lfxp`
+import, per-instance Game I/O in Play Mode, and that Stop removed renderers.
+Unreal verified placement through its viewport actor factory and automatic
+playback of the saved map in PIE with the original `.lfxp` unavailable.
+
+The main setup differences are the separate Unity native DLL and explicit
+binding asset versus Unreal's native target build and asset placement
+shortcut. Do the CPU-only check first to distinguish an SDK/startup error
+from a missing mesh or shader binding. Neither adapter needs a live editor
+connection for ordinary playback. This fresh-project run does not certify
+other backends, console SDKs or shipped players.
 
 ## Godot entry point
 
@@ -78,12 +148,13 @@ repository before copying the bytecode into the project. See the included
 `Runtime\Integrations\Godot\USAGE.txt` for exact build, installation, and smoke
 test commands.
 
-The Godot adapter accepts standalone CPU bytecode v1 and v2, not Spawnable
-packages. It does not expose rendering, Game I/O, asset resolution, GPU or
-live preview. Headless playback has been exercised on Godot 4.7.2 Windows
-x86-64; exported players have not been verified. When selecting engine
-verification targets, include the Godot smoke test for changes that affect its
-supported Core, Converter, integration or distribution paths.
+The Godot adapter accepts standalone CPU bytecode and supported Spawnable
+packages. It exposes named Game I/O, explicit Godot resource bindings,
+CPU rendering, supported root/child GPU billboards, and local preview and
+execution debugging. See its `USAGE.txt` and `LIVE_PREVIEW.txt` for subset and
+rendering-device requirements. Headless playback and real Vulkan GPU execution
+have been exercised on Godot 4.7.2 Windows x86-64; exported players have not
+been verified.
 
 ## Version and ownership boundary
 
@@ -94,6 +165,10 @@ objects and capture/apply snapshots on their required threads; Core owns portabl
 execution over caller/host-owned memory. No serialized pointers identify assets
 or live instances. Host generation plus container and instance identity protects
 targeted operations. Never retain freed state or use a dynamic editor DLL in Core.
+Prefer the engine components above over a custom update loop. Drive their
+playback and named I/O on the game/main thread; let the adapter marshal any
+worker, render-thread, or debugger jobs. Check result codes at load and at
+game I/O boundaries, and do not assume Stop sends natural-end graph events.
 
 An eventual split must preserve the source lock/manifest, carry required notices
 and samples, exercise independent installation in each target engine, and agree

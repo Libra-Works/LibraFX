@@ -7,7 +7,7 @@
   "unity": {
     "package": "works.libra.liberafx",
     "minimumDeclaredEditor": "6000.0",
-    "previouslyExercised": "7000-series editor, URP, D3D11",
+    "previouslyExercised": "7000-series editor, URP and Built-in RP fallback, D3D11",
     "unity6Acceptance": "not yet verified",
     "nativeLibrary": "liberafx_native"
   },
@@ -23,8 +23,8 @@
     "apiVersion": "4.7",
     "platforms": ["Windows x86-64"],
     "maximumBytecodeVersion": 2,
-    "spawnablePackages": false,
-    "previouslyExercised": "Godot 4.7.2 Windows x86-64 headless playback",
+    "spawnablePackages": true,
+    "previouslyExercised": "Godot 4.7.2 Windows x86-64 headless playback and Vulkan GPU execution",
     "exportedPlayerAcceptance": "not yet verified"
   }
 }
