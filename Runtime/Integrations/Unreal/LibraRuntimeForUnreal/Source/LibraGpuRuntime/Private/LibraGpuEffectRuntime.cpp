@@ -1,6 +1,7 @@
 #include "LibraGpuEffectRuntime.h"
 
 #include "CommonRenderResources.h"
+#include "DynamicRHI.h"
 #include "Engine/AssetManager.h"
 #include "Engine/StreamableManager.h"
 #include "Engine/Texture2D.h"
@@ -8,6 +9,7 @@
 #include "GameFramework/Actor.h"
 #include "GlobalShader.h"
 #include "GlobalRenderResources.h"
+#include "HAL/PlatformProcess.h"
 #include "LibraGpuEffectAsset.h"
 #include "PipelineStateCache.h"
 #include "PostProcess/PostProcessMaterialInputs.h"
@@ -757,6 +759,27 @@ void ULibraGpuEffectRuntime::BeginDestroy()
 }
 
 #if !UE_BUILD_SHIPPING
+static bool WaitForLibraGpuReadback(FRHICommandListImmediate& commandList, FRHIGPUMemoryReadback& readback)
+{
+    if (RHIGetInterfaceType() != ERHIInterfaceType::D3D12)
+    {
+        readback.Wait(commandList, readback.GetLastCopyGPUMask());
+        return true;
+    }
+    // The D3D12 fence can exist before its command list has been submitted.
+    commandList.ImmediateFlush(EImmediateFlushType::FlushRHIThread);
+    const auto deadline = FPlatformTime::Seconds() + 5.0;
+    while (!readback.IsReady())
+    {
+        if (FPlatformTime::Seconds() >= deadline)
+        {
+            return false;
+        }
+        FPlatformProcess::SleepNoStats(0.001f);
+    }
+    return true;
+}
+
 bool ULibraGpuEffectRuntime::VerifyGpuSmoke(FString& report)
 {
     if (!State || GUsingNullRHI || GMaxRHIFeatureLevel < ERHIFeatureLevel::SM5)
@@ -776,7 +799,10 @@ bool ULibraGpuEffectRuntime::VerifyGpuSmoke(FString& report)
         FRDGBuilder graph(commandList);
         AddEnqueueCopyPass(graph, &readback, graph.RegisterExternalBuffer(state->Particles), bytes.Num());
         graph.Execute();
-        readback.Wait(commandList, readback.GetLastCopyGPUMask());
+        if (!WaitForLibraGpuReadback(commandList, readback))
+        {
+            return;
+        }
         auto data = readback.Lock(bytes.Num());
         if (data)
         {
@@ -1005,9 +1031,15 @@ bool FLibraGpuInterpreterReadbackTest::RunTest(const FString& parameters)
             FRDGBuilder graph(commandList);
             AddEnqueueCopyPass(graph, &readback, graph.RegisterExternalBuffer(state->Particles), sizeof(FTestParticle));
             graph.Execute();
-            readback.Wait(commandList, readback.GetLastCopyGPUMask());
-            FMemory::Memcpy(&output, readback.Lock(sizeof(FTestParticle)), sizeof(FTestParticle));
-            readback.Unlock();
+            if (!WaitForLibraGpuReadback(commandList, readback))
+            {
+                return;
+            }
+            if (const auto* data = readback.Lock(sizeof(FTestParticle)))
+            {
+                FMemory::Memcpy(&output, data, sizeof(FTestParticle));
+                readback.Unlock();
+            }
         };
         FLibraGpuFrame frame;
         frame.SpawnCount = 1;
@@ -1070,7 +1102,10 @@ bool FLibraGpuBillboardReadbackTest::RunTest(const FString& parameters)
                 ELibraGpuBillboardBlend::Alpha, &drawTransform);
             AddEnqueueCopyPass(graph, &readback, target);
             graph.Execute();
-            readback.Wait(commandList, readback.GetLastCopyGPUMask());
+            if (!WaitForLibraGpuReadback(commandList, readback))
+            {
+                return;
+            }
             int32 pitch = 0;
             auto pixels = static_cast<const uint8*>(readback.Lock(pitch));
             if (pixels)
@@ -1217,7 +1252,10 @@ bool LibraGpuEvaluateReferences(ULibraGpuEffectAsset* asset, const FString& kern
         auto bytes = outputs.Num() * sizeof(FTestParticle);
         AddEnqueueCopyPass(graph, &readback, graph.RegisterExternalBuffer(state->Particles), bytes);
         graph.Execute();
-        readback.Wait(commandList, readback.GetLastCopyGPUMask());
+        if (!WaitForLibraGpuReadback(commandList, readback))
+        {
+            return;
+        }
         auto data = readback.Lock(bytes);
         if (data)
         {
@@ -1287,7 +1325,10 @@ bool FLibraGpuDefaultEmitterRendererTest::RunTest(const FString& parameters)
             FRDGBuilder graph(commandList);
             AddEnqueueCopyPass(graph, &readback, graph.RegisterExternalBuffer(state->Particles), sizeof(first));
             graph.Execute();
-            readback.Wait(commandList, readback.GetLastCopyGPUMask());
+            if (!WaitForLibraGpuReadback(commandList, readback))
+            {
+                return;
+            }
             if (auto data = readback.Lock(sizeof(first)))
             {
                 FMemory::Memcpy(&first, data, sizeof(first));
@@ -1333,7 +1374,10 @@ bool FLibraGpuDefaultEmitterRendererTest::RunTest(const FString& parameters)
                 GMaxRHIFeatureLevel, TEXT("LibraGpu.TestStarter"), blend);
             AddEnqueueCopyPass(graph, &readback, target);
             graph.Execute();
-            readback.Wait(commandList, readback.GetLastCopyGPUMask());
+            if (!WaitForLibraGpuReadback(commandList, readback))
+            {
+                return;
+            }
             int32 pitch = 0;
             if (auto pixels = static_cast<const uint8*>(readback.Lock(pitch)))
             {

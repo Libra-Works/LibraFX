@@ -59,7 +59,7 @@ extension. Unity 7 validates imported shader metadata, kernel entry points,
 thread-group sizes and resource bindings in `LibraGpuParticleRuntime`. Its
 source hash check is Editor-only; an exported game must carry the imported
 shader and matching metadata together. Unity submits compute and draw work via
-engine APIs and retires in-flight resources separately. Godot has an
+engine APIs and retires in-flight resources separately. Godot has a
 local RenderingDevice LGPK interpreter with synchronous readback for
 MultiMesh billboard draws. Root and child scopes own separate particle
 buffers and read their own draw Matrix rows. See the
@@ -102,6 +102,12 @@ tests. Compiler tests alone do not establish device parity. Standalone engines
 and console SDKs are not covered by these tests. For a console target, validate the actual target
 engine's shader compilation, build/cook and device execution before advertising
 support.
+
+On Windows, Unreal 5.7 passed the `Libra.GPU.Compute` suite on both D3D11
+and D3D12/SM6, including spawn/update, canonical math and noise, and FlowMap
+readback. `Libra.GPU.Render.BillboardFramebuffer` also passed on both RHIs.
+D3D12 diagnostic readback submits the RHI work before polling for completion;
+production dispatch does not wait on these diagnostic fences.
 
 See the [Unity GPU guide](../Runtime/Integrations/Unity/GPU-USAGE.txt) and
 [Unreal integration guide](../Runtime/Integrations/Unreal/USAGE.txt) for
