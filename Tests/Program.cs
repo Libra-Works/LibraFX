@@ -204,6 +204,12 @@ internal static class Program
             GraphRevisionDiffTests.Run();
             return;
         }
+        if (args is ["--graph-file-comparison"])
+        {
+            InitializeIsolatedUi();
+            GraphRevisionDiffTests.VerifyFileComparison();
+            return;
+        }
         if (args is ["--vcs-workspace"])
         {
             InitializeIsolatedUi();

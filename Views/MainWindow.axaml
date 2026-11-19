@@ -51,6 +51,7 @@
             </MenuItem>
             <MenuItem Header="{DynamicResource Text.Editor.Edit}">
                 <MenuItem Header="{DynamicResource Text.Search.Title}" Click="OnAnythingSearchClick" />
+                <MenuItem x:Name="CompareGraphFilesMenu" Header="{DynamicResource Text.Vcs.FileCompareTitle}" Click="OnCompareGraphFilesClick" />
                 <MenuItem Header="{DynamicResource Text.Vcs.Title}" Tag="RevisionHistory" Click="OnDockPanelClick" />
                 <MenuItem Header="{DynamicResource Text.Editor.Undo}"
                           Command="{Binding UndoCommand}">

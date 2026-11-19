@@ -157,6 +157,9 @@ public partial class MainWindow : Window
         QueueGroupUpdateCheck();
     }
 
+    private async void OnCompareGraphFilesClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
+        await new GraphFileComparisonWindow().ShowDialog(this);
+
     private async void OnHelpClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
         await new HelpWindow().ShowDialog(this);
 

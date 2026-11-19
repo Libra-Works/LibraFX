@@ -1,5 +1,9 @@
 LIBERA FX revision adapters and graphical diff
 
+Edit > Compare graph files compares two local .lfxproj or .lfxgroup files
+with the same side-by-side graph display. No version control plugin is needed,
+and neither file nor the active editor document is modified.
+
 In Settings > Plugins > Extensions, enable and trust the desired provider,
 then restart the editor. Bundled DLLs are discovered but not run by default.
 The bundled RGB inspector follows the same opt-in flow under Plugins >

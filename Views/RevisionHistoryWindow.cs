@@ -18,22 +18,16 @@ public sealed class RevisionHistoryWindow : UserControl
     private readonly ComboBox _before = new() { Width = 260 };
     private readonly ComboBox _after = new() { Width = 260 };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
-    private readonly RevisionGraphCanvas _left = new();
-    private readonly RevisionGraphCanvas _right = new();
-    private readonly ListBox _changes = new();
+    private readonly GraphComparisonView _comparison = new();
+    private readonly ListBox _history = new();
     private readonly ListBox _workspaceChanges = new() { MaxHeight = 170 };
     private readonly TextBlock _branch = new();
     private readonly Button _workspaceRefresh = new();
     private readonly Button _openForEdit = new();
-    private readonly TextBlock _scope = new();
     private readonly bool _canCompare;
-    private GraphSnapshot? _beforeGraph, _afterGraph;
-    private IReadOnlyList<GraphNodeDifference> _differences = [];
     private CancellationTokenSource? _lifetime;
     private bool _busy;
     private sealed record Choice(string? Revision, string Label)
-    { public override string ToString() => Label; }
-    private sealed record ChangeChoice(GraphNodeDifference Difference, string Label)
     { public override string ToString() => Label; }
 
     public RevisionHistoryWindow(MainViewModel main, string? resourceFile = null, bool compareGraphs = true)
@@ -101,10 +95,6 @@ public sealed class RevisionHistoryWindow : UserControl
                 }
             }
         };
-        var graphs = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*") };
-        graphs.Children.Add(_left);
-        Grid.SetColumn(_right, 1);
-        graphs.Children.Add(_right);
         _before.IsVisible = _after.IsVisible = compare.IsVisible = _canCompare;
         var workspace = new Expander
         {
@@ -121,42 +111,30 @@ public sealed class RevisionHistoryWindow : UserControl
                 }
             }
         };
-        var root = new Grid { RowDefinitions = new RowDefinitions(_canCompare ? "Auto,Auto,Auto,*,130,Auto" : "Auto,Auto,Auto,0,*,Auto"), RowSpacing = 6 };
+        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto"), RowSpacing = 6 };
         root.Children.Add(controls);
         Grid.SetRow(workspace, 1);
         root.Children.Add(workspace);
-        _scope.Margin = new Thickness(10, 0);
-        Grid.SetRow(_scope, 2);
-        root.Children.Add(_scope);
-        Grid.SetRow(graphs, 3);
-        root.Children.Add(graphs);
-        _changes.Margin = new Thickness(10, 0);
-        Grid.SetRow(_changes, 4);
-        root.Children.Add(_changes);
+        Control results = _canCompare ? _comparison : _history;
+        results.Margin = new Thickness(10, 0);
+        Grid.SetRow(results, 2);
+        root.Children.Add(results);
         _status.Margin = new Thickness(10, 0, 10, 8);
         _status.Classes.Add("editor-label");
-        Grid.SetRow(_status, 5);
+        Grid.SetRow(_status, 3);
         root.Children.Add(_status);
         Content = root;
         _provider.SelectionChanged += (_, _) =>
         {
             _before.ItemsSource = null;
             _after.ItemsSource = null;
-            _changes.ItemsSource = null;
+            _history.ItemsSource = null;
             _workspaceChanges.ItemsSource = null;
             _branch.Text = "";
-            _beforeGraph = _afterGraph = null;
-            _scope.Text = "";
-            _left.Show(new([], []), [], true, new([], []));
-            _right.Show(new([], []), [], false, new([], []));
+            _comparison.Clear();
             _status.Text = _file is null ? text.Get("Vcs.SaveFirst") :
                 _provider.SelectedItem is null ? text.Get("Vcs.NoProvider") : _file;
             UpdateWorkspaceActions();
-        };
-        _changes.SelectionChanged += (_, _) =>
-        {
-            if (_changes.SelectedItem is ChangeChoice choice)
-                ShowScope(choice.Difference.Path.Split('/').SkipLast(1).Select(Guid.Parse).ToArray());
         };
         AttachedToVisualTree += (_, _) => _lifetime = new CancellationTokenSource();
         DetachedFromVisualTree += (_, _) =>
@@ -202,7 +180,7 @@ public sealed class RevisionHistoryWindow : UserControl
                 : null;
             if (!_canCompare)
             {
-                _changes.ItemsSource = choices;
+                _history.ItemsSource = choices;
             }
             _before.SelectedIndex = choices.Length > 0 ? 0 : -1;
             _after.SelectedIndex = _canCompare ? 0 : -1;
@@ -310,45 +288,12 @@ public sealed class RevisionHistoryWindow : UserControl
             token.ThrowIfCancellationRequested();
             if (!_main.Extensions.VersionControlProviders.Contains(provider))
                 throw new InvalidOperationException("The selected provider was disabled.");
-            _beforeGraph = before;
-            _afterGraph = after;
-            _differences = GraphRevisionDiff.Compare(before, after);
-            ShowScope([]);
-            _changes.ItemsSource = _differences.Where(item => item.Kind != GraphDiffKind.Unchanged)
-                .Select(item => new ChangeChoice(item, $"{LocalizationService.Shared.Get("Vcs." + item.Kind)}  " +
-                    $"{item.After?.Name ?? item.Before?.Name ?? LocalizationService.Shared.Get("Vcs.GraphSettings")}  " +
-                    $"[{ScopeLabel(item.Path.Split('/').SkipLast(1).Select(Guid.Parse).ToArray())}]")).ToArray();
+            _comparison.ShowComparison(before, after);
             _status.Text = LocalizationService.Shared.Get("Vcs.Legend");
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { _status.Text = ex.GetBaseException().Message; }
         finally { _busy = false; _provider.IsEnabled = true; }
-    }
-
-    private string ScopeLabel(IReadOnlyList<Guid> path)
-    {
-        var labels = new List<string> { LocalizationService.Shared.Get("Vcs.RootGraph") };
-        for (var index = 0; index < path.Count; ++index)
-        {
-            var parent = path.Take(index).ToArray();
-            var node = GraphRevisionDiff.Scope(_afterGraph!, parent)?.Nodes.FirstOrDefault(item => item.Id == path[index]) ??
-                GraphRevisionDiff.Scope(_beforeGraph!, parent)?.Nodes.FirstOrDefault(item => item.Id == path[index]);
-            labels.Add(node?.Name ?? LocalizationService.Shared.Get("Vcs.GraphSettings"));
-        }
-        return string.Join(" / ", labels);
-    }
-
-    private void ShowScope(IReadOnlyList<Guid> path)
-    {
-        if (_beforeGraph is null || _afterGraph is null) return;
-        var before = GraphRevisionDiff.Scope(_beforeGraph, path) ?? new([], []);
-        var after = GraphRevisionDiff.Scope(_afterGraph, path) ?? new([], []);
-        var prefix = string.Concat(path.Select(id => id.ToString("D") + "/"));
-        var diff = _differences.Where(item => item.Path.StartsWith(prefix, StringComparison.Ordinal) &&
-            !item.Path[prefix.Length..].Contains('/')).ToArray();
-        _left.Show(before, diff, true, after);
-        _right.Show(after, diff, false, before);
-        _scope.Text = ScopeLabel(path);
     }
 
     private async Task<GraphSnapshot> ReadAsync(Choice choice, IVersionControlProvider provider, CancellationToken token)
@@ -363,66 +308,15 @@ public sealed class RevisionHistoryWindow : UserControl
                 return open.Workspace.CreateSnapshot();
             }
             using var file = File.OpenRead(_file!);
-            return await ReadGraphAsync(file);
+            return await GraphComparisonFile.ReadAsync(_file!, file);
         }
         var bytes = await provider.ReadRevisionAsync(_file!, choice.Revision, token);
-        if (bytes.Length > 16 * 1024 * 1024) throw new InvalidDataException("Revision exceeds 16 MiB.");
+        if (bytes.Length > 16 * 1024 * 1024)
+        {
+            throw new InvalidDataException("Revision exceeds 16 MiB.");
+        }
         using var stream = new MemoryStream(bytes, writable: false);
-        return await ReadGraphAsync(stream);
+        return await GraphComparisonFile.ReadAsync(_file!, stream);
     }
 
-    private async Task<GraphSnapshot> ReadGraphAsync(Stream stream) =>
-        string.Equals(Path.GetExtension(_file), GroupAssetLibrary.FileExtension, StringComparison.OrdinalIgnoreCase)
-            ? GroupAssetLibrary.ReadAsset(stream).Graph
-            : (await new ProjectFileService().LoadAsync(stream)).Graph;
-
-    private sealed class RevisionGraphCanvas : Control
-    {
-        private GraphSnapshot? _graph;
-        private Dictionary<Guid, GraphDiffKind> _changes = [];
-        private GraphSnapshot _other = new([], []);
-        public void Show(GraphSnapshot graph, IReadOnlyList<GraphNodeDifference> diff, bool beforeSide, GraphSnapshot other)
-        {
-            _graph = graph;
-            _other = other;
-            _changes = diff.Where(item => (beforeSide ? item.Before : item.After) is not null)
-                .ToDictionary(item => (beforeSide ? item.Before : item.After)!.Id, item => item.Kind);
-            InvalidateVisual();
-        }
-        public override void Render(DrawingContext context)
-        {
-            base.Render(context);
-            if (_graph is not { Nodes.Count: > 0 } graph) return;
-            if (Application.Current?.Resources.TryGetResource("EffectForegroundBrush", ActualThemeVariant, out var fg) != true ||
-                fg is not IBrush foreground) return;
-            var accent = Application.Current.Resources.TryGetResource("DockApplicationAccentBrushIndicator", ActualThemeVariant, out var ac) &&
-                ac is IBrush brush ? brush : foreground;
-            var all = graph.Nodes.Concat(_other.Nodes).ToArray();
-            var minX = all.Min(node => node.X);
-            var minY = all.Min(node => node.Y);
-            var width = Math.Max(160, all.Max(node => node.X) - minX + 160);
-            var height = Math.Max(70, all.Max(node => node.Y) - minY + 70);
-            if (!double.IsFinite(width) || !double.IsFinite(height)) return;
-            var scale = Math.Min(1, Math.Min(Math.Max(1, Bounds.Width - 24) / width, Math.Max(1, Bounds.Height - 24) / height));
-            Point Position(GraphNodeSnapshot node) => new(12 + (node.X - minX) * scale, 12 + (node.Y - minY) * scale);
-            var nodes = graph.Nodes.ToDictionary(node => node.Id);
-            foreach (var edge in graph.Connections)
-                if (nodes.TryGetValue(edge.SourceNodeId, out var source) && nodes.TryGetValue(edge.TargetNodeId, out var target))
-                    context.DrawLine(_other.Connections.Contains(edge) ? new Pen(foreground, 1) :
-                        new Pen(accent, 2, DashStyle.Dash), Position(source) + new Vector(140 * scale, 22 * scale),
-                        Position(target) + new Vector(0, 22 * scale));
-            foreach (var node in graph.Nodes)
-            {
-                var kind = _changes.GetValueOrDefault(node.Id);
-                var position = Position(node);
-                context.DrawRectangle(null, new Pen(kind == GraphDiffKind.Unchanged ? foreground : accent,
-                    kind == GraphDiffKind.Unchanged ? 1 : 3), new Rect(position, new Size(140 * scale, 44 * scale)));
-                var marker = kind switch { GraphDiffKind.Added => "+ ", GraphDiffKind.Removed => "- ", GraphDiffKind.Modified => "~ ", _ => "" };
-                var label = new FormattedText(marker + node.Name, System.Globalization.CultureInfo.CurrentUICulture,
-                    FlowDirection.LeftToRight, Typeface.Default, Math.Max(7, 11 * scale), foreground)
-                    { MaxTextWidth = Math.Max(1, 132 * scale), MaxTextHeight = Math.Max(1, 40 * scale), Trimming = TextTrimming.CharacterEllipsis };
-                context.DrawText(label, position + new Vector(4 * scale, 4 * scale));
-            }
-        }
-    }
 }
