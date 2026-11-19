@@ -9,7 +9,7 @@
 #include <array>
 #include <cmath>
 
-namespace {
+namespace LibraSkeletalPoseDetail {
 constexpr const TCHAR* MatrixPrefix = TEXT("__LFXS1M_");
 constexpr const TCHAR* ValidityPrefix = TEXT("__LFXS1V_");
 
@@ -96,18 +96,22 @@ auto ResolveBoneIndex(const USkeletalMeshComponent& component, const FString& pa
     return INDEX_NONE;
 }
 
-auto MatrixValues(const FTransform& transform, std::array<double, 16>& out) -> bool
+auto MatrixValues(const FMatrix& matrix, std::array<double, 16>& out) -> bool
 {
-    const auto matrix = transform.ToMatrixWithScale();
     for (auto row = 0; row < 4; ++row)
+    {
         for (auto column = 0; column < 4; ++column)
         {
             const auto value = static_cast<double>(matrix.M[column][row]);
-            if (!FMath::IsFinite(value)) return false;
+            if (!FMath::IsFinite(value))
+            {
+                return false;
+            }
             // Unreal's FMatrix uses row-vector composition. Transpose into the
             // Core's row-major storage / column-vector convention.
             out[static_cast<std::size_t>(row * 4 + column)] = value;
         }
+    }
     return true;
 }
 }
@@ -116,11 +120,12 @@ bool FLibraSkeletalPoseRuntime::TryParse(const std::string& name,
     FLibraSkeletalPoseSource& source, bool& isValidity)
 {
     auto bytes = TArray<uint8>{};
-    if (!ReadBindingBytes(name, isValidity, bytes) || bytes.Num() < 21 || bytes[0] != 1)
+    if (!LibraSkeletalPoseDetail::ReadBindingBytes(name, isValidity, bytes) || bytes.Num() < 21 || bytes[0] != 1)
         return false;
-    source.SourceNodeId = FGuid(BigEndianUint32(bytes.GetData() + 1),
-        BigEndianUint32(bytes.GetData() + 5), BigEndianUint32(bytes.GetData() + 9),
-        BigEndianUint32(bytes.GetData() + 13));
+    source.SourceNodeId = FGuid(LibraSkeletalPoseDetail::BigEndianUint32(bytes.GetData() + 1),
+        LibraSkeletalPoseDetail::BigEndianUint32(bytes.GetData() + 5),
+        LibraSkeletalPoseDetail::BigEndianUint32(bytes.GetData() + 9),
+        LibraSkeletalPoseDetail::BigEndianUint32(bytes.GetData() + 13));
     source.Target = bytes[17];
     source.Space = bytes[18];
     const auto keyLength = static_cast<int32>(bytes[19]);
@@ -130,17 +135,18 @@ bool FLibraSkeletalPoseRuntime::TryParse(const std::string& name,
         return false;
     const auto key = std::string(reinterpret_cast<const char*>(bytes.GetData() + 20), keyLength);
     const auto bone = std::string(reinterpret_cast<const char*>(bytes.GetData() + 21 + keyLength), boneLength);
-    if (!TryDecodeUtf8(key, source.Key) || !TryDecodeUtf8(bone, source.BonePath) ||
+    if (!LibraSkeletalPoseDetail::TryDecodeUtf8(key, source.Key) ||
+        !LibraSkeletalPoseDetail::TryDecodeUtf8(bone, source.BonePath) ||
         key.size() + bone.size() > 63 || !source.SourceNodeId.IsValid() ||
         (source.Target == 0 && !source.Key.IsEmpty()) ||
-        source.Key.TrimStartAndEnd() != source.Key || HasControlCharacter(source.Key) ||
-        (source.Target == 1 && source.Key.IsEmpty()) || !ValidatePath(source.BonePath))
+        source.Key.TrimStartAndEnd() != source.Key || LibraSkeletalPoseDetail::HasControlCharacter(source.Key) ||
+        (source.Target == 1 && source.Key.IsEmpty()) || !LibraSkeletalPoseDetail::ValidatePath(source.BonePath))
         return false;
     return true;
 }
 
 bool FLibraSkeletalPoseRuntime::Initialize(const liberafx::SpawnableHost& host,
-    AActor* owner, TArray<UActorComponent*>& tickPrerequisites)
+    UActorComponent& consumer)
 {
     Sources.Reset();
     TickPrerequisites.Reset();
@@ -151,7 +157,7 @@ bool FLibraSkeletalPoseRuntime::Initialize(const liberafx::SpawnableHost& host,
         auto isValidity = false;
         if (!TryParse(port.name, source, isValidity))
         {
-            if (HasSourcePrefix(port.name)) return false;
+            if (LibraSkeletalPoseDetail::HasSourcePrefix(port.name)) return false;
             continue;
         }
         auto& existing = parsed.FindOrAdd(source.SourceNodeId);
@@ -176,34 +182,52 @@ bool FLibraSkeletalPoseRuntime::Initialize(const liberafx::SpawnableHost& host,
     {
         auto source = MoveTemp(pair.Value);
         if (source.MatrixPort.IsEmpty() || source.ValidityPort.IsEmpty()) return false;
-        const auto hasTarget = source.Target == 0
-            ? ULibraSkeletalPoseTargetComponent::ResolveOwnerTarget(owner, source.Registration)
-            : ULibraSkeletalPoseTargetComponent::ResolveKeyTarget(source.Key, source.Registration);
-        if (hasTarget)
-        {
-            source.bBound = true;
-            if (auto* mesh = source.Registration.Mesh.Get())
-            {
-                tickPrerequisites.AddUnique(mesh);
-                TickPrerequisites.AddUnique(mesh);
-            }
-        }
         Sources.Add(MoveTemp(source));
+    }
+    for (auto& source : Sources)
+    {
+        Bind(source, consumer);
     }
     return true;
 }
 
-auto FLibraSkeletalPoseRuntime::TryCapture(FLibraSkeletalPoseSource& source,
-    AActor* owner, std::array<double, 16>& matrix) -> bool
+bool FLibraSkeletalPoseRuntime::Bind(FLibraSkeletalPoseSource& source, UActorComponent& consumer)
 {
-    matrix.fill(0);
-    if (source.bInvalid) return false;
-    if (!source.bBound)
+    const auto resolved = source.Target == 0
+        ? ULibraSkeletalPoseTargetComponent::ResolveOwnerTarget(consumer.GetOwner(), source.Registration)
+        : ULibraSkeletalPoseTargetComponent::ResolveKeyTarget(source.Key, source.Registration);
+    auto* mesh = resolved ? source.Registration.Mesh.Get() : nullptr;
+    if (!mesh || !mesh->IsRegistered() || mesh->GetWorld() != consumer.GetWorld())
     {
-        source.bBound = source.Target == 0
-            ? ULibraSkeletalPoseTargetComponent::ResolveOwnerTarget(owner, source.Registration)
-            : ULibraSkeletalPoseTargetComponent::ResolveKeyTarget(source.Key, source.Registration);
-        if (!source.bBound) return false;
+        return false;
+    }
+    source.bBound = true;
+    AddPosePrerequisite(*mesh, consumer);
+    if (auto* leader = mesh->LeaderPoseComponent.Get(); leader && leader->GetWorld() == consumer.GetWorld())
+    {
+        AddPosePrerequisite(*leader, consumer);
+    }
+    return true;
+}
+
+bool FLibraSkeletalPoseRuntime::AddPosePrerequisite(USkinnedMeshComponent& pose, UActorComponent& consumer)
+{
+    const auto prerequisite = TWeakObjectPtr<UActorComponent>(&pose);
+    if (TickPrerequisites.Contains(prerequisite))
+    {
+        return false;
+    }
+    consumer.AddTickPrerequisiteComponent(&pose);
+    TickPrerequisites.Add(prerequisite);
+    return true;
+}
+
+auto FLibraSkeletalPoseRuntime::TryCapture(FLibraSkeletalPoseSource& source,
+    UActorComponent& consumer, std::array<double, 16>& matrix) -> bool
+{
+    if (source.bInvalid)
+    {
+        return false;
     }
     if (!ULibraSkeletalPoseTargetComponent::IsCurrent(source.Registration))
     {
@@ -211,43 +235,86 @@ auto FLibraSkeletalPoseRuntime::TryCapture(FLibraSkeletalPoseSource& source,
         return false;
     }
     auto* mesh = source.Registration.Mesh.Get();
-    if (!mesh || mesh->GetSkeletalMeshAsset() != source.Registration.MeshAsset.Get())
+    if (!mesh || !mesh->IsRegistered() || mesh->GetSkeletalMeshAsset() != source.Registration.MeshAsset.Get())
     {
         source.bInvalid = true;
         return false;
     }
-    const auto boneIndex = ResolveBoneIndex(*mesh, source.BonePath);
-    if (boneIndex == INDEX_NONE) return false;
-    const auto componentTransform = mesh->GetComponentTransform();
-    const auto componentSpaceBone = mesh->GetBoneTransform(boneIndex, FTransform::Identity);
-    FTransform selected;
+    const auto boneIndex = LibraSkeletalPoseDetail::ResolveBoneIndex(*mesh, source.BonePath);
+    if (boneIndex == INDEX_NONE)
+    {
+        return false;
+    }
+    const auto* leader = mesh->LeaderPoseComponent.Get();
+    if (leader && (!leader->IsRegistered() || leader->GetWorld() != consumer.GetWorld()))
+    {
+        return false;
+    }
+    if (auto* poseLeader = mesh->LeaderPoseComponent.Get(); poseLeader && AddPosePrerequisite(*poseLeader, consumer))
+    {
+        return false;
+    }
+    const auto& pose = leader ? leader->GetComponentSpaceTransforms() : mesh->GetComponentSpaceTransforms();
+    const auto& leaderMap = mesh->GetLeaderBoneMap();
+    auto readPose = [&](int32 index, FMatrix& out)
+    {
+        const auto poseIndex = leader ? (leaderMap.IsValidIndex(index) ? leaderMap[index] : INDEX_NONE) : index;
+        if (!pose.IsValidIndex(poseIndex))
+        {
+            return false;
+        }
+        out = pose[poseIndex].ToMatrixWithScale();
+        return true;
+    };
+    auto componentSpaceBone = FMatrix{};
+    if (!readPose(boneIndex, componentSpaceBone))
+    {
+        return false;
+    }
+    auto selected = componentSpaceBone;
     if (source.Space == 0)
     {
         const auto parentIndex = mesh->GetSkeletalMeshAsset()->GetRefSkeleton().GetParentIndex(boneIndex);
-        if (parentIndex == INDEX_NONE) return false;
-        const auto componentSpaceParent = mesh->GetBoneTransform(parentIndex, FTransform::Identity);
-        selected = componentSpaceBone.GetRelativeTransform(componentSpaceParent);
+        if (parentIndex != INDEX_NONE)
+        {
+            auto parent = FMatrix{};
+            if (!readPose(parentIndex, parent))
+            {
+                return false;
+            }
+            const auto determinant = parent.Determinant();
+            if (!FMath::IsFinite(determinant) || FMath::IsNearlyZero(determinant, UE_DOUBLE_SMALL_NUMBER))
+            {
+                return false;
+            }
+            selected = componentSpaceBone * parent.Inverse();
+        }
     }
-    else if (source.Space == 1)
+    else if (source.Space == 2)
     {
-        selected = componentSpaceBone;
+        selected = componentSpaceBone * mesh->GetComponentTransform().ToMatrixWithScale();
     }
-    else
-    {
-        selected = mesh->GetBoneTransform(boneIndex, mesh->GetComponentTransform());
-    }
-    return MatrixValues(selected, matrix);
+    return LibraSkeletalPoseDetail::MatrixValues(selected, matrix);
 }
 
 auto FLibraSkeletalPoseRuntime::Publish(liberafx::SpawnableHost& host,
-    AActor* owner) -> liberafx::Result
+    UActorComponent& consumer) -> liberafx::Result
 {
     for (auto& source : Sources)
     {
         auto matrix = std::array<double, 16>{};
-        const auto valid = TryCapture(source, owner, matrix);
-        auto matrixName = Utf8(source.MatrixPort);
-        auto validityName = Utf8(source.ValidityPort);
+        // A newly added tick dependency applies to the next tick.
+        const auto valid = source.bBound && TryCapture(source, consumer, matrix);
+        if (!source.bBound)
+        {
+            Bind(source, consumer);
+        }
+        if (!valid)
+        {
+            matrix.fill(0);
+        }
+        auto matrixName = LibraSkeletalPoseDetail::Utf8(source.MatrixPort);
+        auto validityName = LibraSkeletalPoseDetail::Utf8(source.ValidityPort);
         auto result = host.setGameProperty(matrixName.c_str(), matrix.data(), matrix.size());
         if (result != liberafx::Result::Ok) return result;
         const auto validity = valid ? 1.0 : 0.0;
@@ -255,14 +322,6 @@ auto FLibraSkeletalPoseRuntime::Publish(liberafx::SpawnableHost& host,
         if (result != liberafx::Result::Ok) return result;
     }
     return liberafx::Result::Ok;
-}
-
-void FLibraSkeletalPoseRuntime::AddTickPrerequisites(UActorComponent& component) const
-{
-    check(IsInGameThread());
-    for (const auto& prerequisite : TickPrerequisites)
-        if (auto* target = prerequisite.Get())
-            component.AddTickPrerequisiteComponent(target);
 }
 
 void FLibraSkeletalPoseRuntime::RemoveTickPrerequisites(UActorComponent& component) const

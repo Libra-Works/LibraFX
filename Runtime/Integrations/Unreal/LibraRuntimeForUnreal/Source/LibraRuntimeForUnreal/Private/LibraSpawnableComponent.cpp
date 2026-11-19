@@ -302,8 +302,7 @@ auto ULibraSpawnableComponent::Play(bool bRestart) -> ELibraRuntimeResult
     ++HostGeneration;
     RenderState = MoveTemp(rendering);
     SkeletalPoseState = FLibraSkeletalPoseRuntimePtr(new FLibraSkeletalPoseRuntime());
-    auto tickPrerequisites = TArray<UActorComponent*>{};
-    if (!SkeletalPoseState->Initialize(*NativeHost, GetOwner(), tickPrerequisites))
+    if (!SkeletalPoseState->Initialize(*NativeHost, *this))
     {
         ReleaseHost();
         return Report(ELibraRuntimeResult::InvalidArgument);
@@ -312,7 +311,6 @@ auto ULibraSpawnableComponent::Play(bool bRestart) -> ELibraRuntimeResult
     if (bSourceInitialAdvancePending)
     {
         PrimaryComponentTick.TickGroup = TG_PostUpdateWork;
-        SkeletalPoseState->AddTickPrerequisites(*this);
     }
     if (!RenderState->Spawn(FGuid{}, 0, 0, 0))
     {
@@ -761,7 +759,7 @@ void ULibraSpawnableComponent::TickDebugger(float deltaTime)
         return;
     }
     auto result = SkeletalPoseState
-        ? SkeletalPoseState->Publish(*NativeHost, GetOwner()) : liberafx::Result::Ok;
+        ? SkeletalPoseState->Publish(*NativeHost, *this) : liberafx::Result::Ok;
     if (result == liberafx::Result::Ok)
     {
         result = PublishLibraFrameInputs(*NativeHost, *this);
@@ -802,7 +800,7 @@ void ULibraSpawnableComponent::TickComponent(float deltaTime, ELevelTick tickTyp
     if (bSourceInitialAdvancePending)
     {
         auto result = SkeletalPoseState
-            ? SkeletalPoseState->Publish(*current, GetOwner())
+            ? SkeletalPoseState->Publish(*current, *this)
             : liberafx::Result::NotReady;
         if (result == liberafx::Result::Ok)
         {
@@ -830,7 +828,7 @@ void ULibraSpawnableComponent::TickComponent(float deltaTime, ELevelTick tickTyp
     }
     TimeSeconds = nextTime;
     auto result = SkeletalPoseState
-        ? SkeletalPoseState->Publish(*current, GetOwner()) : liberafx::Result::Ok;
+        ? SkeletalPoseState->Publish(*current, *this) : liberafx::Result::Ok;
     if (result == liberafx::Result::Ok)
     {
         result = PublishLibraFrameInputs(*current, *this);

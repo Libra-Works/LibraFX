@@ -55,7 +55,11 @@ keyed acquisition. It registers that exact weak mesh reference while the
 component is registered. Owner selection requires exactly one such target
 component on the effect owner. Unreal bone paths include the full reference
 skeleton path from its root (for example `root/spine/hand_r`), and the adapter
-samples current component-space pose transforms on the game thread.
+samples current component-space pose transforms on the game thread. Bone
+Local is derived relative to the parent's pose matrix; World composes the
+component-to-world matrix without decomposing the result into TRS. If a
+keyed target first appears after playback starts, the adapter installs its
+pose tick prerequisite and publishes unavailable until the following tick.
 
 ## Execution support boundary
 
@@ -81,6 +85,17 @@ render scene is a live SOURCE preview. SOURCE inside Spawnable Group templates
 is separately rejected until adapters publish per-instance pose inputs through
 generation-checked instance APIs.
 
-These are source-level integration boundaries. They do not establish engine
-SDK compilation or runtime acceptance; animated-pose capture and rendered
-results still require verification in actual Unity and Unreal projects.
+Unity 7 Play Mode and Unreal 5.7 automation have verified animated Matrix
+values from compiled packages for owner and registered targets in all three
+spaces. This verifies the values the effect receives, not the rendered
+placement of an effect connected to those values.
+
+To reproduce the Unreal check, run the managed `--source-batch-contracts`
+tests with `LIBERAFX_SKELETAL_FIXTURES` set to the output directory and
+`LIBERAFX_UNREAL_TEST_BONE_PATH` set to an exact child-bone path. Run
+`Libra.Runtime.SkeletalPose.AnimatedPackage` in the test project with
+`-LibraSkeletalFixture` pointing to the generated
+`UnrealAnimatedSkeletalSpaces.lfxp`, `-LibraSkeletalBone` set to the same bone
+path, and `-LibraSkeletalMesh` and `-LibraSkeletalAnimation` set to the Unreal
+object paths of a mesh and clip that share a skeleton. Without these flags,
+general automation runs skip this project-specific check.

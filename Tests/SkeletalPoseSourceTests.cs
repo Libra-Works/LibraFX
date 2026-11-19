@@ -117,10 +117,17 @@ internal static class SkeletalPoseSourceTests
 
         Require(!SkeletalPoseSchema.TryDecodePortName("__LFXS1M_not-a-descriptor", out _, out _),
             "Malformed source metadata must not be interpreted as a different target.");
-        if (fixtureDirectory is not null) WriteEngineFixtures(fixtureDirectory);
+        if (fixtureDirectory is not null)
+        {
+            WriteEngineFixture(fixtureDirectory, "AnimatedSkeletalSpaces", "hand_r");
+            if (Environment.GetEnvironmentVariable("LIBERAFX_UNREAL_TEST_BONE_PATH") is { Length: > 0 } unrealBone)
+            {
+                WriteEngineFixture(fixtureDirectory, "UnrealAnimatedSkeletalSpaces", unrealBone);
+            }
+        }
     }
 
-    private static void WriteEngineFixtures(string directory)
+    private static void WriteEngineFixture(string directory, string name, string bonePath)
     {
         var nodes = new List<GraphNodeSnapshot>();
         var connections = new List<GraphConnectionSnapshot>();
@@ -130,7 +137,7 @@ internal static class SkeletalPoseSourceTests
             var source = Node("Source",
                 ("target", "enum:b0af61d2-29f6-4cc9-a71e-000000000202", target == "Owner" ? 0 : 1),
                 ("key", "string", target == "Owner" ? "" : "hero.skeleton"),
-                ("bone", "string", "hand_r"),
+                ("bone", "string", bonePath),
                 ("space", "enum:b0af61d2-29f6-4cc9-a71e-000000000203", index));
             var matrix = Node("OutputProperty", ("name", "string", target + space),
                 ("valueType", "enum:1e309707-1fa0-4d38-aed9-42d000000001", 5));
@@ -143,7 +150,7 @@ internal static class SkeletalPoseSourceTests
         var package = SpawnableGroupPackage.Compile(new GraphSnapshot(nodes, connections)
             { AutoDestroyWhenIdle = false });
         Directory.CreateDirectory(directory);
-        File.WriteAllBytes(Path.Combine(directory, "AnimatedSkeletalSpaces.lfxp"),
+        File.WriteAllBytes(Path.Combine(directory, name + ".lfxp"),
             SpawnableGroupPackageBinary.Serialize(package));
     }
 

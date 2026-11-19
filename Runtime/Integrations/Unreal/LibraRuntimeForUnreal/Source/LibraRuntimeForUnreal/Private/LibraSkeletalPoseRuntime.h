@@ -8,6 +8,7 @@
 namespace liberafx { class SpawnableHost; }
 class AActor;
 class UActorComponent;
+class USkinnedMeshComponent;
 
 struct FLibraSkeletalPoseSource
 {
@@ -26,17 +27,17 @@ struct FLibraSkeletalPoseSource
 class FLibraSkeletalPoseRuntime final
 {
 public:
-    bool Initialize(const liberafx::SpawnableHost& host, AActor* owner,
-        TArray<UActorComponent*>& tickPrerequisites);
-    auto Publish(liberafx::SpawnableHost& host, AActor* owner) -> liberafx::Result;
-    void AddTickPrerequisites(UActorComponent& component) const;
+    bool Initialize(const liberafx::SpawnableHost& host, UActorComponent& consumer);
+    auto Publish(liberafx::SpawnableHost& host, UActorComponent& consumer) -> liberafx::Result;
     void RemoveTickPrerequisites(UActorComponent& component) const;
     bool HasSources() const { return Sources.Num() != 0; }
 
 private:
     static bool TryParse(const std::string& name, FLibraSkeletalPoseSource& source,
         bool& isValidity);
-    bool TryCapture(FLibraSkeletalPoseSource& source, AActor* owner,
+    bool Bind(FLibraSkeletalPoseSource& source, UActorComponent& consumer);
+    bool AddPosePrerequisite(USkinnedMeshComponent& pose, UActorComponent& consumer);
+    bool TryCapture(FLibraSkeletalPoseSource& source, UActorComponent& consumer,
         std::array<double, 16>& matrix);
     TArray<FLibraSkeletalPoseSource> Sources;
     TArray<TWeakObjectPtr<UActorComponent>> TickPrerequisites;
