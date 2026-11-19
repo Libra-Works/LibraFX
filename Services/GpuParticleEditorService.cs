@@ -100,7 +100,10 @@ public static class GpuParticleEditorService
                 p.Kernels.Count > 64 || p.Flow.Count > 128 || p.Resources.Count > 64 || p.Attributes.Count > 64 ||
                 p.Attributes.Any(a => a is null || a.Id is not { Length: > 0 and <= 128 } || !Enum.IsDefined(a.Type)) ||
                 p.Flow.Any(f => f is null || f.Id is not { Length: > 0 and <= 128 } || !Enum.IsDefined(f.Kind) ||
-                    f.Kernel is { Length: > 128 } || f.Resource is { Length: > 128 }) ||
+                    f.Kernel is { Length: > 128 } || f.Resource is { Length: > 128 } ||
+                    f.SpawnShape is { } shape && (!Enum.IsDefined(shape.Kind) || shape.HalfExtents is null ||
+                        shape.HalfExtents.Count != 3 || shape.HalfExtents.Any(value => !double.IsFinite(value)) ||
+                        !double.IsFinite(shape.Radius))) ||
                 p.Resources.Any(r => r is null || r.Id is not { Length: > 0 and <= 128 } || !Enum.IsDefined(r.Kind) ||
                     (r.Kind == ResourceKind.FlowMap2D) != (r.FlowMap is not null) ||
                     r.FlowMap is { } flowMap && (!Enum.IsDefined(flowMap.AxisU) || !Enum.IsDefined(flowMap.AxisV) ||

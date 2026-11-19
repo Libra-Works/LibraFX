@@ -296,7 +296,11 @@ public partial class GpuWorkspaceView : UserControl
                     _selection = null;
                     vm.EnterKernel(kernel.Id);
                 }));
+                if (flow.Kind == FlowKind.Spawn)
+                    AddEmitterShapeControls(panel, vm, flow);
             }
+            else if (flow.Kind == FlowKind.Spawn)
+                AddEmitterShapeControls(panel, vm, flow);
             else if (flow.Kind == FlowKind.RenderBillboard)
             {
                 if (flow.Kernel is not null)
@@ -452,6 +456,83 @@ public partial class GpuWorkspaceView : UserControl
             if (map.Diagnostics.Count > 8)
                 FlowPanel.Children.Add(new TextBlock { Text = $"… {map.Diagnostics.Count - 8} more diagnostics" });
         }
+    }
+    private void AddEmitterShapeControls(StackPanel panel, GpuWorkspaceViewModel vm, FlowStep flow)
+    {
+        var current = flow.SpawnShape ?? new GpuSpawnShapeSettings();
+        panel.Children.Add(new TextBlock
+        {
+            Text = LocalizationService.Shared.Get("Gpu.EmitterShape"),
+            FontWeight = FontWeight.SemiBold
+        });
+        var shapeChoice = new ComboBox();
+        foreach (var kind in Enum.GetValues<GpuSpawnShapeKind>())
+            shapeChoice.Items.Add(new ComboBoxItem
+            {
+                Content = LocalizationService.Shared.Get("Gpu.EmitterShape." + kind),
+                Tag = kind
+            });
+        shapeChoice.SelectedItem = shapeChoice.Items
+            .OfType<ComboBoxItem>().Single(item => item.Tag is GpuSpawnShapeKind kind && kind == current.Kind);
+        Avalonia.Automation.AutomationProperties.SetName(
+            shapeChoice, LocalizationService.Shared.Get("Gpu.EmitterShape"));
+        shapeChoice.SelectionChanged += (_, _) =>
+        {
+            if (shapeChoice.SelectedItem is ComboBoxItem { Tag: GpuSpawnShapeKind kind } &&
+                kind != current.Kind)
+                Run(() => vm.Edit(new()
+                {
+                    Action = "flow-update",
+                    Flow = flow with { SpawnShape = current with { Kind = kind } }
+                }));
+        };
+        panel.Children.Add(shapeChoice);
+        panel.Children.Add(new TextBlock
+        {
+            Text = LocalizationService.Shared.Get("Gpu.EmitterShapeHelp"),
+            TextWrapping = TextWrapping.Wrap
+        });
+        if (current.Kind == GpuSpawnShapeKind.Box)
+        {
+            var halfExtents = current.HalfExtents;
+            var x = AddEmitterShapeNumber(panel, "Gpu.EmitterHalfExtentX", halfExtents[0]);
+            var y = AddEmitterShapeNumber(panel, "Gpu.EmitterHalfExtentY", halfExtents[1]);
+            var z = AddEmitterShapeNumber(panel, "Gpu.EmitterHalfExtentZ", halfExtents[2]);
+            panel.Children.Add(Button(LocalizationService.Shared.Get("Gpu.ApplyEmitterShape"), () => Run(() =>
+            {
+                var values = new[] { ParseEmitterShapeNumber(x), ParseEmitterShapeNumber(y), ParseEmitterShapeNumber(z) };
+                vm.Edit(new()
+                {
+                    Action = "flow-update",
+                    Flow = flow with { SpawnShape = current with { HalfExtents = values.ToList() } }
+                });
+            })));
+        }
+        else if (current.Kind is GpuSpawnShapeKind.Sphere or GpuSpawnShapeKind.Circle)
+        {
+            var radius = AddEmitterShapeNumber(panel, "Gpu.EmitterRadius", current.Radius);
+            panel.Children.Add(Button(LocalizationService.Shared.Get("Gpu.ApplyEmitterShape"), () => Run(() =>
+                vm.Edit(new()
+                {
+                    Action = "flow-update",
+                    Flow = flow with { SpawnShape = current with { Radius = ParseEmitterShapeNumber(radius) } }
+                }))));
+        }
+    }
+    private static TextBox AddEmitterShapeNumber(StackPanel panel, string labelKey, double value)
+    {
+        panel.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get(labelKey) });
+        var input = new TextBox { Text = value.ToString("R", CultureInfo.InvariantCulture) };
+        Avalonia.Automation.AutomationProperties.SetName(input, LocalizationService.Shared.Get(labelKey));
+        panel.Children.Add(input);
+        return input;
+    }
+    private static double ParseEmitterShapeNumber(TextBox input)
+    {
+        if (!double.TryParse(input.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
+            !double.IsFinite(value) || value < 0)
+            throw new ArgumentException(LocalizationService.Shared.Get("Gpu.EmitterShapeInvalid"));
+        return value;
     }
     private static void AddFlowPorts(StackPanel panel, string heading, IReadOnlyList<GpuFlowPort> ports)
     {

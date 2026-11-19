@@ -156,6 +156,45 @@ internal static class GpuParticleEditorTests
         var render = vm.State.Program.Flow.Single(f => f.Kind == FlowKind.RenderBillboard);
         Check(vm.State.ResourceAssetPaths[render.Resource!] == "builtin:white" &&
             vm.State.RendererSettings[render.Id].SizeScale == 100, "New GPU starter explicitly binds a visible builtin billboard");
+        var spawn = vm.State.Program.Flow.Single(flow => flow.Kind == FlowKind.Spawn);
+        Check(spawn.SpawnShape?.Kind == GpuSpawnShapeKind.Point,
+            "New GPU Spawn explicitly exposes Point independently of the billboard renderer");
+        var selectedShape = new GpuSpawnShapeSettings
+        {
+            Kind = GpuSpawnShapeKind.Sphere,
+            Radius = 2.5
+        };
+        vm.Edit(new() { Action = "flow-update", Flow = spawn with { SpawnShape = selectedShape } });
+        Check(vm.TryCompile(out var shapedProgram) && shapedProgram!.RegisterKernels
+                .Single(kernel => kernel.Stage == KernelStage.Spawn).Instructions
+                .Any(instruction => instruction.Opcode == GpuInstructionOpcode.Random) &&
+            shapedProgram.EmitUnityCompute().Text.Contains("LibraGpuRandom(") &&
+            shapedProgram.EmitUsf().Text.Contains("LibraGpuRandom(") &&
+            shapedProgram.EmitHlslInclude().Text.Contains("LibraGpuRandom("),
+            "Authored GPU shape compiles to existing Random/math operations in every exported shader format");
+        var shapeJson = GpuParticleEditorService.Export(vm.State, "json");
+        var shapeShaders = new[] { "usf", "hlsl", "compute" }
+            .Select(format => GpuParticleEditorService.Export(vm.State, format)).ToArray();
+        Check(GpuCompiler.Parse(shapeJson).Flow.Single(flow => flow.Kind == FlowKind.Spawn)
+                .SpawnShape is { Kind: GpuSpawnShapeKind.Sphere, Radius: 2.5 } &&
+            shapeShaders.All(source => source.Contains("LibraGpuRandom(") && source.Contains("LibraGpuPow(")),
+            "GPU workspace preserves authored shape in JSON and lowers it through every source export");
+        var authoredShapeSnapshot = graph.CreateSnapshot();
+        var loadedShapeGraph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        loadedShapeGraph.InitializeFromSnapshot(JsonSerializer.Deserialize<GraphSnapshot>(
+            JsonSerializer.Serialize(authoredShapeSnapshot))!);
+        Check(GpuParticleEditorService.ReadProgram(loadedShapeGraph.GetNode(container.Id)).Flow
+                .Single(flow => flow.Kind == FlowKind.Spawn).SpawnShape is
+                { Kind: GpuSpawnShapeKind.Sphere, Radius: 2.5, HalfExtents: [1, 1, 1] },
+            "GPU Spawn shape survives graph snapshot save/load");
+        history.Undo();
+        Check(vm.State.Program.Flow.Single(flow => flow.Kind == FlowKind.Spawn).SpawnShape?.Kind == GpuSpawnShapeKind.Point,
+            "Undo restores the prior GPU Spawn shape");
+        history.Redo();
+        Check(vm.State.Program.Flow.Single(flow => flow.Kind == FlowKind.Spawn).SpawnShape is
+                { Kind: GpuSpawnShapeKind.Sphere, Radius: 2.5, HalfExtents: [1, 1, 1] },
+            "Redo restores the authored GPU Spawn shape and parameters");
+        history.Undo();
         vm.Edit(new() { Action = "renderer", NodeId = render.Id, Material = "builtin:unlit-additive", SizeScale = 120 });
         var rendererDelivery = GpuProgramDeliveryService.Create(new([graph.CreateSnapshot().Nodes.Single(n => n.Id == container.Id)], []), 76).Single();
         Check(rendererDelivery.RendererBindingsVersion == 1 &&
@@ -257,9 +296,16 @@ internal static class GpuParticleEditorTests
         Check(view.Workspace!.Kernel is null && view.IsVisible, "Actual flow view opens");
         var flowLabels = view.FindControl<StackPanel>("FlowPanel")!.GetLogicalDescendants()
             .OfType<TextBlock>().Select(block => block.Text ?? "").ToArray();
+        var emitterShapePicker = view.FindControl<StackPanel>("FlowPanel")!.GetLogicalDescendants()
+            .OfType<ComboBox>().Single(combo =>
+                Avalonia.Automation.AutomationProperties.GetName(combo) ==
+                LocalizationService.Shared.Get("Gpu.EmitterShape"));
         Check(new[] { "spawnStep", "updateStep", "renderStep" }.All(id =>
                 flowLabels.Any(text => text.Contains(id, StringComparison.Ordinal))),
             "The actual flow view identifies every authored step");
+        Check(emitterShapePicker.SelectedItem is ComboBoxItem { Content: "Point" } &&
+            emitterShapePicker.Items.OfType<ComboBoxItem>().Count() == 4,
+            "The Spawn card presents all initial-emission shapes, separately from RenderBillboard");
         Check(flowLabels.Any(text => text.Contains("spawnStep", StringComparison.Ordinal) &&
                 text.Contains("updateStep", StringComparison.Ordinal) &&
                 text.Contains("Position", StringComparison.Ordinal) &&
@@ -281,9 +327,38 @@ internal static class GpuParticleEditorTests
             using var strings = AssetLoader.Open(new Uri($"avares://LiberaFx/Assets/Translations/Gpu.{language}.json"));
             var labels = JsonSerializer.Deserialize<Dictionary<string, string>>(strings)!;
             Check(labels["Gpu.Visual"] == expected, "Kernel Graph mode name: " + language);
+            Check(labels.ContainsKey("Gpu.EmitterShape") && labels.ContainsKey("Gpu.EmitterShape.Box") &&
+                labels.ContainsKey("Gpu.EmitterShape.Sphere") && labels.ContainsKey("Gpu.EmitterShape.Circle") &&
+                labels.ContainsKey("Gpu.EmitterShapeHelp") && labels.ContainsKey("Gpu.EmitterRadius"),
+                "GPU Spawn shape controls have complete " + language + " translations");
         }
         view.CloseWorkspace();
         Check(!view.IsVisible && graph.Nodes.Any(n => n.Id == other.Id), "Closing mode keeps CPU document");
+        var shapeUiGraph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var shapeUiContainer = GpuParticleEditorService.Create(shapeUiGraph);
+        var shapeUiView = new GpuWorkspaceView();
+        shapeUiView.Open(shapeUiGraph, shapeUiContainer.Id);
+        ComboBox ShapePicker() => shapeUiView.FindControl<StackPanel>("FlowPanel")!
+            .GetLogicalDescendants().OfType<ComboBox>().Single(combo =>
+                Avalonia.Automation.AutomationProperties.GetName(combo) ==
+                LocalizationService.Shared.Get("Gpu.EmitterShape"));
+        ShapePicker().SelectedItem = ShapePicker().Items.OfType<ComboBoxItem>()
+            .Single(item => item.Tag is GpuSpawnShapeKind.Box);
+        var boxInputs = shapeUiView.FindControl<StackPanel>("FlowPanel")!
+            .GetLogicalDescendants().OfType<TextBox>().ToArray();
+        Check(boxInputs.Length == 3, "Selecting Box reveals all three half-extents");
+        boxInputs[0].Text = "2";
+        boxInputs[1].Text = "3";
+        boxInputs[2].Text = "4";
+        var applyShape = shapeUiView.FindControl<StackPanel>("FlowPanel")!
+            .GetLogicalDescendants().OfType<Button>().Single(button =>
+                button.Content as string == LocalizationService.Shared.Get("Gpu.ApplyEmitterShape"));
+        applyShape.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Check(GpuParticleEditorService.ReadProgram(shapeUiGraph.GetNode(shapeUiContainer.Id)).Flow
+                .Single(flow => flow.Kind == FlowKind.Spawn).SpawnShape is
+                { Kind: GpuSpawnShapeKind.Box, HalfExtents: [2, 3, 4] },
+            "The Spawn card shape selector and apply control persist Box dimensions");
+        shapeUiView.CloseWorkspace();
         var main = new MainViewModel();
         var window = new MainWindow { DataContext = main };
         var layout = main.Layout;

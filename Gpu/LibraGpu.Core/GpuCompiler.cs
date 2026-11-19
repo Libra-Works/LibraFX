@@ -92,7 +92,10 @@ public static class GpuCompiler
         // Snapshot frontend-owned lists before publishing immutable compiled metadata.
         var canonicalJson = Serialize(program, limits);
         var snapshot = Parse(canonicalJson, limits);
-        return ShaderEmitter.Compile(snapshot, canonicalJson);
+        var lowered = GpuEmitterShapeLowering.Lower(snapshot);
+        var loweredDiagnostics = Validate(lowered, limits);
+        if (loweredDiagnostics.Count != 0) throw new GpuValidationException(loweredDiagnostics);
+        return ShaderEmitter.Compile(lowered, canonicalJson);
     }
     public static CompiledGpuProgram Compile(string json, GpuLimits? limits = null) => Compile(Parse(json, limits), limits);
     private static GpuValidationException Error(string code, string message) => new([new(code, message)]);
@@ -185,6 +188,20 @@ public static class GpuCompiler
             if (f is null) { Add("Flow", "Null flow step."); continue; }
             GlobalId(f.Id);
             if (!Enum.IsDefined(f.Kind)) { Add("FlowKind", "Unknown execution flow kind."); continue; }
+            if (f.SpawnShape is { } shape)
+            {
+                if (f.Kind != FlowKind.Spawn)
+                    Add("SpawnShape", "Emitter shapes are only valid on Spawn flow steps.");
+                if (!Enum.IsDefined(shape.Kind))
+                    Add("SpawnShape", "Unknown emitter shape.");
+                if (shape.HalfExtents is null || shape.HalfExtents.Count != 3 ||
+                    shape.HalfExtents.Any(value => !double.IsFinite(value) || !float.IsFinite((float)value)) ||
+                    !double.IsFinite(shape.Radius) || !float.IsFinite((float)shape.Radius))
+                    Add("SpawnShape", "Shape dimensions must be finite Float3 values.");
+                else if (shape.Kind == GpuSpawnShapeKind.Box && shape.HalfExtents.Any(value => value < 0) ||
+                    shape.Kind is GpuSpawnShapeKind.Sphere or GpuSpawnShapeKind.Circle && shape.Radius < 0)
+                    Add("SpawnShape", "Half-extents and radius must be non-negative.");
+            }
             if (f.Kind is FlowKind.RenderStartTexture or FlowKind.ComputePass)
             { Add("UnsupportedPass", "Texture simulation passes are declared but not implemented."); continue; }
             if (f.Kind is FlowKind.Spawn or FlowKind.Update)

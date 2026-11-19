@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Runtime.InteropServices;
+using System.Text.Json.Serialization;
 
 namespace LibraGpu.Core;
 
@@ -19,6 +20,7 @@ public enum KernelStage { Spawn, Update }
 public enum FlowKind { Spawn, Update, RenderBillboard, RenderStartTexture, ComputePass }
 public enum ResourceKind { Texture2D, StorageTexture2D, Buffer, FlowMap2D }
 public enum GpuAxis { X, Y, Z }
+public enum GpuSpawnShapeKind { Point, Box, Sphere, Circle }
 
 public sealed record GpuProgram
 {
@@ -75,6 +77,14 @@ public sealed record FlowStep
     public FlowKind Kind { get; init; }
     public string? Kernel { get; init; }
     public string? Resource { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GpuSpawnShapeSettings? SpawnShape { get; init; }
+}
+public sealed record GpuSpawnShapeSettings
+{
+    public GpuSpawnShapeKind Kind { get; init; } = GpuSpawnShapeKind.Point;
+    public List<double> HalfExtents { get; init; } = [1, 1, 1];
+    public double Radius { get; init; } = 1;
 }
 public sealed record TextSpan(int Start, int Length);
 public sealed record GpuDiagnostic(string Code, string Message, string? KernelId = null, string? NodeId = null, string? PinId = null, TextSpan? Span = null);

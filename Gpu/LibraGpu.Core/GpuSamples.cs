@@ -72,7 +72,7 @@ public static class GpuSamples
             Resources = [new() { Id = "billboardTexture", Kind = ResourceKind.Texture2D }],
             Flow =
             [
-                new() { Id="spawnStep",Kind=FlowKind.Spawn,Kernel="spawn" },
+                new() { Id="spawnStep",Kind=FlowKind.Spawn,Kernel="spawn",SpawnShape=new() },
                 new() { Id="updateStep",Kind=FlowKind.Update,Kernel="update" },
                 new() { Id="renderStep",Kind=FlowKind.RenderBillboard,Resource="billboardTexture" }
             ]

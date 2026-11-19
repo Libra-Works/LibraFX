@@ -86,5 +86,17 @@
   "Gpu.EmitText": "Graph → text",
   "Gpu.Properties": "GPU properties",
   "Gpu.Writes": "Attribute writes",
-  "Gpu.Diagnostics": "Diagnostics"
+  "Gpu.Diagnostics": "Diagnostics",
+  "Gpu.EmitterShape": "Spawn position shape",
+  "Gpu.EmitterShape.Point": "Point",
+  "Gpu.EmitterShape.Box": "Box (volume)",
+  "Gpu.EmitterShape.Sphere": "Sphere (uniform volume)",
+  "Gpu.EmitterShape.Circle": "Circle (XY circumference)",
+  "Gpu.EmitterShapeHelp": "Offsets the Spawn Position write around its value; without a Position write, the center is emitterPosition. This affects initial emission, not billboard drawing.",
+  "Gpu.EmitterHalfExtentX": "Half-extent X",
+  "Gpu.EmitterHalfExtentY": "Half-extent Y",
+  "Gpu.EmitterHalfExtentZ": "Half-extent Z",
+  "Gpu.EmitterRadius": "Radius",
+  "Gpu.ApplyEmitterShape": "Apply shape dimensions",
+  "Gpu.EmitterShapeInvalid": "Enter a finite, non-negative number."
 }

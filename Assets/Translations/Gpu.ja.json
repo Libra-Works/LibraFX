@@ -86,5 +86,17 @@
   "Gpu.EmitText": "グラフ → テキスト",
   "Gpu.Properties": "GPU プロパティ",
   "Gpu.Writes": "属性出力",
-  "Gpu.Diagnostics": "診断"
+  "Gpu.Diagnostics": "診断",
+  "Gpu.EmitterShape": "Spawn の放出形状",
+  "Gpu.EmitterShape.Point": "Point（点）",
+  "Gpu.EmitterShape.Box": "Box（体積）",
+  "Gpu.EmitterShape.Sphere": "Sphere（均一な体積）",
+  "Gpu.EmitterShape.Circle": "Circle（XY円周）",
+  "Gpu.EmitterShapeHelp": "Spawn の Position 出力値を中心に初期位置のオフセットを加えます。Position 出力がない場合は emitterPosition が中心です。ビルボードの描画形状は変わりません。",
+  "Gpu.EmitterHalfExtentX": "X 半径（中心からの半幅）",
+  "Gpu.EmitterHalfExtentY": "Y 半径（中心からの半幅）",
+  "Gpu.EmitterHalfExtentZ": "Z 半径（中心からの半幅）",
+  "Gpu.EmitterRadius": "半径",
+  "Gpu.ApplyEmitterShape": "形状寸法を適用",
+  "Gpu.EmitterShapeInvalid": "有限の 0 以上の数値を入力してください。"
 }

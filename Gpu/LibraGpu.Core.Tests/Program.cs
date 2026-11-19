@@ -79,6 +79,7 @@ internal static partial class Program
                 p.Kernels.Clear(); p.Flow.Clear(); p.Attributes.Clear();
                 Check(c.EmitUsf().Text == before, "Compiled object must snapshot frontend lists");
             });
+            Run("GPU Spawn emitter shapes", VerifyEmitterShapes);
             Run("strict JSON", () =>
             {
                 var json = GpuCompiler.Serialize(GpuSamples.CreateEmitter());

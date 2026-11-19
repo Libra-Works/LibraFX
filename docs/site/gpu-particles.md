@@ -32,6 +32,27 @@ effect. Read the cards in this order:
 | **Update** | Per-step simulation. Read the current attributes, compute new values, and write the attributes that should persist for the next step. Use `deltaTime` for a rate expressed per second. |
 | **RenderBillboard** | Drawing of the simulated state. Set the texture, material preset, and draw-size multiplier in the renderer properties. A draw-size multiplier changes the rendered size, not the simulated Size attribute. |
 
+### Choose the initial Spawn shape
+
+The **Spawn position shape** selector is on the Spawn flow card. It controls
+where each new particle is initially placed; it does not change billboard draw
+geometry. Choose **Point**, **Box (volume)**, **Sphere (uniform volume)**, or
+**Circle (XY circumference)**. Box uses non-negative half-extents; Sphere and
+Circle use a non-negative radius. Sphere samples volume uniformly (radius is
+distributed by the cube root of a uniform sample); Circle samples its XY
+circumference and keeps Z unchanged.
+
+The shape adds a seeded, per-particle offset to the value written to Spawn's
+**Position** attribute. If Spawn has no Position write, the offset is centered
+on the host-provided `emitterPosition`. Point adds no offset. Existing GPU
+documents without a saved shape keep their previous Spawn position behavior
+and are shown as Point when opened. Authored shape settings remain in the
+portable JSON IR; compilation lowers sampling to existing typed `Random` and
+math operations for register packets and all generated shader formats, without
+a new GPU opcode.
+After editing Box half-extents or a Sphere/Circle radius, use **Apply shape
+dimensions** on the Spawn card to save the values.
+
 Set **Particle capacity** at program level and apply the change with the
 checkmark. Capacity limits the particle storage; it is not an emission rate.
 

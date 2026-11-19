@@ -30,6 +30,25 @@ CPU の Signal 接続と GPU の値の配線は別物です。
 | **Update** | 更新ごとのシミュレーションです。現在の属性を読み、次のステップまで保持する値を計算して属性へ書きます。毎秒の変化量には `deltaTime` を掛けます。 |
 | **RenderBillboard** | シミュレーション結果を描画します。テクスチャ、マテリアルプリセット、描画サイズ倍率を設定します。倍率が変えるのは描画サイズで、シミュレーションの Size 属性ではありません。 |
 
+### 初期 Spawn 形状を選ぶ
+
+Spawn フローカードの **Spawn position shape** で、新しい粒子の初期位置を選びます。
+ビルボードの描画形状は変わりません。**Point**、**Box (volume)**、
+**Sphere (uniform volume)**、**Circle (XY circumference)** を選べます。
+Box の半径（half-extents）は 0 以上、Sphere と Circle の半径も 0 以上です。
+Sphere は半径を一様乱数の 3 乗根で分布させ、体積内を一様にサンプリングします。
+Circle は XY 平面の円周上をサンプリングし、Z は変えません。
+
+形状が加えるのは、Spawn の **Position** 属性へ書き込む値を中心とした、
+粒子ごとのシード付きオフセットです。Position の書き込みがない場合は、
+ホストから渡される `emitterPosition` を中心にします。Point はオフセットを加えません。
+形状設定が保存されていない既存 GPU ドキュメントは、従来の Spawn 位置を維持し、
+開いたときは Point として表示されます。形状設定はポータブル JSON IR に保存され、
+コンパイル時に既存の型付き `Random` と数学演算へ変換されます。
+その結果、新しい GPU opcode を追加せず、レジスターパケットと各シェーダー形式に含まれます。
+Box の半径（half-extents）や
+Sphere/Circle の半径を編集したら、Spawn カードの **Apply shape dimensions** で適用します。
+
 **Particle capacity** はプログラム全体の粒子容量です。チェックマークで変更を適用します。
 粒子の保持数に関わる設定で、発生頻度ではありません。
 
