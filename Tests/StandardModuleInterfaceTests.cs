@@ -39,11 +39,13 @@ internal static class StandardModuleInterfaceTests
         var window = new Window { Width = 1500, Height = 920, Content = content };
         var text = LocalizationService.Shared;
         var language = text.SelectedLanguage;
+        var nodeLanguage = text.SelectedNodeLanguage;
         window.Show();
         window.Activate();
         try
         {
             text.SelectedLanguage = text.Languages.Single(item => item.Id == "en");
+            text.SelectedNodeLanguage = text.Languages.Single(item => item.Id == "en");
             Pump(window);
             list.GetVisualDescendants().OfType<TextBox>().Single().Text = "Tree Billboard";
             Pump(window);
@@ -82,8 +84,8 @@ internal static class StandardModuleInterfaceTests
             Pump(window);
             Require(pane.Parameters.Any(item => item.Description == text.Get(metadata.DescriptionKey)) &&
                 list.GetVisualDescendants().OfType<TextBlock>().Any(item => item.Text ==
-                    text.Get(catalog.Metadata(assetId)!.NameKey)),
-                "The visible standard search and parameter descriptions must switch to Japanese without changing saved identity.");
+                    "Tree Billboard"),
+                "The module name must stay English while parameter descriptions switch to Japanese.");
             Capture("standard-library-ja.png");
             Require(profiles.Save(null, "Isolated module review", Path.Combine(directory, "project-library")), profiles.Status);
             Pump(window);
@@ -100,7 +102,12 @@ internal static class StandardModuleInterfaceTests
                 explicitClone = true
             }));
         }
-        finally { text.SelectedLanguage = language; window.Close(); }
+        finally
+        {
+            text.SelectedNodeLanguage = nodeLanguage;
+            text.SelectedLanguage = language;
+            window.Close();
+        }
 
         void Capture(string name)
         {

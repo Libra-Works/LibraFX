@@ -144,7 +144,7 @@ public sealed class ProjectResourcesViewModel : ObservableObject, IDisposable
         if (_disposed) return;
         var candidates = IsLocal ? _localEntries : _main.GroupAssets.CreatableAssets
             .Select(group => new WorkspaceResourceEntry(
-                LocalizationService.Shared.GetOrDefault(_main.GroupAssets.Metadata(group.Id)?.NameKey, group.Name),
+                LocalizationService.Shared.GetNodeLabel(_main.GroupAssets.Metadata(group.Id)?.NameKey, group.Name),
                 group.Origin == GroupAssetOrigin.Standard
                     ? LocalizationService.Shared.Get("Modules.StandardLibrary")
                     : _main.TeamProfiles.Active.Name,

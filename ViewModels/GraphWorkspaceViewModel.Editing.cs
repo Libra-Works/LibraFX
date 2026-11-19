@@ -394,7 +394,7 @@ public sealed partial class GraphWorkspaceViewModel
         var node = new GraphNodeViewModel(
             this,
             definition,
-            isPolymorphic ? LocalizationService.Shared.GetOrDefault(family?.DisplayNameKey ?? definition.DisplayNameKey, definition.Name) : definition.Name,
+            isPolymorphic ? LocalizationService.Shared.GetEnglishOrDefault(family?.DisplayNameKey ?? definition.DisplayNameKey, definition.Name) : definition.Name,
             x ?? 80 + (index % 4) * 280,
             y ?? 80 + (index / 4) * 160,
             id: nodeId,

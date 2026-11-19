@@ -661,9 +661,9 @@ public partial class GpuWorkspaceView : UserControl
     {
         var operation = node.Op switch
         {
-            GpuOp.ReadAttribute => LocalizationService.Shared.Get("Gpu.ReadAttribute") + " · " +
+            GpuOp.ReadAttribute => LocalizationService.Shared.GetNodeLabel("Gpu.ReadAttribute", "Read Attribute") + " · " +
                 AttributeDisplayName(node.Attribute),
-            GpuOp.ReadUniform => LocalizationService.Shared.Get("Gpu.ReadUniform") + " · " +
+            GpuOp.ReadUniform => LocalizationService.Shared.GetNodeLabel("Gpu.ReadUniform", "Read Uniform") + " · " +
                 UniformDisplayName(node.Uniform),
             GpuOp.SampleFlowMap => GpuOperationRegistry.Operations[node.Op].DisplayName + " · " + node.Resource,
             _ => GpuOperationRegistry.Operations[node.Op].DisplayName

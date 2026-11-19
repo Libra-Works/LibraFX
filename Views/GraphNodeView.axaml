@@ -50,8 +50,8 @@
                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Grid>
                     </ToggleButton>
-                    <TextBlock Text="{Binding Name}"
-                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}"
+                    <TextBlock Text="{Binding DisplayName}"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DisplayName}"
                                Foreground="{DynamicResource EffectForegroundBrush}"
                                FontWeight="SemiBold" />
                 </DockPanel>

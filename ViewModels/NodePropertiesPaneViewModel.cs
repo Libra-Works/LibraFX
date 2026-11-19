@@ -38,7 +38,7 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
         set { if (_node is not null && !IsInspectingContainingSpawnable) _node.Name = value; }
     }
     public string InspectorNodeType => _node is { } node
-        ? LocalizationService.Shared.GetOrDefault(node.Definition.DisplayNameKey, node.Definition.Name) : string.Empty;
+        ? LocalizationService.Shared.GetNodeLabel(node.Definition.DisplayNameKey, node.Definition.Name) : string.Empty;
     public bool CanManageGroup => IsGroup && !IsInspectingContainingSpawnable && !IsPinned;
     public bool IsStandardGroup => CurrentAsset?.Origin == GroupAssetOrigin.Standard;
     public bool IsProjectLinkedGroup => IsLinkedGroup && !IsStandardGroup;

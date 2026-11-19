@@ -25,7 +25,7 @@ public sealed partial class GraphWorkspaceViewModel
         ValidateSnapshot(asset.Graph, new HashSet<Guid>(), _graphPath.Count + 1);
         var definition = GraphNodeDefinition.All.Single(item => item.Kind == GraphNodeKind.GraphGroup);
         var reference = new GroupAssetReference(asset.Id, asset.Revision, asset.Locked);
-        var displayName = LocalizationService.Shared.GetOrDefault(catalog.Metadata(asset.Id)?.NameKey, asset.Name);
+        var displayName = LocalizationService.Shared.GetEnglishOrDefault(catalog.Metadata(asset.Id)?.NameKey, asset.Name);
         var node = new GraphNodeViewModel(this, definition, displayName, x, y,
             childGraph: CloneGraph(asset.Graph), groupAsset: reference);
         ExecuteEdit(new AddGraphNodeCommand(this, node, Nodes.Count));

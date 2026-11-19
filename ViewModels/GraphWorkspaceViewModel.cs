@@ -155,7 +155,7 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
     }
 
     public string SelectedNodeType => SelectedNode is { } node
-        ? LocalizationService.Shared.GetOrDefault(node.Definition.DisplayNameKey, node.Definition.Name) : string.Empty;
+        ? LocalizationService.Shared.GetNodeLabel(node.Definition.DisplayNameKey, node.Definition.Name) : string.Empty;
 
     public string ConnectionStatus
     {

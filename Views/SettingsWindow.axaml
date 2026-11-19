@@ -43,6 +43,18 @@
                         </DataTemplate>
                     </ComboBox.ItemTemplate>
                 </ComboBox>
+                <TextBlock Classes="editor-label" Text="{DynamicResource Text.Editor.NodeLanguage}" />
+                <ComboBox x:Name="NodeLanguageList" ItemsSource="{Binding Localization.Languages}"
+                          IsEnabled="{Binding Localization.CanChangeLanguage}"
+                          SelectedItem="{Binding Localization.SelectedNodeLanguage, Mode=OneWay}"
+                          SelectionChanged="OnNodeLanguageSelected"
+                          AutomationProperties.Name="{DynamicResource Text.Editor.NodeLanguage}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate DataType="services:EditorLanguage">
+                            <TextBlock Text="{Binding Name}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
                 <TextBlock Classes="editor-label" Text="{Binding Localization.Status}" TextWrapping="Wrap"
                            IsVisible="{Binding Localization.Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             </StackPanel>

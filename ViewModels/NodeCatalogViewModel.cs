@@ -113,7 +113,10 @@ public sealed class NodeCatalogEntryViewModel
     public NodeCatalogEntryViewModel(GraphNodeDefinition definition, string? projectName = null)
     {
         IsPolymorphic = GraphPolymorphism.TryFamily(definition.Kind, out var family);
-        Name = LocalizationService.Shared.GetOrDefault(family?.DisplayNameKey ?? definition.DisplayNameKey, definition.Name);
+        var text = LocalizationService.Shared;
+        var labelKey = family?.DisplayNameKey ?? definition.DisplayNameKey;
+        Name = text.GetNodeLabel(labelKey, definition.Name);
+        SearchTerms = text.GetNodeSearchTerms(labelKey, definition.Name);
         OriginalName = definition.Name;
         KindName = definition.Kind.ToString();
         Namespace = definition.Namespace;
@@ -127,11 +130,12 @@ public sealed class NodeCatalogEntryViewModel
             var fallback = GraphEnumDefinition.All.Values.Count(item =>
                 string.Equals(item.Name, enumeration.Name, StringComparison.OrdinalIgnoreCase)) > 1
                 ? enumeration.QualifiedName : enumeration.Name;
-            var typeName = LocalizationService.Shared.GetOrDefault(
-                $"EnumBranches.Type.{enumeration.TypeId:D}", fallback);
+            var typeKey = $"EnumBranches.Type.{enumeration.TypeId:D}";
+            var typeName = text.GetNodeLabel(typeKey, fallback);
             Name = $"{Name} — {typeName}";
-            Group = $"{Group} / {typeName}";
-            SearchTerms = $"{enumeration.Name} {enumeration.QualifiedName}";
+            var localizedTypeName = text.GetOrDefault(typeKey, fallback);
+            Group = $"{Group} / {localizedTypeName}";
+            SearchTerms = $"{SearchTerms} {text.GetNodeSearchTerms(typeKey, fallback)} {enumeration.Name} {enumeration.QualifiedName}";
         }
         DragIdentifier = (IsPolymorphic ? PolymorphicPrefix : "") + definition.Kind;
     }
@@ -139,7 +143,7 @@ public sealed class NodeCatalogEntryViewModel
     public NodeCatalogEntryViewModel(GroupAsset asset, GroupAssetCatalog? catalog = null)
     {
         var metadata = asset.Origin == GroupAssetOrigin.Standard ? catalog?.Metadata(asset.Id) : null;
-        Name = LocalizationService.Shared.GetOrDefault(metadata?.NameKey, asset.Name);
+        Name = LocalizationService.Shared.GetNodeLabel(metadata?.NameKey, asset.Name);
         OriginalName = asset.Name;
         KindName = "GraphGroup";
         Namespace = asset.Origin == GroupAssetOrigin.Standard ? "Standard" : "Project";
@@ -148,7 +152,7 @@ public sealed class NodeCatalogEntryViewModel
             ? $"{LocalizationService.Shared.Get("Modules.StandardLibrary")} / " +
               LocalizationService.Shared.GetOrDefault(metadata?.CategoryKey, "Modules")
             : LocalizationService.Shared.Get("Messages.ProjectGroups");
-        SearchTerms = string.Join(" ", metadata?.Keywords ?? []);
+        SearchTerms = $"{LocalizationService.Shared.GetNodeSearchTerms(metadata?.NameKey, asset.Name)} {string.Join(" ", metadata?.Keywords ?? [])}";
         GroupAssetId = asset.Id;
         DragIdentifier = GroupPrefix + asset.Id.ToString("D");
     }

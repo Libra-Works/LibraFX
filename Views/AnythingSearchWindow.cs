@@ -114,10 +114,12 @@ public sealed class AnythingSearchWindow : Window
         }
         foreach (var group in main.GroupAssets.CreatableAssets)
         {
-            var name = text.GetOrDefault(main.GroupAssets.Metadata(group.Id)?.NameKey, group.Name);
+            var nameKey = main.GroupAssets.Metadata(group.Id)?.NameKey;
+            var name = text.GetNodeLabel(nameKey, group.Name);
             yield return Item("asset/" + group.Id, "Search.Group", name,
                 text.Get("Search.GroupDetail", group.Revision),
-                () => main.Graph.CreateGroupAssetNode(group.Id, 100, 100), group.Name + " " + group.Id.ToString("D"));
+                () => main.Graph.CreateGroupAssetNode(group.Id, 100, 100),
+                $"{text.GetNodeSearchTerms(nameKey, group.Name)} {group.Name} {group.Id:D}");
         }
         foreach (var command in main.Extensions.Commands.ToArray())
             yield return new("extension/" + command.Id, text.Get("Search.Command"), command.Name,

@@ -18,6 +18,7 @@ public sealed class LocalizationService : ObservableObject
     private readonly ResourceDictionary _resources = new();
     private bool _canSave = true;
     private EditorLanguage _selectedLanguage;
+    private EditorLanguage _selectedNodeLanguage;
     private string _status = string.Empty;
 
     public static LocalizationService Shared { get; private set; } = null!;
@@ -43,7 +44,7 @@ public sealed class LocalizationService : ObservableObject
             }
             try
             {
-                Save(value.Id);
+                Save(value.Id, _selectedNodeLanguage.Id);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -54,6 +55,42 @@ public sealed class LocalizationService : ObservableObject
             }
             _selectedLanguage = value;
             ApplyResources();
+            OnPropertyChanged();
+            Status = string.Empty;
+            LanguageChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    public EditorLanguage SelectedNodeLanguage
+    {
+        get => _selectedNodeLanguage;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            if (!Languages.Contains(value))
+            {
+                throw new ArgumentException("Unsupported node language.", nameof(value));
+            }
+            if (value == _selectedNodeLanguage)
+            {
+                return;
+            }
+            if (!_canSave)
+            {
+                Status = Get("Editor.LanguageSettingsInvalid");
+                return;
+            }
+            try
+            {
+                Save(_selectedLanguage.Id, value.Id);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Trace.TraceWarning("Could not save node language: {0}", ex.Message);
+                Status = Get("Editor.LanguageSaveFailed");
+                return;
+            }
+            _selectedNodeLanguage = value;
             OnPropertyChanged();
             Status = string.Empty;
             LanguageChanged?.Invoke(this, EventArgs.Empty);
@@ -79,7 +116,9 @@ public sealed class LocalizationService : ObservableObject
             _translations.Add(language.Id, strings);
         }
         if (_translations["en"].Count == 0) throw new InvalidDataException("English translation catalog is missing.");
-        _selectedLanguage = Languages.Single(language => language.Id == LoadLanguage());
+        var settings = LoadLanguage();
+        _selectedLanguage = Languages.Single(language => language.Id == settings.Language);
+        _selectedNodeLanguage = Languages.Single(language => language.Id == (settings.NodeLanguage ?? "en"));
         application.Resources.MergedDictionaries.Add(_resources);
         ApplyResources();
     }
@@ -102,33 +141,45 @@ public sealed class LocalizationService : ObservableObject
         string.IsNullOrEmpty(key) ? fallback :
         _translations[_selectedLanguage.Id].GetValueOrDefault(key) ?? _translations["en"].GetValueOrDefault(key) ?? fallback;
 
-    private string LoadLanguage()
+    public string GetEnglishOrDefault(string? key, string fallback) =>
+        string.IsNullOrEmpty(key) ? fallback : _translations["en"].GetValueOrDefault(key) ?? fallback;
+
+    public string GetNodeLabel(string? key, string fallback) =>
+        string.IsNullOrEmpty(key) ? fallback :
+        _translations[_selectedNodeLanguage.Id].GetValueOrDefault(key) ?? GetEnglishOrDefault(key, fallback);
+
+    public string GetNodeSearchTerms(string? key, string fallback) =>
+        string.IsNullOrEmpty(key) ? fallback :
+        $"{GetEnglishOrDefault(key, fallback)} {_translations["ja"].GetValueOrDefault(key)}";
+
+    private LanguageSettings LoadLanguage()
     {
         try
         {
-            if (!File.Exists(_settingsPath)) return "en";
+            if (!File.Exists(_settingsPath)) return new("en");
             var settings = JsonSerializer.Deserialize<LanguageSettings>(File.ReadAllText(_settingsPath));
-            if (settings is null || !Languages.Any(language => language.Id == settings.Language))
+            if (settings is null || !Languages.Any(language => language.Id == settings.Language) ||
+                (settings.NodeLanguage is not null && !Languages.Any(language => language.Id == settings.NodeLanguage)))
                 throw new InvalidDataException("Unknown editor language.");
-            return settings.Language;
+            return settings;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)
         {
             _canSave = false;
             Trace.TraceWarning("Could not read editor language: {0}", ex.Message);
             _status = _translations["en"].GetValueOrDefault("Editor.LanguageSettingsInvalid") ?? "Invalid language settings.";
-            return "en";
+            return new("en");
         }
     }
 
-    private void Save(string language)
+    private void Save(string language, string nodeLanguage)
     {
         var directory = Path.GetDirectoryName(_settingsPath)!;
         Directory.CreateDirectory(directory);
         var temporary = Path.Combine(directory, $".language-{Guid.NewGuid():N}.tmp");
         try
         {
-            File.WriteAllText(temporary, JsonSerializer.Serialize(new LanguageSettings(language)));
+            File.WriteAllText(temporary, JsonSerializer.Serialize(new LanguageSettings(language, nodeLanguage)));
             File.Move(temporary, _settingsPath, true);
         }
         finally
@@ -147,5 +198,5 @@ public sealed class LocalizationService : ObservableObject
             _resources["Text." + key] = Get(key);
     }
 
-    private sealed record LanguageSettings(string Language);
+    private sealed record LanguageSettings(string Language, string? NodeLanguage = null);
 }

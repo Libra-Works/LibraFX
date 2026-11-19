@@ -14,6 +14,7 @@
   "Editor.Sequence.EditOutputs": "Edit Sequence outputs",
   "Editor.Sequence.SingleDestination": "A Signal output can have only one destination. Add a Sequence node to branch.",
   "Editor.Language": "Language",
+  "Editor.NodeLanguage": "Node names",
   "Editor.Node.LifeTime": "Life Time",
   "Editor.Node.InstanceAge": "Instance Age",
   "Editor.Node.EffectAge": "Effect Age",

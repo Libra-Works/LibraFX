@@ -192,6 +192,31 @@ public sealed class GraphNodeViewModel : ObservableObject
         set => _workspace.RenameNode(this, value);
     }
 
+    public string DisplayName
+    {
+        get
+        {
+            var text = LocalizationService.Shared;
+            if (GroupAsset is { } reference &&
+                _workspace.GroupAssets is { } catalog &&
+                catalog.Metadata(reference.Id) is { } metadata &&
+                catalog.Assets.FirstOrDefault(asset => asset.Id == reference.Id) is { } standard &&
+                (Name == standard.Name || Name == text.GetEnglishOrDefault(metadata.NameKey, standard.Name)))
+            {
+                return text.GetNodeLabel(metadata.NameKey, Name);
+            }
+            if (IsPolymorphic && GraphPolymorphism.TryFamily(BaseDefinition.Kind, out var family))
+            {
+                var key = family.DisplayNameKey ?? BaseDefinition.DisplayNameKey;
+                if (Name == BaseDefinition.Name || Name == text.GetEnglishOrDefault(key, BaseDefinition.Name))
+                {
+                    return text.GetNodeLabel(key, Name);
+                }
+            }
+            return Name == BaseDefinition.Name ? text.GetNodeLabel(BaseDefinition.DisplayNameKey, Name) : Name;
+        }
+    }
+
     public double X => _x;
 
     public double Y => _y;
@@ -219,6 +244,7 @@ public sealed class GraphNodeViewModel : ObservableObject
         .Where(text => !string.IsNullOrEmpty(text)));
     internal void RefreshLocalizedText()
     {
+        OnPropertyChanged(nameof(DisplayName));
         if (IsPreviewDebugDraw) OnPropertyChanged(nameof(InputPorts));
         OnPropertyChanged(nameof(Description));
         OnPropertyChanged(nameof(HeaderHelp));
@@ -332,7 +358,10 @@ public sealed class GraphNodeViewModel : ObservableObject
     internal void SetNameValue(string value)
     {
         if (SetProperty(ref _name, value, nameof(Name)))
+        {
+            OnPropertyChanged(nameof(DisplayName));
             _workspace.RefreshTypeDiagnostics();
+        }
     }
 
     internal void SetCurveValue(FCurveSnapshot value)
@@ -443,6 +472,7 @@ public sealed class GraphNodeViewModel : ObservableObject
     {
         GroupAsset = value;
         OnPropertyChanged(nameof(GroupAsset));
+        OnPropertyChanged(nameof(DisplayName));
     }
 
     internal void SetGroupOverridesValue(IReadOnlyList<GroupInstanceValue>? value)

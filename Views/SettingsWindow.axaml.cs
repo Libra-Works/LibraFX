@@ -85,6 +85,22 @@ public partial class SettingsWindow : Window
         finally { _updatingLanguage = false; }
     }
 
+    private void OnNodeLanguageSelected(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingLanguage || DataContext is not MainViewModel model ||
+            NodeLanguageList.SelectedItem is not EditorLanguage language)
+        {
+            return;
+        }
+        _updatingLanguage = true;
+        try
+        {
+            model.Localization.SelectedNodeLanguage = language;
+            NodeLanguageList.SetCurrentValue(ComboBox.SelectedItemProperty, model.Localization.SelectedNodeLanguage);
+        }
+        finally { _updatingLanguage = false; }
+    }
+
     private void OnShortcutKeyDown(object? sender, KeyEventArgs e)
     {
         if (DataContext is not MainViewModel model || sender is not TextBox { Tag: string id }) return;
