@@ -1,6 +1,8 @@
 #pragma once
 
+#include "LibraFxGodotFlexiblePlane.h"
 #include "liberafx/LbSpawnableHost.h"
+#include <godot_cpp/variant/packed_float32_array.hpp>
 #include "liberafx/LbSceneBindings.h"
 #include <godot_cpp/classes/mesh.hpp>
 #include <godot_cpp/classes/node.hpp>
@@ -11,6 +13,8 @@
 #include <godot_cpp/classes/quad_mesh.hpp>
 #include <godot_cpp/classes/standard_material3d.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
+#include <godot_cpp/classes/multi_mesh.hpp>
+#include <godot_cpp/classes/multi_mesh_instance3d.hpp>
 #include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <array>
@@ -44,6 +48,8 @@ public:
     auto handleEvent(const SpawnableHostEvent& event, PackageGpuRenderer* gpu,
         godot::String& gpuError) -> Result;
     auto updateValues(SpawnableHost& host, double effectTime) -> Result;
+    // Call before an explicit non-contiguous seek; backwards time also resets automatically.
+    void resetFlexibleHistories();
 
 private:
     struct Input final {
@@ -99,6 +105,9 @@ private:
         std::string assetIdentity;
         bool sprite = false;
         bool billboard = false;
+        bool flexiblePlane = false;
+        flexible_adapter::Definition flexibleDefinition;
+        godot::Ref<godot::Texture2D> flexibleTexture;
         Input position{};
         Input rotation{};
         Input scale{};
@@ -114,9 +123,24 @@ private:
     };
     struct RenderInstance final {
         godot::MeshInstance3D* node = nullptr;
+        std::unique_ptr<FlexiblePlaneRenderer> flexiblePlane;
         godot::Ref<godot::QuadMesh> quad;
         godot::Ref<godot::StandardMaterial3D> material;
         std::unordered_map<std::int32_t, godot::Ref<godot::ShaderMaterial>> shaderMaterials;
+    };
+    struct CpuParticleDraw final {
+        std::array<std::uint8_t, 16> nodeId{};
+        std::string nodeName;
+        std::string assetIdentity;
+        godot::Ref<godot::Texture2D> texture;
+        bool additive = false;
+        double drawScale = 1;
+    };
+    struct CpuParticleRenderInstance final {
+        godot::MultiMeshInstance3D* node = nullptr;
+        godot::Ref<godot::MultiMesh> multiMesh;
+        godot::PackedFloat32Array buffer;
+        std::uint32_t capacity = 0;
     };
     struct TemplateDraws final {
         std::array<std::uint8_t, 16> containerId{};
@@ -128,6 +152,11 @@ private:
         double startTime = 0;
         godot::Node3D* node = nullptr;
         std::vector<RenderInstance> renderables;
+        flexible_adapter::HistoryScope flexibleHistory;
+        double lastFlexibleTime = 0;
+        bool hasFlexibleTime = false;
+        bool flexibleHidden = false;
+        bool visibleBeforeFlexibleFailure = true;
     };
 
     PackageRenderRenderer(const MeshBindings& meshBindings,
@@ -137,7 +166,8 @@ private:
                           const MeshBindings& meshBindings,
                           const TextureBindings& textureBindings,
                           const MaterialBindings& materialBindings,
-                          std::vector<Draw>& out) -> Result;
+                          std::vector<Draw>& out,
+                          std::vector<CpuParticleDraw>* cpuParticles = nullptr) -> Result;
     static auto applyMaterials(godot::MeshInstance3D& node, const Draw& draw,
                                RenderInstance& out) -> Result;
     auto updateMaterials(SpawnableHost& host, const Draw& draw, const RenderInstance& renderable,
@@ -146,11 +176,17 @@ private:
     static auto uuidString(const std::uint8_t* bytes) -> godot::String;
     auto makeRenderable(godot::Node& parent, const Draw& draw,
                         RenderInstance& out) -> Result;
+    auto makeCpuRenderable(godot::Node& parent, const CpuParticleDraw& draw,
+                           CpuParticleRenderInstance& out) -> Result;
     auto makeScope(godot::Node& parent, const std::vector<Draw>& draws,
                    godot::Node3D*& node, std::vector<RenderInstance>& renderables) -> Result;
     auto updateScope(SpawnableHost& host, const std::vector<Draw>& draws,
                      const std::vector<RenderInstance>& renderables,
-                     const VisualScope* child, double localTime) -> Result;
+                     const VisualScope* child, double localTime,
+                     flexible_adapter::HistoryScope& flexibleHistory,
+                     bool& flexibleHidden, bool& visibleBeforeFlexibleFailure) -> Result;
+    auto updateCpuParticles(SpawnableHost& host) -> Result;
+    auto currentFlexibleCamera() const -> godot::Camera3D*;
     auto updateInput(SpawnableHost& host, const Input& input, const VisualScope* child,
                      std::array<double, 4>& values) const -> Result;
     auto handleEvents(SpawnableHost& host, PackageGpuRenderer* gpu, godot::String& gpuError) -> Result;
@@ -163,10 +199,17 @@ private:
     MeshBindings meshBindings_;
     TextureBindings textureBindings_;
     std::vector<Draw> rootDraws_;
+    std::vector<CpuParticleDraw> rootCpuParticles_;
     std::vector<TemplateDraws> templates_;
     godot::Node3D* root_ = nullptr;
     std::vector<RenderInstance> rootRenderables_;
+    std::vector<CpuParticleRenderInstance> rootCpuRenderables_;
     std::vector<VisualScope> children_;
+    flexible_adapter::HistoryScope rootFlexibleHistory_;
+    double rootLastFlexibleTime_ = 0;
+    bool rootHasFlexibleTime_ = false;
+    bool rootFlexibleHidden_ = false;
+    bool rootVisibleBeforeFlexibleFailure_ = true;
 };
 
 }

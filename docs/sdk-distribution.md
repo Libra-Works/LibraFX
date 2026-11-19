@@ -99,7 +99,28 @@ Compiler/editor sources are not runtime dependencies.
 
 ## First effect in a new project
 
-Start with a **CPU-only `.lfxp`** with no render assets, GPU programs, or
+New exports have two user-facing files: editable `.lfxproj` and compiled `.lfxb`.
+The `.lfxb` always contains the existing LFXP package envelope, including for
+graphs without children. Engine importers inspect its signature; old raw `.lfxb`
+programs and `.lfxp` packages remain legacy inputs. This requires updated SDKs
+from the same source revision, not the published 2026.11.8 binaries.
+Historical test fixture filenames elsewhere in this document still use `.lfxp`.
+The `.lfxrm` diagnostic resource-mapping manifest is not a second playable binary.
+The current source supports container 4/package 12 for CPU particles; effects
+without CPU particles retain container 3/package 11. The source compatibility
+manifest's package ceiling describes updated source exports, not an update to
+already published SDK archives. CPU particles, Flexible Plane and Quaternion/
+Random additions have compiler/native regression coverage, but still require
+engine acceptance by integrators. Build results do not establish rendered
+pixels; the bilingual feature guides describe these verification boundaries.
+
+Legacy raw-program assets are not automatically migrated into package asset
+types. Import a replacement package as a new asset and reassign component
+references explicitly. Keep existing Unity `.meta` files for unchanged assets;
+renaming/reimporting a raw file is not a type migration. Unity import validation
+requires the matching native plugin.
+
+Start with a **numeric-only `.lfxb` package** with no render assets, GPU programs, or
 editor connection. This separates package loading and game I/O from project
 resource bindings. For a visible second check in Unity or Unreal, use the
 same compiler-produced ModelDraw Cube package described in both adapters'
@@ -107,13 +128,13 @@ same compiler-produced ModelDraw Cube package described in both adapters'
 Generate effects in the authoring repository, not in the exported SDK:
 
 ```powershell
-dotnet run --project Tools\Converter -- convert C:\Effects\input.lfxproj C:\Effects\effect.lfxp
+dotnet run --project Tools\Converter -- convert C:\Effects\input.lfxproj C:\Effects\effect.lfxb
 ```
 
 | Step | Unity | Unreal | Godot |
 | --- | --- | --- | --- |
 | Install | Add the local package and the matching `liberafx_native` plugin. | Copy-install with the script below into a blank C++ project, then build its Editor target. | Install the built GDExtension descriptor and matching library. |
-| Load | Copy `.lfxp` into Assets and assign the imported asset to `LiberaFxSpawnableComponent`. | Import `.lfxp`, then drag the imported asset into the level. It creates a `LibraEffectActor` with one `Libra Effect` component. | Copy `.lfxp` under `res://`, add `LibraEffectPlayer`, and pass the file bytes to `play_package` after the node enters the tree. |
+| Load | Copy `.lfxb` into Assets and assign the imported asset to `LiberaFxSpawnableComponent`. | Import `.lfxb`, then drag the imported asset into the level. It creates a `LibraEffectActor` with one `Libra Effect` component. | Copy `.lfxb` under `res://`, add `LibraEffectPlayer`, and pass the file bytes to `play_package` after the node enters the tree. |
 | Start | Enter Play mode with Play On Enable set, or call `Play()`. Check `LastError` if startup is rejected. | Start Play In Editor with Auto Play set, or call `Play()` and check its result. | Check `play_package` returns `0` before issuing game I/O. |
 | Drive and observe | Use `SetGameProperty` / `FireGameSignal` and subscribe to `GameIoEventReceived`. | Use `SetGameProperty` / `FireGameSignal` and bind `OnGameIoEvent`. | Use `set_game_property` / `fire_game_signal` and connect `game_io_event`. |
 | Retire | Call `Stop()` or disable the component. | Call `Stop()` or destroy the actor. | Call `stop()` or remove the player from the scene tree. |
@@ -213,15 +234,15 @@ adapter is loaded. Prebuilt binaries contain no project callbacks. To pass
 multiple sources, use a quoted, semicolon-separated CMake list and define the
 entry point in only one file.
 
-The project registry is used by `.lfxp` root and child programs. Unreal and
-Unity also use it for ordinary `.lfxb` loads; Godot's raw `play()` path remains
+The project registry is used by unified `.lfxb` package root and child programs.
+Unreal and Unity also use it for legacy raw program loads; Godot's raw `play()` path remains
 limited to v1/v2. Neither registration path requires custom rendering: return
 values to built-in Model Draw or Sprite nodes and let the adapter render them.
 Keep engine objects and engine API calls out of native parameter callbacks.
 
 ### C# and GDScript workflow
 
-On the root graph of a CPU Spawnable package (`.lfxp`), connect a signal (for
+On the root graph of a CPU effect package (`.lfxb`), connect a signal (for
 example, a named **Input Signal** called `sample`) to an **Output Signal**
 called `action.sampleSpeed`. Add a float **Input Property** called `speed` and
 wire it into the graph that drives your standard Model Draw or Sprite nodes.
@@ -237,7 +258,7 @@ player.FireGameSignal("sample");
 ```
 
 In Godot, bind on a `LibraEffectPlayer` that's in the scene tree before starting
-playback. `package_bytes` holds the exported `.lfxp`:
+playback. `package_bytes` holds the exported `.lfxb` package:
 
 ```gdscript
 func resolve_speed(_event: Dictionary) -> PackedFloat64Array:
@@ -290,7 +311,7 @@ The LIBERA FX Preview pane's **Runtime debugger** uses a private, local
 Windows session. Its invitation is not a Preview Connections invitation and
 must not be saved in assets, source, or logs. Use the same graph revision and
 compiled payload on both sides; a stale import or a preview-specific package
-is not interchangeable with the offline `.lfxp`.
+is not interchangeable with an offline `.lfxb` effect package.
 
 1. Generate the ModelDraw **MaterialPulse** sample using either adapter's
    `--model-material-animation` instructions. Open `MaterialPulse.lfxproj`

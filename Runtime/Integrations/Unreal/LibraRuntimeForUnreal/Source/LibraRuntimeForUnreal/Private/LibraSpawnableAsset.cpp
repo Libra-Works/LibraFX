@@ -121,6 +121,39 @@ bool ReadLibraPackageResourceDrawKeys(const std::vector<std::uint8_t>& bytes,
             !AddLibraPackageResourceKey(keys, TEXT("builtin:sprite"), ELibraPackageResourceKind::Material))
             return false;
     }
+    const FLibraPackageResourceJsonArray* cpuParticles = nullptr;
+    if (root->HasField(TEXT("cpuParticles")) &&
+        !root->TryGetArrayField(TEXT("cpuParticles"), cpuParticles))
+        return false;
+    if (cpuParticles)
+    {
+        auto cpuVersion = double{};
+        if (cpuParticles->Num() > 128 ||
+            (!cpuParticles->IsEmpty() && (!root->TryGetNumberField(TEXT("cpuParticleVersion"), cpuVersion) ||
+                cpuVersion != 1)))
+        {
+            return false;
+        }
+        for (const auto& value : *cpuParticles)
+        {
+            auto particle = value && value->Type == EJson::Object ? value->AsObject() : nullptr;
+            auto identity = FString{}, blendMode = FString{};
+            if (!particle || !particle->TryGetStringField(TEXT("assetPath"), identity) ||
+                !particle->TryGetStringField(TEXT("blendMode"), blendMode) ||
+                (blendMode != TEXT("Alpha") && blendMode != TEXT("Additive")) ||
+                (identity != TEXT("builtin:white") &&
+                    !AddLibraPackageResourceKey(keys, identity, ELibraPackageResourceKind::Texture)))
+            {
+                return false;
+            }
+            const auto* materialIdentity = blendMode == TEXT("Additive")
+                ? TEXT("builtin:cpu-particle-additive") : TEXT("builtin:cpu-particle-alpha");
+            if (!AddLibraPackageResourceKey(keys, materialIdentity, ELibraPackageResourceKind::Material))
+            {
+                return false;
+            }
+        }
+    }
     return true;
 }
 

@@ -559,6 +559,17 @@ namespace LiberaFx.Unity
             return host != current ? NativeResult.Ok : result;
         }
 
+        public NativeResult PopCpuParticleEvent(out CpuParticleEvent particleEvent, out bool hasEvent)
+        {
+            particleEvent = default;
+            hasEvent = false;
+            var current = host;
+            if (current == null) return NativeResult.NotReady;
+            if (debugPending || ownerThreadId != System.Threading.Thread.CurrentThread.ManagedThreadId)
+                return NativeResult.Busy;
+            return current.PopCpuParticleEvent(out particleEvent, out hasEvent);
+        }
+
         public NativeResult ReadRootValue(string nodeGuid, out NativeValue value)
         {
             if (host == null) { value = default; return NativeResult.NotReady; }
@@ -647,7 +658,7 @@ namespace LiberaFx.Unity
                     "Root GPU programs cannot auto-drain with AutoDestroyWhenIdle. Set AutoDestroyWhenIdle=false " +
                     "and call RequestNaturalEnd or Stop explicitly.");
             var rootPrograms = GetGpuProgramsPayload(candidate, null, rootContainers);
-            var root = bindings.Prepare("root", rootRender, rootContainers, rootPrograms);
+            var root = bindings.Prepare("root", rootRender, rootContainers, rootPrograms, true);
 
             var countResult = candidate.GetTemplateCount(out var count);
             if (countResult != NativeResult.Ok || count > MaximumTemplates)
@@ -733,7 +744,7 @@ namespace LiberaFx.Unity
                 throw new InvalidOperationException("Spawnable package header is invalid.");
             var format = package[4] | package[5] << 8;
             var headerSize = package[6] | package[7] << 8;
-            if (format < 1 || format > 3 || headerSize != 24 || package[24] > 1)
+            if (format < 1 || format > 4 || headerSize != 24 || package[24] > 1)
                 throw new InvalidOperationException("Spawnable package header version or flags are unsupported.");
             return package[24] != 0;
         }

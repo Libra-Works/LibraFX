@@ -1,0 +1,15 @@
+{
+  "schemaVersion":1,"typeId":"7c7e1000-2521-4bdb-b8a0-210000000001","namespace":"LiberaFx","kind":"CpuParticle",
+  "name":"CPU Particle","displayNameKey":"Editor.Node.CpuParticle","group":"CPU Particles","groupNameKey":"Editor.NodeGroup.CpuParticles",
+  "descriptionKey":"Cpu.Help.Container",
+  "portType":"Float","portCategory":"Parameter",
+  "inputPorts":[{"id":"emitted","name":"Emitted total","portType":"Float","category":"Parameter"}],"outputPorts":[],
+  "parameters":[
+    {"id":"capacity","name":"Capacity","displayNameKey":"Cpu.Parameter.Capacity","type":"int","defaultValue":1024},
+    {"id":"seed","name":"Seed (UInt32)","displayNameKey":"Cpu.Parameter.Seed","type":"float","defaultValue":1},
+    {"id":"rate","name":"Default particles / second","displayNameKey":"Cpu.Parameter.Rate","type":"float","defaultValue":30},
+    {"id":"burst","name":"Initial burst","displayNameKey":"Cpu.Parameter.Burst","type":"int","defaultValue":0},
+    {"id":"queueCapacity","name":"Queue capacity","displayNameKey":"Cpu.Parameter.Queue","type":"int","defaultValue":4096},
+    {"id":"outputReduction","name":"Output reduction (None / LastById)","displayNameKey":"Cpu.Parameter.Reduction","type":"string","defaultValue":"None"}
+  ]
+}

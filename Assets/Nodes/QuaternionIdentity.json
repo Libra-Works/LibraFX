@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1, "typeId": "9bd7a620-c8e1-4f35-a962-000000000001",
+  "namespace": "LiberaFx", "kind": "QuaternionIdentity", "name": "Quaternion Identity",
+  "displayNameKey": "QuaternionRandom.Node.QuaternionIdentity", "descriptionKey": "QuaternionRandom.Help.QuaternionIdentity",
+  "group": "Quaternion", "groupNameKey": "QuaternionRandom.Group.Quaternion", "portType": "FloatX4", "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [], "outputPorts": [{ "id": "value", "name": "Quaternion XYZW" }], "parameters": []
+}

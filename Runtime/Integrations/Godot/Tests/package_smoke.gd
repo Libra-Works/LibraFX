@@ -33,6 +33,14 @@ func run() -> void:
 	var package_result: int = player.play_package(package)
 	if not check(package_result == 0, "CPU Spawnable package loads (result %d)" % package_result):
 		return
+	if not check(player.play(package) == 0,
+			"Unified play accepts LFXP bytes from either canonical .lfxb or legacy .lfxp"):
+		return
+	var generation: int = player.get_playback_generation()
+	if not check(player.play(package.slice(0, 24)) != 0
+			and player.get_playback_generation() == generation and player.is_playing(),
+			"Truncated LFXP is rejected without replacing the active package"):
+		return
 	player.set_process(false)
 
 	var ports: Array = player.get_game_io_ports()

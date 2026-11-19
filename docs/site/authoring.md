@@ -6,6 +6,8 @@ title: Graph Authoring Guide
 
 # Graph Authoring Guide
 
+New to node graphs? Start with [nodes, pins, and Signals](glossary.md#graphs).
+
 ## Connect values and signals
 
 **Parameter** pins carry typed data, such as a Float, Vector3, Color, or Matrix.
@@ -45,8 +47,11 @@ its definition, not the exposed values you set on a particular instance.
 ## Move from graph to engine
 
 Save source projects as `.lfxproj`. The editor's **Export VFX...** produces a
-standalone `.lfxb`; compile `.lfxp` packages with the converter for Spawnable
-workflows. Bind actual textures, materials, and meshes in the engine project.
+`.lfxb` effect package, also used by the converter for simple and Spawnable
+graphs alike. Bind actual textures, materials, and meshes in the engine project.
+This unified export requires the matching updated SDK; the published 2026.11.8
+SDK predates the new `.lfxb` package import. Legacy `.lfxp` packages and old raw
+`.lfxb` files remain supported inputs, not alternative new export choices.
 Named root or instance Game I/O is distinct from internal graph connections.
 See [Engine integration](engine-integration.md) for installation, output events,
 and extending your effect with script actions or C++ nodes.

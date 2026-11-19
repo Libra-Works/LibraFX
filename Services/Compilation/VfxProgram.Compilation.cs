@@ -10,10 +10,19 @@ public sealed partial class VfxProgram
         IRenderResourceBindingContext? resourceContext = null, VfxCompileOptions? options = null)
     {
         ValidateForCompilation(graph);
+        CpuParticleSchema.ValidateContext(graph);
+        if (CpuParticleCompilation.Contains(graph))
+        {
+            throw new InvalidDataException("CPU Particle requires an effect package; export .lfxb with a matching updated SDK.");
+        }
         if (Flatten(graph).Any(node => GameIoSchema.IsInstanceNode(node.Kind)))
-            throw new InvalidDataException("Instance Game I/O requires a Spawnable Group package; export .lfxp.");
+        {
+            throw new InvalidDataException("Instance Game I/O requires an effect package; export with EffectBinary to .lfxb.");
+        }
         if (Flatten(graph).Any(node => node.SignalKeys?.Any(key => key.Mode == SignalTimelineMode.Runtime) == true))
-            throw new InvalidDataException("Runtime Signal timeline keys require a Spawnable Group package; export .lfxp.");
+        {
+            throw new InvalidDataException("Runtime Signal timeline keys require an effect package; export with EffectBinary to .lfxb.");
+        }
         var starts = graph.Nodes.Where(node => node.Kind.Value == "OnStart").ToArray();
         if (starts.Length == 1 && !graph.Connections.Any(edge => edge.SourceNodeId == starts[0].Id))
             graph = graph with { Nodes = graph.Nodes.Where(node => node.Id != starts[0].Id).ToArray() };
@@ -21,7 +30,7 @@ public sealed partial class VfxProgram
             throw new InvalidDataException("Compile Spawnable Groups with SpawnableGroupPackage so templates are not discarded.");
         if (RenderProgramBindings.HasGpuDrawMatrix(graph))
         {
-            throw new InvalidDataException("A GPU Draw Matrix requires a Spawnable Group package; export .lfxp.");
+            throw new InvalidDataException("A GPU Draw Matrix requires an effect package; export with EffectBinary to .lfxb.");
         }
         if (SkeletalPoseSchema.ContainsSource(graph))
             throw new NotSupportedException(
@@ -43,6 +52,7 @@ public sealed partial class VfxProgram
         IRenderResourceBindingContext? resourceContext = null, VfxCompileOptions? options = null)
     {
         ValidateForCompilation(graph);
+        graph = CpuParticleCompilation.LowerEmitters(graph);
         // Strip terminal observers before lowering; never run reachability pruning.
         if (options?.IncludePreviewDebugDraw != true) graph = PreviewDebugDraw.Strip(graph);
         graph = GroupExposedItems.Materialize(graph);
@@ -82,6 +92,7 @@ public sealed partial class VfxProgram
         var nodes = Flatten(graph)
             .Where(node => node.Kind != GraphNodeKind.Comment && node.Kind != GraphNodeKind.GraphGroup &&
                 !GpuParticleEditorService.IsGpu(node.Kind) &&
+                !FlexiblePlaneDrawSchema.IsMetadata(node.Kind) &&
                 !RenderProgramBindings.IsRenderNode(node.Kind))
             .ToArray();
         if (nodes.Length > MaxInstructions) throw new InvalidDataException("Too many runtime nodes.");

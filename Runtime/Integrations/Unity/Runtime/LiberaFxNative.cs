@@ -77,6 +77,44 @@ namespace LiberaFx.Unity
         [FieldOffset(32)] public float A;
     }
 
+    [StructLayout(LayoutKind.Explicit, Pack = 8, Size = 80)]
+    internal struct NativeCpuParticleSnapshot
+    {
+        [FieldOffset(0)] public ulong Id;
+        [FieldOffset(8)] public double PositionX;
+        [FieldOffset(16)] public double PositionY;
+        [FieldOffset(24)] public double PositionZ;
+        [FieldOffset(32)] public double ColorR;
+        [FieldOffset(40)] public double ColorG;
+        [FieldOffset(48)] public double ColorB;
+        [FieldOffset(56)] public double ColorA;
+        [FieldOffset(64)] public double SizeX;
+        [FieldOffset(72)] public double SizeY;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Pack = 8, Size = 88)]
+    public unsafe struct CpuParticleEvent
+    {
+        [FieldOffset(0)] private fixed byte systemId[16];
+        [FieldOffset(16)] private fixed byte nodeId[16];
+        [FieldOffset(32)] public ulong ParticleId;
+        [FieldOffset(40)] public double Time;
+        [FieldOffset(48)] public double X;
+        [FieldOffset(56)] public double Y;
+        [FieldOffset(64)] public double Z;
+        [FieldOffset(72)] public double W;
+        [FieldOffset(80)] public uint Kind;
+        [FieldOffset(84)] public uint Width;
+
+        public Guid SystemId { get { fixed (byte* id = systemId) return ReadGuid(id); } }
+        public Guid NodeId { get { fixed (byte* id = nodeId) return ReadGuid(id); } }
+
+        private static Guid ReadGuid(byte* id) => new Guid(
+            id[0] << 24 | id[1] << 16 | id[2] << 8 | id[3],
+            unchecked((short)(id[4] << 8 | id[5])), unchecked((short)(id[6] << 8 | id[7])),
+            id[8], id[9], id[10], id[11], id[12], id[13], id[14], id[15]);
+    }
+
     public sealed class SpawnableHostEvent
     {
         public uint Kind { get; }
@@ -162,6 +200,18 @@ namespace LiberaFx.Unity
                 Marshal.OffsetOf<NativeLifetimeSample>(nameof(NativeLifetimeSample.Infinite)).ToInt32() != 28 ||
                 Marshal.SizeOf<AtlasFrame>() != 20 ||
                 Marshal.SizeOf<SpriteVertex>() != 36 ||
+                Marshal.SizeOf<CpuParticleEvent>() != 88 ||
+                Marshal.SizeOf<NativeCpuParticleSnapshot>() != 80 ||
+                Marshal.OffsetOf<NativeCpuParticleSnapshot>(nameof(NativeCpuParticleSnapshot.Id)).ToInt32() != 0 ||
+                Marshal.OffsetOf<NativeCpuParticleSnapshot>(nameof(NativeCpuParticleSnapshot.PositionX)).ToInt32() != 8 ||
+                Marshal.OffsetOf<NativeCpuParticleSnapshot>(nameof(NativeCpuParticleSnapshot.PositionY)).ToInt32() != 16 ||
+                Marshal.OffsetOf<NativeCpuParticleSnapshot>(nameof(NativeCpuParticleSnapshot.PositionZ)).ToInt32() != 24 ||
+                Marshal.OffsetOf<NativeCpuParticleSnapshot>(nameof(NativeCpuParticleSnapshot.ColorR)).ToInt32() != 32 ||
+                Marshal.OffsetOf<NativeCpuParticleSnapshot>(nameof(NativeCpuParticleSnapshot.ColorG)).ToInt32() != 40 ||
+                Marshal.OffsetOf<NativeCpuParticleSnapshot>(nameof(NativeCpuParticleSnapshot.ColorB)).ToInt32() != 48 ||
+                Marshal.OffsetOf<NativeCpuParticleSnapshot>(nameof(NativeCpuParticleSnapshot.ColorA)).ToInt32() != 56 ||
+                Marshal.OffsetOf<NativeCpuParticleSnapshot>(nameof(NativeCpuParticleSnapshot.SizeX)).ToInt32() != 64 ||
+                Marshal.OffsetOf<NativeCpuParticleSnapshot>(nameof(NativeCpuParticleSnapshot.SizeY)).ToInt32() != 72 ||
                 Marshal.OffsetOf<NativeValue>(nameof(NativeValue.X)).ToInt32() != 0 ||
                 Marshal.OffsetOf<NativeValue>(nameof(NativeValue.Y)).ToInt32() != 8 ||
                 Marshal.OffsetOf<NativeValue>(nameof(NativeValue.Z)).ToInt32() != 16 ||
@@ -332,6 +382,15 @@ namespace LiberaFx.Unity
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_root_value(
             ulong host, byte* nodeId, out NativeValue value);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_cpu_particle_count(
+            ulong host, byte* systemId, out uint count);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_cpu_particle_at(
+            ulong host, byte* systemId, uint index, out NativeCpuParticleSnapshot particle);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_cpu_particle_pop_event(
+            ulong host, out CpuParticleEvent particleEvent, out uint hasEvent);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_child_value(
             ulong host, byte* containerId, ulong instance, byte* nodeId, out NativeValue value);
@@ -601,6 +660,31 @@ namespace LiberaFx.Unity
                 {
                     fixed (byte* pointer = id)
                         return Native.libra_spawnable_host_root_value(Alive, pointer, out value);
+                }
+
+                internal NativeResult CpuParticleCount(byte[] systemId, out uint count)
+                {
+                    count = 0;
+                    if (systemId == null || systemId.Length != 16) return NativeResult.InvalidArgument;
+                    fixed (byte* pointer = systemId)
+                        return Native.libra_spawnable_host_cpu_particle_count(Alive, pointer, out count);
+                }
+
+                internal NativeResult CpuParticleAt(byte[] systemId, uint index,
+                    out NativeCpuParticleSnapshot particle)
+                {
+                    particle = default;
+                    if (systemId == null || systemId.Length != 16) return NativeResult.InvalidArgument;
+                    fixed (byte* pointer = systemId)
+                        return Native.libra_spawnable_host_cpu_particle_at(Alive, pointer, index, out particle);
+                }
+
+                public NativeResult PopCpuParticleEvent(out CpuParticleEvent particleEvent, out bool hasEvent)
+                {
+                    var result = Native.libra_spawnable_host_cpu_particle_pop_event(
+                        Alive, out particleEvent, out var available);
+                    hasEvent = result == NativeResult.Ok && available != 0;
+                    return result;
                 }
 
                 public NativeResult ReadChildValue(byte[] containerId, ulong instance, string nodeGuid,

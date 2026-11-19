@@ -5,6 +5,8 @@
 #include "EditorReimportHandler.h"
 #include "LibraSpawnableFactory.generated.h"
 
+class ULibraSpawnableAsset;
+
 UCLASS()
 class ULibraSpawnableFactory : public UFactory, public FReimportHandler
 {
@@ -19,4 +21,8 @@ public:
     virtual bool CanReimport(UObject* object, TArray<FString>& outFilenames) override;
     virtual void SetReimportPaths(UObject* object, const TArray<FString>& newPaths) override;
     virtual EReimportResult::Type Reimport(UObject* object) override;
+
+private:
+    static bool ReadPackage(const FString& filename, TArray<uint8>& bytes);
+    static void UpdateImportData(ULibraSpawnableAsset& asset, const FString& filename);
 };

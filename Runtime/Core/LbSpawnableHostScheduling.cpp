@@ -214,7 +214,12 @@ auto SpawnableHost::Impl::notifyOwnerDestroy(double at) -> Result {
 
 auto SpawnableHost::Impl::beginAutoEnd(double at) -> Result {
   if (rootEnding || rootFinished || !packageData.autoDestroyWhenIdle ||
-      templates.empty()) {
+      (templates.empty() && packageData.cpuPrograms.empty())) {
+    return Result::Ok;
+  }
+  if (cpuParticles && (cpuParticles->canEmit() || cpuParticles->activeCount() != 0 ||
+      cpuParticles->hasPendingRoutes()))
+  {
     return Result::Ok;
   }
   for (const auto &state : templates) {
@@ -244,7 +249,7 @@ auto SpawnableHost::Impl::beginAutoEnd(double at) -> Result {
 
 auto SpawnableHost::Impl::finishIfQuiescent() -> Result {
   if (!rootEnding || rootFinished || activeCount() != 0 ||
-      !scheduledRoutes.empty()) {
+      !scheduledRoutes.empty() || (cpuParticles && cpuParticles->hasPendingRoutes())) {
     return Result::Ok;
   }
   auto due = double{};
@@ -372,6 +377,10 @@ auto SpawnableHost::Impl::forceTerminate(const SpawnableScope &scope)
     host.eventHead = host.eventCount = 0;
     host.discardChildGameEvents(scope);
     host.pendingPump = false;
+    if (host.cpuParticles)
+    {
+      host.cpuParticles->clear();
+    }
     host.rootStopped = host.rootFinished = host.rootForced = true;
     return host.appendEvent(SpawnableHostEventKind::ForceTerminated, nullptr, 0,
                             at, 0);

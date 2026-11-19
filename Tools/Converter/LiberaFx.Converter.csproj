@@ -20,11 +20,15 @@
     <Compile Include="..\..\Models\Graph\SequenceSchema.cs" Link="Models\SequenceSchema.cs" />
     <Compile Include="..\..\Models\Graph\GroupExposedItem.cs" Link="Models\GroupExposedItem.cs" />
     <Compile Include="..\..\Models\Graph\GraphNodeDefinition.cs" Link="Models\GraphNodeDefinition.cs" />
+    <Compile Include="..\..\Models\Graph\QuaternionRandomNodeCatalog.cs" Link="Models\QuaternionRandomNodeCatalog.cs" />
     <Compile Include="..\..\Models\Graph\GraphMatrixLowering.cs" Link="Models\GraphMatrixLowering.cs" />
     <Compile Include="..\..\Models\Graph\GraphPolymorphism.cs" Link="Models\GraphPolymorphism.cs" />
     <Compile Include="..\..\Models\Graph\GraphTypeDiagnostics.cs" Link="Models\GraphTypeDiagnostics.cs" />
     <Compile Include="..\..\Models\Graph\GraphConversionRegistry.cs" Link="Models\GraphConversionRegistry.cs" />
     <Compile Include="..\..\Models\Graph\SpawnableGroupSchema.cs" Link="Models\SpawnableGroupSchema.cs" />
+    <Compile Include="..\..\Models\Graph\CpuParticleSchema.cs" Link="Models\CpuParticleSchema.cs" />
+    <Compile Include="..\..\Models\Graph\CpuParticleNodeCatalog.cs" Link="Models\CpuParticleNodeCatalog.cs" />
+    <Compile Include="..\..\Services\Compilation\CpuParticleCompilation.cs" Link="Services\CpuParticleCompilation.cs" />
     <Compile Include="..\..\Models\Graph\GroupBoundarySchema.cs" Link="Models\GroupBoundarySchema.cs" />
     <Compile Include="..\..\Models\Graph\GroupBoundaryLowering.cs" Link="Models\GroupBoundaryLowering.cs" />
     <Compile Include="..\..\Models\Graph\RenderNodeSchema.cs" Link="Models\RenderNodeSchema.cs" />
@@ -42,8 +46,10 @@
     <Compile Include="..\..\Services\Compilation\VfxProgram*.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\..\Services\Compilation\SpawnableGroupPackage.cs" Link="Services\SpawnableGroupPackage.cs" />
     <Compile Include="..\..\Services\Compilation\SpawnableGroupPackageBinary.cs" Link="Services\SpawnableGroupPackageBinary.cs" />
+    <Compile Include="..\..\Services\Compilation\EffectBinary.cs" Link="Services\EffectBinary.cs" />
     <Compile Include="..\..\Services\Compilation\SignalTimelineLowering.cs" Link="Services\SignalTimelineLowering.cs" />
     <Compile Include="..\..\Services\Compilation\RenderProgramBindings.cs" Link="Services\RenderProgramBindings.cs" />
+    <Compile Include="..\..\Services\Compilation\FlexiblePlaneDrawSchema.cs" Link="Services\FlexiblePlaneDrawSchema.cs" />
     <Compile Include="..\..\Services\Compilation\PreviewDebugDraw.cs" Link="Services\PreviewDebugDraw.cs" />
     <Compile Include="..\..\Services\SpriteAnimationData.cs" Link="Services\SpriteAnimationData.cs" />
     <Compile Include="..\..\Services\SpriteCompositionData.cs" Link="Services\SpriteCompositionData.cs" />

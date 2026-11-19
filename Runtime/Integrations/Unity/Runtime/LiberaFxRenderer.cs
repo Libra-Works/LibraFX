@@ -11,6 +11,8 @@ namespace LiberaFx.Unity
     public sealed class LiberaFxRenderer : MonoBehaviour
     {
         [SerializeField] private TextAsset compiledProgram;
+        [SerializeField, Tooltip("Legacy raw LFXB imported directly. Leave Compiled Program empty when using this asset.")]
+        private LiberaFxProgramAsset legacyProgram;
         [SerializeField] private Mesh modelMesh;
         [SerializeField] private Material material;
         [SerializeField] private Texture spriteTexture;
@@ -62,6 +64,7 @@ namespace LiberaFx.Unity
         public void SetupCubeSample(Mesh cubeMesh, Material sharedMaterial)
         {
             compiledProgram = null;
+            legacyProgram = null;
             modelMesh = cubeMesh;
             material = sharedMaterial;
             sprite = false;
@@ -70,6 +73,7 @@ namespace LiberaFx.Unity
         public void SetupAtlasSample(Texture atlas, Material sharedMaterial, int columns, int rows, bool deform = false)
         {
             compiledProgram = null;
+            legacyProgram = null;
             spriteTexture = atlas;
             material = sharedMaterial;
             atlasColumns = columns;
@@ -112,8 +116,13 @@ namespace LiberaFx.Unity
                     throw new InvalidOperationException("Assign a shared material and a model mesh (or choose sprite).");
                 if (sprite && (!spriteTexture || atlasColumns <= 0 || atlasRows <= 0))
                     throw new InvalidOperationException("Assign a sprite atlas and a positive atlas grid.");
-                var bytes = compiledProgram ? compiledProgram.bytes : LiberaFxSampleProgram.Create();
-                sample = !compiledProgram;
+                if (compiledProgram && legacyProgram)
+                {
+                    throw new InvalidOperationException("Assign either Compiled Program or Legacy Program, not both.");
+                }
+                var bytes = legacyProgram ? legacyProgram.ProgramBytes :
+                    compiledProgram ? compiledProgram.bytes : LiberaFxSampleProgram.Create();
+                sample = !compiledProgram && !legacyProgram;
                 using (var program = new NativeProgram(bytes))
                     instance = program.CreateInstance(); // Native instance retains immutable program.
                 bindings = new uint[dynamicQuad && sprite ? 4 : 3];

@@ -6,7 +6,18 @@ title: Engine Integration
 
 # Engine Integration
 
-Download the matching SDK from [2026.11.8 Preview](https://github.com/Libra-Works/LibraFX/releases/tag/v2026.11.8).
+See [engine and file terms](glossary.md#engine) for SDK, runtime, editable projects, and compiled effects.
+
+Download the matching SDK from the latest [Preview release](https://github.com/Libra-Works/LibraFX/releases).
+The unified `.lfxb` package workflow below requires the updated editor,
+converter, and SDK from the same source revision; it is not included in that
+published release. Older `.lfxp` packages remain supported by updated SDKs.
+
+Existing raw-program assets do not automatically become package assets.
+When replacing a legacy raw `.lfxb` with a new package export, import it as a new
+asset and explicitly reassign its component references. Renaming a file or
+reimporting it is not an asset-type migration. Unity also needs the matching
+native plugin installed for import validation.
 Close the engine before installing. Extract the archive and copy only the
 top-level install folder shown below. Each folder includes `VERSION.json`.
 
@@ -24,29 +35,29 @@ do not delete through a development junction.
 
 ## Play a first effect
 
-Start with a CPU-only Spawnable package (`.lfxp`) without draw or GPU nodes.
+Start with a CPU-only effect package (`.lfxb`) without draw or GPU nodes.
 This lets you verify loading and named Game I/O before setting up mesh or material
 bindings. Save your `.lfxproj`, then compile it using the bundled `LiberaFxConverter`
 from the `Converter` directory. For example, on Windows:
 
 ```powershell
-.\LiberaFxConverter.exe convert C:\Effects\input.lfxproj C:\Effects\effect.lfxp
+.\LiberaFxConverter.exe convert C:\Effects\input.lfxproj C:\Effects\effect.lfxb
 ```
 
-The editor's **Export VFX...** command is for `.lfxb`, not `.lfxp`. Give the graph
+The editor's **Export VFX...** command creates the same `.lfxb` package. Give the graph
 an observable output, such as a named Output Signal, so that a successful load
 can be distinguished from an effect that never runs.
 
 ### Unity
 
-Put the `.lfxp` under `Assets/`. Assign the imported asset to a
+Put the `.lfxb` under `Assets/`. Assign the imported asset to a
 `LiberaFxSpawnableComponent`; enable **Play On Enable** and enter Play Mode,
 or call `Play()` explicitly. Inspect `LastError` on failure and use
 `GameIoEventReceived` to observe authored outputs.
 
 ### Unreal Engine
 
-Build the project's Editor target after copying the plugin. Import the `.lfxp`
+Build the project's Editor target after copying the plugin. Import the `.lfxb`
 in the Content Browser and drag the imported asset into the level. This creates
 an actor with a **Libra Effect** component. Enable **Auto Play** and start
 Play In Editor, or call `Play()` explicitly. Use `OnGameIoEvent` to observe
@@ -54,11 +65,11 @@ authored outputs.
 
 ### Godot
 
-Place the `.lfxp` under `res://`, add a `LibraEffectPlayer`, and call
-`play_package(FileAccess.get_file_as_bytes("res://effect.lfxp"))` after the
+Place the `.lfxb` under `res://`, add a `LibraEffectPlayer`, and call
+`play_package(FileAccess.get_file_as_bytes("res://effect.lfxb"))` after the
 player enters the scene tree. A result of `0` means the package loaded; wait
 for the first process tick before firing a game input signal. Observe authored
-outputs via `game_io_event`. Include `.lfxp` files in the export preset's
+outputs via `game_io_event`. Include `.lfxb` files in the export preset's
 non-resource filter if you ship them with the game.
 
 ## Extend an effect
@@ -71,10 +82,10 @@ non-resource filter if you ship them with the game.
 - **Project C++ nodes:** Register the descriptor matching the node JSON's UUID,
   ABI, and ports. Unreal registers descriptors at module startup. Unity and
   Godot build project descriptors into their native bridge. This supports root
-  and child programs of `.lfxp`. Use a native node when the graph needs the
+  and child programs of the `.lfxb` package. Use a native node when the graph needs the
   result within the current evaluation.
 
-See the [SDK distribution reference](https://github.com/Libra-Works/LibraFX/blob/v2026.11.8/docs/sdk-distribution.md#project-defined-nodes-in-spawnable-packages)
+See the [SDK distribution reference](https://github.com/Libra-Works/LibraFX/blob/main/docs/sdk-distribution.md#project-defined-nodes-in-spawnable-packages)
 for registration steps, working code examples, and the supported verification
 matrix. The Preview's Windows bridge binaries do not certify other target
 platforms, render backends, or console SDKs.

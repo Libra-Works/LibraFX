@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1, "typeId": "9bd7a620-c8e1-4f35-a962-000000000009",
+  "namespace": "LiberaFx", "kind": "QuaternionAxisAngle", "name": "Quaternion Axis Angle",
+  "displayNameKey": "QuaternionRandom.Node.QuaternionAxisAngle", "descriptionKey": "QuaternionRandom.Help.QuaternionAxisAngle",
+  "group": "Quaternion", "groupNameKey": "QuaternionRandom.Group.Quaternion", "portType": "FloatX4", "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [{ "id": "axis", "name": "Axis", "portType": "FloatX3" }, { "id": "angle", "name": "Angle (degrees)", "portType": "Float" }],
+  "outputPorts": [{ "id": "value", "name": "Quaternion XYZW" }],
+  "parameters": [{ "id": "axis", "name": "Axis", "displayNameKey": "QuaternionRandom.Axis", "type": "vector3", "defaultValue": [0, 0, 1] }, { "id": "angle", "name": "Angle (degrees)", "displayNameKey": "QuaternionRandom.Angle", "type": "float", "defaultValue": 0 }]
+}

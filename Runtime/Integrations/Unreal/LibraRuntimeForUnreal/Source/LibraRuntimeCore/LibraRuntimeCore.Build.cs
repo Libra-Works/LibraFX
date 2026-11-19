@@ -18,6 +18,7 @@ public class LibraRuntimeCore : ModuleRules
         CppStandard = CppStandardVersion.Cpp20;
         PrivateDependencyModuleNames.Add("Core");
         PublicDefinitions.Add("LIBRA_RUNTIME_CORE_API=LIBRARUNTIMECORE_API");
+        PublicDefinitions.Add("LIBRA_FLEXIBLE_API=LIBRARUNTIMECORE_API");
 
         var pluginRoot = Path.GetFullPath(Path.Combine(ModuleDirectory, "..", ".."));
         var coreRoot = Path.Combine(pluginRoot, "Source", "ThirdParty", "LibraRuntimeCore");

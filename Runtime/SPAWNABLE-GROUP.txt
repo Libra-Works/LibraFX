@@ -155,7 +155,8 @@ defaults; it does not navigate away or select an out-of-scope node.
 `SpawnableGroupPackage.Compile` emits the parent LFXB, separate template LFXBs,
 capture maps, per-template render configuration, GPU container snapshots and
 executable GPU programs.
-MCP `libera_graph_compile_spawnable` exposes JSON package format version 11.
+MCP `libera_graph_compile_spawnable` exposes JSON package version 11 without
+CPU particles, or version 12 with the numeric CPU-program payload.
 Versions 2 through 8 introduced lifecycle routing, root and Spawnable Delay,
 per-pin CaptureAtSpawn/Live bindings, extended inputs, and local Signal I/O.
 Version 9 adds the root `AutoDestroyWhenIdle` policy. Older hosts must reject
@@ -345,17 +346,17 @@ libra_effect_start_captured obtains a finite scalar duration from the initial
 evaluation, before publishing game properties or invoking OnStart. Later input
 changes do not change the captured duration; invalid values fail before OnStart.
 
-Portable engine asset container (LFXP v3)
+Portable engine asset container (LFXP v3/v4)
 -----------------------------------------
-JSON package v11 remains the compiler/editor interchange format. Engine assets
+JSON package v11/v12 is the compiler/editor interchange format. Engine assets
 use a separate LFXP container so LFXB programs and render configurations are
 stored as raw bytes instead of base64. The fixed 24-byte header is:
 
 - bytes 0..3: ASCII `LFXP`
-- bytes 4..5: container version (little-endian u16, currently 3)
+- bytes 4..5: container version (little-endian u16, 3 without CPU particles, 4 with)
 - bytes 6..7: header size (little-endian u16, 24)
 - bytes 8..15: total container length (little-endian u64)
-- bytes 16..19: Spawnable package version (little-endian u32, currently 11)
+- bytes 16..19: Spawnable package version (little-endian u32, 11 or 12 respectively)
 - bytes 20..23: reserved, zero
 
 The payload is sequential and little-endian. It contains root policy flags,
@@ -386,15 +387,35 @@ configuration, kind 1 for the legacy GPU container snapshots and kind 2 for
 executable GPU programs. Values 0/1 retain their existing meaning. Payload
 copies are owned bytes; GPU program JSON stays opaque to the C++ Core.
 
-Readers accept exactly (container 1, package 9), (container 2, package 10), and
-(container 3, package 11). Legacy v1 packages have no root render/GPU payloads;
+LFXP v4/package 12 appends one length-prefixed numeric CPU-program blob after
+the executable GPU blobs. All preceding fields retain the v3 layout. CPU
+payload v1 is little-endian and contains:
+- u32 version (1), u32 system count (at most 1024).
+- Per system: 16-byte system GUID, u32 capacity, u32 seed, u32 queue capacity,
+  f64 emission rate, u32 initial burst, 16-byte cumulative-emission source GUID
+  (zero when absent), and u32 source component.
+- Spawn stage then Update stage: 16-byte entry GUID (zero when absent),
+  length-prefixed LFXB program, u32 boundary count (at most 256), then boundaries.
+- Per boundary: u8 kind (0/1 input/output Property, 2/3 input/output Signal),
+  u32 width, 16-byte stage-node GUID, 16-byte outer binding GUID (zero when
+  unconnected), and u32 component.
+The portable loader validates lengths, types, identities, numeric bounds,
+stage programs and trailing bytes. Native CPU snapshots (80 bytes) and scoped
+events (88 bytes) are host ABI structures, not structs to cast over wire bytes.
+See docs/site/cpu-particles.md and its Japanese counterpart for authoring,
+queued Property/Signal delivery, ownership, batching and current restrictions.
+
+Readers accept exactly (container 1, package 9), (container 2, package 10),
+(container 3, package 11), and (container 4, package 12).
+Legacy v1 packages have no root render/GPU payloads;
 v2 packages preserve their root render configuration and GPU snapshots but have
 no executable GPU payloads. Missing executable payloads do not affect raw
 CPU-only legacy packages; adapters must reject legacy authored GPU snapshots
 when their matching executable payload is absent. Decoded .NET objects
-normalize to the current in-memory version; serializing them emits v3 and
+normalize to the current in-memory version; serializing non-CPU packages emits v3 and
 versioned empty executable payloads for scopes absent from older files, without
-inventing compiled GPU programs. Older readers reject v2/v3 rather than
+inventing compiled GPU programs. CPU packages emit v4. Older readers reject
+unknown versions rather than
 silently discarding root metadata. Rebuild engine modules against matching
 runtime headers: the C++ package layout has changed.
 Root render/GPU collection and executable-program collection include ordinary
@@ -434,3 +455,11 @@ port-ID string, template-node GUID and proxy-node GUID. Optional lists encode
 presence u8 then count/records when present. Counts are 0..100000, blobs are at
 most 256 MiB and the whole container is at most 512 MiB. Booleans and presence
 Flags are exactly 0 or 1.
+
+Distribution convention (unified effect binary)
+----------------------------------------------
+New editor and converter outputs use .lfxb with this same LFXP package envelope,
+whether or not child templates exist. .lfxp is a legacy import alias, not a new
+export choice. Embedded LFXB instruction blobs keep their existing versions and
+validation. Old raw .lfxb programs remain legacy inputs. Update the engine
+importers together with the exporter; no on-disk signature/version was changed.

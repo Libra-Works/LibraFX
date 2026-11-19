@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1, "typeId": "74305ac1-91b2-4c33-8d44-000000000036",
+  "namespace": "LiberaFx", "kind": "InverseLerp", "name": "Inverse Lerp", "displayNameKey": "ScalarMath.Node.InverseLerp", "descriptionKey": "ScalarMath.Help.InverseLerp",
+  "group": "Math", "portType": "Float", "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [{ "id": "a", "name": "Value" }, { "id": "b", "name": "Start" }, { "id": "c", "name": "End" }],
+  "outputPorts": [{ "id": "value", "name": "Value" }],
+  "parameters": [{ "id": "a", "name": "Value", "displayNameKey": "ScalarMath.Value", "type": "float", "defaultValue": 0.0 }, { "id": "b", "name": "Start", "displayNameKey": "ScalarMath.Start", "type": "float", "defaultValue": 0.0 }, { "id": "c", "name": "End", "displayNameKey": "ScalarMath.End", "type": "float", "defaultValue": 1.0 }]
+}

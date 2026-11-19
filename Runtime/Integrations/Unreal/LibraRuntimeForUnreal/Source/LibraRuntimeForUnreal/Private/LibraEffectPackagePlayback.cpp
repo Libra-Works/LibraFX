@@ -110,6 +110,18 @@ void ULibraEffectComponent::ReleasePackagePlayback()
     SetComponentTickEnabled(false);
 }
 
+ELibraRuntimeResult ULibraEffectComponent::PopCpuParticleEvent(
+    FLibraCpuParticleEvent& particleEvent, bool& hasEvent)
+{
+    if (PackagePlayback)
+    {
+        return PackagePlayback->PopCpuParticleEvent(particleEvent, hasEvent);
+    }
+    particleEvent = {};
+    hasEvent = false;
+    return ELibraRuntimeResult::NotReady;
+}
+
 void ULibraEffectComponent::ForwardHostEvent(const FLibraSpawnableHostEvent& event)
 {
     SyncPackageState();

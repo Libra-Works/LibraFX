@@ -1,11 +1,13 @@
 #pragma once
 
 #include "liberafx/LbVfxRuntime.h"
+#include "QuaternionRandom/LbQuaternionRandomNodes.h"
 #include <array>
 
 namespace liberafx::builtin_node_detail
 {
 constexpr auto arithmeticNodeCount = 47;
+constexpr auto scalarNodeCount = 10;
 constexpr auto matrixNodeCount = 13;
 constexpr auto orderedMatrixNodeCount = 4;
 constexpr auto signalNodeCount = 2;
@@ -24,7 +26,8 @@ using ForceNodeDescriptors = std::array<CustomNodeDescriptor, forceNodeCount>;
 using PhaseNodeDescriptors = std::array<CustomNodeDescriptor, phaseNodeCount>;
 constexpr auto builtinNodeCount = arithmeticNodeCount + matrixNodeCount + orderedMatrixNodeCount + signalNodeCount +
                                   lifetimeNodeCount + hostTimeNodeCount + delayNodeCount + forceNodeCount +
-                                  phaseNodeCount;
+                                  phaseNodeCount + scalarNodeCount +
+                                  quaternion_random_node_detail::quaternionRandomNodeCount;
 
 auto arithmeticNodeDescriptors() noexcept -> const ArithmeticNodeDescriptors&;
 auto matrixNodeDescriptors() noexcept -> const MatrixNodeDescriptors&;

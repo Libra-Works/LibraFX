@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "typeId": "864fea49-8719-4c36-a7d1-1f3000000001",
+  "namespace": "LiberaFx",
+  "kind": "FlexiblePlaneDraw",
+  "name": "Flexible Plane Draw",
+  "displayNameKey": "FlexiblePlane.Draw",
+  "descriptionKey": "FlexiblePlane.DrawDescription",
+  "groupNameKey": "Assets.Rendering",
+  "group": "Rendering",
+  "portType": "RenderInstance",
+  "portCategory": "Parameter",
+  "inputPorts": [
+    { "id": "points", "name": "Points", "displayNameKey": "FlexiblePlane.Points", "portType": "FlexiblePlanePoints" },
+    { "id": "width", "name": "Width multiplier", "displayNameKey": "FlexiblePlane.WidthMultiplier", "portType": "Float" },
+    { "id": "tint", "name": "Tint", "displayNameKey": "FlexiblePlane.Tint", "portType": "FloatX4" }
+  ],
+  "parameters": [
+    { "id": "assetPath", "name": "Texture", "displayNameKey": "FlexiblePlane.Texture", "type": "string", "defaultValue": "" },
+    { "id": "width", "name": "Width multiplier", "displayNameKey": "FlexiblePlane.WidthMultiplier", "type": "float", "defaultValue": 1 },
+    { "id": "tint", "name": "Tint", "displayNameKey": "FlexiblePlane.Tint", "type": "vector4", "defaultValue": [1, 1, 1, 1] },
+    { "id": "cameraFacing", "name": "Camera facing", "displayNameKey": "FlexiblePlane.CameraFacing", "type": "bool", "defaultValue": true },
+    { "id": "up", "name": "Fixed up", "displayNameKey": "FlexiblePlane.Up", "type": "vector3", "defaultValue": [0, 1, 0] },
+    { "id": "repeat", "name": "Repeat UV", "displayNameKey": "FlexiblePlane.Repeat", "type": "bool", "defaultValue": false },
+    { "id": "repeatLength", "name": "Repeat length", "displayNameKey": "FlexiblePlane.RepeatLength", "type": "float", "defaultValue": 1 }
+  ]
+}

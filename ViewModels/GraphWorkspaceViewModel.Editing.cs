@@ -144,8 +144,10 @@ public sealed partial class GraphWorkspaceViewModel
             throw new ArgumentException("The value is invalid for this parameter.", nameof(value));
         }
 
-        if (RenderNodeSchema.IsRenderNode(node.Definition) && id == "assetPath" &&
+        if ((RenderNodeSchema.IsRenderNode(node.Definition) || RenderNodeSchema.IsTextureOnlyDraw(node.Definition)) &&
+            id == "assetPath" &&
             value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 0 } assetPath &&
+            !(node.Definition.TypeName == "CpuParticleSpriteDraw" && assetPath == "builtin:white") &&
             !RenderNodeSchema.IsSafeAssetPath(assetPath))
         {
             throw new ArgumentException("The engine asset path is invalid.", nameof(value));
@@ -195,6 +197,12 @@ public sealed partial class GraphWorkspaceViewModel
     public void AssignRenderAsset(GraphNodeViewModel node, EngineAsset asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
+        if (Nodes.Contains(node) && RenderNodeSchema.IsTextureOnlyDraw(node.Definition))
+        {
+            RenderNodeAuthoring.ValidateAssetClass(asset, "texture");
+            SetParameter(node, "assetPath", JsonSerializer.SerializeToElement(asset.Path));
+            return;
+        }
         if (!Nodes.Contains(node) || !RenderNodeSchema.IsRenderNode(node.Definition))
         {
             throw new InvalidOperationException("Select a model or sprite render node.");
@@ -375,7 +383,8 @@ public sealed partial class GraphWorkspaceViewModel
     private GraphNodeViewModel CreateNodeCore(GraphNodeKind kind, double? x, double? y, bool isPolymorphic,
         IReadOnlyList<NodeParameterSnapshot>? parameters = null)
     {
-        if ((kind == GraphNodeKind.GraphGroup || kind == GraphNodeKind.SpawnableGroup) && _graphPath.Count >= MaxGraphDepth)
+        if ((kind == GraphNodeKind.GraphGroup || kind == GraphNodeKind.SpawnableGroup ||
+             CpuParticleSchema.HasChild(kind)) && _graphPath.Count >= MaxGraphDepth)
         {
             throw new InvalidOperationException("The graph hierarchy has reached its maximum depth.");
         }

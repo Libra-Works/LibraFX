@@ -16,10 +16,17 @@ public static class ResourceAssignment
     {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentException.ThrowIfNullOrWhiteSpace(parameterId);
-        if (!RenderNodeSchema.IsRenderNode(node.Definition)) return null;
+        if (!RenderNodeSchema.IsRenderNode(node.Definition) && !RenderNodeSchema.IsTextureOnlyDraw(node.Definition))
+        {
+            return null;
+        }
         if (parameterId == "assetPath")
             return new(node.Id, ResourceTargetKind.RenderAsset, parameterId,
                 LocalizationService.Shared.Get("Resources.RenderTarget", node.Name));
+        if (RenderNodeSchema.IsTextureOnlyDraw(node.Definition))
+        {
+            return null;
+        }
         if (RenderNodeSchema.TryGetMaterialSlot(parameterId, out var slot) &&
             RenderNodeSchema.ReadMaterials(node.Definition, node.Parameters).Any(material => material.Slot == slot))
             return new(node.Id, ResourceTargetKind.RenderMaterial, parameterId,
@@ -50,11 +57,18 @@ public static class ResourceAssignment
                 .Where(resource => resource.Kind is ResourceKind.Texture2D or ResourceKind.FlowMap2D)
                 .Select(resource => new ResourceAssignmentTarget(node.Id, ResourceTargetKind.GpuTexture,
                     resource.Id, LocalizationService.Shared.Get("Resources.GpuTarget", resource.Id))));
-        if (!RenderNodeSchema.IsRenderNode(node.Definition)) return targets;
+        if (!RenderNodeSchema.IsRenderNode(node.Definition) && !RenderNodeSchema.IsTextureOnlyDraw(node.Definition))
+        {
+            return targets;
+        }
         var expected = node.Definition.TypeName == "ModelDraw" ? "model" : "texture";
         if (asset.AssetClass == expected)
             targets.Add(new(node.Id, ResourceTargetKind.RenderAsset, "assetPath",
                 LocalizationService.Shared.Get("Resources.RenderTarget", node.Name)));
+        if (RenderNodeSchema.IsTextureOnlyDraw(node.Definition))
+        {
+            return targets;
+        }
         if (asset.AssetClass == "material")
             targets.AddRange(RenderNodeSchema.ReadMaterials(node.Definition, node.Parameters).Select(material =>
                 new ResourceAssignmentTarget(node.Id, ResourceTargetKind.RenderMaterial,

@@ -11,6 +11,12 @@ namespace LiberaFx.Unity
         private readonly ulong instanceId;
         private readonly double startTime;
         private readonly List<LiberaFxRenderNodeInstance> renderNodes = new List<LiberaFxRenderNodeInstance>();
+        private readonly List<LiberaFxFlexiblePlaneRenderer> flexiblePlanes =
+            new List<LiberaFxFlexiblePlaneRenderer>();
+        private readonly LiberaFxFlexiblePlaneHistoryScope flexibleHistory =
+            new LiberaFxFlexiblePlaneHistoryScope();
+        private readonly List<LiberaFxCpuParticleRenderInstance> cpuParticleRenderers =
+            new List<LiberaFxCpuParticleRenderInstance>();
         private readonly List<LiberaFxDebugDrawInstance> debugDraws = new List<LiberaFxDebugDrawInstance>();
         private readonly List<LibraGpuParticleRuntime> gpuPrograms = new List<LibraGpuParticleRuntime>();
         private readonly Dictionary<LibraGpuParticleRuntime, LiberaFxPreparedGpuProgram> gpuDrawTransforms =
@@ -35,7 +41,8 @@ namespace LiberaFx.Unity
             var scope = new LiberaFxRenderScope(isRoot, containerId, instanceId, startTime);
             try
             {
-                if (prepared.renderNodes.Length == 0 && prepared.gpuPrograms.Length == 0)
+                if (prepared.renderNodes.Length == 0 && prepared.cpuParticles.Length == 0 &&
+                    prepared.gpuPrograms.Length == 0)
                     return scope;
 
                 scope.scopeObject = new GameObject(isRoot
@@ -44,12 +51,29 @@ namespace LiberaFx.Unity
                 scope.scopeObject.transform.SetParent(owner, false);
                 scope.scopeObject.SetActive(false);
                 foreach (var node in prepared.renderNodes)
-                    if (node.debugDraw != null)
+                {
+                    if (node.flexiblePlane != null)
+                    {
+                        scope.flexiblePlanes.Add(new LiberaFxFlexiblePlaneRenderer(
+                            scope.scopeObject.transform, node.flexiblePlane, scope.flexibleHistory));
+                    }
+                    else if (node.debugDraw != null)
                     {
                         if (!suppressDebugDraw)
+                        {
                             scope.debugDraws.Add(LiberaFxDebugDrawInstance.Create(node, instanceId, scope.scopeObject.scene));
+                        }
                     }
-                    else scope.renderNodes.Add(LiberaFxRenderNodeInstance.Create(scope.scopeObject.transform, node));
+                    else
+                    {
+                        scope.renderNodes.Add(LiberaFxRenderNodeInstance.Create(scope.scopeObject.transform, node));
+                    }
+                }
+                foreach (var cpuParticle in prepared.cpuParticles)
+                {
+                    scope.cpuParticleRenderers.Add(
+                        LiberaFxCpuParticleRenderInstance.Create(scope.scopeObject.transform, cpuParticle));
+                }
                 foreach (var gpu in prepared.gpuPrograms)
                 {
                     var gpuObject = new GameObject("Libera FX GPU " + gpu.nodeId);
@@ -111,8 +135,17 @@ namespace LiberaFx.Unity
         private void Apply(NativeInstance.NativeSpawnableHostBase host, double effectTime)
         {
             var localTime = LocalTime(effectTime);
+            flexibleHistory.BeginUpdate();
+            foreach (var plane in flexiblePlanes)
+            {
+                plane.Update(host, rootScope, containerId, instanceId, localTime);
+            }
             foreach (var node in renderNodes)
                 node.Update(host, rootScope, containerId, instanceId, localTime);
+            foreach (var cpuParticleRenderer in cpuParticleRenderers)
+            {
+                cpuParticleRenderer.Update(host);
+            }
             foreach (var draw in debugDraws)
                 draw.Update(host, rootScope, containerId, instanceId);
             foreach (var gpu in gpuPrograms)
@@ -174,9 +207,20 @@ namespace LiberaFx.Unity
                 gpu.Dispose();
             }
             foreach (var node in renderNodes) node.Dispose();
+            foreach (var plane in flexiblePlanes)
+            {
+                plane.Dispose();
+            }
+            flexiblePlanes.Clear();
+            flexibleHistory.Reset();
+            foreach (var cpuParticleRenderer in cpuParticleRenderers)
+            {
+                cpuParticleRenderer.Dispose();
+            }
             foreach (var draw in debugDraws) draw.Dispose();
             debugDraws.Clear();
             renderNodes.Clear();
+            cpuParticleRenderers.Clear();
             gpuPrograms.Clear();
             gpuDrawTransforms.Clear();
             if (scopeObject) DestroyOwned(scopeObject);

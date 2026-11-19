@@ -6,13 +6,15 @@ title: はじめに
 
 # はじめに
 
+「ノード」「ピン」「Signal」が初めての方は、[グラフの用語](glossary.md#graphs)を参照してください。
+
 同梱の **Afterimage Gate** を開き、紫のリングと、その少し後に現れる水色の残像を
 作る二つのシグナルをたどります。グラフを見るだけならゲームエンジンは不要です。
 実際の描画を確認する場合は Unreal のプレビューを使います。
 
 ## エディターを導入する
 
-[2026.11.8 Preview](https://github.com/Libra-Works/LibraFX/releases/tag/v2026.11.8)
+[最新 Preview](https://github.com/Libra-Works/LibraFX/releases)
 から、使っている OS に合うファイルをダウンロードします。
 
 | プラットフォーム | 起動方法 |
@@ -40,7 +42,8 @@ LIBERA FX のタイムラインを 60 FPS、**End** を 144 に設定し、再�
 54〜63 フレーム付近で、紫のリングと水色の残像が同時に見えます。
 
 ライブプレビューでは Unreal 標準の球メッシュと専用のアンリットマテリアルを使います。
-書き出した `.lfxp` を単体で再生する場合は、明示的なアセット割り当てが必要です。
+書き出した `.lfxb` パッケージを単体で再生する場合は、明示的なアセット割り当てが必要です。
+統合出力には更新後のエディターと SDK が必要です。旧リリースのパッケージ拡張子は `.lfxp` です。
 プレビューに必要なネイティブライブラリやカメラ位置は
-[同梱サンプルの説明（英語）](https://github.com/Libra-Works/LibraFX/blob/v2026.11.8/Assets/Samples/AfterimageGate.txt)
+[同梱サンプルの説明（英語）](https://github.com/Libra-Works/LibraFX/blob/main/Assets/Samples/AfterimageGate.txt)
 を参照してください。

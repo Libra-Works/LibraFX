@@ -15,6 +15,7 @@
 #include "GameFramework/PlayerController.h"
 #include "liberafx/LbSpawnableHost.h"
 #include "liberafx/LbSpawnablePackage.h"
+#include "liberafx/LbCpuParticles.h"
 #include "Misc/ScopeExit.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 
@@ -311,7 +312,7 @@ auto ULibraSpawnableComponent::Play(bool bRestart) -> ELibraRuntimeResult
         return Report(ELibraRuntimeResult::InvalidArgument);
     }
     bSourceInitialAdvancePending = SkeletalPoseState->HasSources();
-    if (bSourceInitialAdvancePending)
+    if (bSourceInitialAdvancePending || !NativeHost->package().cpuPrograms.empty())
     {
         PrimaryComponentTick.TickGroup = TG_PostUpdateWork;
     }
@@ -714,6 +715,107 @@ auto ULibraSpawnableComponent::ReadChildValue(FGuid containerId, int64 instanceI
     if (result != liberafx::Result::Ok) return ToLibraResult(result);
     value = FVector4(values[0], values[1], values[2], values[3]);
     componentCount = width;
+    return ELibraRuntimeResult::Ok;
+}
+
+ELibraRuntimeResult ULibraSpawnableComponent::PopCpuParticleEvent(
+    FLibraCpuParticleEvent& particleEvent, bool& hasEvent)
+{
+    particleEvent = {};
+    hasEvent = false;
+    if (!IsInGameThread() || DebugJobPending())
+    {
+        return ELibraRuntimeResult::Busy;
+    }
+    if (!NativeHost)
+    {
+        return ELibraRuntimeResult::NotReady;
+    }
+    auto event = liberafx::CpuParticleEvent{};
+    hasEvent = NativeHost->popCpuParticleEvent(event);
+    if (hasEvent)
+    {
+        particleEvent.SystemId = LibraGuid(event.systemId);
+        particleEvent.NodeId = LibraGuid(event.nodeId);
+        particleEvent.ParticleId = FString::Printf(TEXT("%llu"), static_cast<unsigned long long>(event.particleId));
+        particleEvent.Time = event.time;
+        particleEvent.Values = FVector4(event.values[0], event.values[1], event.values[2], event.values[3]);
+        particleEvent.Kind = static_cast<int32>(event.kind);
+        particleEvent.Width = static_cast<int32>(event.width);
+    }
+    return ELibraRuntimeResult::Ok;
+}
+
+auto ULibraSpawnableComponent::ReadCpuParticleCount(FGuid systemId, uint32& count) const
+    -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    count = 0;
+    if (DebugJobPending())
+    {
+        return ELibraRuntimeResult::Busy;
+    }
+    if (!NativeHost)
+    {
+        return ELibraRuntimeResult::NotReady;
+    }
+    if (!systemId.IsValid())
+    {
+        return ELibraRuntimeResult::InvalidArgument;
+    }
+    uint8 systemBytes[16]{};
+    LibraNodeIdBytes(systemId, systemBytes);
+    auto nativeCount = std::size_t{};
+    auto result = NativeHost->cpuParticleCount(systemBytes, nativeCount);
+    if (result != liberafx::Result::Ok)
+    {
+        return ToLibraResult(result);
+    }
+    if (nativeCount > MAX_uint32)
+    {
+        return ELibraRuntimeResult::InvalidBinary;
+    }
+    count = static_cast<uint32>(nativeCount);
+    return ELibraRuntimeResult::Ok;
+}
+
+auto ULibraSpawnableComponent::ReadCpuParticleAt(FGuid systemId, SIZE_T index,
+    uint64& particleId, double& positionX, double& positionY, double& positionZ,
+    double& colorR, double& colorG, double& colorB, double& colorA,
+    double& sizeX, double& sizeY) const -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    particleId = 0;
+    if (DebugJobPending())
+    {
+        return ELibraRuntimeResult::Busy;
+    }
+    if (!NativeHost)
+    {
+        return ELibraRuntimeResult::NotReady;
+    }
+    if (!systemId.IsValid())
+    {
+        return ELibraRuntimeResult::InvalidArgument;
+    }
+    uint8 systemBytes[16]{};
+    LibraNodeIdBytes(systemId, systemBytes);
+    auto particle = liberafx::CpuParticleSnapshot{};
+    const auto result = NativeHost->cpuParticleAt(systemBytes, index, particle);
+    if (result != liberafx::Result::Ok)
+    {
+        return ToLibraResult(result);
+    }
+    particleId = particle.id;
+    positionX = particle.position[0];
+    positionY = particle.position[1];
+    positionZ = particle.position[2];
+    colorR = particle.color[0];
+    colorG = particle.color[1];
+    colorB = particle.color[2];
+    colorA = particle.color[3];
+    sizeX = particle.size[0];
+    sizeY = particle.size[1];
     return ELibraRuntimeResult::Ok;
 }
 

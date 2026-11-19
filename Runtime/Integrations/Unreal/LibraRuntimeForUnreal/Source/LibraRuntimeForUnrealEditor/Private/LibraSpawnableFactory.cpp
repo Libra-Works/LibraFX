@@ -8,25 +8,40 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogLibraSpawnableImport, Log, All);
 
-namespace {
-auto ReadPackage(const FString& filename, TArray<uint8>& bytes) -> bool
+auto ULibraSpawnableFactory::ReadPackage(const FString& filename, TArray<uint8>& bytes) -> bool
 {
+    auto extension = FPaths::GetExtension(filename);
+    if (!extension.Equals(TEXT("lfxb"), ESearchCase::IgnoreCase) &&
+        !extension.Equals(TEXT("lfxp"), ESearchCase::IgnoreCase))
+    {
+        return false;
+    }
     auto input = TUniquePtr<FArchive>(IFileManager::Get().CreateFileReader(*filename));
-    if (!input) return false;
+    if (!input)
+    {
+        return false;
+    }
     auto size = input->TotalSize();
-    if (size <= 0 || size > ULibraSpawnableAsset::MaximumPackageBytes) return false;
+    if (size <= 0 || size > ULibraSpawnableAsset::MaximumPackageBytes)
+    {
+        return false;
+    }
     bytes.SetNumUninitialized(static_cast<int32>(size));
     input->Serialize(bytes.GetData(), size);
-    if (input->IsError()) return false;
+    if (input->IsError())
+    {
+        return false;
+    }
     return ULibraSpawnableAsset::ValidatePackageBuffer(bytes) == ELibraRuntimeResult::Ok;
 }
 
-void UpdateImportData(ULibraSpawnableAsset& asset, const FString& filename)
+void ULibraSpawnableFactory::UpdateImportData(ULibraSpawnableAsset& asset, const FString& filename)
 {
     if (!asset.AssetImportData)
+    {
         asset.AssetImportData = NewObject<UAssetImportData>(&asset, TEXT("AssetImportData"));
+    }
     asset.AssetImportData->Update(filename);
-}
 }
 
 ULibraSpawnableFactory::ULibraSpawnableFactory()
@@ -34,12 +49,14 @@ ULibraSpawnableFactory::ULibraSpawnableFactory()
     SupportedClass = ULibraSpawnableAsset::StaticClass();
     bEditorImport = true;
     bCreateNew = false;
-    Formats.Add(TEXT("lfxp;LIBERA FX Spawnable package"));
+    Formats.Add(TEXT("lfxb;LIBERA FX compiled package"));
+    Formats.Add(TEXT("lfxp;LIBERA FX legacy package alias"));
 }
 
 auto ULibraSpawnableFactory::FactoryCanImport(const FString& filename) -> bool
 {
-    return FPaths::GetExtension(filename).Equals(TEXT("lfxp"), ESearchCase::IgnoreCase);
+    auto bytes = TArray<uint8>{};
+    return ReadPackage(filename, bytes);
 }
 
 auto ULibraSpawnableFactory::FactoryCreateFile(UClass* inClass, UObject* inParent, FName inName,
@@ -47,9 +64,9 @@ auto ULibraSpawnableFactory::FactoryCreateFile(UClass* inClass, UObject* inParen
     bool& outOperationCanceled) -> UObject*
 {
     outOperationCanceled = false;
-    TArray<uint8> bytes;
+    auto bytes = TArray<uint8>{};
     if (!inClass || !inClass->IsChildOf(ULibraSpawnableAsset::StaticClass()) ||
-        !FactoryCanImport(filename) || !ReadPackage(filename, bytes))
+        !ReadPackage(filename, bytes))
     {
         UE_LOG(LogLibraSpawnableImport, Error, TEXT("Cannot import invalid or unsupported LIBERA FX package: %s"), *filename);
         return nullptr;
@@ -68,7 +85,10 @@ auto ULibraSpawnableFactory::FactoryCreateFile(UClass* inClass, UObject* inParen
 auto ULibraSpawnableFactory::CanReimport(UObject* object, TArray<FString>& outFilenames) -> bool
 {
     auto asset = Cast<ULibraSpawnableAsset>(object);
-    if (!asset || !asset->AssetImportData) return false;
+    if (!asset || !asset->AssetImportData)
+    {
+        return false;
+    }
     asset->AssetImportData->ExtractFilenames(outFilenames);
     return outFilenames.Num() == 1;
 }
@@ -87,12 +107,21 @@ void ULibraSpawnableFactory::SetReimportPaths(UObject* object, const TArray<FStr
 auto ULibraSpawnableFactory::Reimport(UObject* object) -> EReimportResult::Type
 {
     auto asset = Cast<ULibraSpawnableAsset>(object);
-    if (!asset || !asset->AssetImportData) return EReimportResult::Failed;
+    if (!asset || !asset->AssetImportData)
+    {
+        return EReimportResult::Failed;
+    }
     auto filename = asset->AssetImportData->GetFirstFilename();
-    TArray<uint8> bytes;
-    if (!ReadPackage(filename, bytes)) return EReimportResult::Failed;
+    auto bytes = TArray<uint8>{};
+    if (!ReadPackage(filename, bytes))
+    {
+        return EReimportResult::Failed;
+    }
     asset->Modify();
-    if (asset->SetPackageBytes(bytes) != ELibraRuntimeResult::Ok) return EReimportResult::Failed;
+    if (asset->SetPackageBytes(bytes) != ELibraRuntimeResult::Ok)
+    {
+        return EReimportResult::Failed;
+    }
     asset->AssetImportData->Modify();
     UpdateImportData(*asset, filename);
     asset->MarkPackageDirty();

@@ -442,6 +442,10 @@ auto SpawnableHost::stop() -> Result {
   host.scheduledRoutes.clear();
   host.ownerNotices.clear();
   host.discardChildGameEvents({});
+  if (host.cpuParticles)
+  {
+    host.cpuParticles->clear();
+  }
   host.rootStopped = true;
   return Result::Ok;
 }

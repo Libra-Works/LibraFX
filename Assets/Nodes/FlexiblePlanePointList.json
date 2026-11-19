@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "typeId": "864fea49-8719-4c36-a7d1-1f3000000002",
+  "namespace": "LiberaFx",
+  "kind": "FlexiblePlanePointList",
+  "name": "Flexible Plane Point List",
+  "displayNameKey": "FlexiblePlane.List",
+  "descriptionKey": "FlexiblePlane.ListDescription",
+  "groupNameKey": "FlexiblePlane.Group",
+  "group": "Flexible Plane",
+  "portType": "FlexiblePlanePoints",
+  "portCategory": "Parameter",
+  "inputPorts": [
+    { "id": "position0", "name": "Position 0", "displayNameKey": "FlexiblePlane.Position0", "portType": "FloatX3" },
+    { "id": "position1", "name": "Position 1", "displayNameKey": "FlexiblePlane.Position1", "portType": "FloatX3" },
+    { "id": "position2", "name": "Position 2", "displayNameKey": "FlexiblePlane.Position2", "portType": "FloatX3" },
+    { "id": "position3", "name": "Position 3", "displayNameKey": "FlexiblePlane.Position3", "portType": "FloatX3" }
+  ],
+  "parameters": [
+    { "id": "pointData", "name": "Points JSON", "displayNameKey": "FlexiblePlane.PointData", "type": "string", "defaultValue": "[{\"position\":[0,0,0],\"width\":1,\"color\":[1,1,1,1]},{\"position\":[1,0,0],\"width\":1,\"color\":[1,1,1,1]}]" }
+  ]
+}

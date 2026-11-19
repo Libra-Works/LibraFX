@@ -51,6 +51,34 @@ struct FLibraSpawnableAssetBinding
     TObjectPtr<UObject> Asset;
 };
 
+USTRUCT(BlueprintType)
+struct FLibraCpuParticleEvent
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime|CPU Particles")
+    FGuid SystemId;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime|CPU Particles")
+    FGuid NodeId;
+
+    // Decimal string preserves the full unsigned native ID in Blueprint.
+    UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime|CPU Particles")
+    FString ParticleId;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime|CPU Particles")
+    double Time = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime|CPU Particles")
+    FVector4 Values = FVector4(0, 0, 0, 0);
+
+    UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime|CPU Particles")
+    int32 Kind = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime|CPU Particles")
+    int32 Width = 0;
+};
+
 UCLASS(HideDropdown, ClassGroup = (Effects), meta = (DisplayName = "Libra Spawnable (Internal)"))
 class LIBRARUNTIMEFORUNREAL_API ULibraSpawnableComponent : public UActorComponent
 {
@@ -175,6 +203,13 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult ReadChildValue(FGuid containerId, int64 instanceId, FGuid nodeId,
         FVector4& value, int32& componentCount) const;
+
+    ELibraRuntimeResult ReadCpuParticleCount(FGuid systemId, uint32& count) const;
+    ELibraRuntimeResult PopCpuParticleEvent(FLibraCpuParticleEvent& particleEvent, bool& hasEvent);
+    ELibraRuntimeResult ReadCpuParticleAt(FGuid systemId, SIZE_T index, uint64& particleId,
+        double& positionX, double& positionY, double& positionZ,
+        double& colorR, double& colorG, double& colorB, double& colorA,
+        double& sizeX, double& sizeY) const;
 
     UFUNCTION(BlueprintPure, Category = "Libra Runtime|Rendering")
     int32 GetRenderObjectCount() const;

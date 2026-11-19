@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1, "typeId": "9bd7a620-c8e1-4f35-a962-000000000002",
+  "namespace": "LiberaFx", "kind": "QuaternionCompose", "name": "Quaternion Compose XYZW",
+  "displayNameKey": "QuaternionRandom.Node.QuaternionCompose", "descriptionKey": "QuaternionRandom.Help.QuaternionCompose",
+  "group": "Quaternion", "groupNameKey": "QuaternionRandom.Group.Quaternion", "portType": "FloatX4", "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [{ "id": "x", "name": "X", "portType": "Float" }, { "id": "y", "name": "Y", "portType": "Float" }, { "id": "z", "name": "Z", "portType": "Float" }, { "id": "w", "name": "W", "portType": "Float" }],
+  "outputPorts": [{ "id": "value", "name": "Quaternion XYZW" }],
+  "parameters": [{ "id": "x", "name": "X", "type": "float", "defaultValue": 0 }, { "id": "y", "name": "Y", "type": "float", "defaultValue": 0 }, { "id": "z", "name": "Z", "type": "float", "defaultValue": 0 }, { "id": "w", "name": "W", "type": "float", "defaultValue": 1 }]
+}

@@ -39,6 +39,44 @@ internal static class Program
 
     private static void MainCore(string[] args)
     {
+        if (args is ["--cpu-particles"])
+        {
+            InitializeIsolatedUi();
+            LiberaFx.Tests.CpuParticleCompilationTests.Run();
+            return;
+        }
+        if (args is ["--cpu-particle-fixture", var directory])
+        {
+            InitializeIsolatedUi();
+            LiberaFx.Tests.CpuParticleCompilationTests.WriteNativeFixture(directory);
+            return;
+        }
+        if (args is ["--flexible-plane"])
+        {
+            InitializeIsolatedUi();
+            LiberaFx.Tests.FlexiblePlaneDrawSchemaTests.Run();
+            return;
+        }
+        if (args is ["--quaternion-random"])
+        {
+            InitializeIsolatedUi();
+            LiberaFx.Tests.QuaternionRandomCompilationTests.Run();
+            return;
+        }
+        if (args is ["--quaternion-random-fixtures", var quaternionDirectory])
+        {
+            InitializeIsolatedUi();
+            LiberaFx.Tests.QuaternionRandomCompilationTests.WriteNativeFixtures(quaternionDirectory);
+            return;
+        }
+        if (args is ["--effect-binary"])
+        {
+            InitializeIsolatedUi();
+            EffectBinaryTests.Run();
+            EffectBinaryConverterTests.Run();
+            ResourceIdentityConverterTests.Run();
+            return;
+        }
         if (args is ["--editor-appearance-audit", var outputDirectory])
         {
             InitializeIsolatedUi();

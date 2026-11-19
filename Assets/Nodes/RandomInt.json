@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1, "typeId": "9bd7a620-c8e1-4f35-a962-000000000022",
+  "namespace": "LiberaFx", "kind": "RandomInt", "name": "Random Integer (Float)",
+  "displayNameKey": "QuaternionRandom.Node.RandomInt", "descriptionKey": "QuaternionRandom.Help.RandomInt",
+  "group": "Random", "groupNameKey": "QuaternionRandom.Group.Random", "portType": "Float", "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [{ "id": "seed", "name": "Seed (uint32)" }, { "id": "sampleIndex", "name": "Sample Index (uint32)" }, { "id": "min", "name": "Min (inclusive integer)" }, { "id": "max", "name": "Max (inclusive integer)" }],
+  "outputPorts": [{ "id": "value", "name": "Integer (Float)" }],
+  "parameters": [{ "id": "seed", "name": "Seed (uint32)", "displayNameKey": "QuaternionRandom.Seed", "type": "float", "defaultValue": 0 }, { "id": "sampleIndex", "name": "Sample Index (uint32)", "displayNameKey": "QuaternionRandom.SampleIndex", "type": "float", "defaultValue": 0 }, { "id": "min", "name": "Min (inclusive integer)", "displayNameKey": "QuaternionRandom.MinInteger", "type": "float", "defaultValue": 0 }, { "id": "max", "name": "Max (inclusive integer)", "displayNameKey": "QuaternionRandom.MaxInteger", "type": "float", "defaultValue": 10 }]
+}

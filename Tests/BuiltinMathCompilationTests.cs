@@ -11,7 +11,7 @@ public static class BuiltinMathCompilationTests
     {
         var math = GraphNodeDefinition.All.Where(item =>
             item.TypeId.ToString("D").StartsWith("74305ac1-91b2-4c33-8d44-", StringComparison.Ordinal)).ToArray();
-        Require(math.Length == 47, "All native math definitions must load.");
+        Require(math.Length == 57, "All native math definitions must load.");
         var typeId = new byte[16];
         foreach (var definition in math)
         {
@@ -58,6 +58,21 @@ public static class BuiltinMathCompilationTests
         Require(composed.Inputs[0].SourceIndex >= 0 && composed.Inputs[1].Defaults[0] == 0.25 &&
                 composed.Inputs[3].Defaults[0] == 1,
             "A connected scalar must drive one composed channel while other defaults persist.");
+        var fraction = Node(math.Single(item => item.Kind.Value == "Fraction"));
+        var smoothstep = Node(math.Single(item => item.Kind.Value == "Smoothstep"),
+            new NodeParameterSnapshot("b", "float", JsonSerializer.SerializeToElement(0.25)),
+            new NodeParameterSnapshot("c", "float", JsonSerializer.SerializeToElement(0.75)));
+        var scalarGraph = new GraphSnapshot([time, fraction, smoothstep],
+            [new(time.Id, fraction.Id, "a"), new(fraction.Id, smoothstep.Id, "a", "value")]);
+        var scalarProgram = VfxProgram.Compile(scalarGraph);
+        var scalarInputs = scalarProgram.CustomInstructions.Single(item => item.NodeId == smoothstep.Id).Inputs;
+        Require(scalarInputs[0].SourceIndex >= 0 && scalarInputs[1].Defaults[0] == 0.25 &&
+                scalarInputs[2].Defaults[0] == 0.75,
+            "The connected scalar and edited Smoothstep bounds must compile.");
+        var package = SpawnableGroupPackageBinary.Deserialize(
+            SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(scalarGraph)));
+        Require(package.ParentBytecode.SequenceEqual(scalarProgram.ToBinary()),
+            "Packaging must preserve the compiled custom scalar nodes.");
         var examples = Path.Combine(AppContext.BaseDirectory, "Runtime", "examples", "CustomNodes");
         var customDefinitions = GraphNodeDefinition.LoadDirectory(examples, out var warnings);
         Require(warnings.Count == 0, "Example custom node definitions must load.");

@@ -14,7 +14,18 @@ namespace LiberaFx.Unity
         public string type;
         public long programSequence;
         public LiberaFxRenderNodePayload[] nodes;
+        public LiberaFxCpuParticlePayload[] cpuParticles;
+        public int cpuParticleVersion;
         public LiberaFxGpuDrawTransformPayload[] gpuDrawTransforms;
+    }
+
+    [Serializable] internal sealed class LiberaFxCpuParticlePayload
+    {
+        public string nodeId;
+        public string assetPath;
+        public string blendMode;
+        public double drawScale;
+        public bool billboard;
     }
 
     [Serializable] internal sealed class LiberaFxGpuDrawTransformPayload
@@ -28,6 +39,7 @@ namespace LiberaFx.Unity
     {
         public string nodeId;
         public string kind;
+        public LiberaFxFlexiblePlanePayload flexiblePlane;
         public string assetPath;
         public LiberaFxRenderMaterialPayload[] materials;
         public LiberaFxRenderInputPayload[] inputs;
@@ -168,6 +180,7 @@ namespace LiberaFx.Unity
 
     internal sealed class LiberaFxPreparedRenderNode
     {
+        public LiberaFxPreparedFlexiblePlane flexiblePlane;
         public LiberaFxRenderNodePayload debugDraw;
         public string nodeId;
         public bool isSprite;
@@ -179,7 +192,6 @@ namespace LiberaFx.Unity
         public Material[] materials;
         public string[] tintPropertyNames;
         public string[] materialParameterPropertyNames;
-        public Camera billboardCamera;
         public LiberaFxRenderInputPayload[] inputs;
         public LiberaFxPreparedTextureParameter[] textures;
         public LiberaFxRenderSpriteAnimationPayload spriteAnimation;
@@ -207,7 +219,18 @@ namespace LiberaFx.Unity
     {
         public string templateId;
         public LiberaFxPreparedRenderNode[] renderNodes;
+        public LiberaFxPreparedCpuParticleRenderer[] cpuParticles;
         public LiberaFxPreparedGpuProgram[] gpuPrograms;
+    }
+
+    internal sealed class LiberaFxPreparedCpuParticleRenderer
+    {
+        public string nodeId;
+        public byte[] nodeIdBytes;
+        public Texture texture;
+        public bool additive;
+        public float drawScale;
+        public Camera billboardCamera;
     }
 
     internal sealed class LiberaFxUnityBindingLookup
@@ -273,10 +296,11 @@ namespace LiberaFx.Unity
         }
 
         public LiberaFxPreparedScope Prepare(string templateId, byte[] renderBytes,
-            byte[] gpuContainerBytes, byte[] gpuProgramBytes)
+            byte[] gpuContainerBytes, byte[] gpuProgramBytes, bool isRoot = false)
         {
             var renderConfiguration = ParseRender(renderBytes);
             var renderNodes = renderConfiguration.nodes;
+            var cpuParticles = ResolveCpuParticles(renderConfiguration.cpuParticles, renderNodes, isRoot);
             var authoredGpuIds = ParseGpuContainerIds(gpuContainerBytes);
             var gpuPrograms = ParseGpuPrograms(gpuProgramBytes, authoredGpuIds,
                 renderConfiguration.gpuDrawTransforms);
@@ -284,14 +308,73 @@ namespace LiberaFx.Unity
             {
                 templateId = templateId,
                 renderNodes = renderNodes.Select(ResolveRenderNode).ToArray(),
+                cpuParticles = cpuParticles,
                 gpuPrograms = gpuPrograms.Select(program =>
                     ResolveGpuProgram(program, renderConfiguration.gpuDrawTransforms
                         .ToDictionary(transform => transform.nodeId, StringComparer.Ordinal))).ToArray()
             };
         }
 
+        private LiberaFxPreparedCpuParticleRenderer[] ResolveCpuParticles(
+            LiberaFxCpuParticlePayload[] payloads, LiberaFxRenderNodePayload[] renderNodes, bool isRoot)
+        {
+            payloads = payloads ?? Array.Empty<LiberaFxCpuParticlePayload>();
+            if (payloads.Length > 128)
+                throw new InvalidOperationException("CPU particle renderer count exceeds 128.");
+            if (!isRoot && payloads.Length != 0)
+                throw new NotSupportedException(
+                    "CPU particle Sprite rendering inside SpawnableGroup templates is not supported.");
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var node in renderNodes)
+                ids.Add(node.nodeId);
+            var result = new LiberaFxPreparedCpuParticleRenderer[payloads.Length];
+            for (var index = 0; index < payloads.Length; ++index)
+            {
+                var item = payloads[index];
+                if (item == null || !TryCanonicalGuid(item.nodeId, out var nodeId) ||
+                    !ids.Add(nodeId) || string.IsNullOrWhiteSpace(item.assetPath) ||
+                    item.assetPath.Length > 512 || item.blendMode != "Alpha" && item.blendMode != "Additive" ||
+                    !item.billboard || double.IsNaN(item.drawScale) || double.IsInfinity(item.drawScale) ||
+                    item.drawScale <= 0 || !IsFiniteFloat(item.drawScale))
+                    throw new InvalidOperationException("CPU particle renderer metadata is invalid or unsupported.");
+                Texture texture;
+                if (item.assetPath == "builtin:white")
+                    texture = Texture2D.whiteTexture;
+                else if (!renderAssets.TryGetValue(item.assetPath, out var asset) || !asset.texture)
+                    throw new InvalidOperationException(
+                        "No Unity Texture binding exists for CPU particle asset '" + item.assetPath + "'.");
+                else texture = asset.texture;
+                result[index] = new LiberaFxPreparedCpuParticleRenderer
+                {
+                    nodeId = nodeId,
+                    nodeIdBytes = new NativeSignal(nodeId).Id,
+                    texture = texture,
+                    additive = item.blendMode == "Additive",
+                    drawScale = (float)item.drawScale
+                };
+            }
+            return result;
+        }
+
         private LiberaFxPreparedRenderNode ResolveRenderNode(LiberaFxRenderNodePayload node)
         {
+            if (node.kind == "flexiblePlane")
+            {
+                if (!renderAssets.TryGetValue(node.assetPath, out var planeAsset) ||
+                    !planeAsset.texture || planeAsset.defaultMaterials == null ||
+                    planeAsset.defaultMaterials.Length != 1 || !planeAsset.defaultMaterials[0])
+                {
+                    throw new InvalidOperationException(
+                        "Flexible Plane requires a Texture binding with exactly one vertex-colored Material.");
+                }
+                return new LiberaFxPreparedRenderNode
+                {
+                    nodeId = node.nodeId,
+                    inputs = node.inputs,
+                    flexiblePlane = LiberaFxPreparedFlexiblePlane.Prepare(node, node.flexiblePlane,
+                        planeAsset.texture, planeAsset.defaultMaterials[0], "_MainTex", Camera.main)
+                };
+            }
             if (node.kind == "debugText" || node.kind == "debugModel")
             {
                 Mesh debugMesh = null;
@@ -586,7 +669,7 @@ namespace LiberaFx.Unity
             {
                 if (node == null || !TryCanonicalGuid(node.nodeId, out var id) ||
                     !ids.Add(id) || (node.kind != "model" && node.kind != "sprite" &&
-                        node.kind != "debugText" && node.kind != "debugModel") ||
+                        node.kind != "debugText" && node.kind != "debugModel" && node.kind != "flexiblePlane") ||
                     node.kind != "debugText" && (string.IsNullOrWhiteSpace(node.assetPath) || node.assetPath.Length > 512))
                     throw new InvalidOperationException("Render configuration contains an invalid node identity, kind or asset.");
                 node.nodeId = id;
@@ -601,6 +684,9 @@ namespace LiberaFx.Unity
                 if ((node.materials?.Length ?? 0) > 256 || (node.textures?.Length ?? 0) > 256)
                     throw new InvalidOperationException("Render node material metadata exceeds the supported bound.");
             }
+            payload.cpuParticles = payload.cpuParticles ?? Array.Empty<LiberaFxCpuParticlePayload>();
+            if (payload.cpuParticleVersion != 1 && (payload.cpuParticleVersion != 0 || payload.cpuParticles.Length != 0))
+                throw new NotSupportedException("Unsupported CPU particle scene metadata version.");
             var drawTransforms = new Dictionary<string, LiberaFxGpuDrawTransformPayload>(StringComparer.Ordinal);
             foreach (var transform in payload.gpuDrawTransforms ?? Array.Empty<LiberaFxGpuDrawTransformPayload>())
             {
@@ -648,6 +734,10 @@ namespace LiberaFx.Unity
                 foreach (var lane in input.defaults)
                     if (!IsFiniteFloat(lane))
                         throw new InvalidOperationException("Render node default exceeds finite Unity float range.");
+            }
+            if (node.kind == "flexiblePlane")
+            {
+                return;
             }
             if (node.kind == "debugText" || node.kind == "debugModel")
             {

@@ -1,0 +1,1 @@
+{"descriptionKey":"Cpu.Help.Boundary","schemaVersion":1,"typeId":"7c7e1000-2521-4bdb-b8a0-210000000036","namespace":"LiberaFx","kind":"CpuParticleInputSignal","name":"Particle Input Signal","displayNameKey":"Editor.Node.CpuParticleInputSignal","group":"CPU Particles","groupNameKey":"Editor.NodeGroup.CpuParticles","portType":"Signal","portCategory":"Signal","inputPorts":[]}

@@ -6,6 +6,8 @@ title: Editor Window and Panel Reference
 
 # Editor Window and Panel Reference
 
+See [editor terms](glossary.md#editor) for dock, inspector, outliner, and MCP.
+
 Most editor tools are dockable panels rather than separate windows. Open them from
 **Window** or **View**. Panels that read the graph normally follow the active
 document tab. Menu labels and screenshots use the English UI. Screenshots show

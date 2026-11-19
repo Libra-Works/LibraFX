@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1, "typeId": "9bd7a620-c8e1-4f35-a962-000000000008",
+  "namespace": "LiberaFx", "kind": "QuaternionToEuler", "name": "Quaternion To Euler",
+  "displayNameKey": "QuaternionRandom.Node.QuaternionToEuler", "descriptionKey": "QuaternionRandom.Help.QuaternionToEuler",
+  "group": "Quaternion", "groupNameKey": "QuaternionRandom.Group.Quaternion", "portType": "FloatX3", "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [{ "id": "q", "name": "Quaternion XYZW", "portType": "FloatX4" }],
+  "outputPorts": [{ "id": "value", "name": "Roll Pitch Yaw (degrees)" }],
+  "parameters": [{ "id": "q", "name": "Quaternion XYZW", "displayNameKey": "QuaternionRandom.Quaternion", "type": "vector4", "defaultValue": [0, 0, 0, 1] }]
+}

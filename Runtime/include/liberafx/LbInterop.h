@@ -33,6 +33,27 @@ typedef uint64_t LibraGeneratorInstance;
 typedef uint64_t LibraSpawnableHostHandle;
 typedef uint32_t LibraBinding;
 typedef int32_t LibraResult;
+typedef struct LIBRA_INTEROP_ALIGN(8) LibraCpuParticleSnapshot {
+    uint64_t id;
+    double position[3];
+    double color[4];
+    double size[2];
+} LibraCpuParticleSnapshot;
+typedef struct LIBRA_INTEROP_ALIGN(8) LibraCpuParticleEvent {
+    uint8_t systemId[16];
+    uint8_t nodeId[16];
+    uint64_t particleId;
+    double time;
+    double values[4];
+    uint32_t kind;
+    uint32_t width;
+} LibraCpuParticleEvent;
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_cpu_particle_count(
+    LibraSpawnableHostHandle host, const uint8_t systemId[16], uint32_t* outCount);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_cpu_particle_at(
+    LibraSpawnableHostHandle host, const uint8_t systemId[16], uint32_t index, LibraCpuParticleSnapshot* out);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_cpu_particle_pop_event(
+    LibraSpawnableHostHandle host, LibraCpuParticleEvent* out, uint32_t* hasEvent);
 enum {
     LIBRA_OK = 0, LIBRA_INVALID_ARGUMENT = 1, LIBRA_INVALID_BINARY = 2,
     LIBRA_UNSUPPORTED_BINARY = 3, LIBRA_INSUFFICIENT_WORK = 4,
@@ -161,6 +182,8 @@ typedef struct LIBRA_INTEROP_ALIGN(8) LibraSpawnableHostEvent {
 #endif
 #ifdef LIBRA_INTEROP_ASSERT
 LIBRA_INTEROP_ASSERT(sizeof(LibraValue) == 40 && LIBRA_INTEROP_ALIGNOF(LibraValue) == 8);
+LIBRA_INTEROP_ASSERT(sizeof(LibraCpuParticleSnapshot) == 80 && offsetof(LibraCpuParticleSnapshot, color) == 32);
+LIBRA_INTEROP_ASSERT(sizeof(LibraCpuParticleEvent) == 88 && offsetof(LibraCpuParticleEvent, values) == 48);
 LIBRA_INTEROP_ASSERT(offsetof(LibraValue, x) == 0 && offsetof(LibraValue, y) == 8 &&
     offsetof(LibraValue, z) == 16 && offsetof(LibraValue, w) == 24 &&
     offsetof(LibraValue, componentCount) == 32 && offsetof(LibraValue, reserved) == 36);

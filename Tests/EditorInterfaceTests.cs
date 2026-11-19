@@ -25,6 +25,7 @@ internal static class EditorInterfaceTests
         VerifyCatalogs();
         var text = LocalizationService.Shared;
         var originalLanguage = text.SelectedLanguage;
+        var originalNodeLanguage = text.SelectedNodeLanguage;
         var root = Path.Combine(AppDataDirectory.Root, "inspector-tests");
         var directory = Path.Combine(root, "groups");
         var profilesPath = Path.Combine(root, "profiles.json");
@@ -66,6 +67,7 @@ internal static class EditorInterfaceTests
 
             var before = graph.CreateSnapshot();
             text.SelectedLanguage = text.Languages.Single(language => language.Id == "ja");
+            text.SelectedNodeLanguage = text.SelectedLanguage;
             Dispatcher.UIThread.RunJobs();
             if (AutomationProperties.GetName(save) != text.Get("Editor.SaveGroup") ||
                 AutomationProperties.GetName(toggle) != text.Get("Editor.UnlockGroup") ||
@@ -78,7 +80,10 @@ internal static class EditorInterfaceTests
                     .Any(entry => entry.KindName == "Float" && entry.Name == text.Get("Editor.Node.Scalar")) ||
                 parameter.Name != text.Get("Editor.Parameter.Value") || !parameterNameRefreshed ||
                 parameterNode.Name != parameterNode.Definition.Name)
-                throw new InvalidOperationException("Translated node catalog or inspector labels changed saved names or lost English search.");
+                throw new InvalidOperationException(
+                    $"Translated catalog/inspector mismatch: entries={string.Join(", ", nodeList.Groups.SelectMany(category => category.Nodes).Select(entry => $"{entry.KindName}:{entry.Name}"))}; " +
+                    $"parameter={parameter.Name}/{text.Get("Editor.Parameter.Value")}; refreshed={parameterNameRefreshed}; " +
+                    $"savedName={parameterNode.Name}/{parameterNode.Definition.Name}; originalLanguage={originalLanguage.Id}.");
             using (var settings = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppDataDirectory.Root, "LiberaFx", "language.json"))))
                 if (settings.RootElement.GetProperty("Language").GetString() != "ja")
                     throw new InvalidOperationException("The selected language was not saved.");
@@ -108,6 +113,7 @@ internal static class EditorInterfaceTests
         finally
         {
             text.SelectedLanguage = originalLanguage;
+            text.SelectedNodeLanguage = originalNodeLanguage;
             window.Close();
             if (File.Exists(profilesPath)) File.Delete(profilesPath);
             if (assetId != Guid.Empty)

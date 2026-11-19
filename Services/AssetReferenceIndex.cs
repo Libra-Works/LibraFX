@@ -81,7 +81,7 @@ public sealed class AssetReferenceIndex
                 if (GraphNodeDefinition.TryFind(node.Kind.Value, out var definition))
                 {
                     var handled = new HashSet<string>();
-                    if (RenderNodeSchema.IsRenderNode(definition!))
+                    if (RenderNodeSchema.IsRenderNode(definition!) || RenderNodeSchema.IsTextureOnlyDraw(definition!))
                     {
                         var effective = RenderNodeSchema.Effective(definition!, node.Parameters);
                         string Value(string id) => (node.Parameters?.FirstOrDefault(parameter => parameter.Id == id)?.Value

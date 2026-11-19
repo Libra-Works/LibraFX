@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "typeId": "864fea49-8719-4c36-a7d1-1f3000000003",
+  "namespace": "LiberaFx",
+  "kind": "FlexiblePlanePointHistory",
+  "name": "Flexible Plane Point History",
+  "displayNameKey": "FlexiblePlane.History",
+  "descriptionKey": "FlexiblePlane.HistoryDescription",
+  "groupNameKey": "FlexiblePlane.Group",
+  "group": "Flexible Plane",
+  "portType": "FlexiblePlanePoints",
+  "portCategory": "Parameter",
+  "inputPorts": [
+    { "id": "position", "name": "Position", "displayNameKey": "FlexiblePlane.Position", "portType": "FloatX3" },
+    { "id": "width", "name": "Width", "displayNameKey": "FlexiblePlane.Width", "portType": "Float" },
+    { "id": "color", "name": "Color", "displayNameKey": "FlexiblePlane.Color", "portType": "FloatX4" }
+  ],
+  "parameters": [
+    { "id": "position", "name": "Position", "displayNameKey": "FlexiblePlane.Position", "type": "vector3", "defaultValue": [0, 0, 0] },
+    { "id": "width", "name": "Width", "displayNameKey": "FlexiblePlane.Width", "type": "float", "defaultValue": 1 },
+    { "id": "color", "name": "Color", "displayNameKey": "FlexiblePlane.Color", "type": "vector4", "defaultValue": [1, 1, 1, 1] },
+    { "id": "capacity", "name": "Capacity", "displayNameKey": "FlexiblePlane.Capacity", "type": "int", "defaultValue": 64 },
+    { "id": "maxAge", "name": "Maximum age (seconds)", "displayNameKey": "FlexiblePlane.MaxAge", "type": "float", "defaultValue": 1 }
+  ]
+}

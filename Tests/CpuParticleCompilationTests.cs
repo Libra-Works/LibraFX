@@ -1,0 +1,190 @@
+using System.Buffers.Binary;
+using System.Text.Json;
+using LiberaFx.Models.Graph;
+using LiberaFx.Models.Commands;
+using LiberaFx.Services.Compilation;
+using LiberaFx.ViewModels;
+
+namespace LiberaFx.Tests;
+
+public static class CpuParticleCompilationTests
+{
+    public static void Run()
+    {
+        var graph = Fixture();
+        GraphValidator.ValidateDocument(graph);
+        var saved = JsonSerializer.Deserialize<GraphSnapshot>(JsonSerializer.Serialize(graph))!;
+        Require(GraphSnapshot.ContentEquals(graph, saved), "CPU stage snapshots must roundtrip with stable IDs.");
+        var package = SpawnableGroupPackage.Compile(saved);
+        Require(package.Version == 12 && package.CpuPrograms.Length > 0, "CPU must produce executable numeric payload.");
+        var bytes = SpawnableGroupPackageBinary.Serialize(package);
+        Require(BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(4)) == 4, "CPU requires explicit new envelope version.");
+        var restored = SpawnableGroupPackageBinary.Deserialize(bytes);
+        Require(restored.CpuPrograms.SequenceEqual(package.CpuPrograms), "CPU payload must survive package serialization.");
+        using var scene = JsonDocument.Parse(restored.RootRenderConfiguration);
+        Require(scene.RootElement.GetProperty("cpuParticleVersion").GetInt32() == 1 &&
+            scene.RootElement.GetProperty("cpuParticles").GetArrayLength() == 1,
+            "CPU batch scene metadata must be present.");
+        var stageIds = graph.Nodes.Single(Cpu).ChildGraph!.Nodes
+            .Where(node => CpuParticleSchema.IsStage(node.Kind)).SelectMany(node => node.ChildGraph!.Nodes)
+            .Where(node => !CpuParticleSchema.IsBoundary(node.Kind)).Select(node => node.Id).ToArray();
+        Span<byte> uuid = stackalloc byte[16];
+        foreach (var id in stageIds)
+        {
+            id.TryWriteBytes(uuid, true, out _);
+            Require(!ContainsInstructionId(package.ParentBytecode, uuid), "CPU stage nodes must never leak into the parent numeric VM.");
+        }
+        Reject(() => VfxProgram.Compile(new([Node("CpuParticlePosition")], [])), "Stage-only attributes at root");
+        Reject(() => VfxProgram.Compile(graph), "CPU raw-bytecode export");
+        VerifyOuterSignalTarget(graph);
+        var invalid = graph with { Nodes = [graph.Nodes.Single(Cpu) with
+        {
+            ChildGraph = graph.Nodes.Single(Cpu).ChildGraph! with
+            {
+                Nodes = graph.Nodes.Single(Cpu).ChildGraph!.Nodes.Where(node => CpuParticleSchema.Name(node.Kind) != "CpuParticleUpdate").ToArray()
+            }
+        }] };
+        Reject(() => SpawnableGroupPackage.Compile(invalid), "Missing Update stage");
+        var legacy = SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(new([Node("Float")], [])));
+        Require(BinaryPrimitives.ReadUInt16LittleEndian(legacy.AsSpan(4)) == 3, "Non-CPU package format must remain unchanged.");
+
+        var burst = Node("EmitterBurst", Parameter("count", "float", 4d));
+        var trigger = Node("Signal");
+        var burstProgram = VfxProgram.Compile(new([trigger, burst], [new(trigger.Id, burst.Id, "trigger")]));
+        Require(burstProgram.CustomInstructions.Any(item => item.TypeId == GraphLogicalSchema.SignalToNumberTypeId),
+            "Burst must lower to real CPU Signal counting, not a catalog-only trigger.");
+
+        var history = new UndoRedoManager();
+        var workspace = new GraphWorkspaceViewModel(history);
+        var cpuDefinition = Definition("CpuParticle");
+        var vm = workspace.CreateNode(cpuDefinition.Kind, 80, 80);
+        Require(vm.ChildGraph?.Nodes.Count == 3 && workspace.EnterGraph(vm), "CPU authoring must use ordinary child navigation.");
+        var spawn = workspace.Nodes.Single(node => CpuParticleSchema.Name(node.Definition.Kind) == "CpuParticleSpawn");
+        Require(workspace.EnterGraph(spawn), "Spawn stage must be navigable.");
+        var before = workspace.CreateSnapshot();
+        workspace.CreateNode(Definition("CpuParticleSetLife").Kind, 800, 100);
+        var after = workspace.CreateSnapshot();
+        Require(!GraphSnapshot.ContentEquals(before, after), "Nested stage edits must be document state.");
+        history.Undo();
+        Require(GraphSnapshot.ContentEquals(before, workspace.CreateSnapshot()), "Stage edit Undo must restore the whole document.");
+        history.Redo();
+        Require(GraphSnapshot.ContentEquals(after, workspace.CreateSnapshot()), "Stage edit Redo must restore IDs and nested edits.");
+        // History entry points are the same ordinary workspace commands, not a CPU-specific mutable model.
+        workspace.NavigateToGraph(0);
+        Require(workspace.Nodes.Single().ChildGraph!.Nodes.Single(node =>
+            CpuParticleSchema.Name(node.Kind) == "CpuParticleSpawn").ChildGraph!.Nodes.Count == 3,
+            "Leaving a CPU stage must retain edits.");
+    }
+
+    private static void VerifyOuterSignalTarget(GraphSnapshot graph)
+    {
+        var system = graph.Nodes.Single(Cpu);
+        var output = system.ChildGraph!.Nodes
+            .Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleUpdate").ChildGraph!.Nodes
+            .Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleOutputSignal");
+        var counter = Node("SignalToNumber");
+        var withReset = graph with
+        {
+            Nodes = [.. graph.Nodes, counter],
+            Connections = [.. graph.Connections, new(system.Id, counter.Id, "reset", CpuParticleSchema.PortId(output.Id))]
+        };
+        var lowered = CpuParticleCompilation.Lower(withReset, null, null);
+        var relay = lowered.Graph.Connections.Single(edge => edge.TargetNodeId == counter.Id);
+        Require(relay.TargetPortId == "reset" && relay.SourcePortId is null &&
+            lowered.Graph.Nodes.Single(node => node.Id == relay.SourceNodeId).Kind == GraphNodeKind.Signal,
+            "CPU output Signal must forward through an ordinary VM edge to Reset, not the first input.");
+        var program = VfxProgram.Compile(lowered.Graph);
+        var route = program.LogicalSignalRoutes.Single(item =>
+            program.TypedInstructions[item.SourceIndex].NodeId == relay.SourceNodeId &&
+            program.TypedInstructions[item.TargetIndex].NodeId == counter.Id);
+        Require(route.TargetInputSlot == 1, "The VM route must encode Reset as slot 1, not Signal as slot 0.");
+        var package = SpawnableGroupPackage.Compile(withReset);
+        Span<byte> relayId = stackalloc byte[16];
+        relay.SourceNodeId.TryWriteBytes(relayId, true, out _);
+        Require(package.CpuPrograms.AsSpan().IndexOf(relayId) >= 0 &&
+            ContainsInstructionId(package.ParentBytecode, relayId),
+            "The CPU payload must dispatch to the compiled relay entry, not directly to the counter.");
+    }
+
+    public static GraphSnapshot Fixture()
+    {
+        var system = Node("CpuParticle", Parameter("rate", "float", 0d), Parameter("burst", "int", 3)) with
+        {
+            ChildGraph = CpuParticleSchema.CreateChild(Definition("CpuParticle").Kind)
+        };
+        var child = system.ChildGraph!;
+        var update = child.Nodes.Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleUpdate");
+        var input = Node("CpuParticleInputVector3");
+        var setVelocity = Node("CpuParticleSetVelocity");
+        var outputId = Node("CpuParticleOutputFloat");
+        var id = Node("CpuParticleId");
+        var outputSignal = Node("CpuParticleOutputSignal");
+        var inputSignal = Node("CpuParticleInputSignal");
+        var entry = update.ChildGraph!.Nodes.Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleStageEvent");
+        var move = update.ChildGraph.Nodes.Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleMove");
+        update = update with { ChildGraph = new(
+            [entry, move, input, setVelocity, outputId, id, outputSignal, inputSignal],
+            [new(entry.Id, setVelocity.Id, "signal", "then"),
+             new(input.Id, setVelocity.Id, "value"), new(setVelocity.Id, move.Id, "signal", "then"),
+             new(id.Id, outputId.Id, null, "value"), new(inputSignal.Id, outputSignal.Id)]) };
+        system = system with { ChildGraph = child with
+        {
+            Nodes = child.Nodes.Select(node => node.Id == update.Id ? update : node).ToArray()
+        } };
+        var velocity = Node("FloatX3", Parameter("value", "vector3", new[] { 10d, 0, 0 }));
+        return new([system, velocity], [new(velocity.Id, system.Id, CpuParticleSchema.PortId(input.Id))]);
+    }
+
+    // Called only by an explicitly invoked fixture command; never runs a build/editor.
+    public static void WriteNativeFixture(string directory)
+    {
+        if (!Path.IsPathFullyQualified(directory) || Directory.Exists(directory))
+        {
+            throw new ArgumentException("Supply an absolute NEW isolated temporary directory.");
+        }
+        Directory.CreateDirectory(directory);
+        File.WriteAllBytes(Path.Combine(directory, "cpu-particles.lfxb"),
+            SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(Fixture())));
+    }
+    private static bool Cpu(GraphNodeSnapshot node) => CpuParticleSchema.IsContainer(node.Kind);
+    private static GraphNodeDefinition Definition(string name) => GraphNodeDefinition.All.Single(item => item.TypeName == name);
+    private static GraphNodeSnapshot Node(string name, params NodeParameterSnapshot[] parameters)
+    {
+        var definition = Definition(name);
+        return new(Guid.NewGuid(), definition.Kind, definition.Name, 80, 80, definition.PortType,
+            definition.PortCategory, Parameters: parameters.Length == 0 ? null : parameters);
+    }
+    private static NodeParameterSnapshot Parameter<T>(string id, string type, T value) => new(id, type, JsonSerializer.SerializeToElement(value));
+    private static bool ContainsInstructionId(byte[] bytes, ReadOnlySpan<byte> id)
+    {
+        var count = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(8));
+        var stride = bytes[4] >= 3 ? 256 : 96;
+        for (var index = 0; index < count; index++)
+        {
+            if (bytes.AsSpan(16 + index * stride, 16).SequenceEqual(id))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+    private static void Reject(Action action, string message)
+    {
+        try
+        {
+            action();
+        }
+        catch (InvalidDataException)
+        {
+            return;
+        }
+        throw new InvalidOperationException(message + " must fail explicitly.");
+    }
+    private static void Require(bool condition, string message)
+    {
+        if (!condition)
+        {
+            throw new InvalidOperationException(message);
+        }
+    }
+}

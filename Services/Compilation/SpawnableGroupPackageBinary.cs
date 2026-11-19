@@ -23,13 +23,13 @@ public static class SpawnableGroupPackageBinary
     public static byte[] Serialize(SpawnableGroupPackage package)
     {
         ArgumentNullException.ThrowIfNull(package);
-        if (package.Version != SpawnableGroupPackage.FormatVersion)
+        if (package.Version is not (SpawnableGroupPackage.FormatVersion or 12))
             throw new InvalidDataException("Unsupported Spawnable package version.");
 
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
         writer.Write(Magic);
-        writer.Write(FormatVersion);
+        writer.Write(package.CpuPrograms.Length == 0 ? FormatVersion : (ushort)4);
         writer.Write(HeaderSize);
         writer.Write(0L);
         writer.Write(package.Version);
@@ -68,6 +68,10 @@ public static class SpawnableGroupPackageBinary
         WriteGpuPrograms(writer, package.RootGpuPrograms);
         foreach (var template in package.Templates)
             WriteGpuPrograms(writer, template.GpuPrograms);
+        if (package.CpuPrograms.Length != 0)
+        {
+            WriteBlob(writer, package.CpuPrograms);
+        }
 
         writer.Flush();
         if (stream.Length > MaximumPackageBytes)
@@ -95,13 +99,14 @@ public static class SpawnableGroupPackageBinary
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
         _ = reader.ReadBytes(4);
         var formatVersion = reader.ReadUInt16();
-        if (formatVersion is not (1 or 2 or FormatVersion) || reader.ReadUInt16() != HeaderSize)
+        if (formatVersion is not (1 or 2 or FormatVersion or 4) || reader.ReadUInt16() != HeaderSize)
             throw new InvalidDataException("Unsupported Spawnable binary package format.");
         if (reader.ReadInt64() != bytes.Length)
             throw new InvalidDataException("Spawnable binary package length mismatch.");
         var packageVersion = reader.ReadInt32();
         if ((formatVersion == 1 ? packageVersion != 9 :
              formatVersion == 2 ? packageVersion != 10 :
+             formatVersion == 4 ? packageVersion != 12 :
              packageVersion != SpawnableGroupPackage.FormatVersion) ||
             reader.ReadUInt32() != 0)
             throw new InvalidDataException("Unsupported or malformed Spawnable package metadata.");
@@ -136,9 +141,10 @@ public static class SpawnableGroupPackageBinary
             JsonSerializer.Deserialize<GraphNodeSnapshot[]>(ReadBlob(reader), JsonOptions)
                 ?? throw new InvalidDataException("Invalid root GPU container metadata.");
         var rootGpuPrograms = formatVersion < 3 ? [] : ReadGpuPrograms(reader);
-        if (formatVersion == 3)
+        if (formatVersion >= 3)
             for (var index = 0; index < templates.Length; index++)
                 templates[index] = templates[index] with { GpuPrograms = ReadGpuPrograms(reader) };
+        var cpuPrograms = formatVersion >= 4 ? ReadBlob(reader) : [];
         if (stream.Position != stream.Length)
             throw new InvalidDataException("Unexpected trailing data in Spawnable binary package.");
         return new(parentBytecode, Array.AsReadOnly(templates))
@@ -153,7 +159,8 @@ public static class SpawnableGroupPackageBinary
             SignalRoutes = Array.AsReadOnly(signalRoutes),
             RootRenderConfiguration = rootRenderConfiguration,
             RootGpuContainers = Array.AsReadOnly(rootGpuContainers),
-            RootGpuPrograms = rootGpuPrograms
+            RootGpuPrograms = rootGpuPrograms,
+            CpuPrograms = cpuPrograms
         };
     }
 

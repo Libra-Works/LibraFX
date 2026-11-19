@@ -77,7 +77,16 @@ public sealed partial class GraphWorkspaceViewModel
 
         var changed = nodes.Single(node => node.Id == path[depth]);
         var connections = root.Connections;
-        if (changed.Kind == GraphNodeKind.SpawnableGroup)
+        if (CpuParticleSchema.IsContainer(changed.Kind))
+        {
+            var definition = CpuParticleSchema.Effective(GraphNodeDefinition.All.Single(item => item.Kind == changed.Kind), changed.ChildGraph);
+            var inputs = definition.InputPorts!.Select(port => port.Id).ToHashSet();
+            var outputs = definition.OutputPorts!.Select(port => port.Id).ToHashSet();
+            connections = connections.Where(edge =>
+                (edge.TargetNodeId != changed.Id || edge.TargetPortId is { } input && inputs.Contains(input)) &&
+                (edge.SourceNodeId != changed.Id || edge.SourcePortId is { } output && outputs.Contains(output))).ToArray();
+        }
+        else if (changed.Kind == GraphNodeKind.SpawnableGroup)
         {
             var valid = changed.ChildGraph!.Nodes.Where(node =>
                     SpawnableGroupSchema.IsInput(node.Kind) || SpawnableGroupSchema.IsSignalInput(node.Kind))

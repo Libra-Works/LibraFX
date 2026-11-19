@@ -145,13 +145,32 @@ public sealed partial class GraphWorkspaceViewModel
         var parent = _rootSnapshot;
         GraphNodeSnapshot? owner = null;
         var insideSpawnable = false;
+        var insideCpuStage = false;
         foreach (var id in _graphPath)
         {
             owner = parent.Nodes.First(node => node.Id == id);
             insideSpawnable |= owner.Kind == GraphNodeKind.SpawnableGroup;
+            insideCpuStage |= CpuParticleSchema.IsStage(owner.Kind);
             parent = owner.ChildGraph!;
         }
 
+        if (additions.Any(CpuParticleSchema.IsStageOnly) &&
+            !insideCpuStage)
+        {
+            throw new InvalidOperationException("Particle attributes and boundaries belong inside a CPU Spawn/Update stage.");
+        }
+        if (additions.Any(kind => CpuParticleSchema.IsBoundary(kind) ||
+                CpuParticleSchema.Name(kind) == "CpuParticleStageEvent") &&
+            (owner is null || !CpuParticleSchema.IsStage(owner.Kind)))
+        {
+            throw new InvalidOperationException("CPU boundary nodes and Stage Event must be directly in Spawn/Update.");
+        }
+        if (additions.Any(kind => CpuParticleSchema.IsStage(kind) ||
+                CpuParticleSchema.Name(kind) == "CpuParticleSpriteDraw") &&
+            (owner is null || !CpuParticleSchema.IsContainer(owner.Kind)))
+        {
+            throw new InvalidOperationException("CPU Spawn/Update and Sprite Draw belong directly inside CpuParticle.");
+        }
         if (insideSpawnable && additions.Any(kind => kind == GraphNodeKind.SpawnableGroup))
         {
             throw new InvalidOperationException("Nested Spawnable Groups are not supported.");

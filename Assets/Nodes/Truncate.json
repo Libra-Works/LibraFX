@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1, "typeId": "74305ac1-91b2-4c33-8d44-000000000039",
+  "namespace": "LiberaFx", "kind": "Truncate", "name": "Truncate", "displayNameKey": "ScalarMath.Node.Truncate", "descriptionKey": "ScalarMath.Help.Truncate",
+  "group": "Math", "portType": "Float", "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [{ "id": "a", "name": "Value" }],
+  "outputPorts": [{ "id": "value", "name": "Value" }],
+  "parameters": [{ "id": "a", "name": "Value", "displayNameKey": "ScalarMath.Value", "type": "float", "defaultValue": 0.0 }]
+}

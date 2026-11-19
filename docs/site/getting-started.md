@@ -6,13 +6,15 @@ title: Getting Started
 
 # Getting Started
 
+If terms like node, pin, or Signal are new to you, see the [graph glossary](glossary.md#graphs).
+
 Open the bundled **Afterimage Gate** project and follow the two cues that create
 a violet ring and a delayed burst of cyan streaks. You can inspect the graph
 without a game engine; to see the effect render, use the Unreal preview.
 
 ## Install the editor
 
-Download a package from [2026.11.8 Preview](https://github.com/Libra-Works/LibraFX/releases/tag/v2026.11.8).
+Download a package from the latest [Preview release](https://github.com/Libra-Works/LibraFX/releases).
 
 | Platform | How to start |
 | --- | --- |
@@ -39,6 +41,8 @@ test project. In Unreal, open **Window → LIBERA FX Preview** and choose
 144, then play or scrub. Around frames 54–63, look for the ring and cyan streaks
 together. The live preview uses Unreal's stock sphere mesh and its own unlit
 material. Standalone playback needs explicit asset bindings.
+New offline exports use `.lfxb` packages and require the updated editor and SDK;
+the older published release uses `.lfxp` for packages.
 
 For the preview's native-library prerequisite and camera framing, see the
-[bundled sample notes](https://github.com/Libra-Works/LibraFX/blob/v2026.11.8/Assets/Samples/AfterimageGate.txt).
+[bundled sample notes](https://github.com/Libra-Works/LibraFX/blob/main/Assets/Samples/AfterimageGate.txt).

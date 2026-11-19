@@ -6,6 +6,8 @@ title: GPU Particle Authoring
 
 # GPU Particle Authoring
 
+See [GPU particle terms](glossary.md#gpu) for kernel, attribute, uniform, and IR.
+
 A **GPU Particle** node is a container on the main effect graph. Its contents
 are edited in a separate workspace: the outer graph owns effect scope and
 Signals, while a GPU kernel computes typed values for particles. A CPU Signal
@@ -64,5 +66,7 @@ portable IR or supported shader source; retain the matching metadata when
 exporting a shader. **A successful compile or export does not run the GPU.**
 Use the target engine's integration to resolve bindings, build or import the
 backend artifacts, and verify simulated motion and rendering. Do not treat
-standalone shader source or raw `.lfxb` bytecode as a complete GPU effect
-package. See [Engine integration](engine-integration.md).
+standalone shader source or legacy raw bytecode as a complete GPU effect.
+The editor exports GPU effects in the same `.lfxb` package as CPU effects;
+the standalone converter still rejects GPU graphs explicitly. Use the matching
+updated engine SDK. See [Engine integration](engine-integration.md).

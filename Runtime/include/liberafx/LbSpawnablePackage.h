@@ -95,6 +95,7 @@ struct SpawnablePackage final {
     std::vector<std::uint8_t> rootRenderConfiguration;
     std::vector<std::uint8_t> rootGpuContainersJson;
     std::vector<std::uint8_t> rootGpuProgramsJson;
+    std::vector<std::uint8_t> cpuPrograms;
     std::vector<SpawnablePackageTemplate> templates;
     std::vector<SpawnablePackageDestroyRoute> destroyRoutes;
     std::vector<SpawnablePackageSignalRoute> signalRoutes;

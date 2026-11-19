@@ -5,6 +5,8 @@
 #include "EditorReimportHandler.h"
 #include "LibraEffectFactory.generated.h"
 
+class ULibraEffectAsset;
+
 UCLASS()
 class ULibraEffectFactory : public UFactory, public FReimportHandler
 {
@@ -19,4 +21,8 @@ public:
     virtual bool CanReimport(UObject* object, TArray<FString>& outFilenames) override;
     virtual void SetReimportPaths(UObject* object, const TArray<FString>& newPaths) override;
     virtual EReimportResult::Type Reimport(UObject* object) override;
+
+private:
+    static bool ReadBytecode(const FString& filename, TArray<uint8>& bytes);
+    static void UpdateImportData(ULibraEffectAsset& asset, const FString& filename);
 };

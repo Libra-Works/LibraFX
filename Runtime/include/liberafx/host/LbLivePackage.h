@@ -12,6 +12,10 @@ inline auto validateLiveRestart(const std::uint8_t* bytes, std::size_t count) no
     auto package = SpawnablePackage{};
     auto result = loadSpawnablePackage(bytes, count, package);
     if (result != Result::Ok) return result;
+    if (!package.cpuPrograms.empty())
+    {
+        return Result::UnsupportedBinary;
+    }
     if (package.autoDestroyWhenIdle || package.hasDeferredSignals || package.hasChildDeferredSignals ||
         package.onStartNodeId || package.onDestroyNodeId || !package.templates.empty() ||
         !package.destroyRoutes.empty() || !package.signalRoutes.empty() || !package.gameIoPorts.empty())

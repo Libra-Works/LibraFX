@@ -1,11 +1,14 @@
 #include "LibraSpawnableRenderState.h"
 #include "LibraDebugDrawScope.h"
+#include "LibraFlexiblePlaneRenderer.h"
 
 #include "LibraSpawnableComponent.h"
 #include "LibraSpawnableAsset.h"
 #include "LibraGpuEffectAsset.h"
 #include "LibraGpuEffectRuntime.h"
+#include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Dom/JsonObject.h"
 #include "Engine/StaticMesh.h"
@@ -15,6 +18,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "Math/RotationMatrix.h"
 #include "Misc/PackageName.h"
 #include "RHI.h"
 #include "Serialization/JsonReader.h"
@@ -24,6 +28,19 @@
 #include "liberafx/LbSceneBindings.h"
 #include "LibraSpriteCompositionRender.h"
 #include "liberafx/LbSpawnablePackage.h"
+#include <algorithm>
+
+namespace LibraCpuParticleRendering
+{
+struct FBatch
+{
+    TStrongObjectPtr<UInstancedStaticMeshComponent> Component;
+    TArray<FTransform> Transforms;
+    TArray<FTransform> Growth;
+    TArray<int32> Removed;
+    TArray<FLinearColor> Colors;
+};
+}
 
 namespace {
 auto Text(const std::vector<std::uint8_t>& bytes) -> FString
@@ -120,11 +137,30 @@ struct FDraw
     TArray<TPair<int32, FName>> TintTargets;
 };
 
+struct FCpuParticleDraw
+{
+    FGuid Id;
+    float DrawScale = 1;
+    bool bAdditive = false;
+    TStrongObjectPtr<UStaticMesh> Mesh;
+    TStrongObjectPtr<UTexture> Texture;
+    TStrongObjectPtr<UMaterialInterface> Material;
+};
+
+struct FFlexiblePlaneDraw
+{
+    FLibraFlexiblePlaneDefinition Definition;
+    TStrongObjectPtr<UTexture> Texture;
+    TStrongObjectPtr<UMaterialInterface> Material;
+};
+
 struct FDefinition
 {
     TSharedPtr<FJsonObject> DebugConfiguration;
     int32 DebugCount = 0;
     TArray<FDraw> Draws;
+    TArray<FCpuParticleDraw> CpuParticles;
+    TArray<FFlexiblePlaneDraw> FlexiblePlanes;
     TArray<TStrongObjectPtr<ULibraGpuEffectAsset>> Gpu;
     TArray<FGuid> GpuNodeIds;
     TMap<FGuid, TArray<FGuid>> GpuDrawTransforms;
@@ -139,6 +175,9 @@ struct FInstance
     double Started = 0, Previous = 0;
     FDefinition* Definition = nullptr;
     TArray<TStrongObjectPtr<UStaticMeshComponent>> Draws;
+    TArray<LibraCpuParticleRendering::FBatch> CpuDraws;
+    TArray<TUniquePtr<FLibraFlexiblePlaneRenderer>> FlexiblePlanes;
+    FLibraFlexiblePlaneHistoryScope FlexibleHistory;
     TArray<TStrongObjectPtr<ULibraGpuEffectRuntime>> Gpu;
     ~FInstance()
     {
@@ -154,6 +193,13 @@ struct FInstance
             if (component.IsValid())
             {
                 component->DestroyComponent();
+            }
+        }
+        for (auto& system : CpuDraws)
+        {
+            if (system.Component.IsValid())
+            {
+                system.Component->DestroyComponent();
             }
         }
     }
@@ -288,7 +334,25 @@ struct FLibraSpawnableRenderState::FImpl
             animation.Durations, start, end, billboard) || Fail(TEXT("Invalid layered sprite clock, order or pose keys."));
     }
 
-    bool ReadDraws(const std::vector<std::uint8_t>& bytes, FDefinition& definition)
+    UTexture2D* MakeWhiteTexture()
+    {
+        auto* texture = UTexture2D::CreateTransient(1, 1, PF_B8G8R8A8);
+        if (!texture || !texture->GetPlatformData() || texture->GetPlatformData()->Mips.IsEmpty())
+            return nullptr;
+        auto& mip = texture->GetPlatformData()->Mips[0];
+        auto* pixel = static_cast<FColor*>(mip.BulkData.Lock(LOCK_READ_WRITE));
+        if (!pixel)
+        {
+            return nullptr;
+        }
+        *pixel = FColor::White;
+        mip.BulkData.Unlock();
+        texture->UpdateResource();
+        return texture;
+    }
+
+    bool ReadDraws(const std::vector<std::uint8_t>& bytes, FDefinition& definition,
+        bool bAllowCpuParticles = false)
     {
         if (bytes.empty()) return true;
         auto root = TSharedPtr<FJsonObject>{};
@@ -299,6 +363,26 @@ struct FLibraSpawnableRenderState::FImpl
             !root->TryGetStringField(TEXT("type"), type) || type != TEXT("render_config") ||
             !root->TryGetArrayField(TEXT("nodes"), nodes) || nodes->Num() > 128)
             return Fail(TEXT("Invalid render configuration."));
+        const TArray<TSharedPtr<FJsonValue>>* cpuParticles = nullptr;
+        if (root->HasField(TEXT("cpuParticles")) &&
+            !root->TryGetArrayField(TEXT("cpuParticles"), cpuParticles))
+        {
+            return Fail(TEXT("CPU particle renderer metadata must be an array."));
+        }
+        if (cpuParticles && cpuParticles->Num() > 128)
+        {
+            return Fail(TEXT("CPU particle renderer count exceeds 128."));
+        }
+        auto cpuVersion = double{};
+        if ((root->HasField(TEXT("cpuParticleVersion")) || (cpuParticles && !cpuParticles->IsEmpty())) &&
+            (!root->TryGetNumberField(TEXT("cpuParticleVersion"), cpuVersion) || cpuVersion != 1))
+        {
+            return Fail(TEXT("Unsupported CPU particle scene metadata version."));
+        }
+        if (!bAllowCpuParticles && cpuParticles && cpuParticles->Num() != 0)
+        {
+            return Fail(TEXT("CPU particle Sprite rendering inside SpawnableGroup templates is not supported."));
+        }
         const TArray<TSharedPtr<FJsonValue>>* gpuDrawTransforms = nullptr;
         if (root->TryGetArrayField(TEXT("gpuDrawTransforms"), gpuDrawTransforms))
         {
@@ -330,11 +414,33 @@ struct FLibraSpawnableRenderState::FImpl
             }
         }
         auto ids = TSet<FGuid>{};
+        using EKind = ELibraPackageResourceKind;
         for (const auto& item : *nodes)
         {
             auto object = item.IsValid() && item->Type == EJson::Object ? item->AsObject() : nullptr;
             auto draw = FDraw{};
             auto id = FString{}, kind = FString{}, asset = FString{};
+            if (object && object->TryGetStringField(TEXT("kind"), kind) &&
+                kind == TEXT("flexiblePlane"))
+            {
+                auto plane = FFlexiblePlaneDraw{};
+                auto error = FString{};
+                if (!FLibraFlexiblePlaneRenderer::Prepare(object, plane.Definition, error) ||
+                    ids.Contains(plane.Definition.nodeId))
+                {
+                    return Fail(error.IsEmpty() ? TEXT("Duplicate Flexible Plane identity.") : error);
+                }
+                plane.Texture.Reset(Resolve<UTexture>(plane.Definition.assetPath, EKind::Texture));
+                plane.Material.Reset(Resolve<UMaterialInterface>(TEXT("builtin:flexible-plane"), EKind::Material));
+                if (!plane.Texture.IsValid() || !plane.Material.IsValid() ||
+                    !HasParameter(plane.Material.Get(), FMaterialParameterInfo(TEXT("Texture")), TEXT("texture")))
+                {
+                    return Fail(TEXT("Flexible Plane requires its Texture binding and a builtin:flexible-plane Material with a Texture parameter and vertex colors."));
+                }
+                ids.Add(plane.Definition.nodeId);
+                definition.FlexiblePlanes.Add(MoveTemp(plane));
+                continue;
+            }
             if (object && object->TryGetStringField(TEXT("kind"), kind) &&
                 (kind == TEXT("debugText") || kind == TEXT("debugModel")))
             {
@@ -354,7 +460,6 @@ struct FLibraSpawnableRenderState::FImpl
             draw.bSprite = kind == TEXT("sprite");
             object->TryGetBoolField(TEXT("billboard"), draw.bBillboard);
             if (draw.bSprite && !ReadSpriteAnimation(object, draw.SpriteAnimation, draw.bBillboard)) return false;
-            using EKind = ELibraPackageResourceKind;
             draw.Mesh.Reset(Resolve<UStaticMesh>(draw.bSprite ? TEXT("/Engine/BasicShapes/Plane.Plane") : asset,
                 EKind::Model, !draw.bSprite));
             if (!draw.Mesh.IsValid() || draw.Mesh->GetStaticMaterials().Num() < 1 ||
@@ -461,6 +566,62 @@ struct FLibraSpawnableRenderState::FImpl
                 draw.Textures.Add(MoveTemp(texture));
             }
             definition.Draws.Add(MoveTemp(draw));
+        }
+        if (bAllowCpuParticles && cpuParticles)
+        {
+            for (const auto& value : *cpuParticles)
+            {
+                auto object = value.IsValid() && value->Type == EJson::Object ? value->AsObject() : nullptr;
+                auto draw = FCpuParticleDraw{};
+                auto id = FString{}, asset = FString{}, blendMode = FString{};
+                auto drawScale = double{};
+                auto billboard = false;
+                if (!object || !object->TryGetStringField(TEXT("nodeId"), id) ||
+                    !FGuid::Parse(id, draw.Id) || !draw.Id.IsValid() || ids.Contains(draw.Id) ||
+                    !object->TryGetStringField(TEXT("assetPath"), asset) || asset.IsEmpty() ||
+                    asset.Len() > 512 || !object->TryGetStringField(TEXT("blendMode"), blendMode) ||
+                    (blendMode != TEXT("Alpha") && blendMode != TEXT("Additive")) ||
+                    !object->TryGetNumberField(TEXT("drawScale"), drawScale) ||
+                    !FMath::IsFinite(drawScale) || drawScale <= 0 || drawScale > MAX_flt ||
+                    !object->TryGetBoolField(TEXT("billboard"), billboard) || !billboard)
+                {
+                    return Fail(TEXT("CPU particle Sprite descriptor is invalid or unsupported."));
+                }
+                ids.Add(draw.Id);
+                draw.DrawScale = static_cast<float>(drawScale);
+                draw.bAdditive = blendMode == TEXT("Additive");
+                auto texture = asset == TEXT("builtin:white")
+                    ? MakeWhiteTexture() : Resolve<UTexture>(asset, EKind::Texture);
+                if (!texture)
+                {
+                    return Fail(TEXT("Missing CPU particle Texture binding: ") + asset);
+                }
+                draw.Texture.Reset(texture);
+                const auto* materialIdentity = draw.bAdditive
+                    ? TEXT("builtin:cpu-particle-additive") : TEXT("builtin:cpu-particle-alpha");
+                auto* material = Resolve<UMaterialInterface>(materialIdentity, EKind::Material);
+                if (!material)
+                {
+                    return Fail(TEXT("Missing CPU particle Sprite material binding: ") + FString(materialIdentity));
+                }
+                const auto expectedBlend = draw.bAdditive ? BLEND_Additive : BLEND_Translucent;
+                if (material->GetBlendMode() != expectedBlend || !material->IsTwoSided() ||
+                    !material->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes) ||
+                    !HasParameter(material, FMaterialParameterInfo(TEXT("Texture")), TEXT("texture")))
+                {
+                    return Fail(TEXT("CPU particle material must be two-sided, support instanced static meshes, ")
+                        TEXT("use the requested blend mode and expose a Texture parameter."));
+                }
+                draw.Material.Reset(material);
+                auto* plane = Resolve<UStaticMesh>(TEXT("/Engine/BasicShapes/Plane.Plane"),
+                    EKind::Model, false);
+                if (!plane)
+                {
+                    return Fail(TEXT("Unreal engine Plane mesh is unavailable for CPU particle billboards."));
+                }
+                draw.Mesh.Reset(plane);
+                definition.CpuParticles.Add(MoveTemp(draw));
+            }
         }
         return true;
     }
@@ -587,9 +748,12 @@ struct FLibraSpawnableRenderState::FImpl
         {
             if (instance->Container == container && instance->Id == id)
                 return Fail(TEXT("Duplicate engine instance identity."));
-            count += instance->Draws.Num() + (instance->Debug ? instance->Debug->Count() : 0);
+            count += instance->Draws.Num() + instance->CpuDraws.Num() + instance->FlexiblePlanes.Num() +
+                (instance->Debug ? instance->Debug->Count() : 0);
         }
-        if (count + (*definition)->Draws.Num() + (Owner.IsPreviewDebugDrawSuppressed() ? 0 : (*definition)->DebugCount) > 4096 ||
+        if (count + (*definition)->Draws.Num() + (*definition)->CpuParticles.Num() +
+            (*definition)->FlexiblePlanes.Num() +
+            (Owner.IsPreviewDebugDrawSuppressed() ? 0 : (*definition)->DebugCount) > 4096 ||
             (*definition)->GpuBytes > ULibraGpuEffectAsset::MaximumGpuBytes - GpuBytes)
             return Fail(TEXT("Active renderer or aggregate GPU memory budget exceeded."));
         auto actor = Owner.GetOwner();
@@ -598,6 +762,52 @@ struct FLibraSpawnableRenderState::FImpl
         instance->Container = container; instance->Id = id;
         instance->Started = instance->Previous = time;
         instance->Definition = definition->Get();
+        for (const auto& plane : instance->Definition->FlexiblePlanes)
+        {
+            auto* root = actor->GetRootComponent();
+            if (!root)
+            {
+                return Fail(TEXT("Flexible Plane rendering requires an actor root component."));
+            }
+            auto renderer = TUniquePtr<FLibraFlexiblePlaneRenderer>{};
+            auto error = FString{};
+            if (!FLibraFlexiblePlaneRenderer::Create(*actor, *root, plane.Definition,
+                plane.Texture.Get(), plane.Material.Get(), FName(TEXT("Texture")), renderer, error))
+            {
+                return Fail(error);
+            }
+            instance->FlexiblePlanes.Add(MoveTemp(renderer));
+        }
+        for (const auto& system : instance->Definition->CpuParticles)
+        {
+            auto* root = actor->GetRootComponent();
+            if (!root)
+            {
+                return Fail(TEXT("CPU particle rendering requires an actor root component."));
+            }
+            auto& batch = instance->CpuDraws.AddDefaulted_GetRef();
+            batch.Component.Reset(NewObject<UInstancedStaticMeshComponent>(actor, NAME_None, RF_Transient));
+            auto* component = batch.Component.Get();
+            component->SetMobility(EComponentMobility::Movable);
+            component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+            component->SetCanEverAffectNavigation(false);
+            component->SetCastShadow(false);
+            component->SetupAttachment(root);
+            component->SetAbsolute(false, true, true);
+            component->SetStaticMesh(system.Mesh.Get());
+            component->NumCustomDataFloats = 4;
+            auto* material = UMaterialInstanceDynamic::Create(system.Material.Get(), component);
+            if (!material)
+            {
+                return Fail(TEXT("Could not create a CPU particle batch material."));
+            }
+            material->SetTextureParameterValue(TEXT("Texture"), system.Texture.Get());
+            component->SetMaterial(0, material);
+            component->ComponentTags.Add(TEXT("LibraCpuParticleRenderer"));
+            component->ComponentTags.Add(FName(*system.Id.ToString()));
+            actor->AddInstanceComponent(component);
+            component->RegisterComponent();
+        }
         if (instance->Definition->DebugConfiguration && !Owner.IsPreviewDebugDrawSuppressed())
         {
             instance->Debug = MakeUnique<FLibraDebugDrawScope>();
@@ -661,8 +871,58 @@ struct FLibraSpawnableRenderState::FImpl
 
     bool Update(double time)
     {
-        for (const auto& instance : Instances)
+        for (auto& instance : Instances)
         {
+            instance->FlexibleHistory.beginUpdate();
+            for (auto planeIndex = 0; planeIndex < instance->FlexiblePlanes.Num(); ++planeIndex)
+            {
+                auto& plane = instance->FlexiblePlanes[planeIndex];
+                auto cameraPosition = FVector::ZeroVector;
+                auto* overrideCamera = Owner.EffectCameraOverride.Get();
+                auto* controller = Owner.GetWorld() ? Owner.GetWorld()->GetFirstPlayerController() : nullptr;
+                auto* camera = controller ? controller->PlayerCameraManager : nullptr;
+                if (IsValid(overrideCamera))
+                {
+                    cameraPosition = overrideCamera->GetComponentLocation();
+                }
+                else if (IsValid(camera))
+                {
+                    cameraPosition = camera->GetCameraLocation();
+                }
+                else if (instance->Definition->FlexiblePlanes[planeIndex].Definition.native.options.facing == 1)
+                {
+                    return Fail(TEXT("Flexible Plane rendering requires a current effect or player camera."));
+                }
+                auto error = FString{};
+                if (!plane->Update(time - instance->Started, cameraPosition,
+                    [this, &instance](const uint8* source, double* output, uint8& width) -> LibraResult
+                    {
+                        auto id = std::array<uint8, 16>{};
+                        std::copy_n(source, id.size(), id.begin());
+                        auto value = FVector4{};
+                        auto count = int32{};
+                        const auto result = instance->Container.IsValid()
+                            ? Owner.ReadChildValue(instance->Container, instance->Id, Guid(id), value, count)
+                            : Owner.ReadRootValue(Guid(id), value, count);
+                        if (result != ELibraRuntimeResult::Ok)
+                        {
+                            return static_cast<LibraResult>(result);
+                        }
+                        if (count < 1 || count > 4 || !Finite(value))
+                        {
+                            return LIBRA_INVALID_VALUE_TYPE;
+                        }
+                        width = static_cast<uint8>(count);
+                        for (auto lane = 0; lane < count; ++lane)
+                        {
+                            output[lane] = value[lane];
+                        }
+                        return LIBRA_OK;
+                    }, instance->FlexibleHistory, error))
+                {
+                    return Fail(error);
+                }
+            }
             if (instance->Debug)
             {
                 auto error = FString{};
@@ -772,6 +1032,126 @@ struct FLibraSpawnableRenderState::FImpl
                     }
                 component->SetVisibility(true);
             }
+            if (instance->CpuDraws.Num() != instance->Definition->CpuParticles.Num())
+            {
+                return Fail(TEXT("CPU particle batches do not match their definitions."));
+            }
+            for (auto systemIndex = 0; systemIndex < instance->Definition->CpuParticles.Num(); ++systemIndex)
+            {
+                if (instance->Container.IsValid())
+                {
+                    return Fail(TEXT("CPU particle systems are supported only in the root render scope."));
+                }
+                const auto& system = instance->Definition->CpuParticles[systemIndex];
+                auto particleCount = uint32{};
+                auto result = Owner.ReadCpuParticleCount(system.Id, particleCount);
+                if (result != ELibraRuntimeResult::Ok)
+                {
+                    return Fail(TEXT("CPU particle count read failed with runtime result ") +
+                        FString::FromInt(static_cast<int32>(result)) + TEXT("."));
+                }
+                if (particleCount > 1000000)
+                {
+                    return Fail(TEXT("CPU particle count exceeds the native system capacity limit."));
+                }
+                auto& batch = instance->CpuDraws[systemIndex];
+                auto* component = batch.Component.Get();
+                auto* actor = Owner.GetOwner();
+                auto* root = actor ? actor->GetRootComponent() : nullptr;
+                if (!IsValid(component) || !component->IsRegistered() || !root)
+                {
+                    return Fail(TEXT("An owned CPU particle batch or its actor root was destroyed externally."));
+                }
+                auto* world = Owner.GetWorld();
+                auto* controller = world ? world->GetFirstPlayerController() : nullptr;
+                auto* camera = controller ? controller->PlayerCameraManager : nullptr;
+                auto* overrideCamera = Owner.EffectCameraOverride.Get();
+                if (particleCount != 0 && !IsValid(overrideCamera) && !IsValid(camera))
+                {
+                    return Fail(TEXT("CPU particle billboard rendering requires a player camera."));
+                }
+                auto rotation = FQuat::Identity;
+                if (IsValid(overrideCamera) || IsValid(camera))
+                {
+                    const auto view = IsValid(overrideCamera) ? overrideCamera->GetComponentQuat()
+                        : camera->GetCameraRotation().Quaternion();
+                    rotation = FRotationMatrix::MakeFromXY(view.GetRightVector(), view.GetUpVector()).ToQuat();
+                }
+                const auto ownerTransform = root->GetComponentTransform();
+                const auto ownerScale = ownerTransform.GetScale3D().GetAbs();
+                const auto count = static_cast<int32>(particleCount);
+                batch.Transforms.Reset();
+                batch.Colors.Reset();
+                for (auto particleIndex = 0; particleIndex < count; ++particleIndex)
+                {
+                    auto particleId = uint64{};
+                    auto positionX = double{}, positionY = double{}, positionZ = double{};
+                    auto colorR = double{}, colorG = double{}, colorB = double{}, colorA = double{};
+                    auto sizeX = double{}, sizeY = double{};
+                    result = Owner.ReadCpuParticleAt(system.Id, static_cast<SIZE_T>(particleIndex),
+                        particleId, positionX, positionY, positionZ, colorR, colorG,
+                        colorB, colorA, sizeX, sizeY);
+                    if (result != ELibraRuntimeResult::Ok || particleId == 0)
+                    {
+                        return Fail(TEXT("CPU particle snapshot read failed."));
+                    }
+                    const auto worldPosition = ownerTransform.TransformPosition(FVector(
+                        positionX * system.DrawScale,
+                        positionY * system.DrawScale,
+                        positionZ * system.DrawScale));
+                    const auto scaledX = sizeX * system.DrawScale * ownerScale.X;
+                    const auto scaledY = sizeY * system.DrawScale * ownerScale.Y;
+                    if (!Finite(FVector4(worldPosition.X, worldPosition.Y, worldPosition.Z, scaledX)) ||
+                        !Finite(FVector4(scaledY, 0, 0, 0)) ||
+                        !Finite(FVector4(colorR, colorG, colorB, colorA)))
+                    {
+                        return Fail(TEXT("CPU particle snapshot exceeds Unreal's finite float range."));
+                    }
+                    batch.Transforms.Emplace(rotation, worldPosition, FVector(scaledX / 100, scaledY / 100, 1));
+                    batch.Colors.Emplace(static_cast<float>(colorR), static_cast<float>(colorG),
+                        static_cast<float>(colorB), static_cast<float>(colorA));
+                }
+                const auto previousCount = component->GetInstanceCount();
+                if (count < previousCount)
+                {
+                    batch.Removed.Reset(previousCount - count);
+                    for (auto index = previousCount - 1; index >= count; --index)
+                    {
+                        batch.Removed.Add(index);
+                    }
+                    if (!component->RemoveInstances(batch.Removed, true))
+                    {
+                        return Fail(TEXT("Could not shrink a CPU particle batch."));
+                    }
+                }
+                else if (count > previousCount)
+                {
+                    batch.Growth.Reset(count - previousCount);
+                    batch.Growth.Append(batch.Transforms.GetData() + previousCount, count - previousCount);
+                    component->AddInstances(batch.Growth, false, true, false);
+                    if (component->GetInstanceCount() != count)
+                    {
+                        return Fail(TEXT("Could not grow a CPU particle batch."));
+                    }
+                }
+                if (count != 0)
+                {
+                    if (!component->BatchUpdateInstancesTransforms(0, batch.Transforms, true, false, true))
+                    {
+                        return Fail(TEXT("Could not update CPU particle batch transforms."));
+                    }
+                    for (auto index = 0; index < count; ++index)
+                    {
+                        const auto& color = batch.Colors[index];
+                        const float channels[]{color.R, color.G, color.B, color.A};
+                        if (!component->SetCustomData(index, MakeArrayView(channels), false))
+                        {
+                            return Fail(TEXT("Could not update CPU particle batch RGBA."));
+                        }
+                    }
+                    component->MarkRenderInstancesDirty();
+                }
+            }
             auto delta = time - instance->Previous;
             if (!FMath::IsFinite(delta) || delta < 0 || delta > MAX_flt) return Fail(TEXT("Invalid GPU local time."));
             for (auto gpuIndex = 0; gpuIndex < instance->Gpu.Num(); ++gpuIndex)
@@ -812,7 +1192,7 @@ bool FLibraSpawnableRenderState::Prepare(const liberafx::SpawnablePackage& packa
     }
     if (package.templates.size() > 128) return Impl->Fail(TEXT("The engine adapter supports at most 128 templates."));
     auto root = MakeUnique<FDefinition>();
-    if (!Impl->ReadDraws(package.rootRenderConfiguration, *root) ||
+    if (!Impl->ReadDraws(package.rootRenderConfiguration, *root, true) ||
         !Impl->ReadGpu(package.rootGpuContainersJson, package.rootGpuProgramsJson, *root)) return false;
     if (!root->Gpu.IsEmpty() && package.autoDestroyWhenIdle)
         return Impl->Fail(TEXT("Root GPU auto-idle draining is unsupported. Disable AutoDestroyWhenIdle and use RequestNaturalEnd or Stop."));
@@ -854,7 +1234,10 @@ int32 FLibraSpawnableRenderState::DrawCount() const
 {
     auto count = 0;
     for (const auto& instance : Impl->Instances)
-        count += instance->Draws.Num() + (instance->Debug ? instance->Debug->Count() : 0);
+    {
+        count += instance->Draws.Num() + instance->CpuDraws.Num() + instance->FlexiblePlanes.Num() +
+            (instance->Debug ? instance->Debug->Count() : 0);
+    }
     return count;
 }
 

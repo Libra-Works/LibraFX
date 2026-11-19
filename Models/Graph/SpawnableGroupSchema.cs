@@ -32,6 +32,19 @@ public static class SpawnableGroupSchema
 
     public static string? RemapPort(GraphNodeSnapshot original, GraphSnapshot? clone, string? port)
     {
+        if (CpuParticleSchema.IsContainer(original.Kind) && original.ChildGraph is { } originalChild && clone is not null)
+        {
+            var oldBoundaries = CpuParticleSchema.Boundaries(originalChild).ToArray();
+            var newBoundaries = CpuParticleSchema.Boundaries(clone).ToArray();
+            for (var index = 0; index < oldBoundaries.Length; index++)
+            {
+                if (CpuParticleSchema.PortId(oldBoundaries[index].Id) == port)
+                {
+                    return CpuParticleSchema.PortId(newBoundaries[index].Id);
+                }
+            }
+            return port;
+        }
         if (original.Kind == GraphNodeKind.GraphGroup)
             return GroupBoundarySchema.RemapPort(original, clone, port);
         if (original.Kind != GraphNodeKind.SpawnableGroup || original.ChildGraph is null || clone is null || port is null)
@@ -52,6 +65,10 @@ public static class SpawnableGroupSchema
 
     public static GraphNodeDefinition Effective(GraphNodeDefinition definition, GraphSnapshot? child)
     {
+        if (CpuParticleSchema.IsContainer(definition.Kind))
+        {
+            return CpuParticleSchema.Effective(definition, child);
+        }
         if (definition.Kind != GraphNodeKind.SpawnableGroup || child is null) return definition;
         var inputs = new List<GraphInputPortDefinition>(definition.InputPorts ?? []);
         foreach (var node in child.Nodes.Where(node => IsInput(node.Kind)))

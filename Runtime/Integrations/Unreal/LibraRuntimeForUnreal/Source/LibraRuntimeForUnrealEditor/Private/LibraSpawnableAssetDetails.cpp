@@ -139,7 +139,7 @@ void FLibraSpawnableAssetDetails::CustomizeDetails(IDetailLayoutBuilder& detailB
             SNew(SButton)
             .Text(LOCTEXT("ReimportLabel", "Reimport from source"))
             .ToolTipText(LOCTEXT("ReimportTooltip",
-                "Update the embedded package from its source .lfxp file. "
+                "Update the embedded package from its source .lfxb file (legacy .lfxp also supported). "
                 "If the source has moved, select its new location. "
                 "A failed import leaves the existing package unchanged. Save the asset afterwards."))
             .IsEnabled_Lambda([objects] {

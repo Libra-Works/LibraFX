@@ -1,6 +1,7 @@
 #include "liberafx/host/LbProgramSession.h"
 #include "liberafx/host/LbProjectNodes.h"
 #include "liberafx/LbLivePreview.h"
+#include "liberafx/LbCpuParticles.h"
 #include "liberafx/LbSpawnableHost.h"
 #include "LibraFxGodotRender.h"
 #include "LibraFxGodotGpu.h"
@@ -103,6 +104,11 @@ class LibraEffectPlayer final : public Node {
 public:
     int play(const PackedByteArray& bytecode, double duration)
     {
+        if (bytecode.size() >= 4 && bytecode[0] == 'L' && bytecode[1] == 'F' &&
+            bytecode[2] == 'X' && bytecode[3] == 'P')
+        {
+            return play_package(bytecode, duration);
+        }
         return playStandalone(bytecode, duration, 0, false);
     }
 
@@ -145,6 +151,7 @@ public:
             candidate->duration = duration;
             candidate->elapsed = previewTime;
             ++playbackGeneration_;
+            completedCpuEventHost_.reset();
             playback_ = std::move(candidate);
             set_process(!preview);
         }
@@ -275,6 +282,7 @@ public:
         if (result == Result::Ok) {
             candidate->duration = duration;
             ++playbackGeneration_;
+            completedCpuEventHost_.reset();
             playback_ = std::move(candidate);
             set_process(true);
         }
@@ -327,14 +335,25 @@ public:
                 if (generation != playbackGeneration_) {
                     return code(Result::Ok);
                 }
+                if (!playback_->packageHost->package().cpuPrograms.empty()) {
+                    emit_signal("cpu_particle_events_ready");
+                    if (generation != playbackGeneration_) {
+                        return code(Result::Ok);
+                    }
+                }
                 if (playback_ && ((playback_->duration >= 0 && elapsed >= playback_->duration) ||
                     playback_->packageHost->rootFinished())) {
                     if (playback_->duration >= 0 && elapsed >= playback_->duration &&
                         !playback_->packageHost->rootFinished()) {
                         result = playback_->packageHost->stop();
+                    } else if (!playback_->packageHost->package().cpuPrograms.empty()) {
+                        // Keep the terminal queue available to polling callers
+                        // without retaining the render nodes or GPU adapter.
+                        completedCpuEventHost_ = std::move(playback_->packageHost);
                     }
                     ++playbackGeneration_;
                     playback_.reset();
+                    completedCpuEventHost_.reset();
                     set_process(false);
                 }
             }
@@ -362,6 +381,37 @@ public:
     }
 
     bool is_playing() const { return Thread::is_main_thread() && playback_ != nullptr; }
+
+    Dictionary pop_cpu_particle_event()
+    {
+        auto out = Dictionary{};
+        if (!Thread::is_main_thread()) {
+            return out;
+        }
+        auto* host = playback_ ? playback_->packageHost.get() : completedCpuEventHost_.get();
+        if (!host) {
+            return out;
+        }
+        auto event = CpuParticleEvent{};
+        if (!host->popCpuParticleEvent(event)) {
+            if (!playback_) {
+                completedCpuEventHost_.reset();
+            }
+            return out;
+        }
+        auto values = PackedFloat64Array{};
+        for (auto index = std::uint32_t{}; index < event.width; ++index) {
+            values.append(event.values[index]);
+        }
+        out["system_id"] = uuidString(event.systemId);
+        out["node_id"] = uuidString(event.nodeId);
+        out["particle_id"] = String::num_uint64(event.particleId);
+        out["time"] = event.time;
+        out["values"] = values;
+        out["kind"] = static_cast<std::int64_t>(event.kind);
+        out["width"] = static_cast<std::int64_t>(event.width);
+        return out;
+    }
 
     std::int64_t get_playback_generation() const
     {
@@ -618,7 +668,17 @@ public:
 
     NodePath get_camera_path() const { return cameraPath_; }
 
-    void _process(double delta) override { advance(delta); }
+    void _process(double delta) override
+    {
+        const auto cpuPlayback = playback_ && playback_->packageHost &&
+            !playback_->packageHost->package().cpuPrograms.empty();
+        const auto result = advance(delta);
+        if (cpuPlayback && result != code(Result::Ok)) {
+            godot::UtilityFunctions::push_error(
+                String("Libra FX CPU package advance failed: ") + String::num_int64(result));
+            set_process(false);
+        }
+    }
     void _exit_tree() override
     {
         reset_preview_stream();
@@ -633,6 +693,7 @@ protected:
         godot::ClassDB::bind_method(godot::D_METHOD("advance", "delta"), &LibraEffectPlayer::advance);
         godot::ClassDB::bind_method(godot::D_METHOD("stop"), &LibraEffectPlayer::stop);
         godot::ClassDB::bind_method(godot::D_METHOD("is_playing"), &LibraEffectPlayer::is_playing);
+        godot::ClassDB::bind_method(godot::D_METHOD("pop_cpu_particle_event"), &LibraEffectPlayer::pop_cpu_particle_event);
         godot::ClassDB::bind_method(godot::D_METHOD("read_value", "node_id"), &LibraEffectPlayer::read_value);
         godot::ClassDB::bind_method(godot::D_METHOD("get_game_io_ports"), &LibraEffectPlayer::get_game_io_ports);
         godot::ClassDB::bind_method(godot::D_METHOD("set_game_property", "name", "values"), &LibraEffectPlayer::set_game_property);
@@ -667,6 +728,7 @@ protected:
             "set_camera_path", "get_camera_path");
         ADD_SIGNAL(godot::MethodInfo("game_io_event",
             godot::PropertyInfo(godot::Variant::DICTIONARY, "event")));
+        ADD_SIGNAL(godot::MethodInfo("cpu_particle_events_ready"));
     }
 
 private:
@@ -873,6 +935,7 @@ private:
     }
 
     std::unique_ptr<Playback> playback_;
+    std::unique_ptr<SpawnableHost> completedCpuEventHost_;
     Dictionary scriptActions_;
     bool dispatchingScriptAction_ = false;
     MeshBindings meshBindings_;

@@ -3,7 +3,7 @@
   "sdkVersion": "0.1.0",
   "nativeAbi": 1,
   "maximumBytecodeVersion": 11,
-  "spawnablePackageVersion": 11,
+  "spawnablePackageVersion": 12,
   "unity": {
     "package": "works.libra.liberafx",
     "minimumDeclaredEditor": "6000.0",

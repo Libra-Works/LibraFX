@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1, "typeId": "9bd7a620-c8e1-4f35-a962-000000000023",
+  "namespace": "LiberaFx", "kind": "RandomVector3", "name": "Random Vector3",
+  "displayNameKey": "QuaternionRandom.Node.RandomVector3", "descriptionKey": "QuaternionRandom.Help.RandomVector3",
+  "group": "Random", "groupNameKey": "QuaternionRandom.Group.Random", "portType": "FloatX3", "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [{ "id": "seed", "name": "Seed (uint32)", "portType": "Float" }, { "id": "sampleIndex", "name": "Sample Index (uint32)", "portType": "Float" }, { "id": "min", "name": "Min XYZ" }, { "id": "max", "name": "Max XYZ" }],
+  "outputPorts": [{ "id": "value", "name": "Vector" }],
+  "parameters": [{ "id": "seed", "name": "Seed (uint32)", "displayNameKey": "QuaternionRandom.Seed", "type": "float", "defaultValue": 0 }, { "id": "sampleIndex", "name": "Sample Index (uint32)", "displayNameKey": "QuaternionRandom.SampleIndex", "type": "float", "defaultValue": 0 }, { "id": "min", "name": "Min XYZ", "displayNameKey": "QuaternionRandom.MinVector", "type": "vector3", "defaultValue": [0, 0, 0] }, { "id": "max", "name": "Max XYZ", "displayNameKey": "QuaternionRandom.MaxVector", "type": "vector3", "defaultValue": [1, 1, 1] }]
+}

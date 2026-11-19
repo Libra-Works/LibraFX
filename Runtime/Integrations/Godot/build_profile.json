@@ -1,5 +1,6 @@
 {
   "enabled_classes": [
+    "ArrayMesh",
     "Camera3D",
     "GeometryInstance3D",
     "Image",

@@ -311,9 +311,11 @@ public sealed class GraphNodeViewModel : ObservableObject
         _y = y;
         _curve = definition.Kind == GraphNodeKind.FloatFCurve ? curve ?? FCurve.CreateDefault() : null;
         _signalKeys = signalKeys;
-        ChildGraph = definition.Kind == GraphNodeKind.GraphGroup || definition.Kind == GraphNodeKind.SpawnableGroup
-            ? childGraph ?? (definition.Kind == GraphNodeKind.SpawnableGroup
-                ? GraphDefaults.CreateEffect() : new GraphSnapshot([], [])) : null;
+        ChildGraph = definition.Kind == GraphNodeKind.GraphGroup || definition.Kind == GraphNodeKind.SpawnableGroup ||
+            CpuParticleSchema.HasChild(definition.Kind)
+            ? childGraph ?? (CpuParticleSchema.HasChild(definition.Kind) ? CpuParticleSchema.CreateChild(definition.Kind) :
+                definition.Kind == GraphNodeKind.SpawnableGroup ? GraphDefaults.CreateEffect() : new GraphSnapshot([], [])) : null;
+        _definition = EffectiveDefinition(definition, parameters, ChildGraph);
         GroupAsset = ChildGraph is not null ? groupAsset : null;
         GroupOverrides = ChildGraph is not null ? groupOverrides : null;
         _parameters = parameters;

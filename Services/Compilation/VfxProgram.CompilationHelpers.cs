@@ -76,6 +76,7 @@ public sealed partial class VfxProgram
         {
             yield return node;
             if (node.ChildGraph is not null && !GpuParticleEditorService.IsGpu(node.Kind) &&
+                !CpuParticleSchema.HasChild(node.Kind) &&
                 node.Kind != GraphNodeKind.SpawnableGroup)
                 foreach (var child in Flatten(node.ChildGraph))
                     yield return child;

@@ -12,7 +12,7 @@ public static class RenderProgramBindings
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     public static bool IsRenderNode(GraphNodeKind kind) => GraphNodeDefinition.All.Any(definition =>
         definition.Kind == kind && definition.TypeName is "ModelDraw" or "SpriteDraw" or "SpriteAnimation" or "SpriteComposition")
-        || PreviewDebugDraw.IsDebugNode(kind);
+        || PreviewDebugDraw.IsDebugNode(kind) || FlexiblePlaneDrawSchema.IsNode(kind);
 
     internal static bool HasGpuDrawMatrix(GraphSnapshot graph)
     {
@@ -33,6 +33,10 @@ public static class RenderProgramBindings
     private static byte[] CreateSceneCore(GraphSnapshot graph, long programSequence,
         IRenderResourceBindingContext? resourceContext, VfxCompileOptions? options, bool allowSourceMetadata)
     {
+        if (!allowSourceMetadata && CpuParticleCompilation.Contains(graph))
+        {
+            throw new NotSupportedException("CPU Particle rendering requires effect-package playback with matching updated SDK adapters.");
+        }
         if (SkeletalPoseSchema.ContainsAuthoredSource(graph) ||
             !allowSourceMetadata && SkeletalPoseSchema.ContainsSource(graph))
             throw new NotSupportedException(
@@ -80,6 +84,15 @@ public static class RenderProgramBindings
         {
             var localPath = instanceScopes.GetValueOrDefault(node.Id) ?? Array.Empty<Guid>();
             var instancePath = resourceContext?.GetInstancePath(node.Id, localPath) ?? localPath;
+            if (FlexiblePlaneDrawSchema.IsNode(node.Kind))
+            {
+                if (renderNodes.Count >= 128)
+                {
+                    throw new InvalidDataException("A render scope supports at most 128 draws.");
+                }
+                renderNodes.Add(FlexiblePlaneDrawSchema.CreateDraw(node, nodes, connections, resourceContext, instancePath));
+                continue;
+            }
             if (PreviewDebugDraw.IsDebugNode(node.Kind))
             {
                 if (!PreviewDebugDraw.Enabled(node)) continue;
@@ -318,6 +331,7 @@ public static class RenderProgramBindings
                 if (!result.TryAdd(node.Id, scope))
                     throw new InvalidDataException($"Graph contains duplicate node ID '{node.Id}'.");
                 if (node.ChildGraph is { } child && !GpuParticleEditorService.IsGpu(node.Kind) &&
+                    !CpuParticleSchema.HasChild(node.Kind) &&
                     node.Kind != GraphNodeKind.SpawnableGroup)
                     Visit(child, ResourceIdentityScope.Child(scope, node.Id));
             }
@@ -328,8 +342,10 @@ public static class RenderProgramBindings
 
     private static IEnumerable<GraphNodeSnapshot> Flatten(GraphSnapshot graph) => graph.Nodes.SelectMany(node =>
         node.Kind == GraphNodeKind.SpawnableGroup ? Array.Empty<GraphNodeSnapshot>() :
-        !GpuParticleEditorService.IsGpu(node.Kind) && node.ChildGraph is { } child ? Flatten(child) : new[] { node });
+        !GpuParticleEditorService.IsGpu(node.Kind) && !CpuParticleSchema.HasChild(node.Kind) &&
+        node.ChildGraph is { } child ? Flatten(child) : new[] { node });
     private static IEnumerable<GraphConnectionSnapshot> Connections(GraphSnapshot graph) =>
         graph.Connections.Concat(graph.Nodes.Where(node => node.ChildGraph is not null &&
-            !GpuParticleEditorService.IsGpu(node.Kind) && node.Kind != GraphNodeKind.SpawnableGroup).SelectMany(node => Connections(node.ChildGraph!)));
+            !GpuParticleEditorService.IsGpu(node.Kind) && !CpuParticleSchema.HasChild(node.Kind) &&
+            node.Kind != GraphNodeKind.SpawnableGroup).SelectMany(node => Connections(node.ChildGraph!)));
 }

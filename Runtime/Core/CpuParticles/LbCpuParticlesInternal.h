@@ -1,0 +1,119 @@
+#pragma once
+#include "liberafx/LbCpuParticles.h"
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstring>
+#include <limits>
+#include <new>
+#include <vector>
+
+namespace liberafx::cpu_particle_detail {
+using Id = std::array<std::uint8_t, 16>;
+inline auto nonzero(const Id& id) noexcept -> bool
+{
+    return std::any_of(id.begin(), id.end(), [](auto value) { return value != 0; });
+}
+inline auto typeId(std::uint8_t suffix) noexcept -> Id
+{
+    return {0x7c, 0x7e, 0x10, 0x00, 0x25, 0x21, 0x4b, 0xdb, 0xb8, 0xa0, 0x21, 0, 0, 0, 0, suffix};
+}
+struct Buffer final {
+    void* data = nullptr;
+    std::size_t alignment = 16;
+    ~Buffer()
+    {
+        if (data)
+        {
+            ::operator delete(data, std::align_val_t{alignment});
+        }
+    }
+    void allocate(std::size_t bytes, std::size_t align)
+    {
+        alignment = std::max<std::size_t>(16, align);
+        if (bytes != 0)
+        {
+            data = ::operator new(bytes, std::align_val_t{alignment});
+        }
+    }
+};
+struct Io final {
+    std::uint8_t kind = 0;
+    std::uint32_t width = 0;
+    Id node{}, root{};
+    std::uint32_t component = 0;
+    std::array<double, 4> sampled{};
+};
+struct Stage final {
+    Id entry{};
+    std::vector<std::uint8_t> bytes;
+    Program program;
+    std::vector<CustomNodeBinding> bindings;
+    std::vector<Io> io;
+    Buffer work, defaults;
+    std::size_t workStride = 0, defaultStride = 0;
+};
+struct Slot final {
+    CpuParticleSnapshot draw;
+    std::array<double, 3> velocity{};
+    double age = 0, life = 2;
+    bool active = false;
+    Instance stages[2];
+};
+struct Inbound final {
+    Id node{};
+    std::uint32_t stage = 0;
+};
+struct Outbound final {
+    CpuParticleEvent event;
+    Id target{};
+};
+struct System;
+struct Callback final {
+    System* system = nullptr;
+    Id node{};
+    std::uint32_t operation = 0, stage = 0;
+};
+struct System final {
+    ~System()
+    {
+        slots.reset();
+    }
+    Id id{}, emissionSource{};
+    std::uint32_t capacity = 0, seed = 0, queueCapacity = 0, burst = 0, emissionComponent = 0;
+    double rate = 0, remainder = 0, lastTotal = 0, lastTime = -1, stepDelta = 0;
+    double frameDelta = 0;
+    std::uint64_t nextId = 1;
+    std::size_t live = 0;
+    Stage stages[2];
+    std::unique_ptr<Slot[]> slots;
+    std::vector<std::uint32_t> activeIndices;
+    Slot* current = nullptr;
+    std::vector<CustomNodeDescriptor> descriptors;
+    std::vector<Callback> callbacks;
+    std::vector<Inbound> incoming;
+    std::size_t incomingCount = 0;
+    std::vector<Outbound> pending, delivery;
+    std::size_t pendingCount = 0, deliveryCount = 0;
+    std::vector<CpuParticleEvent> events;
+    std::size_t eventHead = 0, eventCount = 0;
+    Result failure = Result::Ok;
+
+    Result initialize(const CustomNodeDescriptor* registry, std::size_t registryCount);
+    Result tick(Instance& root, double time, bool emitting, const HostQualitySnapshot& quality) noexcept;
+    Result run(Slot& slot, std::uint32_t stage, double time, const HostQualitySnapshot& quality) noexcept;
+    Result publish(const Io& io, const double* values, double time) noexcept;
+    Result collect(Slot& slot, std::uint32_t stage, double time) noexcept;
+    static Result invoke(CustomNodeInvocation& call) noexcept;
+    static Result observe(void* context, const std::uint8_t nodeId[16]) noexcept;
+};
+Result parse(const std::uint8_t* bytes, std::size_t count,
+    std::vector<std::unique_ptr<System>>& systems);
+}
+
+namespace liberafx {
+struct CpuParticleWorld::Impl final {
+    std::vector<std::unique_ptr<cpu_particle_detail::System>> systems;
+    std::vector<CustomNodeDescriptor> signals;
+};
+}

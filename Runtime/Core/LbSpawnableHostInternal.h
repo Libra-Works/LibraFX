@@ -153,6 +153,7 @@ struct SpawnableHost::Impl final {
   spawnable_host_detail::AlignedBuffer rootWork;
   spawnable_host_detail::AlignedBuffer rootDefaults;
   std::optional<Instance> rootInstance;
+  std::unique_ptr<CpuParticleWorld> cpuParticles;
   std::unique_ptr<NamedIo> gameIo;
   std::optional<EffectLifecycle> lifecycle;
   std::vector<NamedIoPort> gameIoPorts;
@@ -247,7 +248,7 @@ struct SpawnableHost::Impl final {
   }
 
   auto activeCount() const noexcept -> std::size_t {
-    auto count = std::size_t{};
+    auto count = cpuParticles ? cpuParticles->activeCount() : std::size_t{};
     for (const auto &state : templates) {
       count += state->pool->activeCount();
     }

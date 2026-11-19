@@ -221,6 +221,18 @@ auto SpawnableHost::Impl::initialize() -> Result {
   }
   parentDescriptors.insert(parentDescriptors.end(), projectDescriptors.begin(),
                            projectDescriptors.end());
+  result = CpuParticleWorld::create(packageData.cpuPrograms.data(), packageData.cpuPrograms.size(),
+      projectDescriptors.data(), projectDescriptors.size(), cpuParticles);
+  if (result != Result::Ok)
+  {
+    return result;
+  }
+  auto cpuSignalCount = std::size_t{};
+  auto cpuSignals = cpuParticles->signalDescriptors(cpuSignalCount);
+  if (cpuSignalCount != 0)
+  {
+    parentDescriptors.insert(parentDescriptors.end(), cpuSignals, cpuSignals + cpuSignalCount);
+  }
   result = loadProgram(packageData.parentBytecode, parentDescriptors.data(),
                        parentDescriptors.size(), parentBindings, parentProgram);
   if (result != Result::Ok) {
@@ -360,6 +372,12 @@ auto SpawnableHost::Impl::startRoot(double initialFrameDelta) -> Result {
   rootAge = 0;
   time = 0;
   rootEnding = sample.expired;
+  result = cpuParticles->advance(*rootInstance, 0, !rootEnding, quality, initialFrameDelta);
+  if (result != Result::Ok)
+  {
+    failure = result;
+    return result;
+  }
   result = pump(0);
   if (result == Result::Ok) {
     result = dispatchScheduled(0);
@@ -408,12 +426,28 @@ auto SpawnableHost::Impl::evaluateParent(double at) -> Result {
 }
 
 auto SpawnableHost::Impl::evaluateFrame(double at) -> Result {
+  auto cpuResult = cpuParticles->prepare(*rootInstance);
+  if (cpuResult != Result::Ok)
+  {
+    failure = cpuResult;
+    return cpuResult;
+  }
   auto result = evaluateParent(at);
   if (result != Result::Ok) {
     return result;
   }
   result = applyAuthoredForce();
   if (result != Result::Ok || rootForced) {
+    return result;
+  }
+  result = cpuParticles->deliverSignals(*rootInstance, at, options.instructionBudget);
+  if (result == Result::Ok)
+  {
+    result = cpuParticles->advance(*rootInstance, at, !rootEnding, quality, frameDelta);
+  }
+  if (result != Result::Ok)
+  {
+    failure = result;
     return result;
   }
   auto evaluated = std::vector<OwnerNotice>{};

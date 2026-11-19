@@ -109,7 +109,7 @@ func consume(bytes: PackedByteArray) -> Dictionary:
 		if package.size() >= 4 and package.slice(0, 4).get_string_from_ascii() == "LFXB":
 			return {"result": 0, "resync": false}
 		if package.size() < 24 or package.slice(0, 4).get_string_from_ascii() != "LFXP":
-			return _fail("Expected a compiled .lfxp package.")
+			return _fail("Expected a compiled .lfxb package (LFXP signature; legacy .lfxp is also supported).")
 		if _generation >= 0 and not _owns_player():
 			return _fail("Preview player was replaced externally.", ERR_BUSY)
 		if _generation < 0 and _player.call("is_playing"):

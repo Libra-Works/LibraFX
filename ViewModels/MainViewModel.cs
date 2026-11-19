@@ -397,16 +397,16 @@ public partial class MainViewModel : ViewModelBase
         IStorageFile? file = null;
         try
         {
-            var bytes = VfxProgram.Compile(document.Workspace.CreateSnapshot()).ToBinary();
+            var bytes = EffectBinary.Compile(document.Workspace.CreateSnapshot());
             file = await _storageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
                 Title = LocalizationService.Shared.Get("Messages.ExportBinaryTitle"),
-                DefaultExtension = "lfxb",
-                SuggestedFileName = Path.GetFileNameWithoutExtension(document.FileName) + ".lfxb",
+                DefaultExtension = EffectBinary.FileExtension.TrimStart('.'),
+                SuggestedFileName = Path.GetFileNameWithoutExtension(document.FileName) + EffectBinary.FileExtension,
                 FileTypeChoices = [VfxBinaryFileType]
             });
             if (file is null) return;
-            if (!file.Name.EndsWith(".lfxb", StringComparison.OrdinalIgnoreCase) ||
+            if (!file.Name.EndsWith(EffectBinary.FileExtension, StringComparison.OrdinalIgnoreCase) ||
                 Documents.Any(open => open.FileKey is not null &&
                     string.Equals(open.FileKey, GetFileKey(file), StringComparison.OrdinalIgnoreCase)))
                 throw new IOException(LocalizationService.Shared.Get("Messages.Error.ChooseBinaryFile"));

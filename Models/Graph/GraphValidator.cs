@@ -4,8 +4,11 @@ public static class GraphValidator
 {
     public static void Validate(GraphSnapshot snapshot) => Validate(snapshot, new HashSet<Guid>(), 0);
 
-    public static void ValidateDocument(GraphSnapshot snapshot) =>
+    public static void ValidateDocument(GraphSnapshot snapshot)
+    {
         Validate(snapshot, new HashSet<Guid>(), 0, false, null, true);
+        CpuParticleSchema.ValidateContext(snapshot);
+    }
 
     public static void Validate(GraphSnapshot snapshot, HashSet<Guid> allIds, int depth) =>
         Validate(snapshot, allIds, depth, false, null, false);
@@ -43,7 +46,8 @@ public static class GraphValidator
                 (node.IsPolymorphic && !GraphPolymorphism.TryFamily(node.Kind, out _)) ||
                 node.PortType != definition.PortType || node.PortCategory != definition.PortCategory ||
                 (node.Kind == GraphNodeKind.FloatFCurve) != (node.Curve is not null) ||
-                (node.Kind == GraphNodeKind.GraphGroup || node.Kind == GraphNodeKind.SpawnableGroup) != (node.ChildGraph is not null) ||
+                (node.Kind == GraphNodeKind.GraphGroup || node.Kind == GraphNodeKind.SpawnableGroup ||
+                 CpuParticleSchema.HasChild(node.Kind)) != (node.ChildGraph is not null) ||
                 (node.GroupAsset is not null &&
                  (node.Kind != GraphNodeKind.GraphGroup && node.Kind != GraphNodeKind.SpawnableGroup || node.GroupAsset.Id == Guid.Empty || node.GroupAsset.Revision < 1)) ||
                 !nodes.TryAdd(node.Id, node))

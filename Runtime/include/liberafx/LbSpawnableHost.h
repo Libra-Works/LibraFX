@@ -3,6 +3,7 @@
 #include "liberafx/LbNamedIo.h"
 #include "liberafx/LbGeneratorPool.h"
 #include "liberafx/LbSpawnablePackage.h"
+#include "liberafx/LbCpuParticles.h"
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -99,6 +100,9 @@ public:
     std::size_t activeCount() const noexcept;
     bool rootFinished() const noexcept;
     const SpawnablePackage& package() const noexcept;
+    Result cpuParticleCount(const std::uint8_t systemId[16], std::size_t& out) const noexcept;
+    Result cpuParticleAt(const std::uint8_t systemId[16], std::size_t index, CpuParticleSnapshot& out) const noexcept;
+    bool popCpuParticleEvent(CpuParticleEvent& out) noexcept;
 
 private:
     struct Impl;

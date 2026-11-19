@@ -203,7 +203,7 @@ public sealed partial class VfxProgram
             if (!byte.TryParse(id.AsSpan(30, 2), System.Globalization.NumberStyles.HexNumber,
                     System.Globalization.CultureInfo.InvariantCulture, out var number)) return false;
             return id.StartsWith("74305ac191b24c338d440000000000", StringComparison.Ordinal) &&
-                    number is >= 1 and <= 47 ||
+                    number is >= 1 and <= 57 ||
                 id.StartsWith("b0af61d229f64cc9a71e0000000000", StringComparison.Ordinal) &&
                     (number is >= 1 and <= 13 or >= 15 and <= 18);
         }

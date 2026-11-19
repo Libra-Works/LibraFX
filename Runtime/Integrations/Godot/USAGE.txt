@@ -2,8 +2,9 @@ LIBERA FX for Godot 4.7
 ======================
 
 This Windows x86-64 GDExtension embeds the same portable C++ Core Runtime
-used by the other integrations. It plays standalone .lfxb programs (pure
-v1 scalar or v2 typed bytecode) and supported .lfxp Spawnable packages. No
+used by the other integrations. New .lfxb exports contain the existing LFXP
+Spawnable package envelope, including scalar-only roots. Legacy raw .lfxb
+programs and the legacy .lfxp package input alias remain supported. No
 .NET runtime is required in Godot.
 
 The godot-cpp build profile enables the JSON, Camera3D/Viewport, Node3D and
@@ -26,10 +27,11 @@ a copy of godot-cpp.
 Convert graphs offline using the authoring repository:
 
   dotnet run --project Tools\Converter -- convert path\input.lfxproj path\effect.lfxb
-  dotnet run --project Tools\Converter -- convert path\spawnable.lfxproj path\effect.lfxp
 
-Play .lfxb from GDScript on the main thread after the player has entered the
-tree:
+Play exported .lfxb from GDScript on the main thread after the player has
+entered the tree. play() routes by the LFXP signature to package playback;
+legacy raw LFXB still uses standalone playback. The file suffix does not bypass
+either loader's validation:
 
   var result: int = $LibraEffectPlayer.play(FileAccess.get_file_as_bytes("res://effect.lfxb"))
   if result != 0:
@@ -45,9 +47,10 @@ read_value(node_uuid) returns the evaluated lanes as PackedFloat64Array, or
 an empty array if the player is stopped or the UUID has no value. Use these
 values to drive Godot properties from your scene script.
 
-Play a CPU-only Spawnable package with play_package:
+The explicit package-only entrypoint also accepts the canonical .lfxb bytes
+or legacy .lfxp bytes:
 
-  var package := FileAccess.get_file_as_bytes("res://effect.lfxp")
+  var package := FileAccess.get_file_as_bytes("res://effect.lfxb")
   var result: int = $LibraEffectPlayer.play_package(package)
   if result != 0:
       push_error("LIBERA FX package could not play: %d" % result)
@@ -55,7 +58,15 @@ Play a CPU-only Spawnable package with play_package:
 The package is loaded and validated before replacing current playback. The
 player advances its Spawnable lifecycle, children, routing and timing on the
 Godot main thread. An optional duration uses the same -1 / finite-seconds
-convention as play(). .lfxb playback remains unchanged.
+convention as play(). Legacy raw LFXB playback remains unchanged; do not pass
+raw bytes to play_package(). Renaming a file does not convert its contents.
+New scalar-only exports use package lifecycle behavior, not standalone lifetime
+semantics. Existing raw fixtures are intentionally unchanged.
+
+Focused coverage added to Tests/package_smoke.gd checks both explicit package
+playback and unified play(), rejects truncated LFXP without replacing playback,
+and retains the existing callback-driven replacement with raw LFXB. No build,
+Godot execution or rendered-pixel validation was performed for this change.
 
 Named Game I/O is available for packages:
 
@@ -100,6 +111,20 @@ billboarding is enabled by the authored setting. Rotation is applied as
 Godot-local Euler degrees. The root scope is named `LibraFxRootScope`; a
 replacement started before the previous queued scope is freed receives a
 `LibraFxRootScope_<n>` name to avoid ambiguous siblings.
+
+Flexible Plane Draw has source-level integration in this package renderer for
+root and spawned-child scopes. Bind its compiled texture identity explicitly
+with set_texture_binding before playback; a missing or invalid texture rejects
+the package. Each draw uses one ArrayMesh with an unshaded transparent,
+vertex-colored StandardMaterial3D. Camera-facing ribbons require the player
+camera_path Camera3D or, failing that, the active viewport Camera3D. The debug
+player uses the viewport camera. History is shared by draws of the same source within a
+scope, but never between root and child instances; backwards time clears it.
+The native renderer exposes resetFlexibleHistories() for hosts implementing
+explicit discontinuous seeks. Normal player/debug advances are nonnegative;
+no public forward-seek API is provided here. Rendering failures are reported
+and hide the affected scope instead of leaving a stale ribbon visible.
+This source integration has not been built or exercised in Godot.
 
 ModelDraw supports surface overrides bound while stopped with
 set_material_binding(compiled_identity, Material). clear_material_binding
@@ -288,3 +313,25 @@ run CommentImageSmokeTests with --spawnable-package-binary in an isolated
 directory, copy the resulting .godot-material.lfxp and .godot-material.ids.json
 as material.lfxp and material.ids.json, and run Tests\material_smoke.gd with
 --path <scratch> --script res://material_smoke.gd --quit-after 120.
+
+CPU particle Sprite billboards
+------------------------------
+CPU packages use LFXP format 4/package 12 with `cpuParticleVersion: 1`. Bind
+each `cpuParticles` entry's `assetPath` with `set_texture_binding`, except for
+the explicit `builtin:white` token. Each emitter owns one MultiMeshInstance3D.
+It uploads one reused buffer with per-particle transforms and RGBA; the
+material billboards per view while retaining separate X/Y sizes. Alpha and
+Additive are supported; transparent sorting is by emitter, not by particle.
+`drawScale` applies to effect-local position and XY size.
+
+On the main thread, call `pop_cpu_particle_event()` until it returns an empty
+dictionary. For automatic playback, connect `cpu_particle_events_ready` and
+drain synchronously there, including before a duration-limited playback ends.
+Kind 1 is Property and kind 2 is Signal. `particle_id` is an unsigned decimal
+string and `values` contains `width` values. At natural completion, polling
+may still drain the queue; an empty pop then releases the completed host.
+Explicit Stop or replacement releases that queue, so drain beforehand. The
+renderer does not consume events; size the queue for one simulation advance.
+
+CPU Sprite rendering is supported only at the package root. This path was not
+built or pixel-verified for this change.

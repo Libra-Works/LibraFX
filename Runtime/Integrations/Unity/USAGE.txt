@@ -2,7 +2,8 @@ LiberaFx native Runtime -> Unity adapter
 =====================================
 
 Separation (no Unity APIs in the C++ Core):
-  .lfxb -> owned native Program -> Instance evaluates numeric ports
+  canonical .lfxb (LFXP) -> owned native SpawnableHost -> package component
+  legacy raw LFXB -> owned native Program -> Instance evaluates numeric ports
        -> one libra_evaluate P/Invoke fills cached POD arrays
        -> MonoBehaviour.Update applies Mesh, renderer, texture and shader changes.
 The C++ work/default buffers are NOT Unity GPU buffers. The engine adapter owns
@@ -15,6 +16,15 @@ and Texture references are the engine asset handles in this sample.
 
 Build the native plugin
 -----------------------
+Unreleased source addition: FlexiblePlaneDraw is wired into root and Spawnable
+render scopes, with a separate history for each instance and point source.
+In RenderAssets, bind the authored texture identity to its Texture and exactly
+one defaultMaterials entry. That Material must expose _MainTex and multiply
+the texture by vertex color. Camera-facing mode requires Camera.main.
+The new source has not been built or observed in Unity; published SDK
+2026.11.8 is unchanged. Disable root AutoDestroyWhenIdle for an indefinitely
+running standalone ribbon/history, or author an explicit lifetime.
+
 Runtime CMake builds liberafx_native by default. Set LIBERAFX_BUILD_INTEROP=OFF
 when only the static Core library is needed. LIBERAFX_BUILD_TESTS=ON also
 includes the bridge ownership, alignment, evaluation and allocation checks.
@@ -95,11 +105,13 @@ shader compile without that fallback does not prove that Camera.Render drew.
    only once. Enter Play mode. Native time -> scalar gain/default -> splat/color
    drives cube movement/color; the same time port drives sprite atlas frames.
    Dynamic mode also uses the native scalar output to deform the cached quad.
-4. Or add LiberaFxRenderer to an object, assign your Mesh/shared Material or
-   sprite Texture, and assign compiled bytecode. Unity's binary TextAsset import
-   uses .bytes: copy/rename a compiled .lfxb to .bytes without altering contents,
-   then drag that TextAsset into Compiled Program. Do NOT convert binary to text.
-   An empty Compiled Program selects the bundled locally generated v2 fixture.
+4. For new exports, use LiberaFxSpawnableComponent as described below, even
+   for scalar-only root graphs. For legacy raw LFXB only, add LiberaFxRenderer,
+   assign your Mesh/shared Material or sprite Texture, and drag the directly
+   imported LiberaFxProgramAsset into Legacy Program. Existing .bytes TextAssets
+   still work in Compiled Program; leave Legacy Program empty in that case.
+   Do NOT rename a new LFXP package to .bytes or convert binary to text.
+   Leaving BOTH program fields empty selects the bundled generated v2 sample.
 5. Set node GUIDs to the compiled graph's output instruction IDs:
      Position: scalar X or Vector2/3/4 (XYZ used)
      Color: four components, already evaluated by native Core
@@ -166,8 +178,15 @@ adapter; use `NativeSpawnableHost` or `LiberaFxSpawnableComponent` for LFXP.
 
 Spawnable package playback
 --------------------------
-The Unity `LiberaFxSpawnableImporter` imports `.lfxp` files as
-`LiberaFxSpawnableAsset`. Add `LiberaFxSpawnableComponent` to an object and
+The single Unity `LiberaFxSpawnableImporter` owns `.lfxb` and legacy `.lfxp`.
+It routes by signature and validates with the installed native runtime before
+creating an asset. New `.lfxb` exports contain the existing LFXP package envelope,
+including scalar-only roots; `.lfxp` remains an input alias. Both import as
+`LiberaFxSpawnableAsset`. Raw LFXB imports as `LiberaFxProgramAsset` for the
+legacy renderer instead. Corrupt/unsupported inputs and a missing/incompatible
+native plugin produce an import error, not a placeholder asset.
+
+Add `LiberaFxSpawnableComponent` to an object and
 assign that asset, and assign a `LiberaFxUnityBindingAsset` created from
 Assets > Create > LiberaFx > Unity Bindings. The binding asset maps opaque
 render/material identities and GPU node GUIDs to project-local Unity Mesh,
@@ -176,6 +195,22 @@ Unity paths into the effect package or infer Unity assets from Unreal paths.
 Bind every asset referenced by the root and all templates before Play; missing
 or unsupported bindings fail preflight before native OnStart or spawn events,
 with the reason in `LastError`.
+
+Package reimport keeps the existing "package" local asset ID; component/prefab
+references and the separate binding asset's Unity resource references remain
+intact. This does not migrate a raw-program asset into a package asset in place.
+When replacing an old raw export with a new package export, import at a new path
+and assign it to the package component; do not keep the old renderer reference.
+
+Focused importer verification (not executed as part of this format change):
+in a dedicated installed Unity project, set LIBERAFX_VERIFICATION_PROJECT to
+that absolute project directory and LIBERAFX_UNITY_SPAWNABLE_FIXTURE to an
+existing compiler-produced LFXP package (.lfxb or legacy .lfxp). Invoke
+LiberaFx.Unity.Editor.LiberaFxUnifiedImportVerification.RunBatch with Unity's
+-executeMethod. It uses a unique temporary Assets folder and deletes only that
+folder. It checks both suffixes, legacy raw byte execution, stable package IDs,
+prefab/binding/resource references after reimport, and corrupt-input rejection.
+It does not establish rendered pixels or Play Mode behavior.
 
 The component drives the shared native package host using Unity's scaled
 `Time.deltaTime`, exposes Spawn/Stop/Destroy/Signal and named game-I/O events
@@ -344,3 +379,29 @@ The Spawnable component's CPU and D3D11 GPU integration is verified separately
 as described above. Player builds/IL2CPP, consoles, non-Windows plugins and
 other graphics devices were not exercised. The explicit binding asset is
 project-local; automatic engine asset catalog discovery is not implemented.
+
+CPU particle Sprite billboards
+------------------------------
+Whole-effect CPU packages use LFXP format 4/package 12 with
+`cpuParticleVersion: 1` and a `cpuParticles` render-configuration array.
+Unity resolves each `assetPath` through the existing project-local render asset
+bindings (or the explicit `builtin:white` token). One dynamic mesh and one
+MeshRenderer per CPU emitter carry the particles' individual RGBA and XY size.
+The bundled `LiberaFx/CPU Particle` shader must be present in Resources; it
+billboards in the rendering camera's view, including when that camera moves
+after the host update. No MainCamera tag is required. The adapter requires
+32-bit mesh index support and handles Alpha or Additive blending. Transparent
+sorting is by emitter, not by particle. `drawScale` multiplies effect-local
+position and XY particle size. Native snapshots are read on the main thread.
+
+The managed C ABI wrapper requires a native SDK/plugin that exports
+`libra_spawnable_host_cpu_particle_count`, `libra_spawnable_host_cpu_particle_at`,
+and `libra_spawnable_host_cpu_particle_pop_event` (80-byte snapshots, 88-byte
+events). On the main thread, call `LiberaFxSpawnableComponent.PopCpuParticleEvent`
+or the native managed host equivalent until `hasEvent` is false. Kind 1 is
+Property and kind 2 is Signal; read `Width` lanes from X/Y/Z/W. Rendering does
+not consume events. Drain each frame and before Stop/restart; queue capacity
+must accommodate the output from one simulation advance.
+
+CPU Sprite rendering is supported only at the package root. This path was not
+built or pixel-verified for this change.

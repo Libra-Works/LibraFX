@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1, "typeId": "74305ac1-91b2-4c33-8d44-000000000035",
+  "namespace": "LiberaFx", "kind": "Smoothstep", "name": "Smoothstep", "displayNameKey": "ScalarMath.Node.Smoothstep", "descriptionKey": "ScalarMath.Help.Smoothstep",
+  "group": "Math", "portType": "Float", "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [{ "id": "a", "name": "Value" }, { "id": "b", "name": "Low" }, { "id": "c", "name": "High" }],
+  "outputPorts": [{ "id": "value", "name": "Value" }],
+  "parameters": [{ "id": "a", "name": "Value", "displayNameKey": "ScalarMath.Value", "type": "float", "defaultValue": 0.0 }, { "id": "b", "name": "Low", "displayNameKey": "ScalarMath.Low", "type": "float", "defaultValue": 0.0 }, { "id": "c", "name": "High", "displayNameKey": "ScalarMath.High", "type": "float", "defaultValue": 1.0 }]
+}

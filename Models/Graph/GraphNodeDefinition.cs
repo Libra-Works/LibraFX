@@ -98,7 +98,7 @@ public sealed record GraphNodeDefinition(
     string Group)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new() { PropertyNameCaseInsensitive = true };
-    private static readonly Dictionary<Guid, string> BuiltInIds = new()
+    private static readonly Dictionary<Guid, string> BuiltInIds = CpuParticleNodeCatalog.WithBuiltInIds(QuaternionRandomNodeCatalog.WithBuiltInIds(new()
     {
         [Guid.Parse("65db6000-5d15-4f11-83da-650000000001")] = "DebugText",
         [Guid.Parse("65db6000-5d15-4f11-83da-650000000002")] = "DebugModel",
@@ -107,6 +107,9 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700002")] = "SpriteDraw",
         [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700003")] = "SpriteAnimation",
         [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700004")] = "SpriteComposition",
+        [Guid.Parse("864fea49-8719-4c36-a7d1-1f3000000001")] = "FlexiblePlaneDraw",
+        [Guid.Parse("864fea49-8719-4c36-a7d1-1f3000000002")] = "FlexiblePlanePointList",
+        [Guid.Parse("864fea49-8719-4c36-a7d1-1f3000000003")] = "FlexiblePlanePointHistory",
         [Guid.Parse("19aa71e5-b3c7-453d-860e-baad3b9d0fc4")] = "Float",
         [Guid.Parse("d98eb6f5-ee2e-432a-9450-09e44dcc42e3")] = "FloatX2",
         [Guid.Parse("7ef61949-53c4-41fb-aabd-840b0a4680f7")] = "FloatX3",
@@ -264,6 +267,16 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("74305ac1-91b2-4c33-8d44-00000000002d")] = "MaxVector4",
         [Guid.Parse("74305ac1-91b2-4c33-8d44-00000000002e")] = "LerpVector4",
         [Guid.Parse("74305ac1-91b2-4c33-8d44-00000000002f")] = "ComposeVector4",
+        [Guid.Parse("74305ac1-91b2-4c33-8d44-000000000030")] = "Modulo",
+        [Guid.Parse("74305ac1-91b2-4c33-8d44-000000000031")] = "Fraction",
+        [Guid.Parse("74305ac1-91b2-4c33-8d44-000000000032")] = "Ceil",
+        [Guid.Parse("74305ac1-91b2-4c33-8d44-000000000033")] = "Exp",
+        [Guid.Parse("74305ac1-91b2-4c33-8d44-000000000034")] = "Exp2",
+        [Guid.Parse("74305ac1-91b2-4c33-8d44-000000000035")] = "Smoothstep",
+        [Guid.Parse("74305ac1-91b2-4c33-8d44-000000000036")] = "InverseLerp",
+        [Guid.Parse("74305ac1-91b2-4c33-8d44-000000000037")] = "Saturate",
+        [Guid.Parse("74305ac1-91b2-4c33-8d44-000000000038")] = "Step",
+        [Guid.Parse("74305ac1-91b2-4c33-8d44-000000000039")] = "Truncate",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000101")] = "MatrixCompose",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000102")] = "MatrixBreak",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000103")] = "Transform",
@@ -295,7 +308,7 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000010")] = "MatrixRuntimeOrderedTransformRow1",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000011")] = "MatrixRuntimeOrderedTransformRow2",
         [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000012")] = "MatrixRuntimeOrderedTransformRow3"
-    };
+    }));
 
     private static readonly List<string> Warnings = [];
     private static readonly object RegistryLock = new();
@@ -532,7 +545,8 @@ public sealed record GraphNodeDefinition(
                 !(BuiltInIds.TryGetValue(node.TypeId, out var builtInKind) &&
                   (GroupBoundarySchema.IsOutput(new GraphNodeKind(builtInKind)) ||
                    builtInKind is "OutputProperty" or "OutputSignal" or "SpawnOutputSignal" or
-                       "InstanceOutputProperty" or "InstanceOutputSignal" or "DebugText" or "DebugModel")))
+                       "InstanceOutputProperty" or "InstanceOutputSignal" or "DebugText" or "DebugModel" or
+                       "CpuParticle" or "CpuParticleSpawn" or "CpuParticleUpdate" or "CpuParticleSpriteDraw")))
                 throw new InvalidDataException("Output port definitions must not be empty.");
         }
         var parameterIds = new HashSet<string>(StringComparer.Ordinal);

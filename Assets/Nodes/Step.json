@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1, "typeId": "74305ac1-91b2-4c33-8d44-000000000038",
+  "namespace": "LiberaFx", "kind": "Step", "name": "Step", "displayNameKey": "ScalarMath.Node.Step", "descriptionKey": "ScalarMath.Help.Step",
+  "group": "Math", "portType": "Float", "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [{ "id": "a", "name": "Value" }, { "id": "b", "name": "Edge" }],
+  "outputPorts": [{ "id": "value", "name": "Value" }],
+  "parameters": [{ "id": "a", "name": "Value", "displayNameKey": "ScalarMath.Value", "type": "float", "defaultValue": 0.0 }, { "id": "b", "name": "Edge", "displayNameKey": "ScalarMath.Edge", "type": "float", "defaultValue": 0.0 }]
+}

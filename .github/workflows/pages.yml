@@ -28,7 +28,7 @@ jobs:
           cp docs/site/_layouts/bilingual.html pages-source/_layouts/
           cp docs/site/assets/css/libradark.css pages-source/assets/css/
           cp Assets/Brand/LibraFx.ico pages-source/assets/libera-fx.ico
-          for file in getting-started.md engine-integration.md editor-reference.md authoring.md gpu-particles.md; do
+          for file in getting-started.md engine-integration.md editor-reference.md authoring.md gpu-particles.md glossary.md scalar-math-nodes.md cpu-particles.md flexible-plane-draw.md quaternion-random.md; do
             cp "docs/site/$file" pages-source/
             cp "docs/site/ja/$file" pages-source/ja/
           done
@@ -42,7 +42,7 @@ jobs:
           destination: ./pages-output
       - name: Verify the rendered pages
         run: |
-          for file in index.html getting-started.html engine-integration.html editor-reference.html authoring.html gpu-particles.html node-reference.html; do
+          for file in index.html getting-started.html engine-integration.html editor-reference.html authoring.html gpu-particles.html node-reference.html glossary.html scalar-math-nodes.html cpu-particles.html flexible-plane-draw.html quaternion-random.html; do
             test -s "pages-output/$file"
             test -s "pages-output/ja/$file"
             for lang in en ja; do
@@ -69,6 +69,8 @@ jobs:
           grep -q 'getting-started.html' pages-output/ja/index.html
           grep -q 'engine-integration.html' pages-output/ja/index.html
           for lang in '' ja/; do
+            grep -Fq 'id="gpu"' "pages-output/${lang}glossary.html"
+            grep -Fq 'glossary.html#gpu' "pages-output/${lang}gpu-particles.html"
             grep -q 'node-reference.html' "pages-output/${lang}index.html"
             grep -q 'gpu-particles.html' "pages-output/${lang}index.html"
             grep -q 'images/editor/gpu-kernel.png' "pages-output/${lang}gpu-particles.html"

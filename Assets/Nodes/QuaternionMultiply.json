@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1, "typeId": "9bd7a620-c8e1-4f35-a962-000000000006",
+  "namespace": "LiberaFx", "kind": "QuaternionMultiply", "name": "Quaternion Multiply",
+  "displayNameKey": "QuaternionRandom.Node.QuaternionMultiply", "descriptionKey": "QuaternionRandom.Help.QuaternionMultiply",
+  "group": "Quaternion", "groupNameKey": "QuaternionRandom.Group.Quaternion", "portType": "FloatX4", "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [{ "id": "a", "name": "A (applied second)" }, { "id": "b", "name": "B (applied first)" }],
+  "outputPorts": [{ "id": "value", "name": "Quaternion XYZW" }],
+  "parameters": [{ "id": "a", "name": "A (applied second)", "displayNameKey": "QuaternionRandom.AppliedSecond", "type": "vector4", "defaultValue": [0, 0, 0, 1] }, { "id": "b", "name": "B (applied first)", "displayNameKey": "QuaternionRandom.AppliedFirst", "type": "vector4", "defaultValue": [0, 0, 0, 1] }]
+}

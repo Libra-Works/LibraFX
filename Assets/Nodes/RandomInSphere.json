@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1, "typeId": "9bd7a620-c8e1-4f35-a962-000000000025",
+  "namespace": "LiberaFx", "kind": "RandomInSphere", "name": "Random In Sphere",
+  "displayNameKey": "QuaternionRandom.Node.RandomInSphere", "descriptionKey": "QuaternionRandom.Help.RandomInSphere",
+  "group": "Random", "groupNameKey": "QuaternionRandom.Group.Random", "portType": "FloatX3", "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [{ "id": "seed", "name": "Seed (uint32)", "portType": "Float" }, { "id": "sampleIndex", "name": "Sample Index (uint32)", "portType": "Float" }],
+  "outputPorts": [{ "id": "value", "name": "Point" }],
+  "parameters": [{ "id": "seed", "name": "Seed (uint32)", "displayNameKey": "QuaternionRandom.Seed", "type": "float", "defaultValue": 0 }, { "id": "sampleIndex", "name": "Sample Index (uint32)", "displayNameKey": "QuaternionRandom.SampleIndex", "type": "float", "defaultValue": 0 }]
+}

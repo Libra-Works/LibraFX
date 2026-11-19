@@ -29,7 +29,8 @@ public sealed record SpawnableTemplate(Guid ContainerId, Guid SignalTypeId, byte
 public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<SpawnableTemplate> Templates)
 {
     public const int FormatVersion = 11;
-    public int Version => FormatVersion;
+    public int Version => CpuPrograms.Length == 0 ? FormatVersion : 12;
+    public byte[] CpuPrograms { get; init; } = [];
     public bool AutoDestroyWhenIdle { get; init; } = true;
     public bool HasLiveInputs => Templates.Any(template => template.Inputs.Any(input => input.IsLive));
     public bool HasSignalPorts => Templates.Any(template =>
@@ -73,6 +74,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
         IRenderResourceBindingContext? resourceContext = null, VfxCompileOptions? options = null)
     {
         VfxProgram.ValidateForCompilation(graph);
+        CpuParticleSchema.ValidateContext(graph);
         if (options?.IncludePreviewDebugDraw != true) graph = PreviewDebugDraw.Strip(graph);
         RejectTemplateGameIo(graph, withinTemplate: false);
         VfxProgram.ValidateForCompilation(graph);
@@ -81,6 +83,10 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
         graph = SignalTimelineLowering.Lower(graph, includePreviewSignalKeys);
         VfxProgram.ValidateForCompilation(graph);
         GraphTypeDiagnostics.Validate(graph);
+        graph = CpuParticleCompilation.LowerEmitters(graph);
+        var cpuSourceGraph = graph;
+        var cpu = CpuParticleCompilation.Lower(graph, resourceContext, options);
+        graph = cpu.Graph;
         var starts = graph.Nodes.Where(node => node.Kind.Value == "OnStart").ToArray();
         if (starts.Length > 1) throw new InvalidDataException("Only one direct On Start entry is supported.");
         var destroys = graph.Nodes.Where(node => node.Kind.Value == "OnDestroy").ToArray();
@@ -190,6 +196,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
         }
         Visit(graph, false, false);
         var parentWithSignalInputs = LowerSignalInputs(flatParent, out var signalInputTypes, out var signalInputProxies);
+        signalInputTypes = signalInputTypes.Concat(cpu.SignalTypes).ToDictionary(pair => pair.Key, pair => pair.Value);
         var signalRoutes = CreateSignalRoutes(flatParent, signalInputProxies);
         var parentProgram = VfxProgram.CompileForPackage(
             RemoveLocalRoutes(parentWithSignalInputs, routedDelays), out var rootRender, signalInputTypes,
@@ -204,7 +211,8 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
             DestroyRoutes = routes,
             SignalRoutes = signalRoutes,
             GameIoPorts = parentProgram.GameIoPorts,
-            RootRenderConfiguration = rootRender,
+            RootRenderConfiguration = CpuParticleCompilation.AddDraws(rootRender, cpuSourceGraph, resourceContext),
+            CpuPrograms = cpu.Payload,
             RootGpuContainers = CollectGpu(graph).ToArray(),
             RootGpuPrograms = CreateGpuPrograms(graph)
         };

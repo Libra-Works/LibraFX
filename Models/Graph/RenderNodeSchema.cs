@@ -27,6 +27,9 @@ public static class RenderNodeSchema
     public static bool IsRenderNode(GraphNodeDefinition definition) =>
         definition.TypeName is "ModelDraw" or "SpriteDraw" or "SpriteAnimation" or "SpriteComposition";
 
+    public static bool IsTextureOnlyDraw(GraphNodeDefinition definition) =>
+        definition.TypeName is "FlexiblePlaneDraw" or "CpuParticleSpriteDraw";
+
     public static string Encode(EngineAsset asset)
     {
         ArgumentNullException.ThrowIfNull(asset);

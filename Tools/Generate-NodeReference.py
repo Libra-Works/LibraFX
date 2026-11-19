@@ -171,14 +171,23 @@ def parameters(node, strings, enums, japanese):
     return items
 
 
+# Numeric family anchors are already public; new families use stable textual IDs.
+LEGACY_FAMILIES = (
+    "Curve nodes", "Debug (Preview Only)", "GPU", "Game I/O", "Graph nodes",
+    "Group boundary", "Instance Game I/O", "Lifecycle", "Logic", "Math", "Matrices",
+    "Matrices / Transforms", "Orientation", "Parameter nodes", "Rendering",
+    "Signal nodes", "Spawnable Group", "Utilities", "Vectors",
+)
+
 CATEGORIES = [
     ("control", "Flow and lifecycle", "実行フローと寿命",
      ("Signal nodes", "Lifecycle", "Spawnable Group", "Logic")),
     ("values", "Values and math", "値と演算",
-     ("Parameter nodes", "Math", "Vectors", "Matrices", "Orientation", "Curve nodes")),
+     ("Parameter nodes", "Math", "Vectors", "Matrices", "Orientation", "Quaternion", "Random", "Curve nodes")),
     ("composition", "Groups and host I/O", "Group とホスト入出力",
      ("Graph nodes", "Group boundary", "Game I/O", "Instance Game I/O", "Matrices / Transforms")),
-    ("visuals", "Rendering and GPU", "描画と GPU", ("Rendering", "GPU")),
+    ("visuals", "Rendering and particles", "描画とパーティクル",
+     ("Rendering", "Flexible Plane", "Emitters", "CPU Particles", "GPU")),
     ("tools", "Authoring and preview", "オーサリングとプレビュー", ("Utilities", "Debug (Preview Only)")),
 ]
 
@@ -220,6 +229,18 @@ def render(nodes, enums, modules, language):
         if japanese else
         "[Home](index.md) · [Editor reference](editor-reference.md) · [Graph authoring](authoring.md)",
         "", "# 標準ノード図鑑" if japanese else "# Built-in Node Reference", "",
+        "ピン・型・既定値の意味は[グラフの用語](glossary.md#graphs)を参照してください。"
+        if japanese else
+        "See the [graph glossary](glossary.md#graphs) for pins, types, and defaults.", "",
+        "追加された10種類の演算と使用例は[スカラー演算の使い方](scalar-math-nodes.md)を参照してください。更新後のランタイム・SDK が必要です。"
+        if japanese else
+        "See [scalar math recipes](scalar-math-nodes.md) for the ten new operations and examples. These require the updated runtime/SDK.", "",
+        "[CPU パーティクル](cpu-particles.md)と[Flexible Plane Draw](flexible-plane-draw.md)には、専用の制作手順と対応範囲の説明があります。"
+        if japanese else
+        "See [CPU particles](cpu-particles.md) and [Flexible Plane Draw](flexible-plane-draw.md) for their dedicated workflows and support boundaries.", "",
+        "[クォータニオンと乱数](quaternion-random.md)では、回転の表現と再現可能な乱数の使い方を説明します。"
+        if japanese else
+        "See [quaternions and random values](quaternion-random.md) for rotation conventions and reproducible sampling.", "",
         f"標準ノードの {len(nodes)} 定義を掲載しています。一部の型別定義は、独立した検索項目ではなく、接続に応じて切り替わります。ピンと既定値は基本定義のものです。掲載は全エンジンでの再生を保証するものではありません。"
         if japanese else
         f"This reference covers {len(nodes)} built-in authoring definitions. Some typed variants are selected by connections rather than listed separately in search. Pins and defaults come from the base definitions. Inclusion does not guarantee playback on every engine.",
@@ -238,7 +259,9 @@ def render(nodes, enums, modules, language):
         buckets = {}
         for node in sorted(entries, key=lambda n: n["kind"].casefold()):
             buckets.setdefault(subfamily(group, node["kind"]), []).append(node)
-        families[group] = (len(families), title, buckets)
+        family_id = (LEGACY_FAMILIES.index(group) if group in LEGACY_FAMILIES else
+                     "group-" + re.sub(r"[^a-z0-9]+", "-", group.casefold()).strip("-"))
+        families[group] = (family_id, title, buckets)
     categories = list(CATEGORIES)
     categorized = {group for _, _, _, group_names in categories for group in group_names}
     uncategorized = tuple(group for group in families if group not in categorized)

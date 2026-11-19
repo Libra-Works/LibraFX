@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1, "typeId": "9bd7a620-c8e1-4f35-a962-00000000000a",
+  "namespace": "LiberaFx", "kind": "QuaternionSlerp", "name": "Quaternion Slerp",
+  "displayNameKey": "QuaternionRandom.Node.QuaternionSlerp", "descriptionKey": "QuaternionRandom.Help.QuaternionSlerp",
+  "group": "Quaternion", "groupNameKey": "QuaternionRandom.Group.Quaternion", "portType": "FloatX4", "portCategory": "Parameter",
+  "runtime": { "kind": "custom", "abiVersion": 1, "execution": "parameter" },
+  "inputPorts": [{ "id": "a", "name": "From XYZW" }, { "id": "b", "name": "To XYZW" }, { "id": "t", "name": "T (0..1)", "portType": "Float" }],
+  "outputPorts": [{ "id": "value", "name": "Quaternion XYZW" }],
+  "parameters": [{ "id": "a", "name": "From XYZW", "displayNameKey": "QuaternionRandom.From", "type": "vector4", "defaultValue": [0, 0, 0, 1] }, { "id": "b", "name": "To XYZW", "displayNameKey": "QuaternionRandom.To", "type": "vector4", "defaultValue": [0, 0, 0, 1] }, { "id": "t", "name": "T (0..1)", "type": "float", "defaultValue": 0.5 }]
+}

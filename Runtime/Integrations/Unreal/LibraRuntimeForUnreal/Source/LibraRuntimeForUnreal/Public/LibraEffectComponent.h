@@ -170,6 +170,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult ReadRootValue(FGuid nodeId, FVector4& value, int32& componentCount) const;
 
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|CPU Particles")
+    ELibraRuntimeResult PopCpuParticleEvent(FLibraCpuParticleEvent& particleEvent, bool& hasEvent);
+
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult ReadChildValue(FGuid containerId, int64 instanceId, FGuid nodeId,
         FVector4& value, int32& componentCount) const;

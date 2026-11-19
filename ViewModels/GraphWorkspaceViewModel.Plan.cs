@@ -186,7 +186,8 @@ public sealed partial class GraphWorkspaceViewModel
 
     private GraphNodeViewModel CreatePlannedNode(LiberaGraphNodeSpec specification)
     {
-        if ((specification.Kind == GraphNodeKind.GraphGroup || specification.Kind == GraphNodeKind.SpawnableGroup) && _graphPath.Count >= MaxGraphDepth)
+        if ((specification.Kind == GraphNodeKind.GraphGroup || specification.Kind == GraphNodeKind.SpawnableGroup ||
+             CpuParticleSchema.HasChild(specification.Kind)) && _graphPath.Count >= MaxGraphDepth)
         {
             throw new ArgumentException("The graph hierarchy has reached its maximum depth.");
         }

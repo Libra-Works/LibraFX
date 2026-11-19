@@ -218,6 +218,18 @@ try {
         'LbInteropSpawnableHost.cpp',
         'LbInteropSession.cpp'
     )
+    $sourcesWithHandwrittenWrappers = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $modulePrivate = Join-Path $stage 'Source\LibraRuntimeCore\Private'
+    foreach ($wrapper in Get-ChildItem -LiteralPath $modulePrivate -Filter '*.cpp' -File -Recurse) {
+        foreach ($include in [regex]::Matches([IO.File]::ReadAllText($wrapper.FullName),
+            '(?m)^#include\s+"([^"\r\n]+\.cpp)"')) {
+            $source = $include.Groups[1].Value.Replace('\', '/')
+            if (-not $source.StartsWith('Core/', [StringComparison]::Ordinal)) {
+                $source = 'Core/' + $source
+            }
+            [void]$sourcesWithHandwrittenWrappers.Add($source)
+        }
+    }
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $coreRoot 'Core') -Filter '*.cpp' -File -Recurse) {
         if (($file.Name -in $moduleIncludedSources -or $file.Name -in $excludedInteropSources) -and
             $file.DirectoryName -eq (Join-Path $coreRoot 'Core'))
@@ -225,6 +237,11 @@ try {
             continue
         }
         $relative = [IO.Path]::GetRelativePath($coreRoot, $file.FullName).Replace('\', '/')
+        if ($sourcesWithHandwrittenWrappers.Contains($relative) -or
+            $relative -eq 'Core/CpuParticles/LbInteropCpuParticles.cpp')
+        {
+            continue
+        }
         $sha = [Security.Cryptography.SHA256]::Create()
         try { $digest = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($relative)) }
         finally { $sha.Dispose() }

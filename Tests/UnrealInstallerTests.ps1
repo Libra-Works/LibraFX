@@ -11,7 +11,7 @@ $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $core = Join-Path $repository 'Runtime\Core'
 $nativeCMake = [IO.File]::ReadAllText((Join-Path $repository 'Runtime\CMakeLists.txt'))
 $interopTarget = [regex]::Match($nativeCMake, 'add_library\(liberafx_native\s+SHARED\b([^)]*)\)')
-$interopSources = @([regex]::Matches($interopTarget.Groups[1].Value, 'Core/[\w./-]+\.cpp') |
+$interopSources = @([regex]::Matches($nativeCMake, 'Core/(?:[\w.-]+/)*LbInterop[\w.-]*\.cpp') |
     ForEach-Object { $_.Value.Replace('/', '\') })
 if ($interopSources.Count -eq 0) { throw 'Could not identify standalone C ABI sources.' }
 $installer = Join-Path $repository 'Runtime\Integrations\Unreal\Install-LibraRuntimeForUnreal.ps1'

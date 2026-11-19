@@ -13,10 +13,48 @@ internal static class AssetAuthoringTests
         VerifySpriteModes();
         VerifyLocalMetadata();
         VerifyProjectAssetRoot();
+        VerifyTextureOnlyDrawAssignment("FlexiblePlaneDraw");
         VerifyCallerTargetBinding();
         VerifyCallerTargetBinding(inline: true);
         VerifyCallerTargetBinding(material: true);
         VerifyCallerTargetBinding(inline: true, material: true);
+    }
+
+    private static void VerifyTextureOnlyDrawAssignment(string typeName)
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var definition = GraphNodeDefinition.All.Single(item => item.TypeName == typeName);
+        var node = graph.CreateNode(definition.Kind);
+        var id = node.Id;
+        string PathValue() => graph.GetNode(id).GetParameterValue(
+            definition.Parameters.Single(parameter => parameter.Id == "assetPath")).GetString()!;
+        var original = PathValue();
+        var texture = new EngineAsset("/Game/Textures/T_Ribbon", "Ribbon", "texture", "Unreal",
+            Materials: [new(0, "/Game/Materials/M_Ribbon", "Ribbon", [])]);
+        var targets = ResourceAssignment.Targets(node, texture);
+        if (targets.Count != 1 || targets[0].Kind != ResourceTargetKind.RenderAsset ||
+            ResourceAssignment.AssetClassForParameter(node, "assetPath") != "texture")
+        {
+            throw new InvalidOperationException($"{typeName} must expose one typed primary texture target.");
+        }
+        ResourceAssignment.Assign(graph, node, texture, targets[0]);
+        if (PathValue() != texture.Path ||
+            graph.GetNode(id).Parameters?.Any(parameter => parameter.Id == "materialSchema") == true ||
+            ResourceAssignment.Targets(graph.GetNode(id),
+                new EngineAsset("/Game/Materials/M_Ribbon", "Ribbon", "material", "Unreal")).Count != 0)
+        {
+            throw new InvalidOperationException($"{typeName} texture assignment must not invent material slots or schema.");
+        }
+        graph.History.Undo();
+        if (PathValue() != original)
+        {
+            throw new InvalidOperationException($"{typeName} texture assignment must be undoable.");
+        }
+        graph.History.Redo();
+        if (PathValue() != texture.Path)
+        {
+            throw new InvalidOperationException($"{typeName} texture assignment must be redoable.");
+        }
     }
 
     private static void VerifyMaterialAssociationDelivery()

@@ -2,6 +2,7 @@
 
 #include "LibraSpawnableAsset.h"
 #include "LibraSpawnableFactory.h"
+#include "LibraEffectFactory.h"
 #include "LibraEffectAsset.h"
 #include "../LibraSourceProjectDetails.h"
 #include "AssetToolsModule.h"
@@ -155,7 +156,7 @@ bool FLibraSpawnableReimportTest::RunTest(const FString&)
         }
     };
     auto verifyFixture = [&](const FString& fixturePath,
-        const TArray<ELibraPackageResourceKind>& requiredKinds) -> bool
+        const TArray<ELibraPackageResourceKind>& requiredKinds, const TCHAR* extension) -> bool
     {
         auto bytes = TArray<uint8>{};
         if (!TestTrue(TEXT("LFXP fixture loads"), FFileHelper::LoadFileToArray(bytes, *fixturePath)) ||
@@ -167,12 +168,24 @@ bool FLibraSpawnableReimportTest::RunTest(const FString&)
 
         auto directory = FPaths::ProjectSavedDir();
         IFileManager::Get().MakeDirectory(*directory, true);
-        auto sourcePath = FPaths::CreateTempFilename(*directory, TEXT("LibraReimport"), TEXT(".lfxp"));
+        auto sourcePath = FPaths::CreateTempFilename(*directory, TEXT("LibraReimport"), extension);
         ON_SCOPE_EXIT { IFileManager::Get().Delete(*sourcePath); };
         if (!TestTrue(TEXT("Isolated source is written"), FFileHelper::SaveArrayToFile(bytes, *sourcePath)))
         {
             return false;
         }
+        auto rawFactory = NewObject<ULibraEffectFactory>();
+        if (!TestTrue(TEXT("Package factory recognizes validated content"), factory->FactoryCanImport(sourcePath)) ||
+            !TestFalse(TEXT("Raw factory does not compete for package content"), rawFactory->FactoryCanImport(sourcePath)))
+        {
+            return false;
+        }
+        AddExpectedError(TEXT("Cannot import invalid or unsupported LIBERA FX bytecode"),
+            EAutomationExpectedErrorFlags::Contains, 1);
+        auto rawCanceled = false;
+        TestNull(TEXT("Direct raw factory call rejects package content"), rawFactory->FactoryCreateFile(
+            ULibraEffectAsset::StaticClass(), GetTransientPackage(), NAME_None, RF_Transient,
+            sourcePath, nullptr, GWarn, rawCanceled));
 
         auto projectPath = FPaths::ChangeExtension(fixturePath, TEXT("lfxproj"));
         const auto hasSourceProject = IFileManager::Get().FileExists(*projectPath);
@@ -324,10 +337,32 @@ bool FLibraSpawnableReimportTest::RunTest(const FString&)
             }
         }
 
+        auto truncated = bytes;
+        truncated.SetNum(24); // Keep the correct LFXP magic but remove the payload.
+        if (!TestTrue(TEXT("Truncated package source is written"),
+            FFileHelper::SaveArrayToFile(truncated, *sourcePath)))
+        {
+            return false;
+        }
+        TestFalse(TEXT("Correct LFXP magic does not bypass validation"), factory->FactoryCanImport(sourcePath));
+        TestTrue(TEXT("Truncated package fails reimport without changing the existing asset"),
+            factory->Reimport(asset) == EReimportResult::Failed &&
+            TArray<uint8>(asset->GetPackageBytes()) == bytes);
         auto invalid = bytes;
         invalid[0] = 0;
-        if (!TestTrue(TEXT("Malformed source is written"), FFileHelper::SaveArrayToFile(invalid, *sourcePath)) ||
-            !TestTrue(TEXT("Malformed source fails reimport"),
+        if (!TestTrue(TEXT("Malformed source is written"), FFileHelper::SaveArrayToFile(invalid, *sourcePath)))
+        {
+            return false;
+        }
+        TestFalse(TEXT("Package factory rejects corrupt content despite the suffix"), factory->FactoryCanImport(sourcePath));
+        TestFalse(TEXT("Raw factory rejects corrupt content despite the suffix"), rawFactory->FactoryCanImport(sourcePath));
+        AddExpectedError(TEXT("Cannot import invalid or unsupported LIBERA FX package"),
+            EAutomationExpectedErrorFlags::Contains, 1);
+        auto invalidCanceled = false;
+        TestNull(TEXT("Direct package factory call cannot bypass validation"), factory->FactoryCreateFile(
+            ULibraSpawnableAsset::StaticClass(), GetTransientPackage(), NAME_None, RF_Transient,
+            sourcePath, nullptr, GWarn, invalidCanceled));
+        if (!TestTrue(TEXT("Malformed source fails reimport"),
                 factory->Reimport(asset) == EReimportResult::Failed) ||
             !TestTrue(TEXT("Failed reimport preserves binary"),
                 TArray<uint8>(asset->GetPackageBytes()) == bytes) ||
@@ -468,7 +503,8 @@ bool FLibraSpawnableReimportTest::RunTest(const FString&)
         return true;
     };
 
-    if (!verifyFixture(fixture, requestedKinds))
+    if (!verifyFixture(fixture, requestedKinds, TEXT(".lfxb")) ||
+        !verifyFixture(fixture, requestedKinds, TEXT(".lfxp")))
     {
         return false;
     }
