@@ -59,7 +59,7 @@ public sealed class EditorNativePreviewSession : IDisposable
     }
 
     public EditorNativePreviewSession(GraphSnapshot graph, string? nativeLibraryPath = null,
-        VfxCompileOptions? options = null)
+        VfxCompileOptions? options = null, IRenderResourceBindingContext? resourceContext = null)
     {
         VfxProgram.ValidateForCompilation(graph);
         if (SkeletalPoseSchema.ContainsSource(graph))
@@ -70,8 +70,9 @@ public sealed class EditorNativePreviewSession : IDisposable
         _library = ResolveLibraryPath(nativeLibraryPath);
         if (ContainsGpu(graph))
             throw new NotSupportedException("Editor-native lifecycle preview cannot yet combine GPU particle containers with Spawnable lifecycles. Preview GPU graphs separately; no GPU payload will be silently discarded.");
-        _package = SpawnableGroupPackage.Compile(graph, includePreviewSignalKeys: true, options: options);
-        _rootRender = RenderProgramBindings.CreateScene(WithoutTemplates(graph), 0, options: options);
+        _package = SpawnableGroupPackage.Compile(graph, includePreviewSignalKeys: true,
+            resourceContext: resourceContext, options: options);
+        _rootRender = RenderProgramBindings.CreateScene(WithoutTemplates(graph), 0, resourceContext, options);
         try { _native = new EditorNativeHostSession(_package, _library); }
         catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or EntryPointNotFoundException)
         {

@@ -314,6 +314,9 @@ public sealed class PreviewHost : IDisposable
         PreviewPublication? baseline = null;
         using var compiled = new CompiledPreviewSender();
         var godotPackage = new GodotPackagePreviewSender();
+        GraphSnapshot? resourceGraph = null;
+        IRenderResourceBindingContext? resourceContext = null;
+        var resourceFailed = false;
         await foreach (var publication in client.Channel.Reader.ReadAllAsync(cancellation))
         {
             // Diff against the last message actually sent, never a dropped pending update.
@@ -321,20 +324,51 @@ public sealed class PreviewHost : IDisposable
             if (client.Version == 3)
             {
                 var packagePreview = client.PackagePreview || _assets?.Supports(id, "godotPackagePreview") == true;
-                var message = packagePreview ? godotPackage.Prepare(publication, force) : compiled.Prepare(publication, force);
+                var renderPeer = _assets?.Supports(id, "rendering") == true;
+                var message = default(CompiledPreviewMessage);
+                byte[]? sceneFrame = null;
+                try
+                {
+                    if (renderPeer || packagePreview)
+                    {
+                        if (force || !ReferenceEquals(resourceGraph, publication.Graph))
+                        {
+                            resourceGraph = publication.Graph;
+                            resourceContext = null;
+                            resourceFailed = false;
+                            if (PreviewResourceBindings.HasMappings(publication.Graph))
+                            {
+                                if (packagePreview)
+                                    throw new InvalidDataException("This package preview backend does not resolve project-scoped resources.");
+                                resourceContext = await PreviewResourceBindings.ResolveAsync(publication.Graph, _assets!, id, cancellation);
+                            }
+                        }
+                        if (resourceFailed) continue;
+                    }
+                    message = packagePreview ? godotPackage.Prepare(publication, force) :
+                        compiled.Prepare(publication, force, resourceContext);
+                    if (message is not null && !packagePreview && renderPeer &&
+                        (message.Kind == CompiledPreviewKind.Program || message.EvaluatedRenderScene is not null))
+                    {
+                        var scene = message.EvaluatedRenderScene ?? RenderProgramBindings.CreateScene(publication.Graph,
+                            publication.Sequence, resourceContext,
+                            new VfxCompileOptions { IncludePreviewDebugDraw = publication.IncludePreviewDebugDraw &&
+                                publication.Playback?.DebugDrawStopped != true });
+                        sceneFrame = CompiledPreviewProtocol.CreateScene(scene);
+                    }
+                }
+                catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException or
+                    TimeoutException or JsonException or ArgumentException or NotSupportedException)
+                {
+                    resourceFailed = true;
+                    message = CompiledPreviewProtocol.CreateError(publication, ex.Message);
+                }
                 if (message is null) continue;
                 if (message.Kind == CompiledPreviewKind.Program)
                     _telemetry?.ExpectProgramAcknowledgement(id, publication.Sequence);
                 await SendSerializedAsync(socket, client, message.Bytes, WebSocketMessageType.Binary, cancellation);
-                if (!packagePreview && (message.Kind == CompiledPreviewKind.Program || message.EvaluatedRenderScene is not null) &&
-                    _assets?.Supports(id, "rendering") == true)
-                {
-                    var scene = message.EvaluatedRenderScene ?? RenderProgramBindings.CreateScene(publication.Graph, publication.Sequence,
-                        options: new VfxCompileOptions { IncludePreviewDebugDraw = publication.IncludePreviewDebugDraw &&
-                            publication.Playback?.DebugDrawStopped != true });
-                    await SendSerializedAsync(socket, client, CompiledPreviewProtocol.CreateScene(scene),
-                        WebSocketMessageType.Binary, cancellation);
-                }
+                if (sceneFrame is not null)
+                    await SendSerializedAsync(socket, client, sceneFrame, WebSocketMessageType.Binary, cancellation);
                 if (!packagePreview && message.Kind == CompiledPreviewKind.Program && _assets?.Supports(id, "gpuParticles") == true)
                 {
                     // Native lifecycle graphs reject GPU mixtures, but must

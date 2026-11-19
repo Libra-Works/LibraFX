@@ -9,6 +9,7 @@ using System.Text.Json;
 using Avalonia.Threading;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
+using LiberaFx.Models.Resources;
 using LiberaFx.Services;
 using LiberaFx.Services.Compilation;
 using LiberaFx.ViewModels;
@@ -63,9 +64,96 @@ internal static class CompiledPreviewProtocolTests
         Require(recovered.Kind == CompiledPreviewKind.Playback && U64(recovered.Bytes, 16) == 12,
             "A failure must preserve the last good graph and last sent message baseline.");
         RunWithDispatcher(VerifyTransportAsync());
+        RunWithDispatcher(VerifyProjectMappedRenderAsync());
     }
 
     public static void RunUnrealGpuPreview() => RunWithDispatcher(VerifyUnrealGpuPreviewAsync(), 330);
+
+    private static async Task VerifyProjectMappedRenderAsync()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        using var host = new PreviewHost(port);
+        var model = new MainViewModel();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+        var stop = timeout.Token;
+        const string legacy = "/Game/Test/Legacy.Legacy";
+        const string mapped = "/Game/Test/Mapped.Mapped";
+        var project = Guid.NewGuid();
+        var resource = Guid.NewGuid();
+        var draw = model.Graph.CreateNode(new("ModelDraw"));
+        model.Graph.SetParameter(draw, "assetPath", JsonSerializer.SerializeToElement(legacy));
+        void SetMapping(Guid projectId) => model.Graph.SetResourceIdentityDocument(new ResourceIdentityDocument(1,
+            [new(resource, "model", "Mapped model")],
+            [new(new("Unreal", projectId), resource, "model", new("unreal.object-path", mapped))],
+            [], [new(draw.Id, "assetPath", resource)], []), "Set test mapping");
+        SetMapping(project);
+        try
+        {
+            await host.StartAsync(model);
+            using var socket = new ClientWebSocket();
+            socket.Options.SetRequestHeader("X-LiberaFx-Preview-Token", host.AccessToken);
+            var fingerprint = Convert.FromHexString(host.Fingerprint);
+            socket.Options.RemoteCertificateValidationCallback = (_, certificate, _, _) =>
+                certificate is not null && CryptographicOperations.FixedTimeEquals(
+                    SHA256.HashData(certificate.GetRawCertData()), fingerprint);
+            await socket.ConnectAsync(new Uri($"wss://localhost:{port}/preview?protocol=3"), stop);
+            _ = await ReceiveAsync(socket, stop);
+            await Send(new { type = "hello", engine = "Unreal", role = "editor", version = 1,
+                capabilities = new[] { "rendering", "resourceIdentity" } });
+            await ReplyProject();
+            using (var probe = await ReceiveScene("resource_identity_probe"))
+            {
+                var request = probe.RootElement;
+                Require(request.GetProperty("projectId").GetGuid() == project &&
+                        request.GetProperty("binding").GetProperty("value").GetString() == mapped,
+                    "Live query must use only the peer's project and explicit opaque binding.");
+                await Send(new { type = "resource_identity_result", operation = "probe",
+                    requestId = request.GetProperty("requestId").GetGuid(), status = "Resolved", actualKind = "model",
+                    project = new { engine = "Unreal", projectId = project } });
+            }
+            Require(U16(await ReceiveAsync(socket, stop), 6) == (ushort)CompiledPreviewKind.Program,
+                "A resolved project mapping should admit the program.");
+            using (var scene = await ReceiveScene("render_config"))
+                Require(scene.RootElement.GetProperty("nodes")[0].GetProperty("assetPath").GetString() == mapped,
+                    "The rendered scene must use the live mapped path.");
+
+            await Dispatcher.UIThread.InvokeAsync(() => SetMapping(Guid.NewGuid()));
+            await ReplyProject();
+            var failure = await ReceiveAsync(socket, stop);
+            Require(U16(failure, 6) == (ushort)CompiledPreviewKind.CompileError &&
+                    Encoding.UTF8.GetString(failure, 48, failure.Length - 48).Contains("Unregistered", StringComparison.Ordinal),
+                "An unmapped project must receive a diagnostic rather than falling back to the legacy render path.");
+
+            async Task Send(object message) => await socket.SendAsync(JsonSerializer.SerializeToUtf8Bytes(message),
+                WebSocketMessageType.Text, true, stop);
+
+            async Task<JsonDocument> ReceiveScene(string type)
+            {
+                var frame = await ReceiveAsync(socket, stop);
+                Require(U16(frame, 6) == (ushort)CompiledPreviewKind.Scene, $"Expected scene message {type}.");
+                var document = JsonDocument.Parse(frame.AsMemory(48));
+                if (document.RootElement.GetProperty("type").GetString() == type) return document;
+                document.Dispose();
+                throw new InvalidOperationException("Unexpected scene message: " + type);
+            }
+
+            async Task ReplyProject()
+            {
+                using var request = await ReceiveScene("resource_identity_project");
+                await Send(new { type = "resource_identity_result", operation = "status",
+                    requestId = request.RootElement.GetProperty("requestId").GetGuid(), status = "Ready",
+                    projectState = "Ready", project = new { engine = "Unreal", projectId = project } });
+            }
+        }
+        finally
+        {
+            await host.StopAsync();
+            await Dispatcher.UIThread.InvokeAsync(model.DisposeStorageFiles);
+        }
+    }
 
     private static void RunWithDispatcher(Task task, int timeoutSeconds = 35)
     {
@@ -90,6 +178,8 @@ internal static class CompiledPreviewProtocolTests
         var texture = Environment.GetEnvironmentVariable("LIBERAFX_UNREAL_TEXTURE")
             ?? "builtin:white";
         var useDiscovery = Environment.GetEnvironmentVariable("LIBERAFX_UNREAL_DISCOVERY") == "1";
+        var verifyMappedModel = Environment.GetEnvironmentVariable("LIBERAFX_UNREAL_MAPPED_MODEL") == "1";
+        const string mappedModelPath = "/Engine/BasicShapes/Cube.Cube";
         var probe = new TcpListener(IPAddress.Loopback, 0);
         probe.Start();
         var port = ((IPEndPoint)probe.LocalEndpoint).Port;
@@ -136,7 +226,10 @@ internal static class CompiledPreviewProtocolTests
             }
             native = Process.Start(start) ?? throw new InvalidOperationException("Unreal failed to start.");
             Guid? peer = null;
+            Guid? mappedModel = null;
             JsonElement? lastStatus = null;
+            JsonElement? lastRenderStatus = null;
+            var modelRendered = !verifyMappedModel;
             var executed = false;
             var startedPlayback = false;
             var deadline = DateTime.UtcNow.AddSeconds(240);
@@ -147,6 +240,45 @@ internal static class CompiledPreviewProtocolTests
                 if (peer is { } id)
                 {
                     if (!model.PreviewAssets.Supports(id, "gpuParticles")) break;
+                    if (verifyMappedModel && mappedModel is null)
+                    {
+                        var projectState = await model.PreviewAssets.EngineProjectAsync(id);
+                        var projectIdentity = projectState.Project;
+                        Require(projectState.ProjectState == "Ready" && projectIdentity is not null,
+                            "Initialize the isolated Unreal verification project's identity first: " + projectState.ProjectState);
+                        mappedModel = await Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            var draw = model.Graph.CreateNode(new("ModelDraw"));
+                            model.Graph.SetParameter(draw, "assetPath", JsonSerializer.SerializeToElement(
+                                "/Game/LibraVerification/MissingLegacyModel.MissingLegacyModel"));
+                            var resource = Guid.NewGuid();
+                            model.Graph.SetResourceIdentityDocument(new ResourceIdentityDocument(1,
+                                [new(resource, "model", "Explicit mapped preview model")],
+                                [new(projectIdentity!, resource, "model", new("unreal.object-path", mappedModelPath))],
+                                [], [new(draw.Id, "assetPath", resource)], []), "Map isolated preview model");
+                            return draw.Id;
+                        });
+                        if (Environment.GetEnvironmentVariable("LIBERAFX_UNREAL_MAPPED_PACKAGE") is { Length: > 0 } fixture)
+                        {
+                            var graph = await Dispatcher.UIThread.InvokeAsync(() => model.Graph.CreateSnapshot());
+                            // Package verification uses an ordinary model, independently of GPU-only preview playback.
+                            graph = graph with { Nodes = graph.Nodes.Where(item => item.Id == mappedModel).ToArray() };
+                            var context = await PreviewResourceBindings.ResolveAsync(graph, model.PreviewAssets, id,
+                                CancellationToken.None);
+                            var package = SpawnableGroupPackage.Compile(graph, resourceContext: context);
+                            File.WriteAllBytes(fixture, SpawnableGroupPackageBinary.Serialize(package));
+                        }
+                    }
+                    if (!modelRendered && mappedModel is { } drawId)
+                    {
+                        lastRenderStatus = model.PreviewAssets.RenderStatus(id);
+                        modelRendered = lastRenderStatus is { } render &&
+                            render.GetProperty("errors").GetArrayLength() == 0 &&
+                            render.GetProperty("nodes").EnumerateArray().Any(item =>
+                                item.GetProperty("nodeId").GetGuid() == drawId &&
+                                item.GetProperty("assetPath").GetString() == mappedModelPath &&
+                                item.GetProperty("rendered").GetBoolean());
+                    }
                     try { lastStatus = model.PreviewAssets.GpuStatus(id); }
                     catch (InvalidOperationException) when (!model.PreviewAssets.Supports(id, "gpuParticles")) { break; }
                     if (!startedPlayback && lastStatus is { } applied &&
@@ -156,7 +288,7 @@ internal static class CompiledPreviewProtocolTests
                         await Dispatcher.UIThread.InvokeAsync(() => model.Playback.Play());
                         startedPlayback = true;
                     }
-                    if (lastStatus is { } status && status.GetProperty("runtimeExecuted").GetBoolean() &&
+                    if (modelRendered && lastStatus is { } status && status.GetProperty("runtimeExecuted").GetBoolean() &&
                         status.GetProperty("errors").GetArrayLength() == 0 &&
                         status.GetProperty("programs").EnumerateArray().Any(program =>
                             program.GetProperty("nodeId").GetGuid() == node.Id))
@@ -167,6 +299,8 @@ internal static class CompiledPreviewProtocolTests
                 }
                 await Task.Delay(50);
             }
+            Require(modelRendered, "Mapped model did not render on the real Unreal peer: " +
+                (lastRenderStatus?.GetRawText() ?? "no render feedback"));
             Require(executed, "Actual Root-to-Unreal GPU delivery failed: " + (lastStatus?.GetRawText() ?? "no GPU feedback"));
             await Dispatcher.UIThread.InvokeAsync(() => model.Playback.Pause());
             var paused = false;
@@ -188,6 +322,8 @@ internal static class CompiledPreviewProtocolTests
             await native.WaitForExitAsync(exitTimeout.Token);
             Require(native.ExitCode == 0, "Unreal preview automation did not exit cleanly.");
             Console.WriteLine("Actual Root-to-Unreal GPU publication, execution and feedback passed.");
+            if (verifyMappedModel)
+                Console.WriteLine("Real Unreal WSS peer rendered the project-mapped model instead of the legacy path.");
         }
         finally
         {

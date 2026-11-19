@@ -150,6 +150,13 @@ public static class CompiledPreviewProtocol
         payload.CopyTo(bytes, HeaderSize);
         return new(bytes, kind, publication) { EditorNativeExecution = editorNative };
     }
+
+    internal static CompiledPreviewMessage CreateError(PreviewPublication publication, string diagnostic)
+    {
+        var error = new byte[MaxErrorBytes];
+        Encoding.UTF8.GetEncoder().Convert(diagnostic.AsSpan(), error, true, out _, out var written, out _);
+        return CreatePayload(publication, CompiledPreviewKind.CompileError, error[..written], 0);
+    }
 }
 
 // One instance per client. Call Sent only after the WebSocket send succeeds.
@@ -162,6 +169,7 @@ public sealed class CompiledPreviewSender : IDisposable
     private GraphSnapshot? _nativeGraph;
     private string? _nativeDocument;
     private bool _nativeDebugDraw;
+    private IRenderResourceBindingContext? _nativeResources;
     private readonly string? _nativeLibraryPath;
     private GraphSnapshot? _signalGraph;
     private string? _signalDocument;
@@ -170,7 +178,8 @@ public sealed class CompiledPreviewSender : IDisposable
 
     public CompiledPreviewSender(string? nativeLibraryPath = null) => _nativeLibraryPath = nativeLibraryPath;
 
-    public CompiledPreviewMessage? Prepare(PreviewPublication publication, bool forceSnapshot = false)
+    public CompiledPreviewMessage? Prepare(PreviewPublication publication, bool forceSnapshot = false,
+        IRenderResourceBindingContext? resourceContext = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (forceSnapshot || _signalDocument != publication.DocumentId || !ReferenceEquals(_signalGraph, publication.Graph))
@@ -181,7 +190,8 @@ public sealed class CompiledPreviewSender : IDisposable
         }
         if (_native is not null && (_nativeDocument != publication.DocumentId ||
             !ReferenceEquals(_nativeGraph, publication.Graph) ||
-            _nativeDebugDraw != publication.IncludePreviewDebugDraw)) ReleaseNative();
+            _nativeDebugDraw != publication.IncludePreviewDebugDraw ||
+            !ReferenceEquals(_nativeResources, resourceContext))) ReleaseNative();
         if (!forceSnapshot && _failed is not null && _failed.DocumentId == publication.DocumentId &&
             ReferenceEquals(_failed.Graph, publication.Graph) &&
             _failed.IncludePreviewDebugDraw == publication.IncludePreviewDebugDraw &&
@@ -199,7 +209,9 @@ public sealed class CompiledPreviewSender : IDisposable
                 if (_native is null)
                 {
                     _native = new EditorNativePreviewSession(publication.Graph, _nativeLibraryPath,
-                        new VfxCompileOptions { IncludePreviewDebugDraw = publication.IncludePreviewDebugDraw });
+                        new VfxCompileOptions { IncludePreviewDebugDraw = publication.IncludePreviewDebugDraw },
+                        resourceContext);
+                    _nativeResources = resourceContext;
                     _nativeDebugDraw = publication.IncludePreviewDebugDraw;
                     _nativeGraph = publication.Graph;
                     _nativeDocument = publication.DocumentId;
@@ -229,10 +241,7 @@ public sealed class CompiledPreviewSender : IDisposable
                 var diagnostic = ex.Message;
                 try { ReleaseNative(); }
                 catch (Exception cleanup) { diagnostic += " Native cleanup failed: " + cleanup.Message; }
-                var error = new byte[CompiledPreviewProtocol.MaxErrorBytes];
-                Encoding.UTF8.GetEncoder().Convert(diagnostic.AsSpan(), error, true, out _, out var written, out _);
-                return CompiledPreviewProtocol.CreatePayload(publication, CompiledPreviewKind.CompileError,
-                    error[..written], 0);
+                return CompiledPreviewProtocol.CreateError(publication, diagnostic);
             }
         }
         return CompiledPreviewProtocol.Create(publication, playback, checked((ulong)_lastSent));
@@ -251,6 +260,7 @@ public sealed class CompiledPreviewSender : IDisposable
         _native = null;
         _nativeGraph = null;
         _nativeDocument = null;
+        _nativeResources = null;
         native?.Dispose();
     }
     public void Dispose()

@@ -78,12 +78,13 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
         _ = await RequestAsync("reconnect", clientId, request => new { type = "reconnect", requestId = request });
     }
 
-    public async Task<EngineProjectConnectionState> EngineProjectAsync(Guid clientId, string operation = "status")
+    public async Task<EngineProjectConnectionState> EngineProjectAsync(Guid clientId, string operation = "status",
+        CancellationToken cancellation = default)
     {
         if (operation is not ("status" or "initialize" or "keep" or "fork"))
             throw new ArgumentException("Unsupported project identity operation.", nameof(operation));
         var response = await RequestAsync(operation, clientId, "resourceIdentity", "resource_identity_result",
-            request => new { type = "resource_identity_project", requestId = request, operation });
+            request => new { type = "resource_identity_project", requestId = request, operation }, cancellation);
         var status = RequiredText(response, "status", 64);
         var projectState = response.TryGetProperty("projectState", out var stateValue) &&
             stateValue.ValueKind == JsonValueKind.String ? stateValue.GetString() : status;
@@ -107,7 +108,7 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
     }
 
     public async Task<ResourceProbeResult> ProbeResourceAsync(Guid clientId, EngineProjectIdentity project,
-        OpaqueBinding binding)
+        OpaqueBinding binding, CancellationToken cancellation = default)
     {
         ValidateProjectRequest(clientId, project);
         ValidateOpaqueBinding(binding);
@@ -116,12 +117,12 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
             {
                 type = "resource_identity_probe", requestId = request, projectId = project.ProjectId.ToString("D"),
                 binding = new { binding.Format, binding.Value }
-            });
+            }, cancellation);
         return ParseProbe(response, project);
     }
 
     public async Task<ResourceProbeResult> ProbeParameterAsync(Guid clientId, EngineProjectIdentity project,
-        OpaqueBinding resourceBinding, OpaqueBinding parameterBinding)
+        OpaqueBinding resourceBinding, OpaqueBinding parameterBinding, CancellationToken cancellation = default)
     {
         ValidateProjectRequest(clientId, project);
         ValidateOpaqueBinding(resourceBinding);
@@ -132,7 +133,7 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
                 type = "resource_identity_probe", requestId = request, projectId = project.ProjectId.ToString("D"),
                 resourceBinding = new { resourceBinding.Format, resourceBinding.Value },
                 parameterBinding = new { parameterBinding.Format, parameterBinding.Value }
-            });
+            }, cancellation);
         return ParseProbe(response, project);
     }
 
@@ -207,8 +208,9 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
         await RequestAsync(operation, clientId, "assets", "asset_result", command);
 
     private async Task<JsonElement> RequestAsync(string operation, Guid? clientId, string capability,
-        string resultType, Func<Guid, object> command)
+        string resultType, Func<Guid, object> command, CancellationToken cancellation = default)
     {
+        cancellation.ThrowIfCancellationRequested();
         var peer = SelectPeer(clientId, capability);
         var requestId = Guid.NewGuid();
         var completion = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -223,7 +225,7 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
             if (bytes.Length > CompiledPreviewProtocol.MaxSceneBytes - CompiledPreviewProtocol.HeaderSize)
                 throw new InvalidDataException("Resource identity request exceeds the preview message limit.");
             await telemetry.SceneControlAsync(bytes, peer, capability);
-            var reply = await completion.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            var reply = await completion.Task.WaitAsync(TimeSpan.FromSeconds(20), cancellation);
             if (reply.TryGetProperty("error", out var error) && error.ValueKind != JsonValueKind.Null)
                 throw new InvalidOperationException(error.GetString() ?? "Engine asset operation failed.");
             return reply;

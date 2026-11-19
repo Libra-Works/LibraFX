@@ -168,7 +168,7 @@ public static class ResourceIdentityExport
         return JsonSerializer.SerializeToUtf8Bytes(manifest, Options);
     }
 
-    private static Dictionary<(string Scope, Guid NodeId), GraphNodeSnapshot> ScopedNodes(GraphSnapshot graph)
+    internal static Dictionary<(string Scope, Guid NodeId), GraphNodeSnapshot> ScopedNodes(GraphSnapshot graph)
     {
         var result = new Dictionary<(string Scope, Guid NodeId), GraphNodeSnapshot>();
         void Visit(GraphSnapshot current, IReadOnlyList<Guid> path)

@@ -31,6 +31,11 @@ namespace
         return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("LibraFxProjectIdentity.marker"));
     }
 
+    FString ProjectIdentityConfigPath()
+    {
+        return FPaths::Combine(FPaths::ProjectConfigDir(), TEXT("LibraFxResourceIdentity.ini"));
+    }
+
     FProjectIdentityState ReadProjectIdentity()
     {
         auto state = FProjectIdentityState{};
@@ -41,14 +46,26 @@ namespace
             return state;
         }
 
-        GConfig->GetString(IdentitySection, IdentityKey, state.ProjectId, GGameIni);
+        const auto configPath = ProjectIdentityConfigPath();
+        const auto hasProjectFile = IFileManager::Get().FileExists(*configPath);
+        if (hasProjectFile)
+        {
+            auto config = FConfigFile{};
+            config.Read(configPath);
+            config.GetString(IdentitySection, IdentityKey, state.ProjectId);
+        }
+        else
+        {
+            GConfig->GetString(IdentitySection, IdentityKey, state.ProjectId, GGameIni);
+        }
         auto projectGuid = FGuid{};
         if (state.ProjectId.IsEmpty() || !FGuid::ParseExact(state.ProjectId, EGuidFormats::DigitsWithHyphens, projectGuid) ||
             !projectGuid.IsValid())
         {
             state.ProjectId.Reset();
-            state.Status = TEXT("Unregistered");
-            state.Detail = TEXT("No explicit Unreal project identity is registered.");
+            state.Status = hasProjectFile ? TEXT("QueryFailure") : TEXT("Unregistered");
+            state.Detail = hasProjectFile ? TEXT("The Unreal project identity file is invalid or unreadable.") :
+                TEXT("No explicit Unreal project identity is registered.");
             return state;
         }
         state.ProjectId = projectGuid.ToString(EGuidFormats::DigitsWithHyphensLower);
@@ -87,9 +104,17 @@ namespace
             error = TEXT("A valid project GUID and Unreal configuration are required.");
             return false;
         }
-        auto text = id.ToString(EGuidFormats::DigitsWithHyphensLower);
-        GConfig->SetString(IdentitySection, IdentityKey, *text, GGameIni);
-        GConfig->Flush(false, GGameIni);
+        const auto text = id.ToString(EGuidFormats::DigitsWithHyphensLower);
+        const auto path = ProjectIdentityConfigPath();
+        const auto temporary = path + TEXT(".") + FGuid::NewGuid().ToString(EGuidFormats::Digits) + TEXT(".tmp");
+        const auto content = FString::Printf(TEXT("[%s]\n%s=%s\n"), IdentitySection, IdentityKey, *text);
+        if (!FFileHelper::SaveStringToFile(content, *temporary) ||
+            !IFileManager::Get().Move(*path, *temporary, true, false, false, true))
+        {
+            IFileManager::Get().Delete(*temporary, false, true);
+            error = TEXT("Could not save the persistent Unreal project identity.");
+            return false;
+        }
         if (!FFileHelper::SaveStringToFile(text, *ProjectMarkerPath()))
         {
             error = TEXT("Could not write the local clone-policy marker.");

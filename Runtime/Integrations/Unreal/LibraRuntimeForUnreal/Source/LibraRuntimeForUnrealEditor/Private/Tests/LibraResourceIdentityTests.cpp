@@ -2,18 +2,27 @@
 
 #include "../LibraEditorResourceIdentityAdapter.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Components/StaticMeshComponent.h"
 #include "Dom/JsonObject.h"
+#include "Engine/SceneCapture2D.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Engine/World.h"
+#include "LibraSpawnableAsset.h"
+#include "LibraSpawnableComponent.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
+#include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeExit.h"
+#include "RenderingThread.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -244,6 +253,68 @@ bool FLibraResourceIdentityTest::RunTest(const FString&)
     auto appliedTint = FLinearColor{};
     passed &= TestTrue(TEXT("Runtime MID applies the exact probed vector locator"),
         instance->GetVectorParameterValue(parameterInfo, appliedTint) && appliedTint.Equals(overrideTint));
+    auto packagePath = FString{};
+    if (FParse::Value(FCommandLine::Get(), TEXT("LibraIdentityMappedPackage="), packagePath))
+    {
+        auto bytes = TArray<uint8>{};
+        auto* package = NewObject<ULibraSpawnableAsset>();
+        if (!TestTrue(TEXT("Load the compiler package built from WSS probe results"),
+            FFileHelper::LoadFileToArray(bytes, *packagePath) && package->SetPackageBytes(bytes) == ELibraRuntimeResult::Ok))
+        {
+            return false;
+        }
+        auto init = UWorld::InitializationValues().AllowAudioPlayback(false).CreatePhysicsScene(false)
+            .CreateNavigation(false).CreateAISystem(false).ShouldSimulatePhysics(false);
+        auto* world = UWorld::CreateWorld(EWorldType::Game, false, NAME_None, nullptr, true,
+            ERHIFeatureLevel::Num, &init);
+        if (!TestNotNull(TEXT("Isolated mapped package world"), world))
+        {
+            return false;
+        }
+        ON_SCOPE_EXIT { world->DestroyWorld(false); };
+        auto* actor = world->SpawnActor<AActor>();
+        auto* effect = NewObject<ULibraSpawnableComponent>(actor);
+        effect->bAutoPlay = false;
+        effect->Package = package;
+        actor->AddInstanceComponent(effect);
+        effect->RegisterComponent();
+        if (!TestEqual(TEXT("Play the mapped package"), effect->Play(), ELibraRuntimeResult::Ok))
+        {
+            return false;
+        }
+        effect->TickComponent(1.0f / 60, LEVELTICK_All, &effect->PrimaryComponentTick);
+        auto meshes = TArray<UStaticMeshComponent*>{};
+        actor->GetComponents(meshes);
+        if (!TestTrue(TEXT("Package instantiated the exact mapped engine mesh"),
+            meshes.Num() == 1 && meshes[0]->GetStaticMesh() &&
+            meshes[0]->GetStaticMesh()->GetPathName() == cubePath))
+        {
+            return false;
+        }
+        auto* cameraActor = world->SpawnActor<ASceneCapture2D>();
+        auto* camera = cameraActor->GetCaptureComponent2D();
+        auto* framebuffer = NewObject<UTextureRenderTarget2D>(cameraActor);
+        framebuffer->InitCustomFormat(128, 128, PF_B8G8R8A8, false);
+        framebuffer->ClearColor = FLinearColor::Black;
+        cameraActor->SetActorLocationAndRotation(FVector(-250, 0, 0), FRotator::ZeroRotator);
+        camera->TextureTarget = framebuffer;
+        camera->CaptureSource = SCS_FinalColorLDR;
+        camera->bCaptureEveryFrame = false;
+        camera->bCaptureOnMovement = false;
+        camera->ShowFlags.SetLighting(false);
+        camera->ShowFlags.SetFog(false);
+        camera->ShowFlags.SetAtmosphere(false);
+        camera->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
+        camera->ShowOnlyComponent(meshes[0]);
+        world->SendAllEndOfFrameUpdates();
+        camera->CaptureScene();
+        FlushRenderingCommands();
+        auto pixels = TArray<FColor>{};
+        passed &= TestTrue(TEXT("Mapped package mesh produces visible framebuffer pixels"),
+            framebuffer->GameThread_GetRenderTargetResource()->ReadPixels(pixels) &&
+            pixels.ContainsByPredicate([](const FColor& pixel)
+                { return pixel.R > 24 || pixel.G > 24 || pixel.B > 24; }));
+    }
     return passed;
 }
 

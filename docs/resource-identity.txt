@@ -62,8 +62,10 @@ missing asset. Async desktop requests have correlation and timeouts. Unity proje
 and exact resource/property helpers run through the live Editor bridge; Unreal project
 identity/resource/schema requests are routed by its authenticated editor connection.
 Unity stores its project GUID in LiberaFxUnityResourceProjectIdentity and its clone decision in
-an ignored Library marker. Unreal stores its GUID in project Game config and its clone decision
-in Saved. Missing local markers are CloneDecisionRequired, never implicitly adopted. The Unity
+an ignored Library marker. Unreal stores its GUID in Config/LibraFxResourceIdentity.ini and its
+clone decision in Saved. Existing Game config identities remain readable when the new file is
+absent. Keep the project config with the project, but do not distribute the local marker with a
+clone. Missing local markers are CloneDecisionRequired, never implicitly adopted. The Unity
 Editor menu and the adapter request operations provide explicit initialize/keep/fork actions.
 ResourceIdentitySnapshotProbe loads explicit caller-supplied query assertions for exactly
 one project. A snapshot is not a live engine lookup; unknown entries are query failures,
@@ -80,6 +82,15 @@ than being emitted as paths. Nested Group and Spawnable render contexts carry th
 instance scope. Unselected legacy values remain unchanged and are NOT portable. Unity
 delivery populates the Unity runtime binding asset only when requested from the Resource
 Identity tab.
+
+For live protocol-3 rendering, a peer must advertise both rendering and resourceIdentity.
+The host queries that peer's Ready project identity and probes explicitly mapped resources
+and material parameters before sending the replacement. Unmapped legacy uses retain their
+old values; a failed explicit mapping reports a preview error rather than falling back.
+The host rechecks mappings on a new graph snapshot or a peer's resync. This applies to
+Unreal desktop render scenes, including editor-native lifecycle rendering. The Unity
+resource window is an asset-query and binding-delivery peer, not a live scene renderer.
+GPU resource mappings and Godot package preview mappings are not enabled by this path.
 
 Headless path (after the owner adds the source links and builds):
   LiberaFxConverter convert effect.lfxproj effect.lfxrm
@@ -108,12 +119,20 @@ Verified in isolated projects: Unity 7 AssetDatabase lookup, rename retaining id
 binding delivery and runtime lookup; Unreal 5.7 project-scoped lookup, failure responses,
 material schema and application to a dynamic material instance. Managed checks cover scoped
 clipboard and history behavior, correlated loopback requests, and a real converter process.
-These runs do not establish live desktop-to-engine mapped rendering.
+Unreal 5.7 also verified the same project GUID after restart, live rendering of a mapped mesh
+over certificate-pinned WSS, and framebuffer output from a compiled package using that
+mapping. The fixture intentionally names a nonexistent legacy asset. The protocol regression
+requires an explicit diagnostic for a same-path mapping owned by the wrong project.
+
+For the Unreal integration check, initialize the dedicated project with
+Libra.Editor.Resources.Identity and -LibraInitializeResourceProject, then run
+--unreal-gpu-preview with LIBERAFX_UNREAL_DISCOVERY=1, LIBERAFX_UNREAL_MAPPED_MODEL=1 and
+LIBERAFX_UNREAL_MAPPED_PACKAGE pointing to a new local .lfxp file. Run the Unreal resource
+automation again with -LibraIdentityMappedPackage pointing to that file and a real graphics
+device. In both resource automation runs, pass -LibraResourceProject with the exact isolated
+.uproject path.
 
 Remaining acceptance/verification:
 * Validate the Resource Identity tab and Unity WSS bridge in a Unity Editor with a safe
   project, including project initialize/clone decisions, missing/type-mismatch responses,
-  parameter schema, and delivery of the runtime binding asset.
-* Validate Unreal live resource/schema queries and runtime binding application in the
-  dedicated Unreal project. Unreal schema range/default semantics require an engine check;
-  do not infer missing assets from incomplete catalog results.
+  parameter schema, and mapped package rendering using the delivered runtime binding asset.
