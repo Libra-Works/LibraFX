@@ -845,7 +845,7 @@ auto PackageRenderRenderer::makeCpuRenderable(godot::Node& parent,
     const CpuParticleDraw& draw, CpuParticleRenderInstance& out) -> Result
 {
     auto node = memnew(godot::MultiMeshInstance3D);
-    node->set_name(godot::String("LibraFxCpuParticles_") + draw.nodeName);
+    node->set_name(godot::String("LibraFxCpuParticles_") + godot::String::utf8(draw.nodeName.c_str()));
     auto quad = godot::Ref<godot::QuadMesh>{};
     quad.instantiate();
     quad->set_size(godot::Vector2(1, 1));
