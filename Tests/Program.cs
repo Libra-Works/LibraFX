@@ -581,6 +581,11 @@ internal static class Program
             CompiledPreviewProtocolTests.RunUnityMappedPackage();
             return;
         }
+        if (args is ["--unreal-peer-mcp"])
+        {
+            UnrealPeerMcpTests.Run();
+            return;
+        }
         if (args is ["--spawnable-group"])
         {
             SpawnableGroupTests.Run();

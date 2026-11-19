@@ -78,49 +78,10 @@ internal static class PreviewAssetMcpTests
             metadata, model.Playback, model);
         try
         {
-            using var client = new HttpClient(new HttpClientHandler { UseProxy = false })
-            {
-                Timeout = TimeSpan.FromSeconds(15)
-            };
-            client.DefaultRequestHeaders.Add("X-LiberaFx-Token", host.AccessToken);
-            client.DefaultRequestHeaders.Add("Accept", "application/json, text/event-stream");
-            client.DefaultRequestHeaders.Add("MCP-Protocol-Version", "2025-03-26");
-            var requestId = 0;
+            using var client = new LocalPreviewMcpClient(host);
+            var Call = client.CallAsync;
 
-            async Task<JsonDocument> Send(string method, object? parameters = null)
-            {
-                using var content = new StringContent(JsonSerializer.Serialize(new
-                {
-                    jsonrpc = "2.0",
-                    id = ++requestId,
-                    method,
-                    @params = parameters
-                }), Encoding.UTF8, "application/json");
-                using var response = await client.PostAsync(host.ActualEndpoint, content);
-                response.EnsureSuccessStatusCode();
-                var body = await response.Content.ReadAsStringAsync();
-                if (body.StartsWith("event:", StringComparison.Ordinal) || body.StartsWith("data:", StringComparison.Ordinal))
-                {
-                    body = body.Split('\n').First(line => line.StartsWith("data:", StringComparison.Ordinal))[5..].Trim();
-                }
-
-                return JsonDocument.Parse(body);
-            }
-
-            async Task<string> Call(string name, object arguments)
-            {
-                using var response = await Send("tools/call", new { name, arguments });
-                var result = response.RootElement.GetProperty("result");
-                if (result.TryGetProperty("isError", out var isError) && isError.GetBoolean())
-                {
-                    throw new InvalidOperationException(result.GetProperty("content")[0].GetProperty("text").GetString());
-                }
-
-                return result.GetProperty("content")[0].GetProperty("text").GetString()
-                    ?? throw new InvalidDataException("MCP tool returned no text result.");
-            }
-
-            using (var tools = await Send("tools/list"))
+            using (var tools = await client.SendAsync("tools/list"))
             {
                 var names = tools.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray()
                     .Select(tool => tool.GetProperty("name").GetString()).ToHashSet(StringComparer.Ordinal);
@@ -129,6 +90,7 @@ internal static class PreviewAssetMcpTests
                 {
                     throw new InvalidOperationException("Asset, authoring, or reconnect MCP tools were not registered.");
                 }
+
             }
 
             _ = await Call("libera_asset_metadata_set", new

@@ -13,6 +13,15 @@ To connect after Unreal Editor startup:
 2. In the Unreal LIBERA FX Preview header, click Connect to Libra.
 3. Use Disconnect to end that preview connection without closing Unreal.
 
+The opt-in CommentImageSmokeTests mode --unreal-peer-mcp starts an isolated
+preview host, loopback MCP server, and an existing Unreal Editor build. Set
+LIBERAFX_DATA_ROOT, LIBERAFX_UNREAL_EDITOR, LIBERAFX_UNREAL_PROJECT (a dedicated
+project), and LIBERAFX_UNREAL_PEER_MCP_DIR (a fresh output directory) to absolute
+paths. It checks real asset search, semantic sprite authoring, an edit reaching
+the renderer, acknowledged reconnect with a new peer, asset-load diagnostics
+and Undo, and retirement after node deletion. The test uses an engine texture
+by default; LIBERAFX_UNREAL_MCP_TEXTURE can select another indexed Texture2D.
+
 One valid local instance connects automatically. Multiple valid instances require
 the explicit Select Libra menu; discovery never chooses an arbitrary first peer.
 The worker queries only local LibraFX.Preview.<processID> named pipes, verifying

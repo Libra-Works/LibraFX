@@ -314,7 +314,7 @@ internal static class CompiledPreviewProtocolTests
         }
     }
 
-    private static void RunWithDispatcher(Task task, int timeoutSeconds = 35)
+    internal static void RunWithDispatcher(Task task, int timeoutSeconds = 35)
     {
         if (!task.IsCompleted)
         {
