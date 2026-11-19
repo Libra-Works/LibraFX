@@ -1,9 +1,11 @@
 #include "liberafx/LbInterop.h"
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <vector>

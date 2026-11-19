@@ -96,11 +96,11 @@ jobs:
               plutil -replace CFBundleVersion -string $env:GITHUB_RUN_NUMBER $plist
               plutil -replace CFBundleShortVersionString -string $env:BUILD_VERSION $plist
               plutil -lint $plist
-              /usr/bin/test -x (Join-Path $editor 'LiberaFx')
+              /bin/sh -c 'test -x "$1"' sh (Join-Path $editor 'LiberaFx')
               ditto -c -k --sequesterRsrc --keepParent $package (Join-Path $artifacts "LibraFX-$env:BUILD_VERSION-macos-arm64.zip")
           }
           if ($env:TARGET_RID -eq 'linux-x64') {
-              /usr/bin/test -x (Join-Path $editor 'LiberaFx')
+              /bin/sh -c 'test -x "$1"' sh (Join-Path $editor 'LiberaFx')
               tar -czf (Join-Path $artifacts "LibraFX-$env:BUILD_VERSION-linux-x64.tar.gz") -C $package Editor Converter build-info.json
           }
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
