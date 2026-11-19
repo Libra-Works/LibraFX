@@ -41,6 +41,11 @@ namespace LiberaFx.Unity
                     return;
                 }
                 if (ioEvent == null) break;
+                InvokeScriptAction(ioEvent, current);
+                if (host != current || effectForced)
+                {
+                    return;
+                }
                 InvokeGameIoEvent(ioEvent);
                 if (host != current) return;
             }
@@ -130,10 +135,22 @@ namespace LiberaFx.Unity
             else throw new InvalidOperationException("Unknown native lifecycle event kind " + item.Kind + ".");
         }
 
-        private static bool IsWholeEffect(SpawnableHostEvent item)
+        private static bool IsWholeEffect(SpawnableHostEvent item) =>
+            IsWholeEffect(item.ContainerId, item.InstanceId);
+
+        private static bool IsWholeEffect(byte[] containerId, ulong instanceId)
         {
-            if (item.InstanceId != 0 || item.ContainerId == null || item.ContainerId.Length != 16) return false;
-            foreach (var value in item.ContainerId) if (value != 0) return false;
+            if (instanceId != 0 || containerId == null || containerId.Length != 16)
+            {
+                return false;
+            }
+            foreach (var value in containerId)
+            {
+                if (value != 0)
+                {
+                    return false;
+                }
+            }
             return true;
         }
 

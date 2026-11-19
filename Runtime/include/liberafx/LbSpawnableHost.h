@@ -51,6 +51,10 @@ class LIBRA_RUNTIME_CORE_API SpawnableHost final {
 public:
     static Result create(SpawnablePackage package, const SpawnableHostOptions& options,
                          std::unique_ptr<SpawnableHost>& out);
+    // Descriptors are copied. Callback code and contexts must outlive the host.
+    static Result create(SpawnablePackage package, const SpawnableHostOptions& options,
+                         const CustomNodeDescriptor* registry, std::size_t registryCount,
+                         std::unique_ptr<SpawnableHost>& out);
     ~SpawnableHost();
     SpawnableHost(const SpawnableHost&) = delete;
     SpawnableHost& operator=(const SpawnableHost&) = delete;

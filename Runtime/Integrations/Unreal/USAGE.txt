@@ -298,6 +298,8 @@ Live editor connection
 Project-native nodes
   Add LibraRuntimeForUnreal to your module's Build.cs dependencies.
   Register descriptors with FLibraNativeNodes::Register in your module startup.
+  The same registry is used by raw programs (.lfxb) and by both the root and
+  spawned templates of an effect package (.lfxp). Register before playback.
   Use the same type UUID, ABI version, numeric input order/widths, output width
   and signal branch count in C++ and the project's JSON node definitions.
   Parameter callbacks run on workers: do not touch UObject/actors there.

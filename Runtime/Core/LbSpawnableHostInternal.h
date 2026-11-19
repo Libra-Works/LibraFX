@@ -143,6 +143,7 @@ struct SpawnableHost::Impl final {
 
   SpawnablePackage packageData;
   SpawnableHostOptions options;
+  std::vector<CustomNodeDescriptor> projectDescriptors;
   std::vector<std::unique_ptr<TemplateState>> templates;
   std::vector<SpawnContextEntry> spawnContexts;
   std::vector<SignalInputContext> signalInputs;

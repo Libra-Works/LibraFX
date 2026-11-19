@@ -16,4 +16,8 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../.." "${CMAKE_CURRENT_BINARY_DIR
 add_library(liberafx_godot SHARED LibraFxGodot.cpp LibraFxGodotRender.cpp LibraFxGodotGpu.cpp)
 target_link_libraries(liberafx_godot PRIVATE godot::cpp LibraRuntimeCore)
 target_compile_features(liberafx_godot PRIVATE cxx_std_17)
+if(LIBERAFX_PROJECT_NODE_SOURCES)
+    target_sources(liberafx_godot PRIVATE ${LIBERAFX_PROJECT_NODE_SOURCES})
+    target_compile_definitions(liberafx_godot PRIVATE LIBERAFX_HAS_PROJECT_NODES=1)
+endif()
 set_target_properties(liberafx_godot PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")

@@ -57,6 +57,72 @@ namespace LiberaFx.Unity.Editor
             catch (Exception error) { Finish(error); }
         }
 
+        private static void VerifyScriptActions()
+        {
+            var fixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_SCRIPT_ACTION_FIXTURE");
+            if (string.IsNullOrEmpty(fixture))
+            {
+                return;
+            }
+            var package = ScriptableObject.CreateInstance<LiberaFxSpawnableAsset>();
+            var actionTarget = new GameObject("LIBERA FX script action verification");
+            try
+            {
+                package.SetPackageBytes(File.ReadAllBytes(fixture));
+                actionTarget.SetActive(false);
+                var player = actionTarget.AddComponent<LiberaFxSpawnableComponent>();
+                Require(player.ConfigureForSession(package, null, true) == NativeResult.Ok,
+                    "Could not configure script action fixture.");
+                var mainThread = System.Threading.Thread.CurrentThread.ManagedThreadId;
+                var calls = 0;
+                var received = new List<GameIoEvent>();
+                player.GameIoEventReceived += received.Add;
+                Require(player.BindScriptAction("action.sample", item =>
+                {
+                    if (item.PortName == "action.sample" &&
+                        System.Threading.Thread.CurrentThread.ManagedThreadId == mainThread)
+                    {
+                        ++calls;
+                    }
+                    return new[] { 42d };
+                }, "reply"), "Could not bind action before playback.");
+                bool Observed(double value) => received.Any(item =>
+                    item.PortName == "observed" && item.Width == 1 &&
+                    Math.Abs(item.Values[0] - value) < 1e-5);
+
+                actionTarget.SetActive(true);
+                Require(player.Play() == NativeResult.Ok &&
+                    player.FireGameSignal("trigger") == NativeResult.Ok && calls == 1 &&
+                    received.Any(item => item.PortName == "action.sample") && !Observed(42),
+                    "Action did not run on the main thread, skipped ordinary listeners, or wrote during evaluation.");
+                var advance = player.AdvancePreview(0.01);
+                Require(advance == NativeResult.Ok && Observed(42),
+                    $"Action result did not reach the next evaluation ({advance}): " +
+                    string.Join("; ", received.Select(item =>
+                        $"{item.PortName}=[{string.Join(", ", item.Values.Take(item.Width))}]")));
+
+                var replacement = NativeResult.NotReady;
+                Require(player.UnbindScriptAction("action.sample") &&
+                    player.BindScriptAction("action.sample", _ =>
+                    {
+                        replacement = player.Play();
+                        return new[] { 999d };
+                    }, "reply"), "Could not replace action binding.");
+                received.Clear();
+                Require(player.FireGameSignal("trigger") == NativeResult.Ok &&
+                    replacement == NativeResult.Ok && Observed(0),
+                    "Action failed to replace playback with a fresh package.");
+                Require(player.AdvancePreview(0.01) == NativeResult.Ok && !Observed(999),
+                    "Stale action result leaked into replacement playback.");
+                proof.Add("Script action main-thread dispatch, next-evaluation reply and replacement isolation: PASS");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(actionTarget);
+                UnityEngine.Object.DestroyImmediate(package);
+            }
+        }
+
         private static void OnPlayModeChanged(PlayModeStateChange state)
         {
             if (!SessionState.GetBool(SessionKey, false)) return;
@@ -77,6 +143,7 @@ namespace LiberaFx.Unity.Editor
                 proof.Add("Unity: " + Application.unityVersion);
                 proof.Add("Mode: actual Play Mode; automatic MonoBehaviour callbacks");
                 proof.Add("LFXP importer preserved compiler-produced package bytes: PASS");
+                VerifyScriptActions();
                 Time.captureDeltaTime = 0.25f;
                 Time.timeScale = 1;
                 target = new GameObject("LIBERA FX Spawnable Play Mode verification");

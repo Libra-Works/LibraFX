@@ -82,7 +82,7 @@ public static class CustomNodeCompilationTests
             "Custom Signal fan-out must retain target order separately for each output.");
     }
 
-    private static string FindExampleDirectory()
+    internal static string FindExampleDirectory()
     {
         var packaged = Path.Combine(AppContext.BaseDirectory, "Runtime", "examples", "CustomNodes");
         if (File.Exists(Path.Combine(packaged, "CustomScale.json"))) return packaged;

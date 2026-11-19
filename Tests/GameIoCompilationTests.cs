@@ -69,6 +69,7 @@ public static class GameIoCompilationTests
             var persistentPackage = package with { AutoDestroyWhenIdle = false };
             File.WriteAllBytes(Path.Combine(fixtureDirectory, "RootGameIo.lfxp"),
                 SpawnableGroupPackageBinary.Serialize(persistentPackage));
+            WriteScriptActionFixture(fixtureDirectory);
         }
         var spawnableDefinition = GraphNodeDefinition.All.Single(item => item.Kind == GraphNodeKind.SpawnableGroup);
         var templateWithGameIo = new GraphNodeSnapshot(Guid.NewGuid(), spawnableDefinition.Kind,
@@ -99,6 +100,21 @@ public static class GameIoCompilationTests
             ChildGraph: new GraphSnapshot([inputProperty], []));
         RequireInvalid(() => GraphValidator.Validate(new GraphSnapshot([nestedGroup], [])),
             "Game I/O nodes must be rejected below the root graph.");
+    }
+
+    private static void WriteScriptActionFixture(string fixtureDirectory)
+    {
+        var trigger = Node(GraphNodeKind.InputSignal, ("name", "trigger"));
+        var action = Node(GraphNodeKind.OutputSignal, ("name", "action.sample"));
+        var reply = Node(GraphNodeKind.InputProperty, ("name", "reply"), ("valueType", 0));
+        var observed = Node(GraphNodeKind.OutputProperty, ("name", "observed"), ("valueType", 0));
+        var graph = new GraphSnapshot([trigger, action, reply, observed],
+        [
+            new(trigger.Id, action.Id, "signal", "then"),
+            new(reply.Id, observed.Id, "value", "value")
+        ]) { AutoDestroyWhenIdle = false };
+        File.WriteAllBytes(Path.Combine(fixtureDirectory, "ScriptAction.lfxp"),
+            SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(graph)));
     }
 
     private static void VerifyCurrentCamera()

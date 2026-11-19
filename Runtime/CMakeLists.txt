@@ -37,6 +37,7 @@ target_link_libraries(liberafx_runtime PUBLIC Threads::Threads)
 set_target_properties(liberafx_runtime PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 option(LIBERAFX_BUILD_INTEROP "Build the native C ABI plugin" ON)
+set(LIBERAFX_PROJECT_NODE_SOURCES "" CACHE STRING "Project C++ sources (absolute paths) for native adapters")
 if(LIBERAFX_BUILD_INTEROP)
     add_library(liberafx_native SHARED
         Core/LbInterop.cpp
@@ -51,6 +52,10 @@ if(LIBERAFX_BUILD_INTEROP)
     target_include_directories(liberafx_native PUBLIC include)
     target_compile_features(liberafx_native PRIVATE cxx_std_17)
     target_compile_definitions(liberafx_native PRIVATE LIBRA_INTEROP_BUILD=1)
+    if(LIBERAFX_PROJECT_NODE_SOURCES)
+        target_sources(liberafx_native PRIVATE ${LIBERAFX_PROJECT_NODE_SOURCES})
+        target_compile_definitions(liberafx_native PRIVATE LIBERAFX_HAS_PROJECT_NODES=1)
+    endif()
     set_target_properties(liberafx_runtime liberafx_native PROPERTIES
         CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
 endif()

@@ -28,6 +28,9 @@ drain, finish and stop. This does not verify a Spawnable package or Play Mode.
 
 For real Spawnable MonoBehaviour scheduling, use a dedicated project and set
 LIBERAFX_UNITY_SPAWNABLE_FIXTURE to the compiler-produced Fireworks.lfxp FILE.
+Optionally set LIBERAFX_UNITY_SCRIPT_ACTION_FIXTURE to ScriptAction.lfxp,
+emitted by GameIoCompilationTests under LIBERAFX_INSTANCE_GAMEIO_FIXTURES,
+to also check script dispatch, replies, and playback replacement.
 Run -batchmode -nographics -projectPath "<dedicated project>" -executeMethod
 LiberaFx.Unity.Editor.LiberaFxSpawnablePlayModeVerification.Run -logFile
 "<dedicated project>\spawnable-playmode.log". Do NOT add -quit: this asynchronous

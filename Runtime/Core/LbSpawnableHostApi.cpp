@@ -625,9 +625,26 @@ SpawnableHost::~SpawnableHost() = default;
 auto SpawnableHost::create(SpawnablePackage package,
                            const SpawnableHostOptions &options,
                            std::unique_ptr<SpawnableHost> &out) -> Result {
+  return create(std::move(package), options, nullptr, 0, out);
+}
+
+auto SpawnableHost::create(SpawnablePackage package,
+                           const SpawnableHostOptions &options,
+                           const CustomNodeDescriptor *registry,
+                           std::size_t registryCount,
+                           std::unique_ptr<SpawnableHost> &out) -> Result {
   out.reset();
+  if (registryCount != 0 && registry == nullptr) {
+    return Result::InvalidArgument;
+  }
   try {
     auto impl = std::make_unique<Impl>(std::move(package), options);
+    if (registryCount != 0) {
+      if (registryCount > impl->projectDescriptors.max_size()) {
+        return Result::InvalidArgument;
+      }
+      impl->projectDescriptors.assign(registry, registry + registryCount);
+    }
     static auto generation = std::atomic<std::uint64_t>{1};
     auto next = generation.load(std::memory_order_relaxed);
     do {

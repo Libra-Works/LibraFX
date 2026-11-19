@@ -232,7 +232,8 @@ CPU Spawnable / Game I/O regression:
    output-signal callback.
 3. Set `LIBERAFX_INSTANCE_GAMEIO_FIXTURES` to an isolated output directory
    while running the existing `Tests\GameIoCompilationTests` fixture, then
-   copy its compiler-produced `CurrentCamera.lfxp` into the scratch project.
+   copy its compiler-produced `CurrentCamera.lfxp` and `ScriptAction.lfxp`
+   into the scratch project.
    Also put a valid package containing a non-empty GPU payload at
    `res://unsupported_gpu.lfxp`. Copy the extension DLL layout above.
 4. Run Godot 4.7 with:

@@ -79,6 +79,8 @@ func run() -> void:
 	if not check(has_event("", "output_signal", []),
 			"Named output signal event is emitted"):
 		return
+	if not verify_script_action(player):
+		return
 
 	var camera_package := FileAccess.get_file_as_bytes("res://CurrentCamera.lfxp")
 	if not check(not camera_package.is_empty() and player.play_package(camera_package) == 0,
@@ -124,6 +126,48 @@ func run() -> void:
 		return
 	print("PASS: Godot played CPU .lfxp and routed named Game I/O")
 	quit(0)
+
+
+func verify_script_action(player: Variant) -> bool:
+	var package := FileAccess.get_file_as_bytes("res://ScriptAction.lfxp")
+	var calls: Array[String] = []
+	var handler := func(event: Dictionary) -> PackedFloat64Array:
+		if OS.get_thread_caller_id() == OS.get_main_thread_id():
+			calls.append(event["name"])
+		return PackedFloat64Array([42.0])
+	if not check(player.bind_script_action("action.sample", handler, "reply")
+			and not player.bind_script_action("action.sample", handler, "reply"),
+			"Action binds before playback and refuses duplicate names"):
+		return false
+	if not check(player.play_package(package) == 0, "Script action fixture loads"):
+		return false
+	player.set_process(false)
+	if not check(player.advance(0.01) == 0, "Script action fixture starts"):
+		return false
+	received_events.clear()
+	if not check(player.fire_game_signal("trigger") == 0 and player.advance(0.01) == 0
+			and calls == ["action.sample"] and has_event("action.sample", "output_signal", [])
+			and not has_event("observed", "output_property", [42.0]),
+			"Action runs on the main thread and still reaches ordinary listeners"):
+		return false
+	if not check(player.advance(0.01) == 0 and has_event("observed", "output_property", [42.0]),
+			"Action result reaches the graph on the next evaluation"):
+		return false
+	calls.clear()
+	var replace_handler := func(event: Dictionary) -> PackedFloat64Array:
+		if player.play_package(package) == 0:
+			calls.append(event["name"])
+		return PackedFloat64Array([999.0])
+	if not check(player.unbind_script_action("action.sample")
+			and player.bind_script_action("action.sample", replace_handler, "reply")
+			and player.fire_game_signal("trigger") == 0 and player.advance(0.01) == 0
+			and calls == ["action.sample"], "Action can replace its playback"):
+		return false
+	player.set_process(false)
+	received_events.clear()
+	return check(player.advance(0.01) == 0 and has_event("observed", "output_property", [0.0])
+		and not has_event("observed", "output_property", [999.0]),
+		"Action result never leaks into replacement playback")
 
 
 func _on_game_io_event(event: Dictionary) -> void:

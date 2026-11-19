@@ -192,6 +192,80 @@ minimum. Keep the portable Core/Unreal integration Clang-compilable, and use MSV
 for final Windows Unreal integration verification. This does not certify console
 SDKs, cooking or gameplay merely because a desktop source build succeeds.
 
+## Project-defined nodes in Spawnable packages
+
+Start with `Runtime/examples/CustomNodes/CustomScale.json`. Add the JSON to the
+editor's project node directory, or pass that directory to the converter with
+`--nodes`. Keep the JSON type UUID, ABI version, and port contract identical to
+the native descriptor. The same definition and C++ calculation can be used by
+all three engine adapters.
+
+| Engine | Where to register native implementations |
+| --- | --- |
+| Unreal | Call `FLibraNativeNodes::Register` from a separate project module's `StartupModule`, before loading effects. See `Runtime/Integrations/Unreal/Examples/LibraProjectNodes`. |
+| Unity | Build the C ABI plugin from the source SDK with `-DLIBERAFX_PROJECT_NODE_SOURCES=<absolute-source-path>` and replace the bundled native library with the result for each target platform. |
+| Godot | Build the GDExtension from the source SDK with the same CMake option and replace the matching extension library. Keep the `.gdextension` and DLL layout unchanged. |
+
+For Unity and Godot, `CustomScaleNode.cpp` is a complete example. Use its
+`liberafx::host::projectNodes()` entry point to return one immutable descriptor
+table for the project. Its callbacks and contexts must remain valid while the
+adapter is loaded. Prebuilt binaries contain no project callbacks. To pass
+multiple sources, use a quoted, semicolon-separated CMake list and define the
+entry point in only one file.
+
+The project registry is used by `.lfxp` root and child programs. Unreal and
+Unity also use it for ordinary `.lfxb` loads; Godot's raw `play()` path remains
+limited to v1/v2. Neither registration path requires custom rendering: return
+values to built-in Model Draw or Sprite nodes and let the adapter render them.
+Keep engine objects and engine API calls out of native parameter callbacks.
+
+### C# and GDScript workflow
+
+On the root graph of a CPU Spawnable package (`.lfxp`), connect a signal (for
+example, a named **Input Signal** called `sample`) to an **Output Signal**
+called `action.sampleSpeed`. Add a float **Input Property** called `speed` and
+wire it into the graph that drives your standard Model Draw or Sprite nodes.
+Keep the effect alive through the next evaluation so it can consume the reply.
+
+In Unity, bind before calling `Play()` on a `LiberaFxSpawnableComponent`. Disable
+**Play On Enable** if your script controls when playback begins:
+
+```csharp
+player.BindScriptAction("action.sampleSpeed", _ => new[] { 2.5d }, "speed");
+player.Play();
+player.FireGameSignal("sample");
+```
+
+In Godot, bind on a `LibraEffectPlayer` that's in the scene tree before starting
+playback. `package_bytes` holds the exported `.lfxp`:
+
+```gdscript
+func resolve_speed(_event: Dictionary) -> PackedFloat64Array:
+    return PackedFloat64Array([2.5])
+
+func start_effect(player, package_bytes: PackedByteArray) -> void:
+    player.bind_script_action("action.sampleSpeed", resolve_speed, "speed")
+    player.play_package(package_bytes)
+```
+
+Fire `player.fire_game_signal("sample")` from gameplay after the package's first
+process tick (or first manual `advance`).
+
+Bindings are case-sensitive and belong to the component/player, not the package.
+Duplicate binds return `false`; remove the old one with `UnbindScriptAction` /
+`unbind_script_action`. All binding and handler code runs on the engine thread.
+Omit the reply property for a side-effect-only action (return `null` in C#).
+Otherwise return one number per lane of the named input property. The graph
+sees it on the **next evaluation**. If the callback stops or replaces playback,
+its reply is discarded. Ordinary Game I/O listeners still receive action signals
+while that playback remains active. Advancing playback or firing another game
+signal directly from an action handler returns `Busy`; defer it to gameplay
+code if needed.
+
+There is no dedicated visual script node, child action, synchronous worker
+callback, or editor script execution. Use native C++ nodes when the result is
+needed within the same evaluation.
+
 ## Fresh-project verification on Windows
 
 The local source exports were installed in clean Unity 7000.0.0a16 and

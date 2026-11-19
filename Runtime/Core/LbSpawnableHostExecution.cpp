@@ -31,8 +31,8 @@ auto SpawnableHost::Impl::initialize() -> Result {
     }
     auto state = std::make_unique<TemplateState>();
     state->data = &data;
-    result =
-        loadProgram(data.bytecode, nullptr, 0, state->bindings, state->program);
+    result = loadProgram(data.bytecode, projectDescriptors.data(),
+                         projectDescriptors.size(), state->bindings, state->program);
     if (result != Result::Ok) {
       return result;
     }
@@ -212,6 +212,15 @@ auto SpawnableHost::Impl::initialize() -> Result {
     }
   }
 
+  for (const auto &project : projectDescriptors) {
+    for (auto index = std::size_t{}; index < descriptorIndex; ++index) {
+      if (sameId(project.typeId, parentDescriptors[index].typeId)) {
+        return Result::InvalidArgument;
+      }
+    }
+  }
+  parentDescriptors.insert(parentDescriptors.end(), projectDescriptors.begin(),
+                           projectDescriptors.end());
   result = loadProgram(packageData.parentBytecode, parentDescriptors.data(),
                        parentDescriptors.size(), parentBindings, parentProgram);
   if (result != Result::Ok) {

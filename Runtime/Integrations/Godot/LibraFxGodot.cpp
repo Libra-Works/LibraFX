@@ -1,4 +1,5 @@
 #include "liberafx/host/LbProgramSession.h"
+#include "liberafx/host/LbProjectNodes.h"
 #include "liberafx/LbLivePreview.h"
 #include "liberafx/LbSpawnableHost.h"
 #include "LibraFxGodotRender.h"
@@ -12,10 +13,12 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/godot.hpp>
 #include <godot_cpp/variant/array.hpp>
+#include <godot_cpp/variant/callable.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/node_path.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_float64_array.hpp>
+#include <godot_cpp/variant/utility_functions.hpp>
 #include <array>
 #include <cmath>
 #include <cstring>
@@ -257,7 +260,9 @@ public:
             return code(result);
         }
         auto options = SpawnableHostOptions{};
-        result = SpawnableHost::create(std::move(package), options, candidate->packageHost);
+        const auto projectNodes = liberafx::host::projectNodes();
+        result = SpawnableHost::create(std::move(package), options,
+            projectNodes.descriptors, projectNodes.count, candidate->packageHost);
         if (result == Result::Ok) {
             result = updateCurrentCamera(*candidate->packageHost);
         }
@@ -280,6 +285,10 @@ public:
     {
         if (!Thread::is_main_thread() || !std::isfinite(delta) || delta < 0) {
             return code(Result::InvalidArgument);
+        }
+        if (dispatchingScriptAction_)
+        {
+            return code(Result::Busy);
         }
         if (!playback_) {
             return code(Result::NotReady);
@@ -433,8 +442,32 @@ public:
         if (!Thread::is_main_thread() || !playback_ || !playback_->packageHost) {
             return code(Result::NotReady);
         }
+        if (dispatchingScriptAction_)
+        {
+            return code(Result::Busy);
+        }
         auto utf8Name = name.utf8();
         return code(playback_->packageHost->fireGameSignal(utf8Name.get_data()));
+    }
+
+    bool bind_script_action(const String& signalName, const godot::Callable& handler, const String& resultProperty)
+    {
+        if (!Thread::is_main_thread() || !isScriptAction(signalName) ||
+            !isScriptPortName(signalName) || !handler.is_valid() || handler.get_argument_count() != 1 ||
+            (!resultProperty.is_empty() && !isScriptPortName(resultProperty)) || scriptActions_.has(signalName))
+        {
+            return false;
+        }
+        auto action = Array{};
+        action.push_back(handler);
+        action.push_back(resultProperty);
+        scriptActions_[signalName] = action;
+        return true;
+    }
+
+    bool unbind_script_action(const String& signalName)
+    {
+        return Thread::is_main_thread() && scriptActions_.erase(signalName);
     }
 
     int dispatch_signal(const String& nodeId)
@@ -604,6 +637,10 @@ protected:
         godot::ClassDB::bind_method(godot::D_METHOD("get_game_io_ports"), &LibraEffectPlayer::get_game_io_ports);
         godot::ClassDB::bind_method(godot::D_METHOD("set_game_property", "name", "values"), &LibraEffectPlayer::set_game_property);
         godot::ClassDB::bind_method(godot::D_METHOD("fire_game_signal", "name"), &LibraEffectPlayer::fire_game_signal);
+        godot::ClassDB::bind_method(godot::D_METHOD("bind_script_action", "signal_name", "handler", "result_property"),
+            &LibraEffectPlayer::bind_script_action, String{});
+        godot::ClassDB::bind_method(godot::D_METHOD("unbind_script_action", "signal_name"),
+            &LibraEffectPlayer::unbind_script_action);
         godot::ClassDB::bind_method(godot::D_METHOD("dispatch_signal", "node_id"), &LibraEffectPlayer::dispatch_signal);
         godot::ClassDB::bind_method(godot::D_METHOD("set_owner_matrix", "values"), &LibraEffectPlayer::set_owner_matrix);
         godot::ClassDB::bind_method(godot::D_METHOD("set_mesh_binding", "asset_identity", "mesh"), &LibraEffectPlayer::set_mesh_binding);
@@ -699,6 +736,58 @@ private:
         return String::utf8(text.data());
     }
 
+    static bool isScriptAction(const String& name)
+    {
+        return name.length() > 7 && name.begins_with("action.");
+    }
+
+    static bool isScriptPortName(const String& name)
+    {
+        if (name.is_empty() || name[0] == U' ' || name[name.length() - 1] == U' ' ||
+            name.utf8().length() > 128)
+        {
+            return false;
+        }
+        for (auto index = std::int64_t{}; index < name.length(); ++index)
+        {
+            const auto character = name[index];
+            if (character < 0x20 || (character >= 0x7f && character <= 0x9f))
+            {
+                return false;
+            }
+        }
+        return !name.strip_edges().is_empty();
+    }
+
+    void invokeScriptAction(const String& name, const Dictionary& item, std::uint64_t generation)
+    {
+        if (!scriptActions_.has(name))
+        {
+            godot::UtilityFunctions::push_warning(String("No LIBERA FX script action is bound to ") + name);
+            return;
+        }
+        const auto action = static_cast<Array>(scriptActions_[name]);
+        const auto handler = static_cast<godot::Callable>(action[0]);
+        const auto resultProperty = static_cast<String>(action[1]);
+        if (!handler.is_valid())
+        {
+            godot::UtilityFunctions::push_warning(String("Invalid LIBERA FX script action: ") + name);
+            return;
+        }
+        dispatchingScriptAction_ = true;
+        const auto result = handler.call(item.duplicate(true));
+        dispatchingScriptAction_ = false;
+        if (generation != playbackGeneration_ || resultProperty.is_empty())
+        {
+            return;
+        }
+        if (result.get_type() != godot::Variant::PACKED_FLOAT64_ARRAY ||
+            set_game_property(resultProperty, static_cast<PackedFloat64Array>(result)) != code(Result::Ok))
+        {
+            godot::UtilityFunctions::push_warning(String("Invalid LIBERA FX script action result: ") + name);
+        }
+    }
+
     void drainGameIoEvents()
     {
         if (!playback_ || !playback_->packageHost) {
@@ -741,6 +830,14 @@ private:
                 values.set(index, event.values[index]);
             }
             item["values"] = values;
+            if (!scoped && event.kind == NamedIoKind::OutputSignal && isScriptAction(portName))
+            {
+                invokeScriptAction(portName, item, generation);
+                if (generation != playbackGeneration_)
+                {
+                    return;
+                }
+            }
             emit_signal("game_io_event", item);
             if (generation != playbackGeneration_ || !playback_ ||
                 playback_->packageHost.get() != activeHost) {
@@ -776,6 +873,8 @@ private:
     }
 
     std::unique_ptr<Playback> playback_;
+    Dictionary scriptActions_;
+    bool dispatchingScriptAction_ = false;
     MeshBindings meshBindings_;
     TextureBindings textureBindings_;
     MaterialBindings materialBindings_;

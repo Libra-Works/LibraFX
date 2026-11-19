@@ -183,6 +183,10 @@ namespace LiberaFx.Unity
         public NativeResult AdvancePreview(double time)
         {
             UnityInstanceSession.RequireMainThread();
+            if (scriptActionDepth != 0)
+            {
+                return NativeResult.Busy;
+            }
             if (!manualPreviewTime || host == null || debugging || sourceInitialAdvancePending)
             {
                 return NativeResult.NotReady;
@@ -498,6 +502,10 @@ namespace LiberaFx.Unity
 
         public NativeResult FireGameSignal(string name)
         {
+            if (scriptActionDepth != 0)
+            {
+                return NativeResult.Busy;
+            }
             var current = host;
             if (current == null) return NativeResult.NotReady;
             if (debugging) return SubmitDebug(2, name: name);

@@ -1,4 +1,5 @@
 #include "LbInteropInternal.h"
+#include "liberafx/host/LbProjectNodes.h"
 
 namespace liberafx::interop_detail {
 static_assert(static_cast<int>(liberafx::Result::InstructionBudgetExceeded) == LIBRA_INSTRUCTION_BUDGET_EXCEEDED);
@@ -187,7 +188,9 @@ LibraResult LIBRA_INTEROP_CALL libra_program_create(const uint8_t *bytes, uint64
     auto native = std::make_shared<NativeProgram>();
     native->bytes.assign(bytes, bytes + static_cast<std::size_t>(byteCount));
     native->bindings.resize(count);
-    auto result = liberafx::Program::load(native->bytes.data(), native->bytes.size(), nullptr, 0,
+    const auto projectNodes = liberafx::host::projectNodes();
+    auto result = liberafx::Program::load(native->bytes.data(), native->bytes.size(),
+                                          projectNodes.descriptors, projectNodes.count,
                                           native->bindings.data(), native->bindings.size(), native->program);
     if (result != liberafx::Result::Ok)
     {

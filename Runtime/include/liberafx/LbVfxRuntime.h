@@ -37,7 +37,7 @@ using CustomNodeInitialize = Result (*)(void* state, std::size_t stateBytes, voi
 using CustomNodeCleanup = void (*)(void* state, std::size_t stateBytes, void* context) noexcept;
 using SignalObserver = Result (*)(void* context, const std::uint8_t nodeId[16]) noexcept;
 
-struct LIBRA_RUNTIME_CORE_API CustomNodeDescriptor final {
+struct CustomNodeDescriptor final {
     std::uint8_t typeId[16]{};
     std::uint32_t abiVersion = 0;
     CustomExecution execution = CustomExecution::Parameter;

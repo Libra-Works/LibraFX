@@ -1,6 +1,7 @@
 #include "liberafx/LbSpawnableHost.h"
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -135,6 +136,50 @@ void verifyManualStop(const std::vector<std::uint8_t>& bytes)
     require(!foundDestroy, "Manual Stop must not publish natural Destroy events.");
 }
 
+void verifyCustomNodes(const std::vector<std::uint8_t>& bytes, const Id& container)
+{
+    using liberafx::Result;
+    auto package = liberafx::SpawnablePackage{};
+    require(liberafx::loadSpawnablePackage(bytes.data(), bytes.size(), package) == Result::Ok,
+        "Could not decode the custom-node package.");
+    auto host = std::unique_ptr<liberafx::SpawnableHost>{};
+    require(liberafx::SpawnableHost::create(package, {}, host) == Result::UnknownCustomNode && !host,
+        "An unregistered custom node must fail to load.");
+    {
+        auto descriptor = liberafx::CustomNodeDescriptor{};
+        constexpr auto typeId = Id{0xc3, 0xde, 0x33, 0x77, 0x59, 0xae, 0x4a, 0x2d,
+            0x89, 0x91, 0x7f, 0x38, 0xe5, 0xd8, 0x21, 0x11};
+        std::memcpy(descriptor.typeId, typeId.data(), typeId.size());
+        descriptor.abiVersion = 1;
+        descriptor.execution = liberafx::CustomExecution::Parameter;
+        descriptor.inputCount = 2;
+        descriptor.inputWidths[0] = 1;
+        descriptor.inputWidths[1] = 1;
+        descriptor.outputWidth = 1;
+        descriptor.function = [](liberafx::CustomNodeInvocation& invocation) noexcept {
+            invocation.outputs[0] = invocation.inputs[0] * invocation.inputs[4] + 41;
+            return Result::Ok;
+        };
+        require(liberafx::SpawnableHost::create(std::move(package), {}, &descriptor, 1, host) == Result::Ok,
+            "The same custom descriptor must bind in both root and child programs.");
+        descriptor.function = nullptr;
+    }
+    require(host->advance(0, 0) == Result::Ok && host->activeCount() == 1,
+        "The custom-node fixture must spawn its child.");
+    const auto spawn = nextEvent(*host);
+    auto value = std::array<double, 4>{};
+    auto width = std::uint8_t{};
+    constexpr auto root = Id{0xa1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
+    constexpr auto child = Id{0xa2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2};
+    const auto rootResult = host->rootValue(root.data(), value.data(), width);
+    require(rootResult == Result::Ok && width == 1 && std::abs(value[0] - 42) < 1e-5,
+        ("Root custom output: status " + std::to_string(static_cast<int>(rootResult)) +
+         ", width " + std::to_string(width) + ", value " + std::to_string(value[0])).c_str());
+    require(host->childValue(container.data(), spawn.instanceId, child.data(), value.data(), width) ==
+        Result::Ok && width == 1 && std::abs(value[0] - 42) < 1e-5,
+        "The child did not execute its registered custom node.");
+}
+
 void verifyEventBackpressure(const std::vector<std::uint8_t>& bytes, const std::array<Id, 11>& ids)
 {
     auto options = liberafx::SpawnableHostOptions{};
@@ -174,6 +219,7 @@ auto main(int argc, char** argv) -> int
         verifyNaturalLifecycle(package, ids);
         verifyManualStop(package);
         verifyEventBackpressure(package, ids);
+        verifyCustomNodes(read(folder + "CustomSpawnable.lfxp"), ids[1]);
         std::cout << "Compiler-produced LFXP SpawnableHost lifecycle checks passed.\n";
         return 0;
     } catch (const std::exception& error) {

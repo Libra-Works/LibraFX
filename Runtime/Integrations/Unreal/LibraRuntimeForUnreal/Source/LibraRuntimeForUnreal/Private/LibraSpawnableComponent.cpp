@@ -293,7 +293,10 @@ auto ULibraSpawnableComponent::Play(bool bRestart) -> ELibraRuntimeResult
     options.eventCapacity = static_cast<std::size_t>(FMath::Max(1, EventCapacity));
     options.instructionBudget = static_cast<std::size_t>(FMath::Max(1, InstructionBudget));
     auto host = std::unique_ptr<liberafx::SpawnableHost>{};
-    result = liberafx::SpawnableHost::create(MoveTemp(package), options, host);
+    const auto registry = LibraNativeNodeSnapshot();
+    const auto projectNodes = registry->ProjectDescriptors();
+    result = liberafx::SpawnableHost::create(MoveTemp(package), options,
+        projectNodes.GetData(), projectNodes.Num(), host);
     if (result != liberafx::Result::Ok) return Report(ToLibraResult(result));
     NativeHost.Reset(host.release());
 #if PLATFORM_WINDOWS

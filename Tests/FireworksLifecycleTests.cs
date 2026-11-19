@@ -49,6 +49,7 @@ internal static class FireworksLifecycleTests
         Require(package.Templates.Count == 2 && package.DestroyRoutes.Count == 1 && package.OnStartNodeId is not null, "Lifecycle package incomplete.");
         var binaryPackage = SpawnablePackageBinaryTests.Verify(package);
         File.WriteAllBytes(Path.Combine(output, "Fireworks.lfxp"), binaryPackage);
+        WriteCustomSpawnableFixture(output, graph, launch);
         using (var render = JsonDocument.Parse(package.Templates.Single(template => template.ContainerId == launch.Id).RenderConfiguration))
             Require(render.RootElement.GetProperty("nodes").GetArrayLength() == 1, "Launch render binding missing.");
         using (var render = JsonDocument.Parse(package.Templates.Single(template => template.ContainerId == burst.Id).RenderConfiguration))
@@ -1085,6 +1086,27 @@ internal static class FireworksLifecycleTests
         Console.WriteLine($"Fireworks authoring/persistence/package and actual native execution passed. Sample: {sample}");
         Console.WriteLine("UE-owned lifecycle remains unsupported; editor-native bridge is covered separately by --fireworks-native-preview. No pixel validation claimed here.");
     }
+    private static void WriteCustomSpawnableFixture(string output, GraphSnapshot graph, GraphNodeSnapshot launch)
+    {
+        var definitions = GraphNodeDefinition.LoadDirectory(
+            LiberaFx.Tests.CustomNodeCompilationTests.FindExampleDirectory(), out var warnings);
+        Require(warnings.Count == 0, "Custom node fixtures could not be loaded.");
+        var scale = definitions.Single(definition => definition.TypeName == "CustomScale");
+        GraphNodeSnapshot Node(string id) => new(Guid.Parse(id), scale.Kind, scale.Name, 0, 0,
+            scale.PortType, scale.PortCategory);
+
+        var rootNode = Node("a1000000-0000-0000-0000-000000000001");
+        var childNode = Node("a2000000-0000-0000-0000-000000000002");
+        var customGraph = graph with
+        {
+            Nodes = graph.Nodes.Select(node => node.Id == launch.Id
+                ? node with { ChildGraph = node.ChildGraph! with { Nodes = [.. node.ChildGraph!.Nodes, childNode] } }
+                : node).Append(rootNode).ToArray()
+        };
+        var package = SpawnableGroupPackage.Compile(customGraph);
+        File.WriteAllBytes(Path.Combine(output, "CustomSpawnable.lfxp"), SpawnableGroupPackageBinary.Serialize(package));
+    }
+
     private static void VerifyLiveInputs(string library, string output)
     {
         var workspace = new GraphWorkspaceViewModel(new UndoRedoManager());

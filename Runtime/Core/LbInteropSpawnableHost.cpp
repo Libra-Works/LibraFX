@@ -1,4 +1,5 @@
 #include "LbInteropInternal.h"
+#include "liberafx/host/LbProjectNodes.h"
 
 using namespace liberafx::interop_detail;
 
@@ -23,7 +24,9 @@ LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_create(
     options.eventCapacity = eventCapacity;
     options.instructionBudget = instructionBudget;
     auto host = std::unique_ptr<liberafx::SpawnableHost>{};
-    result = liberafx::SpawnableHost::create(std::move(package), options, host);
+    const auto projectNodes = liberafx::host::projectNodes();
+    result = liberafx::SpawnableHost::create(std::move(package), options,
+        projectNodes.descriptors, projectNodes.count, host);
     if (result != liberafx::Result::Ok)
       return toLibraResult(result);
     if (!nextHandle)
