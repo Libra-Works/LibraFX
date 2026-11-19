@@ -34,7 +34,8 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </Border>
-        <Border x:Name="GraphToolbar" Grid.Row="2" Classes="editor-bar" BorderThickness="0,1,0,0">
+        <Border x:Name="GraphToolbar" Grid.Row="2" Classes="editor-bar" BorderThickness="0,1,0,0"
+                IsVisible="{Binding !IsCpuParticleOverview}">
             <StackPanel Spacing="3">
             <TextBlock Text="{DynamicResource Text.Inline.Locked}" IsVisible="{Binding IsReadOnly}"
                        TextWrapping="Wrap" />
@@ -86,6 +87,7 @@
 
         <ScrollViewer Grid.Row="1"
                       x:Name="GraphScrollViewer"
+                      IsVisible="{Binding !IsCpuParticleOverview}"
                       PointerPressed="OnViewportPointerPressed"
                       PointerMoved="OnViewportPointerMoved"
                       PointerReleased="OnViewportPointerReleased"
@@ -202,6 +204,7 @@
             </Grid>
             </Grid>
         </ScrollViewer>
+        <views:CpuParticleFlowView Grid.Row="1" IsVisible="{Binding IsCpuParticleOverview}" />
         <Popup x:Name="NodeSearchPopup" Grid.Row="2" PlacementTarget="{Binding #GraphScrollViewer}"
                Placement="Center" IsLightDismissEnabled="True">
             <Border Width="340" MaxHeight="400" Padding="8" BorderThickness="1"

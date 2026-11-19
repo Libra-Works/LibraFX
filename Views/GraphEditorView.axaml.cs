@@ -401,6 +401,11 @@ public partial class GraphEditorView : UserControl
         }
 
         var shortcuts = ShortcutService.Shared;
+        if (graph.IsCpuParticleOverview &&
+            !shortcuts.Matches("undo", e) && !shortcuts.Matches("redo", e))
+        {
+            return;
+        }
         if (shortcuts.Matches("graph.search", e) && e.Source is Visual source &&
             source.GetSelfAndVisualAncestors().OfType<TextBox>().Any())
         {

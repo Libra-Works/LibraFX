@@ -105,7 +105,15 @@ internal static class CpuParticleDocumentationCapture
                 Pump();
                 editor.FrameAll();
                 Pump();
-                if (editor.GetVisualDescendants().OfType<GraphNodeView>().Count() < workspace.Nodes.Count)
+                if (workspace.IsCpuParticleOverview)
+                {
+                    if (editor.GetVisualDescendants().OfType<Button>().Count(button =>
+                        button.IsEffectivelyVisible && button.Tag is CpuParticleFlowStage) != 3)
+                    {
+                        throw new InvalidOperationException("The CPU documentation Flow has missing stage actions.");
+                    }
+                }
+                else if (editor.GetVisualDescendants().OfType<GraphNodeView>().Count() < workspace.Nodes.Count)
                 {
                     throw new InvalidOperationException("The CPU documentation graph has missing node views.");
                 }

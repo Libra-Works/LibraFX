@@ -74,6 +74,7 @@ public static class CpuParticleCompilationTests
         Require(workspace.Nodes.Single().ChildGraph!.Nodes.Single(node =>
             CpuParticleSchema.Name(node.Kind) == "CpuParticleSpawn").ChildGraph!.Nodes.Count == 3,
             "Leaving a CPU stage must retain edits.");
+        CpuParticleFlowTests.Run();
     }
 
     private static void VerifyOuterSignalTarget(GraphSnapshot graph)

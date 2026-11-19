@@ -205,6 +205,7 @@ public sealed partial class GraphWorkspaceViewModel
         OnPropertyChanged(nameof(IsReadOnly));
         if (!_inlinePathExists)
         {
+            OnPropertyChanged(nameof(IsCpuParticleOverview));
             // Detached controls must never write their old graph back, or remain the inspector/MCP target.
             _containingSpawnable = null;
             OnPropertyChanged(nameof(ContainingSpawnable));

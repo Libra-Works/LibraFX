@@ -1,0 +1,64 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:LiberaFx.Views"
+             xmlns:vm="using:LiberaFx.ViewModels"
+             x:Class="LiberaFx.Views.CpuParticleFlowView"
+             x:DataType="vm:GraphWorkspaceViewModel">
+    <UserControl.Styles>
+        <Style Selector="Border.cpu-flow-stage">
+            <Setter Property="BorderBrush" Value="{DynamicResource EffectBorderBrush}" />
+        </Style>
+        <Style Selector="Border.cpu-flow-stage.selected">
+            <Setter Property="BorderBrush" Value="{DynamicResource EffectSelectionBorderBrush}" />
+        </Style>
+    </UserControl.Styles>
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="32,20" Spacing="12" MaxWidth="680" HorizontalAlignment="Center">
+            <TextBlock Text="{DynamicResource Text.Cpu.Flow.Title}" FontSize="20" FontWeight="SemiBold" />
+            <TextBlock Text="{DynamicResource Text.Cpu.Flow.Summary}" TextWrapping="Wrap"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <ItemsControl x:Name="StageList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="views:CpuParticleFlowStage">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="↓" IsVisible="{Binding HasPredecessor}" FontSize="20"
+                                       HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                            <Border Classes="cpu-flow-stage" Classes.selected="{Binding IsSelected}"
+                                    Padding="16" CornerRadius="6" BorderThickness="1"
+                                    Background="{DynamicResource EffectSurfaceBrush}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="16" />
+                                    <TextBlock Text="{Binding Node.DisplayName}"
+                                               Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                                    <TextBlock Text="{Binding Detail}" TextWrapping="Wrap" />
+                                    <Button Content="{Binding ButtonText}" Tag="{Binding}"
+                                            AutomationProperties.Name="{Binding Title}"
+                                            IsEnabled="{Binding CanActivate}" Click="OnStageClick"
+                                            HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="{DynamicResource Text.Inline.Locked}" IsVisible="{Binding IsReadOnly}"
+                       TextWrapping="Wrap" />
+            <Expander x:Name="FlowNotes" Header="{DynamicResource Text.Cpu.Flow.Notes}" HorizontalAlignment="Stretch">
+                <StackPanel Spacing="8" IsEnabled="{Binding !IsReadOnly}">
+                    <Button x:Name="AddNoteButton" Content="{DynamicResource Text.Editor.AddComment}" Click="OnAddNoteClick" />
+                    <ItemsControl ItemsSource="{Binding CommentNodes}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="vm:GraphNodeViewModel">
+                                <TextBox Text="{Binding CommentText}" AcceptsReturn="True" TextWrapping="Wrap"
+                                         Margin="0,4" MinHeight="64" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Expander>
+            <TextBlock Text="{Binding ConnectionStatus}" TextWrapping="Wrap"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

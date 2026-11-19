@@ -148,6 +148,7 @@ public sealed partial class GraphWorkspaceViewModel
     {
         OnPropertyChanged(nameof(IsRootGraph));
         OnPropertyChanged(nameof(IsReadOnly));
+        OnPropertyChanged(nameof(IsCpuParticleOverview));
         Breadcrumbs.Clear();
         Breadcrumbs.Add(new GraphBreadcrumb(LocalizationService.Shared.Get("Messages.Top"), 0));
         var graph = _rootSnapshot;

@@ -16,6 +16,8 @@ translation_url: /ja/cpu-particles/
 
 These are real editor captures of an isolated example, not engine-rendered
 particles. Open an image at full size to read the pins and Inspector fields.
+The Flow overview below is newer source than the published 2026.11.22 Preview;
+that Preview still shows the three structural nodes.
 
 ### 1. Parent graph: connect emission
 
@@ -28,12 +30,15 @@ default rate; the two rates are not added.
 
 ### 2. Inside CPU Particle: choose the editing scope
 
-Open CPU Particle to find **Spawn**, **Update** and **CPU Particle Sprite Draw**.
-Open Spawn or Update to edit particle behavior. Sprite Draw stays beside those
-stages, not inside them. These three structural nodes do not need wires between
-them; Signal wiring belongs inside the stages.
+Open CPU Particle to find the **Spawn → Update → Draw** Flow cards, matching the
+GPU overview's stage-oriented presentation. Use **Open stage graph** on Spawn
+or Update; use **Edit draw settings** on Draw for the existing Inspector.
+This is a fixed simulation-phase order, not Signal connections, a live trace,
+or support for arbitrary extra passes. Property and Signal wiring remains free
+inside the ordinary CPU stage graphs. **Flow notes** retains existing comments
+and lets you add/edit notes through normal undo history.
 
-[![CPU Particle contents showing Spawn, Update and Sprite Draw](images/editor/cpu-particles-stages-en.png)](images/editor/cpu-particles-stages-en.png)
+[![CPU Particle Flow with Spawn, Update and Draw cards](images/editor/cpu-particles-stages-en.png)](images/editor/cpu-particles-stages-en.png)
 
 ### 3. Spawn: set initial values once
 
@@ -56,12 +61,12 @@ show that you are editing the Update child graph.
 
 ### 5. Sprite Draw: choose appearance for the entire pool
 
-Return one level and select **CPU Particle Sprite Draw**. The Inspector shows
+Return to Flow and choose **Edit draw settings** on **Draw**. The Inspector shows
 the texture, Alpha/Additive blend mode and draw scale. `builtin:white` selects
 the built-in white texture explicitly; it is not an unresolved asset fallback.
 This screen configures rendering but does not display engine playback.
 
-[![Sprite Draw selected beside Spawn and Update, showing texture and blend settings](images/editor/cpu-particles-draw-en.png)](images/editor/cpu-particles-draw-en.png)
+[![Draw selected in CPU Flow, showing texture and blend settings](images/editor/cpu-particles-draw-en.png)](images/editor/cpu-particles-draw-en.png)
 
 ### Does ordinary Draw create more MeshComponents?
 
@@ -85,6 +90,8 @@ Add **CPU Particle** from **CPU Particles**, open it, then open its **Spawn** or
 **Update** child graph. These are ordinary CPU graphs, not GPU-language kernels.
 They retain normal node UUIDs, connections, parameters, graph history, copy/paste
 and document persistence. Navigation does not itself add an undo step.
+Flow projects the existing stage identities without migrating the graph format:
+old projects, nested edits, boundary ports and undo branches keep their data.
 
 The initial Spawn graph sets velocity to `(0,1,0)`. The initial Update graph
 connects **CPU Stage Event → Move Particle**. Each particle starts at the origin,
