@@ -112,7 +112,7 @@ public sealed class AnythingSearchWindow : Window
                     GraphNodeDefinition.TryFind(node.Kind.Value, out var definition) ? definition!.Name : node.Kind.Value);
             }
         }
-        foreach (var group in main.GroupAssets.Assets.ToArray())
+        foreach (var group in main.GroupAssets.CreatableAssets)
         {
             var name = text.GetOrDefault(main.GroupAssets.Metadata(group.Id)?.NameKey, group.Name);
             yield return Item("asset/" + group.Id, "Search.Group", name,

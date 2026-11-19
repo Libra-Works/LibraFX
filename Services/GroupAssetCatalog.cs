@@ -13,6 +13,8 @@ public sealed class GroupAssetCatalog : IDisposable
     private string? _catalogDirectory;
 
     public IReadOnlyList<GroupAsset> Assets { get; private set; } = [];
+    public IEnumerable<GroupAsset> CreatableAssets => Assets.Where(asset =>
+        asset.Origin != GroupAssetOrigin.Standard || Metadata(asset.Id)?.Legacy != true);
     public bool HasLibraryDirectory => !string.IsNullOrWhiteSpace(_profiles.Active.GroupDirectory);
     public string Warnings { get; private set; } = string.Empty;
     public event EventHandler? Changed;

@@ -1,0 +1,21 @@
+{
+  "FormatVersion": 5, "Id": "29000000-0000-4000-8000-000000000005", "Name": "F-Curve Vec2", "Revision": 1, "Locked": true,
+  "Graph": {
+    "Nodes": [
+      { "Id": "29050000-0000-4000-8000-000000000001", "Kind": "FloatFCurve", "Name": "X", "X": 0, "Y": 0, "PortType": "Float", "PortCategory": "Parameter", "Curve": { "Keys": [{ "Id": "29050000-0000-4000-8000-000000000011", "TimeSeconds": 0, "Value": 0, "InSlope": 0, "OutSlope": 0, "Interpolation": "Linear" }] } },
+      { "Id": "29050000-0000-4000-8000-000000000002", "Kind": "FloatFCurve", "Name": "Y", "X": 0, "Y": 140, "PortType": "Float", "PortCategory": "Parameter", "Curve": { "Keys": [{ "Id": "29050000-0000-4000-8000-000000000012", "TimeSeconds": 0, "Value": 0, "InSlope": 0, "OutSlope": 0, "Interpolation": "Linear" }] } },
+      { "Id": "29050000-0000-4000-8000-000000000005", "Kind": "ComposeVector4", "Name": "Compose", "X": 280, "Y": 0, "PortType": "FloatX4", "PortCategory": "Parameter" },
+      { "Id": "29050000-0000-4000-8000-000000000006", "Kind": "Vector4ToVector2", "Name": "To Vec2", "X": 560, "Y": 0, "PortType": "FloatX2", "PortCategory": "Parameter" },
+      { "Id": "29050000-0000-4000-8000-000000000007", "Kind": "GroupOutputVector2", "Name": "Value", "X": 840, "Y": 0, "PortType": "FloatX2", "PortCategory": "Parameter" }
+    ],
+    "Connections": [
+      { "SourceNodeId": "29050000-0000-4000-8000-000000000001", "TargetNodeId": "29050000-0000-4000-8000-000000000005", "TargetPortId": "r" },
+      { "SourceNodeId": "29050000-0000-4000-8000-000000000002", "TargetNodeId": "29050000-0000-4000-8000-000000000005", "TargetPortId": "g" },
+      { "SourceNodeId": "29050000-0000-4000-8000-000000000005", "SourcePortId": "value", "TargetNodeId": "29050000-0000-4000-8000-000000000006", "TargetPortId": "a" },
+      { "SourceNodeId": "29050000-0000-4000-8000-000000000006", "TargetNodeId": "29050000-0000-4000-8000-000000000007" }
+    ],
+    "ExposedItems": [{ "Id": "29050000-0000-4000-8000-000000000009", "Name": "Vec2", "Description": "", "Category": "Curve", "Order": 0, "Editor": "vector2Curve", "Targets": [
+      { "NodeId": "29050000-0000-4000-8000-000000000001" }, { "NodeId": "29050000-0000-4000-8000-000000000002" }
+    ] }]
+  }
+}

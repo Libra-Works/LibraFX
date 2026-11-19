@@ -32,6 +32,7 @@ public sealed record GraphEnumDefinition(Guid TypeId, string Namespace, string N
             [Guid.Parse("c1c90dae-c39c-46c9-bc67-c0b6fd7cf06b")] = "CommentFormat",
             [Guid.Parse("1e309707-1fa0-4d38-aed9-42d000000001")] = "PropertyValueType",
             [Guid.Parse("b0af61d2-29f6-4cc9-a71e-000000000201")] = "TransformOrder",
+            [Guid.Parse("b17b0000-0000-4000-8000-000000000101")] = "BillboardMode",
             [Guid.Parse("4a94e882-39e8-4efb-92c7-180000000030")] = "LifecyclePhase",
             [Guid.Parse("4a94e882-39e8-4efb-92c7-180000000040")] = "HostQualityTier",
             [Guid.Parse("4a94e882-39e8-4efb-92c7-180000000041")] = "HostQualityComparison"

@@ -32,6 +32,29 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
     public GraphNodeViewModel? Node => _node;
     public EditorPlayback? Playback { get; }
     public double? PlayheadFrame => Playback?.Frame;
+    public bool IsColorCurve => _node is not null &&
+        _groupChannels.TryGetValue(_node.Id, out var channel) && channel.Item.Editor == "colorCurve";
+    public IBrush? ColorCurvePreview
+    {
+        get
+        {
+            if (_node is null || !_groupChannels.TryGetValue(_node.Id, out var channel) ||
+                channel.Item.Editor != "colorCurve")
+            {
+                return null;
+            }
+            var rgba = channel.Item.Targets.Select(target =>
+            {
+                var node = _groupNodes.FirstOrDefault(candidate => candidate.Id == target.NodeId);
+                var curve = ReferenceEquals(node, _node) ? Curve : node?.Curve;
+                var value = curve is null ? 0 : Models.Graph.FCurve.Evaluate(curve, Playback?.TimeSeconds ?? 0);
+                return (byte)Math.Round(Math.Clamp(value, 0, 1) * 255);
+            }).ToArray();
+            return rgba.Length == 4
+                ? new SolidColorBrush(Color.FromArgb(rgba[3], rgba[0], rgba[1], rgba[2]))
+                : null;
+        }
+    }
     public ObservableCollection<CurveChannelViewModel> Channels { get; } = [];
     public IReadOnlyList<CurveChannelViewModel> FilteredChannels => Channels
         .Where(channel => channel.Name.Contains(ChannelSearch.Trim(), StringComparison.OrdinalIgnoreCase)).ToArray();
@@ -126,6 +149,10 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
     private void OnPlaybackChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(EditorPlayback.Frame)) OnPropertyChanged(nameof(PlayheadFrame));
+        if (e.PropertyName == nameof(EditorPlayback.TimeSeconds) && IsColorCurve)
+        {
+            OnPropertyChanged(nameof(ColorCurvePreview));
+        }
         if (e.PropertyName is nameof(EditorPlayback.FramesPerSecond) or nameof(EditorPlayback.ShowSeconds))
         {
             OnPropertyChanged(nameof(TimeUnitLabel));
@@ -402,7 +429,7 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
     private void BuildGroupChannels(GraphNodeViewModel group)
     {
         var child = group.ChildGraph!;
-        foreach (var item in (child.ExposedItems ?? []).Where(item => item.Editor is "curve" or "vector3Curve")
+        foreach (var item in (child.ExposedItems ?? []).Where(item => GroupExposedItems.CurveChannels(item.Editor).Length != 0)
                      .OrderBy(item => item.Order))
         {
             var targets = item.Targets.Select(target => child.Nodes.FirstOrDefault(node =>
@@ -411,11 +438,12 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
             if (targets.Any(node => node is null) || value is not null &&
                 (value.Components.Count != targets.Length || value.Components.Any(component => component.Curve is null)))
                 continue;
+            var channels = GroupExposedItems.CurveChannels(item.Editor);
             for (var index = 0; index < targets.Length; index++)
             {
                 var target = targets[index]!;
                 if (_groupChannels.ContainsKey(target.Id)) continue;
-                var name = item.Editor == "vector3Curve" ? $"{item.Name} / {"XYZ"[index]}" : item.Name;
+                var name = channels.Length > 1 ? $"{item.Name} / {channels[index]}" : item.Name;
                 var definition = GraphNodeDefinition.All.Single(candidate => candidate.Kind == target.Kind);
                 var curve = value?.Components[index].Curve ?? target.Curve!;
                 var node = new GraphNodeViewModel(_graph, definition, name, 0, 0, target.Id, curve);
@@ -436,6 +464,7 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
                 _group.ChildGraph!.Nodes.Single(target => target.Id == node.Id).Curve!;
             node.SetCurveValue(curve);
         }
+        OnPropertyChanged(nameof(ColorCurvePreview));
     }
 
     private void SetCurve(GraphNodeViewModel node, FCurveSnapshot curve, string description)
@@ -469,6 +498,8 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
     private void NotifyCurve()
     {
         OnPropertyChanged(nameof(Curve));
+        OnPropertyChanged(nameof(IsColorCurve));
+        OnPropertyChanged(nameof(ColorCurvePreview));
         OnPropertyChanged(nameof(VisibleCurves));
         OnPropertyChanged(nameof(HasCurve));
         OnPropertyChanged(nameof(SelectedKey));

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "typeId": "b17b0000-0000-4000-8000-000000000101",
+  "namespace": "LiberaFx",
+  "name": "BillboardMode",
+  "values": [
+    { "value": 0, "name": "Spherical", "displayNameKey": "Modules.SphericalBillboard.Name" },
+    { "value": 1, "name": "Axis Locked", "displayNameKey": "Modules.TreeBillboard.Name" },
+    { "value": 2, "name": "Look At", "displayNameKey": "Modules.WorldLookAt.Name" }
+  ]
+}

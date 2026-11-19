@@ -47,13 +47,13 @@ public sealed partial class GraphWorkspaceViewModel
 
     public bool CanPublishGroupCurves(IReadOnlyList<GraphNodeViewModel> nodes)
     {
-        if (_graphPath.Count == 0 || nodes.Count is not (1 or 3) || nodes.Distinct().Count() != nodes.Count ||
+        if (_graphPath.Count == 0 || nodes.Count is < 1 or > 4 || nodes.Distinct().Count() != nodes.Count ||
             nodes.Any(node => !Nodes.Contains(node) || node.Curve is null))
         {
             return false;
         }
 
-        var existing = (GetCurrentGraph().ExposedItems ?? []).Where(item => item.Editor is "curve" or "vector3Curve")
+        var existing = (GetCurrentGraph().ExposedItems ?? []).Where(item => GroupExposedItems.CurveChannels(item.Editor).Length != 0)
             .SelectMany(item => item.Targets).Select(target => target.NodeId).ToHashSet();
         return nodes.All(node => !existing.Contains(node.Id));
     }
@@ -64,13 +64,13 @@ public sealed partial class GraphWorkspaceViewModel
     {
         if (!CanPublishGroupCurves(nodes))
         {
-            throw new InvalidOperationException("Select one or three unexposed F-Curve nodes inside a group.");
+            throw new InvalidOperationException("Select one to four unexposed F-Curve nodes inside a group.");
         }
 
         var item = new GroupExposedItem(Guid.NewGuid(),
-            nodes.Count == 1 ? nodes[0].Name : "Vector3 Curve", "", "",
+            nodes.Count == 1 ? nodes[0].Name : $"Vector{nodes.Count} Curve", "", "",
             GetCurrentGraph().ExposedItems?.Count ?? 0,
-            nodes.Count == 1 ? "curve" : "vector3Curve",
+            nodes.Count == 1 ? "curve" : $"vector{nodes.Count}Curve",
             nodes.Select(node => new GroupExposedTarget(node.Id, null)).ToArray());
         return PublishGroupItem(item);
     }

@@ -50,6 +50,7 @@ internal static class StandardModuleTests
         if (standard.Any(asset => asset.Graph.Nodes.Any(node => node.Kind.Value == "LifeTime")))
             throw new InvalidOperationException("A standard module silently introduced a particle LifeTime.");
         VerifyBillboardAssets(catalog);
+        VerifyTypedCurves(catalog, exportNativeFixtures ? root : null);
 
         var workspace = new GraphWorkspaceViewModel(new UndoRedoManager(), catalog);
         var nodeList = new NodeCatalogViewModel(new ActiveGraphProvider(workspace), catalog);
@@ -62,11 +63,25 @@ internal static class StandardModuleTests
         if (!nodeList.Groups.SelectMany(group => group.Nodes).Any(entry => entry.GroupAssetId == VelocityStepId))
             throw new InvalidOperationException("Standard modules were not searchable by Japanese keywords.");
         nodeList.SearchText = "spherical";
-        if (!nodeList.Groups.SelectMany(group => group.Nodes).Any(entry => entry.GroupAssetId == SphericalBillboardId))
-            throw new InvalidOperationException("The spherical billboard standard group was not searchable.");
+        if (!nodeList.Groups.SelectMany(group => group.Nodes).Where(entry => entry.GroupAssetId is not null)
+                .Select(entry => entry.GroupAssetId).SequenceEqual([BillboardGraphLibrary.AssetId]))
+        {
+            throw new InvalidOperationException("Search did not return only the unified Billboard.");
+        }
         nodeList.SearchText = "樹木";
-        if (!nodeList.Groups.SelectMany(group => group.Nodes).Any(entry => entry.GroupAssetId == TreeBillboardId))
-            throw new InvalidOperationException("The tree billboard standard group was not searchable by Japanese keywords.");
+        if (!nodeList.Groups.SelectMany(group => group.Nodes).Any(entry => entry.GroupAssetId == BillboardGraphLibrary.AssetId))
+        {
+            throw new InvalidOperationException("The unified Billboard was not searchable by legacy Japanese keywords.");
+        }
+        var unified = workspace.CreateGroupAssetNode(BillboardGraphLibrary.AssetId, 120, 100);
+        using (var unifiedPane = new NodePropertiesPaneViewModel(new ActiveGraphProvider(workspace)))
+        {
+            if (unified.ChildGraph?.ExposedItems?.Count != 9 || !unifiedPane.Parameters.Any(parameter =>
+                    GraphEnumDefinition.TryGetTypeId(parameter.Type, out _)))
+            {
+                throw new InvalidOperationException("The unified Billboard did not expose its enum control.");
+            }
+        }
 
         foreach (var id in new[] { WorldLookAtId, SphericalBillboardId, TreeBillboardId })
         {
@@ -148,6 +163,48 @@ internal static class StandardModuleTests
                 id.ToString("N") + GroupAssetLibrary.FileExtension)));
             if (!sourceHashes[id].AsSpan().SequenceEqual(current))
                 throw new InvalidOperationException("Cloning changed a bundled standard asset file.");
+        }
+    }
+
+    private static void VerifyTypedCurves(GroupAssetCatalog catalog, string? fixtureDirectory)
+    {
+        var cases = new[] { ("XY", "FloatX2"), ("XYZ", "FloatX3"), ("XYZW", "FloatX4"), ("RGBA", "Color") };
+        for (var index = 0; index < cases.Length; index++)
+        {
+            var (channels, portType) = cases[index];
+            var id = Guid.Parse($"29000000-0000-4000-8000-00000000000{index + 5}");
+            var workspace = new GraphWorkspaceViewModel(new UndoRedoManager(), catalog);
+            var group = workspace.CreateGroupAssetNode(id, 120, 100);
+            var item = group.ChildGraph!.ExposedItems!.Single();
+            var active = new ActiveGraphProvider(workspace);
+            using var pane = new NodePropertiesPaneViewModel(active);
+            using var editor = pane.CreateGroupCurveEditor();
+            if (group.Definition.OutputPorts?.Single().PortType != portType ||
+                pane.CanEditColorCurves != (portType == "Color") ||
+                (editor.ColorCurvePreview is not null) != (portType == "Color") ||
+                !editor.Channels.Select(channel => channel.Name[^1]).SequenceEqual(channels))
+            {
+                throw new InvalidOperationException($"Curve module {portType} did not expose its typed output and editor.");
+            }
+            var components = item.Targets.Select((target, lane) => new GroupInstanceComponent(Curve:
+                new FCurveSnapshot([new FCurveKey(Guid.NewGuid(), 0, lane + 0.25, 0, 0, CurveInterpolation.Linear)])))
+                .ToArray();
+            workspace.SetGroupInstanceValue(group, new(item.Id, components));
+            var snapshot = workspace.CreateSnapshot();
+            var materialized = GroupExposedItems.Materialize(snapshot).Nodes.Single().ChildGraph!;
+            var program = VfxProgram.Compile(snapshot);
+            if (!item.Targets.Select(target => materialized.Nodes.Single(node => node.Id == target.NodeId)
+                    .Curve!.Keys.Single().Value).SequenceEqual(components.Select(component => component.Curve!.Keys.Single().Value)) ||
+                program.CurveInstructions.Count != channels.Length)
+            {
+                throw new InvalidOperationException($"Curve module {portType} did not compile its per-instance lanes.");
+            }
+            if (fixtureDirectory is not null)
+            {
+                var output = group.ChildGraph.Nodes.Single(node => GroupBoundarySchema.IsOutput(node.Kind));
+                WriteNativeFixture(fixtureDirectory, $"effect-time-curve-{portType}", snapshot, program, output, 0.25,
+                    Enumerable.Range(0, channels.Length).Select(lane => lane + 0.25).ToArray());
+            }
         }
     }
 
@@ -308,25 +365,31 @@ internal static class StandardModuleTests
 
             var graph = workspace.CreateSnapshot();
             var program = VfxProgram.Compile(graph);
-            var lowered = GraphPolymorphism.LowerWithOutputs(
-                GroupBoundaryLowering.Lower(GroupExposedItems.Materialize(graph)));
             var boundary = group.ChildGraph!.Nodes.Single(node =>
                 GroupBoundarySchema.IsOutput(node.Kind) && node.Name == outputName);
-            var definition = GraphNodeDefinition.All.Single(item => item.Kind == boundary.Kind);
-            var outputPort = definition.OutputPorts?.FirstOrDefault()?.Id;
-            var bindings = lowered.Outputs[(boundary.Id, outputPort)];
-            if (bindings.Count == 0) throw new InvalidOperationException($"Native fixture output {outputName} has no runtime binding.");
+            WriteNativeFixture(directory, name, graph, program, boundary, seconds, expected);
+        }
+    }
 
-            File.WriteAllBytes(Path.Combine(directory, name + ".lfxb"), program.ToBinary());
-            using var writer = new StreamWriter(Path.Combine(directory, name + ".checks"));
-            for (var row = 0; row < bindings.Count; row++)
-            {
-                var index = program.TypedInstructions.ToList().FindIndex(item => item.NodeId == bindings[row].NodeId);
-                if (index < 0) throw new InvalidOperationException($"Native fixture output {outputName} is not compiled.");
-                var lanes = bindings.Count == 4 ? expected.Skip(row * 4).Take(4).ToArray() : expected;
-                writer.WriteLine($"{seconds.ToString("R", System.Globalization.CultureInfo.InvariantCulture)} {index} {lanes.Length} " +
-                    string.Join(" ", lanes.Select(value => value.ToString("R", System.Globalization.CultureInfo.InvariantCulture))));
-            }
+    private static void WriteNativeFixture(string directory, string name, GraphSnapshot graph, VfxProgram program,
+        GraphNodeSnapshot boundary, double seconds, double[] expected)
+    {
+        var lowered = GraphPolymorphism.LowerWithOutputs(
+            GroupBoundaryLowering.Lower(GroupExposedItems.Materialize(graph)));
+        var definition = GraphNodeDefinition.All.Single(item => item.Kind == boundary.Kind);
+        var outputPort = definition.OutputPorts?.FirstOrDefault()?.Id;
+        var bindings = lowered.Outputs[(boundary.Id, outputPort)];
+        if (bindings.Count == 0) throw new InvalidOperationException($"Native fixture output {boundary.Name} has no runtime binding.");
+
+        File.WriteAllBytes(Path.Combine(directory, name + ".lfxb"), program.ToBinary());
+        using var writer = new StreamWriter(Path.Combine(directory, name + ".checks"));
+        for (var row = 0; row < bindings.Count; row++)
+        {
+            var index = program.TypedInstructions.ToList().FindIndex(item => item.NodeId == bindings[row].NodeId);
+            if (index < 0) throw new InvalidOperationException($"Native fixture output {boundary.Name} is not compiled.");
+            var lanes = bindings.Count == 4 ? expected.Skip(row * 4).Take(4).ToArray() : expected;
+            writer.WriteLine($"{seconds.ToString("R", System.Globalization.CultureInfo.InvariantCulture)} {index} {lanes.Length} " +
+                string.Join(" ", lanes.Select(value => value.ToString("R", System.Globalization.CultureInfo.InvariantCulture))));
         }
     }
 

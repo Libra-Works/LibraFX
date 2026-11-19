@@ -37,6 +37,7 @@
     <Compile Include="..\..\Services\ProjectDocumentReader.cs" Link="Services\ProjectDocumentReader.cs" />
     <Compile Include="..\..\Services\GroupAssetLibrary.cs" Link="Services\GroupAssetLibrary.cs" />
     <Compile Include="..\..\Services\StandardGroupAssetLibrary.cs" Link="Services\StandardGroupAssetLibrary.cs" />
+    <Compile Include="..\..\Services\BillboardGraphLibrary.cs" Link="Services\BillboardGraphLibrary.cs" />
     <Compile Include="..\..\Services\GroupCompilationResolver.cs" Link="Services\GroupCompilationResolver.cs" />
     <Compile Include="..\..\Services\Compilation\VfxProgram*.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\..\Services\Compilation\SpawnableGroupPackage.cs" Link="Services\SpawnableGroupPackage.cs" />

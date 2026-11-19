@@ -7,11 +7,17 @@ namespace LiberaFx.Services;
 
 public static class BillboardGraphLibrary
 {
+    public static readonly Guid AssetId = Guid.Parse("b17b0000-0000-4000-8000-000000000004");
+    private static readonly Guid ModeType = Guid.Parse("b17b0000-0000-4000-8000-000000000101");
+
     public static GraphSnapshot Create(string kind)
     {
-        if (kind is not ("WorldLookAt" or "SphericalBillboard" or "TreeBillboard"))
+        if (kind is not ("Billboard" or "WorldLookAt" or "SphericalBillboard" or "TreeBillboard"))
+        {
             throw new ArgumentOutOfRangeException(nameof(kind));
+        }
         var builder = new Builder(kind);
+        Output? mode = kind == "Billboard" ? builder.ModeInput() : null;
         var position = builder.Input("Position", new[] { 0d, 0, 0 }, "World anchor; same coordinate system as Target.");
         var target = builder.Input("Target", new[] { 1d, 0, 0 }, "Explicit world target or camera position; no camera singleton.");
         var up = builder.Input("World Up", new[] { 0d, 0, 1 }, "World up direction. Tree preserves this axis.");
@@ -25,11 +31,21 @@ public static class BillboardGraphLibrary
         builder.Connect(tolerance, epsilon, "a");
         var direction = builder.Binary("SubtractVector3", target, position, "target direction");
         var upUnit = builder.Unary("NormalizeVector3", up, "unit world up");
-        if (kind == "TreeBillboard")
+        if (kind is "Billboard" or "TreeBillboard")
         {
             var dot = builder.Binary("DotVector3", direction, upUnit, "height along world up");
             var height = builder.Binary("MultiplyVector3", upUnit,
                 builder.Unary("ScalarToVector3", dot, "broadcast height"), "vertical direction");
+            if (mode is { } selectorMode)
+            {
+                // Guard only a literal, not the shared inputs used by the world frame.
+                var axisLocked = builder.Node("Float", "axis locked weight", ("value", "float", 1d));
+                var selector = builder.Node($"EnumSelectFloat_{ModeType:N}", "projection weight by mode");
+                builder.Connect(selectorMode, selector, "selector");
+                builder.Connect(axisLocked, selector, GraphEnumBranchSchema.CasePortId(1));
+                height = builder.Binary("MultiplyVector3", height,
+                    builder.Unary("ScalarToVector3", selector, "broadcast projection weight"), "selected vertical direction");
+            }
             direction = builder.Binary("SubtractVector3", direction, height, "direction in up plane");
         }
         var world = builder.Frame(direction, up, position, epsilon, "world");
@@ -79,7 +95,7 @@ public static class BillboardGraphLibrary
 
         public Output Node(string kind, string name, params (string Id, string Type, object Value)[] parameters)
         {
-            var definition = GraphNodeDefinition.All.Single(item => item.TypeName == kind);
+            var definition = GraphNodeDefinition.Core.Single(item => item.QualifiedName == $"LiberaFx.{kind}");
             var id = Id($"node:{kind}:{name}");
             _nodes.Add(new(id, definition.Kind, name, _nodes.Count % 6 * 300, _nodes.Count / 6 * 180,
                 definition.PortType, definition.PortCategory, Parameters: parameters.Select(parameter =>
@@ -102,6 +118,15 @@ public static class BillboardGraphLibrary
         }
 
         public void Output(string kind, string name, Output source) => Connect(source, Node(kind, name), null);
+        public Output ModeInput()
+        {
+            var node = Node(GraphEnumBranchSchema.GroupInputKind(ModeType), "Mode",
+                ("value", GraphEnumBranchSchema.EnumPortType(ModeType), 0));
+            _exposed.Add(new(Id("exposed:Mode"), "Mode", "Spherical, axis-locked, or explicit look-at.",
+                "Orientation", _exposed.Count, "parameter", [new(node.Id, "value")]));
+            return node;
+        }
+
         public Output Unary(string kind, Output source, string name)
         {
             var node = Node(kind, name);

@@ -94,7 +94,9 @@
                     Command="{Binding PublishCurvesCommand}"
                     ToolTip.Tip="{DynamicResource Text.Panels.PublishGroupCurvesHelp}" />
             <Button Content="{DynamicResource Text.Panels.EditGroupCurves}"
-                    IsVisible="{Binding CanEditGroupCurves}" Click="OnEditGroupCurvesClick" />
+                    IsVisible="{Binding CanEditVectorCurves}" Click="OnEditGroupCurvesClick" />
+            <Button Content="{DynamicResource Text.Panels.EditColorCurves}"
+                    IsVisible="{Binding CanEditColorCurves}" Click="OnEditGroupCurvesClick" />
             <Button Content="{DynamicResource Text.Panels.ConfigureGroupItems}"
                     IsVisible="{Binding CanConfigureGroupItems}" Click="OnConfigureGroupItemsClick" />
             <TextBlock Text="{Binding GroupExposedDiagnostics}" TextWrapping="Wrap"

@@ -20,11 +20,13 @@ public sealed record StandardGroupMetadata(
     string StateKey,
     string BackendKey,
     IReadOnlyList<string> Keywords,
-    IReadOnlyList<StandardGroupParameterMetadata> Parameters);
+    IReadOnlyList<StandardGroupParameterMetadata> Parameters)
+{
+    public bool Legacy { get; init; }
+}
 
 /// <summary>
-/// Loads the read-only, shipped graph groups. Adding a standard group requires a stable-ID
-/// .lfxgroup file plus a row in manifest.json; it never writes into the application assets.
+/// Loads read-only shipped graph groups from the standard manifest and registered providers.
 /// </summary>
 public sealed class StandardGroupAssetLibrary
 {
@@ -85,7 +87,17 @@ public sealed class StandardGroupAssetLibrary
     {
         if (_registeredModules.TryGetValue(id, out var registered))
             return registered.Asset with { Origin = GroupAssetOrigin.Standard };
-        if (!ReadMetadata().ContainsKey(id)) throw new FileNotFoundException($"Standard group asset {id} is not registered.");
+        if (!ReadMetadata().TryGetValue(id, out var metadata))
+        {
+            throw new FileNotFoundException($"Standard group asset {id} is not registered.");
+        }
+        if (id == BillboardGraphLibrary.AssetId)
+        {
+            var graph = BillboardGraphLibrary.Create("Billboard");
+            var generated = new GroupAsset(5, id, "Billboard", 1, true, graph) { Origin = GroupAssetOrigin.Standard };
+            ValidateDefinition(new(generated, metadata));
+            return generated;
+        }
         var asset = _assets.Load(id);
         if (!asset.Locked)
             throw new InvalidDataException($"Standard group asset {id} must be shipped locked.");
@@ -101,6 +113,10 @@ public sealed class StandardGroupAssetLibrary
             return registered.Asset with { Origin = GroupAssetOrigin.Standard };
         }
         if (!ReadMetadata().ContainsKey(id)) throw new FileNotFoundException($"Standard group asset {id} is not registered.");
+        if (id == BillboardGraphLibrary.AssetId && revision == 1)
+        {
+            return Load(id);
+        }
         var asset = _assets.LoadRevision(id, revision);
         if (!asset.Locked)
             throw new InvalidDataException($"Standard group asset {id} revision {revision} must be shipped locked.");

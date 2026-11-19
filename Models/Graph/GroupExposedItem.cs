@@ -22,6 +22,16 @@ public sealed record GroupInstanceValue(Guid ItemId, IReadOnlyList<GroupInstance
 
 public static class GroupExposedItems
 {
+    public static string CurveChannels(string editor) => editor switch
+    {
+        "curve" => "X",
+        "vector2Curve" => "XY",
+        "vector3Curve" => "XYZ",
+        "vector4Curve" => "XYZW",
+        "colorCurve" => "RGBA",
+        _ => ""
+    };
+
     public static bool SupportsParameter(GraphNodeDefinition definition, NodeParameterDefinition parameter) =>
         !SequenceSchema.IsSequence(definition.Kind) &&
         parameter.EnabledWhen is null &&
@@ -43,7 +53,7 @@ public static class GroupExposedItems
         foreach (var value in values)
         {
             if (value is null || value.ItemId == Guid.Empty || !ids.Add(value.ItemId) ||
-                value.Components is null || value.Components.Count is < 1 or > 3)
+                value.Components is null || value.Components.Count is < 1 or > 4)
                 throw new InvalidDataException("The group contains an invalid instance value.");
             foreach (var component in value.Components)
             {
@@ -111,7 +121,7 @@ public static class GroupExposedItems
                         GameIoSchema.ValidateNodeParameters(baseDefinition, parameters);
                         children[childIndex] = internalNode with { Parameters = parameters.AsReadOnly() };
                     }
-                    else if (item.Editor is "curve" or "vector3Curve" &&
+                    else if (CurveChannels(item.Editor).Length != 0 &&
                              component.Curve is { } curve && internalNode.Kind == GraphNodeKind.FloatFCurve)
                         children[childIndex] = internalNode with { Curve = curve };
                     else throw new InvalidDataException($"Group exposed item '{item.Name}' has an incompatible target.");
@@ -135,8 +145,8 @@ public static class GroupExposedItems
                 string.IsNullOrWhiteSpace(item.Name) || item.Name.Length > 200 ||
                 item.Description is null || item.Description.Length > 4096 ||
                 item.Category is null || item.Category.Length > 200 ||
-                item.Editor is not ("parameter" or "curve" or "vector3Curve") ||
-                item.Targets is null || item.Targets.Count != (item.Editor == "vector3Curve" ? 3 : 1) ||
+                item.Targets is null || item.Targets.Count == 0 ||
+                item.Targets.Count != (item.Editor == "parameter" ? 1 : CurveChannels(item.Editor).Length) ||
                 item.Targets.Any(target => target is null || target.NodeId == Guid.Empty ||
                     (item.Editor == "parameter"
                         ? string.IsNullOrWhiteSpace(target.ParameterId) || target.ParameterId.Length > 128

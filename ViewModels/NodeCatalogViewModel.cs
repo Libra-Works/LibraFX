@@ -54,7 +54,7 @@ public sealed class NodeCatalogViewModel : Tool
         _entries = (_definitions?.AvailableDefinitions ?? GraphNodeDefinition.AuthoringCore)
             .Where(definition => !GraphPolymorphism.IsHiddenVariant(definition.Kind))
             .Select(definition => new NodeCatalogEntryViewModel(definition, ProjectName))
-            .Concat((_groups?.Assets ?? []).Select(asset => new NodeCatalogEntryViewModel(asset, _groups)))
+            .Concat((_groups?.CreatableAssets ?? []).Select(asset => new NodeCatalogEntryViewModel(asset, _groups)))
             .ToArray();
         OnPropertyChanged(nameof(LoadWarnings));
         OnPropertyChanged(nameof(ProjectName));

@@ -100,7 +100,48 @@
     ]
   },
   {
+    "id": "29000000-0000-4000-8000-000000000005",
+    "nameKey": "Modules.Curve.Vec2",
+    "descriptionKey": "Modules.Curve.VectorDescription",
+    "categoryKey": "Modules.Category.Curves", "phaseKey": "Modules.Phase.EffectTime",
+    "unitsKey": "Modules.Units.EffectCurve", "inputsKey": "Modules.Inputs.EffectCurve",
+    "outputsKey": "Modules.Curve.Vec2Output", "stateKey": "Modules.State.Stateless",
+    "backendKey": "Modules.Backend.GenericCurve",
+    "keywords": ["fcurve", "curve", "vector2", "vec2", "カーブ"], "parameters": []
+  },
+  {
+    "id": "29000000-0000-4000-8000-000000000006",
+    "nameKey": "Modules.Curve.Vec3",
+    "descriptionKey": "Modules.Curve.VectorDescription",
+    "categoryKey": "Modules.Category.Curves", "phaseKey": "Modules.Phase.EffectTime",
+    "unitsKey": "Modules.Units.EffectCurve", "inputsKey": "Modules.Inputs.EffectCurve",
+    "outputsKey": "Modules.Curve.Vec3Output", "stateKey": "Modules.State.Stateless",
+    "backendKey": "Modules.Backend.GenericCurve",
+    "keywords": ["fcurve", "curve", "vector3", "vec3", "カーブ"], "parameters": []
+  },
+  {
+    "id": "29000000-0000-4000-8000-000000000007",
+    "nameKey": "Modules.Curve.Vec4",
+    "descriptionKey": "Modules.Curve.VectorDescription",
+    "categoryKey": "Modules.Category.Curves", "phaseKey": "Modules.Phase.EffectTime",
+    "unitsKey": "Modules.Units.EffectCurve", "inputsKey": "Modules.Inputs.EffectCurve",
+    "outputsKey": "Modules.Curve.Vec4Output", "stateKey": "Modules.State.Stateless",
+    "backendKey": "Modules.Backend.GenericCurve",
+    "keywords": ["fcurve", "curve", "vector4", "vec4", "カーブ"], "parameters": []
+  },
+  {
+    "id": "29000000-0000-4000-8000-000000000008",
+    "nameKey": "Modules.Curve.Color",
+    "descriptionKey": "Modules.Curve.ColorDescription",
+    "categoryKey": "Modules.Category.Curves", "phaseKey": "Modules.Phase.EffectTime",
+    "unitsKey": "Modules.Units.EffectCurve", "inputsKey": "Modules.Inputs.EffectCurve",
+    "outputsKey": "Modules.Curve.ColorOutput", "stateKey": "Modules.State.Stateless",
+    "backendKey": "Modules.Backend.GenericCurve",
+    "keywords": ["fcurve", "curve", "color", "rgba", "カーブ", "色"], "parameters": []
+  },
+  {
     "id": "b17b0000-0000-4000-8000-000000000001",
+    "legacy": true,
     "nameKey": "Modules.WorldLookAt.Name",
     "descriptionKey": "Modules.WorldLookAt.Description",
     "categoryKey": "Modules.Category.Orientation",
@@ -124,6 +165,7 @@
   },
   {
     "id": "b17b0000-0000-4000-8000-000000000002",
+    "legacy": true,
     "nameKey": "Modules.SphericalBillboard.Name",
     "descriptionKey": "Modules.SphericalBillboard.Description",
     "categoryKey": "Modules.Category.Orientation",
@@ -147,6 +189,7 @@
   },
   {
     "id": "b17b0000-0000-4000-8000-000000000003",
+    "legacy": true,
     "nameKey": "Modules.TreeBillboard.Name",
     "descriptionKey": "Modules.TreeBillboard.Description",
     "categoryKey": "Modules.Category.Orientation",
@@ -166,6 +209,30 @@
       { "itemId": "8bc2f704-46cc-bb84-a1f1-23cb8894d216", "nameKey": "Modules.Billboard.Parameter.Scale.Name", "descriptionKey": "Modules.Billboard.Parameter.Scale.Description" },
       { "itemId": "9c676e20-ec4f-3055-7d96-a921271fd655", "nameKey": "Modules.Billboard.Parameter.Pivot.Name", "descriptionKey": "Modules.Billboard.Parameter.Pivot.Description" },
       { "itemId": "f129210b-904d-5ce1-fb77-4598b98edaf1", "nameKey": "Modules.Billboard.Parameter.Tolerance.Name", "descriptionKey": "Modules.Billboard.Parameter.Tolerance.Description" }
+    ]
+  },
+  {
+    "id": "b17b0000-0000-4000-8000-000000000004",
+    "nameKey": "Modules.Billboard.Name",
+    "descriptionKey": "Modules.Billboard.Description",
+    "categoryKey": "Modules.Category.Orientation",
+    "phaseKey": "Modules.Phase.Orientation",
+    "unitsKey": "Modules.Units.Billboard",
+    "inputsKey": "Modules.Inputs.Billboard",
+    "outputsKey": "Modules.Outputs.Billboard",
+    "stateKey": "Modules.State.Stateless",
+    "backendKey": "Modules.Backend.GenericPortable",
+    "keywords": ["billboard", "spherical", "tree", "axial", "look at", "ビルボード", "樹木", "軸固定"],
+    "parameters": [
+      { "itemId": "0a16da2d-a2e1-dfa9-bbb3-b5a906273884", "nameKey": "Modules.Billboard.Parameter.Mode.Name", "descriptionKey": "Modules.Billboard.Parameter.Mode.Description" },
+      { "itemId": "8f4f99a1-9104-dc1c-5db6-92d9c7cbf404", "nameKey": "Modules.Billboard.Parameter.Position.Name", "descriptionKey": "Modules.Billboard.Parameter.Position.Description" },
+      { "itemId": "affa0fed-c68d-c8b4-5769-4ccf53c40f97", "nameKey": "Modules.Billboard.Parameter.Target.Name", "descriptionKey": "Modules.Billboard.Parameter.Target.Description" },
+      { "itemId": "af785f5c-b7ca-b474-c166-98c480b6e6e8", "nameKey": "Modules.Billboard.Parameter.WorldUp.Name", "descriptionKey": "Modules.Billboard.Parameter.WorldUp.Description" },
+      { "itemId": "f79d6437-541e-f20c-9565-72864bf3f424", "nameKey": "Modules.Billboard.Parameter.LocalForward.Name", "descriptionKey": "Modules.Billboard.Parameter.LocalForward.Description" },
+      { "itemId": "b975b609-d854-7ed6-a29b-f3fefc3af85b", "nameKey": "Modules.Billboard.Parameter.LocalUp.Name", "descriptionKey": "Modules.Billboard.Parameter.LocalUp.Description" },
+      { "itemId": "1079d223-d8fc-3f4b-abd7-f2fb896ac7b2", "nameKey": "Modules.Billboard.Parameter.Scale.Name", "descriptionKey": "Modules.Billboard.Parameter.Scale.Description" },
+      { "itemId": "1ad78f76-5e88-041c-fff4-32ac6ff381ee", "nameKey": "Modules.Billboard.Parameter.Pivot.Name", "descriptionKey": "Modules.Billboard.Parameter.Pivot.Description" },
+      { "itemId": "6bc8048a-a39f-47d7-8eb5-7098691880ee", "nameKey": "Modules.Billboard.Parameter.Tolerance.Name", "descriptionKey": "Modules.Billboard.Parameter.Tolerance.Description" }
     ]
   }
 ]

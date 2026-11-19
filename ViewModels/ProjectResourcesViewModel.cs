@@ -126,7 +126,7 @@ public sealed class ProjectResourcesViewModel : ObservableObject, IDisposable
     private void Filter()
     {
         if (_disposed) return;
-        var candidates = IsLocal ? _localEntries : _main.GroupAssets.Assets
+        var candidates = IsLocal ? _localEntries : _main.GroupAssets.CreatableAssets
             .Select(group => new WorkspaceResourceEntry(
                 LocalizationService.Shared.GetOrDefault(_main.GroupAssets.Metadata(group.Id)?.NameKey, group.Name),
                 group.Origin == GroupAssetOrigin.Standard

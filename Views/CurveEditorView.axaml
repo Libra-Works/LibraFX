@@ -27,6 +27,11 @@
             <CheckBox Content="{DynamicResource Text.Panels.SnapFrames}" IsChecked="{Binding SnapToFrames}" VerticalAlignment="Center" />
             <CheckBox Content="{DynamicResource Text.Timeline.UseSeconds}" IsChecked="{Binding Playback.ShowSeconds}" VerticalAlignment="Center" />
             <TextBlock Text="{Binding Node.Name}" VerticalAlignment="Center" FontWeight="SemiBold" />
+            <Border IsVisible="{Binding IsColorCurve}" Background="{Binding ColorCurvePreview}"
+                    BorderBrush="{DynamicResource EffectMutedForegroundBrush}" BorderThickness="1"
+                    Width="32" Height="18" VerticalAlignment="Center"
+                    ToolTip.Tip="{DynamicResource Text.Panels.CurveColorPreview}"
+                    AutomationProperties.Name="{DynamicResource Text.Panels.CurveColorPreview}" />
         </StackPanel>
         <Grid Grid.Row="2" ColumnDefinitions="190,*">
             <Grid RowDefinitions="Auto,*" Margin="4">

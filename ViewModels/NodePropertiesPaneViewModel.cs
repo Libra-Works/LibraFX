@@ -52,8 +52,11 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
     public IRelayCommand PublishCurvesCommand { get; }
     public bool CanPublishCurves => !IsPinned && _graph.CanPublishGroupCurves();
     public bool CanEditGroupCurves => HasExposedCurves && !IsPinned;
+    public bool CanEditColorCurves => CanEditGroupCurves &&
+        _node?.ChildGraph?.ExposedItems?.Any(item => item.Editor == "colorCurve") == true;
+    public bool CanEditVectorCurves => CanEditGroupCurves && !CanEditColorCurves;
     public bool HasExposedCurves => _node?.ChildGraph?.ExposedItems?.Any(item =>
-        item.Editor is "curve" or "vector3Curve") == true;
+        GroupExposedItems.CurveChannels(item.Editor).Length != 0) == true;
     public bool HasExposedItems => _node?.ChildGraph?.ExposedItems is { Count: > 0 };
     public bool IsGroup => _node?.IsGraphGroup == true;
     public bool IsLinkedGroup => _node?.GroupAsset is not null;
@@ -216,6 +219,8 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
         OnPropertyChanged(nameof(CanConfigureGroupItems));
         OnPropertyChanged(nameof(HasExposedCurves));
         OnPropertyChanged(nameof(CanEditGroupCurves));
+        OnPropertyChanged(nameof(CanEditColorCurves));
+        OnPropertyChanged(nameof(CanEditVectorCurves));
         OnPropertyChanged(nameof(HasExposedItems));
         OnPropertyChanged(nameof(CanPublishCurves));
         OnPropertyChanged(nameof(IsLinkedGroup));
@@ -285,7 +290,7 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
                     .FirstOrDefault(parameter => parameter.ItemId == item.Id)
                 : null;
             var displayName = LocalizationService.Shared.GetOrDefault(itemMetadata?.NameKey, item.Name);
-            if (item.Editor is "curve" or "vector3Curve")
+            if (GroupExposedItems.CurveChannels(item.Editor).Length != 0)
             {
                 if (item.Targets.Any(target => !child.Nodes.Any(node => node.Id == target.NodeId &&
                         node.Kind == GraphNodeKind.FloatFCurve && node.Curve is not null)))

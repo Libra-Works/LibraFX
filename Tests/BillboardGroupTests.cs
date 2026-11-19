@@ -24,13 +24,17 @@ internal static class BillboardGroupTests
             Case("pivot-scale", kind, [3, -4, 2], [-2, 5, 9], [0, 0, 1], scale: [-2, 3, 0.5], pivot: [1, -2, 3]);
             Case("invalid-local-axes", kind, [0, 0, 0], [1, 0, 0], [0, 0, 1], [1, 0, 0], [1, 0, 1]);
         }
+        Case("spherical-elevated", "Billboard", [3, -4, 2], [-2, 5, 9], [0, 0, 1], mode: 0);
+        Case("axial-elevated", "Billboard", [3, -4, 2], [-2, 5, 9], [0, 0, 1], mode: 1);
+        Case("look-at-elevated", "Billboard", [3, -4, 2], [-2, 5, 9], [0, 0, 1], mode: 2);
         VerifyAuthoring();
         VerifyWorldRotationMetadata();
         if (directory is not null) ExportMovingCamera(directory);
         Console.WriteLine("Billboard ordinary-Group axes, invalid inputs, project history, copying and compiler fixtures passed.");
 
         void Case(string name, string kind, double[] position, double[] target, double[] up,
-            double[]? forward = null, double[]? localUp = null, double[]? scale = null, double[]? pivot = null)
+            double[]? forward = null, double[]? localUp = null, double[]? scale = null, double[]? pivot = null,
+            int? mode = null)
         {
             forward ??= [1, 0, 0]; localUp ??= [0, 0, 1]; scale ??= [1, 1, 1]; pivot ??= [0, 0, 0];
             var values = new Dictionary<string, double[]> { ["Position"] = position, ["Target"] = target,
@@ -40,13 +44,17 @@ internal static class BillboardGroupTests
                 ? node with { Parameters = [new("value", "vector3", JsonSerializer.SerializeToElement(value))] } : node).ToArray() };
             var groupDefinition = GraphNodeDefinition.All.Single(item => item.Kind == GraphNodeKind.GraphGroup);
             var group = new GraphNodeSnapshot(Guid.NewGuid(), groupDefinition.Kind, kind, 0, 0,
-                groupDefinition.PortType, groupDefinition.PortCategory, ChildGraph: child);
+                groupDefinition.PortType, groupDefinition.PortCategory, ChildGraph: child,
+                GroupOverrides: mode is { } selected
+                    ? [new(child.ExposedItems!.Single(item => item.Name == "Mode").Id,
+                        [new(JsonSerializer.SerializeToElement(selected))])]
+                    : null);
             var graph = new GraphSnapshot([group], []);
             GraphValidator.Validate(graph);
             Require(GraphTypeDiagnostics.Analyze(graph).Count == 0, "Billboards must use compatible ordinary primitive connections.");
             var program = VfxProgram.Compile(graph);
             var direction = Sub(target, position);
-            if (kind == "TreeBillboard")
+            if (kind == "TreeBillboard" || mode == 1)
             {
                 var axis = Unit(up);
                 direction = Sub(direction, Scale(axis, Dot(direction, axis)));

@@ -431,16 +431,18 @@ public sealed partial class LiberaFxMcpTools
         });
 
     [McpServerTool(Name = "libera_graph_expose_curves", Destructive = false, OpenWorld = false)]
-    [Description("Expose one Float F-Curve or three Float F-Curves in X/Y/Z order on the containing group. The active graph must be inside an editable group.")]
+    [Description("Expose one to four Float F-Curves in component order on the containing group. The active graph must be inside an editable group.")]
     public static async Task<string> ExposeCurves(ActiveGraphProvider activeGraph,
-        [Description("One FloatFCurve GUID or three FloatFCurve GUIDs in X/Y/Z order.")] string[] nodeIds) =>
+        [Description("One to four FloatFCurve GUIDs in X/Y/Z/W order.")] string[] nodeIds) =>
         await ChatMcpExecution.InvokeAsync(() =>
         {
             var graph = activeGraph.Graph;
             try
             {
-                if (nodeIds is null || nodeIds.Length is not (1 or 3))
-                    throw new ArgumentException("Supply one or three curve node IDs.");
+                if (nodeIds is null || nodeIds.Length is < 1 or > 4)
+                {
+                    throw new ArgumentException("Supply one to four curve node IDs.");
+                }
                 var id = graph.PublishGroupCurves(nodeIds.Select(nodeId => FindNode(graph, nodeId)).ToArray());
                 return JsonSerializer.Serialize(new { exposedItemId = id }, JsonOptions);
             }
@@ -450,12 +452,12 @@ public sealed partial class LiberaFxMcpTools
         });
 
     [McpServerTool(Name = "libera_graph_set_group_instance_value", Destructive = false, OpenWorld = false)]
-    [Description("Set an exposed group item on this instance without changing the shared group. Pass the item GUID and a JSON parameter value, one F-Curve object, or an array of three F-Curve objects for vector3Curve.")]
+    [Description("Set an exposed group item on this instance without changing the shared group. Pass the item GUID and a JSON parameter value, one F-Curve object, or a component-ordered array of F-Curve objects.")]
     public static async Task<string> SetGroupInstanceValue(
         ActiveGraphProvider activeGraph,
         [Description("GUID of the group instance in the active graph.")] string nodeId,
         [Description("Stable exposed-item GUID from the child graph's exposedItems.")] string exposedItemId,
-        [Description("Actual JSON value for a parameter, an object with a keys array for a curve, or three such objects for vector3Curve.")] JsonElement value) =>
+        [Description("JSON parameter value, an object with a keys array for a curve, or a matching array for vector and color curves.")] JsonElement value) =>
         await ChatMcpExecution.InvokeAsync(() =>
         {
             var graph = activeGraph.Graph;
@@ -471,8 +473,9 @@ public sealed partial class LiberaFxMcpTools
                     "parameter" => [new(value.Clone())],
                     "curve" => [new(Curve: JsonSerializer.Deserialize<FCurveSnapshot>(value.GetRawText(), JsonOptions)
                         ?? throw new ArgumentException("An F-Curve is required."))],
-                    "vector3Curve" => (JsonSerializer.Deserialize<FCurveSnapshot[]>(value.GetRawText(), JsonOptions)
-                        ?? throw new ArgumentException("Three F-Curves are required."))
+                    "vector2Curve" or "vector3Curve" or "vector4Curve" or "colorCurve" =>
+                        (JsonSerializer.Deserialize<FCurveSnapshot[]>(value.GetRawText(), JsonOptions)
+                        ?? throw new ArgumentException("An array of F-Curves is required."))
                         .Select(curve => new GroupInstanceComponent(Curve: curve)).ToArray(),
                     _ => throw new InvalidOperationException("The exposed editor type is unsupported.")
                 };

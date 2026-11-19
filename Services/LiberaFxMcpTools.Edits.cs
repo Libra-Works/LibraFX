@@ -93,7 +93,7 @@ public sealed partial class LiberaFxMcpTools
         ChatMcpExecution.InvokeAsync(() =>
         {
             var catalog = activeGraph.Graph.GroupAssets;
-            var modules = (catalog?.Assets ?? []).Where(asset => asset.Origin == GroupAssetOrigin.Standard)
+            var modules = (catalog?.CreatableAssets ?? []).Where(asset => asset.Origin == GroupAssetOrigin.Standard)
                 .OrderBy(asset => asset.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(asset =>
                 {
@@ -112,7 +112,7 @@ public sealed partial class LiberaFxMcpTools
         EditGraph(activeGraph, graph =>
         {
             ValidatePosition(x, y);
-            if (graph.GroupAssets?.Assets.Any(asset => asset.Id == moduleId && asset.Origin == GroupAssetOrigin.Standard) != true)
+            if (graph.GroupAssets?.CreatableAssets.Any(asset => asset.Id == moduleId && asset.Origin == GroupAssetOrigin.Standard) != true)
             {
                 throw new McpException("Standard module not found. Use libera_graph_list_modules.");
             }

@@ -1,0 +1,23 @@
+{
+  "FormatVersion": 5, "Id": "29000000-0000-4000-8000-000000000007", "Name": "F-Curve Vec4", "Revision": 1, "Locked": true,
+  "Graph": {
+    "Nodes": [
+      { "Id": "29070000-0000-4000-8000-000000000001", "Kind": "FloatFCurve", "Name": "X", "X": 0, "Y": 0, "PortType": "Float", "PortCategory": "Parameter", "Curve": { "Keys": [{ "Id": "29070000-0000-4000-8000-000000000011", "TimeSeconds": 0, "Value": 0, "InSlope": 0, "OutSlope": 0, "Interpolation": "Linear" }] } },
+      { "Id": "29070000-0000-4000-8000-000000000002", "Kind": "FloatFCurve", "Name": "Y", "X": 0, "Y": 140, "PortType": "Float", "PortCategory": "Parameter", "Curve": { "Keys": [{ "Id": "29070000-0000-4000-8000-000000000012", "TimeSeconds": 0, "Value": 0, "InSlope": 0, "OutSlope": 0, "Interpolation": "Linear" }] } },
+      { "Id": "29070000-0000-4000-8000-000000000003", "Kind": "FloatFCurve", "Name": "Z", "X": 0, "Y": 280, "PortType": "Float", "PortCategory": "Parameter", "Curve": { "Keys": [{ "Id": "29070000-0000-4000-8000-000000000013", "TimeSeconds": 0, "Value": 0, "InSlope": 0, "OutSlope": 0, "Interpolation": "Linear" }] } },
+      { "Id": "29070000-0000-4000-8000-000000000004", "Kind": "FloatFCurve", "Name": "W", "X": 0, "Y": 420, "PortType": "Float", "PortCategory": "Parameter", "Curve": { "Keys": [{ "Id": "29070000-0000-4000-8000-000000000014", "TimeSeconds": 0, "Value": 0, "InSlope": 0, "OutSlope": 0, "Interpolation": "Linear" }] } },
+      { "Id": "29070000-0000-4000-8000-000000000005", "Kind": "ComposeVector4", "Name": "Compose", "X": 280, "Y": 0, "PortType": "FloatX4", "PortCategory": "Parameter" },
+      { "Id": "29070000-0000-4000-8000-000000000007", "Kind": "GroupOutputVector4", "Name": "Value", "X": 560, "Y": 0, "PortType": "FloatX4", "PortCategory": "Parameter" }
+    ],
+    "Connections": [
+      { "SourceNodeId": "29070000-0000-4000-8000-000000000001", "TargetNodeId": "29070000-0000-4000-8000-000000000005", "TargetPortId": "r" },
+      { "SourceNodeId": "29070000-0000-4000-8000-000000000002", "TargetNodeId": "29070000-0000-4000-8000-000000000005", "TargetPortId": "g" },
+      { "SourceNodeId": "29070000-0000-4000-8000-000000000003", "TargetNodeId": "29070000-0000-4000-8000-000000000005", "TargetPortId": "b" },
+      { "SourceNodeId": "29070000-0000-4000-8000-000000000004", "TargetNodeId": "29070000-0000-4000-8000-000000000005", "TargetPortId": "a" },
+      { "SourceNodeId": "29070000-0000-4000-8000-000000000005", "SourcePortId": "value", "TargetNodeId": "29070000-0000-4000-8000-000000000007" }
+    ],
+    "ExposedItems": [{ "Id": "29070000-0000-4000-8000-000000000009", "Name": "Vec4", "Description": "", "Category": "Curve", "Order": 0, "Editor": "vector4Curve", "Targets": [
+      { "NodeId": "29070000-0000-4000-8000-000000000001" }, { "NodeId": "29070000-0000-4000-8000-000000000002" }, { "NodeId": "29070000-0000-4000-8000-000000000003" }, { "NodeId": "29070000-0000-4000-8000-000000000004" }
+    ] }]
+  }
+}
