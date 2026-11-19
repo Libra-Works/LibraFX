@@ -197,11 +197,25 @@ public partial class GpuWorkspaceView : UserControl
         {
             Breadcrumb.Text = vm.Breadcrumb;
             Capacity.Text = vm.State.Program.Capacity.ToString(CultureInfo.InvariantCulture);
-            BackButton.Content = vm.Kernel is null ? LocalizationService.Shared.Get("Gpu.Close") : "Flow / フローへ";
-            FlowScroll.IsVisible = vm.Kernel is null;
-            KernelTabs.IsVisible = vm.Kernel is not null;
+            var fluid = vm.State.Fluid2D is not null;
+            if (vm.State.Fluid2D is { } settings)
+            {
+                Capacity.Text = ((ulong)settings.Width * settings.Height).ToString(CultureInfo.InvariantCulture);
+            }
+            CapacityLabel.Text = LocalizationService.Shared.Get(fluid ? "Fluid.CellCount" : "Gpu.Capacity");
+            Capacity.IsEnabled = ApplyCapacityButton.IsEnabled = !fluid;
+            TypeChoice.IsVisible = !fluid;
+            FutureTextureButton.IsVisible = !fluid;
+            BackButton.Content = LocalizationService.Shared.Get(vm.Kernel is null ? "Gpu.Close" : "Gpu.FlowBack");
+            FlowScroll.IsVisible = fluid || vm.Kernel is null;
+            KernelTabs.IsVisible = !fluid && vm.Kernel is not null;
             Palette.Children.Clear();
-            if (vm.Kernel is null)
+            AddSimulationModeControl(vm);
+            if (fluid)
+            {
+                BuildFluidFlow();
+            }
+            else if (vm.Kernel is null)
             {
                 foreach (var kind in new[] { FlowKind.Spawn, FlowKind.Update, FlowKind.RenderBillboard })
                 {
@@ -223,17 +237,24 @@ public partial class GpuWorkspaceView : UserControl
                             throw new ArgumentException("No ABI attribute has this type.");
                         SelectVisualNode(vm.Add(op.Op, type).Id);
                     })));
-                Palette.Children.Add(Button("+ Attribute write / 属性出力", () =>
+                Palette.Children.Add(Button(LocalizationService.Shared.Get("Gpu.AddAttributeWrite"), () =>
                 {
-                    Status.Text = "Select a value node, then choose an attribute under Writes / 値ノードを選択し、属性出力を指定";
+                    Status.Text = LocalizationService.Shared.Get("Gpu.SelectValueNodeHint");
                 }));
                 BuildGraph();
                 _displayedText = vm.Text;
                 KernelText.Text = _displayedText;
             }
-            BuildInspector();
-            BuildWrites();
-            BuildBindings();
+            if (fluid)
+            {
+                BuildFluidInspector();
+            }
+            else
+            {
+                BuildInspector();
+                BuildWrites();
+                BuildBindings();
+            }
             RefreshDiagnostics();
             Status.Text = vm.Status;
         }
@@ -265,7 +286,7 @@ public partial class GpuWorkspaceView : UserControl
             if (i != 0)
                 FlowPanel.Children.Add(new TextBlock
                 {
-                    Text = "↓ declared flow-list order · not a runtime trace / 保存された順序 · 実行トレースではありません",
+                    Text = LocalizationService.Shared.Get("Gpu.FlowOrderHint"),
                     TextWrapping = TextWrapping.Wrap,
                     HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
                     Foreground = ThemeSettingsService.EditorBrush("CurveAxis")
@@ -280,7 +301,7 @@ public partial class GpuWorkspaceView : UserControl
             if (step.CompiledMetadata is not null)
                 panel.Children.Add(new TextBlock
                 {
-                    Text = $"Compiled source reference · {step.CompiledMetadata.Kind} / ソースコンパイル済み",
+                    Text = LocalizationService.Shared.Get("Gpu.CompiledSourceRef", step.CompiledMetadata.Kind),
                     TextWrapping = TextWrapping.Wrap,
                     Foreground = ThemeSettingsService.EditorBrush("GraphSignal")
                 });
@@ -288,10 +309,10 @@ public partial class GpuWorkspaceView : UserControl
             {
                 panel.Children.Add(new TextBlock
                 {
-                    Text = $"Kernel: {kernel.Id} · {kernel.Stage} / カーネル",
+                    Text = LocalizationService.Shared.Get("Gpu.KernelLabel", kernel.Id, kernel.Stage),
                     TextWrapping = TextWrapping.Wrap
                 });
-                panel.Children.Add(Button("Open kernel / カーネルを開く", () =>
+                panel.Children.Add(Button(LocalizationService.Shared.Get("Gpu.OpenKernel"), () =>
                 {
                     _selection = null;
                     vm.EnterKernel(kernel.Id);
@@ -307,12 +328,12 @@ public partial class GpuWorkspaceView : UserControl
                 {
                     panel.Children.Add(new TextBlock
                     {
-                        Text = $"Unexpected kernel reference: {flow.Kernel} / 想定外のカーネル参照",
+                        Text = LocalizationService.Shared.Get("Gpu.UnexpectedKernelRef", flow.Kernel),
                         TextWrapping = TextWrapping.Wrap,
                         Foreground = ThemeSettingsService.EditorBrush("GraphSignal")
                     });
                     if (step.Kernel is { } referencedKernel)
-                        panel.Children.Add(Button("Inspect referenced kernel / 参照カーネルを確認", () =>
+                        panel.Children.Add(Button(LocalizationService.Shared.Get("Gpu.InspectReferencedKernel"), () =>
                         {
                             _selection = null;
                             vm.EnterKernel(referencedKernel.Id);
@@ -320,7 +341,7 @@ public partial class GpuWorkspaceView : UserControl
                 }
                 panel.Children.Add(new TextBlock
                 {
-                    Text = "Billboard source binding · engine-side rendering is pending / 描画実行はエンジン側で未対応",
+                    Text = LocalizationService.Shared.Get("Gpu.BillboardSourceBindingPending"),
                     TextWrapping = TextWrapping.Wrap
                 });
                 var texture = new ComboBox
@@ -329,7 +350,7 @@ public partial class GpuWorkspaceView : UserControl
                     SelectedItem = flow.Resource
                 };
                 Avalonia.Automation.AutomationProperties.SetName(
-                    texture, "Billboard texture resource / ビルボードのテクスチャリソース");
+                    texture, LocalizationService.Shared.Get("Gpu.BillboardTextureResource"));
                 texture.SelectionChanged += (_, _) =>
                 {
                     if (texture.SelectedItem is string resource && resource != flow.Resource)
@@ -341,38 +362,38 @@ public partial class GpuWorkspaceView : UserControl
             {
                 panel.Children.Add(new TextBlock
                 {
-                    Text = $"Kernel reference: {kernelId} / カーネル参照",
+                    Text = LocalizationService.Shared.Get("Gpu.KernelRef", kernelId),
                     TextWrapping = TextWrapping.Wrap
                 });
                 if (step.Kernel is { } referencedKernel)
-                    panel.Children.Add(Button("Inspect referenced kernel / 参照カーネルを確認 (unsupported binding)", () =>
+                    panel.Children.Add(Button(LocalizationService.Shared.Get("Gpu.InspectReferencedKernelUnsupported"), () =>
                     {
                         _selection = null;
                         vm.EnterKernel(referencedKernel.Id);
                     }));
             }
 
-            AddFlowPorts(panel, "Inputs / 入力ポート", step.Inputs);
-            AddFlowPorts(panel, "Outputs / 出力ポート", step.Outputs);
+            AddFlowPorts(panel, LocalizationService.Shared.Get("Gpu.Inputs"), step.Inputs);
+            AddFlowPorts(panel, LocalizationService.Shared.Get("Gpu.Outputs"), step.Outputs);
             foreach (var reason in step.UnsupportedReasons)
                 panel.Children.Add(new TextBlock
                 {
-                    Text = "Unsupported relationship / 未対応: " + reason,
+                    Text = LocalizationService.Shared.Get("Gpu.UnsupportedRelationship", reason),
                     TextWrapping = TextWrapping.Wrap,
                     Foreground = ThemeSettingsService.EditorBrush("GraphSignal")
                 });
 
             var actions = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 5 };
             var up = Button("↑", () => vm.Edit(new() { Action = "flow-move", NodeId = flow.Id, Input = index - 1 }));
-            Avalonia.Automation.AutomationProperties.SetName(up, "Move flow earlier / フローを前へ移動");
-            ToolTip.SetTip(up, "Move earlier in the authored flow list / 保存されたフロー順を前へ");
+            Avalonia.Automation.AutomationProperties.SetName(up, LocalizationService.Shared.Get("Gpu.MoveFlowEarlier"));
+            ToolTip.SetTip(up, LocalizationService.Shared.Get("Gpu.MoveFlowEarlierTip"));
             up.IsEnabled = i > 0;
             var down = Button("↓", () => vm.Edit(new() { Action = "flow-move", NodeId = flow.Id, Input = index + 1 }));
-            Avalonia.Automation.AutomationProperties.SetName(down, "Move flow later / フローを後へ移動");
-            ToolTip.SetTip(down, "Move later in the authored flow list / 保存されたフロー順を後へ");
+            Avalonia.Automation.AutomationProperties.SetName(down, LocalizationService.Shared.Get("Gpu.MoveFlowLater"));
+            ToolTip.SetTip(down, LocalizationService.Shared.Get("Gpu.MoveFlowLaterTip"));
             down.IsEnabled = i + 1 < vm.State.Program.Flow.Count;
             actions.Children.Add(up); actions.Children.Add(down);
-            actions.Children.Add(Button("Remove / 削除", () => vm.Edit(new() { Action = "flow-remove", NodeId = flow.Id })));
+            actions.Children.Add(Button(LocalizationService.Shared.Get("Gpu.Remove"), () => vm.Edit(new() { Action = "flow-remove", NodeId = flow.Id })));
             panel.Children.Add(actions);
             var border = new Border
             {
@@ -395,7 +416,7 @@ public partial class GpuWorkspaceView : UserControl
 
         var relationTitle = new TextBlock
         {
-            Text = "Cross-flow parameter relationships / フロー間パラメーター関係",
+            Text = LocalizationService.Shared.Get("Gpu.CrossFlowRelations"),
             TextWrapping = TextWrapping.Wrap,
             FontWeight = FontWeight.SemiBold,
             Margin = new Thickness(0, 10, 0, 2)
@@ -404,7 +425,7 @@ public partial class GpuWorkspaceView : UserControl
         if (map.Transfers.Count == 0)
             FlowPanel.Children.Add(new TextBlock
             {
-                Text = "No authored cross-flow attribute write/read match. Host uniforms are external inputs, not flow-to-flow transfers. / フロー間で一致する属性の書き込み・読み取りはありません。Uniform は外部入力です。",
+                Text = LocalizationService.Shared.Get("Gpu.NoCrossFlowMatch"),
                 TextWrapping = TextWrapping.Wrap,
                 MaxWidth = 640,
                 Foreground = ThemeSettingsService.EditorBrush("CurveAxis")
@@ -419,11 +440,10 @@ public partial class GpuWorkspaceView : UserControl
                 $"{transfer.Attribute} : {transfer.TypeLabel} · write {string.Join(", ", transfer.ProducerWriteIds)} " +
                 $"(value node {string.Join(", ", transfer.ProducerValueNodeIds)}) → " +
                 $"read {string.Join(", ", transfer.ConsumerIds)}\n" +
-                (transfer.IsTypeCompatible ? "Static attribute dependency · not observed execution / 静的依存関係 · 実行観測ではありません"
-                    : "Type mismatch or unresolved declaration / 型不一致または宣言未解決") +
+                LocalizationService.Shared.Get(transfer.IsTypeCompatible ? "Gpu.StaticDependency" : "Gpu.TypeMismatchOrUnresolved") +
                 (transfer.ProducerPrecedesConsumer
                     ? ""
-                    : "\nAuthored producer appears after consumer; transfer order is not valid / 出力側が入力側より後のため、順序は無効です");
+                    : LocalizationService.Shared.Get("Gpu.InvalidTransferOrder"));
             FlowPanel.Children.Add(new Border
             {
                 Child = new TextBlock { Text = transferText, TextWrapping = TextWrapping.Wrap, MaxWidth = 640 },
@@ -541,7 +561,7 @@ public partial class GpuWorkspaceView : UserControl
         {
             panel.Children.Add(new TextBlock
             {
-                Text = "No authored ports / ポートなし",
+                Text = LocalizationService.Shared.Get("Gpu.NoAuthoredPorts"),
                 Foreground = ThemeSettingsService.EditorBrush("CurveAxis")
             });
             return;
@@ -967,7 +987,7 @@ public partial class GpuWorkspaceView : UserControl
         else
         {
             _wireSource = clicked ? source.Model.Id : null;
-            if (clicked) Status.Text = "Select a target input / 接続先を選択";
+            if (clicked) Status.Text = LocalizationService.Shared.Get("Gpu.SelectTargetInput");
         }
         e.Handled = true;
     }
@@ -1118,7 +1138,7 @@ public partial class GpuWorkspaceView : UserControl
         NodeInspector.Children.Clear();
         var vm = Workspace!;
         var n = vm.Kernel?.Nodes.FirstOrDefault(n => n.Id == _selection);
-        SelectionLabel.Text = n is null ? "Select a visual node / ノードを選択" : NodeDisplayName(n);
+        SelectionLabel.Text = n is null ? LocalizationService.Shared.Get("Gpu.SelectVisualNode") : NodeDisplayName(n);
         ToolTip.SetTip(SelectionLabel, n?.Id);
         if (n is null) return;
         var type = new ComboBox { ItemsSource = Enum.GetValues<GpuType>().Where(t => t != GpuType.Quaternion).ToArray(), SelectedItem = n.Type };
@@ -1126,11 +1146,11 @@ public partial class GpuWorkspaceView : UserControl
             NodeInspector.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.FlowMapTypeFromInput") });
         else
         {
-            NodeInspector.Children.Add(new TextBlock { Text = "Result type / 出力型" });
+            NodeInspector.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.ResultType") });
             NodeInspector.Children.Add(type);
         }
         var value = new TextBox { Text = string.Join(", ", n.Value.Select(v => v.ToString("G", CultureInfo.InvariantCulture))) };
-        if (n.Op == GpuOp.Constant) { NodeInspector.Children.Add(new TextBlock { Text = "Constant components / 定数" }); NodeInspector.Children.Add(value); }
+        if (n.Op == GpuOp.Constant) { NodeInspector.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.ConstantComponents") }); NodeInspector.Children.Add(value); }
         var attr = new ComboBox { ItemsSource = ParticleAbi.Attributes.Select(a => a.Id).ToArray(), SelectedItem = n.Attribute };
         if (n.Op == GpuOp.ReadAttribute) NodeInspector.Children.Add(attr);
         var uniform = new ComboBox { ItemsSource = ParticleAbi.Uniforms.Keys.ToArray(), SelectedItem = n.Uniform };
@@ -1148,7 +1168,7 @@ public partial class GpuWorkspaceView : UserControl
         }
         var component = new TextBox { Text = (n.ComponentIndex ?? 0).ToString(CultureInfo.InvariantCulture) };
         if (n.Op == GpuOp.Component) { NodeInspector.Children.Add(new TextBlock { Text = "Component 0…3" }); NodeInspector.Children.Add(component); }
-        NodeInspector.Children.Add(Button("Apply properties / 適用", () =>
+        NodeInspector.Children.Add(Button(LocalizationService.Shared.Get("Gpu.ApplyProperties"), () =>
         {
             var updated = n with
             {
@@ -1170,7 +1190,7 @@ public partial class GpuWorkspaceView : UserControl
             NodeInspector.Children.Add(Button("Disconnect input " + input, () =>
                 vm.Edit(new() { Action = "disconnect", KernelId = vm.KernelId, NodeId = n.Id, Input = input })));
         }
-        NodeInspector.Children.Add(Button("Remove node / ノード削除", () =>
+        NodeInspector.Children.Add(Button(LocalizationService.Shared.Get("Gpu.RemoveNode"), () =>
             vm.Edit(new() { Action = "remove", KernelId = vm.KernelId, NodeId = n.Id })));
     }
     private void BuildWrites()
@@ -1192,7 +1212,7 @@ public partial class GpuWorkspaceView : UserControl
         }
         var attributes = new ComboBox { ItemsSource = ParticleAbi.Attributes.Select(a => a.Id).ToArray(), SelectedIndex = 0 };
         WritesPanel.Children.Add(attributes);
-        WritesPanel.Children.Add(Button("Write selected node / 選択ノードを出力", () =>
+        WritesPanel.Children.Add(Button(LocalizationService.Shared.Get("Gpu.WriteSelectedNode"), () =>
         {
             if (_selection is null) throw new ArgumentException("Select a node first.");
             var attribute = (string)attributes.SelectedItem!;
@@ -1326,7 +1346,7 @@ public partial class GpuWorkspaceView : UserControl
         Workspace!.Edit(new() { Action = "discard-draft", KernelId = Workspace.KernelId }));
     private void OnCapacity(object? sender, RoutedEventArgs e) => Run(() =>
         Workspace!.Edit(new() { Action = "capacity", Capacity = uint.Parse(Capacity.Text!, CultureInfo.InvariantCulture) }));
-    private void OnCompile(object? sender, RoutedEventArgs e) => Workspace?.TryCompile(out _);
+    private void OnCompile(object? sender, RoutedEventArgs e) => Workspace?.ValidateSources();
     private void OnUndo(object? sender, RoutedEventArgs e) => Workspace?.Graph.History.Undo();
     private void OnRedo(object? sender, RoutedEventArgs e) => Workspace?.Graph.History.Redo();
     private void OnClose(object? sender, RoutedEventArgs e) => CloseWorkspace();
@@ -1348,6 +1368,11 @@ public partial class GpuWorkspaceView : UserControl
         else if (!IsEditingSource(e.Source as Visual))
         {
             var shortcuts = ShortcutService.Shared;
+            if (Workspace?.State.Fluid2D is not null &&
+                !shortcuts.Matches("undo", e) && !shortcuts.Matches("redo", e))
+            {
+                return;
+            }
             if (shortcuts.Matches("undo", e)) Workspace?.Graph.History.Undo();
             else if (shortcuts.Matches("redo", e)) Workspace?.Graph.History.Redo();
             else if (shortcuts.Matches("graph.delete", e)) DeleteSelection();
@@ -1392,11 +1417,11 @@ public partial class GpuWorkspaceView : UserControl
             await GpuParticleEditorService.WriteAtomicAsync(destination, source);
             if (format != "json")
             {
-                var shaderFormat = format switch { "usf" => ShaderFormat.Usf, "hlsl" => ShaderFormat.HlslInclude, _ => ShaderFormat.UnityCompute };
-                var metadata = GpuParticleEditorService.Compile(vm.State).ExportMetadataJson(shaderFormat);
+                var metadata = System.Text.Json.JsonSerializer.Serialize(
+                    GpuParticleEditorService.ExportMetadata(vm.State, format), GpuParticleEditorService.Json);
                 await GpuParticleEditorService.WriteAtomicAsync(Path.ChangeExtension(destination, ".metadata.json"), metadata);
             }
-            Status.Text = "Exported source · GPU not executed / ソース出力完了（GPU未実行）";
+            Status.Text = LocalizationService.Shared.Get("Gpu.ExportedSource");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or GpuValidationException or ArgumentException)
         { Status.Text = error is GpuValidationException gpu ? string.Join("\n", gpu.Diagnostics.Select(d => d.Message)) : error.Message; }
