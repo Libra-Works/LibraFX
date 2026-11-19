@@ -56,6 +56,7 @@
 #include "ShaderCompiler.h"
 #include "Misc/PackageName.h"
 #include "Misc/Parse.h"
+#include "Misc/Paths.h"
 #include "Misc/EngineVersionComparison.h"
 #include "Modules/ModuleManager.h"
 #include "PreviewScene.h"
@@ -634,10 +635,11 @@ TSharedRef<SWidget> FLibraEditorPreviewSession::BuildPreviewContent()
     if (!previewScene.IsValid() || !viewportWidget.IsValid() || !previewSettings.IsValid())
         return SNew(STextBlock)
             .Text(FText::FromString(TEXT("LIBERA FX Preview will initialize when the editor is ready.")));
-    auto makeToggle = [this](const TCHAR* label, bool (FAdvancedPreviewScene::*query)() const,
+    auto makeToggle = [this](const TCHAR* label, FName tag, bool (FAdvancedPreviewScene::*query)() const,
         void (FAdvancedPreviewScene::*toggle)()) -> TSharedRef<SWidget>
     {
         return SNew(SCheckBox)
+            .Tag(tag)
             .IsChecked_Lambda([this, query]
             {
                 return previewScene.IsValid() && (previewScene.Get()->*query)()
@@ -662,6 +664,7 @@ TSharedRef<SWidget> FLibraEditorPreviewSession::BuildPreviewContent()
                 + SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 16, 0)
                 [
                     SNew(SCheckBox)
+                    .Tag(FName(TEXT("LibraFx.Preview.Settings")))
                     .IsChecked_Lambda([this]
                     {
                         return bSettingsVisible ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
@@ -698,12 +701,12 @@ TSharedRef<SWidget> FLibraEditorPreviewSession::BuildPreviewContent()
                 ]
                 + SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 16, 0)
                 [
-                    makeToggle(TEXT("Floor"), &FAdvancedPreviewScene::IsFloorEnabled,
+                    makeToggle(TEXT("Floor"), NAME_None, &FAdvancedPreviewScene::IsFloorEnabled,
                         &FAdvancedPreviewScene::HandleToggleFloor)
                 ]
                 + SHorizontalBox::Slot().AutoWidth()
                 [
-                    makeToggle(TEXT("Environment"), &FAdvancedPreviewScene::IsEnvironmentEnabled,
+                    makeToggle(TEXT("Environment"), FName(TEXT("LibraFx.Preview.Environment")), &FAdvancedPreviewScene::IsEnvironmentEnabled,
                         &FAdvancedPreviewScene::HandleToggleEnvironment)
                 ]
                 + SHorizontalBox::Slot().AutoWidth().Padding(16, 0, 0, 0)
@@ -2324,6 +2327,123 @@ bool FLibraPreviewEmptySceneTest::RunTest(const FString&)
         reopenedTab != closedTab && session.viewportClient->GetViewLocation().Equals(FVector(123, 456, 789)));
     session.Stop();
     return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraPreviewProfileRestartTest, "Libra.Editor.Preview.ProfileRestart",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraPreviewProfileRestartTest::RunTest(const FString&)
+{
+    auto fixture = FString{};
+    auto phase = FString{};
+    if (!FParse::Value(FCommandLine::Get(), TEXT("LibraPreviewProfileTestDir="), fixture) ||
+        !FParse::Value(FCommandLine::Get(), TEXT("LibraPreviewProfileTestPhase="), phase))
+    {
+        AddInfo(TEXT("ProfileRestart requires an isolated -UserDir and an explicit Write or Read phase."));
+        return true;
+    }
+    if (!TestTrue(TEXT("Both active config paths belong to the isolated fixture"),
+            !FPaths::IsRelative(fixture) &&
+            FPaths::IsUnderDirectory(FPaths::ConvertRelativePathToFull(GEditorIni), fixture) &&
+            FPaths::IsUnderDirectory(FPaths::ConvertRelativePathToFull(GEditorPerProjectIni), fixture)))
+    {
+        return false;
+    }
+    auto marker = FPaths::Combine(fixture, TEXT("profile-written.txt"));
+    auto writing = phase == TEXT("Write");
+    if (!TestTrue(TEXT("Write must use a fresh fixture; Read must use the completed Write fixture"),
+            (writing || phase == TEXT("Read")) && IFileManager::Get().FileExists(*marker) != writing))
+    {
+        return false;
+    }
+
+    auto settings = GetMutableDefault<UEditorPerProjectUserSettings>();
+    const auto& profiles = UAssetViewerSettings::Get()->Profiles;
+    auto originalProfile = profiles.IndexOfByPredicate([](const FPreviewSceneProfile& profile)
+    {
+        return profile.ProfileName != TEXT("LIBERA FX");
+    });
+    if (!TestTrue(TEXT("A separate stock profile is available for the restore check"), profiles.IsValidIndex(originalProfile)))
+    {
+        return false;
+    }
+    auto restoreIndex = TGuardValue<int32>(settings->AssetViewerProfileIndex, originalProfile);
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
+    auto originalName = profiles[originalProfile].ProfileName;
+    auto restoreName = TGuardValue<FString>(settings->AssetViewerProfileName, originalName);
+#endif
+    auto session = FLibraEditorPreviewSession{};
+    session.bEngineReady = true;
+    session.bPreviewRequested = true;
+    if (!TestTrue(TEXT("Create an isolated preview scene"), session.Tick(0) && session.previewScene.IsValid()))
+    {
+        session.Stop();
+        return false;
+    }
+    auto content = session.BuildPreviewContent();
+    auto findCheckBox = [](auto&& self, const TSharedRef<SWidget>& widget, FName tag) -> TSharedPtr<SCheckBox>
+    {
+        if (widget->GetTag() == tag)
+        {
+            return StaticCastSharedRef<SCheckBox>(widget);
+        }
+        auto children = widget->GetChildren();
+        for (auto index = 0; index < children->Num(); ++index)
+        {
+            if (auto match = self(self, children->GetChildAt(index), tag))
+            {
+                return match;
+            }
+        }
+        return nullptr;
+    };
+    auto environment = findCheckBox(findCheckBox, content, FName(TEXT("LibraFx.Preview.Environment")));
+    auto panel = findCheckBox(findCheckBox, content, FName(TEXT("LibraFx.Preview.Settings")));
+    if (!TestTrue(TEXT("Find the production Environment and Settings checkboxes"), environment.IsValid() && panel.IsValid()))
+    {
+        session.Stop();
+        return false;
+    }
+    auto profile = session.previewScene->GetCurrentProfile();
+    TestTrue(TEXT("The preview uses its dedicated LIBERA FX profile"),
+        profile && profile->ProfileName == TEXT("LIBERA FX"));
+    if (writing)
+    {
+        if (!TestTrue(TEXT("The fresh fixture starts with both controls checked"), environment->IsChecked() && panel->IsChecked()))
+        {
+            session.Stop();
+            return false;
+        }
+        auto activate = [](SCheckBox& control)
+        {
+            auto input = FKeyEvent(EKeys::SpaceBar, FModifierKeysState{}, uint32{0}, false, uint32{0}, uint32{0});
+            return control.OnKeyDown(FGeometry{}, input).IsEventHandled() &&
+                control.OnKeyUp(FGeometry{}, input).IsEventHandled();
+        };
+        TestTrue(TEXT("Keyboard activation is handled by the Environment checkbox"), activate(*environment));
+        TestTrue(TEXT("Keyboard activation is handled by the Settings checkbox"), activate(*panel));
+    }
+    TestFalse(TEXT("Environment control is unchecked"), environment->IsChecked());
+    TestFalse(TEXT("Environment is disabled in the preview scene"), session.previewScene->IsEnvironmentEnabled());
+    profile = session.previewScene->GetCurrentProfile();
+    TestTrue(TEXT("The dedicated profile records the Environment change"), profile && !profile->bShowEnvironment);
+    TestFalse(TEXT("Settings control is unchecked"), panel->IsChecked());
+    TestFalse(TEXT("The settings panel visibility is disabled"), session.bSettingsVisible);
+    content = SNullWidget::NullWidget;
+    environment.Reset();
+    panel.Reset();
+    session.Stop();
+    TestEqual(TEXT("Stopping the preview restores the editor's prior profile index"),
+        settings->AssetViewerProfileIndex, originalProfile);
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
+    TestEqual(TEXT("Stopping the preview restores the editor's prior profile name"),
+        settings->AssetViewerProfileName, originalName);
+#endif
+    if (writing && !HasAnyErrors())
+    {
+        TestTrue(TEXT("Write the completed-phase marker"), FFileHelper::SaveStringToFile(TEXT("Written"), *marker));
+    }
+    return !HasAnyErrors();
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraPreviewCameraTest, "Libra.Editor.Preview.NativeCameraNavigation",

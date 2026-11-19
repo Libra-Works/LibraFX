@@ -98,6 +98,15 @@ Libra.Runtime.EditorTransport.ReceiveQueueBurst.
 Window/connection automation: Libra.Editor.Preview.MenuShowLifecycle,
 Libra.Editor.Preview.EmptySceneAndDeferredConnection,
 Libra.Editor.Preview.ConnectionInvitation and DeferredTabRestoration.
+To verify profile persistence, run Libra.Editor.Preview.ProfileRestart in two
+editor processes using a dedicated project and the same fresh absolute directory
+for -UserDir and -LibraPreviewProfileTestDir. Start with
+-LibraPreviewProfileTestPhase=Write, then run -LibraPreviewProfileTestPhase=Read
+after the first process exits. Write activates the real Environment and Settings
+checkboxes with Slate keyboard input. Read checks the restored widgets and the
+dedicated LIBERA FX profile; both phases check that teardown restores the
+editor's prior asset preview profile. The test refuses to operate on config files
+outside the specified fixture.
 Discovery automation: Libra.Editor.Preview.LocalDiscovery. The optional real
 post-startup fixture Libra.Editor.Preview.PostStartupDiscovery requires
 -LibraPreviewDiscoveryPipe=LibraFX.Preview.<test-name>. This selects one explicitly

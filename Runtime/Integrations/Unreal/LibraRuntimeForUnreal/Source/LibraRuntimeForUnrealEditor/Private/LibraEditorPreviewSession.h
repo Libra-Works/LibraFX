@@ -36,6 +36,7 @@ private:
     friend class FLibraPreviewDeferredTabTest;
     friend class FLibraPreviewMenuTest;
     friend class FLibraPreviewEmptySceneTest;
+    friend class FLibraPreviewProfileRestartTest;
     friend class FLibraPreviewDiscoveryTest;
     friend class FLibraPreviewPostStartupDiscoveryTest;
     friend class FLibraPreviewCpuSceneTest;
