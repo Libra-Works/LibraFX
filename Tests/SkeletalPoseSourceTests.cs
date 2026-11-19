@@ -1,7 +1,10 @@
 using System.Text;
 using System.Text.Json;
+using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
+using LiberaFx.Services;
 using LiberaFx.Services.Compilation;
+using LiberaFx.ViewModels;
 
 namespace LiberaFx.Tests;
 
@@ -9,6 +12,7 @@ internal static class SkeletalPoseSourceTests
 {
     public static void Run(string? fixtureDirectory = null)
     {
+        VerifyAuthoring();
         var source = Node("Source",
             ("target", "enum:b0af61d2-29f6-4cc9-a71e-000000000202", 1),
             ("key", "string", "hero.skeleton"),
@@ -120,14 +124,41 @@ internal static class SkeletalPoseSourceTests
         if (fixtureDirectory is not null)
         {
             WriteEngineFixture(fixtureDirectory, "AnimatedSkeletalSpaces", "hand_r");
+            WriteEngineFixture(fixtureDirectory, "AnimatedSkeletalRender", "hand_r", includeMarker: true);
             if (Environment.GetEnvironmentVariable("LIBERAFX_UNREAL_TEST_BONE_PATH") is { Length: > 0 } unrealBone)
             {
-                WriteEngineFixture(fixtureDirectory, "UnrealAnimatedSkeletalSpaces", unrealBone);
+                WriteEngineFixture(fixtureDirectory, "UnrealAnimatedSkeletalSpaces", unrealBone, includeMarker: true);
             }
         }
     }
 
-    private static void WriteEngineFixture(string directory, string name, string bonePath)
+    private static void VerifyAuthoring()
+    {
+        var workspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var source = workspace.CreateNode(new("Source"));
+        var point = workspace.CreateNode(new("TransformPoint"));
+        workspace.SetParameter(source, "bone", JsonSerializer.SerializeToElement("Root/Hand"));
+        Require(workspace.TryConnectNodes(source, point, out _, "matrix", "value"),
+            "The named SOURCE Matrix output must connect to an authored Matrix consumer.");
+        workspace.SetParameter(source, "bone", JsonSerializer.SerializeToElement("Root/OtherHand"));
+        var changed = workspace.CreateSnapshot();
+        Require(workspace.History.Undo() && !GraphSnapshot.ContentEquals(changed, workspace.CreateSnapshot()) &&
+                workspace.History.Redo() && GraphSnapshot.ContentEquals(changed, workspace.CreateSnapshot()),
+            "Undo/Redo must restore the SOURCE target edit and retain its Matrix connection.");
+        using var stream = new MemoryStream();
+        new ProjectFileService().SaveAsync(stream, workspace).GetAwaiter().GetResult();
+        stream.Position = 0;
+        var loaded = ProjectDocumentReader.LoadAsync(stream).GetAwaiter().GetResult().Graph;
+        Require(GraphSnapshot.ContentEquals(changed, loaded),
+            "Project reload must keep the authored SOURCE parameters and named connection.");
+        var package = SpawnableGroupPackage.Compile(loaded);
+        Require(package.GameIoPorts.Any(port =>
+                SkeletalPoseSchema.TryDecodePortName(port.Name, out var binding, out var validity) &&
+                !validity && binding?.BonePath == "Root/OtherHand"),
+            "The reloaded project must compile the redone bone selection.");
+    }
+
+    private static void WriteEngineFixture(string directory, string name, string bonePath, bool includeMarker = false)
     {
         var nodes = new List<GraphNodeSnapshot>();
         var connections = new List<GraphConnectionSnapshot>();
@@ -146,6 +177,21 @@ internal static class SkeletalPoseSourceTests
             nodes.AddRange([source, matrix, valid]);
             connections.Add(new(source.Id, matrix.Id, "value", "value"));
             connections.Add(new(source.Id, valid.Id, "value", "valid"));
+            if (includeMarker && target == "Owner" && space == "Component")
+            {
+                var point = Node("TransformPoint");
+                var visibility = Node("ScalarToVector3");
+                var scale = Node("MultiplyVector3",
+                    ("b", "vector3", new[] { 0.18, 0.18, 0.18 }));
+                var draw = Node("ModelDraw",
+                    ("assetPath", "string", "/Engine/BasicShapes/Cube.Cube"));
+                nodes.AddRange([point, visibility, scale, draw]);
+                connections.Add(new(source.Id, point.Id, "matrix", "value"));
+                connections.Add(new(source.Id, visibility.Id, "a", "valid"));
+                connections.Add(new(visibility.Id, scale.Id, "a"));
+                connections.Add(new(point.Id, draw.Id, "position", "value"));
+                connections.Add(new(scale.Id, draw.Id, "scale"));
+            }
         }
         var package = SpawnableGroupPackage.Compile(new GraphSnapshot(nodes, connections)
             { AutoDestroyWhenIdle = false });

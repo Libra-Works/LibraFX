@@ -147,6 +147,9 @@ namespace LiberaFx.Unity.Editor
             }
         }
 
+        private static Vector3? skeletalFirstMarkerPosition;
+        private static bool skeletalMarkerMovementCaptured;
+
         private static void StartSkeletalPlayModeRuntime()
         {
             Require(Application.isPlaying,
@@ -170,6 +173,8 @@ namespace LiberaFx.Unity.Editor
             skeletalPlayEventFrame = -1;
             skeletalPlayCommittedFrame = -1;
             skeletalPlayHasWorldSample = false;
+            skeletalFirstMarkerPosition = null;
+            skeletalMarkerMovementCaptured = false;
             skeletalOwnerWorldMin = skeletalRegisteredWorldMin = float.MaxValue;
             skeletalOwnerWorldMax = skeletalRegisteredWorldMax = float.MinValue;
 
@@ -311,8 +316,24 @@ namespace LiberaFx.Unity.Editor
                 Require(string.IsNullOrEmpty(skeletalPlayError), skeletalPlayError);
                 CommitSkeletalPlayFrame();
 
+                if (skeletalPlayPhase == 0 && skeletalPlayFramesInPhase > 0)
+                {
+                    var position = skeletalPlayOwnerRig.hand.position;
+                    if (!skeletalFirstMarkerPosition.HasValue)
+                    {
+                        CaptureSkeletalMarker("first", visible: true);
+                        skeletalFirstMarkerPosition = position;
+                    }
+                    else if (!skeletalMarkerMovementCaptured &&
+                        Mathf.Abs(position.x - skeletalFirstMarkerPosition.Value.x) > 0.35f)
+                    {
+                        CaptureSkeletalMarker("moved", visible: true);
+                        skeletalMarkerMovementCaptured = true;
+                    }
+                }
+
                 if (skeletalPlayPhase == 0 && skeletalPlayFramesInPhase >= 8 &&
-                    EditorApplication.timeSinceStartup - skeletalPlayStartedAt >= 1.2)
+                    skeletalMarkerMovementCaptured && EditorApplication.timeSinceStartup - skeletalPlayStartedAt >= 1.2)
                 {
                     Require(skeletalPlayMatrixSeen.Count == SkeletalMatrixPorts.Length &&
                         skeletalPlayHasWorldSample &&
@@ -332,12 +353,77 @@ namespace LiberaFx.Unity.Editor
                 // there is no second frame of change events to wait for.
                 else if (skeletalPlayPhase == 2 && skeletalPlayFramesInPhase >= 1)
                 {
+                    CaptureSkeletalMarker("unavailable", visible: false);
                     FinishSkeletalPlayMode(null);
                 }
             }
             catch (Exception error)
             {
                 FinishSkeletalPlayMode(error);
+            }
+        }
+
+        private static void CaptureSkeletalMarker(string name, bool visible)
+        {
+            var renderer = skeletalPlayComponent.GetComponentsInChildren<MeshRenderer>().Single();
+            var bonePosition = skeletalPlayOwnerRig.hand.position;
+            if (visible)
+            {
+                Require(Vector3.Distance(renderer.transform.position, bonePosition) < 0.005f,
+                    "The actual Model Draw transform did not follow the animated bone.");
+            }
+            renderer.gameObject.layer = 31;
+            var cameraObject = new GameObject("SOURCE acceptance framebuffer camera");
+            var camera = cameraObject.AddComponent<Camera>();
+            var target = new RenderTexture(128, 128, 24, RenderTextureFormat.ARGB32);
+            var pixels = new Texture2D(128, 128, TextureFormat.RGBA32, false);
+            var previous = RenderTexture.active;
+            try
+            {
+                camera.enabled = false;
+                camera.orthographic = true;
+                camera.orthographicSize = 2.5f;
+                camera.clearFlags = CameraClearFlags.SolidColor;
+                camera.backgroundColor = Color.black;
+                camera.cullingMask = 1 << 31;
+                camera.transform.position = skeletalPlayOwnerRig.root.position + Vector3.back * 8;
+                Require(target.Create(), "Could not create the SOURCE acceptance render target.");
+                camera.targetTexture = target;
+                camera.Render();
+                RenderTexture.active = target;
+                pixels.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
+                pixels.Apply();
+                var colors = pixels.GetPixels32();
+                var count = 0;
+                var sum = Vector2.zero;
+                for (var index = 0; index < colors.Length; ++index)
+                {
+                    var color = colors[index];
+                    if (color.r > 24 || color.g > 24 || color.b > 24)
+                    {
+                        ++count;
+                        sum += new Vector2(index % target.width + 0.5f, index / target.width + 0.5f);
+                    }
+                }
+                File.WriteAllBytes(Path.Combine(ProjectRoot, "source-batch-skeletal-" + name + ".png"),
+                    pixels.EncodeToPNG());
+                if (visible)
+                {
+                    var expected = (Vector2)camera.WorldToViewportPoint(bonePosition) * target.width;
+                    Require(count >= 8 && Vector2.Distance(sum / count, expected) < 4,
+                        "SOURCE marker pixels were not centered on the animated bone (" + count + " visible pixels).");
+                }
+                else
+                {
+                    Require(count == 0, "Invalid SOURCE left a visible marker in the framebuffer.");
+                }
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+                Object.DestroyImmediate(cameraObject);
+                Object.DestroyImmediate(target);
+                Object.DestroyImmediate(pixels);
             }
         }
 
@@ -375,7 +461,7 @@ namespace LiberaFx.Unity.Editor
             var resultPath = SessionState.GetString(SkeletalPlayResultPath, "");
             var exitCode = error == null ? 0 : 2;
             var result = error == null
-                ? "PASS: actual Unity Play Mode; saved serialized skeleton assets; player-loop Animation, OnEnable and LateUpdate; six Owner/Registered BoneLocal/Component/World matrices; unregister and disable invalidation; Unity " + Application.unityVersion + "\n"
+                ? "PASS: actual Unity Play Mode; six Owner/Registered BoneLocal/Component/World matrices; marker framebuffer follows the animated bone and disappears on invalidation; Unity " + Application.unityVersion + "\n"
                 : "FAIL\n" + error + "\n";
             File.WriteAllText(resultPath, result);
             if (error != null) Debug.LogException(error);
@@ -510,6 +596,10 @@ namespace LiberaFx.Unity.Editor
 
                     owner.SetActive(true);
                     registeredOwner.SetActive(true);
+                    var targetOnEnable = typeof(LiberaFxSkeletalPoseTarget).GetMethod("OnEnable",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    targetOnEnable.Invoke(ownerRig.target, null);
+                    targetOnEnable.Invoke(registeredRig.target, null);
                     registration = LiberaFxSkeletalPoseTarget.RegisterTarget("hero.skeleton", registeredRig.target);
                     Require(component.Play() == NativeResult.Ok,
                         "The compiler SOURCE package failed to start: " + component.LastError);
@@ -522,12 +612,8 @@ namespace LiberaFx.Unity.Editor
 
                     VerifyPoseAt(0);
                     var first = ReadFrame(events);
-                    VerifyMatrix(first, "OwnerBoneLocal", Pose(ownerRig, 0));
-                    VerifyMatrix(first, "OwnerComponent", Pose(ownerRig, 0));
-                    VerifyMatrix(first, "OwnerWorld", Pose(ownerRig, 0));
-                    VerifyMatrix(first, "RegisteredBoneLocal", Pose(registeredRig, 0));
-                    VerifyMatrix(first, "RegisteredComponent", Pose(registeredRig, 0));
-                    VerifyMatrix(first, "RegisteredWorld", Pose(registeredRig, 0));
+                    VerifyRig(first, "Owner", ownerRig);
+                    VerifyRig(first, "Registered", registeredRig);
                     VerifyValidity(first, "OwnerBoneLocalValid", true);
                     VerifyValidity(first, "OwnerComponentValid", true);
                     VerifyValidity(first, "OwnerWorldValid", true);
@@ -537,21 +623,17 @@ namespace LiberaFx.Unity.Editor
 
                     VerifyPoseAt(1);
                     var second = ReadFrame(events);
-                    VerifyMatrix(second, "OwnerBoneLocal", Pose(ownerRig, 1));
-                    VerifyMatrix(second, "OwnerComponent", Pose(ownerRig, 1));
-                    VerifyMatrix(second, "OwnerWorld", Pose(ownerRig, 1));
-                    VerifyMatrix(second, "RegisteredBoneLocal", Pose(registeredRig, 1));
-                    VerifyMatrix(second, "RegisteredComponent", Pose(registeredRig, 1));
-                    VerifyMatrix(second, "RegisteredWorld", Pose(registeredRig, 1));
+                    VerifyRig(second, "Owner", ownerRig);
+                    VerifyRig(second, "Registered", registeredRig);
                     VerifyValidity(second, "OwnerBoneLocalValid", true);
                     VerifyValidity(second, "OwnerComponentValid", true);
                     VerifyValidity(second, "OwnerWorldValid", true);
                     VerifyValidity(second, "RegisteredBoneLocalValid", true);
                     VerifyValidity(second, "RegisteredComponentValid", true);
                     VerifyValidity(second, "RegisteredWorldValid", true);
-                    Require(Math.Abs(first["OwnerWorld"].Values[3] - second["OwnerWorld"].Values[3]) > 0.5,
+                    Require(Vector3.Distance(Translation(first["OwnerWorld"]), Translation(second["OwnerWorld"])) > 0.5f,
                         "Owner World SOURCE did not follow the sampled hand_r animation.");
-                    Require(Math.Abs(first["RegisteredWorld"].Values[3] - second["RegisteredWorld"].Values[3]) > 0.5,
+                    Require(Vector3.Distance(Translation(first["RegisteredWorld"]), Translation(second["RegisteredWorld"])) > 0.5f,
                         "Registered World SOURCE did not follow the sampled hand_r animation.");
 
                     // Removing a registered key invalidates the existing pose lease,
@@ -593,7 +675,6 @@ namespace LiberaFx.Unity.Editor
                     {
                         clip.SampleAnimation(owner, time);
                         clip.SampleAnimation(registeredOwner, time);
-                        events.Clear();
                         elapsed.SetValue(component, (double)time - Time.deltaTime);
                         lateUpdate.Invoke(component, null);
                         Require(string.IsNullOrEmpty(component.LastError),
@@ -659,11 +740,16 @@ namespace LiberaFx.Unity.Editor
                     target.enabled = true;
                 }
 
-                Matrix4x4 Pose(Rig rig, float time)
+                void VerifyRig(Dictionary<string, GameIoEvent> frame, string prefix, Rig rig)
                 {
-                    clip.SampleAnimation(rig.target.gameObject, time);
-                    return rig.hand.localToWorldMatrix;
+                    var world = rig.hand.localToWorldMatrix;
+                    VerifyMatrix(frame, prefix + "BoneLocal", rig.hand.parent.worldToLocalMatrix * world);
+                    VerifyMatrix(frame, prefix + "Component", rig.renderer.transform.worldToLocalMatrix * world);
+                    VerifyMatrix(frame, prefix + "World", world);
                 }
+
+                static Vector3 Translation(GameIoEvent item) =>
+                    new Vector3((float)item.Values[3], (float)item.Values[7], (float)item.Values[11]);
             }
 
         public static void RunSkeletalPosePlayModeAcceptance()
@@ -673,7 +759,7 @@ namespace LiberaFx.Unity.Editor
                 "The isolated Editor must begin this acceptance run outside Play Mode.");
             var fixture = Environment.GetEnvironmentVariable("LIBERAFX_SKELETAL_FIXTURE");
             Require(Path.IsPathRooted(fixture ?? "") && File.Exists(fixture),
-                "Supply the compiler-produced AnimatedSkeletalSpaces.lfxp file.");
+                "Supply the compiler-produced AnimatedSkeletalRender.lfxp file.");
             var resultPath = Path.Combine(ProjectRoot, "source-batch-skeletal-playmode-result.txt");
 
             try
@@ -716,7 +802,12 @@ namespace LiberaFx.Unity.Editor
                 package.name = "Compiler AnimatedSkeletalSpaces SOURCE package";
                 package.SetPackageBytes(File.ReadAllBytes(fixture));
                 AssetDatabase.CreateAsset(package, SkeletalPlayAssetFolder + "/SkeletalPackage.asset");
-                var bindings = ScriptableObject.CreateInstance<LiberaFxUnityBindingAsset>();
+                var markerMesh = Resources.GetBuiltinResource<Mesh>("Cube.fbx");
+                var markerShader = Shader.Find("Unlit/Color");
+                Require(markerMesh && markerShader && markerShader.isSupported, "The SOURCE marker requires Cube and Unlit/Color.");
+                var markerMaterial = new Material(markerShader);
+                AssetDatabase.CreateAsset(markerMaterial, SkeletalPlayAssetFolder + "/SkeletalMarker.mat");
+                var bindings = CreateBindings("/Engine/BasicShapes/Cube.Cube", markerMesh, markerMaterial);
                 bindings.name = "SOURCE PlayMode bindings";
                 AssetDatabase.CreateAsset(bindings, SkeletalPlayAssetFolder + "/SkeletalBindings.asset");
 

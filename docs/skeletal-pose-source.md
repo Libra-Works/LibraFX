@@ -87,15 +87,29 @@ generation-checked instance APIs.
 
 Unity 7 Play Mode and Unreal 5.7 automation have verified animated Matrix
 values from compiled packages for owner and registered targets in all three
-spaces. This verifies the values the effect receives, not the rendered
-placement of an effect connected to those values.
+spaces. The rendered fixture also connects the owner's Component matrix to
+Transform Point and then to an ordinary Model Draw position. Component space
+is used because the draw is attached to the effect owner; connecting the World
+translation directly there would apply the owner's transform again. `Valid`
+gates the marker's scale. Both engines capture two distinct animated poses and
+check the marker's projected position in the framebuffer. After invalidation
+the same camera must see no marker pixels.
 
-To reproduce the Unreal check, run the managed `--source-batch-contracts`
-tests with `LIBERAFX_SKELETAL_FIXTURES` set to the output directory and
-`LIBERAFX_UNREAL_TEST_BONE_PATH` set to an exact child-bone path. Run
+To reproduce the checks, run the managed `--source-batch-contracts` tests
+with `LIBERAFX_SKELETAL_FIXTURES` set to the output directory. In isolated
+Unity, set `LIBERAFX_SKELETAL_FIXTURE` to `AnimatedSkeletalRender.lfxp` and
+run `LiberaFx.Unity.Editor.LiberaFxSourceBatchAcceptanceVerification.RunSkeletalPosePlayModeAcceptance`
+with a graphics device. It generates its own skinned mesh and animation and
+writes `source-batch-skeletal-*.png` into the isolated project.
+
+For Unreal, also set `LIBERAFX_UNREAL_TEST_BONE_PATH` to an exact child-bone
+path when generating the fixtures. Run
 `Libra.Runtime.SkeletalPose.AnimatedPackage` in the test project with
 `-LibraSkeletalFixture` pointing to the generated
 `UnrealAnimatedSkeletalSpaces.lfxp`, `-LibraSkeletalBone` set to the same bone
 path, and `-LibraSkeletalMesh` and `-LibraSkeletalAnimation` set to the Unreal
-object paths of a mesh and clip that share a skeleton. Without these flags,
-general automation runs skip this project-specific check.
+object paths of an existing mesh and clip that share a skeleton. Use a real
+graphics device, not NullRHI. The test writes `unreal-source-*.png` next to
+the fixture. Without these flags, general automation runs skip this
+project-specific check. These are isolated verification assets, not bundled
+or published project samples.

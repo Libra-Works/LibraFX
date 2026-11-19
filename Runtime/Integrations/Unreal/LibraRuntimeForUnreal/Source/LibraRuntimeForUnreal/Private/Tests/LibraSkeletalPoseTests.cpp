@@ -4,14 +4,21 @@
 #include "LibraSpawnableComponent.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimSingleNodeInstance.h"
+#include "Components/SceneCaptureComponent2D.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/SceneCapture2D.h"
 #include "Engine/SkeletalMesh.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
+#include "ImageUtils.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
+#include "Misc/Paths.h"
 #include "Misc/ScopeExit.h"
+#include "RenderingThread.h"
 #include "liberafx/LbSpawnablePackage.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraSkeletalPosePackageTest, "Libra.Runtime.SkeletalPose.AnimatedPackage",
@@ -114,6 +121,76 @@ bool FLibraSkeletalPosePackageTest::RunTest(const FString&)
         return false;
     }
     auto tick = [&]() { effect->TickComponent(1.0f / 60, LEVELTICK_All, &effect->PrimaryComponentTick); };
+    auto* capture = world->SpawnActor<ASceneCapture2D>();
+    auto* camera = capture->GetCaptureComponent2D();
+    auto* target = NewObject<UTextureRenderTarget2D>(capture);
+    constexpr auto imageSize = 256;
+    target->ClearColor = FLinearColor::Black;
+    target->InitCustomFormat(imageSize, imageSize, PF_B8G8R8A8, false);
+    camera->TextureTarget = target;
+    camera->CaptureSource = SCS_FinalColorLDR;
+    camera->ProjectionType = ECameraProjectionMode::Orthographic;
+    camera->bCaptureEveryFrame = false;
+    camera->bCaptureOnMovement = false;
+    camera->ShowFlags.SetLighting(false);
+    camera->ShowFlags.SetAtmosphere(false);
+    camera->ShowFlags.SetFog(false);
+    camera->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
+    auto readMarker = [&](const TCHAR* label, const FVector& expected, bool visible)
+    {
+        auto markers = TArray<UStaticMeshComponent*>{};
+        actor->GetComponents(markers);
+        if (!TestEqual(TEXT("One ordinary Model Draw marker"), markers.Num(), 1))
+        {
+            return false;
+        }
+        if (visible && !TestTrue(TEXT("Draw object's world position tracks the animated bone"),
+            markers[0]->GetComponentLocation().Equals(expected, 0.01)))
+        {
+            return false;
+        }
+        camera->ClearShowOnlyComponents();
+        camera->ShowOnlyComponent(markers[0]);
+        world->SendAllEndOfFrameUpdates();
+        camera->CaptureScene();
+        FlushRenderingCommands();
+        auto pixels = TArray<FColor>{};
+        if (!TestTrue(TEXT("SOURCE framebuffer is readable"),
+            target->GameThread_GetRenderTargetResource()->ReadPixels(pixels) && pixels.Num() == imageSize * imageSize))
+        {
+            return false;
+        }
+        auto count = 0;
+        auto sum = FVector2D::ZeroVector;
+        for (auto index = 0; index < pixels.Num(); ++index)
+        {
+            const auto& pixel = pixels[index];
+            if (pixel.R > 24 || pixel.G > 24 || pixel.B > 24)
+            {
+                ++count;
+                sum += FVector2D(index % imageSize + 0.5, index / imageSize + 0.5);
+            }
+        }
+        auto png = TArray64<uint8>{};
+        FImageUtils::PNGCompressImageArray(imageSize, imageSize,
+            TArrayView64<const FColor>(pixels.GetData(), pixels.Num()), png);
+        const auto filename = FPaths::GetPath(fixture) / FString::Printf(TEXT("unreal-source-%s.png"), label);
+        if (!TestTrue(TEXT("Save isolated SOURCE framebuffer"), FFileHelper::SaveArrayToFile(png, *filename)))
+        {
+            return false;
+        }
+        AddInfo(FString::Printf(TEXT("SOURCE marker %s: %d pixels"), label, count));
+        if (!visible)
+        {
+            return TestEqual(TEXT("Invalid SOURCE does not render a marker"), count, 0);
+        }
+        const auto relative = expected - camera->GetComponentLocation();
+        const auto projected = FVector2D(FVector::DotProduct(relative, camera->GetRightVector()),
+            -FVector::DotProduct(relative, camera->GetUpVector())) * (imageSize / camera->OrthoWidth) +
+            FVector2D(imageSize / 2.0, imageSize / 2.0);
+        return TestTrue(TEXT("Framebuffer marker pixels are centered on the bone"),
+            count >= 12 && FVector2D::Distance(sum / count, projected) < 6);
+    };
     auto read = [&](const std::string& name, TArray<double>& values)
     {
         for (const auto& port : package.gameIoPorts)
@@ -182,8 +259,29 @@ bool FLibraSkeletalPosePackageTest::RunTest(const FString&)
         checkSpace("World", worldMatrix);
         return pass;
     };
+    const auto firstPosition = ownedPose->GetBoneMatrix(bone).GetOrigin();
+    if (!seek(*ownedPose, 0.5f))
+    {
+        AddError(TEXT("Could not evaluate the second marker frame."));
+        return false;
+    }
+    const auto nextPosition = ownedPose->GetBoneMatrix(bone).GetOrigin();
+    const auto motion = nextPosition - firstPosition;
+    if (!TestTrue(TEXT("Selected animation samples visibly separate the marker"),
+        motion.Size() > 5 && seek(*ownedPose, 0.1f)))
+    {
+        return false;
+    }
+    const auto motionAxis = motion.GetSafeNormal();
+    const auto up = FMath::Abs(motionAxis.Z) < 0.9 ? FVector::UpVector : FVector::ForwardVector;
+    const auto view = FVector::CrossProduct(motionAxis, up).GetSafeNormal();
+    const auto center = (firstPosition + nextPosition) * 0.5;
+    capture->SetActorLocationAndRotation(center - view * 400,
+        FRotationMatrix::MakeFromXY(view, motion).Rotator());
+    camera->OrthoWidth = FMath::Max(100.0, motion.Size() * 2.0);
     tick();
-    if (!verifyPose("Owner", ownedPose) || !verifyPose("Registered", nullptr))
+    if (!verifyPose("Owner", ownedPose) || !verifyPose("Registered", nullptr) ||
+        !readMarker(TEXT("first"), firstPosition, true))
     {
         return false;
     }
@@ -207,7 +305,8 @@ bool FLibraSkeletalPosePackageTest::RunTest(const FString&)
     }
     tick();
     if (!TestFalse(TEXT("The actual clip changed the selected bone"), previous.Equals(registeredPose->GetBoneMatrix(bone), 0.001)) ||
-        !verifyPose("Owner", ownedPose) || !verifyPose("Registered", registeredPose))
+        !verifyPose("Owner", ownedPose) || !verifyPose("Registered", registeredPose) ||
+        !readMarker(TEXT("moved"), nextPosition, true))
     {
         return false;
     }
@@ -219,6 +318,7 @@ bool FLibraSkeletalPosePackageTest::RunTest(const FString&)
     }
     ownedPose->SetSkeletalMesh(nullptr);
     tick();
-    return verifyPose("Owner", nullptr) && verifyPose("Registered", nullptr);
+    return verifyPose("Owner", nullptr) && verifyPose("Registered", nullptr) &&
+        readMarker(TEXT("unavailable"), FVector::ZeroVector, false);
 }
 #endif
