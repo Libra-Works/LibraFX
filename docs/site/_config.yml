@@ -1,0 +1,14 @@
+title: LIBERA FX
+description: Author effects in graphs. Play them in-engine.
+lang: en
+baseurl: /LibraFX
+theme: jekyll-theme-cayman
+plugins:
+  - jekyll-relative-links
+relative_links:
+  enabled: true
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default

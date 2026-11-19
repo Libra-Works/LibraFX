@@ -31,4 +31,4 @@ foreach ($file in $documents) {
     }
 }
 if ($failures.Count) { throw ($failures -join [Environment]::NewLine) }
-Write-Output 'Private documentation local links and referenced image files exist. No URLs were fetched.'
+Write-Output 'Local documentation links and referenced image files exist. No URLs were fetched.'

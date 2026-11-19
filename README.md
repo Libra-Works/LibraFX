@@ -14,7 +14,7 @@
 <h3 align="center">Unity · Unreal Engine · Godot</h3>
 
 <p align="center">
-  <a href="https://github.com/Libra-Works/LibraFX/actions/workflows/build.yml">Builds</a> ·
-  <a href="LICENSE">MIT License</a> ·
-  <em>Documentation site in progress</em>
+  <a href="https://github.com/Libra-Works/LibraFX/releases">Downloads</a> ·
+  <a href="https://libra-works.github.io/LibraFX/">Documentation</a> ·
+  <a href="LICENSE">MIT License</a>
 </p>

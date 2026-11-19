@@ -1,0 +1,58 @@
+name: Documentation
+
+on:
+  pull_request:
+    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', '.github/workflows/pages.yml']
+  push:
+    branches: [main]
+    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - name: Stage reviewed documentation
+        run: |
+          mkdir -p pages-source/images
+          cp docs/site/{_config.yml,getting-started.md,engine-integration.md} pages-source/
+          sed 's|\.\./images/afterimage-gate-editor\.png|images/afterimage-gate-editor.png|g' docs/site/index.md > pages-source/index.md
+          cp docs/images/afterimage-gate-editor.png pages-source/images/
+      - uses: actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1
+        with:
+          source: ./pages-source
+          destination: ./pages-output
+      - name: Verify the rendered pages
+        run: |
+          for file in index.html getting-started.html engine-integration.html images/afterimage-gate-editor.png; do
+            test -s "pages-output/$file"
+          done
+          grep -q 'getting-started.html' pages-output/index.html
+          grep -q 'engine-integration.html' pages-output/index.html
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        with:
+          path: ./pages-output
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy reviewed documentation
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
