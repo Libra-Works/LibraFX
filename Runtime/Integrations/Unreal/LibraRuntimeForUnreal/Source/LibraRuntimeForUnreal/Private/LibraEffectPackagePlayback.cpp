@@ -1,6 +1,7 @@
 #include "LibraEffectComponent.h"
 
 #include "LibraSpawnableAsset.h"
+#include "LibraGpuEffectRuntime.h"
 #include "GameFramework/Actor.h"
 
 auto ULibraEffectComponent::ReportPackageError(ELibraRuntimeResult result, const FString& message) -> ELibraRuntimeResult
@@ -276,5 +277,5 @@ int32 ULibraEffectComponent::GetGpuInstanceCount() const
     {
         return PackagePlayback ? PackagePlayback->GetGpuInstanceCount() : 0;
     }
-    return GpuEffect && GpuPlayback ? 1 : 0;
+    return GpuEffect && GpuPlayback && GpuPlayback->HasRuntimeState() ? 1 : 0;
 }

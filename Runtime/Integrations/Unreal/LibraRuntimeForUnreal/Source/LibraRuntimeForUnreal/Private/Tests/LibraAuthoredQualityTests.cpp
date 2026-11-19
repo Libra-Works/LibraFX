@@ -80,6 +80,7 @@ bool FLibraAuthoredQualityTest::RunTest(const FString&)
     return true;
 }
 
+#if WITH_EDITOR
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraAuthoredPhaseRenderTest, "Libra.Runtime.Lifecycle.AuthoredPhaseRender",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -165,4 +166,5 @@ bool FLibraAuthoredPhaseRenderTest::RunTest(const FString&)
     TestEqual(TEXT("Explicit force clears the rendered scope"), component->GetRenderObjectCount(), 0);
     return true;
 }
+#endif
 #endif

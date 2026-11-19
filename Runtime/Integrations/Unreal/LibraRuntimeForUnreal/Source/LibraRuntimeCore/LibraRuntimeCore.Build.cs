@@ -13,6 +13,8 @@ public class LibraRuntimeCore : ModuleRules
 
         PCHUsage = PCHUsageMode.NoPCHs;
         bUseUnity = false;
+        // Core catches allocation failures and translates them into runtime results.
+        bEnableExceptions = true;
         CppStandard = CppStandardVersion.Cpp20;
         PrivateDependencyModuleNames.Add("Core");
         PublicDefinitions.Add("LIBRA_RUNTIME_CORE_API=LIBRARUNTIMECORE_API");

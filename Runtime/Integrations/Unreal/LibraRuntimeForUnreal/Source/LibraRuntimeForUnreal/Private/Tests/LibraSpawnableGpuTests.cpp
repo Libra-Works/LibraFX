@@ -67,7 +67,7 @@ bool FLibraSpawnableGpuFixtureTest::RunTest(const FString&)
     TestEqual(TEXT("One GPU emitter is owned by first child"), component->GetGpuInstanceCount(), 1);
     component->TickComponent(0.5f, LEVELTICK_All, nullptr);
     auto emitters = FindGpuRuntimes(actor);
-    if (emitters.Num() == 1)
+    if (TestEqual(TEXT("One actual child GPU runtime"), emitters.Num(), 1))
     {
         auto report = FString{};
         TestTrue(TEXT("Actual GPU dispatch and particle readback"), emitters[0]->VerifyGpuSmoke(report));
@@ -169,6 +169,7 @@ bool FLibraSpawnableRootGpuFixtureTest::RunTest(const FString&)
     component->TickComponent(0.25f, LEVELTICK_All, nullptr);
     auto emitters = FindGpuRuntimes(actor);
     TestEqual(TEXT("One actual root GPU runtime"), emitters.Num(), 1);
+    auto standaloneAsset = emitters.Num() == 1 ? emitters[0]->Effect.Get() : nullptr;
     if (emitters.Num() == 1)
     {
         auto report = FString{};
@@ -187,6 +188,18 @@ bool FLibraSpawnableRootGpuFixtureTest::RunTest(const FString&)
     TestTrue(TEXT("Root force disables playback"), component->bRootFinished && !component->bIsPlaying);
     TestEqual(TEXT("Duplicate root GPU force succeeds"), component->ForceTerminate(), ELibraRuntimeResult::Ok);
     component->Stop();
+    if (TestNotNull(TEXT("The compiled root supplied a reusable GPU asset"), standaloneAsset))
+    {
+        TestEqual(TEXT("Assign the same emitter as a standalone effect"),
+            component->SetGpuEffect(standaloneAsset), ELibraRuntimeResult::Ok);
+        TestEqual(TEXT("Standalone GPU starts"), component->Play(), ELibraRuntimeResult::Ok);
+        TestEqual(TEXT("Standalone GPU owns one active state"), component->GetGpuInstanceCount(), 1);
+        component->Pause();
+        TestEqual(TEXT("Standalone pause retains its active state"), component->GetGpuInstanceCount(), 1);
+        component->Stop();
+        TestEqual(TEXT("Standalone Stop no longer counts a cached but retired runtime"),
+            component->GetGpuInstanceCount(), 0);
+    }
     world->DestroyWorld(false);
     return true;
 }

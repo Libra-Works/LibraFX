@@ -1277,7 +1277,7 @@ bool FLibraGpuDefaultEmitterRendererTest::RunTest(const FString& parameters)
     }
     auto copied = false;
     FTestParticle first;
-    auto readParticle = [&copied, &first, state]()
+    auto readParticle = [&copied, &first, &state]()
     {
         copied = false;
         ENQUEUE_RENDER_COMMAND(LibraGpuStarterParticle)([&copied, &first, state](FRHICommandListImmediate& commandList)
@@ -1366,6 +1366,7 @@ bool FLibraGpuDefaultEmitterRendererTest::RunTest(const FString& parameters)
     runtime->Tick(0.1f);
     readParticle();
     TestTrue(TEXT("Resume advances real GPU age"), copied && first.PositionAge.W > paused.PositionAge.W);
+    auto previousState = TWeakPtr<FLibraGpuState, ESPMode::ThreadSafe>(state);
     FString editedBundle;
     if (FFileHelper::LoadFileToString(editedBundle, *LibraGpuFixturePath(TEXT("white-emitter.lfxgpu"))))
     {
@@ -1378,12 +1379,20 @@ bool FLibraGpuDefaultEmitterRendererTest::RunTest(const FString& parameters)
                 runtime->State->Flow.Last().BillboardBlend, ELibraGpuBillboardBlend::Alpha);
     }
     else AddError(TEXT("Missing starter fixture for material replacement test."));
+    state.Reset();
+    FlushRenderingCommands();
+    TestFalse(TEXT("Replacing the effect releases the previous render state"), previousState.IsValid());
     FBox bounds;
     TestFalse(TEXT("No invented dynamic particle bounds"), runtime->GetPreviewBounds(bounds));
     runtime->LocalPreviewBounds = FBox(FVector(-100), FVector(100));
     TestTrue(TEXT("Explicit conservative framing bounds are available"), runtime->GetPreviewBounds(bounds));
+    auto finalState = TWeakPtr<FLibraGpuState, ESPMode::ThreadSafe>(runtime->State);
+    TestTrue(TEXT("A live renderer exists before Stop"), finalState.IsValid());
+    runtime->Tick(0.1f);
     runtime->Stop();
+    TestFalse(TEXT("Stop detaches the render state on the game thread"), runtime->HasRuntimeState());
     FlushRenderingCommands();
+    TestFalse(TEXT("Stopped render state is released after queued rendering drains"), finalState.IsValid());
     world->DestroyWorld(false);
     FlushRenderingCommands();
     AddInfo(FString::Printf(TEXT("Canonical starter GPU render: size0.1 scale100=%d pixels, legacy scale1=%d; pause/resume verified"),
@@ -1512,7 +1521,6 @@ bool FLibraGpuFlowMapReadbackTest::RunTest(const FString& parameters)
     }
     texture->SRGB = false;
     texture->Filter = TF_Bilinear;
-    texture->MipGenSettings = TMGS_NoMipmaps;
     auto textureName = FString::Printf(TEXT("LibraGpuFlowMap_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits));
     if (!texture->Rename(*textureName, GetTransientPackage(), REN_DontCreateRedirectors))
     {

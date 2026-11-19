@@ -213,6 +213,17 @@ readback, and authored emitter and draw Matrix framebuffer tests. The
 Matrix test observed 1024 identity, 640 translated, and 0 dead-particle
 pixels. This is Editor automation, not a packaged-game or console result.
 
+Packaged follow-up on UE 5.7.4 / Win64 Development / D3D11 (RX 6700 XT):
+BuildCookRun built, cooked, staged and archived the compiler-produced noise,
+root GPU and child GPU assets after native import. Three separate staged game
+runs loaded the cooked assets with the original .lfxgpu/.lfxp files unavailable.
+Each returned real GPU readback (30 live particles out of 32 sampled) and no
+active GPU instance after retirement, using natural end for the root and Stop
+for the standalone emitter and child package. This complements the Editor
+canonical noise value comparisons; the packaged smoke checks particle
+liveness, not individual noise values. D3D12/SM6 shader compilation passed, but
+baseline and canonical math readbacks timed out. Console SDKs were not tested.
+
 Live-preview owner integration (game thread, module dependency LibraGpuRuntime):
   auto candidate = ULibraGpuEffectAsset::CreateInMemory(owner, compiledBundleJson, error);
   if (!candidate) return; // Keep the previous effect/component unchanged.

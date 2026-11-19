@@ -237,12 +237,16 @@ Effect package playback
   (actual particle dispatch/readback, independent local clocks, paused playback,
   natural scope release, Stop and component destruction). Supply the matching
   compiler-produced fixtures using -LibraSpawnableGameIoFixture=<absolute path>
-  and -LibraSpawnableGpuFixture=<absolute path>, then run
+  and -LibraSpawnableGpuFixture=<absolute path to spawnable.gpu.lfxp>, then run
   "Automation RunTests Libra.Runtime.Spawnable". RootGpuFixture additionally
   passed actual root dispatch/readback, natural teardown, legacy re-export and
   auto-idle rejection; supply -LibraSpawnableRootGpuFixture=<RootGpu.lfxp>, with
   RootGpu.legacy.lfxp beside it. The isolated test project's
   --spawnable-adapter-fixtures command emits these root GPU and game I/O files.
+  Run Tests\CommentImageSmokeTests.csproj with
+  --spawnable-package-binary <isolated-directory>\spawnable.lfxp to emit the
+  finite child fixture. The similarly named spawnable.adapter-gpu.lfxp has a
+  different entry point and is not the input for this Unreal test.
   Synchronous GPU diagnostics wait on the readback fence; an idle GPU alone
   does not make an emulated frame-based RHI fence immediately report ready.
   The asset editor's LIBERA FX Package section includes "Reimport from source".
