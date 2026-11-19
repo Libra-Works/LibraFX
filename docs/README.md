@@ -25,6 +25,11 @@ The [Pages workflow](../.github/workflows/pages.yml) stages an explicit list of
 pages and images. Adding a file here does not add it to the site. Review any
 new public content before adding it to the list.
 
+Both languages share the Bootstrap layout in `site/_layouts/bilingual.html`.
+Keep `site/assets/css/libradark.css` aligned with the editor's LibraDark
+palette. The Bootstrap CSS URL is pinned and its integrity hash must be
+updated together with the version. The site does not load Bootstrap JavaScript.
+
 The workflow generates both built-in node references from catalog definitions,
 enum options, the standard module manifest, translations, and the supplemental explanations in
 [`Tools/Generate-NodeReference.py`](../Tools/Generate-NodeReference.py). Internal

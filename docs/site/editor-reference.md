@@ -8,7 +8,12 @@ title: Editor Window and Panel Reference
 
 Most editor tools are dockable panels rather than separate windows. Open them from
 **Window** or **View**. Panels that read the graph normally follow the active
-document tab. Menu labels below use the English UI.
+document tab. Menu labels and screenshots use the English UI. Screenshots show
+the editor with bundled sample data, not engine rendering.
+
+[Workspace and editing](#workspace-and-editing) · [Animation](#animation) ·
+[Engine connection and diagnostics](#engine-connection-and-diagnostics) ·
+[First launch and settings](#first-launch-and-settings)
 
 ## Authoring workspace
 
@@ -24,9 +29,9 @@ document tab. Menu labels below use the English UI.
 | Timeline | **Window → Timeline** | Set playback range, scrub or step, and author timed Signal keys. Preview playback and the F-Curve pane share the playhead. A preview loop does not define runtime lifetime. |
 | Playback controls | Timeline and workspace transport | Play, pause, seek, or step. Use the engine connection status to distinguish moving the playhead from successfully displaying a frame in an engine. |
 | Color editor | Open a color control in the inspector | Edit color channels and alpha. Editable color curves, where exposed, are opened from the corresponding curve control. |
-| GPU workspace | Open a GPU Particle node's workspace | Edit the GPU subgraph and export authoring IR or shader source where offered. Source export is not proof of working GPU playback in an engine. |
+| GPU workspace | Double-click a GPU Particle node | Edit Spawn and Update kernels or billboard settings. See [GPU Particle Authoring](gpu-particles.md) for the separate workflow. |
 | Sprite Animation | **Window → Sprite Animation** | Author sprite animation and composition data using the atlas, cells, and timeline. Previewing a composition in this pane is different from drawing a compiled package in an engine. |
-| Graph Problems | **Window → Graph Problems** | Review graph diagnostics while editing. Resolve missing or incompatible definitions and connections before retrying compilation. |
+| Graph Problems | **Window → Graph problems** | Review graph diagnostics while editing. Resolve missing or incompatible definitions and connections before retrying compilation. |
 | History | **Window → History** | Navigate this document's edit history and pin useful versions. Editing after moving back creates a branch; this does not create a Git commit. |
 
 ## Projects, assets, and shared groups
@@ -64,7 +69,7 @@ document tab. Menu labels below use the English UI.
 | Settings → Shortcuts | **Edit → Settings** | Inspect or change command bindings and graph/curve navigation controls. The shortcuts in these docs refer to defaults. |
 | Settings → Servers | **Edit → Settings** | View or change the editor's MCP and preview ports. Update the corresponding client connection when needed. |
 | Settings → Projects | **Edit → Settings** | Choose a profile and supply its node directory and group asset directory. Switching profiles changes future discovery, not the contents of open graphs. |
-| Settings → Plugins / Inspectors | **Edit → Settings** | Manage extensions, inspector providers, default inspectors, and plugin commands. Review the trust prompt before enabling third-party code. |
+| Settings → Inspectors / Extensions | **Edit → Settings** | Manage extensions, inspector providers, default inspectors, and plugin commands. Review the trust prompt before enabling third-party code. |
 | Window layouts | **Window → Window layouts** | Save, select, or manage docking presets, or restore the default layout from the layout menu. Layout changes do not edit the effect graph. |
 | Startup setup | During initial setup | Choose the initial editor settings when prompted. These can be reviewed later in Settings. The splash screen only indicates startup. |
 | Unsaved changes | Closing a modified document or workspace | Choose whether to save changes, discard them, or cancel the close. File open/save/export dialogs select the destination or source; the editor's VFX export creates `.lfxb`. |
@@ -74,3 +79,224 @@ Specialized confirmation dialogs appear inside these workflows, for example when
 trusting an inspector provider, managing resource or sprite data, reviewing a
 chat action, or copying diagnostic details. Review the selected target and action
 before accepting. Operating-system file pickers vary by platform.
+
+## Workspace and editing
+
+### Main window and graph
+
+![LIBERA FX with Fireworks open, the graph at left, editing tools at right, and playback below](images/editor/workspace.png)
+
+1. **Document tabs:** select `Fireworks.lfxproj` to edit the sample rather than the adjacent untitled graph. For your own experiment, use **File → Save As** before editing the sample.
+2. **Graph canvas:** read Signal edges in execution order. In Fireworks, **Start once** initiates **Launch**. The child-graph button opens the nested graph at full size; **Top** in the breadcrumb returns to the root. The zoom and framing controls only change what you see.
+3. **Tool tabs:** use the right-side tabs to switch between Properties, History, Outliner, Node List, and Resources without leaving the active document. Docking and resizing the panels do not change the graph.
+4. **Transport:** the bottom bar shows the current frame, preview range, FPS, loop state, and whether a preview viewer is connected. It is not a runtime lifetime editor.
+
+### Outliner, Node List, and Properties
+
+| Find an existing node | Add a node |
+| --- | --- |
+| ![Outliner listing nodes from Fireworks](images/editor/outliner.png) | ![Node List with search and built-in entries](images/editor/node-list.png) |
+
+![Properties showing the selected Launch Spawnable Group](images/editor/inspector.png)
+
+Use **Outliner** to select a node already in the active graph. Switch to
+**Properties** to inspect that node. With nothing selected, the inspector shows
+the graph-level options instead; a different selection can expose a different
+set of fields. Use the lock control if you want to keep an inspector on one
+selection while examining another with a separate inspector slot.
+
+Use **Node List** to look up a type and drag it onto the canvas. Finding a type
+doesn't establish whether it can connect to a particular pin. Check the pin type
+and whether it carries a value or a Signal before wiring it. See the
+[built-in node reference](node-reference.md) for the base pin definitions.
+
+### Search anything
+
+![Search anything dialog showing results for Launch](images/editor/search.png)
+
+Open **Edit → Search anything** or press `Ctrl+P`. For example, type `Launch`
+in Fireworks and choose a **Node** result to navigate to it. Read the result's
+type before pressing Enter: a graph result opens a graph, a panel result opens a
+tool, and a Group library result can insert an instance. Use Escape to close
+without running anything.
+
+### History
+
+![History panel showing the current Fireworks state and earlier edits](images/editor/history.png)
+
+The top of **History** shows the current branch and edit. Open an earlier state
+to see the graph as it was at that point. Pin states you want to find again.
+If you edit after going back, the new edit belongs to a branch instead of
+overwriting the original trail. Use revision history or graph comparison for
+saved files rather than for these in-editor states.
+
+![Revision history and graph diff window with Git and two revision selectors](images/editor/revision-history.png)
+
+For a Git-tracked project, refresh the revision list, choose two saved
+revisions, and run the comparison. If a bundled sample has no revisions
+listed, use **Compare Graph Files** with two saved copies instead. Neither
+view replaces the in-editor undo history or merges changes.
+
+## Animation
+
+### Timeline and transport
+
+![Timeline with the playhead at frame zero and the main preview transport below](images/editor/timeline.png)
+
+For Fireworks, set the preview range to **0–240** at **60 FPS** for a four-second
+preview. The initial **0–120** range loops around the point where Launch expires
+and can hide the Burst. Scrub or step the playhead to inspect timing, then connect
+a supported engine viewer to see the rendered result.
+
+To author a timed Signal, select a compatible Signal input node and use one of
+the two add-key actions in the Timeline. **Preview Signal** is for editor preview;
+**Runtime Signal** is authored for supported runtime package export. Drag a key
+diamond to retime it; select it before editing its time or deleting it. Neither
+kind of key is a substitute for a **Life Time** node.
+
+### F-Curve
+
+![F-Curve pane with key controls and the prompt to select a curve node](images/editor/f-curve.png)
+
+Select a **Float F-Curve** node to show its curve. Add or select a key, then edit
+its time, value, and interpolation in **Selected key**. Slope fields apply where
+the interpolation supports tangents. Use **Frame all** if the keys are outside
+the visible range. This pane shares the preview playhead with the Timeline, but
+its keys produce values rather than triggering Signals.
+
+### Sprite Animation
+
+![Sprite Animation before an atlas is loaded, showing the cell canvas, frame preview, and timeline](images/editor/sprite.png)
+
+1. Open a local source image or pick a supported texture from a connected editor. **Source dimensions** must be known to edit exact pixel rectangles.
+2. In **Cut cells**, draw or add a rectangle and refine its pixel position and size. For an evenly spaced atlas, enter its grid dimensions, enable snap if useful, and use **Fill track from grid**.
+3. Use the bottom **Timeline** to insert, reorder, and preview frames. Use **Arrange parts** if you need to layer parts and key their transforms separately. The **Frame preview** lets you review the result before applying it to the selected Sprite Draw.
+
+### Content and asset references
+
+![Content window showing engine asset, local resource, identity, and reference tabs](images/editor/content.png)
+
+In **Connected engine assets**, select an editor and search its catalog. An
+empty disconnected list, as shown above, doesn't mean the effect has no local
+resources. Use **Project and local resources** for those and **Asset roots**
+to review the sources that are available. When replacing an asset, inspect
+**Resource identity** for its binding and **Asset usage and references** for
+use sites. A filename match alone is not evidence that two engine bindings
+refer to the same asset.
+
+## Engine connection and diagnostics
+
+### Engine Connection
+
+![Engine Connection panel showing zero connected clients and runtime debugger controls](images/editor/engine-connection.png)
+
+Start with **Preview transport**. In the screenshot the local server is running,
+but **Connected clients: 0** means no external viewer is connected. After
+connecting, check the target and transfer status before diagnosing an invisible
+effect as a graph problem. See [Engine integration](engine-integration.md) for
+engine setup.
+
+The **Runtime debugger** is separate and requires a supported CPU debug session.
+Use **Match a compiled Spawnable package** when you need the debug session to
+match that export. Only share invites with the intended client; never include
+them in a public screenshot.
+
+### Native preview profiler
+
+![Profiler CPU overview waiting for a connected client and a profile snapshot](images/editor/profiler.png)
+
+Select a supported preview client and start capture. **CPU overview** summarizes
+the reported work; click a cost bar to see its scope, call count, and timings
+once samples arrive. **Live metrics** and **Native returned values** show
+different data from timing. An empty chart or a zero before the first snapshot
+isn't a measurement of the effect's cost.
+
+### Live Game Instances
+
+![Live Game Instances with no endpoint selected and the restart action disabled](images/editor/live-game.png)
+
+This tool changes an actual development game instance, not the editor preview.
+Select the private endpoint directory, authorize this session explicitly, and
+select the instance to update. **Apply active graph — Restart** restarts
+supported playback and resets its elapsed time and state; it does not migrate
+the instance. The panel lists the supported graph restrictions before applying.
+
+### Log, AI Chat, and crash reports
+
+![Log panel showing category and text filters alongside the graph](images/editor/log.png)
+
+Start with the category and text filters to narrow down a problem. **Find in
+visible log** navigates within the filtered results. Disable **Follow** if
+you want to read older lines without scrolling to each new event. Review
+paths and connection details before sharing an export.
+
+![AI Chat in the offline state with the model destination and permission controls visible](images/editor/chat.png)
+
+In **AI Chat**, check the adapter and destination before granting permission
+to send graph context. Connecting the local tools does not authorize sending
+context to a model. Review the proposed graph changes separately before applying
+them.
+
+![Crash report drafts and destinations without a draft or repository selected](images/editor/crash-reports.png)
+
+Select a local draft, confirm the destination and visibility, and review the
+title, body, and optional diagnostics before sending. **Check destination**
+is separate from sending. The screenshot shows no recoverable drafts; this
+window does not automatically create a report from project data or logs.
+
+## First launch and settings
+
+### Startup setup
+
+![Welcome to LIBERA FX with language, color scheme and continue controls](images/editor/startup.png)
+
+Choose **Language** and **Color scheme**, then select **Continue to LIBERA FX**.
+The crash-report button opens draft and destination management; choosing a theme
+or continuing startup does not send a report. You can change the appearance
+later under **Edit → Settings**.
+
+### Appearance and shortcuts
+
+![Appearance settings showing language, color scheme and accent color](images/editor/settings-appearance.png)
+
+Use **Language** for menus and dialogs and **Node names** for built-in
+node labels. If you follow an English tutorial in a localized editor, you can
+keep the node labels in English without changing the menus. The color scheme
+and accent affect the editor, not project output.
+The node-name selector is not shown in this screenshot.
+
+![Shortcuts settings with command bindings and navigation controls](images/editor/settings-shortcuts.png)
+
+In **Shortcuts**, find the command you use and inspect its binding. Graph and
+curve panning and wheel modifiers are separate from command shortcuts. If
+navigation differs between two machines, check these settings before assuming
+the graph is damaged. Resetting shortcuts changes editor preferences, not the
+open document.
+
+### Servers and projects
+
+![Servers settings with separate MCP and preview port fields](images/editor/settings-servers.png)
+
+**Servers** shows separate ports for MCP and preview. Use **Save** and read
+the status after changing a port. Restart the editor and update the
+client configuration to match. A port number is not an access token.
+
+![Projects settings showing the profile selector, name, and node and Group directories](images/editor/settings-projects.png)
+
+**Projects** controls which additional definitions and reusable Groups appear
+in the editor. Choose or create a profile, set its **Project node definitions
+directory** and **Group library directory**, and save the profile. Switch back
+to **Default** to work without those extra catalogs. Switching profiles doesn't
+rewrite nodes or Group revisions already saved in an open graph.
+
+### Inspectors and extensions
+
+| Inspectors | Extensions |
+| --- | --- |
+| ![Inspector search and default inspector selection by value type](images/editor/settings-inspectors.png) | ![Extensions settings with the extension command selector](images/editor/settings-extensions.png) |
+
+Use **Inspectors** to see registered inspector providers and select defaults by
+type. Choose **Automatic / built-in** to go back to the default picker. The
+**Extensions** tab lists registered extension commands separately from
+inspectors. Only enable code you trust; a plugin is not an isolated graph file.
+Local directories are hidden in these screenshots.

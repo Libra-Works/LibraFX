@@ -171,6 +171,43 @@ def parameters(node, strings, enums, japanese):
     return items
 
 
+CATEGORIES = [
+    ("control", "Flow and lifecycle", "実行フローと寿命",
+     ("Signal nodes", "Lifecycle", "Spawnable Group", "Logic")),
+    ("values", "Values and math", "値と演算",
+     ("Parameter nodes", "Math", "Vectors", "Matrices", "Orientation", "Curve nodes")),
+    ("composition", "Groups and host I/O", "Group とホスト入出力",
+     ("Graph nodes", "Group boundary", "Game I/O", "Instance Game I/O", "Matrices / Transforms")),
+    ("visuals", "Rendering and GPU", "描画と GPU", ("Rendering", "GPU")),
+    ("tools", "Authoring and preview", "オーサリングとプレビュー", ("Utilities", "Debug (Preview Only)")),
+]
+
+
+def subfamily(group, kind):
+    if group == "Math":
+        if kind.startswith("Int32") or kind == "FloatToInt32":
+            return "integers", "Integers and conversions", "整数と型変換"
+        if kind in {"ATan", "ATan2", "Cos", "DegToRad", "NormalizeDeg", "NormalizeRad",
+                    "PI", "RadToDeg", "Sin", "Tan", "TwoPI"}:
+            return "angles", "Angles and trigonometry", "角度と三角関数"
+        if kind == "Time":
+            return "time", "Time", "時間"
+        return "scalars", "Scalar operations", "スカラー演算"
+    if group == "Vectors":
+        if kind.startswith(("Break", "Compose", "Mask")) or "To" in kind:
+            return "components", "Components and conversions", "成分と型変換"
+        if kind.startswith(("Cross", "Dot", "Length", "Normalize")):
+            return "geometry", "Geometry", "幾何演算"
+        return "arithmetic", "Vector arithmetic", "ベクトル演算"
+    if group == "Spawnable Group":
+        if kind.startswith("SpawnInput"):
+            return "inputs", "Spawnable inputs", "Spawnable の入力"
+        if kind.startswith("SpawnOutput"):
+            return "outputs", "Spawnable outputs", "Spawnable の出力"
+        return "scope", "Instance events and age", "インスタンスのイベントと経過時間"
+    return None
+
+
 def render(nodes, enums, modules, language):
     japanese = language == "ja"
     strings = translations(language)
@@ -188,7 +225,7 @@ def render(nodes, enums, modules, language):
         f"This reference covers {len(nodes)} built-in authoring definitions. Some typed variants are selected by connections rather than listed separately in search. Pins and defaults come from the base definitions. Inclusion does not guarantee playback on every engine.",
         "",
     ]
-    families = []
+    families = {}
     for group, entries in sorted(groups.items()):
         title = next((strings[n["groupNameKey"]] for n in entries if n.get("groupNameKey") in strings), group)
         if japanese:
@@ -198,25 +235,52 @@ def render(nodes, enums, modules, language):
                      "Group boundary": "Group の入出力"}.get(title, title)
         if group == "Matrices / Transforms":
             title = "ホストから受け取る変換" if japanese else "Host transforms"
-        families.append((title, entries))
-    for index, (title, entries) in enumerate(families):
-        text.append(f"- [{title} ({len(entries)})](#family-{index})")
+        buckets = {}
+        for node in sorted(entries, key=lambda n: n["kind"].casefold()):
+            buckets.setdefault(subfamily(group, node["kind"]), []).append(node)
+        families[group] = (len(families), title, buckets)
+    categories = list(CATEGORIES)
+    categorized = {group for _, _, _, group_names in categories for group in group_names}
+    uncategorized = tuple(group for group in families if group not in categorized)
+    if uncategorized:
+        categories.append(("other", "Other definitions", "その他の定義", uncategorized))
+    for category, en, ja, group_names in categories:
+        text.append(f"- [{ja if japanese else en}](#category-{category})")
+        for group in group_names:
+            if group not in families:
+                continue
+            index, title, buckets = families[group]
+            text.append(f"  - [{title} ({sum(map(len, buckets.values()))})](#family-{index})")
+            for bucket, entries in buckets.items():
+                if bucket:
+                    slug, bucket_en, bucket_ja = bucket
+                    text.append(f"    - [{bucket_ja if japanese else bucket_en} ({len(entries)})](#family-{index}-{slug})")
     module_title = "標準 Group モジュール" if japanese else "Standard Group Modules"
     text.append(f"- [{module_title} ({len(modules)})](#standard-modules)")
-    for index, (title, entries) in enumerate(families):
-        text += ["", f'<span id="family-{index}"></span>', f"## {title}", ""]
-        for node in sorted(entries, key=lambda n: n["kind"].casefold()):
-            identifier = node["kind"]
-            text += [
-                f'<span id="node-{identifier.lower()}"></span>', f"### {label(node, strings)}", "",
-                f"`{identifier}` — {note(node, strings, language)}", "",
-                f"- **{'入力' if japanese else 'Inputs'}:** {ports(node, 'inputPorts', strings, japanese)}",
-                f"- **{'出力' if japanese else 'Outputs'}:** {ports(node, 'outputPorts', strings, japanese)}",
-            ]
-            if items := parameters(node, strings, enums, japanese):
-                text += [f"- **{'設定と既定値' if japanese else 'Settings and defaults'}:**"] + [
-                    f"  {item}" for item in items]
-            text.append("")
+    for category, en, ja, group_names in categories:
+        text += ["", f'<span id="category-{category}"></span>', f"## {ja if japanese else en}", ""]
+        for group in group_names:
+            if group not in families:
+                continue
+            index, title, buckets = families[group]
+            text += [f'<span id="family-{index}"></span>', f"### {title}", ""]
+            for bucket, entries in buckets.items():
+                if bucket:
+                    slug, bucket_en, bucket_ja = bucket
+                    text += [f'<span id="family-{index}-{slug}"></span>', f"#### {bucket_ja if japanese else bucket_en}", ""]
+                heading = "#####" if bucket else "####"
+                for node in entries:
+                    identifier = node["kind"]
+                    text += [
+                        f'<span id="node-{identifier.lower()}"></span>', f"{heading} {label(node, strings)}", "",
+                        f"`{identifier}` — {note(node, strings, language)}", "",
+                        f"- **{'入力' if japanese else 'Inputs'}:** {ports(node, 'inputPorts', strings, japanese)}",
+                        f"- **{'出力' if japanese else 'Outputs'}:** {ports(node, 'outputPorts', strings, japanese)}",
+                    ]
+                    if items := parameters(node, strings, enums, japanese):
+                        text += [f"- **{'設定と既定値' if japanese else 'Settings and defaults'}:**"] + [
+                            f"  {item}" for item in items]
+                    text.append("")
     text += ["", '<span id="standard-modules"></span>', f"## {module_title}", "",
              "同梱モジュールはロック済みの再利用 Group です。中のグラフを変更する場合は、プロジェクトライブラリへ複製してください。"
              if japanese else

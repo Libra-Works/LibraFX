@@ -2,10 +2,10 @@ name: Documentation
 
 on:
   pull_request:
-    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', '.github/workflows/pages.yml', 'Tools/Generate-NodeReference.py', 'Assets/Nodes/**', 'Assets/Enums/**', 'Assets/Translations/**', 'Assets/Modules/manifest.json']
+    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', '.github/workflows/pages.yml', 'Tools/Generate-NodeReference.py', 'Assets/Nodes/**', 'Assets/Enums/**', 'Assets/Translations/**', 'Assets/Modules/manifest.json', 'Assets/Brand/LibraFx.ico']
   push:
     branches: [main]
-    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', '.github/workflows/pages.yml', 'Tools/Generate-NodeReference.py', 'Assets/Nodes/**', 'Assets/Enums/**', 'Assets/Translations/**', 'Assets/Modules/manifest.json']
+    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', '.github/workflows/pages.yml', 'Tools/Generate-NodeReference.py', 'Assets/Nodes/**', 'Assets/Enums/**', 'Assets/Translations/**', 'Assets/Modules/manifest.json', 'Assets/Brand/LibraFx.ico']
   workflow_dispatch:
 
 permissions:
@@ -22,16 +22,19 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Stage reviewed documentation
         run: |
-          mkdir -p pages-source/{images,ja,_layouts}
+          mkdir -p pages-source/{images/editor,ja,_layouts,assets/css}
           cp docs/site/_config.yml pages-source/
           sed 's|\.\./images/afterimage-gate-editor\.png|images/afterimage-gate-editor.png|g' docs/site/index.md > pages-source/index.md
           cp docs/site/_layouts/bilingual.html pages-source/_layouts/
-          for file in getting-started.md engine-integration.md editor-reference.md authoring.md; do
+          cp docs/site/assets/css/libradark.css pages-source/assets/css/
+          cp Assets/Brand/LibraFx.ico pages-source/assets/libera-fx.ico
+          for file in getting-started.md engine-integration.md editor-reference.md authoring.md gpu-particles.md; do
             cp "docs/site/$file" pages-source/
             cp "docs/site/ja/$file" pages-source/ja/
           done
           sed 's|\.\./\.\./images/afterimage-gate-editor\.png|../images/afterimage-gate-editor.png|g' docs/site/ja/index.md > pages-source/ja/index.md
           cp docs/images/afterimage-gate-editor.png pages-source/images/
+          cp docs/site/images/editor/{chat,content,crash-reports,engine-connection,f-curve,gpu-dsl,gpu-flow,gpu-kernel,history,inspector,live-game,log,node-list,outliner,profiler,revision-history,search,settings-appearance,settings-extensions,settings-inspectors,settings-projects,settings-servers,settings-shortcuts,sprite,startup,timeline,workspace}.png pages-source/images/editor/
           python3 Tools/Generate-NodeReference.py pages-source
       - uses: actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1
         with:
@@ -39,23 +42,38 @@ jobs:
           destination: ./pages-output
       - name: Verify the rendered pages
         run: |
-          for file in index.html getting-started.html engine-integration.html editor-reference.html authoring.html node-reference.html; do
+          for file in index.html getting-started.html engine-integration.html editor-reference.html authoring.html gpu-particles.html node-reference.html; do
             test -s "pages-output/$file"
             test -s "pages-output/ja/$file"
-            grep -q '<html lang="en">' "pages-output/$file"
-            grep -q '<html lang="ja">' "pages-output/ja/$file"
+            for lang in en ja; do
+              rendered="pages-output/$file"
+              if [ "$lang" = ja ]; then rendered="pages-output/ja/$file"; fi
+              grep -Fq "<html lang=\"$lang\" data-bs-theme=\"dark\">" "$rendered"
+              grep -Fq 'bootstrap@5.3.3/dist/css/bootstrap.min.css' "$rendered"
+              grep -Fq 'href="/LibraFX/assets/css/libradark.css"' "$rendered"
+              grep -Fq 'aria-current="page"' "$rendered"
+            done
             route="$file"
             if [ "$file" = index.html ]; then route=""; fi
             grep -Fq "href=\"/LibraFX/ja/$route\" hreflang=\"ja\"" "pages-output/$file"
             grep -Fq "href=\"/LibraFX/$route\" hreflang=\"en\"" "pages-output/ja/$file"
           done
+          test -s pages-output/assets/css/libradark.css
+          test -s pages-output/assets/libera-fx.ico
           test -s pages-output/images/afterimage-gate-editor.png
+          for image in pages-source/images/editor/*.png; do
+            test -s "pages-output/images/editor/${image##*/}"
+          done
           grep -q 'getting-started.html' pages-output/index.html
           grep -q 'engine-integration.html' pages-output/index.html
           grep -q 'getting-started.html' pages-output/ja/index.html
           grep -q 'engine-integration.html' pages-output/ja/index.html
           for lang in '' ja/; do
             grep -q 'node-reference.html' "pages-output/${lang}index.html"
+            grep -q 'gpu-particles.html' "pages-output/${lang}index.html"
+            grep -q 'images/editor/gpu-kernel.png' "pages-output/${lang}gpu-particles.html"
+            grep -q 'images/editor/workspace.png' "pages-output/${lang}editor-reference.html"
+            grep -q 'id="category-values"' "pages-output/${lang}node-reference.html"
             grep -q 'id="node-sequence"' "pages-output/${lang}node-reference.html"
             grep -q 'id="standard-modules"' "pages-output/${lang}node-reference.html"
             if grep -Eq 'id="node-(matrixruntime|lifecycleruntime|gameioruntime)' "pages-output/${lang}node-reference.html"; then

@@ -1,7 +1,6 @@
 # Private documentation capture
 
-Pages publishing remains disabled. No public workflow, repository visibility
-change or automatic upload is installed by this feature.
+The capture runner does not publish to GitHub Pages or upload its output.
 
 On Windows, the guarded PowerShell runner starts an existing editor build with
 fresh settings, opens an approved bundled sample over loopback MCP and saves
@@ -13,8 +12,7 @@ only that graph's PNG and metadata to a new local directory:
 ```
 
 Use the same display scaling when comparing captures. Review the image and
-metadata before copying an approved image into private documentation; the
-runner never publishes anything.
+metadata before copying an approved image into documentation.
 
 Start a dedicated editor with an **absolute isolated** `LIBERAFX_DATA_ROOT` and
 `LIBERAFX_MCP_DEBUG=1`. Keep real user documents/settings out of that session.
@@ -42,6 +40,12 @@ actual metadata/behavior and check all local links/image files exist. A graph
 capture does not replace Unity/Unreal playback screenshots: obtain those through
 their guarded engine verification paths after permission to launch the engines.
 Do not capture private user projects/assets or attach logs/source automatically.
+
+For window or panel screenshots, capture only windows owned by an isolated
+editor process. Use a bundled sample or a throwaway graph. Crop to the tool
+being explained and review the pixels for local paths, private endpoints,
+credentials, invites, and other identifying details before adding images to
+the Pages allowlist. Do not copy the isolated app-data directory into the site.
 
 Run `.\Tools\Test-DocumentationLinks.ps1` from PowerShell 7 to check local
 Markdown/image targets without fetching external URLs. This detects missing

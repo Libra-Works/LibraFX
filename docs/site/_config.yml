@@ -3,9 +3,9 @@ description: Author effects in graphs. Play them in-engine.
 lang: en
 url: https://libra-works.github.io
 baseurl: /LibraFX
-theme: jekyll-theme-cayman
 plugins:
   - jekyll-relative-links
+  - jekyll-seo-tag
 relative_links:
   enabled: true
 defaults:
