@@ -720,6 +720,10 @@ public sealed partial class VfxProgram
             hasInt32 ? (ushort)10 : logicalCode.Count != 0 ? (ushort)9 :
             hasEnumBranches ? (ushort)8 : gameIoPorts.Count != 0 ? (ushort)7 :
             extraRoutes != 0 ? (ushort)5 : curveCode.Count != 0 ? (ushort)4 : (ushort)3;
+        if (customCode.Count != 0 && version is >= 8 and < 11)
+        {
+            version = 11;
+        }
         return new VfxProgram(legacy, typedCode, customCode.ToArray(), curveCode.ToArray(),
             version, gameIoPorts, enumValueCode.ToArray(), enumSelectCode.ToArray(), branchGuards.ToArray(),
             logicalCode.ToArray(), logicalSignalRoutes.ToArray(), valueTypes);

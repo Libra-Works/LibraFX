@@ -47,6 +47,14 @@ public static class QuaternionRandomCompilationTests
         Require(rotated.Inputs[0].SourceIndex >= 0 &&
                 rotated.Inputs[1].Defaults.Take(3).SequenceEqual(new[] { 1.0, 2.0, -3.0 }),
             "An authored Euler rotation must connect to explicit vector rotation with edited vector defaults.");
+        VerifySerializedVectorDefault(originalProgram);
+        var logicalProgram = VfxProgram.Compile(rotationGraph with
+        {
+            Nodes = [.. rotationGraph.Nodes, Node("SignalToNumber")]
+        });
+        Require(logicalProgram.BinaryVersion == 11,
+            "Custom inputs mixed with logical/enum metadata require the non-overlapping v11 guard layout.");
+        VerifySerializedVectorDefault(logicalProgram);
 
         var randomGraph = RandomGraph();
         var randomProgram = VfxProgram.Compile(randomGraph);
@@ -92,6 +100,17 @@ public static class QuaternionRandomCompilationTests
         throw new InvalidOperationException("Malformed quaternion defaults must fail conversion.");
     }
 
+    private static void VerifySerializedVectorDefault(VfxProgram program)
+    {
+        var rotated = program.CustomInstructions.Single(item =>
+            item.TypeId == Definition("QuaternionRotateVector").TypeId);
+        var index = Array.FindIndex(program.TypedInstructions.ToArray(), item => item.NodeId == rotated.NodeId);
+        var bytes = program.ToBinary();
+        var recordSize = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(12));
+        Require(BinaryPrimitives.ReadDoubleLittleEndian(bytes.AsSpan(16 + index * recordSize + 112)) == 1,
+            "Custom input defaults must survive serialization without branch-guard overlap.");
+    }
+
     // Optional INTERNAL compiler-to-native raw program fixtures, produced by VfxProgram.Compile.
     // These are not unified EffectBinary files and do not exercise the standalone converter.
     // Caller supplies a NEW isolated temporary directory. Pass the two .lfxb paths to
@@ -123,7 +142,7 @@ public static class QuaternionRandomCompilationTests
     }
 
     private static GraphNodeDefinition Definition(string kind) =>
-        GraphNodeDefinition.Core.Single(item => item.Kind.Value == kind);
+        GraphNodeDefinition.Core.Single(item => item.TypeName == kind);
 
     private static GraphNodeSnapshot Node(string kind, params NodeParameterSnapshot[] parameters)
     {

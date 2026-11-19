@@ -4,6 +4,11 @@ title: Quaternion and seeded random nodes
 
 # Quaternion and seeded random nodes
 
+The updated converter fixes custom-node default values being overwritten by
+branch metadata in older output. Re-export existing effects from their editable
+`.lfxproj` files to recover the authored values; loading an already affected
+binary cannot reconstruct the overwritten bits.
+
 Use Quaternion nodes to orient an authored direction or interpolate an object's
 orientation, and Random nodes to give each particle a repeatable starting
 direction or position. These are portable native parameter callbacks, not GPU

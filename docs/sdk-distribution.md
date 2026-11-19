@@ -106,6 +106,9 @@ programs and `.lfxp` packages remain legacy inputs. This requires updated SDKs
 from the same source revision, not the published 2026.11.8 binaries.
 Historical test fixture filenames elsewhere in this document still use `.lfxp`.
 The `.lfxrm` diagnostic resource-mapping manifest is not a second playable binary.
+The updated converter also fixes overlapping custom-input defaults and branch
+metadata. Re-export older custom-node effects from their `.lfxproj` sources;
+the original values cannot be reconstructed from already overwritten bytes.
 The current source supports container 4/package 12 for CPU particles; effects
 without CPU particles retain container 3/package 11. The source compatibility
 manifest's package ceiling describes updated source exports, not an update to

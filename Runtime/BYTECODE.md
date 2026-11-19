@@ -86,6 +86,13 @@ Custom records use these fields:
 
 Custom numeric inputs accept scalar, Vector2/3/4, or Color values as declared by the registered descriptor. Parameter dependencies must reference earlier records; signal targets must be forward references to signal records. These constraints reject parameter cycles and signal-flow cycles. Signal programs intentionally have no general loop instruction.
 
+Input defaults occupy offsets 80–207, including offset 112. Versions 3–7 do not
+store branch guards there. When custom callbacks are mixed with enum, logical or
+typed metadata requiring version 8 or later, the compiler uses version 11, whose
+custom guard field is at offset 44 instead. This prevents a guard from overwriting
+the second input's first binary64 default. Re-export older affected custom-node
+binaries from their editable projects; readers cannot reconstruct overwritten bits.
+
 ### Native registration and execution
 
 Load v3 with `Program::load(bytes, size, registry, registryCount, bindings, bindingCount, out)`. `registry` is an immutable caller-owned `CustomNodeDescriptor` array; its descriptors and the caller-owned per-instruction `bindings` array must stay alive while the Program is in use. The loader resolves `TypeId` and ABI once and stores descriptor pointers in `bindings`; no registry lookup occurs during evaluation. Unknown types fail with `UnknownCustomNode`; descriptor/layout mismatches fail rather than being guessed.

@@ -319,7 +319,7 @@ void runCompiledFixture(const char* path, bool random)
                     matrix[4] + 2 * matrix[5] - 3 * matrix[6],
                     matrix[8] + 2 * matrix[9] - 3 * matrix[10]};
     }
-    checkVector({work[4], work[5], work[6]}, expected, 1e-6);
+    checkVector({work[4], work[5], work[6]}, expected);
 }
 }
 

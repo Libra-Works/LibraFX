@@ -84,7 +84,11 @@ public sealed partial class VfxProgram
                 }
                 for (var input = custom.Inputs.Length; input < 4; input++)
                     BinaryPrimitives.WriteInt32LittleEndian(span[(48 + input * 8)..], -1);
-                BinaryPrimitives.WriteInt32LittleEndian(span[(_version >= 11 ? 44 : 112)..], instruction.BranchGuardId);
+                if (_version >= 8)
+                {
+                    BinaryPrimitives.WriteInt32LittleEndian(span[(_version >= 11 ? 44 : 112)..],
+                        instruction.BranchGuardId);
+                }
                 for (var branch = 0; branch < 4; branch++)
                 {
                     BinaryPrimitives.WriteInt32LittleEndian(span[(208 + branch * 4)..],
