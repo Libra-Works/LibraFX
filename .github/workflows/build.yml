@@ -83,6 +83,7 @@ jobs:
           $versionProperties = @("-p:InformationalVersion=$env:BUILD_VERSION", '-p:IncludeSourceRevisionInInformationalVersion=false')
           dotnet publish LiberaFx.csproj -c Release -r $env:TARGET_RID --self-contained true -o $editor @versionProperties
           dotnet publish Tools/Converter/LiberaFx.Converter.csproj -c Release -r $env:TARGET_RID --self-contained true -o (Join-Path $package 'Converter') @versionProperties
+          Copy-Item -LiteralPath 'LICENSE' -Destination $package
           [ordered]@{
               buildVersion = $env:BUILD_VERSION
               sourceRevision = $env:GITHUB_SHA
@@ -101,7 +102,7 @@ jobs:
           }
           if ($env:TARGET_RID -eq 'linux-x64') {
               /bin/sh -c 'test -x "$1"' sh (Join-Path $editor 'LiberaFx')
-              tar -czf (Join-Path $artifacts "LibraFX-$env:BUILD_VERSION-linux-x64.tar.gz") -C $package Editor Converter build-info.json
+              tar -czf (Join-Path $artifacts "LibraFX-$env:BUILD_VERSION-linux-x64.tar.gz") -C $package Editor Converter build-info.json LICENSE
           }
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: github.event_name == 'workflow_dispatch'

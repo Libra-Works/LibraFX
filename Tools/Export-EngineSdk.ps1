@@ -57,7 +57,7 @@ foreach ($relative in $roots) {
         $files.Add($file)
     }
 }
-foreach ($relative in @('Runtime\CMakeLists.txt', 'SDK\compatibility.json', 'docs\sdk-distribution.md')) {
+foreach ($relative in @('LICENSE', 'Runtime\CMakeLists.txt', 'SDK\compatibility.json', 'docs\sdk-distribution.md')) {
     $file = Get-Item -LiteralPath (Join-Path $repository $relative)
     Assert-NoLinks $file.FullName
     $files.Add($file)
