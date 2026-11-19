@@ -138,6 +138,74 @@ from a missing mesh or shader binding. Neither adapter needs a live editor
 connection for ordinary playback. This fresh-project run does not certify
 other backends, console SDKs or shipped players.
 
+## Local CPU debugger acceptance in Unity and Unreal
+
+The LIBERA FX Preview pane's **Runtime debugger** uses a private, local
+Windows session. Its invitation is not a Preview Connections invitation and
+must not be saved in assets, source, or logs. Use the same graph revision and
+compiled payload on both sides; a stale import or a preview-specific package
+is not interchangeable with the offline `.lfxp`.
+
+1. Generate the ModelDraw **MaterialPulse** sample using either adapter's
+   `--model-material-animation` instructions. Open `MaterialPulse.lfxproj`
+   in LIBERA FX and play the corresponding `MaterialPulse.lfxp` with the
+   sample's engine bindings. Verify the cube is visible before attaching.
+   In LIBERA FX select the **Amplitude** (Multiply) node, toggle its breakpoint, enable
+   **Match a compiled Spawnable package**, and start the local debugger.
+2. In Unity Play Mode, select the live `LiberaFxSpawnableComponent`, click
+   **Select current playback**, leave both child fields blank, paste the
+   invitation, and click **Attach package debugger**. In Unreal PIE, select
+   the live actor's **Libra Effect** component, paste the invitation into
+   **Local Debugger Invitation**, and invoke **Attach Local Debugger**. This
+   attaches the package root. If using a game-thread Blueprint helper, call
+   `AttachExecutionDebugger` on that same live component.
+3. Wait for the pause in LIBERA FX. Confirm the target is the package root
+   and **Locate** selects Amplitude. Inspect its connected cosine operand
+   and the disconnected `-0.5` multiplier separately from the saved node
+   parameters. Click **Step** and verify a fresh pause at the next executable
+   instruction in the selected scope; if the fixture reaches the end of the
+   evaluation, use the next tick. A source node may compile to more than
+   one instruction. Check the cube retains its last committed presentation
+   and an unrelated game object continues updating while the effect is paused.
+4. Remove the breakpoint before **Resume** to avoid hitting it on the next
+   update. Confirm normal playback, then disconnect or end Play Mode/PIE
+   and check that the debugger releases the session. Repeat with a fresh
+   invitation to test detaching or destroying the effect while paused.
+
+For child acceptance, get the container ID and instance ID from the selected
+effect's Spawn event and the generation from its current playback; never reuse
+IDs across a restart. Supply the child fields in Unity or use
+`GetPackageDebuggerGeneration` and `AttachPackageDebugger` on Unreal's
+public component. To generate a CPU-only child stepping fixture, set
+`LIBERAFX_DATA_ROOT` to an isolated absolute path and run:
+
+```powershell
+dotnet run --project Tests\CommentImageSmokeTests.csproj -- --debugger-fixtures C:\SdkScratch\Debugger
+```
+
+Play `DebugChild.lfxp`, open
+`DebugChild.lfxproj`, enter **Debug Child**, and set a breakpoint on **Child
+Scale**. The first input is the child's Time, the second is the default `2`.
+Step to **Child Offset**, which consumes the scaled value and the default `3`.
+Check the reported container, instance, and playback generation before
+resuming. For signal-specific troubleshooting, drive an authored signal in
+that child and inspect its signal predecessor as well as its operands.
+
+An accepted attach request in the engine is not proof of a breakpoint or a
+successful step. Worker tests with an in-process controller and editor tests
+with a simulated runtime cover their respective layers; this walkthrough is
+for validating the actual editor-to-engine connection.
+
+On Windows, the standalone LIBERA FX desktop editor was connected to
+Unity 7000.0.0a16 Play Mode and UE 5.7.4 PIE with this fixture. Both stopped
+before Amplitude, showed its live Cosine input and default `-0.5`, stepped
+to **White - Blue - White**, and resumed. Game frames advanced and the
+engine retained the model renderer during the pause. The desktop run
+also verified exact child scope, live operands, stepping and resume using
+`DebugChild`, while another effect's renderer stayed present. Separate
+engine worker tests cover destruction while paused. GPU instructions are
+not part of CPU stepping.
+
 ## Godot entry point
 
 Build `Runtime\Integrations\Godot` from the staged source with a separate

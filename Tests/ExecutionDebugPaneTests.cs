@@ -59,13 +59,16 @@ internal static class ExecutionDebugPaneTests
             releaseStep.SetResult();
 
             WaitUntil(() => runtime.IsCompleted ||
-                (pollAfterStep.Task.IsCompleted && pane.StepCommand.CanExecute(null)), timeout.Token);
+                (pollAfterStep.Task.IsCompleted && pane.StepCommand.CanExecute(null) &&
+                    pane.CurrentNode.Contains(source.Name, StringComparison.Ordinal)), timeout.Token);
             if (runtime.IsCompleted)
             {
                 runtime.GetAwaiter().GetResult();
             }
             Require(pollAfterStep.Task.IsCompletedSuccessfully && pane.StepCommand.CanExecute(null),
                 "The next pause must become controllable without replaying duplicate control commands.");
+            Require(model.Graph.ExecutionDebugFrame?.Node == source.Id,
+                "The graph must highlight the new instruction after Step, not the original breakpoint.");
         }
         finally
         {
@@ -115,7 +118,7 @@ internal static class ExecutionDebugPaneTests
                     pollAfterStep.TrySetResult();
                 }
             }
-            await pipe.WriteAsync(Frame(stepped ? 2UL : 1UL, node, source), cancellation);
+            await pipe.WriteAsync(stepped ? Frame(2, source) : Frame(1, node, source), cancellation);
         }
     }
 
