@@ -319,9 +319,37 @@ Profiling and native feedback
   Libra.Node.<runtime-node-UUID>. Matrix-lowered rows are measured separately by
   their runtime UUID; the trace does not reconstruct a parent Matrix aggregate.
   Package playback exposes a SpawnableAdvance aggregate but still rejects
-  standalone per-node recording flags. GPU RDG events include the owning component
-  path and kernel ID, so GPU timings can be compared per emitter/kernel; they are
-  pass timings, not individual instruction timings.
+  standalone per-node recording flags.
+  For GPU timing, launch the Editor or Development game with -trace=cpu,frame,gpu
+  and -tracefile=<absolute-path>. Reproduce the effect across multiple game
+  frames on a graphics RHI and open the trace in Unreal Insights. On UE 5.7,
+  set r.RDG.Events 2 to include nested scopes, or 3 for pass labels containing
+  the owning runtime path and interpreter kernel ID. Look for LibraGpu.Simulate
+  and LibraGpu.Billboards on a GPU track. LibraGpu_SubmitFrame,
+  LibraGpu_SetDrawTransform (validation and rebasing) and
+  LibraGpu_ApplyDrawTransform (render-thread handoff) are CPU scopes, not GPU
+  timings. Compare the same emitter, camera and spawn settings with and without
+  the Matrix input. GPU scopes are pass timings, not instruction timings.
+  Use TimingInsights.ExportTimers to check the timer types and
+  TimingInsights.ExportTimingEvents to check that the timers have durations in
+  the captured interval. A missing LIBERA FX GPU scope is not a timing result.
+  To check disabled overhead, keep the same gameplay scene, disable the Core
+  recorder and node/accessor profiling, turn off Insights channels and set
+  r.RDG.Events 0. Compare frame times after warmup under identical settings,
+  including a build without instrumentation if measuring instrumentation cost
+  rather than the cost of enabling recording.
+
+  Verified on UE 5.7.4 / D3D11, Radeon RX 6700 XT, in a 1280x720 game
+  viewport with one authored GPU emitter and eight standalone CPU effects.
+  Two captures recorded GPU pass medians of 15.45-16.30 us for simulation
+  and 7.10-8.60 us for billboards across the disconnected and connected Matrix
+  phases. Matrix validation/rebasing and render-thread handoff appeared only
+  in the connected phase. With recording, trace channels and RDG events off,
+  frame-time medians stayed within run-to-run variation of the pre-change
+  build (four runs each, 720 measured frames per phase per run after warmup).
+  These are local measurements, not performance guarantees for other workloads
+  or graphics backends.
+
   Connected peers explicitly advertise engine, role and capabilities. Editor,
   runtime and viewer roles do not imply asset catalog or profiling support.
   Protocol 3 peers advertising profiling/values accept bounded LFXP Control frames

@@ -13,6 +13,7 @@
 #include "PostProcess/PostProcessMaterialInputs.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "RenderGraphBuilder.h"
+#include "RenderGraphEvent.h"
 #include "RenderGraphUtils.h"
 #include "RenderingThread.h"
 #include "RHITextureReference.h"
@@ -264,6 +265,7 @@ static void AddLibraGpuBillboardRasterPass(FRDGBuilder& graph,
     auto shaderMap = GetGlobalShaderMap(featureLevel);
     TShaderMapRef<FLibraGpuBillboardVS> vertexShader(shaderMap);
     TShaderMapRef<FLibraGpuBillboardPS> pixelShader(shaderMap);
+    RDG_EVENT_SCOPE(graph, "LibraGpu.Billboards");
     graph.AddPass(RDG_EVENT_NAME("%s.Billboards", profileName), parameters, ERDGPassFlags::Raster,
         [parameters, vertexShader, pixelShader, rect, count, blend](FRHICommandList& commandList)
         {
@@ -416,6 +418,7 @@ struct FLibraGpuState
             auto program = graph.RegisterExternalBuffer(Programs[step.Index]);
             auto dispatch = [&](uint32 start, uint32 count)
             {
+                RDG_EVENT_SCOPE(graph, "LibraGpu.Simulate");
                 auto parameters = graph.AllocParameters<FLibraGpuInterpreterCS::FParameters>();
                 parameters->Particles = graph.CreateUAV(particles);
                 parameters->Registers = graph.CreateUAV(registers);
@@ -541,6 +544,7 @@ bool ULibraGpuEffectRuntime::ConfigureEmitter(float emitterSpawnRate, int32 seed
 bool ULibraGpuEffectRuntime::SetDrawTransform(const FMatrix44f& drawTransform, bool connected)
 {
     check(IsInGameThread());
+    TRACE_CPUPROFILER_EVENT_SCOPE(LibraGpu_SetDrawTransform);
     if (connected && !IsFiniteAffineDrawTransform(drawTransform))
     {
         LastError = TEXT("GPU draw Matrix must be finite and affine so its bounds remain conservative.");
@@ -578,6 +582,7 @@ bool ULibraGpuEffectRuntime::SetDrawTransform(const FMatrix44f& drawTransform, b
         auto nextTransform = DrawTransform;
         ENQUEUE_RENDER_COMMAND(LibraGpuSetDrawTransform)([state, nextTransform](FRHICommandListImmediate&)
         {
+            TRACE_CPUPROFILER_EVENT_SCOPE(LibraGpu_ApplyDrawTransform);
             state->DrawTransform = nextTransform;
         });
     }
