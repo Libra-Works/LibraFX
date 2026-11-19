@@ -147,6 +147,12 @@ private:
         std::vector<Draw> draws;
     };
     struct VisualScope final {
+        VisualScope() = default;
+        VisualScope(const VisualScope&) = delete;
+        auto operator=(const VisualScope&) -> VisualScope& = delete;
+        VisualScope(VisualScope&&) noexcept = default;
+        auto operator=(VisualScope&&) noexcept -> VisualScope& = default;
+
         std::array<std::uint8_t, 16> containerId{};
         std::uint64_t instanceId = 0;
         double startTime = 0;

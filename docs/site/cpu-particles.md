@@ -12,6 +12,67 @@ translation_url: /ja/cpu-particles/
 > packages from [Preview releases](https://github.com/Libra-Works/LibraFX/releases).
 > Build and regression results do not establish engine playback, UI usability or rendered pixels.
 
+## Follow the five editor views
+
+These are real editor captures of an isolated example, not engine-rendered
+particles. Open an image at full size to read the pins and Inspector fields.
+
+### 1. Parent graph: connect emission
+
+Connect **Emitter Rate → Emitted total** to **CPU Particle → Emitted total**.
+The selected CPU Particle Inspector sets capacity, seed, initial burst and queue
+capacity. With this connection, the emitter's rate replaces the container's
+default rate; the two rates are not added.
+
+[![Parent graph with Emitter Rate connected to CPU Particle and the container Inspector](images/editor/cpu-particles-root-en.png)](images/editor/cpu-particles-root-en.png)
+
+### 2. Inside CPU Particle: choose the editing scope
+
+Open CPU Particle to find **Spawn**, **Update** and **CPU Particle Sprite Draw**.
+Open Spawn or Update to edit particle behavior. Sprite Draw stays beside those
+stages, not inside them. These three structural nodes do not need wires between
+them; Signal wiring belongs inside the stages.
+
+[![CPU Particle contents showing Spawn, Update and Sprite Draw](images/editor/cpu-particles-stages-en.png)](images/editor/cpu-particles-stages-en.png)
+
+### 3. Spawn: set initial values once
+
+The initial **CPU Stage Event → Set Particle Velocity** chain gives each newborn
+particle velocity `(0,1,0)`, visible in the Inspector. To add initial position,
+color or life, chain their setters along the orange Signal wire. Merely placing
+an unconnected setter does not execute it.
+
+[![Spawn child graph and the initial velocity Inspector](images/editor/cpu-particles-spawn-en.png)](images/editor/cpu-particles-spawn-en.png)
+
+### 4. Update: move each living particle
+
+**CPU Stage Event → Move Particle** runs for the current particle at each
+simulation step. The Inspector controls acceleration and drag. The screenshot
+uses the defaults; for downward acceleration, change its acceleration rather
+than repeatedly changing the initial velocity in Spawn. Breadcrumbs at the top
+show that you are editing the Update child graph.
+
+[![Update child graph with Move Particle and its Inspector](images/editor/cpu-particles-update-en.png)](images/editor/cpu-particles-update-en.png)
+
+### 5. Sprite Draw: choose appearance for the entire pool
+
+Return one level and select **CPU Particle Sprite Draw**. The Inspector shows
+the texture, Alpha/Additive blend mode and draw scale. `builtin:white` selects
+the built-in white texture explicitly; it is not an unresolved asset fallback.
+This screen configures rendering but does not display engine playback.
+
+[![Sprite Draw selected beside Spawn and Update, showing texture and blend settings](images/editor/cpu-particles-draw-en.png)](images/editor/cpu-particles-draw-en.png)
+
+### Does ordinary Draw create more MeshComponents?
+
+In Unreal, an ordinary Draw creates a `UStaticMeshComponent` per draw node and
+playback instance. Spawnable instances therefore add their own draw components;
+they are not recreated every frame, and do not necessarily need separate Actors.
+CPU Particle Sprite Draw instead uses one `UInstancedStaticMeshComponent` for
+the pool: 1,000 particles do not mean 1,000 MeshComponents. Per-particle transform
+and color data still scale with particle count; this does not remove all CPU,
+memory, overdraw or material costs.
+
 ## Authoring a moving Sprite cloud
 
 Add **CPU Particle** from **CPU Particles**, open it, then open its **Spawn** or

@@ -12,6 +12,70 @@ translation_url: /cpu-particles/
 > [Preview 配布ページ](https://github.com/Libra-Works/LibraFX/releases)の更新版を組み合わせてください。
 > ビルドや回帰テストの結果だけでは、エンジン実行・UI 操作性・描画結果の確認にはなりません。
 
+## 5つの実画面で編集の流れを確認する
+
+以下は、隔離したサンプルを実際のエディターで開いて撮影した画面です。
+エンジン上のパーティクル描画結果ではありません。画像を開くと、ピンや
+インスペクターの値を原寸で確認できます。
+
+### 1. 親グラフで放出数をつなぐ
+
+**連続放出エミッターの Emitted total → CPU パーティクルの Emitted total**
+を接続します。右側では粒子上限・Seed・開始時バースト・キュー容量を設定します。
+この接続がある場合、コンテナの「既定の毎秒放出数」ではなく、
+エミッター側の放出率を使います。二つの放出率を加算するわけではありません。
+
+[![連続放出エミッターとCPUパーティクルを接続した親グラフとコンテナの設定](../images/editor/cpu-particles-root-ja.png)](../images/editor/cpu-particles-root-ja.png)
+
+### 2. CPU パーティクルを開き、編集する階層を選ぶ
+
+中には **生成（Spawn）・更新（Update）・CPU Particle Sprite Draw** があります。
+粒子の処理は Spawn または Update を開いて編集し、描画ノードはそれらと
+同じ階層に置きます。この三つの構造ノードの間を配線する必要はありません。
+Signal の配線は、各ステージの内部で行います。
+
+[![CPUパーティクル内部のSpawn・Update・Sprite Drawの三つのノード](../images/editor/cpu-particles-stages-ja.png)](../images/editor/cpu-particles-stages-ja.png)
+
+### 3. Spawn で生成時の初期値を決める
+
+初期状態の **CPU ステージイベント → 粒子の速度を設定** は、生まれた粒子に
+速度 `(0,1,0)` を設定します。右側の X・Y・Z がその値です。位置・色・寿命も
+初期化したい場合は、対応する setter をオレンジ色の Signal につなぎます。
+setter は置くだけでは実行されません。
+
+[![Spawn子グラフのイベントと速度設定ノード、初速度のインスペクター](../images/editor/cpu-particles-spawn-ja.png)](../images/editor/cpu-particles-spawn-ja.png)
+
+### 4. Update で生存中の粒子を動かす
+
+**CPU ステージイベント → 粒子を移動** が、シミュレーションの各ステップで
+現在の粒子を更新します。右側で加速度と抵抗を設定します。画像は初期値です。
+下向きに加速したい場合は、Spawn の初速度を毎回設定し直すのではなく、
+こちらの加速度を変更します。画面上部のパンくずでも Update の階層を確認できます。
+
+[![Update子グラフの移動ノードと加速度・抵抗の設定](../images/editor/cpu-particles-update-ja.png)](../images/editor/cpu-particles-update-ja.png)
+
+### 5. Sprite Draw で粒子群の見た目を設定する
+
+一つ上の階層へ戻り、**CPU Particle Sprite Draw** を選択します。
+右側でテクスチャ、Alpha／Additive、描画倍率を設定します。
+`builtin:white` は明示的に選んだ組込白テクスチャであり、
+見つからないアセットを勝手に置き換えるための値ではありません。
+この画面は描画設定で、エンジン上の再生プレビューではありません。
+
+[![Sprite Drawを選び、テクスチャとブレンドと描画倍率を表示した画面](../images/editor/cpu-particles-draw-ja.png)](../images/editor/cpu-particles-draw-ja.png)
+
+### 通常の Draw では MeshComponent が増える？
+
+Unreal の通常の Draw は、描画ノードと再生インスタンスごとに
+`UStaticMeshComponent` を作ります。Spawnable を増やすと、そのインスタンス分の
+描画 Component も増えます。毎フレーム作り直すわけではなく、
+必ず別の Actor が必要になるわけでもありません。
+一方、CPU Particle Sprite Draw は粒子群を一つの
+`UInstancedStaticMeshComponent` にまとめるため、1,000 粒子を出しても
+MeshComponent が1,000個になる方式ではありません。
+ただし位置・色などの粒子データは粒子数に応じて増え、
+CPU・メモリ・オーバードロー・マテリアルの負荷まで消えるわけではありません。
+
 ## Sprite の粒子群を作る
 
 **CPU パーティクル**から CPU Particle を追加して開き、**生成（Spawn）** または

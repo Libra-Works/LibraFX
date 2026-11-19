@@ -39,6 +39,12 @@ internal static class Program
 
     private static void MainCore(string[] args)
     {
+        if (args is ["--cpu-particle-documentation", var cpuDocumentationDirectory])
+        {
+            InitializeIsolatedUi();
+            CpuParticleDocumentationCapture.Capture(cpuDocumentationDirectory);
+            return;
+        }
         if (args is ["--cpu-particles"])
         {
             InitializeIsolatedUi();

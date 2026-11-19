@@ -35,6 +35,7 @@ jobs:
           sed 's|\.\./\.\./images/afterimage-gate-editor\.png|../images/afterimage-gate-editor.png|g' docs/site/ja/index.md > pages-source/ja/index.md
           cp docs/images/afterimage-gate-editor.png pages-source/images/
           cp docs/site/images/editor/{chat,content,crash-reports,engine-connection,f-curve,gpu-dsl,gpu-flow,gpu-kernel,history,inspector,live-game,log,node-list,outliner,profiler,revision-history,search,settings-appearance,settings-extensions,settings-inspectors,settings-projects,settings-servers,settings-shortcuts,sprite,startup,timeline,workspace}.png pages-source/images/editor/
+          cp docs/site/images/editor/cpu-particles-*.png pages-source/images/editor/
           python3 Tools/Generate-NodeReference.py pages-source
       - uses: actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1
         with:
@@ -63,6 +64,13 @@ jobs:
           test -s pages-output/images/afterimage-gate-editor.png
           for image in pages-source/images/editor/*.png; do
             test -s "pages-output/images/editor/${image##*/}"
+          done
+          for lang in en ja; do
+            rendered="pages-output/cpu-particles.html"
+            if [ "$lang" = ja ]; then rendered="pages-output/ja/cpu-particles.html"; fi
+            for view in root stages spawn update draw; do
+              grep -Fq "images/editor/cpu-particles-$view-$lang.png" "$rendered"
+            done
           done
           grep -q 'getting-started.html' pages-output/index.html
           grep -q 'engine-integration.html' pages-output/index.html
