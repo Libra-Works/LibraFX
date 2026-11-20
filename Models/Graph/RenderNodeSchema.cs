@@ -83,6 +83,7 @@ public static class RenderNodeSchema
         IReadOnlyList<NodeParameterSnapshot>? nodeParameters)
     {
         ArgumentNullException.ThrowIfNull(baseDefinition);
+        baseDefinition = ProceduralResourceSchema.Effective(baseDefinition, nodeParameters);
         if (!IsRenderNode(baseDefinition)) return baseDefinition;
 
         var schemaParameter = baseDefinition.Parameters.FirstOrDefault(parameter => parameter.Id == "materialSchema");
@@ -245,6 +246,8 @@ public static class RenderNodeSchema
 
     public static bool IsValidParameterValue(GraphNodeDefinition definition, NodeParameterSnapshot parameter)
     {
+        if (ProceduralResourceSchema.IsMetadata(definition.Kind) && parameter.Id == "proceduralState")
+            return parameter.Type is "string" or "proceduralState" && NodeParameter.IsValidValue("proceduralState", parameter.Value);
         if (IsRenderNode(definition) && parameter.Id == "materialSchema")
         {
             if (parameter.Type != "string" || parameter.Value.ValueKind != JsonValueKind.String) return false;

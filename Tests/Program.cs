@@ -39,6 +39,18 @@ internal static class Program
 
     private static void MainCore(string[] args)
     {
+        if (args is ["--procedural-resources"])
+        {
+            InitializeIsolatedUi();
+            LiberaFx.Tests.ProceduralResourceTests.Run();
+            return;
+        }
+        if (args is ["--procedural-fixtures", var proceduralDirectory])
+        {
+            InitializeIsolatedUi();
+            LiberaFx.Tests.ProceduralResourceTests.WriteFixtures(proceduralDirectory);
+            return;
+        }
         if (args is ["--fluid-2d"])
         {
             InitializeIsolatedUi();

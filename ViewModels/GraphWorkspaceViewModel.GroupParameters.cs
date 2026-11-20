@@ -21,7 +21,7 @@ public sealed partial class GraphWorkspaceViewModel
         }
 
         var definition = node.Definition.Parameters.FirstOrDefault(parameter => parameter.Id == parameterId);
-        if (definition is null || !GroupExposedItems.SupportsParameter(node.Definition, definition))
+        if (definition is null || definition.Hidden || !GroupExposedItems.SupportsParameter(node.Definition, definition))
         {
             return false;
         }

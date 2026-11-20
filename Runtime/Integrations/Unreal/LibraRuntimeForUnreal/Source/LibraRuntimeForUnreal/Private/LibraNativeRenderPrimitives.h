@@ -10,6 +10,7 @@
 class ULibraSpawnableComponent;
 class UStaticMesh;
 class UMaterialInterface;
+class FLibraProceduralGeometry;
 
 class FLibraNativeInstancedMeshPrimitive final
 {
@@ -74,7 +75,9 @@ class FLibraNativeFlexiblePlanePrimitive final
 {
 public:
     bool Create(ULibraSpawnableComponent& owner, UMaterialInterface* material,
-        const FTransform& worldTransform);
+        const FTransform& worldTransform,
+        TSharedPtr<FLibraProceduralGeometry, ESPMode::ThreadSafe> proceduralGeometry = nullptr);
+    void SetLocalBounds(const FBoxSphereBounds& bounds);
     void SetGeometry(TArray<FDynamicMeshVertex>& vertices, TArray<uint32>& indices,
         FRenderCommandFence& uploadFence, const FTransform& worldTransform);
     void SetTransform(const FTransform& worldTransform);

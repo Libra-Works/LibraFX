@@ -1,0 +1,230 @@
+{
+  "FormatVersion": 13,
+  "AutoDestroyWhenIdle": false,
+  "Nodes": [
+    {
+      "Id": "b7c37a3e-744e-4f78-87a2-c5e4bd9b64d9",
+      "Name": "Slash Procedural Model",
+      "Kind": "ProceduralModel",
+      "X": 0,
+      "Y": 0,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "proceduralState",
+          "Type": "string",
+          "Value": "{\u0022version\u0022:1,\u0022shape\u0022:1,\u0022segmentsU\u0022:32,\u0022segmentsV\u0022:8,\u0022size\u0022:[2,1,1],\u0022innerRadius\u0022:0.6,\u0022sweepDegrees\u0022:360,\u0022turns\u0022:2,\u0022tubeRadius\u0022:0.1,\u0022pivotMode\u0022:5,\u0022pivot\u0022:[0,0,0],\u0022pivotVertex\u0022:0,\u0022capped\u0022:true,\u0022animatedBase\u0022:false,\u0022modifiers\u0022:[{\u0022id\u0022:\u002209fe7c85-cb2b-4dfa-85b2-cb20b796f815\u0022,\u0022kind\u0022:0,\u0022axis\u0022:0,\u0022flags\u0022:1,\u0022count\u0022:1,\u0022seed\u0022:1,\u0022values\u0022:[20,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{\u0022id\u0022:\u002237dfafde-1fb0-4f16-950a-a0ac717c8277\u0022,\u0022kind\u0022:3,\u0022axis\u0022:2,\u0022flags\u0022:17,\u0022count\u0022:1,\u0022seed\u0022:1,\u0022values\u0022:[0.06,3,0,2,0,0,0,0,0,0,0,0,0,0,0,0]},{\u0022id\u0022:\u00226d19e7ff-1dc2-425a-ae01-c04d7e32d0aa\u0022,\u0022kind\u0022:12,\u0022axis\u0022:1,\u0022flags\u0022:1,\u0022count\u0022:1,\u0022seed\u0022:1,\u0022values\u0022:[0.02,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}],\u0022resolution\u0022:256,\u0022operations\u0022:[],\u0022outputRegister\u0022:0,\u0022blend\u0022:\u0022alpha\u0022,\u0022doubleSided\u0022:true,\u0022emission\u0022:1}"
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false,
+      "GroupOverrides": null,
+      "SignalKeys": null
+    },
+    {
+      "Id": "e011050c-a60b-4c34-996b-31d99f54fe71",
+      "Name": "Slash Procedural Texture",
+      "Kind": "ProceduralTexture",
+      "X": 0,
+      "Y": 250,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "proceduralState",
+          "Type": "string",
+          "Value": "{\u0022version\u0022:1,\u0022shape\u0022:16,\u0022segmentsU\u0022:32,\u0022segmentsV\u0022:8,\u0022size\u0022:[1,1,1],\u0022innerRadius\u0022:0.6,\u0022sweepDegrees\u0022:360,\u0022turns\u0022:2,\u0022tubeRadius\u0022:0.1,\u0022pivotMode\u0022:0,\u0022pivot\u0022:[0,0,0],\u0022pivotVertex\u0022:0,\u0022capped\u0022:true,\u0022animatedBase\u0022:false,\u0022modifiers\u0022:[],\u0022resolution\u0022:256,\u0022operations\u0022:[{\u0022id\u0022:\u002233ae29dd-87a4-4ca3-9b5f-7cf0f69abc2e\u0022,\u0022kind\u0022:13,\u0022inputA\u0022:0,\u0022inputB\u0022:0,\u0022seed\u0022:1,\u0022values\u0022:[8,5,0.15,0.08,4,0.5,0,0,0,0,0,0]},{\u0022id\u0022:\u00228c9ec49e-6eae-44c7-8021-56aa80267112\u0022,\u0022kind\u0022:27,\u0022inputA\u0022:1,\u0022inputB\u0022:0,\u0022seed\u0022:1,\u0022values\u0022:[0,0.05,0.2,0,0.15,0.65,1,1,0.15,0.8,0,0]}],\u0022outputRegister\u0022:2,\u0022blend\u0022:\u0022alpha\u0022,\u0022doubleSided\u0022:true,\u0022emission\u0022:1}"
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false,
+      "GroupOverrides": null,
+      "SignalKeys": null
+    },
+    {
+      "Id": "27817b3e-ea68-472b-8470-0bcfb2ddb4d2",
+      "Name": "Slash Procedural Material",
+      "Kind": "ProceduralMaterial",
+      "X": 0,
+      "Y": 500,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "proceduralState",
+          "Type": "string",
+          "Value": "{\u0022version\u0022:1,\u0022shape\u0022:16,\u0022segmentsU\u0022:32,\u0022segmentsV\u0022:8,\u0022size\u0022:[1,1,1],\u0022innerRadius\u0022:0.6,\u0022sweepDegrees\u0022:360,\u0022turns\u0022:2,\u0022tubeRadius\u0022:0.1,\u0022pivotMode\u0022:0,\u0022pivot\u0022:[0,0,0],\u0022pivotVertex\u0022:0,\u0022capped\u0022:true,\u0022animatedBase\u0022:false,\u0022modifiers\u0022:[],\u0022resolution\u0022:256,\u0022operations\u0022:[{\u0022id\u0022:\u0022ae845978-8a00-45a6-970c-e5b9c3c96fc5\u0022,\u0022kind\u0022:30,\u0022inputA\u0022:0,\u0022inputB\u0022:0,\u0022seed\u0022:1,\u0022values\u0022:[0,0,0,0,0,0,0,0,0,0,0,0]}],\u0022outputRegister\u0022:1,\u0022blend\u0022:\u0022additive\u0022,\u0022doubleSided\u0022:true,\u0022emission\u0022:1.5}"
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false,
+      "GroupOverrides": null,
+      "SignalKeys": null
+    },
+    {
+      "Id": "9c811436-25b6-43cc-8cbc-bd6ca766cc00",
+      "Name": "Slash Draw",
+      "Kind": "ModelDraw",
+      "X": 430,
+      "Y": 100,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": null,
+      "GroupAsset": null,
+      "IsPolymorphic": false,
+      "GroupOverrides": null,
+      "SignalKeys": null
+    }
+  ],
+  "Connections": [
+    {
+      "SourceNodeId": "b7c37a3e-744e-4f78-87a2-c5e4bd9b64d9",
+      "TargetNodeId": "9c811436-25b6-43cc-8cbc-bd6ca766cc00",
+      "TargetPortId": "proceduralModel",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "e011050c-a60b-4c34-996b-31d99f54fe71",
+      "TargetNodeId": "27817b3e-ea68-472b-8470-0bcfb2ddb4d2",
+      "TargetPortId": "texture0",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "27817b3e-ea68-472b-8470-0bcfb2ddb4d2",
+      "TargetNodeId": "9c811436-25b6-43cc-8cbc-bd6ca766cc00",
+      "TargetPortId": "proceduralMaterial",
+      "SourcePortId": "value"
+    }
+  ],
+  "History": {
+    "RootId": "257610db-a58f-4ae9-a44a-c3c72c08db9b",
+    "CurrentNodeId": "257610db-a58f-4ae9-a44a-c3c72c08db9b",
+    "TimelineRevisionId": "1540d197-e806-4738-8da6-af6fb0147c74",
+    "NextBranchNumber": 1,
+    "Entries": [
+      {
+        "Id": "257610db-a58f-4ae9-a44a-c3c72c08db9b",
+        "ParentId": null,
+        "PreferredChildId": null,
+        "Description": "Start",
+        "BranchName": "Main",
+        "IsPinned": false,
+        "State": {
+          "Nodes": [
+            {
+              "Id": "b7c37a3e-744e-4f78-87a2-c5e4bd9b64d9",
+              "Kind": "ProceduralModel",
+              "Name": "Slash Procedural Model",
+              "X": 0,
+              "Y": 0,
+              "PortType": "ProceduralModel",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "proceduralState",
+                  "Type": "string",
+                  "Value": "{\u0022version\u0022:1,\u0022shape\u0022:1,\u0022segmentsU\u0022:32,\u0022segmentsV\u0022:8,\u0022size\u0022:[2,1,1],\u0022innerRadius\u0022:0.6,\u0022sweepDegrees\u0022:360,\u0022turns\u0022:2,\u0022tubeRadius\u0022:0.1,\u0022pivotMode\u0022:5,\u0022pivot\u0022:[0,0,0],\u0022pivotVertex\u0022:0,\u0022capped\u0022:true,\u0022animatedBase\u0022:false,\u0022modifiers\u0022:[{\u0022id\u0022:\u002209fe7c85-cb2b-4dfa-85b2-cb20b796f815\u0022,\u0022kind\u0022:0,\u0022axis\u0022:0,\u0022flags\u0022:1,\u0022count\u0022:1,\u0022seed\u0022:1,\u0022values\u0022:[20,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{\u0022id\u0022:\u002237dfafde-1fb0-4f16-950a-a0ac717c8277\u0022,\u0022kind\u0022:3,\u0022axis\u0022:2,\u0022flags\u0022:17,\u0022count\u0022:1,\u0022seed\u0022:1,\u0022values\u0022:[0.06,3,0,2,0,0,0,0,0,0,0,0,0,0,0,0]},{\u0022id\u0022:\u00226d19e7ff-1dc2-425a-ae01-c04d7e32d0aa\u0022,\u0022kind\u0022:12,\u0022axis\u0022:1,\u0022flags\u0022:1,\u0022count\u0022:1,\u0022seed\u0022:1,\u0022values\u0022:[0.02,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}],\u0022resolution\u0022:256,\u0022operations\u0022:[],\u0022outputRegister\u0022:0,\u0022blend\u0022:\u0022alpha\u0022,\u0022doubleSided\u0022:true,\u0022emission\u0022:1}"
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "GroupOverrides": null,
+              "SignalKeys": null,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "e011050c-a60b-4c34-996b-31d99f54fe71",
+              "Kind": "ProceduralTexture",
+              "Name": "Slash Procedural Texture",
+              "X": 0,
+              "Y": 250,
+              "PortType": "ProceduralTexture",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "proceduralState",
+                  "Type": "string",
+                  "Value": "{\u0022version\u0022:1,\u0022shape\u0022:16,\u0022segmentsU\u0022:32,\u0022segmentsV\u0022:8,\u0022size\u0022:[1,1,1],\u0022innerRadius\u0022:0.6,\u0022sweepDegrees\u0022:360,\u0022turns\u0022:2,\u0022tubeRadius\u0022:0.1,\u0022pivotMode\u0022:0,\u0022pivot\u0022:[0,0,0],\u0022pivotVertex\u0022:0,\u0022capped\u0022:true,\u0022animatedBase\u0022:false,\u0022modifiers\u0022:[],\u0022resolution\u0022:256,\u0022operations\u0022:[{\u0022id\u0022:\u002233ae29dd-87a4-4ca3-9b5f-7cf0f69abc2e\u0022,\u0022kind\u0022:13,\u0022inputA\u0022:0,\u0022inputB\u0022:0,\u0022seed\u0022:1,\u0022values\u0022:[8,5,0.15,0.08,4,0.5,0,0,0,0,0,0]},{\u0022id\u0022:\u00228c9ec49e-6eae-44c7-8021-56aa80267112\u0022,\u0022kind\u0022:27,\u0022inputA\u0022:1,\u0022inputB\u0022:0,\u0022seed\u0022:1,\u0022values\u0022:[0,0.05,0.2,0,0.15,0.65,1,1,0.15,0.8,0,0]}],\u0022outputRegister\u0022:2,\u0022blend\u0022:\u0022alpha\u0022,\u0022doubleSided\u0022:true,\u0022emission\u0022:1}"
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "GroupOverrides": null,
+              "SignalKeys": null,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "27817b3e-ea68-472b-8470-0bcfb2ddb4d2",
+              "Kind": "ProceduralMaterial",
+              "Name": "Slash Procedural Material",
+              "X": 0,
+              "Y": 500,
+              "PortType": "ProceduralMaterial",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "proceduralState",
+                  "Type": "string",
+                  "Value": "{\u0022version\u0022:1,\u0022shape\u0022:16,\u0022segmentsU\u0022:32,\u0022segmentsV\u0022:8,\u0022size\u0022:[1,1,1],\u0022innerRadius\u0022:0.6,\u0022sweepDegrees\u0022:360,\u0022turns\u0022:2,\u0022tubeRadius\u0022:0.1,\u0022pivotMode\u0022:0,\u0022pivot\u0022:[0,0,0],\u0022pivotVertex\u0022:0,\u0022capped\u0022:true,\u0022animatedBase\u0022:false,\u0022modifiers\u0022:[],\u0022resolution\u0022:256,\u0022operations\u0022:[{\u0022id\u0022:\u0022ae845978-8a00-45a6-970c-e5b9c3c96fc5\u0022,\u0022kind\u0022:30,\u0022inputA\u0022:0,\u0022inputB\u0022:0,\u0022seed\u0022:1,\u0022values\u0022:[0,0,0,0,0,0,0,0,0,0,0,0]}],\u0022outputRegister\u0022:1,\u0022blend\u0022:\u0022additive\u0022,\u0022doubleSided\u0022:true,\u0022emission\u0022:1.5}"
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "GroupOverrides": null,
+              "SignalKeys": null,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "9c811436-25b6-43cc-8cbc-bd6ca766cc00",
+              "Kind": "ModelDraw",
+              "Name": "Slash Draw",
+              "X": 430,
+              "Y": 100,
+              "PortType": "RenderInstance",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": null,
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "GroupOverrides": null,
+              "SignalKeys": null,
+              "KindDomain": "Cpu"
+            }
+          ],
+          "Connections": [
+            {
+              "SourceNodeId": "b7c37a3e-744e-4f78-87a2-c5e4bd9b64d9",
+              "TargetNodeId": "9c811436-25b6-43cc-8cbc-bd6ca766cc00",
+              "TargetPortId": "proceduralModel",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "e011050c-a60b-4c34-996b-31d99f54fe71",
+              "TargetNodeId": "27817b3e-ea68-472b-8470-0bcfb2ddb4d2",
+              "TargetPortId": "texture0",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "27817b3e-ea68-472b-8470-0bcfb2ddb4d2",
+              "TargetNodeId": "9c811436-25b6-43cc-8cbc-bd6ca766cc00",
+              "TargetPortId": "proceduralMaterial",
+              "SourcePortId": "value"
+            }
+          ],
+          "ExposedItems": null,
+          "AutoDestroyWhenIdle": false,
+          "ResourceIdentities": null
+        }
+      }
+    ]
+  },
+  "ResourceIdentities": null
+}

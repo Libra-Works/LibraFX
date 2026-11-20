@@ -133,6 +133,7 @@
         <dock:DockControl Grid.Row="1"
                           Layout="{Binding Layout}" />
         <views:GpuWorkspaceView x:Name="GpuWorkspace" Grid.Row="1" IsVisible="False" />
+        <views:ProceduralWorkspaceView x:Name="ProceduralWorkspace" Grid.Row="1" IsVisible="False" />
 
         <Border Grid.Row="2" Classes="editor-bar" BorderThickness="0,1,0,0">
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">

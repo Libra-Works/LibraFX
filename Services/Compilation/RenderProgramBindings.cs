@@ -27,12 +27,17 @@ public static class RenderProgramBindings
         IRenderResourceBindingContext? resourceContext = null, VfxCompileOptions? options = null) =>
         CreateSceneCore(graph, programSequence, resourceContext, options, allowSourceMetadata: false);
 
+    internal static byte[] CreateProceduralScene(GraphSnapshot graph, long programSequence,
+        IRenderResourceBindingContext? resourceContext = null, VfxCompileOptions? options = null) =>
+        CreateSceneCore(graph, programSequence, resourceContext, options, allowSourceMetadata: false, allowProceduralScene: true);
+
     internal static byte[] CreateSceneForPackage(GraphSnapshot graph, long programSequence,
         IRenderResourceBindingContext? resourceContext = null, VfxCompileOptions? options = null) =>
         CreateSceneCore(graph, programSequence, resourceContext, options, allowSourceMetadata: true);
 
     private static byte[] CreateSceneCore(GraphSnapshot graph, long programSequence,
-        IRenderResourceBindingContext? resourceContext, VfxCompileOptions? options, bool allowSourceMetadata)
+        IRenderResourceBindingContext? resourceContext, VfxCompileOptions? options, bool allowSourceMetadata,
+        bool allowProceduralScene = false)
     {
         if (!allowSourceMetadata && CpuParticleCompilation.Contains(graph))
         {
@@ -58,6 +63,11 @@ public static class RenderProgramBindings
         graph = GraphPolymorphism.Lower(GroupBoundaryLowering.Lower(graph));
         var nodes = Flatten(graph).ToDictionary(node => node.Id);
         var connections = Connections(graph).ToLookup(connection => connection.TargetNodeId);
+        var proceduralResources = ProceduralProgramBindings.Resources(nodes, connections, instanceScopes);
+        if (!allowSourceMetadata && !allowProceduralScene && proceduralResources.Length != 0)
+        {
+            throw new NotSupportedException("Procedural resources require whole-effect package playback with updated SDK adapters.");
+        }
         bool IsWorldRotation(Guid id, HashSet<Guid> visiting)
         {
             if (!visiting.Add(id) || !nodes.TryGetValue(id, out var source)) return false;
@@ -90,6 +100,19 @@ public static class RenderProgramBindings
         {
             var localPath = instanceScopes.GetValueOrDefault(node.Id) ?? Array.Empty<Guid>();
             var instancePath = resourceContext?.GetInstancePath(node.Id, localPath) ?? localPath;
+            if (GraphNodeDefinition.All.Single(d => d.Kind == node.Kind).TypeName == "ModelDraw")
+            {
+                var model = ProceduralProgramBindings.Source(node, "proceduralModel", "ProceduralModel", nodes, connections, instanceScopes);
+                var material = ProceduralProgramBindings.Source(node, "proceduralMaterial", "ProceduralMaterial", nodes, connections, instanceScopes);
+                if (model is { } modelId)
+                {
+                    if (renderNodes.Count >= 128) throw new InvalidDataException("A scope supports at most 128 draws.");
+                    renderNodes.Add(ProceduralProgramBindings.Draw(node, modelId, material, nodes, connections));
+                    continue;
+                }
+                if (material is not null)
+                    throw new NotSupportedException("A procedural material currently requires a Procedural Model input.");
+            }
             if (FlexiblePlaneDrawSchema.IsNode(node.Kind))
             {
                 if (renderNodes.Count >= 128)
@@ -320,6 +343,13 @@ public static class RenderProgramBindings
                     new { type = "render_config", programSequence, nodes = renderNodes }, JsonOptions)
                 : JsonSerializer.SerializeToUtf8Bytes(
                     new { type = "render_config", programSequence, nodes = renderNodes, gpuDrawTransforms }, JsonOptions);
+            if (proceduralResources.Length != 0)
+            {
+                var document = JsonNode.Parse(bytes)!;
+                document["proceduralVersion"] = 1;
+                document["proceduralResources"] = JsonSerializer.SerializeToNode(proceduralResources, JsonOptions);
+                bytes = JsonSerializer.SerializeToUtf8Bytes(document, JsonOptions);
+            }
             if (generatedTextures.Count != 0)
             {
                 var document = JsonNode.Parse(bytes)!;

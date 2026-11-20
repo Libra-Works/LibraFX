@@ -1,4 +1,5 @@
 #include "LibraEditorPreviewSession.h"
+#include "LibraProceduralPreview.h"
 #include "Misc/App.h"
 
 #include "AdvancedPreviewScene.h"
@@ -975,6 +976,7 @@ void FLibraEditorPreviewSession::ConfigureScene(const FString& json, int64 progr
     sceneErrors.Reset();
     if (json.IsEmpty())
     {
+        if (proceduralPreview) proceduralPreview->Clear();
         for (auto& node : renderNodes)
             if (node.component.IsValid()) node.component->DestroyComponent();
         renderNodes.Reset();
@@ -1001,6 +1003,13 @@ void FLibraEditorPreviewSession::ConfigureScene(const FString& json, int64 progr
         { sceneErrors.Add(error); return; }
     }
     auto byNode = TMap<FGuid, FLibraValueHandle>{};
+    if (!proceduralPreview) proceduralPreview = MakeUnique<FLibraProceduralPreview>();
+    auto proceduralError = FString{};
+    if (!proceduralPreview->Configure(*previewActor.Get(), root, proceduralError))
+    {
+        sceneErrors.Add(proceduralError);
+        return;
+    }
     auto candidateNodes = TArray<FRenderNode>{};
     auto nodeIds = TSet<FGuid>{};
     auto target = effect.Get();
@@ -1012,7 +1021,7 @@ void FLibraEditorPreviewSession::ConfigureScene(const FString& json, int64 progr
         auto idText = FString{};
         auto kind = FString{};
         if (object->TryGetStringField(TEXT("kind"), kind) &&
-            (kind == TEXT("debugText") || kind == TEXT("debugModel"))) continue;
+            (kind == TEXT("debugText") || kind == TEXT("debugModel") || kind == TEXT("proceduralModel"))) continue;
         auto assetPath = FString{};
         auto id = FGuid{};
         if (!object->TryGetStringField(TEXT("nodeId"), idText) || !FGuid::Parse(idText, id) || !id.IsValid() ||
@@ -1470,6 +1479,11 @@ FString FLibraEditorPreviewSession::UpdateScene(int64 programSequence, double ti
     if (!effect.IsValid() || !connection.IsValid() ||
         effect->IsEvaluationPending()) return {};
     auto currentProgram = programSequence == renderProgramSequence;
+    if (currentProgram && proceduralPreview)
+    {
+        auto error = FString{};
+        if (!proceduralPreview->Update(*effect.Get(), timeSeconds, error)) sceneErrors.Add(error);
+    }
     if (debugDraw)
     {
         auto error = FString{};
@@ -1745,6 +1759,7 @@ void FLibraEditorPreviewSession::Stop()
     ticker.Reset();
     SavePreviewProfile();
     debugDraw.Reset();
+    proceduralPreview.Reset();
     gpuPreview.Reset();
     pendingRenderNodes.Reset();
     pendingRenderProgramSequence = -1;

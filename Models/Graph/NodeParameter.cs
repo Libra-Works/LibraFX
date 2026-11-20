@@ -7,6 +7,8 @@ public sealed record NodeParameterCondition(string Parameter, JsonElement Expect
 public sealed record NodeParameterDefinition(string Id, string Name, string Type, JsonElement DefaultValue)
 {
     public string? DisplayNameKey { get; init; }
+    /// <summary>Persisted implementation data, excluded from generic authoring inspectors.</summary>
+    public bool Hidden { get; init; }
     public NodeParameterEditorDefinition? Editor { get; init; }
     public NodeParameterCondition? EnabledWhen { get; init; }
 }
@@ -17,6 +19,8 @@ public static class NodeParameter
     public static bool IsValidValue(string type, JsonElement value)
     {
         if (type == "gpuState") return Services.GpuParticleEditorService.IsStateValue(value);
+        if (type == "proceduralState") return value.ValueKind == JsonValueKind.String &&
+            value.GetString()!.Length <= ProceduralResourceSchema.MaximumRecipeCharacters;
         if (type == "commentImage")
         {
             if (value.ValueKind != JsonValueKind.String) return false;

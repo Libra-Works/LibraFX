@@ -259,6 +259,10 @@ void PackageRenderRenderer::synchronizePresentation(bool exiting)
         }
     }
     synchronizeModelBatches(exiting);
+    if (procedural_)
+    {
+        procedural_->synchronize(ownerVisible_, exiting);
+    }
     synchronizeScope(*root_, rootRenderables_, ownerVisible_ && !rootFlexibleHidden_, exiting);
     synchronizeCpuScope(*root_, rootCpuRenderables_, ownerVisible_ && !rootFlexibleHidden_, exiting);
     for (auto& child : children_) {

@@ -359,7 +359,10 @@ public sealed class PreviewHost : IDisposable
                     if (message is not null && !packagePreview && renderPeer &&
                         (message.Kind == CompiledPreviewKind.Program || message.EvaluatedRenderScene is not null))
                     {
-                        var scene = message.EvaluatedRenderScene ?? RenderProgramBindings.CreateScene(publication.Graph,
+                        var sceneFactory = ProceduralResourceSchema.Contains(publication.Graph)
+                            ? (Func<GraphSnapshot, long, IRenderResourceBindingContext?, VfxCompileOptions?, byte[]>)RenderProgramBindings.CreateProceduralScene
+                            : RenderProgramBindings.CreateScene;
+                        var scene = message.EvaluatedRenderScene ?? sceneFactory(publication.Graph,
                             publication.Sequence, resourceContext,
                             new VfxCompileOptions { IncludePreviewDebugDraw = publication.IncludePreviewDebugDraw &&
                                 publication.Playback?.DebugDrawStopped != true });

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LibraFxGodotFlexiblePlane.h"
+#include "LibraFxGodotProcedural.h"
 #include "LibraFxGodotGpu.h"
 #include "LibraFxGodotRenderServer.h"
 #include "liberafx/LbSpawnableHost.h"
@@ -209,6 +210,7 @@ private:
     };
 
     PackageGpuRenderer* gpu_ = nullptr;
+    std::unique_ptr<ProceduralPackageRenderer> procedural_;
     PackageRenderRenderer(const MeshBindings& meshBindings,
                           const TextureBindings& textureBindings);
 

@@ -104,6 +104,9 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("65db6000-5d15-4f11-83da-650000000002")] = "DebugModel",
         [Guid.Parse("57980d8e-701f-443c-91f6-8db56a09d2fc")] = "GpuParticle",
         [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700001")] = "ModelDraw",
+        [Guid.Parse("89e9b18d-9ea2-48c0-bb26-a89000000001")] = "ProceduralModel",
+        [Guid.Parse("89e9b18d-9ea2-48c0-bb26-a89000000002")] = "ProceduralTexture",
+        [Guid.Parse("89e9b18d-9ea2-48c0-bb26-a89000000003")] = "ProceduralMaterial",
         [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700002")] = "SpriteDraw",
         [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700003")] = "SpriteAnimation",
         [Guid.Parse("5bf459b5-77aa-4ec5-a704-cc59df700004")] = "SpriteComposition",
@@ -587,7 +590,7 @@ public sealed record GraphNodeDefinition(
             parameters.Add(new NodeParameterDefinition(parameter.Id!, parameter.Name, parameter.Type,
                 parameter.DefaultValue.Clone())
             {
-                Editor = editor, EnabledWhen = condition, DisplayNameKey = parameter.DisplayNameKey
+                Editor = editor, EnabledWhen = condition, DisplayNameKey = parameter.DisplayNameKey, Hidden = parameter.Hidden
             });
         }
         foreach (var parameter in parameters)
@@ -705,6 +708,7 @@ public sealed record GraphNodeDefinition(
 
     private sealed class NodeParameterFile
     {
+        public bool Hidden { get; set; }
         public string? Id { get; set; }
         public string? Name { get; set; }
         public string? DisplayNameKey { get; set; }

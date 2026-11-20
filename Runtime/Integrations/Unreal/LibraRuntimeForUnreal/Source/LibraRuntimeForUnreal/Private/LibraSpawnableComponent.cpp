@@ -1,4 +1,6 @@
 #include "LibraSpawnableComponent.h"
+#include "LibraProceduralMaterial.h"
+#include "Materials/MaterialInterface.h"
 #include "LibraExecutionDebugAdapter.h"
 #include "LibraTaskScheduler.h"
 #include "liberafx/host/LbSpawnableDebugJob.h"
@@ -105,6 +107,35 @@ ULibraSpawnableComponent::ULibraSpawnableComponent()
     PrimaryComponentTick.bCanEverTick = true;
     PrimaryComponentTick.bStartWithTickEnabled = false;
     bAutoActivate = true;
+    for (const auto* blend : {TEXT("Alpha"), TEXT("Additive")})
+    {
+        for (const auto* side : {TEXT("Double"), TEXT("Single")})
+        {
+            const auto path = FString::Printf(TEXT("/LibraRuntimeForUnreal/Materials/M_Procedural_%s_%s.M_Procedural_%s_%s"), blend, side, blend, side);
+            if (auto* material = LoadObject<UMaterialInterface>(nullptr, *path, nullptr, LOAD_NoWarn))
+            {
+                ProceduralMaterialMasters.Add(material);
+            }
+        }
+    }
+}
+
+bool ULibraSpawnableComponent::EnsureProceduralMaterialMasters(FString& error)
+{
+    auto* defaults = GetMutableDefault<ULibraSpawnableComponent>();
+    for (auto blend = 0; blend < 2; ++blend)
+    {
+        for (auto side = 0; side < 2; ++side)
+        {
+            auto* material = LibraProceduralMaterial::Resolve(blend != 0, side == 0, error);
+            if (!material)
+            {
+                return false;
+            }
+            defaults->ProceduralMaterialMasters.AddUnique(material);
+        }
+    }
+    return true;
 }
 
 class FLibraSpawnableDebugState final

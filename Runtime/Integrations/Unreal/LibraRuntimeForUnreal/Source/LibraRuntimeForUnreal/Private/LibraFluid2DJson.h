@@ -35,7 +35,12 @@ static bool LibraReadFluidModelProperties(const TSharedPtr<FJsonObject>& object,
     }
     for (const auto& entry : object->Values)
     {
-        if (!required.Contains(entry.Key) && !optional.Contains(entry.Key))
+#if defined(UE_JSONOBJECT_LEGACY_STRING_KEYS) && !UE_JSONOBJECT_LEGACY_STRING_KEYS
+        const auto key = FString(entry.Key.ToView());
+#else
+        const auto& key = entry.Key;
+#endif
+        if (!required.Contains(key) && !optional.Contains(key))
         {
             return false;
         }

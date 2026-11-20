@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "typeId": "89e9b18d-9ea2-48c0-bb26-a89000000001",
+  "namespace": "LiberaFx",
+  "kind": "ProceduralModel",
+  "name": "Procedural Model",
+  "displayNameKey": "Procedural.ProceduralModel",
+  "descriptionKey": "Procedural.Description.ProceduralModel",
+  "groupNameKey": "Procedural.Group",
+  "group": "Procedural",
+  "portType": "ProceduralModel",
+  "portCategory": "Parameter",
+  "inputPorts": [],
+  "outputPorts": [
+    {
+      "id": "value",
+      "name": "Output",
+      "portType": "ProceduralModel"
+    }
+  ],
+  "parameters": [
+    {
+      "id": "proceduralState",
+      "name": "Flow",
+      "displayNameKey": "Procedural.Flow",
+      "type": "proceduralState",
+      "hidden": true,
+      "defaultValue": ""
+    }
+  ]
+}

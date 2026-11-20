@@ -8,6 +8,7 @@
 namespace liberafx { class SpawnableHost; }
 class ULibraSpawnableAsset;
 class UCameraComponent;
+class UMaterialInterface;
 class FLibraSpawnableRenderState;
 class FLibraSpawnableDebugState;
 class FLibraSkeletalPoseRuntime;
@@ -88,6 +89,7 @@ public:
     void ClearPreviewDebugDraw();
     bool IsPreviewDebugDrawSuppressed() const { return bSuppressPreviewDebugDraw; }
     ULibraSpawnableComponent();
+    static bool EnsureProceduralMaterialMasters(FString& error);
     virtual ~ULibraSpawnableComponent() override;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime")
@@ -267,6 +269,9 @@ protected:
     virtual void OnComponentDestroyed(bool bDestroyingHierarchy) override;
 
 private:
+    // Hard references on the component CDO keep the shipped masters in cooked builds.
+    UPROPERTY()
+    TArray<TObjectPtr<UMaterialInterface>> ProceduralMaterialMasters;
     bool bSuppressPreviewDebugDraw = false;
     ELibraRuntimeResult ForceTerminateScope(FGuid containerId, int64 instanceId, bool wholeEffect);
     ELibraRuntimeResult NotifyEndRequestScope(FGuid containerId, int64 instanceId,

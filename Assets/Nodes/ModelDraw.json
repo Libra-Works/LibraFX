@@ -10,6 +10,8 @@
   "portType": "RenderInstance",
   "portCategory": "Parameter",
   "inputPorts": [
+    { "id": "proceduralModel", "name": "Procedural Model", "portType": "ProceduralModel" },
+    { "id": "proceduralMaterial", "name": "Procedural Material", "portType": "ProceduralMaterial" },
     { "id": "position", "name": "Position", "portType": "FloatX3" },
     { "id": "rotation", "name": "Rotation", "portType": "FloatX3" },
     { "id": "scale", "name": "Scale", "portType": "FloatX3" },

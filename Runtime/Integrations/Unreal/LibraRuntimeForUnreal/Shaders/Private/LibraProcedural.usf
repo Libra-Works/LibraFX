@@ -1,0 +1,150 @@
+#include "/Engine/Public/Platform.ush"
+
+// Trusted, bounded pixel interpreter. This file contains no graph-supplied shader code.
+struct PixelOperation { uint kind, inputA, inputB, seed; float4 p, q, r; };
+StructuredBuffer<PixelOperation> LibraProceduralOperations;
+RWTexture2D<float4> LibraProceduralOutput;
+Texture2D<float4> LibraProceduralTexture0;
+Texture2D<float4> LibraProceduralTexture1;
+Texture2D<float4> LibraProceduralTexture2;
+Texture2D<float4> LibraProceduralTexture3;
+SamplerState sampler_linear_repeat;
+uint LibraProceduralOperationCount;
+uint LibraProceduralOutputRegister;
+uint LibraProceduralResolution;
+float LibraProceduralLocalTime;
+
+uint phash(int2 p, uint seed)
+{
+    uint h = (uint(p.x) & 4095u) * 0x8da6b343u ^ (uint(p.y) & 4095u) * 0xd8163841u ^ seed * 0x9e3779b9u;
+    h ^= h >> 16; h *= 0x7feb352du; h ^= h >> 15; h *= 0x846ca68bu;
+    return h ^ (h >> 16);
+}
+bool pfinite(float4 value)
+{
+    uint4 bits=asuint(value);
+    return (bits.x & 0x7f800000u)!=0x7f800000u && (bits.y & 0x7f800000u)!=0x7f800000u &&
+        (bits.z & 0x7f800000u)!=0x7f800000u && (bits.w & 0x7f800000u)!=0x7f800000u;
+}
+float punit(uint h) { return float(h >> 8) / 16777215.0; }
+float2 pfade(float2 t) { return t*t*t*(t*(t*6-15)+10); }
+float pvalue(float2 p, uint seed)
+{
+    p = p - floor(p / 4096.0) * 4096.0;
+    int2 i = int2(floor(p)); float2 f = pfade(frac(p));
+    return lerp(lerp(punit(phash(i,seed)),punit(phash(i+int2(1,0),seed)),f.x),
+        lerp(punit(phash(i+int2(0,1),seed)),punit(phash(i+int2(1,1),seed)),f.x),f.y);
+}
+float2 pgradient(uint h)
+{
+    switch(h & 7u)
+    {
+    case 0: return float2(1,0); case 1: return float2(-1,0); case 2: return float2(0,1); case 3: return float2(0,-1);
+    case 4: return float2(.70710678118,.70710678118); case 5: return float2(-.70710678118,.70710678118);
+    case 6: return float2(.70710678118,-.70710678118); default: return float2(-.70710678118,-.70710678118);
+    }
+}
+float pgrad(float2 p, uint seed)
+{
+    p = p - floor(p / 4096.0) * 4096.0;
+    int2 i = int2(floor(p)); float2 f=frac(p), t=pfade(f);
+    return saturate(.5+.70710678118*lerp(
+        lerp(dot(pgradient(phash(i,seed)),f),dot(pgradient(phash(i+int2(1,0),seed)),f-float2(1,0)),t.x),
+        lerp(dot(pgradient(phash(i+int2(0,1),seed)),f-float2(0,1)),dot(pgradient(phash(i+int2(1,1),seed)),f-1),t.x),t.y));
+}
+float pcell(float2 p, uint seed, bool edge)
+{
+    p = p - floor(p / 4096.0) * 4096.0;
+    int2 i=int2(floor(p)); float nearest=16,second=16;
+    [unroll] for(int y=-1;y<=1;++y)
+    {
+        [unroll] for(int x=-1;x<=1;++x)
+        {
+            int2 cell=i+int2(x,y);
+            float2 delta=float2(cell)+float2(punit(phash(cell,seed)),punit(phash(cell,seed^0x68bc21ebu)))-p;
+            float d=dot(delta,delta);
+            if(d<nearest) { second=nearest; nearest=d; } else if(d<second) { second=d; }
+        }
+    }
+    return saturate(edge?sqrt(second)-sqrt(nearest):sqrt(nearest));
+}
+float psmooth(float lo,float hi,float value)
+{
+    float t=hi==lo?(value>=hi?1:0):saturate((value-lo)/(hi-lo)); return t*t*(3-2*t);
+}
+float pfractal(float2 uv,PixelOperation op,bool ridged)
+{
+    float result=0,weight=1,total=0;
+    [loop] for(uint i=0;i<min(uint(op.q.x),8u);++i)
+    {
+        float v=pvalue(uv,op.seed+i*0x9e3779b9u);
+        if(ridged) v=1-abs(2*v-1);
+        result+=weight*v; total+=weight; weight*=op.q.y; uv*=2;
+    }
+    return result/max(total,1e-6);
+}
+[numthreads(8,8,1)]
+void Generate(uint3 id : SV_DispatchThreadID)
+{
+    if(any(id.xy>=LibraProceduralResolution)) return;
+    float4 regs[33]; regs[0]=float4((float2(id.xy)+.5)/LibraProceduralResolution,0,1);
+    [loop] for(uint i=0;i<min(LibraProceduralOperationCount,32u);++i)
+    {
+        PixelOperation op=LibraProceduralOperations[i];
+        float4 a=regs[min(op.inputA,i)],b=regs[min(op.inputB,i)],v=a;
+        float2 uv=a.xy*op.p.xy+LibraProceduralLocalTime*op.p.zw;
+        switch(op.kind)
+        {
+        case 0: v=regs[0]; break;
+        case 1: v=op.p; break;
+        case 2: v=LibraProceduralLocalTime.xxxx; break;
+        case 3:
+        {
+            float angle=op.q.x*.0174532925199433;
+            float2 p=(a.xy-op.q.yz)*op.p.xy;
+            v.xy=float2(cos(angle)*p.x-sin(angle)*p.y,sin(angle)*p.x+cos(angle)*p.y)+op.q.yz+op.p.zw;
+            break;
+        }
+        case 4: v=dot(a.xy,op.p.xy)+op.p.z; break;
+        case 5: v=length(a.xy-op.p.xy)*op.p.z; break;
+        case 6: v=1-psmooth(op.p.w,op.p.w+max(op.q.x,1e-6),abs(length(a.xy-op.p.xy)-op.p.z)); break;
+        case 7: v=.5+.5*sin((dot(a.xy,op.p.xy)+op.p.z)*6.28318530718); break;
+        case 8: v=fmod(abs(floor(a.x*op.p.x)+floor(a.y*op.p.y)),2); break;
+        case 9: v=pvalue(uv,op.seed); break;
+        case 10: v=pgrad(uv,op.seed); break;
+        case 11: v=pcell(uv,op.seed,false); break;
+        case 12: v=pcell(uv,op.seed,true); break;
+        case 13: v=pfractal(uv,op,false); break;
+        case 14: v=pfractal(uv,op,true); break;
+        case 15: v=float4((pvalue(uv+float2(0,.01),op.seed)-pvalue(uv-float2(0,.01),op.seed))/.02,
+            -(pvalue(uv+float2(.01,0),op.seed)-pvalue(uv-float2(.01,0),op.seed))/.02,0,1); break;
+        case 16: v.xy=a.xy+(b.xy-op.p.yy)*op.p.x; break;
+        case 17: v=a+b; break;
+        case 18: v=a*b; break;
+        case 19: v=a-b; break;
+        case 20: v=min(a,b); break;
+        case 21: v=max(a,b); break;
+        case 22: v=lerp(a,b,op.p.x); break;
+        case 23: v=pow(max(a,1e-6),clamp(op.p.x,-32,32)); break;
+        case 24: v=saturate(a); break;
+        case 25: v=1-a; break;
+        case 26: v=float4(psmooth(op.p.x,op.p.y,a.x),psmooth(op.p.x,op.p.y,a.y),psmooth(op.p.x,op.p.y,a.z),psmooth(op.p.x,op.p.y,a.w)); break;
+        case 27: v=lerp(op.p,op.q,psmooth(op.r.x,op.r.y,a.x)); break;
+        case 28: v=a[min(uint(op.p.x),3u)]; break;
+        case 29: v.w=a.w*b.x; break;
+        case 30:
+            switch(uint(op.p.x))
+            {
+            case 0: v=LibraProceduralTexture0.SampleLevel(sampler_linear_repeat,a.xy,0); break;
+            case 1: v=LibraProceduralTexture1.SampleLevel(sampler_linear_repeat,a.xy,0); break;
+            case 2: v=LibraProceduralTexture2.SampleLevel(sampler_linear_repeat,a.xy,0); break;
+            default: v=LibraProceduralTexture3.SampleLevel(sampler_linear_repeat,a.xy,0); break;
+            }
+            break;
+        default: break;
+        }
+        // Half-float storage has a finite range, even when intermediate arithmetic overflows.
+        regs[i+1]=pfinite(v)?clamp(v,-65504.0,65504.0):float4(0,0,0,0);
+    }
+    LibraProceduralOutput[id.xy]=regs[min(LibraProceduralOutputRegister,LibraProceduralOperationCount)];
+}

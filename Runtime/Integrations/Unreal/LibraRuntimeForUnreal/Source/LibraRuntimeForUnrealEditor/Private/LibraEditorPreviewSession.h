@@ -17,6 +17,7 @@ class SEditorViewport;
 class SWidget;
 struct FLibraPreviewConnectionInvitation;
 class FLibraEditorGpuPreview;
+class FLibraProceduralPreview;
 class FLibraEditorDebugDraw;
 class UMaterialInstanceDynamic;
 class ULibraEffectComponent;
@@ -33,6 +34,7 @@ public:
     void Stop();
 
 private:
+    TUniquePtr<FLibraProceduralPreview> proceduralPreview;
     friend class FLibraPreviewDeferredTabTest;
     friend class FLibraPreviewMenuTest;
     friend class FLibraPreviewEmptySceneTest;

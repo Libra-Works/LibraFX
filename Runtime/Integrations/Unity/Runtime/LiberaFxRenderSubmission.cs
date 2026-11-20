@@ -21,6 +21,14 @@ namespace LiberaFx.Unity
     {
         internal LiberaFxRenderStatistics value;
         private long reservedFluidBytes;
+        private long reservedProceduralBytes;
+        internal void ReserveProcedural(long bytes)
+        {
+            if (bytes < 0 || bytes > 128L * 1024 * 1024 - reservedProceduralBytes)
+                throw new InvalidOperationException("Active procedural storage exceeds the 128 MiB effect budget.");
+            reservedProceduralBytes += bytes;
+        }
+        internal void ReleaseProcedural(long bytes) { reservedProceduralBytes -= bytes; }
         internal void ReserveFluid(long bytes)
         {
             if (bytes < 0 || bytes > 256L * 1024 * 1024 - reservedFluidBytes)

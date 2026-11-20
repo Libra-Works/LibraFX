@@ -1026,4 +1026,85 @@ bool FLibraGeneratedDrawConsumerRhiTest::RunTest(const FString& parameters)
     return !HasAnyErrors();
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraProceduralRealRhiTest,
+    "Libra.Runtime.Procedural.RealRhi", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraProceduralRealRhiTest::RunTest(const FString&)
+{
+    using namespace LibraNativeRenderRhiTests;
+    auto fixtures = FString{}, output = FString{};
+    if (!FParse::Value(FCommandLine::Get(), TEXT("LibraProceduralFixtures="), fixtures) ||
+        !FParse::Value(FCommandLine::Get(), TEXT("LibraProceduralOutput="), output))
+    {
+        AddError(TEXT("Absolute procedural fixtures and output arguments are required."));
+        return false;
+    }
+    auto* world = CreateWorld(*this, TEXT("LibraProceduralVerification"));
+    ON_SCOPE_EXIT { DestroyWorld(world); };
+    if (!world || !GDynamicRHI)
+    {
+        return false;
+    }
+    auto* component = static_cast<ULibraEffectComponent*>(nullptr);
+    auto* root = static_cast<USceneComponent*>(nullptr);
+    auto* actor = CreateEffectActor(*world, component, root);
+    if (!actor)
+    {
+        return false;
+    }
+    auto capture = CreateCapture(*world, FVector(0, 0, 80), 600);
+    const auto cameraPosition = FVector(400, -500, 350);
+    capture.Actor->SetActorLocationAndRotation(cameraPosition, (FVector(0, 0, 80) - cameraPosition).Rotation());
+    for (const auto* sample : {TEXT("ModelOnly"), TEXT("Slash"), TEXT("Shockwave"), TEXT("Beam")})
+    {
+        auto bytes = TArray<uint8>{};
+        if (!TestTrue(TEXT("Compiler-produced procedural package loads"), FFileHelper::LoadFileToArray(bytes,
+            *FPaths::Combine(fixtures, FString(sample) + TEXT(".lfxp")))))
+        {
+            return false;
+        }
+        auto* package = NewObject<ULibraSpawnableAsset>(actor);
+        if (!TestEqual(TEXT("Procedural package validates"), package->SetPackageBytes(bytes), ELibraRuntimeResult::Ok))
+        {
+            return false;
+        }
+        component->Package = package;
+        if (!TestEqual(TEXT("Procedural effect starts without mesh bindings"), component->Play(), ELibraRuntimeResult::Ok))
+        {
+            return false;
+        }
+        if (!WaitForShaderCompilation(*this, TEXT("Shipped procedural materials")))
+        {
+            return false;
+        }
+        for (auto frame = 0; frame < 5; ++frame)
+        {
+            component->TickComponent(.02f, LEVELTICK_All, nullptr);
+            FlushRenderingCommands();
+            FPlatformProcess::Sleep(.01f);
+        }
+        AddInfo(FString::Printf(TEXT("Procedural %s render objects=%d primitives=%d"), sample,
+            component->GetRenderObjectCount(), component->GetNativeDrawPrimitiveCount()));
+        AddInfo(FString::Printf(TEXT("Procedural playing=%d error=%s"), component->bIsPlaying, *component->LastError));
+        auto first = TArray<FColor>{};
+        if (!TestTrue(TEXT("Procedural capture succeeds"), CapturePixels(*world, capture, first)))
+        {
+            return false;
+        }
+        SavePixels(output, *(FString(sample) + TEXT("-first.png")), first);
+        if (!TestTrue(FString(sample) + TEXT(" renders generated pixels"), HasAnyBrightPixels(first)))
+        {
+            return false;
+        }
+        component->TickComponent(.5f, LEVELTICK_All, nullptr);
+        auto second = TArray<FColor>{}; CapturePixels(*world, capture, second);
+        TestTrue(FString(sample) + TEXT(" updates correctly"), FString(sample) == TEXT("ModelOnly") ? first == second : first != second);
+        SavePixels(output, *(FString(sample) + TEXT("-animated.png")), second);
+        component->Stop();
+        auto stopped = TArray<FColor>{}; CapturePixels(*world, capture, stopped);
+        TestFalse(TEXT("Stopping removes procedural draw pixels"), HasAnyBrightPixels(stopped));
+    }
+    return !HasAnyErrors();
+}
+
 #endif

@@ -1,6 +1,7 @@
 #include "LibraSpawnableRenderState.h"
 #include "LibraDebugDrawScope.h"
 #include "LibraFlexiblePlaneRenderer.h"
+#include "LibraProceduralScope.h"
 #include "LibraNativeRenderPrimitives.h"
 
 #include "LibraSpawnableComponent.h"
@@ -279,6 +280,7 @@ struct FGeneratedDrawTexture
 
 struct FDefinition
 {
+    TSharedPtr<FLibraProceduralDefinition> Procedural;
     TSharedPtr<FJsonObject> DebugConfiguration;
     int32 DebugCount = 0;
     TArray<FDraw> Draws;
@@ -294,6 +296,7 @@ struct FDefinition
 
 struct FInstance
 {
+    TUniquePtr<FLibraProceduralScope> Procedural;
     TUniquePtr<FLibraDebugDrawScope> Debug;
     FGuid Container;
     int64 Id = 0;
@@ -529,6 +532,12 @@ struct FLibraSpawnableRenderState::FImpl
             !root->TryGetStringField(TEXT("type"), type) || type != TEXT("render_config") ||
             !root->TryGetArrayField(TEXT("nodes"), nodes) || nodes->Num() > 128)
             return Fail(TEXT("Invalid render configuration."));
+        auto proceduralError = FString{};
+        if (!LibraProcedural::Prepare(root, definition.Procedural, proceduralError))
+        {
+            return Fail(proceduralError);
+        }
+        definition.GpuBytes += LibraProcedural::Bytes(definition.Procedural);
         const TArray<TSharedPtr<FJsonValue>>* cpuParticles = nullptr;
         if (root->HasField(TEXT("cpuParticles")) &&
             !root->TryGetArrayField(TEXT("cpuParticles"), cpuParticles))
@@ -582,6 +591,10 @@ struct FLibraSpawnableRenderState::FImpl
             auto object = item.IsValid() && item->Type == EJson::Object ? item->AsObject() : nullptr;
             auto draw = FDraw{};
             auto id = FString{}, kind = FString{}, asset = FString{};
+            if (object && object->TryGetStringField(TEXT("kind"), kind) && kind == TEXT("proceduralModel"))
+            {
+                continue;
+            }
             if (object && object->TryGetStringField(TEXT("kind"), kind) &&
                 kind == TEXT("flexiblePlane"))
             {
@@ -1130,6 +1143,12 @@ struct FLibraSpawnableRenderState::FImpl
         instance->bHasPresentationRootTransform = true;
         const auto visible = !actor->IsHidden() && (!root || root->IsVisible());
         const auto ownerMatrix = FMatrix44f(parentTransform.ToMatrixWithScale().GetTransposed());
+        instance->Procedural = MakeUnique<FLibraProceduralScope>();
+        auto proceduralError = FString{};
+        if (!instance->Procedural->Create(Owner, instance->Definition->Procedural, proceduralError))
+        {
+            return Fail(proceduralError);
+        }
         for (const auto& fluid : instance->Definition->FluidPrograms)
         {
             auto runtime = TStrongObjectPtr<ULibraGpuEffectRuntime>(
@@ -1437,6 +1456,34 @@ struct FLibraSpawnableRenderState::FImpl
     {
         for (auto& instance : Instances)
         {
+            if (instance->Procedural)
+            {
+                auto* actor = Owner.GetOwner();
+                auto* root = actor ? actor->GetRootComponent() : nullptr;
+                const auto transform = root ? root->GetComponentTransform() : FTransform::Identity;
+                auto error = FString{};
+                if (!instance->Procedural->Update([this, &instance](const liberafx::flexible_adapter::Id& id,
+                    double* output, uint8& width) -> LibraResult
+                    {
+                        auto value = FVector4{}; auto count = int32{};
+                        const auto result = instance->Container.IsValid()
+                            ? Owner.ReadChildValue(instance->Container, instance->Id, Guid(id), value, count)
+                            : Owner.ReadRootValue(Guid(id), value, count);
+                        if (result != ELibraRuntimeResult::Ok || count < 1 || count > 4 || !Finite(value))
+                        {
+                            return result == ELibraRuntimeResult::Ok ? LIBRA_INVALID_VALUE_TYPE : static_cast<LibraResult>(result);
+                        }
+                        width = static_cast<uint8>(count);
+                        for (auto i = 0; i < count; ++i)
+                        {
+                            output[i] = value[i];
+                        }
+                        return LIBRA_OK;
+                    }, time - instance->Started, transform, actor && !actor->IsHidden() && (!root || root->IsVisible()), error))
+                {
+                    return Fail(error);
+                }
+            }
             instance->FlexibleHistory.beginUpdate();
             for (auto planeIndex = 0; planeIndex < instance->FlexiblePlanes.Num(); ++planeIndex)
             {
@@ -1825,6 +1872,7 @@ void FLibraSpawnableRenderState::UpdateOwnerPresentation()
     const auto visible = !actor->IsHidden() && (!root || root->IsVisible());
     for (auto& instance : Impl->Instances)
     {
+        if (instance->Procedural) instance->Procedural->SetPresentation(rootTransform, visible);
         const auto transformChanged = !instance->bHasPresentationRootTransform ||
             !instance->PresentationRootTransform.Equals(rootTransform);
         const auto ownerMatrix = FMatrix44f(rootTransform.ToMatrixWithScale().GetTransposed());
@@ -1935,7 +1983,7 @@ int32 FLibraSpawnableRenderState::DrawCount() const
     auto count = 0;
     for (const auto& instance : Impl->Instances)
     {
-        count += instance->Draws.Num() + instance->CpuDraws.Num() + instance->FlexiblePlanes.Num() +
+        count += (instance->Procedural ? instance->Procedural->DrawCount() : 0) + instance->Draws.Num() + instance->CpuDraws.Num() + instance->FlexiblePlanes.Num() +
             (instance->Debug ? instance->Debug->Count() : 0);
     }
     return count;
@@ -1976,6 +2024,9 @@ void FLibraSpawnableRenderState::GetNativeRenderSubmissionStats(int32& logicalRe
     {
         logicalRenderObjects += instance->Definition->Draws.Num() +
             instance->Definition->CpuParticles.Num() + instance->Definition->FlexiblePlanes.Num();
+        const auto proceduralDraws = instance->Procedural ? instance->Procedural->DrawCount() : 0;
+        logicalRenderObjects += proceduralDraws;
+        nativePrimitives += proceduralDraws;
         opaqueBatches += instance->DrawBatches.Num();
         nativePrimitives += instance->DrawBatches.Num();
         for (const auto& draw : instance->Draws)

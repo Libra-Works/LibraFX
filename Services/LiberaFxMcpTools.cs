@@ -407,7 +407,7 @@ public sealed partial class LiberaFxMcpTools
             var graph = activeGraph.Graph;
             var node = FindNode(graph, nodeId);
             try { graph.SetParameter(node, parameterId, value); }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or InvalidDataException)
             { throw new McpException(ex.Message); }
             return SerializeNode(graph, node.Id);
         });

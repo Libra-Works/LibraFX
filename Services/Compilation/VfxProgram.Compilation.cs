@@ -105,6 +105,7 @@ public sealed partial class VfxProgram
             .Where(node => node.Kind != GraphNodeKind.Comment && node.Kind != GraphNodeKind.GraphGroup &&
                 !GpuParticleEditorService.IsGpu(node.Kind) &&
                 !FlexiblePlaneDrawSchema.IsMetadata(node.Kind) &&
+                !ProceduralResourceSchema.IsMetadata(node.Kind) &&
                 !RenderProgramBindings.IsRenderNode(node.Kind))
             .ToArray();
         if (nodes.Length > MaxInstructions) throw new InvalidDataException("Too many runtime nodes.");

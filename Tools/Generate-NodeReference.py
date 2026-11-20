@@ -153,6 +153,8 @@ def ports(node, field, strings, japanese):
 def parameters(node, strings, enums, japanese):
     items = []
     for parameter in node.get("parameters", []):
+        if parameter.get("hidden", False):
+            continue
         kind = parameter["type"]
         default = parameter["defaultValue"]
         enum = enums.get(kind[5:]) if kind.startswith("enum:") else None

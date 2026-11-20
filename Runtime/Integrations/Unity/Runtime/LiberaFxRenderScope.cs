@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace LiberaFx.Unity
@@ -20,6 +21,9 @@ namespace LiberaFx.Unity
         private readonly List<LiberaFxCpuParticleRenderInstance> cpuParticleRenderers =
             new List<LiberaFxCpuParticleRenderInstance>();
         private readonly List<LiberaFxDebugDrawInstance> debugDraws = new List<LiberaFxDebugDrawInstance>();
+        private readonly Dictionary<string, LiberaFxProceduralResource> proceduralResources = new Dictionary<string, LiberaFxProceduralResource>(StringComparer.Ordinal);
+        private readonly List<LiberaFxProceduralResource> proceduralOrder = new List<LiberaFxProceduralResource>();
+        private readonly List<LiberaFxProceduralDraw> proceduralDraws = new List<LiberaFxProceduralDraw>();
         private readonly List<LibraGpuParticleRuntime> gpuPrograms = new List<LibraGpuParticleRuntime>();
         private readonly List<LibraFluid2DInstance> fluidPrograms = new List<LibraFluid2DInstance>();
         private readonly Dictionary<LibraGpuParticleRuntime, LiberaFxPreparedGpuProgram> gpuDrawTransforms =
@@ -66,11 +70,27 @@ namespace LiberaFx.Unity
                 }
                 var renderParent = scope.scopeObject
                     ? scope.scopeObject.transform : owner;
+                foreach (var resource in (prepared.proceduralResources ?? Array.Empty<LiberaFxProceduralResourcePayload>()).OrderBy(p => p.kind == "ProceduralModel" ? 0 : p.kind == "ProceduralTexture" ? 1 : 2))
+                {
+                    var producer = LiberaFxProceduralResource.Acquire(resource, scope.proceduralResources, statistics);
+                    scope.proceduralResources.Add(resource.nodeId, producer);
+                }
+                foreach (var producer in scope.proceduralResources.Values)
+                {
+                    producer.Connect(scope.proceduralResources);
+                    if (producer.definition.kind != "ProceduralMaterial") scope.proceduralOrder.Add(producer);
+                }
+                foreach (var producer in scope.proceduralResources.Values)
+                    if (producer.definition.kind == "ProceduralMaterial") scope.proceduralOrder.Add(producer);
                 foreach (var fluid in prepared.fluidPrograms ?? Array.Empty<LiberaFxPreparedFluidProgram>())
                     scope.fluidPrograms.Add(new LibraFluid2DInstance(owner, fluid, statistics));
                 foreach (var node in prepared.renderNodes)
                 {
-                    if (node.flexiblePlane != null)
+                    if (node.proceduralDraw != null)
+                    {
+                        scope.proceduralDraws.Add(new LiberaFxProceduralDraw(renderParent, node.proceduralDraw, scope.proceduralResources, statistics));
+                    }
+                    else if (node.flexiblePlane != null)
                     {
                         scope.flexiblePlanes.Add(new LiberaFxFlexiblePlaneRenderer(
                             renderParent, node.flexiblePlane,
@@ -183,6 +203,8 @@ namespace LiberaFx.Unity
                 scopeObject.layer = owner.gameObject.layer;
             }
             flexibleHistory.BeginUpdate();
+            foreach (var producer in proceduralOrder) producer.Update(host, rootScope, containerId, instanceId, localTime);
+            foreach (var draw in proceduralDraws) draw.Update(host, rootScope, containerId, instanceId);
             foreach (var plane in flexiblePlanes)
             {
                 plane.Update(host, rootScope, containerId, instanceId, localTime);
@@ -314,6 +336,11 @@ namespace LiberaFx.Unity
                 gpu.Dispose();
             }
             foreach (var node in renderNodes) node.Dispose();
+            foreach (var draw in proceduralDraws) draw.Dispose();
+            proceduralDraws.Clear();
+            foreach (var producer in proceduralResources.Values) producer.Dispose();
+            proceduralResources.Clear();
+            proceduralOrder.Clear();
             foreach (var plane in flexiblePlanes)
             {
                 plane.Dispose();

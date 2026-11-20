@@ -6,7 +6,7 @@
   "Description": "LIBERA FX bytecode execution through an engine-independent core. Source targets UE 5.7 and later.",
   "Category": "FX",
   "EnabledByDefault": true,
-  "CanContainContent": false,
+  "CanContainContent": true,
   "IsBetaVersion": true,
   "Installed": false,
   "Modules": [

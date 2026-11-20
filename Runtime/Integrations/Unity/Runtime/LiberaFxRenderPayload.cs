@@ -17,6 +17,8 @@ namespace LiberaFx.Unity
         public LiberaFxCpuParticlePayload[] cpuParticles;
         public int cpuParticleVersion;
         public LiberaFxGpuDrawTransformPayload[] gpuDrawTransforms;
+        public int proceduralVersion;
+        public LiberaFxProceduralResourcePayload[] proceduralResources;
     }
 
     [Serializable] internal sealed class LiberaFxCpuParticlePayload
@@ -39,6 +41,7 @@ namespace LiberaFx.Unity
     {
         public string nodeId;
         public string kind;
+        public string proceduralModel, proceduralMaterial;
         public LiberaFxFlexiblePlanePayload flexiblePlane;
         public string assetPath;
         public LiberaFxRenderMaterialPayload[] materials;
@@ -204,6 +207,7 @@ namespace LiberaFx.Unity
 
     internal sealed class LiberaFxPreparedRenderNode
     {
+        public LiberaFxRenderNodePayload proceduralDraw;
         public LiberaFxPreparedFlexiblePlane flexiblePlane;
         public LiberaFxRenderNodePayload debugDraw;
         public string nodeId;
@@ -253,6 +257,7 @@ namespace LiberaFx.Unity
 
     internal sealed class LiberaFxPreparedScope
     {
+        public LiberaFxProceduralResourcePayload[] proceduralResources;
         public string templateId;
         public LiberaFxPreparedRenderNode[] renderNodes;
         public LiberaFxPreparedCpuParticleRenderer[] cpuParticles;
@@ -351,6 +356,7 @@ namespace LiberaFx.Unity
             return new LiberaFxPreparedScope
             {
                 templateId = templateId,
+                proceduralResources = renderConfiguration.proceduralResources,
                 renderNodes = renderNodes.Select(ResolveRenderNode).ToArray(),
                 cpuParticles = cpuParticles,
                 gpuPrograms = gpuPrograms.Select(program => ResolveGpuProgram(program, transforms)).ToArray(),
@@ -407,6 +413,8 @@ namespace LiberaFx.Unity
 
         private LiberaFxPreparedRenderNode ResolveRenderNode(LiberaFxRenderNodePayload node)
         {
+            if (node.kind == "proceduralModel")
+                return new LiberaFxPreparedRenderNode { nodeId = node.nodeId, inputs = node.inputs, proceduralDraw = node };
             var generated = node.generatedTextures ?? Array.Empty<LiberaFxGeneratedRenderTexturePayload>();
             var generatedMain = generated.Any(binding => binding.mainTexture);
             LiberaFxUnityRenderAssetBinding builtIn = null;
@@ -761,7 +769,7 @@ namespace LiberaFx.Unity
             {
                 if (node == null || !TryCanonicalGuid(node.nodeId, out var id) ||
                     !ids.Add(id) || (node.kind != "model" && node.kind != "sprite" &&
-                        node.kind != "debugText" && node.kind != "debugModel" && node.kind != "flexiblePlane") ||
+                        node.kind != "debugText" && node.kind != "debugModel" && node.kind != "flexiblePlane" && node.kind != "proceduralModel") ||
                     node.kind != "debugText" && (string.IsNullOrWhiteSpace(node.assetPath) || node.assetPath.Length > 512))
                     throw new InvalidOperationException("Render configuration contains an invalid node identity, kind or asset.");
                 node.nodeId = id;
@@ -775,6 +783,46 @@ namespace LiberaFx.Unity
                 ValidateSpriteAnimation(node);
                 if ((node.materials?.Length ?? 0) > 256 || (node.textures?.Length ?? 0) > 256)
                     throw new InvalidOperationException("Render node material metadata exceeds the supported bound.");
+            }
+            payload.proceduralResources = payload.proceduralResources ?? Array.Empty<LiberaFxProceduralResourcePayload>();
+            if (payload.proceduralVersion != 1 && (payload.proceduralVersion != 0 || payload.proceduralResources.Length != 0) ||
+                payload.proceduralResources.Length > 64)
+                throw new NotSupportedException("Unsupported procedural resource metadata version or count.");
+            var resourceIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var resource in payload.proceduralResources)
+            {
+                var recipe = resource?.recipe;
+                if (resource == null || !TryCanonicalGuid(resource.nodeId, out var resourceId) || !resourceIds.Add(resourceId) ||
+                    recipe == null || recipe.version != 1 ||
+                    resource.kind != "ProceduralModel" && resource.kind != "ProceduralTexture" && resource.kind != "ProceduralMaterial" ||
+                    recipe.modifiers == null || recipe.modifiers.Length > 16 || recipe.operations == null || recipe.operations.Length > 32 ||
+                    recipe.resolution < 16 || recipe.resolution > 1024 || (recipe.resolution & (recipe.resolution - 1)) != 0 ||
+                    recipe.blend != "alpha" && recipe.blend != "additive" || !IsFiniteFloat(recipe.emission) || recipe.emission < 0 || recipe.emission > 64)
+                    throw new InvalidOperationException("Invalid procedural resource recipe.");
+                resource.nodeId = resourceId;
+                ValidateInputs(new LiberaFxRenderNodePayload { nodeId = resource.nodeId, kind = "flexiblePlane", inputs = resource.inputs });
+                var textureSlots = new HashSet<int>();
+                foreach (var reference in resource.textures ?? Array.Empty<LiberaFxProceduralTextureReference>())
+                {
+                    if (reference == null || resource.kind != "ProceduralMaterial" || reference.slot < 0 || reference.slot > 3 ||
+                        !textureSlots.Add(reference.slot) || !TryCanonicalGuid(reference.producerNodeId, out var source))
+                        throw new InvalidOperationException("Invalid procedural texture binding.");
+                    reference.producerNodeId = source;
+                }
+                if (recipe.modifiers.Any(m => m == null) || recipe.operations.Any(op => op == null))
+                    throw new InvalidOperationException("Null procedural operation.");
+            }
+            foreach (var draw in payload.nodes.Where(n => n.kind == "proceduralModel"))
+            {
+                if (!TryCanonicalGuid(draw.proceduralModel, out var source) || !resourceIds.Contains(source))
+                    throw new InvalidOperationException("Procedural draw is missing its scoped producer.");
+                draw.proceduralModel = source;
+                if (!string.IsNullOrEmpty(draw.proceduralMaterial))
+                {
+                    if (!TryCanonicalGuid(draw.proceduralMaterial, out var material) || !resourceIds.Contains(material))
+                        throw new InvalidOperationException("Procedural draw material is missing its scoped producer.");
+                    draw.proceduralMaterial = material;
+                }
             }
             payload.cpuParticles = payload.cpuParticles ?? Array.Empty<LiberaFxCpuParticlePayload>();
             if (payload.cpuParticleVersion != 1 && (payload.cpuParticleVersion != 0 || payload.cpuParticles.Length != 0))

@@ -267,7 +267,7 @@ using render_detail::toReal;
 
 PackageRenderRenderer::PackageRenderRenderer(const MeshBindings& meshBindings,
     const TextureBindings& textureBindings)
-    : meshBindings_(meshBindings), textureBindings_(textureBindings)
+    : procedural_(std::make_unique<ProceduralPackageRenderer>()), meshBindings_(meshBindings), textureBindings_(textureBindings)
 {
 }
 
@@ -282,6 +282,11 @@ auto PackageRenderRenderer::create(const SpawnablePackage& package,
     auto candidate = std::unique_ptr<PackageRenderRenderer>(
         new PackageRenderRenderer(meshBindings, textureBindings));
     candidate->gpu_ = gpu;
+    const auto proceduralResult = candidate->procedural_->prepare(package);
+    if (proceduralResult != Result::Ok)
+    {
+        return proceduralResult;
+    }
     auto result = readDraws(package.rootRenderConfiguration, meshBindings,
         textureBindings, materialBindings, candidate->rootDraws_,
         &candidate->rootCpuParticles_, gpu ? &gpu->drawBindings({}) : nullptr);
@@ -367,6 +372,10 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
         if (!readString(node, "kind", kind) || !readString(node, "nodeId", idText) ||
             !readString(node, "assetPath", assetIdentity)) {
             return Result::InvalidBinary;
+        }
+        if (kind == "proceduralModel")
+        {
+            continue; // The procedural renderer validates and owns these draws.
         }
         if (kind != "model" && kind != "sprite" && kind != "flexiblePlane") {
             return Result::UnsupportedBinary;
@@ -1068,7 +1077,7 @@ auto PackageRenderRenderer::attach(godot::Node& owner) -> Result
 {
     auto anyChildDraws = std::any_of(templates_.begin(), templates_.end(),
         [](const auto& item) { return !item.draws.empty() || !item.cpuParticles.empty(); });
-    if (rootDraws_.empty() && rootCpuParticles_.empty() && !anyChildDraws) {
+    if (rootDraws_.empty() && rootCpuParticles_.empty() && !anyChildDraws && !procedural_->hasDraws()) {
         return Result::Ok;
     }
     root_ = memnew(LibraRenderScopeNode);
@@ -1080,6 +1089,11 @@ auto PackageRenderRenderer::attach(godot::Node& owner) -> Result
     root_->set_name(rootName);
     owner.add_child(root_);
     root_->setRenderer(this);
+    const auto proceduralResult = procedural_->attach(*root_);
+    if (proceduralResult != Result::Ok)
+    {
+        return proceduralResult;
+    }
     for (const auto& draw : rootDraws_) {
         auto renderable = RenderInstance{};
         auto result = makeRenderable(*root_, draw, renderable);
@@ -1117,7 +1131,11 @@ auto PackageRenderRenderer::updateValues(SpawnableHost& host, double effectTime)
     if (!std::isfinite(effectTime) || effectTime < 0) {
         return Result::InvalidArgument;
     }
-    auto result = Result::Ok;
+    auto result = procedural_->update(host, effectTime);
+    if (result != Result::Ok)
+    {
+        return result;
+    }
     if (!rootCpuParticles_.empty())
     {
         if (!root_)
@@ -1186,7 +1204,7 @@ auto PackageRenderRenderer::updateValues(SpawnableHost& host, double effectTime)
 
 auto PackageRenderRenderer::renderStats() const -> godot::Dictionary
 {
-    auto renderInstances = std::uint64_t{};
+    auto renderInstances = static_cast<std::uint64_t>(procedural_ ? procedural_->drawCount() : 0);
     auto flexibleUpdates = std::uint64_t{};
     auto allocatedDrawInstances = std::uint64_t{};
     auto allocatedFlexibleInstances = std::uint64_t{};
@@ -1747,6 +1765,11 @@ auto PackageRenderRenderer::handleEvents(SpawnableHost& host, PackageGpuRenderer
 auto PackageRenderRenderer::handleEvent(const SpawnableHostEvent& event, PackageGpuRenderer* gpu,
     godot::String& gpuError) -> Result
 {
+    const auto proceduralResult = procedural_->handleEvent(event);
+    if (proceduralResult != Result::Ok)
+    {
+        return proceduralResult;
+    }
     if (gpu) {
         auto result = gpu->handleEvent(event, gpuError);
         if (result != Result::Ok) {
@@ -1848,6 +1871,7 @@ void PackageRenderRenderer::removeChild(std::vector<VisualScope>::iterator child
 
 void PackageRenderRenderer::clear() noexcept
 {
+    procedural_.reset();
     if (root_) {
         root_->setRenderer(nullptr);
     }

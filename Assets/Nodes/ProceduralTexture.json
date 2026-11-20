@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "typeId": "89e9b18d-9ea2-48c0-bb26-a89000000002",
+  "namespace": "LiberaFx",
+  "kind": "ProceduralTexture",
+  "name": "Procedural Texture",
+  "displayNameKey": "Procedural.ProceduralTexture",
+  "descriptionKey": "Procedural.Description.ProceduralTexture",
+  "groupNameKey": "Procedural.Group",
+  "group": "Procedural",
+  "portType": "ProceduralTexture",
+  "portCategory": "Parameter",
+  "inputPorts": [],
+  "outputPorts": [
+    {
+      "id": "value",
+      "name": "Output",
+      "portType": "ProceduralTexture"
+    }
+  ],
+  "parameters": [
+    {
+      "id": "proceduralState",
+      "name": "Flow",
+      "displayNameKey": "Procedural.Flow",
+      "type": "proceduralState",
+      "hidden": true,
+      "defaultValue": ""
+    }
+  ]
+}

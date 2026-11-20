@@ -1,4 +1,5 @@
 #include "LibraNativeRenderPrimitives.h"
+#include "LibraProceduralGeometry.h"
 
 #include "LibraSpawnableComponent.h"
 #include "Engine/StaticMesh.h"
@@ -134,8 +135,8 @@ class FLibraFlexiblePlaneSceneProxy final : public FPrimitiveSceneProxy
 {
 public:
     FLibraFlexiblePlaneSceneProxy(const FPrimitiveSceneProxyDesc& description,
-        UMaterialInterface& material)
-        : FPrimitiveSceneProxy(description)
+        UMaterialInterface& material, TSharedPtr<FLibraProceduralGeometry, ESPMode::ThreadSafe> proceduralGeometry)
+        : FPrimitiveSceneProxy(description), ProceduralGeometry(MoveTemp(proceduralGeometry))
     {
         MaterialProxy = material.GetRenderProxy();
 #if UE_VERSION_OLDER_THAN(5, 7, 0)
@@ -158,6 +159,11 @@ public:
         {
             if ((visibility & (1u << viewIndex)) == 0 || !bOwnerVisible.load(std::memory_order_relaxed))
             {
+                continue;
+            }
+            if (ProceduralGeometry)
+            {
+                ProceduralGeometry->Draw(*this, MaterialProxy, viewIndex, collector);
                 continue;
             }
             auto builder = FDynamicMeshBuilder(views[viewIndex]->GetFeatureLevel());
@@ -207,6 +213,7 @@ private:
     const FMaterialRenderProxy* MaterialProxy = nullptr;
     FMaterialRelevance MaterialRelevance;
     std::atomic<bool> bOwnerVisible = true;
+    TSharedPtr<FLibraProceduralGeometry, ESPMode::ThreadSafe> ProceduralGeometry;
 };
 
 struct FLibraFlexiblePlaneSceneProxyDesc final : FPrimitiveSceneProxyDesc
@@ -605,7 +612,8 @@ FLibraNativeMeshPrimitive::~FLibraNativeMeshPrimitive()
 }
 
 bool FLibraNativeFlexiblePlanePrimitive::Create(ULibraSpawnableComponent& owner,
-    UMaterialInterface* material, const FTransform& worldTransform)
+    UMaterialInterface* material, const FTransform& worldTransform,
+    TSharedPtr<FLibraProceduralGeometry, ESPMode::ThreadSafe> proceduralGeometry)
 {
     check(IsInGameThread());
     auto* actor = owner.GetOwner();
@@ -633,7 +641,7 @@ bool FLibraNativeFlexiblePlanePrimitive::Create(ULibraSpawnableComponent& owner,
     MaterialObject.Reset(material);
     LibraNativeRenderPrimitives::SetInitialSceneState(SceneDesc, SceneData,
         CustomPrimitiveData, *OwnerObject.Get(), *Scene, worldTransform, LocalBounds, WorldBounds);
-    SceneData.SceneProxy = new FLibraFlexiblePlaneSceneProxy(proxyDesc, *material);
+    SceneData.SceneProxy = new FLibraFlexiblePlaneSceneProxy(proxyDesc, *material, MoveTemp(proceduralGeometry));
     if (!SceneData.SceneProxy)
     {
         return false;
@@ -670,6 +678,11 @@ void FLibraNativeFlexiblePlanePrimitive::SetGeometry(TArray<FDynamicMeshVertex>&
             });
         uploadFence.BeginFence();
     }
+}
+
+void FLibraNativeFlexiblePlanePrimitive::SetLocalBounds(const FBoxSphereBounds& bounds)
+{
+    LocalBounds = bounds;
 }
 
 void FLibraNativeFlexiblePlanePrimitive::SetTransform(const FTransform& worldTransform)

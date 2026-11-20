@@ -1,4 +1,6 @@
 #include "Modules/ModuleManager.h"
+#include "LibraSpawnableComponent.h"
+#include "Misc/CoreDelegates.h"
 #include "AssetToolsModule.h"
 #include "LibraAssetTypeActions.h"
 #include "LibraEditorPreviewSession.h"
@@ -15,6 +17,8 @@ class FLibraRuntimeForUnrealEditorModule final : public IModuleInterface
 public:
     void StartupModule() override
     {
+        proceduralInit = FCoreDelegates::OnPostEngineInit.AddRaw(this,
+            &FLibraRuntimeForUnrealEditorModule::InitializeProceduralMaterials);
         auto& assetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
         auto category = assetTools.RegisterAdvancedAssetCategory("LibraFX",
             LOCTEXT("AssetCategory", "LIBERA FX"));
@@ -34,6 +38,7 @@ public:
     }
     void ShutdownModule() override
     {
+        FCoreDelegates::OnPostEngineInit.Remove(proceduralInit);
         preview.Stop();
         if (auto* assetTools = FModuleManager::GetModulePtr<FAssetToolsModule>("AssetTools"))
             for (const auto& actions : assetActions) assetTools->Get().UnregisterAssetTypeActions(actions);
@@ -47,6 +52,15 @@ public:
     }
     bool SupportsDynamicReloading() override { return false; }
 private:
+    FDelegateHandle proceduralInit;
+    void InitializeProceduralMaterials()
+    {
+        auto error = FString{};
+        if (!ULibraSpawnableComponent::EnsureProceduralMaterialMasters(error))
+        {
+            UE_LOG(LogTemp, Error, TEXT("LIBERA FX: %s"), *error);
+        }
+    }
     TArray<TSharedRef<IAssetTypeActions>> assetActions;
     FLibraEditorPreviewSession preview;
 };

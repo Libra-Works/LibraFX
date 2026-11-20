@@ -33,7 +33,7 @@ public static class GroupExposedItems
     };
 
     public static bool SupportsParameter(GraphNodeDefinition definition, NodeParameterDefinition parameter) =>
-        !SequenceSchema.IsSequence(definition.Kind) &&
+        !parameter.Hidden && !SequenceSchema.IsSequence(definition.Kind) &&
         parameter.EnabledWhen is null &&
         !(parameter.Id == "materialSchema" && RenderNodeSchema.IsRenderNode(definition)) &&
         !(RenderNodeSchema.IsRenderNode(definition) && RenderNodeSchema.TryGetMaterialSlot(parameter.Id, out _)) &&

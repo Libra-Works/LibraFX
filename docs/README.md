@@ -11,6 +11,7 @@ The Markdown sources are also available on GitHub:
 - [SDK distribution and compatibility](sdk-distribution.md)
 - [Unity integration](../Runtime/Integrations/Unity/USAGE.txt), [Unreal integration](../Runtime/Integrations/Unreal/USAGE.txt), and [Godot integration](../Runtime/Integrations/Godot/USAGE.txt)
 - [Bytecode format](../Runtime/BYTECODE.md), [GPU backends](gpu-backends.md), and [math backend measurements](../Runtime/MATH-BACKEND-MEASUREMENTS.md)
+- [Procedural models, textures, materials and shared resources](procedural-resources.md)
 - [GPU resource plan compiler contract](gpu-resource-plan.md)
 - [Signal timeline](signal-timeline.md), [type conversions](type-conversions.md), [logical signals](logical-signals.md), and [runtime enum branches](runtime-enum-branches.md)
 - [Asset references](asset-references.md), [resource workspace](resource-workspace.md), [transform order](transform-order.md), [Look At and billboards](lookat-billboards.md), and [standard modules](standard-modules.md)

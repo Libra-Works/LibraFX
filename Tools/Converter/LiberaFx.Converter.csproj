@@ -50,6 +50,10 @@
     <Compile Include="..\..\Services\Compilation\SignalTimelineLowering.cs" Link="Services\SignalTimelineLowering.cs" />
     <Compile Include="..\..\Services\Compilation\RenderProgramBindings.cs" Link="Services\RenderProgramBindings.cs" />
     <Compile Include="..\..\Services\Compilation\FlexiblePlaneDrawSchema.cs" Link="Services\FlexiblePlaneDrawSchema.cs" />
+    <Compile Include="..\..\Models\Graph\ProceduralResourceSchema.cs" Link="Models\ProceduralResourceSchema.cs" />
+    <Compile Include="..\..\Services\Compilation\ProceduralProgramBindings.cs" Link="Services\ProceduralProgramBindings.cs" />
+    <Compile Include="..\..\Services\Compilation\ProceduralDefinitionWriter.cs" Link="Services\ProceduralDefinitionWriter.cs" />
+    <Compile Include="..\..\Services\Compilation\ProceduralPixelCompilation.cs" Link="Services\ProceduralPixelCompilation.cs" />
     <Compile Include="..\..\Services\Compilation\PreviewDebugDraw.cs" Link="Services\PreviewDebugDraw.cs" />
     <Compile Include="..\..\Services\SpriteAnimationData.cs" Link="Services\SpriteAnimationData.cs" />
     <Compile Include="..\..\Services\SpriteCompositionData.cs" Link="Services\SpriteCompositionData.cs" />

@@ -1,0 +1,230 @@
+{
+  "FormatVersion": 13,
+  "AutoDestroyWhenIdle": false,
+  "Nodes": [
+    {
+      "Id": "d6b4d8ae-2101-43c5-b1e3-70d40cfa7ee4",
+      "Name": "Beam Procedural Model",
+      "Kind": "ProceduralModel",
+      "X": 0,
+      "Y": 0,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "proceduralState",
+          "Type": "string",
+          "Value": "{\u0022version\u0022:1,\u0022shape\u0022:8,\u0022segmentsU\u0022:32,\u0022segmentsV\u0022:8,\u0022size\u0022:[0.25,3,0.25],\u0022innerRadius\u0022:0.6,\u0022sweepDegrees\u0022:360,\u0022turns\u0022:2,\u0022tubeRadius\u0022:0.1,\u0022pivotMode\u0022:1,\u0022pivot\u0022:[0,0,0],\u0022pivotVertex\u0022:0,\u0022capped\u0022:true,\u0022animatedBase\u0022:false,\u0022modifiers\u0022:[{\u0022id\u0022:\u0022de6686e8-5ca6-4128-b6e9-d05677695611\u0022,\u0022kind\u0022:5,\u0022axis\u0022:1,\u0022flags\u0022:17,\u0022count\u0022:1,\u0022seed\u0022:1,\u0022values\u0022:[0.03,5,0,0.8,0.5,0,0,0,0,0,0,0,0,0,0,0]}],\u0022resolution\u0022:256,\u0022operations\u0022:[],\u0022outputRegister\u0022:0,\u0022blend\u0022:\u0022alpha\u0022,\u0022doubleSided\u0022:true,\u0022emission\u0022:1}"
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false,
+      "GroupOverrides": null,
+      "SignalKeys": null
+    },
+    {
+      "Id": "34f5d7b6-1671-44cf-bad1-5991a6cf4126",
+      "Name": "Beam Procedural Texture",
+      "Kind": "ProceduralTexture",
+      "X": 0,
+      "Y": 250,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "proceduralState",
+          "Type": "string",
+          "Value": "{\u0022version\u0022:1,\u0022shape\u0022:16,\u0022segmentsU\u0022:32,\u0022segmentsV\u0022:8,\u0022size\u0022:[1,1,1],\u0022innerRadius\u0022:0.6,\u0022sweepDegrees\u0022:360,\u0022turns\u0022:2,\u0022tubeRadius\u0022:0.1,\u0022pivotMode\u0022:0,\u0022pivot\u0022:[0,0,0],\u0022pivotVertex\u0022:0,\u0022capped\u0022:true,\u0022animatedBase\u0022:false,\u0022modifiers\u0022:[],\u0022resolution\u0022:256,\u0022operations\u0022:[{\u0022id\u0022:\u0022c6fcac1b-db20-435c-8452-dbe082f0b44d\u0022,\u0022kind\u0022:13,\u0022inputA\u0022:0,\u0022inputB\u0022:0,\u0022seed\u0022:1,\u0022values\u0022:[8,5,0.15,0.08,4,0.5,0,0,0,0,0,0]},{\u0022id\u0022:\u00223fb1eab8-658c-47a9-8fa0-7f03770b1530\u0022,\u0022kind\u0022:27,\u0022inputA\u0022:1,\u0022inputB\u0022:0,\u0022seed\u0022:1,\u0022values\u0022:[0,0.05,0.2,0,0.15,0.65,1,1,0.15,0.8,0,0]}],\u0022outputRegister\u0022:2,\u0022blend\u0022:\u0022alpha\u0022,\u0022doubleSided\u0022:true,\u0022emission\u0022:1}"
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false,
+      "GroupOverrides": null,
+      "SignalKeys": null
+    },
+    {
+      "Id": "79cffee7-fe80-4b07-94ad-c077aa5543b8",
+      "Name": "Beam Procedural Material",
+      "Kind": "ProceduralMaterial",
+      "X": 0,
+      "Y": 500,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "proceduralState",
+          "Type": "string",
+          "Value": "{\u0022version\u0022:1,\u0022shape\u0022:16,\u0022segmentsU\u0022:32,\u0022segmentsV\u0022:8,\u0022size\u0022:[1,1,1],\u0022innerRadius\u0022:0.6,\u0022sweepDegrees\u0022:360,\u0022turns\u0022:2,\u0022tubeRadius\u0022:0.1,\u0022pivotMode\u0022:0,\u0022pivot\u0022:[0,0,0],\u0022pivotVertex\u0022:0,\u0022capped\u0022:true,\u0022animatedBase\u0022:false,\u0022modifiers\u0022:[],\u0022resolution\u0022:256,\u0022operations\u0022:[{\u0022id\u0022:\u0022b8b832c7-bac2-4857-9a7a-42f6131ad290\u0022,\u0022kind\u0022:30,\u0022inputA\u0022:0,\u0022inputB\u0022:0,\u0022seed\u0022:1,\u0022values\u0022:[0,0,0,0,0,0,0,0,0,0,0,0]}],\u0022outputRegister\u0022:1,\u0022blend\u0022:\u0022additive\u0022,\u0022doubleSided\u0022:true,\u0022emission\u0022:1.5}"
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false,
+      "GroupOverrides": null,
+      "SignalKeys": null
+    },
+    {
+      "Id": "684d57c7-f426-4911-96c3-6ea669c88c6a",
+      "Name": "Beam Draw",
+      "Kind": "ModelDraw",
+      "X": 430,
+      "Y": 100,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": null,
+      "GroupAsset": null,
+      "IsPolymorphic": false,
+      "GroupOverrides": null,
+      "SignalKeys": null
+    }
+  ],
+  "Connections": [
+    {
+      "SourceNodeId": "d6b4d8ae-2101-43c5-b1e3-70d40cfa7ee4",
+      "TargetNodeId": "684d57c7-f426-4911-96c3-6ea669c88c6a",
+      "TargetPortId": "proceduralModel",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "34f5d7b6-1671-44cf-bad1-5991a6cf4126",
+      "TargetNodeId": "79cffee7-fe80-4b07-94ad-c077aa5543b8",
+      "TargetPortId": "texture0",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "79cffee7-fe80-4b07-94ad-c077aa5543b8",
+      "TargetNodeId": "684d57c7-f426-4911-96c3-6ea669c88c6a",
+      "TargetPortId": "proceduralMaterial",
+      "SourcePortId": "value"
+    }
+  ],
+  "History": {
+    "RootId": "7ef7a027-e635-4cb1-b8f0-8ace6c488178",
+    "CurrentNodeId": "7ef7a027-e635-4cb1-b8f0-8ace6c488178",
+    "TimelineRevisionId": "29aafbef-d926-4144-8f0b-7038f53a5510",
+    "NextBranchNumber": 1,
+    "Entries": [
+      {
+        "Id": "7ef7a027-e635-4cb1-b8f0-8ace6c488178",
+        "ParentId": null,
+        "PreferredChildId": null,
+        "Description": "Start",
+        "BranchName": "Main",
+        "IsPinned": false,
+        "State": {
+          "Nodes": [
+            {
+              "Id": "d6b4d8ae-2101-43c5-b1e3-70d40cfa7ee4",
+              "Kind": "ProceduralModel",
+              "Name": "Beam Procedural Model",
+              "X": 0,
+              "Y": 0,
+              "PortType": "ProceduralModel",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "proceduralState",
+                  "Type": "string",
+                  "Value": "{\u0022version\u0022:1,\u0022shape\u0022:8,\u0022segmentsU\u0022:32,\u0022segmentsV\u0022:8,\u0022size\u0022:[0.25,3,0.25],\u0022innerRadius\u0022:0.6,\u0022sweepDegrees\u0022:360,\u0022turns\u0022:2,\u0022tubeRadius\u0022:0.1,\u0022pivotMode\u0022:1,\u0022pivot\u0022:[0,0,0],\u0022pivotVertex\u0022:0,\u0022capped\u0022:true,\u0022animatedBase\u0022:false,\u0022modifiers\u0022:[{\u0022id\u0022:\u0022de6686e8-5ca6-4128-b6e9-d05677695611\u0022,\u0022kind\u0022:5,\u0022axis\u0022:1,\u0022flags\u0022:17,\u0022count\u0022:1,\u0022seed\u0022:1,\u0022values\u0022:[0.03,5,0,0.8,0.5,0,0,0,0,0,0,0,0,0,0,0]}],\u0022resolution\u0022:256,\u0022operations\u0022:[],\u0022outputRegister\u0022:0,\u0022blend\u0022:\u0022alpha\u0022,\u0022doubleSided\u0022:true,\u0022emission\u0022:1}"
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "GroupOverrides": null,
+              "SignalKeys": null,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "34f5d7b6-1671-44cf-bad1-5991a6cf4126",
+              "Kind": "ProceduralTexture",
+              "Name": "Beam Procedural Texture",
+              "X": 0,
+              "Y": 250,
+              "PortType": "ProceduralTexture",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "proceduralState",
+                  "Type": "string",
+                  "Value": "{\u0022version\u0022:1,\u0022shape\u0022:16,\u0022segmentsU\u0022:32,\u0022segmentsV\u0022:8,\u0022size\u0022:[1,1,1],\u0022innerRadius\u0022:0.6,\u0022sweepDegrees\u0022:360,\u0022turns\u0022:2,\u0022tubeRadius\u0022:0.1,\u0022pivotMode\u0022:0,\u0022pivot\u0022:[0,0,0],\u0022pivotVertex\u0022:0,\u0022capped\u0022:true,\u0022animatedBase\u0022:false,\u0022modifiers\u0022:[],\u0022resolution\u0022:256,\u0022operations\u0022:[{\u0022id\u0022:\u0022c6fcac1b-db20-435c-8452-dbe082f0b44d\u0022,\u0022kind\u0022:13,\u0022inputA\u0022:0,\u0022inputB\u0022:0,\u0022seed\u0022:1,\u0022values\u0022:[8,5,0.15,0.08,4,0.5,0,0,0,0,0,0]},{\u0022id\u0022:\u00223fb1eab8-658c-47a9-8fa0-7f03770b1530\u0022,\u0022kind\u0022:27,\u0022inputA\u0022:1,\u0022inputB\u0022:0,\u0022seed\u0022:1,\u0022values\u0022:[0,0.05,0.2,0,0.15,0.65,1,1,0.15,0.8,0,0]}],\u0022outputRegister\u0022:2,\u0022blend\u0022:\u0022alpha\u0022,\u0022doubleSided\u0022:true,\u0022emission\u0022:1}"
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "GroupOverrides": null,
+              "SignalKeys": null,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "79cffee7-fe80-4b07-94ad-c077aa5543b8",
+              "Kind": "ProceduralMaterial",
+              "Name": "Beam Procedural Material",
+              "X": 0,
+              "Y": 500,
+              "PortType": "ProceduralMaterial",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "proceduralState",
+                  "Type": "string",
+                  "Value": "{\u0022version\u0022:1,\u0022shape\u0022:16,\u0022segmentsU\u0022:32,\u0022segmentsV\u0022:8,\u0022size\u0022:[1,1,1],\u0022innerRadius\u0022:0.6,\u0022sweepDegrees\u0022:360,\u0022turns\u0022:2,\u0022tubeRadius\u0022:0.1,\u0022pivotMode\u0022:0,\u0022pivot\u0022:[0,0,0],\u0022pivotVertex\u0022:0,\u0022capped\u0022:true,\u0022animatedBase\u0022:false,\u0022modifiers\u0022:[],\u0022resolution\u0022:256,\u0022operations\u0022:[{\u0022id\u0022:\u0022b8b832c7-bac2-4857-9a7a-42f6131ad290\u0022,\u0022kind\u0022:30,\u0022inputA\u0022:0,\u0022inputB\u0022:0,\u0022seed\u0022:1,\u0022values\u0022:[0,0,0,0,0,0,0,0,0,0,0,0]}],\u0022outputRegister\u0022:1,\u0022blend\u0022:\u0022additive\u0022,\u0022doubleSided\u0022:true,\u0022emission\u0022:1.5}"
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "GroupOverrides": null,
+              "SignalKeys": null,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "684d57c7-f426-4911-96c3-6ea669c88c6a",
+              "Kind": "ModelDraw",
+              "Name": "Beam Draw",
+              "X": 430,
+              "Y": 100,
+              "PortType": "RenderInstance",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": null,
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "GroupOverrides": null,
+              "SignalKeys": null,
+              "KindDomain": "Cpu"
+            }
+          ],
+          "Connections": [
+            {
+              "SourceNodeId": "d6b4d8ae-2101-43c5-b1e3-70d40cfa7ee4",
+              "TargetNodeId": "684d57c7-f426-4911-96c3-6ea669c88c6a",
+              "TargetPortId": "proceduralModel",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "34f5d7b6-1671-44cf-bad1-5991a6cf4126",
+              "TargetNodeId": "79cffee7-fe80-4b07-94ad-c077aa5543b8",
+              "TargetPortId": "texture0",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "79cffee7-fe80-4b07-94ad-c077aa5543b8",
+              "TargetNodeId": "684d57c7-f426-4911-96c3-6ea669c88c6a",
+              "TargetPortId": "proceduralMaterial",
+              "SourcePortId": "value"
+            }
+          ],
+          "ExposedItems": null,
+          "AutoDestroyWhenIdle": false,
+          "ResourceIdentities": null
+        }
+      }
+    ]
+  },
+  "ResourceIdentities": null
+}

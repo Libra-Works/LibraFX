@@ -1,0 +1,14 @@
+プロシージャル / Procedural
+
+ProceduralSlash.lfxproj: 斬撃 / Slash
+ProceduralShockwave.lfxproj: 衝撃波 / Shockwave
+ProceduralBeam.lfxproj: ビーム / Beam
+
+モデル、テクスチャー、マテリアルを生成し、既存の Model Draw で描画します。
+プロシージャルノードをダブルクリックして Flow を編集してください。
+外部のモデル・画像アセットは必要ありません。
+
+Generate a model, texture and material, then render with the existing Model Draw.
+Double-click a procedural node to edit its Flow. No external mesh or image asset is required.
+
+Guide: docs/procedural-resources.md
