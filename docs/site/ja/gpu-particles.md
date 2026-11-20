@@ -6,6 +6,9 @@ title: GPU パーティクル制作
 
 # GPU パーティクル制作
 
+新しいソースでは、同じワークスペースに[リソース先頭の 2D 煙・インクモード](fluid-2d.md)も追加しています。
+粒子カーネルとは別のソルバーで、公開済み 2026.11.22 Preview には含まれません。
+
 カーネル・属性・uniform・IR の意味は [GPU パーティクルの用語](glossary.md#gpu)を参照してください。
 
 **GPU Particle** はメイングラフに置くコンテナで、中身は専用のワークスペースで編集します。
@@ -18,7 +21,7 @@ CPU の Signal 接続と GPU の値の配線は別物です。
 2. **GPU Program — double-click to edit** と表示されたノードをダブルクリックします。
    パンくずが CPU グラフから GPU ワークスペースに切り替わります。
 3. Spawn または Update カードの **Open kernel** を押すと、計算グラフを編集できます。
-   **Back** でフローに、**CPU / Close** でメイングラフに戻ります。
+   **Flow**（日本語UIでは **フローへ**）でフローに、**Main graph**（**メイングラフへ**）でメイングラフに戻ります。
 
 ![Spawn のフローカード、GPU パレット、描画設定が表示された GPU Particle ワークスペース](../images/editor/gpu-flow.png)
 

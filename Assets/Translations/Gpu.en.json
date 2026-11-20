@@ -4,7 +4,7 @@
   "Gpu.DrawMatrix": "Draw Matrix",
   "Gpu.Group": "GPU",
   "Gpu.Back": "Back",
-  "Gpu.Close": "CPU / Close",
+  "Gpu.Close": "Main graph",
   "Gpu.Compile": "Compile",
   "Gpu.Status": "GPU Particle · SourceExport only · GPU runtime pending",
   "Gpu.Palette": "GPU palette",

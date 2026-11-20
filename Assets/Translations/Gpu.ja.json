@@ -4,7 +4,7 @@
   "Gpu.DrawMatrix": "描画行列",
   "Gpu.Group": "GPU",
   "Gpu.Back": "戻る",
-  "Gpu.Close": "CPU / 閉じる",
+  "Gpu.Close": "メイングラフへ",
   "Gpu.Compile": "コンパイル",
   "Gpu.Status": "GPU パーティクル · ソース出力のみ · GPU 実行は未対応",
   "Gpu.Palette": "GPU ノード",

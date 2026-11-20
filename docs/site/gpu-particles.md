@@ -7,6 +7,8 @@ title: GPU Particle Authoring
 # GPU Particle Authoring
 
 See [GPU particle terms](glossary.md#gpu) for kernel, attribute, uniform, and IR.
+Newer source also provides a [resource-first 2D smoke / ink mode](fluid-2d.md)
+inside this workspace; that solver is not a particle kernel or part of the published 2026.11.22 Preview.
 
 A **GPU Particle** node is a container on the main effect graph. Its contents
 are edited in a separate workspace: the outer graph owns effect scope and
@@ -19,7 +21,7 @@ connection is not a GPU data wire.
 2. Double-click the node marked **GPU Program — double-click to edit**. The
    breadcrumb changes from the CPU graph to the GPU workspace.
 3. Use **Open kernel** on a Spawn or Update card to edit its calculations.
-   **Back** returns to the flow; **CPU / Close** returns to the main graph.
+   **Flow** returns to the flow; **Main graph** returns to the main graph.
 
 ![GPU Particle workspace showing the Spawn flow card, GPU palette, and renderer properties](images/editor/gpu-flow.png)
 
