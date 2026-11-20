@@ -17,7 +17,7 @@ if ($Engine -eq 'Unity') {
     $nativeItems = @('liberafx_native.dll')
 } else {
     $target = Join-Path $ArtifactRoot 'liberafx'
-    $items = @('USAGE.txt', 'LIVE_PREVIEW.txt', 'liberafx_live_preview.gd', 'liberafx_package_preview.gd')
+    $items = @('USAGE.txt', 'LIVE_PREVIEW.txt', 'liberafx_live_preview.gd', 'liberafx_package_preview.gd', 'icon.png')
     $nativeItems = @('liberafx.gdextension', 'bin\liberafx_godot.dll')
 }
 
