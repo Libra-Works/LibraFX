@@ -10,7 +10,7 @@ public static class CpuParticleSchema
     public static bool IsStage(GraphNodeKind kind) => Name(kind) is "CpuParticleSpawn" or "CpuParticleUpdate";
     public static bool HasChild(GraphNodeKind kind) => IsContainer(kind) || IsStage(kind);
     public static string Name(GraphNodeKind kind) =>
-        GraphNodeDefinition.All.FirstOrDefault(definition => definition.Kind == kind)?.TypeName ?? kind.Value;
+        GraphNodeDefinition.Find(kind)?.TypeName ?? kind.Value;
     public static bool IsBoundary(GraphNodeKind kind) => Name(kind).StartsWith("CpuParticleInput", StringComparison.Ordinal) ||
         Name(kind).StartsWith("CpuParticleOutput", StringComparison.Ordinal);
     public static bool IsInput(GraphNodeKind kind) => Name(kind).StartsWith("CpuParticleInput", StringComparison.Ordinal);

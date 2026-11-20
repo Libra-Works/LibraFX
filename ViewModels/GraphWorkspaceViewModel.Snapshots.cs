@@ -344,18 +344,13 @@ public sealed partial class GraphWorkspaceViewModel
                 specification.TargetPortId, specification.SourcePortId));
         }
 
+        _restoringGraph = true;
+        try
+        {
         SelectNode(null);
         Connections.Clear();
-        Nodes.Clear();
-        foreach (var specification in snapshot.Nodes)
-        {
-            Nodes.Add(nodesById[specification.Id]);
-        }
-
-        foreach (var connection in connections)
-        {
-            Connections.Add(connection);
-        }
+        Nodes.ReplaceAll(snapshot.Nodes.Select(specification => nodesById[specification.Id]));
+        Connections.ReplaceAll(connections);
 
         SetSelection(selectedIds.Where(nodesById.ContainsKey).Select(id => nodesById[id]));
         _nextNodeIndex = Nodes.Count;
@@ -364,6 +359,10 @@ public sealed partial class GraphWorkspaceViewModel
         ConnectionPreviewPoint = null;
         OnPropertyChanged(nameof(PendingOutputNode));
         OnPropertyChanged(nameof(PendingOutputPortId));
+        }
+        finally { _restoringGraph = false; }
+        RefreshSelectedConnections();
+        RefreshSignalOrder();
         RefreshTypeDiagnostics();
     }
 

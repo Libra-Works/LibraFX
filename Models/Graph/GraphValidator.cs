@@ -23,7 +23,7 @@ public static class GraphValidator
         GroupExposedItems.Validate(snapshot.ExposedItems);
         if (isDocumentRoot && snapshot.ExposedItems is { Count: > 0 })
             throw new InvalidDataException("Exposed items must belong to a group.");
-        var definitions = GraphNodeDefinition.All.ToDictionary(definition => definition.Kind);
+        var definitions = GraphNodeDefinition.ByKind;
         var nodes = new Dictionary<Guid, GraphNodeSnapshot>();
         var effectiveDefinitions = new Dictionary<Guid, GraphNodeDefinition>();
         foreach (var node in snapshot.Nodes)

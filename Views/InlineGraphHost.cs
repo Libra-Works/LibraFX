@@ -77,7 +77,9 @@ public sealed class InlineGraphHost : ContentControl
         Dispatcher.UIThread.VerifyAccess();
         if (_node is not { IsInlineExpanded: true } node)
         {
-            ClearHostedWorkspace();
+            // Retain the child's editor and viewport while collapsed. Detach still disposes it.
+            if (_editor is not null) Content = null;
+            else ClearHostedWorkspace();
             return;
         }
         if (node.IsGpuParticle)

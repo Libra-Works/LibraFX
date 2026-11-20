@@ -180,20 +180,24 @@ public sealed partial class GraphWorkspaceViewModel
             reason = "The graph hierarchy has reached its maximum depth.";
             return false;
         }
-        try
-        {
-            ValidateSpawnPlacement([kind]);
-            reason = null;
-            return true;
-        }
-        catch (InvalidOperationException ex)
-        {
-            reason = ex.Message;
-            return false;
-        }
+        reason = SpawnPlacementError([kind]);
+        return reason is null;
+    }
+
+    internal HashSet<GraphNodeKind> CreatableNodeKinds()
+    {
+        if (IsReadOnly) return [];
+        return AvailableNodeDefinitions.Where(d =>
+            !((d.Kind == GraphNodeKind.GraphGroup || d.Kind == GraphNodeKind.SpawnableGroup || CpuParticleSchema.HasChild(d.Kind)) &&
+              _graphPath.Count >= MaxGraphDepth) && SpawnPlacementError([d.Kind]) is null).Select(d => d.Kind).ToHashSet();
     }
 
     private void ValidateSpawnPlacement(IEnumerable<GraphNodeKind> kinds)
+    {
+        if (SpawnPlacementError(kinds) is { } reason) throw new InvalidOperationException(reason);
+    }
+
+    private string? SpawnPlacementError(IEnumerable<GraphNodeKind> kinds)
     {
         var additions = kinds.ToArray();
         var parent = _rootSnapshot;
@@ -209,19 +213,19 @@ public sealed partial class GraphWorkspaceViewModel
         if (additions.Any(CpuParticleSchema.IsStageOnly) &&
             !insideCpuStage)
         {
-            throw new InvalidOperationException("Particle attributes and boundaries belong inside a CPU Spawn/Update stage.");
+            return "Particle attributes and boundaries belong inside a CPU Spawn/Update stage.";
         }
         if (additions.Any(kind => CpuParticleSchema.IsBoundary(kind) ||
                 CpuParticleSchema.Name(kind) == "CpuParticleStageEvent") &&
             (owner is null || !CpuParticleSchema.IsStage(owner.Kind)))
         {
-            throw new InvalidOperationException("CPU boundary nodes and Stage Event must be directly in Spawn/Update.");
+            return "CPU boundary nodes and Stage Event must be directly in Spawn/Update.";
         }
         if (additions.Any(kind => CpuParticleSchema.IsStage(kind) ||
                 CpuParticleSchema.Name(kind) == "CpuParticleSpriteDraw") &&
             (owner is null || !CpuParticleSchema.IsContainer(owner.Kind)))
         {
-            throw new InvalidOperationException("CPU Spawn/Update and Sprite Draw belong directly inside CpuParticle.");
+            return "CPU Spawn/Update and Sprite Draw belong directly inside CpuParticle.";
         }
 
         var addsSimulationContainer = additions.Any(kind =>
@@ -229,43 +233,43 @@ public sealed partial class GraphWorkspaceViewModel
             GpuParticleEditorService.IsGpu(kind));
         if (insideCpuStage && addsSimulationContainer)
         {
-            throw new InvalidOperationException("Particle kernels cannot contain Spawnable, CPU Particle, or GPU simulation containers.");
+            return "Particle kernels cannot contain Spawnable, CPU Particle, or GPU simulation containers.";
         }
         if (owner is not null && CpuParticleSchema.IsContainer(owner.Kind) &&
             additions.Any(kind => kind == GraphNodeKind.SpawnableGroup ||
                 CpuParticleSchema.IsContainer(kind) || GpuParticleEditorService.IsGpu(kind)))
         {
-            throw new InvalidOperationException("A CPU Particle container can contain only its Spawn/Update stages and Sprite Draw.");
+            return "A CPU Particle container can contain only its Spawn/Update stages and Sprite Draw.";
         }
 
         var ownerDestroyCount = additions.Count(kind => kind.Value == "OwnerDestroy");
         if (ownerDestroyCount != 0 && (owner?.Kind != GraphNodeKind.SpawnableGroup ||
             Nodes.Count(node => node.Definition.Kind.Value == "OwnerDestroy") + ownerDestroyCount > 1))
         {
-            throw new InvalidOperationException(LocalizationService.Shared.Get("Messages.OwnerDestroyPlacement"));
+            return LocalizationService.Shared.Get("Messages.OwnerDestroyPlacement");
         }
 
         var rootDestroyCount = additions.Count(kind => kind.Value == "OnDestroy");
         if (rootDestroyCount != 0 && (owner is not null ||
             Nodes.Count(node => node.Definition.Kind.Value == "OnDestroy") + rootDestroyCount > 1))
         {
-            throw new InvalidOperationException(LocalizationService.Shared.Get("Messages.OnDestroyPlacement"));
+            return LocalizationService.Shared.Get("Messages.OnDestroyPlacement");
         }
 
         if (additions.Any(kind => GameIoSchema.IsNode(kind) && !GameIoSchema.IsInstanceNode(kind)) && owner is not null)
         {
-            throw new InvalidOperationException("Game I/O nodes must be placed directly in the root graph.");
+            return "Game I/O nodes must be placed directly in the root graph.";
         }
 
         if (additions.Any(GameIoSchema.IsInstanceNode) && owner?.Kind != GraphNodeKind.SpawnableGroup)
         {
-            throw new InvalidOperationException("Instance Game I/O nodes must be placed directly inside a Spawnable Group.");
+            return "Instance Game I/O nodes must be placed directly inside a Spawnable Group.";
         }
 
         if (additions.Any(kind => GroupBoundarySchema.IsInput(kind) || GroupBoundarySchema.IsOutput(kind)) &&
             owner?.Kind != GraphNodeKind.GraphGroup)
         {
-            throw new InvalidOperationException("Group boundary nodes must be placed directly inside a Graph Group.");
+            return "Group boundary nodes must be placed directly inside a Graph Group.";
         }
 
         var newInputLanes = additions.Where(SpawnableGroupSchema.IsInput)
@@ -274,16 +278,17 @@ public sealed partial class GraphWorkspaceViewModel
         {
             if (owner?.Kind != GraphNodeKind.SpawnableGroup)
             {
-                throw new InvalidOperationException("Spawn inputs must be placed directly inside a Spawnable Group.");
+                return "Spawn inputs must be placed directly inside a Spawnable Group.";
             }
 
             var existingInputLanes = Nodes.Where(node => SpawnableGroupSchema.IsInput(node.Definition.Kind))
                 .Sum(node => SpawnableGroupSchema.InputWidth(node.Definition.PortType));
             if (existingInputLanes + newInputLanes > SpawnableGroupSchema.MaxInputLanes)
             {
-                throw new InvalidOperationException($"A Spawnable Group supports at most {SpawnableGroupSchema.MaxInputLanes} input value lanes.");
+                return $"A Spawnable Group supports at most {SpawnableGroupSchema.MaxInputLanes} input value lanes.";
             }
         }
+        return null;
     }
 
     private bool InsideSpawnable()

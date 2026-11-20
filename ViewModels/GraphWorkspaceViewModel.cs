@@ -62,6 +62,7 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
     public IReadOnlyList<GraphNodeDefinition> AvailableNodeDefinitions =>
         NodeDefinitions?.AvailableDefinitions ?? GraphNodeDefinition.AuthoringCore;
     private int _nextNodeIndex;
+    private bool _restoringGraph;
     private GraphNodeViewModel? _selectedNode;
     private readonly List<GraphNodeViewModel> _selectedNodes = [];
     private GraphNodeViewModel? _pendingOutputNode;
@@ -75,12 +76,12 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
     public event EventHandler? FrameSelectionRequested;
     private GraphNodeViewModel? _containingSpawnable;
 
-    public ObservableCollection<GraphNodeViewModel> Nodes { get; } = [];
+    public GraphItemCollection<GraphNodeViewModel> Nodes { get; } = [];
     public ObservableCollection<GraphNodeViewModel> CommentNodes { get; } = [];
     public ObservableCollection<GraphNodeViewModel> ForegroundNodes { get; } = [];
     public ObservableCollection<GraphBreadcrumb> Breadcrumbs { get; } = [new(LocalizationService.Shared.Get("Messages.Top"), 0)];
 
-    public ObservableCollection<GraphConnectionViewModel> Connections { get; } = [];
+    public GraphItemCollection<GraphConnectionViewModel> Connections { get; } = [];
 
     public ObservableCollection<GraphConnectionViewModel> SelectedConnections { get; } = [];
     public ObservableCollection<GraphProblemViewModel> TypeProblems { get; } = [];
@@ -293,6 +294,7 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
         DeleteSelectedNodeCommand = new RelayCommand(DeleteSelectedNode, () => HasSelection);
         Connections.CollectionChanged += (_, _) =>
         {
+            if (_restoringGraph) return;
             RefreshSelectedConnections();
             RefreshTypeDiagnostics();
             RefreshSignalOrder();
@@ -332,7 +334,8 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
 
         var byId = Nodes.ToDictionary(node => node.Id);
         var problems = new List<GraphProblemViewModel>();
-        foreach (var diagnostic in GraphTypeDiagnostics.Analyze(snapshot, AvailableNodeDefinitions))
+        foreach (var diagnostic in GraphTypeDiagnostics.Analyze(snapshot, AvailableNodeDefinitions,
+                     includeChildren: false, resolvedDefinitions: effective))
         {
             if (!byId.TryGetValue(diagnostic.NodeId, out var target) ||
                 !byId.TryGetValue(diagnostic.SourceNodeId, out var source))

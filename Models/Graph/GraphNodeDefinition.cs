@@ -98,6 +98,11 @@ public sealed record GraphNodeDefinition(
     string Group)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new() { PropertyNameCaseInsensitive = true };
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IReadOnlyList<GraphNodeDefinition>,
+        Dictionary<GraphNodeKind, GraphNodeDefinition>> KindIndexes = new();
+    public static IReadOnlyDictionary<GraphNodeKind, GraphNodeDefinition> ByKind =>
+        KindIndexes.GetValue(All, static definitions => definitions.ToDictionary(d => d.Kind));
+    public static GraphNodeDefinition? Find(GraphNodeKind kind) => ByKind.GetValueOrDefault(kind);
     private static readonly Dictionary<Guid, string> BuiltInIds = CpuParticleNodeCatalog.WithBuiltInIds(QuaternionRandomNodeCatalog.WithBuiltInIds(new()
     {
         [Guid.Parse("65db6000-5d15-4f11-83da-650000000001")] = "DebugText",

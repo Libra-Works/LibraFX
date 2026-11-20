@@ -122,7 +122,7 @@ public static class GraphPolymorphism
 
     public static IReadOnlyDictionary<Guid, GraphNodeDefinition> Resolve(GraphSnapshot graph)
     {
-        var all = GraphNodeDefinition.All.ToDictionary(item => item.Kind);
+        var all = GraphNodeDefinition.ByKind;
         var nodes = graph.Nodes.ToDictionary(item => item.Id);
         var result = graph.Nodes.ToDictionary(item => item.Id,
             item => GroupBoundarySchema.Effective(SpawnableGroupSchema.Effective(

@@ -502,9 +502,10 @@ public partial class GraphEditorView : UserControl
     {
         var workspace = DataContext as GraphWorkspaceViewModel;
         var projectName = workspace?.NodeDefinitions?.ProjectName;
+        var allowedKinds = workspace?.CreatableNodeKinds();
         var definitions = (workspace?.AvailableNodeDefinitions ?? GraphNodeDefinition.Core)
             .Where(definition => !GraphPolymorphism.IsHiddenVariant(definition.Kind) &&
-                                 (workspace is null || workspace.CanCreateNode(definition.Kind, out _)))
+                                 (allowedKinds is null || allowedKinds.Contains(definition.Kind)))
             .Select(definition => new NodeCatalogEntryViewModel(definition, projectName));
         var groups = (workspace is null || workspace.CanCreateNode(GraphNodeKind.GraphGroup, out _)
             ? workspace?.GroupAssets?.Assets

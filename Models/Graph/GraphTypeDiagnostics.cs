@@ -9,14 +9,16 @@ public sealed record GraphTypeDiagnostic(Guid NodeId, string? InputPortId, Guid 
 public static class GraphTypeDiagnostics
 {
     public static IReadOnlyList<GraphTypeDiagnostic> Analyze(GraphSnapshot graph,
-        IEnumerable<GraphNodeDefinition>? availableDefinitions = null)
+        IEnumerable<GraphNodeDefinition>? availableDefinitions = null, bool includeChildren = true,
+        IReadOnlyDictionary<Guid, GraphNodeDefinition>? resolvedDefinitions = null)
     {
         var result = new List<GraphTypeDiagnostic>();
         var conversions = new GraphConversionRegistry(availableDefinitions ?? GraphNodeDefinition.All);
         void Visit(GraphSnapshot current)
         {
             var nodes = current.Nodes.ToDictionary(item => item.Id);
-            var effective = GraphPolymorphism.Resolve(current);
+            var effective = ReferenceEquals(current, graph) && resolvedDefinitions is not null
+                ? resolvedDefinitions : GraphPolymorphism.Resolve(current);
             foreach (var connection in current.Connections)
             {
                 var source = effective[connection.SourceNodeId].GetOutputPortType(connection.SourcePortId);
@@ -27,7 +29,7 @@ public static class GraphTypeDiagnostics
                         connection.SourceNodeId, source, target)
                     { Conversion = conversions.Resolve(source, target) });
             }
-            foreach (var node in nodes.Values)
+            foreach (var node in includeChildren ? nodes.Values : Enumerable.Empty<GraphNodeSnapshot>())
                 if (node.ChildGraph is not null) Visit(node.ChildGraph);
         }
         Visit(graph);
