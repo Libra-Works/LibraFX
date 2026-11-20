@@ -57,16 +57,6 @@
 <h3 align="center">Unity · Unreal Engine · Godot</h3>
 
 <p align="center">
-  Preview update: GPU 2D smoke and dye, nested Spawnables with CPU particles, and direct engine rendering.<br>
-  Upgrade guide: <a href="docs/site/preview-update.md">English</a> / <a href="docs/site/ja/preview-update.md">日本語</a>
-</p>
-
-<p align="center">
-  Production workflow (Unity / Unreal / Godot): <a href="docs/site/production-workflow.md">English</a> / <a href="docs/site/ja/production-workflow.md">日本語</a><br>
-  Batch converter: <a href="docs/site/batch-conversion.md">English</a> / <a href="docs/site/ja/batch-conversion.md">日本語</a>
-</p>
-
-<p align="center">
   <a href="https://github.com/Libra-Works/LibraFX/releases">Downloads</a> ·
   Documentation:
   <a href="https://libra-works.github.io/LibraFX/" lang="en">English</a> /
