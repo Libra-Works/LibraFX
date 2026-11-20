@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using Dock.Model.Mvvm.Controls;
 using CommunityToolkit.Mvvm.Input;
 using LiberaFx.Models.Graph;
@@ -8,9 +10,11 @@ namespace LiberaFx.ViewModels;
 
 public sealed class NodeCatalogViewModel : Tool
 {
+    private readonly ActiveGraphProvider _activeGraph;
+    private GraphWorkspaceViewModel? _observedGraph;
     private IReadOnlyList<NodeCatalogEntryViewModel> _entries;
-    private readonly GroupAssetCatalog? _groups;
-    private readonly NodeDefinitionCatalog? _definitions;
+    private GroupAssetCatalog? _groups;
+    private NodeDefinitionCatalog? _definitions;
     private string _searchText = string.Empty;
 
     public ObservableCollection<NodeCatalogGroupViewModel> Groups { get; } = [];
@@ -35,6 +39,7 @@ public sealed class NodeCatalogViewModel : Tool
 
     public NodeCatalogViewModel(ActiveGraphProvider activeGraph, GroupAssetCatalog? groups = null)
     {
+        _activeGraph = activeGraph;
         _groups = groups;
         _definitions = activeGraph.Graph.NodeDefinitions;
         _entries = [];
@@ -45,16 +50,57 @@ public sealed class NodeCatalogViewModel : Tool
         });
         if (_groups is not null) _groups.Changed += (_, _) => RefreshEntries();
         if (_definitions is not null) _definitions.Changed += (_, _) => RefreshEntries();
+        _activeGraph.PropertyChanged += OnActiveGraphChanged;
+        ObserveGraph(_activeGraph.Graph);
         RefreshEntries();
         MessageLocalization.Observe(this, static catalog => catalog.RefreshEntries());
     }
 
+    private void OnActiveGraphChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(ActiveGraphProvider.Graph)) return;
+        ObserveGraph(_activeGraph.Graph);
+        RefreshEntries();
+    }
+
+    private void ObserveGraph(GraphWorkspaceViewModel graph)
+    {
+        if (_observedGraph is not null)
+        {
+            _observedGraph.PropertyChanged -= OnObservedGraphPropertyChanged;
+            _observedGraph.Nodes.CollectionChanged -= OnObservedGraphCollectionChanged;
+            _observedGraph.Breadcrumbs.CollectionChanged -= OnObservedGraphCollectionChanged;
+        }
+        _observedGraph = graph;
+        _definitions = graph.NodeDefinitions;
+        _observedGraph.PropertyChanged += OnObservedGraphPropertyChanged;
+        _observedGraph.Nodes.CollectionChanged += OnObservedGraphCollectionChanged;
+        _observedGraph.Breadcrumbs.CollectionChanged += OnObservedGraphCollectionChanged;
+    }
+
+    private void OnObservedGraphPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(GraphWorkspaceViewModel.IsReadOnly))
+            RefreshEntries();
+    }
+
+    private void OnObservedGraphCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => RefreshEntries();
+
     private void RefreshEntries()
     {
+        var graph = _activeGraph.Graph;
         _entries = (_definitions?.AvailableDefinitions ?? GraphNodeDefinition.AuthoringCore)
             .Where(definition => !GraphPolymorphism.IsHiddenVariant(definition.Kind))
-            .Select(definition => new NodeCatalogEntryViewModel(definition, ProjectName))
-            .Concat((_groups?.CreatableAssets ?? []).Select(asset => new NodeCatalogEntryViewModel(asset, _groups)))
+            .Select(definition =>
+            {
+                var canCreate = graph.CanCreateNode(definition.Kind, out var reason);
+                return new NodeCatalogEntryViewModel(definition, ProjectName, canCreate, reason);
+            })
+            .Concat((_groups?.CreatableAssets ?? []).Select(asset =>
+            {
+                var canCreate = graph.CanCreateNode(GraphNodeKind.GraphGroup, out var reason);
+                return new NodeCatalogEntryViewModel(asset, _groups, canCreate, reason);
+            }))
             .ToArray();
         OnPropertyChanged(nameof(LoadWarnings));
         OnPropertyChanged(nameof(ProjectName));
@@ -107,11 +153,19 @@ public sealed class NodeCatalogEntryViewModel
     public string SearchTerms { get; } = string.Empty;
     public Guid? GroupAssetId { get; }
     public bool IsPolymorphic { get; }
+    public bool CanCreate { get; }
+    public double DisplayOpacity => CanCreate ? 1.0 : 0.4;
+    public string ToolTipText { get; }
     public string ConversionDescription { get; } = string.Empty;
     public bool HasConversions => ConversionDescription.Length != 0;
 
-    public NodeCatalogEntryViewModel(GraphNodeDefinition definition, string? projectName = null)
+    public NodeCatalogEntryViewModel(GraphNodeDefinition definition, string? projectName = null,
+        bool canCreate = true, string? unavailableReason = null)
     {
+        CanCreate = canCreate;
+        ToolTipText = canCreate || string.IsNullOrWhiteSpace(unavailableReason)
+            ? LocalizationService.Shared.Get("Editor.DragNode")
+            : unavailableReason;
         IsPolymorphic = GraphPolymorphism.TryFamily(definition.Kind, out var family);
         var text = LocalizationService.Shared;
         var labelKey = family?.DisplayNameKey ?? definition.DisplayNameKey;
@@ -140,8 +194,13 @@ public sealed class NodeCatalogEntryViewModel
         DragIdentifier = (IsPolymorphic ? PolymorphicPrefix : "") + definition.Kind;
     }
 
-    public NodeCatalogEntryViewModel(GroupAsset asset, GroupAssetCatalog? catalog = null)
+    public NodeCatalogEntryViewModel(GroupAsset asset, GroupAssetCatalog? catalog = null,
+        bool canCreate = true, string? unavailableReason = null)
     {
+        CanCreate = canCreate;
+        ToolTipText = canCreate || string.IsNullOrWhiteSpace(unavailableReason)
+            ? LocalizationService.Shared.Get("Editor.DragNode")
+            : unavailableReason;
         var metadata = asset.Origin == GroupAssetOrigin.Standard ? catalog?.Metadata(asset.Id) : null;
         Name = LocalizationService.Shared.GetNodeLabel(metadata?.NameKey, asset.Name);
         OriginalName = asset.Name;

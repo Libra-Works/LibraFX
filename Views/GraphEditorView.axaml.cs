@@ -501,10 +501,13 @@ public partial class GraphEditorView : UserControl
         var search = NodeSearchBox.Text?.Trim() ?? string.Empty;
         var workspace = DataContext as GraphWorkspaceViewModel;
         var entries = (workspace?.AvailableNodeDefinitions ?? GraphNodeDefinition.Core)
-            .Where(definition => !GraphPolymorphism.IsHiddenVariant(definition.Kind))
+            .Where(definition => !GraphPolymorphism.IsHiddenVariant(definition.Kind) &&
+                                 (workspace is null || workspace.CanCreateNode(definition.Kind, out _)))
             .Select(definition => new NodeCatalogEntryViewModel(definition, workspace?.NodeDefinitions?.ProjectName))
-            .Concat((DataContext as GraphWorkspaceViewModel)?.GroupAssets?.Assets
-                .Select(asset => new NodeCatalogEntryViewModel(asset, workspace?.GroupAssets)) ?? [])
+            .Concat((workspace is null || workspace.CanCreateNode(GraphNodeKind.GraphGroup, out _)
+                ? workspace?.GroupAssets?.Assets
+                    .Select(asset => new NodeCatalogEntryViewModel(asset, workspace?.GroupAssets))
+                : null) ?? [])
             .Where(entry => entry.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.OriginalName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.KindName.Contains(search, StringComparison.OrdinalIgnoreCase) ||

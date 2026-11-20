@@ -139,17 +139,41 @@ public sealed partial class GraphWorkspaceViewModel
         return true;
     }
 
+    public bool CanCreateNode(GraphNodeKind kind, out string? reason)
+    {
+        if (IsReadOnly)
+        {
+            reason = LocalizationService.Shared.Get("Inline.Locked");
+            return false;
+        }
+        if ((kind == GraphNodeKind.GraphGroup || kind == GraphNodeKind.SpawnableGroup ||
+             CpuParticleSchema.HasChild(kind)) && _graphPath.Count >= MaxGraphDepth)
+        {
+            reason = "The graph hierarchy has reached its maximum depth.";
+            return false;
+        }
+        try
+        {
+            ValidateSpawnPlacement([kind]);
+            reason = null;
+            return true;
+        }
+        catch (InvalidOperationException ex)
+        {
+            reason = ex.Message;
+            return false;
+        }
+    }
+
     private void ValidateSpawnPlacement(IEnumerable<GraphNodeKind> kinds)
     {
         var additions = kinds.ToArray();
         var parent = _rootSnapshot;
         GraphNodeSnapshot? owner = null;
-        var insideSpawnable = false;
         var insideCpuStage = false;
         foreach (var id in _graphPath)
         {
             owner = parent.Nodes.First(node => node.Id == id);
-            insideSpawnable |= owner.Kind == GraphNodeKind.SpawnableGroup;
             insideCpuStage |= CpuParticleSchema.IsStage(owner.Kind);
             parent = owner.ChildGraph!;
         }
@@ -171,9 +195,19 @@ public sealed partial class GraphWorkspaceViewModel
         {
             throw new InvalidOperationException("CPU Spawn/Update and Sprite Draw belong directly inside CpuParticle.");
         }
-        if (insideSpawnable && additions.Any(kind => kind == GraphNodeKind.SpawnableGroup))
+
+        var addsSimulationContainer = additions.Any(kind =>
+            kind == GraphNodeKind.SpawnableGroup || CpuParticleSchema.IsContainer(kind) ||
+            GpuParticleEditorService.IsGpu(kind));
+        if (insideCpuStage && addsSimulationContainer)
         {
-            throw new InvalidOperationException("Nested Spawnable Groups are not supported.");
+            throw new InvalidOperationException("Particle kernels cannot contain Spawnable, CPU Particle, or GPU simulation containers.");
+        }
+        if (owner is not null && CpuParticleSchema.IsContainer(owner.Kind) &&
+            additions.Any(kind => kind == GraphNodeKind.SpawnableGroup ||
+                CpuParticleSchema.IsContainer(kind) || GpuParticleEditorService.IsGpu(kind)))
+        {
+            throw new InvalidOperationException("A CPU Particle container can contain only its Spawn/Update stages and Sprite Draw.");
         }
 
         var ownerDestroyCount = additions.Count(kind => kind.Value == "OwnerDestroy");
@@ -240,7 +274,4 @@ public sealed partial class GraphWorkspaceViewModel
         return false;
     }
 
-    private static bool ContainsSpawnable(GraphSnapshot graph) => graph.Nodes.Any(node =>
-        node.Kind == GraphNodeKind.SpawnableGroup ||
-        node.ChildGraph is { } child && ContainsSpawnable(child));
 }
