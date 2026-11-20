@@ -26,6 +26,8 @@ public partial class GraphNodeView : UserControl
     private Grid? _connectionCanvas;
     private Point _connectionStart;
     private bool _connectionMoved;
+    private readonly PortSnapFeedback _connectionFeedback = new();
+    private (Button Pin, GraphNodeViewModel Node, string? PortId)[] _connectionTargets = [];
     private GraphNodeViewModel? _resizeNode;
     private GraphEditorView? _resizeEditor;
     private Point _resizeStart;
@@ -545,13 +547,20 @@ public partial class GraphNodeView : UserControl
         var graph = dragged.Workspace;
         var positions = _dragNodes.Select(item => (item.Node, item.Node.DisplayX, item.Node.DisplayY)).ToArray();
         var nodes = _dragNodes.Select(item => item.Node).ToArray();
+        var destination = _dragEditor is not null &&
+            (Math.Abs(e.GetPosition(_dragEditor).X - _pointerStart.X) +
+             Math.Abs(e.GetPosition(_dragEditor).Y - _pointerStart.Y)) > 4
+            ? _dragEditor.FindDropContainer(e.GetPosition(_dragEditor), nodes) : null;
         ResetDrag();
         e.Pointer.Capture(null);
         if (!dragged.IsSelected && graph.Nodes.Contains(dragged))
             dragged.SelectCommand.Execute(null);
         try
         {
-            graph.RunAuthoringAction(() => graph.MoveNodes(positions));
+            graph.RunAuthoringAction(() =>
+            {
+                if (destination is null || !graph.MoveNodesIntoGraph(nodes, destination)) graph.MoveNodes(positions);
+            });
         }
         finally
         {
@@ -666,6 +675,14 @@ public partial class GraphNodeView : UserControl
         _connectionStart = e.GetPosition(canvas);
         _connectionMoved = false;
         _connectionSourcePortId = port.Tag is GraphOutputPortDefinition outputPort ? outputPort.Id : null;
+        _connectionTargets = canvas.GetVisualDescendants().OfType<Button>()
+            .Where(button => button.IsEffectivelyVisible &&
+                button.FindAncestorOfType<GraphEditorView>()?.DataContext == node.Workspace)
+            .Select(button => (Pin: button, Node: button.FindAncestorOfType<GraphNodeView>()?.DataContext as GraphNodeViewModel,
+                PortId: (button.Tag as GraphInputPortDefinition)?.Id))
+            .Where(item => item.Node is not null && (item.Pin.Tag is GraphInputPortDefinition or "InputPort") &&
+                node.Workspace.CanConnectNodes(node, item.Node, out _, item.PortId, _connectionSourcePortId))
+            .Select(item => (item.Pin, item.Node!, item.PortId)).ToArray();
         if (_connectionSourcePortId is null) node.SelectOutputPortCommand.Execute(null);
         else node.Workspace.BeginConnection(node, _connectionSourcePortId);
         e.Pointer.Capture(port);
@@ -690,6 +707,10 @@ public partial class GraphNodeView : UserControl
         if (_connectionMoved)
         {
             var editor = this.FindAncestorOfType<GraphEditorView>();
+            var target = FindInputAt(canvas, position);
+            _connectionFeedback.Show(target?.Pin);
+            if (target is { } snap && snap.Pin.TranslatePoint(new Point(snap.Pin.Bounds.Width / 2, snap.Pin.Bounds.Height / 2), canvas) is { } anchor)
+                position = anchor;
             source.Workspace.PreviewConnection(editor?.ToGraphPoint(position) ?? position);
         }
 
@@ -705,7 +726,9 @@ public partial class GraphNodeView : UserControl
 
         var moved = _connectionMoved;
         var position = e.GetPosition(canvas);
-        var target = moved ? FindInputAt(canvas, position, source.Workspace) : null;
+        var target = moved ? FindInputAt(canvas, position) : null;
+        _connectionFeedback.Dispose();
+        _connectionTargets = [];
         _connectionSource = null;
         var sourcePortId = _connectionSourcePortId;
         _connectionSourcePortId = null;
@@ -731,30 +754,25 @@ public partial class GraphNodeView : UserControl
             node.Workspace.RunAuthoringAction(() => node.Workspace.CompleteConnection(node, port.Id));
     }
 
-    private static (GraphNodeViewModel Node, string? PortId)? FindInputAt(
-        Grid canvas, Point position, GraphWorkspaceViewModel workspace)
+    private (Button Pin, GraphNodeViewModel Node, string? PortId)? FindInputAt(Grid canvas, Point position)
     {
-        foreach (var button in canvas.GetVisualDescendants().OfType<Button>().Reverse())
+        var root = TopLevel.GetTopLevel(canvas);
+        if (root is null || canvas.TranslatePoint(position, root) is not { } pointer) return null;
+        (Button Pin, GraphNodeViewModel Node, string? PortId)? best = null;
+        var distance = PortSnapFeedback.AcquireRadius;
+        foreach (var candidate in _connectionTargets)
         {
-            if (!button.IsEffectivelyVisible ||
-                button.FindAncestorOfType<GraphEditorView>()?.DataContext != workspace ||
-                button.TranslatePoint(default, canvas) is not { } origin)
+            if (!candidate.Pin.IsEffectivelyVisible || candidate.Pin.TranslatePoint(
+                    new Point(candidate.Pin.Bounds.Width / 2, candidate.Pin.Bounds.Height / 2), root) is not { } center) continue;
+            var next = ((Vector)(center - pointer)).Length;
+            var current = ReferenceEquals(candidate.Pin, _connectionFeedback.Pin);
+            if (next <= distance || best is null && current && next <= PortSnapFeedback.ReleaseRadius)
             {
-                continue;
-            }
-
-            if (new Rect(origin, button.Bounds.Size).Contains(position))
-            {
-                if (button.Tag is string tag && tag == "InputPort" &&
-                    button.DataContext is GraphNodeViewModel node)
-                    return (node, null);
-                if (button.Tag is GraphInputPortDefinition port &&
-                    button.FindAncestorOfType<GraphNodeView>()?.DataContext is GraphNodeViewModel owner)
-                    return (owner, port.Id);
+                best = candidate;
+                distance = next;
             }
         }
-
-        return null;
+        return best;
     }
 
     private void OnToggleInlineClick(object? sender, RoutedEventArgs e)
@@ -773,6 +791,8 @@ public partial class GraphNodeView : UserControl
 
     private void OnOutputPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
     {
+        _connectionFeedback.Dispose();
+        _connectionTargets = [];
         _connectionSource?.Workspace.CancelConnection();
         _connectionSource = null;
         _connectionSourcePortId = null;

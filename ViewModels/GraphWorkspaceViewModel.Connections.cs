@@ -81,6 +81,17 @@ public sealed partial class GraphWorkspaceViewModel
         string? targetPortId = null,
         string? sourcePortId = null)
     {
+        if (!CanConnectNodes(source, target, out error, targetPortId, sourcePortId)) return false;
+        targetPortId ??= target.Definition.InputPorts?.FirstOrDefault()?.Id;
+        ExecuteEdit(new AddGraphConnectionCommand(this, source, target,
+            targetPortId: targetPortId, sourcePortId: sourcePortId));
+        return true;
+    }
+
+    public bool CanConnectNodes(GraphNodeViewModel source, GraphNodeViewModel target, out string? error,
+        string? targetPortId = null, string? sourcePortId = null)
+    {
+        if (IsReadOnly) { error = LocalizationService.Shared.Get("Inline.Locked"); return false; }
         if (!Nodes.Contains(source) || !Nodes.Contains(target))
         {
             error = "Both nodes must belong to this graph.";
@@ -173,8 +184,6 @@ public sealed partial class GraphWorkspaceViewModel
             return false;
         }
 
-        ExecuteEdit(new AddGraphConnectionCommand(this, source, target,
-            targetPortId: targetPortId, sourcePortId: sourcePortId));
         error = null;
         return true;
     }

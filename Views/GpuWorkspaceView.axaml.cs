@@ -18,6 +18,10 @@ public partial class GpuWorkspaceView : UserControl
 {
     public GpuWorkspaceViewModel? Workspace { get; private set; }
     public event EventHandler? CloseRequested;
+    public void UseDocumentNavigation()
+    {
+        BackButton.IsVisible = Breadcrumb.IsVisible = false;
+    }
     private string? _selection;
     private string? _wireSource;
     private bool _refreshing;
@@ -36,6 +40,7 @@ public partial class GpuWorkspaceView : UserControl
     private Point _paletteDragStart;
     private NodeDrag? _drag;
     private ConnectionDrag? _connectionDrag;
+    private readonly PortSnapFeedback _connectionFeedback = new();
     private bool _framePending;
     private bool _anchorsDirty;
     private readonly Action<TimeSpan> _renderFrame;
@@ -89,6 +94,7 @@ public partial class GpuWorkspaceView : UserControl
         public readonly GpuConnectionCurve Preview = preview;
         public Point Latest = latest;
         public readonly Point Start = latest;
+        public IReadOnlySet<(string Node, int Input)> Compatible = new HashSet<(string, int)>();
     }
     public GpuWorkspaceView()
     {
@@ -910,7 +916,13 @@ public partial class GpuWorkspaceView : UserControl
         if (_anchorsDirty) UpdatePortAnchors();
         if (_drag is { } drag) ApplyDrag(drag);
         if (_connectionDrag is { } connection)
-            connection.Preview.SetEndpoints(connection.Source.CanvasPosition + (Vector)connection.Source.OutputAnchor, connection.Latest);
+        {
+            var target = FindConnectionTarget(connection, connection.Latest);
+            _connectionFeedback.Show(target?.Node.Inputs[target.Value.Input]);
+            var end = target is { } snap
+                ? snap.Node.CanvasPosition + (Vector)snap.Node.InputAnchors[snap.Input] : connection.Latest;
+            connection.Preview.SetEndpoints(connection.Source.CanvasPosition + (Vector)connection.Source.OutputAnchor, end);
+        }
     }
     private void UpdatePortAnchors()
     {
@@ -983,7 +995,8 @@ public partial class GpuWorkspaceView : UserControl
             Stroke = TypeBrush(source.Model.Type), StrokeThickness = 2, StrokeDashArray = new Avalonia.Collections.AvaloniaList<double> { 4, 4 },
             IsHitTestVisible = false
         };
-        _connectionDrag = new(source, e.Pointer, preview, e.GetPosition(NodeCanvas));
+        _connectionDrag = new(source, e.Pointer, preview, e.GetPosition(NodeCanvas))
+        { Compatible = Workspace!.CompatibleInputs(source.Model.Id) };
         NodeCanvas.Children.Insert(1, preview);
         e.Pointer.Capture(source.Output);
         ScheduleFrame();
@@ -993,22 +1006,13 @@ public partial class GpuWorkspaceView : UserControl
     {
         if (_connectionDrag is not { } connection || connection.Source != source || connection.Pointer != e.Pointer) return;
         var point = e.GetPosition(NodeCanvas);
-        NodeVisual? target = null;
-        var input = -1;
-        foreach (var candidate in _nodeVisuals.Values)
-            for (var i = 0; i < candidate.Inputs.Length; i++)
-            {
-                var pin = candidate.Inputs[i];
-                var local = NodeCanvas.TranslatePoint(point, pin);
-                if (local is { } p && new Rect(-3, -3, pin.Bounds.Width + 6, pin.Bounds.Height + 6).Contains(p))
-                { target = candidate; input = i; }
-            }
+        var target = FindConnectionTarget(connection, point);
         var clicked = Math.Abs(point.X - connection.Start.X) < 4 && Math.Abs(point.Y - connection.Start.Y) < 4;
         CancelConnectionDrag();
-        if (target is { } targetNode && Workspace?.KernelId is { } kernel)
+        if (target is { } snap && Workspace?.KernelId is { } kernel)
         {
             Run(() => Workspace.Edit(new() { Action = "connect", KernelId = kernel,
-                NodeId = targetNode.Model.Id, SourceId = source.Model.Id, Input = input }));
+                NodeId = snap.Node.Model.Id, SourceId = source.Model.Id, Input = snap.Input }));
             _wireSource = null;
         }
         else
@@ -1020,10 +1024,28 @@ public partial class GpuWorkspaceView : UserControl
     }
     private void CancelConnectionDrag()
     {
+        _connectionFeedback.Dispose();
         if (_connectionDrag is not { } connection) return;
         _connectionDrag = null;
         NodeCanvas.Children.Remove(connection.Preview);
         connection.Pointer.Capture(null);
+    }
+    private (NodeVisual Node, int Input)? FindConnectionTarget(ConnectionDrag connection, Point point)
+    {
+        var root = TopLevel.GetTopLevel(this);
+        if (root is null || NodeCanvas.TranslatePoint(point, root) is not { } pointer) return null;
+        (NodeVisual Node, int Input)? best = null;
+        var distance = PortSnapFeedback.AcquireRadius;
+        foreach (var (id, input) in connection.Compatible)
+        {
+            if (!_nodeVisuals.TryGetValue(id, out var visual) || input >= visual.Inputs.Length) continue;
+            var pin = visual.Inputs[input];
+            if (!pin.IsEffectivelyVisible || pin.TranslatePoint(new Point(pin.Bounds.Width / 2, pin.Bounds.Height / 2), root) is not { } center) continue;
+            var next = ((Vector)(center - pointer)).Length;
+            if (next <= distance || best is null && ReferenceEquals(pin, _connectionFeedback.Pin) && next <= PortSnapFeedback.ReleaseRadius)
+            { best = (visual, input); distance = next; }
+        }
+        return best;
     }
     internal Point ToGraphPoint(Point point) => _viewport.ToGraphPoint(point);
     internal double DebugZoom => _viewport.Zoom;
@@ -1350,6 +1372,15 @@ public partial class GpuWorkspaceView : UserControl
     {
         BindingsPanel.Children.Clear();
         var vm = Workspace!;
+        BindingsPanel.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.FormatManaged"), TextWrapping = TextWrapping.Wrap });
+        BindingsPanel.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.SpawnRate") });
+        var spawnRate = new NumericUpDown { Name = "GpuSpawnRate", Minimum = 0, Maximum = 1_000_000,
+            Value = (decimal)(vm.State.Program.SpawnRate ?? 100), IsEnabled = !vm.Graph.IsReadOnly };
+        BindingsPanel.Children.Add(spawnRate);
+        var applySpawnRate = Button(LocalizationService.Shared.Get("Fluid.Apply"), () =>
+            vm.Edit(new() { Action = "spawn-rate", SpawnRate = (double)(spawnRate.Value ?? 0) }));
+        applySpawnRate.IsEnabled = !vm.Graph.IsReadOnly;
+        BindingsPanel.Children.Add(applySpawnRate);
         BindingsPanel.Children.Add(Button(LocalizationService.Shared.Get("Gpu.AddFlowMap"), () =>
         {
             var resource = new ResourceDeclaration

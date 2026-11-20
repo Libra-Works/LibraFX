@@ -1,4 +1,8 @@
 {
+  "Inline.DropNotAllowed": "Cannot drop these node types into this graph.",
+  "Inline.DropExternalConnections": "Disconnect wires to nodes outside the selection before moving into a child graph.",
+  "Inline.DropExposed": "Unpublish exposed parameters before moving their nodes into a child graph.",
+  "Inline.History.MoveIntoGraph": "Move nodes into child graph",
   "Inline.Toggle": "Expand / collapse editable child graph",
   "Inline.Maximize": "Open child graph full size (use breadcrumbs to return)",
   "Inline.Resize": "Resize child graph view",

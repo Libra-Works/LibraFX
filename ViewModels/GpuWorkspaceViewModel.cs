@@ -86,6 +86,32 @@ public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
         KernelId = id; _text = null; _defaultPositions = null; Refreshed?.Invoke(this, EventArgs.Empty);
     }
     public void Back() { KernelId = null; _text = null; Refreshed?.Invoke(this, EventArgs.Empty); }
+    public IReadOnlySet<(string Node, int Input)> CompatibleInputs(string sourceId)
+    {
+        var valid = new HashSet<(string, int)>();
+        if (Kernel is not { } kernel || Graph.IsReadOnly) return valid;
+        var nodes = kernel.Nodes.ToDictionary(node => node.Id, StringComparer.Ordinal);
+        if (!nodes.TryGetValue(sourceId, out var source)) return valid;
+        var ancestors = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new Stack<string>(); pending.Push(sourceId);
+        while (pending.TryPop(out var id))
+            if (ancestors.Add(id) && nodes.TryGetValue(id, out var ancestor))
+                foreach (var input in ancestor.Inputs) pending.Push(input);
+        foreach (var target in kernel.Nodes.Where(node => !ancestors.Contains(node.Id)))
+        {
+            var defaults = GpuOperationRegistry.GetDefaultInputs(target.Op, target.Type);
+            var count = Math.Max(target.Inputs.Count, GpuOperationRegistry.Operations[target.Op].MinInputs);
+            for (var input = 0; input < count; input++)
+            {
+                var types = Enumerable.Range(0, count).Select(index => index == input ? source.Type :
+                    index < target.Inputs.Count && nodes.TryGetValue(target.Inputs[index], out var connected) ? connected.Type :
+                    index < defaults.Count ? defaults[index].DefaultType : GpuType.Float).ToArray();
+                var result = target.Op == GpuOp.SampleFlowMap ? source.Type : target.Type;
+                if (GpuOperationRegistry.TypesMatch(target.Op, result, types)) valid.Add((target.Id, input));
+            }
+        }
+        return valid;
+    }
     public void Edit(GpuEdit first, params GpuEdit[] remaining)
     {
         GpuParticleEditorService.Apply(Graph, ContainerId, [first, .. remaining]);

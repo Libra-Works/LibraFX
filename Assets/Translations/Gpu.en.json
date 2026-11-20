@@ -1,4 +1,7 @@
 {
+  "Gpu.SpawnRate": "Particles per second",
+  "Gpu.EmitterMatrix": "Emitter Matrix",
+  "Gpu.FormatManaged": "File and shader versions are selected automatically when saving and exporting. Configure features with the controls; no version editing is required.",
   "Gpu.ContainerHint": "GPU Program — double-click to edit",
   "Gpu.Node": "GPU Particle",
   "Gpu.DrawMatrix": "Draw Matrix",

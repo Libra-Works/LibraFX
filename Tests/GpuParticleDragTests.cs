@@ -433,7 +433,13 @@ internal static class GpuParticleDragTests
         Check(ReferenceEquals(pointer.Captured, outputPin) && Near(preview.StartPoint, start) && Near(preview.EndPoint, middle) &&
             Near(Origin(sourceBorder, canvas), origin) && committed == 0,
             $"Output-pin preview: capture={ReferenceEquals(pointer.Captured, outputPin)}, start={preview.StartPoint}/{start}, end={preview.EndPoint}/{middle}, node={Origin(sourceBorder, canvas)}/{origin}, commits={committed}");
-        outputPin.RaiseEvent(new PointerReleasedEventArgs(outputPin, pointer, window, Root(canvas, end, window), 2,
+        var nearInput = Root(canvas, end, window) + new Vector(-18, 0);
+        outputPin.RaiseEvent(new PointerEventArgs(InputElement.PointerMovedEvent, outputPin, pointer, window,
+            nearInput, 2, Held, KeyModifiers.None));
+        Frame(window);
+        Check(Ports(Node(canvas, target.Id))[1].Classes.Contains("connection-target") && Near(preview.EndPoint, end),
+            "A compatible input must highlight and snap the preview 18 screen pixels before reaching the pin.");
+        outputPin.RaiseEvent(new PointerReleasedEventArgs(outputPin, pointer, window, nearInput, 3,
             new(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased), KeyModifiers.None, MouseButton.Left));
         Frame(window);
         Check(committed == 1 && pointer.Captured is null &&

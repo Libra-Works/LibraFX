@@ -14,6 +14,19 @@ public sealed record McpSignalKey(double TimeSeconds, string Mode, Guid? Id = nu
 
 public sealed partial class LiberaFxMcpTools
 {
+    [McpServerTool(Name = "libera_graph_move_into_group", Destructive = false, OpenWorld = false)]
+    [Description("Move existing nodes and their internal wires into a child graph as one undoable edit. IDs are retained. Rejects outside wires, exposed parameters and invalid/locked destinations. This is the same action as dropping nodes onto a group.")]
+    public static Task<string> MoveIntoGroup(ActiveGraphProvider activeGraph,
+        [Description("Node GUIDs in the current graph.")] string[] nodeIds,
+        [Description("Destination group node GUID in the current graph.")] string groupId) =>
+        EditGraph(activeGraph, graph =>
+        {
+            if (nodeIds is null || nodeIds.Length == 0) throw new McpException("Select nodes to move.");
+            if (!graph.MoveNodesIntoGraph(nodeIds.Select(id => FindNode(graph, id)), FindNode(graph, groupId)))
+                throw new McpException("The nodes cannot be moved into this child graph.");
+            return EncodeGraph(graph.CreateCurrentSnapshot()).ToJsonString(JsonOptions);
+        });
+
     [McpServerTool(Name = "libera_graph_set_curve", Destructive = false, OpenWorld = false)]
     [Description("Replace the keys of a FloatFCurve in one undoable edit. Times are seconds, slopes are value per second. Interpolation is per key: Constant, Linear or Cubic. Read back the node for assigned key IDs.")]
     public static Task<string> SetCurve(ActiveGraphProvider activeGraph,

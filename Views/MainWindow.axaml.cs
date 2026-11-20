@@ -20,8 +20,6 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        DataContextChanged += OnGpuDataContextChanged;
-        Closed += (_, _) => DetachGpuWorkspace();
         DataContextChanged += OnGroupDataContextChanged;
         Opened += (_, _) => QueueGroupUpdateCheck();
         Opened += (_, _) => RestoreWindowWorkspace();

@@ -34,6 +34,7 @@ public sealed class ProceduralWorkspaceView : UserControl
     private Guid? _selectedStage;
     public string Title => _breadcrumb.Text ?? "";
     public GraphWorkspaceViewModel? Workspace => IsVisible ? _workspace : null;
+    public bool UseDocumentNavigation { get; set; }
 
     public ProceduralWorkspaceView()
     {
@@ -182,12 +183,12 @@ public sealed class ProceduralWorkspaceView : UserControl
             _breadcrumb.Text = T(ProceduralResourceSchema.Name(_node.Definition.Kind)!) + " / " + T("Flow");
             _flow.Children.Clear(); _palette.Children.Clear(); _inspector.Children.Clear();
             _toolbar.Children.Clear();
-            Button(_toolbar, "Back", CloseWorkspace);
-            _toolbar.Children.Add(_breadcrumb);
-            Button(_toolbar, "Undo", () => _workspace.History.Undo());
-            Button(_toolbar, "Redo", () => _workspace.History.Redo());
+            if (!UseDocumentNavigation)
+            {
+                Button(_toolbar, "Back", CloseWorkspace);
+                _toolbar.Children.Add(_breadcrumb);
+            }
             Button(_toolbar, "Compile", () => { try { _ = LiberaFx.Services.Compilation.SpawnableGroupPackage.Compile(_workspace.CreateSnapshot()); _status.Text = T("Valid"); } catch (Exception error) { _status.Text = T("Invalid") + " " + error.Message; } });
-            Button(_toolbar, "Close", CloseWorkspace);
             _palette.Children.Add(new TextBlock { Text = T("Palette"), FontSize = 17 });
             var choices = Model ? ProceduralResourceSchema.ModifierNames : ProceduralResourceSchema.PixelNames;
             for (var i = 0; i < choices.Length; ++i)

@@ -17,19 +17,9 @@
         <TextBlock x:Name="Breadcrumb" Classes="editor-heading" Grid.Column="1" VerticalAlignment="Center" />
         <Border Grid.Column="2" Classes="editor-toolbar-group" Padding="4,2">
           <StackPanel Orientation="Horizontal" Spacing="2">
-            <views:IconButton Classes="editor-tool" Icon="Undo" Click="OnUndo"
-                              ToolTip.Tip="{DynamicResource Text.Editor.Undo}"
-                              AutomationProperties.Name="{DynamicResource Text.Editor.Undo}" />
-            <views:IconButton Classes="editor-tool" Icon="Redo" Click="OnRedo"
-                              ToolTip.Tip="{DynamicResource Text.Editor.Redo}"
-                              AutomationProperties.Name="{DynamicResource Text.Editor.Redo}" />
-            <Border Classes="editor-toolbar-divider" />
             <views:IconButton Classes="editor-tool transport-primary" Icon="Play" Click="OnCompile"
                               ToolTip.Tip="{DynamicResource Text.Gpu.Compile}"
                               AutomationProperties.Name="{DynamicResource Text.Gpu.Compile}" />
-            <views:IconButton Classes="editor-tool" Icon="Close" Click="OnClose"
-                              ToolTip.Tip="{DynamicResource Text.Gpu.Close}"
-                              AutomationProperties.Name="{DynamicResource Text.Gpu.Close}" />
           </StackPanel>
         </Border>
         <Border Grid.Column="3" Background="Transparent" Padding="4" VerticalAlignment="Center"

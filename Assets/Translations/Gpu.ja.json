@@ -1,4 +1,7 @@
 {
+  "Gpu.SpawnRate": "1秒あたりの発生数",
+  "Gpu.EmitterMatrix": "発生源の行列",
+  "Gpu.FormatManaged": "ファイル・シェーダーの形式バージョンは保存・書き出し時に自動選択します。機能は画面の操作欄から設定でき、バージョンの手入力は不要です。",
   "Gpu.ContainerHint": "GPU プログラム — ダブルクリックして編集",
   "Gpu.Node": "GPU パーティクル",
   "Gpu.DrawMatrix": "描画行列",

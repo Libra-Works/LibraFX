@@ -13,6 +13,7 @@
         <Border Grid.Row="0" Classes="editor-bar" BorderThickness="0,0,0,1"
                 IsVisible="{Binding !IsInlineWorkspace}">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <StackPanel Orientation="Horizontal">
                 <ItemsControl ItemsSource="{Binding Breadcrumbs}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -34,6 +35,8 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                <StackPanel x:Name="SpecializedBreadcrumbs" Orientation="Horizontal" />
+                </StackPanel>
                 <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Settings"
                                   IsVisible="{Binding IsRootGraph}"
                                   ToolTip.Tip="{DynamicResource Text.Editor.EffectSettings}"
@@ -136,6 +139,13 @@
                             <MenuItem.Icon><views:EditorIconView Icon="Add" /></MenuItem.Icon>
                         </MenuItem>
                         <Separator />
+                        <MenuItem Header="{DynamicResource Text.Editor.NewCpuParticle}" Click="OnAddCpuParticleClick">
+                            <MenuItem.Icon><views:EditorIconView Icon="Add" /></MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="{DynamicResource Text.Editor.NewGpuParticle}" Click="OnAddGpuParticleClick">
+                            <MenuItem.Icon><views:EditorIconView Icon="Add" /></MenuItem.Icon>
+                        </MenuItem>
+                        <Separator />
                         <MenuItem Header="{DynamicResource Text.Editor.Copy}" IsEnabled="{Binding HasSelection}" Click="OnCopyClick">
                             <MenuItem.Icon><views:EditorIconView Icon="Copy" /></MenuItem.Icon>
                         </MenuItem>
@@ -222,6 +232,8 @@
             </Grid>
         </ScrollViewer>
         <views:CpuParticleFlowView Grid.Row="1" IsVisible="{Binding IsCpuParticleOverview}" />
+        <ContentControl x:Name="SpecializedWorkspace" Grid.Row="1" Grid.RowSpan="2" IsVisible="False"
+                        Background="{DynamicResource EffectWindowBackgroundBrush}" />
         <Popup x:Name="NodeSearchPopup" Grid.Row="2" PlacementTarget="{Binding #GraphScrollViewer}"
                Placement="Center" IsLightDismissEnabled="True">
             <Border Width="340" MaxHeight="400" Padding="8" BorderThickness="1"

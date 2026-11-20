@@ -91,6 +91,7 @@ public partial class GraphEditorView : UserControl
 
     private void OnLanguageChanged(object? sender, EventArgs e)
     {
+        if (_specializedNodeId is not null) RefreshSpecializedBreadcrumbs(sender, e);
         _searchEntries = null;
         if (NodeSearchPopup.IsOpen) RefreshNodeSearch();
     }
@@ -103,6 +104,7 @@ public partial class GraphEditorView : UserControl
 
     private void ObserveDefinitionChanges(bool subscribe)
     {
+        ObserveSpecializedWorkspaces(subscribe);
         if (_observedGraph is not null)
         {
             _observedGraph.FrameSelectionRequested -= OnFrameSelectionRequested;
@@ -157,6 +159,8 @@ public partial class GraphEditorView : UserControl
 
     private void SynchronizeNodes()
     {
+        if (_specializedNodeId is { } id && _observedGraph?.Nodes.Any(node => node.Id == id) != true)
+            CloseSpecializedWorkspace();
         var current = _observedGraph?.Nodes.ToHashSet() ?? [];
         foreach (var node in _observedNodes.Except(current).ToArray())
         {
@@ -235,6 +239,11 @@ public partial class GraphEditorView : UserControl
         var position = ToGraphPoint(e.GetPosition(GraphCanvas));
         try
         {
+            if (FindHitNode(e.Source)?.DataContext is GraphNodeViewModel { ChildGraph: not null } owner)
+            {
+                graph = graph.OpenInlineGraph(owner);
+                position = new Point(80, 80);
+            }
             if (TryGetGroupId(e, out var assetId)) graph.CreateGroupAssetNode(assetId, position.X, position.Y);
             else if (TryGetNodeKind(e, out var kind)) graph.CreateNode(kind, position.X, position.Y,
                 e.DataTransfer.TryGetText()?.StartsWith(NodeCatalogEntryViewModel.PolymorphicPrefix, StringComparison.Ordinal) == true);
@@ -365,6 +374,15 @@ public partial class GraphEditorView : UserControl
         (source as Visual)?.GetSelfAndVisualAncestors().OfType<GraphNodeView>()
             .FirstOrDefault(view => ReferenceEquals(view.FindAncestorOfType<GraphEditorView>(), this));
 
+    internal GraphNodeViewModel? FindDropContainer(Point point, IReadOnlyCollection<GraphNodeViewModel> dragged)
+    {
+        return this.GetVisualDescendants().OfType<GraphNodeView>()
+            .Where(view => view.IsEffectivelyVisible && ReferenceEquals(view.FindAncestorOfType<GraphEditorView>(), this) &&
+                view.DataContext is GraphNodeViewModel { ChildGraph: not null } node && !dragged.Contains(node))
+            .Reverse().FirstOrDefault(view => view.TranslatePoint(default, this) is { } origin &&
+                new Rect(origin, view.Bounds.Size).Contains(point))?.DataContext as GraphNodeViewModel;
+    }
+
     private async void OnCopyClick(object? sender, RoutedEventArgs e) => await CopySelectionAsync(false);
 
     private async void OnCutClick(object? sender, RoutedEventArgs e) => await CopySelectionAsync(true);
@@ -387,11 +405,19 @@ public partial class GraphEditorView : UserControl
         try { graph.CreateNode(GraphNodeKind.SpawnableGroup, _pastePosition.X, _pastePosition.Y); }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException) { graph.ReportStatus(ex.Message); }
     }
+    private void OnAddCpuParticleClick(object? sender, RoutedEventArgs e) => AddParticle("CpuParticle");
+    private void OnAddGpuParticleClick(object? sender, RoutedEventArgs e) => AddParticle("GpuParticle");
+    private void AddParticle(string kind)
+    {
+        if (DataContext is GraphWorkspaceViewModel graph)
+            graph.RunAuthoringAction(() => graph.CreateNode(new(kind), _pastePosition.X, _pastePosition.Y));
+    }
 
     private void OnBreadcrumbClick(object? sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: int depth } && DataContext is GraphWorkspaceViewModel graph)
         {
+            CloseSpecializedWorkspace();
             graph.NavigateToGraph(depth);
             graph.Document.ActivateEditingWorkspace();
         }
@@ -531,6 +557,9 @@ public partial class GraphEditorView : UserControl
                 entry.Namespace.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                 entry.Group.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                 entry.SearchTerms.Contains(search, StringComparison.OrdinalIgnoreCase)).ToArray();
+        entries = entries.OrderByDescending(entry => entry.IsFavorite)
+            .ThenByDescending(entry => string.Equals(entry.Name, search, StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(entry => entry.Name.StartsWith(search, StringComparison.OrdinalIgnoreCase)).ToArray();
         NodeSearchResults.ItemsSource = entries;
         NodeSearchResults.SelectedIndex = entries.Length > 0 ? 0 : -1;
     }

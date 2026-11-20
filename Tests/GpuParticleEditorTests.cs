@@ -346,8 +346,11 @@ internal static class GpuParticleEditorTests
         ShapePicker().SelectedItem = ShapePicker().Items.OfType<ComboBoxItem>()
             .Single(item => item.Tag is GpuSpawnShapeKind.Box);
         var boxInputs = shapeUiView.FindControl<StackPanel>("FlowPanel")!
-            .GetLogicalDescendants().OfType<TextBox>().ToArray();
-        Check(boxInputs.Length == 3, "Selecting Box reveals all three half-extents");
+            .GetLogicalDescendants().OfType<TextBox>().Where(input => new[] {
+                "Gpu.EmitterHalfExtentX", "Gpu.EmitterHalfExtentY", "Gpu.EmitterHalfExtentZ" }.Any(key =>
+                Avalonia.Automation.AutomationProperties.GetName(input) == LocalizationService.Shared.Get(key))).ToArray();
+        Check(boxInputs.Length == 3, "Selecting Box reveals all three half-extents: " + string.Join(", ",
+            boxInputs.Select(input => Avalonia.Automation.AutomationProperties.GetName(input) + "=" + input.Text)));
         boxInputs[0].Text = "2";
         boxInputs[1].Text = "3";
         boxInputs[2].Text = "4";
@@ -360,19 +363,7 @@ internal static class GpuParticleEditorTests
                 { Kind: GpuSpawnShapeKind.Box, HalfExtents: [2, 3, 4] },
             "The Spawn card shape selector and apply control persist Box dimensions");
         shapeUiView.CloseWorkspace();
-        var main = new MainViewModel();
-        var window = new MainWindow { DataContext = main };
-        var layout = main.Layout;
-        var document = main.ActiveDocument;
-        var activeGraph = main.Graph;
-        var mainGpu = GpuParticleEditorService.Create(activeGraph);
-        activeGraph.OpenGpuEditor(mainGpu);
-        var overlay = window.FindControl<GpuWorkspaceView>("GpuWorkspace")!;
-        Check(overlay.IsVisible && overlay.Workspace?.ContainerId == mainGpu.Id &&
-            ReferenceEquals(main.Layout, layout) && ReferenceEquals(main.ActiveDocument, document), "MainWindow dedicated overlay preserves document/layout");
-        overlay.CloseWorkspace();
-        Check(ReferenceEquals(main.Graph, activeGraph) && ReferenceEquals(main.Layout, layout), "Back preserves CPU workspace");
-        window.Close();
+        WorkspaceNavigationTests.Run();
         VerifyMcp();
         GpuParticleDragTests.Run();
         var exportDirectory = Path.Combine(Environment.CurrentDirectory, "build", "gpu-export-" + Guid.NewGuid().ToString("N"));

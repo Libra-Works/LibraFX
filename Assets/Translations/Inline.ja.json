@@ -1,4 +1,8 @@
 {
+  "Inline.DropNotAllowed": "この種類のノードは移動先のグラフに配置できません。",
+  "Inline.DropExternalConnections": "子グラフに移す前に、選択外のノードとの接続を外してください。",
+  "Inline.DropExposed": "子グラフに移す前に、対象ノードのパラメーター公開を解除してください。",
+  "Inline.History.MoveIntoGraph": "ノードを子グラフへ移動",
   "Inline.Toggle": "編集可能な子グラフを展開／折りたたむ",
   "Inline.Maximize": "子グラフを全画面で開く（パンくずから戻る）",
   "Inline.Resize": "子グラフの表示サイズを変更",
