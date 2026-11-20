@@ -10,6 +10,7 @@
   "portType": "Float",
   "portCategory": "Parameter",
   "inputPorts": [
+    { "id": "emitterMatrix", "name": "Emitter Matrix", "displayNameKey": "Gpu.EmitterMatrix", "portType": "Matrix" },
     { "id": "drawMatrix", "name": "Draw Matrix", "displayNameKey": "Gpu.DrawMatrix", "portType": "Matrix" }
   ],
   "outputPorts": [],

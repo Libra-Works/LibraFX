@@ -18,7 +18,7 @@ public static class RenderProgramBindings
     internal static bool HasGpuDrawMatrix(GraphSnapshot graph)
     {
         var gpuIds = graph.Nodes.Where(node => GpuParticleEditorService.IsGpu(node.Kind)).Select(node => node.Id).ToHashSet();
-        return graph.Connections.Any(edge => edge.TargetPortId == "drawMatrix" && gpuIds.Contains(edge.TargetNodeId)) ||
+        return graph.Connections.Any(edge => edge.TargetPortId is "drawMatrix" or "emitterMatrix" && gpuIds.Contains(edge.TargetNodeId)) ||
             graph.Nodes.Any(node => node.ChildGraph is { } child && !GpuParticleEditorService.IsGpu(node.Kind) &&
                 HasGpuDrawMatrix(child));
     }
@@ -78,8 +78,16 @@ public static class RenderProgramBindings
         }
         var renderNodes = new List<object>();
         var gpuDrawTransforms = new List<object>();
+        var gpuEmitterTransforms = new List<object>();
         foreach (var node in nodes.Values.Where(node => GpuParticleEditorService.IsGpu(node.Kind)))
         {
+            var emitterBindings = connections[node.Id].Where(edge => edge.TargetPortId?.StartsWith("emitterRow", StringComparison.Ordinal) == true).ToArray();
+            if (emitterBindings.Length != 0)
+            {
+                if (emitterBindings.Length != 4) throw new InvalidDataException("Emitter Matrix requires four rows.");
+                gpuEmitterTransforms.Add(new { nodeId = node.Id, rowNodeIds = Enumerable.Range(0, 4)
+                    .Select(row => emitterBindings.Single(edge => edge.TargetPortId == $"emitterRow{row}").SourceNodeId).ToArray() });
+            }
             var bindings = connections[node.Id].Where(edge =>
                 edge.TargetPortId?.StartsWith("drawRow", StringComparison.Ordinal) == true).ToArray();
             if (bindings.Length == 0)
@@ -343,6 +351,12 @@ public static class RenderProgramBindings
                     new { type = "render_config", programSequence, nodes = renderNodes }, JsonOptions)
                 : JsonSerializer.SerializeToUtf8Bytes(
                     new { type = "render_config", programSequence, nodes = renderNodes, gpuDrawTransforms }, JsonOptions);
+            if (gpuEmitterTransforms.Count != 0)
+            {
+                var document = JsonNode.Parse(bytes)!;
+                document["gpuEmitterTransforms"] = JsonSerializer.SerializeToNode(gpuEmitterTransforms, JsonOptions);
+                bytes = JsonSerializer.SerializeToUtf8Bytes(document, JsonOptions);
+            }
             if (proceduralResources.Length != 0)
             {
                 var document = JsonNode.Parse(bytes)!;

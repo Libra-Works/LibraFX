@@ -59,6 +59,14 @@ public static class CpuParticleCompilation
         {
             return (original, [], new Dictionary<Guid, Guid>());
         }
+        var emitterRows = new Dictionary<Guid, Guid[]>();
+        foreach (var system in systems)
+        {
+            var binding = CpuEmitterMatrixLowering.Bind(graph, system);
+            graph = binding.Graph;
+            emitterRows[system.Id] = binding.Rows;
+            graph = CpuEmitterMatrixLowering.Bind(graph, system, "draw").Graph;
+        }
         var nodes = graph.Nodes.Where(node => !CpuParticleSchema.IsContainer(node.Kind)).ToList();
         var ids = systems.Select(node => node.Id).ToHashSet();
         var edges = graph.Connections.Where(edge => !ids.Contains(edge.SourceNodeId) && !ids.Contains(edge.TargetNodeId)).ToList();
@@ -158,7 +166,9 @@ public static class CpuParticleCompilation
                         signal ? 0 : SpawnableGroupSchema.InputWidth(boundary.PortType), boundary.Id, rootId,
                         input && edge is not null && !signal ? Component(graph, edge) : 0));
                 }
-                var lowered = LowerBoundaries(stageGraph);
+                var lowered = CpuEmitterMatrixLowering.TransformShapes(LowerBoundaries(stageGraph), stage.Id,
+                    emitterRows[system.Id], out var matrixBindings);
+                io.AddRange(matrixBindings.Select(binding => new Io(0, 4, binding.Inner, binding.Outer, 0)));
                 var program = VfxProgram.CompileForPackage(lowered, out var render, resourceContext: resources, options: options);
                 if (render.Length != 0 && lowered.Nodes.Any(node => RenderProgramBindings.IsRenderNode(node.Kind)))
                 {
@@ -241,6 +251,7 @@ public static class CpuParticleCompilation
 
     public static object[] Draws(GraphSnapshot graph, IRenderResourceBindingContext? resources)
     {
+        var flat = GroupBoundaryLowering.Lower(graph);
         var systems = new List<(GraphNodeSnapshot Node, IReadOnlyList<Guid> Scope)>();
         void Visit(GraphSnapshot current, IReadOnlyList<Guid> scope)
         {
@@ -279,7 +290,10 @@ public static class CpuParticleCompilation
             {
                 throw new InvalidDataException("CPU Sprite Draw needs an explicit texture, Alpha/Additive blend and positive draw scale.");
             }
-            return (object)new { nodeId = system.Id, assetPath = path, blendMode = blend, drawScale = scale, billboard = true };
+            var rows = flat.Connections.Any(e => e.TargetNodeId == system.Id && e.TargetPortId == "drawMatrix")
+                ? CpuEmitterMatrixLowering.RowIds(system.Id, "draw") : null;
+            return (object)new { nodeId = system.Id, assetPath = path, blendMode = blend, drawScale = scale, billboard = true,
+                drawMatrixRowNodeIds = rows };
         }).ToArray();
     }
 
@@ -290,8 +304,9 @@ public static class CpuParticleCompilation
             return scene;
         }
         var root = System.Text.Json.Nodes.JsonNode.Parse(scene)!.AsObject();
-        root["cpuParticleVersion"] = 1;
-        root["cpuParticles"] = JsonSerializer.SerializeToNode(Draws(graph, resources));
+        var draws = JsonSerializer.SerializeToNode(Draws(graph, resources));
+        root["cpuParticleVersion"] = draws!.AsArray().Any(d => d?["drawMatrixRowNodeIds"] is not null) ? 2 : 1;
+        root["cpuParticles"] = draws;
         return JsonSerializer.SerializeToUtf8Bytes(root);
     }
 }

@@ -38,6 +38,15 @@ public sealed record GpuContainerDiagnostic(Guid NodeId, GpuDiagnostic Diagnosti
 
 public static class GpuProgramDeliveryService
 {
+    private static GpuEditorState StateForDelivery(GraphSnapshot graph, GraphNodeSnapshot node)
+    {
+        var state = GpuParticleEditorService.ReadState(node);
+        bool Connected(GraphSnapshot scope) => scope.Connections.Any(e => e.TargetNodeId == node.Id && e.TargetPortId == "emitterMatrix") ||
+            scope.Nodes.Any(n => n.Kind != GraphNodeKind.SpawnableGroup && n.ChildGraph is { } child && Connected(child));
+        if (!Connected(graph)) return state;
+        if (state.Fluid2D is not null) throw new InvalidDataException("Emitter Matrix applies to particle emitter shapes. Use Draw Matrix to place a Fluid2D domain.");
+        return state with { Program = state.Program with { TransformEmitterShape = true } };
+    }
     private const int MaximumProgramsPerScope = 16;
     private static readonly JsonSerializerOptions PayloadJson = new(JsonSerializerDefaults.Web)
     {
@@ -157,7 +166,7 @@ public static class GpuProgramDeliveryService
     {
         return Containers(graph).Select(node =>
         {
-            var state = GpuParticleEditorService.ReadState(node);
+            var state = StateForDelivery(graph, node);
             if (state.Fluid2D is not null)
             {
                 throw new InvalidDataException("2D fluid requires the executable effect-package transport, not particle source delivery.");
@@ -183,7 +192,7 @@ public static class GpuProgramDeliveryService
         if (containers.Length > MaximumProgramsPerScope)
             throw new InvalidDataException($"A GPU program scope supports at most {MaximumProgramsPerScope} programs.");
 
-        var states = containers.Select(node => (Node: node, State: GpuParticleEditorService.ReadState(node))).ToArray();
+        var states = containers.Select(node => (Node: node, State: StateForDelivery(graph, node))).ToArray();
         ulong ownedBytes = 0;
         foreach (var item in states)
         {

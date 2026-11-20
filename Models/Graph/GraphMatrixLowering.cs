@@ -257,8 +257,9 @@ public static class GraphMatrixLowering
                         edges.Add(new(source[row].NodeId, edge.TargetNodeId, $"row{row}", source[row].PortId));
                     continue;
                 }
-                if (original[edge.TargetNodeId].Kind.Value == "GpuParticle" && edge.TargetPortId == "drawMatrix")
+                if (original[edge.TargetNodeId].Kind.Value == "GpuParticle" && edge.TargetPortId is "drawMatrix" or "emitterMatrix")
                 {
+                    var role = edge.TargetPortId == "emitterMatrix" ? "emitter" : "draw";
                     if (source.Count != 4)
                     {
                         throw new InvalidDataException("A GPU Draw Matrix requires four rows.");
@@ -267,7 +268,7 @@ public static class GraphMatrixLowering
                     var definition = byName["LiberaFx.FloatX4"];
                     for (var row = 0; row < 4; row++)
                     {
-                        var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"LiberaFx.gpu-draw.v1:{target.Id:D}:{row}"));
+                        var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"LiberaFx.gpu-{role}.v1:{target.Id:D}:{row}"));
                         var rowId = new Guid(hash.AsSpan(0, 16));
                         if (rowId == Guid.Empty || !occupied.Add(rowId))
                         {
@@ -276,7 +277,7 @@ public static class GraphMatrixLowering
                         lowered.Add(new(rowId, definition.Kind, $"{target.Name}: draw row {row}",
                             target.X, target.Y, definition.PortType, definition.PortCategory));
                         edges.Add(new(source[row].NodeId, rowId, SourcePortId: source[row].PortId));
-                        edges.Add(new(rowId, target.Id, $"drawRow{row}"));
+                        edges.Add(new(rowId, target.Id, $"{role}Row{row}"));
                     }
                     continue;
                 }

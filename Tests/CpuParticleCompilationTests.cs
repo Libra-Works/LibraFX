@@ -11,6 +11,7 @@ public static class CpuParticleCompilationTests
 {
     public static void Run()
     {
+        VerifyMatrixInputs();
         var graph = Fixture();
         GraphValidator.ValidateDocument(graph);
         var saved = JsonSerializer.Deserialize<GraphSnapshot>(JsonSerializer.Serialize(graph))!;
@@ -136,6 +137,45 @@ public static class CpuParticleCompilationTests
         return new([system, velocity], [new(velocity.Id, system.Id, CpuParticleSchema.PortId(input.Id))]);
     }
 
+    public static GraphSnapshot MatrixFixture()
+    {
+        var graph = Fixture();
+        var system = graph.Nodes.Single(Cpu);
+        var spawn = system.ChildGraph!.Nodes.Single(n => CpuParticleSchema.Name(n.Kind) == "CpuParticleSpawn");
+        var shape = Node("CpuParticleEmitterBox", Parameter("extent", "vector3", new[] { 0d, 0, 0 }));
+        var position = Node("CpuParticleSetPosition");
+        var first = spawn.ChildGraph!.Connections.Single();
+        spawn = spawn with { ChildGraph = spawn.ChildGraph with
+        {
+            Nodes = [.. spawn.ChildGraph.Nodes, shape, position],
+            Connections = [first with { TargetNodeId = position.Id }, new(position.Id, first.TargetNodeId, "signal", "then"),
+                new(shape.Id, position.Id, "value", "value")]
+        } };
+        system = system with { ChildGraph = system.ChildGraph with
+            { Nodes = system.ChildGraph.Nodes.Select(n => n.Id == spawn.Id ? spawn : n).ToArray() } };
+        var matrix = Node("Transform", Parameter("position", "vector3", new[] { 10d, 20, 30 }));
+        return graph with { Nodes = graph.Nodes.Where(n => n.Id != system.Id).Append(system).Append(matrix).ToArray(),
+            Connections = [.. graph.Connections, new(matrix.Id, system.Id, "emitterMatrix", "value"),
+                new(matrix.Id, system.Id, "drawMatrix", "value")] };
+    }
+
+    private static void VerifyMatrixInputs()
+    {
+        var package = SpawnableGroupPackage.Compile(MatrixFixture());
+        using var render = JsonDocument.Parse(package.RootRenderConfiguration);
+        var scene = render.RootElement;
+        Require(scene.GetProperty("cpuParticleVersion").GetInt32() == 2 &&
+            scene.GetProperty("cpuParticles")[0].GetProperty("drawMatrixRowNodeIds").GetArrayLength() == 4,
+            "CPU Draw Matrix must automatically select the matching scene format and retain all four row bindings.");
+        Span<byte> id = stackalloc byte[16];
+        foreach (var row in scene.GetProperty("cpuParticles")[0].GetProperty("drawMatrixRowNodeIds").EnumerateArray())
+        {
+            row.GetGuid().TryWriteBytes(id, true, out _);
+            Require(ContainsInstructionId(package.ParentBytecode, id), "CPU draw rows must be actual root VM values.");
+        }
+        Require(package.CpuPrograms.Length > 0, "CPU emitter Matrix must retain executable particle stages.");
+    }
+
     // Called only by an explicitly invoked fixture command; never runs a build/editor.
     public static void WriteNativeFixture(string directory)
     {
@@ -144,6 +184,8 @@ public static class CpuParticleCompilationTests
             throw new ArgumentException("Supply an absolute NEW isolated temporary directory.");
         }
         Directory.CreateDirectory(directory);
+        File.WriteAllBytes(Path.Combine(directory, "cpu-emitter-matrix.lfxb"),
+            SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(MatrixFixture())));
         File.WriteAllBytes(Path.Combine(directory, "cpu-particles.lfxb"),
             SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(Fixture())));
         var renderGraph = Fixture();
