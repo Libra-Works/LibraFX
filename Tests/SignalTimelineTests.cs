@@ -16,6 +16,7 @@ internal static class SignalTimelineTests
 {
     public static void Run(string? output = null)
     {
+        VerifyAutomaticTracks();
         var library = EditorNativePreviewSession.ResolveLibraryPath();
         VerifyAuthoring();
         var root = RootGraph();
@@ -42,6 +43,29 @@ internal static class SignalTimelineTests
             File.WriteAllBytes(Path.Combine(output, "Timeline.lfxproj"), project.ToArray());
         }
         Console.WriteLine("Signal timeline editing/history/persistence, preview/runtime separation, frame-step and native scoped dispatch passed.");
+    }
+
+    public static void VerifyAutomaticTracks()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var first = graph.CreateNode(GraphNodeKind.Signal);
+        var second = graph.CreateNode(GraphNodeKind.Signal);
+        graph.CreateNode(GraphNodeKind.Float);
+        var timeline = new TimelineViewModel(new ActiveGraphProvider(graph), new EditorPlayback());
+        Require(timeline.Tracks.Count == 2 && timeline.Tracks.All(track => track.IsSignal && track.SignalKeys.Count == 0) &&
+            timeline.SelectedTrack is null, "Empty Signal tracks must appear without selecting a Signal node or adding a key.");
+        graph.DeleteNodes([first]);
+        Require(timeline.Tracks.Count == 1 && timeline.Tracks.Single().Node.Id == second.Id,
+            "Deleting a Signal must remove its automatic track.");
+        graph.History.Undo();
+        Require(timeline.Tracks.Count == 2, "Undo must restore an empty Signal track.");
+        graph.CreateNode(GraphNodeKind.Signal);
+        Require(timeline.Tracks.Count == 3, "Creating another Signal must append its track automatically.");
+        var track = timeline.Tracks.Single(track => track.Node.Id == second.Id);
+        timeline.Select(track);
+        timeline.AddSignalKey(SignalTimelineMode.Preview, track, .5);
+        Require(timeline.Tracks.Single(track => track.Node.Id == second.Id).SignalKeys.Single().TimeSeconds == .5,
+            "An automatically created Signal track must accept timeline key edits.");
     }
 
     private static GraphSnapshot RootGraph()

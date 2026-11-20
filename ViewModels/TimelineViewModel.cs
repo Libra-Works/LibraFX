@@ -114,8 +114,12 @@ public sealed class TimelineViewModel : Tool
         foreach (var node in _graph.Nodes)
         {
             if (node.Curve is not null) Tracks.Add(new TimelineTrackViewModel(this, node));
-            foreach (var mode in (node.SignalKeys ?? []).Select(key => key.Mode).Distinct().Order())
-                Tracks.Add(new TimelineTrackViewModel(this, node, mode));
+            if (SignalTimeline.Supports(node.BaseDefinition.Kind))
+            {
+                Tracks.Add(new TimelineTrackViewModel(this, node, SignalTimelineMode.Preview));
+                if (node.SignalKeys?.Any(key => key.Mode == SignalTimelineMode.Runtime) == true)
+                    Tracks.Add(new TimelineTrackViewModel(this, node, SignalTimelineMode.Runtime));
+            }
         }
         SelectedSignalKey = SelectedTrack?.SignalKeys.FirstOrDefault(key => key.Id == selectedKeyId);
         OnPropertyChanged(nameof(SelectedTrack));
