@@ -19,7 +19,7 @@ LIBERA FX は、Unity・Unreal Engine・Godot で再生するエフェクトを�
 | [用語集](glossary.md) | ノード、Signal、Spawnable、ランタイムなどの言葉を、短い例と一緒に確認できます。 |
 | [ウィンドウとパネルのリファレンス](editor-reference.md) | ツール、設定、ダイアログの使い方を実画面と操作例で確認できます。 |
 | [GPU パーティクル制作](gpu-particles.md) | GPU フロー、ビジュアルカーネル、型付き DSL、ビルボード設定を編集します。 |
-| [2D の煙・インク](fluid-2d.md) | リソース先頭の GPU 格子ソルバー、発生源、密度テクスチャを扱います。 |
+| [2D の煙・水・炎](fluid-2d.md) | リソース先頭の格子ソルバー、セル外力、専用描画、生成出力を扱います。 |
 | [CPU パーティクル制作](cpu-particles.md) | Spawn／Update 子グラフ、粒子の放出、CPU の Property／Signal のやり取りを説明します。 |
 | [Flexible Plane Draw](flexible-plane-draw.md) | 自由配置の点列や、位置の履歴から帯状のポリゴンを作ります。 |
 | [グラフ制作ガイド](authoring.md) | ピンの接続、カーブ、Spawnable の寿命、Group の再利用を説明します。 |
@@ -35,20 +35,18 @@ LIBERA FX は、Unity・Unreal Engine・Godot で再生するエフェクトを�
 
 ## フルイドは 2D を先に充実
 
-最初は **smoke-first：GPU による 2D の煙・色密度の移流**です。
-今回の更新では固定の格子ソルバーとリソース先頭の Flow を追加しています。
-設定・エンジン検証・制限は[2D の煙・インク](fluid-2d.md)を参照してください。
-2026.11.22 より後の Preview 更新が必要です。エディター・コンバーター・SDK は
-同じビルドを組み合わせてください。過去のアーカイブは更新されません。
+開発ソースでは **2D の煙、横から見る自由表面の水、上から見る浅水、燃料・温度による燃焼**に対応します。
+リソース先頭の Flow、セル外力、専用描画、同一スコープ内の生成テクスチャ・フィールド参照は、
+実画面付きの[フルイドの説明](fluid-2d.md)を参照してください。
+対応するエディターと SDK ソースを組み合わせてください。公開済みアーカイブの再配布は行っていません。
 
-Unity・Unreal・Godot の描画改修、CPU パーティクルの Flow、GPU 放出形状は
-今回の更新に含みます。Spawnable のネストと内部 CPU 粒子も、個体ごとの所有・寿命に対応します。
+Unity・Unreal・Godot の描画改修、CPU パーティクルの Flow、GPU 放出形状も含みます。
+Spawnable のネストと内部 CPU 粒子は、個体ごとの所有・寿命に対応します。
 **2D を充実させてから 3D へ進める**計画は
 [issue #69](https://github.com/Libra-Works/LibraFX/issues/69)にまとめています。
-液体や燃焼は今後の対象で、煙・色密度の計算は水面や炎の実装ではありません。
-今回のリソース／ターゲット宣言は
-[issue #68](https://github.com/Libra-Works/LibraFX/issues/68)の一部を具体化したもので、
-任意のリソースグラフやメイン画面へのアクセスではありません。
+共通リソース計画の契約と宣言は
+[issue #68](https://github.com/Libra-Works/LibraFX/issues/68)の基礎です。
+任意の実行リソースグラフやメイン画面への書き込みには、追加のアダプター対応が必要です。
 
 [ソースリポジトリ](https://github.com/Libra-Works/LibraFX) ·
 [MIT ライセンス](https://github.com/Libra-Works/LibraFX/blob/main/LICENSE)

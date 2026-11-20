@@ -60,9 +60,13 @@ thread-group sizes and resource bindings in `LibraGpuParticleRuntime`. Its
 source hash check is Editor-only; an exported game must carry the imported
 shader and matching metadata together. Unity submits compute and draw work via
 engine APIs and retires in-flight resources separately. Godot has a
-local RenderingDevice LGPK interpreter with synchronous readback for
-MultiMesh billboard draws. Root and child scopes own separate particle
-buffers and read their own draw Matrix rows. See the
+global RenderingDevice LGPK interpreter on the render thread. A GPU pass
+publishes particle state to an RGBA32Float texture sampled by the MultiMesh
+billboard shader; normal playback does not read particle state to CPU.
+Root and child scopes own separate buffers/textures and read their own authored
+draw Matrix rows. Fixed-capacity draws bypass CPU bounds culling, and command
+processing currently synchronizes the main/render threads. This is a basis for
+resource sharing, not implemented cross-container field binding. See the
 [Godot integration guide](../Runtime/Integrations/Godot/USAGE.txt) for
 admission limits and device verification.
 

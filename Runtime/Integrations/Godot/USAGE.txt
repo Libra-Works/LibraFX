@@ -197,13 +197,22 @@ without render payloads remain supported.
 GPU package playback
 --------------------
 
-The LGPK particle interpreter continues to use a local RenderingDevice for
-supported root and Spawnable child emitters. Root GPU emitters require
+The LGPK particle interpreter uses the global RenderingDevice on the render
+thread for supported root and Spawnable child emitters. Root GPU emitters require
 AutoDestroyWhenIdle to be disabled, as in Unity. Godot validates packaged
 Unreal-format LGPK v1 packets and runs the trusted embedded compute interpreter
 (opcodes 0–41, up to 128 registers); shader source from a package is never
-executed. That legacy billboard path still reads particle buffers back for
-MultiMesh submission.
+executed. A trusted GPU publication pass writes a five-texel-wide RGBA32Float
+state texture, sampled directly by the billboard vertex shader. Normal
+simulation and drawing do not read particles back to the CPU or rewrite
+per-particle instance transforms. One MultiMesh draw per emitter contains
+fixed identity instances; the shader discards dead particles. The extra state
+texture uses 80 bytes per capacity slot, in addition to the 80-byte particle
+buffer. Aggregate live capacity remains limited to 16384 slots per player.
+Because positions remain on the GPU, emitter draws bypass CPU bounds culling;
+this trades additional vertex work for removing synchronous state readback.
+Dispatch currently synchronizes main/render-thread command processing, not a
+local device submission. This is not a performance guarantee for every effect.
 
 Version 2 GPU manifests may mix those existing particle programs with
 Fluid2D programs. Godot validates every scope, identity, settings block and
@@ -230,11 +239,33 @@ At most 16 fluid programs may be active for one player. Unsupported renderers,
 invalid settings and devices unable to provide the required storage/sampleable
 RGBA16F texture fail visibly through `get_gpu_error()`.
 
+Optional settings.vorticity (0..100) reinforces existing rotation using
+neighboring advected velocities. The force is applied every substep before
+pressure projection; it is separate from noise-driven turbulence. Old settings
+omit it and use zero. Nonzero exports require the updated extension. The
+uniform block is 512 bytes; vorticity remains in grid.w, with model/reaction/force vectors appended.
+Tests/fluid_2d_vorticity_smoke.gd uses the compiler's fluid-only.lfxb and
+vorticity.lfxb fixtures with LIBERAFX_GODOT_TEST_HOOKS enabled. It compares real
+GPU velocity fields, closed boundaries, independent retirement and restart.
+
 Both GPU paths require a RenderingDevice renderer such as Forward+ or Mobile.
 Compatibility and headless/null devices are rejected; there is no CPU fluid
 fallback. Fluid output requires a 3D World3D/viewport and camera for visible
-presentation. The existing GPU particle path's local-device/readback behavior
-is unchanged.
+presentation. GPU particles and fluids now use the same global device, but
+generic cross-container field bindings are still separate implementation work.
+
+Version 3 GPU manifests add same-scope generated Texture2D bindings from a fluid
+producer's DyeOutput to a particle billboard. These references appear separately
+from resourceAssetPaths and require no set_texture_binding call. The shared
+RenderingDevice output is sampled through Texture2DRD; no field readback is
+used for this binding. The source is created and advanced before its consumer.
+An optional automaticPlane=false suppresses the source's separate plane while
+retaining compute and output storage; the editor uses this by default when the
+output is consumed. Each scope resolves its own producer and releases both
+resources with that scope. Other field outputs and particle field sampling are
+not provided by this binding. Tests/fluid_2d_generated_smoke.gd consumes actual
+generated-output.lfxb and fluid-only.lfxb compiler fixtures, with test hooks,
+to check consumer pixels, orientation, independent retirement and clear replay.
 
 Each spawned instance owns its particle state and advances on its local time.
 Draw Matrix rows are read from that same scope and affect only billboard
@@ -550,3 +581,52 @@ and its IDs, and requires a real display plus `LIBERAFX_PIXEL_ARTIFACTS`.
 This is not coverage of all shader uniforms, transparent ordering, UVs,
 history ribbons, camera-facing visual correctness, graphics backends or
 platforms. GPU simulation was not changed or rerun for this migration.
+
+Development: water, combustion and generated fields
+--------------------------------------------------
+The source now defines Smoke, FreeSurface, ShallowWater and Combustion models.
+Use matching regenerated trusted shaders (512-byte uniforms, 13 kernels).
+The model defaults preserve old Smoke settings. Water uses a bounded 2D CFL
+step; ShallowWater is flat-bed first-order HLL depth/momentum and has a depth
+safety cap of 16 * rest depth. FreeSurface uses staggered face velocities,
+air pressure zero, pressure warm starting and conservative water-fraction
+transport. Combustion stores fuel/temperature/smoke/reaction, with ignition,
+heat release and cooling; its dedicated fire display does not replace reaction.
+
+The dedicated water renderer adds Fresnel, foam and surface lighting; shallow
+water uses a GPU-displaced horizontal grid. Fire visualizes temperature emission
+and smoke. These development paths need their own numerical and framebuffer
+acceptance; earlier smoke evidence does not certify them.
+
+Instance-owned output allocations: DyeOutput RGBA16F premultiplied display,
+ColorOutput RGBA16F straight display, FieldOutput RGBA32F local velocity.xy,
+density/depth and temperature. VelocityOutput/DensityOutput are typed views
+of FieldOutput, without copies. Storage is 144 bytes/cell before overhead.
+
+Version 3 generatedDrawBindings connect same-scope fluid outputs to ordinary
+Sprite/Flexible Plane main textures (ColorOutput only) or explicitly bound
+material texture parameters. The compiled builtin:generated-texture marker
+requires an executable producer reference. It is not an engine asset fallback.
+Each instance resolves its own output; prepared definitions do not retain a
+native texture from another instance. Bound drawing consumers suppress the automatic
+source plane unless authored otherwise. Static asset references remain distinct.
+
+FlowMap2D FloatVelocity reads raw RG. FloatDensity reads BA (density and
+ temperature); SignedNormalized retains the old RG*2-1 behavior. GeneratedPlane
+coordinates use the producer plane transform and convert velocity into consumer
+simulation space. Source and consumer matrices must be invertible. Sampling
+clamps at the edge. Particle comparison opcodes 42/43 implement scalar float
+GreaterThan/LessThan, so density masks/probabilities can set Alive on the GPU.
+The LGPK packet envelope remains version 1; older interpreters reject new ops.
+
+Cell forces support up to eight ordered, explicitly connected nodes:
+Acceleration, Noise, CurlNoise, CellPosition, Time, Density, Temperature, Add,
+Multiply, Sine and Smoothstep. InputA/InputB refer to earlier stable node IDs;
+noise uses them as position/time, math uses vector inputs. Final unconsumed
+math/noise/acceleration outputs contribute force, source nodes alone do not.
+Noise is evaluated per cell on the GPU; density and temperature masks do not
+require normal playback readback. Vorticity is a separate neighborhood force.
+
+Current engine acceptance targets remain Windows D3D11/SM5 (Unreal 5.7),
+Unity 7000-series D3D11 Built-in fallback, and Godot 4.7.2 Vulkan Mobile/Forward+.
+UE 5.8/5.9 are separate tracked compatibility work, not proven by UE 5.7 runs.

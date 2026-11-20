@@ -8,7 +8,7 @@ title: GPU Particle Authoring
 
 See [GPU particle terms](glossary.md#gpu) for kernel, attribute, uniform, and IR.
 The Preview update after 2026.11.22 also provides a
-[resource-first 2D smoke / ink mode](fluid-2d.md) inside this workspace.
+[resource-first 2D smoke, water and fire modes](fluid-2d.md) inside this workspace.
 That solver is not a particle kernel. Install matching updated SDKs;
 the older archives are unchanged.
 

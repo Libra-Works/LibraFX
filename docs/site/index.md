@@ -19,7 +19,7 @@ with the standalone converter, and play it through a game-engine integration.
 | [Glossary](glossary.md) | Look up words such as node, Signal, Spawnable, and runtime, with short examples. |
 | [Editor window and panel reference](editor-reference.md) | Find tools, settings, and dialogs with screenshots and step-by-step examples. |
 | [GPU Particle Authoring](gpu-particles.md) | Edit the GPU flow, visual kernels, typed DSL, and billboard settings. |
-| [2D smoke and ink](fluid-2d.md) | Use the resource-first GPU grid solver, its source settings and density texture. |
+| [2D smoke, water and fire](fluid-2d.md) | Use the resource-first grid solvers, cell forces, dedicated renderers and generated outputs. |
 | [CPU Particle Authoring](cpu-particles.md) | Author Spawn/Update particle graphs, emission, and CPU Property/Signal interactions. |
 | [Flexible Plane Draw](flexible-plane-draw.md) | Build a ribbon from authored points or a bounded position history. |
 | [Graph authoring guide](authoring.md) | Connect pins, animate with curves, and manage Spawnable lifetime and Group reuse. |
@@ -35,20 +35,20 @@ with the standalone converter, and play it through a game-engine integration.
 
 ## 2D fluids first
 
-The first implementation is **smoke-first: 2D GPU smoke / advected dye**.
-This update adds a fixed grid solver and a resource-first Flow; see
-[2D smoke and ink](fluid-2d.md) for its settings, engine verification and limits.
-It requires the Preview update after 2026.11.22. Update the editor, converter
-and SDK together; old archives are unchanged.
+Development sources now support **2D smoke, side-view free-surface water,
+top-down shallow water and fuel/temperature combustion**. The resource-first
+Flow, cell forces, dedicated renderers and same-scope generated texture/field
+consumers are described in the [fluid guide](fluid-2d.md), with actual editor
+and engine captures. Use matching editor and SDK sources; published archives
+have not been rebuilt with these changes.
 
 The coordinated Unity, Unreal and Godot renderer migration, CPU particle Flow
 and GPU emitter shapes are included. Nested Spawnables and their CPU particles
 have per-instance ownership and lifetime retention. **2D improvements come before
 3D** in [issue #69](https://github.com/Libra-Works/LibraFX/issues/69).
-Liquids and combustion remain future work; smoke / dye does not implement
-water surfaces or fire. The solver's Resources / Targets declaration is the
-first limited implementation of [issue #68](https://github.com/Libra-Works/LibraFX/issues/68),
-not a general-purpose resource graph or access to the main framebuffer.
+The portable resource-plan contract and declarations implement a foundation for
+[issue #68](https://github.com/Libra-Works/LibraFX/issues/68). Arbitrary runtime
+resource graphs and writable main-framebuffer access still require adapter work.
 
 [Source repository](https://github.com/Libra-Works/LibraFX) ·
 [MIT license](https://github.com/Libra-Works/LibraFX/blob/main/LICENSE)

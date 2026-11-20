@@ -60,6 +60,14 @@ Linked development installation (no source copying)
   copy installer still bundles Core and does not ship the machine-local marker.
 
 GPU Fluid2D smoke/ink
+  Optional settings.vorticity is a finite strength from 0 to 100; absence means
+  zero and preserves old settings. The trusted shader computes confinement
+  from neighboring advected velocities during the force pass, once per
+  substep before divergence and pressure projection. It introduces no extra
+  field allocation or CPU readback. Grid.w is the strength in the unchanged
+  512-byte uniform block. Use matching updated plugin shaders.
+  Libra.GPU.Fluid2D.VorticityConfinement compares projected GPU velocities
+  against a disabled control and checks finite values and closed boundaries.
   Executable GPU payload manifests use Version=2 only for scopes containing a
   fluid. The existing programs array remains the particle path; fluidPrograms
   carries {nodeId, settings, renderer}. Container snapshots stay GpuParticle
@@ -584,3 +592,52 @@ CPU particle Sprite billboards
   -LibraRhiNestedCpuSprite -LibraCpuParticleFixture=<absolute fixture path>.
   This checks rendering after both parent/child deadlines, natural retirement,
   resource cleanup and restart through the public Libra Effect component.
+
+Development: water, combustion and generated fields
+--------------------------------------------------
+The source now defines Smoke, FreeSurface, ShallowWater and Combustion models.
+Use matching regenerated trusted shaders (512-byte uniforms, 13 kernels).
+The model defaults preserve old Smoke settings. Water uses a bounded 2D CFL
+step; ShallowWater is flat-bed first-order HLL depth/momentum and has a depth
+safety cap of 16 * rest depth. FreeSurface uses staggered face velocities,
+air pressure zero, pressure warm starting and conservative water-fraction
+transport. Combustion stores fuel/temperature/smoke/reaction, with ignition,
+heat release and cooling; its dedicated fire display does not replace reaction.
+
+The dedicated water renderer adds Fresnel, foam and surface lighting; shallow
+water uses a GPU-displaced horizontal grid. Fire visualizes temperature emission
+and smoke. These development paths need their own numerical and framebuffer
+acceptance; earlier smoke evidence does not certify them.
+
+Instance-owned output allocations: DyeOutput RGBA16F premultiplied display,
+ColorOutput RGBA16F straight display, FieldOutput RGBA32F local velocity.xy,
+density/depth and temperature. VelocityOutput/DensityOutput are typed views
+of FieldOutput, without copies. Storage is 144 bytes/cell before overhead.
+
+Version 3 generatedDrawBindings connect same-scope fluid outputs to ordinary
+Sprite/Flexible Plane main textures (ColorOutput only) or explicitly bound
+material texture parameters. The compiled builtin:generated-texture marker
+requires an executable producer reference. It is not an engine asset fallback.
+Each instance resolves its own output; prepared definitions do not retain a
+native texture from another instance. Bound drawing consumers suppress the automatic
+source plane unless authored otherwise. Static asset references remain distinct.
+
+FlowMap2D FloatVelocity reads raw RG. FloatDensity reads BA (density and
+ temperature); SignedNormalized retains the old RG*2-1 behavior. GeneratedPlane
+coordinates use the producer plane transform and convert velocity into consumer
+simulation space. Source and consumer matrices must be invertible. Sampling
+clamps at the edge. Particle comparison opcodes 42/43 implement scalar float
+GreaterThan/LessThan, so density masks/probabilities can set Alive on the GPU.
+The LGPK packet envelope remains version 1; older interpreters reject new ops.
+
+Cell forces support up to eight ordered, explicitly connected nodes:
+Acceleration, Noise, CurlNoise, CellPosition, Time, Density, Temperature, Add,
+Multiply, Sine and Smoothstep. InputA/InputB refer to earlier stable node IDs;
+noise uses them as position/time, math uses vector inputs. Final unconsumed
+math/noise/acceleration outputs contribute force, source nodes alone do not.
+Noise is evaluated per cell on the GPU; density and temperature masks do not
+require normal playback readback. Vorticity is a separate neighborhood force.
+
+Current engine acceptance targets remain Windows D3D11/SM5 (Unreal 5.7),
+Unity 7000-series D3D11 Built-in fallback, and Godot 4.7.2 Vulkan Mobile/Forward+.
+UE 5.8/5.9 are separate tracked compatibility work, not proven by UE 5.7 runs.

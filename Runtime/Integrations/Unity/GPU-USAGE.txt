@@ -2,6 +2,32 @@ Libra GPU particle adapter
 
 Fluid2D in Spawnable packages
 -----------------------------
+GPU executable payload version 3 adds generated Texture2D references on particle
+programs: unreal.generatedResources maps the resource ID to producerNodeId and
+outputId (currently DyeOutput). The producer must be a fluid in the same scope.
+Leave those resource IDs out of the Unity binding asset's static textures array;
+the scope binds its native RenderTexture before starting the particle runtime.
+Keep the updated Libra/GPU Particle Billboard shader with the runtime: it handles
+premultiplied generated dye. Custom materials used with this path must expose
+_LibraGpuTexturePremultiplied and _LibraGpuTextureFlipY and implement their meaning.
+The optional fluid automaticPlane flag controls its separate source-plane draw;
+the editor defaults consumed sources to false. Compute and output allocation
+continue while that plane is hidden. Stop/restart owns both lifetimes.
+LibraFluid2DGeneratedVerification.Run consumes generated-output.json/.lfxb from
+LIBERAFX_FLUID_FIXTURES and writes its framebuffer/proof to
+LIBERAFX_FLUID_UNITY_OUTPUT. GPU readback in that test is diagnostic only.
+
+The optional settings.vorticity value (0..100, omitted when zero by the editor)
+reinforces the curl of the advected velocity. It is evaluated per substep in
+the force pass, before pressure projection; it is separate from authored noise.
+Old settings default to zero. The expanded fluid uniform block is 512 bytes:
+LibraFluidGrid.w carries the strength. Use a matching updated SDK for nonzero
+values; older SDKs reject the unknown setting.
+LibraFluid2DVorticityVerification.Run uses a compiler-exported
+fluid-vorticity-settings.json (LIBERAFX_FLUID_SETTINGS) to compare real GPU
+forces with an independent finite-difference reference, including disabled
+and zero-field controls. Run in an isolated graphics-enabled Unity project.
+
 An authored 2D smoke/ink GPU container is played by the existing Spawnable
 component, in root and spawned scopes. No additional component, renderer or
 per-fluid GameObject is required. Version 2 GPU executable payloads can mix
@@ -139,3 +165,59 @@ math.metadata.json, math.reference.json, flowmap.compute, and
 flowmap.metadata.json into
 Assets\LibraFXGPUValidation\Fixtures, then run the test's Run executeMethod.
 Its particle uploads and readbacks are test-only, not production simulation.
+
+Development: water, combustion and generated fields
+--------------------------------------------------
+The source now defines Smoke, FreeSurface, ShallowWater and Combustion models.
+Use matching regenerated trusted shaders (512-byte uniforms, 13 kernels).
+The model defaults preserve old Smoke settings. Water uses a bounded 2D CFL
+step; ShallowWater is flat-bed first-order HLL depth/momentum and has a depth
+safety cap of 16 * rest depth. FreeSurface uses staggered face velocities,
+air pressure zero, pressure warm starting and conservative water-fraction
+transport. Combustion stores fuel/temperature/smoke/reaction, with ignition,
+heat release and cooling; its dedicated fire display does not replace reaction.
+
+The dedicated water renderer adds Fresnel, foam and surface lighting; shallow
+water uses a GPU-displaced horizontal grid. Fire visualizes temperature emission
+and smoke. These development paths need their own numerical and framebuffer
+acceptance; earlier smoke evidence does not certify them.
+
+Instance-owned output allocations: DyeOutput RGBA16F premultiplied display,
+ColorOutput RGBA16F straight display, FieldOutput RGBA32F local velocity.xy,
+density/depth and temperature. VelocityOutput/DensityOutput are typed views
+of FieldOutput, without copies. Storage is 144 bytes/cell before overhead.
+
+Version 3 generatedDrawBindings connect same-scope fluid outputs to ordinary
+Sprite/Flexible Plane main textures (ColorOutput only) or explicitly bound
+material texture parameters. The compiled builtin:generated-texture marker
+requires an executable producer reference. It is not an engine asset fallback.
+Each instance resolves its own output; prepared definitions do not retain a
+native texture from another instance. Bound drawing consumers suppress the automatic
+source plane unless authored otherwise. Static asset references remain distinct.
+
+FlowMap2D FloatVelocity reads raw RG. FloatDensity reads BA (density and
+ temperature); SignedNormalized retains the old RG*2-1 behavior. GeneratedPlane
+coordinates use the producer plane transform and convert velocity into consumer
+simulation space. Source and consumer matrices must be invertible. Sampling
+clamps at the edge. Particle comparison opcodes 42/43 implement scalar float
+GreaterThan/LessThan, so density masks/probabilities can set Alive on the GPU.
+The LGPK packet envelope remains version 1; older interpreters reject new ops.
+
+Cell forces support up to eight ordered, explicitly connected nodes:
+Acceleration, Noise, CurlNoise, CellPosition, Time, Density, Temperature, Add,
+Multiply, Sine and Smoothstep. InputA/InputB refer to earlier stable node IDs;
+noise uses them as position/time, math uses vector inputs. Final unconsumed
+math/noise/acceleration outputs contribute force, source nodes alone do not.
+Noise is evaluated per cell on the GPU; density and temperature masks do not
+require normal playback readback. Vorticity is a separate neighborhood force.
+
+Current engine acceptance targets remain Windows D3D11/SM5 (Unreal 5.7),
+Unity 7000-series D3D11 Built-in fallback, and Godot 4.7.2 Vulkan Mobile/Forward+.
+UE 5.8/5.9 are separate tracked compatibility work, not proven by UE 5.7 runs.
+
+Generated-plane particle programs additionally declare generatedFieldMappings
+metadata (shaderName/register/elements/stride). The 256 Float4 mappings live in
+an instance-owned structured buffer, bound only to kernels sampling the field.
+The original particle constants remain 48 bytes. This avoids a second implicit
+constant block interfering with kernel parameters; the mapping buffer is retired
+with queued GPU work. Use compiler output matching this runtime.

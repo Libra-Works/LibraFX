@@ -4,15 +4,16 @@ title: Preview update and upgrade guide
 
 # Preview update and upgrade guide
 
-This update follows **2026.11.22 Preview**. Download the editor and engine SDKs
-from the **same build** on [GitHub Releases](https://github.com/Libra-Works/LibraFX/releases).
-Older release archives are unchanged.
+This page describes development sources following **2026.11.22 Preview**.
+The fluid extensions require matching editor and SDK sources; published archives
+have not been rebuilt with these changes. When using a published build, obtain
+the editor and SDKs from the same [release](https://github.com/Libra-Works/LibraFX/releases).
 
 ## What is new
 
 | Feature | Included behavior |
 | --- | --- |
-| [2D smoke and ink](fluid-2d.md) | GPU smoke / advected dye, resource-first Flow, fixed projection passes and a rendered density texture. |
+| [2D smoke, water and fire](fluid-2d.md) | Smoke, side-view free-surface water, top-down shallow water and fuel/temperature combustion; resource-first Flow, cell forces, dedicated renderers and generated drawing/particle consumers. |
 | [Nested Spawnables and CPU particles](cpu-particles.md#spawnable-ownership) | Nested ownership, CPU systems inside Spawnables, immediate-parent Capture/Live and independent per-instance particles. |
 | Lifetime and cleanup | Life Time stops a scope's emission; particles, descendants and scheduled work retain it until completion. Forcing a parent removes its subtree, not unrelated siblings. |
 | [Engine rendering](engine-integration.md#rendering) | Engine-owned assets and direct/native/RID submissions instead of a scene renderer component for every ordinary Draw or CPU emitter. |
@@ -27,7 +28,9 @@ Older release archives are unchanged.
    libraries with new scripts or leave duplicate Unity plugins.
 3. Re-export `.lfxb` effects from their projects. Nested ownership or template
    CPU programs use **LFXP format 5 / package 13**; root-only CPU remains
-   format 4 / package 12. Fluid scopes use GPU executable payload version 2.
+   format 4 / package 12. Ordinary fluid scopes use GPU executable payload version 2;
+   generated resource/draw references and explicit automatic-plane settings use version 3.
+   Fluid shaders require the matching 512-byte uniform contract.
    Old SDKs must reject unsupported formats rather than omit their contents.
 4. Test load, Play, natural completion, Stop and restart in a separate project.
    Preserve unchanged Unity `.meta` files and Godot `.gdextension.uid` files.
@@ -65,13 +68,15 @@ Unity/Godot included native binaries are Windows x64.
 
 ## Not included yet
 
-Smoke / dye is **not liquid surfaces, combustion or 3D fluid**. Arbitrary fluid
-force/turbulence graphs, vorticity confinement, generic cross-system texture
-consumers and using fluid fields to spawn another GPU particle system are future
-work. The output plane is implemented; a general-purpose resource graph and
-dedicated renderer handoff are not.
+Three-dimensional fluids, arbitrary runtime resource/pass graphs, writable engine
+main targets, solid obstacles, shallow-water bathymetry and detached droplet
+geometry remain future work. The current 2D cell-force editor supports eight
+ordered nodes; it is not an arbitrary shader graph. Same-scope generated
+color/field consumers are implemented; parent/child resource sharing is not.
 
 [Issue #69](https://github.com/Libra-Works/LibraFX/issues/69) tracks the
-**2D-first** roadmap before 3D. There is no claim of Niagara Fluids feature parity.
+**2D-first** work before 3D. See the [fluid guide](fluid-2d.md) for verified models,
+engine environments and renderer limits. There is no claim of Niagara Fluids
+feature parity. UE 5.8/5.9 compatibility remains separately tracked.
 Unity's global transparent Sprite ordering limitation also remains; see the
 [rendering guide](engine-integration.md#rendering).
