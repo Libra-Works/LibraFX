@@ -31,6 +31,9 @@ public partial class GpuWorkspaceView : UserControl
     private (IPointer Pointer, Point Start, string[] Before, Border Box)? _marquee;
     private Point _pastePosition = new(80, 80);
     private string? _visualKernelId;
+    private Button? _paletteDragSource;
+    private PointerPressedEventArgs? _palettePressed;
+    private Point _paletteDragStart;
     private NodeDrag? _drag;
     private ConnectionDrag? _connectionDrag;
     private bool _framePending;
@@ -204,7 +207,7 @@ public partial class GpuWorkspaceView : UserControl
             }
             CapacityLabel.Text = LocalizationService.Shared.Get(fluid ? "Fluid.CellCount" : "Gpu.Capacity");
             Capacity.IsEnabled = ApplyCapacityButton.IsEnabled = !fluid;
-            TypeChoice.IsVisible = !fluid;
+            TypeChoice.IsVisible = !fluid && vm.Kernel is not null;
             FutureTextureButton.IsVisible = !fluid;
             BackButton.Content = LocalizationService.Shared.Get(vm.Kernel is null ? "Gpu.Close" : "Gpu.FlowBack");
             FlowScroll.IsVisible = fluid || vm.Kernel is null;
@@ -228,15 +231,12 @@ public partial class GpuWorkspaceView : UserControl
             else
             {
                 foreach (var op in vm.Palette)
-                    Palette.Children.Add(Button("+ " + op.DisplayName, () => Run(() =>
-                    {
-                        var type = TypeChoice.SelectedItem is GpuType selected ? selected : GpuType.Float;
-                        if (op.Op == GpuOp.ReadUniform && !ParticleAbi.Uniforms.Values.Contains(type))
-                            throw new ArgumentException("Uniforms support Float and Float3.");
-                        if (op.Op == GpuOp.ReadAttribute && !ParticleAbi.Attributes.Any(a => a.Type == type))
-                            throw new ArgumentException("No ABI attribute has this type.");
-                        SelectVisualNode(vm.Add(op.Op, type).Id);
-                    })));
+                {
+                    var opButton = Button("+ " + op.DisplayName, () => AddPaletteNode(vm, op.Op));
+                    ToolTip.SetTip(opButton, OpDescription(op.Op));
+                    AttachPaletteDrag(opButton, op.Op);
+                    Palette.Children.Add(opButton);
+                }
                 Palette.Children.Add(Button(LocalizationService.Shared.Get("Gpu.AddAttributeWrite"), () =>
                 {
                     Status.Text = LocalizationService.Shared.Get("Gpu.SelectValueNodeHint");
@@ -556,16 +556,16 @@ public partial class GpuWorkspaceView : UserControl
     }
     private static void AddFlowPorts(StackPanel panel, string heading, IReadOnlyList<GpuFlowPort> ports)
     {
-        panel.Children.Add(new TextBlock { Text = heading, FontWeight = FontWeight.SemiBold });
         if (ports.Count == 0)
         {
             panel.Children.Add(new TextBlock
             {
-                Text = LocalizationService.Shared.Get("Gpu.NoAuthoredPorts"),
+                Text = $"{heading}: {LocalizationService.Shared.Get("Gpu.NoAuthoredPorts")}",
                 Foreground = ThemeSettingsService.EditorBrush("CurveAxis")
             });
             return;
         }
+        var content = new StackPanel { Spacing = 4 };
         foreach (var port in ports)
         {
             var prefix = port.Direction == GpuFlowPortDirection.Input ? "IN" : "OUT";
@@ -578,8 +578,14 @@ public partial class GpuWorkspaceView : UserControl
                     : ThemeSettingsService.EditorBrush("GraphSignal")
             };
             ToolTip.SetTip(row, port.Detail);
-            panel.Children.Add(row);
+            content.Children.Add(row);
         }
+        panel.Children.Add(new Expander
+        {
+            Header = LocalizationService.Shared.Get("Gpu.PortsSummary", heading, ports.Count),
+            IsExpanded = false,
+            Content = content
+        });
     }
     private void BuildGraph()
     {
@@ -609,6 +615,7 @@ public partial class GpuWorkspaceView : UserControl
                     Margin = new Thickness(4, 0), MinHeight = 26, Tag = n.Id,
                     TextWrapping = TextWrapping.Wrap
                 };
+                ToolTip.SetTip(title, OpDescription(n.Op));
                 panel.Children.Add(title);
                 var output = PortButton("gpu-output");
                 var outputLabel = PortLabel();
@@ -1032,6 +1039,83 @@ public partial class GpuWorkspaceView : UserControl
         if (_selectedNodes.Count > 0)
             _viewport.Frame(NodeBounds(_selectedNodes.Where(_nodeVisuals.ContainsKey).Select(id => _nodeVisuals[id])));
     }
+    private void OnFrameAll(object? sender, RoutedEventArgs e)
+    {
+        if (_nodeVisuals.Count > 0)
+            _viewport.Frame(NodeBounds(_nodeVisuals.Values));
+    }
+    private static string OpDescription(GpuOp op) =>
+        LocalizationService.Shared.GetOrDefault($"Gpu.OpDesc.{op}", op.ToString());
+
+    private void AddPaletteNode(GpuWorkspaceViewModel vm, GpuOp op, GpuPosition? position = null) => Run(() =>
+    {
+        var type = TypeChoice.SelectedItem is GpuType selected ? selected : GpuType.Float;
+        if (op == GpuOp.ReadUniform && !ParticleAbi.Uniforms.Values.Contains(type))
+            throw new ArgumentException("Uniforms support Float and Float3.");
+        if (op == GpuOp.ReadAttribute && !ParticleAbi.Attributes.Any(a => a.Type == type))
+            throw new ArgumentException("No ABI attribute has this type.");
+        SelectVisualNode(vm.Add(op, type, position).Id);
+    });
+
+    private void AttachPaletteDrag(Button button, GpuOp op)
+    {
+        button.AddHandler(InputElement.PointerPressedEvent, (_, e) =>
+        {
+            if (!e.GetCurrentPoint(button).Properties.IsLeftButtonPressed) return;
+            _paletteDragSource = button;
+            _palettePressed = e;
+            _paletteDragStart = e.GetPosition(this);
+        }, RoutingStrategies.Tunnel);
+
+        button.AddHandler(InputElement.PointerMovedEvent, async (_, e) =>
+        {
+            if (_paletteDragSource != button || _palettePressed is not { } pressed ||
+                !e.GetCurrentPoint(button).Properties.IsLeftButtonPressed)
+                return;
+            var current = e.GetPosition(this);
+            if (Math.Abs(current.X - _paletteDragStart.X) < 5 && Math.Abs(current.Y - _paletteDragStart.Y) < 5)
+                return;
+            _paletteDragSource = null;
+            _palettePressed = null;
+            var transfer = new DataTransfer();
+            transfer.Add(DataTransferItem.CreateText("gpu-op:" + op));
+            await DragDrop.DoDragDropAsync(pressed, transfer, DragDropEffects.Copy);
+        }, RoutingStrategies.Tunnel);
+
+        button.AddHandler(InputElement.PointerReleasedEvent, (_, _) =>
+        {
+            if (_paletteDragSource == button) { _paletteDragSource = null; _palettePressed = null; }
+        }, RoutingStrategies.Tunnel);
+
+        button.AddHandler(InputElement.PointerCaptureLostEvent, (_, _) =>
+        {
+            if (_paletteDragSource == button) { _paletteDragSource = null; _palettePressed = null; }
+        }, RoutingStrategies.Tunnel);
+    }
+
+    private void OnNodeCanvasDragOver(object? sender, DragEventArgs e)
+    {
+        if (Workspace is { Kernel: not null } &&
+            e.DataTransfer.TryGetText() is { } text &&
+            text.StartsWith("gpu-op:", StringComparison.Ordinal))
+        {
+            e.DragEffects = DragDropEffects.Copy;
+            e.Handled = true;
+        }
+    }
+
+    private void OnNodeCanvasDrop(object? sender, DragEventArgs e)
+    {
+        if (Workspace is not { Kernel: not null } vm ||
+            e.DataTransfer.TryGetText() is not { } text ||
+            !text.StartsWith("gpu-op:", StringComparison.Ordinal) ||
+            !Enum.TryParse<GpuOp>(text["gpu-op:".Length..], out var op))
+            return;
+
+        var point = _viewport.ToGraphPoint(e.GetPosition(NodeCanvas));
+        AddPaletteNode(vm, op, new(point.X, point.Y));
+        e.Handled = true;
+    }
     private void OpenGraphContext(Point position)
     {
         if (Workspace is not { Kernel: not null } vm) return;
@@ -1040,6 +1124,7 @@ public partial class GpuWorkspaceView : UserControl
         add.ItemsSource = vm.Palette.Select(op =>
         {
             var item = new MenuItem { Header = op.DisplayName };
+            ToolTip.SetTip(item, OpDescription(op.Op));
             item.Click += (_, _) => Run(() => SelectVisualNode(vm.Add(op.Op,
                 TypeChoice.SelectedItem is GpuType type ? type : GpuType.Float, new(position.X, position.Y)).Id));
             return item;
@@ -1168,7 +1253,8 @@ public partial class GpuWorkspaceView : UserControl
         }
         var component = new TextBox { Text = (n.ComponentIndex ?? 0).ToString(CultureInfo.InvariantCulture) };
         if (n.Op == GpuOp.Component) { NodeInspector.Children.Add(new TextBlock { Text = "Component 0…3" }); NodeInspector.Children.Add(component); }
-        NodeInspector.Children.Add(Button(LocalizationService.Shared.Get("Gpu.ApplyProperties"), () =>
+
+        void CommitInspector() => Run(() =>
         {
             var updated = n with
             {
@@ -1182,8 +1268,20 @@ public partial class GpuWorkspaceView : UserControl
                 Resource = n.Op == GpuOp.SampleFlowMap ? flowMap.SelectedItem as string : n.Resource,
                 SourceSpan = null
             };
-            vm.Edit(new() { Action = "update", KernelId = vm.KernelId, Node = updated });
-        }));
+            if (updated != n)
+                vm.Edit(new() { Action = "update", KernelId = vm.KernelId, Node = updated });
+        });
+
+        type.SelectionChanged += (_, _) => CommitInspector();
+        attr.SelectionChanged += (_, _) => CommitInspector();
+        uniform.SelectionChanged += (_, _) => CommitInspector();
+        flowMap.SelectionChanged += (_, _) => CommitInspector();
+        value.LostFocus += (_, _) => CommitInspector();
+        value.KeyDown += (_, e) => { if (e.Key == Key.Enter) { CommitInspector(); e.Handled = true; } };
+        component.LostFocus += (_, _) => CommitInspector();
+        component.KeyDown += (_, e) => { if (e.Key == Key.Enter) { CommitInspector(); e.Handled = true; } };
+
+        NodeInspector.Children.Add(Button(LocalizationService.Shared.Get("Gpu.ApplyProperties"), CommitInspector));
         for (var i = 0; i < n.Inputs.Count; i++)
         {
             var input = i;

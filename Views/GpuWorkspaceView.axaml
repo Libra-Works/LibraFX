@@ -45,10 +45,10 @@
           <ComboBox x:Name="TypeChoice" />
           <StackPanel x:Name="Palette" Spacing="3" />
           <Separator />
-          <TextBlock Classes="editor-label" Text="{DynamicResource Text.Gpu.Capacity}" />
+          <TextBlock x:Name="CapacityLabel" Classes="editor-label" />
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
             <TextBox x:Name="Capacity" />
-            <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Check" Click="OnCapacity"
+            <views:IconButton x:Name="ApplyCapacityButton" Grid.Column="1" Classes="editor-tool" Icon="Check" Click="OnCapacity"
                               ToolTip.Tip="{DynamicResource Text.Gpu.ApplyCapacity}"
                               AutomationProperties.Name="{DynamicResource Text.Gpu.ApplyCapacity}" />
           </Grid>
@@ -59,7 +59,7 @@
                               ToolTip.Tip="{DynamicResource Text.Gpu.Export}"
                               AutomationProperties.Name="{DynamicResource Text.Gpu.Export}" />
           </Grid>
-          <Button Classes="editor-action" IsEnabled="False" Content="{DynamicResource Text.Gpu.FutureTexture}"
+          <Button x:Name="FutureTextureButton" Classes="editor-action" IsEnabled="False" Content="{DynamicResource Text.Gpu.FutureTexture}"
                   ToolTip.Tip="{DynamicResource Text.Gpu.FutureHint}" />
         </StackPanel></ScrollViewer>
       </Border>
@@ -81,6 +81,7 @@
                 <views:IconButton x:Name="FrameButton" Classes="editor-tool" Icon="Frame" Click="OnFrame" IsEnabled="False"
                                   ToolTip.Tip="{DynamicResource Text.Gpu.Frame}"
                                   AutomationProperties.Name="{DynamicResource Text.Gpu.Frame}" />
+                <Button x:Name="FrameAllButton" Classes="editor-action" Content="{DynamicResource Text.Gpu.FrameAll}" Click="OnFrameAll" />
                 <Button x:Name="ArrangeButton" Classes="editor-action" Content="{DynamicResource Text.Gpu.Arrange}" Click="OnArrange" />
                 <Border Background="Transparent" Padding="4" VerticalAlignment="Center"
                         ToolTip.Tip="{DynamicResource Text.Gpu.Gestures}">
@@ -91,7 +92,10 @@
                             HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
                 <Grid x:Name="GpuZoomHost" HorizontalAlignment="Left" VerticalAlignment="Top">
                   <Canvas x:Name="NodeCanvas" Width="2200" Height="1600" Background="Transparent"
-                          HorizontalAlignment="Left" VerticalAlignment="Top" RenderTransformOrigin="0%,0%" />
+                          HorizontalAlignment="Left" VerticalAlignment="Top" RenderTransformOrigin="0%,0%"
+                          DragDrop.AllowDrop="True"
+                          DragDrop.DragOver="OnNodeCanvasDragOver"
+                          DragDrop.Drop="OnNodeCanvasDrop" />
                 </Grid>
               </ScrollViewer>
             </Grid>
