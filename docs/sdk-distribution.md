@@ -114,6 +114,11 @@ See the bilingual [update guide](site/preview-update.md),
 [production workflow](site/production-workflow.md) and
 [batch conversion guide](site/batch-conversion.md). GPU CLI conversion remains
 tracked in #72; the current converter explicitly rejects GPU graphs.
+The current source revision also adds Procedural Model, Texture and Material
+authoring, alongside recent graph, history and inspector workflow improvements.
+These changes are included only in archives built from this source revision;
+older previews are not updated in place. See the
+[procedural resources guide](procedural-resources.md).
 2D smoke / dye adds GPU executable payload version 2 inside the
 same effect envelope. Particle-only scopes remain version 1; old SDKs must
 reject fluid scopes rather than silently omit them. Install the matching
