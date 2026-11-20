@@ -40,7 +40,7 @@
                         <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemContainerTheme>
-                        <ControlTheme TargetType="ContentPresenter" BasedOn="{StaticResource {x:Type ContentPresenter}}">
+                        <ControlTheme TargetType="ContentPresenter">
                             <Setter Property="Canvas.Left" Value="{ReflectionBinding X}" />
                             <Setter Property="Canvas.Top" Value="{ReflectionBinding Y}" />
                         </ControlTheme>
