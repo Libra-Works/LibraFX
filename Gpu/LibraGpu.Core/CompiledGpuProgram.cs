@@ -26,6 +26,10 @@ public sealed record FlowMetadata(string Id, FlowKind Kind, string? KernelId, st
 public sealed record GpuGeneratedFieldMappingMetadata(string ShaderName, int Register, int Elements, int Stride);
 public sealed record GpuExportMetadata
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool EmitterMatrix { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? SpawnRate { get; init; }
     public int Version { get; init; } = 1;
     public CompilationPurpose Purpose { get; init; } = CompilationPurpose.SourceExport;
     public bool RuntimeExecuted { get; init; }
@@ -117,6 +121,9 @@ public sealed class CompiledGpuProgram
         return new()
         {
             ProgramId = ProgramId,
+            EmitterMatrix = snapshot.TransformEmitterShape,
+            Version = snapshot.SpawnRate is not null ? 3 : snapshot.TransformEmitterShape ? 2 : 1,
+            SpawnRate = snapshot.SpawnRate,
             ContentHash = ContentHash,
             SourceHash = source.ContentHash,
             Format = format,

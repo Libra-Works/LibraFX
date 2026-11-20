@@ -117,6 +117,8 @@ public static class GpuCompiler
         if (program is null) { Add("NullProgram", "Program is required."); return d.AsReadOnly(); }
         var p = program;
         if (p.Version != 1) Add("Version", "Only IR version 1 is supported.");
+        if (p.SpawnRate is { } rate && (!double.IsFinite(rate) || rate < 0 || rate > 1_000_000))
+            Add("SpawnRate", "Spawn rate must be finite and between 0 and 1000000 particles per second.");
         if (!ValidId(p.Id)) Add("Id", "Program ID must contain 1–128 non-control characters.");
         if (p.Capacity == 0 || (ulong)p.Capacity * ParticleAbi.Stride > limits.MaxParticleBytes ||
             (ulong)p.Capacity * ParticleAbi.Stride > uint.MaxValue)

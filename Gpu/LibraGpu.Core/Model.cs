@@ -28,6 +28,10 @@ public enum GpuSpawnShapeKind { Point, Box, Sphere, Circle }
 public sealed record GpuProgram
 {
     public int Version { get; init; } = 1;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool TransformEmitterShape { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? SpawnRate { get; init; }
     public string Id { get; init; } = "emitter";
     public uint Capacity { get; init; } = 4096;
     public List<AttributeDeclaration> Attributes { get; init; } = ParticleAbi.Attributes.ToList();
@@ -154,5 +158,7 @@ public static class ParticleAbi
     });
     public static IReadOnlyDictionary<string, GpuType> Uniforms { get; } =
         new ReadOnlyDictionary<string, GpuType>(new Dictionary<string, GpuType>
-        { ["deltaTime"] = GpuType.Float, ["time"] = GpuType.Float, ["emitterPosition"] = GpuType.Float3 });
+        { ["deltaTime"] = GpuType.Float, ["time"] = GpuType.Float, ["emitterPosition"] = GpuType.Float3,
+            ["emitterRow0"] = GpuType.Float4, ["emitterRow1"] = GpuType.Float4,
+            ["emitterRow2"] = GpuType.Float4, ["emitterRow3"] = GpuType.Float4 });
 }

@@ -2,6 +2,29 @@ namespace LibraGpu.Core;
 
 public static class GpuSamples
 {
+    public static GpuProgram CreateCurlCloud(uint capacity = 100_000)
+    {
+        var program = CreateEmitter(capacity);
+        var spawn = GpuDsl.Compile("""
+            @Position = emitterPosition;
+            @Velocity = float3(0, 0, 0);
+            @Lifetime = 12;
+            @Size = float2(0.025, 0.025);
+            @Color = float4(0.12, 0.65, 1, 0.4);
+            """, "spawn", KernelStage.Spawn);
+        var update = GpuDsl.Compile("""
+            let frequency = 0.65;
+            let strength = 1.2;
+            let drift = float3(0, 0.3, 0);
+            let animatedPosition = @Position * frequency + float3(0, time * 0.1, 0);
+            @Velocity = curlnoise(animatedPosition, 17u, 3i, 0.5) * strength + drift;
+            @Position += @Velocity * dt;
+            @Color.a = 0.4 * clamp(@Age, 0, 1) * clamp(@Lifetime - @Age, 0, 1);
+            """, "update", KernelStage.Update);
+        return program with { Id = "curlCloud100k", SpawnRate = capacity / 8d,
+            Kernels = [spawn, update], Flow = program.Flow.Select(flow => flow.Kind == FlowKind.Spawn
+                ? flow with { SpawnShape = new() { Kind = GpuSpawnShapeKind.Sphere, Radius = 1.5 } } : flow).ToList() };
+    }
     public static GpuProgram CreateNoiseProbe(uint capacity = 256)
     {
         var k = GpuDsl.Compile("""

@@ -13,8 +13,8 @@ internal static class GpuEmitterShapeLowering
     public static GpuProgram Lower(GpuProgram program)
     {
         var spawn = program.Flow.SingleOrDefault(flow => flow.Kind == FlowKind.Spawn);
-        if (spawn?.SpawnShape is not { Kind: not GpuSpawnShapeKind.Point } shape)
-            return program;
+        if (spawn is null || !program.TransformEmitterShape && spawn.SpawnShape is not { Kind: not GpuSpawnShapeKind.Point }) return program;
+        var shape = spawn.SpawnShape ?? new GpuSpawnShapeSettings();
 
         var kernelIndex = program.Kernels.FindIndex(kernel => kernel.Id == spawn.Kernel);
         if (kernelIndex < 0) return program;
@@ -63,6 +63,7 @@ internal static class GpuEmitterShapeLowering
         nodes[^1] = nodes[^1] with { Attribute = "Seed" };
         var offset = shape.Kind switch
         {
+            GpuSpawnShapeKind.Point => Constant(GpuType.Float3, 0, 0, 0),
             GpuSpawnShapeKind.Box => BoxOffset(shape, seed, Random, Add, Constant),
             GpuSpawnShapeKind.Sphere => SphereOffset(shape, seed, Random, Add, Constant),
             GpuSpawnShapeKind.Circle => CircleOffset(shape, seed, Random, Add, Constant),
@@ -75,6 +76,26 @@ internal static class GpuEmitterShapeLowering
         if (positionWriteIndex < 0)
             nodes[^1] = nodes[^1] with { Uniform = "emitterPosition" };
         var positioned = Add(GpuOp.Add, GpuType.Float3, position, offset.Id);
+        if (program.TransformEmitterShape)
+        {
+            var components = new List<string>();
+            for (var i = 0; i < 3; i++)
+            {
+                var component = Add(GpuOp.Component, GpuType.Float, positioned.Id);
+                nodes[^1] = component with { ComponentIndex = i };
+                components.Add(component.Id);
+            }
+            components.Add(Constant(GpuType.Float, 1).Id);
+            var point = Add(GpuOp.Compose, GpuType.Float4, components.ToArray());
+            var transformed = new List<string>();
+            for (var i = 0; i < 3; i++)
+            {
+                var row = Add(GpuOp.ReadUniform, GpuType.Float4);
+                nodes[^1] = row with { Uniform = "emitterRow" + i };
+                transformed.Add(Add(GpuOp.Dot, GpuType.Float, row.Id, point.Id).Id);
+            }
+            positioned = Add(GpuOp.Compose, GpuType.Float3, transformed.ToArray());
+        }
         if (positionWriteIndex >= 0)
             writes[positionWriteIndex] = writes[positionWriteIndex] with { Value = positioned.Id };
         else

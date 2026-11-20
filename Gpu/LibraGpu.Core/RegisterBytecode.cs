@@ -18,7 +18,7 @@ public enum GpuInstructionOpcode : uint
     GreaterThan = 42, LessThan = 43
 }
 public enum GpuAttributeSlot : uint { Position = 0, Velocity = 1, Color = 2, Size = 3, Rotation = 4, Age = 5, Lifetime = 6, Alive = 7, Seed = 8 }
-public enum GpuUniformSlot : uint { DeltaTime = 0, Time = 1, EmitterPosition = 2 }
+public enum GpuUniformSlot : uint { DeltaTime = 0, Time = 1, EmitterPosition = 2, EmitterRow0 = 3, EmitterRow1 = 4, EmitterRow2 = 5, EmitterRow3 = 6 }
 
 /// <summary>
 /// 64-byte, 16-byte-slot GPU instruction contract. uint fields at 0/4/8/12/16/20/24/28 are
@@ -80,7 +80,8 @@ public sealed class CompiledRegisterKernel
             uint aux = n.Op switch
             {
                 GpuOp.ReadAttribute => (uint)Enum.Parse<GpuAttributeSlot>(n.Attribute!),
-                GpuOp.ReadUniform => n.Uniform switch { "deltaTime" => (uint)GpuUniformSlot.DeltaTime, "time" => (uint)GpuUniformSlot.Time, "emitterPosition" => (uint)GpuUniformSlot.EmitterPosition, _ => throw new InvalidOperationException() },
+                GpuOp.ReadUniform => n.Uniform switch { "deltaTime" => (uint)GpuUniformSlot.DeltaTime, "time" => (uint)GpuUniformSlot.Time, "emitterPosition" => (uint)GpuUniformSlot.EmitterPosition,
+                    "emitterRow0" => 3, "emitterRow1" => 4, "emitterRow2" => 5, "emitterRow3" => 6, _ => throw new InvalidOperationException() },
                 GpuOp.Component => (uint)n.ComponentIndex!.Value,
                 GpuOp.SampleFlowMap => resourceIndices[n.Resource!],
                 _ => 0

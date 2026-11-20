@@ -29,6 +29,13 @@ internal static partial class Program
         var emitterPosition = new[] { 4.25, -3.5, 8.75 };
         Check(EvaluateSpawnPosition(oldCompiled, 17, emitterPosition).SequenceEqual(emitterPosition),
             "Legacy Spawn still writes the host emitter position");
+        var transformed = GpuCompiler.Compile(starter with { TransformEmitterShape = true });
+        double[][] rows = [[0, -2, 0, 10], [3, 0, 0, 20], [0, 0, 4, 30], [0, 0, 0, 1]];
+        var transformedPosition = EvaluateSpawnPosition(transformed, 17, emitterPosition, rows);
+        Check(transformedPosition.Zip(new[] { 17d, 32.75, 65d }).All(pair => Math.Abs(pair.First - pair.Second) < 1e-5),
+            "Emitter Matrix applies translation, rotation and scale to the authored spawn point");
+        Check(transformed.GetExportMetadata().EmitterMatrix && transformed.EmitUnityCompute().Text.Contains("LibraGpuEmitterRows"),
+            "Matrix-enabled source and metadata advertise the optional emitter rows");
 
         var center = new[] { 11.5, -2.25, 4.75 };
         var box = CompileShape(starter, new()
@@ -201,7 +208,7 @@ internal static partial class Program
     private static double Length(double[] value) =>
         Math.Sqrt(value[0] * value[0] + value[1] * value[1] + value[2] * value[2]);
 
-    private static double[] EvaluateSpawnPosition(CompiledGpuProgram program, uint seed, double[] emitterPosition)
+    private static double[] EvaluateSpawnPosition(CompiledGpuProgram program, uint seed, double[] emitterPosition, double[][]? emitterRows = null)
     {
         var kernel = program.RegisterKernels.Single(candidate => candidate.Stage == KernelStage.Spawn);
         var registers = new double[kernel.RegisterCount][];
@@ -244,6 +251,9 @@ internal static partial class Program
                 GpuInstructionOpcode.ReadAttribute when instruction.Aux == (uint)GpuAttributeSlot.Seed => [seed],
                 GpuInstructionOpcode.ReadAttribute when instruction.Aux == (uint)GpuAttributeSlot.Position => emitterPosition,
                 GpuInstructionOpcode.ReadUniform when instruction.Aux == (uint)GpuUniformSlot.EmitterPosition => emitterPosition,
+                GpuInstructionOpcode.ReadUniform when instruction.Aux is >= 3 and <= 6 => emitterRows![instruction.Aux - 3],
+                GpuInstructionOpcode.Component => [a[instruction.Aux]],
+                GpuInstructionOpcode.Dot => [Enumerable.Range(0, a.Length).Sum(i => (double)((float)a[i] * (float)b[i]))],
                 GpuInstructionOpcode.Add when instruction.Type == GpuType.UInt =>
                     [unchecked((uint)a[0] + (uint)b[0])],
                 GpuInstructionOpcode.Add => Binary(a, b, components, (left, right) => left + right),

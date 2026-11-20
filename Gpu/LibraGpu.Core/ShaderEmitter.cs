@@ -41,6 +41,8 @@ internal static partial class ShaderEmitter
         Write("    float LibraGpuDeltaTime; float LibraGpuTime; uint LibraGpuEmitterSeed; uint LibraGpuFrameIndex;");
         Write("    float3 LibraGpuEmitterPosition; uint LibraGpuPadding;");
         Write("};");
+        if (p.Kernels.Any(k => k.Nodes.Any(n => n.Uniform?.StartsWith("emitterRow", StringComparison.Ordinal) == true)))
+            Write("float4 LibraGpuEmitterRows[4]; // Optional shape transform, independent of the 48-byte base frame ABI.");
         for (int i = 0; i < p.Resources.Count; i++)
         {
             Write($"Texture2D<float4> LibraGpuTexture_{i:D4} : register(t{b.TextureRegisterBase + i});");
@@ -191,7 +193,9 @@ internal static partial class ShaderEmitter
         {
             GpuOp.Constant => Literal(n),
             GpuOp.ReadAttribute => n.Attribute == "Alive" ? "(p.seedAlive.y != 0u)" : Attribute(n.Attribute!),
-            GpuOp.ReadUniform => n.Uniform switch { "deltaTime" => "LibraGpuDeltaTime", "time" => "LibraGpuTime", "emitterPosition" => "LibraGpuEmitterPosition", _ => throw new InvalidOperationException() },
+            GpuOp.ReadUniform => n.Uniform switch { "deltaTime" => "LibraGpuDeltaTime", "time" => "LibraGpuTime", "emitterPosition" => "LibraGpuEmitterPosition",
+                "emitterRow0" => "LibraGpuEmitterRows[0]", "emitterRow1" => "LibraGpuEmitterRows[1]",
+                "emitterRow2" => "LibraGpuEmitterRows[2]", "emitterRow3" => "LibraGpuEmitterRows[3]", _ => throw new InvalidOperationException() },
             GpuOp.Add => $"({Cast(0)} + {Cast(1)})",
             GpuOp.Sub => $"({Cast(0)} - {Cast(1)})",
             GpuOp.Mul => $"({Cast(0)} * {Cast(1)})",
