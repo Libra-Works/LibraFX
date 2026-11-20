@@ -4,7 +4,8 @@ title: 2D smoke and ink
 
 # 2D smoke and ink
 
-> **New source feature; not included in the published 2026.11.22 Preview.**
+> **Requires the Preview update after 2026.11.22.**
+> See the [update and upgrade guide](preview-update.md); old archives are unchanged.
 > Use a matching updated editor and engine SDK. The first solver
 > targets **2D GPU smoke / dye**, not liquid surfaces, combustion or 3D volumes.
 

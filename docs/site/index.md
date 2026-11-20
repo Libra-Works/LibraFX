@@ -12,11 +12,14 @@ with the standalone converter, and play it through a game-engine integration.
 
 | Start here | What you will learn |
 | --- | --- |
+| [Preview update and upgrade guide](preview-update.md) | Review the new fluid, hierarchy and rendering features, matching SDK requirements and known limits. |
+| [Production workflow: Unity, Unreal and Godot](production-workflow.md) | Install, launch, obtain engine resources, transfer previews, create engine assets and prepare distribution. |
+| [Batch conversion](batch-conversion.md) | Automate supported CPU exports, resolve shared libraries, and fail safely before game builds. |
 | [Getting started](getting-started.md) | Install the editor, open **Afterimage Gate**, and follow the signals that drive it. |
 | [Glossary](glossary.md) | Look up words such as node, Signal, Spawnable, and runtime, with short examples. |
 | [Editor window and panel reference](editor-reference.md) | Find tools, settings, and dialogs with screenshots and step-by-step examples. |
 | [GPU Particle Authoring](gpu-particles.md) | Edit the GPU flow, visual kernels, typed DSL, and billboard settings. |
-| [2D smoke and ink](fluid-2d.md) | Use the resource-first GPU grid solver, its source settings and density texture. New source feature; not in the published Preview. |
+| [2D smoke and ink](fluid-2d.md) | Use the resource-first GPU grid solver, its source settings and density texture. |
 | [CPU Particle Authoring](cpu-particles.md) | Author Spawn/Update particle graphs, emission, and CPU Property/Signal interactions. |
 | [Flexible Plane Draw](flexible-plane-draw.md) | Build a ribbon from authored points or a bounded position history. |
 | [Graph authoring guide](authoring.md) | Connect pins, animate with curves, and manage Spawnable lifetime and Group reuse. |
@@ -30,17 +33,19 @@ with the standalone converter, and play it through a game-engine integration.
 
 *The Afterimage Gate graph in the editor. The screenshot does not show engine rendering.*
 
-## Future direction: fluids
+## 2D fluids first
 
 The first implementation is **smoke-first: 2D GPU smoke / advected dye**.
-The updated source adds a fixed grid solver and a resource-first Flow; see
+This update adds a fixed grid solver and a resource-first Flow; see
 [2D smoke and ink](fluid-2d.md) for its settings, engine verification and limits.
-It is **not included in the published 2026.11.22 Preview**. Use matching source
-revisions of the editor, converter and SDK.
+It requires the Preview update after 2026.11.22. Update the editor, converter
+and SDK together; old archives are unchanged.
 
 The coordinated Unity, Unreal and Godot renderer migration, CPU particle Flow
-and GPU emitter shapes are already in source. **2D verification comes before
-3D**. Liquids and combustion remain future work; smoke / dye does not implement
+and GPU emitter shapes are included. Nested Spawnables and their CPU particles
+have per-instance ownership and lifetime retention. **2D improvements come before
+3D** in [issue #69](https://github.com/Libra-Works/LibraFX/issues/69).
+Liquids and combustion remain future work; smoke / dye does not implement
 water surfaces or fire. The solver's Resources / Targets declaration is the
 first limited implementation of [issue #68](https://github.com/Libra-Works/LibraFX/issues/68),
 not a general-purpose resource graph or access to the main framebuffer.

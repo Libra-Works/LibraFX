@@ -6,6 +6,11 @@ title: Engine Integration
 
 # Engine Integration
 
+For the full development process, use the
+[Unity / Unreal / Godot production workflow](production-workflow.md):
+installation, desktop launch, engine resources, live preview, imported assets
+and offline gameplay. See [Batch conversion](batch-conversion.md) for automation.
+
 See [engine and file terms](glossary.md#engine) for SDK, runtime, editable projects, and compiled effects.
 
 Download the matching SDK from the latest [Preview release](https://github.com/Libra-Works/LibraFX/releases).
@@ -35,18 +40,20 @@ do not delete through a development junction.
 
 ### Verification boundaries
 
-The published 2026.11.22 Unreal adapter passed UE 5.7.4 Clang compilation (`-NoLink`),
-MSVC Editor linking, and the isolated legacy raw import-routing automation.
-The Clang check does not verify linking against an MSVC-built engine or a
-console SDK. New CPU particle and Flexible Plane rendered results remain
-unverified; engine compilation and import tests are not visual acceptance.
+The Preview update after 2026.11.22 includes the rendering, 2D smoke/dye and
+nested Spawnable/CPU changes below. Local acceptance includes real rendered
+pixels and cleanup in all three engines. Unreal has UE 5.7.4 Clang compilation
+(`-NoLink`), MSVC Editor linking and D3D11/SM5 rendered-pixel coverage.
+Clang compilation is not console SDK verification or linking against an
+MSVC-built engine. See the [update guide](preview-update.md) for the complete
+matrix; engine compilation/import tests alone are not visual acceptance.
 
 <span id="rendering"></span>
 
 ## Drawing without per-Draw scene components
 
-The renderer migration **after 2026.11.22 is a source change**, not an update to
-that release's archives. Rebuild/install matching adapters before using it.
+The Preview update **after 2026.11.22** includes the renderer migration; that
+older release's archives do not change. Install matching updated adapters.
 The effect-level playback Component/Node remains. Ordinary Model/Sprite Draw,
 CPU Sprite particles and FlexiblePlane use engine-owned rendering resources
 without a MeshComponent, MeshRenderer or MeshInstance3D for each drawn item.
@@ -81,7 +88,7 @@ Renderers. Renderer removal is intentional; a future sorting/submission backend
 can consume the retained metadata without changing graph files. That backend
 is not implemented yet.
 
-### Source verification and cost counters
+### Local verification and cost counters
 
 Unity 7000.0.0a16/D3D11 Built-in and URP 17.7 have rendered-pixel coverage for
 ordinary batching, CPU Sprite, fixed-point ribbons and layered Sprite composition,
@@ -102,6 +109,12 @@ and submitted/staged data; see each adapter's `USAGE.txt` for exact fields.
 Allocated upload capacity can exceed the live particle count: three live
 particles in a four-record MultiMesh buffer still submit four records.
 Staged bytes are not a measurement of completed GPU transfers or frame time.
+
+The update also has local real-GPU checks for [2D smoke/dye](fluid-2d.md),
+and [nested CPU ownership](cpu-particles.md#spawnable-ownership) checks covering
+particles surviving parent/child deadlines, final cleanup and restart in all
+three engines. These are implementation acceptance, not certification of every
+downloaded binary, platform, rendering backend or shipped player.
 
 ## Play a first effect
 

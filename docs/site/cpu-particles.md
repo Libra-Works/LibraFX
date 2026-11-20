@@ -16,8 +16,9 @@ translation_url: /ja/cpu-particles/
 
 These are real editor captures of an isolated example, not engine-rendered
 particles. Open an image at full size to read the pins and Inspector fields.
-The Flow overview below is newer source than the published 2026.11.22 Preview;
-that Preview still shows the three structural nodes.
+The Flow overview requires the Preview update after 2026.11.22;
+the older archives still show the three structural nodes. See the
+[upgrade guide](preview-update.md).
 
 ### 1. Parent graph: connect emission
 
@@ -70,9 +71,9 @@ This screen configures rendering but does not display engine playback.
 
 ### Does ordinary Draw create more MeshComponents?
 
-The published **2026.11.22 Preview** uses Unreal MeshComponents for ordinary
+The older **2026.11.22 Preview** uses Unreal MeshComponents for ordinary
 Draw and one InstancedStaticMeshComponent per CPU particle system, not per
-particle. The renderer migration in newer source removes those draw components:
+particle. The Preview update after that release removes those draw components:
 the effect host owns native rendering data and compatible batches. Unity uses
 direct drawing, Unreal native primitives/proxies, and Godot RenderingServer
 instances. The effect-level playback Component/Node remains.
@@ -82,7 +83,7 @@ one draw call. Different materials, shader parameters and transparent ordering
 can require separate submissions. Particle data, CPU work, memory, overdraw and
 transfer costs still scale with the content. See the
 [engine rendering boundary](engine-integration.md#rendering) before comparing
-the released Preview with a newer source build.
+the older archives with the updated Preview.
 
 ## Authoring a moving Sprite cloud
 

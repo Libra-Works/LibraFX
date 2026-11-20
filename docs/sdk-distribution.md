@@ -108,7 +108,13 @@ The [2026.11.22 Preview](https://github.com/Libra-Works/LibraFX/releases/tag/v20
 includes the unified exports and the CPU particle, Flexible Plane and Quaternion/
 Random additions. Later renderer and authoring changes in source are not
 retroactive updates to those archives.
-Source-only 2D smoke / dye adds GPU executable payload version 2 inside the
+The Preview update after 2026.11.22 includes those renderer/authoring changes,
+2D smoke/dye and nested Spawnable ownership with per-instance CPU systems.
+See the bilingual [update guide](site/preview-update.md),
+[production workflow](site/production-workflow.md) and
+[batch conversion guide](site/batch-conversion.md). GPU CLI conversion remains
+tracked in #72; the current converter explicitly rejects GPU graphs.
+2D smoke / dye adds GPU executable payload version 2 inside the
 same effect envelope. Particle-only scopes remain version 1; old SDKs must
 reject fluid scopes rather than silently omit them. Install the matching
 generated solver shaders, native header and adapter resources together.
@@ -119,8 +125,9 @@ The `.lfxrm` diagnostic resource-mapping manifest is not a second playable binar
 The updated converter also fixes overlapping custom-input defaults and branch
 metadata. Re-export older custom-node effects from their `.lfxproj` sources;
 the original values cannot be reconstructed from already overwritten bytes.
-The current source supports container 4/package 12 for CPU particles; effects
-without CPU particles retain container 3/package 11. The source compatibility
+Nested Spawnables or template CPU programs use container 5/package 13.
+Root-only CPU particles use container 4/package 12; effects without CPU or
+nested ownership retain container 3/package 11. The source compatibility
 manifest's package ceiling must match the SDK revision being installed; it does
 not update older downloaded archives. CPU particles, Flexible Plane and Quaternion/
 Random additions have compiler/native regression coverage, but still require
@@ -404,10 +411,10 @@ rendering-device requirements. Headless playback and real Vulkan GPU execution
 have been exercised on Godot 4.7.2 Windows x86-64; exported players have not
 been verified.
 
-## Component-free rendering in newer source
+## Component-free rendering in the Preview update
 
 The renderer migration after 2026.11.22 is not contained in that Preview's
-downloaded SDKs. Matching source builds move ordinary Draw, CPU Sprite and
+downloaded SDKs. The matching Preview update moves ordinary Draw, CPU Sprite and
 FlexiblePlane to direct Unity Graphics submissions, Unreal native
 primitive/proxy descriptors, and Godot RenderingServer Mesh/MultiMesh RIDs.
 Whole-effect playback entry points and engine-native assets remain; portable

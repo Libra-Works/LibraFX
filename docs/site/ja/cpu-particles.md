@@ -17,8 +17,8 @@ translation_url: /cpu-particles/
 以下は、隔離したサンプルを実際のエディターで開いて撮影した画面です。
 エンジン上のパーティクル描画結果ではありません。画像を開くと、ピンや
 インスペクターの値を原寸で確認できます。
-以下の Flow 表示は公開済み 2026.11.22 Preview より新しいソースの機能です。
-その Preview では従来の三つの構造ノードを表示します。
+以下の Flow 表示は 2026.11.22 より後の Preview 更新が必要です。
+旧アーカイブでは従来の三つの構造ノードを表示します。[更新手順](preview-update.md)も参照してください。
 
 ### 1. 親グラフで放出数をつなぐ
 
@@ -70,9 +70,9 @@ Flow に戻り、**描画**の「描画設定を編集」を選びます。
 
 ### 通常の Draw では MeshComponent が増える？
 
-公開済みの **2026.11.22 Preview** では、Unreal の通常 Draw に MeshComponent、
+旧版の **2026.11.22 Preview** では、Unreal の通常 Draw に MeshComponent、
 CPU 粒子群ごとに一つの InstancedStaticMeshComponent を使います。
-粒子ごとの Component ではありません。新しいソースの描画移行版では、
+粒子ごとの Component ではありません。その後の Preview 更新では、
 これらの描画 Component を廃止し、エフェクト側が描画データと互換なバッチを所有します。
 Unity は直接描画、Unreal は native primitive／proxy、Godot は RenderingServer の
 instance を使います。エフェクト全体を再生する Component／Node は残します。
@@ -80,7 +80,7 @@ instance を使います。エフェクト全体を再生する Component／Node
 Component を消しても、メッシュ・マテリアルのリソースや描画命令までなくなるわけでは
 ありません。マテリアル、パラメーター、透明物の順序によっては描画を分けます。
 粒子データ、CPU・メモリ・転送・オーバードローの負荷も内容に応じて増えます。
-公開版と新しいソース版の違いは[エンジンの描画範囲](engine-integration.md#rendering)を参照してください。
+旧アーカイブと更新版の違いは[エンジンの描画範囲](engine-integration.md#rendering)を参照してください。
 
 ## Sprite の粒子群を作る
 
@@ -110,7 +110,7 @@ Spawn は生成時の一度、Update は正のシミュレーションステッ�
 同階層の **CPU Particle Sprite Draw** が全粒子をバッチ描画します。粒子ごとの
 actor/component は作りません。テクスチャ（`builtin:white` は明示的な組込リソース）、
 Alpha/Additive、正の描画倍率を指定します。位置・XY サイズは effect-local で、
-描画倍率は双方に適用します。移行後のソースでは、Unity は再利用する結合 Mesh の
+描画倍率は双方に適用します。更新版では、Unity は再利用する結合 Mesh の
 直接描画、Unreal は native のインスタンス描画、Godot は RenderingServer の
 MultiMesh データ一括転送を使い、粒子ごとのシーンオブジェクトを作りません。
 RGBA・XY サイズを保持しますが、半透明の粒子単位ソートはありません。

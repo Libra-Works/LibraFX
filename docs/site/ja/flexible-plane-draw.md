@@ -8,13 +8,14 @@ title: フレキシブルプレーン描画
 
 順序付きの点からテクスチャ付きの帯を作ります。四角形やパーティクル
 シミュレーションではありません。Unity・Unreal・Godot のパッケージ描画は
-root と Spawnable 子に接続済みです。新しいソースでは描画ごとのシーン Component を
+root と Spawnable 子に接続済みです。更新版 Preview では描画ごとのシーン Component を
 作らず、エンジンの描画機能へ渡します。固定点の帯は Unity 7 の Built-in／URP と
 Godot 4.7.2 で実ピクセルを確認していますが、すべての履歴・カメラ・対象環境を
 検証したことにはなりません。
 旧 SDK **2026.11.8 は新しいシンボルや描画機能を含みません**。
 対応する更新版を [Preview 配布ページ](https://github.com/Libra-Works/LibraFX/releases)から導入してください。
 公開済み 2026.11.22 は最初の帯実装を含みますが、その後の描画移行は含みません。
+[Preview の更新手順](preview-update.md)と、
 [描画の検証範囲](engine-integration.md#rendering)も確認してください。
 
 ## 作り方

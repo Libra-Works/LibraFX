@@ -7,8 +7,10 @@ title: GPU Particle Authoring
 # GPU Particle Authoring
 
 See [GPU particle terms](glossary.md#gpu) for kernel, attribute, uniform, and IR.
-Newer source also provides a [resource-first 2D smoke / ink mode](fluid-2d.md)
-inside this workspace; that solver is not a particle kernel or part of the published 2026.11.22 Preview.
+The Preview update after 2026.11.22 also provides a
+[resource-first 2D smoke / ink mode](fluid-2d.md) inside this workspace.
+That solver is not a particle kernel. Install matching updated SDKs;
+the older archives are unchanged.
 
 A **GPU Particle** node is a container on the main effect graph. Its contents
 are edited in a separate workspace: the outer graph owns effect scope and

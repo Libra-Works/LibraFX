@@ -8,14 +8,15 @@ title: Flexible Plane Draw
 
 Flexible Plane Draw turns ordered points into a textured ribbon, not a flat
 rectangle or a particle simulation. Unity, Unreal and Godot package renderers
-have root and spawned-child wiring. Newer source uses engine-native rendering
+have root and spawned-child wiring. The updated Preview uses engine-native rendering
 without a per-Draw scene component. Fixed-point ribbons have rendered-pixel
 coverage in Unity 7 Built-in/URP and Godot 4.7.2; this does not certify every
 history, camera or target-platform combination.
 The earlier **2026.11.8 SDK does not include** these new symbols;
 use matching updated [Preview packages](https://github.com/Libra-Works/LibraFX/releases).
 The published 2026.11.22 archives include the original ribbon implementation,
-not the later renderer migration. See [rendering boundaries](engine-integration.md#rendering).
+not the later renderer migration. Use the [Preview update](preview-update.md)
+and see [rendering boundaries](engine-integration.md#rendering).
 
 ## Authoring
 

@@ -15,6 +15,11 @@ without a game engine; to see the effect render, use the Unreal preview.
 ## Install the editor
 
 Download a package from the latest [Preview release](https://github.com/Libra-Works/LibraFX/releases).
+Update the editor and SDKs together; the [upgrade guide](preview-update.md)
+lists the new features, package formats and known limits.
+For the complete install-to-game process, follow the
+[Unity / Unreal / Godot production workflow](production-workflow.md) and
+[batch conversion guide](batch-conversion.md).
 
 | Platform | How to start |
 | --- | --- |
@@ -42,7 +47,7 @@ test project. In Unreal, open **Window → LIBERA FX Preview** and choose
 together. The live preview uses Unreal's stock sphere mesh and its own unlit
 material. Standalone playback needs explicit asset bindings.
 New offline exports use `.lfxb` packages and require the updated editor and SDK;
-the older published release uses `.lfxp` for packages.
+legacy releases used `.lfxp` for packages.
 
 For the preview's native-library prerequisite and camera framing, see the
 [bundled sample notes](https://github.com/Libra-Works/LibraFX/blob/main/Assets/Samples/AfterimageGate.txt).
