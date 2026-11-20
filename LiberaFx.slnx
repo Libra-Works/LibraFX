@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/CommentImageSmokeTests.csproj" />
+  </Folder>
+  <Folder Name="/Tools/" />
+  <Folder Name="/Tools/Converter/">
+    <Project Path="Tools/Converter/LiberaFx.Converter.csproj" />
+  </Folder>
+  <Project Path="LiberaFx.csproj" />
+</Solution>
