@@ -64,9 +64,9 @@ public static class CpuParticleSchema
         {
             if (IsContainer(node.Kind))
             {
-                if (insideSpawnable || stageContext is not null || parent is { } owner && HasChild(owner))
+                if (stageContext is not null || parent is { } owner && HasChild(owner))
                 {
-                    throw new InvalidDataException("CPU Particle containers currently require the effect root or an ordinary Graph Group; nested CPU/Spawnable systems are unsupported.");
+                    throw new InvalidDataException("CPU Particle containers cannot be nested inside another CPU Particle container or kernel.");
                 }
                 var stages = node.ChildGraph?.Nodes.Where(item => IsStage(item.Kind)).ToArray() ?? [];
                 if (stages.Count(item => Name(item.Kind) == "CpuParticleSpawn") != 1 ||

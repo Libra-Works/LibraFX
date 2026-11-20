@@ -80,10 +80,10 @@ public:
     // rootEnding, lifetime change or automatic Destroy is attached to it.
     Result notifyEndRequest(const SpawnableScope& scope, const std::uint8_t nodeId[16]);
     // Effect covers root, all child pools, pending spawns and continuations.
-    // Instance covers exactly (containerId,instanceId), including its deferred
-    // signals. Current packages prohibit nested Spawnables; sibling instances
-    // and Destroy-route targets are NOT children of the source instance.
-    // On QueueRejected nothing changes: drain events then retry before advance.
+    // Instance covers (containerId,instanceId) and its dynamically owned
+    // descendant subtree, including deferred signals, CPU worlds and queued
+    // spawns. Sibling instances and Destroy-route targets remain unaffected.
+    // Per-descendant cleanup notices are retained beyond eventCapacity.
     // Issued, retired targets and duplicate requests succeed without replay.
     Result forceTerminate(const SpawnableScope& scope);
     // Only at an owner/job boundary. Scope Effect means root only here.
@@ -99,10 +99,19 @@ public:
     bool popGameIoEvent(NamedIoEvent& out) noexcept;
     std::size_t activeCount() const noexcept;
     bool rootFinished() const noexcept;
+    bool hasCpuParticleEvents() const noexcept;
     const SpawnablePackage& package() const noexcept;
     Result cpuParticleCount(const std::uint8_t systemId[16], std::size_t& out) const noexcept;
     Result cpuParticleAt(const std::uint8_t systemId[16], std::size_t index, CpuParticleSnapshot& out) const noexcept;
     bool popCpuParticleEvent(CpuParticleEvent& out) noexcept;
+    Result cpuParticleCount(const SpawnableScope& scope,
+                            const std::uint8_t systemId[16],
+                            std::size_t& out) const noexcept;
+    Result cpuParticleAt(const SpawnableScope& scope,
+                         const std::uint8_t systemId[16], std::size_t index,
+                         CpuParticleSnapshot& out) const noexcept;
+    bool popCpuParticleEvent(const SpawnableScope& scope,
+                             CpuParticleEvent& out) noexcept;
 
 private:
     struct Impl;

@@ -142,6 +142,31 @@ auto CpuParticleWorld::advance(Instance& root, double time, bool emitting, const
     }
     return Result::Ok;
 }
+auto CpuParticleWorld::queueSignal(const std::uint8_t nodeId[16]) noexcept -> Result
+{
+    if (!nodeId)
+    {
+        return Result::InvalidArgument;
+    }
+    for (auto& system : impl_->systems)
+    {
+        for (const auto& callback : system->callbacks)
+        {
+            if (callback.operation != 0x36 ||
+                std::memcmp(callback.node.data(), nodeId, 16) != 0)
+            {
+                continue;
+            }
+            if (system->incomingCount == system->incoming.size())
+            {
+                return Result::QueueRejected;
+            }
+            system->incoming[system->incomingCount++] =
+                {callback.node, callback.stage};
+        }
+    }
+    return Result::Ok;
+}
 auto CpuParticleWorld::count(const std::uint8_t systemId[16], std::size_t& out) const noexcept -> Result
 {
     if (!systemId)
@@ -192,6 +217,15 @@ auto CpuParticleWorld::popEvent(CpuParticleEvent& out) noexcept -> bool
         }
     }
     return false;
+}
+auto CpuParticleWorld::pendingEventCount() const noexcept -> std::size_t
+{
+    auto count = std::size_t{};
+    for (const auto& system : impl_->systems)
+    {
+        count += system->eventCount;
+    }
+    return count;
 }
 auto CpuParticleWorld::activeCount() const noexcept -> std::size_t
 {

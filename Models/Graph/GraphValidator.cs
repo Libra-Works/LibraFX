@@ -35,8 +35,6 @@ public static class GraphValidator
             if (node is not null && GameIoSchema.IsInstanceNode(node.Kind) &&
                 (isDocumentRoot || depth != 0 && parentKind != GraphNodeKind.SpawnableGroup))
                 throw new InvalidDataException("Instance Game I/O nodes must be directly inside a Spawnable Group.");
-            if (insideSpawnable && node is not null && node.Kind == GraphNodeKind.SpawnableGroup)
-                throw new InvalidDataException("Nested Spawnable Groups are not supported.");
             if (node is not null && (isDocumentRoot || parentKind is not null && parentKind != GraphNodeKind.GraphGroup) &&
                 (GroupBoundarySchema.IsInput(node.Kind) || GroupBoundarySchema.IsOutput(node.Kind)))
                 throw new InvalidDataException("Group boundary nodes must be directly inside a Graph Group.");

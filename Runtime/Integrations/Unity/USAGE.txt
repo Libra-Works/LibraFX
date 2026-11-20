@@ -412,6 +412,7 @@ CPU particle Sprite billboards
 ------------------------------
 Whole-effect CPU packages use LFXP format 4/package 12 with
 `cpuParticleVersion: 1` and a `cpuParticles` render-configuration array.
+Template CPU systems or nested Spawnables use format 5/package 13 instead.
 Unity resolves each `assetPath` through the existing project-local render asset
 bindings (or the explicit `builtin:white` token). One reusable dynamic mesh,
 owned material and direct draw submission per CPU emitter carry the particles'
@@ -432,9 +433,16 @@ Property and kind 2 is Signal; read `Width` lanes from X/Y/Z/W. Rendering does
 not consume events. Drain each frame and before Stop/restart; queue capacity
 must accommodate the output from one simulation advance.
 
-CPU Sprite rendering is supported only at the package root. The current
-isolated Editor checks exercised native snapshots, pixels and Stop using
-the released 2026.11.22 bridge in Built-in RP and URP.
+CPU Sprite rendering works at the root and in nested Spawnable scopes. Each
+dynamic instance owns its particle storage and direct batch. Life Time stops
+emission, then waits for particles and descendants before removing rendering.
+Use PopScopedCpuParticleEvent(containerId, instanceId, ...) for a child queue;
+the original PopCpuParticleEvent continues to read only the root queue.
+The native plugin must additionally export the scoped_cpu_particle_count,
+scoped_cpu_particle_at and scoped_cpu_particle_pop_event functions under the
+libra_spawnable_host_ prefix. Rebuild the plugin; the older released bridge
+does not support format 5. LiberaFxHierarchyVerification.Run exercises a
+compiler-produced nested fixture, retained pixels, subtree force and restart.
 
 Flexible Plane uses the same direct camera submission route. Its native
 geometry generator must be exported by the installed `liberafx_native` plugin;

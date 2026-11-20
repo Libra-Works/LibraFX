@@ -9,6 +9,7 @@
 namespace liberafx {
 
 using GeneratorInstanceId = std::uint64_t;
+using GeneratorInstanceAccess = Result (*)(void *, Instance &) noexcept;
 
 struct GeneratorCapture final {
     std::uint8_t nodeId[16]{};
@@ -61,11 +62,19 @@ public:
     // CaptureAtSpawn: values address unconnected template parameter defaults.
     Result spawn(double time, const GeneratorCapture* captures, std::size_t count,
                  GeneratorInstanceId& out) noexcept;
+    // Host-internal ownership tag is copied from a deferred command to the
+    // materialized slot. It does not alter the public GeneratorEvent ABI.
+    Result spawnTagged(double time, const GeneratorCapture* captures, std::size_t count,
+                       std::uint64_t ownerTag, GeneratorInstanceId& out) noexcept;
     // Allocation-free signal callback path. The default limit is 16 lanes;
     // createWithCaptureLimit can increase it to at most 256.
     // Owner processes commands outside callback execution. A rejected command
     // remains queued until resources are available or reset clears it.
     Result enqueueSpawn(double time, const GeneratorCapture* captures, std::size_t count) noexcept;
+    Result enqueueSpawnTagged(double time, const GeneratorCapture* captures, std::size_t count,
+                              std::uint64_t ownerTag) noexcept;
+    Result ownerTag(GeneratorInstanceId id, std::uint64_t& out) const noexcept;
+    Result cancelSpawnsOwned(std::uint64_t ownerTag) noexcept;
     Result processSpawns(std::size_t maxCommands, std::size_t& processed) noexcept;
     // Configure only while empty. Once configured, spawn creates an initialized
     // instance; the owner applies initial Live values, then explicitly starts it.
@@ -101,7 +110,12 @@ public:
     // invokes ownerDestroy. time must equal the last evaluated effect time.
     Result dispatchSignal(GeneratorInstanceId id, const std::uint8_t nodeId[16],
                           double time, std::size_t instructionBudget) noexcept;
+    Result dispatchSignalOwned(const std::uint8_t nodeId[16], double time,
+                               std::size_t instructionBudget,
+                               std::uint64_t ownerTag) noexcept;
     Result setTimeContext(GeneratorInstanceId id, double effectTime, double frameDelta) noexcept;
+    Result withInstance(GeneratorInstanceId id, GeneratorInstanceAccess access,
+                        void *context) noexcept;
     Result setHostQuality(GeneratorInstanceId id, const HostQualitySnapshot& snapshot) noexcept;
     Result setDebugHooks(GeneratorInstanceId id, const ExecutionDebugHooks& hooks) noexcept;
     // Deferred-signal lifecycles require monotonic evaluation without skipping

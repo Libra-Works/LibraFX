@@ -219,6 +219,21 @@ void PackageRenderRenderer::synchronizeModelBatches(bool exiting)
     }
 }
 
+void PackageRenderRenderer::synchronizeCpuScope(godot::Node3D& scope,
+    std::vector<CpuParticleRenderInstance>& renderables, bool enabled, bool exiting)
+{
+    for (auto& renderable : renderables)
+    {
+        if (scope.is_inside_tree() && (!renderable.boundsValid ||
+            renderable.boundsBasis != scope.get_global_transform().basis))
+        {
+            renderable.boundsValid = updateCpuBounds(renderable, scope.get_global_transform().basis);
+        }
+        updateInstance(renderable.instance, scope, godot::Transform3D{},
+            enabled && renderable.boundsValid, exiting);
+    }
+}
+
 void PackageRenderRenderer::synchronizePresentation(bool exiting)
 {
     if (!root_) {
@@ -245,17 +260,12 @@ void PackageRenderRenderer::synchronizePresentation(bool exiting)
     }
     synchronizeModelBatches(exiting);
     synchronizeScope(*root_, rootRenderables_, ownerVisible_ && !rootFlexibleHidden_, exiting);
-    for (auto& renderable : rootCpuRenderables_) {
-        if (root_->is_inside_tree() && (!renderable.boundsValid ||
-            renderable.boundsBasis != root_->get_global_transform().basis)) {
-            renderable.boundsValid = updateCpuBounds(renderable, root_->get_global_transform().basis);
-        }
-        updateInstance(renderable.instance, *root_, godot::Transform3D{},
-            ownerVisible_ && !rootFlexibleHidden_ && renderable.boundsValid, exiting);
-    }
+    synchronizeCpuScope(*root_, rootCpuRenderables_, ownerVisible_ && !rootFlexibleHidden_, exiting);
     for (auto& child : children_) {
         if (child.node) {
             synchronizeScope(*child.node, child.renderables, ownerVisible_ && !child.flexibleHidden, exiting);
+            synchronizeCpuScope(*child.node, child.cpuRenderables,
+                ownerVisible_ && !child.flexibleHidden, exiting);
         }
     }
 }

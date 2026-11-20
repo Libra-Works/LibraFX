@@ -54,6 +54,15 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_cpu_partic
     LibraSpawnableHostHandle host, const uint8_t systemId[16], uint32_t index, LibraCpuParticleSnapshot* out);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_cpu_particle_pop_event(
     LibraSpawnableHostHandle host, LibraCpuParticleEvent* out, uint32_t* hasEvent);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_scoped_cpu_particle_count(
+    LibraSpawnableHostHandle host, const uint8_t containerId[16], uint64_t instanceId,
+    const uint8_t systemId[16], uint32_t* outCount);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_scoped_cpu_particle_at(
+    LibraSpawnableHostHandle host, const uint8_t containerId[16], uint64_t instanceId,
+    const uint8_t systemId[16], uint32_t index, LibraCpuParticleSnapshot* out);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_scoped_cpu_particle_pop_event(
+    LibraSpawnableHostHandle host, const uint8_t containerId[16], uint64_t instanceId,
+    LibraCpuParticleEvent* out, uint32_t* hasEvent);
 enum {
     LIBRA_OK = 0, LIBRA_INVALID_ARGUMENT = 1, LIBRA_INVALID_BINARY = 2,
     LIBRA_UNSUPPORTED_BINARY = 3, LIBRA_INSUFFICIENT_WORK = 4,

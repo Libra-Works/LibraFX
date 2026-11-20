@@ -76,12 +76,16 @@ internal static class FireworksLifecycleTests
                 node.ChildGraph.Nodes.Single(item => item.Kind.Value == "LifeTime") with { Id = Guid.NewGuid() }]).ToArray() }
         } : node).ToArray() };
         Reject(() => SpawnableGroupPackage.Compile(multiple), "multiple Life Times");
+        var nestedTemplateId = Guid.NewGuid();
         var nested = graph with { Nodes = graph.Nodes.Select(node => node.Id == launch.Id ? node with
         {
             ChildGraph = node.ChildGraph! with { Nodes = node.ChildGraph.Nodes.Concat([
-                burst with { Id = Guid.NewGuid(), ChildGraph = new GraphSnapshot([], []) }]).ToArray() }
+                burst with { Id = nestedTemplateId, ChildGraph = new GraphSnapshot([], []) }]).ToArray() }
         } : node).ToArray() };
-        Reject(() => SpawnableGroupPackage.Compile(nested), "nested Spawnable");
+        var nestedPackage = SpawnableGroupPackage.Compile(nested);
+        Require(nestedPackage.Templates.Any(template => template.ContainerId == nestedTemplateId &&
+            template.ParentContainerId == launch.Id),
+            "Nested Spawnable compilation must retain its Launch parent template.");
         Reject(() => SpawnableGroupPackage.Compile(ChangeLife(graph, launch.Id, -1)), "negative Life Time");
         var library = Environment.GetEnvironmentVariable("LIBERAFX_NATIVE_TEST_LIBRARY")
             ?? throw new InvalidOperationException("Actual Fireworks execution requires LIBERAFX_NATIVE_TEST_LIBRARY.");

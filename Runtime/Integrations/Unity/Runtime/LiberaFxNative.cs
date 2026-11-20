@@ -392,6 +392,16 @@ namespace LiberaFx.Unity
         internal static extern NativeResult libra_spawnable_host_cpu_particle_pop_event(
             ulong host, out CpuParticleEvent particleEvent, out uint hasEvent);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_count(
+            ulong host, byte* containerId, ulong instance, byte* systemId, out uint count);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_at(
+            ulong host, byte* containerId, ulong instance, byte* systemId, uint index,
+            out NativeCpuParticleSnapshot particle);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_pop_event(
+            ulong host, byte* containerId, ulong instance, out CpuParticleEvent particleEvent, out uint hasEvent);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_child_value(
             ulong host, byte* containerId, ulong instance, byte* nodeId, out NativeValue value);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
@@ -685,6 +695,70 @@ namespace LiberaFx.Unity
                         Alive, out particleEvent, out var available);
                     hasEvent = result == NativeResult.Ok && available != 0;
                     return result;
+                }
+
+                internal NativeResult CpuParticleCount(byte[] containerId, ulong instance,
+                    byte[] systemId, out uint count)
+                {
+                    if (containerId == null && instance == 0)
+                    {
+                        return CpuParticleCount(systemId, out count);
+                    }
+                    count = 0;
+                    if (containerId == null || containerId.Length != 16 || instance == 0 ||
+                        systemId == null || systemId.Length != 16)
+                    {
+                        return NativeResult.InvalidArgument;
+                    }
+                    fixed (byte* container = containerId)
+                    fixed (byte* system = systemId)
+                    {
+                        return Native.libra_spawnable_host_scoped_cpu_particle_count(
+                            Alive, container, instance, system, out count);
+                    }
+                }
+
+                internal NativeResult CpuParticleAt(byte[] containerId, ulong instance,
+                    byte[] systemId, uint index, out NativeCpuParticleSnapshot particle)
+                {
+                    if (containerId == null && instance == 0)
+                    {
+                        return CpuParticleAt(systemId, index, out particle);
+                    }
+                    particle = default;
+                    if (containerId == null || containerId.Length != 16 || instance == 0 ||
+                        systemId == null || systemId.Length != 16)
+                    {
+                        return NativeResult.InvalidArgument;
+                    }
+                    fixed (byte* container = containerId)
+                    fixed (byte* system = systemId)
+                    {
+                        return Native.libra_spawnable_host_scoped_cpu_particle_at(
+                            Alive, container, instance, system, index, out particle);
+                    }
+                }
+
+                public NativeResult PopCpuParticleEvent(byte[] containerId, ulong instance,
+                    out CpuParticleEvent particleEvent, out bool hasEvent)
+                {
+                    if (containerId == null && instance == 0)
+                    {
+                        return PopCpuParticleEvent(out particleEvent, out hasEvent);
+                    }
+                    particleEvent = default;
+                    hasEvent = false;
+                    if (containerId == null || containerId.Length != 16 || instance == 0)
+                    {
+                        return NativeResult.InvalidArgument;
+                    }
+                    fixed (byte* container = containerId)
+                    {
+                        var result = Native.libra_spawnable_host_scoped_cpu_particle_pop_event(
+                            Alive, container, instance, out particleEvent, out var available);
+                        hasEvent = result == NativeResult.Ok && available != 0;
+                        return result;
+                    }
                 }
 
                 public NativeResult ReadChildValue(byte[] containerId, ulong instance, string nodeGuid,

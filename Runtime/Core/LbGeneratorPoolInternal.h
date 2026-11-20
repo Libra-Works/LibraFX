@@ -54,6 +54,7 @@ struct Slot final
     // Must be destroyed before its storage.
     std::optional<Instance> instance;
     GeneratorInstanceId id = 0;
+    std::uint64_t ownerTag = 0;
     double start = 0;
     Lifetime lifetime = Lifetime::infinite();
     std::uint64_t seed = 0;
@@ -75,6 +76,7 @@ struct SpawnCommand final
 {
     double time = 0;
     std::size_t count = 0;
+    std::uint64_t ownerTag = 0;
 };
 
 // In-place stable ring filtering, including a wrapped/full queue.

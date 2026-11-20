@@ -324,7 +324,7 @@ namespace LiberaFx.Unity
         {
             var renderConfiguration = ParseRender(renderBytes);
             var renderNodes = renderConfiguration.nodes;
-            var cpuParticles = ResolveCpuParticles(renderConfiguration.cpuParticles, renderNodes, isRoot);
+            var cpuParticles = ResolveCpuParticles(renderConfiguration.cpuParticles, renderNodes);
             var authoredGpuIds = ParseGpuContainerIds(gpuContainerBytes);
             var gpuPrograms = ParseGpuPrograms(gpuProgramBytes, authoredGpuIds,
                 renderConfiguration.gpuDrawTransforms, out var fluidPrograms);
@@ -350,14 +350,11 @@ namespace LiberaFx.Unity
         }
 
         private LiberaFxPreparedCpuParticleRenderer[] ResolveCpuParticles(
-            LiberaFxCpuParticlePayload[] payloads, LiberaFxRenderNodePayload[] renderNodes, bool isRoot)
+            LiberaFxCpuParticlePayload[] payloads, LiberaFxRenderNodePayload[] renderNodes)
         {
             payloads = payloads ?? Array.Empty<LiberaFxCpuParticlePayload>();
             if (payloads.Length > 128)
                 throw new InvalidOperationException("CPU particle renderer count exceeds 128.");
-            if (!isRoot && payloads.Length != 0)
-                throw new NotSupportedException(
-                    "CPU particle Sprite rendering inside SpawnableGroup templates is not supported.");
             var ids = new HashSet<string>(StringComparer.Ordinal);
             foreach (var node in renderNodes)
                 ids.Add(node.nodeId);

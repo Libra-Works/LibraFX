@@ -500,6 +500,7 @@ auto RunOpaqueAcceptance(FAutomationTestBase& test, const FString& fixture,
 auto RunCpuSpriteAcceptance(FAutomationTestBase& test, const FString& fixture,
     const FString& outputDirectory) -> bool
 {
+    const auto nested = FParse::Param(FCommandLine::Get(), TEXT("LibraRhiNestedCpuSprite"));
     auto bytes = TArray<uint8>{};
     if (!test.TestTrue(TEXT("CPU Sprite package loads"),
         FFileHelper::LoadFileToArray(bytes, *fixture)))
@@ -555,7 +556,8 @@ auto RunCpuSpriteAcceptance(FAutomationTestBase& test, const FString& fixture,
         texture->RemoveFromRoot();
         return false;
     }
-    for (auto tick = 0; tick < 4; ++tick)
+    const auto ticks = nested ? 30 : 4;
+    for (auto tick = 0; tick < ticks; ++tick)
     {
         component->TickComponent(0.1f, LEVELTICK_All, nullptr);
     }
@@ -581,7 +583,8 @@ auto RunCpuSpriteAcceptance(FAutomationTestBase& test, const FString& fixture,
         liveCpuParticles, cpuBatches, primitives, capacity, submittedBytes);
     if (!test.TestTrue(TEXT("CPU Sprite has live native instances and RGBA payload"),
         liveCpuParticles > 0 && cpuBatches == 1 && primitives == 1 &&
-        capacity >= liveCpuParticles && submittedBytes > 0))
+        capacity >= liveCpuParticles && submittedBytes > 0 &&
+        (!nested || liveCpuParticles == 3)))
     {
         component->Stop();
         texture->RemoveFromRoot();
@@ -614,6 +617,38 @@ auto RunCpuSpriteAcceptance(FAutomationTestBase& test, const FString& fixture,
                 HasRedPixels(pixels)) ||
             !test.TestTrue(TEXT("Overlapping half-alpha particles remain below opaque red"),
                 maxRed > 100 && maxRed < 250))
+        {
+            component->Stop();
+            texture->RemoveFromRoot();
+            return false;
+        }
+    }
+    if (nested)
+    {
+        for (auto tick = 0; tick < 15; ++tick)
+        {
+            component->TickComponent(0.1f, LEVELTICK_All, nullptr);
+        }
+        component->GetNativeRenderSubmissionStats(logical, primitives, batches,
+            cpuBatches, liveCpuParticles, capacity, submittedBytes);
+        if (!test.TestTrue(TEXT("Particle death naturally retires both nested scopes"),
+                logical == 0 && primitives == 0 && cpuBatches == 0) ||
+            !test.TestTrue(TEXT("Natural CPU retirement capture is readable"),
+                CapturePixels(*world, capture, pixels)) ||
+            !test.TestTrue(TEXT("Natural CPU retirement leaves no pixels"),
+                !HasAnyBrightPixels(pixels)) ||
+            !test.TestEqual(TEXT("Nested CPU restarts after natural completion"),
+                component->Play(), ELibraRuntimeResult::Ok))
+        {
+            component->Stop();
+            texture->RemoveFromRoot();
+            return false;
+        }
+        component->TickComponent(0.1f, LEVELTICK_All, nullptr);
+        component->GetNativeRenderSubmissionStats(logical, primitives, batches,
+            cpuBatches, liveCpuParticles, capacity, submittedBytes);
+        if (!test.TestTrue(TEXT("Restart creates one fresh nested CPU batch"),
+            cpuBatches == 1 && primitives == 1 && liveCpuParticles == 3))
         {
             component->Stop();
             texture->RemoveFromRoot();

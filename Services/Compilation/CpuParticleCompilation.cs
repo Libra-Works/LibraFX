@@ -46,7 +46,8 @@ public static class CpuParticleCompilation
         node.ChildGraph is { } child && !CpuParticleSchema.HasChild(node.Kind) && Contains(child));
     public static IEnumerable<GraphNodeSnapshot> Systems(GraphSnapshot graph) => graph.Nodes.SelectMany(node =>
         CpuParticleSchema.IsContainer(node.Kind) ? new[] { node } :
-        node.ChildGraph is { } child && !GpuParticleEditorService.IsGpu(node.Kind) ? Systems(child) : Array.Empty<GraphNodeSnapshot>());
+        node.Kind != GraphNodeKind.SpawnableGroup && node.ChildGraph is { } child &&
+        !GpuParticleEditorService.IsGpu(node.Kind) ? Systems(child) : Array.Empty<GraphNodeSnapshot>());
 
     public static (GraphSnapshot Graph, byte[] Payload, IReadOnlyDictionary<Guid, Guid> SignalTypes) Lower(
         GraphSnapshot original, IRenderResourceBindingContext? resources, VfxCompileOptions? options)
@@ -245,6 +246,10 @@ public static class CpuParticleCompilation
         {
             foreach (var node in current.Nodes)
             {
+                if (node.Kind == GraphNodeKind.SpawnableGroup)
+                {
+                    continue;
+                }
                 if (CpuParticleSchema.IsContainer(node.Kind))
                 {
                     systems.Add((node, ResourceIdentityScope.Child(scope, node.Id)));

@@ -100,6 +100,13 @@ auto GeneratorPool::spawn(double time, const GeneratorCapture *captures,
                           std::size_t count, GeneratorInstanceId &out) noexcept
     -> Result
 {
+    return spawnTagged(time, captures, count, 0, out);
+}
+
+auto GeneratorPool::spawnTagged(double time, const GeneratorCapture *captures,
+                                std::size_t count, std::uint64_t ownerTag,
+                                GeneratorInstanceId &out) noexcept -> Result
+{
     out = 0;
     if (!std::isfinite(time) || count > 256 || (count && !captures))
     {
@@ -193,6 +200,7 @@ auto GeneratorPool::spawn(double time, const GeneratorCapture *captures,
             return result;
         }
         slot->id = impl_->nextId++;
+        slot->ownerTag = ownerTag;
         slot->start = time;
         slot->lifetime = Lifetime::infinite();
         slot->started = !impl_->lifecycleConfigured;
@@ -329,6 +337,13 @@ auto GeneratorPool::forceTerminateAll() noexcept -> Result
 auto GeneratorPool::enqueueSpawn(double time, const GeneratorCapture *captures,
                                  std::size_t count) noexcept -> Result
 {
+    return enqueueSpawnTagged(time, captures, count, 0);
+}
+
+auto GeneratorPool::enqueueSpawnTagged(double time, const GeneratorCapture *captures,
+                                       std::size_t count,
+                                       std::uint64_t ownerTag) noexcept -> Result
+{
     if (!std::isfinite(time) || (count && !captures))
     {
         return Result::InvalidArgument;
@@ -351,12 +366,43 @@ auto GeneratorPool::enqueueSpawn(double time, const GeneratorCapture *captures,
     auto &command = impl_->commands[index];
     command.time = time;
     command.count = count;
+    command.ownerTag = ownerTag;
     for (auto i = std::size_t{}; i < count; ++i)
     {
         impl_->commandCaptures[index * impl_->maxCaptureLanes + i] =
             captures[i];
     }
     ++impl_->commandCount;
+    return Result::Ok;
+}
+
+auto GeneratorPool::ownerTag(GeneratorInstanceId id, std::uint64_t& out) const noexcept -> Result
+{
+    auto lock = std::lock_guard<std::mutex>(impl_->mutex);
+    if (impl_->executing)
+    {
+        return Result::Busy;
+    }
+    auto slot = impl_->find(id);
+    if (!slot)
+    {
+        return Result::InvalidHandle;
+    }
+    out = slot->ownerTag;
+    return Result::Ok;
+}
+
+auto GeneratorPool::cancelSpawnsOwned(std::uint64_t ownerTag) noexcept -> Result
+{
+    auto lock = std::lock_guard<std::mutex>(impl_->mutex);
+    if (impl_->executing)
+    {
+        return Result::Busy;
+    }
+    removeQueued(impl_->commands, impl_->commandHead, impl_->commandCount,
+                 [ownerTag](const auto& command) {
+                     return command.ownerTag == ownerTag;
+                 });
     return Result::Ok;
 }
 
@@ -388,7 +434,8 @@ auto GeneratorPool::processSpawns(std::size_t maxCommands,
             }
         }
         auto id = GeneratorInstanceId{};
-        auto result = spawn(command.time, captures.data(), command.count, id);
+        auto result = spawnTagged(command.time, captures.data(), command.count,
+                                  command.ownerTag, id);
         if (result != Result::Ok)
         {
             return result;

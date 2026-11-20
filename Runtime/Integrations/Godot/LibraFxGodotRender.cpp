@@ -292,7 +292,7 @@ auto PackageRenderRenderer::create(const SpawnablePackage& package,
         auto definition = TemplateDraws{};
         definition.containerId = item.containerId;
         result = readDraws(item.renderConfiguration, meshBindings, textureBindings,
-            materialBindings, definition.draws);
+            materialBindings, definition.draws, &definition.cpuParticles);
         if (result != Result::Ok) {
             return result;
         }
@@ -990,7 +990,7 @@ auto PackageRenderRenderer::updateMaterials(SpawnableHost& host, const Draw& dra
 auto PackageRenderRenderer::attach(godot::Node& owner) -> Result
 {
     auto anyChildDraws = std::any_of(templates_.begin(), templates_.end(),
-        [](const auto& item) { return !item.draws.empty(); });
+        [](const auto& item) { return !item.draws.empty() || !item.cpuParticles.empty(); });
     if (rootDraws_.empty() && rootCpuParticles_.empty() && !anyChildDraws) {
         return Result::Ok;
     }
@@ -1041,9 +1041,17 @@ auto PackageRenderRenderer::updateValues(SpawnableHost& host, double effectTime)
         return Result::InvalidArgument;
     }
     auto result = Result::Ok;
-    result = updateCpuParticles(host);
-    if (result != Result::Ok) {
-        return result;
+    if (!rootCpuParticles_.empty())
+    {
+        if (!root_)
+        {
+            return Result::InvalidBinary;
+        }
+        result = updateCpuParticles(host, {}, rootCpuParticles_, rootCpuRenderables_, *root_);
+        if (result != Result::Ok)
+        {
+            return result;
+        }
     }
     if (!rootDraws_.empty()) {
         if (rootHasFlexibleTime_ && effectTime < rootLastFlexibleTime_)
@@ -1062,6 +1070,20 @@ auto PackageRenderRenderer::updateValues(SpawnableHost& host, double effectTime)
         auto definition = findTemplate(child.containerId.data());
         if (!definition) {
             return Result::InvalidBinary;
+        }
+        if (!child.node)
+        {
+            return Result::InvalidBinary;
+        }
+        auto scope = SpawnableScope{};
+        scope.kind = SpawnableScopeKind::Instance;
+        std::memcpy(scope.containerId, child.containerId.data(), child.containerId.size());
+        scope.instanceId = child.instanceId;
+        result = updateCpuParticles(host, scope, definition->cpuParticles,
+            child.cpuRenderables, *child.node);
+        if (result != Result::Ok)
+        {
+            return result;
         }
         auto localTime = effectTime - child.startTime;
         if (!std::isfinite(localTime) || localTime < -1e-8) {
@@ -1121,17 +1143,30 @@ auto PackageRenderRenderer::renderStats() const -> godot::Dictionary
             }
         }
     }
-    renderInstances += rootCpuRenderables_.size();
+    auto cpuBatchCount = rootCpuRenderables_.size();
     auto allocatedCpuInstances = std::uint64_t{};
     auto allocatedMultiMeshes = std::uint64_t{};
-    for (const auto& renderable : rootCpuRenderables_) {
-        if (renderable.instance.isValid()) {
-            ++allocatedCpuInstances;
+    const auto countCpuInstances = [&](const auto& renderables)
+    {
+        for (const auto& renderable : renderables)
+        {
+            if (renderable.instance.isValid())
+            {
+                ++allocatedCpuInstances;
+            }
+            if (renderable.multiMesh.isValid())
+            {
+                ++allocatedMultiMeshes;
+            }
         }
-        if (renderable.multiMesh.isValid()) {
-            ++allocatedMultiMeshes;
-        }
+    };
+    countCpuInstances(rootCpuRenderables_);
+    for (const auto& child : children_)
+    {
+        cpuBatchCount += child.cpuRenderables.size();
+        countCpuInstances(child.cpuRenderables);
     }
+    renderInstances += cpuBatchCount;
     auto modelBatchCount = std::uint64_t{};
     auto modelBatchMembers = std::uint64_t{};
     for (const auto& batch : modelBatches_) {
@@ -1155,7 +1190,7 @@ auto PackageRenderRenderer::renderStats() const -> godot::Dictionary
     stats["allocated_cpu_particle_instances"] = static_cast<std::int64_t>(allocatedCpuInstances);
     stats["allocated_opaque_model_batch_instances"] = static_cast<std::int64_t>(modelBatchCount);
     stats["allocated_render_server_multimeshes"] = static_cast<std::int64_t>(allocatedMultiMeshes);
-    stats["cpu_multimesh_batches"] = static_cast<std::int64_t>(rootCpuRenderables_.size());
+    stats["cpu_multimesh_batches"] = static_cast<std::int64_t>(cpuBatchCount);
     stats["opaque_model_multimesh_batches"] = static_cast<std::int64_t>(modelBatchCount);
     stats["opaque_model_multimesh_members"] = static_cast<std::int64_t>(modelBatchMembers);
     stats["flexible_plane_surface_updates"] = static_cast<std::int64_t>(flexibleUpdates);
@@ -1241,22 +1276,24 @@ auto PackageRenderRenderer::updateCpuBounds(CpuParticleRenderInstance& renderabl
     return true;
 }
 
-auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host) -> Result
+auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host, const SpawnableScope& scope,
+    const std::vector<CpuParticleDraw>& draws,
+    std::vector<CpuParticleRenderInstance>& renderables, godot::Node3D& node) -> Result
 {
     constexpr auto maximumParticles = std::uint32_t{1000000}; // Native system capacity limit.
     constexpr auto instanceStride = std::size_t{16}; // 3x4 transform rows followed by RGBA.
-    if (rootCpuParticles_.size() != rootCpuRenderables_.size()) {
+    if (draws.size() != renderables.size()) {
         return Result::InvalidBinary;
     }
-    for (auto index = std::size_t{}; index < rootCpuParticles_.size(); ++index) {
-        const auto& draw = rootCpuParticles_[index];
-        auto& renderable = rootCpuRenderables_[index];
-        if (!renderable.instance.isValid() || !renderable.multiMesh.isValid() || !root_) {
+    for (auto index = std::size_t{}; index < draws.size(); ++index) {
+        const auto& draw = draws[index];
+        auto& renderable = renderables[index];
+        if (!renderable.instance.isValid() || !renderable.multiMesh.isValid()) {
             return Result::InvalidBinary;
         }
-        updateInstance(renderable.instance, *root_, godot::Transform3D{});
+        updateInstance(renderable.instance, node, godot::Transform3D{});
         auto count = std::size_t{};
-        auto result = host.cpuParticleCount(draw.nodeId.data(), count);
+        auto result = host.cpuParticleCount(scope, draw.nodeId.data(), count);
         if (result != Result::Ok) {
             return result;
         }
@@ -1290,13 +1327,13 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host) -> Result
             continue;
         }
         auto* buffer = renderable.buffer.ptrw();
-        const auto basis = root_->get_global_transform().basis;
+        const auto basis = node.get_global_transform().basis;
         if (!std::isfinite(basis.determinant()) || basis.determinant() == 0) {
             return Result::InvalidArgument;
         }
         for (auto particleIndex = std::size_t{}; particleIndex < count; ++particleIndex) {
             auto snapshot = CpuParticleSnapshot{};
-            result = host.cpuParticleAt(draw.nodeId.data(), particleIndex, snapshot);
+            result = host.cpuParticleAt(scope, draw.nodeId.data(), particleIndex, snapshot);
             if (result != Result::Ok || snapshot.id == 0) {
                 return result == Result::Ok ? Result::InvalidBinary : result;
             }
@@ -1643,7 +1680,7 @@ auto PackageRenderRenderer::handleEvent(const SpawnableHostEvent& event, Package
         if (!definition) {
             return Result::InvalidBinary;
         }
-        if (definition->draws.empty()) {
+        if (definition->draws.empty() && definition->cpuParticles.empty()) {
             return Result::Ok;
         }
         if (findChild(event.containerId, event.instanceId) != children_.end() || !root_) {
@@ -1659,6 +1696,21 @@ auto PackageRenderRenderer::handleEvent(const SpawnableHostEvent& event, Package
         }
         child.node->set_name(uuidString(event.containerId) + "_" +
             godot::String::num_uint64(event.instanceId));
+        for (const auto& draw : definition->cpuParticles)
+        {
+            auto renderable = CpuParticleRenderInstance{};
+            result = makeCpuRenderable(*child.node, draw, renderable);
+            if (result != Result::Ok)
+            {
+                if (auto* parent = child.node->get_parent())
+                {
+                    parent->remove_child(child.node);
+                }
+                child.node->queue_free();
+                return result;
+            }
+            child.cpuRenderables.push_back(std::move(renderable));
+        }
         children_.push_back(std::move(child));
     } else if (event.kind == SpawnableHostEventKind::Stop ||
                event.kind == SpawnableHostEventKind::Destroy) {

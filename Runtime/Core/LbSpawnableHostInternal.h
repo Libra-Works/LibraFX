@@ -40,6 +40,26 @@ struct OwnerOperation final {
   ~OwnerOperation() { busy = false; }
 };
 
+struct OwnerTagOperation final {
+  std::uint64_t &current;
+  std::uint64_t previous;
+  OwnerTagOperation(std::uint64_t &value, std::uint64_t next) noexcept
+      : current(value), previous(value) {
+    current = next;
+  }
+  ~OwnerTagOperation() { current = previous; }
+};
+
+struct CpuWorldOperation final {
+  CpuParticleWorld *&current;
+  CpuParticleWorld *previous;
+  CpuWorldOperation(CpuParticleWorld *&value, CpuParticleWorld *next) noexcept
+      : current(value), previous(value) {
+    current = next;
+  }
+  ~CpuWorldOperation() { current = previous; }
+};
+
 inline auto validScope(const SpawnableScope &scope) noexcept -> bool {
   if (scope.kind == SpawnableScopeKind::Effect) {
     return !scope.instanceId && !isNonzero(scope.containerId);
@@ -78,6 +98,7 @@ struct AlignedBuffer final {
 
 struct SpawnCallbackContext final {
   GeneratorPool *pool = nullptr;
+  std::uint64_t *ownerTag = nullptr;
   std::array<std::array<std::uint8_t, 16>, 4> nodeIds{};
   std::array<std::uint8_t, 4> widths{};
   std::uint8_t inputCount = 0;
@@ -85,6 +106,12 @@ struct SpawnCallbackContext final {
 
 struct SignalInputCallbackContext final {
   GeneratorPool *pool = nullptr;
+  std::uint64_t *ownerTag = nullptr;
+  std::array<std::uint8_t, 16> nodeId{};
+};
+
+struct CpuSignalCallbackContext final {
+  CpuParticleWorld **activeWorld = nullptr;
   std::array<std::uint8_t, 16> nodeId{};
 };
 
@@ -100,6 +127,7 @@ auto findSignalType(const std::vector<std::uint8_t> &bytes,
                     std::array<std::uint8_t, 16> &typeId) noexcept -> Result;
 auto enqueueSpawn(CustomNodeInvocation &call) noexcept -> Result;
 auto dispatchTemplateSignal(CustomNodeInvocation &call) noexcept -> Result;
+auto dispatchCpuParticleSignal(CustomNodeInvocation &call) noexcept -> Result;
 auto passthroughDescriptor(CustomNodeDescriptor &out) noexcept -> void;
 } // namespace liberafx::spawnable_host_detail
 
@@ -109,15 +137,28 @@ struct SpawnableHost::Impl final {
     GeneratorInstanceId id = 0;
     double start = 0;
     double life = std::numeric_limits<double>::infinity();
+    std::uint64_t ownerTag = 0;
+    std::uint64_t scopeTag = 0;
+    std::unique_ptr<CpuParticleWorld> cpuParticles;
+    bool retiring = false;
+    std::uint64_t retirementSeed = 0;
+    bool destroyPublished = false;
   };
   struct TemplateState final {
     const SpawnablePackageTemplate *data = nullptr;
+    std::uint8_t depth = 1;
     Program program;
     std::vector<CustomNodeBinding> bindings;
-    std::unique_ptr<GeneratorPool> pool;
-    std::vector<InstanceInfo> instances;
     spawnable_host_detail::SpawnCallbackContext spawnContext;
     std::vector<std::array<std::uint8_t, 16>> outputIds;
+    std::vector<CustomNodeDescriptor> descriptors;
+    std::vector<spawnable_host_detail::SpawnCallbackContext> spawnCallbacks;
+    std::vector<spawnable_host_detail::SignalInputCallbackContext> signalCallbacks;
+    std::vector<std::array<std::uint8_t, 16>> signalTypes;
+    std::vector<spawnable_host_detail::CpuSignalCallbackContext> cpuCallbacks;
+    std::unique_ptr<CpuParticleWorld> cpuDescriptorWorld;
+    std::unique_ptr<GeneratorPool> pool;
+    std::vector<InstanceInfo> instances;
   };
   struct SignalInputContext final {
     std::array<std::uint8_t, 16> typeId{};
@@ -130,15 +171,22 @@ struct SpawnableHost::Impl final {
   struct CapturedRoute final {
     const SpawnablePackageDestroyRoute *route = nullptr;
     std::vector<GeneratorCapture> captures;
+    std::uint64_t ownerTag = 0;
   };
   struct ScheduledRoute final {
     std::uint64_t token = 0;
     CapturedRoute continuation;
     GeneratorInstanceId sourceInstanceId = 0;
+    std::uint64_t ownerTag = 0;
   };
   struct OwnerNotice final {
     std::array<std::uint8_t, 16> containerId{};
     GeneratorInstanceId instanceId = 0;
+  };
+  struct RetiredCpuEvent final {
+    std::array<std::uint8_t, 16> containerId{};
+    GeneratorInstanceId instanceId = 0;
+    CpuParticleEvent event{};
   };
 
   SpawnablePackage packageData;
@@ -154,22 +202,28 @@ struct SpawnableHost::Impl final {
   spawnable_host_detail::AlignedBuffer rootDefaults;
   std::optional<Instance> rootInstance;
   std::unique_ptr<CpuParticleWorld> cpuParticles;
+  CpuParticleWorld *activeCpuParticles = nullptr;
   std::unique_ptr<NamedIo> gameIo;
   std::optional<EffectLifecycle> lifecycle;
   std::vector<NamedIoPort> gameIoPorts;
   std::vector<SpawnableHostEvent> events;
   std::size_t eventHead = 0;
   std::size_t eventCount = 0;
+  std::vector<SpawnableHostEvent> pendingForceEvents;
+  std::size_t pendingForceEventHead = 0;
   std::vector<NamedIoEvent> childGameEvents;
   std::size_t childGameHead = 0;
   std::size_t childGameCount = 0;
   std::vector<OwnerNotice> ownerNotices;
+  std::vector<RetiredCpuEvent> retiredCpuEvents;
   std::vector<ScheduledRoute> scheduledRoutes;
   double time = -1;
   double rootAge = 0;
   double frameDelta = 0;
   HostQualitySnapshot quality{};
   std::uint64_t nextToken = 1;
+  std::uint64_t nextScopeTag = 1;
+  std::uint64_t currentOwnerTag = 0;
   std::uint64_t debugGeneration = 0;
   bool started = false;
   bool rootEnding = false;
@@ -203,6 +257,25 @@ struct SpawnableHost::Impl final {
       }
     }
     return nullptr;
+  }
+
+  auto findScope(std::uint64_t tag, TemplateState *&state,
+                 InstanceInfo *&instance) noexcept -> bool {
+    if (!tag) {
+      state = nullptr;
+      instance = nullptr;
+      return true;
+    }
+    for (auto &candidate : templates) {
+      for (auto &item : candidate->instances) {
+        if (item.scopeTag == tag) {
+          state = candidate.get();
+          instance = &item;
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   auto findPort(TemplateState &state, const char *name, NamedIoKind kind,
@@ -263,6 +336,7 @@ struct SpawnableHost::Impl final {
     if (eventCount == events.size()) {
       return Result::QueueRejected;
     }
+
     auto &event = events[(eventHead + eventCount) % events.size()];
     event = {};
     event.kind = kind;
@@ -276,6 +350,24 @@ struct SpawnableHost::Impl final {
       std::memcpy(event.signalNodeId, nodeId, 16);
     }
     ++eventCount;
+    return Result::Ok;
+  }
+
+  auto appendForceEvent(const std::uint8_t container[16],
+                        GeneratorInstanceId instance,
+                        double eventTime) -> Result {
+    auto event = SpawnableHostEvent{};
+    event.kind = SpawnableHostEventKind::ForceTerminated;
+    if (container) {
+      std::memcpy(event.containerId, container, 16);
+    }
+    event.instanceId = instance;
+    event.time = eventTime;
+    if (eventCount < events.size()) {
+      events[(eventHead + eventCount++) % events.size()] = event;
+      return Result::Ok;
+    }
+    pendingForceEvents.push_back(event);
     return Result::Ok;
   }
 
@@ -294,6 +386,29 @@ struct SpawnableHost::Impl final {
                  const std::uint8_t nodeId[16], double out[4],
                  std::uint8_t &width) -> Result {
     return state.pool->value(instance, nodeId, out, width);
+  }
+
+  auto readOwner(std::uint64_t ownerTag,
+                 const std::uint8_t *requiredContainer,
+                 const std::uint8_t nodeId[16], double out[4],
+                 std::uint8_t &width) -> Result {
+    auto state = static_cast<TemplateState *>(nullptr);
+    auto instance = static_cast<InstanceInfo *>(nullptr);
+    if (!findScope(ownerTag, state, instance)) {
+      return Result::InvalidHandle;
+    }
+    if (!state) {
+      if (requiredContainer) {
+        return Result::InvalidBinary;
+      }
+      return readRoot(nodeId, out, width);
+    }
+    if (requiredContainer &&
+        !spawnable_host_detail::sameId(requiredContainer,
+                                       state->data->containerId.data())) {
+      return Result::InvalidBinary;
+    }
+    return readChild(*state, instance->id, nodeId, out, width);
   }
 
   auto appendCapture(std::vector<GeneratorCapture> &captures,
@@ -318,13 +433,15 @@ struct SpawnableHost::Impl final {
   }
 
   auto appendParentCapture(std::vector<GeneratorCapture> &captures,
-                           const SpawnablePackageCapture &binding) -> Result {
-    if (binding.sourceContainerId) {
-      return Result::InvalidBinary;
-    }
+                           const SpawnablePackageCapture &binding,
+                           std::uint64_t ownerTag) -> Result {
     auto values = std::array<double, 4>{};
     auto width = std::uint8_t{};
-    auto result = readRoot(binding.sourceNodeId.data(), values.data(), width);
+    auto result = readOwner(ownerTag,
+                            binding.sourceContainerId
+                                ? binding.sourceContainerId->data()
+                                : nullptr,
+                            binding.sourceNodeId.data(), values.data(), width);
     if (result != Result::Ok) {
       return result;
     }
@@ -338,6 +455,10 @@ struct SpawnableHost::Impl final {
   auto pump(double at) -> Result;
   auto processPoolEvent(TemplateState &state, const GeneratorEvent &event,
                         double at) -> Result;
+  auto publishNaturalDestroy(TemplateState &state, const InstanceInfo &instance,
+                             double at, std::uint64_t seed) -> Result;
+  auto dispatchOwnerSignal(std::uint64_t ownerTag,
+                           const std::uint8_t nodeId[16], double at) -> Result;
   auto spawnRoute(const CapturedRoute &captured, double at) -> Result;
   auto dispatchScheduled(double at) -> Result;
   auto nextDeferredTime(double &out) -> Result;
@@ -346,10 +467,13 @@ struct SpawnableHost::Impl final {
   auto notifyOwnerDestroy(double at) -> Result;
   auto beginAutoEnd(double at) -> Result;
   auto finishIfQuiescent() -> Result;
+  auto finishRetiredInstances() -> Result;
+  auto preserveCpuEvents(TemplateState &state,
+                         InstanceInfo &instance) -> Result;
   auto applyCaptures(
       TemplateState &state, GeneratorInstanceId id,
       const std::optional<std::vector<SpawnablePackageCapture>> &inputs,
-      bool live) -> Result;
+      bool live, std::uint64_t ownerTag) -> Result;
   auto forceTerminate(const SpawnableScope &scope) -> Result;
   auto applyAuthoredForce() -> Result;
 };

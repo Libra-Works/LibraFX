@@ -721,6 +721,12 @@ auto ULibraSpawnableComponent::ReadChildValue(FGuid containerId, int64 instanceI
 ELibraRuntimeResult ULibraSpawnableComponent::PopCpuParticleEvent(
     FLibraCpuParticleEvent& particleEvent, bool& hasEvent)
 {
+    return PopScopedCpuParticleEvent(FGuid{}, 0, particleEvent, hasEvent);
+}
+
+ELibraRuntimeResult ULibraSpawnableComponent::PopScopedCpuParticleEvent(
+    FGuid containerId, int64 instanceId, FLibraCpuParticleEvent& particleEvent, bool& hasEvent)
+{
     particleEvent = {};
     hasEvent = false;
     if (!IsInGameThread() || DebugJobPending())
@@ -731,8 +737,19 @@ ELibraRuntimeResult ULibraSpawnableComponent::PopCpuParticleEvent(
     {
         return ELibraRuntimeResult::NotReady;
     }
+    if (instanceId < 0 || containerId.IsValid() != (instanceId > 0))
+    {
+        return ELibraRuntimeResult::InvalidArgument;
+    }
+    auto scope = liberafx::SpawnableScope{};
+    if (containerId.IsValid())
+    {
+        scope.kind = liberafx::SpawnableScopeKind::Instance;
+        LibraNodeIdBytes(containerId, scope.containerId);
+        scope.instanceId = static_cast<liberafx::GeneratorInstanceId>(instanceId);
+    }
     auto event = liberafx::CpuParticleEvent{};
-    hasEvent = NativeHost->popCpuParticleEvent(event);
+    hasEvent = NativeHost->popCpuParticleEvent(scope, event);
     if (hasEvent)
     {
         particleEvent.SystemId = LibraGuid(event.systemId);
@@ -749,6 +766,12 @@ ELibraRuntimeResult ULibraSpawnableComponent::PopCpuParticleEvent(
 auto ULibraSpawnableComponent::ReadCpuParticleCount(FGuid systemId, uint32& count) const
     -> ELibraRuntimeResult
 {
+    return ReadCpuParticleCount(FGuid{}, 0, systemId, count);
+}
+
+auto ULibraSpawnableComponent::ReadCpuParticleCount(FGuid containerId, int64 instanceId,
+    FGuid systemId, uint32& count) const -> ELibraRuntimeResult
+{
     check(IsInGameThread());
     count = 0;
     if (DebugJobPending())
@@ -759,14 +782,21 @@ auto ULibraSpawnableComponent::ReadCpuParticleCount(FGuid systemId, uint32& coun
     {
         return ELibraRuntimeResult::NotReady;
     }
-    if (!systemId.IsValid())
+    if (!systemId.IsValid() || instanceId < 0 || containerId.IsValid() != (instanceId > 0))
     {
         return ELibraRuntimeResult::InvalidArgument;
     }
     uint8 systemBytes[16]{};
     LibraNodeIdBytes(systemId, systemBytes);
+    auto scope = liberafx::SpawnableScope{};
+    if (containerId.IsValid())
+    {
+        scope.kind = liberafx::SpawnableScopeKind::Instance;
+        LibraNodeIdBytes(containerId, scope.containerId);
+        scope.instanceId = static_cast<liberafx::GeneratorInstanceId>(instanceId);
+    }
     auto nativeCount = std::size_t{};
-    auto result = NativeHost->cpuParticleCount(systemBytes, nativeCount);
+    auto result = NativeHost->cpuParticleCount(scope, systemBytes, nativeCount);
     if (result != liberafx::Result::Ok)
     {
         return ToLibraResult(result);
@@ -784,6 +814,16 @@ auto ULibraSpawnableComponent::ReadCpuParticleAt(FGuid systemId, SIZE_T index,
     double& colorR, double& colorG, double& colorB, double& colorA,
     double& sizeX, double& sizeY) const -> ELibraRuntimeResult
 {
+    return ReadCpuParticleAt(FGuid{}, 0, systemId, index, particleId,
+        positionX, positionY, positionZ, colorR, colorG, colorB, colorA, sizeX, sizeY);
+}
+
+auto ULibraSpawnableComponent::ReadCpuParticleAt(FGuid containerId, int64 instanceId,
+    FGuid systemId, SIZE_T index, uint64& particleId,
+    double& positionX, double& positionY, double& positionZ,
+    double& colorR, double& colorG, double& colorB, double& colorA,
+    double& sizeX, double& sizeY) const -> ELibraRuntimeResult
+{
     check(IsInGameThread());
     particleId = 0;
     if (DebugJobPending())
@@ -794,14 +834,21 @@ auto ULibraSpawnableComponent::ReadCpuParticleAt(FGuid systemId, SIZE_T index,
     {
         return ELibraRuntimeResult::NotReady;
     }
-    if (!systemId.IsValid())
+    if (!systemId.IsValid() || instanceId < 0 || containerId.IsValid() != (instanceId > 0))
     {
         return ELibraRuntimeResult::InvalidArgument;
     }
     uint8 systemBytes[16]{};
     LibraNodeIdBytes(systemId, systemBytes);
+    auto scope = liberafx::SpawnableScope{};
+    if (containerId.IsValid())
+    {
+        scope.kind = liberafx::SpawnableScopeKind::Instance;
+        LibraNodeIdBytes(containerId, scope.containerId);
+        scope.instanceId = static_cast<liberafx::GeneratorInstanceId>(instanceId);
+    }
     auto particle = liberafx::CpuParticleSnapshot{};
-    const auto result = NativeHost->cpuParticleAt(systemBytes, index, particle);
+    const auto result = NativeHost->cpuParticleAt(scope, systemBytes, index, particle);
     if (result != liberafx::Result::Ok)
     {
         return ToLibraResult(result);

@@ -509,7 +509,13 @@ auto SpawnableHost::forceTerminate(const SpawnableScope &scope) -> Result {
     return Result::Busy;
   }
   auto operation = OwnerOperation(host.operationActive);
-  return host.forceTerminate(scope);
+  try {
+    return host.forceTerminate(scope);
+  } catch (const std::bad_alloc &) {
+    return Result::InsufficientWork;
+  } catch (...) {
+    return Result::NotReady;
+  }
 }
 
 auto SpawnableHost::debugGeneration() const noexcept -> std::uint64_t {
@@ -588,11 +594,28 @@ auto SpawnableHost::childValue(const std::uint8_t containerId[16],
 auto SpawnableHost::popEvent(SpawnableHostEvent &out) noexcept -> bool {
   auto &host = *impl_;
   if (!host.eventCount) {
-    return false;
+    if (host.pendingForceEventHead >= host.pendingForceEvents.size()) {
+      return false;
+    }
+    out = host.pendingForceEvents[host.pendingForceEventHead++];
+    if (host.pendingForceEventHead == host.pendingForceEvents.size()) {
+      host.pendingForceEvents.clear();
+      host.pendingForceEventHead = 0;
+    }
+    return true;
   }
   out = host.events[host.eventHead];
   host.eventHead = (host.eventHead + 1) % host.events.size();
   --host.eventCount;
+  if (host.eventCount < host.events.size() &&
+      host.pendingForceEventHead < host.pendingForceEvents.size()) {
+    host.events[(host.eventHead + host.eventCount++) % host.events.size()] =
+        host.pendingForceEvents[host.pendingForceEventHead++];
+    if (host.pendingForceEventHead == host.pendingForceEvents.size()) {
+      host.pendingForceEvents.clear();
+      host.pendingForceEventHead = 0;
+    }
+  }
   return true;
 }
 
@@ -616,6 +639,21 @@ auto SpawnableHost::activeCount() const noexcept -> std::size_t {
 
 auto SpawnableHost::rootFinished() const noexcept -> bool {
   return impl_->rootFinished;
+}
+
+auto SpawnableHost::hasCpuParticleEvents() const noexcept -> bool {
+  if (impl_->cpuParticles && impl_->cpuParticles->pendingEventCount() != 0) {
+    return true;
+  }
+  for (const auto &state : impl_->templates) {
+    for (const auto &instance : state->instances) {
+      if (instance.cpuParticles &&
+          instance.cpuParticles->pendingEventCount() != 0) {
+        return true;
+      }
+    }
+  }
+  return !impl_->retiredCpuEvents.empty();
 }
 
 auto SpawnableHost::package() const noexcept -> const SpawnablePackage & {

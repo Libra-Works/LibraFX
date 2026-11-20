@@ -75,6 +75,23 @@ internal static class Program
             LiberaFx.Tests.CpuParticleCompilationTests.WriteNativeFixture(directory);
             return;
         }
+        if (args is ["--spawnable-hierarchy"])
+        {
+            InitializeIsolatedUi();
+            LiberaFx.Tests.SpawnableHierarchyTests.Run();
+            Console.WriteLine("Nested Spawnable and scoped CPU compilation checks passed.");
+            return;
+        }
+        if (args is ["--spawnable-hierarchy-fixtures", var spawnableFixtureDirectory])
+        {
+            LiberaFx.Tests.SpawnableHierarchyTests.WriteFixtures(spawnableFixtureDirectory);
+            return;
+        }
+        if (args is ["--spawnable-hierarchy-extra-fixtures", var extraFixtureDirectory])
+        {
+            LiberaFx.Tests.SpawnableHierarchyTests.WriteAdditionalFixtures(extraFixtureDirectory);
+            return;
+        }
         if (args is ["--flexible-plane"])
         {
             InitializeIsolatedUi();

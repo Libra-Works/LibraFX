@@ -46,10 +46,11 @@ auto SpawnableHost::Impl::nextChildDeferredTime(double &out) -> Result {
 
 auto SpawnableHost::Impl::nextScheduledTime(double &out) -> Result {
   out = std::numeric_limits<double>::infinity();
+  auto result = Result::Ok;
   if (started) {
     auto scheduled = ScheduledEvent{};
     auto hasScheduled = false;
-    auto result = lifecycle->nextScheduled(scheduled, hasScheduled);
+    result = lifecycle->nextScheduled(scheduled, hasScheduled);
     if (result != Result::Ok) {
       return result;
     }
@@ -58,7 +59,7 @@ auto SpawnableHost::Impl::nextScheduledTime(double &out) -> Result {
     }
   }
   auto due = double{};
-  auto result = nextDeferredTime(due);
+  result = nextDeferredTime(due);
   if (result != Result::Ok) {
     return result;
   }
@@ -136,6 +137,12 @@ auto SpawnableHost::Impl::dispatchScheduled(double at) -> Result {
             if (!pending || dueTime != at) {
               continue;
             }
+            auto instance = findInstance(state, id);
+            if (!instance) {
+              return Result::InvalidHandle;
+            }
+            auto ownerContext =
+                OwnerTagOperation(currentOwnerTag, instance->scopeTag);
             result = state.pool->dispatchDeferredSignal(
                 id, at, options.instructionBudget);
             if (result != Result::Ok) {
@@ -159,22 +166,48 @@ auto SpawnableHost::Impl::dispatchScheduled(double at) -> Result {
 }
 
 auto SpawnableHost::Impl::notifyOwnerDestroy(double at) -> Result {
-  if (!rootEnding || rootForced) {
+  if ((!rootEnding && std::none_of(
+                          templates.begin(), templates.end(),
+                          [](const auto &state) {
+                            return std::any_of(
+                                state->instances.begin(), state->instances.end(),
+                                [](const auto &instance) {
+                                  return instance.retiring;
+                                });
+                          })) ||
+      rootForced) {
     return Result::Ok;
   }
   for (auto round = 0u; round < 128; ++round) {
     auto pending = std::vector<OwnerNotice>{};
+    auto ownerTags = std::vector<std::uint64_t>{};
+    if (rootEnding) {
+      ownerTags.push_back(0);
+    }
     for (const auto &statePointer : templates) {
       const auto &state = *statePointer;
       for (const auto &instance : state.instances) {
-        const auto notified = std::any_of(
-            ownerNotices.begin(), ownerNotices.end(), [&](const auto &item) {
-              return item.instanceId == instance.id &&
-                     sameId(item.containerId.data(),
-                            state.data->containerId.data());
-            });
-        if (!notified) {
-          pending.push_back({state.data->containerId, instance.id});
+        if (instance.retiring) {
+          ownerTags.push_back(instance.scopeTag);
+        }
+      }
+    }
+    for (const auto ownerTag : ownerTags) {
+      for (const auto &statePointer : templates) {
+        const auto &state = *statePointer;
+        for (const auto &instance : state.instances) {
+          if (instance.ownerTag != ownerTag || instance.retiring) {
+            continue;
+          }
+          const auto notified = std::any_of(
+              ownerNotices.begin(), ownerNotices.end(), [&](const auto &item) {
+                return item.instanceId == instance.id &&
+                       sameId(item.containerId.data(),
+                              state.data->containerId.data());
+              });
+          if (!notified) {
+            pending.push_back({state.data->containerId, instance.id});
+          }
         }
       }
     }
@@ -192,6 +225,8 @@ auto SpawnableHost::Impl::notifyOwnerDestroy(double at) -> Result {
       }
       if (state->data->lifecycle &&
           state->data->lifecycle->ownerDestroyNodeId) {
+        auto ownerContext =
+            OwnerTagOperation(currentOwnerTag, instance->scopeTag);
         auto result = state->pool->ownerDestroy(
             item.instanceId, state->data->lifecycle->ownerDestroyNodeId->data(),
             at, options.instructionBudget);
@@ -248,12 +283,22 @@ auto SpawnableHost::Impl::beginAutoEnd(double at) -> Result {
 }
 
 auto SpawnableHost::Impl::finishIfQuiescent() -> Result {
+  auto result = finishRetiredInstances();
+  if (result != Result::Ok) {
+    return result;
+  }
+  if (!rootEnding) {
+    result = beginAutoEnd(rootAge);
+    if (result != Result::Ok) {
+      return result;
+    }
+  }
   if (!rootEnding || rootFinished || activeCount() != 0 ||
       !scheduledRoutes.empty() || (cpuParticles && cpuParticles->hasPendingRoutes())) {
     return Result::Ok;
   }
   auto due = double{};
-  auto result = nextDeferredTime(due);
+  result = nextDeferredTime(due);
   if (result != Result::Ok) {
     return result;
   }
@@ -290,6 +335,99 @@ auto SpawnableHost::Impl::finishIfQuiescent() -> Result {
     rootFinished = true;
   }
   return result;
+}
+
+auto SpawnableHost::Impl::finishRetiredInstances() -> Result {
+  for (auto round = 0u; round < 128; ++round) {
+    auto finalized = false;
+    for (auto &statePointer : templates) {
+      auto &state = *statePointer;
+      for (const auto &instance : state.instances) {
+        if (!instance.retiring) {
+          continue;
+        }
+        auto hasDescendants = false;
+        for (const auto &candidate : templates) {
+          hasDescendants = hasDescendants ||
+              std::any_of(candidate->instances.begin(), candidate->instances.end(),
+                          [&](const auto &child) {
+                            return child.ownerTag == instance.scopeTag;
+                          });
+        }
+        const auto hasContinuations = std::any_of(
+            scheduledRoutes.begin(), scheduledRoutes.end(),
+            [&](const auto &route) { return route.ownerTag == instance.scopeTag; });
+        if (hasDescendants || hasContinuations ||
+            (instance.cpuParticles &&
+             (instance.cpuParticles->activeCount() != 0 ||
+              instance.cpuParticles->hasPendingRoutes()))) {
+          continue;
+        }
+        auto mutableInstance = findInstance(state, instance.id);
+        if (!mutableInstance) {
+          return Result::InvalidHandle;
+        }
+        auto result = preserveCpuEvents(state, *mutableInstance);
+        if (result != Result::Ok) {
+          return result;
+        }
+        if (!mutableInstance->destroyPublished) {
+          result = publishNaturalDestroy(state, *mutableInstance, rootAge,
+                                         mutableInstance->retirementSeed);
+          if (result != Result::Ok) {
+            return result;
+          }
+          mutableInstance->destroyPublished = true;
+        }
+        result = state.pool->finalize(instance.id);
+        if (result == Result::QueueRejected) {
+          continue;
+        }
+        if (result != Result::Ok) {
+          return result;
+        }
+        finalized = true;
+      }
+    }
+    if (!finalized) {
+      return Result::Ok;
+    }
+    auto result = pump(rootAge);
+    if (result != Result::Ok) {
+      return result;
+    }
+    auto due = double{};
+    result = nextScheduledTime(due);
+    if (result == Result::Ok && due == rootAge) {
+      result = dispatchScheduled(rootAge);
+    }
+    if (result != Result::Ok) {
+      return result;
+    }
+  }
+  return Result::InstructionBudgetExceeded;
+}
+
+auto SpawnableHost::Impl::preserveCpuEvents(TemplateState &state,
+                                            InstanceInfo &instance) -> Result {
+  if (!instance.cpuParticles) {
+    return Result::Ok;
+  }
+  const auto pending = instance.cpuParticles->pendingEventCount();
+  if (pending > retiredCpuEvents.max_size() - retiredCpuEvents.size()) {
+    return Result::InsufficientWork;
+  }
+  try {
+    retiredCpuEvents.reserve(retiredCpuEvents.size() + pending);
+    auto event = CpuParticleEvent{};
+    while (instance.cpuParticles->popEvent(event)) {
+      retiredCpuEvents.push_back(
+          {state.data->containerId, instance.id, event});
+    }
+    return Result::Ok;
+  } catch (const std::bad_alloc &) {
+    return Result::InsufficientWork;
+  }
 }
 
 auto SpawnableHost::Impl::applyAuthoredForce() -> Result {
@@ -362,6 +500,7 @@ auto SpawnableHost::Impl::forceTerminate(const SpawnableScope &scope)
     }
     host.scheduledRoutes.clear();
     host.ownerNotices.clear();
+    host.retiredCpuEvents.clear();
     if (host.gameIo) {
       auto ignored = NamedIoEvent{};
       while (host.gameIo->popEvent(ignored)) {
@@ -375,6 +514,8 @@ auto SpawnableHost::Impl::forceTerminate(const SpawnableScope &scope)
     host.rootDefaults.release();
     host.rootWork.release();
     host.eventHead = host.eventCount = 0;
+    host.pendingForceEvents.clear();
+    host.pendingForceEventHead = 0;
     host.discardChildGameEvents(scope);
     host.pendingPump = false;
     if (host.cpuParticles)
@@ -390,19 +531,56 @@ auto SpawnableHost::Impl::forceTerminate(const SpawnableScope &scope)
   if (!state) {
     return Result::InvalidHandle;
   }
-  auto active = host.findInstance(*state, scope.instanceId) != nullptr;
-  auto ownsPending = [&](const Impl::ScheduledRoute &item) {
-    return item.sourceInstanceId == scope.instanceId &&
-           item.continuation.route &&
-           sameId(item.continuation.route->sourceContainerId.data(),
-                  scope.containerId);
+  struct SubtreeItem final {
+    TemplateState *state = nullptr;
+    GeneratorInstanceId id = 0;
+    std::uint64_t scopeTag = 0;
   };
-  auto hasPending = std::any_of(host.scheduledRoutes.begin(),
-                                host.scheduledRoutes.end(), ownsPending);
+  auto subtree = std::vector<SubtreeItem>{{state, scope.instanceId, 0}};
+  if (auto instance = host.findInstance(*state, scope.instanceId)) {
+    subtree[0].scopeTag = instance->scopeTag;
+    for (auto cursor = std::size_t{}; cursor < subtree.size(); ++cursor) {
+      const auto ownerTag = subtree[cursor].scopeTag;
+      for (auto &candidate : host.templates) {
+        for (const auto &child : candidate->instances) {
+          if (child.ownerTag == ownerTag) {
+            subtree.push_back({candidate.get(), child.id, child.scopeTag});
+          }
+        }
+      }
+      if (subtree.size() >
+          host.pendingForceEvents.max_size() - host.pendingForceEvents.size()) {
+        return Result::InsufficientWork;
+      }
+      host.pendingForceEvents.reserve(host.pendingForceEvents.size() + subtree.size());
+    }
+  }
+  auto hasPending = false;
+  auto sourceInSubtree = [&](const Impl::ScheduledRoute &item) {
+    return std::any_of(subtree.begin(), subtree.end(), [&](const auto &owned) {
+      return item.sourceInstanceId == owned.id &&
+             item.continuation.route &&
+             sameId(item.continuation.route->sourceContainerId.data(),
+                    owned.state->data->containerId.data());
+    });
+  };
+  auto ownerInSubtree = [&](std::uint64_t ownerTag) {
+    return std::any_of(subtree.begin(), subtree.end(), [&](const auto &owned) {
+      return ownerTag == owned.scopeTag && owned.scopeTag != 0;
+    });
+  };
+  auto routeAffected = [&](const Impl::ScheduledRoute &item) {
+    return sourceInSubtree(item) || ownerInSubtree(item.ownerTag);
+  };
+  hasPending = std::any_of(host.scheduledRoutes.begin(),
+                           host.scheduledRoutes.end(), routeAffected);
   auto matches = [&](const SpawnableHostEvent &event) {
-    return event.instanceId == scope.instanceId &&
-           sameId(event.containerId, scope.containerId) &&
-           event.kind != SpawnableHostEventKind::ForceTerminated;
+    return event.kind != SpawnableHostEventKind::ForceTerminated &&
+           std::any_of(subtree.begin(), subtree.end(), [&](const auto &owned) {
+             return event.instanceId == owned.id &&
+                    sameId(event.containerId,
+                           owned.state->data->containerId.data());
+           });
   };
   auto removed = std::size_t{};
   for (auto index = std::size_t{}; index < host.eventCount; ++index) {
@@ -410,29 +588,77 @@ auto SpawnableHost::Impl::forceTerminate(const SpawnableScope &scope)
       ++removed;
     }
   }
-  if ((active || removed || hasPending) &&
-      host.eventCount - removed == host.events.size()) {
-    return Result::QueueRejected;
+  const auto wasActive = std::any_of(
+      subtree.begin(), subtree.end(), [&](const auto &owned) {
+        return host.findInstance(*owned.state, owned.id) != nullptr;
+      });
+
+  for (auto &candidate : host.templates) {
+    for (const auto &owned : subtree) {
+      if (!owned.scopeTag) {
+        continue;
+      }
+      auto result = candidate->pool->cancelSpawnsOwned(owned.scopeTag);
+      if (result != Result::Ok) {
+        return result;
+      }
+    }
   }
-  auto result = state->pool->forceTerminate(scope.instanceId);
-  if (result != Result::Ok) {
-    return result;
-  }
-  host.discardChildGameEvents(scope);
   for (const auto &item : host.scheduledRoutes) {
-    if (!ownsPending(item)) {
+    if (!routeAffected(item)) {
       continue;
     }
-    // Host's guard establishes the lifecycle job boundary before any purge.
-    result = host.lifecycle->cancelScheduled(item.token);
+    if (host.lifecycle) {
+      const auto result = host.lifecycle->cancelScheduled(item.token);
+      if (result != Result::Ok) {
+        return result;
+      }
+    }
+  }
+  host.scheduledRoutes.erase(
+      std::remove_if(host.scheduledRoutes.begin(), host.scheduledRoutes.end(),
+                     routeAffected),
+      host.scheduledRoutes.end());
+
+  for (auto index = subtree.size(); index > 0; --index) {
+    const auto &owned = subtree[index - 1];
+    const auto result = owned.state->pool->forceTerminate(owned.id);
     if (result != Result::Ok) {
       return result;
     }
   }
-  host.scheduledRoutes.erase(std::remove_if(host.scheduledRoutes.begin(),
-                                            host.scheduledRoutes.end(),
-                                            ownsPending),
-                             host.scheduledRoutes.end());
+  for (const auto &owned : subtree) {
+    auto childScope = SpawnableScope{};
+    childScope.kind = SpawnableScopeKind::Instance;
+    std::memcpy(childScope.containerId, owned.state->data->containerId.data(), 16);
+    childScope.instanceId = owned.id;
+    host.discardChildGameEvents(childScope);
+    owned.state->instances.erase(
+        std::remove_if(owned.state->instances.begin(),
+                       owned.state->instances.end(), [&](const auto &item) {
+                         return item.id == owned.id;
+                       }),
+        owned.state->instances.end());
+    host.ownerNotices.erase(
+        std::remove_if(host.ownerNotices.begin(), host.ownerNotices.end(),
+                       [&](const auto &item) {
+                         return item.instanceId == owned.id &&
+                                sameId(item.containerId.data(),
+                                       owned.state->data->containerId.data());
+                       }),
+        host.ownerNotices.end());
+  }
+  host.retiredCpuEvents.erase(
+      std::remove_if(host.retiredCpuEvents.begin(), host.retiredCpuEvents.end(),
+                     [&](const auto &item) {
+                       return std::any_of(
+                           subtree.begin(), subtree.end(), [&](const auto &owned) {
+                             return item.instanceId == owned.id &&
+                                    sameId(item.containerId.data(),
+                                           owned.state->data->containerId.data());
+                           });
+                     }),
+      host.retiredCpuEvents.end());
   auto kept = std::size_t{};
   for (auto index = std::size_t{}; index < host.eventCount; ++index) {
     const auto &event =
@@ -446,25 +672,19 @@ auto SpawnableHost::Impl::forceTerminate(const SpawnableScope &scope)
     ++kept;
   }
   host.eventCount = kept;
-  state->instances.erase(std::remove_if(state->instances.begin(),
-                                        state->instances.end(),
-                                        [&](const auto &item) {
-                                          return item.id == scope.instanceId;
-                                        }),
-                         state->instances.end());
-  host.ownerNotices.erase(
-      std::remove_if(host.ownerNotices.begin(), host.ownerNotices.end(),
-                     [&](const auto &item) {
-                       return item.instanceId == scope.instanceId &&
-                              sameId(item.containerId.data(),
-                                     scope.containerId);
-                     }),
-      host.ownerNotices.end());
   // Do not pump: that could execute unrelated natural routes while cancelling.
-  // Root auto-end is deliberately left to a subsequent normal advance.
-  return active || removed || hasPending
-             ? host.appendEvent(SpawnableHostEventKind::ForceTerminated,
-                                scope.containerId, scope.instanceId, at, 0)
-             : Result::Ok;
+  // Cleanup notices are retained independently of the bounded lifecycle ring.
+  if (!wasActive && !removed && !hasPending) {
+    return Result::Ok;
+  }
+  for (auto index = subtree.size(); index > 0; --index) {
+    const auto &owned = subtree[index - 1];
+    const auto result = host.appendForceEvent(
+        owned.state->data->containerId.data(), owned.id, at);
+    if (result != Result::Ok) {
+      return result;
+    }
+  }
+  return Result::Ok;
 }
 } // namespace liberafx

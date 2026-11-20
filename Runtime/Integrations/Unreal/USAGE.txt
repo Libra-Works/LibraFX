@@ -549,8 +549,10 @@ Validation sources
 
 CPU particle Sprite billboards
   CPU packages use LFXP format 4/package 12 with `cpuParticleVersion: 1`.
-  Play through Libra Effect; it owns one instanced static mesh component per
-  emitter. Do not add a Spawnable component. Resolve each texture through
+  Template CPU systems or nested Spawnables use format 5/package 13.
+  Play through Libra Effect; it owns one instanced native primitive per
+  emitter and dynamic scope, not an instanced mesh component. Do not add a
+  Spawnable component. Resolve each texture through
   AssetBindings or package resource overrides, or use `builtin:white`.
 
   Bind a Translucent material as `builtin:cpu-particle-alpha`, or an Additive
@@ -572,5 +574,13 @@ CPU particle Sprite billboards
   Width gives the meaningful lanes of Values. ParticleId is an unsigned
   decimal string so Blueprint retains all 64 bits. Rendering does not consume
   events. Drain each frame and before Stop/restart; size the queue for one
-  simulation advance. CPU Sprite rendering is supported only at package root.
-  This path was not built or pixel-verified for this change.
+  simulation advance. PopScopedCpuParticleEvent(containerId, instanceId, ...)
+  reads a child queue; the original call remains root-only.
+  CPU Sprite rendering supports nested Spawnables. Life Time stops emission,
+  but particles and descendants retain their scope and renderer until done.
+  Rebuild the complete plugin for format 5. To exercise the compiler-produced
+  nested-cpu-only-retention fixture with real D3D11 pixels, run
+  Libra.Runtime.Rendering.RealRhiAcceptance with -LibraRhiCpuSpriteOnly
+  -LibraRhiNestedCpuSprite -LibraCpuParticleFixture=<absolute fixture path>.
+  This checks rendering after both parent/child deadlines, natural retirement,
+  resource cleanup and restart through the public Libra Effect component.

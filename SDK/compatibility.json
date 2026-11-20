@@ -3,7 +3,7 @@
   "sdkVersion": "0.1.0",
   "nativeAbi": 1,
   "maximumBytecodeVersion": 11,
-  "spawnablePackageVersion": 12,
+  "spawnablePackageVersion": 13,
   "maximumGpuExecutablePayloadVersion": 2,
   "unity": {
     "package": "works.libra.liberafx",

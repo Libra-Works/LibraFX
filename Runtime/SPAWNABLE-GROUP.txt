@@ -142,7 +142,7 @@ source mappings in the package for larger templates, up to 256 total scalar
 lanes. The host reads parent values at the spawn timestamp and applies
 CaptureAtSpawn values before OnStart; Live values are updated before start and
 each child evaluation. A signal enqueues one runtime instance, never another
-graph node. Nested Spawnable Groups are rejected.
+graph node. Nested Spawnable Groups retain that immediate parent instance.
 The editor distinguishes expandable lifecycle owners, Life Time and
 non-container Delay nodes with role labels and theme-colored badges. Visible
 summaries show configured seconds, including published instance overrides;
@@ -156,7 +156,8 @@ defaults; it does not navigate away or select an out-of-scope node.
 capture maps, per-template render configuration, GPU container snapshots and
 executable GPU programs.
 MCP `libera_graph_compile_spawnable` exposes JSON package version 11 without
-CPU particles, or version 12 with the numeric CPU-program payload.
+CPU particles, version 12 with root CPU programs, or version 13 with nested
+Spawnable ownership or per-template CPU programs.
 Versions 2 through 8 introduced lifecycle routing, root and Spawnable Delay,
 per-pin CaptureAtSpawn/Live bindings, extended inputs, and local Signal I/O.
 Version 9 adds the root `AutoDestroyWhenIdle` policy. Older hosts must reject
@@ -167,7 +168,17 @@ explicit Destroy routes.
 The effect root has no Life Time; a root Life Time is an authoring diagnostic
 and compilation error. Exactly one direct Life Time per template is supported;
 none means infinity.
-Multiple Life Times and nested Spawnables are rejected. Busy/FCurve are never
+Multiple Life Times are rejected. Nested Spawnables are supported, including
+through ordinary Graph Groups, up to the graph nesting limit of 12.
+Each instance belongs to a particular immediate parent instance, not merely
+its parent's template. Capture/Live bindings and local signals resolve within
+that dynamic parent scope; independently spawned parents never share children.
+CPU Particle systems may belong to any Spawnable scope. Life Time stops that
+scope's emission, but retirement and natural Destroy routes wait for its live
+particles, descendants and scheduled continuations. Forcing a scope clears
+only its subtree without firing natural Destroy routes; unrelated siblings
+continue. Retirement notices identify every removed descendant individually.
+Busy/FCurve are never
 implicit lifetime participants. The existing `then` pin remains immediate for
 old projects; `destroy` is a separate natural-expiry-only local event pin.
 Float, Vector2, Vector3, Vector4 and Color Group Outputs can route only from the
@@ -207,7 +218,7 @@ after the last continuation finishes, using that actual completion time and
 its final evaluated values. The root waits for the child and subsequent
 Destroy-routed sibling work. Ordinary Graph Groups inherit their enclosing
 effect/Spawnable clock, including Delay routed through group signal boundaries.
-Nested Spawnable ownership and lifecycle routing remain unsupported.
+Nested Spawnables keep the same rules within each immediate dynamic parent.
 One delayed Destroy can fan out to multiple sibling Spawn targets; each branch
 retains the parent until its scheduled spawn and resulting child finish.
 The root's natural end begins after startup/queued work drains when
@@ -331,7 +342,7 @@ Life Time and a dispatched Delay capture their duration once, even when driven
 by a Live pin. Live never keeps extending an existing lifetime or timer.
 Live cannot read a naturally completed sibling's final output: choose
 CaptureAtSpawn for that Destroy-routed input. The existing four-numeric-pin
-bytecode limit remains; arbitrary Signal/Matrix pins and nested ownership
+bytecode limit remains; arbitrary Signal/Matrix pins
 are separate unfinished authoring/compiler/runtime work.
 The opt-in libra_effect_start/advance/stop C ABI exposes this primitive for a
 fresh instance, optionally with game IO configured before start. Managed game
@@ -340,23 +351,23 @@ start/update are disabled. Failed evaluation, publication or OnStart is
 terminal rather than replaying partially executed nodes. The editor-native
 host uses an infinite root and requests natural end according to
 `AutoDestroyWhenIdle` or an explicit host `End` call. Unity exposes low-level
-lifetime calls but does not yet host package lifecycle; Unreal does not yet use
-this lifecycle API.
+lifetime calls. Engine package adapters use SpawnableHost rather than this
+standalone effect primitive.
 libra_effect_start_captured obtains a finite scalar duration from the initial
 evaluation, before publishing game properties or invoking OnStart. Later input
 changes do not change the captured duration; invalid values fail before OnStart.
 
-Portable engine asset container (LFXP v3/v4)
------------------------------------------
-JSON package v11/v12 is the compiler/editor interchange format. Engine assets
+Portable engine asset container (LFXP v3/v4/v5)
+--------------------------------------------
+JSON package v11/v12/v13 is the compiler/editor interchange format. Engine assets
 use a separate LFXP container so LFXB programs and render configurations are
 stored as raw bytes instead of base64. The fixed 24-byte header is:
 
 - bytes 0..3: ASCII `LFXP`
-- bytes 4..5: container version (little-endian u16, 3 without CPU particles, 4 with)
+- bytes 4..5: container version (little-endian u16, 3, 4 or 5; see below)
 - bytes 6..7: header size (little-endian u16, 24)
 - bytes 8..15: total container length (little-endian u64)
-- bytes 16..19: Spawnable package version (little-endian u32, 11 or 12 respectively)
+- bytes 16..19: Spawnable package version (little-endian u32, 11, 12 or 13 respectively)
 - bytes 20..23: reserved, zero
 
 The payload is sequential and little-endian. It contains root policy flags,
@@ -405,8 +416,17 @@ events (88 bytes) are host ABI structures, not structs to cast over wire bytes.
 See docs/site/cpu-particles.md and its Japanese counterpart for authoring,
 queued Property/Signal delivery, ownership, batching and current restrictions.
 
+LFXP v5/package 13 preserves the complete v4 layout, including its root CPU
+blob even when empty. After that blob, each template in existing list order
+adds an optional parent-container GUID followed by a length-prefixed CPU blob.
+A missing parent means the template belongs directly to the effect root.
+Static template IDs must be unique; parents must exist, cannot refer to
+themselves, and must form an acyclic hierarchy no deeper than 12.
+Dynamic parent instance IDs are runtime state, never serialized into templates.
+This format is emitted only when a template has a parent or a CPU program.
+
 Readers accept exactly (container 1, package 9), (container 2, package 10),
-(container 3, package 11), and (container 4, package 12).
+(container 3, package 11), (container 4, package 12), and (container 5, package 13).
 Legacy v1 packages have no root render/GPU payloads;
 v2 packages preserve their root render configuration and GPU snapshots but have
 no executable GPU payloads. Missing executable payloads do not affect raw
@@ -414,7 +434,8 @@ CPU-only legacy packages; adapters must reject legacy authored GPU snapshots
 when their matching executable payload is absent. Decoded .NET objects
 normalize to the current in-memory version; serializing non-CPU packages emits v3 and
 versioned empty executable payloads for scopes absent from older files, without
-inventing compiled GPU programs. CPU packages emit v4. Older readers reject
+inventing compiled GPU programs. Root-only CPU packages emit v4; nested ownership
+or template CPU programs emit v5. Older readers reject
 unknown versions rather than
 silently discarding root metadata. Rebuild engine modules against matching
 runtime headers: the C++ package layout has changed.

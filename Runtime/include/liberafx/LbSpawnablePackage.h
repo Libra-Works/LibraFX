@@ -48,10 +48,12 @@ struct SpawnablePackageLifecycle final {
 struct SpawnablePackageTemplate final {
     std::array<std::uint8_t, 16> containerId{};
     std::array<std::uint8_t, 16> signalTypeId{};
+    std::optional<std::array<std::uint8_t, 16>> parentContainerId;
     std::vector<std::uint8_t> bytecode;
     std::vector<std::uint8_t> renderConfiguration;
     std::vector<std::uint8_t> gpuContainersJson;
     std::vector<std::uint8_t> gpuProgramsJson;
+    std::vector<std::uint8_t> cpuPrograms;
     std::vector<SpawnablePackageInput> inputs;
     std::optional<std::vector<SpawnablePackageOutput>> outputs;
     std::optional<std::vector<SpawnablePackageCapture>> liveInputs;

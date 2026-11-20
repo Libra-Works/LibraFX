@@ -50,10 +50,11 @@ internal static class SpawnablePackageBinaryTests
     public static byte[] Verify(SpawnableGroupPackage package)
     {
         var binary = SpawnableGroupPackageBinary.Serialize(package);
+        var expectedContainerVersion = package.Version switch { 11 => 3, 12 => 4, 13 => 5, _ => 0 };
         Require(binary.AsSpan(0, 4).SequenceEqual("LFXP"u8) &&
-            BinaryPrimitives.ReadUInt16LittleEndian(binary.AsSpan(4)) == 3 &&
-            BinaryPrimitives.ReadUInt32LittleEndian(binary.AsSpan(16)) == 11,
-            "Current writer must emit LFXP container/package version 3/11.");
+            BinaryPrimitives.ReadUInt16LittleEndian(binary.AsSpan(4)) == expectedContainerVersion &&
+            BinaryPrimitives.ReadUInt32LittleEndian(binary.AsSpan(16)) == package.Version,
+            "Current writer must emit the package's matching LFXP container/package version.");
         using (var emptyRootPrograms = JsonDocument.Parse(package.RootGpuPrograms.Length == 0
                    ? EmptyGpuPrograms : package.RootGpuPrograms))
             Require(emptyRootPrograms.RootElement.GetProperty("version").GetInt32() == 1 &&
@@ -77,6 +78,8 @@ internal static class SpawnablePackageBinaryTests
                 pair.First.Bytecode.SequenceEqual(pair.Second.Bytecode) &&
                 pair.First.RenderConfiguration.SequenceEqual(pair.Second.RenderConfiguration) &&
                 pair.First.GpuPrograms.SequenceEqual(EffectiveGpuPrograms(pair.Second.GpuPrograms)) &&
+                pair.First.ParentContainerId == pair.Second.ParentContainerId &&
+                pair.First.CpuPrograms.SequenceEqual(pair.Second.CpuPrograms) &&
                 pair.First.Inputs.SequenceEqual(pair.Second.Inputs) &&
                 SameOptional(pair.First.Outputs, pair.Second.Outputs) &&
                 SameOptional(pair.First.LiveInputs, pair.Second.LiveInputs) &&

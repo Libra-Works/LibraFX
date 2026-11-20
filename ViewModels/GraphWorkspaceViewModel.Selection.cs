@@ -69,10 +69,6 @@ public sealed partial class GraphWorkspaceViewModel
     {
         ValidateSnapshot(snapshot, new HashSet<Guid>(), _graphPath.Count);
         ValidateSpawnPlacement(snapshot.Nodes.Select(node => node.Kind));
-        if (InsideSpawnable() && ContainsSpawnable(snapshot))
-        {
-            throw new InvalidOperationException("Nested Spawnable Groups are not supported.");
-        }
 
         if (snapshot.Nodes.Count == 0 || !double.IsFinite(x) || !double.IsFinite(y))
         {

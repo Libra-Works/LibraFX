@@ -118,13 +118,28 @@ auto enqueueSpawn(CustomNodeInvocation &call) noexcept -> Result {
     }
   }
   call.selectedBranch = 0;
-  return context.pool->enqueueSpawn(call.time, captures.data(), count);
+  const auto effectTime = call.hasTimeContext ? call.effectTime : call.time;
+  const auto ownerTag = context.ownerTag ? *context.ownerTag : 0;
+  return context.pool->enqueueSpawnTagged(effectTime, captures.data(), count,
+                                          ownerTag);
 }
 
 auto dispatchTemplateSignal(CustomNodeInvocation &call) noexcept -> Result {
   auto &context = *static_cast<SignalInputCallbackContext *>(call.context);
   call.selectedBranch = 0;
-  return context.pool->dispatchSignal(context.nodeId.data(), call.time, 10000);
+  const auto effectTime = call.hasTimeContext ? call.effectTime : call.time;
+  const auto ownerTag = context.ownerTag ? *context.ownerTag : 0;
+  return context.pool->dispatchSignalOwned(context.nodeId.data(), effectTime,
+                                            10000, ownerTag);
+}
+
+auto dispatchCpuParticleSignal(CustomNodeInvocation &call) noexcept -> Result {
+  auto &context = *static_cast<CpuSignalCallbackContext *>(call.context);
+  if (!context.activeWorld || !*context.activeWorld) {
+    return Result::NotReady;
+  }
+  call.selectedBranch = 0;
+  return (*context.activeWorld)->queueSignal(context.nodeId.data());
 }
 
 auto passthroughDescriptor(CustomNodeDescriptor &out) noexcept -> void {

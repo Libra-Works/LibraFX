@@ -1,5 +1,7 @@
 #include "liberafx/LbInterop.h"
+#include "liberafx/LbExecutionDebugInterop.h"
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -25,13 +27,19 @@ void check(LibraResult result)
 auto read(const std::filesystem::path& path) -> std::vector<std::uint8_t>
 {
     auto file = std::ifstream(path, std::ios::binary);
-    require(file.good(), "Missing compiler-produced Fireworks fixture.");
+    require(file.good(), "Missing compiler-produced interop fixture.");
     return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 struct Host final {
     LibraSpawnableHostHandle value = 0;
     ~Host() { if (value) (void)libra_spawnable_host_release(value); }
 };
+void create(Host& host, const std::vector<std::uint8_t>& bytes)
+{
+    check(libra_spawnable_host_create(bytes.data(), bytes.size(), 32, 4 * 1024 * 1024,
+        128, 10000, &host.value));
+    check(libra_spawnable_host_advance(host.value, 0, 0));
+}
 auto next(Host& host, std::uint32_t kind) -> LibraSpawnableHostEvent
 {
     auto event = LibraSpawnableHostEvent{};
@@ -50,9 +58,7 @@ void empty(Host& host)
 void run(const std::vector<std::uint8_t>& bytes, const Id& start, const Id& position)
 {
     auto host = Host{};
-    check(libra_spawnable_host_create(bytes.data(), bytes.size(), 32, 4 * 1024 * 1024,
-        128, 10000, &host.value));
-    check(libra_spawnable_host_advance(host.value, 0, 0));
+    create(host, bytes);
     auto first = next(host, LIBRA_SPAWNABLE_EVENT_SPAWN);
     require(first.instanceId != 0, "Spawn did not preserve the full instance identity.");
     empty(host);
@@ -136,18 +142,208 @@ void run(const std::vector<std::uint8_t>& bytes, const Id& start, const Id& posi
     require(libra_spawnable_host_force_terminate(stale, LIBRA_SPAWNABLE_SCOPE_EFFECT, nullptr, 0) ==
         LIBRA_INVALID_HANDLE, "Released handle remained valid.");
 }
+
+void verifyRootCpuAbi(const std::vector<std::uint8_t>& bytes)
+{
+    auto host = Host{};
+    create(host, bytes);
+    auto event = LibraCpuParticleEvent{};
+    auto has = std::uint32_t{};
+    check(libra_spawnable_host_cpu_particle_pop_event(host.value, &event, &has));
+    require(has == 1 && event.kind == 1 && event.width == 1 &&
+        event.particleId == 1 && event.values[0] == 1, "Legacy root event payload changed.");
+    auto system = Id{};
+    std::memcpy(system.data(), event.systemId, system.size());
+    const auto root = Id{};
+    auto count = std::uint32_t{};
+    check(libra_spawnable_host_cpu_particle_count(host.value, system.data(), &count));
+    require(count == 3, "Legacy root count changed.");
+    check(libra_spawnable_host_scoped_cpu_particle_count(host.value, root.data(), 0, system.data(), &count));
+    require(count == 3, "Explicit root scope did not resolve the legacy root world.");
+    auto snapshot = LibraCpuParticleSnapshot{};
+    check(libra_spawnable_host_cpu_particle_at(host.value, system.data(), 0, &snapshot));
+    require(snapshot.id == 1, "Legacy root snapshot changed.");
+    const auto oldSnapshot = snapshot;
+    check(libra_spawnable_host_scoped_cpu_particle_at(host.value, root.data(), 0, system.data(), 0, &snapshot));
+    require(std::memcmp(&oldSnapshot, &snapshot, sizeof(snapshot)) == 0,
+        "Explicit root scope returned a different snapshot.");
+    check(libra_spawnable_host_scoped_cpu_particle_pop_event(host.value, root.data(), 0, &event, &has));
+    require(has == 1 && event.particleId == 2, "Root APIs did not share the same event queue.");
+    check(libra_spawnable_host_cpu_particle_pop_event(host.value, &event, &has));
+    require(has == 1 && event.particleId == 3, "Legacy root queue order changed.");
+    check(libra_spawnable_host_cpu_particle_pop_event(host.value, &event, &has));
+    require(has == 0, "Legacy root queue did not drain.");
+}
+
+void verifyScopedCpuGuards(Host& host, const LibraSpawnableHostEvent& scope, const Id& system)
+{
+    const auto expectBusy = [&] {
+        auto count = std::uint32_t{99};
+        auto snapshot = LibraCpuParticleSnapshot{};
+        snapshot.id = 99;
+        auto event = LibraCpuParticleEvent{};
+        event.particleId = 99;
+        auto has = std::uint32_t{99};
+        return libra_spawnable_host_scoped_cpu_particle_count(host.value, scope.containerId,
+                   scope.instanceId, system.data(), &count) == LIBRA_BUSY && count == 0 &&
+               libra_spawnable_host_scoped_cpu_particle_at(host.value, scope.containerId,
+                   scope.instanceId, system.data(), 0, &snapshot) == LIBRA_BUSY && snapshot.id == 0 &&
+               libra_spawnable_host_scoped_cpu_particle_pop_event(host.value, scope.containerId,
+                   scope.instanceId, &event, &has) == LIBRA_BUSY && has == 0 && event.particleId == 0;
+    };
+    auto rejected = false;
+    auto other = std::thread([&] { rejected = expectBusy(); });
+    other.join();
+    require(rejected, "Scoped CPU calls did not reject a foreign owner thread.");
+#if defined(_WIN32)
+    auto generation = std::uint64_t{};
+    check(libra_spawnable_debug_generation(host.value, &generation));
+    // A real debug job remains pending until polled, even if its worker has
+    // already completed. No debugger server or paused worker is required.
+    check(libra_spawnable_debug_attach(host.value, generation, nullptr, 0,
+        "f93a36aa89c24cfab43ade125cbfd2e7"));
+    check(libra_spawnable_debug_submit(host.value, 0, 0, 0, nullptr, 0, nullptr, nullptr));
+    require(expectBusy(), "Scoped CPU calls did not reject a pending debug job.");
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(4);
+    for (;;)
+    {
+        auto work = LibraResult{LIBRA_NOT_READY};
+        const auto status = libra_spawnable_debug_poll(host.value, &work);
+        if (status == LIBRA_OK)
+        {
+            check(work);
+            break;
+        }
+        require(status == LIBRA_BUSY && std::chrono::steady_clock::now() < deadline,
+            "Debug job did not complete before timeout.");
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    check(libra_spawnable_debug_detach(host.value));
+#endif
+}
+
+void verifyScopedCpuAbi(const std::vector<std::uint8_t>& bytes)
+{
+    const auto child = Id{0x40, 0, 0, 0, 0, 0, 0x40, 0, 0x80, 0, 0, 0, 0, 0, 0, 0x05};
+    const auto system = Id{0x40, 0, 0, 0, 0, 0, 0x40, 0, 0x80, 0, 0, 0, 0, 0, 0, 0x08};
+    const auto source = Id{0x40, 0, 0, 0, 0, 0, 0x40, 0, 0x80, 0, 0, 0, 0, 0, 0, 0x10};
+    auto host = Host{};
+    create(host, bytes);
+    auto scope = LibraSpawnableHostEvent{};
+    auto scopeCount = 0u;
+    for (;;)
+    {
+        auto item = LibraSpawnableHostEvent{};
+        auto has = std::uint32_t{};
+        check(libra_spawnable_host_next_event(host.value, &item, &has));
+        if (!has)
+        {
+            break;
+        }
+        if (item.kind == LIBRA_SPAWNABLE_EVENT_SPAWN)
+        {
+            ++scopeCount;
+            if (std::memcmp(item.containerId, child.data(), child.size()) == 0)
+            {
+                scope = item;
+            }
+        }
+    }
+    require(scopeCount == 2 && scope.instanceId != 0, "Missing nested CPU instance.");
+    auto event = LibraCpuParticleEvent{};
+    auto has = std::uint32_t{};
+    check(libra_spawnable_host_cpu_particle_pop_event(host.value, &event, &has));
+    require(has == 0, "Legacy root pop consumed a child CPU event.");
+    const auto root = Id{};
+    auto count = std::uint32_t{};
+    check(libra_spawnable_host_scoped_cpu_particle_count(host.value, scope.containerId,
+        scope.instanceId, system.data(), &count));
+    require(count == 3, "Incorrect live scoped particle count.");
+    auto snapshot = LibraCpuParticleSnapshot{};
+    check(libra_spawnable_host_scoped_cpu_particle_at(host.value, scope.containerId,
+        scope.instanceId, system.data(), 0, &snapshot));
+    require(snapshot.id == 1 && snapshot.color[3] == 1 && snapshot.size[0] == 1,
+        "Incorrect live scoped particle snapshot.");
+    require(libra_spawnable_host_cpu_particle_count(host.value, system.data(), &count) == LIBRA_INVALID_HANDLE,
+        "Legacy root count resolved a child system.");
+    for (const auto zeroContainer : {false, true})
+    {
+        const auto* container = zeroContainer ? root.data() : scope.containerId;
+        const auto instance = zeroContainer ? scope.instanceId : std::uint64_t{};
+        count = 99;
+        snapshot.id = 99;
+        has = 99;
+        event.particleId = 99;
+        require(libra_spawnable_host_scoped_cpu_particle_count(host.value, container, instance,
+                    system.data(), &count) == LIBRA_INVALID_ARGUMENT && count == 0 &&
+                libra_spawnable_host_scoped_cpu_particle_at(host.value, container, instance,
+                    system.data(), 0, &snapshot) == LIBRA_INVALID_ARGUMENT && snapshot.id == 0 &&
+                libra_spawnable_host_scoped_cpu_particle_pop_event(host.value, container, instance,
+                    &event, &has) == LIBRA_INVALID_ARGUMENT && has == 0 && event.particleId == 0,
+            "Mismatched container and instance IDs were not rejected.");
+    }
+    require(libra_spawnable_host_scoped_cpu_particle_count(host.value, nullptr, 0,
+                system.data(), &count) == LIBRA_INVALID_ARGUMENT &&
+            libra_spawnable_host_scoped_cpu_particle_at(host.value, scope.containerId, scope.instanceId,
+                system.data(), 0, nullptr) == LIBRA_INVALID_ARGUMENT &&
+            libra_spawnable_host_scoped_cpu_particle_pop_event(host.value, scope.containerId,
+                scope.instanceId, &event, nullptr) == LIBRA_INVALID_ARGUMENT,
+        "Null scoped CPU arguments were not rejected.");
+    verifyScopedCpuGuards(host, scope, system);
+
+    const auto expectEvent = [&](std::uint64_t id, double time) {
+        check(libra_spawnable_host_scoped_cpu_particle_pop_event(host.value, scope.containerId,
+            scope.instanceId, &event, &has));
+        require(has == 1 && event.particleId == id && event.kind == 2 && event.width == 0 &&
+            event.time == time && std::memcmp(event.systemId, system.data(), system.size()) == 0 &&
+            std::memcmp(event.nodeId, source.data(), source.size()) == 0,
+            "Scoped queue lost, duplicated, or reordered a particle event.");
+    };
+    expectEvent(1, 0); // Leave the other events unread until after retirement.
+    check(libra_spawnable_host_advance(host.value, 1, 1));
+    check(libra_spawnable_host_advance(host.value, 2, 1));
+    check(libra_spawnable_host_advance(host.value, 3, 1));
+    check(libra_spawnable_host_advance(host.value, 4, 1));
+    auto active = std::uint64_t{99};
+    check(libra_spawnable_host_active_count(host.value, &active));
+    require(active == 0, "Scoped CPU fixture did not retire.");
+    require(libra_spawnable_host_scoped_cpu_particle_count(host.value, scope.containerId,
+                scope.instanceId, system.data(), &count) == LIBRA_INVALID_HANDLE && count == 0 &&
+            libra_spawnable_host_scoped_cpu_particle_at(host.value, scope.containerId,
+                scope.instanceId, system.data(), 0, &snapshot) == LIBRA_INVALID_HANDLE && snapshot.id == 0,
+        "Retired scope retained readable particle storage.");
+    check(libra_spawnable_host_cpu_particle_pop_event(host.value, &event, &has));
+    require(has == 0, "Terminal root pop consumed a retired child event.");
+    check(libra_spawnable_host_scoped_cpu_particle_pop_event(host.value, scope.containerId,
+        scope.instanceId + 1, &event, &has));
+    require(has == 0, "A different instance resolved a retired child queue.");
+    for (auto id = 2u; id <= 3; ++id)
+    {
+        expectEvent(id, 0);
+    }
+    for (auto time = 1; time <= 3; ++time)
+    {
+        for (auto id = 1u; id <= 3; ++id)
+        {
+            expectEvent(id, time);
+        }
+    }
+    check(libra_spawnable_host_scoped_cpu_particle_pop_event(host.value, scope.containerId,
+        scope.instanceId, &event, &has));
+    require(has == 0 && event.particleId == 0, "Retired scoped CPU queue did not drain.");
+}
 }
 
 int main(int argc, char** argv)
 {
-    auto directory = argc == 2 ? argv[1] : std::getenv("LIBERAFX_FORCE_FIXTURE_DIR");
+    auto directory = argc >= 2 ? argv[1] : std::getenv("LIBERAFX_FORCE_FIXTURE_DIR");
     if (argc == 1 && (!directory || !*directory))
     {
         return 77;
     }
     try {
-        require(argc == 1 || argc == 2,
-            "Usage: liberafx_interop_scoped_termination_tests [isolated Fireworks fixture folder]");
+        require(argc == 1 || argc == 2 || argc == 4,
+            "Usage: liberafx_interop_scoped_termination_tests [Fireworks fixture folder [root CPU fixture scoped CPU fixture]]");
         auto folder = std::filesystem::path(directory);
         auto ids = read(folder / "Fireworks.native-fixture");
         require(ids.size() == 8 + 11 * 16 && std::memcmp(ids.data(), "LFXF", 4) == 0 &&
@@ -157,6 +353,16 @@ int main(int argc, char** argv)
         std::memcpy(position.data(), ids.data() + 8 + 5 * 16, 16);
         run(read(folder / "Fireworks.lfxp"), start, position);
         std::cout << "Scoped force/EndRequest C ABI checks passed.\n";
+        const auto* rootCpu = argc == 4 ? argv[2] : std::getenv("LIBERAFX_ROOT_CPU_FIXTURE");
+        const auto* scopedCpu = argc == 4 ? argv[3] : std::getenv("LIBERAFX_SCOPED_CPU_FIXTURE");
+        if (rootCpu || scopedCpu)
+        {
+            require(rootCpu && *rootCpu && scopedCpu && *scopedCpu,
+                "Both CPU fixtures must be supplied to run the ABI checks.");
+            verifyRootCpuAbi(read(rootCpu));
+            verifyScopedCpuAbi(read(scopedCpu));
+            std::cout << "Scoped and legacy root CPU particle C ABI checks passed.\n";
+        }
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

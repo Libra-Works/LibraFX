@@ -73,13 +73,14 @@ namespace LiberaFx.Unity
             }
         }
 
-        public void Update(NativeInstance.NativeSpawnableHostBase host)
+        public void Update(NativeInstance.NativeSpawnableHostBase host,
+            byte[] containerId = null, ulong instanceId = 0)
         {
             if (disposed || !parent)
             {
                 throw new ObjectDisposedException(nameof(LiberaFxCpuParticleRenderInstance));
             }
-            var result = host.CpuParticleCount(definition.nodeIdBytes, out var count);
+            var result = host.CpuParticleCount(containerId, instanceId, definition.nodeIdBytes, out var count);
             if (result != NativeResult.Ok)
                 throw new InvalidOperationException("Could not read CPU particle count for " + definition.nodeId + ": " + result);
             if (count > 1000000)
@@ -107,7 +108,7 @@ namespace LiberaFx.Unity
             var radius = 0.0;
             for (var index = 0u; index < count; ++index)
             {
-                result = host.CpuParticleAt(definition.nodeIdBytes, index, out var snapshot);
+                result = host.CpuParticleAt(containerId, instanceId, definition.nodeIdBytes, index, out var snapshot);
                 if (result != NativeResult.Ok || snapshot.Id == 0)
                     throw new InvalidOperationException("Could not read a live CPU particle snapshot: " + result);
                 var drawScale = definition.drawScale;

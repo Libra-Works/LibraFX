@@ -460,7 +460,9 @@ Flexible Plane dynamic-mesh smoke:
 
 CPU particle Sprite billboards
 ------------------------------
-CPU packages use LFXP format 4/package 12 with `cpuParticleVersion: 1`. Bind
+CPU packages use LFXP format 4/package 12 with `cpuParticleVersion: 1`.
+Template CPU systems or nested Spawnables use format 5/package 13.
+For either format, bind
 each `cpuParticles` entry's `assetPath` with `set_texture_binding`, except for
 the explicit `builtin:white` token. Each CPU emitter owns one RenderingServer
 MultiMesh RID and one direct instance RID, with no MultiMeshInstance3D Node. It
@@ -476,11 +478,20 @@ dictionary. For automatic playback, connect `cpu_particle_events_ready` and
 drain synchronously there, including before a duration-limited playback ends.
 Kind 1 is Property and kind 2 is Signal. `particle_id` is an unsigned decimal
 string and `values` contains `width` values. At natural completion, polling
-may still drain the queue; an empty pop then releases the completed host.
+may still drain the queues; the completed host is released only after all root
+and scoped CPU queues are empty.
 Explicit Stop or replacement releases that queue, so drain beforehand. The
 renderer does not consume events; size the queue for one simulation advance.
 
-CPU Sprite rendering is supported only at the package root.
+CPU Sprite rendering supports root and nested Spawnable scopes. Each dynamic
+instance owns its MultiMesh and instance RID; Life Time stops emission but keeps
+rendering alive until that scope's particles and descendants finish.
+Use pop_scoped_cpu_particle_event(container_id, instance_id) for a child queue;
+pop_cpu_particle_event() remains root-only and cannot discard child events.
+The production-extension regression Tests/nested_cpu_render_smoke.gd consumes
+LIBERAFX_HIERARCHY_FIXTURE (the compiler nested-cpu-only-retention package).
+It checks real pixels after both parent/child deadlines, natural cleanup and
+restart. LIBERAFX_HIERARCHY_OUTPUT optionally selects an evidence directory.
 
 For the CPU direct-submission smoke, copy the isolated
 `cpu-particles.lfxb` fixture to the scratch project as `cpu-particles.lfxb`,

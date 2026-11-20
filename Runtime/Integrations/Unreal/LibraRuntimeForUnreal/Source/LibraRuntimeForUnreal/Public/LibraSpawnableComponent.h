@@ -206,6 +206,15 @@ public:
 
     ELibraRuntimeResult ReadCpuParticleCount(FGuid systemId, uint32& count) const;
     ELibraRuntimeResult PopCpuParticleEvent(FLibraCpuParticleEvent& particleEvent, bool& hasEvent);
+    ELibraRuntimeResult PopScopedCpuParticleEvent(FGuid containerId, int64 instanceId,
+        FLibraCpuParticleEvent& particleEvent, bool& hasEvent);
+    ELibraRuntimeResult ReadCpuParticleCount(FGuid containerId, int64 instanceId,
+        FGuid systemId, uint32& count) const;
+    ELibraRuntimeResult ReadCpuParticleAt(FGuid containerId, int64 instanceId,
+        FGuid systemId, SIZE_T index, uint64& particleId,
+        double& positionX, double& positionY, double& positionZ,
+        double& colorR, double& colorG, double& colorB, double& colorA,
+        double& sizeX, double& sizeY) const;
     ELibraRuntimeResult ReadCpuParticleAt(FGuid systemId, SIZE_T index, uint64& particleId,
         double& positionX, double& positionY, double& positionZ,
         double& colorR, double& colorG, double& colorB, double& colorA,

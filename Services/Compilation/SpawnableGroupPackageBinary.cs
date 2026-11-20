@@ -23,13 +23,15 @@ public static class SpawnableGroupPackageBinary
     public static byte[] Serialize(SpawnableGroupPackage package)
     {
         ArgumentNullException.ThrowIfNull(package);
-        if (package.Version is not (SpawnableGroupPackage.FormatVersion or 12))
+        if (package.Version is not (SpawnableGroupPackage.FormatVersion or 12 or 13))
             throw new InvalidDataException("Unsupported Spawnable package version.");
+        ValidateHierarchy(package.Templates);
 
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
         writer.Write(Magic);
-        writer.Write(package.CpuPrograms.Length == 0 ? FormatVersion : (ushort)4);
+        writer.Write(package.Version == 13 ? (ushort)5 :
+            package.CpuPrograms.Length == 0 ? FormatVersion : (ushort)4);
         writer.Write(HeaderSize);
         writer.Write(0L);
         writer.Write(package.Version);
@@ -68,9 +70,17 @@ public static class SpawnableGroupPackageBinary
         WriteGpuPrograms(writer, package.RootGpuPrograms);
         foreach (var template in package.Templates)
             WriteGpuPrograms(writer, template.GpuPrograms);
-        if (package.CpuPrograms.Length != 0)
+        if (package.Version >= 12)
         {
             WriteBlob(writer, package.CpuPrograms);
+        }
+        if (package.Version == 13)
+        {
+            foreach (var template in package.Templates)
+            {
+                WriteOptionalGuid(writer, template.ParentContainerId);
+                WriteBlob(writer, template.CpuPrograms);
+            }
         }
 
         writer.Flush();
@@ -99,7 +109,7 @@ public static class SpawnableGroupPackageBinary
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
         _ = reader.ReadBytes(4);
         var formatVersion = reader.ReadUInt16();
-        if (formatVersion is not (1 or 2 or FormatVersion or 4) || reader.ReadUInt16() != HeaderSize)
+        if (formatVersion is not (1 or 2 or FormatVersion or 4 or 5) || reader.ReadUInt16() != HeaderSize)
             throw new InvalidDataException("Unsupported Spawnable binary package format.");
         if (reader.ReadInt64() != bytes.Length)
             throw new InvalidDataException("Spawnable binary package length mismatch.");
@@ -107,6 +117,7 @@ public static class SpawnableGroupPackageBinary
         if ((formatVersion == 1 ? packageVersion != 9 :
              formatVersion == 2 ? packageVersion != 10 :
              formatVersion == 4 ? packageVersion != 12 :
+             formatVersion == 5 ? packageVersion != 13 :
              packageVersion != SpawnableGroupPackage.FormatVersion) ||
             reader.ReadUInt32() != 0)
             throw new InvalidDataException("Unsupported or malformed Spawnable package metadata.");
@@ -145,8 +156,22 @@ public static class SpawnableGroupPackageBinary
             for (var index = 0; index < templates.Length; index++)
                 templates[index] = templates[index] with { GpuPrograms = ReadGpuPrograms(reader) };
         var cpuPrograms = formatVersion >= 4 ? ReadBlob(reader) : [];
+        if (formatVersion == 5)
+        {
+            for (var index = 0; index < templates.Length; index++)
+            {
+                var parentContainerId = ReadOptionalGuid(reader);
+                var templateCpuPrograms = ReadBlob(reader);
+                templates[index] = templates[index] with
+                {
+                    ParentContainerId = parentContainerId,
+                    CpuPrograms = templateCpuPrograms
+                };
+            }
+        }
         if (stream.Position != stream.Length)
             throw new InvalidDataException("Unexpected trailing data in Spawnable binary package.");
+        ValidateHierarchy(templates);
         return new(parentBytecode, Array.AsReadOnly(templates))
         {
             AutoDestroyWhenIdle = autoDestroyWhenIdle,
@@ -238,6 +263,38 @@ public static class SpawnableGroupPackageBinary
 
         return new(containerId, signalTypeId, bytecode, Array.AsReadOnly(inputs), renderConfiguration,
             Array.AsReadOnly(gpuContainers), lifecycle, outputs, liveInputs, capturedInputs, signalInputs, signalOutputs);
+    }
+
+    private static void ValidateHierarchy(IReadOnlyList<SpawnableTemplate> templates)
+    {
+        var byId = new Dictionary<Guid, SpawnableTemplate>();
+        foreach (var template in templates)
+        {
+            if (template.ContainerId == Guid.Empty || !byId.TryAdd(template.ContainerId, template))
+                throw new InvalidDataException("Spawnable template IDs must be nonempty and unique.");
+        }
+        foreach (var template in templates)
+        {
+            if (template.ParentContainerId is not { } parentId) continue;
+            if (parentId == template.ContainerId || !byId.ContainsKey(parentId))
+                throw new InvalidDataException("A Spawnable template has an invalid parent container reference.");
+        }
+
+        foreach (var template in templates)
+        {
+            var visiting = new HashSet<Guid>();
+            var cursor = template.ContainerId;
+            var depth = 0;
+            while (true)
+            {
+                if (!visiting.Add(cursor))
+                    throw new InvalidDataException("Spawnable template ownership contains a cycle.");
+                if (++depth > 12)
+                    throw new InvalidDataException("The Spawnable template hierarchy is too deep.");
+                if (byId[cursor].ParentContainerId is not { } parent) break;
+                cursor = parent;
+            }
+        }
     }
 
     private static void WriteGameIoPorts(BinaryWriter writer, IReadOnlyList<GameIoPort> ports)

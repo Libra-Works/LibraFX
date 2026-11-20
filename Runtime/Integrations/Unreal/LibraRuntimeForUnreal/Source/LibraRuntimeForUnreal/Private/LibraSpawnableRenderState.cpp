@@ -510,8 +510,7 @@ struct FLibraSpawnableRenderState::FImpl
         return texture;
     }
 
-    bool ReadDraws(const std::vector<std::uint8_t>& bytes, FDefinition& definition,
-        bool bAllowCpuParticles = false)
+    bool ReadDraws(const std::vector<std::uint8_t>& bytes, FDefinition& definition)
     {
         if (bytes.empty()) return true;
         auto root = TSharedPtr<FJsonObject>{};
@@ -537,10 +536,6 @@ struct FLibraSpawnableRenderState::FImpl
             (!root->TryGetNumberField(TEXT("cpuParticleVersion"), cpuVersion) || cpuVersion != 1))
         {
             return Fail(TEXT("Unsupported CPU particle scene metadata version."));
-        }
-        if (!bAllowCpuParticles && cpuParticles && cpuParticles->Num() != 0)
-        {
-            return Fail(TEXT("CPU particle Sprite rendering inside SpawnableGroup templates is not supported."));
         }
         const TArray<TSharedPtr<FJsonValue>>* gpuDrawTransforms = nullptr;
         if (root->TryGetArrayField(TEXT("gpuDrawTransforms"), gpuDrawTransforms))
@@ -737,7 +732,7 @@ struct FLibraSpawnableRenderState::FImpl
             }
             definition.Draws.Add(MoveTemp(draw));
         }
-        if (bAllowCpuParticles && cpuParticles)
+        if (cpuParticles)
         {
             for (const auto& value : *cpuParticles)
             {
@@ -1473,13 +1468,10 @@ struct FLibraSpawnableRenderState::FImpl
             }
             for (auto systemIndex = 0; systemIndex < instance->Definition->CpuParticles.Num(); ++systemIndex)
             {
-                if (instance->Container.IsValid())
-                {
-                    return Fail(TEXT("CPU particle systems are supported only in the root render scope."));
-                }
                 const auto& system = instance->Definition->CpuParticles[systemIndex];
                 auto particleCount = uint32{};
-                auto result = Owner.ReadCpuParticleCount(system.Id, particleCount);
+                auto result = Owner.ReadCpuParticleCount(instance->Container, instance->Id,
+                    system.Id, particleCount);
                 if (result != ELibraRuntimeResult::Ok)
                 {
                     return Fail(TEXT("CPU particle count read failed with runtime result ") +
@@ -1522,7 +1514,8 @@ struct FLibraSpawnableRenderState::FImpl
                     auto positionX = double{}, positionY = double{}, positionZ = double{};
                     auto colorR = double{}, colorG = double{}, colorB = double{}, colorA = double{};
                     auto sizeX = double{}, sizeY = double{};
-                    result = Owner.ReadCpuParticleAt(system.Id, static_cast<SIZE_T>(particleIndex),
+                    result = Owner.ReadCpuParticleAt(instance->Container, instance->Id,
+                        system.Id, static_cast<SIZE_T>(particleIndex),
                         particleId, positionX, positionY, positionZ, colorR, colorG,
                         colorB, colorA, sizeX, sizeY);
                     if (result != ELibraRuntimeResult::Ok || particleId == 0)
@@ -1624,7 +1617,7 @@ bool FLibraSpawnableRenderState::Prepare(const liberafx::SpawnablePackage& packa
     }
     if (package.templates.size() > 128) return Impl->Fail(TEXT("The engine adapter supports at most 128 templates."));
     auto root = MakeUnique<FDefinition>();
-    if (!Impl->ReadDraws(package.rootRenderConfiguration, *root, true) ||
+    if (!Impl->ReadDraws(package.rootRenderConfiguration, *root) ||
         !Impl->ReadGpu(package.rootGpuContainersJson, package.rootGpuProgramsJson, *root)) return false;
     if ((!root->Gpu.IsEmpty() || !root->FluidPrograms.IsEmpty()) && package.autoDestroyWhenIdle)
         return Impl->Fail(TEXT("Root GPU auto-idle draining is unsupported. Disable AutoDestroyWhenIdle and use RequestNaturalEnd or Stop."));

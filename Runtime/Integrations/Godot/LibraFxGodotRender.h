@@ -184,6 +184,7 @@ private:
     struct TemplateDraws final {
         std::array<std::uint8_t, 16> containerId{};
         std::vector<Draw> draws;
+        std::vector<CpuParticleDraw> cpuParticles;
     };
     struct VisualScope final {
         VisualScope() = default;
@@ -197,6 +198,7 @@ private:
         double startTime = 0;
         godot::Node3D* node = nullptr;
         std::vector<RenderInstance> renderables;
+        std::vector<CpuParticleRenderInstance> cpuRenderables;
         flexible_adapter::HistoryScope flexibleHistory;
         double lastFlexibleTime = 0;
         bool hasFlexibleTime = false;
@@ -230,7 +232,9 @@ private:
                      const VisualScope* child, double localTime,
                      flexible_adapter::HistoryScope& flexibleHistory,
                      bool& flexibleHidden, bool& visibleBeforeFlexibleFailure) -> Result;
-    auto updateCpuParticles(SpawnableHost& host) -> Result;
+    auto updateCpuParticles(SpawnableHost& host, const SpawnableScope& scope,
+        const std::vector<CpuParticleDraw>& draws,
+        std::vector<CpuParticleRenderInstance>& renderables, godot::Node3D& node) -> Result;
     static auto updateCpuBounds(CpuParticleRenderInstance& renderable,
                                 const godot::Basis& basis) -> bool;
     static void updateInstance(const OwnedRenderingRid& instance, godot::Node3D& scope,
@@ -239,6 +243,8 @@ private:
     auto currentFlexibleCamera() const -> godot::Camera3D*;
     void synchronizeScope(godot::Node3D& scope, std::vector<RenderInstance>& renderables,
                           bool enabled, bool exiting = false);
+    void synchronizeCpuScope(godot::Node3D& scope,
+        std::vector<CpuParticleRenderInstance>& renderables, bool enabled, bool exiting);
     void synchronizeModelBatches(bool exiting);
     static auto opaqueBatchable(const godot::Ref<godot::Mesh>& mesh) -> bool;
     auto updateInput(SpawnableHost& host, const Input& input, const VisualScope* child,

@@ -24,12 +24,16 @@ public sealed record SpawnableTemplate(Guid ContainerId, Guid SignalTypeId, byte
     IReadOnlyList<SpawnableSignalPort>? SignalOutputs = null)
 {
     public byte[] GpuPrograms { get; init; } = [];
+    public Guid? ParentContainerId { get; init; }
+    public byte[] CpuPrograms { get; init; } = [];
     public bool UsesExtendedCaptureInputs => Inputs.Count > 4 || Inputs.Sum(input => input.Width) > 16;
 }
 public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<SpawnableTemplate> Templates)
 {
     public const int FormatVersion = 11;
-    public int Version => CpuPrograms.Length == 0 ? FormatVersion : 12;
+    public int Version => Templates.Any(template =>
+        template.ParentContainerId is not null || template.CpuPrograms.Length > 0)
+        ? 13 : CpuPrograms.Length == 0 ? FormatVersion : 12;
     public byte[] CpuPrograms { get; init; } = [];
     public bool AutoDestroyWhenIdle { get; init; } = true;
     public bool HasLiveInputs => Templates.Any(template => template.Inputs.Any(input => input.IsLive));
@@ -84,138 +88,176 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
         VfxProgram.ValidateForCompilation(graph);
         GraphTypeDiagnostics.Validate(graph);
         graph = CpuParticleCompilation.LowerEmitters(graph);
-        var cpuSourceGraph = graph;
-        var cpu = CpuParticleCompilation.Lower(graph, resourceContext, options);
-        graph = cpu.Graph;
+        var templates = new List<SpawnableTemplate>();
+        var destroyRoutes = new List<SpawnableDestroyRoute>();
+        var signalRoutes = new List<SpawnableSignalRoute>();
+        var hasDeferredSignals = false;
+        var hasChildDeferredSignals = false;
+
+        ScopeBuild BuildScope(GraphSnapshot source, Guid? ownerContainerId, IRenderResourceBindingContext? scopeResources)
+        {
+            ValidateScope(source, ownerContainerId);
+            var cpuSource = source;
+            var cpu = CpuParticleCompilation.Lower(source, scopeResources, options);
+            var scope = cpu.Graph;
+            var flat = GroupBoundaryLowering.Lower(scope);
+            if (flat.Nodes.Count(node => node.Kind.Value == "LifeTime") > 1)
+                throw new InvalidDataException("An execution scope can contain at most one Life Time.");
+
+            var routes = CreateRoutes(flat);
+            destroyRoutes.AddRange(routes);
+            var routedDelays = routes.Where(route => route.DelayNodeId is not null)
+                .Select(route => route.DelayNodeId!.Value).ToHashSet();
+            var delays = flat.Nodes.Where(node => node.Kind.Value == "Delay").ToArray();
+            if (ownerContainerId is null)
+                hasDeferredSignals |= delays.Any(node => !routedDelays.Contains(node.Id));
+            else
+                hasChildDeferredSignals |= delays.Length > 0;
+
+            var parentWithSignalInputs = LowerSignalInputs(flat, out var signalTypes, out var signalProxies);
+            foreach (var pair in cpu.SignalTypes) signalTypes = AddSignalType(signalTypes, pair.Key, pair.Value);
+            signalRoutes.AddRange(CreateSignalRoutes(flat, signalProxies));
+            var program = VfxProgram.CompileForPackage(RemoveLocalRoutes(parentWithSignalInputs, routedDelays),
+                out var render, signalTypes, scopeResources, options);
+            render = CpuParticleCompilation.AddDraws(render, cpuSource, scopeResources);
+
+            var nodes = flat.Nodes.ToDictionary(node => node.Id);
+            foreach (var node in flat.Nodes.Where(item => item.Kind == GraphNodeKind.SpawnableGroup))
+            {
+                var child = node.ChildGraph!;
+                var inputs = child.Nodes.Where(item => SpawnableGroupSchema.IsInput(item.Kind))
+                    .Select(item => new SpawnableInput(SpawnableGroupSchema.PortId(item.Id), item.Id,
+                        item.PortType, SpawnableGroupSchema.InputWidth(item.PortType),
+                        item.PortType == "Color", SpawnableGroupSchema.IsLive(item))).ToArray();
+                var usesExtendedCaptureInputs = inputs.Length > 4 || inputs.Sum(input => input.Width) > 16;
+                var capturedInputs = new List<SpawnableRouteCapture>();
+                foreach (var input in inputs.Where(input => usesExtendedCaptureInputs && !input.IsLive))
+                {
+                    var edge = flat.Connections.SingleOrDefault(item =>
+                        item.TargetNodeId == node.Id && item.TargetPortId == input.PortId);
+                    if (edge is null) continue;
+                    var binding = nodes[edge.SourceNodeId];
+                    if (binding.Kind != GraphNodeKind.SpawnableGroup)
+                        capturedInputs.Add(new(input.TemplateNodeId, input.Width, null, binding.Id,
+                            ParameterSourceComponent(binding, edge.SourcePortId)));
+                }
+
+                var childResources = ScopedRenderResourceBindingContext.UnderGroup(scopeResources, node.Id);
+                var childBuild = BuildScope(child, node.Id, childResources);
+                var life = childBuild.Graph.Nodes.Where(item => item.Kind.Value == "LifeTime").ToArray();
+                var onStart = childBuild.Graph.Nodes.Where(item => item.Kind.Value == "OnStart").ToArray();
+                var ownerDestroy = childBuild.Graph.Nodes.Where(item => item.Kind.Value == "OwnerDestroy").ToArray();
+                if (life.Length > 1) throw new InvalidDataException($"Spawnable '{node.Name}' has multiple Life Times; exactly one or none is supported.");
+                if (onStart.Length > 1) throw new InvalidDataException($"Spawnable '{node.Name}' has multiple On Start entries.");
+                if (ownerDestroy.Length > 1) throw new InvalidDataException($"Spawnable '{node.Name}' has multiple Owner Destroy entries.");
+                if (life.Length == 1 && !childBuild.Graph.Connections.Any(edge => edge.TargetNodeId == life[0].Id))
+                {
+                    var seconds = life[0].Parameters?.SingleOrDefault(parameter => parameter.Id == "seconds")?.Value.GetDouble() ?? 2;
+                    if (!double.IsFinite(seconds) || seconds < 0)
+                        throw new InvalidDataException($"Spawnable '{node.Name}' Life Time must be nonnegative finite seconds.");
+                }
+                var outputs = child.Nodes.Where(item => SpawnableGroupSchema.IsOutput(item.Kind))
+                    .Select(item => new SpawnableOutput(SpawnableGroupSchema.OutputPortId(item.Id), item.Id, item.PortType)).ToArray();
+                var signalInputs = child.Nodes.Where(item => SpawnableGroupSchema.IsSignalInput(item.Kind))
+                    .Select(item => new SpawnableSignalPort(SpawnableGroupSchema.PortId(item.Id), item.Id,
+                        SignalInputProxyNodeId(node.Id, item.Id))).ToArray();
+                var signalOutputs = child.Nodes.Where(item => SpawnableGroupSchema.IsSignalOutput(item.Kind))
+                    .Select(item => new SpawnableSignalPort(SpawnableGroupSchema.OutputPortId(item.Id), item.Id)).ToArray();
+                var liveInputs = new List<SpawnableRouteCapture>();
+                foreach (var input in inputs.Where(input => input.IsLive))
+                {
+                    var edge = flat.Connections.SingleOrDefault(item =>
+                        item.TargetNodeId == node.Id && item.TargetPortId == input.PortId);
+                    if (edge is null) continue;
+                    var binding = nodes[edge.SourceNodeId];
+                    if (binding.Kind == GraphNodeKind.SpawnableGroup)
+                        throw new InvalidDataException("Live cannot read a completed Spawnable's local output. Use CaptureAtSpawn on Destroy routes.");
+                    liveInputs.Add(new(input.TemplateNodeId, input.Width, null, binding.Id,
+                        ParameterSourceComponent(binding, edge.SourcePortId)));
+                }
+                templates.Add(new(node.Id, SignalTypeId(node.Id, child), childBuild.Bytecode, inputs,
+                    childBuild.RenderConfiguration, CollectGpu(child).ToArray(),
+                    new(onStart.SingleOrDefault()?.Id, life.SingleOrDefault()?.Id, ownerDestroy.SingleOrDefault()?.Id),
+                    outputs, liveInputs.AsReadOnly(), capturedInputs.AsReadOnly(), signalInputs, signalOutputs)
+                {
+                    GpuPrograms = CreateGpuPrograms(child),
+                    ParentContainerId = ownerContainerId,
+                    CpuPrograms = childBuild.CpuPrograms
+                });
+            }
+
+            return new(program.ToPackageBinary(), render, cpu.Payload, flat, program.GameIoPorts);
+        }
+
+        var rootBuild = BuildScope(graph, null, resourceContext);
         var starts = graph.Nodes.Where(node => node.Kind.Value == "OnStart").ToArray();
         if (starts.Length > 1) throw new InvalidDataException("Only one direct On Start entry is supported.");
         var destroys = graph.Nodes.Where(node => node.Kind.Value == "OnDestroy").ToArray();
         if (destroys.Length > 1) throw new InvalidDataException("Only one root On Destroy entry is supported.");
-        if (graph.Nodes.Any(node => node.Kind.Value == "LifeTime"))
-            throw new InvalidDataException("Life Time is only valid directly inside a Spawnable Group; the effect root has no Life Time.");
-        var routes = CreateRoutes(graph);
-        var routedDelays = routes.Where(route => route.DelayNodeId is not null)
-            .Select(route => route.DelayNodeId!.Value).ToHashSet();
-        var hasDeferredSignals = false;
-        var hasChildDeferredSignals = false;
-        var flatParent = GroupBoundaryLowering.Lower(graph);
-        var parentNodes = flatParent.Nodes.ToDictionary(node => node.Id);
-        var templates = new List<SpawnableTemplate>();
-        void Visit(GraphSnapshot current, bool withinTemplate, bool directTemplate)
-        {
-            foreach (var node in current.Nodes)
-            {
-                if (GameIoSchema.IsInstanceNode(node.Kind) && !directTemplate)
-                    throw new InvalidDataException("Instance Game I/O must be directly inside a Spawnable Group.");
-                if (SpawnableGroupSchema.IsInput(node.Kind) && !directTemplate)
-                    throw new InvalidDataException("Spawn input nodes must be directly inside a Spawnable Group.");
-                if ((SpawnableGroupSchema.IsSignalInput(node.Kind) ||
-                     SpawnableGroupSchema.IsSignalOutput(node.Kind)) && !directTemplate)
-                    throw new InvalidDataException("Spawnable Signal boundary nodes must be directly inside a Spawnable Group.");
-                if ((node.Kind.Value == "LifeTime" && !directTemplate) ||
-                    (SpawnableGroupSchema.IsOutput(node.Kind) && !directTemplate))
-                    throw new InvalidDataException("Life Time and Group Output must be directly inside a Spawnable Group.");
-                if (node.Kind.Value == "OnStart" && !directTemplate && !ReferenceEquals(current, graph))
-                    throw new InvalidDataException("On Start must be directly at the root or directly inside a Spawnable Group.");
-                if (node.Kind.Value == "OwnerDestroy" && !directTemplate)
-                    throw new InvalidDataException("Owner Destroy must be directly inside a Spawnable Group.");
-                if (node.Kind.Value == "OnDestroy" && !ReferenceEquals(current, graph))
-                    throw new InvalidDataException("On Destroy must be directly at the effect root.");
-                if (node.Kind.Value == "Delay" && withinTemplate)
-                    hasChildDeferredSignals = true;
-                if (node.Kind.Value == "Delay" && !withinTemplate && !routedDelays.Contains(node.Id))
-                    hasDeferredSignals = true;
-                if (node.Kind == GraphNodeKind.SpawnableGroup)
-                {
-                    if (withinTemplate) throw new InvalidDataException("Nested Spawnable Groups are not supported.");
-                    var child = node.ChildGraph!;
-                    var inputs = child.Nodes.Where(item => SpawnableGroupSchema.IsInput(item.Kind))
-                        .Select(item => new SpawnableInput(SpawnableGroupSchema.PortId(item.Id), item.Id,
-                            item.PortType, SpawnableGroupSchema.InputWidth(item.PortType),
-                            item.PortType == "Color", SpawnableGroupSchema.IsLive(item))).ToArray();
-                    var usesExtendedCaptureInputs = inputs.Length > 4 || inputs.Sum(input => input.Width) > 16;
-                    var capturedInputs = new List<SpawnableRouteCapture>();
-                    foreach (var input in inputs.Where(input => usesExtendedCaptureInputs && !input.IsLive))
-                    {
-                        var edge = flatParent.Connections.SingleOrDefault(edge =>
-                            edge.TargetNodeId == node.Id && edge.TargetPortId == input.PortId);
-                        if (edge is null) continue;
-                        var source = parentNodes[edge.SourceNodeId];
-                        if (source.Kind != GraphNodeKind.SpawnableGroup)
-                            capturedInputs.Add(new(input.TemplateNodeId, input.Width, null, source.Id,
-                                ParameterSourceComponent(source, edge.SourcePortId)));
-                    }
-
-                    Visit(child, true, true);
-                    var life = child.Nodes.Where(item => item.Kind.Value == "LifeTime").ToArray();
-                    var onStart = child.Nodes.Where(item => item.Kind.Value == "OnStart").ToArray();
-                    var ownerDestroy = child.Nodes.Where(item => item.Kind.Value == "OwnerDestroy").ToArray();
-                    if (life.Length > 1) throw new InvalidDataException($"Spawnable '{node.Name}' has multiple Life Times; exactly one or none is supported.");
-                    if (onStart.Length > 1) throw new InvalidDataException($"Spawnable '{node.Name}' has multiple On Start entries.");
-                    if (ownerDestroy.Length > 1) throw new InvalidDataException($"Spawnable '{node.Name}' has multiple Owner Destroy entries.");
-                    if (life.Length == 1 && !child.Connections.Any(edge => edge.TargetNodeId == life[0].Id))
-                    {
-                        var seconds = life[0].Parameters?.SingleOrDefault(parameter => parameter.Id == "seconds")?.Value.GetDouble() ?? 2;
-                        if (!double.IsFinite(seconds) || seconds < 0)
-                            throw new InvalidDataException($"Spawnable '{node.Name}' Life Time must be nonnegative finite seconds.");
-                    }
-                    var childResourceContext = ScopedRenderResourceBindingContext.UnderGroup(resourceContext, node.Id);
-                    var childProgram = VfxProgram.CompileForPackage(child, out var render,
-                        resourceContext: childResourceContext, options: options);
-                    var bytecode = childProgram.ToPackageBinary();
-                    var gpu = CollectGpu(child).ToArray();
-                    var outputs = child.Nodes.Where(item => SpawnableGroupSchema.IsOutput(item.Kind))
-                        .Select(item => new SpawnableOutput(SpawnableGroupSchema.OutputPortId(item.Id), item.Id, item.PortType)).ToArray();
-                    var signalInputs = child.Nodes.Where(item => SpawnableGroupSchema.IsSignalInput(item.Kind))
-                        .Select(item => new SpawnableSignalPort(SpawnableGroupSchema.PortId(item.Id), item.Id,
-                            SignalInputProxyNodeId(node.Id, item.Id))).ToArray();
-                    var signalOutputs = child.Nodes.Where(item => SpawnableGroupSchema.IsSignalOutput(item.Kind))
-                        .Select(item => new SpawnableSignalPort(SpawnableGroupSchema.OutputPortId(item.Id), item.Id)).ToArray();
-                    var liveInputs = new List<SpawnableRouteCapture>();
-                    foreach (var input in inputs.Where(input => input.IsLive))
-                    {
-                        var edge = flatParent.Connections.SingleOrDefault(edge =>
-                            edge.TargetNodeId == node.Id && edge.TargetPortId == input.PortId);
-                        if (edge is null) continue;
-                        var source = parentNodes[edge.SourceNodeId];
-                        if (source.Kind == GraphNodeKind.SpawnableGroup)
-                            throw new InvalidDataException("Live cannot read a completed Spawnable's local output. Use CaptureAtSpawn on Destroy routes.");
-                        liveInputs.Add(new(input.TemplateNodeId, input.Width, null, source.Id,
-                            ParameterSourceComponent(source, edge.SourcePortId)));
-                    }
-                    templates.Add(new(node.Id, SignalTypeId(node.Id, child), bytecode, inputs, render, gpu,
-                        new(onStart.SingleOrDefault()?.Id, life.SingleOrDefault()?.Id, ownerDestroy.SingleOrDefault()?.Id), outputs,
-                        liveInputs.AsReadOnly(), capturedInputs.AsReadOnly(), signalInputs, signalOutputs)
-                    {
-                        GpuPrograms = CreateGpuPrograms(child)
-                    });
-                }
-                else if (node.ChildGraph is { } child && !GpuParticleEditorService.IsGpu(node.Kind))
-                    Visit(child, withinTemplate, false);
-            }
-        }
-        Visit(graph, false, false);
-        var parentWithSignalInputs = LowerSignalInputs(flatParent, out var signalInputTypes, out var signalInputProxies);
-        signalInputTypes = signalInputTypes.Concat(cpu.SignalTypes).ToDictionary(pair => pair.Key, pair => pair.Value);
-        var signalRoutes = CreateSignalRoutes(flatParent, signalInputProxies);
-        var parentProgram = VfxProgram.CompileForPackage(
-            RemoveLocalRoutes(parentWithSignalInputs, routedDelays), out var rootRender, signalInputTypes,
-            resourceContext, options);
-        return new(parentProgram.ToPackageBinary(), templates.AsReadOnly())
+        return new(rootBuild.Bytecode, templates.AsReadOnly())
         {
             AutoDestroyWhenIdle = graph.AutoDestroyWhenIdle,
             OnStartNodeId = starts.SingleOrDefault()?.Id,
             OnDestroyNodeId = destroys.SingleOrDefault()?.Id,
             HasDeferredSignals = hasDeferredSignals,
             HasChildDeferredSignals = hasChildDeferredSignals,
-            DestroyRoutes = routes,
+            DestroyRoutes = destroyRoutes.AsReadOnly(),
             SignalRoutes = signalRoutes,
-            GameIoPorts = parentProgram.GameIoPorts,
-            RootRenderConfiguration = CpuParticleCompilation.AddDraws(rootRender, cpuSourceGraph, resourceContext),
-            CpuPrograms = cpu.Payload,
-            RootGpuContainers = CollectGpu(graph).ToArray(),
-            RootGpuPrograms = CreateGpuPrograms(graph)
+            GameIoPorts = rootBuild.GameIoPorts,
+            RootRenderConfiguration = rootBuild.RenderConfiguration,
+            CpuPrograms = rootBuild.CpuPrograms,
+            RootGpuContainers = CollectGpu(rootBuild.Graph).ToArray(),
+            RootGpuPrograms = CreateGpuPrograms(rootBuild.Graph)
         };
+    }
+
+    private sealed record ScopeBuild(byte[] Bytecode, byte[] RenderConfiguration, byte[] CpuPrograms,
+        GraphSnapshot Graph, IReadOnlyList<GameIoPort> GameIoPorts);
+
+    private static IReadOnlyDictionary<Guid, Guid> AddSignalType(IReadOnlyDictionary<Guid, Guid> source,
+        Guid nodeId, Guid typeId)
+    {
+        var result = source.ToDictionary(pair => pair.Key, pair => pair.Value);
+        result.Add(nodeId, typeId);
+        return result;
+    }
+
+    private static void ValidateScope(GraphSnapshot graph, Guid? ownerContainerId)
+    {
+        var root = ownerContainerId is null;
+        void Visit(GraphSnapshot current, bool insideOrdinaryGroup)
+        {
+            foreach (var node in current.Nodes)
+            {
+                if (node.Kind == GraphNodeKind.GraphGroup && node.ChildGraph is { } groupChild)
+                {
+                    Visit(groupChild, true);
+                    continue;
+                }
+                if (insideOrdinaryGroup &&
+                    (GameIoSchema.IsInstanceNode(node.Kind) || SpawnableGroupSchema.IsInput(node.Kind) ||
+                     SpawnableGroupSchema.IsSignalInput(node.Kind) || SpawnableGroupSchema.IsSignalOutput(node.Kind) ||
+                     SpawnableGroupSchema.IsOutput(node.Kind) ||
+                     node.Kind.Value is "LifeTime" or "OwnerDestroy" or "OnDestroy"))
+                    throw new InvalidDataException("Spawnable boundary and lifecycle nodes must be directly inside their execution scope, not inside an ordinary Graph Group.");
+                if (insideOrdinaryGroup && root && node.Kind.Value == "OnStart")
+                    throw new InvalidDataException("Root On Start must be directly in the effect graph.");
+                if (GameIoSchema.IsInstanceNode(node.Kind) && root)
+                    throw new InvalidDataException("Instance Game I/O must be directly inside a Spawnable Group.");
+                if ((SpawnableGroupSchema.IsInput(node.Kind) || SpawnableGroupSchema.IsSignalInput(node.Kind) ||
+                     SpawnableGroupSchema.IsSignalOutput(node.Kind)) && root)
+                    throw new InvalidDataException("Spawnable boundary nodes must be directly inside a Spawnable Group.");
+                if (SpawnableGroupSchema.IsOutput(node.Kind) && root)
+                    throw new InvalidDataException("Group Output must be directly inside a Spawnable Group.");
+                if (node.Kind.Value == "OwnerDestroy" && root)
+                    throw new InvalidDataException("Owner Destroy must be directly inside a Spawnable Group.");
+                if (node.Kind.Value == "OnDestroy" && !root)
+                    throw new InvalidDataException("On Destroy must be directly at the effect root.");
+                if (root && node.Kind.Value == "LifeTime")
+                    throw new InvalidDataException("Life Time is only valid directly inside a Spawnable Group; the effect root has no Life Time.");
+            }
+        }
+        Visit(graph, false);
     }
 
     private static void RejectTemplateGameIo(GraphSnapshot graph, bool withinTemplate)

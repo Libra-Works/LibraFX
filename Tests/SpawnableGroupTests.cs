@@ -48,8 +48,6 @@ internal static class SpawnableGroupTests
         var capturedTime = workspace.CreateNode(new GraphNodeKind("SpawnInputFloat"), 3, 2);
         var time = workspace.CreateNode(GraphNodeKind.Time, 3, 4);
         var gpu = workspace.CreateNode(new GraphNodeKind("GpuParticle"), 5, 6);
-        try { workspace.CreateNode(GraphNodeKind.SpawnableGroup); throw new Exception("Nested Spawnable Group accepted."); }
-        catch (InvalidOperationException) { }
         var snapshot = workspace.CreateSnapshot();
         var encoded = JsonSerializer.Serialize(snapshot);
         var loaded = JsonSerializer.Deserialize<GraphSnapshot>(encoded)!;

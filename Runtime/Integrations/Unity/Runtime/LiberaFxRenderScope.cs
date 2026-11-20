@@ -173,7 +173,7 @@ namespace LiberaFx.Unity
                 node.Update(host, rootScope, containerId, instanceId, localTime);
             foreach (var cpuParticleRenderer in cpuParticleRenderers)
             {
-                cpuParticleRenderer.Update(host);
+                cpuParticleRenderer.Update(host, rootScope ? null : containerId, instanceId);
             }
             foreach (var draw in debugDraws)
                 draw.Update(host, rootScope, containerId, instanceId);

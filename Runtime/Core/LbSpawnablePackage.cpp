@@ -4,7 +4,7 @@
 #include <utility>
 
 namespace liberafx {
-namespace {
+namespace spawnable_package_detail {
 constexpr auto headerSize = std::size_t{24};
 constexpr auto maximumPackageBytes = std::size_t{512} * 1024 * 1024;
 constexpr auto maximumBlobBytes = std::size_t{256} * 1024 * 1024;
@@ -251,6 +251,8 @@ auto readTemplate(Reader& reader, SpawnablePackageTemplate& out) -> bool
 }
 }
 
+using namespace spawnable_package_detail;
+
 auto loadSpawnablePackage(const std::uint8_t* bytes, std::size_t byteCount,
     SpawnablePackage& out) noexcept -> Result
 {
@@ -274,7 +276,8 @@ auto loadSpawnablePackage(const std::uint8_t* bytes, std::size_t byteCount,
     if (!((formatVersion == 1 && packageVersion == 9) ||
           (formatVersion == 2 && packageVersion == 10) ||
           (formatVersion == 3 && packageVersion == 11) ||
-          (formatVersion == 4 && packageVersion == 12)))
+          (formatVersion == 4 && packageVersion == 12) ||
+          (formatVersion == 5 && packageVersion == 13)))
         return Result::UnsupportedBinary;
 
     try {
@@ -344,12 +347,77 @@ auto loadSpawnablePackage(const std::uint8_t* bytes, std::size_t byteCount,
         }
         if (formatVersion >= 4)
         {
-            if (!reader.readBlob(package.cpuPrograms) || package.cpuPrograms.empty())
+            if (!reader.readBlob(package.cpuPrograms) ||
+                (formatVersion == 4 && package.cpuPrograms.empty()))
             {
                 return Result::InvalidBinary;
             }
         }
+        if (formatVersion >= 5)
+        {
+            for (auto& item : package.templates)
+            {
+                if (!reader.readOptionalGuid(item.parentContainerId) ||
+                    !reader.readBlob(item.cpuPrograms))
+                {
+                    return Result::InvalidBinary;
+                }
+            }
+        }
         if (reader.remaining() != 0) return Result::InvalidBinary;
+        if (formatVersion >= 5)
+        {
+            auto nestedPayload = false;
+            for (const auto& item : package.templates)
+            {
+                nestedPayload = nestedPayload || item.parentContainerId.has_value() ||
+                    !item.cpuPrograms.empty();
+            }
+            if (!nestedPayload)
+            {
+                return Result::InvalidBinary;
+            }
+            for (auto index = std::size_t{}; index < package.templates.size(); ++index)
+            {
+                for (auto previous = std::size_t{}; previous < index; ++previous)
+                {
+                    if (package.templates[index].containerId ==
+                        package.templates[previous].containerId)
+                    {
+                        return Result::InvalidBinary;
+                    }
+                }
+            }
+            for (auto index = std::size_t{}; index < package.templates.size(); ++index)
+            {
+                auto cursor = index;
+                auto depth = std::uint8_t{1};
+                auto visited = std::vector<bool>(package.templates.size(), false);
+                visited[cursor] = true;
+                while (package.templates[cursor].parentContainerId)
+                {
+                    const auto parentId =
+                        *package.templates[cursor].parentContainerId;
+                    auto parent = std::size_t{};
+                    while (parent < package.templates.size() &&
+                           package.templates[parent].containerId != parentId)
+                    {
+                        ++parent;
+                    }
+                    if (parent == package.templates.size() || visited[parent])
+                    {
+                        return Result::InvalidBinary;
+                    }
+                    visited[parent] = true;
+                    ++depth;
+                    if (depth > 12)
+                    {
+                        return Result::InvalidBinary;
+                    }
+                    cursor = parent;
+                }
+            }
+        }
         out = std::move(package);
         return Result::Ok;
     } catch (const std::bad_alloc&) {

@@ -21,6 +21,7 @@
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_float64_array.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstring>
@@ -336,7 +337,7 @@ public:
                 if (generation != playbackGeneration_) {
                     return code(Result::Ok);
                 }
-                if (!playback_->packageHost->package().cpuPrograms.empty()) {
+                if (playback_->packageHost->hasCpuParticleEvents()) {
                     emit_signal("cpu_particle_events_ready");
                     if (generation != playbackGeneration_) {
                         return code(Result::Ok);
@@ -347,14 +348,14 @@ public:
                     if (playback_->duration >= 0 && elapsed >= playback_->duration &&
                         !playback_->packageHost->rootFinished()) {
                         result = playback_->packageHost->stop();
-                    } else if (!playback_->packageHost->package().cpuPrograms.empty()) {
+                    }
+                    if (playback_->packageHost->hasCpuParticleEvents()) {
                         // Keep the terminal queue available to polling callers
                         // without retaining the render nodes or GPU adapter.
                         completedCpuEventHost_ = std::move(playback_->packageHost);
                     }
                     ++playbackGeneration_;
                     playback_.reset();
-                    completedCpuEventHost_.reset();
                     set_process(false);
                 }
             }
@@ -385,6 +386,26 @@ public:
 
     Dictionary pop_cpu_particle_event()
     {
+        return popCpuParticleEvent({});
+    }
+
+    Dictionary pop_scoped_cpu_particle_event(const String& containerId, std::int64_t instanceId)
+    {
+        auto id = std::array<std::uint8_t, 16>{};
+        if (instanceId <= 0 || !parse_node_id(containerId, id))
+        {
+            return {};
+        }
+        auto scope = SpawnableScope{};
+        scope.kind = SpawnableScopeKind::Instance;
+        std::memcpy(scope.containerId, id.data(), id.size());
+        scope.instanceId = static_cast<GeneratorInstanceId>(instanceId);
+        return popCpuParticleEvent(scope);
+    }
+
+private:
+    Dictionary popCpuParticleEvent(const SpawnableScope& scope)
+    {
         auto out = Dictionary{};
         if (!Thread::is_main_thread()) {
             return out;
@@ -394,10 +415,12 @@ public:
             return out;
         }
         auto event = CpuParticleEvent{};
-        if (!host->popCpuParticleEvent(event)) {
-            if (!playback_) {
-                completedCpuEventHost_.reset();
-            }
+        const auto available = host->popCpuParticleEvent(scope, event);
+        if (!playback_ && !host->hasCpuParticleEvents())
+        {
+            completedCpuEventHost_.reset();
+        }
+        if (!available) {
             return out;
         }
         auto values = PackedFloat64Array{};
@@ -414,6 +437,7 @@ public:
         return out;
     }
 
+public:
     std::int64_t get_playback_generation() const
     {
         return Thread::is_main_thread() ? static_cast<std::int64_t>(playbackGeneration_) : -1;
@@ -724,7 +748,7 @@ public:
     void _process(double delta) override
     {
         const auto cpuPlayback = playback_ && playback_->packageHost &&
-            !playback_->packageHost->package().cpuPrograms.empty();
+            hasCpuPrograms(playback_->packageHost->package());
         const auto result = advance(delta);
         if (cpuPlayback && result != code(Result::Ok)) {
             godot::UtilityFunctions::push_error(
@@ -747,6 +771,8 @@ protected:
         godot::ClassDB::bind_method(godot::D_METHOD("stop"), &LibraEffectPlayer::stop);
         godot::ClassDB::bind_method(godot::D_METHOD("is_playing"), &LibraEffectPlayer::is_playing);
         godot::ClassDB::bind_method(godot::D_METHOD("pop_cpu_particle_event"), &LibraEffectPlayer::pop_cpu_particle_event);
+        godot::ClassDB::bind_method(godot::D_METHOD("pop_scoped_cpu_particle_event", "container_id", "instance_id"),
+            &LibraEffectPlayer::pop_scoped_cpu_particle_event);
         godot::ClassDB::bind_method(godot::D_METHOD("read_value", "node_id"), &LibraEffectPlayer::read_value);
         godot::ClassDB::bind_method(godot::D_METHOD("get_game_io_ports"), &LibraEffectPlayer::get_game_io_ports);
         godot::ClassDB::bind_method(godot::D_METHOD("set_game_property", "name", "values"), &LibraEffectPlayer::set_game_property);
@@ -846,6 +872,13 @@ private:
             position = {worldPosition.x, worldPosition.y, worldPosition.z, 1};
         }
         return host.setGameProperty("__LFX_CAMERA_V1", position.data(), position.size());
+    }
+
+    static auto hasCpuPrograms(const SpawnablePackage& package) -> bool
+    {
+        return !package.cpuPrograms.empty() ||
+            std::any_of(package.templates.begin(), package.templates.end(),
+                [](const auto& item) { return !item.cpuPrograms.empty(); });
     }
 
     static String uuidString(const std::uint8_t* bytes)

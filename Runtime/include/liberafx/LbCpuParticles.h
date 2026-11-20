@@ -41,9 +41,11 @@ public:
     Result deliverSignals(Instance& root, double time, std::size_t budget) noexcept;
     Result advance(Instance& root, double time, bool emitting, const HostQualitySnapshot& quality,
         double frameDelta = 0) noexcept;
+    Result queueSignal(const std::uint8_t nodeId[16]) noexcept;
     Result count(const std::uint8_t systemId[16], std::size_t& out) const noexcept;
     Result at(const std::uint8_t systemId[16], std::size_t index, CpuParticleSnapshot& out) const noexcept;
     bool popEvent(CpuParticleEvent& out) noexcept;
+    std::size_t pendingEventCount() const noexcept;
     std::size_t activeCount() const noexcept;
     bool canEmit() const noexcept;
     bool hasPendingRoutes() const noexcept;

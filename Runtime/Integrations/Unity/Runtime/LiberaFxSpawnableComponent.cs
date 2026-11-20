@@ -160,6 +160,22 @@ namespace LiberaFx.Unity
             return host == null ? NativeResult.NotReady : host.CpuParticleAt(nodeId, index, out snapshot);
         }
 
+        internal NativeResult InspectCpuParticleCount(byte[] containerId, ulong instanceId,
+            byte[] nodeId, out uint count)
+        {
+            count = 0;
+            return host == null ? NativeResult.NotReady :
+                host.CpuParticleCount(containerId, instanceId, nodeId, out count);
+        }
+
+        internal NativeResult InspectCpuParticle(byte[] containerId, ulong instanceId,
+            byte[] nodeId, uint index, out NativeCpuParticleSnapshot snapshot)
+        {
+            snapshot = default;
+            return host == null ? NativeResult.NotReady :
+                host.CpuParticleAt(containerId, instanceId, nodeId, index, out snapshot);
+        }
+
         internal bool TryGetRenderMatrix(string nodeId, ulong instanceId, out Matrix4x4 matrix)
         {
             if (instanceId == 0 && rootRenderScope != null)
@@ -634,13 +650,19 @@ namespace LiberaFx.Unity
 
         public NativeResult PopCpuParticleEvent(out CpuParticleEvent particleEvent, out bool hasEvent)
         {
+            return PopScopedCpuParticleEvent(null, 0, out particleEvent, out hasEvent);
+        }
+
+        public NativeResult PopScopedCpuParticleEvent(byte[] containerId, ulong instanceId,
+            out CpuParticleEvent particleEvent, out bool hasEvent)
+        {
             particleEvent = default;
             hasEvent = false;
             var current = host;
             if (current == null) return NativeResult.NotReady;
             if (debugPending || ownerThreadId != System.Threading.Thread.CurrentThread.ManagedThreadId)
                 return NativeResult.Busy;
-            return current.PopCpuParticleEvent(out particleEvent, out hasEvent);
+            return current.PopCpuParticleEvent(containerId, instanceId, out particleEvent, out hasEvent);
         }
 
         public NativeResult ReadRootValue(string nodeGuid, out NativeValue value)
@@ -817,7 +839,7 @@ namespace LiberaFx.Unity
                 throw new InvalidOperationException("Spawnable package header is invalid.");
             var format = package[4] | package[5] << 8;
             var headerSize = package[6] | package[7] << 8;
-            if (format < 1 || format > 4 || headerSize != 24 || package[24] > 1)
+            if (format < 1 || format > 5 || headerSize != 24 || package[24] > 1)
                 throw new InvalidOperationException("Spawnable package header version or flags are unsupported.");
             return package[24] != 0;
         }

@@ -214,9 +214,12 @@ void backpressureAndEffect()
     assert(host->advance(0, 0) == Result::Ok);
     auto first = next(*host).instanceId;
     assert(host->dispatchSignal(id(42).data()) == Result::Ok); // fills queue with sibling Spawn
-    assert(host->forceTerminate(target(first)) == Result::QueueRejected && host->activeCount() == 2);
+    assert(host->forceTerminate(target(first)) == Result::Ok && host->activeCount() == 1);
     auto sibling = next(*host).instanceId;
     assert(sibling != first);
+    auto scopedForce = next(*host);
+    assert(scopedForce.kind == liberafx::SpawnableHostEventKind::ForceTerminated &&
+        scopedForce.instanceId == first);
     assert(host->forceTerminate(target(first)) == Result::Ok && host->activeCount() == 1);
     // Effect force replaces pending notices with one whole-scope invalidation.
     assert(host->forceTerminate({}) == Result::Ok && host->activeCount() == 0);

@@ -170,10 +170,23 @@ systemId, nodeId, particleId, time, kind, width, values[4]
 次のシミュレーションステップに配送します。個々の値・ID が必要な場合は
 scoped event API を使ってください。フィードバックは再帰的実行ではなくキューです。
 
+## Spawnable の所有関係
+
+CPU システムは Spawnable Group 内にも配置でき、Spawnable 自体のネストにも対応します。
+粒子・イベントキュー・描画バッチは動的インスタンスごとに独立します。
+Capture/Live はルートや同一テンプレートの別個体ではなく、直近の親インスタンスを参照します。
+Life Time 到達時はそのスコープの放出を停止し、生存粒子・子孫・予約処理が完了するまで
+スコープと描画を維持します。親の強制終了はその配下だけを破棄し、無関係な兄弟には影響しません。
+
+従来の CPU イベント読出 API は引き続き root 専用です。子の通知にはコンテナ GUID と
+native instance ID を指定し、Unity/Unreal の `PopScopedCpuParticleEvent`、
+Godot の `pop_scoped_cpu_particle_event`、または native の scoped CPU API を使います。
+自然退役後も未読通知は元のスコープから読めます。明示 Stop・再生し直しでは破棄します。
+
 ## 制限・所有権・互換性
 
-* root と通常 Graph Group 内の CPU システムが対象です。Spawnable Group 内、
-  CPU/GPU コンテナのステージ内入れ子、ステージ内 Draw、
+* root・通常 Graph Group・Spawnable Group 内の CPU システムに対応します。
+  CPU/GPU コンテナの粒子ステージ内入れ子、ステージ内 Draw、
   `Delay`・`LifeTime` 等の遅延 lifecycle は明示的にコンパイルを拒否します。
 * Sprite billboard が対象です。Mesh Draw・Cone・衝突・trail・粒子 ID 指定の
   外部 Signal 配送は未実装です。グラフ入力 Signal は broadcast です。
@@ -186,9 +199,11 @@ scoped event API を使ってください。フィードバックは再帰的実
   無関係な既存 Spawnable 処理全体が allocation-free という主張ではありません。
 * 時刻は単調増加です。逆方向 seek は再生を作り直します。自然終了は放出停止後に
   生存粒子を排出し、Stop・Force は粒子と CPU 通知を消去します。
-* CPU を含む `.lfxb` は既存 `LFXP` envelope の **format 4 / package 12** と、
-  little-endian の CPU payload v1 を使います。非 CPU は既存 format 3 / package 11 を維持します。
-  更新版 reader は旧形式を読み、旧 reader は CPU を捨てず非対応として拒否します。
+* root のみの CPU を含む `.lfxb` は既存 `LFXP` envelope の **format 4 / package 12** と、
+  little-endian の CPU payload v1 を使います。テンプレート内 CPU または Spawnable の
+  ネストには **format 5 / package 13** を使います。CPU もネストもない場合は
+  format 3 / package 11 を維持します。更新版 reader は旧形式を読み、
+  旧 reader は新形式の内容を黙って捨てず非対応として拒否します。
 * 描画 metadata に `cpuParticleVersion:1` と `cpuParticles` を追加します。
   native snapshot は80バイト、scoped event は88バイトです。既存 UUID・値 ABI は変えません。
 

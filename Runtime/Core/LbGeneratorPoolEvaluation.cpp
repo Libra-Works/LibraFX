@@ -458,6 +458,44 @@ auto GeneratorPool::dispatchSignal(GeneratorInstanceId id,
     return result;
 }
 
+auto GeneratorPool::dispatchSignalOwned(const std::uint8_t nodeId[16], double time,
+                                       std::size_t instructionBudget,
+                                       std::uint64_t ownerTag) noexcept -> Result
+{
+    if (!nodeId || !std::isfinite(time) || !instructionBudget ||
+        instructionBudget > 10000)
+    {
+        return Result::InvalidArgument;
+    }
+    auto lock = std::unique_lock<std::mutex>(impl_->mutex);
+    if (impl_->executing)
+    {
+        return Result::Busy;
+    }
+    impl_->executing = true;
+    auto result = Result::Ok;
+    for (auto& slot : impl_->slots)
+    {
+        if (!slot->id || slot->ownerTag != ownerTag || !slot->started ||
+            !slot->sampleReady || slot->expiring || time < slot->start)
+        {
+            continue;
+        }
+        slot->signalTime = time - slot->start;
+        slot->signalEffectTime = time;
+        lock.unlock();
+        auto current = slot->instance->dispatchSignal(nodeId, slot->signalTime,
+                                                      instructionBudget);
+        lock.lock();
+        if (result == Result::Ok)
+        {
+            result = current;
+        }
+    }
+    impl_->executing = false;
+    return result;
+}
+
 auto GeneratorPool::setHostQuality(GeneratorInstanceId id,
                                    const HostQualitySnapshot &snapshot) noexcept
     -> Result
@@ -493,6 +531,36 @@ auto GeneratorPool::setTimeContext(GeneratorInstanceId id, double effectTime,
         return Result::NotReady;
     }
     return slot->instance->setTimeContext(effectTime, frameDelta);
+}
+
+auto GeneratorPool::withInstance(GeneratorInstanceId id,
+                                 GeneratorInstanceAccess access,
+                                 void *context) noexcept -> Result
+{
+    if (!access)
+    {
+        return Result::InvalidArgument;
+    }
+    auto lock = std::unique_lock<std::mutex>(impl_->mutex);
+    if (impl_->executing)
+    {
+        return Result::Busy;
+    }
+    auto slot = impl_->find(id);
+    if (!slot)
+    {
+        return Result::InvalidHandle;
+    }
+    if (!slot->instance)
+    {
+        return Result::NotReady;
+    }
+    impl_->executing = true;
+    lock.unlock();
+    auto result = access(context, *slot->instance);
+    lock.lock();
+    impl_->executing = false;
+    return result;
 }
 
 auto GeneratorPool::evaluate(GeneratorInstanceId id, double time) noexcept

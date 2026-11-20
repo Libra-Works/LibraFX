@@ -178,10 +178,25 @@ outer Signal routes are delivered on the following simulation step. Read the
 scoped event API when every individual value/identity matters. Feedback is
 therefore queued rather than recursively re-entering the particle VM.
 
+## Spawnable ownership
+
+CPU systems may live inside Spawnable Groups, including nested Spawnables.
+Each dynamic instance owns independent particles, event queues and render batches.
+Capture/Live reads the immediate parent instance, not the effect root or another
+instance of the same template. A scope's Life Time stops its emission; existing
+particles, descendants and scheduled work keep it alive until they finish.
+Forcing a parent clears its subtree, not unrelated siblings.
+
+The original CPU event-pop APIs remain root-only. For children, supply the
+container GUID and native instance ID to Unity/Unreal `PopScopedCpuParticleEvent`,
+Godot `pop_scoped_cpu_particle_event`, or the native scoped CPU API. Unread events
+remain available under their original scope after natural retirement; explicit
+Stop/restart discards them.
+
 ## Limits, ownership and compatibility
 
-* Root and ordinary Graph Group CPU systems are supported. CPU inside Spawnable
-  Group, nested CPU/GPU containers inside stages, stage Draw nodes and deferred
+* Root, ordinary Graph Group and Spawnable Group CPU systems are supported.
+  Nested CPU/GPU containers inside particle stages, stage Draw nodes and deferred
   lifecycle nodes (`Delay`, `LifeTime`, etc.) fail compilation explicitly.
 * Sprite billboard is the renderer implemented here. Mesh Draw, Cone shape,
   collision, trails and particle-specific external targeted Signal delivery are
@@ -199,10 +214,11 @@ therefore queued rather than recursively re-entering the particle VM.
 * Time is monotonic. Seeking backwards requires recreating playback; no silent
   rewind/reset. Natural end stops emission and drains surviving particles;
   Stop/Force clears particles and queued CPU notifications.
-* CPU effects use the existing `LFXP` envelope **format 4 / package 12**, adding a
-  little-endian numeric CPU payload version 1. Non-CPU effects retain format 3 /
-  package 11. Updated readers retain legacy package reads; old readers reject
-  CPU packages rather than silently discarding them.
+* Root-only CPU effects use the existing `LFXP` envelope **format 4 / package 12**, adding a
+  little-endian numeric CPU payload version 1. Template CPU systems or nested
+  Spawnables use **format 5 / package 13**. Effects without CPU or nested
+  Spawnables retain format 3 / package 11. Updated readers retain legacy reads;
+  old readers reject new formats rather than silently discarding their contents.
 * Render metadata adds `cpuParticleVersion: 1` and `cpuParticles`. Native snapshot
   ABI is 80 bytes; scoped event ABI is 88 bytes. Existing stable node IDs and
   existing value ABI are unchanged.

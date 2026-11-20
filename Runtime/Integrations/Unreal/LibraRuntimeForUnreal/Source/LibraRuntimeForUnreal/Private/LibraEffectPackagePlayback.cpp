@@ -123,6 +123,18 @@ ELibraRuntimeResult ULibraEffectComponent::PopCpuParticleEvent(
     return ELibraRuntimeResult::NotReady;
 }
 
+ELibraRuntimeResult ULibraEffectComponent::PopScopedCpuParticleEvent(
+    FGuid containerId, int64 instanceId, FLibraCpuParticleEvent& particleEvent, bool& hasEvent)
+{
+    if (PackagePlayback)
+    {
+        return PackagePlayback->PopScopedCpuParticleEvent(containerId, instanceId, particleEvent, hasEvent);
+    }
+    particleEvent = {};
+    hasEvent = false;
+    return ELibraRuntimeResult::NotReady;
+}
+
 void ULibraEffectComponent::ForwardHostEvent(const FLibraSpawnableHostEvent& event)
 {
     SyncPackageState();
