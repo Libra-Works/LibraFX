@@ -1,6 +1,10 @@
 [Bb]in/
 [Oo]bj/
 /build/
+# Native CMake outputs and local profiler/crash captures.
+/Runtime/build-*/
+*.dmp
+*.etl
 .vs/
 .idea/
 TestResults/
