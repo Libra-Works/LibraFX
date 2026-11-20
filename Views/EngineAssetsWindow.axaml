@@ -72,12 +72,12 @@
                     <Expander Header="{DynamicResource Text.Asset.MaterialDetails}" IsExpanded="False">
                         <TextBlock Text="{Binding AssetDetails}" TextWrapping="Wrap" FontFamily="Consolas" />
                     </Expander>
-                    <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="4">
-                        <TextBlock Classes="editor-label" Text="{DynamicResource Text.Asset.Description}" />
+                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="4">
+                        <TextBlock Classes="editor-label" Text="{DynamicResource Text.Asset.Description}" VerticalAlignment="Center" />
                         <TextBox Grid.Column="1" Text="{Binding Description}" AcceptsReturn="True" MinHeight="42" TextWrapping="Wrap" />
-                        <TextBlock Grid.Row="1" Classes="editor-label" Text="{DynamicResource Text.Asset.SemanticUsage}" />
+                        <TextBlock Grid.Row="1" Classes="editor-label" Text="{DynamicResource Text.Asset.SemanticUsage}" VerticalAlignment="Center" />
                         <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding SemanticUsage}" PlaceholderText="{DynamicResource Text.Asset.SemanticHint}" />
-                        <TextBlock Grid.Row="2" Classes="editor-label" Text="{DynamicResource Text.Asset.Tags}" />
+                        <TextBlock Grid.Row="2" Classes="editor-label" Text="{DynamicResource Text.Asset.Tags}" VerticalAlignment="Center" />
                         <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Tags}" PlaceholderText="{DynamicResource Text.Asset.TagsHint}" />
                     </Grid>
                     <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Asset.Atlas}" />

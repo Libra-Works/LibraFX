@@ -76,7 +76,7 @@ public sealed class ProfilerHistoryChart : Control
         Enumerable.Range(0, _samples.Count).FirstOrDefault(i => _samples[i].SnapshotId == id, _samples.Count - 1) + 1 :
         _samples.Count;
     private int Start => Math.Max(0, End - _visibleCount);
-    private Rect Plot => new(64, 14, Math.Max(1, Bounds.Width - 82), Math.Max(1, Bounds.Height - 42));
+    private Rect Plot => new(64, 24, Math.Max(1, Bounds.Width - 82), Math.Max(1, Bounds.Height - 52));
     private int IndexAt(double x)
     {
         if (_samples.Count == 0 || x < Plot.Left || x > Plot.Right) return -1;
@@ -111,7 +111,7 @@ public sealed class ProfilerHistoryChart : Control
             context.DrawLine(grid, new(plot.Left, y), new(plot.Right, y));
             Label(context, (maximum * line / 4).ToString("0.####", CultureInfo.CurrentCulture), new(4, y - 7));
         }
-        Label(context, "ms", new(4, 0));
+        Label(context, "ms", new(4, 2));
         if (count == 0)
         {
             Label(context, LocalizationService.Shared.Get("Profiler.ProfileEmpty"), new(plot.Left + 12, plot.Top + 20));

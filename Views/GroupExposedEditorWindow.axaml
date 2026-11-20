@@ -2,12 +2,12 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="LiberaFx.Views.GroupExposedEditorWindow"
         Title="{DynamicResource Text.Panels.ConfigureGroupItems}"
-        Width="520" Height="650" MinWidth="420" MinHeight="480"
+        Width="520" Height="720" MinWidth="420" MinHeight="480"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
     <Grid RowDefinitions="*,Auto" Margin="16">
         <ScrollViewer>
-            <StackPanel Spacing="6">
+            <StackPanel Spacing="6" Margin="0,0,10,0">
                 <ComboBox x:Name="ItemSelector" HorizontalAlignment="Stretch" SelectionChanged="OnItemChanged">
                     <ComboBox.ItemTemplate>
                         <DataTemplate><TextBlock Text="{ReflectionBinding Name}" /></DataTemplate>
