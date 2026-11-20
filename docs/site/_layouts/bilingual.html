@@ -10,10 +10,10 @@
 {% assign nav_items = 'index.html|preview-update.html|getting-started.html|production-workflow.html|batch-conversion.html|editor-reference.html|authoring.html|gpu-particles.html|cpu-particles.html|fluid-2d.html|flexible-plane-draw.html|node-reference.html|scalar-math-nodes.html|quaternion-random.html|engine-integration.html|glossary.html' | split: '|' %}
 {% if page.lang == 'ja' %}
   {% assign prefix = '/ja/' %}
-  {% assign nav_labels = 'トップ|今回の更新|はじめに|制作フロー|一括変換|画面ガイド|グラフ制作|GPU パーティクル|CPU パーティクル|2D 煙・インク|Flexible Plane Draw|標準ノード|スカラー演算|回転と乱数|エンジン連携|用語集' | split: '|' %}
+  {% assign nav_labels = 'トップ|今回の更新|はじめに|制作フロー|一括変換|画面ガイド|グラフ制作|GPU パーティクル|CPU パーティクル|2D 煙・水・炎|Flexible Plane Draw|標準ノード|スカラー演算|回転と乱数|エンジン連携|用語集' | split: '|' %}
 {% else %}
   {% assign prefix = '/' %}
-  {% assign nav_labels = 'Home|Preview update|Getting started|Production workflow|Batch conversion|Editor guide|Graph authoring|GPU particles|CPU particles|2D smoke and ink|Flexible Plane Draw|Built-in nodes|Scalar math|Quaternions and random|Engine integration|Glossary' | split: '|' %}
+  {% assign nav_labels = 'Home|Preview update|Getting started|Production workflow|Batch conversion|Editor guide|Graph authoring|GPU particles|CPU particles|2D smoke, water and fire|Flexible Plane Draw|Built-in nodes|Scalar math|Quaternions and random|Engine integration|Glossary' | split: '|' %}
 {% endif %}
 <html lang="{{ page.lang }}" data-bs-theme="dark">
   <head>
