@@ -17,6 +17,7 @@ internal static class ResourcePlanAuthoringTests
 {
     public static void Run()
     {
+        Console.WriteLine("Resource plan: opening form checks.");
         var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
         var node = GpuParticleEditorService.Create(graph);
         GpuParticleEditorService.Apply(graph, node.Id, [new() { Action = "fluid-enable" }], requireValid: true);
@@ -31,12 +32,57 @@ internal static class ResourcePlanAuthoringTests
             Pump();
             Find<Expander>("ResourcePlanEditor").IsExpanded = true;
             Pump();
-            Invoke("ApplyResourcePlan");
+            Invoke("ApplyResourcePlanForm");
+            Console.WriteLine("Resource plan: built-in form applied.");
             Require(GpuParticleEditorService.ResourcePlanRuntimeSupported(vm.State),
                 "Applying an unchanged built-in fluid plan must preserve playback support.");
             Invoke("ResetResourcePlan");
             Require(GraphSnapshot.ContentEquals(original, graph.CreateSnapshot()),
                 "Resetting the source plan must restore the original fluid state.");
+
+            Find<Expander>("ResourcePlanEditor").IsExpanded = true;
+            Pump();
+            Invoke("AddPlanResource");
+            Require(vm.State.ResourcePlanDraft is null, "Adding form rows must remain a local draft until Apply.");
+            var resourceCard = Find<StackPanel>("ResourcePlanForm").Children.OfType<Expander>().Single(e => Equals(e.Header, "resource1"));
+            resourceCard.IsExpanded = true;
+            Pump();
+            Find<ComboBox>("PlanResource10Kind").SelectedIndex = (int)GpuFlowResourceKind.Texture3D;
+            Find<ComboBox>("PlanResource10Format").SelectedIndex = (int)GpuResourceFormat.R32Float;
+            Find<NumericUpDown>("PlanResource10Width").Value = 8;
+            Find<NumericUpDown>("PlanResource10Height").Value = 4;
+            Find<NumericUpDown>("PlanResource10Depth").Value = 2;
+            var passIndex = GpuParticleEditorService.ResourcePlan(vm.State).Passes.Count;
+            Invoke("AddPlanPass");
+            OpenPass();
+            Invoke("PlanPass" + passIndex + "AddUse");
+            OpenPass();
+            var passPanel = (StackPanel)Find<StackPanel>("ResourcePlanForm").Children.OfType<Expander>()
+                .Single(e => Equals(e.Header, "pass1")).Content!;
+            passPanel.Children.OfType<CheckBox>().First().IsChecked = true;
+            passPanel.Children.OfType<Expander>().Single().IsExpanded = true;
+            Pump();
+            Find<ComboBox>("PlanPass" + passIndex + "Use0Resource").SelectedItem = "resource1";
+            Find<ComboBox>("PlanPass" + passIndex + "Use0Access").SelectedIndex = (int)GpuResourceAccess.Sample;
+            Invoke("ApplyResourcePlanForm");
+            Console.WriteLine("Resource plan: edited form applied.");
+            Require(vm.State.ResourcePlanDraft!.Resources.Last() is { Kind: GpuFlowResourceKind.Texture3D,
+                Format: GpuResourceFormat.R32Float, Width: 8, Height: 4, Depth: 2 },
+                "Form selections and numbers must generate the saved resource JSON without manual source editing.");
+            Require(vm.State.ResourcePlanDraft.Passes.Single(p => p.Id == "pass1") is { After.Count: 1, Uses.Count: 1 } added &&
+                added.Uses[0] is { Resource: "resource1", Access: GpuResourceAccess.Sample, Version: 0 },
+                "Pass dependency checkboxes and resource access selectors must generate the saved contract.");
+            Require(graph.History.Undo() && vm.State.ResourcePlanDraft is null && graph.History.Redo(),
+                "Form edits must support Undo and Redo.");
+            Pump();
+            Invoke("ResetResourcePlan");
+
+            void OpenPass()
+            {
+                Find<StackPanel>("ResourcePlanForm").Children.OfType<Expander>()
+                    .Single(e => Equals(e.Header, "pass1")).IsExpanded = true;
+                Pump();
+            }
 
             var plan = new GpuResourcePlan
             {
@@ -64,8 +110,11 @@ internal static class ResourcePlanAuthoringTests
             };
             Find<Expander>("ResourcePlanEditor").IsExpanded = true;
             Pump();
+            Find<Expander>("ResourcePlanAdvanced").IsExpanded = true;
+            Pump();
             Find<TextBox>("ResourcePlanSource").Text = GpuResourcePlanCompiler.Serialize(plan);
             Invoke("ApplyResourcePlan");
+            Console.WriteLine("Resource plan: advanced source applied.");
             var state = vm.State;
             Require(state.ResourcePlanDraft?.Resources.Count == 5 &&
                 GpuResourcePlanCompiler.Compile(state.ResourcePlanDraft).OwnedBytes == 1216,
@@ -97,6 +146,8 @@ internal static class ResourcePlanAuthoringTests
             Require(graph.History.Undo() && vm.State.ResourcePlanDraft is null && graph.History.Redo(),
                 "Applying a resource plan must be one undoable edit.");
             Pump();
+            Find<Expander>("ResourcePlanAdvanced").IsExpanded = true;
+            Pump();
             Require(Find<TextBox>("ResourcePlanSource").Text!.Contains("host.main.color", StringComparison.Ordinal),
                 "Redo must refresh the actual source editor.");
             var history = graph.History.CurrentNodeId;
@@ -122,6 +173,7 @@ internal static class ResourcePlanAuthoringTests
                 "Reset must restore supported fluid execution without editing the particle graph.");
         }
         finally { view.CloseWorkspace(); window.Close(); }
+        Console.WriteLine("Resource plan authoring checks passed.");
 
         T Find<T>(string name) where T : Control => view.GetVisualDescendants().OfType<T>().Single(control => control.Name == name);
         void Pump() { Dispatcher.UIThread.RunJobs(); window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }

@@ -12,7 +12,7 @@ the engine/backends listed below.
 
 ## Make a water or fire effect
 
-1. Add **GPU Particle**, open its workspace and click **Use 2D smoke / ink**.
+1. Add **GPU Particle**, open its workspace and click **Use Fluid2D**.
 2. Select **Simulation model / preset**. Changing model loads that preset's settings and clears its previous force nodes; Undo restores them.
 3. Adjust the grid, domain, source and model settings. Start with a small grid. Source coordinates are normalized; radius and depth use simulation-domain distance units.
 4. Leave **Output plane: Auto / On / Off** at Auto to use the dedicated renderer. For a continuous root effect, disable **End automatically when idle**. A Spawnable template needs a Spawn Signal and an appropriate **Life Time**.
@@ -25,7 +25,7 @@ These are actual development-editor captures in English with LibraDark, not engi
 
 | Model | Simulation | Dedicated renderer |
 | --- | --- | --- |
-| 2D smoke / ink | Collocated velocity projection and transported dye | Premultiplied density plane |
+| Fluid2D (smoke / ink) | Collocated velocity projection and transported dye | Premultiplied density plane |
 | Side-view free-surface water | Staggered MAC face velocities, air pressure boundary and conservative water-fraction transport in a closed rectangular domain | Water tint, Fresnel response, surface-edge foam and highlights |
 | Top-down shallow water | Flat-bed, first-order HLL shallow-water depth and horizontal momentum | Horizontal GPU-displaced grid, height-derived normals, Fresnel and foam |
 | Fuel / temperature combustion | Fuel injection, ignition-gated reaction, heat release, cooling and smoke transport | Temperature emission and smoke opacity |
@@ -70,9 +70,19 @@ Pressure iterations apply to smoke, free surface and combustion. Free surface wa
 
 ## Edit resource declarations
 
-Expand **Resource declarations / pass plan (source contract)** in Resources / Targets. Its JSON declares named particle/general buffers, Texture2D/3D resources, render targets, dimensions, format, lifetime, initialization and external binding names. Each pass binds explicit resource versions and access. **Apply declarations** validates the portable dependency graph and saves one undoable edit; **Use built-in plan** removes the override. Project/history storage and MCP retain the declarations. The `resources` export writes their source contract and compilation metadata.
+For normal smoke, water and fire adjustments, use the fluid inspector: select a model, toggle the source checkbox and edit grid or velocity numbers. No handwritten JSON is required.
 
-![Resource-plan source editor](images/editor/fluid-2d-resources-en.png)
+To edit resource structure, expand **Resource declarations / pass plan (source contract)** in Resources / Targets. The following form controls are available in the development version.
+
+1. Expand a resource name. Select its kind, format, lifetime and initialization, then enter width, height and depth. Buffer width is the element count. Use **Add resource** and **Remove** to change the rows.
+2. Expand a pass. Enter its operation and check **Run after these passes** to specify dependencies.
+3. Expand each access entry. Select a resource, access method and frame. Version 0 is the initial state; written versions start at 1. Use **Add access** for more bindings.
+4. **Apply form settings** generates JSON internally, validates dependencies and saves one undoable edit. Added and removed rows remain drafts until applied. Invalid plans leave the saved graph unchanged.
+5. **Use built-in plan** removes the override. For direct source editing, expand **Advanced: edit JSON** and use **Apply declarations**. The form and advanced source are separate inputs; use the Apply button for the input you edited.
+
+Project/history storage and MCP retain the declarations. The `resources` export writes their source contract and compilation metadata.
+
+![Earlier resource-plan JSON editor, now in the advanced section](images/editor/fluid-2d-resources-en.png)
 
 This editor describes allocations and dependencies; it does not provide arbitrary engine kernels or an engine main target. An unchanged built-in fluid plan remains playable. Other authored layouts/operations are rejected for effect playback with `ResourcePlanRuntimeUnsupported`; reset to the built-in plan to play the fluid again. Declaring an external target does not establish its availability, write permission or ownership on a host. Texture3D execution remains separate work.
 

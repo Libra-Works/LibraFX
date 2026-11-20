@@ -26,18 +26,21 @@ public partial class GpuWorkspaceView
             Height = 300, MaxLength = 4 * 1024 * 1024,
             FontFamily = new FontFamily("Consolas"), IsReadOnly = vm.Graph.IsReadOnly
         };
-        panel.Children.Add(source);
+        panel.Children.Add(BuildResourcePlanForm(plan));
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         var apply = Button(text.Get("Fluid.ResourcePlanApply"), () =>
             vm.Edit(new() { Action = "resource-plan", Text = source.Text }));
         apply.Name = "ApplyResourcePlan";
         apply.IsEnabled = !vm.Graph.IsReadOnly;
-        actions.Children.Add(apply);
         var reset = Button(text.Get("Fluid.ResourcePlanReset"), () =>
             vm.Edit(new() { Action = "resource-plan-reset" }));
         reset.Name = "ResetResourcePlan";
         reset.IsEnabled = !vm.Graph.IsReadOnly && vm.State.ResourcePlanDraft is not null;
         actions.Children.Add(reset);
+        var advanced = new StackPanel { Spacing = 6 };
+        advanced.Children.Add(source);
+        advanced.Children.Add(apply);
+        panel.Children.Add(new Expander { Name = "ResourcePlanAdvanced", Header = text.Get("Fluid.Plan.Advanced"), Content = advanced });
         panel.Children.Add(actions);
         panel.Children.Add(new TextBlock
         {
