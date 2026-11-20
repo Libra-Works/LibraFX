@@ -1,5 +1,7 @@
 <Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dock="using:Dock.Avalonia.Controls"
+        xmlns:dockSettings="using:Dock.Settings">
     <Styles.Resources>
         <CornerRadius x:Key="EditorChromeCornerRadius">6</CornerRadius>
         <x:Double x:Key="EditorBodyFontSize">14</x:Double>
@@ -113,5 +115,182 @@
     </Style>
     <Style Selector=".editor-inspector CheckBox">
         <Setter Property="MinHeight" Value="28" />
+    </Style>
+
+    <Style Selector="Border.dock-compass-item">
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="34" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Background" Value="{DynamicResource EffectSurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource EditorChromeDividerBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Opacity" Value="0.94" />
+    </Style>
+    <Style Selector="Border.dock-compass-item:pointerover">
+        <Setter Property="Background" Value="{DynamicResource DockApplicationAccentBrushLow}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource DockApplicationAccentBrushIndicator}" />
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+
+    <Style Selector="dock|DockTarget">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid x:Name="PART_Panel" Margin="{TemplateBinding TargetMargin}">
+                    <Panel x:Name="PART_TopIndicator" IsHitTestVisible="False"
+                           IsVisible="{TemplateBinding ShowVerticalTargets}"
+                           VerticalAlignment="Top" Height="80" Opacity="0">
+                        <Border Background="{DynamicResource EffectSelectionFillBrush}"
+                                BorderBrush="{DynamicResource DockApplicationAccentBrushIndicator}"
+                                BorderThickness="1" CornerRadius="4" />
+                    </Panel>
+                    <Panel x:Name="PART_BottomIndicator" IsHitTestVisible="False"
+                           IsVisible="{TemplateBinding ShowVerticalTargets}"
+                           VerticalAlignment="Bottom" Height="80" Opacity="0">
+                        <Border Background="{DynamicResource EffectSelectionFillBrush}"
+                                BorderBrush="{DynamicResource DockApplicationAccentBrushIndicator}"
+                                BorderThickness="1" CornerRadius="4" />
+                    </Panel>
+                    <Panel x:Name="PART_LeftIndicator" IsHitTestVisible="False"
+                           IsVisible="{TemplateBinding ShowHorizontalTargets}"
+                           HorizontalAlignment="Left" Width="80" Opacity="0">
+                        <Border Background="{DynamicResource EffectSelectionFillBrush}"
+                                BorderBrush="{DynamicResource DockApplicationAccentBrushIndicator}"
+                                BorderThickness="1" CornerRadius="4" />
+                    </Panel>
+                    <Panel x:Name="PART_RightIndicator" IsHitTestVisible="False"
+                           IsVisible="{TemplateBinding ShowHorizontalTargets}"
+                           HorizontalAlignment="Right" Width="80" Opacity="0">
+                        <Border Background="{DynamicResource EffectSelectionFillBrush}"
+                                BorderBrush="{DynamicResource DockApplicationAccentBrushIndicator}"
+                                BorderThickness="1" CornerRadius="4" />
+                    </Panel>
+                    <Panel x:Name="PART_CenterIndicator" IsHitTestVisible="False" Opacity="0">
+                        <Border Background="{DynamicResource EffectSelectionFillBrush}"
+                                BorderBrush="{DynamicResource DockApplicationAccentBrushIndicator}"
+                                BorderThickness="1" CornerRadius="4" />
+                    </Panel>
+
+                    <Grid x:Name="PART_SelectorGrid"
+                          RowDefinitions="36,36,36" ColumnDefinitions="36,36,36"
+                          RowSpacing="4" ColumnSpacing="4"
+                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                          IsVisible="{TemplateBinding ShowIndicatorsOnly, Converter={x:Static BoolConverters.Not}}">
+                        <Border x:Name="PART_TopSelector" Grid.Row="0" Grid.Column="1" Classes="dock-compass-item"
+                                IsVisible="{TemplateBinding ShowVerticalTargets}"
+                                dockSettings:DockProperties.IndicatorDockOperation="Top">
+                            <Grid Width="18" Height="18">
+                                <Path Data="M2,3 H16 V15 H2 Z" Stroke="{DynamicResource EffectMutedForegroundBrush}" StrokeThickness="1.5" />
+                                <Path Data="M3.5,4.5 H14.5 V9 H3.5 Z" Fill="{DynamicResource EffectForegroundBrush}" />
+                            </Grid>
+                        </Border>
+                        <Border x:Name="PART_LeftSelector" Grid.Row="1" Grid.Column="0" Classes="dock-compass-item"
+                                IsVisible="{TemplateBinding ShowHorizontalTargets}"
+                                dockSettings:DockProperties.IndicatorDockOperation="Left">
+                            <Grid Width="18" Height="18">
+                                <Path Data="M2,3 H16 V15 H2 Z" Stroke="{DynamicResource EffectMutedForegroundBrush}" StrokeThickness="1.5" />
+                                <Path Data="M3.5,4.5 H9 V13.5 H3.5 Z" Fill="{DynamicResource EffectForegroundBrush}" />
+                            </Grid>
+                        </Border>
+                        <Border x:Name="PART_CenterSelector" Grid.Row="1" Grid.Column="1" Classes="dock-compass-item"
+                                dockSettings:DockProperties.IndicatorDockOperation="Fill">
+                            <Grid Width="18" Height="18">
+                                <Path Data="M2,3 H16 V15 H2 Z" Stroke="{DynamicResource EffectMutedForegroundBrush}" StrokeThickness="1.5" />
+                                <Path Data="M4,5 H14 V13 H4 Z" Fill="{DynamicResource DockApplicationAccentBrushIndicator}" />
+                            </Grid>
+                        </Border>
+                        <Border x:Name="PART_RightSelector" Grid.Row="1" Grid.Column="2" Classes="dock-compass-item"
+                                IsVisible="{TemplateBinding ShowHorizontalTargets}"
+                                dockSettings:DockProperties.IndicatorDockOperation="Right">
+                            <Grid Width="18" Height="18">
+                                <Path Data="M2,3 H16 V15 H2 Z" Stroke="{DynamicResource EffectMutedForegroundBrush}" StrokeThickness="1.5" />
+                                <Path Data="M9,4.5 H14.5 V13.5 H9 Z" Fill="{DynamicResource EffectForegroundBrush}" />
+                            </Grid>
+                        </Border>
+                        <Border x:Name="PART_BottomSelector" Grid.Row="2" Grid.Column="1" Classes="dock-compass-item"
+                                IsVisible="{TemplateBinding ShowVerticalTargets}"
+                                dockSettings:DockProperties.IndicatorDockOperation="Bottom">
+                            <Grid Width="18" Height="18">
+                                <Path Data="M2,3 H16 V15 H2 Z" Stroke="{DynamicResource EffectMutedForegroundBrush}" StrokeThickness="1.5" />
+                                <Path Data="M3.5,9 H14.5 V13.5 H3.5 Z" Fill="{DynamicResource EffectForegroundBrush}" />
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+
+    <Style Selector="dock|GlobalDockTarget">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid x:Name="PART_Panel">
+                    <Panel x:Name="PART_TopIndicator" IsHitTestVisible="False"
+                           IsVisible="{TemplateBinding ShowVerticalTargets}"
+                           VerticalAlignment="Top" Height="80" Opacity="0">
+                        <Border Background="{DynamicResource EffectSelectionFillBrush}"
+                                BorderBrush="{DynamicResource DockApplicationAccentBrushIndicator}"
+                                BorderThickness="1" CornerRadius="4" />
+                    </Panel>
+                    <Panel x:Name="PART_BottomIndicator" IsHitTestVisible="False"
+                           IsVisible="{TemplateBinding ShowVerticalTargets}"
+                           VerticalAlignment="Bottom" Height="80" Opacity="0">
+                        <Border Background="{DynamicResource EffectSelectionFillBrush}"
+                                BorderBrush="{DynamicResource DockApplicationAccentBrushIndicator}"
+                                BorderThickness="1" CornerRadius="4" />
+                    </Panel>
+                    <Panel x:Name="PART_LeftIndicator" IsHitTestVisible="False"
+                           IsVisible="{TemplateBinding ShowHorizontalTargets}"
+                           HorizontalAlignment="Left" Width="80" Opacity="0">
+                        <Border Background="{DynamicResource EffectSelectionFillBrush}"
+                                BorderBrush="{DynamicResource DockApplicationAccentBrushIndicator}"
+                                BorderThickness="1" CornerRadius="4" />
+                    </Panel>
+                    <Panel x:Name="PART_RightIndicator" IsHitTestVisible="False"
+                           IsVisible="{TemplateBinding ShowHorizontalTargets}"
+                           HorizontalAlignment="Right" Width="80" Opacity="0">
+                        <Border Background="{DynamicResource EffectSelectionFillBrush}"
+                                BorderBrush="{DynamicResource DockApplicationAccentBrushIndicator}"
+                                BorderThickness="1" CornerRadius="4" />
+                    </Panel>
+
+                    <Border x:Name="PART_TopSelector" Classes="dock-compass-item" Margin="0,12,0,0"
+                            HorizontalAlignment="Center" VerticalAlignment="Top"
+                            IsVisible="{TemplateBinding ShowVerticalTargets}"
+                            dockSettings:DockProperties.IndicatorDockOperation="Top">
+                        <Grid Width="18" Height="18">
+                            <Path Data="M2,3 H16 V15 H2 Z" Stroke="{DynamicResource EffectMutedForegroundBrush}" StrokeThickness="1.5" />
+                            <Path Data="M3.5,4.5 H14.5 V8 H3.5 Z" Fill="{DynamicResource DockApplicationAccentBrushIndicator}" />
+                        </Grid>
+                    </Border>
+                    <Border x:Name="PART_BottomSelector" Classes="dock-compass-item" Margin="0,0,0,12"
+                            HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                            IsVisible="{TemplateBinding ShowVerticalTargets}"
+                            dockSettings:DockProperties.IndicatorDockOperation="Bottom">
+                        <Grid Width="18" Height="18">
+                            <Path Data="M2,3 H16 V15 H2 Z" Stroke="{DynamicResource EffectMutedForegroundBrush}" StrokeThickness="1.5" />
+                            <Path Data="M3.5,10 H14.5 V13.5 H3.5 Z" Fill="{DynamicResource DockApplicationAccentBrushIndicator}" />
+                        </Grid>
+                    </Border>
+                    <Border x:Name="PART_LeftSelector" Classes="dock-compass-item" Margin="12,0,0,0"
+                            HorizontalAlignment="Left" VerticalAlignment="Center"
+                            IsVisible="{TemplateBinding ShowHorizontalTargets}"
+                            dockSettings:DockProperties.IndicatorDockOperation="Left">
+                        <Grid Width="18" Height="18">
+                            <Path Data="M2,3 H16 V15 H2 Z" Stroke="{DynamicResource EffectMutedForegroundBrush}" StrokeThickness="1.5" />
+                            <Path Data="M3.5,4.5 H8 V13.5 H3.5 Z" Fill="{DynamicResource DockApplicationAccentBrushIndicator}" />
+                        </Grid>
+                    </Border>
+                    <Border x:Name="PART_RightSelector" Classes="dock-compass-item" Margin="0,0,12,0"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            IsVisible="{TemplateBinding ShowHorizontalTargets}"
+                            dockSettings:DockProperties.IndicatorDockOperation="Right">
+                        <Grid Width="18" Height="18">
+                            <Path Data="M2,3 H16 V15 H2 Z" Stroke="{DynamicResource EffectMutedForegroundBrush}" StrokeThickness="1.5" />
+                            <Path Data="M10,4.5 H14.5 V13.5 H10 Z" Fill="{DynamicResource DockApplicationAccentBrushIndicator}" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
     </Style>
 </Styles>
