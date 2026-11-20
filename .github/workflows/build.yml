@@ -157,6 +157,7 @@ jobs:
           name: LibraSDK-source-${{ needs.version.outputs.value }}
           path: ${{ runner.temp }}/LibraSDK
           if-no-files-found: error
+          include-hidden-files: true
 
   adapters:
     name: LibraFor${{ matrix.engine }}
@@ -231,3 +232,4 @@ jobs:
           name: LibraFor${{ matrix.engine }}-${{ needs.version.outputs.value }}
           path: ${{ runner.temp }}/sdk
           if-no-files-found: error
+          include-hidden-files: true
