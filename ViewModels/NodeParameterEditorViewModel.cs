@@ -3,6 +3,7 @@ using System.Text.Json;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using LiberaFx.Models.Appearance;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services;
 
@@ -35,6 +36,13 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         connection.Target == _node && (connection.TargetPortId == Id ||
         connection.TargetPortId is null && _node.HasLegacyInput && _node.Definition.Parameters.Count == 1));
     public bool HasConnection => InputConnection is not null;
+    public bool IsNodeLocked => _node.IsLocked;
+    public bool IsParameterLocked => _node.IsParameterLocked(Id);
+    public bool IsEffectiveLocked => IsNodeLocked || IsParameterLocked;
+    public bool CanEditValue => IsEnabled && !HasConnection && !IsEffectiveLocked && !_graph.IsReadOnly;
+    public bool CanToggleParameterLock => !IsNodeLocked && !_graph.IsReadOnly && _graph.Nodes.Contains(_node);
+    public EditorIcon ConnectionIcon => HasConnection ? EditorIcon.Link : EditorIcon.Disconnect;
+    public EditorIcon LockIcon => IsEffectiveLocked ? EditorIcon.Lock : EditorIcon.Unlock;
     public bool IsResourceParameter => _assetBrowser is not null && _exposed is null && Type == "string" &&
         ResourceAssignment.TargetForParameter(_node, Id) is not null;
     public bool CanRevealResource
@@ -51,15 +59,22 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
             catch (ArgumentException) { return false; }
         }
     }
-    public bool CanReset => (_exposed is null || IsCurrentInspectorTarget()) && (_graph.Nodes.Contains(_node) ||
+    public bool CanReset => !HasConnection && !IsEffectiveLocked && !_graph.IsReadOnly &&
+        (_exposed is null || IsCurrentInspectorTarget()) && (_graph.Nodes.Contains(_node) ||
         _exposed is not null && ReferenceEquals(_graph.ContainingSpawnable, _node)) && (_exposed is { } item
         ? _node.GroupOverrides?.Any(value => value.ItemId == item.Id) == true
         : !NodeParameter.ValuesEqual(Value, _definition.DefaultValue));
     public IRelayCommand DisconnectCommand { get; }
+    public IRelayCommand ToggleLockCommand { get; }
     public IRelayCommand ResetCommand { get; }
     public IRelayCommand PublishCommand { get; }
     public bool ShowPublish => !IsMaterialSlot && _exposed is null && _graph.CanPublishGroupParameter(_node, Id);
     public string DisconnectHint => LocalizationService.Shared.Get("Panels.DisconnectParameter", Name);
+    public string ConnectionHint => LocalizationService.Shared.Get(
+        HasConnection ? "Panels.DisconnectParameter" : "Panels.ParameterNotConnected", Name);
+    public string LockHint => LocalizationService.Shared.Get(
+        IsNodeLocked ? "Panels.ParameterLockedByNode" :
+        IsParameterLocked ? "Panels.UnlockParameter" : "Panels.LockParameter", Name);
     public string ResetHint => LocalizationService.Shared.Get("Panels.ResetParameter", Name);
     public string PublishHint => LocalizationService.Shared.Get("Panels.PublishGroupParameter", Name);
     public string BrowseResourceHint => LocalizationService.Shared.Get("Resources.BrowseParameter");
@@ -150,6 +165,12 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
             if (InputConnection is { } connection) _graph.DisconnectConnection(connection);
             Refresh();
         }, () => HasConnection);
+        ToggleLockCommand = new RelayCommand(() =>
+        {
+            if ((_hasInspectorTargetGuard || _exposed is not null) && !IsCurrentInspectorTarget()) return;
+            _graph.SetParameterLocked(_node, Id, !IsParameterLocked);
+            Refresh();
+        }, () => CanToggleParameterLock);
         ResetCommand = new RelayCommand(() =>
         {
             if ((_hasInspectorTargetGuard || _exposed is not null) && !IsCurrentInspectorTarget()) return;
@@ -236,7 +257,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
 
     public void OpenResourceBrowser()
     {
-        if (!IsResourceParameter || !IsCurrentInspectorTarget() || _assetBrowser is null) return;
+        if (!CanEditValue || !IsResourceParameter || !IsCurrentInspectorTarget() || _assetBrowser is null) return;
         if (_assetBrowser.MainDocumentFor(_graph) is not { } document)
         {
             Status = "Messages.AssetSelectionStale";
@@ -285,6 +306,15 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(DisplayValue));
         OnPropertyChanged(nameof(IsEnabled));
         OnPropertyChanged(nameof(HasConnection));
+        OnPropertyChanged(nameof(IsNodeLocked));
+        OnPropertyChanged(nameof(IsParameterLocked));
+        OnPropertyChanged(nameof(IsEffectiveLocked));
+        OnPropertyChanged(nameof(CanEditValue));
+        OnPropertyChanged(nameof(CanToggleParameterLock));
+        OnPropertyChanged(nameof(ConnectionIcon));
+        OnPropertyChanged(nameof(ConnectionHint));
+        OnPropertyChanged(nameof(LockIcon));
+        OnPropertyChanged(nameof(LockHint));
         OnPropertyChanged(nameof(IsResourceParameter));
         OnPropertyChanged(nameof(CanRevealResource));
         OnPropertyChanged(nameof(BrowseResourceHint));
@@ -295,6 +325,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(PublishHint));
         OnPropertyChanged(nameof(ShowPublish));
         DisconnectCommand.NotifyCanExecuteChanged();
+        ToggleLockCommand.NotifyCanExecuteChanged();
         ResetCommand.NotifyCanExecuteChanged();
         PublishCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(EnumValues));
@@ -333,6 +364,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     private bool SetValue(JsonElement value)
     {
         if ((_hasInspectorTargetGuard || _exposed is not null) && !IsCurrentInspectorTarget()) return false;
+        if (HasConnection || IsEffectiveLocked) return false;
         try
         {
             if (_exposed is { } item)

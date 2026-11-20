@@ -77,12 +77,27 @@ public sealed class GraphNodeViewModel : ObservableObject
     public bool IsComment => Definition.Kind == GraphNodeKind.Comment;
     public bool HasPorts => !IsGpuParticle && !IsComment && (!IsGraphGroup ||
         IsSpawnableGroup || Definition.InputPorts is { Count: > 0 } || Definition.OutputPorts is { Count: > 0 });
-    public bool ShowPortType => Definition.Kind != GraphNodeKind.GraphGroup;
+    public bool ShowPortType => HasPorts && Definition.Kind != GraphNodeKind.GraphGroup;
     public bool HasLegacyInput => HasPorts && Definition.InputPorts is null;
     public bool HasCustomInputs => HasPorts && Definition.InputPorts is { Count: > 0 };
-    public IReadOnlyList<GraphInputPortDefinition> InputPorts => !IsPreviewDebugDraw ? Definition.InputPorts ?? [] :
-        (Definition.InputPorts ?? []).Select(port => port with { Name = LocalizationService.Shared.Get(
-            port.Id == "matrix" ? "DebugDraw.Matrix" : "DebugDraw.Visible") }).ToArray();
+    public IReadOnlyList<GraphInputPortDefinition> InputPorts
+    {
+        get
+        {
+            var ports = Definition.InputPorts ?? [];
+            if (IsPreviewDebugDraw) return ports.Select(port => port with { Name = LocalizationService.Shared.Get(
+                port.Id == "matrix" ? "DebugDraw.Matrix" : "DebugDraw.Visible") }).ToArray();
+            if (!ProceduralResourceSchema.IsMetadata(Definition.Kind)) return ports;
+            var model = ProceduralResourceSchema.Name(Definition.Kind) == "ProceduralModel";
+            var names = model ? ProceduralResourceSchema.ModifierNames : ProceduralResourceSchema.PixelNames;
+            return ports.Select(port =>
+            {
+                var label = names.FirstOrDefault(name => port.Name.Contains(". " + name + " · ", StringComparison.Ordinal));
+                return label is null ? port : port with { Name = port.Name.Replace(". " + label + " · ", ". " +
+                    LocalizationService.Shared.Get("Procedural." + (model ? "Modifier." : "Pixel.") + label) + " · ", StringComparison.Ordinal) };
+            }).ToArray();
+        }
+    }
     public bool HasLegacyOutput => HasPorts && Definition.OutputPorts is null;
     public bool HasCustomOutputs => HasPorts && Definition.OutputPorts is { Count: > 0 };
     public IReadOnlyList<GraphOutputPortDefinition> OutputPorts => Definition.OutputPorts ?? [];
@@ -98,11 +113,34 @@ public sealed class GraphNodeViewModel : ObservableObject
     internal const string InlineExpandedId = "editor.inline.expanded";
     internal const string InlineWidthId = "editor.inline.width";
     internal const string InlineHeightId = "editor.inline.height";
+    internal const string NodeLockedId = "editor.locked";
+    internal const string ParameterLockedPrefix = "editor.locked.";
+    internal static string ParameterLockId(string parameterId) => ParameterLockedPrefix + parameterId;
+    public bool IsLocked => Parameters?.FirstOrDefault(p =>
+        p.Id == NodeLockedId && p.Type == "bool")?.Value.ValueKind == JsonValueKind.True;
+    public bool IsParameterLocked(string parameterId) => Parameters?.FirstOrDefault(p =>
+        p.Id == ParameterLockId(parameterId) && p.Type == "bool")?.Value.ValueKind == JsonValueKind.True;
     public bool IsInlineExpanded => IsGraphGroup && Parameters?.FirstOrDefault(p =>
         p.Id == InlineExpandedId && p.Type == "bool")?.Value.ValueKind == JsonValueKind.True;
     public double InlineWidth => _previewWidth ?? InlineNumber(InlineWidthId, 640, 420, 2400);
     public double InlineHeight => _previewHeight ?? InlineNumber(InlineHeightId, 380, 260, 1600);
-    public double RenderedWidth => IsComment ? CommentWidth : IsInlineExpanded ? InlineWidth : NodeWidth;
+    public double RenderedWidth => IsComment ? CommentWidth : IsInlineExpanded ? InlineWidth : CalculatedNodeWidth;
+
+    private double CalculatedNodeWidth
+    {
+        get
+        {
+            var maxInput = HasCustomInputs
+                ? InputPorts.Select(p => p.Name.Length).DefaultIfEmpty(0).Max()
+                : (HasLegacyInput ? 6 : 0);
+            var maxOutput = HasCustomOutputs
+                ? OutputPorts.Select(p => p.Name.Length).DefaultIfEmpty(0).Max()
+                : (HasLegacyOutput ? 6 : 0);
+            var left = maxInput > 0 ? maxInput * 7.2 + 26 : 0;
+            var right = maxOutput > 0 ? maxOutput * 7.2 + 26 : 0;
+            return Math.Clamp(Math.Ceiling(left + right + 36), NodeWidth, 520);
+        }
+    }
 
     private double InlineNumber(string id, double fallback, double min, double max)
     {
@@ -239,15 +277,18 @@ public sealed class GraphNodeViewModel : ObservableObject
 
     public bool HasDiagnostics => _diagnosticText.Length != 0;
     public string DiagnosticText => _diagnosticText;
+    public string? DiagnosticToolTip => string.IsNullOrEmpty(_diagnosticText) ? null : _diagnosticText;
     public string Description => LocalizationService.Shared.GetOrDefault(Definition.DescriptionKey, string.Empty);
     public string HeaderHelp => string.Join(Environment.NewLine, new[] { Description, DiagnosticText }
         .Where(text => !string.IsNullOrEmpty(text)));
+    public string? HeaderHelpToolTip => string.IsNullOrEmpty(HeaderHelp) ? null : HeaderHelp;
     internal void RefreshLocalizedText()
     {
         OnPropertyChanged(nameof(DisplayName));
-        if (IsPreviewDebugDraw) OnPropertyChanged(nameof(InputPorts));
+        if (IsPreviewDebugDraw || ProceduralResourceSchema.IsMetadata(Definition.Kind)) OnPropertyChanged(nameof(InputPorts));
         OnPropertyChanged(nameof(Description));
         OnPropertyChanged(nameof(HeaderHelp));
+        OnPropertyChanged(nameof(HeaderHelpToolTip));
         OnPropertyChanged(nameof(LifecycleRoleLabel));
         OnPropertyChanged(nameof(LifecycleSummary));
         OnPropertyChanged(nameof(LifecycleSummaryHelp));
@@ -267,8 +308,10 @@ public sealed class GraphNodeViewModel : ObservableObject
     {
         if (!SetProperty(ref _diagnosticText, text, nameof(DiagnosticText))) return;
         OnPropertyChanged(nameof(HasDiagnostics));
+        OnPropertyChanged(nameof(DiagnosticToolTip));
         OnPropertyChanged(nameof(BorderBrush));
         OnPropertyChanged(nameof(HeaderHelp));
+        OnPropertyChanged(nameof(HeaderHelpToolTip));
     }
 
     public string PortType => Definition.PortType;
@@ -392,6 +435,7 @@ public sealed class GraphNodeViewModel : ObservableObject
             OnPropertyChanged(nameof(CommentWidth));
             OnPropertyChanged(nameof(CommentHeight));
             OnPropertyChanged(nameof(RenderedWidth));
+            OnPropertyChanged(nameof(IsLocked));
             RefreshInlinePresentation();
             RefreshLifecyclePresentation();
             _workspace.RefreshTypeDiagnostics();
@@ -431,6 +475,7 @@ public sealed class GraphNodeViewModel : ObservableObject
         OnPropertyChanged(nameof(HasLegacyInput));
         OnPropertyChanged(nameof(HasParameters));
         OnPropertyChanged(nameof(OutputPorts));
+        OnPropertyChanged(nameof(RenderedWidth));
         OnPropertyChanged(nameof(HasCustomOutputs));
         OnPropertyChanged(nameof(HasLegacyOutput));
         OnPropertyChanged(nameof(CanAddSequenceOutput));
@@ -448,6 +493,7 @@ public sealed class GraphNodeViewModel : ObservableObject
         OnPropertyChanged(nameof(DisplayPortType));
         OnPropertyChanged(nameof(InputPorts));
         OnPropertyChanged(nameof(OutputPorts));
+        OnPropertyChanged(nameof(RenderedWidth));
         OnPropertyChanged(nameof(HasCustomInputs));
         OnPropertyChanged(nameof(HasCustomOutputs));
         OnPropertyChanged(nameof(HasLegacyInput));
@@ -463,6 +509,7 @@ public sealed class GraphNodeViewModel : ObservableObject
 
     private IReadOnlyList<NodeParameterDefinition> VisibleParameters(GraphNodeDefinition definition) =>
         definition.Parameters.Where(parameter =>
+            !parameter.Hidden &&
             !IsGpuParticle &&
             (!IsSequence || parameter.Id != SequenceSchema.OutputCountParameter) &&
             (!IsComment || parameter.Id != "image") &&

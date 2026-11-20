@@ -37,13 +37,19 @@ public partial class GraphNodeView : UserControl
     private string? _imageStatusKey;
     private bool _editingComment;
     private GraphNodeViewModel? _lifecycleNode;
+    private GraphNodeViewModel? _anchorNode;
+    private bool _anchorsDirty = true;
 
     public GraphNodeView()
     {
         InitializeComponent();
-        LayoutUpdated += (_, _) => UpdatePortAnchors();
+        LayoutUpdated += (_, _) =>
+        {
+            if (_anchorsDirty) UpdatePortAnchors();
+        };
         SizeChanged += (_, _) =>
         {
+            _anchorsDirty = true;
             if (DataContext is not GraphNodeViewModel node) return;
             node.RenderedHeight = Bounds.Height;
             var editor = this.FindAncestorOfType<GraphEditorView>();
@@ -53,6 +59,7 @@ public partial class GraphNodeView : UserControl
 
     private void UpdatePortAnchors()
     {
+        _anchorsDirty = false;
         if (DataContext is not GraphNodeViewModel node) return;
         var inputs = new Dictionary<string, Point>();
         var outputs = new Dictionary<string, Point>();
@@ -80,6 +87,7 @@ public partial class GraphNodeView : UserControl
         LocalizationService.Shared.LanguageChanged += OnLanguageChanged;
         AttachImageNode();
         AttachLifecycleNode();
+        AttachAnchorNode();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -87,6 +95,7 @@ public partial class GraphNodeView : UserControl
         LocalizationService.Shared.LanguageChanged -= OnLanguageChanged;
         DetachImageNode();
         DetachLifecycleNode();
+        DetachAnchorNode();
         base.OnDetachedFromVisualTree(e);
     }
 
@@ -95,10 +104,43 @@ public partial class GraphNodeView : UserControl
         base.OnDataContextChanged(e);
         DetachImageNode();
         DetachLifecycleNode();
+        DetachAnchorNode();
         if (this.IsAttachedToVisualTree())
         {
             AttachImageNode();
             AttachLifecycleNode();
+            AttachAnchorNode();
+        }
+    }
+
+    private void AttachAnchorNode()
+    {
+        _anchorsDirty = true;
+        if (DataContext is not GraphNodeViewModel node || _anchorNode == node) return;
+        _anchorNode = node;
+        node.PropertyChanged += OnAnchorNodePropertyChanged;
+    }
+
+    private void DetachAnchorNode()
+    {
+        if (_anchorNode is not null)
+            _anchorNode.PropertyChanged -= OnAnchorNodePropertyChanged;
+        _anchorNode = null;
+    }
+
+    private void OnAnchorNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(GraphNodeViewModel.InputPorts) or
+            nameof(GraphNodeViewModel.OutputPorts) or
+            nameof(GraphNodeViewModel.HasPorts) or
+            nameof(GraphNodeViewModel.HasCustomInputs) or
+            nameof(GraphNodeViewModel.HasCustomOutputs) or
+            nameof(GraphNodeViewModel.IsDetailsExpanded) or
+            nameof(GraphNodeViewModel.IsInlineExpanded) or
+            nameof(GraphNodeViewModel.IsLifecycleNode) or
+            nameof(GraphNodeViewModel.RenderedWidth))
+        {
+            _anchorsDirty = true;
         }
     }
 
@@ -379,6 +421,12 @@ public partial class GraphNodeView : UserControl
             e.Handled = true;
             return;
         }
+        if (e.ClickCount >= 2 && ProceduralResourceSchema.IsMetadata(node.Definition.Kind))
+        {
+            node.Workspace.OpenProceduralEditor(node);
+            e.Handled = true;
+            return;
+        }
         if (e.ClickCount >= 2 && node.IsGraphGroup && e.KeyModifiers == KeyModifiers.None)
         {
             node.Workspace.EnterGraph(node);
@@ -400,17 +448,22 @@ public partial class GraphNodeView : UserControl
             return;
         }
 
-        if (!node.IsSelected)
-        {
-            node.SelectCommand.Execute(null);
-        }
-
         _dragNode = node;
-        _dragNodes = node.Workspace.GetMoveTargets(node.Workspace.SelectedNodes)
-            .Select(selected => (selected, selected.X, selected.Y)).ToArray();
+        _dragNodes = node.IsSelected
+            ? node.Workspace.GetMoveTargets(node.Workspace.SelectedNodes)
+                .Select(selected => (selected, selected.X, selected.Y)).ToArray()
+            : [(node, node.X, node.Y)];
         _pointerStart = e.GetPosition(_dragEditor);
         e.Pointer.Capture(header);
         e.Handled = true;
+        if (!node.IsSelected)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!node.IsSelected && node.Workspace.Nodes.Contains(node))
+                    node.SelectCommand.Execute(null);
+            }, DispatcherPriority.Background);
+        }
     }
 
     private void OnNodePointerPressed(object? sender, PointerPressedEventArgs e)
@@ -486,11 +539,14 @@ public partial class GraphNodeView : UserControl
             return;
         }
 
-        var graph = _dragNode.Workspace;
+        var dragged = _dragNode;
+        var graph = dragged.Workspace;
         var positions = _dragNodes.Select(item => (item.Node, item.Node.DisplayX, item.Node.DisplayY)).ToArray();
         var nodes = _dragNodes.Select(item => item.Node).ToArray();
         ResetDrag();
         e.Pointer.Capture(null);
+        if (!dragged.IsSelected && graph.Nodes.Contains(dragged))
+            dragged.SelectCommand.Execute(null);
         try
         {
             graph.RunAuthoringAction(() => graph.MoveNodes(positions));
@@ -582,6 +638,24 @@ public partial class GraphNodeView : UserControl
             !e.GetCurrentPoint(port).Properties.IsLeftButtonPressed ||
             this.FindAncestorOfType<GraphEditorView>()?.FindControl<Grid>("GraphCanvas") is not { } canvas)
         {
+            return;
+        }
+
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Alt))
+        {
+            var outputPortId = port.Tag is GraphOutputPortDefinition op ? op.Id : null;
+            var matches = node.Workspace.Connections
+                .Where(c => c.Source == node && (outputPortId is null || c.SourcePortId == outputPortId))
+                .ToArray();
+            if (matches.Length > 0)
+            {
+                node.Workspace.RunAuthoringAction(() =>
+                {
+                    foreach (var connection in matches)
+                        node.Workspace.DisconnectConnection(connection);
+                });
+            }
+            e.Handled = true;
             return;
         }
 

@@ -332,26 +332,56 @@ internal static class EditorInterfaceTests
             Dispatcher.UIThread.RunJobs();
             var row = (Grid)host.Content!;
             var actions = row.Children.OfType<StackPanel>().Single();
-            var disconnect = actions.Children.OfType<IconButton>().Single(button => button.Icon == EditorIcon.Disconnect);
+            var disconnect = actions.Children.OfType<IconButton>().Single(button => button.Name == "DisconnectParameterButton");
+            var lockButton = actions.Children.OfType<IconButton>().Single(button => button.Name == "LockParameterButton");
             var reset = actions.Children.OfType<IconButton>().Single(button => button.Icon == EditorIcon.Reset);
             var label = row.Children.OfType<TextBlock>().First();
             var editor = row.Children.OfType<TextBox>().Single();
-            if (!disconnect.IsVisible || editor.Bounds.Left < label.Bounds.Right ||
+            if (!disconnect.IsVisible || disconnect.Icon != EditorIcon.Link || editor.IsEnabled ||
+                reset.Command!.CanExecute(null) || editor.Bounds.Left < label.Bounds.Right ||
                 actions.Bounds.Left < editor.Bounds.Right || disconnect.Bounds.Right > reset.Bounds.Left)
-                throw new InvalidOperationException("Parameter row must align label, field and trailing unlink/reset actions.");
+                throw new InvalidOperationException("Parameter row must align label, disabled connected field and trailing link/lock/reset actions.");
             if (row.Children.OfType<TextBlock>().Single(block => block.Name == "ParameterStatus").IsVisible)
                 throw new InvalidOperationException("Empty parameter status must not reserve an extra inspector row.");
+            pane.Parameters.Single(p => p.Id == "a").DisconnectCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            if (graph.Connections.Count != 1 || graph.Connections.Single().TargetPortId != "b" ||
+                pane.Parameters.Single(p => p.Id == "a").HasConnection ||
+                !disconnect.IsVisible || disconnect.Icon != EditorIcon.Disconnect || !editor.IsEnabled)
+                throw new InvalidOperationException("Row unlink must remove only the matching input pin, keep the link icon visible, and re-enable editing.");
             reset.Command!.Execute(null);
-            if (parameter.NumericValue != 1 || graph.Connections.Count != 2 || parameter.ResetCommand.CanExecute(null))
-                throw new InvalidOperationException("Reset must restore the declared default without breaking links.");
+            if (parameter.NumericValue != 1 || graph.Connections.Count != 1 || parameter.ResetCommand.CanExecute(null))
+                throw new InvalidOperationException("Reset must restore the declared default when unlocked and disconnected.");
             graph.History.Undo();
             if (graph.Nodes.Single(node => node.Id == targetId).Parameters!.Single(p => p.Id == "a").Value.GetDouble() != 7)
                 throw new InvalidOperationException("Parameter reset must use one undoable graph edit.");
             graph.History.Redo();
-            pane.Parameters.Single(p => p.Id == "a").DisconnectCommand.Execute(null);
-            if (graph.Connections.Count != 1 || graph.Connections.Single().TargetPortId != "b" ||
-                pane.Parameters.Single(p => p.Id == "a").HasConnection)
-                throw new InvalidOperationException("Row unlink must remove only the matching input pin.");
+            parameter = pane.Parameters.Single(p => p.Id == "a");
+            host.DataContext = parameter;
+            Dispatcher.UIThread.RunJobs();
+            row = (Grid)host.Content!;
+            actions = row.Children.OfType<StackPanel>().Single();
+            lockButton = actions.Children.OfType<IconButton>().Single(button => button.Name == "LockParameterButton");
+            reset = actions.Children.OfType<IconButton>().Single(button => button.Icon == EditorIcon.Reset);
+            editor = row.Children.OfType<TextBox>().Single();
+            lockButton.Command!.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            if (!parameter.IsParameterLocked || editor.IsEnabled || reset.Command!.CanExecute(null) ||
+                lockButton.Icon != EditorIcon.Lock || !lockButton.IsEnabled)
+                throw new InvalidOperationException(
+                    $"Per-parameter lock failed: locked={parameter.IsParameterLocked}, editorEnabled={editor.IsEnabled}, resetCan={reset.Command!.CanExecute(null)}, icon={lockButton.Icon}, lockEnabled={lockButton.IsEnabled}.");
+            pane.ToggleNodeLockCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            if (!pane.IsNodeLocked || !parameter.IsEffectiveLocked || editor.IsEnabled ||
+                lockButton.Command!.CanExecute(null))
+                throw new InvalidOperationException("Node-level lock must disable editing and lock child parameter lock buttons.");
+            pane.ToggleNodeLockCommand.Execute(null);
+            lockButton.Command!.Execute(null);
+            graph.History.Undo();
+            graph.History.Undo();
+            graph.History.Undo();
+            graph.History.Undo();
+            graph.History.Undo();
             graph.History.Undo();
             if (graph.Connections.Count != 2 || !pane.Parameters.Single(p => p.Id == "a").HasConnection)
                 throw new InvalidOperationException("Undo must restore the row link state.");

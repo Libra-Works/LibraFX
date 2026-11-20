@@ -131,6 +131,13 @@ public sealed partial class GraphWorkspaceViewModel
         {
             throw new InvalidOperationException("Assign an engine asset to update the material schema.");
         }
+        if (ProceduralResourceSchema.IsMetadata(node.Definition.Kind) && id == "proceduralState")
+        {
+            var recipe = ProceduralResourceSchema.Read(node.BaseDefinition,
+                [new NodeParameterSnapshot("proceduralState", "string", value)]);
+            ApplyProceduralRecipe(node, recipe);
+            return;
+        }
 
         if (RenderNodeSchema.IsRenderNode(node.Definition) && RenderNodeSchema.TryGetMaterialSlot(id, out _))
         {
@@ -192,6 +199,28 @@ public sealed partial class GraphWorkspaceViewModel
         commands.Add(new SetNodeParametersCommand(node, node.Parameters, parameters.AsReadOnly(), definition.Name));
         ExecuteEdit(commands.Count == 1 ? commands[0] :
             new CompositeUndoableCommand(LocalizationService.Shared.Get("Editor.Sequence.EditOutputs"), commands));
+    }
+
+    public void SetNodeLocked(GraphNodeViewModel node, bool locked)
+    {
+        if (!Nodes.Contains(node) || IsReadOnly || node.IsLocked == locked) return;
+        UpdateBoolEditorFlag(node, GraphNodeViewModel.NodeLockedId, locked,
+            LocalizationService.Shared.Get(locked ? "Panels.LockNodeParameters" : "Panels.UnlockNodeParameters"));
+    }
+
+    public void SetParameterLocked(GraphNodeViewModel node, string parameterId, bool locked)
+    {
+        if (!Nodes.Contains(node) || IsReadOnly || node.IsLocked || node.IsParameterLocked(parameterId) == locked) return;
+        UpdateBoolEditorFlag(node, GraphNodeViewModel.ParameterLockId(parameterId), locked,
+            LocalizationService.Shared.Get(locked ? "Panels.LockParameter" : "Panels.UnlockParameter", parameterId));
+    }
+
+    private void UpdateBoolEditorFlag(GraphNodeViewModel node, string id, bool enabled, string description)
+    {
+        var values = node.Parameters?.Where(value => value.Id != id).ToList() ?? [];
+        if (enabled)
+            values.Add(new(id, "bool", JsonSerializer.SerializeToElement(true)));
+        ExecuteEdit(new SetNodeParametersCommand(node, node.Parameters, values.AsReadOnly(), description));
     }
 
     public void AssignRenderAsset(GraphNodeViewModel node, EngineAsset asset)

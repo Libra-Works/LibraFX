@@ -13,7 +13,7 @@
     <Border x:Name="NodeBody" Width="{Binding RenderedWidth}" IsVisible="{Binding !IsComment}"
             Background="{DynamicResource EffectSurfaceBrush}"
             BorderBrush="{Binding BorderBrush}"
-            ToolTip.Tip="{Binding DiagnosticText}"
+            ToolTip.Tip="{Binding DiagnosticToolTip}"
             AutomationProperties.HelpText="{Binding DiagnosticText}"
             BorderThickness="2"
             CornerRadius="4">
@@ -22,7 +22,7 @@
                     x:Name="NodeHeader"
                     Padding="8"
                     Background="{DynamicResource EffectBorderBrush}"
-                    ToolTip.Tip="{Binding HeaderHelp}"
+                    ToolTip.Tip="{Binding HeaderHelpToolTip}"
                     AutomationProperties.HelpText="{Binding HeaderHelp}"
                     PointerPressed="OnHeaderPointerPressed"
                     PointerMoved="OnHeaderPointerMoved"
@@ -80,7 +80,7 @@
             <Grid Grid.Row="2"
                   Margin="8"
                   IsVisible="{Binding HasPorts}"
-                  ColumnDefinitions="*,Auto,*">
+                  ColumnDefinitions="*,12,*">
                 <StackPanel Orientation="Horizontal"
                             Spacing="4"
                             IsVisible="{Binding HasLegacyInput}"
@@ -117,12 +117,6 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock x:Name="PortTypeLabel" Grid.Column="1"
-                           Text="{Binding DisplayPortType}"
-                           IsVisible="{Binding ShowPortType}"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           Foreground="{DynamicResource EffectMutedForegroundBrush}" />
                 <StackPanel Grid.Column="2"
                             Orientation="Horizontal"
                             Spacing="4"
@@ -151,7 +145,7 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="graph:GraphOutputPortDefinition">
                             <Grid ColumnDefinitions="*,18" ColumnSpacing="4" Height="24">
-                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                <TextBlock Text="{Binding Name}" HorizontalAlignment="Right" VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
                                 <Border Grid.Column="1" Width="18" Height="18" Background="Transparent" Tag="{Binding}"
                                         PointerPressed="OnOutputPointerPressed"
@@ -176,6 +170,12 @@
                        Text="{DynamicResource Text.Panels.DoubleClickToOpen}" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <TextBlock x:Name="GpuProgramLabel" Grid.Row="2" Margin="8" IsVisible="{Binding IsGpuParticle}"
                        Text="{DynamicResource Text.Gpu.ContainerHint}" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <TextBlock x:Name="PortTypeLabel" Grid.Row="3" Margin="8,0,8,6"
+                       Text="{Binding DisplayPortType}"
+                       IsVisible="{Binding ShowPortType}"
+                       FontSize="11"
+                       HorizontalAlignment="Center"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right"
                         Margin="8,2,8,6" Spacing="4" IsVisible="{Binding IsSequence}">
                 <views:IconButton x:Name="SequenceAddOutputButton" Icon="Add"

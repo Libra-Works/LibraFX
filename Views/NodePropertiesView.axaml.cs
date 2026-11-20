@@ -31,7 +31,8 @@ public partial class NodePropertiesView : UserControl
 
     private void OnParameterDividerDrag(object? sender, VectorEventArgs e)
     {
-        _preferredLabelWidth = Math.Clamp(ParameterHeader.ColumnDefinitions[0].Width.Value + e.Vector.X, 48, 320);
+        var max = Math.Max(48, ParameterHeader.Bounds.Width - 168);
+        _preferredLabelWidth = Math.Clamp(ParameterHeader.ColumnDefinitions[0].Width.Value + e.Vector.X, 48, max);
         UpdateParameterColumns(ParameterHeader.Bounds.Width);
     }
 
@@ -40,8 +41,8 @@ public partial class NodePropertiesView : UserControl
 
     private void UpdateParameterColumns(double width)
     {
-        var maximum = Math.Max(0, Math.Min(width * 0.45, width - 172));
-        var labelWidth = new GridLength(Math.Min(_preferredLabelWidth, maximum));
+        var maximum = Math.Max(48, width - 168);
+        var labelWidth = new GridLength(Math.Clamp(_preferredLabelWidth, 48, maximum));
         ParameterHeader.ColumnDefinitions[0].Width = labelWidth;
         ParameterList.SetValue(ParameterEditorHost.LabelColumnWidthProperty, labelWidth);
     }

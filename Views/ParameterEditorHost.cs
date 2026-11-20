@@ -60,7 +60,7 @@ public sealed class ParameterEditorHost : ContentControl
                 : InspectorEditors.CreateNamedEditor(parameter, editorKind);
         _pluginEditor = custom as InspectorEditorHost;
         var editor = custom ?? (editorKind == "slider" ? CreateSlider(parameter) : CreateStandard(parameter));
-        editor.Bind(IsEnabledProperty, new Binding(nameof(parameter.IsEnabled)));
+        editor.Bind(IsEnabledProperty, new Binding(nameof(parameter.CanEditValue)));
         editor.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.Name)));
         var status = new TextBlock { Name = "ParameterStatus", Foreground = Brushes.OrangeRed, TextWrapping = TextWrapping.Wrap };
         status.Bind(TextBlock.TextProperty, new Binding(nameof(parameter.Status)));
@@ -83,10 +83,15 @@ public sealed class ParameterEditorHost : ContentControl
         if (parameter.Type is "float" or "int" && editor is TextBox scalar)
             EnableScrubbing(label, scalar, parameter, nameof(parameter.ValueText));
         var disconnect = CreateActionButton("DisconnectParameterButton", EditorIcon.Disconnect);
+        disconnect.Bind(IconButton.IconProperty, new Binding(nameof(parameter.ConnectionIcon)));
         disconnect.Bind(Button.CommandProperty, new Binding(nameof(parameter.DisconnectCommand)));
-        disconnect.Bind(IsVisibleProperty, new Binding(nameof(parameter.HasConnection)));
-        disconnect.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.DisconnectHint)));
-        disconnect.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.DisconnectHint)));
+        disconnect.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.ConnectionHint)));
+        disconnect.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.ConnectionHint)));
+        var lockButton = CreateActionButton("LockParameterButton", EditorIcon.Unlock);
+        lockButton.Bind(IconButton.IconProperty, new Binding(nameof(parameter.LockIcon)));
+        lockButton.Bind(Button.CommandProperty, new Binding(nameof(parameter.ToggleLockCommand)));
+        lockButton.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.LockHint)));
+        lockButton.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.LockHint)));
         var reset = CreateActionButton("ResetParameterButton", EditorIcon.Reset);
         reset.Bind(Button.CommandProperty, new Binding(nameof(parameter.ResetCommand)));
         reset.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.ResetHint)));
@@ -98,6 +103,7 @@ public sealed class ParameterEditorHost : ContentControl
         publish.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.PublishHint)));
         var browseResource = CreateActionButton("BrowseResourceParameterButton", EditorIcon.Open);
         browseResource.Bind(IsVisibleProperty, new Binding(nameof(parameter.IsResourceParameter)));
+        browseResource.Bind(IsEnabledProperty, new Binding(nameof(parameter.CanEditValue)));
         browseResource.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.BrowseResourceHint)));
         browseResource.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.BrowseResourceHint)));
         browseResource.Click += (_, _) => parameter.OpenResourceBrowser();
@@ -112,13 +118,13 @@ public sealed class ParameterEditorHost : ContentControl
             Orientation = Avalonia.Layout.Orientation.Horizontal,
             Spacing = 2,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Children = { browseResource, revealResource, publish, disconnect, reset }
+            Children = { browseResource, revealResource, publish, disconnect, lockButton, reset }
         };
         var row = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("124,*,Auto"),
             RowDefinitions = new RowDefinitions("Auto,Auto,Auto"),
-            ColumnSpacing = 6,
+            ColumnSpacing = 14,
             RowSpacing = 2,
             MinHeight = 28,
             Children = { label, editor, actions, status, missing }
@@ -401,7 +407,8 @@ public sealed class ParameterEditorHost : ContentControl
         label.Cursor = new Cursor(StandardCursorType.SizeWestEast);
         label.PointerPressed += (_, e) =>
         {
-            if (!e.GetCurrentPoint(label).Properties.IsLeftButtonPressed ||
+            if (!parameter.CanEditValue ||
+                !e.GetCurrentPoint(label).Properties.IsLeftButtonPressed ||
                 !double.TryParse(box.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out initial) ||
                 !double.IsFinite(initial) || TopLevel.GetTopLevel(label) is not { } top) return;
             start = e.GetPosition(top);

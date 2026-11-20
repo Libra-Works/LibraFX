@@ -89,10 +89,15 @@ public partial class GraphEditorView : UserControl
         DetachedFromVisualTree += (_, _) => ObserveDefinitionChanges(false);
     }
 
-    private void OnLanguageChanged(object? sender, EventArgs e) => RefreshNodeSearch();
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        _searchEntries = null;
+        if (NodeSearchPopup.IsOpen) RefreshNodeSearch();
+    }
 
     private void OnNodeDefinitionsChanged(object? sender, EventArgs e)
     {
+        _searchEntries = null;
         if (NodeSearchPopup.IsOpen) RefreshNodeSearch();
     }
 
@@ -478,19 +483,34 @@ public partial class GraphEditorView : UserControl
         }
     }
 
+    private NodeCatalogEntryViewModel[]? _searchEntries;
+
     private void ShowNodeSearch(Point position)
     {
         if (DataContext is GraphWorkspaceViewModel { IsReadOnly: true }) return;
         _nodeSearchPosition = position;
-        if (DataContext is GraphWorkspaceViewModel graph)
-        {
-            graph.NodeDefinitions?.Refresh();
-            graph.GroupAssets?.Refresh();
-        }
-        NodeSearchBox.Text = string.Empty;
-        RefreshNodeSearch();
+        _searchEntries = BuildNodeSearchEntries();
+        if (string.IsNullOrEmpty(NodeSearchBox.Text))
+            RefreshNodeSearch();
+        else
+            NodeSearchBox.Text = string.Empty;
         NodeSearchPopup.IsOpen = true;
         Dispatcher.UIThread.Post(() => NodeSearchBox.Focus());
+    }
+
+    private NodeCatalogEntryViewModel[] BuildNodeSearchEntries()
+    {
+        var workspace = DataContext as GraphWorkspaceViewModel;
+        var projectName = workspace?.NodeDefinitions?.ProjectName;
+        var definitions = (workspace?.AvailableNodeDefinitions ?? GraphNodeDefinition.Core)
+            .Where(definition => !GraphPolymorphism.IsHiddenVariant(definition.Kind) &&
+                                 (workspace is null || workspace.CanCreateNode(definition.Kind, out _)))
+            .Select(definition => new NodeCatalogEntryViewModel(definition, projectName));
+        var groups = (workspace is null || workspace.CanCreateNode(GraphNodeKind.GraphGroup, out _)
+            ? workspace?.GroupAssets?.Assets
+                .Select(asset => new NodeCatalogEntryViewModel(asset, workspace?.GroupAssets))
+            : null) ?? [];
+        return [.. definitions, .. groups];
     }
 
     private void OnNodeSearchTextChanged(object? sender, TextChangedEventArgs e) => RefreshNodeSearch();
@@ -498,24 +518,18 @@ public partial class GraphEditorView : UserControl
     private void RefreshNodeSearch()
     {
         if (NodeSearchResults is null || NodeSearchBox is null) return;
+        var allEntries = _searchEntries ??= BuildNodeSearchEntries();
         var search = NodeSearchBox.Text?.Trim() ?? string.Empty;
-        var workspace = DataContext as GraphWorkspaceViewModel;
-        var entries = (workspace?.AvailableNodeDefinitions ?? GraphNodeDefinition.Core)
-            .Where(definition => !GraphPolymorphism.IsHiddenVariant(definition.Kind) &&
-                                 (workspace is null || workspace.CanCreateNode(definition.Kind, out _)))
-            .Select(definition => new NodeCatalogEntryViewModel(definition, workspace?.NodeDefinitions?.ProjectName))
-            .Concat((workspace is null || workspace.CanCreateNode(GraphNodeKind.GraphGroup, out _)
-                ? workspace?.GroupAssets?.Assets
-                    .Select(asset => new NodeCatalogEntryViewModel(asset, workspace?.GroupAssets))
-                : null) ?? [])
-            .Where(entry => entry.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                            entry.OriginalName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                            entry.KindName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                            entry.QualifiedName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                            entry.Namespace.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                            entry.Group.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                            entry.SearchTerms.Contains(search, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+        var entries = search.Length == 0
+            ? allEntries
+            : allEntries.Where(entry =>
+                entry.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                entry.OriginalName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                entry.KindName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                entry.QualifiedName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                entry.Namespace.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                entry.Group.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                entry.SearchTerms.Contains(search, StringComparison.OrdinalIgnoreCase)).ToArray();
         NodeSearchResults.ItemsSource = entries;
         NodeSearchResults.SelectedIndex = entries.Length > 0 ? 0 : -1;
     }
@@ -626,6 +640,14 @@ public partial class GraphEditorView : UserControl
     {
         if (e.Handled || !OwnsInput(e.Source)) return;
         var properties = e.GetCurrentPoint(GraphScrollViewer).Properties;
+        if (properties.IsLeftButtonPressed && e.KeyModifiers.HasFlag(KeyModifiers.Alt) &&
+            DataContext is GraphWorkspaceViewModel graph &&
+            FindHitConnection(ToGraphPoint(e.GetPosition(GraphCanvas)), graph) is { } hit)
+        {
+            graph.RunAuthoringAction(() => graph.DisconnectConnection(hit));
+            e.Handled = true;
+            return;
+        }
         var panButton = ShortcutService.Shared.GraphPanButton;
         var right = properties.IsRightButtonPressed && panButton is "Right" or "Right + Middle";
         var middle = properties.IsMiddleButtonPressed && panButton is "Middle" or "Right + Middle";
@@ -635,6 +657,52 @@ public partial class GraphEditorView : UserControl
         }
 
         BeginViewportPan(e, right ? MouseButton.Right : MouseButton.Middle, true);
+    }
+
+    private GraphConnectionViewModel? FindHitConnection(Point point, GraphWorkspaceViewModel graph)
+    {
+        var threshold = 10.0 / Math.Max(0.25, _zoom);
+        var thresholdSq = threshold * threshold;
+        GraphConnectionViewModel? best = null;
+        var bestDistSq = thresholdSq;
+
+        foreach (var connection in graph.Connections)
+        {
+            var start = connection.StartPoint;
+            var end = connection.EndPoint;
+            var offset = Math.Max(48, Math.Abs(end.X - start.X) * 0.5);
+            var c1 = new Point(start.X + offset, start.Y);
+            var c2 = new Point(end.X - offset, end.Y);
+            var prev = start;
+            for (var step = 1; step <= 20; step++)
+            {
+                var t = step / 20.0;
+                var u = 1.0 - t;
+                var cur = new Point(
+                    u * u * u * start.X + 3 * u * u * t * c1.X + 3 * u * t * t * c2.X + t * t * t * end.X,
+                    u * u * u * start.Y + 3 * u * u * t * c1.Y + 3 * u * t * t * c2.Y + t * t * t * end.Y);
+                var distSq = PointToSegmentDistanceSq(point, prev, cur);
+                if (distSq <= bestDistSq)
+                {
+                    bestDistSq = distSq;
+                    best = connection;
+                }
+                prev = cur;
+            }
+        }
+        return best;
+    }
+
+    private static double PointToSegmentDistanceSq(Point p, Point a, Point b)
+    {
+        var dx = b.X - a.X;
+        var dy = b.Y - a.Y;
+        var lenSq = dx * dx + dy * dy;
+        if (lenSq <= 1e-6) return (p.X - a.X) * (p.X - a.X) + (p.Y - a.Y) * (p.Y - a.Y);
+        var t = Math.Clamp(((p.X - a.X) * dx + (p.Y - a.Y) * dy) / lenSq, 0, 1);
+        var projX = a.X + t * dx;
+        var projY = a.Y + t * dy;
+        return (p.X - projX) * (p.X - projX) + (p.Y - projY) * (p.Y - projY);
     }
 
     private void BeginViewportPan(PointerPressedEventArgs e, MouseButton button, bool canMove)

@@ -47,6 +47,7 @@
   "Editor.Lifecycle.InstanceLifeHelp": "Life Time はインスタンス開始時に一度だけ確定します。最終的な破棄時刻を保証するものではなく、稼働中の子や後続処理があれば所有者は存続します。",
   "Editor.Lifecycle.DelayHelp": "Delay はローカル時間で Signal を予約しますが、子ノードを内包しません。後続処理が残っている間は所有者が存続することがあります。これは入力に依存する遅延時間であり、最終破棄時刻ではありません。",
   "Editor.EffectSettings": "エフェクト設定",
+  "Editor.EffectSettings": "エフェクト設定",
   "Editor.AutoDestroyWhenIdle": "アイドル時に自動終了",
   "Editor.AutoDestroyWhenIdleHelp": "有効時は開始Signalとroot内の予約処理がなくなると自然終了を開始し、稼働中のSpawnableへ通知してからインスタンスとその処理の終了を待ちます。ゲームSignal待ちランチャーでは無効にしてください。Spawnableがないエフェクトは無限です。",
   "Editor.NodeGroup.Lifecycle": "ライフサイクル",

@@ -31,16 +31,16 @@
                    IsVisible="{Binding !HasInspectorTarget}"
                    TextWrapping="Wrap"
                    Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-        <Border Classes="editor-card" IsVisible="{Binding ShowRootEffectSettings}" IsEnabled="{Binding !IsPinned}" Padding="8,6">
-            <CheckBox Content="{DynamicResource Text.Editor.AutoDestroyWhenIdle}"
-                      IsChecked="{Binding Graph.AutoDestroyWhenIdle, Mode=TwoWay}"
-                      ToolTip.Tip="{DynamicResource Text.Editor.AutoDestroyWhenIdleHelp}" />
-        </Border>
         <StackPanel IsVisible="{Binding HasInspectorTarget}" Spacing="6">
-            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                 <TextBlock Classes="editor-label" Text="{DynamicResource Text.Editor.Name}" />
                 <TextBox Grid.Column="1" Text="{Binding InspectorNodeName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                          IsReadOnly="{Binding IsInspectingContainingSpawnable}" />
+                <views:IconButton Grid.Column="2" Classes="editor-tool" Icon="{Binding NodeLockIcon}"
+                                  IsEnabled="{Binding CanToggleNodeLock}"
+                                  Command="{Binding ToggleNodeLockCommand}"
+                                  ToolTip.Tip="{Binding NodeLockHint}"
+                                  AutomationProperties.Name="{Binding NodeLockHint}" />
             </Grid>
             <Border Classes="editor-toolbar-group" IsVisible="{Binding CanManageGroup}" Padding="6,4"
                     ToolTip.Tip="{Binding GroupStatus}">
@@ -66,11 +66,19 @@
                             ToolTip.Tip="{Binding StandardGroupDetails}" />
                 </Grid>
             </Border>
-            <Grid x:Name="ParameterHeader" ColumnDefinitions="124,*" ColumnSpacing="6" Margin="0,2,0,0"
+            <Grid x:Name="ParameterHeader" ColumnDefinitions="124,*" RowDefinitions="Auto,Auto" ColumnSpacing="14" RowSpacing="4" Margin="0,2,0,0"
                   SizeChanged="OnParameterHeaderSizeChanged">
-                <TextBlock Classes="editor-label" Text="{DynamicResource Text.Editor.Name}" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
-                <Thumb HorizontalAlignment="Right" Width="8"
-                       Cursor="SizeWestEast" DragDelta="OnParameterDividerDrag"
+                <TextBlock Classes="editor-label" Text="{DynamicResource Text.Editor.Name}" TextTrimming="CharacterEllipsis" Margin="0,0,4,0" />
+                <TextBlock Grid.Column="1" Classes="editor-label" Text="{DynamicResource Text.Panels.Value}" />
+                <ItemsControl x:Name="ParameterList" Grid.Row="1" Grid.ColumnSpan="2" ItemsSource="{Binding Parameters}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:NodeParameterEditorViewModel">
+                            <views:ParameterEditorHost Margin="0,0,0,2" WrapVectorComponents="True" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Thumb Grid.RowSpan="2" Grid.Column="0" HorizontalAlignment="Right" Margin="0,0,-11,0" Width="8"
+                       Cursor="SizeWestEast" DragDelta="OnParameterDividerDrag" ZIndex="10"
                        ToolTip.Tip="{DynamicResource Text.Panels.InspectorResize}"
                        AutomationProperties.Name="{DynamicResource Text.Panels.InspectorResize}">
                     <Thumb.Template>
@@ -81,15 +89,7 @@
                         </ControlTemplate>
                     </Thumb.Template>
                 </Thumb>
-                <TextBlock Grid.Column="1" Classes="editor-label" Text="{DynamicResource Text.Panels.Value}" />
             </Grid>
-            <ItemsControl x:Name="ParameterList" ItemsSource="{Binding Parameters}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="vm:NodeParameterEditorViewModel">
-                        <views:ParameterEditorHost Margin="0,0,0,2" WrapVectorComponents="True" />
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
             <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="4">
                 <Button Classes="editor-action" Content="{DynamicResource Text.Panels.PublishGroupCurves}"
                         IsVisible="{Binding CanPublishCurves}"
@@ -105,24 +105,6 @@
             <TextBlock Text="{Binding GroupExposedDiagnostics}" TextWrapping="Wrap"
                        IsVisible="{Binding GroupExposedDiagnostics, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <Expander Header="{DynamicResource Text.Editor.Connections}"
-                      IsVisible="{Binding ShowSelectedConnections}"
-                      IsExpanded="False" Margin="0,4,0,0">
-                <ItemsControl ItemsSource="{Binding Graph.SelectedConnections}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="vm:GraphConnectionViewModel">
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4" Margin="0,2">
-                                <TextBlock Text="{Binding Description}" TextWrapping="Wrap" VerticalAlignment="Center"
-                                           ToolTip.Tip="{Binding SignalOrderHelp}" />
-                                <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Disconnect" Tag="{Binding}"
-                                        ToolTip.Tip="{DynamicResource Text.Editor.Disconnect}"
-                                        AutomationProperties.Name="{DynamicResource Text.Editor.Disconnect}"
-                                        Click="OnDisconnectClick" />
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </Expander>
         </StackPanel>
     </StackPanel>
     </ScrollViewer>

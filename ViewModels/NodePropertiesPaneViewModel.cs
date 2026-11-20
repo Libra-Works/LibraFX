@@ -27,6 +27,13 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
     public bool CanTogglePin => IsPinned || (_node is not null && _graph.Nodes.Contains(_node));
     public EditorIcon InspectorPinIcon => IsPinned ? EditorIcon.Lock : EditorIcon.Unlock;
     public string InspectorPinHint => LocalizationService.Shared.Get(IsPinned ? "Panels.InspectorUnlock" : "Panels.InspectorLock");
+    public bool IsNodeLocked => _node?.IsLocked == true;
+    public bool CanToggleNodeLock => _node is not null && _graph.Nodes.Contains(_node) &&
+        !_graph.IsReadOnly && !IsInspectingContainingSpawnable;
+    public EditorIcon NodeLockIcon => IsNodeLocked ? EditorIcon.Lock : EditorIcon.Unlock;
+    public string NodeLockHint => LocalizationService.Shared.Get(
+        IsNodeLocked ? "Panels.UnlockNodeParameters" : "Panels.LockNodeParameters");
+    public IRelayCommand ToggleNodeLockCommand { get; }
     public bool IsInspectingContainingSpawnable =>
         _node is not null && ReferenceEquals(_node, _graph.ContainingSpawnable) && _graph.SelectedNode is null;
     public bool ShowSelectedConnections => !IsPinned && !IsInspectingContainingSpawnable && _graph.SelectedConnections.Count > 0;
@@ -119,6 +126,11 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
             () => CanCloneGroup);
         PublishCurvesCommand = new RelayCommand(() => RunGroupAction(() => _graph.PublishGroupCurves()),
             () => CanPublishCurves);
+        ToggleNodeLockCommand = new RelayCommand(() =>
+        {
+            if (_node is not null && CanToggleNodeLock)
+                _graph.SetNodeLocked(_node, !IsNodeLocked);
+        }, () => CanToggleNodeLock);
         _activeGraph.PropertyChanged += OnActiveGraphChanged;
         InspectorPluginService.Shared.DefaultsChanged += OnInspectorDefaultsChanged;
         InspectorPluginService.Shared.PropertyChanged += OnInspectorPluginServiceChanged;
@@ -188,7 +200,11 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
             return;
         }
         if (e.PropertyName is nameof(GraphNodeViewModel.Parameters) or nameof(GraphNodeViewModel.GroupOverrides))
+        {
+            RefreshNodeLockState();
             foreach (var parameter in Parameters) parameter.Refresh();
+        }
+        if (e.PropertyName == nameof(GraphNodeViewModel.IsLocked)) RefreshNodeLockState();
         if (e.PropertyName == nameof(GraphNodeViewModel.GroupAsset)) RefreshGroupState();
         if (e.PropertyName == nameof(GraphNodeViewModel.Name)) OnPropertyChanged(nameof(InspectorNodeName));
     }
@@ -209,7 +225,17 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
         OnPropertyChanged(nameof(InspectorTitle));
         OnPropertyChanged(nameof(InspectorNodeType));
         OnPropertyChanged(nameof(InspectorPinHint));
+        RefreshNodeLockState();
         RefreshGroupState();
+    }
+
+    private void RefreshNodeLockState()
+    {
+        OnPropertyChanged(nameof(IsNodeLocked));
+        OnPropertyChanged(nameof(CanToggleNodeLock));
+        OnPropertyChanged(nameof(NodeLockIcon));
+        OnPropertyChanged(nameof(NodeLockHint));
+        ToggleNodeLockCommand.NotifyCanExecuteChanged();
     }
 
     private void RefreshGroupState()
@@ -269,6 +295,7 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
         OnPropertyChanged(nameof(InspectorTitle));
         OnPropertyChanged(nameof(InspectorNodeName));
         OnPropertyChanged(nameof(InspectorNodeType));
+        RefreshNodeLockState();
         RefreshGroupState();
         if (_node is null) return;
         _node.PropertyChanged += OnNodeChanged;
@@ -279,6 +306,7 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
                 ? ReferenceEquals(_pinnedNode, selectedNode) && graph.Nodes.Contains(selectedNode)
                 : graph.IsCurrentInspectorTarget(selectedNode));
         foreach (var definition in _node.Definition.Parameters.Where(parameter =>
+                     !parameter.Hidden &&
                      !_node.IsGpuParticle &&
                      (!RenderNodeSchema.IsRenderNode(_node.Definition) ||
                          parameter.Id is not ("materialSchema" or "spriteData" or "compositionData"))))

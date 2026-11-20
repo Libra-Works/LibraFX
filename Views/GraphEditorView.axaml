@@ -12,27 +12,44 @@
     <Grid RowDefinitions="Auto,*,Auto">
         <Border Grid.Row="0" Classes="editor-bar" BorderThickness="0,0,0,1"
                 IsVisible="{Binding !IsInlineWorkspace}">
-            <ItemsControl ItemsSource="{Binding Breadcrumbs}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="vm:GraphBreadcrumb">
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <TextBlock Classes="editor-heading" Text="›" IsVisible="{Binding HasSeparator}"
-                                       VerticalAlignment="Center"
-                                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-                            <Button Classes="editor-tool" Tag="{Binding Depth}" AutomationProperties.Name="{Binding Name}"
-                                    Click="OnBreadcrumbClick" Padding="8,2">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <views:EditorIconView Icon="Group" />
-                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-                        </StackPanel>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <ItemsControl ItemsSource="{Binding Breadcrumbs}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:GraphBreadcrumb">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Classes="editor-heading" Text="›" IsVisible="{Binding HasSeparator}"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                                <Button Classes="editor-tool" Tag="{Binding Depth}" AutomationProperties.Name="{Binding Name}"
+                                        Click="OnBreadcrumbClick" Padding="8,2">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <views:EditorIconView Icon="Group" />
+                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Settings"
+                                  IsVisible="{Binding IsRootGraph}"
+                                  ToolTip.Tip="{DynamicResource Text.Editor.EffectSettings}"
+                                  AutomationProperties.Name="{DynamicResource Text.Editor.EffectSettings}">
+                    <Button.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedRight">
+                            <StackPanel Spacing="6" Margin="4" MaxWidth="320">
+                                <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Editor.EffectSettings}" />
+                                <CheckBox Content="{DynamicResource Text.Editor.AutoDestroyWhenIdle}"
+                                          IsChecked="{Binding AutoDestroyWhenIdle, Mode=TwoWay}"
+                                          ToolTip.Tip="{DynamicResource Text.Editor.AutoDestroyWhenIdleHelp}" />
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </views:IconButton>
+            </Grid>
         </Border>
         <Border x:Name="GraphToolbar" Grid.Row="2" Classes="editor-bar" BorderThickness="0,1,0,0"
                 IsVisible="{Binding !IsCpuParticleOverview}">
