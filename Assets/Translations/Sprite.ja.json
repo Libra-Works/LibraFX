@@ -104,5 +104,7 @@
   "Sprite.SelectTexture": "エンジンのテクスチャを選択してください。",
   "Sprite.SelectNode": "スプライトノードを選択してください。",
   "Sprite.InvalidSettings": "有効な列数、行数、FPS、範囲内のフレームを入力してください。",
-  "Sprite.Applied": "スプライト設定を 1 回の編集として適用しました。"
+  "Sprite.Applied": "スプライト設定を 1 回の編集として適用しました。",
+  "Sprite.ToggleAssets": "エンジンアセット",
+  "Sprite.OpenLocalShort": "画像を開く…"
 }

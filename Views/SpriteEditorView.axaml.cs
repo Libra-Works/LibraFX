@@ -42,6 +42,7 @@ public partial class SpriteEditorView : UserControl
             model.InitializeCatalog();
             _clock.Restart();
             _timer.Start();
+            UpdateModeControls();
         }
     }
 
@@ -58,6 +59,8 @@ public partial class SpriteEditorView : UserControl
     {
         if (sender == _model && e.PropertyName is nameof(SpriteEditorViewModel.Playing) or nameof(SpriteEditorViewModel.Frame))
             _clock.Restart();
+        if (sender == _model && e.PropertyName == nameof(SpriteEditorViewModel.IsComposition))
+            UpdateModeControls();
         Atlas.InvalidateVisual();
         FramePreview.InvalidateVisual();
         CompositionPreview.InvalidateVisual();
@@ -90,7 +93,15 @@ public partial class SpriteEditorView : UserControl
     private void OnDeleteKey(object? sender, RoutedEventArgs e) => _model.RemoveTransformKey();
     private void OnAuthoringTabChanged(object? sender, SelectionChangedEventArgs e)
     {
+        UpdateModeControls();
         if (AuthoringTabs?.SelectedIndex == 1 && PartProperties is not null) PartProperties.IsExpanded = true;
+    }
+
+    private void UpdateModeControls()
+    {
+        var showParts = AuthoringTabs?.SelectedIndex == 1 || _model?.IsComposition == true;
+        if (PartProperties is not null) PartProperties.IsVisible = showParts;
+        if (PartTimelineControls is not null) PartTimelineControls.IsVisible = showParts;
     }
 
     private async void OnAutoFlipbook(object? sender, RoutedEventArgs e)

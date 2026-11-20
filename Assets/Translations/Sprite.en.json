@@ -104,5 +104,7 @@
   "Sprite.SelectTexture": "Select an engine texture first.",
   "Sprite.SelectNode": "Select a sprite node first.",
   "Sprite.InvalidSettings": "Enter valid columns, rows, FPS and an in-range frame.",
-  "Sprite.Applied": "Sprite settings applied as one undoable edit."
+  "Sprite.Applied": "Sprite settings applied as one undoable edit.",
+  "Sprite.ToggleAssets": "Engine assets",
+  "Sprite.OpenLocalShort": "Open image…"
 }
