@@ -133,5 +133,18 @@
   "Gpu.ApplyProperties": "Apply properties",
   "Gpu.RemoveNode": "Remove node",
   "Gpu.WriteSelectedNode": "Write selected node",
-  "Gpu.ExportedSource": "Exported source · GPU not executed"
+  "Gpu.ExportedSource": "Exported source · GPU not executed",
+  "Gpu.FlowSummaryCompiled": "Authored flow order validated by source compilation · RuntimeExecuted=false · no live trace",
+  "Gpu.FlowSummaryUncompiled": "Authored flow order only · source compilation unavailable · runtime order not established",
+  "Gpu.Unsupported.NoKernel": "Compute flow has no authored kernel",
+  "Gpu.Unsupported.MissingKernel": "Kernel '{0}' is not present in the authored program",
+  "Gpu.Unsupported.StageMismatch": "Kernel stage {0} does not match flow kind {1}",
+  "Gpu.Unsupported.BillboardKernel": "Billboard render does not consume an authored compute kernel",
+  "Gpu.Unsupported.BillboardResourceType": "Billboard render requires Texture2D, not {0}",
+  "Gpu.Unsupported.BillboardResourceMissing": "Billboard render resource is missing or unresolved",
+  "Gpu.Unsupported.FlowKind": "{0} is declared but not implemented by the GPU source compiler",
+  "Gpu.Unsupported.KernelReference": "Authored kernel reference: {0}",
+  "Gpu.Unsupported.MissingResource": "Resource '{0}' is not present in the authored program",
+  "Gpu.Port.BindingUnsupported": " · referenced kernel only; flow binding unsupported",
+  "Gpu.Port.NoPathToWrite": " · no path to a kernel write"
 }

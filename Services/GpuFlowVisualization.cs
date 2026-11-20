@@ -50,8 +50,13 @@ public sealed record GpuFlowVisualization(
     IReadOnlyList<GpuFlowParameterTransfer> Transfers)
 {
     public string Summary => SourceCompiled
-        ? "Authored flow order validated by source compilation · RuntimeExecuted=false · no live trace / 保存された順序はソース検証済み · 実行トレースなし"
-        : "Authored flow order only · source compilation unavailable · runtime order not established / 保存された順序のみ · 実行順は未確定";
+        ? Text("Gpu.FlowSummaryCompiled", "Authored flow order validated by source compilation · RuntimeExecuted=false · no live trace")
+        : Text("Gpu.FlowSummaryUncompiled", "Authored flow order only · source compilation unavailable · runtime order not established");
+
+    private static string Text(string key, string fallback, params object?[] args) =>
+        LocalizationService.Shared is { } loc
+            ? loc.Get(key, args)
+            : (args.Length == 0 ? fallback : string.Format(System.Globalization.CultureInfo.InvariantCulture, fallback, args));
 
     public static GpuFlowVisualization Create(GpuEditorState state)
     {
@@ -83,23 +88,23 @@ public sealed record GpuFlowVisualization(
             if (flow.Kind is FlowKind.Spawn or FlowKind.Update)
             {
                 if (flow.Kernel is null)
-                    unsupported.Add("Compute flow has no authored kernel / カーネル未割り当て");
+                    unsupported.Add(Text("Gpu.Unsupported.NoKernel", "Compute flow has no authored kernel"));
                 else if (kernel is null)
-                    unsupported.Add($"Kernel '{flow.Kernel}' is not present in the authored program / カーネル参照が不正");
+                    unsupported.Add(Text("Gpu.Unsupported.MissingKernel", "Kernel '{0}' is not present in the authored program", flow.Kernel));
                 else
                 {
                     var bindingSupported = kernel.Stage == (flow.Kind == FlowKind.Spawn
                         ? KernelStage.Spawn : KernelStage.Update);
                     AddKernelPorts(kernel, attributes, inputs, outputs, bindingSupported);
                     if (!bindingSupported)
-                        unsupported.Add($"Kernel stage {kernel.Stage} does not match flow kind {flow.Kind} / フロー種別とカーネル段階が不一致");
+                        unsupported.Add(Text("Gpu.Unsupported.StageMismatch", "Kernel stage {0} does not match flow kind {1}", kernel.Stage, flow.Kind));
                 }
             }
             else if (flow.Kind == FlowKind.RenderBillboard)
             {
                 if (flow.Kernel is not null)
                 {
-                    unsupported.Add("Billboard render does not consume an authored compute kernel / 描画カーネル接続は未対応");
+                    unsupported.Add(Text("Gpu.Unsupported.BillboardKernel", "Billboard render does not consume an authored compute kernel"));
                     if (kernel is not null) AddKernelPorts(kernel, attributes, inputs, outputs, false);
                 }
                 if (flow.Resource is { } resourceId && resources.TryGetValue(resourceId, out var resource))
@@ -109,17 +114,17 @@ public sealed record GpuFlowVisualization(
                         "authored resource binding · engine-side rendering is pending",
                         null, null, [], validResource, false, validResource));
                     if (!validResource)
-                        unsupported.Add($"Billboard render requires Texture2D, not {resource.Kind} / Texture2D以外のリソース種別");
+                        unsupported.Add(Text("Gpu.Unsupported.BillboardResourceType", "Billboard render requires Texture2D, not {0}", resource.Kind));
                 }
                 else
-                    unsupported.Add("Billboard render resource is missing or unresolved / 描画リソース未解決");
+                    unsupported.Add(Text("Gpu.Unsupported.BillboardResourceMissing", "Billboard render resource is missing or unresolved"));
             }
             else
             {
-                unsupported.Add($"{flow.Kind} is declared but not implemented by the GPU source compiler / GPUソースコンパイラー未対応");
+                unsupported.Add(Text("Gpu.Unsupported.FlowKind", "{0} is declared but not implemented by the GPU source compiler", flow.Kind));
                 if (flow.Kernel is { } unsupportedKernel)
                 {
-                    unsupported.Add($"Authored kernel reference: {unsupportedKernel} / カーネル参照");
+                    unsupported.Add(Text("Gpu.Unsupported.KernelReference", "Authored kernel reference: {0}", unsupportedKernel));
                     if (kernel is not null) AddKernelPorts(kernel, attributes, inputs, outputs, false);
                 }
                 if (flow.Resource is { } resourceId)
@@ -129,7 +134,7 @@ public sealed record GpuFlowVisualization(
                             "authored binding; relationship semantics are unsupported",
                             null, null, [], true, false, false));
                     else
-                        unsupported.Add($"Resource '{resourceId}' is not present in the authored program / リソース参照が不正");
+                        unsupported.Add(Text("Gpu.Unsupported.MissingResource", "Resource '{0}' is not present in the authored program", resourceId));
                 }
             }
 
@@ -175,7 +180,7 @@ public sealed record GpuFlowVisualization(
                 if (inputId is not null) pendingNodes.Push(inputId);
         }
 
-        var bindingDetail = bindingSupported ? "" : " · referenced kernel only; flow binding unsupported / カーネル参照のみ・フロー接続未対応";
+        var bindingDetail = bindingSupported ? "" : Text("Gpu.Port.BindingUnsupported", " · referenced kernel only; flow binding unsupported");
         foreach (var read in kernel.Nodes.Where(node => node.Op == GpuOp.ReadAttribute && node.Attribute is not null))
         {
             var declared = attributes.GetValueOrDefault(read.Attribute!);
@@ -183,7 +188,7 @@ public sealed record GpuFlowVisualization(
             inputs.Add(new(read.Attribute!, declared?.Type.ToString() ?? "unknown",
                 GpuFlowPortDirection.Input,
                 $"particle attribute read · node {read.Id}" +
-                (reachable ? "" : " · no path to a kernel write / 出力への経路なし") + bindingDetail,
+                (reachable ? "" : Text("Gpu.Port.NoPathToWrite", " · no path to a kernel write")) + bindingDetail,
                 read.Attribute, null, [read.Id], declared is not null && read.Type == declared.Type,
                 reachable, bindingSupported));
         }
@@ -195,7 +200,7 @@ public sealed record GpuFlowVisualization(
             inputs.Add(new(read.Uniform!, known ? type.ToString() : "unknown",
                 GpuFlowPortDirection.Input,
                 $"external host uniform · not produced by another flow · node {read.Id}" +
-                (reachable ? "" : " · no path to a kernel write / 出力への経路なし") + bindingDetail,
+                (reachable ? "" : Text("Gpu.Port.NoPathToWrite", " · no path to a kernel write")) + bindingDetail,
                 null, null, [read.Id], known && read.Type == type, reachable, bindingSupported));
         }
 

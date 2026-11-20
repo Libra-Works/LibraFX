@@ -133,5 +133,18 @@
   "Gpu.ApplyProperties": "適用",
   "Gpu.RemoveNode": "ノード削除",
   "Gpu.WriteSelectedNode": "選択ノードを出力",
-  "Gpu.ExportedSource": "ソース出力完了（GPU未実行）"
+  "Gpu.ExportedSource": "ソース出力完了（GPU未実行）",
+  "Gpu.FlowSummaryCompiled": "保存された順序はソース検証済み（実行トレースなし）",
+  "Gpu.FlowSummaryUncompiled": "保存された順序のみ（実行順は未確定）",
+  "Gpu.Unsupported.NoKernel": "カーネルが割り当てられていません",
+  "Gpu.Unsupported.MissingKernel": "カーネル '{0}' がプログラム内に存在しません",
+  "Gpu.Unsupported.StageMismatch": "カーネル段階 {0} がフロー種別 {1} と一致しません",
+  "Gpu.Unsupported.BillboardKernel": "ビルボード描画はコンピュートカーネルを消費しません",
+  "Gpu.Unsupported.BillboardResourceType": "ビルボード描画には {0} ではなく Texture2D が必要です",
+  "Gpu.Unsupported.BillboardResourceMissing": "ビルボード描画リソースが見つからないか未解決です",
+  "Gpu.Unsupported.FlowKind": "{0} は宣言されていますが GPU ソースコンパイラー未対応です",
+  "Gpu.Unsupported.KernelReference": "カーネル参照: {0}",
+  "Gpu.Unsupported.MissingResource": "リソース '{0}' がプログラム内に存在しません",
+  "Gpu.Port.BindingUnsupported": " · カーネル参照のみ（フロー接続未対応）",
+  "Gpu.Port.NoPathToWrite": " · 出力への経路なし"
 }
