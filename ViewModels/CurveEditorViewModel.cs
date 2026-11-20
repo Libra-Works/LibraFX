@@ -22,7 +22,7 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
     private readonly HashSet<Guid> _selectedKeyIds = [];
     private Guid? _selectionNodeId;
     private Guid? _previewRevision;
-    private string _status = "Messages.SelectCurveNode";
+    private string _status = string.Empty;
     private bool _snapToFrames = true;
     private string _channelSearch = string.Empty;
     private readonly Dictionary<Guid, bool> _channelVisibility = [];
@@ -431,7 +431,7 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
             _selectionNodeId = _node.Id;
             _selectedKeyIds.IntersectWith(curve.Keys.Select(key => key.Id));
         }
-        Status = _node is null ? "Messages.SelectCurveNode" : "Messages.CurveEditingHint";
+        Status = _node is null ? string.Empty : "Messages.CurveEditingHint";
         OnPropertyChanged(nameof(Node));
         NotifyCurve();
     }

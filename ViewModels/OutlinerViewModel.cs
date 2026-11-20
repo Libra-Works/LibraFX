@@ -75,14 +75,16 @@ public sealed class OutlinerViewModel : Tool
         _graph.PropertyChanged -= OnGraphChanged;
     }
 
-    private void OnHistoryChanged(object? sender, EventArgs e) => Refresh();
+    private void OnHistoryChanged(object? sender, EventArgs e) => ScheduleRefresh();
     private void OnGraphChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(GraphWorkspaceViewModel.SelectedNode) && !_refreshing)
             SyncSelection();
     }
 
-    private void OnBreadcrumbsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    private void OnBreadcrumbsChanged(object? sender, NotifyCollectionChangedEventArgs e) => ScheduleRefresh();
+
+    private void ScheduleRefresh()
     {
         if (_refreshPending) return;
         _refreshPending = true;
@@ -90,7 +92,7 @@ public sealed class OutlinerViewModel : Tool
         {
             _refreshPending = false;
             Refresh();
-        });
+        }, DispatcherPriority.Background);
     }
 
     private void Refresh()
@@ -130,9 +132,12 @@ public sealed class OutlinerViewModel : Tool
             var children = node.ChildGraph is null
                 ? []
                 : BuildNodes(node.ChildGraph, [.. path, node.Id], search, current);
-            var definition = GraphNodeDefinition.All.First(item => item.Kind == node.Kind);
-            if (search.Length == 0 || node.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                definition.Name.Contains(search, StringComparison.OrdinalIgnoreCase) || children.Count > 0)
+            var matches = search.Length == 0 ||
+                node.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                children.Count > 0 ||
+                GraphNodeDefinition.TryFind(node.Kind.Value, out var definition) &&
+                definition!.Name.Contains(search, StringComparison.OrdinalIgnoreCase);
+            if (matches)
             {
                 var item = _nodesById.GetValueOrDefault(node.Id) ?? new OutlinerNode(node.Id);
                 item.Update(node.Name, GraphNodeDefinition.DisplayPortType(node.PortType), path);

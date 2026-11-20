@@ -27,10 +27,6 @@
     </Border>
     <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="8" Spacing="6">
-        <TextBlock Text="{DynamicResource Text.Editor.SelectNodeHint}"
-                   IsVisible="{Binding !HasInspectorTarget}"
-                   TextWrapping="Wrap"
-                   Foreground="{DynamicResource EffectMutedForegroundBrush}" />
         <StackPanel IsVisible="{Binding HasInspectorTarget}" Spacing="6">
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                 <TextBlock Classes="editor-label" Text="{DynamicResource Text.Editor.Name}" />

@@ -80,15 +80,43 @@ public sealed partial class GraphWorkspaceViewModel
     {
         if (!_graphPath.SequenceEqual(parentPath))
         {
-            NavigateToGraph(0);
+            CreateSnapshot();
+            var current = _rootSnapshot;
             foreach (var id in parentPath)
             {
-                var group = Nodes.FirstOrDefault(node => node.Id == id);
-                if (group is null || !EnterGraph(group))
+                var group = current.Nodes.FirstOrDefault(node => node.Id == id);
+                if (group?.ChildGraph is null) return;
+                if (group.GroupAsset is { } reference)
                 {
-                    return;
+                    var asset = GroupAssets?.Assets.FirstOrDefault(item => item.Id == reference.Id);
+                    if (asset is null)
+                    {
+                        try { asset = GroupAssets?.Load(reference.Id); }
+                        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
+                                                   InvalidOperationException or ArgumentException)
+                        {
+                            SetConnectionStatus("Messages.EditLinkedGroupFailed", ex.Message);
+                            return;
+                        }
+                    }
+                    if (asset is null)
+                    {
+                        SetConnectionStatus("Messages.EditLinkedGroupFailed", "The group library is unavailable.");
+                        return;
+                    }
+                    if (asset.Locked)
+                    {
+                        SetConnectionStatus("Messages.GroupLocked");
+                        return;
+                    }
                 }
+                current = group.ChildGraph;
             }
+            _graphPath.Clear();
+            _graphPath.AddRange(parentPath);
+            RestoreCurrentGraph(current);
+            RefreshBreadcrumbs();
+            SetConnectionStatus("Messages.GraphLevelChanged");
         }
         var target = Nodes.FirstOrDefault(node => node.Id == nodeId);
         if (target is not null)

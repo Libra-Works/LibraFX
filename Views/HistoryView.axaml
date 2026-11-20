@@ -20,46 +20,77 @@
                                   VerticalAlignment="Center" />
             </Grid>
         </Border>
-        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
-            <ItemsControl ItemsSource="{Binding Entries}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="vm:HistoryEntryViewModel">
-                        <Border Margin="{Binding Indent}"
-                                BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="0,0,0,1">
-                            <Grid ColumnDefinitions="3,*,Auto">
-                                <Border Background="{DynamicResource DockApplicationAccentBrushIndicator}"
-                                        IsVisible="{Binding IsCurrent}" />
-                                <Button Grid.Column="1" Background="Transparent" BorderThickness="0"
-                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                                        Padding="10,7" Command="{Binding NavigateCommand}">
-                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                                    <views:EditorIconView Icon="Undo" VerticalAlignment="Center" />
-                                    <StackPanel Grid.Column="1" Spacing="2">
-                                        <TextBlock Text="{Binding Description}" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Text="{Binding BranchName}"
-                                                   Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-                                    </StackPanel>
-                                    </Grid>
-                                </Button>
-                                <views:IconButton Grid.Column="2" Icon="Pin"
-                                                  IsVisible="{Binding !IsPinned}"
-                                                  ToolTip.Tip="{DynamicResource Text.Panels.PinHistoryState}"
-                                                  AutomationProperties.Name="{DynamicResource Text.Panels.PinHistoryState}"
-                                                  Command="{Binding TogglePinCommand}"
-                                                  Background="Transparent" BorderThickness="0" Padding="8,4"
-                                                  VerticalAlignment="Center" />
-                                <views:IconButton Grid.Column="2" Icon="Unpin"
-                                                  IsVisible="{Binding IsPinned}"
-                                                  ToolTip.Tip="{DynamicResource Text.Panels.UnpinHistoryState}"
-                                                  AutomationProperties.Name="{DynamicResource Text.Panels.UnpinHistoryState}"
-                                                  Command="{Binding TogglePinCommand}"
-                                                  Background="Transparent" BorderThickness="0" Padding="8,4"
-                                                  VerticalAlignment="Center" />
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                      Background="{DynamicResource EffectCurveBackgroundBrush}">
+            <Grid Width="{Binding CanvasWidth}" Height="{Binding CanvasHeight}" HorizontalAlignment="Left" VerticalAlignment="Top">
+                <ItemsControl ItemsSource="{Binding Edges}" IsHitTestVisible="False">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:HistoryEdgeViewModel">
+                            <Line StartPoint="{Binding Start}" EndPoint="{Binding End}"
+                                  Stroke="{DynamicResource EffectMutedForegroundBrush}"
+                                  StrokeThickness="1.5" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <ItemsControl ItemsSource="{Binding Entries}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemContainerTheme>
+                        <ControlTheme TargetType="ContentPresenter" BasedOn="{StaticResource {x:Type ContentPresenter}}">
+                            <Setter Property="Canvas.Left" Value="{ReflectionBinding X}" />
+                            <Setter Property="Canvas.Top" Value="{ReflectionBinding Y}" />
+                        </ControlTheme>
+                    </ItemsControl.ItemContainerTheme>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:HistoryEntryViewModel">
+                            <Border Width="{Binding Width}" Height="{Binding Height}"
+                                    CornerRadius="4"
+                                    Background="{DynamicResource EffectSurfaceBrush}"
+                                    BorderBrush="{DynamicResource EffectBorderBrush}"
+                                    BorderThickness="1"
+                                    ToolTip.Tip="{Binding ToolTipText}">
+                                <Grid ColumnDefinitions="3,*,Auto">
+                                    <Border Background="{DynamicResource DockApplicationAccentBrushIndicator}"
+                                            CornerRadius="3,0,0,3"
+                                            IsVisible="{Binding IsCurrent}" />
+                                    <Button Grid.Column="1" Background="Transparent" BorderThickness="0"
+                                            HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                            HorizontalContentAlignment="Left" VerticalContentAlignment="Center"
+                                            Padding="7,3" Command="{Binding NavigateCommand}">
+                                        <StackPanel Spacing="1">
+                                            <TextBlock Text="{Binding Description}" FontSize="11.5" FontWeight="Medium"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding BranchName}" FontSize="10"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+                                        </StackPanel>
+                                    </Button>
+                                    <views:IconButton Grid.Column="2" Icon="Pin"
+                                                      IsVisible="{Binding !IsPinned}"
+                                                      ToolTip.Tip="{Binding PinToolTip}"
+                                                      AutomationProperties.Name="{Binding PinToolTip}"
+                                                      Command="{Binding TogglePinCommand}"
+                                                      Width="24" Height="24" MinWidth="24" MinHeight="24"
+                                                      Background="Transparent" BorderThickness="0" Padding="3"
+                                                      VerticalAlignment="Center" Margin="0,0,2,0" />
+                                    <views:IconButton Grid.Column="2" Icon="Unpin"
+                                                      IsVisible="{Binding IsPinned}"
+                                                      ToolTip.Tip="{Binding PinToolTip}"
+                                                      AutomationProperties.Name="{Binding PinToolTip}"
+                                                      Command="{Binding TogglePinCommand}"
+                                                      Width="24" Height="24" MinWidth="24" MinHeight="24"
+                                                      Background="Transparent" BorderThickness="0" Padding="3"
+                                                      VerticalAlignment="Center" Margin="0,0,2,0" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
         </ScrollViewer>
     </Grid>
 </UserControl>
