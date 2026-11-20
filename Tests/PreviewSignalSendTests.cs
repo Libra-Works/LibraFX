@@ -90,7 +90,7 @@ internal static class PreviewSignalSendTests
                         $"language={language.Id}, expectedEnabled={enabled}, visible={button.IsEffectivelyVisible}, " +
                         $"localEnabled={button.IsEnabled}, effectiveEnabled={button.IsEffectivelyEnabled}, " +
                         $"canExecute={node.SendPreviewSignalCommand.CanExecute(null)}.");
-                    Require(button.Content?.ToString() == (language.Id == "ja" ? "送信" : "Send") &&
+                    Require(button is IconButton { Icon: LiberaFx.Models.Appearance.EditorIcon.Play } &&
                         AutomationProperties.GetName(button) == localization.Get("Editor.SignalSend.AccessibleName") &&
                         AutomationProperties.GetHelpText(button) == localization.Get(enabled
                             ? "Editor.SignalSend.Help" : "Editor.SignalSend.InstanceTargetRequired"),
@@ -259,7 +259,7 @@ internal static class PreviewSignalSendTests
         object AddClient(int version)
         {
             var type = typeof(PreviewHost).GetNestedType("PreviewClient", BindingFlags.NonPublic)!;
-            var client = Activator.CreateInstance(type, [version])!;
+            var client = Activator.CreateInstance(type, [version, false, false])!;
             clients.Add(Guid.NewGuid(), client);
             return client;
         }

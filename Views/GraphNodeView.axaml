@@ -40,7 +40,7 @@
                     </StackPanel>
                     <ToggleButton x:Name="DetailsToggle" DockPanel.Dock="Right"
                                   Width="26" Height="26" Padding="0" Margin="4,0,0,0" VerticalAlignment="Center"
-                                  IsVisible="{Binding HasParameters}"
+                                  IsVisible="{Binding HasExpandableParameters}"
                                   IsChecked="{Binding IsDetailsExpanded, Mode=TwoWay}"
                                   ToolTip.Tip="{DynamicResource Text.Panels.ShowHideNodeParameters}"
                                   AutomationProperties.Name="{DynamicResource Text.Panels.ShowHideNodeParameters}">
@@ -98,6 +98,7 @@
                                Foreground="{DynamicResource EffectForegroundBrush}" />
                 </StackPanel>
                 <ItemsControl ItemsSource="{Binding InputPorts}" IsVisible="{Binding HasCustomInputs}"
+                              Grid.ColumnSpan="{Binding InputColumnSpan}"
                               HorizontalAlignment="Stretch" VerticalAlignment="Top">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="graph:GraphInputPortDefinition">
@@ -117,12 +118,16 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <StackPanel Grid.Column="2"
-                            Orientation="Horizontal"
-                            Spacing="4"
-                            IsVisible="{Binding HasLegacyOutput}"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Top">
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Top">
+                    <views:IconButton x:Name="PreviewSignalSendButton" Icon="Play"
+                                      Width="24" Height="24" MinWidth="24" MinHeight="24" Padding="3"
+                                      IsVisible="{Binding IsPreviewSignal}"
+                                      ToolTip.Tip="{Binding PreviewSignalSendHelp}"
+                                      Command="{Binding SendPreviewSignalCommand}"
+                                      AutomationProperties.Name="{DynamicResource Text.Editor.SignalSend.AccessibleName}"
+                                      AutomationProperties.HelpText="{Binding PreviewSignalSendHelp}" />
+                <Grid>
+                <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasLegacyOutput}">
                     <TextBlock Text="{DynamicResource Text.Panels.Output}"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource EffectForegroundBrush}" />
@@ -139,7 +144,7 @@
                                    Foreground="{Binding PortBrush}" />
                     </Border>
                 </StackPanel>
-                <ItemsControl Grid.Column="2" ItemsSource="{Binding OutputPorts}"
+                <ItemsControl ItemsSource="{Binding OutputPorts}"
                               IsVisible="{Binding HasCustomOutputs}"
                               HorizontalAlignment="Stretch" VerticalAlignment="Top">
                     <ItemsControl.ItemTemplate>
@@ -165,13 +170,13 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                </Grid>
+                </StackPanel>
             </Grid>
             <TextBlock x:Name="GroupHintLabel" Grid.Row="2" Margin="8" IsVisible="{Binding ShowGroupHint}"
                        Text="{DynamicResource Text.Panels.DoubleClickToOpen}" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-            <TextBlock x:Name="GpuProgramLabel" Grid.Row="2" Margin="8" IsVisible="{Binding IsGpuParticle}"
-                       Text="{DynamicResource Text.Gpu.ContainerHint}" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <TextBlock x:Name="PortTypeLabel" Grid.Row="3" Margin="8,0,8,6"
-                       Text="{Binding DisplayPortType}"
+                       Text="{Binding OriginalNodeName}"
                        IsVisible="{Binding ShowPortType}"
                        FontSize="11"
                        HorizontalAlignment="Center"
@@ -187,18 +192,23 @@
                                   ToolTip.Tip="{DynamicResource Text.Editor.Sequence.RemoveOutput}"
                                   AutomationProperties.Name="{DynamicResource Text.Editor.Sequence.RemoveOutput}" />
             </StackPanel>
-            <Border Grid.Row="3" Margin="8,2,8,6" HorizontalAlignment="Right"
-                    IsVisible="{Binding IsPreviewSignal}"
-                    ToolTip.Tip="{Binding PreviewSignalSendHelp}"
-                    AutomationProperties.HelpText="{Binding PreviewSignalSendHelp}">
-                <Button x:Name="PreviewSignalSendButton" Padding="8,2" MinHeight="24"
-                        Content="{DynamicResource Text.Editor.SignalSend.Send}"
-                        Command="{Binding SendPreviewSignalCommand}"
-                        AutomationProperties.Name="{DynamicResource Text.Editor.SignalSend.AccessibleName}"
-                        AutomationProperties.HelpText="{Binding PreviewSignalSendHelp}" />
+            <Border Grid.Row="4" IsVisible="{Binding HasConstantEditor}" Padding="8,2,8,8">
+                <ItemsControl x:Name="ConstantEditors" ItemsSource="{Binding InlineParameters}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:NodeParameterEditorViewModel">
+                            <views:ParameterEditorHost Compact="True" WrapVectorComponents="True" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </Border>
-            <Border Grid.Row="4" IsVisible="{Binding IsDetailsExpanded}" Padding="8,5"
+            <Border Grid.Row="4" Padding="8,5"
                     BorderThickness="0,1,0,0" BorderBrush="{DynamicResource EffectBorderBrush}">
+                <Border.IsVisible>
+                    <MultiBinding Converter="{x:Static BoolConverters.And}">
+                        <Binding Path="IsDetailsExpanded" />
+                        <Binding Path="HasExpandableParameters" />
+                    </MultiBinding>
+                </Border.IsVisible>
                 <ItemsControl ItemsSource="{Binding InlineParameters}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="vm:NodeParameterEditorViewModel">

@@ -25,6 +25,7 @@ public sealed class ParameterEditorHost : ContentControl
             "LabelColumnWidth", new GridLength(124), inherits: true);
 
     public bool WrapVectorComponents { get; set; }
+    public bool Compact { get; set; }
 
     private readonly List<RadioButton> _booleanOptions = [];
     private readonly List<TextBlock> _scrubLabels = [];
@@ -65,6 +66,12 @@ public sealed class ParameterEditorHost : ContentControl
         var status = new TextBlock { Name = "ParameterStatus", Foreground = Brushes.OrangeRed, TextWrapping = TextWrapping.Wrap };
         status.Bind(TextBlock.TextProperty, new Binding(nameof(parameter.Status)));
         status.Bind(IsVisibleProperty, new Binding(nameof(parameter.Status)) { Converter = StringConverters.IsNotNullOrEmpty });
+        if (Compact)
+        {
+            Content = new StackPanel { Spacing = 2, Children = { editor, status } };
+            RefreshLocalizedLabels(editorKind);
+            return;
+        }
         _missingEditorMessage = new TextBlock
         {
             IsVisible = custom is null && (editorKind?.StartsWith("inspector:", StringComparison.Ordinal) == true ||

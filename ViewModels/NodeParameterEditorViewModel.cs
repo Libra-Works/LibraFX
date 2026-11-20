@@ -34,7 +34,7 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     public bool IsMaterialSlot => _exposed is null && RenderNodeSchema.IsRenderNode(_node.Definition) && MaterialSlot >= 0;
     private GraphConnectionViewModel? InputConnection => _exposed is not null ? null : _graph.Connections.FirstOrDefault(connection =>
         connection.Target == _node && (connection.TargetPortId == Id ||
-        connection.TargetPortId is null && _node.HasLegacyInput && _node.Definition.Parameters.Count == 1));
+        connection.TargetPortId is null && _node.Definition.InputPorts is null && _node.Definition.Parameters.Count == 1));
     public bool HasConnection => InputConnection is not null;
     public bool IsNodeLocked => _node.IsLocked;
     public bool IsParameterLocked => _node.IsParameterLocked(Id);

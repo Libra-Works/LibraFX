@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -15,8 +16,57 @@ using LiberaFx.Views;
 
 internal static class EditorInterfaceTests
 {
+    public static void VerifyConstantEditors()
+    {
+        foreach (var (kind, count) in new[] { ("Float", 1), ("Int32", 1), ("FloatX2", 2), ("FloatX3", 3), ("FloatX4", 4) })
+        {
+            var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+            var node = graph.CreateNode(new GraphNodeKind(kind));
+            var view = new GraphNodeView { DataContext = node };
+            var leave = new Button { Content = "Commit" };
+            var window = new Window { Width = 420, Height = 320,
+                Content = new StackPanel { Children = { view, leave } } };
+            window.Show();
+            try
+            {
+                window.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+                var fields = view.GetVisualDescendants().OfType<ParameterEditorHost>()
+                    .Where(host => host.Compact).SelectMany(host => host.GetVisualDescendants().OfType<TextBox>()).ToArray();
+                if (fields.Length != count || fields.Any(field => !field.IsEffectivelyVisible || !field.IsEnabled) ||
+                    view.FindControl<ToggleButton>("DetailsToggle")!.IsVisible || node.HasLegacyInput)
+                    throw new InvalidOperationException(kind + " must show editable values without expanding details or exposing an input.");
+                var before = graph.History.CurrentNodeId;
+                fields[^1].Focus();
+                fields[^1].SetCurrentValue(TextBox.TextProperty, "7");
+                leave.Focus();
+                Dispatcher.UIThread.RunJobs();
+                var definition = node.Definition.Parameters.Single(p => p.Id == "value");
+                var value = node.GetParameterValue(definition);
+                if ((count == 1 ? value.GetDouble() : value[count - 1].GetDouble()) != 7 ||
+                    graph.History.CurrentNodeId == before)
+                    throw new InvalidOperationException(kind + " inline editing did not commit through document history.");
+                graph.History.Undo();
+                node = graph.GetNode(node.Id);
+                value = node.GetParameterValue(definition);
+                if ((count == 1 ? value.GetDouble() : value[count - 1].GetDouble()) != 0)
+                    throw new InvalidOperationException(kind + " inline edit cannot be undone.");
+                graph.History.Redo();
+                node = graph.GetNode(node.Id);
+                view.DataContext = node;
+                graph.SetParameterLocked(node, "value", true);
+                Dispatcher.UIThread.RunJobs();
+                if (view.GetVisualDescendants().OfType<ParameterEditorHost>().Where(host => host.Compact)
+                    .SelectMany(host => host.GetVisualDescendants().OfType<TextBox>()).Any(field => field.IsEffectivelyEnabled))
+                    throw new InvalidOperationException(kind + " inline editor must respect parameter locks.");
+            }
+            finally { window.Close(); }
+        }
+    }
+
     public static void Run()
     {
+        VerifyConstantEditors();
         VerifyGraphToolbars();
         VerifyParameterRows();
         VerifyContainerPresentation();
@@ -191,9 +241,8 @@ internal static class EditorInterfaceTests
             Dispatcher.UIThread.RunJobs();
             if (!scalarView.FindControl<TextBlock>("PortTypeLabel")!.IsEffectivelyVisible ||
                 scalar.DisplayPortType != "Scalar" ||
-                gpuView.FindControl<TextBlock>("PortTypeLabel")!.IsEffectivelyVisible ||
-                !gpuView.FindControl<TextBlock>("GpuProgramLabel")!.IsEffectivelyVisible ||
-                gpuView.FindControl<TextBlock>("GpuProgramLabel")!.Text != localization.Get("Gpu.ContainerHint") ||
+                !gpuView.FindControl<TextBlock>("PortTypeLabel")!.IsEffectivelyVisible ||
+                gpuView.FindControl<TextBlock>("PortTypeLabel")!.Text != "GPU Particle" ||
                 !spawnView.FindControl<TextBlock>("PortTypeLabel")!.IsEffectivelyVisible ||
                 spawnView.FindControl<TextBlock>("GroupHintLabel")!.IsEffectivelyVisible ||
                 gpu.HasLegacyInput || gpu.HasLegacyOutput ||
@@ -201,9 +250,13 @@ internal static class EditorInterfaceTests
                 throw new InvalidOperationException("GPU containers must not present or expose scalar ports.");
             localization.SelectedLanguage = localization.Languages.Single(item => item.Id == "ja");
             Dispatcher.UIThread.RunJobs();
-            if (gpuView.FindControl<TextBlock>("GpuProgramLabel")!.Text != localization.Get("Gpu.ContainerHint") ||
+            if (gpuView.FindControl<TextBlock>("PortTypeLabel")!.Text != gpu.OriginalNodeName ||
                 !GraphSnapshot.ContentEquals(before, graph.CreateSnapshot()))
                 throw new InvalidOperationException("GPU container label localization changed graph data.");
+            graph.RenameNode(gpu, "aaa");
+            Dispatcher.UIThread.RunJobs();
+            if (gpuView.FindControl<TextBlock>("PortTypeLabel")!.Text != gpu.OriginalNodeName)
+                throw new InvalidOperationException("Renaming must retain the original node type in the footer.");
         }
         finally { localization.SelectedLanguage = language; window.Close(); }
     }

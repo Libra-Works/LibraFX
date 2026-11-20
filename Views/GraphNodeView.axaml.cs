@@ -469,6 +469,8 @@ public partial class GraphNodeView : UserControl
     private void OnNodePointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (e.Handled) return;
+        if (e.Source is Visual input && input.GetSelfAndVisualAncestors().OfType<ParameterEditorHost>().Any())
+            return;
         if (e.Source is Visual source &&
             source.GetSelfAndVisualAncestors().OfType<GraphEditorView>().FirstOrDefault() is { } sourceEditor &&
             !ReferenceEquals(sourceEditor, this.FindAncestorOfType<GraphEditorView>())) return;

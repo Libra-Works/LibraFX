@@ -77,10 +77,15 @@ public sealed class GraphNodeViewModel : ObservableObject
     public bool IsProcedural => ProceduralResourceSchema.IsMetadata(Definition.Kind);
     public bool HasInlineWorkspace => IsGraphGroup || IsGpuParticle || IsProcedural;
     public bool IsComment => Definition.Kind == GraphNodeKind.Comment;
-    public bool HasPorts => !IsGpuParticle && !IsComment && (!IsGraphGroup ||
+    public bool HasPorts => !IsComment && (!IsGraphGroup ||
         IsSpawnableGroup || Definition.InputPorts is { Count: > 0 } || Definition.OutputPorts is { Count: > 0 });
-    public bool ShowPortType => HasPorts && Definition.Kind != GraphNodeKind.GraphGroup;
-    public bool HasLegacyInput => HasPorts && Definition.InputPorts is null;
+    public bool ShowPortType => !IsComment;
+    public string OriginalNodeName => LocalizationService.Shared.GetNodeLabel(BaseDefinition.DisplayNameKey, BaseDefinition.Name);
+    public int InputColumnSpan => Definition.OutputPorts is { Count: 0 } ? 3 : 1;
+    // These are authored sources. Keep old relay connections readable in saved projects,
+    // but do not offer an input connector on new constant/event nodes.
+    public bool HasLegacyInput => HasPorts && Definition.InputPorts is null &&
+        BaseDefinition.Kind.Value is not ("Float" or "FloatX2" or "FloatX3" or "FloatX4" or "Int32" or "Bool" or "Signal");
     public bool HasCustomInputs => HasPorts && Definition.InputPorts is { Count: > 0 };
     public IReadOnlyList<GraphInputPortDefinition> InputPorts
     {
@@ -195,6 +200,9 @@ public sealed class GraphNodeViewModel : ObservableObject
         ? (CommentFormat)value : CommentFormat.Text;
     public bool HasFormattedComment => IsComment && CommentStyle != CommentFormat.Text;
     public bool HasParameters => InlineParameters.Count > 0;
+    public bool HasConstantEditor => BaseDefinition.Kind.Value is
+        "Float" or "FloatX2" or "FloatX3" or "FloatX4" or "Int32" or "Bool";
+    public bool HasExpandableParameters => HasParameters && !HasConstantEditor;
     public IReadOnlyList<NodeParameterEditorViewModel> InlineParameters { get; private set; }
     internal double RenderedHeight { get; set; } = 80;
     private Dictionary<string, Point> _inputAnchors = [];
@@ -286,6 +294,7 @@ public sealed class GraphNodeViewModel : ObservableObject
     public string? HeaderHelpToolTip => string.IsNullOrEmpty(HeaderHelp) ? null : HeaderHelp;
     internal void RefreshLocalizedText()
     {
+        OnPropertyChanged(nameof(OriginalNodeName));
         OnPropertyChanged(nameof(DisplayName));
         if (IsPreviewDebugDraw || ProceduralResourceSchema.IsMetadata(Definition.Kind)) OnPropertyChanged(nameof(InputPorts));
         OnPropertyChanged(nameof(Description));
@@ -489,6 +498,11 @@ public sealed class GraphNodeViewModel : ObservableObject
     internal void ApplyResolvedDefinition(GraphNodeDefinition definition)
     {
         if (definition == _definition) return;
+        if (definition with { InputPorts = null, OutputPorts = null } == _definition with { InputPorts = null, OutputPorts = null } &&
+            (definition.InputPorts is null && _definition.InputPorts is null ||
+             definition.InputPorts is not null && _definition.InputPorts is not null && definition.InputPorts.SequenceEqual(_definition.InputPorts)) &&
+            (definition.OutputPorts is null && _definition.OutputPorts is null ||
+             definition.OutputPorts is not null && _definition.OutputPorts is not null && definition.OutputPorts.SequenceEqual(_definition.OutputPorts))) return;
         _definition = definition;
         OnPropertyChanged(nameof(Definition));
         OnPropertyChanged(nameof(PortType));
