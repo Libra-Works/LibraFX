@@ -84,7 +84,25 @@ public sealed class NodeCatalogViewModel : Tool
             RefreshEntries();
     }
 
-    private void OnObservedGraphCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => RefreshEntries();
+    private void OnObservedGraphCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (ReferenceEquals(sender, _observedGraph?.Nodes) && _entries.Count > 0 && !CreatabilityChanged(_activeGraph.Graph))
+            return;
+        RefreshEntries();
+    }
+
+    private bool CreatabilityChanged(GraphWorkspaceViewModel graph)
+    {
+        foreach (var entry in _entries)
+        {
+            var kind = entry.GroupAssetId is not null
+                ? GraphNodeKind.GraphGroup
+                : new GraphNodeKind(entry.KindName);
+            if (graph.CanCreateNode(kind, out _) != entry.CanCreate)
+                return true;
+        }
+        return false;
+    }
 
     private void RefreshEntries()
     {

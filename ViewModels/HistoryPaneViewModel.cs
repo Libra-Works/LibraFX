@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Avalonia;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Dock.Model.Mvvm.Controls;
@@ -22,6 +23,7 @@ public sealed class HistoryPaneViewModel : Tool
     private const double CanvasMargin = 20;
     private double _canvasWidth = 320;
     private double _canvasHeight = 200;
+    private bool _refreshPending;
 
     public ObservableCollection<HistoryEntryViewModel> Entries { get; } = [];
     public ObservableCollection<HistoryEdgeViewModel> Edges { get; } = [];
@@ -81,7 +83,13 @@ public sealed class HistoryPaneViewModel : Tool
 
     private void OnHistoryStateChanged(object? sender, EventArgs e)
     {
-        Refresh();
+        if (_refreshPending) return;
+        _refreshPending = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _refreshPending = false;
+            Refresh();
+        }, DispatcherPriority.Background);
     }
 
     private void Refresh()
