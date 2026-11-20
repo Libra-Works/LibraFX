@@ -19,6 +19,8 @@
     "RDPipelineSpecializationConstant",
     "RDShaderSource",
     "RDShaderSPIRV",
+    "RDTextureFormat",
+    "RDTextureView",
     "RDUniform",
     "RefCounted",
     "Resource",
@@ -29,6 +31,7 @@
     "StandardMaterial3D",
     "Thread",
     "Texture2D",
+    "Texture2DRD",
     "Viewport",
     "VisualInstance3D",
     "World3D"

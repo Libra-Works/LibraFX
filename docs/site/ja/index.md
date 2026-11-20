@@ -16,6 +16,7 @@ LIBERA FX は、Unity・Unreal Engine・Godot で再生するエフェクトを�
 | [用語集](glossary.md) | ノード、Signal、Spawnable、ランタイムなどの言葉を、短い例と一緒に確認できます。 |
 | [ウィンドウとパネルのリファレンス](editor-reference.md) | ツール、設定、ダイアログの使い方を実画面と操作例で確認できます。 |
 | [GPU パーティクル制作](gpu-particles.md) | GPU フロー、ビジュアルカーネル、型付き DSL、ビルボード設定を編集します。 |
+| [2D の煙・インク](fluid-2d.md) | リソース先頭の GPU 格子ソルバー、発生源、密度テクスチャを扱います。公開 Preview には未収録のソース機能です。 |
 | [CPU パーティクル制作](cpu-particles.md) | Spawn／Update 子グラフ、粒子の放出、CPU の Property／Signal のやり取りを説明します。 |
 | [Flexible Plane Draw](flexible-plane-draw.md) | 自由配置の点列や、位置の履歴から帯状のポリゴンを作ります。 |
 | [グラフ制作ガイド](authoring.md) | ピンの接続、カーブ、Spawnable の寿命、Group の再利用を説明します。 |
@@ -31,17 +32,18 @@ LIBERA FX は、Unity・Unreal Engine・Godot で再生するエフェクトを�
 
 ## 今後の方針：フルイド（流体）
 
-煙・炎などの気体と、水・粘性のある液体の両方を将来の対応対象とします。
-計算方式、CPU／GPU の役割、描画方式は今後設計します。
-対応は **2D を先に実装・検証し、その後に 3D へ拡張する**順序です。
-流体シミュレーションは **未実装で、今回の Preview には含みません**。
-パーティクルや帯状ポリゴンが使えることは、流体ソルバーへの対応を意味しません。
+最初は **smoke-first：GPU による 2D の煙・色密度の移流**です。
+更新後のソースには固定の格子ソルバーとリソース先頭の Flow を追加しています。
+設定・エンジン検証・制限は[2D の煙・インク](fluid-2d.md)を参照してください。
+**公開済み 2026.11.22 Preview には含まれません**。
+エディター・コンバーター・SDK は対応するソース版を組み合わせます。
 
-今回の Preview 公開後は、Unity・Unreal・Godot の描画改修、CPU パーティクルの
-Flow 対応と GPU 放出形状の追加、2D フルイド、3D フルイドの順に進めます。
-GPU Flow の先頭で使用リソースと描画先を宣言する案は
-[issue #68](https://github.com/Libra-Works/LibraFX/issues/68) で検討します。
-これは将来の設計案で、現在使える機能ではありません。
+Unity・Unreal・Godot の描画改修、CPU パーティクルの Flow、GPU 放出形状は
+ソースへ反映済みです。**2D を検証してから 3D へ進めます**。
+液体や燃焼は今後の対象で、煙・色密度の計算は水面や炎の実装ではありません。
+今回のリソース／ターゲット宣言は
+[issue #68](https://github.com/Libra-Works/LibraFX/issues/68)の一部を具体化したもので、
+任意のリソースグラフやメイン画面へのアクセスではありません。
 
 [ソースリポジトリ](https://github.com/Libra-Works/LibraFX) ·
 [MIT ライセンス](https://github.com/Libra-Works/LibraFX/blob/main/LICENSE)

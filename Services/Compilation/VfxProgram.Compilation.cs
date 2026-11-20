@@ -15,6 +15,18 @@ public sealed partial class VfxProgram
         {
             throw new InvalidDataException("CPU Particle requires an effect package; export .lfxb with a matching updated SDK.");
         }
+#if LIBERAFX_CONVERTER
+        if (Flatten(graph).Any(node => GpuParticleEditorService.IsGpu(node.Kind)))
+        {
+            throw new InvalidDataException("GPU systems require executable GPU export from the editor; CPU-only conversion cannot discard them.");
+        }
+#else
+        if (GpuProgramDeliveryService.Containers(graph).Any(node =>
+                GpuParticleEditorService.ReadState(node).Fluid2D is not null))
+        {
+            throw new InvalidDataException("2D fluid requires an effect package; export .lfxb with matching updated SDK adapters.");
+        }
+#endif
         if (Flatten(graph).Any(node => GameIoSchema.IsInstanceNode(node.Kind)))
         {
             throw new InvalidDataException("Instance Game I/O requires an effect package; export with EffectBinary to .lfxb.");

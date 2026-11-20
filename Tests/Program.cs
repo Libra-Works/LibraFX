@@ -39,6 +39,24 @@ internal static class Program
 
     private static void MainCore(string[] args)
     {
+        if (args is ["--fluid-2d"])
+        {
+            InitializeIsolatedUi();
+            LiberaFx.Tests.Fluid2DAuthoringTests.Run();
+            return;
+        }
+        if (args is ["--fluid-2d-fixtures", var fluidDirectory])
+        {
+            InitializeIsolatedUi();
+            LiberaFx.Tests.Fluid2DAuthoringTests.WriteFixtures(fluidDirectory);
+            return;
+        }
+        if (args is ["--fluid-2d-documentation", var fluidDocumentation])
+        {
+            InitializeIsolatedUi();
+            LiberaFx.Tests.Fluid2DAuthoringTests.Capture(fluidDocumentation);
+            return;
+        }
         if (args is ["--cpu-particle-documentation", var cpuDocumentationDirectory])
         {
             InitializeIsolatedUi();

@@ -483,6 +483,8 @@ void FLibraNativeInstancedMeshPrimitive::Remove()
     }
 }
 
+FLibraNativeInstancedMeshPrimitive::FLibraNativeInstancedMeshPrimitive() = default;
+
 FLibraNativeInstancedMeshPrimitive::~FLibraNativeInstancedMeshPrimitive()
 {
     check(IsInGameThread());

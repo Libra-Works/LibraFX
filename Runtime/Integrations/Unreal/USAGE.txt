@@ -59,6 +59,30 @@ Linked development installation (no source copying)
   For packaging/distribution, install a fresh copy into a separate project: the
   copy installer still bundles Core and does not ship the machine-local marker.
 
+GPU Fluid2D smoke/ink
+  Executable GPU payload manifests use Version=2 only for scopes containing a
+  fluid. The existing programs array remains the particle path; fluidPrograms
+  carries {nodeId, settings, renderer}. Container snapshots stay GpuParticle
+  with gpuState.fluid2D marking fluid mode. Mixed particle/fluid scopes and
+  SpawnableGroup template scopes use the same public ULibraEffectComponent.
+  Settings are validated transactionally, including IDs, scope limits and the
+  256 MiB native-buffer/texture budget. Version=1 particle payloads remain
+  compatible; unsupported versions and mismatched fluid snapshots fail instead
+  of dropping the fluid.
+  Unreal dispatches the shipped LibraFluid2D global shader only; package shader
+  source is never compiled or executed. Each fluid owns seven float4 grid
+  buffers and an RGBA16F dye texture, and renders a premultiplied-alpha local XY
+  plane through the effect-owned post-tonemap view extension. The only supported
+  presentation is builtin:fluid-alpha; arbitrary UE material graphs are not
+  evaluated. The runtime creates no fluid actor/component per node. Domain size
+  uses domainWidth/domainHeight * renderer.sizeScale (default 100 Unreal cm).
+  Pause holds simulation while owner transform/visibility presentation remains
+  updated; Stop, reset and child retirement release the fluid GPU state.
+  Focused automation is Libra.GPU.Fluid2D.ExecutionAndPlaneFramebuffer and
+  Libra.Runtime.Spawnable.Fluid2DCompilerFixtures. It requires a real SM5 GPU
+  and fails on NullRHI. See the GPU module USAGE for isolated fixture and build
+  commands. Liquid and 3D fluid are unsupported.
+
 Compiler verification
   For console portability, changes to this plugin and the embedded Core must
   compile with Clang. Use an isolated copy-installed C++ project, for example:

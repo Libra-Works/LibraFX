@@ -7,6 +7,7 @@
 #include "LibraSpawnableAsset.h"
 #include "LibraGpuEffectAsset.h"
 #include "LibraGpuEffectRuntime.h"
+#include "liberafx/gpu/LbFluid2D.h"
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/StaticMeshComponent.h"
@@ -80,6 +81,97 @@ bool Integer(const TSharedPtr<FJsonObject>& object, const TCHAR* name, int32& va
     if (!object->TryGetNumberField(name, number) || !FMath::IsFinite(number) ||
         number < MIN_int32 || number > MAX_int32 || FMath::FloorToDouble(number) != number) return false;
     value = static_cast<int32>(number);
+    return true;
+}
+
+bool ReadFluid2DFloat(const TSharedPtr<FJsonObject>& object, const TCHAR* name, float& value)
+{
+    auto number = double{};
+    if (!object->TryGetNumberField(name, number) || !FMath::IsFinite(number) ||
+        number < -double(MAX_flt) || number > double(MAX_flt)) return false;
+    value = static_cast<float>(number);
+    return FMath::IsFinite(value);
+}
+
+bool ReadFluid2DUint(const TSharedPtr<FJsonObject>& object, const TCHAR* name,
+    uint32 minimum, uint32 maximum, uint32& value)
+{
+    auto number = double{};
+    if (!object->TryGetNumberField(name, number) || !FMath::IsFinite(number) ||
+        number < minimum || number > maximum || FMath::FloorToDouble(number) != number) return false;
+    value = static_cast<uint32>(number);
+    return true;
+}
+
+bool ReadFluid2DSettings(const TSharedPtr<FJsonObject>& object,
+    liberafx::gpu::Fluid2DSettings& settings)
+{
+    using namespace liberafx::gpu;
+    static const TSet<FString> names{
+        TEXT("version"), TEXT("width"), TEXT("height"), TEXT("domainWidth"), TEXT("domainHeight"),
+        TEXT("pressureIterations"), TEXT("maximumStep"), TEXT("maximumSubsteps"),
+        TEXT("velocityDissipation"), TEXT("densityDissipation"), TEXT("sourceEnabled"),
+        TEXT("sourceX"), TEXT("sourceY"), TEXT("sourceRadius"), TEXT("sourceDensity"),
+        TEXT("sourceVelocityX"), TEXT("sourceVelocityY"), TEXT("buoyancy"),
+        TEXT("colorR"), TEXT("colorG"), TEXT("colorB"), TEXT("colorA")
+    };
+    if (!object.IsValid() || object->Values.Num() != names.Num()) return false;
+    for (const auto& entry : object->Values)
+        if (!names.Contains(entry.Key)) return false;
+
+    return ReadFluid2DUint(object, TEXT("version"), 1, 1, settings.version) &&
+        ReadFluid2DUint(object, TEXT("width"), 8, 1024, settings.width) &&
+        ReadFluid2DUint(object, TEXT("height"), 8, 1024, settings.height) &&
+        ReadFluid2DFloat(object, TEXT("domainWidth"), settings.domainWidth) &&
+        ReadFluid2DFloat(object, TEXT("domainHeight"), settings.domainHeight) &&
+        ReadFluid2DUint(object, TEXT("pressureIterations"), 1, 128, settings.pressureIterations) &&
+        ReadFluid2DFloat(object, TEXT("maximumStep"), settings.maximumStep) &&
+        ReadFluid2DUint(object, TEXT("maximumSubsteps"), 1, 16, settings.maximumSubsteps) &&
+        ReadFluid2DFloat(object, TEXT("velocityDissipation"), settings.velocityDissipation) &&
+        ReadFluid2DFloat(object, TEXT("densityDissipation"), settings.densityDissipation) &&
+        object->TryGetBoolField(TEXT("sourceEnabled"), settings.sourceEnabled) &&
+        ReadFluid2DFloat(object, TEXT("sourceX"), settings.sourceX) &&
+        ReadFluid2DFloat(object, TEXT("sourceY"), settings.sourceY) &&
+        ReadFluid2DFloat(object, TEXT("sourceRadius"), settings.sourceRadius) &&
+        ReadFluid2DFloat(object, TEXT("sourceDensity"), settings.sourceDensity) &&
+        ReadFluid2DFloat(object, TEXT("sourceVelocityX"), settings.sourceVelocityX) &&
+        ReadFluid2DFloat(object, TEXT("sourceVelocityY"), settings.sourceVelocityY) &&
+        ReadFluid2DFloat(object, TEXT("buoyancy"), settings.buoyancy) &&
+        ReadFluid2DFloat(object, TEXT("colorR"), settings.colorR) &&
+        ReadFluid2DFloat(object, TEXT("colorG"), settings.colorG) &&
+        ReadFluid2DFloat(object, TEXT("colorB"), settings.colorB) &&
+        ReadFluid2DFloat(object, TEXT("colorA"), settings.colorA) &&
+        validFluid2DSettings(settings);
+}
+
+struct FFluidProgram
+{
+    FGuid NodeId;
+    liberafx::gpu::Fluid2DSettings Settings;
+    float SizeScale = 100;
+};
+
+bool ReadFluidProgram(const TSharedPtr<FJsonObject>& object, FFluidProgram& program)
+{
+    if (!object.IsValid() || object->Values.Num() != 3) return false;
+    FString nodeId;
+    FGuid parsedNodeId;
+    const TSharedPtr<FJsonObject>* settings = nullptr;
+    const TSharedPtr<FJsonObject>* renderer = nullptr;
+    FString material;
+    auto sizeScale = double{};
+    if (!object->TryGetStringField(TEXT("nodeId"), nodeId) || !FGuid::Parse(nodeId, parsedNodeId) ||
+        !parsedNodeId.IsValid() || !object->TryGetObjectField(TEXT("settings"), settings) ||
+        !object->TryGetObjectField(TEXT("renderer"), renderer) || !renderer->IsValid() ||
+        renderer->Get()->Values.Num() != 2 ||
+        !renderer->Get()->TryGetStringField(TEXT("material"), material) ||
+        material != TEXT("builtin:fluid-alpha") ||
+        !renderer->Get()->TryGetNumberField(TEXT("sizeScale"), sizeScale) ||
+        !FMath::IsFinite(sizeScale) || sizeScale <= 0 || sizeScale > 10000 ||
+        float(sizeScale) <= 0 || !ReadFluid2DSettings(*settings, program.Settings))
+        return false;
+    program.NodeId = parsedNodeId;
+    program.SizeScale = static_cast<float>(sizeScale);
     return true;
 }
 
@@ -187,6 +279,7 @@ struct FDefinition
     TArray<FFlexiblePlaneDraw> FlexiblePlanes;
     TArray<TStrongObjectPtr<ULibraGpuEffectAsset>> Gpu;
     TArray<FGuid> GpuNodeIds;
+    TArray<FFluidProgram> FluidPrograms;
     TMap<FGuid, TArray<FGuid>> GpuDrawTransforms;
     uint64 GpuBytes = 0;
 };
@@ -208,6 +301,8 @@ struct FInstance
     TArray<TUniquePtr<FLibraFlexiblePlaneRenderer>> FlexiblePlanes;
     FLibraFlexiblePlaneHistoryScope FlexibleHistory;
     TArray<TStrongObjectPtr<ULibraGpuEffectRuntime>> Gpu;
+    TArray<FGuid> GpuRuntimeNodeIds;
+    TArray<bool> GpuRuntimeIsFluid;
     ~FInstance()
     {
         for (auto& runtime : Gpu)
@@ -704,7 +799,9 @@ struct FLibraSpawnableRenderState::FImpl
     bool ReadGpu(const std::vector<std::uint8_t>& snapshots, const std::vector<std::uint8_t>& bytes,
         FDefinition& definition)
     {
-        auto expected = TSet<FGuid>{};
+        auto expectedParticles = TSet<FGuid>{};
+        auto expectedFluids = TSet<FGuid>{};
+        auto allExpected = TSet<FGuid>{};
         if (!snapshots.empty())
         {
             auto nodes = TArray<TSharedPtr<FJsonValue>>{};
@@ -714,23 +811,87 @@ struct FLibraSpawnableRenderState::FImpl
             for (const auto& node : nodes)
             {
                 auto id = FString{};
+                auto kind = FString{};
                 auto guid = FGuid{};
                 if (!node || node->Type != EJson::Object || !node->AsObject()->TryGetStringField(TEXT("id"), id) ||
-                    !FGuid::Parse(id, guid) || !guid.IsValid() || expected.Contains(guid))
+                    !node->AsObject()->TryGetStringField(TEXT("kind"), kind) || kind != TEXT("GpuParticle") ||
+                    !FGuid::Parse(id, guid) || !guid.IsValid() || allExpected.Contains(guid))
                     return Fail(TEXT("Invalid GPU container identity."));
-                expected.Add(guid);
+                allExpected.Add(guid);
+                auto isFluid = false;
+                const TSharedPtr<FJsonObject>* gpuState = nullptr;
+                if (node->AsObject()->HasField(TEXT("gpuState")))
+                {
+                    if (!node->AsObject()->TryGetObjectField(TEXT("gpuState"), gpuState) ||
+                        !gpuState->IsValid())
+                        return Fail(TEXT("Invalid GPU container state metadata."));
+                    if ((*gpuState)->HasField(TEXT("fluid2D")))
+                    {
+                        const auto* marker = (*gpuState)->Values.Find(TEXT("fluid2D"));
+                        if (!marker || !marker->IsValid() ||
+                            !((*marker)->Type == EJson::Object ||
+                                ((*marker)->Type == EJson::Boolean && (*marker)->AsBool())))
+                            return Fail(TEXT("gpuState.fluid2D must be true or a fluid-state object."));
+                        isFluid = true;
+                    }
+                }
+                (isFluid ? expectedFluids : expectedParticles).Add(guid);
             }
         }
+        const auto markedFluids = expectedFluids;
         if (bytes.empty())
-            return (expected.IsEmpty() && definition.GpuDrawTransforms.IsEmpty()) ||
+            return (allExpected.IsEmpty() && definition.GpuDrawTransforms.IsEmpty()) ||
                 Fail(TEXT("GPU containers or draw Matrix bindings have no executable program manifest; re-export the source graph."));
         auto root = TSharedPtr<FJsonObject>{};
         auto reader = TJsonReaderFactory<>::Create(Text(bytes));
         auto version = int32{};
         const TArray<TSharedPtr<FJsonValue>>* programs = nullptr;
+        const TArray<TSharedPtr<FJsonValue>>* fluids = nullptr;
         if (!FJsonSerializer::Deserialize(reader, root) || !root || !Integer(root, TEXT("version"), version) ||
-            version != 1 || !root->TryGetArrayField(TEXT("programs"), programs) || programs->Num() != expected.Num())
+            (version != 1 && version != 2) ||
+            !root->TryGetArrayField(TEXT("programs"), programs))
             return Fail(TEXT("GPU program manifest does not match its containers."));
+        if (version == 1 && (!expectedFluids.IsEmpty() || root->HasField(TEXT("fluidPrograms"))))
+            return Fail(TEXT("This Unreal runtime requires GPU program manifest Version=2 for 2D fluids."));
+        if (version == 1 && programs->Num() != expectedParticles.Num())
+            return Fail(TEXT("GPU program manifest does not match its containers."));
+        if (version == 2)
+        {
+            if (!root->TryGetArrayField(TEXT("fluidPrograms"), fluids) ||
+                programs->Num() + fluids->Num() > 16)
+                return Fail(TEXT("Version=2 fluid manifest is missing an array or exceeds the 16-program scope limit."));
+            auto manifestFluidIds = TSet<FGuid>{};
+            for (const auto& item : *fluids)
+            {
+                auto object = item.IsValid() && item->Type == EJson::Object ? item->AsObject() : nullptr;
+                auto id = FString{};
+                auto guid = FGuid{};
+                if (!object || !object->TryGetStringField(TEXT("nodeId"), id) ||
+                    !FGuid::Parse(id, guid) || !allExpected.Contains(guid) || manifestFluidIds.Contains(guid))
+                    return Fail(TEXT("FluidPrograms contains an invalid, duplicate, or unmatched nodeId."));
+                manifestFluidIds.Add(guid);
+            }
+            if (markedFluids.IsEmpty())
+            {
+                for (const auto& guid : manifestFluidIds)
+                {
+                    if (!expectedParticles.Remove(guid))
+                        return Fail(TEXT("FluidPrograms nodeId is already classified as a particle."));
+                    expectedFluids.Add(guid);
+                }
+            }
+            else
+            {
+                if (markedFluids.Num() != manifestFluidIds.Num())
+                    return Fail(TEXT("gpuState.fluid2D markers do not match FluidPrograms entries."));
+                for (const auto& guid : manifestFluidIds)
+                    if (!markedFluids.Contains(guid))
+                        return Fail(TEXT("gpuState.fluid2D markers do not match FluidPrograms entries."));
+            }
+            if (expectedFluids.IsEmpty() || fluids->Num() != expectedFluids.Num() ||
+                programs->Num() != expectedParticles.Num())
+                return Fail(TEXT("Version=2 fluid manifest does not match its GPU container snapshots."));
+        }
         for (const auto& item : *programs)
         {
             auto object = item.IsValid() && item->Type == EJson::Object ? item->AsObject() : nullptr;
@@ -738,7 +899,7 @@ struct FLibraSpawnableRenderState::FImpl
             auto guid = FGuid{};
             const TSharedPtr<FJsonObject>* delivery = nullptr;
             if (!object || !object->TryGetStringField(TEXT("nodeId"), id) || !FGuid::Parse(id, guid) ||
-                !expected.Remove(guid) || !object->TryGetObjectField(TEXT("unreal"), delivery))
+                !expectedParticles.Remove(guid) || !object->TryGetObjectField(TEXT("unreal"), delivery))
                 return Fail(TEXT("Invalid executable GPU identity."));
             if (GUsingNullRHI) return Fail(TEXT("GPU execution requires a real SM5 graphics device, not NullRHI."));
             const TSharedPtr<FJsonObject>* paths = nullptr;
@@ -772,15 +933,38 @@ struct FLibraSpawnableRenderState::FImpl
                 registers = FMath::Max(registers, uint64(count));
                 packetBytes += kernel.Bytes.Num();
             }
-            definition.GpuBytes += uint64(asset->GetCapacity()) * (80 + registers * 16) + packetBytes;
-            if (definition.GpuBytes > ULibraGpuEffectAsset::MaximumGpuBytes)
+            const auto requiredBytes = uint64(asset->GetCapacity()) * (80 + registers * 16) + packetBytes;
+            if (requiredBytes > ULibraGpuEffectAsset::MaximumGpuBytes - definition.GpuBytes)
                 return Fail(TEXT("GPU scope exceeds the 256 MiB budget."));
+            definition.GpuBytes += requiredBytes;
             definition.GpuNodeIds.Add(guid);
             definition.Gpu.Add(MoveTemp(asset));
         }
+        if (fluids)
+        {
+            for (const auto& item : *fluids)
+            {
+                auto object = item.IsValid() && item->Type == EJson::Object ? item->AsObject() : nullptr;
+                auto program = FFluidProgram{};
+                if (!ReadFluidProgram(object, program) || !expectedFluids.Remove(program.NodeId))
+                    return Fail(TEXT("Invalid, duplicate, or unmatched FluidPrograms entry."));
+                const auto fluidBytes = uint64(program.Settings.width) * program.Settings.height * 120;
+                if (fluidBytes > ULibraGpuEffectAsset::MaximumGpuBytes - definition.GpuBytes)
+                    return Fail(TEXT("GPU fluid scope exceeds the 256 MiB buffer and texture budget."));
+                definition.GpuBytes += fluidBytes;
+                definition.FluidPrograms.Add(MoveTemp(program));
+            }
+        }
+        if (!expectedParticles.IsEmpty() || !expectedFluids.IsEmpty())
+            return Fail(TEXT("GPU manifest omits one or more validated container programs."));
         for (const auto& transform : definition.GpuDrawTransforms)
-            if (!definition.GpuNodeIds.Contains(transform.Key))
+        {
+            auto isParticle = definition.GpuNodeIds.Contains(transform.Key);
+            auto isFluid = definition.FluidPrograms.ContainsByPredicate(
+                [&transform](const auto& program) { return program.NodeId == transform.Key; });
+            if (!isParticle && !isFluid)
                 return Fail(TEXT("GPU draw Matrix binding does not match an executable GPU container."));
+        }
         return true;
     }
 
@@ -924,19 +1108,52 @@ struct FLibraSpawnableRenderState::FImpl
                 NewObject<ULibraGpuEffectRuntime>(actor, NAME_None, RF_Transient));
             runtime->Initialize(actor);
             instance->Gpu.Add(MoveTemp(runtime));
+            instance->GpuRuntimeNodeIds.Add(instance->Definition->GpuNodeIds[gpuIndex]);
+            instance->GpuRuntimeIsFluid.Add(false);
             auto gpu = instance->Gpu.Last().Get();
             if (!gpu->SetEffect(asset.Get()) ||
                 !gpu->ConfigureEmitter(Owner.GpuSpawnPerSecond, static_cast<int32>(seed)))
                 return Fail(TEXT("GPU instance creation failed: ") + gpu->LastError);
             auto drawTransform = FMatrix44f::Identity;
             auto connected = false;
-            if (!ReadGpuDrawTransform(*instance->Definition, instance->Definition->GpuNodeIds[gpuIndex],
-                    container, id, drawTransform, connected) ||
-                !gpu->SetDrawTransform(drawTransform, connected))
+            // Root values become available during the initial native advance.
+            if (container.IsValid() &&
+                !ReadGpuDrawTransform(*instance->Definition, instance->Definition->GpuNodeIds[gpuIndex],
+                    container, id, drawTransform, connected))
+            {
+                return Fail(TEXT("GPU draw Matrix binding is invalid."));
+            }
+            if (!gpu->SetDrawTransform(drawTransform, connected))
+            {
                 return Fail(gpu->LastError.IsEmpty()
                     ? TEXT("GPU draw Matrix binding is invalid.") : gpu->LastError);
+            }
             if (!gpu->Play())
                 return Fail(TEXT("GPU instance creation failed: ") + gpu->LastError);
+        }
+        const auto visible = !actor->IsHidden() && (!root || root->IsVisible());
+        const auto ownerMatrix = FMatrix44f(parentTransform.ToMatrixWithScale().GetTransposed());
+        for (const auto& fluid : instance->Definition->FluidPrograms)
+        {
+            auto runtime = TStrongObjectPtr<ULibraGpuEffectRuntime>(
+                NewObject<ULibraGpuEffectRuntime>(actor, NAME_None, RF_Transient));
+            runtime->Initialize(actor);
+            instance->Gpu.Add(MoveTemp(runtime));
+            instance->GpuRuntimeNodeIds.Add(fluid.NodeId);
+            instance->GpuRuntimeIsFluid.Add(true);
+            auto gpu = instance->Gpu.Last().Get();
+            auto drawTransform = FMatrix44f::Identity;
+            auto connected = false;
+            if (container.IsValid() &&
+                !ReadGpuDrawTransform(*instance->Definition, fluid.NodeId, container, id,
+                    drawTransform, connected))
+            {
+                return Fail(TEXT("GPU fluid Matrix binding is invalid."));
+            }
+            const auto localToWorld = connected ? drawTransform : ownerMatrix;
+            if (!gpu->SetFluid2D(fluid.Settings, fluid.SizeScale, localToWorld, visible) ||
+                !gpu->Play())
+                return Fail(TEXT("GPU fluid instance creation failed: ") + gpu->LastError);
         }
         GpuBytes += instance->Definition->GpuBytes;
         Instances.Add(MoveTemp(instance));
@@ -1348,6 +1565,15 @@ struct FLibraSpawnableRenderState::FImpl
             }
             auto delta = time - instance->Previous;
             if (!FMath::IsFinite(delta) || delta < 0 || delta > MAX_flt) return Fail(TEXT("Invalid GPU local time."));
+            auto* ownerActor = Owner.GetOwner();
+            auto* ownerRoot = ownerActor ? ownerActor->GetRootComponent() : nullptr;
+            if (!ownerActor) return Fail(TEXT("GPU presentation lost its actor owner."));
+            const auto ownerTransform = ownerRoot ? ownerRoot->GetComponentTransform() : ownerActor->GetActorTransform();
+            const auto ownerMatrix = FMatrix44f(ownerTransform.ToMatrixWithScale().GetTransposed());
+            const auto visible = !ownerActor->IsHidden() && (!ownerRoot || ownerRoot->IsVisible());
+            if (instance->GpuRuntimeNodeIds.Num() != instance->Gpu.Num() ||
+                instance->GpuRuntimeIsFluid.Num() != instance->Gpu.Num())
+                return Fail(TEXT("GPU runtime identities do not match their prepared programs."));
             for (auto gpuIndex = 0; gpuIndex < instance->Gpu.Num(); ++gpuIndex)
             {
                 auto& gpu = instance->Gpu[gpuIndex];
@@ -1357,17 +1583,24 @@ struct FLibraSpawnableRenderState::FImpl
                 }
                 auto drawTransform = FMatrix44f::Identity;
                 auto connected = false;
-                if (!ReadGpuDrawTransform(*instance->Definition, instance->Definition->GpuNodeIds[gpuIndex],
-                        instance->Container, instance->Id, drawTransform, connected) ||
-                    !gpu->SetDrawTransform(drawTransform, connected))
+                if (!ReadGpuDrawTransform(*instance->Definition, instance->GpuRuntimeNodeIds[gpuIndex],
+                        instance->Container, instance->Id, drawTransform, connected))
+                    return Fail(TEXT("GPU draw Matrix binding is invalid."));
+                if (instance->GpuRuntimeIsFluid[gpuIndex])
+                {
+                    const auto localToWorld = connected ? drawTransform : ownerMatrix;
+                    if (!gpu->SetFluidPresentation(localToWorld, visible))
+                        return Fail(gpu->LastError.IsEmpty()
+                            ? TEXT("GPU fluid presentation transform is invalid.") : gpu->LastError);
+                }
+                else if (!gpu->SetDrawTransform(drawTransform, connected))
+                {
                     return Fail(gpu->LastError.IsEmpty()
                         ? TEXT("GPU draw Matrix binding is invalid.") : gpu->LastError);
+                }
                 if (delta > 0) gpu->Tick(static_cast<float>(delta));
             }
-            auto* ownerActor = Owner.GetOwner();
-            auto* ownerRoot = ownerActor ? ownerActor->GetRootComponent() : nullptr;
-            instance->PresentationRootTransform = ownerRoot
-                ? ownerRoot->GetComponentTransform() : ownerActor->GetActorTransform();
+            instance->PresentationRootTransform = ownerTransform;
             instance->bHasPresentationRootTransform = true;
             instance->Previous = time;
         }
@@ -1393,7 +1626,7 @@ bool FLibraSpawnableRenderState::Prepare(const liberafx::SpawnablePackage& packa
     auto root = MakeUnique<FDefinition>();
     if (!Impl->ReadDraws(package.rootRenderConfiguration, *root, true) ||
         !Impl->ReadGpu(package.rootGpuContainersJson, package.rootGpuProgramsJson, *root)) return false;
-    if (!root->Gpu.IsEmpty() && package.autoDestroyWhenIdle)
+    if ((!root->Gpu.IsEmpty() || !root->FluidPrograms.IsEmpty()) && package.autoDestroyWhenIdle)
         return Impl->Fail(TEXT("Root GPU auto-idle draining is unsupported. Disable AutoDestroyWhenIdle and use RequestNaturalEnd or Stop."));
     Impl->Definitions.Add(FGuid{}, MoveTemp(root));
     for (const auto& entry : package.templates)
@@ -1444,6 +1677,30 @@ void FLibraSpawnableRenderState::UpdateOwnerPresentation()
     {
         const auto transformChanged = !instance->bHasPresentationRootTransform ||
             !instance->PresentationRootTransform.Equals(rootTransform);
+        const auto ownerMatrix = FMatrix44f(rootTransform.ToMatrixWithScale().GetTransposed());
+        if (instance->GpuRuntimeNodeIds.Num() != instance->Gpu.Num() ||
+            instance->GpuRuntimeIsFluid.Num() != instance->Gpu.Num())
+        {
+            Impl->Fail(TEXT("GPU runtime identities do not match their prepared programs."));
+            return;
+        }
+        for (auto gpuIndex = 0; gpuIndex < instance->Gpu.Num(); ++gpuIndex)
+        {
+            if (!instance->GpuRuntimeIsFluid.IsValidIndex(gpuIndex) ||
+                !instance->GpuRuntimeIsFluid[gpuIndex] || !instance->Gpu[gpuIndex].IsValid())
+                continue;
+            auto drawTransform = FMatrix44f::Identity;
+            auto connected = false;
+            if (!Impl->ReadGpuDrawTransform(*instance->Definition, instance->GpuRuntimeNodeIds[gpuIndex],
+                    instance->Container, instance->Id, drawTransform, connected))
+                return;
+            const auto localToWorld = connected ? drawTransform : ownerMatrix;
+            if (!instance->Gpu[gpuIndex]->SetFluidPresentation(localToWorld, visible))
+            {
+                Impl->Fail(instance->Gpu[gpuIndex]->LastError);
+                return;
+            }
+        }
         for (auto drawIndex = 0; drawIndex < instance->Draws.Num(); ++drawIndex)
         {
             auto& primitive = instance->Draws[drawIndex];

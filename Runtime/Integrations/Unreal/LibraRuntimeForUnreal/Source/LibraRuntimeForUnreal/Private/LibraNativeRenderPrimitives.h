@@ -14,6 +14,7 @@ class UMaterialInterface;
 class FLibraNativeInstancedMeshPrimitive final
 {
 public:
+    FLibraNativeInstancedMeshPrimitive();
     bool Create(ULibraSpawnableComponent& owner, UStaticMesh* mesh,
         TArrayView<TObjectPtr<UMaterialInterface>> materials, const FTransform& primitiveTransform);
     bool CreateWithInstances(ULibraSpawnableComponent& owner, UStaticMesh* mesh,

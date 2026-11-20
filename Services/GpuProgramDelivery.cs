@@ -14,7 +14,12 @@ public sealed record GpuProgramDelivery(
     int RendererBindingsVersion, IReadOnlyList<GpuRendererBinding> RendererBindings);
 public sealed record GpuExecutableProgram(Guid NodeId, GpuProgramDelivery Unreal,
     string UnityMetadataJson, string UnityShaderSource);
-public sealed record GpuExecutablePayload(int Version, IReadOnlyList<GpuExecutableProgram> Programs);
+public sealed record GpuFluidProgram(Guid NodeId, Fluid2DSettings Settings, GpuRendererSettings Renderer);
+public sealed record GpuExecutablePayload(int Version, IReadOnlyList<GpuExecutableProgram> Programs)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<GpuFluidProgram>? FluidPrograms { get; init; }
+}
 public sealed record GpuContainerDiagnostic(Guid NodeId, GpuDiagnostic Diagnostic);
 
 public static class GpuProgramDeliveryService
@@ -44,6 +49,10 @@ public static class GpuProgramDeliveryService
         return Containers(graph).Select(node =>
         {
             var state = GpuParticleEditorService.ReadState(node);
+            if (state.Fluid2D is not null)
+            {
+                throw new InvalidDataException("2D fluid requires the executable effect-package transport, not particle source delivery.");
+            }
             var compiled = GpuParticleEditorService.Compile(state);
             if (format == ShaderFormat.Usf)
             {
@@ -63,9 +72,20 @@ public static class GpuProgramDeliveryService
         if (containers.Length > MaximumProgramsPerScope)
             throw new InvalidDataException($"A GPU program scope supports at most {MaximumProgramsPerScope} programs.");
 
-        var programs = containers.Select(node =>
+        var states = containers.Select(node => (Node: node, State: GpuParticleEditorService.ReadState(node))).ToArray();
+        var fluids = states.Where(item => item.State.Fluid2D is not null).Select(item =>
         {
-            var state = GpuParticleEditorService.ReadState(node);
+            if (GpuParticleEditorService.Diagnostics(item.State) is { Count: > 0 } errors)
+            {
+                throw new GpuValidationException(errors);
+            }
+            return new GpuFluidProgram(item.Node.Id, item.State.Fluid2D!,
+                item.State.FluidRenderer ?? new("builtin:fluid-alpha", 100));
+        }).ToArray();
+        var programs = states.Where(item => item.State.Fluid2D is null).Select(item =>
+        {
+            var node = item.Node;
+            var state = item.State;
             var compiled = GpuParticleEditorService.Compile(state);
             RequireBackendSupport(node.Id, compiled, GpuBackendCapabilities.Unreal, GpuBackendCapabilities.Unity);
             foreach (var resource in compiled.Resources)
@@ -79,7 +99,10 @@ public static class GpuProgramDeliveryService
             return new GpuExecutableProgram(node.Id, unreal,
                 compiled.ExportMetadataJson(ShaderFormat.UnityCompute), unityShader.Text);
         }).ToArray();
-        return JsonSerializer.SerializeToUtf8Bytes(new GpuExecutablePayload(1, programs), PayloadJson);
+        return JsonSerializer.SerializeToUtf8Bytes(new GpuExecutablePayload(fluids.Length == 0 ? 1 : 2, programs)
+        {
+            FluidPrograms = fluids.Length == 0 ? null : fluids
+        }, PayloadJson);
     }
 
     private static void RequireBackendSupport(Guid nodeId, CompiledGpuProgram program,

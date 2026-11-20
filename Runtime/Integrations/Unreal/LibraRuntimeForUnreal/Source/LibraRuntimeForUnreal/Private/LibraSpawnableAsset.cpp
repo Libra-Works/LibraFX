@@ -1,21 +1,241 @@
 #include "LibraSpawnableAsset.h"
 
 #include "LibraNativeState.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "liberafx/gpu/LbFluid2D.h"
 #if WITH_EDITORONLY_DATA
 #include "EditorFramework/AssetImportData.h"
 #endif
 #if WITH_EDITOR
-#include "Dom/JsonObject.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInterface.h"
 #include "Misc/PackageName.h"
-#include "Serialization/JsonReader.h"
-#include "Serialization/JsonSerializer.h"
 #include "UObject/AssetRegistryTagsContext.h"
 #include "UObject/Package.h"
 #endif
 #include "liberafx/LbSpawnablePackage.h"
+
+namespace
+{
+FString LibraPackageJsonText(const std::vector<std::uint8_t>& bytes)
+{
+    if (bytes.empty()) return {};
+    auto converted = FUTF8ToTCHAR(reinterpret_cast<const ANSICHAR*>(bytes.data()), bytes.size());
+    return FString(converted.Length(), converted.Get());
+}
+
+bool LibraReadFluidNumber(const TSharedPtr<FJsonObject>& object, const TCHAR* name, float& value)
+{
+    auto number = double{};
+    if (!object->TryGetNumberField(name, number) || !FMath::IsFinite(number) ||
+        number < -double(MAX_flt) || number > double(MAX_flt)) return false;
+    value = static_cast<float>(number);
+    return FMath::IsFinite(value);
+}
+
+bool LibraReadFluidInteger(const TSharedPtr<FJsonObject>& object, const TCHAR* name,
+    uint32 minimum, uint32 maximum, uint32& value)
+{
+    auto number = double{};
+    if (!object->TryGetNumberField(name, number) || !FMath::IsFinite(number) ||
+        number < minimum || number > maximum || FMath::FloorToDouble(number) != number) return false;
+    value = static_cast<uint32>(number);
+    return true;
+}
+
+bool LibraValidateFluidSettings(const TSharedPtr<FJsonObject>& object)
+{
+    using namespace liberafx::gpu;
+    static const TSet<FString> names{
+        TEXT("version"), TEXT("width"), TEXT("height"), TEXT("domainWidth"), TEXT("domainHeight"),
+        TEXT("pressureIterations"), TEXT("maximumStep"), TEXT("maximumSubsteps"),
+        TEXT("velocityDissipation"), TEXT("densityDissipation"), TEXT("sourceEnabled"),
+        TEXT("sourceX"), TEXT("sourceY"), TEXT("sourceRadius"), TEXT("sourceDensity"),
+        TEXT("sourceVelocityX"), TEXT("sourceVelocityY"), TEXT("buoyancy"),
+        TEXT("colorR"), TEXT("colorG"), TEXT("colorB"), TEXT("colorA")
+    };
+    if (!object.IsValid() || object->Values.Num() != names.Num()) return false;
+    for (const auto& entry : object->Values)
+        if (!names.Contains(entry.Key)) return false;
+    auto settings = Fluid2DSettings{};
+    return LibraReadFluidInteger(object, TEXT("version"), 1, 1, settings.version) &&
+        LibraReadFluidInteger(object, TEXT("width"), 8, 1024, settings.width) &&
+        LibraReadFluidInteger(object, TEXT("height"), 8, 1024, settings.height) &&
+        LibraReadFluidNumber(object, TEXT("domainWidth"), settings.domainWidth) &&
+        LibraReadFluidNumber(object, TEXT("domainHeight"), settings.domainHeight) &&
+        LibraReadFluidInteger(object, TEXT("pressureIterations"), 1, 128, settings.pressureIterations) &&
+        LibraReadFluidNumber(object, TEXT("maximumStep"), settings.maximumStep) &&
+        LibraReadFluidInteger(object, TEXT("maximumSubsteps"), 1, 16, settings.maximumSubsteps) &&
+        LibraReadFluidNumber(object, TEXT("velocityDissipation"), settings.velocityDissipation) &&
+        LibraReadFluidNumber(object, TEXT("densityDissipation"), settings.densityDissipation) &&
+        object->TryGetBoolField(TEXT("sourceEnabled"), settings.sourceEnabled) &&
+        LibraReadFluidNumber(object, TEXT("sourceX"), settings.sourceX) &&
+        LibraReadFluidNumber(object, TEXT("sourceY"), settings.sourceY) &&
+        LibraReadFluidNumber(object, TEXT("sourceRadius"), settings.sourceRadius) &&
+        LibraReadFluidNumber(object, TEXT("sourceDensity"), settings.sourceDensity) &&
+        LibraReadFluidNumber(object, TEXT("sourceVelocityX"), settings.sourceVelocityX) &&
+        LibraReadFluidNumber(object, TEXT("sourceVelocityY"), settings.sourceVelocityY) &&
+        LibraReadFluidNumber(object, TEXT("buoyancy"), settings.buoyancy) &&
+        LibraReadFluidNumber(object, TEXT("colorR"), settings.colorR) &&
+        LibraReadFluidNumber(object, TEXT("colorG"), settings.colorG) &&
+        LibraReadFluidNumber(object, TEXT("colorB"), settings.colorB) &&
+        LibraReadFluidNumber(object, TEXT("colorA"), settings.colorA) &&
+        validFluid2DSettings(settings);
+}
+
+bool LibraValidateFluidScope(const std::vector<std::uint8_t>& snapshotBytes,
+    const std::vector<std::uint8_t>& manifestBytes, FString& failure)
+{
+    const auto reject = [&failure](const TCHAR* message)
+    {
+        failure = message;
+        return false;
+    };
+    if (manifestBytes.empty())
+    {
+        if (snapshotBytes.empty()) return true;
+        auto legacySnapshots = TArray<TSharedPtr<FJsonValue>>{};
+        auto legacyReader = TJsonReaderFactory<>::Create(LibraPackageJsonText(snapshotBytes));
+        if (!FJsonSerializer::Deserialize(legacyReader, legacySnapshots))
+            return reject(TEXT("legacy GPU container snapshot JSON is invalid"));
+        for (const auto& value : legacySnapshots)
+        {
+            auto node = value && value->Type == EJson::Object ? value->AsObject() : nullptr;
+            const TSharedPtr<FJsonObject>* gpuState = nullptr;
+            if (node && node->TryGetObjectField(TEXT("gpuState"), gpuState) && gpuState->IsValid() &&
+                (*gpuState)->HasField(TEXT("fluid2D")))
+                return reject(TEXT("legacy package contains Fluid2D without a version-2 manifest"));
+        }
+        return true;
+    }
+    auto manifest = TSharedPtr<FJsonObject>{};
+    auto manifestReader = TJsonReaderFactory<>::Create(LibraPackageJsonText(manifestBytes));
+    if (!FJsonSerializer::Deserialize(manifestReader, manifest) || !manifest)
+        return reject(TEXT("GPU executable manifest JSON is invalid"));
+    auto version = double{};
+    if (!manifest->TryGetNumberField(TEXT("version"), version) || (version != 1 && version != 2))
+        return reject(TEXT("GPU executable manifest has an unsupported version"));
+    TArray<TSharedPtr<FJsonValue>> snapshots;
+    if (!snapshotBytes.empty())
+    {
+        auto snapshotReader = TJsonReaderFactory<>::Create(LibraPackageJsonText(snapshotBytes));
+        if (!FJsonSerializer::Deserialize(snapshotReader, snapshots) || snapshots.Num() > 16)
+            return reject(TEXT("GPU container snapshot JSON is invalid or exceeds 16 entries"));
+    }
+    auto expectedParticles = TSet<FGuid>{};
+    auto expectedFluids = TSet<FGuid>{};
+    auto allIds = TSet<FGuid>{};
+    for (const auto& value : snapshots)
+    {
+        auto node = value && value->Type == EJson::Object ? value->AsObject() : nullptr;
+        auto id = FString{}, kind = FString{};
+        auto guid = FGuid{};
+        if (!node || !node->TryGetStringField(TEXT("id"), id) ||
+            !node->TryGetStringField(TEXT("kind"), kind) || kind != TEXT("GpuParticle") ||
+            !FGuid::Parse(id, guid) || !guid.IsValid() || allIds.Contains(guid))
+            return reject(TEXT("GPU container snapshot has an invalid, duplicate, or non-GpuParticle node ID"));
+        allIds.Add(guid);
+        auto isFluid = false;
+        const TSharedPtr<FJsonObject>* gpuState = nullptr;
+        if (node->HasField(TEXT("gpuState")))
+        {
+            if (!node->TryGetObjectField(TEXT("gpuState"), gpuState) || !gpuState->IsValid())
+                return reject(TEXT("GPU container snapshot gpuState is not an object"));
+            if ((*gpuState)->HasField(TEXT("fluid2D")))
+            {
+                const auto* marker = (*gpuState)->Values.Find(TEXT("fluid2D"));
+                if (!marker || !marker->IsValid() ||
+                    !((*marker)->Type == EJson::Object ||
+                        ((*marker)->Type == EJson::Boolean && (*marker)->AsBool())))
+                    return reject(TEXT("GPU container snapshot has an invalid fluid2D marker"));
+                isFluid = true;
+            }
+        }
+        (isFluid ? expectedFluids : expectedParticles).Add(guid);
+    }
+    const auto markedFluids = expectedFluids;
+    if (version == 1)
+        return expectedFluids.IsEmpty() && !manifest->HasField(TEXT("fluidPrograms"))
+            ? true : reject(TEXT("version-1 manifest cannot contain Fluid2D snapshots or fluidPrograms"));
+    const TArray<TSharedPtr<FJsonValue>>* programs = nullptr;
+    const TArray<TSharedPtr<FJsonValue>>* fluids = nullptr;
+    if (!manifest->TryGetArrayField(TEXT("programs"), programs) ||
+        !manifest->TryGetArrayField(TEXT("fluidPrograms"), fluids))
+        return reject(TEXT("version-2 manifest is missing programs or fluidPrograms array"));
+    auto manifestFluidIds = TSet<FGuid>{};
+    for (const auto& value : *fluids)
+    {
+        auto fluid = value && value->Type == EJson::Object ? value->AsObject() : nullptr;
+        auto id = FString{};
+        auto guid = FGuid{};
+        if (!fluid || !fluid->TryGetStringField(TEXT("nodeId"), id) ||
+            !FGuid::Parse(id, guid) || !allIds.Contains(guid) || manifestFluidIds.Contains(guid))
+            return reject(TEXT("Fluid2D program nodeId is invalid, duplicated, or absent from GPU snapshots"));
+        manifestFluidIds.Add(guid);
+    }
+    if (markedFluids.IsEmpty())
+    {
+        for (const auto& guid : manifestFluidIds)
+        {
+            if (!expectedParticles.Remove(guid))
+                return reject(TEXT("Fluid2D manifest nodeId is already classified as a particle"));
+            expectedFluids.Add(guid);
+        }
+    }
+    else
+    {
+        if (markedFluids.Num() != manifestFluidIds.Num())
+            return reject(TEXT("snapshot gpuState.fluid2D markers do not match Fluid2D manifest entries"));
+        for (const auto& guid : manifestFluidIds)
+            if (!markedFluids.Contains(guid))
+                return reject(TEXT("snapshot gpuState.fluid2D markers do not match Fluid2D manifest entries"));
+    }
+    if (expectedFluids.IsEmpty())
+        return reject(TEXT("version-2 manifest contains no Fluid2D programs"));
+    if (programs->Num() != expectedParticles.Num() || fluids->Num() != expectedFluids.Num())
+    {
+        failure = FString::Printf(
+            TEXT("version-2 manifest/snapshot count mismatch (particles %d/%d, fluids %d/%d)"),
+            programs->Num(), expectedParticles.Num(), fluids->Num(), expectedFluids.Num());
+        return false;
+    }
+    if (programs->Num() + fluids->Num() > 16)
+        return reject(TEXT("version-2 manifest exceeds the 16-program scope limit"));
+    for (const auto& value : *programs)
+    {
+        auto program = value && value->Type == EJson::Object ? value->AsObject() : nullptr;
+        auto id = FString{};
+        auto guid = FGuid{};
+        if (!program || !program->TryGetStringField(TEXT("nodeId"), id) ||
+            !FGuid::Parse(id, guid) || !expectedParticles.Remove(guid))
+            return reject(TEXT("particle program nodeId is invalid, duplicated, or absent from GPU snapshots"));
+    }
+    for (const auto& value : *fluids)
+    {
+        auto fluid = value && value->Type == EJson::Object ? value->AsObject() : nullptr;
+        auto id = FString{}, material = FString{};
+        auto guid = FGuid{};
+        const TSharedPtr<FJsonObject>* settings = nullptr;
+        const TSharedPtr<FJsonObject>* renderer = nullptr;
+        auto sizeScale = double{};
+        if (!fluid || !fluid->TryGetStringField(TEXT("nodeId"), id) ||
+            !FGuid::Parse(id, guid) || !expectedFluids.Remove(guid) ||
+            !fluid->TryGetObjectField(TEXT("settings"), settings) ||
+            !LibraValidateFluidSettings(*settings) ||
+            !fluid->TryGetObjectField(TEXT("renderer"), renderer) || !renderer->IsValid() ||
+            !(*renderer)->TryGetStringField(TEXT("material"), material) ||
+            material != TEXT("builtin:fluid-alpha") ||
+            !(*renderer)->TryGetNumberField(TEXT("sizeScale"), sizeScale) ||
+            !FMath::IsFinite(sizeScale) || sizeScale <= 0 || sizeScale > 10000)
+            return reject(TEXT("Fluid2D program has an invalid ID, settings, or renderer"));
+    }
+    return expectedParticles.IsEmpty() && expectedFluids.IsEmpty()
+        ? true : reject(TEXT("GPU container snapshots contain programs missing from the manifest"));
+}
+}
 
 auto ULibraSpawnableAsset::ValidatePackage() const -> ELibraRuntimeResult
 {
@@ -39,7 +259,24 @@ auto ULibraSpawnableAsset::ValidatePackageBuffer(TConstArrayView<uint8> bytes) -
     if (bytes.Num() <= 0 || bytes.Num() > MaximumPackageBytes)
         return ELibraRuntimeResult::InvalidBinary;
     auto package = liberafx::SpawnablePackage{};
-    return ToLibraResult(liberafx::loadSpawnablePackage(bytes.GetData(), bytes.Num(), package));
+    auto result = liberafx::loadSpawnablePackage(bytes.GetData(), bytes.Num(), package);
+    if (result != liberafx::Result::Ok) return ToLibraResult(result);
+    auto failure = FString{};
+    if (!LibraValidateFluidScope(package.rootGpuContainersJson, package.rootGpuProgramsJson, failure))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Libra GPU root scope rejected: %s"), *failure);
+        return ELibraRuntimeResult::InvalidBinary;
+    }
+    for (const auto& entry : package.templates)
+    {
+        failure.Reset();
+        if (!LibraValidateFluidScope(entry.gpuContainersJson, entry.gpuProgramsJson, failure))
+        {
+            UE_LOG(LogTemp, Error, TEXT("Libra GPU template scope rejected: %s"), *failure);
+            return ELibraRuntimeResult::InvalidBinary;
+        }
+    }
+    return ELibraRuntimeResult::Ok;
 }
 
 UObject* ULibraSpawnableAsset::FindResourceOverride(const FString& identity, ELibraPackageResourceKind kind) const
@@ -163,7 +400,16 @@ bool ReadLibraPackageResourceGpuKeys(const std::vector<std::uint8_t>& bytes,
     if (bytes.empty()) return true;
     const auto root = ReadLibraPackageResourceObject(bytes);
     const FLibraPackageResourceJsonArray* programs = nullptr;
-    if (!root || !root->TryGetArrayField(TEXT("programs"), programs) || programs->Num() > 16) return false;
+    const FLibraPackageResourceJsonArray* fluids = nullptr;
+    auto version = double{};
+    if (!root || !root->TryGetNumberField(TEXT("version"), version) ||
+        (version != 1 && version != 2) ||
+        !root->TryGetArrayField(TEXT("programs"), programs) || programs->Num() > 16)
+        return false;
+    if ((version == 1 && root->HasField(TEXT("fluidPrograms"))) ||
+        (version == 2 && (!root->TryGetArrayField(TEXT("fluidPrograms"), fluids) ||
+            fluids->IsEmpty() || programs->Num() + fluids->Num() > 16)))
+        return false;
     for (const auto& value : *programs)
     {
         auto program = value && value->Type == EJson::Object ? value->AsObject() : nullptr;
@@ -178,6 +424,25 @@ bool ReadLibraPackageResourceGpuKeys(const std::vector<std::uint8_t>& bytes,
             if (!entry.Value || !entry.Value->TryGetString(identity) ||
                 (identity != TEXT("builtin:white") &&
                     !AddLibraPackageResourceKey(keys, identity, ELibraPackageResourceKind::Texture)))
+                return false;
+        }
+    }
+    if (fluids)
+    {
+        for (const auto& value : *fluids)
+        {
+            auto fluid = value && value->Type == EJson::Object ? value->AsObject() : nullptr;
+            const TSharedPtr<FJsonObject>* settings = nullptr;
+            const TSharedPtr<FJsonObject>* renderer = nullptr;
+            FString nodeId, material;
+            double sizeScale = 0;
+            if (!fluid || !fluid->TryGetStringField(TEXT("nodeId"), nodeId) ||
+                !fluid->TryGetObjectField(TEXT("settings"), settings) ||
+                !fluid->TryGetObjectField(TEXT("renderer"), renderer) ||
+                !(*renderer)->TryGetStringField(TEXT("material"), material) ||
+                material != TEXT("builtin:fluid-alpha") ||
+                !(*renderer)->TryGetNumberField(TEXT("sizeScale"), sizeScale) ||
+                !FMath::IsFinite(sizeScale) || sizeScale <= 0 || sizeScale > 10000)
                 return false;
         }
     }

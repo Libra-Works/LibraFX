@@ -21,6 +21,7 @@ namespace LiberaFx.Unity
             new List<LiberaFxCpuParticleRenderInstance>();
         private readonly List<LiberaFxDebugDrawInstance> debugDraws = new List<LiberaFxDebugDrawInstance>();
         private readonly List<LibraGpuParticleRuntime> gpuPrograms = new List<LibraGpuParticleRuntime>();
+        private readonly List<LibraFluid2DInstance> fluidPrograms = new List<LibraFluid2DInstance>();
         private readonly Dictionary<LibraGpuParticleRuntime, LiberaFxPreparedGpuProgram> gpuDrawTransforms =
             new Dictionary<LibraGpuParticleRuntime, LiberaFxPreparedGpuProgram>();
         private readonly LiberaFxRenderStatisticsCounter statistics;
@@ -51,7 +52,7 @@ namespace LiberaFx.Unity
             try
             {
                 if (prepared.renderNodes.Length == 0 && prepared.cpuParticles.Length == 0 &&
-                    prepared.gpuPrograms.Length == 0)
+                    prepared.gpuPrograms.Length == 0 && (prepared.fluidPrograms?.Length ?? 0) == 0)
                     return scope;
 
                 if (prepared.gpuPrograms.Length != 0)
@@ -105,6 +106,8 @@ namespace LiberaFx.Unity
                     scope.gpuPrograms.Add(runtime);
                     scope.gpuDrawTransforms.Add(runtime, gpu);
                 }
+                foreach (var fluid in prepared.fluidPrograms ?? Array.Empty<LiberaFxPreparedFluidProgram>())
+                    scope.fluidPrograms.Add(new LibraFluid2DInstance(owner, fluid, statistics));
                 return scope;
             }
             catch
@@ -129,6 +132,7 @@ namespace LiberaFx.Unity
                 foreach (var gpu in gpuPrograms)
                     if (gpu && gpu.IsRunning)
                         gpu.StepSpawnable((float)localTime, emitterPosition);
+                foreach (var fluid in fluidPrograms) fluid.Step(localTime);
             }
             previousLocalTime = localTime;
         }
@@ -148,6 +152,7 @@ namespace LiberaFx.Unity
                 foreach (var gpu in gpuPrograms)
                     if (gpu && gpu.IsRunning)
                         gpu.StepSpawnable((float)delta, emitterPosition);
+                foreach (var fluid in fluidPrograms) fluid.Step(delta);
             }
             previousLocalTime = localTime;
         }
@@ -174,24 +179,26 @@ namespace LiberaFx.Unity
                 draw.Update(host, rootScope, containerId, instanceId);
             foreach (var gpu in gpuPrograms)
                 gpu.SetDrawTransform(ReadDrawTransform(host, rootScope, containerId, instanceId,
-                    gpuDrawTransforms[gpu]), gpuDrawTransforms[gpu].drawMatrixRowNodeBytes != null);
+                    gpuDrawTransforms[gpu].drawMatrixRowNodeBytes), gpuDrawTransforms[gpu].drawMatrixRowNodeBytes != null);
+            foreach (var fluid in fluidPrograms)
+                fluid.UpdateTransform(ReadDrawTransform(host, rootScope, containerId, instanceId, fluid.DrawRows));
             previousLocalTime = localTime;
         }
 
         private static Matrix4x4 ReadDrawTransform(NativeInstance.NativeSpawnableHostBase host,
-            bool root, byte[] container, ulong instance, LiberaFxPreparedGpuProgram program)
+            bool root, byte[] container, ulong instance, byte[][] rows)
         {
-            if (program.drawMatrixRowNodeBytes == null) return Matrix4x4.identity;
-            if (host == null || program.drawMatrixRowNodeBytes.Length != 4)
+            if (rows == null) return Matrix4x4.identity;
+            if (host == null || rows.Length != 4)
                 throw new InvalidOperationException("GPU draw Matrix binding is incomplete.");
             var matrix = Matrix4x4.identity;
             for (var row = 0; row < 4; ++row)
             {
                 NativeValue value;
                 NativeResult result;
-                if (root) result = host.ReadRootValue(program.drawMatrixRowNodeBytes[row], out value);
+                if (root) result = host.ReadRootValue(rows[row], out value);
                 else result = host.ReadChildValue(container, instance,
-                    program.drawMatrixRowNodeBytes[row], out value);
+                    rows[row], out value);
                 if (result != NativeResult.Ok || value.ComponentCount != 4)
                     throw new InvalidOperationException("GPU draw Matrix row " + row + " could not be read as FloatX4: " + result);
                 if (!LiberaFxUnityBindingLookup.IsFiniteFloat(value.X) ||
@@ -202,6 +209,9 @@ namespace LiberaFx.Unity
                 matrix.SetRow(row, new Vector4((float)value.X, (float)value.Y,
                     (float)value.Z, (float)value.W));
             }
+            if (Mathf.Abs(matrix.m30) > 1e-5f || Mathf.Abs(matrix.m31) > 1e-5f ||
+                Mathf.Abs(matrix.m32) > 1e-5f || Mathf.Abs(matrix.m33 - 1) > 1e-5f)
+                throw new InvalidOperationException("GPU draw Matrix must be affine.");
             return matrix;
         }
 
@@ -229,6 +239,30 @@ namespace LiberaFx.Unity
 
         internal ulong ScopeInstanceId => instanceId;
 
+        internal bool TryGetFluidOutput(string nodeId, out RenderTexture texture)
+        {
+            foreach (var fluid in fluidPrograms)
+                if (fluid.NodeId == nodeId) { texture = fluid.Output; return texture; }
+            texture = null;
+            return false;
+        }
+
+        internal bool TryGetFluidStats(string nodeId, out LibraFluid2DFrameStats stats)
+        {
+            foreach (var fluid in fluidPrograms)
+                if (fluid.NodeId == nodeId)
+                {
+                    stats = new LibraFluid2DFrameStats
+                    {
+                        Substeps = fluid.LastSubsteps,
+                        DiscardedDelta = fluid.DiscardedDelta
+                    };
+                    return true;
+                }
+            stats = default;
+            return false;
+        }
+
         public void ClearPreviewDebugDraw()
         {
             foreach (var draw in debugDraws) draw.Dispose();
@@ -246,6 +280,8 @@ namespace LiberaFx.Unity
                 gpu.StopSimulation();
                 gpu.Dispose();
             }
+            foreach (var fluid in fluidPrograms) fluid.Dispose();
+            fluidPrograms.Clear();
             foreach (var node in renderNodes) node.Dispose();
             foreach (var plane in flexiblePlanes)
             {

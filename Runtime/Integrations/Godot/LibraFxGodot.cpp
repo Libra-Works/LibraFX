@@ -6,6 +6,7 @@
 #include "LibraFxGodotRender.h"
 #include "LibraFxGodotGpu.h"
 #include "LibraFxGodotDebugPlayback.h"
+#include "LibraFxGodotFluid2D.h"
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/classes/thread.hpp>
@@ -420,6 +421,52 @@ public:
 
     String get_gpu_error() const { return Thread::is_main_thread() ? gpuError_ : String{}; }
 
+#ifdef LIBERAFX_GODOT_TEST_HOOKS
+    Dictionary _test_read_fluid_fields()
+    {
+        auto fields = Dictionary{};
+        if (!Thread::is_main_thread() || !playback_ || !playback_->gpu) {
+            fields["result"] = code(Result::NotReady);
+            fields["error"] = "No active Fluid2D package on the main thread";
+            return fields;
+        }
+        auto detail = String{};
+        const auto result = playback_->gpu->testReadFluidFields(fields, detail);
+        fields["result"] = code(result);
+        fields["error"] = detail;
+        return fields;
+    }
+
+    int _test_disable_fluid_source_and_zero_forces()
+    {
+        if (!Thread::is_main_thread() || !playback_ || !playback_->gpu) {
+            gpuError_ = "No active Fluid2D package on the main thread";
+            return code(Result::NotReady);
+        }
+        return code(playback_->gpu->testDisableFluidSourceAndZeroForces(gpuError_));
+    }
+
+    int _test_set_fluid_pressure_iterations(std::int64_t iterations)
+    {
+        if (!Thread::is_main_thread() || !playback_ || !playback_->gpu ||
+            iterations < 1 || iterations > 128) {
+            gpuError_ = "Invalid test pressure iteration count or inactive Fluid2D package";
+            return code(Result::InvalidArgument);
+        }
+        return code(playback_->gpu->testSetFluidPressureIterations(
+            static_cast<std::uint32_t>(iterations), gpuError_));
+    }
+
+    int _test_set_fluid_draw_matrix(const PackedFloat64Array& values)
+    {
+        if (!Thread::is_main_thread() || !playback_ || !playback_->gpu) {
+            gpuError_ = "No active Fluid2D package on the main thread";
+            return code(Result::NotReady);
+        }
+        return code(playback_->gpu->testSetFluidDrawMatrix(values, gpuError_));
+    }
+#endif
+
     void set_gpu_spawn_per_second(double value)
     {
         if (Thread::is_main_thread() && std::isfinite(value) && value >= 0) {
@@ -716,6 +763,16 @@ protected:
         godot::ClassDB::bind_method(godot::D_METHOD("set_material_binding", "asset_identity", "material"), &LibraEffectPlayer::set_material_binding);
         godot::ClassDB::bind_method(godot::D_METHOD("clear_material_binding", "asset_identity"), &LibraEffectPlayer::clear_material_binding);
         godot::ClassDB::bind_method(godot::D_METHOD("get_gpu_error"), &LibraEffectPlayer::get_gpu_error);
+#ifdef LIBERAFX_GODOT_TEST_HOOKS
+        godot::ClassDB::bind_method(godot::D_METHOD("_test_read_fluid_fields"),
+            &LibraEffectPlayer::_test_read_fluid_fields);
+        godot::ClassDB::bind_method(godot::D_METHOD("_test_disable_fluid_source_and_zero_forces"),
+            &LibraEffectPlayer::_test_disable_fluid_source_and_zero_forces);
+        godot::ClassDB::bind_method(godot::D_METHOD("_test_set_fluid_pressure_iterations", "iterations"),
+            &LibraEffectPlayer::_test_set_fluid_pressure_iterations);
+        godot::ClassDB::bind_method(godot::D_METHOD("_test_set_fluid_draw_matrix", "values"),
+            &LibraEffectPlayer::_test_set_fluid_draw_matrix);
+#endif
         godot::ClassDB::bind_method(godot::D_METHOD("get_render_stats"),
             &LibraEffectPlayer::get_render_stats);
         godot::ClassDB::bind_method(godot::D_METHOD("get_playback_generation"),
@@ -963,6 +1020,7 @@ void initialize(godot::ModuleInitializationLevel level)
 {
     if (level == godot::MODULE_INITIALIZATION_LEVEL_SCENE) {
         godot::ClassDB::register_internal_class<LibraRenderScopeNode>();
+        registerFluid2DClasses();
         godot::ClassDB::register_class<LibraEffectPlayer>();
         registerGodotDebugPlayback();
     }

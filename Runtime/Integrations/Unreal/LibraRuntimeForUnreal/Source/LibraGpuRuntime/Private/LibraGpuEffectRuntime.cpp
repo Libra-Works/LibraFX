@@ -24,6 +24,7 @@
 #include "SceneViewExtension.h"
 #include "ScreenPass.h"
 #include "ShaderParameterStruct.h"
+#include "liberafx/gpu/LbFluid2D.h"
 
 static constexpr int32 LibraGpuFlowMapTextureCount = 64;
 
@@ -210,6 +211,92 @@ static void BindFlowMapTexture(FLibraGpuInterpreterCS::FParameters& parameters, 
 
 IMPLEMENT_GLOBAL_SHADER(FLibraGpuInterpreterCS, "/LibraGpu/Private/LibraGpuInterpreter.usf", "MainCS", SF_Compute);
 
+#define LIBRA_FLUID_PARAMETERS \
+    SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>, LibraFluidRead0) \
+    SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>, LibraFluidRead1) \
+    SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>, LibraFluidWrite0) \
+    SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>, LibraFluidWrite1) \
+    SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, LibraFluidOutput) \
+    SHADER_PARAMETER(FVector4f, LibraFluidGrid) \
+    SHADER_PARAMETER(FVector4f, LibraFluidDomain) \
+    SHADER_PARAMETER(FVector4f, LibraFluidSource) \
+    SHADER_PARAMETER(FVector4f, LibraFluidForce) \
+    SHADER_PARAMETER(FVector4f, LibraFluidColor)
+
+#define LIBRA_DECLARE_FLUID_SHADER(ClassName) \
+class ClassName final : public FGlobalShader \
+{ \
+    DECLARE_GLOBAL_SHADER(ClassName); \
+    SHADER_USE_PARAMETER_STRUCT(ClassName, FGlobalShader); \
+    BEGIN_SHADER_PARAMETER_STRUCT(FParameters, ) \
+        LIBRA_FLUID_PARAMETERS \
+    END_SHADER_PARAMETER_STRUCT() \
+    static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& parameters) \
+    { return IsFeatureLevelSupported(parameters.Platform, ERHIFeatureLevel::SM5); } \
+};
+
+LIBRA_DECLARE_FLUID_SHADER(FLibraFluidClearCS)
+LIBRA_DECLARE_FLUID_SHADER(FLibraFluidAdvectVelocityCS)
+LIBRA_DECLARE_FLUID_SHADER(FLibraFluidApplyForcesCS)
+LIBRA_DECLARE_FLUID_SHADER(FLibraFluidDivergenceCS)
+LIBRA_DECLARE_FLUID_SHADER(FLibraFluidJacobiCS)
+LIBRA_DECLARE_FLUID_SHADER(FLibraFluidProjectVelocityCS)
+LIBRA_DECLARE_FLUID_SHADER(FLibraFluidAdvectDyeCS)
+LIBRA_DECLARE_FLUID_SHADER(FLibraFluidPublishCS)
+LIBRA_DECLARE_FLUID_SHADER(FLibraFluidRenderDyeCS)
+
+#undef LIBRA_DECLARE_FLUID_SHADER
+#undef LIBRA_FLUID_PARAMETERS
+
+IMPLEMENT_GLOBAL_SHADER(FLibraFluidClearCS, "/LibraGpu/Private/LibraFluid2D.usf", "LibraFluidClear", SF_Compute);
+IMPLEMENT_GLOBAL_SHADER(FLibraFluidAdvectVelocityCS, "/LibraGpu/Private/LibraFluid2D.usf", "LibraFluidAdvectVelocity", SF_Compute);
+IMPLEMENT_GLOBAL_SHADER(FLibraFluidApplyForcesCS, "/LibraGpu/Private/LibraFluid2D.usf", "LibraFluidApplyForces", SF_Compute);
+IMPLEMENT_GLOBAL_SHADER(FLibraFluidDivergenceCS, "/LibraGpu/Private/LibraFluid2D.usf", "LibraFluidDivergence", SF_Compute);
+IMPLEMENT_GLOBAL_SHADER(FLibraFluidJacobiCS, "/LibraGpu/Private/LibraFluid2D.usf", "LibraFluidJacobi", SF_Compute);
+IMPLEMENT_GLOBAL_SHADER(FLibraFluidProjectVelocityCS, "/LibraGpu/Private/LibraFluid2D.usf", "LibraFluidProjectVelocity", SF_Compute);
+IMPLEMENT_GLOBAL_SHADER(FLibraFluidAdvectDyeCS, "/LibraGpu/Private/LibraFluid2D.usf", "LibraFluidAdvectDye", SF_Compute);
+IMPLEMENT_GLOBAL_SHADER(FLibraFluidPublishCS, "/LibraGpu/Private/LibraFluid2D.usf", "LibraFluidPublish", SF_Compute);
+IMPLEMENT_GLOBAL_SHADER(FLibraFluidRenderDyeCS, "/LibraGpu/Private/LibraFluid2D.usf", "LibraFluidRenderDye", SF_Compute);
+
+class FLibraFluidPlaneVS final : public FGlobalShader
+{
+    DECLARE_GLOBAL_SHADER(FLibraFluidPlaneVS);
+    SHADER_USE_PARAMETER_STRUCT(FLibraFluidPlaneVS, FGlobalShader);
+    BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
+        SHADER_PARAMETER(FMatrix44f, ViewProjection)
+        SHADER_PARAMETER(FMatrix44f, ModelToWorld)
+        SHADER_PARAMETER(FVector3f, PreViewTranslation)
+        SHADER_PARAMETER(FVector2f, DomainSize)
+    END_SHADER_PARAMETER_STRUCT()
+    static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& parameters)
+    {
+        return IsFeatureLevelSupported(parameters.Platform, ERHIFeatureLevel::SM5);
+    }
+};
+
+class FLibraFluidPlanePS final : public FGlobalShader
+{
+    DECLARE_GLOBAL_SHADER(FLibraFluidPlanePS);
+    SHADER_USE_PARAMETER_STRUCT(FLibraFluidPlanePS, FGlobalShader);
+    BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
+        SHADER_PARAMETER_RDG_TEXTURE(Texture2D, FluidOutput)
+        SHADER_PARAMETER_SAMPLER(SamplerState, FluidSampler)
+        RENDER_TARGET_BINDING_SLOTS()
+    END_SHADER_PARAMETER_STRUCT()
+    static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& parameters)
+    {
+        return IsFeatureLevelSupported(parameters.Platform, ERHIFeatureLevel::SM5);
+    }
+};
+
+IMPLEMENT_GLOBAL_SHADER(FLibraFluidPlaneVS, "/LibraGpu/Private/LibraFluid2DDisplay.usf", "MainVS", SF_Vertex);
+IMPLEMENT_GLOBAL_SHADER(FLibraFluidPlanePS, "/LibraGpu/Private/LibraFluid2DDisplay.usf", "MainPS", SF_Pixel);
+
+BEGIN_SHADER_PARAMETER_STRUCT(FLibraFluidPlanePassParameters, )
+    SHADER_PARAMETER_STRUCT_INCLUDE(FLibraFluidPlaneVS::FParameters, VS)
+    SHADER_PARAMETER_STRUCT_INCLUDE(FLibraFluidPlanePS::FParameters, PS)
+END_SHADER_PARAMETER_STRUCT()
+
 class FLibraGpuBillboardVS : public FGlobalShader
 {
     DECLARE_GLOBAL_SHADER(FLibraGpuBillboardVS);
@@ -292,6 +379,36 @@ static void AddLibraGpuBillboardRasterPass(FRDGBuilder& graph,
         });
 }
 
+static void AddLibraFluidPlaneRasterPass(FRDGBuilder& graph,
+    FLibraFluidPlanePassParameters* parameters, FIntRect rect,
+    ERHIFeatureLevel::Type featureLevel, const TCHAR* profileName)
+{
+    auto shaderMap = GetGlobalShaderMap(featureLevel);
+    TShaderMapRef<FLibraFluidPlaneVS> vertexShader(shaderMap);
+    TShaderMapRef<FLibraFluidPlanePS> pixelShader(shaderMap);
+    graph.AddPass(RDG_EVENT_NAME("%s.FluidPlane", profileName), parameters, ERDGPassFlags::Raster,
+        [parameters, vertexShader, pixelShader, rect](FRHICommandList& commandList)
+        {
+            FGraphicsPipelineStateInitializer pipeline;
+            commandList.ApplyCachedRenderTargets(pipeline);
+            // RenderDye is premultiplied; preserve its already-multiplied RGB.
+            pipeline.BlendState = TStaticBlendState<CW_RGBA, BO_Add, BF_One, BF_InverseSourceAlpha,
+                BO_Add, BF_One, BF_InverseSourceAlpha>::GetRHI();
+            pipeline.RasterizerState = TStaticRasterizerState<FM_Solid, CM_None>::GetRHI();
+            pipeline.DepthStencilState = TStaticDepthStencilState<false, CF_Always>::GetRHI();
+            pipeline.BoundShaderState.VertexDeclarationRHI = GEmptyVertexDeclaration.VertexDeclarationRHI;
+            pipeline.BoundShaderState.VertexShaderRHI = vertexShader.GetVertexShader();
+            pipeline.BoundShaderState.PixelShaderRHI = pixelShader.GetPixelShader();
+            pipeline.PrimitiveType = PT_TriangleList;
+            SetGraphicsPipelineState(commandList, pipeline, 0);
+            commandList.SetViewport(rect.Min.X, rect.Min.Y, 0, rect.Max.X, rect.Max.Y, 1);
+            SetShaderParameters(commandList, vertexShader, vertexShader.GetVertexShader(), parameters->VS);
+            SetShaderParameters(commandList, pixelShader, pixelShader.GetPixelShader(), parameters->PS);
+            commandList.SetStreamSource(0, nullptr, 0);
+            commandList.DrawPrimitive(0, 2, 1);
+        });
+}
+
 namespace
 {
 uint32 ComponentPacketWord(const TArray<uint8>& bytes, int32 offset)
@@ -363,6 +480,41 @@ struct FLibraGpuRenderTexture
 };
 }
 
+struct FLibraGpuFluid2DConfiguration
+{
+    liberafx::gpu::Fluid2DSettings Settings;
+    float SizeScale = 100;
+    FMatrix44f LocalToWorld = FMatrix44f::Identity;
+    bool bVisible = true;
+};
+
+template<typename Shader>
+static void AddLibraFluidComputePass(FRDGBuilder& graph,
+    const TShaderMapRef<Shader>& shader, const liberafx::gpu::Fluid2DDispatch& dispatch,
+    const liberafx::gpu::Fluid2DUniforms& uniforms,
+    const TArray<FRDGBufferRef>& fields, FRDGTextureRef output,
+    uint32 width, uint32 height, const TCHAR* eventName)
+{
+    auto parameters = graph.AllocParameters<typename Shader::FParameters>();
+    if (dispatch.read0 != liberafx::gpu::Fluid2DField::None)
+        parameters->LibraFluidRead0 = graph.CreateSRV(fields[static_cast<int32>(dispatch.read0)]);
+    if (dispatch.read1 != liberafx::gpu::Fluid2DField::None)
+        parameters->LibraFluidRead1 = graph.CreateSRV(fields[static_cast<int32>(dispatch.read1)]);
+    if (dispatch.write0 != liberafx::gpu::Fluid2DField::None)
+        parameters->LibraFluidWrite0 = graph.CreateUAV(fields[static_cast<int32>(dispatch.write0)]);
+    if (dispatch.write1 != liberafx::gpu::Fluid2DField::None)
+        parameters->LibraFluidWrite1 = graph.CreateUAV(fields[static_cast<int32>(dispatch.write1)]);
+    if (dispatch.pass == liberafx::gpu::Fluid2DPass::RenderDye)
+        parameters->LibraFluidOutput = graph.CreateUAV(output);
+    parameters->LibraFluidGrid = FVector4f(uniforms.grid[0], uniforms.grid[1], uniforms.grid[2], uniforms.grid[3]);
+    parameters->LibraFluidDomain = FVector4f(uniforms.domain[0], uniforms.domain[1], uniforms.domain[2], uniforms.domain[3]);
+    parameters->LibraFluidSource = FVector4f(uniforms.source[0], uniforms.source[1], uniforms.source[2], uniforms.source[3]);
+    parameters->LibraFluidForce = FVector4f(uniforms.force[0], uniforms.force[1], uniforms.force[2], uniforms.force[3]);
+    parameters->LibraFluidColor = FVector4f(uniforms.color[0], uniforms.color[1], uniforms.color[2], uniforms.color[3]);
+    FComputeShaderUtils::AddPass(graph, RDG_EVENT_NAME("%s", eventName), shader, parameters,
+        FIntVector(FMath::DivideAndRoundUp(width, 8u), FMath::DivideAndRoundUp(height, 8u), 1));
+}
+
 struct FLibraGpuState
 {
     int32 Capacity = 0;
@@ -375,12 +527,133 @@ struct FLibraGpuState
     TRefCountPtr<FRDGPooledBuffer> Particles;
     TRefCountPtr<FRDGPooledBuffer> Registers;
     TArray<TRefCountPtr<FRDGPooledBuffer>> Programs;
+    bool bFluid2D = false;
+    liberafx::gpu::Fluid2DSettings FluidSettings;
+    float FluidSizeScale = 100;
+    FMatrix44f FluidLocalToWorld = FMatrix44f::Identity;
+    bool bFluidVisible = true;
+    double FluidDiscardedDelta = 0;
+    TArray<TRefCountPtr<FRDGPooledBuffer>> FluidFields;
+    TRefCountPtr<IPooledRenderTarget> FluidOutput;
 #if WITH_DEV_AUTOMATION_TESTS
     TArray<uint8> TestInitialParticles;
 #endif
 
+    void DispatchFluid(FRHICommandListImmediate& commandList, double delta)
+    {
+        using namespace liberafx::gpu;
+        auto frame = Fluid2DFrame{};
+        if (!makeFluid2DFrame(FluidSettings, delta, frame)) return;
+        FluidDiscardedDelta += frame.discardedDelta;
+        FRDGBuilder graph(commandList);
+        auto fields = TArray<FRDGBufferRef>{};
+        auto output = FRDGTextureRef{};
+        auto firstUse = FluidFields.Num() != 7 || !FluidFields.IsValidIndex(0) || !FluidFields[0];
+        if (firstUse)
+        {
+            FluidFields.SetNum(7);
+            fields.SetNum(7);
+            const auto cellCount = FluidSettings.width * FluidSettings.height;
+            for (auto index = 0; index < FluidFields.Num(); ++index)
+            {
+                fields[index] = graph.CreateBuffer(FRDGBufferDesc::CreateStructuredDesc(
+                    sizeof(FVector4f), cellCount), *FString::Printf(TEXT("LibraFluid.Field%d"), index));
+                AddClearUAVPass(graph, graph.CreateUAV(fields[index]), 0);
+                FluidFields[index] = graph.ConvertToExternalBuffer(fields[index]);
+            }
+            auto textureDescription = FRDGTextureDesc::Create2D(
+                FIntPoint(FluidSettings.width, FluidSettings.height), PF_FloatRGBA,
+                FClearValueBinding::Transparent, TexCreate_UAV | TexCreate_ShaderResource);
+            output = graph.CreateTexture(textureDescription, TEXT("LibraFluid.DyeOutput"));
+            AddClearUAVPass(graph, graph.CreateUAV(output), FLinearColor::Transparent);
+        }
+        else
+        {
+            fields.SetNum(7);
+            for (auto index = 0; index < fields.Num(); ++index)
+                fields[index] = graph.RegisterExternalBuffer(FluidFields[index]);
+            if (FluidOutput) output = graph.RegisterExternalTexture(FluidOutput.GetReference());
+        }
+        if (!output)
+        {
+            auto textureDescription = FRDGTextureDesc::Create2D(
+                FIntPoint(FluidSettings.width, FluidSettings.height), PF_FloatRGBA,
+                FClearValueBinding::Transparent, TexCreate_UAV | TexCreate_ShaderResource);
+            output = graph.CreateTexture(textureDescription, TEXT("LibraFluid.DyeOutput"));
+            AddClearUAVPass(graph, graph.CreateUAV(output), FLinearColor::Transparent);
+        }
+
+        auto plan = Fluid2DPlan{};
+        if (!makeFluid2DPlan(FluidSettings, plan)) return;
+        TShaderMapRef<FLibraFluidClearCS> clearShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+        TShaderMapRef<FLibraFluidAdvectVelocityCS> advectVelocityShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+        TShaderMapRef<FLibraFluidApplyForcesCS> applyForcesShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+        TShaderMapRef<FLibraFluidDivergenceCS> divergenceShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+        TShaderMapRef<FLibraFluidJacobiCS> jacobiShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+        TShaderMapRef<FLibraFluidProjectVelocityCS> projectVelocityShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+        TShaderMapRef<FLibraFluidAdvectDyeCS> advectDyeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+        TShaderMapRef<FLibraFluidPublishCS> publishShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+        TShaderMapRef<FLibraFluidRenderDyeCS> renderDyeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+        for (auto substep = uint32{0}; substep < frame.substeps; ++substep)
+        {
+            auto uniforms = makeFluid2DUniforms(FluidSettings, frame.stepDelta);
+            for (auto index = uint32{0}; index < plan.count; ++index)
+            {
+                const auto& dispatch = plan.passes[index];
+                switch (dispatch.pass)
+                {
+                case Fluid2DPass::Clear:
+                    AddLibraFluidComputePass(graph, clearShader, dispatch, uniforms, fields, output,
+                        FluidSettings.width, FluidSettings.height, TEXT("LibraFluid.Clear"));
+                    break;
+                case Fluid2DPass::AdvectVelocity:
+                    AddLibraFluidComputePass(graph, advectVelocityShader, dispatch, uniforms, fields, output,
+                        FluidSettings.width, FluidSettings.height, TEXT("LibraFluid.AdvectVelocity"));
+                    break;
+                case Fluid2DPass::ApplyForces:
+                    AddLibraFluidComputePass(graph, applyForcesShader, dispatch, uniforms, fields, output,
+                        FluidSettings.width, FluidSettings.height, TEXT("LibraFluid.ApplyForces"));
+                    break;
+                case Fluid2DPass::Divergence:
+                    AddLibraFluidComputePass(graph, divergenceShader, dispatch, uniforms, fields, output,
+                        FluidSettings.width, FluidSettings.height, TEXT("LibraFluid.Divergence"));
+                    break;
+                case Fluid2DPass::Jacobi:
+                    AddLibraFluidComputePass(graph, jacobiShader, dispatch, uniforms, fields, output,
+                        FluidSettings.width, FluidSettings.height, TEXT("LibraFluid.Jacobi"));
+                    break;
+                case Fluid2DPass::ProjectVelocity:
+                    AddLibraFluidComputePass(graph, projectVelocityShader, dispatch, uniforms, fields, output,
+                        FluidSettings.width, FluidSettings.height, TEXT("LibraFluid.ProjectVelocity"));
+                    break;
+                case Fluid2DPass::AdvectDye:
+                    AddLibraFluidComputePass(graph, advectDyeShader, dispatch, uniforms, fields, output,
+                        FluidSettings.width, FluidSettings.height, TEXT("LibraFluid.AdvectDye"));
+                    break;
+                case Fluid2DPass::Publish:
+                    AddLibraFluidComputePass(graph, publishShader, dispatch, uniforms, fields, output,
+                        FluidSettings.width, FluidSettings.height, TEXT("LibraFluid.Publish"));
+                    break;
+                case Fluid2DPass::RenderDye:
+                    AddLibraFluidComputePass(graph, renderDyeShader, dispatch, uniforms, fields, output,
+                        FluidSettings.width, FluidSettings.height, TEXT("LibraFluid.RenderDye"));
+                    break;
+                }
+            }
+        }
+        for (auto index = 0; index < FluidFields.Num(); ++index)
+            FluidFields[index] = graph.ConvertToExternalBuffer(fields[index]);
+        FluidOutput = graph.ConvertToExternalTexture(output);
+        graph.Execute();
+    }
+
     void Dispatch(FRHICommandListImmediate& commandList, const FLibraGpuFrame& frame)
     {
+        if (bFluid2D)
+        {
+            DispatchFluid(commandList, frame.Delta);
+            return;
+        }
         FRDGBuilder graph(commandList);
         FRDGBufferRef particles;
         FRDGBufferRef registers;
@@ -504,6 +777,20 @@ public:
             AddLibraGpuBillboardRasterPass(graph, parameters, output.ViewRect, State->Capacity,
                 view.GetFeatureLevel(), *State->ProfileName, step.BillboardBlend, &State->DrawTransform);
         }
+        if (State->bFluid2D && State->bFluidVisible && State->FluidOutput)
+        {
+            auto parameters = graph.AllocParameters<FLibraFluidPlanePassParameters>();
+            parameters->VS.ViewProjection = FMatrix44f(view.ViewMatrices.GetTranslatedViewProjectionMatrix());
+            parameters->VS.ModelToWorld = State->FluidLocalToWorld;
+            parameters->VS.PreViewTranslation = FVector3f(view.ViewMatrices.GetPreViewTranslation());
+            parameters->VS.DomainSize = FVector2f(State->FluidSettings.domainWidth * State->FluidSizeScale,
+                State->FluidSettings.domainHeight * State->FluidSizeScale);
+            parameters->PS.FluidOutput = graph.RegisterExternalTexture(State->FluidOutput.GetReference());
+            parameters->PS.FluidSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
+            parameters->PS.RenderTargets[0] = FRenderTargetBinding(output.Texture, ERenderTargetLoadAction::ELoad);
+            AddLibraFluidPlaneRasterPass(graph, parameters, output.ViewRect,
+                view.GetFeatureLevel(), *State->ProfileName);
+        }
         return output;
     }
 
@@ -525,9 +812,61 @@ bool ULibraGpuEffectRuntime::SetEffect(ULibraGpuEffectAsset* newEffect)
         return false;
     }
     Stop();
+    FluidConfiguration.Reset();
     Effect = newEffect;
     LastError.Reset();
     return true;
+}
+
+bool ULibraGpuEffectRuntime::SetFluid2D(const liberafx::gpu::Fluid2DSettings& settings,
+    float sizeScale, const FMatrix44f& localToWorld, bool visible)
+{
+    check(IsInGameThread());
+    if (!liberafx::gpu::validFluid2DSettings(settings) || !FMath::IsFinite(sizeScale) ||
+        sizeScale <= 0 || sizeScale > 10000 || !IsFiniteAffineDrawTransform(localToWorld))
+    {
+        LastError = TEXT("Invalid 2D fluid settings, sizeScale, or affine presentation transform.");
+        return false;
+    }
+    Stop();
+    Effect = nullptr;
+    FluidConfiguration = MakeShared<FLibraGpuFluid2DConfiguration, ESPMode::ThreadSafe>();
+    FluidConfiguration->Settings = settings;
+    FluidConfiguration->SizeScale = sizeScale;
+    FluidConfiguration->LocalToWorld = localToWorld;
+    FluidConfiguration->bVisible = visible;
+    LastError.Reset();
+    return true;
+}
+
+bool ULibraGpuEffectRuntime::SetFluidPresentation(const FMatrix44f& localToWorld, bool visible)
+{
+    check(IsInGameThread());
+    if (!FluidConfiguration || !IsFiniteAffineDrawTransform(localToWorld))
+    {
+        LastError = TEXT("Fluid presentation requires a configured fluid and finite affine transform.");
+        return false;
+    }
+    FluidConfiguration->LocalToWorld = localToWorld;
+    FluidConfiguration->bVisible = visible;
+    if (State)
+    {
+        auto state = State;
+        auto nextTransform = localToWorld;
+        ENQUEUE_RENDER_COMMAND(LibraGpuFluidPresentation)(
+            [state, nextTransform, visible](FRHICommandListImmediate&)
+            {
+                state->FluidLocalToWorld = nextTransform;
+                state->bFluidVisible = visible;
+            });
+    }
+    LastError.Reset();
+    return true;
+}
+
+bool ULibraGpuEffectRuntime::IsFluid2D() const
+{
+    return FluidConfiguration.IsValid();
 }
 
 bool ULibraGpuEffectRuntime::ConfigureEmitter(float emitterSpawnRate, int32 seed)
@@ -621,36 +960,56 @@ bool ULibraGpuEffectRuntime::ResetEffect()
         LastError = TEXT("GPU playback requires a live owner actor and world.");
         return false;
     }
-    FString error;
-    if (!Effect || !Effect->ValidateProgram(error))
-    {
-        LastError = Effect ? MoveTemp(error) : TEXT("No GPU effect is assigned.");
-        return false;
-    }
     if (GMaxRHIFeatureLevel < ERHIFeatureLevel::SM5)
     {
-        LastError = TEXT("GPU register interpreter requires Shader Model 5.");
+        LastError = TEXT("GPU particle and fluid execution require Shader Model 5.");
         return false;
     }
     auto state = MakeShared<FLibraGpuState, ESPMode::ThreadSafe>();
-    state->Capacity = Effect->GetCapacity();
     state->ProfileName = GetPathName();
-    state->Kernels = Effect->GetKernels();
-    state->Flow = Effect->GetFlow();
-    state->DrawTransform = DrawTransform;
-    for (const auto& texture : Effect->GetTextures())
+    if (FluidConfiguration)
     {
-        FLibraGpuRenderTexture binding;
-        binding.bBuiltinWhite = texture.bBuiltinWhite;
-        if (texture.Texture) binding.Reference = texture.Texture->TextureReference.TextureReferenceRHI;
-        if (texture.bFlowMap && !binding.GetTexture())
+        if (!validFluid2DSettings(FluidConfiguration->Settings) ||
+            !FMath::IsFinite(FluidConfiguration->SizeScale) || FluidConfiguration->SizeScale <= 0 ||
+            FluidConfiguration->SizeScale > 10000 ||
+            !IsFiniteAffineDrawTransform(FluidConfiguration->LocalToWorld))
         {
-            LastError = TEXT("FlowMap texture has no initialized GPU resource.");
+            LastError = TEXT("Configured 2D fluid settings or presentation state became invalid.");
             return false;
         }
-        state->Textures.Add(MoveTemp(binding));
+        state->bFluid2D = true;
+        state->FluidSettings = FluidConfiguration->Settings;
+        state->FluidSizeScale = FluidConfiguration->SizeScale;
+        state->FluidLocalToWorld = FluidConfiguration->LocalToWorld;
+        state->bFluidVisible = FluidConfiguration->bVisible;
     }
-    for (const auto& kernel : state->Kernels) state->MaximumRegisters = FMath::Max(state->MaximumRegisters, ComponentPacketWord(kernel.Bytes, 16));
+    else
+    {
+        FString error;
+        if (!Effect || !Effect->ValidateProgram(error))
+        {
+            LastError = Effect ? MoveTemp(error) : TEXT("No GPU effect is assigned.");
+            return false;
+        }
+        state->Capacity = Effect->GetCapacity();
+        state->Kernels = Effect->GetKernels();
+        state->Flow = Effect->GetFlow();
+        state->DrawTransform = DrawTransform;
+        for (const auto& texture : Effect->GetTextures())
+        {
+            FLibraGpuRenderTexture binding;
+            binding.bBuiltinWhite = texture.bBuiltinWhite;
+            if (texture.Texture) binding.Reference = texture.Texture->TextureReference.TextureReferenceRHI;
+            if (texture.bFlowMap && !binding.GetTexture())
+            {
+                LastError = TEXT("FlowMap texture has no initialized GPU resource.");
+                return false;
+            }
+            state->Textures.Add(MoveTemp(binding));
+        }
+        for (const auto& kernel : state->Kernels)
+            state->MaximumRegisters = FMath::Max(state->MaximumRegisters, ComponentPacketWord(kernel.Bytes, 16));
+    }
     State = MoveTemp(state);
     ViewExtension.Reset();
     if (owner->GetWorld()->Scene)
@@ -693,6 +1052,16 @@ void ULibraGpuEffectRuntime::Stop()
     if (LoadHandle) LoadHandle->CancelHandle();
     LoadHandle.Reset();
     ViewExtension.Reset();
+    if (State && State->bFluid2D)
+    {
+        auto state = State;
+        ENQUEUE_RENDER_COMMAND(LibraGpuStopFluid)([state](FRHICommandListImmediate&)
+        {
+            state->bFluidVisible = false;
+            state->FluidOutput.SafeRelease();
+            state->FluidFields.Reset();
+        });
+    }
     State.Reset();
     SpawnCursor = FrameIndex = 0;
     Elapsed = SpawnRemainder = 0;
@@ -714,8 +1083,7 @@ void ULibraGpuEffectRuntime::Initialize(AActor* owner)
 void ULibraGpuEffectRuntime::Tick(float deltaTime)
 {
     TRACE_CPUPROFILER_EVENT_SCOPE(LibraGpu_SubmitFrame);
-    if (!bIsPlaying || !State || !FMath::IsFinite(deltaTime) || deltaTime < 0 ||
-        !FMath::IsFinite(SpawnPerSecond) || SpawnPerSecond < 0)
+    if (!bIsPlaying || !State || !FMath::IsFinite(deltaTime) || deltaTime < 0)
     {
         return;
     }
@@ -724,6 +1092,19 @@ void ULibraGpuEffectRuntime::Tick(float deltaTime)
     {
         return;
     }
+    if (State->bFluid2D)
+    {
+        Elapsed += deltaTime;
+        auto state = State;
+        auto frame = FLibraGpuFrame{};
+        frame.Delta = deltaTime;
+        ENQUEUE_RENDER_COMMAND(LibraGpuFluidTick)([state, frame](FRHICommandListImmediate& commandList)
+        {
+            state->Dispatch(commandList, frame);
+        });
+        return;
+    }
+    if (!FMath::IsFinite(SpawnPerSecond) || SpawnPerSecond < 0) return;
     auto position = FVector3f(owner->GetActorLocation());
     if (!FMath::IsFinite(position.X) || !FMath::IsFinite(position.Y) || !FMath::IsFinite(position.Z))
     {
@@ -838,6 +1219,104 @@ bool ULibraGpuEffectRuntime::VerifyGpuSmoke(FString& report)
     report = FString::Printf(TEXT("GpuRegisterInterpreter capacity=%d sampled=%d alive=%d nativeTextures=%d"),
         state->Capacity, sampleCount, alive, state->Textures.Num());
     return alive > 0;
+}
+
+bool ULibraGpuEffectRuntime::VerifyFluid2DReadback(TArray<FLinearColor>& pixels, FString& report)
+{
+    pixels.Reset();
+    if (!State || !State->bFluid2D || GUsingNullRHI || GMaxRHIFeatureLevel < ERHIFeatureLevel::SM5)
+    {
+        report = TEXT("No active 2D fluid instance on a real SM5 GPU.");
+        return false;
+    }
+    auto state = State;
+    auto width = static_cast<int32>(state->FluidSettings.width);
+    auto height = static_cast<int32>(state->FluidSettings.height);
+    auto copied = false;
+    ENQUEUE_RENDER_COMMAND(LibraGpuFluidReadback)(
+        [state, width, height, &pixels, &copied](FRHICommandListImmediate& commandList)
+        {
+            if (!state->FluidOutput) return;
+            FRHIGPUTextureReadback readback(TEXT("LibraGpu.Fluid2DOutput"));
+            FRDGBuilder graph(commandList);
+            AddEnqueueCopyPass(graph, &readback,
+                graph.RegisterExternalTexture(state->FluidOutput.GetReference()));
+            graph.Execute();
+            if (!WaitForLibraGpuReadback(commandList, readback)) return;
+            auto rowPitch = int32{};
+            const auto* data = static_cast<const uint8*>(readback.Lock(rowPitch));
+            if (!data) return;
+            pixels.Reserve(width * height);
+            for (auto y = 0; y < height; ++y)
+            {
+                auto row = reinterpret_cast<const FFloat16*>(data + y * rowPitch * 4 * sizeof(FFloat16));
+                for (auto x = 0; x < width; ++x)
+                {
+                    const auto* rgba = row + x * 4;
+                    pixels.Emplace(rgba[0].GetFloat(), rgba[1].GetFloat(),
+                        rgba[2].GetFloat(), rgba[3].GetFloat());
+                }
+            }
+            readback.Unlock();
+            copied = true;
+        });
+    FlushRenderingCommands();
+    if (!copied || pixels.Num() != width * height)
+    {
+        pixels.Reset();
+        report = TEXT("The fluid output texture readback was unavailable.");
+        return false;
+    }
+    auto nonzero = 0;
+    for (const auto& pixel : pixels)
+    {
+        if (!FMath::IsFinite(pixel.R) || !FMath::IsFinite(pixel.G) ||
+            !FMath::IsFinite(pixel.B) || !FMath::IsFinite(pixel.A))
+        {
+            pixels.Reset();
+            report = TEXT("Fluid output contained a nonfinite RGBA16F texel.");
+            return false;
+        }
+        if (pixel.R > 0.0001f || pixel.G > 0.0001f || pixel.B > 0.0001f || pixel.A > 0.0001f)
+            ++nonzero;
+    }
+    report = FString::Printf(TEXT("Fluid2D RGBA16F readback: %dx%d, nonzero=%d"),
+        width, height, nonzero);
+    return true;
+}
+
+bool ULibraGpuEffectRuntime::VerifyFluid2DSettings(uint32 width, uint32 height, uint32 pressureIterations)
+{
+    if (!State || !State->bFluid2D) return false;
+    auto matches = false;
+    auto state = State;
+    ENQUEUE_RENDER_COMMAND(LibraGpuFluidSettingsProof)(
+        [state, width, height, pressureIterations, &matches](FRHICommandListImmediate&)
+        {
+            matches = state->FluidSettings.width == width &&
+                state->FluidSettings.height == height &&
+                state->FluidSettings.pressureIterations == pressureIterations;
+        });
+    FlushRenderingCommands();
+    return matches;
+}
+
+bool ULibraGpuEffectRuntime::VerifyFluid2DPresentation(const FMatrix44f& localToWorld, bool visible)
+{
+    if (!State || !State->bFluid2D) return false;
+    auto matches = false;
+    auto state = State;
+    ENQUEUE_RENDER_COMMAND(LibraGpuFluidPresentationProof)(
+        [state, localToWorld, visible, &matches](FRHICommandListImmediate&)
+        {
+            matches = state->bFluidVisible == visible;
+            for (auto row = 0; row < 4; ++row)
+                for (auto column = 0; column < 4; ++column)
+                    matches &= FMath::IsNearlyEqual(
+                        state->FluidLocalToWorld.M[row][column], localToWorld.M[row][column]);
+        });
+    FlushRenderingCommands();
+    return matches;
 }
 #endif
 
@@ -1634,6 +2113,335 @@ bool FLibraGpuSharedSupportTest::RunTest(const FString& parameters)
         FFileHelper::LoadFileToArray(canonical, *LibraGpuFixturePath(TEXT("LibraGpuSupport.hlsl")));
     TestTrue(TEXT("Shared helper fixtures exist"), loaded);
     TestTrue(TEXT("UE helper is byte-identical to the canonical Core export"), loaded && actual == canonical);
+    return true;
+}
+
+static bool ReadFluid2DField(const TSharedPtr<FLibraGpuState, ESPMode::ThreadSafe>& state,
+    int32 fieldIndex, TArray<FVector4f>& values)
+{
+    FlushRenderingCommands();
+    if (!state || !state->FluidFields.IsValidIndex(fieldIndex) || !state->FluidFields[fieldIndex])
+        return false;
+    const auto byteCount = int32(state->FluidSettings.width * state->FluidSettings.height * sizeof(FVector4f));
+    auto copied = false;
+    values.SetNumUninitialized(byteCount / sizeof(FVector4f));
+    ENQUEUE_RENDER_COMMAND(LibraGpuFluidFieldReadback)(
+        [state, fieldIndex, byteCount, &values, &copied](FRHICommandListImmediate& commandList)
+        {
+            FRHIGPUBufferReadback readback(TEXT("LibraGpu.Fluid2DField"));
+            FRDGBuilder graph(commandList);
+            AddEnqueueCopyPass(graph, &readback,
+                graph.RegisterExternalBuffer(state->FluidFields[fieldIndex]), byteCount);
+            graph.Execute();
+            if (!WaitForLibraGpuReadback(commandList, readback)) return;
+            if (const auto* data = readback.Lock(byteCount))
+            {
+                FMemory::Memcpy(values.GetData(), data, byteCount);
+                readback.Unlock();
+                copied = true;
+            }
+        });
+    FlushRenderingCommands();
+    return copied;
+}
+
+static bool RenderFluidPlaneProof(const TSharedPtr<FLibraGpuState, ESPMode::ThreadSafe>& state,
+    int32& nonblackPixels, TArray<FLinearColor>* capturedPixels = nullptr)
+{
+    nonblackPixels = 0;
+    if (capturedPixels) capturedPixels->Reset();
+    if (!state || !state->bFluid2D) return false;
+    auto copied = false;
+    ENQUEUE_RENDER_COMMAND(LibraGpuFluidPlaneReadback)(
+        [state, &nonblackPixels, &copied, capturedPixels](FRHICommandListImmediate& commandList)
+        {
+            FRHIGPUTextureReadback readback(TEXT("LibraGpu.Fluid2DPlane"));
+            FRDGBuilder graph(commandList);
+            auto target = graph.CreateTexture(FRDGTextureDesc::Create2D(FIntPoint(32, 32),
+                PF_FloatRGBA, FClearValueBinding::Transparent,
+                TexCreate_RenderTargetable | TexCreate_ShaderResource), TEXT("LibraGpu.FluidPlaneTarget"));
+            AddClearRenderTargetPass(graph, target);
+            if (state->bFluidVisible && state->FluidOutput)
+            {
+                auto draw = graph.AllocParameters<FLibraFluidPlanePassParameters>();
+                draw->VS.ViewProjection = FMatrix44f::Identity;
+                draw->VS.ViewProjection.M[0][0] = 0.01f;
+                draw->VS.ViewProjection.M[1][1] = 0.01f;
+                draw->VS.ModelToWorld = state->FluidLocalToWorld;
+                draw->VS.PreViewTranslation = FVector3f::ZeroVector;
+                draw->VS.DomainSize = FVector2f(state->FluidSettings.domainWidth * state->FluidSizeScale,
+                    state->FluidSettings.domainHeight * state->FluidSizeScale);
+                draw->PS.FluidOutput = graph.RegisterExternalTexture(state->FluidOutput.GetReference());
+                draw->PS.FluidSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
+                draw->PS.RenderTargets[0] = FRenderTargetBinding(target, ERenderTargetLoadAction::ELoad);
+                AddLibraFluidPlaneRasterPass(graph, draw, FIntRect(0, 0, 32, 32),
+                    GMaxRHIFeatureLevel, TEXT("LibraGpu.FluidPlaneProof"));
+            }
+            AddEnqueueCopyPass(graph, &readback, target);
+            graph.Execute();
+            if (!WaitForLibraGpuReadback(commandList, readback)) return;
+            auto rowPitch = int32{};
+            const auto* data = static_cast<const uint8*>(readback.Lock(rowPitch));
+            if (!data) return;
+            for (auto y = 0; y < 32; ++y)
+            {
+                auto row = reinterpret_cast<const FFloat16*>(data + y * rowPitch * 4 * sizeof(FFloat16));
+                for (auto x = 0; x < 32; ++x)
+                {
+                    const auto* rgba = row + x * 4;
+                    if (rgba[0].GetFloat() > 0.01f || rgba[1].GetFloat() > 0.01f ||
+                        rgba[2].GetFloat() > 0.01f)
+                        ++nonblackPixels;
+                    if (capturedPixels)
+                        capturedPixels->Emplace(rgba[0].GetFloat(), rgba[1].GetFloat(),
+                            rgba[2].GetFloat(), rgba[3].GetFloat());
+                }
+            }
+            readback.Unlock();
+            copied = true;
+        });
+    FlushRenderingCommands();
+    return copied;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraGpuFluid2DExecutionTest,
+    "Libra.GPU.Fluid2D.ExecutionAndPlaneFramebuffer",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraGpuFluid2DExecutionTest::RunTest(const FString& parameters)
+{
+    if (GUsingNullRHI || GMaxRHIFeatureLevel < ERHIFeatureLevel::SM5)
+    {
+        AddError(TEXT("A real SM5 GPU is required for 2D fluid execution and framebuffer proof."));
+        return false;
+    }
+    auto init = UWorld::InitializationValues().AllowAudioPlayback(false).RequiresHitProxies(false)
+        .CreatePhysicsScene(false).CreateNavigation(false).CreateAISystem(false)
+        .ShouldSimulatePhysics(false).SetTransactional(false);
+    auto world = UWorld::CreateWorld(EWorldType::Game, false,
+        FName(TEXT("LibraGpuFluid2DWorld")), nullptr, true, ERHIFeatureLevel::Num, &init);
+    if (!TestNotNull(TEXT("Isolated fluid test world"), world)) return false;
+    auto actor = world->SpawnActor<AActor>();
+    auto runtime = NewObject<ULibraGpuEffectRuntime>(actor, NAME_None, RF_Transient);
+    runtime->Initialize(actor);
+
+    auto settings = liberafx::gpu::Fluid2DSettings{};
+    settings.width = 24;
+    settings.height = 40;
+    settings.pressureIterations = 39;
+    settings.sourceRadius = 0.18f;
+    settings.sourceY = 0.18f;
+    settings.sourceVelocityY = 50;
+    settings.densityDissipation = 10;
+    settings.colorR = 1;
+    settings.colorG = 0.25f;
+    settings.colorB = 0.1f;
+    TestTrue(TEXT("Portable 24x40 odd-iteration fluid settings are valid"),
+        liberafx::gpu::validFluid2DSettings(settings));
+    TestTrue(TEXT("Fluid runtime accepts only its validated settings and built-in display"),
+        runtime->SetFluid2D(settings, 100, FMatrix44f::Identity, true));
+    TestTrue(TEXT("Fluid runtime starts"), runtime->Play());
+    runtime->Tick(0);
+    auto pixels = TArray<FLinearColor>{};
+    auto readbackReport = FString{};
+    if (!TestTrue(TEXT("Zero-delta RGBA16F output can be read back"),
+        runtime->VerifyFluid2DReadback(pixels, readbackReport)))
+    {
+        AddInfo(readbackReport);
+        world->DestroyWorld(false);
+        return false;
+    }
+    TestTrue(TEXT("Zero delta produces an entirely blank output"),
+        pixels.Num() == 24 * 40 && pixels.ContainsByPredicate(
+            [](const auto& pixel) { return pixel.R != 0 || pixel.G != 0 || pixel.B != 0 || pixel.A != 0; }) == false);
+
+    runtime->Tick(settings.maximumStep);
+    if (!TestTrue(TEXT("Source produces actual density output texels"),
+        runtime->VerifyFluid2DReadback(pixels, readbackReport)))
+    {
+        AddInfo(readbackReport);
+        world->DestroyWorld(false);
+        return false;
+    }
+    auto injectedAlpha = 0.0f;
+    for (const auto& pixel : pixels) injectedAlpha += pixel.A;
+    TestTrue(TEXT("Density injection writes finite translucent RGBA16F output"), injectedAlpha > 0.01f);
+    auto hasCorrectPremultipliedColor = false;
+    for (const auto& pixel : pixels)
+    {
+        if (pixel.A <= 0.01f) continue;
+        hasCorrectPremultipliedColor |= pixel.R <= pixel.A + 0.001f &&
+            pixel.G <= pixel.A + 0.001f && pixel.B <= pixel.A + 0.001f &&
+            pixel.R > pixel.G * 2 && pixel.G > pixel.B * 1.5f;
+    }
+    TestTrue(TEXT("Fluid color is preserved as premultiplied translucent RGBA"),
+        hasCorrectPremultipliedColor);
+    AddInfo(readbackReport);
+    auto oddState = runtime->State;
+    TestEqual(TEXT("One independent render-thread fluid state exists"), runtime->HasRuntimeState(), true);
+    auto litPlanePixels = 0;
+    auto initialPlanePixels = TArray<FLinearColor>{};
+    TestTrue(TEXT("Production fluid plane vertex/pixel pipeline executes"),
+        RenderFluidPlaneProof(oddState, litPlanePixels, &initialPlanePixels));
+    TestTrue(TEXT("Fluid plane produces actual nonblack translucent pixels"), litPlanePixels > 0);
+    double planeAlpha = 0;
+    double planeCentroidX = 0;
+    double planeCentroidY = 0;
+    for (auto index = 0; index < initialPlanePixels.Num(); ++index)
+    {
+        const auto alpha = initialPlanePixels[index].A;
+        if (alpha <= 0.001f) continue;
+        const auto x = index % 32;
+        const auto y = index / 32;
+        planeAlpha += alpha;
+        planeCentroidX += x * alpha;
+        planeCentroidY += y * alpha;
+    }
+    TestTrue(TEXT("Logical source Y maps to the lower local-XY screen half"),
+        planeAlpha > 0 && planeCentroidY / planeAlpha > 16.0);
+    auto planeColorIsPremultiplied = false;
+    for (const auto& pixel : initialPlanePixels)
+        if (pixel.A > 0.01f)
+            planeColorIsPremultiplied |= pixel.R <= pixel.A + 0.001f &&
+                pixel.G <= pixel.A + 0.001f && pixel.B <= pixel.A + 0.001f &&
+                pixel.R > pixel.G * 2 && pixel.G > pixel.B * 1.5f;
+    TestTrue(TEXT("Production plane preserves color and premultiplied alpha"),
+        planeColorIsPremultiplied);
+
+    auto translated = FMatrix44f::Identity;
+    translated.M[0][3] = 0.75f;
+    TestTrue(TEXT("Fluid presentation accepts a translated affine world transform"),
+        runtime->SetFluidPresentation(translated, true));
+    FlushRenderingCommands();
+    auto translatedPixels = TArray<FLinearColor>{};
+    TestTrue(TEXT("Translated fluid plane still rasterizes"),
+        RenderFluidPlaneProof(oddState, litPlanePixels, &translatedPixels));
+    double translatedWeight = 0;
+    double translatedCentroidX = 0;
+    for (auto index = 0; index < translatedPixels.Num(); ++index)
+    {
+        const auto alpha = translatedPixels[index].A;
+        if (alpha <= 0.001f) continue;
+        translatedWeight += alpha;
+        translatedCentroidX += (index % 32) * alpha;
+    }
+    AddInfo(FString::Printf(TEXT("Fluid raster centroid X: original=%.3f translated=%.3f; alpha=%.3f"),
+        planeCentroidX / FMath::Max(planeAlpha, 1e-9),
+        translatedCentroidX / FMath::Max(translatedWeight, 1e-9), translatedWeight));
+    TestTrue(TEXT("Fluid local-to-world transform moves the rendered plane pixels"),
+        translatedWeight > 0 &&
+        FMath::Abs(translatedCentroidX / translatedWeight - planeCentroidX / planeAlpha) > 0.25);
+    TestTrue(TEXT("Fluid visibility can be disabled without destroying simulation state"),
+        runtime->SetFluidPresentation(translated, false));
+    FlushRenderingCommands();
+    TestTrue(TEXT("Hidden fluid plane leaves only its transparent framebuffer clear"),
+        RenderFluidPlaneProof(oddState, litPlanePixels));
+    TestEqual(TEXT("Hidden fluid emits no colored plane pixels"), litPlanePixels, 0);
+    TestTrue(TEXT("Fluid presentation visibility can be restored"),
+        runtime->SetFluidPresentation(FMatrix44f::Identity, true));
+    FlushRenderingCommands();
+
+    ENQUEUE_RENDER_COMMAND(LibraGpuFluidDisableSourceForTest)(
+        [oddState](FRHICommandListImmediate&) { oddState->FluidSettings.sourceEnabled = false; });
+    for (auto step = 0; step < 10; ++step) runtime->Tick(settings.maximumStep);
+    runtime->Tick(0.2f);
+    TestTrue(TEXT("Source-disabled simulation returns a finite output"),
+        runtime->VerifyFluid2DReadback(pixels, readbackReport));
+    auto fadedAlpha = 0.0f;
+    for (const auto& pixel : pixels) fadedAlpha += pixel.A;
+    TestTrue(TEXT("Source disable prevents reinjection while density dissipates"),
+        fadedAlpha < injectedAlpha);
+    auto fadedPlanePixels = TArray<FLinearColor>{};
+    TestTrue(TEXT("Faded fluid plane remains renderable with source disabled"),
+        RenderFluidPlaneProof(oddState, litPlanePixels, &fadedPlanePixels));
+    auto fadedWeight = 0.0;
+    auto fadedCentroidY = 0.0;
+    for (auto index = 0; index < fadedPlanePixels.Num(); ++index)
+    {
+        const auto alpha = fadedPlanePixels[index].A;
+        if (alpha <= 0.001f) continue;
+        fadedWeight += alpha;
+        fadedCentroidY += (index / 32) * alpha;
+    }
+    AddInfo(FString::Printf(TEXT("Fluid raster centroid Y: injected=%.3f faded=%.3f; alpha sums %.3f/%.3f"),
+        planeCentroidY / FMath::Max(planeAlpha, 1e-9), fadedCentroidY / FMath::Max(fadedWeight, 1e-9),
+        planeAlpha, fadedWeight));
+    TestTrue(TEXT("Positive logical Y velocity advects the displayed plume upward"),
+        fadedWeight > 0 && fadedCentroidY / fadedWeight < planeCentroidY / planeAlpha);
+    TestTrue(TEXT("Excess long-frame delta is discarded and counted"),
+        oddState->FluidDiscardedDelta > 0.1);
+    for (auto fieldIndex = 0; fieldIndex < 7; ++fieldIndex)
+    {
+        auto values = TArray<FVector4f>{};
+        if (!TestTrue(FString::Printf(TEXT("Fluid field %d actual GPU readback"), fieldIndex),
+            ReadFluid2DField(oddState, fieldIndex, values)))
+            continue;
+        TestEqual(FString::Printf(TEXT("Fluid field %d retains exact non-square grid count"), fieldIndex),
+            values.Num(), 24 * 40);
+        TestFalse(FString::Printf(TEXT("Fluid field %d has no nonfinite values"), fieldIndex),
+            values.ContainsByPredicate([](const auto& value) {
+                return !FMath::IsFinite(value.X) || !FMath::IsFinite(value.Y) ||
+                    !FMath::IsFinite(value.Z) || !FMath::IsFinite(value.W);
+            }));
+        if (fieldIndex == static_cast<int32>(liberafx::gpu::Fluid2DField::Velocity))
+        {
+            auto boundaryFinite = true;
+            for (auto y = 0; y < 40; ++y)
+                for (auto x = 0; x < 24; ++x)
+                {
+                    const auto& velocity = values[y * 24 + x];
+                    if ((x == 0 || x == 23) && FMath::Abs(velocity.X) > 0.001f) boundaryFinite = false;
+                    if ((y == 0 || y == 39) && FMath::Abs(velocity.Y) > 0.001f) boundaryFinite = false;
+                }
+            TestTrue(TEXT("Velocity boundary condition clamps outward normal components"), boundaryFinite);
+        }
+        if (fieldIndex == static_cast<int32>(liberafx::gpu::Fluid2DField::PressureScratch))
+            TestTrue(TEXT("Odd Jacobi count publishes the final pressure from PressureScratch"),
+                values.ContainsByPredicate([](const auto& value) { return FMath::Abs(value.X) > 1e-7f; }));
+    }
+
+    auto evenSettings = settings;
+    evenSettings.pressureIterations = 40;
+    evenSettings.sourceEnabled = true;
+    evenSettings.sourceDensity = 0;
+    evenSettings.sourceVelocityX = 0;
+    evenSettings.sourceVelocityY = 2;
+    evenSettings.buoyancy = 0;
+    auto secondActor = world->SpawnActor<AActor>();
+    auto second = NewObject<ULibraGpuEffectRuntime>(secondActor, NAME_None, RF_Transient);
+    second->Initialize(secondActor);
+    TestTrue(TEXT("Even pressure runtime accepts its own settings"),
+        second->SetFluid2D(evenSettings, 100, FMatrix44f::Identity, false));
+    TestTrue(TEXT("Second fluid effect starts independently"), second->Play());
+    second->Tick(settings.maximumStep);
+    auto evenState = second->State;
+    TestFalse(TEXT("Two effects own distinct pressure and dye buffers"), oddState == evenState);
+    auto evenPressure = TArray<FVector4f>{};
+    TestTrue(TEXT("Even Jacobi count leaves pressure in Pressure"),
+        ReadFluid2DField(evenState, static_cast<int32>(liberafx::gpu::Fluid2DField::Pressure), evenPressure));
+    TestEqual(TEXT("Even-pressure readback uses the non-square grid"), evenPressure.Num(), 24 * 40);
+    TestTrue(TEXT("Velocity-only source produces a finite nonzero even-iteration pressure field"),
+        !evenPressure.IsEmpty() && evenPressure.ContainsByPredicate([](const auto& value) {
+            return FMath::IsFinite(value.X) && FMath::Abs(value.X) > 1e-7f;
+        }));
+
+    runtime->Stop();
+    FlushRenderingCommands();
+    TestFalse(TEXT("Stop detaches active fluid state"), runtime->HasRuntimeState());
+    TestFalse(TEXT("Stop hides/releases the fluid output resource"), oddState->bFluidVisible || oddState->FluidOutput);
+    TestTrue(TEXT("Stop clears the production fluid plane framebuffer"),
+        RenderFluidPlaneProof(oddState, litPlanePixels));
+    TestEqual(TEXT("No unrelated primitives can keep a stopped fluid plane visible"), litPlanePixels, 0);
+    TestTrue(TEXT("Stopped fluid can reset from its saved validated configuration"), runtime->Play());
+    runtime->Tick(0);
+    TestTrue(TEXT("Reset output starts blank"), runtime->VerifyFluid2DReadback(pixels, readbackReport));
+    TestTrue(TEXT("Reset clears every dye texel"), pixels.ContainsByPredicate(
+        [](const auto& pixel) { return pixel.R != 0 || pixel.G != 0 || pixel.B != 0 || pixel.A != 0; }) == false);
+    runtime->Stop();
+    second->Stop();
+    FlushRenderingCommands();
+    world->DestroyWorld(false);
+    AddInfo(TEXT("Fluid2D tested with 24x40 RGBA16F, odd/even Jacobi pressure buffers, source disable, capped delta, live field readback and native plane raster."));
     return true;
 }
 #endif

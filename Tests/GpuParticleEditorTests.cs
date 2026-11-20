@@ -141,6 +141,7 @@ internal static class GpuParticleEditorTests
     }
     public static void Run()
     {
+        Fluid2DAuthoringTests.Run();
         VerifyFlowVisualization();
         var history = new UndoRedoManager();
         var graph = new GraphWorkspaceViewModel(history);

@@ -7,8 +7,10 @@
 class AActor;
 class ULibraGpuEffectAsset;
 struct FLibraGpuState;
+struct FLibraGpuFluid2DConfiguration;
 struct FStreamableHandle;
 class FLibraGpuViewExtension;
+namespace liberafx::gpu { struct Fluid2DSettings; }
 
 UCLASS(Transient)
 class LIBRAGPURUNTIME_API ULibraGpuEffectRuntime : public UObject
@@ -48,6 +50,13 @@ public:
 
     bool ConfigureEmitter(float emitterSpawnRate, int32 seed);
 
+    // Fluid scopes use the shipped LibraFluid2D global shader and an engine-owned
+    // RGBA16F output texture. No author-created component or user shader is used.
+    bool SetFluid2D(const liberafx::gpu::Fluid2DSettings& settings, float sizeScale,
+        const FMatrix44f& localToWorld, bool visible);
+    bool SetFluidPresentation(const FMatrix44f& localToWorld, bool visible);
+    bool IsFluid2D() const;
+
     // Updates billboard placement only. Compute dispatches and particle storage
     // continue to use their original simulation-space positions.
     bool SetDrawTransform(const FMatrix44f& drawTransform, bool connected);
@@ -65,6 +74,9 @@ public:
 #if !UE_BUILD_SHIPPING
     // Explicit development-only diagnostic; never used by gameplay rendering.
     bool VerifyGpuSmoke(FString& report);
+    bool VerifyFluid2DReadback(TArray<FLinearColor>& pixels, FString& report);
+    bool VerifyFluid2DSettings(uint32 width, uint32 height, uint32 pressureIterations);
+    bool VerifyFluid2DPresentation(const FMatrix44f& localToWorld, bool visible);
 #endif
 
     virtual void BeginDestroy() override;
@@ -72,8 +84,10 @@ public:
 private:
 #if WITH_DEV_AUTOMATION_TESTS
     friend class FLibraGpuDefaultEmitterRendererTest;
+    friend class FLibraGpuFluid2DExecutionTest;
 #endif
     TSharedPtr<FLibraGpuState, ESPMode::ThreadSafe> State;
+    TSharedPtr<FLibraGpuFluid2DConfiguration, ESPMode::ThreadSafe> FluidConfiguration;
     TSharedPtr<FLibraGpuViewExtension, ESPMode::ThreadSafe> ViewExtension;
     TSharedPtr<FStreamableHandle> LoadHandle;
     TWeakObjectPtr<AActor> Owner;

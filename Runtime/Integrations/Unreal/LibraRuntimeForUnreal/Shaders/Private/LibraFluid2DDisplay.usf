@@ -1,0 +1,37 @@
+#include "/Engine/Public/Platform.ush"
+
+float4x4 ViewProjection;
+float4x4 ModelToWorld;
+float3 PreViewTranslation;
+float2 DomainSize;
+Texture2D FluidOutput;
+SamplerState FluidSampler;
+
+struct VertexOutput
+{
+    float4 position : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+VertexOutput MainVS(uint vertexId : SV_VertexID)
+{
+    static const float2 corners[6] = {
+        float2(-1, -1), float2(1, -1), float2(-1, 1),
+        float2(-1, 1), float2(1, -1), float2(1, 1)
+    };
+    float2 corner = corners[vertexId];
+    float3 localPosition = float3(corner * DomainSize * 0.5, 0);
+    VertexOutput output;
+    float4 worldPosition = mul(float4(localPosition, 1), ModelToWorld);
+    worldPosition.xyz += PreViewTranslation;
+    output.position = mul(worldPosition, ViewProjection);
+    // Fluid logical Y grows upward, matching local plane +Y.
+    output.uv = float2(corner.x * 0.5 + 0.5, corner.y * 0.5 + 0.5);
+    return output;
+}
+
+float4 MainPS(VertexOutput input) : SV_Target0
+{
+    // LibraFluidRenderDye already produces premultiplied RGBA.
+    return FluidOutput.Sample(FluidSampler, input.uv);
+}

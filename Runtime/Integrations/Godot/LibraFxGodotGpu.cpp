@@ -1,4 +1,5 @@
 #include "LibraFxGodotGpu.h"
+#include "LibraFxGodotFluid2D.h"
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/json.hpp>
 #include <godot_cpp/classes/marshalls.hpp>
@@ -37,6 +38,7 @@ namespace {
 using namespace godot;
 using Textures = std::unordered_map<std::string, Ref<Texture2D>>;
 using Bytes = std::vector<std::uint8_t>;
+using liberafx::gpu::Fluid2DSettings;
 
 constexpr auto particleStride = 80u;
 constexpr auto blockBytes = 64u;
@@ -90,6 +92,7 @@ struct Emitter {
 struct EmitterTemplate {
     NodeId containerId{};
     std::vector<Emitter> emitters;
+    std::vector<Fluid2DProgram> fluids;
 };
 
 auto fail(String& error, const String& detail, Result result = Result::InvalidBinary) -> Result
@@ -437,7 +440,8 @@ auto validatePacket(const Kernel& kernel, std::uint32_t stage,
 }
 
 auto readContainerManifest(const Bytes& containers, const Bytes& manifest,
-    std::vector<std::array<std::uint8_t, 16>>& ids, Array& programs, String& error) -> Result
+    std::vector<std::array<std::uint8_t, 16>>& ids, Array& programs,
+    Array& fluidPrograms, bool& version2, String& error) -> Result
 {
     if (!containers.empty()) {
         const auto value = parseJson(containers);
@@ -463,12 +467,24 @@ auto readContainerManifest(const Bytes& containers, const Bytes& manifest,
         if (!object(parseJson(manifest), outer) || !array(outer, "programs", programs)) {
             return fail(error, "Invalid GPU program manifest");
         }
-        if (number(outer, "version") != 1) {
-            return fail(error, "Only GPU program manifest version 1 is supported",
+        const auto version = number(outer, "version");
+        if (version == 1) {
+            version2 = false;
+            if (outer.has("fluidPrograms")) {
+                return fail(error, "Version 1 GPU manifests cannot contain Fluid2D programs",
+                    Result::UnsupportedBinary);
+            }
+        } else if (version == 2) {
+            version2 = true;
+            if (!array(outer, "fluidPrograms", fluidPrograms)) {
+                return fail(error, "Version 2 GPU manifests require a fluidPrograms array");
+            }
+        } else {
+            return fail(error, "Only GPU program manifest versions 1 and 2 are supported",
                 Result::UnsupportedBinary);
         }
     }
-    if (static_cast<std::size_t>(programs.size()) != ids.size()) {
+    if (static_cast<std::size_t>(programs.size() + fluidPrograms.size()) != ids.size()) {
         return fail(error, "GPU program manifest does not match the container snapshots");
     }
     return Result::Ok;
@@ -508,6 +524,133 @@ auto readDrawMatrices(const Bytes& renderConfig, const std::vector<NodeId>& ids,
             }
             bindings.emplace_back(id, rowIds);
         }
+    }
+    return Result::Ok;
+}
+
+auto unsignedSetting(const Dictionary& settings, const char* key, std::uint32_t& output) -> bool
+{
+    const auto numeric = number(settings.get(key, Variant{}));
+    if (!std::isfinite(numeric) || numeric < 0 ||
+        numeric > std::numeric_limits<std::uint32_t>::max() || std::floor(numeric) != numeric) {
+        return false;
+    }
+    output = static_cast<std::uint32_t>(numeric);
+    return true;
+}
+
+auto floatSetting(const Dictionary& settings, const char* key, float& output) -> bool
+{
+    const auto value = number(settings, key);
+    if (!std::isfinite(value) || std::abs(value) > std::numeric_limits<float>::max()) {
+        return false;
+    }
+    output = static_cast<float>(value);
+    return true;
+}
+
+auto readFluid2DSettings(const Dictionary& values, Fluid2DSettings& settings,
+    String& detail) -> bool
+{
+    if (values.size() != 22) {
+        detail = "Fluid2D settings must contain exactly 22 properties";
+        return false;
+    }
+    const auto invalid = [&](const char* key) {
+        detail = "Invalid Fluid2D setting: " + String::utf8(key);
+        return false;
+    };
+    auto sourceEnabled = values.get("sourceEnabled", Variant{});
+    if (!unsignedSetting(values, "version", settings.version)) return invalid("version");
+    if (!unsignedSetting(values, "width", settings.width)) return invalid("width");
+    if (!unsignedSetting(values, "height", settings.height)) return invalid("height");
+    if (!unsignedSetting(values, "pressureIterations", settings.pressureIterations))
+        return invalid("pressureIterations");
+    if (!unsignedSetting(values, "maximumSubsteps", settings.maximumSubsteps))
+        return invalid("maximumSubsteps");
+    if (!floatSetting(values, "domainWidth", settings.domainWidth)) return invalid("domainWidth");
+    if (!floatSetting(values, "domainHeight", settings.domainHeight)) return invalid("domainHeight");
+    if (!floatSetting(values, "maximumStep", settings.maximumStep)) return invalid("maximumStep");
+    if (!floatSetting(values, "velocityDissipation", settings.velocityDissipation))
+        return invalid("velocityDissipation");
+    if (!floatSetting(values, "densityDissipation", settings.densityDissipation))
+        return invalid("densityDissipation");
+    if (sourceEnabled.get_type() != Variant::BOOL) return invalid("sourceEnabled");
+    if (!floatSetting(values, "sourceX", settings.sourceX)) return invalid("sourceX");
+    if (!floatSetting(values, "sourceY", settings.sourceY)) return invalid("sourceY");
+    if (!floatSetting(values, "sourceRadius", settings.sourceRadius)) return invalid("sourceRadius");
+    if (!floatSetting(values, "sourceDensity", settings.sourceDensity)) return invalid("sourceDensity");
+    if (!floatSetting(values, "sourceVelocityX", settings.sourceVelocityX))
+        return invalid("sourceVelocityX");
+    if (!floatSetting(values, "sourceVelocityY", settings.sourceVelocityY))
+        return invalid("sourceVelocityY");
+    if (!floatSetting(values, "buoyancy", settings.buoyancy)) return invalid("buoyancy");
+    if (!floatSetting(values, "colorR", settings.colorR)) return invalid("colorR");
+    if (!floatSetting(values, "colorG", settings.colorG)) return invalid("colorG");
+    if (!floatSetting(values, "colorB", settings.colorB)) return invalid("colorB");
+    if (!floatSetting(values, "colorA", settings.colorA)) return invalid("colorA");
+    if (!liberafx::gpu::validFluid2DSettings(settings)) {
+        detail = "Fluid2D settings are outside supported limits";
+        return false;
+    }
+    settings.sourceEnabled = static_cast<bool>(sourceEnabled);
+    return true;
+}
+
+auto readFluid2DPrograms(const Array& entries, std::vector<NodeId>& ids,
+    const std::vector<std::pair<NodeId, MatrixRows>>& bindings,
+    const bool version2, std::vector<Fluid2DProgram>& programs,
+    String& error) -> Result
+{
+    if (!entries.is_empty() && !version2) {
+        return fail(error, "Fluid2D requires GPU payload version 2", Result::UnsupportedBinary);
+    }
+    for (auto index = 0; index < entries.size(); ++index) {
+        auto entry = Dictionary{};
+        auto settingsValue = Dictionary{};
+        auto renderer = Dictionary{};
+        auto node = NodeId{};
+        if (!object(entries[index], entry) || !nodeId(text(entry, "nodeId"), node) ||
+            !object(entry.get("settings", Variant{}), settingsValue) ||
+            !object(entry.get("renderer", Variant{}), renderer)) {
+            return fail(error, "Invalid Fluid2D program entry");
+        }
+        const auto snapshot = std::find(ids.begin(), ids.end(), node);
+        if (snapshot == ids.end()) {
+            return fail(error, "Duplicate, overlapping or unmatched Fluid2D GPU container ID");
+        }
+        const auto material = text(renderer, "material");
+        const auto size = number(renderer, "sizeScale");
+        auto program = Fluid2DProgram{};
+        if (settingsValue.size() != 22) {
+            return fail(error, "Fluid2D settings must contain exactly 22 version 1 properties",
+                Result::UnsupportedBinary);
+        }
+        if (renderer.size() != 2) {
+            return fail(error, "Fluid2D renderer must contain exactly material and sizeScale",
+                Result::UnsupportedBinary);
+        }
+        auto settingsError = String{};
+        if (!readFluid2DSettings(settingsValue, program.settings, settingsError)) {
+            return fail(error, settingsError, Result::UnsupportedBinary);
+        }
+        if (material != "builtin:fluid-alpha") {
+            return fail(error, "Unsupported Fluid2D renderer material", Result::UnsupportedBinary);
+        }
+        if (!std::isfinite(size) || size <= 0 || size > 10000 ||
+            size > std::numeric_limits<float>::max()) {
+            return fail(error, "Fluid2D renderer sizeScale is invalid", Result::UnsupportedBinary);
+        }
+        program.nodeId = node;
+        program.sizeScale = static_cast<float>(size);
+        const auto binding = std::find_if(bindings.begin(), bindings.end(),
+            [&](const auto& candidate) { return candidate.first == node; });
+        if (binding != bindings.end()) {
+            program.hasMatrix = true;
+            program.matrixRows = binding->second;
+        }
+        ids.erase(snapshot);
+        programs.push_back(std::move(program));
     }
     return Result::Ok;
 }
@@ -930,6 +1073,7 @@ struct PackageGpuRenderer::Impl {
     godot::PackedByteArray parameters;
     std::vector<Emitter> emitters;
     std::vector<EmitterTemplate> templates;
+    std::unique_ptr<PackageFluid2DRenderer> fluids;
     std::vector<RID> flowBuffers;
     std::uint32_t activeCapacity = 0;
     std::uint64_t rootId = 0;
@@ -957,6 +1101,7 @@ struct PackageGpuRenderer::Impl {
 
     ~Impl()
     {
+        fluids.reset();
         if (rootId != 0) {
             if (auto* root = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(rootId))) {
                 // Playback can end during its owner's tree-exit notification.
@@ -994,11 +1139,15 @@ PackageGpuRenderer::PackageGpuRenderer(std::unique_ptr<Impl> impl) noexcept
 PackageGpuRenderer::~PackageGpuRenderer() = default;
 
 auto readEmitters(const Bytes& containers, const Bytes& manifest, const Bytes& renderConfig,
-    const Textures& textureBindings, std::vector<Emitter>& emitters, String& error) -> Result
+    const Textures& textureBindings, std::vector<Emitter>& emitters,
+    std::vector<Fluid2DProgram>& fluids, String& error) -> Result
 {
     auto ids = std::vector<NodeId>{};
     auto programs = godot::Array{};
-    auto result = readContainerManifest(containers, manifest, ids, programs, error);
+    auto fluidPrograms = godot::Array{};
+    auto version2 = false;
+    auto result = readContainerManifest(containers, manifest, ids, programs, fluidPrograms,
+        version2, error);
     if (result != Result::Ok) {
         return result;
     }
@@ -1042,6 +1191,14 @@ auto readEmitters(const Bytes& containers, const Bytes& manifest, const Bytes& r
         }
         emitters.push_back(std::move(emitter));
     }
+    result = readFluid2DPrograms(fluidPrograms, ids, bindings, version2, fluids, error);
+    if (result != Result::Ok) {
+        return result;
+    }
+    if (!ids.empty()) {
+        return fail(error, "GPU container snapshots contain unsupported or unclaimed node IDs",
+            Result::UnsupportedBinary);
+    }
     return Result::Ok;
 }
 
@@ -1054,12 +1211,13 @@ auto PackageGpuRenderer::create(const SpawnablePackage& package, const Textures&
             Result::Busy);
     }
     auto impl = std::make_unique<Impl>();
+    auto rootFluids = std::vector<Fluid2DProgram>{};
     auto result = readEmitters(package.rootGpuContainersJson, package.rootGpuProgramsJson,
-        package.rootRenderConfiguration, textureBindings, impl->emitters, error);
+        package.rootRenderConfiguration, textureBindings, impl->emitters, rootFluids, error);
     if (result != Result::Ok) {
         return result;
     }
-    if (package.autoDestroyWhenIdle && !impl->emitters.empty()) {
+    if (package.autoDestroyWhenIdle && (!impl->emitters.empty() || !rootFluids.empty())) {
         return fail(error, "Root GPU playback requires package AutoDestroyWhenIdle to be disabled",
             Result::UnsupportedBinary);
     }
@@ -1067,75 +1225,93 @@ auto PackageGpuRenderer::create(const SpawnablePackage& package, const Textures&
         auto definition = EmitterTemplate{};
         definition.containerId = entry.containerId;
         result = readEmitters(entry.gpuContainersJson, entry.gpuProgramsJson, entry.renderConfiguration,
-            textureBindings, definition.emitters, error);
+            textureBindings, definition.emitters, definition.fluids, error);
         if (result != Result::Ok) {
             return result;
         }
-        if (!definition.emitters.empty()) {
+        if (!definition.emitters.empty() || !definition.fluids.empty()) {
             impl->templates.push_back(std::move(definition));
         }
     }
-    if (impl->emitters.empty() && impl->templates.empty()) {
+    auto fluidTemplates = std::vector<Fluid2DTemplate>{};
+    for (const auto& definition : impl->templates) {
+        if (!definition.fluids.empty()) {
+            fluidTemplates.push_back({definition.containerId, definition.fluids});
+        }
+    }
+    if (!rootFluids.empty() || !fluidTemplates.empty()) {
+        result = PackageFluid2DRenderer::create(std::move(rootFluids), std::move(fluidTemplates),
+            impl->fluids, error);
+        if (result != Result::Ok) {
+            return result;
+        }
+    }
+    if (impl->emitters.empty() && impl->templates.empty() && !impl->fluids) {
         return Result::Ok;
     }
 
     auto* server = godot::RenderingServer::get_singleton();
-    if (server && server->get_rendering_device()) {
-        impl->device = server->create_local_rendering_device();
-    }
-    if (!impl->device) {
-        return fail(error, "Godot GPU playback requires a RenderingDevice renderer with local compute; "
-            "Compatibility and headless/null devices are not supported", Result::NotReady);
-    }
-    auto source = godot::Ref<godot::RDShaderSource>{};
-    source.instantiate();
-    source->set_stage_source(godot::RenderingDevice::SHADER_STAGE_COMPUTE, computeSource);
-    const auto spirv = impl->device->shader_compile_spirv_from_source(source);
-    if (spirv.is_null()) {
-        return fail(error, "Godot could not compile the embedded LGPK compute shader", Result::NotReady);
-    }
-    const auto compileError = spirv->get_stage_compile_error(godot::RenderingDevice::SHADER_STAGE_COMPUTE);
-    if (!compileError.is_empty()) {
-        return fail(error, "LGPK compute shader: " + compileError, Result::NotReady);
-    }
-    impl->shader = impl->device->shader_create_from_spirv(spirv, "LibraFX LGPK v1");
-    if (!impl->shader.is_valid()) {
-        return fail(error, "Godot could not create the LGPK compute shader", Result::NotReady);
-    }
-    impl->pipeline = impl->device->compute_pipeline_create(impl->shader);
-    if (!impl->pipeline.is_valid()) {
-        return fail(error, "Godot could not create the LGPK compute pipeline", Result::NotReady);
-    }
-    if (impl->parameters.resize(48) != godot::OK) {
-        return fail(error, "Could not allocate LGPK dispatch uniforms", Result::InsufficientWork);
-    }
-    auto emptyFlow = PackedByteArray{};
-    if (emptyFlow.resize(flowHeaderBytes) != godot::OK) {
-        return fail(error, "Could not allocate empty FlowMap headers", Result::InsufficientWork);
-    }
-    emptyFlow.fill(0);
-    auto empty = impl->device->storage_buffer_create(flowHeaderBytes, emptyFlow);
-    if (!empty.is_valid()) {
-        return fail(error, "Could not create empty FlowMap buffer", Result::NotReady);
-    }
-    impl->flowBuffers.push_back(empty);
-    auto flowBytes = flowHeaderBytes;
-    for (auto& definition : impl->templates) {
-        for (auto& emitter : definition.emitters) {
+    const auto hasParticles = !impl->emitters.empty() ||
+        std::any_of(impl->templates.begin(), impl->templates.end(),
+            [](const auto& definition) { return !definition.emitters.empty(); });
+    if (hasParticles) {
+        if (server && server->get_rendering_device()) {
+            impl->device = server->create_local_rendering_device();
+        }
+        if (!impl->device) {
+            return fail(error, "Godot GPU particles require a RenderingDevice renderer with local compute; "
+                "Compatibility and headless/null devices are not supported", Result::NotReady);
+        }
+        auto source = godot::Ref<godot::RDShaderSource>{};
+        source.instantiate();
+        source->set_stage_source(godot::RenderingDevice::SHADER_STAGE_COMPUTE, computeSource);
+        const auto spirv = impl->device->shader_compile_spirv_from_source(source);
+        if (spirv.is_null()) {
+            return fail(error, "Godot could not compile the embedded LGPK compute shader", Result::NotReady);
+        }
+        const auto compileError = spirv->get_stage_compile_error(godot::RenderingDevice::SHADER_STAGE_COMPUTE);
+        if (!compileError.is_empty()) {
+            return fail(error, "LGPK compute shader: " + compileError, Result::NotReady);
+        }
+        impl->shader = impl->device->shader_create_from_spirv(spirv, "LibraFX LGPK v1");
+        if (!impl->shader.is_valid()) {
+            return fail(error, "Godot could not create the LGPK compute shader", Result::NotReady);
+        }
+        impl->pipeline = impl->device->compute_pipeline_create(impl->shader);
+        if (!impl->pipeline.is_valid()) {
+            return fail(error, "Godot could not create the LGPK compute pipeline", Result::NotReady);
+        }
+        if (impl->parameters.resize(48) != godot::OK) {
+            return fail(error, "Could not allocate LGPK dispatch uniforms", Result::InsufficientWork);
+        }
+        auto emptyFlow = PackedByteArray{};
+        if (emptyFlow.resize(flowHeaderBytes) != godot::OK) {
+            return fail(error, "Could not allocate empty FlowMap headers", Result::InsufficientWork);
+        }
+        emptyFlow.fill(0);
+        auto empty = impl->device->storage_buffer_create(flowHeaderBytes, emptyFlow);
+        if (!empty.is_valid()) {
+            return fail(error, "Could not create empty FlowMap buffer", Result::NotReady);
+        }
+        impl->flowBuffers.push_back(empty);
+        auto flowBytes = flowHeaderBytes;
+        for (auto& definition : impl->templates) {
+            for (auto& emitter : definition.emitters) {
+                result = uploadFlowMaps(*impl->device, emitter, empty, impl->flowBuffers, flowBytes, error);
+                if (result != Result::Ok) {
+                    return result;
+                }
+            }
+        }
+        for (auto& emitter : impl->emitters) {
+            impl->activeCapacity += emitter.capacity;
             result = uploadFlowMaps(*impl->device, emitter, empty, impl->flowBuffers, flowBytes, error);
+            if (result == Result::Ok) {
+                result = setupEmitter(*impl->device, impl->shader, emitter, error);
+            }
             if (result != Result::Ok) {
                 return result;
             }
-        }
-    }
-    for (auto& emitter : impl->emitters) {
-        impl->activeCapacity += emitter.capacity;
-        result = uploadFlowMaps(*impl->device, emitter, empty, impl->flowBuffers, flowBytes, error);
-        if (result == Result::Ok) {
-            result = setupEmitter(*impl->device, impl->shader, emitter, error);
-        }
-        if (result != Result::Ok) {
-            return result;
         }
     }
     out = std::unique_ptr<PackageGpuRenderer>(new PackageGpuRenderer(std::move(impl)));
@@ -1177,31 +1353,41 @@ void PackageGpuRenderer::Impl::attachEmitter(godot::Node3D& root, Emitter& emitt
 auto PackageGpuRenderer::attach(godot::Node& owner, godot::String& error) -> Result
 {
     error = godot::String{};
-    if (!godot::Thread::is_main_thread() || !owner.is_inside_tree() || impl_->rootId != 0) {
+    if (!godot::Thread::is_main_thread() || !owner.is_inside_tree() ||
+        impl_->rootId != 0) {
         return fail(error, "GPU playback requires an active scene owner on Godot's main thread",
             Result::NotReady);
     }
-    auto* root = memnew(godot::Node3D);
-    root->set_name("LibraFxGpuRoot");
-    for (auto& emitter : impl_->emitters) {
-        Impl::attachEmitter(*root, emitter);
-    }
-    const auto rootId = root->get_instance_id();
-    owner.add_child(root, true);
-    auto* attached = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(rootId));
-    if (!attached || attached->get_parent() != &owner) {
-        if (attached) {
-            attached->hide();
-            attached->queue_free();
+    if (!impl_->emitters.empty()) {
+        auto* root = memnew(godot::Node3D);
+        root->set_name("LibraFxGpuRoot");
+        for (auto& emitter : impl_->emitters) {
+            Impl::attachEmitter(*root, emitter);
         }
-        return fail(error, "Godot could not attach the GPU billboard nodes", Result::NotReady);
+        const auto rootId = root->get_instance_id();
+        owner.add_child(root, true);
+        auto* attached = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(rootId));
+        if (!attached || attached->get_parent() != &owner) {
+            if (attached) {
+                attached->hide();
+                attached->queue_free();
+            }
+            return fail(error, "Godot could not attach the GPU billboard nodes", Result::NotReady);
+        }
+        impl_->rootId = rootId;
     }
-    impl_->rootId = rootId;
+    if (impl_->fluids && !impl_->fluids->isEmpty()) {
+        const auto result = impl_->fluids->attach(owner, error);
+        if (result != Result::Ok) {
+            return result;
+        }
+    }
     return Result::Ok;
 }
 
 auto PackageGpuRenderer::handleEvent(const SpawnableHostEvent& event, godot::String& error) -> Result
 {
+    error = godot::String{};
     auto containerId = NodeId{};
     std::copy_n(event.containerId, containerId.size(), containerId.data());
     auto matches = [&](const Emitter& emitter) {
@@ -1210,35 +1396,34 @@ auto PackageGpuRenderer::handleEvent(const SpawnableHostEvent& event, godot::Str
     if (event.kind == SpawnableHostEventKind::Spawn) {
         auto definition = std::find_if(impl_->templates.begin(), impl_->templates.end(),
             [&](const auto& item) { return item.containerId == containerId; });
-        if (definition == impl_->templates.end()) {
-            return Result::Ok;
-        }
-        auto* root = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(impl_->rootId));
-        if (!root || event.instanceId == 0 || !std::isfinite(event.time) ||
-            std::any_of(impl_->emitters.begin(), impl_->emitters.end(), matches)) {
-            return fail(error, "Invalid GPU child scope");
-        }
-        auto capacity = impl_->activeCapacity;
-        for (const auto& source : definition->emitters) {
-            if (source.capacity > maxParticles - capacity) {
-                return fail(error, "Active Godot GPU particle capacity exceeds 16384",
-                    Result::InsufficientWork);
+        if (definition != impl_->templates.end() && !definition->emitters.empty()) {
+            auto* root = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(impl_->rootId));
+            if (!root || event.instanceId == 0 || !std::isfinite(event.time) ||
+                std::any_of(impl_->emitters.begin(), impl_->emitters.end(), matches)) {
+                return fail(error, "Invalid GPU child scope");
             }
-            capacity += source.capacity;
-        }
-        for (const auto& source : definition->emitters) {
-            auto& emitter = impl_->emitters.emplace_back(source);
-            emitter.containerId = containerId;
-            emitter.instanceId = event.instanceId;
-            emitter.startTime = event.time;
-            emitter.seed ^= static_cast<std::uint32_t>(event.seed ^ (event.seed >> 32));
-            auto result = setupEmitter(*impl_->device, impl_->shader, emitter, error);
-            if (result != Result::Ok) {
-                return result;
+            auto capacity = impl_->activeCapacity;
+            for (const auto& source : definition->emitters) {
+                if (source.capacity > maxParticles - capacity) {
+                    return fail(error, "Active Godot GPU particle capacity exceeds 16384",
+                        Result::InsufficientWork);
+                }
+                capacity += source.capacity;
             }
-            Impl::attachEmitter(*root, emitter);
+            for (const auto& source : definition->emitters) {
+                auto& emitter = impl_->emitters.emplace_back(source);
+                emitter.containerId = containerId;
+                emitter.instanceId = event.instanceId;
+                emitter.startTime = event.time;
+                emitter.seed ^= static_cast<std::uint32_t>(event.seed ^ (event.seed >> 32));
+                auto result = setupEmitter(*impl_->device, impl_->shader, emitter, error);
+                if (result != Result::Ok) {
+                    return result;
+                }
+                Impl::attachEmitter(*root, emitter);
+            }
+            impl_->activeCapacity = capacity;
         }
-        impl_->activeCapacity = capacity;
     } else if (event.kind == SpawnableHostEventKind::Stop ||
         event.kind == SpawnableHostEventKind::Destroy ||
         event.kind == SpawnableHostEventKind::ForceTerminated) {
@@ -1253,15 +1438,16 @@ auto PackageGpuRenderer::handleEvent(const SpawnableHostEvent& event, godot::Str
         });
         impl_->emitters.erase(retired, impl_->emitters.end());
     }
-    return Result::Ok;
+    return impl_->fluids ? impl_->fluids->handleEvent(event, error) : Result::Ok;
 }
 
 auto PackageGpuRenderer::advance(SpawnableHost& host, double elapsed, double delta,
     godot::String& error, double spawnPerSecond) -> Result
 {
     error = godot::String{};
-    if (!godot::Thread::is_main_thread() || impl_->rootId == 0 ||
-        !godot::ObjectDB::get_instance(impl_->rootId)) {
+    if (!godot::Thread::is_main_thread() ||
+        (!impl_->emitters.empty() &&
+            (impl_->rootId == 0 || !godot::ObjectDB::get_instance(impl_->rootId)))) {
         return fail(error, "GPU renderer is not attached on Godot's main thread", Result::NotReady);
     }
     if (!std::isfinite(elapsed) || elapsed < 0 || elapsed > std::numeric_limits<float>::max() ||
@@ -1269,8 +1455,11 @@ auto PackageGpuRenderer::advance(SpawnableHost& host, double elapsed, double del
         !std::isfinite(spawnPerSecond) || spawnPerSecond < 0) {
         return fail(error, "Invalid GPU playback time, delta or spawn rate", Result::InvalidArgument);
     }
-    if (host.rootFinished() || impl_->emitters.empty()) {
+    if (host.rootFinished()) {
         return Result::Ok;
+    }
+    if (impl_->emitters.empty()) {
+        return impl_->fluids ? impl_->fluids->advance(host, elapsed, delta, error) : Result::Ok;
     }
     if (delta == 0) {
         for (auto& emitter : impl_->emitters) {
@@ -1279,7 +1468,7 @@ auto PackageGpuRenderer::advance(SpawnableHost& host, double elapsed, double del
                 return result;
             }
         }
-        return Result::Ok;
+        return impl_->fluids ? impl_->fluids->advance(host, elapsed, delta, error) : Result::Ok;
     }
     auto& device = *impl_->device;
     const auto list = device.compute_list_begin();
@@ -1330,12 +1519,49 @@ auto PackageGpuRenderer::advance(SpawnableHost& host, double elapsed, double del
             return result;
         }
     }
-    return Result::Ok;
+    return impl_->fluids ? impl_->fluids->advance(host, elapsed, delta, error) : Result::Ok;
 }
 
 auto PackageGpuRenderer::emitterCount() const noexcept -> std::size_t
 {
     return impl_->emitters.size();
 }
+
+#ifdef LIBERAFX_GODOT_TEST_HOOKS
+auto PackageGpuRenderer::testReadFluidFields(godot::Dictionary& fields,
+    godot::String& error) -> Result
+{
+    if (!impl_ || !impl_->fluids) {
+        return fail(error, "Test package has no Fluid2D renderer", Result::NotReady);
+    }
+    return impl_->fluids->testReadFields(fields, error);
+}
+
+auto PackageGpuRenderer::testDisableFluidSourceAndZeroForces(godot::String& error) -> Result
+{
+    if (!impl_ || !impl_->fluids) {
+        return fail(error, "Test package has no Fluid2D renderer", Result::NotReady);
+    }
+    return impl_->fluids->testDisableSourceAndZeroForces(error);
+}
+
+auto PackageGpuRenderer::testSetFluidPressureIterations(std::uint32_t iterations,
+    godot::String& error) -> Result
+{
+    if (!impl_ || !impl_->fluids) {
+        return fail(error, "Test package has no Fluid2D renderer", Result::NotReady);
+    }
+    return impl_->fluids->testSetPressureIterations(iterations, error);
+}
+
+auto PackageGpuRenderer::testSetFluidDrawMatrix(const godot::PackedFloat64Array& values,
+    godot::String& error) -> Result
+{
+    if (!impl_ || !impl_->fluids) {
+        return fail(error, "Test package has no Fluid2D renderer", Result::NotReady);
+    }
+    return impl_->fluids->testSetDrawMatrix(values, error);
+}
+#endif
 
 }

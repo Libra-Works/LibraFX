@@ -5,6 +5,10 @@
 #include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
 #include <godot_cpp/variant/string.hpp>
+#ifdef LIBERAFX_GODOT_TEST_HOOKS
+#include <godot_cpp/variant/dictionary.hpp>
+#include <godot_cpp/variant/packed_float64_array.hpp>
+#endif
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -26,6 +30,13 @@ public:
     auto advance(SpawnableHost& host, double elapsed, double delta, godot::String& error,
         double spawnPerSecond = 100.0) -> Result;
     auto emitterCount() const noexcept -> std::size_t;
+#ifdef LIBERAFX_GODOT_TEST_HOOKS
+    auto testReadFluidFields(godot::Dictionary& fields, godot::String& error) -> Result;
+    auto testDisableFluidSourceAndZeroForces(godot::String& error) -> Result;
+    auto testSetFluidPressureIterations(std::uint32_t iterations, godot::String& error) -> Result;
+    auto testSetFluidDrawMatrix(const godot::PackedFloat64Array& values,
+        godot::String& error) -> Result;
+#endif
 
 private:
     struct Impl;

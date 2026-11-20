@@ -1,5 +1,65 @@
 Libra GPU particle adapter
 
+Fluid2D in Spawnable packages
+-----------------------------
+An authored 2D smoke/ink GPU container is played by the existing Spawnable
+component, in root and spawned scopes. No additional component, renderer or
+per-fluid GameObject is required. Version 2 GPU executable payloads can mix
+particle programs and FluidPrograms; particle programs retain their existing
+explicit Unity bindings. The fluid renderer must be builtin:fluid-alpha.
+The package includes the fixed LibraFluid2D.compute, its .meta, the
+LibraFluid2DResources asset, and LibraFluid2DDraw shader. Keep these together:
+the Resources asset explicitly references the shipped compute asset for player
+builds. No shader source from a fluid package is compiled or executed.
+
+Each live scope owns separate compute buffers, compute-shader instance, output
+RGBA16Float texture and draw resources. The simulation requires compute support
+and RGBA16Float load/store. Unsupported hardware and missing assets fail
+preflight. The output is premultiplied and drawn as a local XY quad with
+domain dimensions times the exported sizeScale. A connected GPU draw Matrix
+is a world-space override; otherwise the plane follows the effect owner.
+OwnerMatrix is an explicit host-supplied input via SetOwnerMatrix, not an
+automatic copy of the owner Transform. Play/Stop and scope events own its lifetime;
+Stop removes the draw and retires queued GPU resources. Delta is capped at
+maximumStep * maximumSubsteps; excess is discarded. Zero delta does not inject
+or advance. SourceEnabled disables both density and velocity injection.
+
+LiberaFxSpawnableComponent.TryGetFluidOutput(nodeGuid, instanceId, out texture)
+exposes the native RenderTexture for the live root (instanceId 0) or child
+scope. It is borrowed and becomes invalid when the scope stops; do not destroy
+or retain it. TryGetFluidStats reports the latest substep count and discarded
+delta. No synchronous readback occurs during normal playback.
+
+Editor/Tests/LibraFluid2DVerification.cs is a graphics-enabled executeMethod
+check. Set absolute LIBERAFX_DATA_ROOT, LIBERAFX_FLUID_UNITY_OUTPUT and
+LIBERAFX_FLUID_SETTINGS paths in a dedicated project. On Unity 7 alpha's
+built-in pipeline use -force-d3d11 -enable-builtin-rp-fallback. This check
+reads back the fixed shader on a non-square grid, exercises odd/even pressure,
+independence, boundaries, source disable, reset and disposal, and captures an
+actual transparent quad without a diagnostic primitive. It does not substitute
+for exercising a compiler-produced Spawnable package or platform/player builds.
+RunOrientation additionally consumes LIBERAFX_FLUID_FIXTURES/fluid-only.json
+and checks actual framebuffer centroids: low sourceY is at the bottom, and
+positive sourceVelocityY and positive buoyancy independently raise the plume.
+Its initial/risen captures contain the fluid quad only. Raw compute output
+is sampled with logical V increasing along local +Y (not a camera-texture flip).
+RunPackage consumes LIBERAFX_FLUID_PACKAGE and LIBERAFX_FLUID_NODE_ID and
+verifies the actual compiler LFXP importer, root Play/advance/zero-delta pause,
+framebuffer, Stop and blank restart. RunNestedPackage checks native Spawn,
+authored two-second child lifetime completion, restart and Stop.
+RunCompiledScopes uses LIBERAFX_FLUID_FIXTURES containing fluid-only, mixed
+and nested JSON plus mixed.lfxb, imports its actual particle shader/metadata,
+and plays the mixed LFXP with both GPU backends. All use the same isolated
+output variable. The continuous root fixtures require AutoDestroyWhenIdle=false;
+this is the existing GPU lifecycle policy, not a fluid-specific workaround.
+These checks passed on Unity 7000.0.0a16 / D3D11, including a 23x37 package,
+24x40 GPU readback, and independent upward velocity/buoyancy framebuffer
+centroids. Other graphics APIs, URP fluid rendering and player builds remain
+unverified. Existing particle and direct-render regression checks also passed.
+
+Particle adapter
+----------------
+
 Export both CompiledGpuProgram.EmitUnityCompute().Text as a .compute asset and
 ExportMetadataJson() as a .json asset. Import both together. The adapter does
 not load or require the .NET 10 compiler in Unity. The built-in Unity

@@ -40,7 +40,9 @@ public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
         if (Same(_stateValue, value)) return;
         var layoutOnly = SameProperty(_stateValue, value, "program") &&
             SameProperty(_stateValue, value, "drafts") && SameProperty(_stateValue, value, "resourceAssetPaths") &&
-            SameProperty(_stateValue, value, "rendererSettings");
+            SameProperty(_stateValue, value, "rendererSettings") &&
+            SameOptionalProperty(_stateValue, value, "fluid2D") &&
+            SameOptionalProperty(_stateValue, value, "fluidRenderer");
         State = GpuParticleEditorService.ReadState(node);
         _stateValue = value;
         if (layoutOnly) LayoutChanged?.Invoke(this, EventArgs.Empty);
@@ -60,8 +62,22 @@ public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
         left is { ValueKind: JsonValueKind.Object } a && right is { ValueKind: JsonValueKind.Object } b &&
         a.TryGetProperty(property, out var av) && b.TryGetProperty(property, out var bv) &&
         JsonElement.DeepEquals(av, bv);
+    private static bool SameOptionalProperty(JsonElement? left, JsonElement? right, string property)
+    {
+        if (left is not { ValueKind: JsonValueKind.Object } a || right is not { ValueKind: JsonValueKind.Object } b)
+        {
+            return false;
+        }
+        var hasLeft = a.TryGetProperty(property, out var av);
+        var hasRight = b.TryGetProperty(property, out var bv);
+        return hasLeft == hasRight && (!hasLeft || JsonElement.DeepEquals(av, bv));
+    }
     public void EnterKernel(string id)
     {
+        if (State.Fluid2D is not null)
+        {
+            throw new InvalidOperationException("2D fluid uses fixed resource passes, not particle kernels.");
+        }
         if (!State.Program.Kernels.Any(k => k.Id == id)) throw new ArgumentException("Kernel not found.");
         KernelId = id; _text = null; _defaultPositions = null; Refreshed?.Invoke(this, EventArgs.Empty);
     }
@@ -198,6 +214,18 @@ public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
             compiled = null; Status = string.Join("\n", e.Diagnostics.Select(d => d.Code + ": " + d.Message));
             StatusChanged?.Invoke(this, EventArgs.Empty); return false;
         }
+    }
+    public bool ValidateSources()
+    {
+        if (State.Fluid2D is null)
+        {
+            return TryCompile(out _);
+        }
+        var errors = Diagnostics;
+        Status = errors.Count == 0 ? LocalizationService.Shared.Get("Fluid.Validated")
+            : string.Join("\n", errors.Select(error => error.Message));
+        StatusChanged?.Invoke(this, EventArgs.Empty);
+        return errors.Count == 0;
     }
     public void Dispose() => Graph.History.StateChanged -= OnHistoryChanged;
 }

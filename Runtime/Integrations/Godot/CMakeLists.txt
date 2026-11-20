@@ -17,9 +17,13 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../.." "${CMAKE_CURRENT_BINARY_DIR
 
 add_library(liberafx_godot SHARED LibraFxGodot.cpp LibraFxGodotRender.cpp
     LibraFxGodotRenderSubmission.cpp LibraFxGodotGpu.cpp
-    LibraFxGodotFlexiblePlane.cpp)
+    LibraFxGodotFlexiblePlane.cpp LibraFxGodotFluid2D.cpp)
 target_link_libraries(liberafx_godot PRIVATE godot::cpp LibraRuntimeCore)
 target_compile_features(liberafx_godot PRIVATE cxx_std_17)
+option(LIBERAFX_GODOT_TEST_HOOKS "Compile isolated Fluid2D GPU verification hooks" OFF)
+if(LIBERAFX_GODOT_TEST_HOOKS)
+    target_compile_definitions(liberafx_godot PRIVATE LIBERAFX_GODOT_TEST_HOOKS=1)
+endif()
 if(LIBERAFX_PROJECT_NODE_SOURCES)
     target_sources(liberafx_godot PRIVATE ${LIBERAFX_PROJECT_NODE_SOURCES})
     target_compile_definitions(liberafx_godot PRIVATE LIBERAFX_HAS_PROJECT_NODES=1)

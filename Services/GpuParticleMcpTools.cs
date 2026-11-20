@@ -32,7 +32,8 @@ public sealed class GpuParticleMcpTools
         backendCapabilities = new[] { GpuBackendCapabilities.Unreal, GpuBackendCapabilities.Unity },
         textGrammar = "Restricted original typed DSL: let, @Attribute assignment, param(\"deltaTime\"), float2/3/4 constructors, registered math. Not VEX/HLSL.",
         editActions = new[] { "add", "remove", "update", "move", "connect", "disconnect", "write", "write-remove",
-            "text", "draft", "discard-draft", "capacity", "flow-add", "flow-remove", "flow-move", "flow-update", "resource", "renderer" },
+            "text", "draft", "discard-draft", "capacity", "flow-add", "flow-remove", "flow-move", "flow-update", "resource", "renderer",
+            "fluid-enable", "fluid-disable", "fluid-settings", "fluid-renderer" },
         billboardMaterials = new[] { "builtin:unlit-alpha", "builtin:unlit-additive" },
         builtinTextures = new[] { "builtin:white" },
         editSchema = new
@@ -43,7 +44,15 @@ public sealed class GpuParticleMcpTools
             position = "{x,y}", write = "{id,attribute,value}", text = "DSL",
             flow = "{id,kind,kernel?,resource?}", capacity = "uint",
             resource = "{id,kind,width,height,flowMap?}", assetPath = "Engine asset reference or builtin:white for billboards. For FlowMap2D select a Texture2D; linear RG data is recommended.",
-            material = "Billboard material preset for renderer action", sizeScale = "Finite draw-size multiplier in (0,10000]"
+            material = "Billboard preset for renderer, or builtin:fluid-alpha for fluid-renderer", sizeScale = "Finite draw-size multiplier in (0,10000]",
+            fluid2D = "Optional Fluid2DSettings on fluid-enable; required replacement settings on fluid-settings. Particle graph is retained but inactive until fluid-disable."
+        },
+        fluid2D = new
+        {
+            kind = "Fluid2D", settings = new Fluid2DSettings(),
+            resources = Fluid2DCompiler.Resources(new()), passes = Fluid2DCompiler.Step(new()),
+            packageVersion = 2, material = "builtin:fluid-alpha",
+            limits = "Grid8-1024, pressure1-128, substeps1-16; fixed closed XY smoke/ink solver. No liquid,3D,arbitrary passes,or main-framebuffer writes."
         }
     });
 
@@ -91,12 +100,21 @@ public sealed class GpuParticleMcpTools
             var state = GpuParticleEditorService.ReadState(activeGraph.Graph.GetNode(Guid.Parse(nodeId)));
             var errors = GpuParticleEditorService.Diagnostics(state);
             if (errors.Count != 0) return Json(new { nodeId, success = false, diagnostics = errors, runtimeExecuted = false });
-            var compiled = GpuParticleEditorService.Compile(state);
             var shaderFormat = format switch
             {
                 "usf" => ShaderFormat.Usf, "hlsl" => ShaderFormat.HlslInclude, "compute" => ShaderFormat.UnityCompute,
                 _ => throw new ArgumentException("Shader format must be usf, hlsl or compute.")
             };
+            if (state.Fluid2D is not null)
+            {
+                return Json(new
+                {
+                    nodeId, success = true, kind = "Fluid2D", purpose = "SourceExport", runtimeExecuted = false,
+                    metadata = GpuParticleEditorService.ExportMetadata(state, format),
+                    source = includeSource ? GpuParticleEditorService.Export(state, format) : null
+                });
+            }
+            var compiled = GpuParticleEditorService.Compile(state);
             return Json(new
             {
                 nodeId, success = true, purpose = "SourceExport", runtimeExecuted = false,
@@ -113,14 +131,13 @@ public sealed class GpuParticleMcpTools
         {
             var state = GpuParticleEditorService.ReadState(activeGraph.Graph.GetNode(Guid.Parse(nodeId)));
             var source = GpuParticleEditorService.Export(state, format);
-            var shaderFormat = format switch { "usf" => ShaderFormat.Usf, "hlsl" => ShaderFormat.HlslInclude, _ => ShaderFormat.UnityCompute };
             return Json(new { nodeId, format, source,
                 suggestedFileName = GpuParticleEditorService.SafeFileName(state.Program.Id) + "." + format,
-                metadata = format == "json" ? null : GpuParticleEditorService.Compile(state).GetExportMetadata(shaderFormat),
+                metadata = format == "json" ? null : GpuParticleEditorService.ExportMetadata(state, format),
                 purpose = "SourceExport", runtimeExecuted = false });
         });
 
-    [McpServerTool(Name = "gpu_export_bundle"), Description("Explicitly request one GPU Particle source delivery bundle: canonical IR, matching USF/metadata and Core LGPK packets, UI texture path metadata and caller programSequence. SourceExport only, not runtime execution.")]
+    [McpServerTool(Name = "gpu_export_bundle"), Description("Request one particle source-delivery bundle, or a version2 executable fluid scope for a Fluid2D container. Particle mode includes canonical IR/USF/metadata/LGPK; fluid mode includes validated settings and renderer. Does not execute GPU.")]
     public static async Task<string> ExportBundle(ActiveGraphProvider activeGraph,
         [Description("GUID of a GPU container node in the active graph.")] string nodeId,
         [Description("Caller-provided sequence number for delivery metadata.")] long programSequence = 0) =>
@@ -128,6 +145,11 @@ public sealed class GpuParticleMcpTools
         {
             var node = activeGraph.Graph.CreateCurrentSnapshot().Nodes.Single(n => n.Id == Guid.Parse(nodeId));
             if (node.KindDomain != "GpuParticle") throw new ArgumentException("Node is not a GPU Particle.");
+            if (GpuParticleEditorService.ReadState(node).Fluid2D is not null)
+            {
+                return System.Text.Encoding.UTF8.GetString(GpuProgramDeliveryService.CreateExecutablePayload(
+                    new Models.Graph.GraphSnapshot([node], []), programSequence));
+            }
             return Json(GpuProgramDeliveryService.Create(new Models.Graph.GraphSnapshot([node], []), programSequence).Single());
         });
 

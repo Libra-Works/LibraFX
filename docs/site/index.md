@@ -16,6 +16,7 @@ with the standalone converter, and play it through a game-engine integration.
 | [Glossary](glossary.md) | Look up words such as node, Signal, Spawnable, and runtime, with short examples. |
 | [Editor window and panel reference](editor-reference.md) | Find tools, settings, and dialogs with screenshots and step-by-step examples. |
 | [GPU Particle Authoring](gpu-particles.md) | Edit the GPU flow, visual kernels, typed DSL, and billboard settings. |
+| [2D smoke and ink](fluid-2d.md) | Use the resource-first GPU grid solver, its source settings and density texture. New source feature; not in the published Preview. |
 | [CPU Particle Authoring](cpu-particles.md) | Author Spawn/Update particle graphs, emission, and CPU Property/Signal interactions. |
 | [Flexible Plane Draw](flexible-plane-draw.md) | Build a ribbon from authored points or a bounded position history. |
 | [Graph authoring guide](authoring.md) | Connect pins, animate with curves, and manage Spawnable lifetime and Group reuse. |
@@ -31,17 +32,18 @@ with the standalone converter, and play it through a game-engine integration.
 
 ## Future direction: fluids
 
-Future work targets both gases such as smoke/fire and liquids such as water or
-viscous fluids. Solver methods, CPU/GPU responsibilities and rendering remain
-undecided. Development will start with **2D**, verify that implementation, and
-only then extend it to **3D**. Fluid simulation is **not implemented or included in this Preview**;
-particle and ribbon support does not imply a fluid solver.
+The first implementation is **smoke-first: 2D GPU smoke / advected dye**.
+The updated source adds a fixed grid solver and a resource-first Flow; see
+[2D smoke and ink](fluid-2d.md) for its settings, engine verification and limits.
+It is **not included in the published 2026.11.22 Preview**. Use matching source
+revisions of the editor, converter and SDK.
 
-The agreed order after the current Preview is the coordinated Unity, Unreal and
-Godot rendering migration, CPU particle Flow authoring and GPU emitter shapes,
-then 2D fluids followed by 3D fluids. A proposed Resources / Targets section for
-GPU Flow is tracked in [issue #68](https://github.com/Libra-Works/LibraFX/issues/68);
-it is a future design proposal, not an available feature.
+The coordinated Unity, Unreal and Godot renderer migration, CPU particle Flow
+and GPU emitter shapes are already in source. **2D verification comes before
+3D**. Liquids and combustion remain future work; smoke / dye does not implement
+water surfaces or fire. The solver's Resources / Targets declaration is the
+first limited implementation of [issue #68](https://github.com/Libra-Works/LibraFX/issues/68),
+not a general-purpose resource graph or access to the main framebuffer.
 
 [Source repository](https://github.com/Libra-Works/LibraFX) ·
 [MIT license](https://github.com/Libra-Works/LibraFX/blob/main/LICENSE)

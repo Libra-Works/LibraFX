@@ -197,15 +197,44 @@ without render payloads remain supported.
 GPU package playback
 --------------------
 
-On Forward+ or Mobile with a local RenderingDevice, play_package accepts
-supported root and Spawnable child GPU emitters. Root GPU emitters require
-AutoDestroyWhenIdle to be disabled, as in Unity.
-Godot validates the packaged Unreal-format LGPK v1 register packets and runs
-the embedded compute interpreter (opcodes 0–41, up to 128 registers).
-It never runs shader source supplied by the package. This path synchronously
-reads the simulation buffers back for MultiMesh billboard submission; it
-does not simulate particles on CPU. Use get_gpu_error() for admission or
-dispatch diagnostics. Compatibility and null/headless devices cannot run it.
+The LGPK particle interpreter continues to use a local RenderingDevice for
+supported root and Spawnable child emitters. Root GPU emitters require
+AutoDestroyWhenIdle to be disabled, as in Unity. Godot validates packaged
+Unreal-format LGPK v1 packets and runs the trusted embedded compute interpreter
+(opcodes 0–41, up to 128 registers); shader source from a package is never
+executed. That legacy billboard path still reads particle buffers back for
+MultiMesh submission.
+
+Version 2 GPU manifests may mix those existing particle programs with
+Fluid2D programs. Godot validates every scope, identity, settings block and
+`builtin:fluid-alpha` renderer before allocating native resources. Fluid2D
+uses the trusted generated Fluid2D shader source on the global RenderingDevice
+and keeps its seven simulation fields and RGBA16F output on the GPU. The output
+is sampled directly by Godot through Texture2DRD and a premultiplied-alpha
+spatial material on a local XY plane; the fluid fields are not read back for
+presentation. A shared per-effect Node3D scope tracks the nearest spatial
+owner's full world transform and visibility. Each fluid uses a
+RenderingServer instance RID (not a per-fluid scene Node or MeshInstance) and
+its exported 4x4 affine Draw Matrix, including translation, rotation, scale,
+and out-of-plane orientation. Like the existing GPU particle path, an exported
+Draw Matrix is authoritative world-space data and is applied as-is, not
+multiplied by the spatial owner's transform a second time. Without exported
+Draw Matrix rows, the plane follows the nearest spatial owner's world transform.
+The plane measures
+domainWidth*sizeScale by domainHeight*sizeScale and is centered on its local
+origin. The logical fluid grid is Y-up; the spatial material maps its output
+so positive source Y and buoyancy travel along local +Y. Stop, Destroy, reload,
+world removal and owner visibility changes synchronize or clear the relevant
+instance and native RIDs.
+At most 16 fluid programs may be active for one player. Unsupported renderers,
+invalid settings and devices unable to provide the required storage/sampleable
+RGBA16F texture fail visibly through `get_gpu_error()`.
+
+Both GPU paths require a RenderingDevice renderer such as Forward+ or Mobile.
+Compatibility and headless/null devices are rejected; there is no CPU fluid
+fallback. Fluid output requires a 3D World3D/viewport and camera for visible
+presentation. The existing GPU particle path's local-device/readback behavior
+is unchanged.
 
 Each spawned instance owns its particle state and advances on its local time.
 Draw Matrix rows are read from that same scope and affect only billboard
@@ -227,6 +256,43 @@ executable without --headless, in Forward+ or Mobile:
 Expect "PASS: Godot child GPU dispatch, draw Matrix, retirement and FlowMap".
 This checks dispatch, Draw Matrix placement, billboard framebuffer pixels,
 scope cleanup and both world-coordinate and clamped UV FlowMap sampling.
+
+For Fluid2D, place `fluid-only.lfxp`, `mixed.lfxp`, `nested.lfxp`,
+`odd-grid.lfxp`, `draw-matrix.lfxp` and `owner-matrix.lfxp` beside
+`Tests\fluid_2d_gpu_smoke.gd` in an isolated Godot project with the extension.
+The parent-provided `.lfxb` files are already LFXP runtime envelopes; copy them
+with the `.lfxp` names above. Their matching `.json` files are executable v2
+GPU manifests, not the runtime package. The 24x40, odd-39-iteration root fixture checks blank
+zero-delta output, visible translucent dye, upward motion for positive
+logical-Y velocity/buoyancy, independent effects, mixed v1 particle/v2 fluid
+playback and Stop cleanup. The compiler-authored Draw Matrix fixture verifies
+that world-space translation is not multiplied by a spatial owner again. The
+OwnerMatrix fixture checks the 16-lane Game I/O port and identity, translation,
+and rotation updates across runtime frames. The nested fixture starts its Spawnable explicitly,
+keeps the root alive, and expires the child after its authored two-second
+lifetime. The 23x37 fixture checks ceil-sized GPU dispatch on odd dimensions.
+Run on a real display with Vulkan and Forward+ or Mobile (do not use the test
+project's default Compatibility renderer):
+
+  godot --path C:\LibraBuild\Smoke --rendering-method forward_plus --rendering-driver vulkan --script res://fluid_2d_gpu_smoke.gd
+
+For a production build with `LIBERAFX_GODOT_TEST_HOOKS=OFF`, run the dedicated
+compiled-Matrix check (it uses the same two matrix fixtures but no test-only
+API):
+
+  godot --path C:\LibraBuild\Smoke --rendering-method forward_plus --rendering-driver vulkan --script res://fluid_2d_matrix_production_smoke.gd
+
+The current acceptance fixtures are under
+`G:\LfxV\fluid2d-parent\fixtures-active`. Compatibility and null
+RenderingDevice playback must fail explicitly; there is no CPU fallback.
+The numerical readback and controlled source/pressure probes are compiled only
+when configuring the extension with
+`-DLIBERAFX_GODOT_TEST_HOOKS=ON`; the default/runtime build leaves those methods
+out. The test reads all seven field buffers only at explicit checkpoints after
+rendered frames. A test-only row-major 4x4 Draw Matrix override also checks the
+spatial mapping when a fixture has no authored GPU Matrix rows; it is not
+available to package playback. Normal playback remains GPU-resident without
+per-frame readback.
 
 Run the canonical math/noise device comparison separately. It exports the
 shared CPU references and LGPK packets in a fresh scratch project, then

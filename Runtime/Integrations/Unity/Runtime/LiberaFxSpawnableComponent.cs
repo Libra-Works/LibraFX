@@ -107,6 +107,28 @@ namespace LiberaFx.Unity
         public double ElapsedTime => elapsed;
         public string LastError { get; private set; }
         public int ActiveRenderScopeCount => (rootRenderScope == null ? 0 : 1) + instanceScopes.Count;
+
+        /// <summary>Returns the effect-owned fluid texture; valid only until the scope stops.</summary>
+        public bool TryGetFluidOutput(string nodeId, ulong instanceId, out RenderTexture texture)
+        {
+            texture = null;
+            if (!LiberaFxUnityBindingLookup.TryCanonicalGuid(nodeId, out var canonical)) return false;
+            if (instanceId == 0) return rootRenderScope != null && rootRenderScope.TryGetFluidOutput(canonical, out texture);
+            foreach (var scope in instanceScopes.Values)
+                if (scope.ScopeInstanceId == instanceId && scope.TryGetFluidOutput(canonical, out texture)) return true;
+            return false;
+        }
+
+        /// <summary>Reports the most recent capped fluid step for a live scope.</summary>
+        public bool TryGetFluidStats(string nodeId, ulong instanceId, out LibraFluid2DFrameStats stats)
+        {
+            stats = default;
+            if (!LiberaFxUnityBindingLookup.TryCanonicalGuid(nodeId, out var canonical)) return false;
+            if (instanceId == 0) return rootRenderScope != null && rootRenderScope.TryGetFluidStats(canonical, out stats);
+            foreach (var scope in instanceScopes.Values)
+                if (scope.ScopeInstanceId == instanceId && scope.TryGetFluidStats(canonical, out stats)) return true;
+            return false;
+        }
         public LiberaFxRenderStatistics RenderStatistics => renderStatistics.value;
         internal IEnumerable<LiberaFxDirectRenderNodeInstance> InspectDrawNodes()
         {

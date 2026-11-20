@@ -17,6 +17,10 @@ public sealed record GpuEditorState
     public Dictionary<string, GpuTextDraft> Drafts { get; init; } = [];
     public Dictionary<string, string> ResourceAssetPaths { get; init; } = [];
     public Dictionary<string, GpuRendererSettings> RendererSettings { get; init; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Fluid2DSettings? Fluid2D { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GpuRendererSettings? FluidRenderer { get; init; }
 }
 
 public sealed record GpuEdit
@@ -37,6 +41,7 @@ public sealed record GpuEdit
     public string? AssetPath { get; init; }
     public string? Material { get; init; }
     public double? SizeScale { get; init; }
+    public Fluid2DSettings? Fluid2D { get; init; }
 }
 
 /// <summary>Portable program plus non-portable authoring state, committed as one CPU undo command.</summary>
@@ -94,6 +99,16 @@ public static class GpuParticleEditorService
                 state.Positions is null || state.Drafts is null || state.ResourceAssetPaths is null ||
                 state.RendererSettings is null)
                 return false;
+            if (state.Fluid2D is { } fluid)
+            {
+                Fluid2DCompiler.Validate(fluid);
+            }
+            if (state.FluidRenderer is { } renderer &&
+                (renderer.Material != "builtin:fluid-alpha" || !double.IsFinite(renderer.SizeScale) ||
+                    renderer.SizeScale <= 0 || renderer.SizeScale > 10000))
+            {
+                return false;
+            }
             var p = state.Program;
             if (p.Id is not { Length: > 0 and <= 128 } || p.Capacity == 0 ||
                 (ulong)p.Capacity * ParticleAbi.Stride > new GpuLimits().MaxParticleBytes ||
@@ -135,7 +150,7 @@ public static class GpuParticleEditorService
                 return false;
             return true;
         }
-        catch (Exception e) when (e is JsonException or NotSupportedException) { return false; }
+        catch (Exception e) when (e is JsonException or NotSupportedException or ArgumentException) { return false; }
     }
 
     public static GraphNodeViewModel Create(GraphWorkspaceViewModel graph, double x = 80, double y = 80)
@@ -146,10 +161,17 @@ public static class GpuParticleEditorService
 
     public static IReadOnlyList<ResourceDeclaration> BillboardTextures(GpuEditorState state)
     {
+        if (state.Fluid2D is not null)
+        {
+            return [];
+        }
         var ids = state.Program.Flow.Where(f => f.Kind == FlowKind.RenderBillboard)
             .Select(f => f.Resource).ToHashSet();
         return state.Program.Resources.Where(r => r.Kind == ResourceKind.Texture2D && ids.Contains(r.Id)).ToArray();
     }
+    public static IEnumerable<ResourceDeclaration> TextureResources(GpuEditorState state) =>
+        state.Fluid2D is null ? state.Program.Resources.Where(resource =>
+            resource.Kind is ResourceKind.Texture2D or ResourceKind.FlowMap2D) : [];
 
     public static void AssignBillboardTexture(GraphWorkspaceViewModel graph, GraphNodeViewModel node, EngineAsset asset)
     {
@@ -172,8 +194,28 @@ public static class GpuParticleEditorService
         Apply(graph, node.Id, [new() { Action = "resource", Resource = resource, AssetPath = asset.Path }]);
     }
 
-    public static IReadOnlyList<GpuDiagnostic> Diagnostics(GpuEditorState state) =>
-        GpuCompiler.Validate(state.Program).Concat(state.Drafts.SelectMany(d => d.Value.Diagnostics)).ToArray();
+    public static IReadOnlyList<GpuDiagnostic> Diagnostics(GpuEditorState state)
+    {
+        if (state.Fluid2D is { } fluid)
+        {
+            try
+            {
+                Fluid2DCompiler.Validate(fluid);
+                var renderer = state.FluidRenderer ?? new("builtin:fluid-alpha", 100);
+                if (renderer.Material != "builtin:fluid-alpha" || !double.IsFinite(renderer.SizeScale) ||
+                    renderer.SizeScale <= 0 || renderer.SizeScale > 10000)
+                {
+                    return [new("FluidRenderer", "2D fluid rendering requires builtin:fluid-alpha and a positive scale up to 10000.")];
+                }
+                return [];
+            }
+            catch (ArgumentException e)
+            {
+                return [new("FluidSettings", e.Message)];
+            }
+        }
+        return GpuCompiler.Validate(state.Program).Concat(state.Drafts.SelectMany(d => d.Value.Diagnostics)).ToArray();
+    }
 
     public static GpuEditorState Apply(GraphWorkspaceViewModel graph, Guid container, IReadOnlyList<GpuEdit> edits,
         bool requireValid = false)
@@ -194,6 +236,27 @@ public static class GpuParticleEditorService
 
     private static GpuEditorState Stage(GpuEditorState state, GpuEdit edit)
     {
+        if (edit.Action == "fluid-enable")
+        {
+            return state with { Fluid2D = edit.Fluid2D ?? new(), FluidRenderer = new("builtin:fluid-alpha", 100) };
+        }
+        if (edit.Action == "fluid-disable")
+        {
+            return state with { Fluid2D = null, FluidRenderer = null };
+        }
+        if (edit.Action == "fluid-settings" && state.Fluid2D is not null)
+        {
+            return state with { Fluid2D = edit.Fluid2D ?? throw new ArgumentException("Fluid settings are required.") };
+        }
+        if (edit.Action == "fluid-renderer" && state.Fluid2D is not null)
+        {
+            var renderer = state.FluidRenderer ?? new("builtin:fluid-alpha", 100);
+            return state with { FluidRenderer = new(edit.Material ?? renderer.Material, edit.SizeScale ?? renderer.SizeScale) };
+        }
+        if (state.Fluid2D is not null)
+        {
+            throw new ArgumentException("Switch to particle mode before editing the preserved particle graph.");
+        }
         var p = state.Program;
         if (edit.Action == "renderer")
         {
@@ -347,10 +410,29 @@ public static class GpuParticleEditorService
     public static CompiledGpuProgram Compile(GpuEditorState state)
     {
         if (Diagnostics(state) is { Count: > 0 } errors) throw new GpuValidationException(errors);
+        if (state.Fluid2D is not null)
+        {
+            throw new GpuValidationException([new("FluidProgramType", "2D fluid uses resource passes, not particle register kernels.")]);
+        }
         return GpuCompiler.Compile(state.Program);
     }
     public static string Export(GpuEditorState state, string format)
     {
+        if (state.Fluid2D is { } fluid)
+        {
+            if (Diagnostics(state) is { Count: > 0 } errors)
+            {
+                throw new GpuValidationException(errors);
+            }
+            return format switch
+            {
+                "json" => Fluid2DCompiler.Serialize(fluid),
+                "usf" => Fluid2DShaders.EmitHlsl(ShaderFormat.Usf),
+                "hlsl" => Fluid2DShaders.EmitHlsl(ShaderFormat.HlslInclude),
+                "compute" => Fluid2DShaders.EmitHlsl(ShaderFormat.UnityCompute),
+                _ => throw new ArgumentException("Format must be json, usf, hlsl or compute.")
+            };
+        }
         var compiled = Compile(state);
         return format switch
         {
@@ -363,6 +445,20 @@ public static class GpuParticleEditorService
     }
     public static string SafeFileName(string id) =>
         new string(id.Take(80).Select(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' ? c : '_').ToArray());
+    public static object ExportMetadata(GpuEditorState state, string format)
+    {
+        var shaderFormat = format switch
+        {
+            "usf" => ShaderFormat.Usf, "hlsl" => ShaderFormat.HlslInclude, "compute" => ShaderFormat.UnityCompute,
+            _ => throw new ArgumentException("Shader format must be usf, hlsl or compute.")
+        };
+        if (Diagnostics(state) is { Count: > 0 } errors)
+        {
+            throw new GpuValidationException(errors);
+        }
+        return state.Fluid2D is { } fluid ? Fluid2DCompiler.Metadata(fluid, shaderFormat)
+            : Compile(state).GetExportMetadata(shaderFormat);
+    }
     public static async Task WriteAtomicAsync(string destination, string source)
     {
         var full = Path.GetFullPath(destination);

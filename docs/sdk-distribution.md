@@ -108,6 +108,12 @@ The [2026.11.22 Preview](https://github.com/Libra-Works/LibraFX/releases/tag/v20
 includes the unified exports and the CPU particle, Flexible Plane and Quaternion/
 Random additions. Later renderer and authoring changes in source are not
 retroactive updates to those archives.
+Source-only 2D smoke / dye adds GPU executable payload version 2 inside the
+same effect envelope. Particle-only scopes remain version 1; old SDKs must
+reject fluid scopes rather than silently omit them. Install the matching
+generated solver shaders, native header and adapter resources together.
+See the bilingual [2D smoke guide](site/fluid-2d.md) for the actual verification
+matrix and exclusions; this is not a liquid, combustion or 3D solver.
 Historical test fixture filenames elsewhere in this document still use `.lfxp`.
 The `.lfxrm` diagnostic resource-mapping manifest is not a second playable binary.
 The updated converter also fixes overlapping custom-input defaults and branch

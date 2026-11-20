@@ -33,6 +33,39 @@ unsupported pass kinds fail
 import. Asset changes are snapshotted at ResetEffect and do not mutate a running
 render-thread instance.
 
+GPU Fluid2D smoke/ink
+  Compiled Fluid2D is part of an executable GPU package manifest (Version=2),
+  not a standalone .lfxgpu particle asset. Use the same public
+  ULibraEffectComponent and SetPackage/Play/Pause/Stop flow as other effects.
+  Root and SpawnableGroup template scopes may contain fluid programs, including
+  mixed scopes with the existing particle programs array. Each fluid uses the
+  shipped LibraFluid2D global shader, seven independent float4 grid buffers,
+  and a native RGBA16F dye texture. Package shader source is retained only as
+  compiler metadata and is never compiled or executed by this adapter.
+  The display is a premultiplied-alpha local XY plane submitted by the existing
+  effect-owned post-tonemap view extension. Only builtin:fluid-alpha is
+  supported; arbitrary UE material graphs and per-fluid Components are not.
+  Plane dimensions are domainWidth/domainHeight * renderer.sizeScale, with
+  sizeScale defaulting to 100 Unreal centimeters.
+  A connected draw Matrix is a world-space override; otherwise the plane
+  follows the actor. OwnerMatrix is supplied explicitly with SetOwnerMatrix,
+  not copied automatically from the actor transform. Simulation uses bounded
+  substeps; a zero-delta frame does not inject or advance, and excess long-frame
+  time is discarded. Stop retires all seven buffers and the output texture.
+  Manifest settings, renderer token, IDs, total scope count and combined GPU
+  memory are validated before package state is created. Version=1 particle
+  packages remain compatible; a fluid marker paired with Version=1 fails.
+
+  Focused automation:
+    Libra.GPU.Fluid2D.ExecutionAndPlaneFramebuffer
+    Libra.Runtime.Spawnable.Fluid2DCompilerFixtures
+  The second test accepts compiler-produced .lfxb fixtures in
+  -LibraFluidFixtures=<fixture directory> and exercises fluid-only, mixed,
+  SpawnableGroup child, odd-grid, draw-matrix and owner-matrix fixtures.
+  Use a fresh project/output/data-root and a real
+  SM5 graphics RHI; NullRHI is expected to fail these checks. Do not copy or
+  delete the user's plugin Binaries/Intermediate directories.
+
 Billboards are instanced directly from the particle GPU buffer in a post-tonemap
 view extension. This initial pass is unlit and does not depth-test, sort
 transparency, participate in shadows, or evaluate native UE material graphs.

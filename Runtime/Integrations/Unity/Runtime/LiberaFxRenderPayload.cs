@@ -137,6 +137,20 @@ namespace LiberaFx.Unity
     {
         public int version;
         public LiberaFxGpuManifestProgram[] programs;
+        public LiberaFxFluidManifestProgram[] fluidPrograms;
+    }
+
+    [Serializable] internal sealed class LiberaFxFluidManifestProgram
+    {
+        public string nodeId;
+        public LibraFluid2DSettings settings;
+        public LiberaFxFluidRenderer renderer;
+    }
+
+    [Serializable] internal sealed class LiberaFxFluidRenderer
+    {
+        public string material;
+        public float sizeScale;
     }
 
     [Serializable] internal sealed class LiberaFxGpuManifestProgram
@@ -216,12 +230,21 @@ namespace LiberaFx.Unity
         public byte[][] drawMatrixRowNodeBytes;
     }
 
+    internal sealed class LiberaFxPreparedFluidProgram
+    {
+        public string nodeId;
+        public LibraFluid2DSettings settings;
+        public float sizeScale;
+        public byte[][] drawMatrixRowNodeBytes;
+    }
+
     internal sealed class LiberaFxPreparedScope
     {
         public string templateId;
         public LiberaFxPreparedRenderNode[] renderNodes;
         public LiberaFxPreparedCpuParticleRenderer[] cpuParticles;
         public LiberaFxPreparedGpuProgram[] gpuPrograms;
+        public LiberaFxPreparedFluidProgram[] fluidPrograms;
     }
 
     internal sealed class LiberaFxPreparedCpuParticleRenderer
@@ -304,15 +327,25 @@ namespace LiberaFx.Unity
             var cpuParticles = ResolveCpuParticles(renderConfiguration.cpuParticles, renderNodes, isRoot);
             var authoredGpuIds = ParseGpuContainerIds(gpuContainerBytes);
             var gpuPrograms = ParseGpuPrograms(gpuProgramBytes, authoredGpuIds,
-                renderConfiguration.gpuDrawTransforms);
+                renderConfiguration.gpuDrawTransforms, out var fluidPrograms);
+            var transforms = (renderConfiguration.gpuDrawTransforms ?? Array.Empty<LiberaFxGpuDrawTransformPayload>())
+                .ToDictionary(transform => transform.nodeId, StringComparer.Ordinal);
             return new LiberaFxPreparedScope
             {
                 templateId = templateId,
                 renderNodes = renderNodes.Select(ResolveRenderNode).ToArray(),
                 cpuParticles = cpuParticles,
-                gpuPrograms = gpuPrograms.Select(program =>
-                    ResolveGpuProgram(program, renderConfiguration.gpuDrawTransforms
-                        .ToDictionary(transform => transform.nodeId, StringComparer.Ordinal))).ToArray()
+                gpuPrograms = gpuPrograms.Select(program => ResolveGpuProgram(program, transforms)).ToArray(),
+                fluidPrograms = fluidPrograms.Select(program =>
+                {
+                    transforms.TryGetValue(program.nodeId, out var transform);
+                    return new LiberaFxPreparedFluidProgram
+                    {
+                        nodeId = program.nodeId, settings = program.settings,
+                        sizeScale = program.renderer.sizeScale,
+                        drawMatrixRowNodeBytes = transform?.rowNodeBytes
+                    };
+                }).ToArray()
             };
         }
 
@@ -886,8 +919,9 @@ namespace LiberaFx.Unity
         internal static bool HasGpuContainers(byte[] bytes) => ParseGpuContainerIds(bytes).Count != 0;
 
         private LiberaFxGpuManifestProgram[] ParseGpuPrograms(byte[] bytes, HashSet<string> authoredIds,
-            LiberaFxGpuDrawTransformPayload[] drawTransforms)
+            LiberaFxGpuDrawTransformPayload[] drawTransforms, out LiberaFxFluidManifestProgram[] fluids)
         {
+            fluids = Array.Empty<LiberaFxFluidManifestProgram>();
             var transformIds = new HashSet<string>(
                 (drawTransforms ?? Array.Empty<LiberaFxGpuDrawTransformPayload>()).Select(transform => transform.nodeId),
                 StringComparer.Ordinal);
@@ -902,10 +936,21 @@ namespace LiberaFx.Unity
             if (bytes.Length > 16 * 1024 * 1024)
                 throw new InvalidOperationException("GPU executable payload exceeds 16 MiB.");
             LiberaFxGpuManifestPayload manifest;
-            try { manifest = JsonUtility.FromJson<LiberaFxGpuManifestPayload>(Encoding.UTF8.GetString(bytes)); }
+            var json = Encoding.UTF8.GetString(bytes);
+            try { manifest = JsonUtility.FromJson<LiberaFxGpuManifestPayload>(json); }
             catch (Exception error) { throw new InvalidOperationException("GPU executable payload JSON is malformed.", error); }
-            if (manifest == null || manifest.version != 1 || manifest.programs == null || manifest.programs.Length > 16)
+            if (manifest == null || (manifest.version != 1 && manifest.version != 2) ||
+                manifest.programs == null || manifest.programs.Length > 16)
                 throw new InvalidOperationException("GPU executable payload version or program count is invalid.");
+            if (manifest.version == 1 && manifest.fluidPrograms != null && manifest.fluidPrograms.Length != 0)
+                throw new InvalidOperationException("Fluid programs require GPU executable payload version 2.");
+            if (manifest.version == 2)
+            {
+                LibraFluid2DManifestValidation.Validate(json);
+                fluids = manifest.fluidPrograms;
+                if (fluids == null || fluids.Length == 0 || fluids.Length + manifest.programs.Length > 16)
+                    throw new InvalidOperationException("GPU fluid program count is invalid.");
+            }
             var programs = new Dictionary<string, LiberaFxGpuManifestProgram>(StringComparer.Ordinal);
             foreach (var program in manifest.programs)
             {
@@ -915,8 +960,20 @@ namespace LiberaFx.Unity
                 program.nodeId = id;
                 programs.Add(id, program);
             }
-            if (programs.Count != authoredIds.Count || authoredIds.Any(id => !programs.ContainsKey(id)))
+            var ids = new HashSet<string>(programs.Keys, StringComparer.Ordinal);
+            foreach (var fluid in fluids)
+            {
+                if (fluid == null || !TryCanonicalGuid(fluid.nodeId, out var id) || !ids.Add(id) ||
+                    fluid.settings == null || fluid.renderer == null || fluid.renderer.material != "builtin:fluid-alpha" ||
+                    float.IsNaN(fluid.renderer.sizeScale) || float.IsInfinity(fluid.renderer.sizeScale) ||
+                    fluid.renderer.sizeScale <= 0 || fluid.renderer.sizeScale > 10000)
+                    throw new InvalidOperationException("GPU fluid program is invalid or duplicated.");
+                fluid.nodeId = id;
+                fluid.settings.Validate();
+            }
+            if (ids.Count != authoredIds.Count || authoredIds.Any(id => !ids.Contains(id)))
                 throw new InvalidOperationException("GPU authored node IDs do not match compiled executable programs.");
+            if (fluids.Length != 0) LibraFluid2DInstance.ValidateAssets();
             return programs.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => pair.Value).ToArray();
         }
 

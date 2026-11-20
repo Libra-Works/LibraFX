@@ -104,8 +104,7 @@ public sealed class AssetReferenceIndex
                     if (GpuParticleEditorService.IsGpu(node.Kind))
                     {
                         var state = GpuParticleEditorService.ReadState(node);
-                        foreach (var resource in state.Program.Resources.Where(resource =>
-                                     resource.Kind is ResourceKind.Texture2D or ResourceKind.FlowMap2D))
+                        foreach (var resource in GpuParticleEditorService.TextureResources(state))
                         {
                             if (state.ResourceAssetPaths.TryGetValue(resource.Id, out var path) && path.Length > 0)
                                 Binding(path, "texture", "GPU/" + resource.Id);
@@ -113,7 +112,8 @@ public sealed class AssetReferenceIndex
                                 Add(new($"unassigned:{source.Resource.Key}:{node.Id}:{resource.Id}",
                                     ReferenceResourceKind.Unassigned, resource.Id, "texture"), "GPU/" + resource.Id);
                         }
-                        foreach (var renderer in state.Program.Flow.Where(flow => flow.Kind == FlowKind.RenderBillboard))
+                        foreach (var renderer in state.Program.Flow.Where(flow =>
+                                     state.Fluid2D is null && flow.Kind == FlowKind.RenderBillboard))
                             Binding(state.RendererSettings.GetValueOrDefault(renderer.Id)?.Material ?? "builtin:unlit-alpha",
                                 "material", "GPU/" + renderer.Id + "/material");
                         handled.Add(GpuParticleEditorService.ParameterId);

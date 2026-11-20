@@ -77,7 +77,7 @@ void ULibraEffectComponent::SyncPackageState()
     // The public component is the only tick owner, including after callbacks.
     PackagePlayback->SetComponentTickEnabled(false);
     SetComponentTickEnabled(bIsPlaying || PackagePlayback->HasPendingDebugWork() ||
-        PackagePlayback->GetRenderObjectCount() > 0);
+        PackagePlayback->GetRenderObjectCount() > 0 || PackagePlayback->GetGpuInstanceCount() > 0);
 }
 
 int64 ULibraEffectComponent::GetPackageDebuggerGeneration() const
