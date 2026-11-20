@@ -37,8 +37,7 @@ public partial class NodeCatalogView : UserControl
             _pressed is not { } pressed ||
             !e.GetCurrentPoint(source).Properties.IsLeftButtonPressed ||
             (Math.Abs(current.X - _dragStart.X) < 5 && Math.Abs(current.Y - _dragStart.Y) < 5) ||
-            !(kindName.StartsWith(NodeCatalogEntryViewModel.GroupPrefix, StringComparison.Ordinal) ||
-              GraphNodeDefinition.TryFind(kindName, out _)))
+            !IsDraggableIdentifier(kindName))
         {
             return;
         }
@@ -62,5 +61,15 @@ public partial class NodeCatalogView : UserControl
     {
         _dragSource = null;
         _pressed = null;
+    }
+
+    private static bool IsDraggableIdentifier(string identifier)
+    {
+        if (identifier.StartsWith(NodeCatalogEntryViewModel.GroupPrefix, StringComparison.Ordinal))
+            return true;
+        var kindName = identifier.StartsWith(NodeCatalogEntryViewModel.PolymorphicPrefix, StringComparison.Ordinal)
+            ? identifier[NodeCatalogEntryViewModel.PolymorphicPrefix.Length..]
+            : identifier;
+        return GraphNodeDefinition.TryFind(kindName, out _);
     }
 }
