@@ -28,7 +28,7 @@ jobs:
           cp docs/site/_layouts/bilingual.html pages-source/_layouts/
           cp docs/site/assets/css/libradark.css pages-source/assets/css/
           cp Assets/Brand/LibraFx.ico pages-source/assets/libera-fx.ico
-          for file in getting-started.md engine-integration.md editor-reference.md authoring.md gpu-particles.md glossary.md scalar-math-nodes.md cpu-particles.md flexible-plane-draw.md quaternion-random.md; do
+          for file in getting-started.md engine-integration.md editor-reference.md authoring.md gpu-particles.md glossary.md scalar-math-nodes.md cpu-particles.md flexible-plane-draw.md quaternion-random.md fluid-2d.md; do
             cp "docs/site/$file" pages-source/
             cp "docs/site/ja/$file" pages-source/ja/
           done
@@ -36,6 +36,7 @@ jobs:
           cp docs/images/afterimage-gate-editor.png pages-source/images/
           cp docs/site/images/editor/{chat,content,crash-reports,engine-connection,f-curve,gpu-dsl,gpu-flow,gpu-kernel,history,inspector,live-game,log,node-list,outliner,profiler,revision-history,search,settings-appearance,settings-extensions,settings-inspectors,settings-projects,settings-servers,settings-shortcuts,sprite,startup,timeline,workspace}.png pages-source/images/editor/
           cp docs/site/images/editor/cpu-particles-*.png pages-source/images/editor/
+          cp docs/site/images/editor/fluid-2d-*.png pages-source/images/editor/
           python3 Tools/Generate-NodeReference.py pages-source
       - uses: actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1
         with:
@@ -43,7 +44,7 @@ jobs:
           destination: ./pages-output
       - name: Verify the rendered pages
         run: |
-          for file in index.html getting-started.html engine-integration.html editor-reference.html authoring.html gpu-particles.html node-reference.html glossary.html scalar-math-nodes.html cpu-particles.html flexible-plane-draw.html quaternion-random.html; do
+          for file in index.html getting-started.html engine-integration.html editor-reference.html authoring.html gpu-particles.html node-reference.html glossary.html scalar-math-nodes.html cpu-particles.html flexible-plane-draw.html quaternion-random.html fluid-2d.html; do
             test -s "pages-output/$file"
             test -s "pages-output/ja/$file"
             for lang in en ja; do
@@ -70,6 +71,14 @@ jobs:
             if [ "$lang" = ja ]; then rendered="pages-output/ja/cpu-particles.html"; fi
             for view in root stages spawn update draw; do
               grep -Fq "images/editor/cpu-particles-$view-$lang.png" "$rendered"
+            done
+            rendered="pages-output/fluid-2d.html"
+            if [ "$lang" = ja ]; then rendered="pages-output/ja/fluid-2d.html"; fi
+            for view in flow output; do
+              grep -Fq "images/editor/fluid-2d-$view-$lang.png" "$rendered"
+            done
+            for phase in initial risen; do
+              grep -Fq "images/editor/fluid-2d-unity-$phase.png" "$rendered"
             done
           done
           grep -q 'getting-started.html' pages-output/index.html
