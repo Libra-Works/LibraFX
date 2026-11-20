@@ -20,6 +20,7 @@ with the standalone converter, and play it through a game-engine integration.
 | [Editor window and panel reference](editor-reference.md) | Find tools, settings, and dialogs with screenshots and step-by-step examples. |
 | [GPU Particle Authoring](gpu-particles.md) | Edit the GPU flow, visual kernels, typed DSL, and billboard settings. |
 | [2D smoke, water and fire](fluid-2d.md) | Use the resource-first grid solvers, cell forces, dedicated renderers and generated outputs. |
+| [Procedural resources](procedural-resources.md) | Create model geometry, GPU textures and materials from ordered procedural flows. |
 | [CPU Particle Authoring](cpu-particles.md) | Author Spawn/Update particle graphs, emission, and CPU Property/Signal interactions. |
 | [Flexible Plane Draw](flexible-plane-draw.md) | Build a ribbon from authored points or a bounded position history. |
 | [Graph authoring guide](authoring.md) | Connect pins, animate with curves, and manage Spawnable lifetime and Group reuse. |
@@ -42,10 +43,11 @@ consumers are described in the [fluid guide](fluid-2d.md), with actual editor
 and engine captures. Use matching editor and SDK sources; published archives
 have not been rebuilt with these changes.
 
-The coordinated Unity, Unreal and Godot renderer migration, CPU particle Flow
+The 2D-first work tracked in [issue #69](https://github.com/Libra-Works/LibraFX/issues/69) is complete; 3D fluids remain future work.
+The procedural-resource guide covers generated models, textures, materials and
+their bounded editor/runtime contracts. The coordinated Unity, Unreal and Godot renderer migration, CPU particle Flow
 and GPU emitter shapes are included. Nested Spawnables and their CPU particles
-have per-instance ownership and lifetime retention. **2D improvements come before
-3D** in [issue #69](https://github.com/Libra-Works/LibraFX/issues/69).
+have per-instance ownership and lifetime retention.
 The portable resource-plan contract and declarations implement a foundation for
 [issue #68](https://github.com/Libra-Works/LibraFX/issues/68). Arbitrary runtime
 resource graphs and writable main-framebuffer access still require adapter work.

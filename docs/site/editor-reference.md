@@ -26,15 +26,17 @@ the editor with bundled sample data, not engine rendering.
 | Search anything | **Edit → Search anything** or `Ctrl+P` by default | Search across commands, nodes, and assets. Use the arrow keys to select a result and Enter to run or open it. |
 | Outliner | **Window → Outliner** | Browse graph nodes and select one without locating it manually on the canvas. |
 | Node List | **Window → Node List** | Search and drag nodes onto the graph. The catalog includes built-ins and definitions from the active project, not every known project definition. |
-| Properties and inspectors 1–4 | **Window → Inspectors** | Edit the selected node's values, options, and connections. Open another slot to keep a second inspector available. What you can edit depends on the selected node. |
+| Properties and inspectors 1–4 | **Window → Inspectors** | Edit the selected node's values, options, and connections. Use the lock beside the node name to lock or unlock its parameters. Open another slot to keep a second inspector available. |
 | F-Curve | **Window → F-Curve** | Edit numeric animation keys and interpolation. Choose the channel or curve first, edit its keys, and use the shared playhead to inspect timing. |
 | Timeline | **Window → Timeline** | Set playback range, scrub or step, and author timed Signal keys. Preview playback and the F-Curve pane share the playhead. A preview loop does not define runtime lifetime. |
 | Playback controls | Timeline and workspace transport | Play, pause, seek, or step. Use the engine connection status to distinguish moving the playhead from successfully displaying a frame in an engine. |
 | Color editor | Open a color control in the inspector | Edit color channels and alpha. Editable color curves, where exposed, are opened from the corresponding curve control. |
 | GPU workspace | Double-click a GPU Particle node | Edit Spawn and Update kernels or billboard settings. See [GPU Particle Authoring](gpu-particles.md) for the separate workflow. |
+| Procedural workspace | Double-click a Procedural Model, Texture or Material | Edit the producer's ordered Flow in the main window. Connect its output to Model Draw; see [Procedural resources](procedural-resources.md). |
+| Effect settings | **Effect settings** button on the root graph toolbar | Open the flyout and change **End automatically when idle**. The setting is available from the root graph, not nested graphs. |
 | Sprite Animation | **Window → Sprite Animation** | Author sprite animation and composition data using the atlas, cells, and timeline. Previewing a composition in this pane is different from drawing a compiled package in an engine. |
 | Graph Problems | **Window → Graph problems** | Review graph diagnostics while editing. Resolve missing or incompatible definitions and connections before retrying compilation. |
-| History | **Window → History** | Navigate this document's edit history and pin useful versions. Editing after moving back creates a branch; this does not create a Git commit. |
+| History | **Window → History** | Browse the edit history as a branching tree, select a state to navigate, and pin useful states. Editing after moving back creates a branch; this does not create a Git commit. |
 
 ## Projects, assets, and shared groups
 
@@ -124,10 +126,11 @@ without running anything.
 
 ### History
 
-![History panel showing the current Fireworks state and earlier edits](images/editor/history.png)
+![History panel showing Branch 1 and linked Fireworks edit snapshots](images/editor/history.png)
 
-The top of **History** shows the current branch and edit. Open an earlier state
-to see the graph as it was at that point. Pin states you want to find again.
+**History** shows edits as connected nodes in a branching tree. The highlighted
+path marks the current state; select an earlier node to navigate there. Pin
+states you want to find again.
 If you edit after going back, the new edit belongs to a branch instead of
 overwriting the original trail. Use revision history or graph comparison for
 saved files rather than for these in-editor states.

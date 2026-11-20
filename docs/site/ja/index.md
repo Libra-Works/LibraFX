@@ -20,6 +20,7 @@ LIBERA FX は、Unity・Unreal Engine・Godot で再生するエフェクトを�
 | [ウィンドウとパネルのリファレンス](editor-reference.md) | ツール、設定、ダイアログの使い方を実画面と操作例で確認できます。 |
 | [GPU パーティクル制作](gpu-particles.md) | GPU フロー、ビジュアルカーネル、型付き DSL、ビルボード設定を編集します。 |
 | [2D の煙・水・炎](fluid-2d.md) | リソース先頭の格子ソルバー、セル外力、専用描画、生成出力を扱います。 |
+| [プロシージャルリソース](procedural-resources.md) | 順序付き Flow からモデル形状、GPU テクスチャー、マテリアルを作ります。 |
 | [CPU パーティクル制作](cpu-particles.md) | Spawn／Update 子グラフ、粒子の放出、CPU の Property／Signal のやり取りを説明します。 |
 | [Flexible Plane Draw](flexible-plane-draw.md) | 自由配置の点列や、位置の履歴から帯状のポリゴンを作ります。 |
 | [グラフ制作ガイド](authoring.md) | ピンの接続、カーブ、Spawnable の寿命、Group の再利用を説明します。 |
@@ -42,8 +43,8 @@ LIBERA FX は、Unity・Unreal Engine・Godot で再生するエフェクトを�
 
 Unity・Unreal・Godot の描画改修、CPU パーティクルの Flow、GPU 放出形状も含みます。
 Spawnable のネストと内部 CPU 粒子は、個体ごとの所有・寿命に対応します。
-**2D を充実させてから 3D へ進める**計画は
-[issue #69](https://github.com/Libra-Works/LibraFX/issues/69)にまとめています。
+**2D を充実させてから 3D へ進める** [issue #69](https://github.com/Libra-Works/LibraFX/issues/69) の対応は完了しました。3D フルイドは今後の対象です。
+プロシージャルの説明では、生成モデル・テクスチャー・マテリアルと上限を紹介します。
 共通リソース計画の契約と宣言は
 [issue #68](https://github.com/Libra-Works/LibraFX/issues/68)の基礎です。
 任意の実行リソースグラフやメイン画面への書き込みには、追加のアダプター対応が必要です。

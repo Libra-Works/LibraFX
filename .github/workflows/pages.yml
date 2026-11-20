@@ -28,7 +28,7 @@ jobs:
           cp docs/site/_layouts/bilingual.html pages-source/_layouts/
           cp docs/site/assets/css/libradark.css pages-source/assets/css/
           cp Assets/Brand/LibraFx.ico pages-source/assets/libera-fx.ico
-          for file in getting-started.md engine-integration.md editor-reference.md authoring.md gpu-particles.md glossary.md scalar-math-nodes.md cpu-particles.md flexible-plane-draw.md quaternion-random.md fluid-2d.md preview-update.md production-workflow.md batch-conversion.md; do
+          for file in getting-started.md engine-integration.md editor-reference.md authoring.md gpu-particles.md glossary.md scalar-math-nodes.md cpu-particles.md flexible-plane-draw.md quaternion-random.md fluid-2d.md procedural-resources.md preview-update.md production-workflow.md batch-conversion.md; do
             cp "docs/site/$file" pages-source/
             cp "docs/site/ja/$file" pages-source/ja/
           done
@@ -37,6 +37,7 @@ jobs:
           cp docs/site/images/editor/{chat,content,crash-reports,engine-connection,f-curve,gpu-dsl,gpu-flow,gpu-kernel,history,inspector,live-game,log,node-list,outliner,profiler,revision-history,search,settings-appearance,settings-extensions,settings-inspectors,settings-projects,settings-servers,settings-shortcuts,sprite,startup,timeline,workspace}.png pages-source/images/editor/
           cp docs/site/images/editor/cpu-particles-*.png pages-source/images/editor/
           cp docs/site/images/editor/fluid-2d-*.png pages-source/images/editor/
+          cp docs/site/images/editor/procedural-model-flow-*.png pages-source/images/editor/
           python3 Tools/Generate-NodeReference.py pages-source
       - uses: actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1
         with:
@@ -44,7 +45,7 @@ jobs:
           destination: ./pages-output
       - name: Verify the rendered pages
         run: |
-          for file in index.html getting-started.html engine-integration.html editor-reference.html authoring.html gpu-particles.html node-reference.html glossary.html scalar-math-nodes.html cpu-particles.html flexible-plane-draw.html quaternion-random.html fluid-2d.html preview-update.html production-workflow.html batch-conversion.html; do
+          for file in index.html getting-started.html engine-integration.html editor-reference.html authoring.html gpu-particles.html node-reference.html glossary.html scalar-math-nodes.html cpu-particles.html flexible-plane-draw.html quaternion-random.html fluid-2d.html procedural-resources.html preview-update.html production-workflow.html batch-conversion.html; do
             test -s "pages-output/$file"
             test -s "pages-output/ja/$file"
             for lang in en ja; do
@@ -91,6 +92,8 @@ jobs:
             grep -q 'node-reference.html' "pages-output/${lang}index.html"
             grep -q 'gpu-particles.html' "pages-output/${lang}index.html"
             grep -q 'images/editor/gpu-kernel.png' "pages-output/${lang}gpu-particles.html"
+            grep -q 'procedural-resources.html' "pages-output/${lang}index.html"
+            grep -q 'images/editor/procedural-model-flow-' "pages-output/${lang}procedural-resources.html"
             grep -q 'images/editor/workspace.png' "pages-output/${lang}editor-reference.html"
             grep -q 'id="category-values"' "pages-output/${lang}node-reference.html"
             grep -q 'id="node-sequence"' "pages-output/${lang}node-reference.html"

@@ -4,7 +4,11 @@ title: 2D fluids: smoke, water and fire
 
 # 2D fluids: smoke, water and fire
 
-Use matching development editor and engine SDK sources. Existing published archives are unchanged; see [updates](preview-update.md). The four fluid models, cell forces and ordinary-draw consumers have Windows GPU acceptance on the engine/backends listed below. Published archives have not been rebuilt with these changes.
+The four fluid models, cell forces and ordinary-draw consumers are included in
+the [2026.11.42 Preview](https://github.com/Libra-Works/LibraFX/releases/tag/v2026.11.42).
+Use its matching editor and engine SDK; earlier archives remain unchanged. See
+[updates](preview-update.md). These features have Windows GPU acceptance on
+the engine/backends listed below.
 
 ## Make a water or fire effect
 
