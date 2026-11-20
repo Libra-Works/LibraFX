@@ -29,16 +29,17 @@
                     PointerReleased="OnHeaderPointerReleased"
                     PointerCaptureLost="OnHeaderPointerCaptureLost">
                 <DockPanel>
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" IsVisible="{Binding IsGraphGroup}">
-                        <views:IconButton Icon="Group" Click="OnToggleInlineClick"
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" Margin="4,0,0,0"
+                                VerticalAlignment="Center" IsVisible="{Binding IsGraphGroup}">
+                        <views:IconButton Width="26" Height="26" Padding="0" Icon="Group" Click="OnToggleInlineClick"
                                           ToolTip.Tip="{DynamicResource Text.Inline.Toggle}"
                                           AutomationProperties.Name="{DynamicResource Text.Inline.Toggle}" />
-                        <views:IconButton Icon="Frame" Click="OnMaximizeInlineClick"
+                        <views:IconButton Width="26" Height="26" Padding="0" Icon="Frame" Click="OnMaximizeInlineClick"
                                           ToolTip.Tip="{DynamicResource Text.Inline.Maximize}"
                                           AutomationProperties.Name="{DynamicResource Text.Inline.Maximize}" />
                     </StackPanel>
                     <ToggleButton x:Name="DetailsToggle" DockPanel.Dock="Right"
-                                  Width="22" Height="20" Padding="0"
+                                  Width="26" Height="26" Padding="0" Margin="4,0,0,0" VerticalAlignment="Center"
                                   IsVisible="{Binding HasParameters}"
                                   IsChecked="{Binding IsDetailsExpanded, Mode=TwoWay}"
                                   ToolTip.Tip="{DynamicResource Text.Panels.ShowHideNodeParameters}"
@@ -50,7 +51,7 @@
                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Grid>
                     </ToggleButton>
-                    <TextBlock Text="{Binding DisplayName}"
+                    <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DisplayName}"
                                Foreground="{DynamicResource EffectForegroundBrush}"
                                FontWeight="SemiBold" />

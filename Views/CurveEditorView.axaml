@@ -60,22 +60,28 @@
                 <Grid RowDefinitions="Auto,*" RowSpacing="4">
                     <TextBox PlaceholderText="{DynamicResource Text.Panels.SearchCurves}" Text="{Binding ChannelSearch, Mode=TwoWay}" />
                     <ScrollViewer Grid.Row="1">
-                        <ItemsControl ItemsSource="{Binding FilteredChannels}">
+                        <ItemsControl ItemsSource="{Binding FilteredChannelGroups}">
                             <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="vm:CurveChannelViewModel">
+                                <DataTemplate DataType="vm:CurveChannelGroupViewModel">
                                     <Expander Header="{Binding Name}" IsExpanded="True" Margin="0,2">
-                                        <StackPanel Orientation="Horizontal" Margin="16,0,0,0" Spacing="4">
-                                            <CheckBox IsChecked="{Binding IsVisible}"
-                                                      ToolTip.Tip="{DynamicResource Text.Panels.ShowHideCurve}"
-                                                      AutomationProperties.Name="{DynamicResource Text.Panels.ShowHideCurve}" />
-                                            <Button Foreground="{Binding Brush}" Tag="{Binding}" Click="OnChannelClick" Padding="4,1"
-                                                    AutomationProperties.Name="{DynamicResource Text.Panels.Value}">
-                                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                                    <views:EditorIconView Icon="Frame" Stroke="{Binding Brush}" />
-                                                    <TextBlock Text="{DynamicResource Text.Panels.Value}" />
-                                                </StackPanel>
-                                            </Button>
-                                        </StackPanel>
+                                        <ItemsControl ItemsSource="{Binding Channels}" Margin="16,0,0,0">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="vm:CurveChannelViewModel">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,1">
+                                                        <CheckBox IsChecked="{Binding IsVisible}"
+                                                                  ToolTip.Tip="{DynamicResource Text.Panels.ShowHideCurve}"
+                                                                  AutomationProperties.Name="{DynamicResource Text.Panels.ShowHideCurve}" />
+                                                        <Button Foreground="{Binding Brush}" Tag="{Binding}" Click="OnChannelClick" Padding="4,1"
+                                                                AutomationProperties.Name="{Binding Label}">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <views:EditorIconView Icon="Frame" Stroke="{Binding Brush}" />
+                                                                <TextBlock Text="{Binding Label}" />
+                                                            </StackPanel>
+                                                        </Button>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
                                     </Expander>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

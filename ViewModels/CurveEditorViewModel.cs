@@ -58,13 +58,17 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
     public ObservableCollection<CurveChannelViewModel> Channels { get; } = [];
     public IReadOnlyList<CurveChannelViewModel> FilteredChannels => Channels
         .Where(channel => channel.Name.Contains(ChannelSearch.Trim(), StringComparison.OrdinalIgnoreCase)).ToArray();
+    public IReadOnlyList<CurveChannelGroupViewModel> FilteredChannelGroups => BuildFilteredChannelGroups();
     public string ChannelSearch
     {
         get => _channelSearch;
         set
         {
             if (SetProperty(ref _channelSearch, value ?? string.Empty))
+            {
                 OnPropertyChanged(nameof(FilteredChannels));
+                OnPropertyChanged(nameof(FilteredChannelGroups));
+            }
         }
     }
     public IReadOnlyList<CurveDisplay> VisibleCurves => Channels.Where(channel => channel.IsVisible)
@@ -182,13 +186,18 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
         foreach (var node in channelNodes)
         {
             var brush = ThemeSettingsService.EditorBrush(ChannelColors[Channels.Count % ChannelColors.Length]);
-            Channels.Add(new CurveChannelViewModel(node, brush, _channelVisibility.GetValueOrDefault(node.Id, true), visible =>
+            var label = _groupChannels.TryGetValue(node.Id, out var meta) &&
+                        GroupExposedItems.CurveChannels(meta.Item.Editor) is { Length: > 1 } names
+                ? names[meta.Index].ToString()
+                : LocalizationService.Shared?.Get("Panels.Value") ?? "Value";
+            Channels.Add(new CurveChannelViewModel(node, label, brush, _channelVisibility.GetValueOrDefault(node.Id, true), visible =>
             {
                 _channelVisibility[node.Id] = visible;
                 OnPropertyChanged(nameof(VisibleCurves));
             }));
         }
         OnPropertyChanged(nameof(FilteredChannels));
+        OnPropertyChanged(nameof(FilteredChannelGroups));
         OnPropertyChanged(nameof(VisibleCurves));
     }
 
@@ -379,6 +388,7 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
             var channel = Channels.FirstOrDefault(item => ReferenceEquals(item.Node, sender));
             channel?.NotifyNameChanged();
             OnPropertyChanged(nameof(FilteredChannels));
+            OnPropertyChanged(nameof(FilteredChannelGroups));
         }
         if (e.PropertyName == nameof(GraphNodeViewModel.Curve))
         {
@@ -515,10 +525,65 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
         DeleteKeyCommand.NotifyCanExecuteChanged();
     }
 
+    private IReadOnlyList<CurveChannelGroupViewModel> BuildFilteredChannelGroups()
+    {
+        var query = ChannelSearch.Trim();
+        var groups = new List<CurveChannelGroupViewModel>();
+        var groupedById = new Dictionary<Guid, List<CurveChannelViewModel>>();
+        var groupNames = new Dictionary<Guid, string>();
+        var order = new List<(bool IsGroup, Guid Id, CurveChannelViewModel? Single)>();
+
+        foreach (var channel in Channels)
+        {
+            if (_groupChannels.TryGetValue(channel.Node.Id, out var meta))
+            {
+                if (!groupedById.TryGetValue(meta.Item.Id, out var list))
+                {
+                    list = [];
+                    groupedById[meta.Item.Id] = list;
+                    groupNames[meta.Item.Id] = meta.Item.Name;
+                    order.Add((true, meta.Item.Id, null));
+                }
+                list.Add(channel);
+            }
+            else
+            {
+                order.Add((false, channel.Node.Id, channel));
+            }
+        }
+
+        foreach (var entry in order)
+        {
+            if (entry.IsGroup)
+            {
+                var name = groupNames[entry.Id];
+                var members = groupedById[entry.Id];
+                var matching = string.IsNullOrEmpty(query) || name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                    ? members
+                    : members.Where(c => c.Label.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+                if (matching.Count > 0)
+                    groups.Add(new CurveChannelGroupViewModel(name, matching));
+            }
+            else if (entry.Single is { } single)
+            {
+                if (string.IsNullOrEmpty(query) ||
+                    single.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    single.Label.Contains(query, StringComparison.OrdinalIgnoreCase))
+                {
+                    groups.Add(new CurveChannelGroupViewModel(single.Name, [single]));
+                }
+            }
+        }
+
+        return groups;
+    }
+
     private static string Format(double? value) => value?.ToString("G8", CultureInfo.CurrentCulture) ?? "";
 }
 
 public sealed record CurveDisplay(GraphNodeViewModel Node, FCurveSnapshot Curve, IBrush Brush);
+
+public sealed record CurveChannelGroupViewModel(string Name, IReadOnlyList<CurveChannelViewModel> Channels);
 
 public sealed class CurveChannelViewModel : CommunityToolkit.Mvvm.ComponentModel.ObservableObject
 {
@@ -526,6 +591,7 @@ public sealed class CurveChannelViewModel : CommunityToolkit.Mvvm.ComponentModel
     private readonly Action<bool> _visibilityChanged;
     public GraphNodeViewModel Node { get; }
     public string Name => Node.Name;
+    public string Label { get; }
     public IBrush Brush { get; }
     public bool IsVisible
     {
@@ -536,9 +602,10 @@ public sealed class CurveChannelViewModel : CommunityToolkit.Mvvm.ComponentModel
         }
     }
 
-    public CurveChannelViewModel(GraphNodeViewModel node, IBrush brush, bool isVisible, Action<bool> visibilityChanged)
+    public CurveChannelViewModel(GraphNodeViewModel node, string label, IBrush brush, bool isVisible, Action<bool> visibilityChanged)
     {
         Node = node;
+        Label = label;
         Brush = brush;
         _isVisible = isVisible;
         _visibilityChanged = visibilityChanged;
