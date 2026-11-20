@@ -108,8 +108,10 @@ The [2026.11.22 Preview](https://github.com/Libra-Works/LibraFX/releases/tag/v20
 includes the unified exports and the CPU particle, Flexible Plane and Quaternion/
 Random additions. Later renderer and authoring changes in source are not
 retroactive updates to those archives.
-The Preview update after 2026.11.22 includes those renderer/authoring changes,
-2D smoke/dye and nested Spawnable ownership with per-instance CPU systems.
+The current source revision includes those renderer/authoring changes, four 2D
+fluid models (smoke/ink, free-surface water, shallow water and fuel/temperature
+combustion), cell forces, generated-resource consumers and nested Spawnable
+ownership with per-instance CPU systems.
 See the bilingual [update guide](site/preview-update.md),
 [production workflow](site/production-workflow.md) and
 [batch conversion guide](site/batch-conversion.md). GPU CLI conversion remains
@@ -119,12 +121,15 @@ authoring, alongside recent graph, history and inspector workflow improvements.
 These changes are included only in archives built from this source revision;
 older previews are not updated in place. See the
 [procedural resources guide](procedural-resources.md).
-2D smoke / dye adds GPU executable payload version 2 inside the
-same effect envelope. Particle-only scopes remain version 1; old SDKs must
-reject fluid scopes rather than silently omit them. Install the matching
-generated solver shaders, native header and adapter resources together.
+Particle-only GPU payloads remain version 1; ordinary fluid payloads use
+version 2; generated resource/draw references and explicit automatic-plane
+selection use version 3 inside the same effect envelope. Old SDKs must reject
+unsupported payloads rather than silently omit them. Install the matching
+generated solver shaders, native header and adapter resources together; the
+fluid shader uniform block is 512 bytes.
 See the bilingual [2D smoke guide](site/fluid-2d.md) for the actual verification
-matrix and exclusions; this is not a liquid, combustion or 3D solver.
+matrix and exclusions. Free-surface water is grid-based rather than a detached-
+droplet particle liquid solver; 3D fluids remain future work.
 Historical test fixture filenames elsewhere in this document still use `.lfxp`.
 The `.lfxrm` diagnostic resource-mapping manifest is not a second playable binary.
 The updated converter also fixes overlapping custom-input defaults and branch
