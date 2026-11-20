@@ -74,6 +74,8 @@ public sealed class GraphNodeViewModel : ObservableObject
         IsSpawnableGroup || Definition.Kind.Value == "LifeTime" ? "GraphParameter" : "GraphSignal");
     public bool ShowGroupHint => IsGraphGroup && !IsSpawnableGroup && !HasCustomInputs && !HasCustomOutputs;
     public bool IsGpuParticle => GpuParticleEditorService.IsGpu(Definition.Kind);
+    public bool IsProcedural => ProceduralResourceSchema.IsMetadata(Definition.Kind);
+    public bool HasInlineWorkspace => IsGraphGroup || IsGpuParticle || IsProcedural;
     public bool IsComment => Definition.Kind == GraphNodeKind.Comment;
     public bool HasPorts => !IsGpuParticle && !IsComment && (!IsGraphGroup ||
         IsSpawnableGroup || Definition.InputPorts is { Count: > 0 } || Definition.OutputPorts is { Count: > 0 });
@@ -120,7 +122,7 @@ public sealed class GraphNodeViewModel : ObservableObject
         p.Id == NodeLockedId && p.Type == "bool")?.Value.ValueKind == JsonValueKind.True;
     public bool IsParameterLocked(string parameterId) => Parameters?.FirstOrDefault(p =>
         p.Id == ParameterLockId(parameterId) && p.Type == "bool")?.Value.ValueKind == JsonValueKind.True;
-    public bool IsInlineExpanded => IsGraphGroup && Parameters?.FirstOrDefault(p =>
+    public bool IsInlineExpanded => HasInlineWorkspace && Parameters?.FirstOrDefault(p =>
         p.Id == InlineExpandedId && p.Type == "bool")?.Value.ValueKind == JsonValueKind.True;
     public double InlineWidth => _previewWidth ?? InlineNumber(InlineWidthId, 640, 420, 2400);
     public double InlineHeight => _previewHeight ?? InlineNumber(InlineHeightId, 380, 260, 1600);

@@ -30,7 +30,7 @@
                     PointerCaptureLost="OnHeaderPointerCaptureLost">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" Margin="4,0,0,0"
-                                VerticalAlignment="Center" IsVisible="{Binding IsGraphGroup}">
+                                VerticalAlignment="Center" IsVisible="{Binding HasInlineWorkspace}">
                         <views:IconButton MinWidth="26" MinHeight="26" Width="26" Height="26" Padding="0" Icon="Group" Click="OnToggleInlineClick"
                                           ToolTip.Tip="{DynamicResource Text.Inline.Toggle}"
                                           AutomationProperties.Name="{DynamicResource Text.Inline.Toggle}" />

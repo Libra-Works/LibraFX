@@ -140,7 +140,21 @@ public sealed partial class GraphWorkspaceViewModel
     public bool MaximizeInlineGraph(GraphNodeViewModel node)
     {
         Dispatcher.UIThread.VerifyAccess();
-        if (!Nodes.Contains(node) || node.ChildGraph is null)
+        if (!Nodes.Contains(node))
+        {
+            return false;
+        }
+        if (node.IsGpuParticle)
+        {
+            OpenGpuEditor(node);
+            return true;
+        }
+        if (node.IsProcedural)
+        {
+            OpenProceduralEditor(node);
+            return true;
+        }
+        if (node.ChildGraph is null)
         {
             return false;
         }
@@ -265,7 +279,7 @@ public sealed partial class GraphWorkspaceViewModel
     public void SetInlinePresentation(GraphNodeViewModel node, bool expanded, double width, double height)
     {
         Dispatcher.UIThread.VerifyAccess();
-        if (!Nodes.Contains(node) || !node.IsGraphGroup)
+        if (!Nodes.Contains(node) || !node.HasInlineWorkspace)
         {
             throw new InvalidOperationException(LocalizationService.Shared.Get("Inline.MissingGraph"));
         }

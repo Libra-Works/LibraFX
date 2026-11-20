@@ -12,6 +12,8 @@ public sealed class InlineGraphHost : ContentControl
 {
     private GraphNodeViewModel? _node;
     private GraphEditorView? _editor;
+    private GpuWorkspaceView? _gpu;
+    private ProceduralWorkspaceView? _procedural;
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
@@ -22,10 +24,27 @@ public sealed class InlineGraphHost : ContentControl
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         DetachNode();
+        ClearHostedWorkspace();
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    private void ClearHostedWorkspace()
+    {
         Content = null;
         if (_editor is not null) _editor.DataContext = null;
         _editor = null;
-        base.OnDetachedFromVisualTree(e);
+        if (_gpu is not null)
+        {
+            _gpu.PropertyChanged -= OnEmbeddedWorkspacePropertyChanged;
+            _gpu.CloseWorkspace();
+            _gpu = null;
+        }
+        if (_procedural is not null)
+        {
+            _procedural.PropertyChanged -= OnEmbeddedWorkspacePropertyChanged;
+            _procedural.CloseWorkspace();
+            _procedural = null;
+        }
     }
 
     protected override void OnDataContextChanged(EventArgs e)
@@ -56,7 +75,39 @@ public sealed class InlineGraphHost : ContentControl
     private void UpdateEditor()
     {
         Dispatcher.UIThread.VerifyAccess();
-        if (_node is not { IsInlineExpanded: true } node) { Content = null; return; }
+        if (_node is not { IsInlineExpanded: true } node)
+        {
+            ClearHostedWorkspace();
+            return;
+        }
+        if (node.IsGpuParticle)
+        {
+            if (_gpu is null)
+            {
+                _gpu = new GpuWorkspaceView();
+                _gpu.PropertyChanged += OnEmbeddedWorkspacePropertyChanged;
+            }
+            if (!ReferenceEquals(Content, _gpu))
+            {
+                _gpu.Open(node.Workspace, node.Id);
+                Content = _gpu;
+            }
+            return;
+        }
+        if (node.IsProcedural)
+        {
+            if (_procedural is null)
+            {
+                _procedural = new ProceduralWorkspaceView();
+                _procedural.PropertyChanged += OnEmbeddedWorkspacePropertyChanged;
+            }
+            if (!ReferenceEquals(Content, _procedural))
+            {
+                _procedural.Open(node.Workspace, node.Id);
+                Content = _procedural;
+            }
+            return;
+        }
         if (_editor?.DataContext is GraphWorkspaceViewModel current &&
             ReferenceEquals(current.Document, node.Workspace.Document) &&
             current.GraphPath.SequenceEqual(node.Workspace.GraphPath.Append(node.Id)))
@@ -70,5 +121,15 @@ public sealed class InlineGraphHost : ContentControl
             _editor = new GraphEditorView { DataContext = workspace, MinWidth = 0 };
         }
         Content = _editor;
+    }
+
+    private void OnEmbeddedWorkspacePropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == IsVisibleProperty && sender is Control { IsVisible: false } &&
+            _node is { IsInlineExpanded: true } node && ReferenceEquals(Content, sender))
+        {
+            node.Workspace.RunAuthoringAction(() =>
+                node.Workspace.SetInlinePresentation(node, false, node.InlineWidth, node.InlineHeight));
+        }
     }
 }
