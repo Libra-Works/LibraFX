@@ -41,10 +41,9 @@ Unreal をお使いの場合は、修正版の Preview を待ってから更新�
    Unreal の配布プラグインはソース形式なので、プロジェクトの Editor target を再ビルドします。
 
 Resource Identity 登録済み文書の通常 `.lfxb` 出力はまだ未対応で、`.lfxrm` は診断用です。
-対応する経路は[制作フロー](production-workflow.md)、CPU 系に限る現在の CLI は
+対応する経路は[制作フロー](production-workflow.md)、CPU／GPU・Fluid2Dに対応するCLIは
 [一括変換](batch-conversion.md)を参照してください。
-改善は [#71](https://github.com/Libra-Works/LibraFX/issues/71)・
-[#72](https://github.com/Libra-Works/LibraFX/issues/72) で追跡します。
+Resource Identity出力の改善は [#71](https://github.com/Libra-Works/LibraFX/issues/71) で追跡します。
 
 エディターの `build-info.json`、SDK の `VERSION.json` でビルド番号とソース版を確認できます。
 対応する旧 `.lfxp` や raw `.lfxb` の読込は維持しますが、新しいパッケージのインポートだけで

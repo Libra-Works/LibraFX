@@ -8,6 +8,10 @@
     <DefineConstants>$(DefineConstants);LIBERAFX_CONVERTER</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Gpu\LibraGpu.Core\LibraGpu.Core.csproj" />
+    <Compile Include="..\..\Services\GpuParticleEditorService.cs" Link="Services\GpuParticleEditorService.cs" />
+    <Compile Include="..\..\Services\GpuProgramDelivery.cs" Link="Services\GpuProgramDelivery.cs" />
+    <Compile Include="..\..\Services\Compilation\CpuEmitterMatrixLowering.cs" Link="Services\CpuEmitterMatrixLowering.cs" />
     <Compile Include="..\..\Models\Graph\BuiltInAssets.cs" Link="Models\BuiltInAssets.cs" />
     <Compile Include="..\..\Models\Graph\CommentImage.cs" Link="Models\CommentImage.cs" />
     <Compile Include="..\..\Models\Graph\FCurve.cs" Link="Models\FCurve.cs" />

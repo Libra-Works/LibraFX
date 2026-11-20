@@ -123,7 +123,7 @@ bindings if resource keys change; overrides are not inferred for a new key.
 Verify Play, natural completion, Stop and replay with LIBERA FX disconnected.
 Cook the imported effect and referenced engine resources; the user's machine
 must not need the original `.lfxproj` or its authoring path.
-Automate supported CPU exports using the [batch converter](batch-conversion.md),
+Automate CPU/GPU and Fluid2D exports using the [batch converter](batch-conversion.md),
 then run the project's normal Unreal import/cook pipeline.
 
 <span id="unity"></span>
@@ -212,7 +212,7 @@ Keep unchanged `.meta` files and serialized references. Verify load, Play,
 completion, Stop and replay without the desktop connection.
 Build the imported asset and referenced Unity resources with the normal game
 pipeline; include matching native plugins for each target.
-The [batch converter](batch-conversion.md) creates supported CPU packages, not
+The [batch converter](batch-conversion.md) creates executable effect packages, not
 Unity scenes, binding assets or Player builds.
 
 <span id="godot"></span>
@@ -303,7 +303,7 @@ the Godot project's responsibility. Add `*.lfxb` to the export preset's
 **non-resource include filter** when loading packages through FileAccess.
 Include the matching GDExtension binary and bound resources in the game export;
 do not depend on the authoring project's local path.
-Use the [batch converter](batch-conversion.md) for supported CPU packages,
+Use the [batch converter](batch-conversion.md) for CPU/GPU and Fluid2D packages,
 then the normal Godot export pipeline.
 
 ## Before handing an effect to the game team

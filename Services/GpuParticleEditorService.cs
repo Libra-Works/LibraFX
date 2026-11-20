@@ -3,7 +3,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using LibraGpu.Core;
 using LiberaFx.Models.Graph;
+#if !LIBERAFX_CONVERTER
 using LiberaFx.ViewModels;
+#endif
 
 namespace LiberaFx.Services;
 
@@ -46,6 +48,7 @@ public sealed record GpuEdit
     public KernelGraph? Kernel { get; init; }
     public string? Text { get; init; }
     public uint? Capacity { get; init; }
+    public double? SpawnRate { get; init; }
     public ResourceDeclaration? Resource { get; init; }
     public string? AssetPath { get; init; }
     public string? Material { get; init; }
@@ -89,10 +92,13 @@ public static class GpuParticleEditorService
     }
 
     public static bool IsGpu(GraphNodeKind kind) => kind == Kind;
+#if !LIBERAFX_CONVERTER
     public static GpuEditorState ReadState(GraphNodeViewModel node) => IsGpu(node.Definition.Kind)
         ? ReadState(node.Parameters, node.Id) : throw new ArgumentException("Node is not a GPU Particle.");
+#endif
     public static GpuEditorState ReadState(GraphNodeSnapshot node) => IsGpu(node.Kind)
         ? ReadState(node.Parameters, node.Id) : throw new ArgumentException("Node is not a GPU Particle.");
+#if !LIBERAFX_CONVERTER
     public static IReadOnlyList<NodeParameterSnapshot> InitialParameters(Guid id)
     {
         var state = InitialState(id);
@@ -100,6 +106,7 @@ public static class GpuParticleEditorService
         var positions = program.Kernels.SelectMany(GpuGraphLayout.CreatePositions).ToDictionary();
         return [new(ParameterId, "gpuState", JsonSerializer.SerializeToElement(state with { Positions = positions }, Json))];
     }
+#endif
     private static GpuEditorState InitialState(Guid id) => new()
     {
         Program = GpuSamples.CreateEmitter() with { Id = "gpu_" + id.ToString("N") },
@@ -114,7 +121,9 @@ public static class GpuParticleEditorService
         if (!IsStateValue(value.Value)) throw new InvalidDataException("Invalid GPU workspace state.");
         return value.Value.Deserialize<GpuEditorState>(Json)!;
     }
+#if !LIBERAFX_CONVERTER
     public static GpuProgram ReadProgram(GraphNodeViewModel node) => ReadState(node).Program;
+#endif
     public static GpuProgram ReadProgram(GraphNodeSnapshot node) => ReadState(node).Program;
     public static bool IsStateValue(JsonElement value)
     {
@@ -196,11 +205,13 @@ public static class GpuParticleEditorService
         catch (Exception e) when (e is JsonException or NotSupportedException or ArgumentException or GpuValidationException) { return false; }
     }
 
+#if !LIBERAFX_CONVERTER
     public static GraphNodeViewModel Create(GraphWorkspaceViewModel graph, double x = 80, double y = 80)
     {
         if (!double.IsFinite(x) || !double.IsFinite(y)) throw new ArgumentException("GPU node coordinates must be finite.");
         return graph.CreateNode(Kind, x, y);
     }
+#endif
 
     public static IReadOnlyList<ResourceDeclaration> BillboardTextures(GpuEditorState state)
     {
@@ -216,6 +227,7 @@ public static class GpuParticleEditorService
         state.Fluid2D is null ? state.Program.Resources.Where(resource =>
             resource.Kind is ResourceKind.Texture2D or ResourceKind.FlowMap2D) : [];
 
+#if !LIBERAFX_CONVERTER
     public static void AssignBillboardTexture(GraphWorkspaceViewModel graph, GraphNodeViewModel node, EngineAsset asset)
     {
         if (asset.AssetClass != "texture") throw new ArgumentException("Select a texture asset.");
@@ -237,6 +249,7 @@ public static class GpuParticleEditorService
         Apply(graph, node.Id, [new() { Action = "resource", Resource = resource, AssetPath = asset.Path }]);
     }
 
+#endif
     public static IReadOnlyList<GpuDiagnostic> Diagnostics(GpuEditorState state)
     {
         if (state.ResourcePlanDraft is { } draft)
@@ -245,7 +258,11 @@ public static class GpuParticleEditorService
             {
                 GpuResourcePlanCompiler.Compile(draft);
                 if (!ResourcePlanRuntimeSupported(state))
+#if LIBERAFX_CONVERTER
+                    return [new("ResourcePlanRuntimeUnsupported", "This resource plan is not supported by the current engine adapters. Restore the built-in plan before playback.")];
+#else
                     return [new("ResourcePlanRuntimeUnsupported", LocalizationService.Shared.Get("Fluid.ResourcePlanRuntimeUnsupported"))];
+#endif
             }
             catch (GpuValidationException error) { return error.Diagnostics; }
         }
@@ -275,6 +292,7 @@ public static class GpuParticleEditorService
         return GpuCompiler.Validate(state.Program).Concat(state.Drafts.SelectMany(d => d.Value.Diagnostics)).ToArray();
     }
 
+#if !LIBERAFX_CONVERTER
     public static GpuEditorState Apply(GraphWorkspaceViewModel graph, Guid container, IReadOnlyList<GpuEdit> edits,
         bool requireValid = false)
     {
@@ -292,8 +310,15 @@ public static class GpuParticleEditorService
         return state;
     }
 
+#endif
     private static GpuEditorState Stage(GpuEditorState state, GpuEdit edit)
     {
+        if (edit.Action == "spawn-rate")
+        {
+            if (edit.SpawnRate is not { } rate || !double.IsFinite(rate) || rate < 0 || rate > 1_000_000)
+                throw new ArgumentException("Spawn rate must be between 0 and 1000000.");
+            return state with { Program = state.Program with { SpawnRate = rate } };
+        }
         if (edit.Action == "resource-plan")
             return state with { ResourcePlanDraft = GpuResourcePlanCompiler.Parse(edit.Text ?? throw new ArgumentException("Resource plan JSON required.")) };
         if (edit.Action == "resource-plan-reset")

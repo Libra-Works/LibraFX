@@ -9,15 +9,11 @@ editor. The converter produces effect packages; Unity/Unreal/Godot importing,
 binding and game builds remain separate steps in the
 [production workflow](production-workflow.md).
 
-> **Current scope:** the standalone converter supports CPU-side graphs and
-> supported nested Spawnable/CPU particle packages. It explicitly rejects GPU
-> Particle and fluid graphs; it does not silently omit them. Use the editor's
-> [GPU package export](gpu-particles.md#compile-export-and-verify-in-the-engine)
-> for those graphs. Portable Resource Identity projects need the diagnostic
-> manifest path below, not normal `.lfxb` batch output.
->
-> [Issue #72](https://github.com/Libra-Works/LibraFX/issues/72) tracks GPU/fluid
-> support in both single-file and batch conversion.
+The standalone converter uses the editor's executable package compiler for
+Spawnable Groups, CPU/GPU particles and Fluid2D, including nested scopes.
+Use matching converter and engine SDK builds. Portable Resource Identity
+projects need the diagnostic manifest path below, rather than normal `.lfxb`
+batch output.
 
 ## Single-file and directory conversion
 
@@ -42,6 +38,29 @@ Input projects and libraries are not rewritten. Existing outputs cause failure;
 `--force` explicitly permits replacing them. Each file is written through a
 temporary file, but the **whole batch is not one transaction**: other effects
 may already have been written when a conversion fails.
+
+## Convert a list of effects
+
+```powershell
+.\LiberaFxConverter.exe batch --list "C:\FX\effects.txt" "C:\FX\Build"
+```
+
+Write one `.lfxproj` path per line. Relative paths start at the list file's
+directory. Blank lines and lines starting with `#` are ignored. By default,
+the output uses the input filename with `.lfxb`; optionally add a TAB followed
+by a relative output path, such as `Particles/Fountain.lfxb`.
+
+```text
+# effects.txt
+Source/Radial.lfxproj
+Source/Fountain.lfxproj
+Source/Curl.lfxproj
+```
+
+`batch-list <list> <output-directory>` is an alias. Duplicate outputs and paths
+outside the output directory are rejected before conversion. Conversion
+continues after individual file failures and returns a nonzero exit code if
+any file fails. Existing files still require `--force`.
 
 ## Shared groups and project-specific nodes
 

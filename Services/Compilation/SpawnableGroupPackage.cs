@@ -282,11 +282,6 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
 
     private static byte[] CreateGpuPrograms(GraphSnapshot graph, byte[] renderConfiguration)
     {
-#if LIBERAFX_CONVERTER
-        if (CollectGpu(graph).Any())
-            throw new InvalidDataException("GPU Particle graphs require executable GPU export; CPU-only conversion cannot discard them.");
-        return Encoding.UTF8.GetBytes("{\"version\":1,\"programs\":[]}");
-#else
         var bytes = LiberaFx.Services.GpuProgramDeliveryService.CreateExecutablePayload(graph);
         if (renderConfiguration.Length == 0) return bytes;
         var render = JsonNode.Parse(renderConfiguration)!;
@@ -296,7 +291,6 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
         var payload = JsonNode.Parse(bytes)!;
         payload["generatedDrawBindings"] = new JsonArray(bindings);
         return JsonSerializer.SerializeToUtf8Bytes(payload);
-#endif
     }
 
     // Local Destroy is not a signal branch evaluated at spawn. Remove only

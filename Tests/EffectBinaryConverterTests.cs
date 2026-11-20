@@ -29,9 +29,10 @@ internal static class EffectBinaryConverterTests
             var output = Path.Combine(directory, "effect.lfxb");
             var workspace = new GraphWorkspaceViewModel(new UndoRedoManager());
             workspace.CreateNode(GraphNodeKind.Float);
-            using (var stream = File.Create(input))
+            using (var stream = new MemoryStream())
             {
                 new ProjectFileService().SaveAsync(stream, workspace).GetAwaiter().GetResult();
+                File.WriteAllBytes(input, stream.ToArray());
             }
             var source = File.ReadAllBytes(input);
             Invoke(executable, ["convert", input, output], expectedSuccess: true);
@@ -50,6 +51,35 @@ internal static class EffectBinaryConverterTests
             Invoke(executable, ["convert", input, output], expectedSuccess: false);
             Require(bytes.SequenceEqual(File.ReadAllBytes(output)), "Rejected export damaged an existing binary.");
             Require(source.SequenceEqual(File.ReadAllBytes(input)), "Converter modified its source project.");
+            var particle = new GraphWorkspaceViewModel(new UndoRedoManager());
+            var spawnable = particle.CreateNode(GraphNodeKind.SpawnableGroup);
+            Require(particle.EnterGraph(spawnable), "Cannot enter converter Spawnable fixture.");
+            GpuParticleEditorService.Create(particle);
+            particle.NavigateToGraph(0);
+            var gpuInput = Path.Combine(inputDirectory, "gpu-spawnable.lfxproj");
+            using (var stream = new MemoryStream())
+            {
+                new ProjectFileService().SaveAsync(stream, particle).GetAwaiter().GetResult();
+                File.WriteAllBytes(gpuInput, stream.ToArray());
+            }
+            var gpuOutput = Path.Combine(directory, "gpu-spawnable.lfxb");
+            Invoke(executable, ["convert", gpuInput, gpuOutput], expectedSuccess: true);
+            Require(File.ReadAllBytes(gpuOutput).SequenceEqual(EffectBinary.Compile(particle.CreateSnapshot())),
+                "Nested GPU/Spawnable conversion must match the editor's executable package.");
+            var list = Path.Combine(directory, "effects.txt");
+            File.WriteAllText(list, "# Relative input paths and renamed nested outputs\n\ninput/effect.lfxproj\n" +
+                "input/gpu-spawnable.lfxproj\tparticles/nested.lfxb\n");
+            var listed = Path.Combine(directory, "listed");
+            Invoke(executable, ["batch", "--list", list, listed], expectedSuccess: true);
+            Require(bytes.SequenceEqual(File.ReadAllBytes(Path.Combine(listed, "effect.lfxb"))) &&
+                File.ReadAllBytes(gpuOutput).SequenceEqual(File.ReadAllBytes(Path.Combine(listed, "particles", "nested.lfxb"))),
+                "List conversion must preserve both simple and nested GPU effect packages.");
+            File.WriteAllText(list, "input/effect.lfxproj\t../escaped.lfxb\n");
+            Invoke(executable, ["batch-list", list, listed], expectedSuccess: false);
+            Require(!File.Exists(Path.Combine(directory, "escaped.lfxb")), "List conversion must keep outputs inside its output directory.");
+            File.WriteAllText(list, "input/effect.lfxproj\tsame.lfxb\ninput/gpu-spawnable.lfxproj\tsame.lfxb\n");
+            Invoke(executable, ["batch-list", list, listed], expectedSuccess: false);
+            Require(!File.Exists(Path.Combine(listed, "same.lfxb")), "Duplicate list outputs must be rejected before any conversion.");
         }
         finally
         {

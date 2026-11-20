@@ -118,7 +118,7 @@ LIBERA FX が起動済みの場合は既存画面からソースを開いてく�
 資源キーを変更した場合は割り当ても確認してください。新しいキーへの推測移行は行いません。
 LIBERA FX を切断した状態でも Play・自然終了・Stop・再生し直しを確認します。
 インポート済みエフェクトと参照資源を cook し、配布先に元の `.lfxproj` や制作 PC のパスを要求しません。
-対応する CPU 系の出力は[一括コンバーター](batch-conversion.md)で自動化し、
+CPU／GPU・Fluid2Dの出力は[一括コンバーター](batch-conversion.md)で自動化し、
 その後はプロジェクトの通常の Unreal インポート・cook 手順を実行します。
 
 <span id="unity"></span>
@@ -206,7 +206,7 @@ GPU は [GPU ガイド](gpu-particles.md)のアーティファクト・割り当
 変更していない `.meta` とシリアライズ済み参照を保持してください。
 デスクトップ接続なしで読込・Play・自然終了・Stop・再生し直しを確認します。
 ゲームの通常ビルドにインポート済みアセット・参照資源・ターゲットに合う native plugin を含めます。
-[一括コンバーター](batch-conversion.md)は対応する CPU 系パッケージを生成しますが、
+[一括コンバーター](batch-conversion.md)は実行用エフェクトパッケージを生成しますが、
 Unity シーン・割り当てアセット・Player ビルドは生成しません。
 
 <span id="godot"></span>
@@ -297,7 +297,7 @@ if result != 0:
 FileAccess で読む `.lfxb` は Export Preset の
 **リソース以外のファイルを含めるフィルター**へ `*.lfxb` を追加します。
 対応する GDExtension と参照資源もゲームへ含め、制作元 PC のパスに依存させません。
-[一括コンバーター](batch-conversion.md)で対応する CPU 系を生成した後、通常の Godot export を実行します。
+[一括コンバーター](batch-conversion.md)でCPU／GPU・Fluid2Dを生成した後、通常の Godot export を実行します。
 
 ## ゲーム側へ渡す前の確認
 

@@ -14,7 +14,9 @@ internal static class Converter
             Usage(Console.Out);
             return 0;
         }
-        if (args.Length < 3 || args[0] is not ("convert" or "batch"))
+        if (args is ["batch", "--list", var listFile, var listOutput, .. var listOptions])
+            args = ["batch-list", listFile, listOutput, .. listOptions];
+        if (args.Length < 3 || args[0] is not ("convert" or "batch" or "batch-list"))
         {
             Usage(Console.Error);
             return 2;
@@ -73,6 +75,7 @@ internal static class Converter
             var resolver = new GroupCompilationResolver(libraries, embedded);
             if (args[0] == "convert")
                 return await ConvertAsync(input, output, force, resolver, export) ? 0 : 1;
+            if (args[0] == "batch-list") return await ConvertListAsync(input, output, force, resolver);
             if (!Directory.Exists(input))
             {
                 Console.Error.WriteLine($"Input directory not found: {input}");
@@ -110,6 +113,10 @@ internal static class Converter
     {
         writer.WriteLine("Usage: LiberaFxConverter convert <input.lfxproj> <output.lfxb|output.lfxrm> [options]");
         writer.WriteLine("       LiberaFxConverter batch <input-directory> <output-directory> [options]");
+        writer.WriteLine("       LiberaFxConverter batch --list <effects.txt> <output-directory> [options]");
+        writer.WriteLine("       LiberaFxConverter batch-list <effects.txt> <output-directory> [options]");
+        writer.WriteLine("List: one input project per line, optionally TAB + relative output.lfxb. Input paths are relative to the list file. Blank lines and # comments are ignored.");
+        writer.WriteLine("Spawnable Groups, CPU/GPU particles and Fluid2D use the same executable package compiler as the editor.");
         writer.WriteLine("Options: --force  --groups <directory> (repeatable)  --nodes <directory> (repeatable)  --embedded-groups");
         writer.WriteLine("Linked groups use the latest library versions by default. --embedded-groups explicitly uses frozen embedded versions.");
         writer.WriteLine("Source projects and group libraries are never modified.");
@@ -120,6 +127,46 @@ internal static class Converter
     }
 
     private sealed record ExportOptions(string? ResourceMap, string Snapshot, EngineProjectIdentity Project);
+
+    private static async Task<int> ConvertListAsync(string list, string output, bool force, GroupCompilationResolver resolver)
+    {
+        if (new FileInfo(list).Length > 4 * 1024 * 1024) throw new InvalidDataException("The input list exceeds 4 MiB.");
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var listDirectory = Path.GetDirectoryName(list)!;
+        var root = Path.TrimEndingDirectorySeparator(output);
+        var rootPrefix = Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar;
+        var jobs = new List<(string Source, string Target)>();
+        var targets = new HashSet<string>(comparer);
+        var lineNumber = 0;
+        foreach (var raw in await File.ReadAllLinesAsync(list))
+        {
+            lineNumber++;
+            var line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith('#')) continue;
+            if (jobs.Count >= 10000) throw new InvalidDataException("The input list exceeds 10000 projects.");
+            var parts = line.Split('\t');
+            if (parts.Length > 2) throw new InvalidDataException($"Line {lineNumber}: expected input and optional TAB-separated output.");
+            var source = Path.GetFullPath(parts[0].Trim().Trim('"'), listDirectory);
+            if (!Path.GetExtension(source).Equals(".lfxproj", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"Line {lineNumber}: input must be a .lfxproj file.");
+            var relative = parts.Length == 2 ? parts[1].Trim().Trim('"') : Path.ChangeExtension(Path.GetFileName(source), EffectBinary.FileExtension);
+            if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative))
+                throw new InvalidDataException($"Line {lineNumber}: output must be relative to the output directory.");
+            var target = Path.GetFullPath(relative, root);
+            if (!target.StartsWith(rootPrefix, comparison) ||
+                !Path.GetExtension(target).Equals(EffectBinary.FileExtension, StringComparison.OrdinalIgnoreCase) ||
+                !targets.Add(target))
+                throw new InvalidDataException($"Line {lineNumber}: output escapes its directory, is not .lfxb, or duplicates an earlier output.");
+            jobs.Add((source, target));
+        }
+        if (jobs.Count == 0) throw new InvalidDataException("The input list contains no projects.");
+        var succeeded = 0;
+        foreach (var job in jobs)
+            if (await ConvertAsync(job.Source, job.Target, force, resolver)) succeeded++;
+        Console.WriteLine($"Converted {succeeded}/{jobs.Count} projects; {jobs.Count - succeeded} failed.");
+        return succeeded == jobs.Count ? 0 : 1;
+    }
 
     private static async Task<bool> ConvertAsync(string input, string output, bool force, GroupCompilationResolver resolver,
         ExportOptions? export = null)
@@ -136,7 +183,6 @@ internal static class Converter
                 throw new IOException("Output must not overwrite the resource map or binding snapshot.");
             await using var stream = File.OpenRead(input);
             var project = await ProjectDocumentReader.LoadAsync(stream);
-            GpuParticleEditorService.RejectGpu(project.Graph);
             if (export is null && (project.Graph.ResourceIdentities is not null ||
                                    ResourceIdentityExport.HasEmbeddedMetadata(project.Graph)))
                 throw new InvalidDataException("This project contains portable resource identities; use explicit .lfxrm mapping export. Mapped .lfxb export is not implemented.");

@@ -8,13 +8,9 @@ title: 一括コンバーターとビルド自動化
 出力するのはエフェクトのパッケージで、Unity／Unreal／Godot のインポート・
 割り当て・ゲームビルドは別工程です。[制作フロー](production-workflow.md)も参照してください。
 
-> **現在の対象:** CPU 系グラフと、対応する Spawnable のネスト・CPU パーティクルです。
-> GPU Particle／フルイドを含むグラフは明示的に拒否し、黙って省略しません。
-> GPU 系は[エディターのパッケージ出力](gpu-particles.md#コンパイル出力エンジン上での確認)を使ってください。
-> Resource Identity 登録済み文書も通常の `.lfxb` 一括出力ではなく、末尾の診断用経路が対象です。
->
-> GPU／フルイドの単体・一括変換対応は
-> [issue #72](https://github.com/Libra-Works/LibraFX/issues/72)で追跡します。
+Spawnable Group・CPU／GPU Particle・Fluid2Dを、エディターと同じ実行用パッケージへ変換します。
+ネストしたスコープにも対応します。コンバーターとエンジンSDKは同じビルドを使ってください。
+Resource Identity登録済み文書は、通常の`.lfxb`一括出力ではなく末尾の診断用経路が対象です。
 
 ## 単体変換とフォルダー一括変換
 
@@ -38,6 +34,29 @@ C:\FX\Source\Combat\Hit.lfxproj
 明示的な `--force` で上書きを許可します。
 ファイル単位では一時ファイル経由で置換しますが、**一括処理全体がトランザクションではありません**。
 途中で失敗しても、ほかの変換成功済みファイルが残ることがあります。
+
+## テキスト一覧から変換する
+
+```powershell
+.\LiberaFxConverter.exe batch --list "C:\FX\effects.txt" "C:\FX\Build"
+```
+
+一覧には1行に1つの`.lfxproj`を書きます。相対パスは一覧ファイルの場所が基準です。
+空行と`#`から始まるコメントは無視します。
+
+```text
+# effects.txt
+Source/Radial.lfxproj
+Source/Fountain.lfxproj
+Source/Curl.lfxproj
+```
+
+既定では入力のファイル名を`.lfxb`へ変えて出力します。出力名を指定する場合は、
+入力パスの後にTABと相対出力パス（例：`Particles/Fountain.lfxb`）を追加します。
+`batch-list <一覧> <出力フォルダー>`でも同じ動作になります。
+出力先の重複やフォルダー外へのパスは変換開始前に拒否します。
+個別ファイルの失敗後も残りを処理し、1件でも失敗すれば終了コードは0以外になります。
+既存出力の上書きには`--force`が必要です。
 
 ## 共有 Group とプロジェクト固有 Node
 

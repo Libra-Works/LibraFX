@@ -43,9 +43,8 @@ wait for the corrected Preview before upgrading.
 Portable Resource Identity projects still cannot use normal offline `.lfxb`
 export; `.lfxrm` remains diagnostic-only. See the
 [production workflow](production-workflow.md) for the supported paths and
-[batch conversion](batch-conversion.md) for its current CPU-only scope.
-These gaps are tracked in [#71](https://github.com/Libra-Works/LibraFX/issues/71)
-and [#72](https://github.com/Libra-Works/LibraFX/issues/72).
+[batch conversion](batch-conversion.md) for executable CPU/GPU and Fluid2D packages.
+Portable Resource Identity export is tracked in [#71](https://github.com/Libra-Works/LibraFX/issues/71).
 
 The release's `build-info.json` and SDK `VERSION.json` identify the build and
 source revision. Legacy `.lfxp` packages and raw `.lfxb` remain readable where
