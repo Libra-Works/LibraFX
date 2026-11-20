@@ -42,7 +42,11 @@ public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
             SameProperty(_stateValue, value, "drafts") && SameProperty(_stateValue, value, "resourceAssetPaths") &&
             SameProperty(_stateValue, value, "rendererSettings") &&
             SameOptionalProperty(_stateValue, value, "fluid2D") &&
-            SameOptionalProperty(_stateValue, value, "fluidRenderer");
+            SameOptionalProperty(_stateValue, value, "fluidRenderer") &&
+            SameOptionalProperty(_stateValue, value, "generatedResources") &&
+            SameOptionalProperty(_stateValue, value, "generatedConsumers") &&
+            SameOptionalProperty(_stateValue, value, "fluidAutomaticPlane") &&
+            SameOptionalProperty(_stateValue, value, "resourcePlanDraft");
         State = GpuParticleEditorService.ReadState(node);
         _stateValue = value;
         if (layoutOnly) LayoutChanged?.Invoke(this, EventArgs.Empty);

@@ -3,6 +3,8 @@ Shader "Libra/GPU Particle Billboard"
     Properties
     {
         _MainTex ("Texture", 2D) = "white" {}
+        _LibraGpuTexturePremultiplied ("Premultiplied texture", Float) = 0
+        _LibraGpuTextureFlipY ("Flip texture Y", Float) = 0
         [HDR] _Color ("Color", Color) = (1,1,1,1)
         _LibraGpuSizeScale ("Libra GPU Size Scale", Float) = 1
         _LibraGpuDrawMatrixRow0 ("Libra GPU Draw Matrix Row 0", Vector) = (1,0,0,0)
@@ -27,6 +29,7 @@ Shader "Libra/GPU Particle Billboard"
             StructuredBuffer<Particle> _LibraParticles;
             sampler2D _MainTex;
             float4 _Color;
+            float _LibraGpuTexturePremultiplied, _LibraGpuTextureFlipY;
             float _LibraGpuSizeScale;
             float4 _LibraGpuDrawMatrixRow0, _LibraGpuDrawMatrixRow1;
             float4 _LibraGpuDrawMatrixRow2, _LibraGpuDrawMatrixRow3;
@@ -56,7 +59,14 @@ Shader "Libra/GPU Particle Billboard"
                     o.color.a = 0;
                 return o;
             }
-            float4 frag(Output i) : SV_Target { return tex2D(_MainTex, i.uv) * i.color; }
+            float4 frag(Output i) : SV_Target
+            {
+                float2 uv = i.uv;
+                if (_LibraGpuTextureFlipY > 0.5) uv.y = 1.0 - uv.y;
+                float4 texel = tex2D(_MainTex, uv);
+                if (_LibraGpuTexturePremultiplied > 0.5) texel.rgb /= max(texel.a, 0.000001);
+                return texel * i.color;
+            }
             ENDCG
         }
     }

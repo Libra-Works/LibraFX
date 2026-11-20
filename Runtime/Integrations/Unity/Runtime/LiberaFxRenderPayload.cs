@@ -44,6 +44,7 @@ namespace LiberaFx.Unity
         public LiberaFxRenderMaterialPayload[] materials;
         public LiberaFxRenderInputPayload[] inputs;
         public LiberaFxRenderTexturePayload[] textures;
+        public LiberaFxGeneratedRenderTexturePayload[] generatedTextures;
         public LiberaFxRenderSpriteAnimationPayload spriteAnimation;
         public bool __liberafxHasSpriteAnimation;
         public bool billboard;
@@ -52,6 +53,13 @@ namespace LiberaFx.Unity
         public int debugVersion;
         public string text;
         public double size;
+    }
+
+    [Serializable] internal sealed class LiberaFxGeneratedRenderTexturePayload
+    {
+        public string nodeId, producerNodeId, outputId, name;
+        public int slot, association, index;
+        public bool mainTexture;
     }
 
     [Serializable] internal sealed class LiberaFxRenderSpriteAnimationPayload
@@ -145,6 +153,7 @@ namespace LiberaFx.Unity
         public string nodeId;
         public LibraFluid2DSettings settings;
         public LiberaFxFluidRenderer renderer;
+        public bool automaticPlane = true;
     }
 
     [Serializable] internal sealed class LiberaFxFluidRenderer
@@ -159,6 +168,7 @@ namespace LiberaFx.Unity
         public LiberaFxGpuUnrealProgram unreal;
         public string unityMetadataJson;
         public string unityShaderSource;
+        [NonSerialized] internal LiberaFxGeneratedGpuResource[] generatedResources = Array.Empty<LiberaFxGeneratedGpuResource>();
     }
 
     [Serializable] internal sealed class LiberaFxGpuUnrealProgram
@@ -212,6 +222,7 @@ namespace LiberaFx.Unity
         public LiberaFxRenderSpriteAnimationPayload spriteAnimation;
         public double[] spriteKeys;
         public double[] spriteDurations;
+        public LiberaFxGeneratedRenderTexturePayload[] generatedTextures = Array.Empty<LiberaFxGeneratedRenderTexturePayload>();
     }
 
     internal sealed class LiberaFxPreparedTextureParameter
@@ -228,6 +239,7 @@ namespace LiberaFx.Unity
         public LibraGpuMetadata packageMetadata;
         public float sizeScale;
         public byte[][] drawMatrixRowNodeBytes;
+        internal LiberaFxGeneratedGpuResource[] generatedResources = Array.Empty<LiberaFxGeneratedGpuResource>();
     }
 
     internal sealed class LiberaFxPreparedFluidProgram
@@ -236,6 +248,7 @@ namespace LiberaFx.Unity
         public LibraFluid2DSettings settings;
         public float sizeScale;
         public byte[][] drawMatrixRowNodeBytes;
+        internal bool automaticPlane = true;
     }
 
     internal sealed class LiberaFxPreparedScope
@@ -327,7 +340,12 @@ namespace LiberaFx.Unity
             var cpuParticles = ResolveCpuParticles(renderConfiguration.cpuParticles, renderNodes);
             var authoredGpuIds = ParseGpuContainerIds(gpuContainerBytes);
             var gpuPrograms = ParseGpuPrograms(gpuProgramBytes, authoredGpuIds,
-                renderConfiguration.gpuDrawTransforms, out var fluidPrograms);
+                renderConfiguration.gpuDrawTransforms, out var fluidPrograms, out var generatedDrawBindings);
+            var renderIds = renderNodes.ToDictionary(node => CanonicalGuid(node.nodeId), StringComparer.Ordinal);
+            foreach (var binding in generatedDrawBindings)
+                if (!renderIds.ContainsKey(binding.nodeId)) throw new InvalidOperationException("Generated texture target is outside this render scope.");
+            foreach (var node in renderNodes)
+                node.generatedTextures = generatedDrawBindings.Where(binding => binding.nodeId == CanonicalGuid(node.nodeId)).ToArray();
             var transforms = (renderConfiguration.gpuDrawTransforms ?? Array.Empty<LiberaFxGpuDrawTransformPayload>())
                 .ToDictionary(transform => transform.nodeId, StringComparer.Ordinal);
             return new LiberaFxPreparedScope
@@ -342,7 +360,7 @@ namespace LiberaFx.Unity
                     return new LiberaFxPreparedFluidProgram
                     {
                         nodeId = program.nodeId, settings = program.settings,
-                        sizeScale = program.renderer.sizeScale,
+                        sizeScale = program.renderer.sizeScale, automaticPlane = program.automaticPlane,
                         drawMatrixRowNodeBytes = transform?.rowNodeBytes
                     };
                 }).ToArray()
@@ -389,9 +407,26 @@ namespace LiberaFx.Unity
 
         private LiberaFxPreparedRenderNode ResolveRenderNode(LiberaFxRenderNodePayload node)
         {
+            var generated = node.generatedTextures ?? Array.Empty<LiberaFxGeneratedRenderTexturePayload>();
+            var generatedMain = generated.Any(binding => binding.mainTexture);
+            LiberaFxUnityRenderAssetBinding builtIn = null;
+            if (node.assetPath == "builtin:generated-texture")
+            {
+                if (!generatedMain || node.kind != "sprite" && node.kind != "flexiblePlane")
+                    throw new InvalidOperationException("The generated texture renderer requires an explicit main-texture producer.");
+                var material = Resources.Load<Material>("LibraGeneratedTextureMaterial");
+                if (!material || !material.shader || !material.shader.isSupported)
+                    throw new InvalidOperationException("The shipped generated-texture material is unavailable.");
+                builtIn = new LiberaFxUnityRenderAssetBinding { assetIdentity = node.assetPath, texture = Texture2D.whiteTexture,
+                    defaultMaterials = new[] { material }, defaultTintPropertyNames = new[] { "_Color" } };
+            }
             if (node.kind == "flexiblePlane")
             {
-                if (!renderAssets.TryGetValue(node.assetPath, out var planeAsset) ||
+                if (generated.Any(binding => !binding.mainTexture))
+                    throw new InvalidOperationException("Flexible Plane supports only its generated main texture.");
+                var planeAsset = builtIn;
+                if (planeAsset == null) renderAssets.TryGetValue(node.assetPath, out planeAsset);
+                if (planeAsset == null ||
                     !planeAsset.texture || planeAsset.defaultMaterials == null ||
                     planeAsset.defaultMaterials.Length != 1 || !planeAsset.defaultMaterials[0])
                 {
@@ -402,6 +437,7 @@ namespace LiberaFx.Unity
                 {
                     nodeId = node.nodeId,
                     inputs = node.inputs,
+                    generatedTextures = generated,
                     flexiblePlane = LiberaFxPreparedFlexiblePlane.Prepare(node, node.flexiblePlane,
                         planeAsset.texture, planeAsset.defaultMaterials[0], "_MainTex", Camera.main)
                 };
@@ -423,7 +459,9 @@ namespace LiberaFx.Unity
                 return new LiberaFxPreparedRenderNode { nodeId = node.nodeId, debugDraw = node,
                     inputs = node.inputs, mesh = debugMesh, materials = debugMaterials };
             }
-            if (!renderAssets.TryGetValue(node.assetPath, out var asset))
+            var asset = builtIn;
+            if (asset == null) renderAssets.TryGetValue(node.assetPath, out asset);
+            if (asset == null)
                 throw new InvalidOperationException("No Unity asset binding exists for render asset '" + node.assetPath + "'.");
             var isSprite = node.kind == "sprite";
             if (isSprite ? !asset.texture : !asset.mesh)
@@ -470,6 +508,18 @@ namespace LiberaFx.Unity
             }
 
             var textureParameters = new List<LiberaFxPreparedTextureParameter>();
+            var generatedParameters = new List<LiberaFxGeneratedRenderTexturePayload>();
+            foreach (var reference in generated)
+            {
+                if (reference.slot < 0 || reference.slot >= slots || reference.mainTexture && !isSprite)
+                    throw new InvalidOperationException("Generated texture target slot is invalid.");
+                ValidateUnityAssociation(reference.association, reference.index);
+                var name = reference.mainTexture ? "_MainTex" : ResolveMappedProperty(materialBindings[reference.slot], reference.name, reference.slot, "texture");
+                ValidateMappedPropertyType(resolvedMaterials[reference.slot], name, reference.name, "texture");
+                generatedParameters.Add(new LiberaFxGeneratedRenderTexturePayload { nodeId = reference.nodeId, producerNodeId = reference.producerNodeId,
+                    outputId = reference.outputId, mainTexture = reference.mainTexture, slot = reference.slot, name = name,
+                    association = reference.association, index = reference.index });
+            }
             var materialParameterPropertyNames = new string[(node.inputs ?? Array.Empty<LiberaFxRenderInputPayload>()).Length];
             foreach (var texture in node.textures ?? Array.Empty<LiberaFxRenderTexturePayload>())
             {
@@ -547,7 +597,8 @@ namespace LiberaFx.Unity
                 spriteKeys = node.spriteAnimation?.version == 2 ? node.spriteAnimation.keys.SelectMany(key =>
                     new[] { key.frame, key.x, key.y, key.rotationDegrees, key.scaleX, key.scaleY }).ToArray() : null,
                 spriteDurations = node.spriteAnimation?.frames?.Select(frame => frame.durationFrames).ToArray()
-                    ?? Array.Empty<double>()
+                    ?? Array.Empty<double>(),
+                generatedTextures = generatedParameters.ToArray()
             };
         }
 
@@ -626,7 +677,15 @@ namespace LiberaFx.Unity
             if (drawTransform != null &&
                 !LibraGpuParticleRuntime.HasDrawTransformProperties(configured.billboardMaterial))
                 throw new InvalidOperationException("Unity GPU billboard Material must expose all four _LibraGpuDrawMatrixRow0..Row3 properties for the connected Matrix input on " + nodeId + ".");
-            ValidateGpuTextures(packageMetadata, configured.textures, nodeId);
+            var generated = program.generatedResources ?? Array.Empty<LiberaFxGeneratedGpuResource>();
+            var generatedIds = new HashSet<string>(generated.Select(reference => reference.resourceId), StringComparer.Ordinal);
+            ValidateGpuTextures(packageMetadata, configured.textures, nodeId, generatedIds);
+            foreach (var reference in generated)
+                if (!packageMetadata.resources.Any(resource => resource.id == reference.resourceId &&
+                    ((reference.outputId == "DyeOutput" || reference.outputId == "ColorOutput" || reference.outputId == "FieldOutput") && resource.kind == "Texture2D" ||
+                     reference.outputId == "VelocityOutput" && resource.kind == "FlowMap2D" && resource.flowMap?.encoding == "FloatVelocity" ||
+                     reference.outputId == "DensityOutput" && resource.kind == "FlowMap2D" && resource.flowMap?.encoding == "FloatDensity")))
+                    throw new InvalidOperationException("Generated output does not match the declared texture/sampling encoding: " + reference.resourceId);
             var renderBindings = program.unreal.rendererBindings ?? Array.Empty<LiberaFxGpuRendererBinding>();
             var renderFlowCount = 0;
             foreach (var flow in packageMetadata.flow)
@@ -648,19 +707,20 @@ namespace LiberaFx.Unity
                 sizeScale = (float)renderer.sizeScale;
             }
             LibraGpuParticleRuntime.ValidateSpawnableConfiguration(configured.computeShader,
-                configured.metadata, configured.billboardMaterial, configured.textures);
+                configured.metadata, configured.billboardMaterial, configured.textures, generatedIds);
             return new LiberaFxPreparedGpuProgram
             {
                 nodeId = nodeId,
                 binding = configured,
                 packageMetadata = packageMetadata,
                 sizeScale = sizeScale,
+                generatedResources = generated,
                 drawMatrixRowNodeBytes = drawTransform?.rowNodeBytes
             };
         }
 
         private static void ValidateGpuTextures(LibraGpuMetadata metadata,
-            LibraGpuTextureBinding[] bindings, string nodeId)
+            LibraGpuTextureBinding[] bindings, string nodeId, ISet<string> generated = null)
         {
             var byId = new Dictionary<string, LibraGpuTextureBinding>(StringComparer.Ordinal);
             foreach (var binding in bindings ?? Array.Empty<LibraGpuTextureBinding>())
@@ -668,10 +728,11 @@ namespace LiberaFx.Unity
                     byId.ContainsKey(binding.resourceId))
                     throw new InvalidOperationException("Unity GPU texture bindings contain an unresolved or duplicate resource for " + nodeId + ".");
                 else byId.Add(binding.resourceId, binding);
-            if (metadata.resources.Length != byId.Count)
+            generated = generated ?? new HashSet<string>();
+            if (generated.Any(byId.ContainsKey) || metadata.resources.Length != byId.Count + generated.Count)
                 throw new InvalidOperationException("Unity GPU texture binding count does not match metadata for " + nodeId + ".");
             foreach (var resource in metadata.resources)
-                if (!byId.ContainsKey(resource.id))
+                if (!byId.ContainsKey(resource.id) && !generated.Contains(resource.id))
                     throw new InvalidOperationException("Unity GPU resource '" + resource.id + "' is unbound for " + nodeId + ".");
         }
 
@@ -916,9 +977,11 @@ namespace LiberaFx.Unity
         internal static bool HasGpuContainers(byte[] bytes) => ParseGpuContainerIds(bytes).Count != 0;
 
         private LiberaFxGpuManifestProgram[] ParseGpuPrograms(byte[] bytes, HashSet<string> authoredIds,
-            LiberaFxGpuDrawTransformPayload[] drawTransforms, out LiberaFxFluidManifestProgram[] fluids)
+            LiberaFxGpuDrawTransformPayload[] drawTransforms, out LiberaFxFluidManifestProgram[] fluids,
+            out LiberaFxGeneratedRenderTexturePayload[] generatedDrawBindings)
         {
             fluids = Array.Empty<LiberaFxFluidManifestProgram>();
+            generatedDrawBindings = Array.Empty<LiberaFxGeneratedRenderTexturePayload>();
             var transformIds = new HashSet<string>(
                 (drawTransforms ?? Array.Empty<LiberaFxGpuDrawTransformPayload>()).Select(transform => transform.nodeId),
                 StringComparer.Ordinal);
@@ -936,17 +999,27 @@ namespace LiberaFx.Unity
             var json = Encoding.UTF8.GetString(bytes);
             try { manifest = JsonUtility.FromJson<LiberaFxGpuManifestPayload>(json); }
             catch (Exception error) { throw new InvalidOperationException("GPU executable payload JSON is malformed.", error); }
-            if (manifest == null || (manifest.version != 1 && manifest.version != 2) ||
+            if (manifest == null || (manifest.version != 1 && manifest.version != 2 && manifest.version != 3) ||
                 manifest.programs == null || manifest.programs.Length > 16)
                 throw new InvalidOperationException("GPU executable payload version or program count is invalid.");
             if (manifest.version == 1 && manifest.fluidPrograms != null && manifest.fluidPrograms.Length != 0)
                 throw new InvalidOperationException("Fluid programs require GPU executable payload version 2.");
-            if (manifest.version == 2)
+            if (manifest.version >= 2)
             {
-                LibraFluid2DManifestValidation.Validate(json);
+                var resources = LibraFluid2DManifestValidation.Read(json);
+                generatedDrawBindings = resources.drawBindings;
+                foreach (var program in manifest.programs)
+                    program.generatedResources = resources.generated.TryGetValue(CanonicalGuid(program.nodeId), out var generated)
+                        ? generated : Array.Empty<LiberaFxGeneratedGpuResource>();
                 fluids = manifest.fluidPrograms;
                 if (fluids == null || fluids.Length == 0 || fluids.Length + manifest.programs.Length > 16)
                     throw new InvalidOperationException("GPU fluid program count is invalid.");
+                foreach (var fluid in fluids)
+                {
+                    fluid.automaticPlane = resources.automaticPlanes[CanonicalGuid(fluid.nodeId)];
+                    if (fluid.settings == null) throw new InvalidOperationException("Missing fluid settings.");
+                    fluid.settings.ApplyModel(resources.models[CanonicalGuid(fluid.nodeId)]);
+                }
             }
             var programs = new Dictionary<string, LiberaFxGpuManifestProgram>(StringComparer.Ordinal);
             foreach (var program in manifest.programs)
@@ -961,7 +1034,7 @@ namespace LiberaFx.Unity
             foreach (var fluid in fluids)
             {
                 if (fluid == null || !TryCanonicalGuid(fluid.nodeId, out var id) || !ids.Add(id) ||
-                    fluid.settings == null || fluid.renderer == null || fluid.renderer.material != "builtin:fluid-alpha" ||
+                    fluid.settings == null || fluid.renderer == null || fluid.renderer.material != LibraFluid2DSettings.MaterialFor(fluid.settings.ModelId) ||
                     float.IsNaN(fluid.renderer.sizeScale) || float.IsInfinity(fluid.renderer.sizeScale) ||
                     fluid.renderer.sizeScale <= 0 || fluid.renderer.sizeScale > 10000)
                     throw new InvalidOperationException("GPU fluid program is invalid or duplicated.");

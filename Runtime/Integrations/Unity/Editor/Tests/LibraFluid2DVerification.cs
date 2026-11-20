@@ -36,7 +36,8 @@ namespace LiberaFx.Unity.Editor
             throw new InvalidOperationException("Malformed fluid manifest was accepted.");
         }
 
-        public static void Run()
+        public static void Run() => EditorApplication.Exit(Verify());
+        internal static int Verify()
         {
             var outputDirectory = Environment.GetEnvironmentVariable("LIBERAFX_FLUID_UNITY_OUTPUT");
             var settingsPath = Environment.GetEnvironmentVariable("LIBERAFX_FLUID_SETTINGS");
@@ -211,7 +212,7 @@ namespace LiberaFx.Unity.Editor
                 if (target) { target.Release(); UnityEngine.Object.DestroyImmediate(target); }
                 if (capture) UnityEngine.Object.DestroyImmediate(capture);
             }
-            EditorApplication.Exit(exitCode);
+            return exitCode;
         }
 
         // Runs against the real exporter output; no synthetic binary is accepted.
@@ -277,7 +278,9 @@ namespace LiberaFx.Unity.Editor
                 target = new RenderTexture(256, 256, 24, RenderTextureFormat.ARGB32);
                 target.Create(); camera.targetTexture = target;
                 capture = new Texture2D(256, 256, TextureFormat.RGBA32, false);
+                Require(component.RenderStatistics.activeSubmissions > 0, "Package has no registered fluid draw submission.");
                 camera.Render();
+                Require(component.RenderStatistics.drawCalls > 0, "Package camera did not submit the fluid draw.");
                 RenderTexture.active = target;
                 capture.ReadPixels(new Rect(0, 0, 256, 256), 0, 0); capture.Apply();
                 var maximum = 0f;
@@ -348,7 +351,8 @@ namespace LiberaFx.Unity.Editor
 
         // Exercises the actual compiler JSON for fluid-only, mixed, and nested
         // scope shapes, including imported particle assets for the mixed scope.
-        public static void RunCompiledScopes()
+        public static void RunCompiledScopes() => EditorApplication.Exit(VerifyCompiledScopes());
+        internal static int VerifyCompiledScopes()
         {
             const string folder = "Assets/LibraFluidCompiledScopeCheck";
             var fixtureDir = Environment.GetEnvironmentVariable("LIBERAFX_FLUID_FIXTURES");
@@ -485,7 +489,7 @@ namespace LiberaFx.Unity.Editor
                 if (material) UnityEngine.Object.DestroyImmediate(material);
                 if (created) AssetDatabase.DeleteAsset(folder);
             }
-            EditorApplication.Exit(exitCode);
+            return exitCode;
         }
 
         public static void RunNestedPackage()

@@ -69,7 +69,7 @@ bool ValidatePacket(const FLibraGpuKernelPacket& packet, int32 capacity,
         auto d = Word(bytes, base + 28);
         auto type = Word(bytes, base + 20);
         auto aux = Word(bytes, base + 24);
-        if (op > 41 || type > 6) return fail(TEXT("Unknown GPU opcode or type."));
+        if (op > 43 || type > 6) return fail(TEXT("Unknown GPU opcode or type."));
         auto arity = 0;
         if (op >= 3 && op <= 6) arity = 2;
         else if (op == 7 || op == 8 || op == 12 || op == 13 || op == 16 || op == 17 || op == 18) arity = 1;
@@ -82,6 +82,7 @@ bool ValidatePacket(const FLibraGpuKernelPacket& packet, int32 capacity,
         else if (op >= 30 && op <= 32) arity = 3;
         else if (op >= 38 && op <= 40) arity = 4;
         else if (op == 41) arity = 1;
+        else if (op == 42 || op == 43) arity = 2;
         for (auto j = 0; j < 4; ++j)
             if ((j < arity && args[j] >= uint32(types.Num())) ||
                 (j >= arity && args[j] != Missing && !(op == 41 && type == 5 && j == 3)))
@@ -168,12 +169,16 @@ bool ValidatePacket(const FLibraGpuKernelPacket& packet, int32 capacity,
                 FMemory::Memcpy(&minimumV, &bitsV, sizeof(minimumV));
                 FMemory::Memcpy(&rangeU, &bitsRangeU, sizeof(rangeU));
                 FMemory::Memcpy(&rangeV, &bitsRangeV, sizeof(rangeV));
-                valid &= (d & 0xfffffff0u) == 0 && axisU <= 2 && axisV <= 2 && axisU != axisV &&
+                valid &= (d & ~0x10fu) == 0 && axisU <= 2 && axisV <= 2 && axisU != axisV &&
                     FMath::IsFinite(minimumU) && FMath::IsFinite(minimumV) &&
                     FMath::IsFinite(rangeU) && FMath::IsFinite(rangeV) && rangeU > 0 && rangeV > 0;
             }
         }
-        else if (op >= 38)
+        else if (op == 42 || op == 43)
+        {
+            valid = aux == 0 && type == 3 && types[args[0]] == 0 && types[args[1]] == 0;
+        }
+        else if (op >= 38 && op <= 40)
         {
             valid = aux == 0 && type == (op == 40 ? 5u : 0u) && types[args[0]] == 5 &&
                 types[args[1]] == 2 && types[args[2]] == 1 && types[args[3]] == 0;
@@ -201,7 +206,7 @@ bool ValidatePacket(const FLibraGpuKernelPacket& packet, int32 capacity,
             auto floatBits = Word(bytes, base + 32 + j * 4);
             auto integerBits = Word(bytes, base + 48 + j * 4);
             if ((op != 0 && op != 41 && (floatBits || integerBits)) ||
-                (op == 41 && (integerBits || (type == 4 && floatBits))) ||
+                (op == 41 && ((j == 0 ? integerBits > 2 : integerBits != 0) || (type == 4 && floatBits))) ||
                 (op == 0 && IsFloat(type) && (integerBits || (j >= Components(type) && floatBits))) ||
                 (op == 0 && !IsFloat(type) && (floatBits || (j > 0 && integerBits))))
                 return fail(TEXT("GPU packet has nonzero inactive payload fields."));
@@ -269,7 +274,13 @@ bool ULibraGpuEffectAsset::ValidateProgram(FString& error) const
     TArray<bool> flowMapResources;
     for (const auto& texture : Textures)
     {
-        if ((texture.bBuiltinWhite && texture.Texture) || (!texture.bBuiltinWhite && !texture.Texture))
+        FGuid producer;
+        const auto generatedOutputValid = texture.bFlowMap
+            ? ((texture.GeneratedOutputId == TEXT("VelocityOutput") && texture.FlowEncoding == 1) || (texture.GeneratedOutputId == TEXT("DensityOutput") && texture.FlowEncoding == 2))
+            : (texture.GeneratedOutputId == TEXT("DyeOutput") || texture.GeneratedOutputId == TEXT("ColorOutput") || texture.GeneratedOutputId == TEXT("FieldOutput"));
+        if ((texture.IsGenerated() && (texture.bBuiltinWhite || texture.Texture ||
+                !FGuid::Parse(texture.GeneratedProducerNodeId, producer) || !producer.IsValid() || !generatedOutputValid)) ||
+            (!texture.IsGenerated() && ((texture.bBuiltinWhite && texture.Texture) || (!texture.bBuiltinWhite && !texture.Texture))))
         {
             error = TEXT("Missing GPU texture dependency.");
             return false;
@@ -298,7 +309,7 @@ bool ULibraGpuEffectAsset::ValidateProgram(FString& error) const
         else if (step.Kind == TEXT("RenderBillboard"))
         {
             if (!Textures.IsValidIndex(step.Index) ||
-                (!Textures[step.Index].bBuiltinWhite && !Textures[step.Index].Texture) ||
+                (!Textures[step.Index].bBuiltinWhite && !Textures[step.Index].Texture && !Textures[step.Index].IsGenerated()) ||
                 (step.BillboardBlend != ELibraGpuBillboardBlend::Alpha && step.BillboardBlend != ELibraGpuBillboardBlend::Additive) ||
                 !FMath::IsFinite(step.SizeScale) || step.SizeScale <= 0 || step.SizeScale > 10000)
             {
@@ -394,6 +405,34 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
             binding->SetStringField(TEXT("id"), pair.Key);
             binding->SetStringField(TEXT("objectPath"), path);
             deliveryTextures.Add(MakeShared<FJsonValueObject>(binding));
+        }
+        if (root->HasField(TEXT("generatedResources")))
+        {
+            const TSharedPtr<FJsonObject>* generated = nullptr;
+            if (!root->TryGetObjectField(TEXT("generatedResources"), generated) || (*generated)->Values.Num() > 64)
+            {
+                error = TEXT("Invalid generated GPU resource bindings.");
+                return false;
+            }
+            for (const auto& pair : (*generated)->Values)
+            {
+                const auto reference = pair.Value->AsObject();
+                FString producer, output;
+                FGuid id;
+                if (!reference || reference->Values.Num() != 2 || (*paths)->HasField(pair.Key) ||
+                    !reference->TryGetStringField(TEXT("producerNodeId"), producer) || !FGuid::Parse(producer, id) || !id.IsValid() ||
+                    !reference->TryGetStringField(TEXT("outputId"), output) ||
+                    (output != TEXT("DyeOutput") && output != TEXT("ColorOutput") && output != TEXT("FieldOutput") && output != TEXT("VelocityOutput") && output != TEXT("DensityOutput")))
+                {
+                    error = TEXT("Invalid or conflicting generated GPU resource reference.");
+                    return false;
+                }
+                auto binding = MakeShared<FJsonObject>();
+                binding->SetStringField(TEXT("id"), pair.Key);
+                binding->SetStringField(TEXT("producerNodeId"), producer);
+                binding->SetStringField(TEXT("outputId"), output);
+                deliveryTextures.Add(MakeShared<FJsonValueObject>(binding));
+            }
         }
         textureJson = &deliveryTextures;
     }
@@ -528,14 +567,28 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
         auto object = value->AsObject();
         FString id, path;
         if (!object || !object->TryGetStringField(TEXT("id"), id) || !NameValid(id) || textureIndices.Contains(id) ||
-            !object->TryGetStringField(TEXT("objectPath"), path) || path.Len() > 1024)
+            (!object->HasField(TEXT("producerNodeId")) && !object->TryGetStringField(TEXT("objectPath"), path)) || path.Len() > 1024)
         {
             error = TEXT("Invalid GPU texture binding.");
             return false;
         }
         FLibraGpuTextureBinding binding;
         binding.Id = id;
-        if (path == TEXT("builtin:white")) binding.bBuiltinWhite = true;
+        if (object->HasField(TEXT("producerNodeId")))
+        {
+            FGuid producer;
+            if (object->HasField(TEXT("objectPath")) ||
+                !object->TryGetStringField(TEXT("producerNodeId"), binding.GeneratedProducerNodeId) ||
+                !FGuid::Parse(binding.GeneratedProducerNodeId, producer) || !producer.IsValid() ||
+                !object->TryGetStringField(TEXT("outputId"), binding.GeneratedOutputId) ||
+                (binding.GeneratedOutputId != TEXT("DyeOutput") && binding.GeneratedOutputId != TEXT("ColorOutput") && binding.GeneratedOutputId != TEXT("FieldOutput") &&
+                 binding.GeneratedOutputId != TEXT("VelocityOutput") && binding.GeneratedOutputId != TEXT("DensityOutput")))
+            {
+                error = TEXT("Invalid generated texture binding.");
+                return false;
+            }
+        }
+        else if (path == TEXT("builtin:white")) binding.bBuiltinWhite = true;
         else
         {
             if (path.StartsWith(TEXT("builtin:")))
@@ -597,6 +650,35 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
         resourceIds.Add(id);
         auto binding = MoveTemp(newTextures[textureIndices[id]]);
         binding.bFlowMap = kind == TEXT("FlowMap2D");
+        if (binding.bFlowMap)
+        {
+            const TSharedPtr<FJsonObject>* sampling = nullptr;
+            object->TryGetObjectField(TEXT("flowMap"), sampling);
+            FString encoding, coordinates;
+            if ((*sampling)->HasField(TEXT("encoding")) && !(*sampling)->TryGetStringField(TEXT("encoding"), encoding))
+            {
+                error = TEXT("Invalid field sampling encoding."); return false;
+            }
+            if (encoding == TEXT("FloatVelocity")) binding.FlowEncoding = 1;
+            else if (encoding == TEXT("FloatDensity")) binding.FlowEncoding = 2;
+            else if (!encoding.IsEmpty() && encoding != TEXT("SignedNormalized")) { error = TEXT("Unknown field sampling encoding."); return false; }
+            if ((*sampling)->HasField(TEXT("coordinates")) && !(*sampling)->TryGetStringField(TEXT("coordinates"), coordinates))
+            {
+                error = TEXT("Invalid field coordinate mode."); return false;
+            }
+            binding.bGeneratedPlaneCoordinates = coordinates == TEXT("GeneratedPlane");
+            if (!coordinates.IsEmpty() && coordinates != TEXT("WorldBounds") && !binding.bGeneratedPlaneCoordinates)
+            {
+                error = TEXT("Unknown field coordinate mode."); return false;
+            }
+        }
+        if (binding.IsGenerated() && (binding.bFlowMap
+            ? !((binding.GeneratedOutputId == TEXT("VelocityOutput") && binding.FlowEncoding == 1) || (binding.GeneratedOutputId == TEXT("DensityOutput") && binding.FlowEncoding == 2))
+            : (binding.GeneratedOutputId != TEXT("DyeOutput") && binding.GeneratedOutputId != TEXT("ColorOutput") && binding.GeneratedOutputId != TEXT("FieldOutput"))))
+        {
+            error = TEXT("Generated output and declared sampling format disagree."); return false;
+        }
+        if (binding.bGeneratedPlaneCoordinates && !binding.IsGenerated()) { error = TEXT("Generated-plane coordinates need a producer."); return false; }
         orderedTextureIndices.Add(id, orderedTextures.Num());
         orderedTextures.Add(MoveTemp(binding));
         flowMapResources.Add(kind == TEXT("FlowMap2D"));
@@ -606,6 +688,16 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
     for (const auto& packet : newKernels)
     {
         if (!ValidatePacket(packet, newCapacity, flowMapResources, error)) return false;
+        for (auto offset = 64; offset < packet.Bytes.Num(); offset += 64)
+        {
+            if (Word(packet.Bytes, offset) != 41) continue;
+            const auto& texture = newTextures[Word(packet.Bytes, offset + 24)];
+            if (Word(packet.Bytes, offset + 48) != texture.FlowEncoding ||
+                (Word(packet.Bytes, offset + 20) == 5 && ((Word(packet.Bytes, offset + 28) & 0x100u) != 0) != texture.bGeneratedPlaneCoordinates))
+            {
+                error = TEXT("Field sampling packet disagrees with resource metadata."); return false;
+            }
+        }
     }
     if (!LibraGpuBufferBudget(newKernels, newCapacity, error)) return false;
     auto seenSpawn = false;

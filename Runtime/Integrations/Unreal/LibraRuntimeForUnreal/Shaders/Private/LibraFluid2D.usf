@@ -10,6 +10,9 @@ float4 LibraFluidDomain;
 float4 LibraFluidSource;
 float4 LibraFluidForce;
 float4 LibraFluidColor;
+float4 LibraFluidModel;
+float4 LibraFluidReaction;
+float4 LibraFluidForceNodes[25];
 float2 LibraFluidCellSize()
 {
     return LibraFluidDomain.xy / LibraFluidGrid.xy;
@@ -50,6 +53,12 @@ float2 LibraFluidVelocity0(int2 cell)
 }
 float2 LibraFluidBoundary(float2 velocity, int2 cell)
 {
+    if (int(LibraFluidModel.x + 0.5) == 1)
+    {
+        if (cell.x == int(LibraFluidGrid.x) - 1) velocity.x = 0.0;
+        if (cell.y == int(LibraFluidGrid.y) - 1) velocity.y = 0.0;
+        return velocity;
+    }
     if (cell.x == 0 || cell.x == int(LibraFluidGrid.x) - 1)
     {
         velocity.x = 0;
@@ -60,12 +69,195 @@ float2 LibraFluidBoundary(float2 velocity, int2 cell)
     }
     return velocity;
 }
+float LibraFluidCurl0(int2 cell)
+{
+    float2 inverseCell = float2(1, 1) / LibraFluidCellSize();
+    return 0.5 * ((LibraFluidVelocity0(cell + int2(1, 0)).y -
+        LibraFluidVelocity0(cell - int2(1, 0)).y) * inverseCell.x -
+        (LibraFluidVelocity0(cell + int2(0, 1)).x -
+        LibraFluidVelocity0(cell - int2(0, 1)).x) * inverseCell.y);
+}
+float2 LibraFluidConfinement0(int2 cell)
+{
+    if (LibraFluidGrid.w <= 0.0) return float2(0, 0);
+    float2 cellSize = LibraFluidCellSize();
+    float2 gradient = 0.5 * float2(
+        abs(LibraFluidCurl0(cell + int2(1, 0))) - abs(LibraFluidCurl0(cell - int2(1, 0))),
+        abs(LibraFluidCurl0(cell + int2(0, 1))) - abs(LibraFluidCurl0(cell - int2(0, 1)))) / cellSize;
+    float magnitude = length(gradient);
+    float2 direction = gradient / max(magnitude, 0.000001);
+    // N cross (0,0,curl). Cell-size scaling keeps the user coefficient independent of grid resolution.
+    return LibraFluidGrid.w * min(cellSize.x, cellSize.y) *
+        LibraFluidCurl0(cell) * float2(direction.y, -direction.x);
+}
 float LibraFluidSourceWeight(int2 cell)
 {
     float2 uv = (float2(cell) + float2(0.5, 0.5)) / LibraFluidGrid.xy;
     float distanceFromSource = length((uv - LibraFluidSource.xy) * LibraFluidDomain.xy);
     float weight = clamp(1.0 - distanceFromSource / LibraFluidSource.z, 0.0, 1.0);
     return weight * weight * LibraFluidForce.w;
+}int LibraFluidModelId() { return int(LibraFluidModel.x + 0.5); }
+float2 LibraFluidBoundWaterSpeed(float2 velocity)
+{
+    int model = LibraFluidModelId();
+    if (model != 1 && model != 2) return velocity;
+    return velocity * min(1.0, LibraFluidModel.w / max(length(velocity), 0.000001));
+}
+bool LibraFluidInside(int2 cell)
+{
+    return cell.x >= 0 && cell.y >= 0 && cell.x < int(LibraFluidGrid.x) && cell.y < int(LibraFluidGrid.y);
+}
+float LibraFluidMacRead0(int2 cell, int axis)
+{
+    if (axis == 0 && (cell.x < 0 || cell.x >= int(LibraFluidGrid.x) - 1)) return 0.0;
+    if (axis == 1 && (cell.y < 0 || cell.y >= int(LibraFluidGrid.y) - 1)) return 0.0;
+    return axis == 0 ? LibraFluidLoad0(cell).x : LibraFluidLoad0(cell).y;
+}
+float LibraFluidMacSample0(float2 position, int axis)
+{
+    float2 bounded = clamp(position, float2(-1, -1), LibraFluidGrid.xy);
+    int2 lower = int2(floor(bounded));
+    float2 t = bounded - float2(lower);
+    return lerp(lerp(LibraFluidMacRead0(lower, axis), LibraFluidMacRead0(lower + int2(1, 0), axis), t.x),
+        lerp(LibraFluidMacRead0(lower + int2(0, 1), axis), LibraFluidMacRead0(lower + int2(1, 1), axis), t.x), t.y);
+}
+float2 LibraFluidMacSampleVelocity0(float2 position)
+{
+    return float2(LibraFluidMacSample0(position - float2(.5, 0), 0), LibraFluidMacSample0(position - float2(0, .5), 1));
+}
+float4 LibraFluidWaterOutflow(int2 cell)
+{
+    float2 center = LibraFluidLoad1(cell).xy;
+    float2 inverseCell = LibraFluidGrid.z / LibraFluidCellSize();
+    float4 rate = float4(
+        max(-LibraFluidLoad1(cell + int2(-1, 0)).x, 0.0) * inverseCell.x,
+        max(center.x, 0.0) * inverseCell.x,
+        max(-LibraFluidLoad1(cell + int2(0, -1)).y, 0.0) * inverseCell.y,
+        max(center.y, 0.0) * inverseCell.y);
+    if (cell.x == 0) rate.x = 0.0;
+    if (cell.x == int(LibraFluidGrid.x) - 1) rate.y = 0.0;
+    if (cell.y == 0) rate.z = 0.0;
+    if (cell.y == int(LibraFluidGrid.y) - 1) rate.w = 0.0;
+    return rate / max(1.0, rate.x + rate.y + rate.z + rate.w);
+}
+float LibraFluidWaterNetFlux(int2 cell)
+{
+    float4 outgoing = LibraFluidWaterOutflow(cell);
+    float volume = max(LibraFluidLoad0(cell).w, 0.0);
+    float net = -volume * (outgoing.x + outgoing.y + outgoing.z + outgoing.w);
+    int2 left = cell + int2(-1, 0), right = cell + int2(1, 0);
+    int2 down = cell + int2(0, -1), up = cell + int2(0, 1);
+    if (LibraFluidInside(left)) net += LibraFluidWaterOutflow(left).y * max(LibraFluidLoad0(left).w, 0.0);
+    if (LibraFluidInside(right)) net += LibraFluidWaterOutflow(right).x * max(LibraFluidLoad0(right).w, 0.0);
+    if (LibraFluidInside(down)) net += LibraFluidWaterOutflow(down).w * max(LibraFluidLoad0(down).w, 0.0);
+    if (LibraFluidInside(up)) net += LibraFluidWaterOutflow(up).z * max(LibraFluidLoad0(up).w, 0.0);
+    return net;
+}
+float3 LibraShallowLoad(int2 cell)
+{
+    float3 q = LibraFluidLoad0(cell).xyz;
+    q.x = max(q.x, 0.0);
+    if (cell.x < 0 || cell.x >= int(LibraFluidGrid.x)) q.y = -q.y;
+    if (cell.y < 0 || cell.y >= int(LibraFluidGrid.y)) q.z = -q.z;
+    return q;
+}
+float3 LibraShallowFlux(float3 q, int axis)
+{
+    float2 velocity = q.yz / max(q.x, 0.000001);
+    float momentum = axis == 0 ? q.y : q.z;
+    float3 flux = float3(momentum, momentum * velocity);
+    float hydrostatic = 0.5 * LibraFluidModel.y * q.x * q.x;
+    if (axis == 0) flux.y += hydrostatic;
+    else flux.z += hydrostatic;
+    return flux;
+}
+float3 LibraShallowHll(float3 left, float3 right, int axis)
+{
+    float vl = (axis == 0 ? left.y : left.z) / max(left.x, 0.000001);
+    float vr = (axis == 0 ? right.y : right.z) / max(right.x, 0.000001);
+    float cl = sqrt(max(LibraFluidModel.y * left.x, 0.0));
+    float cr = sqrt(max(LibraFluidModel.y * right.x, 0.0));
+    float plus = max(0.0, max(vl + cl, vr + cr));
+    float minus = min(0.0, min(vl - cl, vr - cr));
+    return (plus * LibraShallowFlux(left, axis) - minus * LibraShallowFlux(right, axis) +
+        plus * minus * (right - left)) / max(plus - minus, 0.000001);
+}uint LibraFluidNoiseHash(uint value)
+{
+    value ^= value >> 16; value *= 0x7feb352du;
+    value ^= value >> 15; value *= 0x846ca68bu;
+    return value ^ (value >> 16);
+}
+float LibraFluidNoiseCorner(int2 cell, uint seed)
+{
+    uint value = LibraFluidNoiseHash(uint(cell.x) ^ LibraFluidNoiseHash(uint(cell.y)) ^ LibraFluidNoiseHash(seed));
+    return float(value & 0x00ffffffu) / 8388607.5 - 1.0;
+}
+float3 LibraFluidNoiseDerivative(float2 position, uint seed)
+{
+    if (max(abs(position.x), abs(position.y)) > 1048576.0) return float3(0, 0, 0);
+    float2 lower = floor(position), f = position - lower;
+    int2 cell = int2(lower);
+    float2 t = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    float2 derivative = 30.0 * f * f * (f - 1.0) * (f - 1.0);
+    float a = LibraFluidNoiseCorner(cell, seed), b = LibraFluidNoiseCorner(cell + int2(1, 0), seed);
+    float c = LibraFluidNoiseCorner(cell + int2(0, 1), seed), d = LibraFluidNoiseCorner(cell + int2(1, 1), seed);
+    float value = lerp(lerp(a, b, t.x), lerp(c, d, t.x), t.y);
+    return float3(value, lerp(b - a, d - c, t.y) * derivative.x,
+        lerp(c - a, d - b, t.x) * derivative.y);
+}
+float2 LibraFluidAuthoredForce(int2 cell, float density, float temperature)
+{
+    float2 position = ((float2(cell) + float2(0.5, 0.5)) / LibraFluidGrid.xy - float2(0.5, 0.5)) * LibraFluidDomain.xy;
+    float2 total = float2(0, 0);
+    int count = int(LibraFluidForceNodes[0].x);
+    float2 values[8];
+    for (int reset = 0; reset < 8; ++reset) values[reset] = float2(0, 0);
+    for (int node = 0; node < 8; ++node)
+    {
+        if (node >= count) break;
+        float4 info = LibraFluidForceNodes[1 + node * 3];
+        float4 noise = LibraFluidForceNodes[2 + node * 3];
+        float4 animation = LibraFluidForceNodes[3 + node * 3];
+        int kind = int(info.x);
+        int inputA = int(animation.y) - 1, inputB = int(animation.z) - 1;
+        float2 a = inputA >= 0 && inputA < node ? values[clamp(inputA, 0, 7)] : float2(0, 0);
+        float2 b = inputB >= 0 && inputB < node ? values[clamp(inputB, 0, 7)] : float2(0, 0);
+        float2 result = float2(0, 0);
+        if (kind == 0) result = info.yz * info.w;
+        else if (kind == 3) result = position;
+        else if (kind == 4) result = float2(LibraFluidForceNodes[0].y, LibraFluidForceNodes[0].y);
+        else if (kind == 5) result = float2(density, density);
+        else if (kind == 6) result = float2(temperature, temperature);
+        else if (kind == 7) result = (a + b) * info.w;
+        else if (kind == 8) result = (a * b) * info.w;
+        else if (kind == 9) result = sin(a) * info.w;
+        else if (kind == 10)
+        {
+            float2 t = clamp((a - info.y) / max(info.z - info.y, 0.000001), 0.0, 1.0);
+            result = t * t * (3.0 - 2.0 * t) * info.w;
+        }
+        else if (kind == 1 || kind == 2)
+        {
+            float2 noisePosition = inputA >= 0 ? a : position;
+            float time = inputB >= 0 ? b.x : LibraFluidForceNodes[0].y;
+            float2 animated = noisePosition + time * animation.x * float2(1, 0.61803399);
+            float2 force = float2(0, 0);
+            float weight = 0.0, amplitude = 1.0, frequency = noise.x;
+            for (int octave = 0; octave < 8; ++octave)
+            {
+                if (octave >= int(noise.z)) break;
+                uint seed = LibraFluidNoiseHash(uint(noise.y) ^ uint(octave));
+                float3 n = LibraFluidNoiseDerivative(animated * frequency, seed);
+                if (kind == 2) force += amplitude * frequency * float2(n.z, -n.y);
+                else force += amplitude * float2(n.x, LibraFluidNoiseDerivative(animated * frequency, seed ^ 0x9e3779b9u).x);
+                weight += amplitude; amplitude *= noise.w; frequency *= 2.0;
+            }
+            result = info.w * force / max(weight, 0.000001);
+        }
+        values[node] = result;
+        if (animation.w > 0.5) total += result;
+    }
+    return total;
 }
 [numthreads(8, 8, 1)]
 void LibraFluidClear(uint3 threadId : SV_DispatchThreadID)
@@ -89,7 +281,17 @@ void LibraFluidAdvectVelocity(uint3 threadId : SV_DispatchThreadID)
     uint index = LibraFluidIndex(cell);
     float2 velocity = LibraFluidLoad0(cell).xy;
     float2 previous = float2(cell) - LibraFluidGrid.z * velocity / LibraFluidCellSize();
-    float2 advected = LibraFluidSample0(previous).xy * exp(-LibraFluidDomain.z * LibraFluidGrid.z);
+    float2 advected;
+    if (LibraFluidModelId() == 1)
+    {
+        float2 uFace = float2(cell) + float2(0.5, 0);
+        float2 vFace = float2(cell) + float2(0, 0.5);
+        float2 previousU = uFace - LibraFluidGrid.z * LibraFluidMacSampleVelocity0(uFace) / LibraFluidCellSize();
+        float2 previousV = vFace - LibraFluidGrid.z * LibraFluidMacSampleVelocity0(vFace) / LibraFluidCellSize();
+        advected = float2(LibraFluidMacSample0(previousU - float2(0.5, 0), 0), LibraFluidMacSample0(previousV - float2(0, 0.5), 1));
+    }
+    else advected = LibraFluidSample0(previous).xy;
+    advected *= exp(-LibraFluidDomain.z * LibraFluidGrid.z);
     LibraFluidWrite0[index] = float4(LibraFluidBoundary(advected, cell), 0, 0);
 }
 [numthreads(8, 8, 1)]
@@ -104,8 +306,16 @@ void LibraFluidApplyForces(uint3 threadId : SV_DispatchThreadID)
     float2 velocity = LibraFluidLoad0(cell).xy;
     float density = max(LibraFluidLoad1(cell).w, 0.0);
     velocity += LibraFluidGrid.z * LibraFluidForce.xy * LibraFluidSourceWeight(cell);
-    velocity.y += LibraFluidGrid.z * LibraFluidForce.z * density;
-    LibraFluidWrite0[index] = float4(LibraFluidBoundary(velocity, cell), 0, 0);
+    if (LibraFluidModelId() == 1)
+        velocity.y -= LibraFluidGrid.z * LibraFluidModel.y * (max(density, LibraFluidLoad1(cell + int2(0, 1)).w) > 0.01 ? 1.0 : 0.0);
+    else if (LibraFluidModelId() == 3)
+        velocity.y += LibraFluidGrid.z * LibraFluidForce.z * max(LibraFluidLoad1(cell).y - 0.1 * LibraFluidLoad1(cell).z, 0.0);
+    else
+        velocity.y += LibraFluidGrid.z * LibraFluidForce.z * density;
+    velocity += LibraFluidGrid.z * LibraFluidConfinement0(cell);
+    velocity += LibraFluidGrid.z * LibraFluidAuthoredForce(cell, LibraFluidModelId() == 3 ? LibraFluidLoad1(cell).z : density,
+        LibraFluidModelId() == 3 ? LibraFluidLoad1(cell).y : 0.0);
+    LibraFluidWrite0[index] = float4(LibraFluidBoundary(LibraFluidBoundWaterSpeed(velocity), cell), 0, 0);
 }
 [numthreads(8, 8, 1)]
 void LibraFluidDivergence(uint3 threadId : SV_DispatchThreadID)
@@ -121,7 +331,11 @@ void LibraFluidDivergence(uint3 threadId : SV_DispatchThreadID)
         LibraFluidVelocity0(cell - int2(1, 0)).x) * inverseCell.x +
         (LibraFluidVelocity0(cell + int2(0, 1)).y -
         LibraFluidVelocity0(cell - int2(0, 1)).y) * inverseCell.y);
-    LibraFluidWrite0[index] = float4(divergence, 0, 0, 0);
+    if (LibraFluidModelId() == 1)
+        divergence = (LibraFluidMacRead0(cell, 0) - LibraFluidMacRead0(cell + int2(-1, 0), 0)) * inverseCell.x +
+            (LibraFluidMacRead0(cell, 1) - LibraFluidMacRead0(cell + int2(0, -1), 1)) * inverseCell.y;
+    float wet = LibraFluidModelId() == 1 ? max(LibraFluidLoad1(cell).w, 0.0) : 1.0;
+    LibraFluidWrite0[index] = float4(divergence, wet, 0, 0);
 }
 [numthreads(8, 8, 1)]
 void LibraFluidJacobi(uint3 threadId : SV_DispatchThreadID)
@@ -138,6 +352,7 @@ void LibraFluidJacobi(uint3 threadId : SV_DispatchThreadID)
     float vertical = LibraFluidLoad0(cell + int2(0, 1)).x + LibraFluidLoad0(cell - int2(0, 1)).x;
     float pressure = (horizontal * weight.x + vertical * weight.y - LibraFluidLoad1(cell).x) /
         (2.0 * (weight.x + weight.y));
+    if (LibraFluidModelId() == 1 && LibraFluidLoad1(cell).y <= 0.01) pressure = 0.0;
     LibraFluidWrite0[index] = float4(pressure, 0, 0, 0);
 }
 [numthreads(8, 8, 1)]
@@ -154,7 +369,13 @@ void LibraFluidProjectVelocity(uint3 threadId : SV_DispatchThreadID)
         LibraFluidLoad1(cell + int2(1, 0)).x - LibraFluidLoad1(cell - int2(1, 0)).x,
         LibraFluidLoad1(cell + int2(0, 1)).x - LibraFluidLoad1(cell - int2(0, 1)).x) * inverseCell;
     float2 velocity = LibraFluidLoad0(cell).xy - gradient;
-    LibraFluidWrite0[index] = float4(LibraFluidBoundary(velocity, cell), 0, 0);
+    if (LibraFluidModelId() == 1)
+    {
+        gradient = float2(LibraFluidLoad1(cell + int2(1, 0)).x - LibraFluidLoad1(cell).x,
+            LibraFluidLoad1(cell + int2(0, 1)).x - LibraFluidLoad1(cell).x) * inverseCell;
+        velocity = LibraFluidLoad0(cell).xy - gradient;
+    }
+    LibraFluidWrite0[index] = float4(LibraFluidBoundary(LibraFluidBoundWaterSpeed(velocity), cell), 0, 0);
 }
 [numthreads(8, 8, 1)]
 void LibraFluidAdvectDye(uint3 threadId : SV_DispatchThreadID)
@@ -167,10 +388,39 @@ void LibraFluidAdvectDye(uint3 threadId : SV_DispatchThreadID)
     uint index = LibraFluidIndex(cell);
     float2 velocity = LibraFluidLoad1(cell).xy;
     float2 previous = float2(cell) - LibraFluidGrid.z * velocity / LibraFluidCellSize();
-    float4 dye = LibraFluidSample0(previous) * exp(-LibraFluidDomain.w * LibraFluidGrid.z);
-    float injection = LibraFluidSource.w * LibraFluidColor.w * LibraFluidSourceWeight(cell) * LibraFluidGrid.z;
-    dye += float4(LibraFluidColor.xyz * injection, injection);
-    LibraFluidWrite0[index] = max(dye, float4(0, 0, 0, 0));
+    float4 nextDye;
+    float injection = LibraFluidSource.w * LibraFluidSourceWeight(cell) * LibraFluidGrid.z;
+    float4 sampledDye = max(LibraFluidSample0(previous), float4(0, 0, 0, 0));
+    float densityDecay = exp(-LibraFluidDomain.w * LibraFluidGrid.z);
+    if (LibraFluidModelId() == 1)
+    {
+        float volume = max(LibraFluidLoad0(cell).w, 0.0);
+        volume += LibraFluidWaterNetFlux(cell);
+        volume += min(max(1.0 - volume, 0.0), injection);
+        volume = max(volume, 0.0);
+        nextDye = float4(LibraFluidColor.xyz * volume, volume);
+    }
+    else if (LibraFluidModelId() == 3)
+    {
+        float4 chemistry = sampledDye;
+        chemistry.y = lerp(chemistry.y, LibraFluidModel.w, clamp(injection, 0.0, 1.0));
+        chemistry.x += injection;
+        float ignition = clamp((chemistry.y - LibraFluidReaction.y) / max(LibraFluidReaction.y, 0.000001), 0.0, 1.0);
+        float burnt = chemistry.x * (1.0 - exp(-LibraFluidReaction.x * ignition * LibraFluidGrid.z));
+        chemistry.x -= burnt;
+        chemistry.y = (chemistry.y + burnt * LibraFluidReaction.z) * exp(-LibraFluidReaction.w * LibraFluidGrid.z);
+        chemistry.z = (chemistry.z + burnt) * densityDecay;
+        chemistry.w = burnt / max(LibraFluidGrid.z, 0.000001);
+        nextDye = chemistry;
+    }
+    else
+    {
+        float4 dye = sampledDye * densityDecay;
+        float smokeInjection = injection * LibraFluidColor.w;
+        dye += float4(LibraFluidColor.xyz * smokeInjection, smokeInjection);
+        nextDye = max(dye, float4(0, 0, 0, 0));
+    }
+    LibraFluidWrite0[index] = nextDye;
 }
 [numthreads(8, 8, 1)]
 void LibraFluidPublish(uint3 threadId : SV_DispatchThreadID)
@@ -181,6 +431,13 @@ void LibraFluidPublish(uint3 threadId : SV_DispatchThreadID)
     }
     int2 cell = int2(threadId.xy);
     uint index = LibraFluidIndex(cell);
+    if (LibraFluidModelId() == 2)
+    {
+        float4 water = LibraFluidLoad1(cell);
+        LibraFluidWrite0[index] = float4(water.yz / max(water.x, 0.000001), 0, 0);
+        LibraFluidWrite1[index] = water;
+        return;
+    }
     LibraFluidWrite0[index] = LibraFluidLoad0(cell);
     LibraFluidWrite1[index] = LibraFluidLoad1(cell);
 }
@@ -198,5 +455,134 @@ void LibraFluidRenderDye(uint3 threadId : SV_DispatchThreadID)
     float alpha = 1.0 - exp(-density);
     float3 color = clamp(dye.xyz / max(density, 0.000001), float3(0, 0, 0), float3(1, 1, 1));
     float4 outputColor = float4(color * alpha, alpha);
+    if (LibraFluidModelId() == 1)
+    {
+        alpha = clamp(density, 0.0, 1.0) * LibraFluidColor.w;
+        outputColor = float4(LibraFluidColor.xyz * alpha, alpha);
+    }
+    else if (LibraFluidModelId() == 2)
+    {
+        float height = max(dye.x, 0.0);
+        float shade = clamp(0.65 + (height - LibraFluidModel.z) / max(LibraFluidModel.z, 0.0001), 0.0, 1.0);
+        alpha = (1.0 - exp(-height * 4.0)) * LibraFluidColor.w;
+        outputColor = float4(LibraFluidColor.xyz * shade * alpha, alpha);
+    }
+    else if (LibraFluidModelId() == 3)
+    {
+        float heat = max(dye.y - LibraFluidReaction.y, 0.0);
+        float emission = clamp(heat, 0.0, 4.0);
+        color = clamp(float3(emission * 2.0, emission * 0.7, emission * 0.2), float3(0, 0, 0), float3(1, 1, 1));
+        color = max(color, float3(0.12, 0.12, 0.12));
+        alpha = 1.0 - exp(-(max(dye.z, 0.0) + heat * 0.25));
+        outputColor = float4(color * alpha, alpha);
+    }
     LibraFluidOutput[cell] = outputColor;
+}
+[numthreads(8, 8, 1)]
+void LibraFluidInitializeWater(uint3 threadId : SV_DispatchThreadID)
+{
+    if (threadId.x >= uint(LibraFluidGrid.x) || threadId.y >= uint(LibraFluidGrid.y))
+    {
+        return;
+    }
+    int2 cell = int2(threadId.xy);
+    uint index = LibraFluidIndex(cell);
+    float depth = LibraFluidModel.z;
+    if (LibraFluidModelId() == 1)
+    {
+        float fraction = clamp((depth - float(cell.y) * LibraFluidCellSize().y) / LibraFluidCellSize().y, 0.0, 1.0);
+        LibraFluidWrite0[index] = float4(LibraFluidColor.xyz * fraction, fraction);
+    }
+    else if (LibraFluidModelId() == 2)
+        LibraFluidWrite0[index] = float4(depth, 0, 0, 0);
+    else
+        LibraFluidWrite0[index] = float4(0, 0, 0, 0);
+}
+[numthreads(8, 8, 1)]
+void LibraFluidShallowWater(uint3 threadId : SV_DispatchThreadID)
+{
+    if (threadId.x >= uint(LibraFluidGrid.x) || threadId.y >= uint(LibraFluidGrid.y))
+    {
+        return;
+    }
+    int2 cell = int2(threadId.xy);
+    uint index = LibraFluidIndex(cell);
+    float3 center = LibraShallowLoad(cell);
+    float2 inverseCell = LibraFluidGrid.z / LibraFluidCellSize();
+    float3 q = center - inverseCell.x *
+        (LibraShallowHll(center, LibraShallowLoad(cell + int2(1, 0)), 0) -
+         LibraShallowHll(LibraShallowLoad(cell + int2(-1, 0)), center, 0)) - inverseCell.y *
+        (LibraShallowHll(center, LibraShallowLoad(cell + int2(0, 1)), 1) -
+         LibraShallowHll(LibraShallowLoad(cell + int2(0, -1)), center, 1));
+    float maximumDepth = LibraFluidModel.z * 16.0;
+    float guarded = LibraFluidLoad0(cell).w;
+    if (q.x < -0.000001 || q.x > maximumDepth) guarded = 1.0;
+    q.x = clamp(q.x, 0.0, maximumDepth);
+    float source = LibraFluidSourceWeight(cell);
+    q.x += min(maximumDepth - q.x, LibraFluidGrid.z * LibraFluidSource.w * source);
+    q.yz += q.x * LibraFluidGrid.z * LibraFluidForce.xy * source;
+    q.yz += q.x * LibraFluidGrid.z * LibraFluidAuthoredForce(cell, center.x, 0.0);
+    q.yz *= exp(-LibraFluidDomain.z * LibraFluidGrid.z);
+    if (q.x <= 0.000001) q.yz = float2(0, 0);
+    else q.yz = q.x * LibraFluidBoundWaterSpeed(q.yz / q.x);
+    LibraFluidWrite0[index] = float4(q, guarded);
+}
+[numthreads(8, 8, 1)]
+void LibraFluidRenderFields(uint3 threadId : SV_DispatchThreadID)
+{
+    if (threadId.x >= uint(LibraFluidGrid.x) || threadId.y >= uint(LibraFluidGrid.y))
+    {
+        return;
+    }
+    int2 cell = int2(threadId.xy);
+    uint index = LibraFluidIndex(cell);
+    float2 velocity = LibraFluidLoad0(cell).xy;
+    if (LibraFluidModelId() == 1)
+        velocity = 0.5 * float2(LibraFluidMacRead0(cell, 0) + LibraFluidMacRead0(cell + int2(-1, 0), 0),
+            LibraFluidMacRead0(cell, 1) + LibraFluidMacRead0(cell + int2(0, -1), 1));
+    float4 state = LibraFluidLoad1(cell);
+    float density = max(state.w, 0.0), temperature = 0.0;
+    if (LibraFluidModelId() == 2) density = max(state.x, 0.0);
+    else if (LibraFluidModelId() == 3) { density = max(state.z, 0.0); temperature = max(state.y, 0.0); }
+    float4 outputColor = float4(velocity, density, temperature);
+    LibraFluidOutput[cell] = outputColor;
+}
+[numthreads(8, 8, 1)]
+void LibraFluidRenderColor(uint3 threadId : SV_DispatchThreadID)
+{
+    if (threadId.x >= uint(LibraFluidGrid.x) || threadId.y >= uint(LibraFluidGrid.y))
+    {
+        return;
+    }
+    int2 cell = int2(threadId.xy);
+    uint index = LibraFluidIndex(cell);
+    float4 dye = LibraFluidLoad0(cell);
+    float density = max(dye.w, 0.0);
+    float alpha = 1.0 - exp(-density);
+    float3 color = clamp(dye.xyz / max(density, 0.000001), float3(0, 0, 0), float3(1, 1, 1));
+    float4 outputColor = float4(color * alpha, alpha);
+    if (LibraFluidModelId() == 1)
+    {
+        alpha = clamp(density, 0.0, 1.0) * LibraFluidColor.w;
+        outputColor = float4(LibraFluidColor.xyz * alpha, alpha);
+    }
+    else if (LibraFluidModelId() == 2)
+    {
+        float height = max(dye.x, 0.0);
+        float shade = clamp(0.65 + (height - LibraFluidModel.z) / max(LibraFluidModel.z, 0.0001), 0.0, 1.0);
+        alpha = (1.0 - exp(-height * 4.0)) * LibraFluidColor.w;
+        outputColor = float4(LibraFluidColor.xyz * shade * alpha, alpha);
+    }
+    else if (LibraFluidModelId() == 3)
+    {
+        float heat = max(dye.y - LibraFluidReaction.y, 0.0);
+        float emission = clamp(heat, 0.0, 4.0);
+        color = clamp(float3(emission * 2.0, emission * 0.7, emission * 0.2), float3(0, 0, 0), float3(1, 1, 1));
+        color = max(color, float3(0.12, 0.12, 0.12));
+        alpha = 1.0 - exp(-(max(dye.z, 0.0) + heat * 0.25));
+        outputColor = float4(color * alpha, alpha);
+    }
+    outputColor.rgb /= max(outputColor.a, 0.000001);
+
+    LibraFluidOutput[int2(cell.x, int(LibraFluidGrid.y) - 1 - cell.y)] = outputColor;
 }

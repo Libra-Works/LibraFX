@@ -22,6 +22,9 @@
 #include "Materials/MaterialExpressionPerInstanceCustomData.h"
 #include "Materials/MaterialExpressionTextureSampleParameter2D.h"
 #include "Materials/MaterialExpressionVertexColor.h"
+#include "Materials/MaterialExpressionVectorParameter.h"
+#include "Materials/MaterialExpressionDivide.h"
+#include "Materials/MaterialExpressionMax.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
@@ -859,6 +862,168 @@ bool FLibraNativeRenderRhiAcceptanceTest::RunTest(const FString&)
     }
     return LibraNativeRenderRhiTests::RunFlexiblePlaneAcceptance(*this,
         flexibleFixture, outputDirectory);
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraGeneratedDrawConsumerRhiTest,
+    "Libra.Runtime.Spawnable.GeneratedDrawFramebuffer",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLibraGeneratedDrawConsumerRhiTest::RunTest(const FString& parameters)
+{
+    using namespace LibraNativeRenderRhiTests;
+    auto fixtureDirectory = FString{};
+    if (!FParse::Value(FCommandLine::Get(), TEXT("LibraFluidFixtures="), fixtureDirectory) || fixtureDirectory.IsEmpty())
+    {
+        AddError(TEXT("Generated draw acceptance requires compiler fixtures."));
+        return false;
+    }
+    auto* world = CreateWorld(*this, TEXT("LibraGeneratedDrawWorld"));
+    if (!world)
+    {
+        return false;
+    }
+    ON_SCOPE_EXIT
+    {
+        DestroyWorld(world);
+        FlushRenderingCommands();
+    };
+    auto* root = static_cast<USceneComponent*>(nullptr);
+    auto* component = static_cast<ULibraEffectComponent*>(nullptr);
+    auto* actor = CreateEffectActor(*world, component, root);
+    if (!TestNotNull(TEXT("Generated draw effect owner"), actor))
+    {
+        return false;
+    }
+    auto* texture = CreateTexture(*actor);
+    if (!TestNotNull(TEXT("Explicit material fixture texture"), texture))
+    {
+        return false;
+    }
+    ON_SCOPE_EXIT { texture->RemoveFromRoot(); };
+    auto* material = NewObject<UMaterial>(actor, NAME_None, RF_Transient);
+    material->BlendMode = BLEND_Translucent;
+    material->SetShadingModel(MSM_Unlit);
+    material->TwoSided = true;
+    auto* sample = NewObject<UMaterialExpressionTextureSampleParameter2D>(material);
+    sample->ParameterName = TEXT("Texture");
+    sample->Texture = texture;
+    sample->SamplerType = SAMPLERTYPE_LinearColor;
+    material->GetExpressionCollection().AddExpression(sample);
+    auto* atlas = NewObject<UMaterialExpressionVectorParameter>(material);
+    atlas->ParameterName = TEXT("AtlasRect");
+    atlas->DefaultValue = FLinearColor(0, 0, 1, 1);
+    material->GetExpressionCollection().AddExpression(atlas);
+    auto* opacity = NewObject<UMaterialExpressionMultiply>(material);
+    opacity->A.Connect(4, sample);
+    opacity->B.Connect(4, atlas);
+    material->GetExpressionCollection().AddExpression(opacity);
+    material->GetEditorOnlyData()->EmissiveColor.Connect(0, sample);
+    material->GetEditorOnlyData()->Opacity.Connect(0, opacity);
+    material->PostEditChange();
+    material->ForceRecompileForRendering(EMaterialShaderPrecompileMode::Synchronous);
+    if (!WaitForShaderCompilation(*this, TEXT("Generated ordinary draw")))
+    {
+        return false;
+    }
+    component->AssetBindings.Add({TEXT("builtin:sprite"), material});
+    component->AssetBindings.Add({TEXT("builtin:flexible-plane"), material});
+    auto capture = CreateCapture(*world, FVector::ZeroVector, 200);
+    capture.Actor->SetActorLocationAndRotation(FVector(0, 0, 200), FRotator(-90, 0, 0));
+    capture.Component->ProjectionType = ECameraProjectionMode::Orthographic;
+    capture.Component->OrthoWidth = 160;
+    auto* camera = NewObject<UCameraComponent>(actor);
+    camera->SetupAttachment(root);
+    camera->RegisterComponent();
+    camera->SetWorldLocationAndRotation(FVector(0, 0, 200), FRotator(-90, 0, 0));
+    component->EffectCameraOverride = camera;
+    for (const auto* mode : {TEXT("generated-sprite"), TEXT("generated-flexible"), TEXT("generated-material"), TEXT("generated-material-dye"), TEXT("generated-material-fields")})
+    {
+        auto bytes = TArray<uint8>{};
+        if (!TestTrue(TEXT("Generated ordinary draw fixture loads"), FFileHelper::LoadFileToArray(bytes,
+            *FPaths::Combine(fixtureDirectory, FString(mode) + TEXT(".lfxb")))))
+        {
+            return false;
+        }
+        auto* package = NewObject<ULibraSpawnableAsset>(actor);
+        if (!TestEqual(TEXT("Generated draw package validates"), package->SetPackageBytes(bytes), ELibraRuntimeResult::Ok))
+        {
+            return false;
+        }
+        component->AssetBindings.Reset();
+        if (FString(mode).StartsWith(TEXT("generated-material")))
+        {
+            sample->ParameterName = TEXT("FluidTexture");
+            const auto fields = FString(mode).EndsWith(TEXT("-fields"));
+            material->GetEditorOnlyData()->EmissiveColor.Connect(fields ? 3 : 0, sample);
+            opacity->A.Connect(fields ? 3 : 4, sample);
+            if (FString(mode).EndsWith(TEXT("-dye")))
+            {
+                auto* safeAlpha = NewObject<UMaterialExpressionMax>(material);
+                safeAlpha->A.Connect(4, sample);
+                safeAlpha->ConstB = .000001f;
+                material->GetExpressionCollection().AddExpression(safeAlpha);
+                auto* straight = NewObject<UMaterialExpressionDivide>(material);
+                straight->A.Connect(0, sample);
+                straight->B.Connect(0, safeAlpha);
+                material->GetExpressionCollection().AddExpression(straight);
+                material->GetEditorOnlyData()->EmissiveColor.Connect(0, straight);
+            }
+            material->PostEditChange();
+            material->ForceRecompileForRendering(EMaterialShaderPrecompileMode::Synchronous);
+            if (!WaitForShaderCompilation(*this, TEXT("Generated material texture")))
+            {
+                return false;
+            }
+            auto* mesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Plane.Plane"));
+            component->AssetBindings.Add({TEXT("/Game/LibraTests/GeneratedMesh.GeneratedMesh"), mesh});
+            component->AssetBindings.Add({TEXT("/Game/LibraTests/GeneratedMaterial.GeneratedMaterial"), material});
+        }
+        else
+        {
+            component->AssetBindings.Add({TEXT("builtin:sprite"), material});
+            component->AssetBindings.Add({TEXT("builtin:flexible-plane"), material});
+        }
+        component->Package = package;
+        if (!TestEqual(TEXT("Generated draw plays through the public component"), component->Play(), ELibraRuntimeResult::Ok))
+        {
+            AddError(component->LastError);
+            return false;
+        }
+        for (auto frame = 0; frame < 30; ++frame)
+        {
+            component->TickComponent(1.0f / 60, LEVELTICK_All, nullptr);
+        }
+        auto pixels = TArray<FColor>{};
+        if (!TestTrue(TEXT("Generated ordinary draw scene capture succeeds"), CapturePixels(*world, capture, pixels)))
+        {
+            component->Stop();
+            return false;
+        }
+        TestTrue(FString(mode) + TEXT(" samples its generated straight color texture"), HasAnyBrightPixels(pixels));
+        auto colored = 0;
+        for (const auto& pixel : pixels)
+        {
+            if (pixel.R > 3 || pixel.G > 3 || pixel.B > 3)
+            {
+                ++colored;
+            }
+        }
+        AddInfo(FString::Printf(TEXT("%s actual ordinary scene colored pixels=%d"), mode, colored));
+        component->Stop();
+        pixels.Reset();
+        TestTrue(TEXT("Stopped generated ordinary draw scene capture"), CapturePixels(*world, capture, pixels));
+        TestFalse(TEXT("Stop removes ordinary generated draw"), HasAnyBrightPixels(pixels));
+        if (!TestEqual(TEXT("Generated ordinary draw restarts"), component->Play(), ELibraRuntimeResult::Ok))
+        {
+            return false;
+        }
+        pixels.Reset();
+        CapturePixels(*world, capture, pixels);
+        TestFalse(TEXT("New producer starts with cleared contents"), HasAnyBrightPixels(pixels));
+        component->Stop();
+    }
+    return !HasAnyErrors();
 }
 
 #endif

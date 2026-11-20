@@ -268,6 +268,7 @@ internal static partial class Program
             Run("all safe operations shader fixture", () => Check(GpuCompiler.Validate(AllOps()).Count == 0, "Fixture validates"));
             RunExtensionTests();
             RunFluid2DTests();
+            RunResourcePlanTests();
             if (args.Length == 2 && args[0] == "--export-fluid")
             {
                 ExportFluid2D(args[1]);

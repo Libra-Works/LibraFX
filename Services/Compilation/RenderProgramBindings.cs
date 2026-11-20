@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Resources;
 using LiberaFx.Services;
@@ -42,6 +43,11 @@ public static class RenderProgramBindings
             throw new NotSupportedException(
                 "Desktop render_scene evaluation cannot resolve SOURCE skeletal poses; use Unity or Unreal Spawnable package playback.");
         if (options?.IncludePreviewDebugDraw != true) graph = PreviewDebugDraw.Strip(graph);
+        var generatedTextures = GpuProgramDeliveryService.GeneratedDrawBindings(graph);
+        if (!allowSourceMetadata && generatedTextures.Count != 0)
+            throw new NotSupportedException("Generated draw textures require whole-effect package playback.");
+        var generatedByNode = generatedTextures.ToLookup(binding => binding.NodeId);
+        var mappedGenerated = generatedTextures.ToDictionary(binding => (binding.NodeId, binding.Slot, binding.Name, binding.MainTexture));
         var instanceScopes = CollectInstanceScopes(graph);
         graph = GroupExposedItems.Materialize(graph);
         graph = SkeletalPoseSchema.Lower(graph);
@@ -90,7 +96,8 @@ public static class RenderProgramBindings
                 {
                     throw new InvalidDataException("A render scope supports at most 128 draws.");
                 }
-                renderNodes.Add(FlexiblePlaneDrawSchema.CreateDraw(node, nodes, connections, resourceContext, instancePath));
+                renderNodes.Add(FlexiblePlaneDrawSchema.CreateDraw(node, nodes, connections, resourceContext, instancePath,
+                    generatedByNode[node.Id].Any(binding => binding.MainTexture)));
                 continue;
             }
             if (PreviewDebugDraw.IsDebugNode(node.Kind))
@@ -109,8 +116,9 @@ public static class RenderProgramBindings
             }
             var compositionNode = definition.TypeName == "SpriteComposition";
             var sprite = compositionNode || definition.TypeName is "SpriteDraw" or "SpriteAnimation";
-            var path = Parameter("assetPath").GetString() ?? "";
-            path = resourceContext?.ResolvePath(node.Id, "assetPath", sprite ? "texture" : "model", path, instancePath) ?? path;
+            var generatedMain = generatedByNode[node.Id].Any(binding => binding.MainTexture);
+            var path = generatedMain ? "builtin:generated-texture" : Parameter("assetPath").GetString() ?? "";
+            if (!generatedMain) path = resourceContext?.ResolvePath(node.Id, "assetPath", sprite ? "texture" : "model", path, instancePath) ?? path;
             var materialEntries = RenderNodeSchema.Read(definition, node.Parameters);
             var materialSlots = RenderNodeSchema.ReadMaterials(definition, node.Parameters);
             resourceContext?.ValidateRenderNode(node.Id,
@@ -126,9 +134,9 @@ public static class RenderProgramBindings
                     throw new InvalidDataException($"Model node '{node.Id}' has mapped materials or textures but no model.");
                 continue;
             }
-            if (resourceContext is null ||
+            if (!generatedMain && (resourceContext is null ||
                 !resourceContext.HasResourceUse(node.Id, "assetPath", instancePath))
-                EngineAssetPath.Validate(path);
+                ) EngineAssetPath.Validate(path);
             var composition = compositionNode
                 ? SpriteCompositionData.Deserialize(Parameter("compositionData")) ??
                     throw new InvalidDataException($"Sprite composition '{node.Id}' has no composition data.")
@@ -165,6 +173,16 @@ public static class RenderProgramBindings
             };
             var mappedParameters = materialEntries.ToDictionary(entry => entry.Id, entry =>
                 resourceContext?.ResolveParameter(node.Id, entry.Id, entry.Slot, entry.Kind, instancePath));
+            foreach (var binding in generatedByNode[node.Id].Where(binding => !binding.MainTexture))
+            {
+                var entry = materialEntries.Single(entry => entry.Kind == "texture" && entry.Slot == binding.Slot && entry.Name == binding.Name);
+                var mapped = mappedParameters[entry.Id];
+                mappedGenerated[(binding.NodeId, binding.Slot, binding.Name, binding.MainTexture)] = binding with
+                {
+                    Name = mapped?.Name ?? entry.Name, Association = mapped?.Association ?? MaterialAssociation(entry),
+                    Index = mapped?.Index ?? entry.Index
+                };
+            }
             object? MaterialParameter(string id)
             {
                 var entry = materialEntries.FirstOrDefault(value => value.Id == id);
@@ -243,7 +261,7 @@ public static class RenderProgramBindings
             });
             var textures = materialEntries.Where(entry => entry.Kind == "texture")
                 .Select(entry => new { name = mappedParameters[entry.Id]?.Name ?? entry.Name, slot = entry.Slot,
-                    path = resourceContext?.ResolvePath(node.Id, "texture:" + entry.Id, "texture",
+                    path = generatedByNode[node.Id].Any(binding => !binding.MainTexture && binding.Slot == entry.Slot && binding.Name == entry.Name) ? "" : resourceContext?.ResolvePath(node.Id, "texture:" + entry.Id, "texture",
                         Parameter(entry.Id).GetString() ?? "", instancePath) ?? Parameter(entry.Id).GetString(),
                     association = mappedParameters[entry.Id]?.Association ?? MaterialAssociation(entry),
                     index = mappedParameters[entry.Id]?.Index ?? entry.Index }).ToArray();
@@ -302,6 +320,18 @@ public static class RenderProgramBindings
                     new { type = "render_config", programSequence, nodes = renderNodes }, JsonOptions)
                 : JsonSerializer.SerializeToUtf8Bytes(
                     new { type = "render_config", programSequence, nodes = renderNodes, gpuDrawTransforms }, JsonOptions);
+            if (generatedTextures.Count != 0)
+            {
+                var document = JsonNode.Parse(bytes)!;
+                foreach (var draw in document["nodes"]!.AsArray())
+                {
+                    var id = draw!["nodeId"]!.GetValue<Guid>();
+                    var bindings = generatedByNode[id].Select(binding => mappedGenerated[(binding.NodeId, binding.Slot, binding.Name, binding.MainTexture)]).ToArray();
+                    if (bindings.Length == 0) continue;
+                    draw["generatedTextures"] = JsonSerializer.SerializeToNode(bindings, JsonOptions);
+                }
+                bytes = JsonSerializer.SerializeToUtf8Bytes(document, JsonOptions);
+            }
             if (bytes.Length > 4 * 1024 * 1024)
                 throw new InvalidDataException("Render configuration exceeds the 4 MiB engine payload limit.");
             return bytes;

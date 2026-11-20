@@ -4,7 +4,7 @@
   "nativeAbi": 1,
   "maximumBytecodeVersion": 11,
   "spawnablePackageVersion": 13,
-  "maximumGpuExecutablePayloadVersion": 2,
+  "maximumGpuExecutablePayloadVersion": 3,
   "unity": {
     "package": "works.libra.liberafx",
     "minimumDeclaredEditor": "6000.0",

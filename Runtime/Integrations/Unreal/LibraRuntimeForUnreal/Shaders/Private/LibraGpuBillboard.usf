@@ -19,6 +19,7 @@ float4 DrawRow0;
 float4 DrawRow1;
 float4 DrawRow2;
 Texture2D BillboardTexture;
+uint TextureFlags;
 SamplerState BillboardSampler;
 
 struct VertexOutput
@@ -54,5 +55,9 @@ VertexOutput MainVS(uint vertexId : SV_VertexID, uint instanceId : SV_InstanceID
 
 float4 MainPS(VertexOutput input) : SV_Target0
 {
-    return BillboardTexture.Sample(BillboardSampler, input.uv) * input.color;
+    float2 uv = input.uv;
+    if ((TextureFlags & 2u) != 0u) uv.y = 1.0 - uv.y;
+    float4 texel = BillboardTexture.Sample(BillboardSampler, uv);
+    if ((TextureFlags & 1u) != 0u) texel.rgb /= max(texel.a, 0.000001);
+    return texel * input.color;
 }

@@ -119,26 +119,37 @@ public sealed class GroupCompilationResolver(IReadOnlyList<GroupAssetLibrary> li
 
     private static GraphSnapshot Clone(GraphSnapshot graph, Guid scope)
     {
-        var ids = graph.Nodes.ToDictionary(node => node.Id, node => DeriveId(scope, node.Id));
-        var nodes = graph.Nodes.Select(node => node with
+        var ids = new Dictionary<Guid, Guid>();
+        void Collect(GraphSnapshot current, Guid owner)
         {
-            Id = ids[node.Id],
-            ChildGraph = node.ChildGraph is null ? null : Clone(node.ChildGraph, ids[node.Id])
-        }).ToArray();
-        return graph with
-        {
-            Nodes = nodes,
-            ExposedItems = GroupExposedItems.Remap(graph.ExposedItems, ids),
-            Connections = graph.Connections.Select(connection => connection with
+            foreach (var node in current.Nodes)
             {
-                SourceNodeId = ids[connection.SourceNodeId],
-                TargetNodeId = ids[connection.TargetNodeId],
-                SourcePortId = SpawnableGroupSchema.RemapPort(graph.Nodes.Single(node => node.Id == connection.SourceNodeId),
-                    nodes.Single(node => node.Id == ids[connection.SourceNodeId]).ChildGraph, connection.SourcePortId),
-                TargetPortId = SpawnableGroupSchema.RemapPort(graph.Nodes.Single(node => node.Id == connection.TargetNodeId),
-                    nodes.Single(node => node.Id == ids[connection.TargetNodeId]).ChildGraph, connection.TargetPortId)
-            }).ToArray()
-        };
+                ids.Add(node.Id, DeriveId(owner, node.Id));
+                if (node.ChildGraph is { } child) Collect(child, ids[node.Id]);
+            }
+        }
+        Collect(graph, scope);
+        GraphSnapshot Copy(GraphSnapshot current)
+        {
+            var nodes = current.Nodes.Select(node => node with
+            {
+                Id = ids[node.Id], Parameters = GpuParticleEditorService.RemapReferences(node, ids),
+                ChildGraph = node.ChildGraph is null ? null : Copy(node.ChildGraph)
+            }).ToArray();
+            return current with
+            {
+                Nodes = nodes, ExposedItems = GroupExposedItems.Remap(current.ExposedItems, ids),
+                Connections = current.Connections.Select(connection => connection with
+                {
+                    SourceNodeId = ids[connection.SourceNodeId], TargetNodeId = ids[connection.TargetNodeId],
+                    SourcePortId = SpawnableGroupSchema.RemapPort(current.Nodes.Single(node => node.Id == connection.SourceNodeId),
+                        nodes.Single(node => node.Id == ids[connection.SourceNodeId]).ChildGraph, connection.SourcePortId),
+                    TargetPortId = SpawnableGroupSchema.RemapPort(current.Nodes.Single(node => node.Id == connection.TargetNodeId),
+                        nodes.Single(node => node.Id == ids[connection.TargetNodeId]).ChildGraph, connection.TargetPortId)
+                }).ToArray()
+            };
+        }
+        return Copy(graph);
     }
 
     private static Guid DeriveId(Guid scope, Guid source)

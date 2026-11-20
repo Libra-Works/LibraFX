@@ -12,6 +12,8 @@ struct Particle {
 layout(set = 0, binding = 0, std430) buffer ParticleBuffer { Particle particles[]; };
 layout(set = 0, binding = 1, std430) readonly buffer PacketBuffer { uvec4 code[]; };
 layout(set = 0, binding = 2, std430) readonly buffer FlowMapBuffer { uint flowData[]; };
+layout(set = 0, binding = 3) uniform sampler2D generatedFields[16];
+layout(set = 0, binding = 4, std430) readonly buffer FieldMappingBuffer { vec4 fieldMappings[]; };
 layout(push_constant, std430) uniform Frame {
     uvec4 range; // capacity, count, spawnStart, spawnCount
     vec2 timing; // delta, time
@@ -222,8 +224,36 @@ vec2 flowTexel(uint offset, uint width, ivec2 pixel) {
     return uintBitsToFloat(uvec2(flowData[address], flowData[address + 1u]));
 }
 
-vec2 sampleFlow(uint slot, vec2 uv) {
+vec4 sampleGeneratedField(uint slot, vec2 uv) {
+    uv = clamp(uv, 0.0, 1.0);
+    switch (slot) {
+        case 1u: return textureLod(generatedFields[0], uv, 0.0);
+        case 2u: return textureLod(generatedFields[1], uv, 0.0);
+        case 3u: return textureLod(generatedFields[2], uv, 0.0);
+        case 4u: return textureLod(generatedFields[3], uv, 0.0);
+        case 5u: return textureLod(generatedFields[4], uv, 0.0);
+        case 6u: return textureLod(generatedFields[5], uv, 0.0);
+        case 7u: return textureLod(generatedFields[6], uv, 0.0);
+        case 8u: return textureLod(generatedFields[7], uv, 0.0);
+        case 9u: return textureLod(generatedFields[8], uv, 0.0);
+        case 10u: return textureLod(generatedFields[9], uv, 0.0);
+        case 11u: return textureLod(generatedFields[10], uv, 0.0);
+        case 12u: return textureLod(generatedFields[11], uv, 0.0);
+        case 13u: return textureLod(generatedFields[12], uv, 0.0);
+        case 14u: return textureLod(generatedFields[13], uv, 0.0);
+        case 15u: return textureLod(generatedFields[14], uv, 0.0);
+        case 16u: return textureLod(generatedFields[15], uv, 0.0);
+    }
+    return vec4(0.0);
+}
+vec2 sampleFlow(uint slot, vec2 uv, uint encoding) {
     uint header = slot * 4u;
+    uint generated = flowData[header + 3u];
+    if (generated > 0u && generated <= 16u) {
+        vec4 value = sampleGeneratedField(generated, uv);
+        vec2 field = encoding == 2u ? value.ba : value.rg;
+        return encoding == 0u ? field * 2.0 - 1.0 : field;
+    }
     uint offset = flowData[header];
     if (offset == 0u || any(isnan(uv))) {
         return vec2(0.0);
@@ -237,7 +267,8 @@ vec2 sampleFlow(uint slot, vec2 uv) {
     vec2 t = fract(p);
     vec2 top = mix(flowTexel(offset, size.x, a), flowTexel(offset, size.x, ivec2(b.x, a.y)), t.x);
     vec2 bottom = mix(flowTexel(offset, size.x, ivec2(a.x, b.y)), flowTexel(offset, size.x, b), t.x);
-    return mix(top, bottom, t.y) * 2.0 - 1.0;
+    vec2 field = mix(top, bottom, t.y);
+    return encoding == 0u ? field * 2.0 - 1.0 : field;
 }
 
 )LGPK"
@@ -385,17 +416,23 @@ void main() {
             vec4 value = uintBitsToFloat(a);
             vec4 flow = vec4(0.0);
             if (type == 4u) {
-                flow.xy = sampleFlow(aux, value.xy);
+                flow.xy = sampleFlow(aux, value.xy, code[base + 3u].x);
             } else {
                 uint u = second.w & 3u;
                 uint v = (second.w >> 2u) & 3u;
                 vec4 bounds = uintBitsToFloat(code[base + 2u]);
-                vec2 mapped = sampleFlow(aux, (vec2(value[u], value[v]) - bounds.xy) / bounds.zw);
-                flow[u] = mapped.x;
-                flow[v] = mapped.y;
+                bool generated_plane = (second.w & 0x100u) != 0u;
+                vec2 uv = generated_plane ? vec2(dot(fieldMappings[aux * 4u], vec4(value.xyz, 1)), dot(fieldMappings[aux * 4u + 1u], vec4(value.xyz, 1))) :
+                    (vec2(value[u], value[v]) - bounds.xy) / bounds.zw;
+                vec2 mapped = sampleFlow(aux, uv, code[base + 3u].x);
+                if (code[base + 3u].x == 2u) flow.xy = mapped;
+                else if (generated_plane) flow.xyz = fieldMappings[aux * 4u + 2u].xyz * mapped.x + fieldMappings[aux * 4u + 3u].xyz * mapped.y;
+                else { flow[u] = mapped.x; flow[v] = mapped.y; }
             }
             result = floatBitsToUint(flow);
         }
+        if (op == 42u) result.x = uintBitsToFloat(a.x) > uintBitsToFloat(b.x) ? 1u : 0u;
+        if (op == 43u) result.x = uintBitsToFloat(a.x) < uintBitsToFloat(b.x) ? 1u : 0u;
         if (op != 18u) {
             values[dst] = result;
         }

@@ -4,6 +4,9 @@
 #include "liberafx/gpu/LbFluid2D.h"
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/node3d.hpp>
+#include <godot_cpp/classes/texture2d.hpp>
+#include <godot_cpp/variant/vector4.hpp>
+#include <godot_cpp/variant/transform3d.hpp>
 #ifdef LIBERAFX_GODOT_TEST_HOOKS
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_float64_array.hpp>
@@ -45,6 +48,7 @@ struct Fluid2DProgram final {
     bool hasMatrix = false;
     GeneratorInstanceId instanceId = 0;
     double startTime = 0.0;
+    bool automaticPlane = true;
 };
 
 struct Fluid2DTemplate final {
@@ -64,6 +68,10 @@ public:
     auto advance(SpawnableHost& host, double elapsed, double delta, godot::String& error) -> Result;
     void synchronizePresentation(bool exiting = false);
     auto isEmpty() const noexcept -> bool;
+    auto outputTexture(const FluidNodeId& node, const FluidNodeId& container,
+        GeneratorInstanceId instance, bool fields = false, bool straight = false) const -> godot::Ref<godot::Texture2D>;
+    auto fieldMapping(const FluidNodeId& node, const FluidNodeId& container, GeneratorInstanceId instance,
+        const godot::Transform3D& consumerToWorld, std::array<godot::Vector4, 4>& mapping, godot::String& error) const -> Result;
 #ifdef LIBERAFX_GODOT_TEST_HOOKS
     auto testReadFields(godot::Dictionary& fields, godot::String& error) -> Result;
     auto testDisableSourceAndZeroForces(godot::String& error) -> Result;

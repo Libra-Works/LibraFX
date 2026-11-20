@@ -4,34 +4,80 @@ float4x4 ViewProjection;
 float4x4 ModelToWorld;
 float3 PreViewTranslation;
 float2 DomainSize;
+Texture2D VertexFieldOutput;
+SamplerState VertexFluidSampler;
+uint VSModel;
+uint2 SurfaceCells;
+float2 VSGrid;
+float2 PhysicalDomain;
+float VSInitialDepth;
+float VSHeightScale;
 Texture2D FluidOutput;
+Texture2D PixelFieldOutput;
 SamplerState FluidSampler;
+uint PSModel;
+float PSIgnitionTemperature;
+float3 TranslatedCameraPosition;
 
 struct VertexOutput
 {
     float4 position : SV_Position;
     float2 uv : TEXCOORD0;
+    float3 world : TEXCOORD1;
+    float3 normal : TEXCOORD2;
 };
+
+float WaterDepth(float2 uv)
+{
+    return VertexFieldOutput.SampleLevel(VertexFluidSampler, saturate(uv), 0).b;
+}
 
 VertexOutput MainVS(uint vertexId : SV_VertexID)
 {
-    static const float2 corners[6] = {
-        float2(-1, -1), float2(1, -1), float2(-1, 1),
-        float2(-1, 1), float2(1, -1), float2(1, 1)
-    };
-    float2 corner = corners[vertexId];
-    float3 localPosition = float3(corner * DomainSize * 0.5, 0);
+    static const float2 corners[6] = { float2(0,0), float2(1,0), float2(0,1), float2(0,1), float2(1,0), float2(1,1) };
+    uint cellIndex = vertexId / 6u;
+    uint2 cell = uint2(cellIndex % SurfaceCells.x, cellIndex / SurfaceCells.x);
+    float2 uv = (float2(cell) + corners[vertexId % 6u]) / float2(SurfaceCells);
+    float3 localPosition = float3((uv - .5) * DomainSize, 0);
+    float3 tangentU = float3(1,0,0), tangentV = float3(0,1,0);
+    if (VSModel == 2u)
+    {
+        localPosition.z += (WaterDepth(uv) - VSInitialDepth) * VSHeightScale;
+        float2 texel = 1.0 / VSGrid;
+        tangentU.z = (WaterDepth(uv + float2(texel.x,0)) - WaterDepth(uv - float2(texel.x,0))) / (2 * texel.x * PhysicalDomain.x);
+        tangentV.z = (WaterDepth(uv + float2(0,texel.y)) - WaterDepth(uv - float2(0,texel.y))) / (2 * texel.y * PhysicalDomain.y);
+    }
     VertexOutput output;
     float4 worldPosition = mul(float4(localPosition, 1), ModelToWorld);
     worldPosition.xyz += PreViewTranslation;
     output.position = mul(worldPosition, ViewProjection);
-    // Fluid logical Y grows upward, matching local plane +Y.
-    output.uv = float2(corner.x * 0.5 + 0.5, corner.y * 0.5 + 0.5);
+    output.world = worldPosition.xyz;
+    output.uv = uv;
+    output.normal = normalize(cross(mul(float4(tangentU,0), ModelToWorld).xyz, mul(float4(tangentV,0), ModelToWorld).xyz));
     return output;
 }
 
 float4 MainPS(VertexOutput input) : SV_Target0
 {
-    // LibraFluidRenderDye already produces premultiplied RGBA.
-    return FluidOutput.Sample(FluidSampler, input.uv);
+    float4 dye = FluidOutput.Sample(FluidSampler, input.uv);
+    if (PSModel == 0u) return dye;
+    float4 field = PixelFieldOutput.Sample(FluidSampler, input.uv);
+    if (PSModel == 3u)
+    {
+        float heat = max(field.a - PSIgnitionTemperature, 0);
+        float3 fire = saturate(float3(heat * 2, heat * .7, heat * .2));
+        return float4((float3(.08,.08,.09) + fire * (1 + min(heat,8))) * dye.a, dye.a);
+    }
+    float3 normal = normalize(input.normal);
+    float3 view = normalize(TranslatedCameraPosition - input.world);
+    float fresnel = .02 + .98 * pow(1 - saturate(abs(dot(view,normal))), 5);
+    float3 tint = dye.rgb / max(dye.a, .000001);
+    float light = .45 + .55 * saturate(dot(normal,normalize(float3(.3,.5,.8))));
+    float3 water = lerp(tint * light, float3(.45,.65,.85), fresnel);
+    float edge = PSModel == 1u ? saturate(fwidth(field.b) * 4) : saturate(length(ddx(normal)) + length(ddy(normal)));
+    float foam = saturate(edge * (.3 + length(field.rg) * .2));
+    water = lerp(water,float3(.9,.96,1),foam);
+    float3 halfVector = normalize(view + normalize(float3(.3,.5,.8)));
+    water += pow(saturate(dot(normal,halfVector)),48) * .5;
+    return float4(water * dye.a, dye.a);
 }

@@ -102,7 +102,7 @@ public static class FlexiblePlaneDrawSchema
     public static object CreateDraw(GraphNodeSnapshot node,
         IReadOnlyDictionary<Guid, GraphNodeSnapshot> nodes,
         ILookup<Guid, GraphConnectionSnapshot> connections,
-        IRenderResourceBindingContext? resources = null, IReadOnlyList<Guid>? instancePath = null)
+        IRenderResourceBindingContext? resources = null, IReadOnlyList<Guid>? instancePath = null, bool generatedTexture = false)
     {
         if (!IsNode(node.Kind))
         {
@@ -197,13 +197,13 @@ public static class FlexiblePlaneDrawSchema
         }
         resources?.ValidateRenderNode(node.Id, Array.Empty<(string Id, string Kind, int Slot)>(),
             instancePath ?? [], Array.Empty<int>());
-        var path = Parameter(node, "assetPath").GetString()!;
-        path = resources?.ResolvePath(node.Id, "assetPath", "texture", path, instancePath ?? []) ?? path;
+        var path = generatedTexture ? "builtin:generated-texture" : Parameter(node, "assetPath").GetString()!;
+        if (!generatedTexture) path = resources?.ResolvePath(node.Id, "assetPath", "texture", path, instancePath ?? []) ?? path;
         if (string.IsNullOrWhiteSpace(path))
         {
             throw new InvalidDataException("Flexible Plane Draw requires a texture.");
         }
-        if (resources?.HasResourceUse(node.Id, "assetPath", instancePath ?? []) != true)
+        if (!generatedTexture && resources?.HasResourceUse(node.Id, "assetPath", instancePath ?? []) != true)
         {
             EngineAssetPath.Validate(path);
         }

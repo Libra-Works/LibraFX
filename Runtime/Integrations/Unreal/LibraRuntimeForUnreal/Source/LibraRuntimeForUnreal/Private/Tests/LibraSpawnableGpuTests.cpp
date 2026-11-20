@@ -3,6 +3,8 @@
 #include "LibraSpawnableAsset.h"
 #include "LibraEffectComponent.h"
 #include "LibraGpuEffectRuntime.h"
+#include "DynamicRHI.h"
+#include "RenderingThread.h"
 #include "Engine/World.h"
 #include "Components/SceneComponent.h"
 #include "Misc/AutomationTest.h"
@@ -332,6 +334,12 @@ bool FLibraSpawnableFluidFixtureTest::RunTest(const FString&)
             TestTrue(TEXT("Mixed fixture retains actual GPU particle execution"),
                 particleRuntimes[0]->VerifyGpuSmoke(report));
             AddInfo(report);
+            if (FCString::Stricmp(name, TEXT("generated-output")) == 0)
+            {
+                TestTrue(TEXT("Generated DyeOutput is drawn through the actual GPU particle billboard pipeline"),
+                    particleRuntimes[0]->VerifyGeneratedTextureFramebuffer(report));
+                AddInfo(report);
+            }
         }
         if (expectTemplateFluid)
             TestTrue(TEXT("Nested template contains an actual independent fluid runtime"),
@@ -353,7 +361,7 @@ bool FLibraSpawnableFluidFixtureTest::RunTest(const FString&)
             TestEqual(TEXT("Expired OnStart child is not respawned implicitly"),
                 component->GetGpuInstanceCount(), 0);
         }
-        else if (!fluidRuntimes.IsEmpty())
+        else if (!fluidRuntimes.IsEmpty() && FCString::Stricmp(name, TEXT("generated-output")) != 0)
         {
             component->TickComponent(0.25f, LEVELTICK_All, nullptr);
             TestTrue(TEXT("AutoDestroyWhenIdle=false retains a live root fluid after idle time"),
@@ -428,6 +436,8 @@ bool FLibraSpawnableFluidFixtureTest::RunTest(const FString&)
     success &= runFixture(TEXT("odd-grid"), false, false);
     success &= runFixture(TEXT("draw-matrix"), false, false);
     success &= runFixture(TEXT("owner-matrix"), false, false);
+    success &= runFixture(TEXT("generated-output"), true, false);
+    success &= runFixture(TEXT("generated-fields"), true, false);
     world->DestroyWorld(false);
     return success;
 }

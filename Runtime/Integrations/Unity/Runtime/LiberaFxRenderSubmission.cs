@@ -20,6 +20,14 @@ namespace LiberaFx.Unity
     internal sealed class LiberaFxRenderStatisticsCounter
     {
         internal LiberaFxRenderStatistics value;
+        private long reservedFluidBytes;
+        internal void ReserveFluid(long bytes)
+        {
+            if (bytes < 0 || bytes > 256L * 1024 * 1024 - reservedFluidBytes)
+                throw new InvalidOperationException("Active fluid storage exceeds the 256 MiB effect budget.");
+            reservedFluidBytes += bytes;
+        }
+        internal void ReleaseFluid(long bytes) { reservedFluidBytes -= bytes; }
 
         internal void Reset()
         {

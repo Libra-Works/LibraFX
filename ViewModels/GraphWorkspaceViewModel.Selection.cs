@@ -98,6 +98,36 @@ public sealed partial class GraphWorkspaceViewModel
             commands.Add(new AddGraphNodeCommand(this, node, Nodes.Count + commands.Count));
         }
 
+        var pastedNodeIds = nodesByOldId.ToDictionary(pair => pair.Key, pair => pair.Value.Id);
+        void CollectNested(GraphSnapshot original, GraphSnapshot replacement)
+        {
+            foreach (var (oldNode, newNode) in original.Nodes.Zip(replacement.Nodes))
+            {
+                pastedNodeIds.Add(oldNode.Id, newNode.Id);
+                if (oldNode.ChildGraph is { } oldChild && newNode.ChildGraph is { } newChild)
+                    CollectNested(oldChild, newChild);
+            }
+        }
+        foreach (var original in snapshot.Nodes)
+            if (original.ChildGraph is { } oldChild && nodesByOldId[original.Id].ChildGraph is { } newChild)
+                CollectNested(oldChild, newChild);
+        GraphSnapshot RewriteNested(GraphSnapshot original, GraphSnapshot replacement) => replacement with
+        {
+            Nodes = original.Nodes.Zip(replacement.Nodes, (oldNode, newNode) => newNode with
+            {
+                Parameters = GpuParticleEditorService.RemapReferences(oldNode, pastedNodeIds),
+                ChildGraph = oldNode.ChildGraph is { } oldChild && newNode.ChildGraph is { } newChild
+                    ? RewriteNested(oldChild, newChild) : newNode.ChildGraph
+            }).ToArray()
+        };
+        foreach (var original in snapshot.Nodes)
+        {
+            var replacement = nodesByOldId[original.Id];
+            replacement.SetParametersValue(GpuParticleEditorService.RemapReferences(original, pastedNodeIds));
+            if (original.ChildGraph is { } oldChild && replacement.ChildGraph is { } newChild)
+                replacement.SetChildGraphValue(RewriteNested(oldChild, newChild));
+        }
+
         var connectionIndex = Connections.Count;
         foreach (var connection in snapshot.Connections)
         {

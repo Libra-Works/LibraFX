@@ -1,5 +1,6 @@
 #include "LibraFxGodotGpu.h"
 #include "LibraFxGodotFluid2D.h"
+#include "LibraFxGodotRenderTaskQueue.h"
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/json.hpp>
 #include <godot_cpp/classes/marshalls.hpp>
@@ -9,12 +10,16 @@
 #include <godot_cpp/classes/rd_pipeline_specialization_constant.hpp>
 #include <godot_cpp/classes/rd_shader_source.hpp>
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
+#include <godot_cpp/classes/rd_texture_format.hpp>
+#include <godot_cpp/classes/rd_texture_view.hpp>
 #include <godot_cpp/classes/rd_uniform.hpp>
+#include <godot_cpp/classes/rd_sampler_state.hpp>
 #include <godot_cpp/classes/rendering_device.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/shader.hpp>
 #include <godot_cpp/classes/shader_material.hpp>
 #include <godot_cpp/classes/thread.hpp>
+#include <godot_cpp/classes/texture2drd.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/core/object.hpp>
 #include <godot_cpp/variant/aabb.hpp>
@@ -43,7 +48,7 @@ using liberafx::gpu::Fluid2DSettings;
 constexpr auto particleStride = 80u;
 constexpr auto blockBytes = 64u;
 constexpr auto maxRegisters = 128u; // Must match the embedded interpreter.
-constexpr auto maxParticles = 16384u; // Aggregate per player, bounds render readback.
+constexpr auto maxParticles = 16384u; // Aggregate per player; also bounds the sampled state texture height.
 constexpr auto maxFlowResources = 64u;
 constexpr auto maxFlowBytes = 32u * 1024 * 1024;
 constexpr auto flowHeaderBytes = maxFlowResources * 16;
@@ -54,6 +59,9 @@ constexpr auto computeSource =
 ;
 constexpr auto billboardSource =
 #include "Shaders/LgpkBillboard.gdshader.inc"
+;
+constexpr auto publishSource =
+#include "Shaders/LgpkPublish.glsl.inc"
 ;
 
 struct Kernel {
@@ -74,8 +82,21 @@ struct Emitter {
     bool additive = false;
     Ref<Texture2D> texture;
     std::array<Ref<Texture2D>, maxFlowResources> flowTextures;
+    std::array<NodeId, maxFlowResources> flowProducers{};
+    std::array<std::uint32_t, maxFlowResources> flowEncodings{};
+    std::array<bool, maxFlowResources> generatedPlaneCoordinates{};
+    std::array<std::uint32_t, maxFlowResources> generatedFieldIndices{};
+    std::array<NodeId, 16> generatedFieldProducers{};
+    std::array<Ref<Texture2DRD>, 16> generatedFieldTextures;
+    std::uint32_t generatedFieldCount = 0;
     RID flowStorage;
+    RID fieldMappingStorage;
+    PackedByteArray fieldMappingData;
     RID particles;
+    RID output;
+    RID publishUniforms;
+    Ref<Texture2DRD> outputTexture;
+    Ref<ShaderMaterial> material;
     Ref<MultiMesh> multiMesh;
     std::uint64_t visualId = 0;
     NodeId containerId{};
@@ -83,7 +104,9 @@ struct Emitter {
     double startTime = 0.0;
     MatrixRows matrixRows{};
     bool hasMatrix = false;
-    PackedFloat32Array drawBuffer;
+    bool generatedTexture = false;
+    NodeId textureProducer{};
+    String textureOutput;
     double remainder = 0.0;
     std::uint32_t cursor = 0;
     std::uint32_t frame = 0;
@@ -93,6 +116,7 @@ struct EmitterTemplate {
     NodeId containerId{};
     std::vector<Emitter> emitters;
     std::vector<Fluid2DProgram> fluids;
+    std::vector<GeneratedGpuDrawTexture> drawBindings;
 };
 
 auto fail(String& error, const String& detail, Result result = Result::InvalidBinary) -> Result
@@ -296,7 +320,7 @@ auto validatePacket(const Kernel& kernel, std::uint32_t stage,
         const auto invalid = [&](const String& detail, Result code = Result::InvalidBinary) {
             return fail(error, "LGPK instruction " + String::num_uint64(i) + ": " + detail, code);
         };
-        if (op > 41 || type > 6) {
+        if (op > 43 || type > 6) {
             return invalid("unsupported opcode " + String::num_uint64(op) +
                 " or type " + String::num_uint64(type), Result::UnsupportedBinary);
         }
@@ -308,7 +332,7 @@ auto validatePacket(const Kernel& kernel, std::uint32_t stage,
             arity = 3;
         } else if (basicMath) {
             arity = 2;
-        } else if (op == 24 || op == 26 || (op >= 33 && op <= 35) || op == 37) {
+        } else if (op == 24 || op == 26 || (op >= 33 && op <= 35) || op == 37 || op == 42 || op == 43) {
             arity = 2;
         } else if (op >= 30 && op <= 32) {
             arity = 3;
@@ -389,11 +413,13 @@ auto validatePacket(const Kernel& kernel, std::uint32_t stage,
                 auto axes = args[3];
                 auto u = axes & 3u;
                 auto v = (axes >> 2) & 3u;
-                valid = axes < 16 && u < 3 && v < 3 && u != v;
+                valid = (axes & ~0x10fu) == 0 && u < 3 && v < 3 && u != v;
             }
             if (valid) {
                 flowUsed[aux] = true;
             }
+        } else if (op == 42 || op == 43) {
+            valid = aux == 0 && type == 3 && argType(0) == 0 && argType(1) == 0;
         } else if (op >= 38 && op <= 40) {
             valid = aux == 0 && type == (op == 40 ? 5u : 0u) && argType(0) == 5 &&
                 argType(1) == 2 && argType(2) == 1 && argType(3) == 0;
@@ -422,10 +448,10 @@ auto validatePacket(const Kernel& kernel, std::uint32_t stage,
                 }
             } else if (op == 41 && type == 5) {
                 auto value = floatWord(instruction + 32 + j * 4);
-                if (integerBits || !std::isfinite(value) || (j >= 2 && value <= 0.0f)) {
+                if ((j == 0 ? integerBits > 2 : integerBits != 0) || !std::isfinite(value) || (j >= 2 && value <= 0.0f)) {
                     return invalid("invalid FlowMap world bounds");
                 }
-            } else if (floatBits || (integerBits && !(op == 0 && !isFloat(type) && j == 0))) {
+            } else if (floatBits || (integerBits && !((op == 0 && !isFloat(type) && j == 0) || (op == 41 && j == 0 && integerBits <= 2)))) {
                 return invalid("nonzero inactive immediate fields");
             }
         }
@@ -474,7 +500,7 @@ auto readContainerManifest(const Bytes& containers, const Bytes& manifest,
                 return fail(error, "Version 1 GPU manifests cannot contain Fluid2D programs",
                     Result::UnsupportedBinary);
             }
-        } else if (version == 2) {
+        } else if (version == 2 || version == 3) {
             version2 = true;
             if (!array(outer, "fluidPrograms", fluidPrograms)) {
                 return fail(error, "Version 2 GPU manifests require a fluidPrograms array");
@@ -482,6 +508,27 @@ auto readContainerManifest(const Bytes& containers, const Bytes& manifest,
         } else {
             return fail(error, "Only GPU program manifest versions 1 and 2 are supported",
                 Result::UnsupportedBinary);
+        }
+        if (version < 3)
+        {
+            for (auto index = 0; index < fluidPrograms.size(); ++index)
+            {
+                auto fluid = Dictionary{};
+                if (object(fluidPrograms[index], fluid) && fluid.has("automaticPlane"))
+                {
+                    return fail(error, "Fluid output selection requires GPU payload version 3", Result::UnsupportedBinary);
+                }
+            }
+            for (auto index = 0; index < programs.size(); ++index)
+            {
+                auto program = Dictionary{};
+                auto delivery = Dictionary{};
+                if (object(programs[index], program) && object(program.get("unreal", Variant{}), delivery) &&
+                    delivery.has("generatedResources"))
+                {
+                    return fail(error, "Generated resources require GPU payload version 3", Result::UnsupportedBinary);
+                }
+            }
         }
     }
     if (static_cast<std::size_t>(programs.size() + fluidPrograms.size()) != ids.size()) {
@@ -552,8 +599,14 @@ auto floatSetting(const Dictionary& settings, const char* key, float& output) ->
 auto readFluid2DSettings(const Dictionary& values, Fluid2DSettings& settings,
     String& detail) -> bool
 {
-    if (values.size() != 22) {
-        detail = "Fluid2D settings must contain exactly 22 properties";
+    auto optionalCount = values.has("vorticity") ? 1 : 0;
+    for (const auto* key : {"model", "gravity", "initialWaterDepth", "maximumWaterSpeed", "fuelBurnRate",
+        "ignitionTemperature", "heatYield", "coolingRate", "sourceTemperature", "forces"})
+    {
+        optionalCount += values.has(key) ? 1 : 0;
+    }
+    if (values.size() != 22 + optionalCount) {
+        detail = "Fluid2D settings have missing or unknown properties";
         return false;
     }
     const auto invalid = [&](const char* key) {
@@ -589,6 +642,89 @@ auto readFluid2DSettings(const Dictionary& values, Fluid2DSettings& settings,
     if (!floatSetting(values, "colorG", settings.colorG)) return invalid("colorG");
     if (!floatSetting(values, "colorB", settings.colorB)) return invalid("colorB");
     if (!floatSetting(values, "colorA", settings.colorA)) return invalid("colorA");
+    settings.vorticity = 0;
+    if (values.has("vorticity") && !floatSetting(values, "vorticity", settings.vorticity))
+        return invalid("vorticity");
+    if (values.has("model"))
+    {
+        const auto model = text(values, "model");
+        if (model == "Smoke") settings.model = 0;
+        else if (model == "FreeSurface") settings.model = 1;
+        else if (model == "ShallowWater") settings.model = 2;
+        else if (model == "Combustion") settings.model = 3;
+        else return invalid("model");
+    }
+    for (auto [key, target] : {std::pair{"gravity", &settings.gravity},
+        {"initialWaterDepth", &settings.initialWaterDepth}, {"maximumWaterSpeed", &settings.maximumWaterSpeed},
+        {"fuelBurnRate", &settings.fuelBurnRate}, {"ignitionTemperature", &settings.ignitionTemperature},
+        {"heatYield", &settings.heatYield}, {"coolingRate", &settings.coolingRate}, {"sourceTemperature", &settings.sourceTemperature}})
+    {
+        if (values.has(key) && !floatSetting(values, key, *target))
+        {
+            return invalid(key);
+        }
+    }
+    settings.forceCount = 0;
+    if (values.has("forces"))
+    {
+        auto forces = Array{};
+        if (!array(values, "forces", forces) || forces.size() > 8)
+        {
+            return invalid("forces");
+        }
+        auto forceIds = std::vector<NodeId>{};
+        for (auto index = 0; index < forces.size(); ++index)
+        {
+            auto force = Dictionary{};
+            auto id = NodeId{};
+            auto& node = settings.forces[index];
+            if (!object(forces[index], force) || force.size() != 10 + (force.has("inputA") ? 1 : 0) + (force.has("inputB") ? 1 : 0) || !nodeId(text(force, "id"), id) ||
+                std::find(forceIds.begin(), forceIds.end(), id) != forceIds.end())
+            {
+                return invalid("forces.id");
+            }
+            const auto kind = text(force, "kind");
+            if (kind == "Acceleration") node.kind = 0;
+            else if (kind == "Noise") node.kind = 1;
+            else if (kind == "CurlNoise") node.kind = 2;
+            else if (kind == "CellPosition") node.kind = 3;
+            else if (kind == "Time") node.kind = 4;
+            else if (kind == "Density") node.kind = 5;
+            else if (kind == "Temperature") node.kind = 6;
+            else if (kind == "Add") node.kind = 7;
+            else if (kind == "Multiply") node.kind = 8;
+            else if (kind == "Sine") node.kind = 9;
+            else if (kind == "Smoothstep") node.kind = 10;
+            else return invalid("forces.kind");
+            for (auto [key, target] : {std::pair{"inputA", &node.inputA}, {"inputB", &node.inputB}})
+            {
+                if (!force.has(key))
+                {
+                    continue;
+                }
+                auto reference = NodeId{};
+                if (!nodeId(text(force, key), reference))
+                {
+                    return invalid("forces.input");
+                }
+                const auto found = std::find(forceIds.begin(), forceIds.end(), reference);
+                if (found == forceIds.end() || std::distance(forceIds.begin(), found) >= index)
+                {
+                    return invalid("forces.input must reference an earlier node");
+                }
+                *target = static_cast<std::uint32_t>(std::distance(forceIds.begin(), found) + 1);
+            }
+            forceIds.push_back(id);
+            if (!floatSetting(force, "x", node.x) || !floatSetting(force, "y", node.y) ||
+                !floatSetting(force, "strength", node.strength) || !floatSetting(force, "frequency", node.frequency) ||
+                !floatSetting(force, "roughness", node.roughness) || !floatSetting(force, "animationSpeed", node.animationSpeed) ||
+                !unsignedSetting(force, "seed", node.seed) || !unsignedSetting(force, "octaves", node.octaves))
+            {
+                return invalid("forces.parameters");
+            }
+        }
+        settings.forceCount = static_cast<std::uint32_t>(forces.size());
+    }
     if (!liberafx::gpu::validFluid2DSettings(settings)) {
         detail = "Fluid2D settings are outside supported limits";
         return false;
@@ -622,9 +758,14 @@ auto readFluid2DPrograms(const Array& entries, std::vector<NodeId>& ids,
         const auto material = text(renderer, "material");
         const auto size = number(renderer, "sizeScale");
         auto program = Fluid2DProgram{};
-        if (settingsValue.size() != 22) {
-            return fail(error, "Fluid2D settings must contain exactly 22 version 1 properties",
-                Result::UnsupportedBinary);
+        if (entry.has("automaticPlane"))
+        {
+            const auto automatic = entry.get("automaticPlane", Variant{});
+            if (automatic.get_type() != Variant::BOOL)
+            {
+                return fail(error, "Fluid automaticPlane must be a boolean");
+            }
+            program.automaticPlane = static_cast<bool>(automatic);
         }
         if (renderer.size() != 2) {
             return fail(error, "Fluid2D renderer must contain exactly material and sizeScale",
@@ -634,7 +775,10 @@ auto readFluid2DPrograms(const Array& entries, std::vector<NodeId>& ids,
         if (!readFluid2DSettings(settingsValue, program.settings, settingsError)) {
             return fail(error, settingsError, Result::UnsupportedBinary);
         }
-        if (material != "builtin:fluid-alpha") {
+        const auto expectedMaterial = program.settings.model == 3 ? "builtin:fluid-fire"
+            : program.settings.model == 1 || program.settings.model == 2 ? "builtin:fluid-water"
+            : "builtin:fluid-alpha";
+        if (material != expectedMaterial) {
             return fail(error, "Unsupported Fluid2D renderer material", Result::UnsupportedBinary);
         }
         if (!std::isfinite(size) || size <= 0 || size > 10000 ||
@@ -665,6 +809,11 @@ auto readEmitter(const Dictionary& delivery, const Textures& textures, Emitter& 
 {
     auto metadata = Dictionary{};
     auto paths = Dictionary{};
+    auto generated = Dictionary{};
+    if (delivery.has("generatedResources") && !object(delivery.get("generatedResources", Variant{}), generated))
+    {
+        return fail(error, "Generated GPU resources must be an object");
+    }
     auto packetEntries = Array{};
     auto kernelEntries = Array{};
     auto resources = Array{};
@@ -788,7 +937,7 @@ auto readEmitter(const Dictionary& delivery, const Textures& textures, Emitter& 
     }
     auto resourceIds = std::unordered_set<std::string>{};
     auto actualFlowIds = std::array<std::unordered_set<std::string>, 2>{};
-    if (paths.size() != resources.size()) {
+    if (paths.size() + generated.size() != resources.size()) {
         return fail(error, "Missing or unexpected GPU texture paths");
     }
     for (auto i = 0u; i < maxFlowResources; ++i) {
@@ -812,10 +961,54 @@ auto readEmitter(const Dictionary& delivery, const Textures& textures, Emitter& 
         }
         auto pathValue = paths.get(id, Variant{});
         auto path = pathValue.get_type() == Variant::STRING ? pathValue.operator String() : String{};
-        if (path.is_empty() || path.length() > 4096 || !noNul(path)) {
+        auto encoding = 0u;
+        if (kind == "FlowMap2D")
+        {
+            auto mapping = Dictionary{};
+            if (!object(resource.get("flowMap", Variant{}), mapping)) return fail(error, "Missing field sampling settings");
+            const auto encoded = text(mapping, "encoding");
+            if (encoded == "FloatVelocity") encoding = 1;
+            else if (encoded == "FloatDensity") encoding = 2;
+            else if (!encoded.is_empty() && encoded != "SignedNormalized") return fail(error, "Unknown field encoding");
+            emitter.flowEncodings[i] = encoding;
+            const auto coordinates = text(mapping, "coordinates");
+            if (!coordinates.is_empty() && coordinates != "WorldBounds" && coordinates != "GeneratedPlane")
+                return fail(error, "Unknown field coordinate mode");
+            emitter.generatedPlaneCoordinates[i] = coordinates == "GeneratedPlane";
+            if (emitter.generatedPlaneCoordinates[i] && !generated.has(id))
+                return fail(error, "Generated-plane sampling requires a producer");
+        }
+        if (generated.has(id))
+        {
+            auto reference = Dictionary{};
+            auto producer = NodeId{};
+            if (paths.has(id) || !object(generated[id], reference) || reference.size() != 2 ||
+                !nodeId(text(reference, "producerNodeId"), producer))
+            {
+                return fail(error, "Invalid generated GPU texture binding");
+            }
+            const auto output = text(reference, "outputId");
+            if (billboard)
+            {
+                if (output != "DyeOutput" && output != "ColorOutput" && output != "FieldOutput") return fail(error, "Invalid generated billboard output");
+                emitter.generatedTexture = true; emitter.textureProducer = producer; emitter.textureOutput = output;
+            }
+            else
+            {
+                if (!((output == "VelocityOutput" && encoding == 1) || (output == "DensityOutput" && encoding == 2)))
+                    return fail(error, "Generated field output does not match its sampling encoding");
+                auto slot = 0u;
+                while (slot < emitter.generatedFieldCount && emitter.generatedFieldProducers[slot] != producer) ++slot;
+                if (slot >= 16) return fail(error, "Too many generated field producers");
+                if (slot == emitter.generatedFieldCount) emitter.generatedFieldProducers[emitter.generatedFieldCount++] = producer;
+                emitter.generatedFieldIndices[i] = slot + 1;
+                emitter.flowProducers[i] = producer;
+            }
+        }
+        else if (path.is_empty() || path.length() > 4096 || !noNul(path)) {
             return fail(error, "Missing explicit GPU texture binding for " + id);
         }
-        if (!billboard || path != "builtin:white") {
+        if (!generated.has(id) && (!billboard || path != "builtin:white")) {
             auto binding = textures.find(textKey(path));
             if (binding == textures.end() || binding->second.is_null()) {
                 return fail(error, "Missing GPU Texture2D binding for " + path, Result::InvalidArgument);
@@ -832,8 +1025,27 @@ auto readEmitter(const Dictionary& delivery, const Textures& textures, Emitter& 
             }
         }
     }
+    if (generated.size() != (emitter.generatedTexture ? 1 : 0) +
+        static_cast<int>(std::count_if(emitter.generatedFieldIndices.begin(), emitter.generatedFieldIndices.end(), [](auto value) { return value != 0; })))
+    {
+        return fail(error, "Generated GPU texture binding is undeclared or duplicated");
+    }
     if (resourceIds.count(textKey(textureId)) == 0) {
         return fail(error, "LGPK billboard texture is undeclared");
+    }
+    for (const auto& kernel : emitter.kernels)
+    {
+        const auto* bytes = kernel.packet.ptr();
+        const auto count = word(bytes + 12);
+        for (auto index = 0u; index < count; ++index)
+        {
+            const auto* instruction = bytes + blockBytes * (index + 1);
+            if (word(instruction) != 41) continue;
+            const auto resource = word(instruction + 24);
+            if (word(instruction + 48) != emitter.flowEncodings[resource] ||
+                (word(instruction + 20) == 5 && ((word(instruction + 28) & 0x100u) != 0) != emitter.generatedPlaneCoordinates[resource]))
+                return fail(error, "Field packet and resource metadata disagree");
+        }
     }
     for (auto stage = 0u; stage < used.size(); ++stage) {
         auto& actual = actualFlowIds[stage];
@@ -884,7 +1096,7 @@ auto uploadFlowMaps(RenderingDevice& device, Emitter& emitter, const RID& empty,
 {
     emitter.flowStorage = empty;
     if (std::none_of(emitter.flowTextures.begin(), emitter.flowTextures.end(),
-        [](const auto& texture) { return texture.is_valid(); })) {
+        [](const auto& texture) { return texture.is_valid(); }) && emitter.generatedFieldCount == 0) {
         return Result::Ok;
     }
     if (bytesUsed > maxFlowBytes - flowHeaderBytes) {
@@ -896,6 +1108,11 @@ auto uploadFlowMaps(RenderingDevice& device, Emitter& emitter, const RID& empty,
     }
     packed.fill(0);
     for (auto slot = 0u; slot < maxFlowResources; ++slot) {
+        if (emitter.generatedFieldIndices[slot] != 0)
+        {
+            putWord(packed.ptrw() + slot * 16 + 12, emitter.generatedFieldIndices[slot]);
+            continue;
+        }
         auto& texture = emitter.flowTextures[slot];
         if (texture.is_null()) {
             continue;
@@ -932,7 +1149,7 @@ auto uploadFlowMaps(RenderingDevice& device, Emitter& emitter, const RID& empty,
         putWord(header + 8, static_cast<std::uint32_t>(height));
         auto* source = samples.ptr();
         for (auto pixel = std::int64_t{}; pixel < bytes / 8; ++pixel) {
-            auto* input = source + pixel * 16;
+            auto* input = source + pixel * 16 + (emitter.flowEncodings[slot] == 2 ? 8 : 0);
             if (!std::isfinite(floatWord(input)) || !std::isfinite(floatWord(input + 4))) {
                 return fail(error, "Godot GPU FlowMap contains nonfinite RG data", Result::NonFinite);
             }
@@ -950,19 +1167,37 @@ auto uploadFlowMaps(RenderingDevice& device, Emitter& emitter, const RID& empty,
     return Result::Ok;
 }
 
-auto setupEmitter(RenderingDevice& device, const RID& shader, Emitter& emitter, String& error) -> Result
+auto publishParticleTexture(RenderingDevice& device, const RID& pipeline, const Emitter& emitter) -> bool
+{
+    const auto list = device.compute_list_begin();
+    if (list < 0)
+    {
+        return false;
+    }
+    device.compute_list_bind_compute_pipeline(list, pipeline);
+    device.compute_list_bind_uniform_set(list, emitter.publishUniforms, 0);
+    device.compute_list_dispatch(list, (emitter.capacity + 63) / 64, 1, 1);
+    device.compute_list_end();
+    return true;
+}
+
+auto setupEmitter(RenderingDevice& device, const RID& shader, const RID& publishShader,
+    const RID& publishPipeline, const RID& fieldSampler, const RID& emptyField, Emitter& emitter, String& error) -> Result
 {
     auto initial = PackedByteArray{};
     const auto bytes = emitter.capacity * particleStride;
-    if (initial.resize(bytes) != OK || emitter.drawBuffer.resize(emitter.capacity * 20) != OK) {
+    if (initial.resize(bytes) != OK) {
         return fail(error, "Could not allocate Godot GPU particle staging storage", Result::InsufficientWork);
     }
     initial.fill(0);
-    emitter.drawBuffer.fill(0.0f);
     emitter.particles = device.storage_buffer_create(bytes, initial);
     if (!emitter.particles.is_valid()) {
         return fail(error, "Could not allocate Godot particle storage buffer", Result::NotReady);
     }
+    if (emitter.fieldMappingData.resize(4096) != OK) return fail(error, "Could not stage field mappings", Result::InsufficientWork);
+    emitter.fieldMappingData.fill(0);
+    emitter.fieldMappingStorage = device.storage_buffer_create(4096, emitter.fieldMappingData);
+    if (!emitter.fieldMappingStorage.is_valid()) return fail(error, "Could not allocate field mappings", Result::NotReady);
     for (auto& kernel : emitter.kernels) {
         kernel.storage = device.storage_buffer_create(static_cast<std::uint32_t>(kernel.packet.size()), kernel.packet);
         if (!kernel.storage.is_valid()) {
@@ -972,16 +1207,86 @@ auto setupEmitter(RenderingDevice& device, const RID& shader, Emitter& emitter, 
         bindings.append(storageUniform(0, emitter.particles));
         bindings.append(storageUniform(1, kernel.storage));
         bindings.append(storageUniform(2, emitter.flowStorage));
+        auto fields = Ref<RDUniform>{};
+        fields.instantiate(); fields->set_binding(3);
+        fields->set_uniform_type(RenderingDevice::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE);
+        for (auto index = 0u; index < 16; ++index)
+        {
+            fields->add_id(fieldSampler);
+            fields->add_id(emitter.generatedFieldTextures[index].is_valid()
+                ? emitter.generatedFieldTextures[index]->get_texture_rd_rid() : emptyField);
+        }
+        bindings.append(fields);
+        bindings.append(storageUniform(4, emitter.fieldMappingStorage));
         kernel.uniforms = device.uniform_set_create(bindings, shader, 0);
         if (!kernel.uniforms.is_valid()) {
             return fail(error, "Could not bind LGPK packet " + kernel.id, Result::NotReady);
         }
         kernel.packet.clear();
     }
+    const auto usage = RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice::TEXTURE_USAGE_STORAGE_BIT;
+    if (!device.texture_is_format_supported_for_usage(RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT, usage))
+    {
+        return fail(error, "GPU particle presentation requires RGBA32Float storage and sampling", Result::UnsupportedBinary);
+    }
+    auto format = Ref<RDTextureFormat>{};
+    format.instantiate();
+    format->set_texture_type(RenderingDevice::TEXTURE_TYPE_2D);
+    format->set_format(RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT);
+    format->set_width(5);
+    format->set_height(emitter.capacity);
+    format->set_depth(1);
+    format->set_array_layers(1);
+    format->set_mipmaps(1);
+    format->set_usage_bits(usage);
+    auto view = Ref<RDTextureView>{};
+    view.instantiate();
+    emitter.output = device.texture_create(format, view);
+    if (!emitter.output.is_valid())
+    {
+        return fail(error, "Could not allocate GPU particle presentation texture", Result::InsufficientWork);
+    }
+    auto image = Ref<RDUniform>{};
+    image.instantiate();
+    image->set_uniform_type(RenderingDevice::UNIFORM_TYPE_IMAGE);
+    image->set_binding(1);
+    image->add_id(emitter.output);
+    auto bindings = TypedArray<RDUniform>{};
+    bindings.append(storageUniform(0, emitter.particles));
+    bindings.append(image);
+    emitter.publishUniforms = device.uniform_set_create(bindings, publishShader, 0);
+    if (!emitter.publishUniforms.is_valid())
+    {
+        return fail(error, "Could not bind GPU particle presentation texture", Result::NotReady);
+    }
+    if (!publishParticleTexture(device, publishPipeline, emitter))
+    {
+        return fail(error, "Could not initialize GPU particle presentation", Result::NotReady);
+    }
     return Result::Ok;
 }
 
-auto publishParticles(RenderingDevice& device, Emitter& emitter, SpawnableHost& host, String& error) -> Result
+auto resolveGeneratedEmitterTextures(Emitter& emitter, PackageFluid2DRenderer* fluids, String& error) -> Result
+{
+    if (emitter.generatedTexture)
+    {
+        emitter.texture = fluids ? fluids->outputTexture(emitter.textureProducer, emitter.containerId,
+            emitter.instanceId, emitter.textureOutput != "DyeOutput" && emitter.textureOutput != "ColorOutput",
+            emitter.textureOutput == "ColorOutput") : Ref<Texture2D>{};
+        if (emitter.texture.is_null()) return fail(error, "Generated billboard producer is unavailable in this scope", Result::NotReady);
+    }
+    for (auto index = 0u; index < emitter.generatedFieldCount; ++index)
+    {
+        auto texture = fluids ? fluids->outputTexture(emitter.generatedFieldProducers[index], emitter.containerId,
+            emitter.instanceId, true) : Ref<Texture2D>{};
+        auto* native = Object::cast_to<Texture2DRD>(texture.ptr());
+        if (!native) return fail(error, "Generated sampling field is unavailable in this scope", Result::NotReady);
+        emitter.generatedFieldTextures[index] = Ref<Texture2DRD>(native);
+    }
+    return Result::Ok;
+}
+
+auto publishParticles(Emitter& emitter, SpawnableHost& host, String& error, Transform3D* drawTransform = nullptr) -> Result
 {
     auto matrix = std::array<float, 12>{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
     if (emitter.hasMatrix) {
@@ -1007,76 +1312,53 @@ auto publishParticles(RenderingDevice& device, Emitter& emitter, SpawnableHost& 
             }
         }
     }
-    auto rowX = Vector3(matrix[0], matrix[1], matrix[2]);
-    auto rowY = Vector3(matrix[4], matrix[5], matrix[6]);
-    auto rowZ = Vector3(matrix[8], matrix[9], matrix[10]);
-    auto scale = Vector3(rowX.length(), rowY.length(), rowZ.length());
-    const auto expected = emitter.capacity * particleStride;
-    const auto particles = device.buffer_get_data(emitter.particles);
-    if (particles.size() != expected) {
-        return fail(error, "Godot GPU particle readback did not complete", Result::NotReady);
-    }
-    auto* out = emitter.drawBuffer.ptrw();
-    const auto* bytes = particles.ptr();
-    auto visible = 0u;
-    auto boundsMin = Vector3{};
-    auto boundsMax = Vector3{};
-    for (auto slot = 0u; slot < emitter.capacity; ++slot) {
-        const auto* p = bytes + slot * particleStride;
-        if (word(p + 68) == 0) {
-            continue;
-        }
-        const auto position = Vector3(floatWord(p), floatWord(p + 4), floatWord(p + 8));
-        const auto center = Vector3(rowX.dot(position) + matrix[3],
-            rowY.dot(position) + matrix[7], rowZ.dot(position) + matrix[11]);
-        const auto width = floatWord(p + 48) * emitter.sizeScale;
-        const auto height = floatWord(p + 52) * emitter.sizeScale;
-        const auto angle = floatWord(p + 56);
-        const auto radius = std::max(std::abs(width), std::abs(height)) * 1.415f;
-        const auto extent = scale * radius;
-        const auto low = center - extent;
-        const auto high = center + extent;
-        if (!std::isfinite(angle) || !low.is_finite() || !high.is_finite()) {
-            return fail(error, "GPU billboard exceeds the Godot render coordinate range", Result::NonFinite);
-        }
-        boundsMin = visible == 0 ? low : boundsMin.min(low);
-        boundsMax = visible == 0 ? high : boundsMax.max(high);
-        // MultiMesh format: 3 row-major affine transform rows, RGBA color,
-        // then custom data (authored half-width, half-height and radians).
-        auto* instance = out + visible * 20;
-        const auto values = std::array<float, 20>{matrix[0], matrix[1], matrix[2], static_cast<float>(center.x),
-            matrix[4], matrix[5], matrix[6], static_cast<float>(center.y),
-            matrix[8], matrix[9], matrix[10], static_cast<float>(center.z),
-            floatWord(p + 32), floatWord(p + 36), floatWord(p + 40), floatWord(p + 44),
-            width, height, angle, 0};
-        std::copy(values.begin(), values.end(), instance);
-        ++visible;
-    }
-    const auto extent = boundsMax - boundsMin;
-    if (!extent.is_finite()) {
-        return fail(error, "GPU billboard bounds exceed the Godot render coordinate range", Result::NonFinite);
-    }
-    if (visible != 0) {
-        emitter.multiMesh->set_custom_aabb(AABB(boundsMin, extent));
-        emitter.multiMesh->set_buffer(emitter.drawBuffer);
-    }
-    emitter.multiMesh->set_visible_instance_count(visible);
+    const auto basis = Basis(Vector3(matrix[0], matrix[4], matrix[8]),
+        Vector3(matrix[1], matrix[5], matrix[9]), Vector3(matrix[2], matrix[6], matrix[10]));
+    if (drawTransform) *drawTransform = Transform3D(basis, Vector3(matrix[3], matrix[7], matrix[11]));
+    emitter.material->set_shader_parameter("draw_matrix", Transform3D(basis,
+        Vector3(matrix[3], matrix[7], matrix[11])));
+    emitter.multiMesh->set_visible_instance_count(emitter.capacity);
     return Result::Ok;
 }
 
 }
 
 struct PackageGpuRenderer::Impl {
+    Ref<detail::GpuRenderTaskQueue> queue;
     godot::RenderingDevice* device = nullptr;
     godot::RID shader;
     godot::RID pipeline;
+    godot::RID publishShader;
+    godot::RID publishPipeline;
+    godot::RID fieldSampler;
+    godot::RID emptyField;
     godot::PackedByteArray parameters;
     std::vector<Emitter> emitters;
     std::vector<EmitterTemplate> templates;
+    std::vector<GeneratedGpuDrawTexture> drawBindings;
     std::unique_ptr<PackageFluid2DRenderer> fluids;
     std::vector<RID> flowBuffers;
     std::uint32_t activeCapacity = 0;
     std::uint64_t rootId = 0;
+
+    Impl()
+    {
+        queue.instantiate();
+    }
+
+    auto runOnRenderThread(std::function<Result()> task, String& error) -> Result
+    {
+        auto result = Result::NotReady;
+        if (!queue->enqueue([&result, &task]() { result = task(); }))
+        {
+            return fail(error, "Godot RenderingServer is unavailable", Result::NotReady);
+        }
+        if (auto* server = RenderingServer::get_singleton())
+        {
+            server->force_sync();
+        }
+        return result;
+    }
 
     void release(Emitter& emitter)
     {
@@ -1084,17 +1366,35 @@ struct PackageGpuRenderer::Impl {
             node->hide();
             node->queue_free();
         }
-        for (auto& kernel : emitter.kernels) {
-            if (kernel.uniforms.is_valid()) {
-                device->free_rid(kernel.uniforms);
-            }
-            if (kernel.storage.is_valid()) {
-                device->free_rid(kernel.storage);
-            }
+        if (emitter.outputTexture.is_valid())
+        {
+            emitter.outputTexture->set_texture_rd_rid(RID{});
         }
-        if (emitter.particles.is_valid()) {
-            device->free_rid(emitter.particles);
-        }
+        auto error = String{};
+        runOnRenderThread([&]() {
+            for (auto& kernel : emitter.kernels) {
+                if (kernel.uniforms.is_valid()) {
+                    device->free_rid(kernel.uniforms);
+                }
+                if (kernel.storage.is_valid()) {
+                    device->free_rid(kernel.storage);
+                }
+            }
+            if (emitter.publishUniforms.is_valid())
+            {
+                device->free_rid(emitter.publishUniforms);
+            }
+            if (emitter.particles.is_valid())
+            {
+                device->free_rid(emitter.particles);
+            }
+            if (emitter.fieldMappingStorage.is_valid()) device->free_rid(emitter.fieldMappingStorage);
+            if (emitter.output.is_valid())
+            {
+                device->free_rid(emitter.output);
+            }
+            return Result::Ok;
+        }, error);
     }
 
     static void attachEmitter(godot::Node3D& root, Emitter& emitter);
@@ -1121,13 +1421,21 @@ struct PackageGpuRenderer::Impl {
         for (auto& emitter : emitters) {
             this->release(emitter);
         }
-        for (const auto& buffer : flowBuffers) {
-            release(buffer);
-        }
-        release(pipeline);
-        release(shader);
-        // create_local_rendering_device() transfers ownership to this adapter.
-        memdelete(device);
+        auto error = String{};
+        runOnRenderThread([&]() {
+            for (const auto& buffer : flowBuffers)
+            {
+                release(buffer);
+            }
+            release(publishPipeline);
+            release(publishShader);
+            release(fieldSampler);
+            release(emptyField);
+            release(pipeline);
+            release(shader);
+            return Result::Ok;
+        }, error);
+        // The RenderingServer owns the global device; never delete it.
     }
 };
 
@@ -1137,6 +1445,103 @@ PackageGpuRenderer::PackageGpuRenderer(std::unique_ptr<Impl> impl) noexcept
 }
 
 PackageGpuRenderer::~PackageGpuRenderer() = default;
+
+auto readGeneratedDrawBindings(const Bytes& manifest, const Bytes& renderConfig,
+    const std::vector<Fluid2DProgram>& fluids, std::vector<GeneratedGpuDrawTexture>& out,
+    String& error) -> Result
+{
+    if (manifest.empty())
+    {
+        return Result::Ok;
+    }
+    auto document = Dictionary{};
+    if (!object(JSON::parse_string(String::utf8(reinterpret_cast<const char*>(manifest.data()), manifest.size())), document))
+    {
+        return fail(error, "Invalid generated draw manifest");
+    }
+    const auto value = document.get("generatedDrawBindings", Variant{});
+    if (value.get_type() == Variant::NIL)
+    {
+        return Result::Ok;
+    }
+    if (value.get_type() != Variant::ARRAY || number(document, "version") != 3)
+    {
+        return fail(error, "Generated draw bindings require GPU payload version 3");
+    }
+    const auto entries = Array(value);
+    auto render = Dictionary{};
+    if (entries.size() > 64 || renderConfig.empty() ||
+        !object(JSON::parse_string(String::utf8(reinterpret_cast<const char*>(renderConfig.data()), renderConfig.size())), render))
+    {
+        return fail(error, "Invalid generated draw binding configuration");
+    }
+    const auto nodesValue = render.get("nodes", Variant{});
+    if (nodesValue.get_type() != Variant::ARRAY)
+    {
+        return fail(error, "Missing generated draw targets");
+    }
+    const auto nodes = Array(nodesValue);
+    for (auto i = 0; i < entries.size(); ++i)
+    {
+        auto entry = Dictionary{};
+        auto binding = GeneratedGpuDrawTexture{};
+        if (!object(entries[i], entry) || entry.size() != 8 ||
+            !nodeId(text(entry, "nodeId"), binding.nodeId) ||
+            !nodeId(text(entry, "producerNodeId"), binding.producerNodeId))
+        {
+            return fail(error, "Invalid generated draw identity");
+        }
+        const auto slot = entry.get("slot", Variant{});
+        const auto association = entry.get("association", Variant{});
+        const auto index = entry.get("index", Variant{});
+        const auto main = entry.get("mainTexture", Variant{});
+        if (slot.get_type() != Variant::FLOAT && slot.get_type() != Variant::INT)
+        {
+            return fail(error, "Invalid generated draw slot");
+        }
+        const auto slotNumber = static_cast<double>(slot);
+        const auto associationNumber = static_cast<double>(association);
+        const auto indexNumber = static_cast<double>(index);
+        if (!std::isfinite(slotNumber) || slotNumber < 0 || slotNumber > 127 || std::floor(slotNumber) != slotNumber ||
+            (association.get_type() != Variant::FLOAT && association.get_type() != Variant::INT) || associationNumber != 2 ||
+            (index.get_type() != Variant::FLOAT && index.get_type() != Variant::INT) || indexNumber != -1 ||
+            main.get_type() != Variant::BOOL)
+        {
+            return fail(error, "Unsupported generated draw parameter");
+        }
+        binding.slot = static_cast<std::int32_t>(slotNumber);
+        binding.mainTexture = static_cast<bool>(main);
+        binding.name = text(entry, "name");
+        binding.outputId = text(entry, "outputId");
+        if ((!binding.mainTexture && binding.name.is_empty()) || binding.name.length() > 256 ||
+            (binding.outputId != "ColorOutput" && binding.outputId != "DyeOutput" && binding.outputId != "FieldOutput") ||
+            (binding.mainTexture && binding.outputId != "ColorOutput") ||
+            std::none_of(fluids.begin(), fluids.end(), [&](const auto& fluid) { return fluid.nodeId == binding.producerNodeId; }))
+        {
+            return fail(error, "Invalid or cross-scope generated draw source");
+        }
+        auto found = false;
+        for (auto n = 0; n < nodes.size(); ++n)
+        {
+            auto target = Dictionary{};
+            auto id = NodeId{};
+            if (object(nodes[n], target) && nodeId(text(target, "nodeId"), id) && id == binding.nodeId)
+            {
+                const auto kind = text(target, "kind");
+                found = binding.mainTexture ? kind == "sprite" || kind == "flexiblePlane" : kind == "model";
+            }
+        }
+        if (!found || std::any_of(out.begin(), out.end(), [&](const auto& other) {
+            return other.nodeId == binding.nodeId && (other.mainTexture || binding.mainTexture
+                ? other.mainTexture == binding.mainTexture : other.slot == binding.slot && other.name == binding.name);
+        }))
+        {
+            return fail(error, "Invalid or duplicate generated draw target");
+        }
+        out.push_back(std::move(binding));
+    }
+    return Result::Ok;
+}
 
 auto readEmitters(const Bytes& containers, const Bytes& manifest, const Bytes& renderConfig,
     const Textures& textureBindings, std::vector<Emitter>& emitters,
@@ -1195,11 +1600,54 @@ auto readEmitters(const Bytes& containers, const Bytes& manifest, const Bytes& r
     if (result != Result::Ok) {
         return result;
     }
+    for (const auto& emitter : emitters)
+    {
+        if (emitter.generatedTexture && std::none_of(fluids.begin(), fluids.end(),
+            [&](const auto& fluid) { return fluid.nodeId == emitter.textureProducer; }))
+        {
+            return fail(error, "Generated texture producer is not in the same scope", Result::UnsupportedBinary);
+        }
+        for (auto index = 0u; index < emitter.generatedFieldCount; ++index)
+        {
+            if (std::none_of(fluids.begin(), fluids.end(), [&](const auto& fluid) { return fluid.nodeId == emitter.generatedFieldProducers[index]; }))
+                return fail(error, "Generated sampling producer is not in the same scope", Result::UnsupportedBinary);
+        }
+    }
     if (!ids.empty()) {
         return fail(error, "GPU container snapshots contain unsupported or unclaimed node IDs",
             Result::UnsupportedBinary);
     }
     return Result::Ok;
+}
+
+auto PackageGpuRenderer::drawBindings(const std::array<std::uint8_t, 16>& container) const
+    -> const std::vector<GeneratedGpuDrawTexture>&
+{
+    if (container == NodeId{})
+    {
+        return impl_->drawBindings;
+    }
+    for (const auto& definition : impl_->templates)
+    {
+        if (definition.containerId == container)
+        {
+            return definition.drawBindings;
+        }
+    }
+    static const auto empty = std::vector<GeneratedGpuDrawTexture>{};
+    return empty;
+}
+
+auto PackageGpuRenderer::outputTexture(const std::array<std::uint8_t, 16>& producer,
+    const std::array<std::uint8_t, 16>& container, const std::uint64_t instance,
+    const godot::String& output) const -> godot::Ref<godot::Texture2D>
+{
+    if (!impl_->fluids || (output != "DyeOutput" && output != "FieldOutput" && output != "ColorOutput"))
+    {
+        return {};
+    }
+    return impl_->fluids->outputTexture(producer, container, instance,
+        output == "FieldOutput", output == "ColorOutput");
 }
 
 auto PackageGpuRenderer::create(const SpawnablePackage& package, const Textures& textureBindings,
@@ -1214,6 +1662,10 @@ auto PackageGpuRenderer::create(const SpawnablePackage& package, const Textures&
     auto rootFluids = std::vector<Fluid2DProgram>{};
     auto result = readEmitters(package.rootGpuContainersJson, package.rootGpuProgramsJson,
         package.rootRenderConfiguration, textureBindings, impl->emitters, rootFluids, error);
+    if (result == Result::Ok)
+    {
+        result = readGeneratedDrawBindings(package.rootGpuProgramsJson, package.rootRenderConfiguration, rootFluids, impl->drawBindings, error);
+    }
     if (result != Result::Ok) {
         return result;
     }
@@ -1226,6 +1678,10 @@ auto PackageGpuRenderer::create(const SpawnablePackage& package, const Textures&
         definition.containerId = entry.containerId;
         result = readEmitters(entry.gpuContainersJson, entry.gpuProgramsJson, entry.renderConfiguration,
             textureBindings, definition.emitters, definition.fluids, error);
+        if (result == Result::Ok)
+        {
+            result = readGeneratedDrawBindings(entry.gpuProgramsJson, entry.renderConfiguration, definition.fluids, definition.drawBindings, error);
+        }
         if (result != Result::Ok) {
             return result;
         }
@@ -1254,64 +1710,110 @@ auto PackageGpuRenderer::create(const SpawnablePackage& package, const Textures&
     const auto hasParticles = !impl->emitters.empty() ||
         std::any_of(impl->templates.begin(), impl->templates.end(),
             [](const auto& definition) { return !definition.emitters.empty(); });
+    for (auto& emitter : impl->emitters)
+    {
+        result = resolveGeneratedEmitterTextures(emitter, impl->fluids.get(), error);
+        if (result != Result::Ok) return result;
+    }
     if (hasParticles) {
-        if (server && server->get_rendering_device()) {
-            impl->device = server->create_local_rendering_device();
-        }
-        if (!impl->device) {
-            return fail(error, "Godot GPU particles require a RenderingDevice renderer with local compute; "
-                "Compatibility and headless/null devices are not supported", Result::NotReady);
-        }
-        auto source = godot::Ref<godot::RDShaderSource>{};
-        source.instantiate();
-        source->set_stage_source(godot::RenderingDevice::SHADER_STAGE_COMPUTE, computeSource);
-        const auto spirv = impl->device->shader_compile_spirv_from_source(source);
-        if (spirv.is_null()) {
-            return fail(error, "Godot could not compile the embedded LGPK compute shader", Result::NotReady);
-        }
-        const auto compileError = spirv->get_stage_compile_error(godot::RenderingDevice::SHADER_STAGE_COMPUTE);
-        if (!compileError.is_empty()) {
-            return fail(error, "LGPK compute shader: " + compileError, Result::NotReady);
-        }
-        impl->shader = impl->device->shader_create_from_spirv(spirv, "LibraFX LGPK v1");
-        if (!impl->shader.is_valid()) {
-            return fail(error, "Godot could not create the LGPK compute shader", Result::NotReady);
-        }
-        impl->pipeline = impl->device->compute_pipeline_create(impl->shader);
-        if (!impl->pipeline.is_valid()) {
-            return fail(error, "Godot could not create the LGPK compute pipeline", Result::NotReady);
-        }
-        if (impl->parameters.resize(48) != godot::OK) {
-            return fail(error, "Could not allocate LGPK dispatch uniforms", Result::InsufficientWork);
-        }
-        auto emptyFlow = PackedByteArray{};
-        if (emptyFlow.resize(flowHeaderBytes) != godot::OK) {
-            return fail(error, "Could not allocate empty FlowMap headers", Result::InsufficientWork);
-        }
-        emptyFlow.fill(0);
-        auto empty = impl->device->storage_buffer_create(flowHeaderBytes, emptyFlow);
-        if (!empty.is_valid()) {
-            return fail(error, "Could not create empty FlowMap buffer", Result::NotReady);
-        }
-        impl->flowBuffers.push_back(empty);
-        auto flowBytes = flowHeaderBytes;
-        for (auto& definition : impl->templates) {
-            for (auto& emitter : definition.emitters) {
+        result = impl->runOnRenderThread([&]() -> Result {
+            impl->device = server ? server->get_rendering_device() : nullptr;
+            if (!impl->device) {
+                return fail(error, "Godot GPU particles require the global RenderingDevice; "
+                    "Compatibility and headless/null devices are not supported", Result::NotReady);
+            }
+            auto sampler = Ref<RDSamplerState>{};
+            sampler.instantiate(); sampler->set_min_filter(RenderingDevice::SAMPLER_FILTER_LINEAR);
+            sampler->set_mag_filter(RenderingDevice::SAMPLER_FILTER_LINEAR);
+            sampler->set_repeat_u(RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE);
+            sampler->set_repeat_v(RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE);
+            impl->fieldSampler = impl->device->sampler_create(sampler);
+            auto format = Ref<RDTextureFormat>{}; format.instantiate();
+            format->set_format(RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT);
+            format->set_width(1); format->set_height(1); format->set_depth(1); format->set_array_layers(1);
+            format->set_mipmaps(1); format->set_texture_type(RenderingDevice::TEXTURE_TYPE_2D);
+            format->set_usage_bits(RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT);
+            auto view = Ref<RDTextureView>{}; view.instantiate();
+            auto blank = PackedByteArray{}; blank.resize(16); blank.fill(0);
+            auto images = TypedArray<PackedByteArray>{}; images.append(blank);
+            impl->emptyField = impl->device->texture_create(format, view, images);
+            if (!impl->fieldSampler.is_valid() || !impl->emptyField.is_valid())
+                return fail(error, "Could not create native generated-field sampling bindings", Result::NotReady);
+            auto source = godot::Ref<godot::RDShaderSource>{};
+            source.instantiate();
+            source->set_stage_source(godot::RenderingDevice::SHADER_STAGE_COMPUTE, computeSource);
+            const auto spirv = impl->device->shader_compile_spirv_from_source(source);
+            if (spirv.is_null()) {
+                return fail(error, "Godot could not compile the embedded LGPK compute shader", Result::NotReady);
+            }
+            const auto compileError = spirv->get_stage_compile_error(godot::RenderingDevice::SHADER_STAGE_COMPUTE);
+            if (!compileError.is_empty()) {
+                return fail(error, "LGPK compute shader: " + compileError, Result::NotReady);
+            }
+            impl->shader = impl->device->shader_create_from_spirv(spirv, "LibraFX LGPK v1");
+            if (!impl->shader.is_valid()) {
+                return fail(error, "Godot could not create the LGPK compute shader", Result::NotReady);
+            }
+            impl->pipeline = impl->device->compute_pipeline_create(impl->shader);
+            if (!impl->pipeline.is_valid()) {
+                return fail(error, "Godot could not create the LGPK compute pipeline", Result::NotReady);
+            }
+            auto publishSourceObject = Ref<RDShaderSource>{};
+            publishSourceObject.instantiate();
+            publishSourceObject->set_stage_source(RenderingDevice::SHADER_STAGE_COMPUTE, publishSource);
+            const auto publishSpirv = impl->device->shader_compile_spirv_from_source(publishSourceObject);
+            if (publishSpirv.is_null() || !publishSpirv->get_stage_compile_error(RenderingDevice::SHADER_STAGE_COMPUTE).is_empty())
+            {
+                return fail(error, "Godot could not compile GPU particle presentation", Result::NotReady);
+            }
+            impl->publishShader = impl->device->shader_create_from_spirv(publishSpirv, "LibraFX GPU particle presentation");
+            if (!impl->publishShader.is_valid())
+            {
+                return fail(error, "Godot could not create GPU particle presentation shader", Result::NotReady);
+            }
+            impl->publishPipeline = impl->device->compute_pipeline_create(impl->publishShader);
+            if (!impl->publishPipeline.is_valid())
+            {
+                return fail(error, "Godot could not create GPU particle presentation pipeline", Result::NotReady);
+            }
+            if (impl->parameters.resize(48) != godot::OK) {
+                return fail(error, "Could not allocate LGPK dispatch uniforms", Result::InsufficientWork);
+            }
+            auto emptyFlow = PackedByteArray{};
+            if (emptyFlow.resize(flowHeaderBytes) != godot::OK) {
+                return fail(error, "Could not allocate empty FlowMap headers", Result::InsufficientWork);
+            }
+            emptyFlow.fill(0);
+            auto empty = impl->device->storage_buffer_create(flowHeaderBytes, emptyFlow);
+            if (!empty.is_valid()) {
+                return fail(error, "Could not create empty FlowMap buffer", Result::NotReady);
+            }
+            impl->flowBuffers.push_back(empty);
+            auto flowBytes = flowHeaderBytes;
+            for (auto& definition : impl->templates) {
+                for (auto& emitter : definition.emitters) {
+                    result = uploadFlowMaps(*impl->device, emitter, empty, impl->flowBuffers, flowBytes, error);
+                    if (result != Result::Ok) {
+                        return result;
+                    }
+                }
+            }
+            for (auto& emitter : impl->emitters) {
+                impl->activeCapacity += emitter.capacity;
                 result = uploadFlowMaps(*impl->device, emitter, empty, impl->flowBuffers, flowBytes, error);
+                if (result == Result::Ok) {
+                    result = setupEmitter(*impl->device, impl->shader, impl->publishShader, impl->publishPipeline,
+                        impl->fieldSampler, impl->emptyField, emitter, error);
+                }
                 if (result != Result::Ok) {
                     return result;
                 }
             }
-        }
-        for (auto& emitter : impl->emitters) {
-            impl->activeCapacity += emitter.capacity;
-            result = uploadFlowMaps(*impl->device, emitter, empty, impl->flowBuffers, flowBytes, error);
-            if (result == Result::Ok) {
-                result = setupEmitter(*impl->device, impl->shader, emitter, error);
-            }
-            if (result != Result::Ok) {
-                return result;
-            }
+            return Result::Ok;
+        }, error);
+        if (result != Result::Ok)
+        {
+            return result;
         }
     }
     out = std::unique_ptr<PackageGpuRenderer>(new PackageGpuRenderer(std::move(impl)));
@@ -1328,7 +1830,14 @@ void PackageGpuRenderer::Impl::attachEmitter(godot::Node3D& root, Emitter& emitt
         auto material = godot::Ref<godot::ShaderMaterial>{};
         material.instantiate();
         material->set_shader(shader);
+        emitter.material = material;
+        emitter.outputTexture.instantiate();
+        emitter.outputTexture->set_texture_rd_rid(emitter.output);
+        material->set_shader_parameter("particle_state", emitter.outputTexture);
+        material->set_shader_parameter("particle_size_scale", emitter.sizeScale);
         material->set_shader_parameter("use_draw_matrix", emitter.hasMatrix);
+        material->set_shader_parameter("texture_premultiplied", emitter.generatedTexture && emitter.textureOutput == "DyeOutput");
+        material->set_shader_parameter("texture_flip_y", emitter.generatedTexture && emitter.textureOutput != "ColorOutput");
         if (emitter.texture.is_valid()) {
             material->set_shader_parameter("particle_texture", emitter.texture);
             material->set_shader_parameter("use_particle_texture", true);
@@ -1339,13 +1848,24 @@ void PackageGpuRenderer::Impl::attachEmitter(godot::Node3D& root, Emitter& emitt
         emitter.multiMesh.instantiate();
         emitter.multiMesh->set_mesh(quad);
         emitter.multiMesh->set_transform_format(godot::MultiMesh::TRANSFORM_3D);
-        emitter.multiMesh->set_use_colors(true);
-        emitter.multiMesh->set_use_custom_data(true);
+        emitter.multiMesh->set_use_colors(false);
+        emitter.multiMesh->set_use_custom_data(false);
         emitter.multiMesh->set_instance_count(emitter.capacity);
-        emitter.multiMesh->set_visible_instance_count(0);
+        for (auto index = 0u; index < emitter.capacity; ++index)
+        {
+            emitter.multiMesh->set_instance_transform(index, Transform3D{});
+        }
+        emitter.multiMesh->set_visible_instance_count(emitter.capacity);
         auto* node = memnew(godot::MultiMeshInstance3D);
+        node->set_as_top_level(emitter.hasMatrix);
         node->set_multimesh(emitter.multiMesh);
         node->set_material_override(material);
+        // The GPU owns particle positions; no CPU readback is used to recompute bounds.
+        // Keep the single emitter draw eligible for rendering; dead slots are discarded in the shader.
+        if (auto* server = godot::RenderingServer::get_singleton())
+        {
+            server->instance_set_ignore_culling(node->get_instance(), true);
+        }
         emitter.visualId = node->get_instance_id();
         root.add_child(node);
 }
@@ -1358,7 +1878,7 @@ auto PackageGpuRenderer::attach(godot::Node& owner, godot::String& error) -> Res
         return fail(error, "GPU playback requires an active scene owner on Godot's main thread",
             Result::NotReady);
     }
-    if (!impl_->emitters.empty()) {
+    if (impl_->device != nullptr) {
         auto* root = memnew(godot::Node3D);
         root->set_name("LibraFxGpuRoot");
         for (auto& emitter : impl_->emitters) {
@@ -1394,6 +1914,14 @@ auto PackageGpuRenderer::handleEvent(const SpawnableHostEvent& event, godot::Str
         return emitter.instanceId == event.instanceId && emitter.containerId == containerId;
     };
     if (event.kind == SpawnableHostEventKind::Spawn) {
+        if (impl_->fluids)
+        {
+            const auto result = impl_->fluids->handleEvent(event, error);
+            if (result != Result::Ok)
+            {
+                return result;
+            }
+        }
         auto definition = std::find_if(impl_->templates.begin(), impl_->templates.end(),
             [&](const auto& item) { return item.containerId == containerId; });
         if (definition != impl_->templates.end() && !definition->emitters.empty()) {
@@ -1415,8 +1943,13 @@ auto PackageGpuRenderer::handleEvent(const SpawnableHostEvent& event, godot::Str
                 emitter.containerId = containerId;
                 emitter.instanceId = event.instanceId;
                 emitter.startTime = event.time;
+                auto resolved = resolveGeneratedEmitterTextures(emitter, impl_->fluids.get(), error);
+                if (resolved != Result::Ok) return resolved;
                 emitter.seed ^= static_cast<std::uint32_t>(event.seed ^ (event.seed >> 32));
-                auto result = setupEmitter(*impl_->device, impl_->shader, emitter, error);
+                auto result = impl_->runOnRenderThread([&]() {
+                    return setupEmitter(*impl_->device, impl_->shader, impl_->publishShader,
+                        impl_->publishPipeline, impl_->fieldSampler, impl_->emptyField, emitter, error);
+                }, error);
                 if (result != Result::Ok) {
                     return result;
                 }
@@ -1438,7 +1971,8 @@ auto PackageGpuRenderer::handleEvent(const SpawnableHostEvent& event, godot::Str
         });
         impl_->emitters.erase(retired, impl_->emitters.end());
     }
-    return impl_->fluids ? impl_->fluids->handleEvent(event, error) : Result::Ok;
+    return event.kind != SpawnableHostEventKind::Spawn && impl_->fluids
+        ? impl_->fluids->handleEvent(event, error) : Result::Ok;
 }
 
 auto PackageGpuRenderer::advance(SpawnableHost& host, double elapsed, double delta,
@@ -1458,68 +1992,101 @@ auto PackageGpuRenderer::advance(SpawnableHost& host, double elapsed, double del
     if (host.rootFinished()) {
         return Result::Ok;
     }
-    if (impl_->emitters.empty()) {
-        return impl_->fluids ? impl_->fluids->advance(host, elapsed, delta, error) : Result::Ok;
-    }
-    if (delta == 0) {
-        for (auto& emitter : impl_->emitters) {
-            const auto result = publishParticles(*impl_->device, emitter, host, error);
-            if (result != Result::Ok) {
-                return result;
-            }
-        }
-        return impl_->fluids ? impl_->fluids->advance(host, elapsed, delta, error) : Result::Ok;
-    }
-    auto& device = *impl_->device;
-    const auto list = device.compute_list_begin();
-    if (list < 0) {
-        return fail(error, "Godot could not begin LGPK compute", Result::NotReady);
-    }
-    device.compute_list_bind_compute_pipeline(list, impl_->pipeline);
-    for (auto& emitter : impl_->emitters) {
-        auto localTime = std::max(0.0, elapsed - emitter.startTime);
-        auto localDelta = std::min(delta, localTime);
-        if (localDelta == 0) {
-            continue;
-        }
-        emitter.remainder = std::min(emitter.remainder + spawnPerSecond * localDelta, double(emitter.capacity));
-        const auto count = static_cast<std::uint32_t>(emitter.remainder);
-        emitter.remainder -= count;
-        auto* parameters = impl_->parameters.ptrw();
-        putWord(parameters, emitter.capacity);
-        putWord(parameters + 4, emitter.capacity);
-        putWord(parameters + 8, emitter.cursor);
-        putWord(parameters + 12, count);
-        putFloat(parameters + 16, static_cast<float>(localDelta));
-        putFloat(parameters + 20, static_cast<float>(localTime));
-        putWord(parameters + 24, emitter.seed);
-        putWord(parameters + 28, emitter.frame++);
-        // Simulation is emitter-local; authored Matrix applies only to presentation.
-        std::fill_n(parameters + 32, 16, std::uint8_t{0});
-        emitter.cursor = (emitter.cursor + count) % emitter.capacity;
-        device.compute_list_set_push_constant(list, impl_->parameters, 48);
-        const auto groups = (emitter.capacity + 63) / 64;
-        if (count != 0) {
-            device.compute_list_bind_uniform_set(list, emitter.kernels[0].uniforms, 0);
-            device.compute_list_dispatch(list, groups, 1, 1);
-            device.compute_list_add_barrier(list);
-        }
-        device.compute_list_bind_uniform_set(list, emitter.kernels[1].uniforms, 0);
-        device.compute_list_dispatch(list, groups, 1, 1);
-    }
-    device.compute_list_end();
-    device.submit();
-    device.sync();
-    // The local RenderingDevice cannot give its buffers to the scene
-    // renderer. Read back once per emitter for presentation only. All graph
-    // instructions and particle lifecycle math above ran on the GPU.
-    for (auto& emitter : impl_->emitters) {
-        const auto result = publishParticles(device, emitter, host, error);
-        if (result != Result::Ok) {
+    if (impl_->fluids)
+    {
+        const auto result = impl_->fluids->advance(host, elapsed, delta, error);
+        if (result != Result::Ok)
+        {
             return result;
         }
     }
-    return impl_->fluids ? impl_->fluids->advance(host, elapsed, delta, error) : Result::Ok;
+    if (impl_->emitters.empty()) {
+        return Result::Ok;
+    }
+    auto* root = Object::cast_to<Node3D>(ObjectDB::get_instance(impl_->rootId));
+    for (auto& emitter : impl_->emitters)
+    {
+        auto consumer = Transform3D{};
+        const auto presented = publishParticles(emitter, host, error, &consumer);
+        if (presented != Result::Ok) return presented;
+        if (!emitter.hasMatrix) consumer = root ? root->get_global_transform() : Transform3D{};
+        for (auto resource = 0u; resource < maxFlowResources; ++resource)
+        {
+            if (!emitter.generatedPlaneCoordinates[resource]) continue;
+            auto mapping = std::array<Vector4, 4>{};
+            const auto mapped = impl_->fluids ? impl_->fluids->fieldMapping(emitter.flowProducers[resource],
+                emitter.containerId, emitter.instanceId, consumer, mapping, error) : Result::NotReady;
+            if (mapped != Result::Ok) return mapped;
+            for (auto row = 0u; row < 4; ++row)
+                for (auto lane = 0u; lane < 4; ++lane)
+                {
+                    putFloat(emitter.fieldMappingData.ptrw() + (resource * 16 + row * 4 + lane) * 4, static_cast<float>(mapping[row][lane]));
+                }
+        }
+    }
+    if (delta == 0)
+    {
+        return Result::Ok;
+    }
+    const auto dispatchResult = impl_->runOnRenderThread([&]() -> Result {
+        auto& device = *impl_->device;
+        for (const auto& emitter : impl_->emitters)
+        {
+            if (device.buffer_update(emitter.fieldMappingStorage, 0, 4096, emitter.fieldMappingData) != OK)
+                return fail(error, "Could not upload generated field coordinates", Result::NotReady);
+        }
+        const auto list = device.compute_list_begin();
+        if (list < 0) {
+            return fail(error, "Godot could not begin LGPK compute", Result::NotReady);
+        }
+        device.compute_list_bind_compute_pipeline(list, impl_->pipeline);
+        for (auto& emitter : impl_->emitters) {
+            auto localTime = std::max(0.0, elapsed - emitter.startTime);
+            auto localDelta = std::min(delta, localTime);
+            if (localDelta == 0) {
+                continue;
+            }
+            emitter.remainder = std::min(emitter.remainder + spawnPerSecond * localDelta, double(emitter.capacity));
+            const auto count = static_cast<std::uint32_t>(emitter.remainder);
+            emitter.remainder -= count;
+            auto* parameters = impl_->parameters.ptrw();
+            putWord(parameters, emitter.capacity);
+            putWord(parameters + 4, emitter.capacity);
+            putWord(parameters + 8, emitter.cursor);
+            putWord(parameters + 12, count);
+            putFloat(parameters + 16, static_cast<float>(localDelta));
+            putFloat(parameters + 20, static_cast<float>(localTime));
+            putWord(parameters + 24, emitter.seed);
+            putWord(parameters + 28, emitter.frame++);
+            // Simulation is emitter-local; authored Matrix applies only to presentation.
+            std::fill_n(parameters + 32, 16, std::uint8_t{0});
+            emitter.cursor = (emitter.cursor + count) % emitter.capacity;
+            device.compute_list_set_push_constant(list, impl_->parameters, 48);
+            const auto groups = (emitter.capacity + 63) / 64;
+            if (count != 0) {
+                device.compute_list_bind_uniform_set(list, emitter.kernels[0].uniforms, 0);
+                device.compute_list_dispatch(list, groups, 1, 1);
+                device.compute_list_add_barrier(list);
+            }
+            device.compute_list_bind_uniform_set(list, emitter.kernels[1].uniforms, 0);
+            device.compute_list_dispatch(list, groups, 1, 1);
+            device.compute_list_add_barrier(list);
+        }
+        device.compute_list_end();
+        for (const auto& emitter : impl_->emitters)
+        {
+            if (!publishParticleTexture(device, impl_->publishPipeline, emitter))
+            {
+                return fail(error, "Could not publish GPU particle presentation", Result::NotReady);
+            }
+        }
+        return Result::Ok;
+    }, error);
+    if (dispatchResult != Result::Ok)
+    {
+        return dispatchResult;
+    }
+    return Result::Ok;
 }
 
 auto PackageGpuRenderer::emitterCount() const noexcept -> std::size_t
@@ -1528,6 +2095,34 @@ auto PackageGpuRenderer::emitterCount() const noexcept -> std::size_t
 }
 
 #ifdef LIBERAFX_GODOT_TEST_HOOKS
+auto PackageGpuRenderer::testReadParticleState(std::size_t emitterIndex,
+    godot::Dictionary& fields, godot::String& error) -> Result
+{
+    if (!Thread::is_main_thread() || !impl_ || emitterIndex >= impl_->emitters.size())
+    {
+        return fail(error, "Particle diagnostic readback requires an active emitter", Result::InvalidArgument);
+    }
+    const auto& emitter = impl_->emitters[emitterIndex];
+    auto bytes = PackedByteArray{};
+    const auto result = impl_->runOnRenderThread([&]() {
+        bytes = impl_->device->buffer_get_data(emitter.particles);
+        return bytes.size() == emitter.capacity * particleStride ? Result::Ok : Result::NotReady;
+    }, error);
+    if (result != Result::Ok)
+    {
+        return result;
+    }
+    auto values = PackedFloat32Array{};
+    if (values.resize(emitter.capacity * 20) != OK)
+    {
+        return fail(error, "Could not allocate particle diagnostic data", Result::InsufficientWork);
+    }
+    std::memcpy(values.ptrw(), bytes.ptr(), bytes.size());
+    fields["capacity"] = static_cast<std::int64_t>(emitter.capacity);
+    fields["state"] = values;
+    return Result::Ok;
+}
+
 auto PackageGpuRenderer::testReadFluidFields(godot::Dictionary& fields,
     godot::String& error) -> Result
 {

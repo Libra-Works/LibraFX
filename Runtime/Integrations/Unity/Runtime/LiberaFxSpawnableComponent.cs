@@ -119,6 +119,17 @@ namespace LiberaFx.Unity
             return false;
         }
 
+        /// <summary>Borrowed RGBA32F: logical velocity XY, density/depth Z, temperature W. No readback.</summary>
+        public bool TryGetFluidFieldOutput(string nodeId, ulong instanceId, out RenderTexture texture)
+        {
+            texture = null;
+            if (!LiberaFxUnityBindingLookup.TryCanonicalGuid(nodeId, out var canonical)) return false;
+            if (instanceId == 0) return rootRenderScope != null && rootRenderScope.TryGetFluidOutput(canonical, out texture, true);
+            foreach (var scope in instanceScopes.Values)
+                if (scope.ScopeInstanceId == instanceId && scope.TryGetFluidOutput(canonical, out texture, true)) return true;
+            return false;
+        }
+
         /// <summary>Reports the most recent capped fluid step for a live scope.</summary>
         public bool TryGetFluidStats(string nodeId, ulong instanceId, out LibraFluid2DFrameStats stats)
         {

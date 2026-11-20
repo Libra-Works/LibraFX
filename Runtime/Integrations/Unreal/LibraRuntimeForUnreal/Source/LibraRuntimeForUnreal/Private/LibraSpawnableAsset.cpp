@@ -1,6 +1,7 @@
 #include "LibraSpawnableAsset.h"
 
 #include "LibraNativeState.h"
+#include "LibraFluid2DJson.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -49,18 +50,11 @@ bool LibraReadFluidInteger(const TSharedPtr<FJsonObject>& object, const TCHAR* n
 bool LibraValidateFluidSettings(const TSharedPtr<FJsonObject>& object)
 {
     using namespace liberafx::gpu;
-    static const TSet<FString> names{
-        TEXT("version"), TEXT("width"), TEXT("height"), TEXT("domainWidth"), TEXT("domainHeight"),
-        TEXT("pressureIterations"), TEXT("maximumStep"), TEXT("maximumSubsteps"),
-        TEXT("velocityDissipation"), TEXT("densityDissipation"), TEXT("sourceEnabled"),
-        TEXT("sourceX"), TEXT("sourceY"), TEXT("sourceRadius"), TEXT("sourceDensity"),
-        TEXT("sourceVelocityX"), TEXT("sourceVelocityY"), TEXT("buoyancy"),
-        TEXT("colorR"), TEXT("colorG"), TEXT("colorB"), TEXT("colorA")
-    };
-    if (!object.IsValid() || object->Values.Num() != names.Num()) return false;
-    for (const auto& entry : object->Values)
-        if (!names.Contains(entry.Key)) return false;
     auto settings = Fluid2DSettings{};
+    if (!LibraReadFluidModelProperties(object, settings))
+    {
+        return false;
+    }
     return LibraReadFluidInteger(object, TEXT("version"), 1, 1, settings.version) &&
         LibraReadFluidInteger(object, TEXT("width"), 8, 1024, settings.width) &&
         LibraReadFluidInteger(object, TEXT("height"), 8, 1024, settings.height) &&
@@ -68,7 +62,7 @@ bool LibraValidateFluidSettings(const TSharedPtr<FJsonObject>& object)
         LibraReadFluidNumber(object, TEXT("domainHeight"), settings.domainHeight) &&
         LibraReadFluidInteger(object, TEXT("pressureIterations"), 1, 128, settings.pressureIterations) &&
         LibraReadFluidNumber(object, TEXT("maximumStep"), settings.maximumStep) &&
-        LibraReadFluidInteger(object, TEXT("maximumSubsteps"), 1, 16, settings.maximumSubsteps) &&
+        LibraReadFluidInteger(object, TEXT("maximumSubsteps"), 1, 64, settings.maximumSubsteps) &&
         LibraReadFluidNumber(object, TEXT("velocityDissipation"), settings.velocityDissipation) &&
         LibraReadFluidNumber(object, TEXT("densityDissipation"), settings.densityDissipation) &&
         object->TryGetBoolField(TEXT("sourceEnabled"), settings.sourceEnabled) &&
@@ -83,6 +77,7 @@ bool LibraValidateFluidSettings(const TSharedPtr<FJsonObject>& object)
         LibraReadFluidNumber(object, TEXT("colorG"), settings.colorG) &&
         LibraReadFluidNumber(object, TEXT("colorB"), settings.colorB) &&
         LibraReadFluidNumber(object, TEXT("colorA"), settings.colorA) &&
+        (!object->HasField(TEXT("vorticity")) || LibraReadFluidNumber(object, TEXT("vorticity"), settings.vorticity)) &&
         validFluid2DSettings(settings);
 }
 
@@ -116,7 +111,7 @@ bool LibraValidateFluidScope(const std::vector<std::uint8_t>& snapshotBytes,
     if (!FJsonSerializer::Deserialize(manifestReader, manifest) || !manifest)
         return reject(TEXT("GPU executable manifest JSON is invalid"));
     auto version = double{};
-    if (!manifest->TryGetNumberField(TEXT("version"), version) || (version != 1 && version != 2))
+    if (!manifest->TryGetNumberField(TEXT("version"), version) || (version != 1 && version != 2 && version != 3))
         return reject(TEXT("GPU executable manifest has an unsupported version"));
     TArray<TSharedPtr<FJsonValue>> snapshots;
     if (!snapshotBytes.empty())
@@ -227,10 +222,39 @@ bool LibraValidateFluidScope(const std::vector<std::uint8_t>& snapshotBytes,
             !LibraValidateFluidSettings(*settings) ||
             !fluid->TryGetObjectField(TEXT("renderer"), renderer) || !renderer->IsValid() ||
             !(*renderer)->TryGetStringField(TEXT("material"), material) ||
-            material != TEXT("builtin:fluid-alpha") ||
+            !LibraFluidMaterialMatches(*settings, material) ||
             !(*renderer)->TryGetNumberField(TEXT("sizeScale"), sizeScale) ||
             !FMath::IsFinite(sizeScale) || sizeScale <= 0 || sizeScale > 10000)
             return reject(TEXT("Fluid2D program has an invalid ID, settings, or renderer"));
+        if (fluid->HasField(TEXT("automaticPlane")))
+        {
+            bool automaticPlane;
+            if (version < 3 || !fluid->TryGetBoolField(TEXT("automaticPlane"), automaticPlane))
+                return reject(TEXT("Fluid output selection requires version 3 and a boolean"));
+        }
+    }
+    for (const auto& value : *programs)
+    {
+        const auto program = value->AsObject();
+        const TSharedPtr<FJsonObject>* delivery = nullptr;
+        const TSharedPtr<FJsonObject>* generated = nullptr;
+        if (!program || !program->TryGetObjectField(TEXT("unreal"), delivery))
+            return reject(TEXT("GPU particle delivery is missing"));
+        if (!(*delivery)->HasField(TEXT("generatedResources")))
+            continue;
+        if (version < 3 || !(*delivery)->TryGetObjectField(TEXT("generatedResources"), generated) || (*generated)->Values.Num() > 64)
+            return reject(TEXT("Generated resources require version 3 and bounded bindings"));
+        for (const auto& binding : (*generated)->Values)
+        {
+            const auto reference = binding.Value->AsObject();
+            FString producerId, output;
+            FGuid producer;
+            if (!reference || reference->Values.Num() != 2 ||
+                !reference->TryGetStringField(TEXT("producerNodeId"), producerId) || !FGuid::Parse(producerId, producer) ||
+                !manifestFluidIds.Contains(producer) || !reference->TryGetStringField(TEXT("outputId"), output) ||
+                (output != TEXT("DyeOutput") && output != TEXT("ColorOutput") && output != TEXT("FieldOutput") && output != TEXT("VelocityOutput") && output != TEXT("DensityOutput")))
+                return reject(TEXT("Generated texture producer/output does not match this execution scope"));
+        }
     }
     return expectedParticles.IsEmpty() && expectedFluids.IsEmpty()
         ? true : reject(TEXT("GPU container snapshots contain programs missing from the manifest"));
@@ -403,11 +427,11 @@ bool ReadLibraPackageResourceGpuKeys(const std::vector<std::uint8_t>& bytes,
     const FLibraPackageResourceJsonArray* fluids = nullptr;
     auto version = double{};
     if (!root || !root->TryGetNumberField(TEXT("version"), version) ||
-        (version != 1 && version != 2) ||
+        (version != 1 && version != 2 && version != 3) ||
         !root->TryGetArrayField(TEXT("programs"), programs) || programs->Num() > 16)
         return false;
     if ((version == 1 && root->HasField(TEXT("fluidPrograms"))) ||
-        (version == 2 && (!root->TryGetArrayField(TEXT("fluidPrograms"), fluids) ||
+        (version >= 2 && (!root->TryGetArrayField(TEXT("fluidPrograms"), fluids) ||
             fluids->IsEmpty() || programs->Num() + fluids->Num() > 16)))
         return false;
     for (const auto& value : *programs)
@@ -440,7 +464,7 @@ bool ReadLibraPackageResourceGpuKeys(const std::vector<std::uint8_t>& bytes,
                 !fluid->TryGetObjectField(TEXT("settings"), settings) ||
                 !fluid->TryGetObjectField(TEXT("renderer"), renderer) ||
                 !(*renderer)->TryGetStringField(TEXT("material"), material) ||
-                material != TEXT("builtin:fluid-alpha") ||
+                !LibraFluidMaterialMatches(*settings, material) ||
                 !(*renderer)->TryGetNumberField(TEXT("sizeScale"), sizeScale) ||
                 !FMath::IsFinite(sizeScale) || sizeScale <= 0 || sizeScale > 10000)
                 return false;

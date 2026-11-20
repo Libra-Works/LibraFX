@@ -21,9 +21,15 @@ foreach ($name in @('LibraGpu.Core', 'LibraGpu.Core.Tests')) {
     $src = Join-Path $root "Gpu/$name"
     $dst = Join-Path $managed $name
     New-Item -ItemType Directory -Path $dst | Out-Null
-    Get-ChildItem -LiteralPath $src -File | Copy-Item -Destination $dst
-    if (Test-Path (Join-Path $src 'Shaders')) {
-        Copy-Item -LiteralPath (Join-Path $src 'Shaders') -Destination $dst -Recurse
+    foreach ($file in Get-ChildItem -LiteralPath $src -File -Recurse) {
+        $relative = [IO.Path]::GetRelativePath($src, $file.FullName)
+        if ($relative -match '(^|[\\/])(bin|obj)([\\/]|$)' -or
+            $file.Extension -notin @('.cs', '.csproj', '.hlsl')) {
+            continue
+        }
+        $destination = Join-Path $dst $relative
+        [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination)) | Out-Null
+        Copy-Item -LiteralPath $file.FullName -Destination $destination
     }
 }
 $settings = @{

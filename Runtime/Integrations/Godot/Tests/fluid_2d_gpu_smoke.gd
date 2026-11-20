@@ -543,7 +543,7 @@ func load_player(parent: Node = null) -> Variant:
 	return player
 
 
-func capture(viewport: SubViewport) -> Dictionary:
+func capture(viewport: SubViewport, all_colors: bool = false) -> Dictionary:
 	await process_frame
 	await process_frame
 	await RenderingServer.frame_post_draw
@@ -559,7 +559,7 @@ func capture(viewport: SubViewport) -> Dictionary:
 	for y in range(image.get_height()):
 		for x in range(image.get_width()):
 			var pixel := image.get_pixel(x, y)
-			if pixel.r > 0.08 and pixel.r > pixel.g * 1.4 and pixel.g > pixel.b:
+			if (maxf(pixel.r, maxf(pixel.g, pixel.b)) > .02) if all_colors else (pixel.r > 0.08 and pixel.r > pixel.g * 1.4 and pixel.g > pixel.b):
 				result.colored += 1
 				result.centroid_x += x
 				result.centroid_y += y

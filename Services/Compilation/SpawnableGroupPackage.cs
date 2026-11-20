@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Resources;
 
@@ -180,7 +181,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
                     new(onStart.SingleOrDefault()?.Id, life.SingleOrDefault()?.Id, ownerDestroy.SingleOrDefault()?.Id),
                     outputs, liveInputs.AsReadOnly(), capturedInputs.AsReadOnly(), signalInputs, signalOutputs)
                 {
-                    GpuPrograms = CreateGpuPrograms(child),
+                    GpuPrograms = CreateGpuPrograms(child, childBuild.RenderConfiguration),
                     ParentContainerId = ownerContainerId,
                     CpuPrograms = childBuild.CpuPrograms
                 });
@@ -207,7 +208,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
             RootRenderConfiguration = rootBuild.RenderConfiguration,
             CpuPrograms = rootBuild.CpuPrograms,
             RootGpuContainers = CollectGpu(rootBuild.Graph).ToArray(),
-            RootGpuPrograms = CreateGpuPrograms(rootBuild.Graph)
+            RootGpuPrograms = CreateGpuPrograms(rootBuild.Graph, rootBuild.RenderConfiguration)
         };
     }
 
@@ -279,14 +280,22 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
         }
     }
 
-    private static byte[] CreateGpuPrograms(GraphSnapshot graph)
+    private static byte[] CreateGpuPrograms(GraphSnapshot graph, byte[] renderConfiguration)
     {
 #if LIBERAFX_CONVERTER
         if (CollectGpu(graph).Any())
             throw new InvalidDataException("GPU Particle graphs require executable GPU export; CPU-only conversion cannot discard them.");
         return Encoding.UTF8.GetBytes("{\"version\":1,\"programs\":[]}");
 #else
-        return LiberaFx.Services.GpuProgramDeliveryService.CreateExecutablePayload(graph);
+        var bytes = LiberaFx.Services.GpuProgramDeliveryService.CreateExecutablePayload(graph);
+        if (renderConfiguration.Length == 0) return bytes;
+        var render = JsonNode.Parse(renderConfiguration)!;
+        var bindings = render["nodes"]!.AsArray().Where(node => node?["generatedTextures"] is JsonArray)
+            .SelectMany(node => node!["generatedTextures"]!.AsArray()).Select(binding => binding!.DeepClone()).ToArray();
+        if (bindings.Length == 0) return bytes;
+        var payload = JsonNode.Parse(bytes)!;
+        payload["generatedDrawBindings"] = new JsonArray(bindings);
+        return JsonSerializer.SerializeToUtf8Bytes(payload);
 #endif
     }
 

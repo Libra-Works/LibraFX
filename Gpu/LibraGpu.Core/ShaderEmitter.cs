@@ -13,13 +13,14 @@ internal static partial class ShaderEmitter
     private static partial Regex Identifier();
     internal static ShaderSource Emit(GpuProgram p, IReadOnlyList<KernelMetadata> kernels, ShaderFormat format, ShaderBindings b)
     {
+        var generatedFieldBuffer = format == ShaderFormat.UnityCompute && p.Resources.Any(resource => resource.FlowMap?.Coordinates == FlowMapCoordinates.GeneratedPlane);
         // Custom names are deliberately namespaced to prevent keyword/local/function collisions.
         if (!Identifier().IsMatch(b.ParticleBuffer ?? "") || !Identifier().IsMatch(b.UniformBuffer ?? "") ||
             b.ParticleBuffer == b.UniformBuffer ||
             b.ParticleBuffer != "ParticleBuffer" && !b.ParticleBuffer!.StartsWith("User_", StringComparison.Ordinal) ||
             b.UniformBuffer != "LibraGpuParameters" && !b.UniformBuffer!.StartsWith("User_", StringComparison.Ordinal) ||
             b.ParticleRegister is < 0 or > 127 || b.UniformRegister is < 0 or > 13 ||
-            b.TextureRegisterBase < 0 || b.TextureRegisterBase > 128 - p.Resources.Count ||
+            b.TextureRegisterBase < 0 || b.TextureRegisterBase > 128 - p.Resources.Count - (generatedFieldBuffer ? 1 : 0) ||
             b.SamplerRegisterBase is < 0 or > 15)
             throw new ArgumentException("Bindings require unique, non-reserved ASCII identifiers and bounded registers.", nameof(b));
         var s = new StringBuilder();
@@ -53,6 +54,10 @@ internal static partial class ShaderEmitter
         }
         var resourceIndices = p.Resources.Select((resource, index) => (resource.Id, Index: index))
             .ToDictionary(x => x.Id, x => x.Index, StringComparer.Ordinal);
+        if (p.Resources.Any(resource => resource.FlowMap?.Coordinates == FlowMapCoordinates.GeneratedPlane))
+            Write(generatedFieldBuffer
+                ? $"StructuredBuffer<float4> LibraGpuFieldMappings : register(t{b.TextureRegisterBase + p.Resources.Count}); // Four vectors per resource; instance-owned mapping data."
+                : "float4 LibraGpuFieldMappings[256]; // Four rows/basis vectors per resource; supplied by the live producer scope.");
         for (int i = 0; i < p.Resources.Count; i++)
         {
             var resource = p.Resources[i];
@@ -65,13 +70,29 @@ internal static partial class ShaderEmitter
             var minimumV = ((float)settings.WorldMinimumV).ToString("R", CultureInfo.InvariantCulture);
             var rangeU = ((float)(settings.WorldMaximumU - settings.WorldMinimumU)).ToString("R", CultureInfo.InvariantCulture);
             var rangeV = ((float)(settings.WorldMaximumV - settings.WorldMinimumV)).ToString("R", CultureInfo.InvariantCulture);
-            Write($"float2 LibraGpuSampleFlowMapUv_{i:D4}(float2 uv) {{ return LibraGpuTexture_{i:D4}.SampleLevel({samplerName}, saturate(uv), 0).rg * 2.0f - 1.0f; }}");
+            var decode = settings.Encoding switch
+            {
+                FlowMapEncoding.FloatVelocity => "sampled.rg",
+                FlowMapEncoding.FloatDensity => "sampled.ba",
+                _ => "sampled.rg * 2.0f - 1.0f"
+            };
+            Write($"float2 LibraGpuSampleFlowMapUv_{i:D4}(float2 uv) {{ float4 sampled = LibraGpuTexture_{i:D4}.SampleLevel({samplerName}, saturate(uv), 0); return {decode}; }}");
             Write($"float3 LibraGpuSampleFlowMapWorld_{i:D4}(float3 position) {{");
-            Write($"    float2 uv = saturate((float2(position.{u}, position.{v}) - float2({minimumU}, {minimumV})) / float2({rangeU}, {rangeV}));");
+            if (settings.Coordinates == FlowMapCoordinates.GeneratedPlane)
+                Write($"    float2 uv = saturate(float2(dot(LibraGpuFieldMappings[{i * 4}], float4(position,1)), dot(LibraGpuFieldMappings[{i * 4 + 1}], float4(position,1))));");
+            else
+                Write($"    float2 uv = saturate((float2(position.{u}, position.{v}) - float2({minimumU}, {minimumV})) / float2({rangeU}, {rangeV}));");
             Write($"    float2 flow = LibraGpuSampleFlowMapUv_{i:D4}(uv);");
-            Write("    float3 result = 0.0f;");
-            Write($"    result.{u} = flow.x; result.{v} = flow.y;");
-            Write("    return result;");
+            if (settings.Encoding == FlowMapEncoding.FloatDensity)
+                Write("    return float3(flow, 0);");
+            else if (settings.Coordinates == FlowMapCoordinates.GeneratedPlane)
+                Write($"    return LibraGpuFieldMappings[{i * 4 + 2}].xyz * flow.x + LibraGpuFieldMappings[{i * 4 + 3}].xyz * flow.y;");
+            else
+            {
+                Write("    float3 result = 0.0f;");
+                Write($"    result.{u} = flow.x; result.{v} = flow.y;");
+                Write("    return result;");
+            }
             Write("}");
         }
         foreach (var supportLine in GpuShaderSupport.EmitHlslInclude().Split('\n')) Write(supportLine);
@@ -209,6 +230,8 @@ internal static partial class ShaderEmitter
             GpuOp.Turbulence => RawCall("LibraGpuTurbulence"),
             GpuOp.CurlNoise => RawCall("LibraGpuCurlNoise"),
             GpuOp.SampleFlowMap => $"LibraGpuSampleFlowMap{(n.Type == GpuType.Float2 ? "Uv" : "World")}_{resourceIndices[n.Resource!]:D4}({a[0]})",
+            GpuOp.GreaterThan => $"({a[0]} > {a[1]})",
+            GpuOp.LessThan => $"({a[0]} < {a[1]})",
             _ => throw new InvalidOperationException()
         };
     }

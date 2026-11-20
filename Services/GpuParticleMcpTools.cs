@@ -29,11 +29,15 @@ public sealed class GpuParticleMcpTools
         flowKinds = new[] { "Spawn", "Update", "RenderBillboard" },
         futureUnsupported = new[] { "RenderStartTexture", "ComputePass", "Quaternion" },
         resourceKinds = Enum.GetNames<ResourceKind>(),
+        resourcePlanKinds = Enum.GetNames<GpuFlowResourceKind>(),
+        resourcePlanActions = "resource-plan uses text: version-1 resource plan JSON; resource-plan-reset restores the built-in plan. Arbitrary plans are source contracts and are rejected for engine playback.",
         backendCapabilities = new[] { GpuBackendCapabilities.Unreal, GpuBackendCapabilities.Unity },
         textGrammar = "Restricted original typed DSL: let, @Attribute assignment, param(\"deltaTime\"), float2/3/4 constructors, registered math. Not VEX/HLSL.",
         editActions = new[] { "add", "remove", "update", "move", "connect", "disconnect", "write", "write-remove",
             "text", "draft", "discard-draft", "capacity", "flow-add", "flow-remove", "flow-move", "flow-update", "resource", "renderer",
-            "fluid-enable", "fluid-disable", "fluid-settings", "fluid-renderer" },
+            "fluid-enable", "fluid-disable", "fluid-settings", "fluid-renderer", "fluid-output",
+            "fluid-force-add", "fluid-force-update", "fluid-force-remove", "fluid-consumer-bind", "fluid-consumer-remove",
+            "resource-plan", "resource-plan-reset" },
         billboardMaterials = new[] { "builtin:unlit-alpha", "builtin:unlit-additive" },
         builtinTextures = new[] { "builtin:white" },
         editSchema = new
@@ -41,18 +45,27 @@ public sealed class GpuParticleMcpTools
             action = "required string", kernelId = "kernel ID for node/text/write actions",
             node = "{id,op,type,inputs:string[],value:number[],attribute?,uniform?,componentIndex?}",
             nodeId = "node / write / flow ID", sourceId = "connection source node ID", input = "zero-based input / flow index",
-            position = "{x,y}", write = "{id,attribute,value}", text = "DSL",
+            position = "{x,y}", write = "{id,attribute,value}", text = "DSL, or version-1 resource plan JSON for resource-plan",
             flow = "{id,kind,kernel?,resource?}", capacity = "uint",
             resource = "{id,kind,width,height,flowMap?}", assetPath = "Engine asset reference or builtin:white for billboards. For FlowMap2D select a Texture2D; linear RG data is recommended.",
             material = "Billboard preset for renderer, or builtin:fluid-alpha for fluid-renderer", sizeScale = "Finite draw-size multiplier in (0,10000]",
-            fluid2D = "Optional Fluid2DSettings on fluid-enable; required replacement settings on fluid-settings. Particle graph is retained but inactive until fluid-disable."
+            fluid2D = "Optional Fluid2DSettings on fluid-enable; required replacement settings on fluid-settings. Particle graph is retained but inactive until fluid-disable.",
+            generatedResource = "{producerNodeId,outputId}; replaces assetPath for a same-scope generated source",
+            automaticPlane = "null=automatic, true=on, false=off",
+            generatedConsumer = "{targetNodeId,parameterId,outputId} for fluid-consumer-bind/remove",
+            fluidForce = "{id,kind,x,y,strength,frequency,seed,octaves,roughness,animationSpeed,inputA?,inputB?}; inputs refer to earlier node IDs"
         },
         fluid2D = new
         {
             kind = "Fluid2D", settings = new Fluid2DSettings(),
+            models = Enum.GetNames<Fluid2DModel>(), forceKinds = Enum.GetNames<Fluid2DForceKind>(),
+            presets = Enum.GetValues<Fluid2DModel>().Select(model => new
+            {
+                model, settings = Fluid2DPresets.Create(model), material = Fluid2DPresets.RendererMaterial(model)
+            }),
             resources = Fluid2DCompiler.Resources(new()), passes = Fluid2DCompiler.Step(new()),
-            packageVersion = 2, material = "builtin:fluid-alpha",
-            limits = "Grid8-1024, pressure1-128, substeps1-16; fixed closed XY smoke/ink solver. No liquid,3D,arbitrary passes,or main-framebuffer writes."
+            packageVersion = 2, generatedPackageVersion = 3, material = "builtin:fluid-alpha",
+            limits = "Grid8-1024, pressure1-128, substeps1-64, force nodes0-8. Smoke, side-view free surface, flat-bed shallow water and fuel/temperature combustion. No 3D execution, arbitrary runtime passes or writable main-framebuffer binding."
         }
     });
 
@@ -126,7 +139,7 @@ public sealed class GpuParticleMcpTools
     [McpServerTool(Name = "gpu_export_source"), Description("Return explicitly requested IR/shader source and matching metadata for caller-chosen export. Does not write unsolicited files, execute GPU, or publish anything.")]
     public static async Task<string> Export(ActiveGraphProvider activeGraph,
         [Description("GUID of a GPU container node in the active graph.")] string nodeId,
-        [Description("Output format: json for IR, or usf, hlsl, or compute for shader source.")] string format = "json") =>
+        [Description("Output format: json for IR; usf, hlsl or compute for shader source; resources for the resource-plan source contract.")] string format = "json") =>
         await OnUi(() =>
         {
             var state = GpuParticleEditorService.ReadState(activeGraph.Graph.GetNode(Guid.Parse(nodeId)));

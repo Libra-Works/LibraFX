@@ -114,23 +114,35 @@ public sealed partial class GraphWorkspaceViewModel
 
     private static GraphSnapshot CloneGraph(GraphSnapshot source)
     {
-        var ids = source.Nodes.ToDictionary(node => node.Id, _ => Guid.NewGuid());
-        var nodes = source.Nodes.Select(node => node with
-            {
-                Id = ids[node.Id],
-                ChildGraph = node.ChildGraph is null ? null : CloneGraph(node.ChildGraph)
-            }).ToArray();
-        return source with
+        var ids = new Dictionary<Guid, Guid>();
+        void Collect(GraphSnapshot graph)
         {
-            Nodes = nodes,
-            ExposedItems = GroupExposedItems.Remap(source.ExposedItems, ids),
-            Connections = source.Connections.Select(connection => new GraphConnectionSnapshot(
-                ids[connection.SourceNodeId], ids[connection.TargetNodeId],
-                SpawnableGroupSchema.RemapPort(source.Nodes.Single(node => node.Id == connection.TargetNodeId),
-                    nodes.Single(node => node.Id == ids[connection.TargetNodeId]).ChildGraph, connection.TargetPortId),
-                SpawnableGroupSchema.RemapPort(source.Nodes.Single(node => node.Id == connection.SourceNodeId),
-                    nodes.Single(node => node.Id == ids[connection.SourceNodeId]).ChildGraph, connection.SourcePortId))).ToArray()
-        };
+            foreach (var node in graph.Nodes)
+            {
+                ids.Add(node.Id, Guid.NewGuid());
+                if (node.ChildGraph is { } child) Collect(child);
+            }
+        }
+        Collect(source);
+        GraphSnapshot Clone(GraphSnapshot graph)
+        {
+            var nodes = graph.Nodes.Select(node => node with
+            {
+                Id = ids[node.Id], Parameters = GpuParticleEditorService.RemapReferences(node, ids),
+                ChildGraph = node.ChildGraph is null ? null : Clone(node.ChildGraph)
+            }).ToArray();
+            return graph with
+            {
+                Nodes = nodes, ExposedItems = GroupExposedItems.Remap(graph.ExposedItems, ids),
+                Connections = graph.Connections.Select(connection => new GraphConnectionSnapshot(
+                    ids[connection.SourceNodeId], ids[connection.TargetNodeId],
+                    SpawnableGroupSchema.RemapPort(graph.Nodes.Single(node => node.Id == connection.TargetNodeId),
+                        nodes.Single(node => node.Id == ids[connection.TargetNodeId]).ChildGraph, connection.TargetPortId),
+                    SpawnableGroupSchema.RemapPort(graph.Nodes.Single(node => node.Id == connection.SourceNodeId),
+                        nodes.Single(node => node.Id == ids[connection.SourceNodeId]).ChildGraph, connection.SourcePortId))).ToArray()
+            };
+        }
+        return Clone(source);
     }
 
     private GraphSnapshot GetCurrentGraph()

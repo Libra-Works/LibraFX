@@ -159,7 +159,7 @@ public static class GpuCompiler
                 {
                     var bounds = new[] { settings.WorldMinimumU, settings.WorldMaximumU, settings.WorldMinimumV, settings.WorldMaximumV };
                     var ranges = new[] { settings.WorldMaximumU - settings.WorldMinimumU, settings.WorldMaximumV - settings.WorldMinimumV };
-                    if (!Enum.IsDefined(settings.AxisU) || !Enum.IsDefined(settings.AxisV) || settings.AxisU == settings.AxisV ||
+                    if (!Enum.IsDefined(settings.Encoding) || !Enum.IsDefined(settings.Coordinates) || !Enum.IsDefined(settings.AxisU) || !Enum.IsDefined(settings.AxisV) || settings.AxisU == settings.AxisV ||
                         bounds.Any(value => !double.IsFinite(value) || !float.IsFinite((float)value)) ||
                         ranges.Any(value => !double.IsFinite(value) || !float.IsFinite((float)value) || value <= 0))
                         Add("FlowMapSettings", "Flow-map axes must be distinct and world bounds must be finite, increasing, and representable as floats.");

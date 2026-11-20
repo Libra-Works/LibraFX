@@ -7,6 +7,7 @@
 #include "LibraSpawnableAsset.h"
 #include "LibraGpuEffectAsset.h"
 #include "LibraGpuEffectRuntime.h"
+#include "LibraFluid2DJson.h"
 #include "liberafx/gpu/LbFluid2D.h"
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
@@ -107,18 +108,12 @@ bool ReadFluid2DSettings(const TSharedPtr<FJsonObject>& object,
     liberafx::gpu::Fluid2DSettings& settings)
 {
     using namespace liberafx::gpu;
-    static const TSet<FString> names{
-        TEXT("version"), TEXT("width"), TEXT("height"), TEXT("domainWidth"), TEXT("domainHeight"),
-        TEXT("pressureIterations"), TEXT("maximumStep"), TEXT("maximumSubsteps"),
-        TEXT("velocityDissipation"), TEXT("densityDissipation"), TEXT("sourceEnabled"),
-        TEXT("sourceX"), TEXT("sourceY"), TEXT("sourceRadius"), TEXT("sourceDensity"),
-        TEXT("sourceVelocityX"), TEXT("sourceVelocityY"), TEXT("buoyancy"),
-        TEXT("colorR"), TEXT("colorG"), TEXT("colorB"), TEXT("colorA")
-    };
-    if (!object.IsValid() || object->Values.Num() != names.Num()) return false;
-    for (const auto& entry : object->Values)
-        if (!names.Contains(entry.Key)) return false;
+    if (!LibraReadFluidModelProperties(object, settings))
+    {
+        return false;
+    }
 
+    settings.vorticity = 0;
     return ReadFluid2DUint(object, TEXT("version"), 1, 1, settings.version) &&
         ReadFluid2DUint(object, TEXT("width"), 8, 1024, settings.width) &&
         ReadFluid2DUint(object, TEXT("height"), 8, 1024, settings.height) &&
@@ -126,7 +121,7 @@ bool ReadFluid2DSettings(const TSharedPtr<FJsonObject>& object,
         ReadFluid2DFloat(object, TEXT("domainHeight"), settings.domainHeight) &&
         ReadFluid2DUint(object, TEXT("pressureIterations"), 1, 128, settings.pressureIterations) &&
         ReadFluid2DFloat(object, TEXT("maximumStep"), settings.maximumStep) &&
-        ReadFluid2DUint(object, TEXT("maximumSubsteps"), 1, 16, settings.maximumSubsteps) &&
+        ReadFluid2DUint(object, TEXT("maximumSubsteps"), 1, 64, settings.maximumSubsteps) &&
         ReadFluid2DFloat(object, TEXT("velocityDissipation"), settings.velocityDissipation) &&
         ReadFluid2DFloat(object, TEXT("densityDissipation"), settings.densityDissipation) &&
         object->TryGetBoolField(TEXT("sourceEnabled"), settings.sourceEnabled) &&
@@ -141,6 +136,7 @@ bool ReadFluid2DSettings(const TSharedPtr<FJsonObject>& object,
         ReadFluid2DFloat(object, TEXT("colorG"), settings.colorG) &&
         ReadFluid2DFloat(object, TEXT("colorB"), settings.colorB) &&
         ReadFluid2DFloat(object, TEXT("colorA"), settings.colorA) &&
+        (!object->HasField(TEXT("vorticity")) || ReadFluid2DFloat(object, TEXT("vorticity"), settings.vorticity)) &&
         validFluid2DSettings(settings);
 }
 
@@ -149,11 +145,13 @@ struct FFluidProgram
     FGuid NodeId;
     liberafx::gpu::Fluid2DSettings Settings;
     float SizeScale = 100;
+    bool bAutomaticPlane = true;
 };
 
 bool ReadFluidProgram(const TSharedPtr<FJsonObject>& object, FFluidProgram& program)
 {
-    if (!object.IsValid() || object->Values.Num() != 3) return false;
+    if (!object.IsValid() || object->Values.Num() != 3 + (object->HasField(TEXT("automaticPlane")) ? 1 : 0)) return false;
+    if (object->HasField(TEXT("automaticPlane")) && !object->TryGetBoolField(TEXT("automaticPlane"), program.bAutomaticPlane)) return false;
     FString nodeId;
     FGuid parsedNodeId;
     const TSharedPtr<FJsonObject>* settings = nullptr;
@@ -165,7 +163,7 @@ bool ReadFluidProgram(const TSharedPtr<FJsonObject>& object, FFluidProgram& prog
         !object->TryGetObjectField(TEXT("renderer"), renderer) || !renderer->IsValid() ||
         renderer->Get()->Values.Num() != 2 ||
         !renderer->Get()->TryGetStringField(TEXT("material"), material) ||
-        material != TEXT("builtin:fluid-alpha") ||
+        !LibraFluidMaterialMatches(*settings, material) ||
         !renderer->Get()->TryGetNumberField(TEXT("sizeScale"), sizeScale) ||
         !FMath::IsFinite(sizeScale) || sizeScale <= 0 || sizeScale > 10000 ||
         float(sizeScale) <= 0 || !ReadFluid2DSettings(*settings, program.Settings))
@@ -231,7 +229,7 @@ struct FSpriteAnimation
 struct FDraw
 {
     FGuid Id;
-    bool bSprite = false, bBillboard = false, bOpaqueBatchCandidate = false;
+    bool bSprite = false, bBillboard = false, bOpaqueBatchCandidate = false, bGeneratedMain = false;
     FSpriteAnimation SpriteAnimation;
     TStrongObjectPtr<UStaticMesh> Mesh;
     TArray<TStrongObjectPtr<UMaterialInterface>> Materials;
@@ -270,6 +268,15 @@ struct FDrawBatch
     TUniquePtr<FLibraNativeInstancedMeshPrimitive> Primitive;
 };
 
+struct FGeneratedDrawTexture
+{
+    FGuid NodeId, ProducerNodeId;
+    FMaterialParameterInfo Parameter;
+    int32 Slot = 0;
+    FString OutputId;
+    bool bMainTexture = false;
+};
+
 struct FDefinition
 {
     TSharedPtr<FJsonObject> DebugConfiguration;
@@ -280,6 +287,7 @@ struct FDefinition
     TArray<TStrongObjectPtr<ULibraGpuEffectAsset>> Gpu;
     TArray<FGuid> GpuNodeIds;
     TArray<FFluidProgram> FluidPrograms;
+    TArray<FGeneratedDrawTexture> GeneratedDrawTextures;
     TMap<FGuid, TArray<FGuid>> GpuDrawTransforms;
     uint64 GpuBytes = 0;
 };
@@ -586,7 +594,7 @@ struct FLibraSpawnableRenderState::FImpl
                 }
                 plane.Texture.Reset(Resolve<UTexture>(plane.Definition.assetPath, EKind::Texture));
                 plane.Material.Reset(Resolve<UMaterialInterface>(TEXT("builtin:flexible-plane"), EKind::Material));
-                if (!plane.Texture.IsValid() || !plane.Material.IsValid() ||
+                if ((!plane.Texture.IsValid() && plane.Definition.assetPath != TEXT("builtin:generated-texture")) || !plane.Material.IsValid() ||
                     !HasParameter(plane.Material.Get(), FMaterialParameterInfo(TEXT("Texture")), TEXT("texture")))
                 {
                     return Fail(TEXT("Flexible Plane requires its Texture binding and a builtin:flexible-plane Material with a Texture parameter and vertex colors."));
@@ -640,8 +648,9 @@ struct FLibraSpawnableRenderState::FImpl
             {
                 if (!slots.Contains(0)) draw.Materials[0].Reset(
                     Resolve<UMaterialInterface>(TEXT("builtin:sprite"), EKind::Material));
-                auto texture = Resolve<UTexture>(asset, EKind::Texture);
-                if (!texture) return Fail(TEXT("Missing sprite Texture binding: ") + asset);
+                draw.bGeneratedMain = asset == TEXT("builtin:generated-texture");
+                auto texture = draw.bGeneratedMain ? nullptr : Resolve<UTexture>(asset, EKind::Texture);
+                if (!texture && !draw.bGeneratedMain) return Fail(TEXT("Missing sprite Texture binding: ") + asset);
                 if (!draw.Materials[0].IsValid() ||
                     !HasParameter(draw.Materials[0].Get(), FMaterialParameterInfo(TEXT("Texture")), TEXT("texture")) ||
                     !HasParameter(draw.Materials[0].Get(), FMaterialParameterInfo(TEXT("AtlasRect")), TEXT("vector")))
@@ -715,6 +724,10 @@ struct FLibraSpawnableRenderState::FImpl
                     !textureObject->TryGetStringField(TEXT("path"), path) || !draw.Materials.IsValidIndex(texture.Slot) ||
                     !HasParameter(draw.Materials[texture.Slot].Get(), texture.Parameter, TEXT("texture")))
                     return Fail(TEXT("Requested material texture parameter is unavailable."));
+                if (path.IsEmpty())
+                {
+                    continue;
+                }
                 texture.Texture.Reset(Resolve<UTexture>(path, EKind::Texture));
                 if (!texture.Texture.IsValid()) return Fail(TEXT("Missing Texture binding: ") + path);
                 draw.Textures.Add(MoveTemp(texture));
@@ -843,14 +856,14 @@ struct FLibraSpawnableRenderState::FImpl
         const TArray<TSharedPtr<FJsonValue>>* programs = nullptr;
         const TArray<TSharedPtr<FJsonValue>>* fluids = nullptr;
         if (!FJsonSerializer::Deserialize(reader, root) || !root || !Integer(root, TEXT("version"), version) ||
-            (version != 1 && version != 2) ||
+            (version != 1 && version != 2 && version != 3) ||
             !root->TryGetArrayField(TEXT("programs"), programs))
             return Fail(TEXT("GPU program manifest does not match its containers."));
         if (version == 1 && (!expectedFluids.IsEmpty() || root->HasField(TEXT("fluidPrograms"))))
             return Fail(TEXT("This Unreal runtime requires GPU program manifest Version=2 for 2D fluids."));
         if (version == 1 && programs->Num() != expectedParticles.Num())
             return Fail(TEXT("GPU program manifest does not match its containers."));
-        if (version == 2)
+        if (version >= 2)
         {
             if (!root->TryGetArrayField(TEXT("fluidPrograms"), fluids) ||
                 programs->Num() + fluids->Num() > 16)
@@ -941,9 +954,11 @@ struct FLibraSpawnableRenderState::FImpl
             {
                 auto object = item.IsValid() && item->Type == EJson::Object ? item->AsObject() : nullptr;
                 auto program = FFluidProgram{};
+                if (version < 3 && object && object->HasField(TEXT("automaticPlane")))
+                    return Fail(TEXT("Fluid output selection requires GPU payload version 3."));
                 if (!ReadFluidProgram(object, program) || !expectedFluids.Remove(program.NodeId))
                     return Fail(TEXT("Invalid, duplicate, or unmatched FluidPrograms entry."));
-                const auto fluidBytes = uint64(program.Settings.width) * program.Settings.height * 120;
+                const auto fluidBytes = uint64(program.Settings.width) * program.Settings.height * 144;
                 if (fluidBytes > ULibraGpuEffectAsset::MaximumGpuBytes - definition.GpuBytes)
                     return Fail(TEXT("GPU fluid scope exceeds the 256 MiB buffer and texture budget."));
                 definition.GpuBytes += fluidBytes;
@@ -952,6 +967,99 @@ struct FLibraSpawnableRenderState::FImpl
         }
         if (!expectedParticles.IsEmpty() || !expectedFluids.IsEmpty())
             return Fail(TEXT("GPU manifest omits one or more validated container programs."));
+        for (const auto& asset : definition.Gpu)
+        {
+            for (const auto& texture : asset->GetTextures())
+            {
+                if (!texture.IsGenerated())
+                {
+                    continue;
+                }
+                FGuid producer;
+                if (version < 3 || !FGuid::Parse(texture.GeneratedProducerNodeId, producer) ||
+                    !definition.FluidPrograms.ContainsByPredicate([&](const auto& fluid) { return fluid.NodeId == producer; }))
+                {
+                    return Fail(TEXT("Generated texture producer must be in the same version-3 execution scope."));
+                }
+            }
+        }
+        if (root->HasField(TEXT("generatedDrawBindings")))
+        {
+            const TArray<TSharedPtr<FJsonValue>>* entries = nullptr;
+            if (version != 3 || !root->TryGetArrayField(TEXT("generatedDrawBindings"), entries) || entries->Num() > 64)
+            {
+                return Fail(TEXT("Generated draw bindings require version 3 and at most 64 entries."));
+            }
+            for (const auto& value : *entries)
+            {
+                const auto object = value && value->Type == EJson::Object ? value->AsObject() : nullptr;
+                auto binding = FGeneratedDrawTexture{};
+                auto target = FString{}, producer = FString{}, name = FString{};
+                auto association = int32{}, index = int32{};
+                if (!object || object->Values.Num() != 8 ||
+                    !object->TryGetStringField(TEXT("nodeId"), target) || !FGuid::Parse(target, binding.NodeId) ||
+                    !object->TryGetStringField(TEXT("producerNodeId"), producer) || !FGuid::Parse(producer, binding.ProducerNodeId) ||
+                    !object->TryGetStringField(TEXT("outputId"), binding.OutputId) ||
+                    !object->TryGetStringField(TEXT("name"), name) || name.Len() > 256 ||
+                    !Integer(object, TEXT("slot"), binding.Slot) || binding.Slot < 0 || binding.Slot > 255 ||
+                    !Integer(object, TEXT("association"), association) || association < 0 || association > 2 ||
+                    !Integer(object, TEXT("index"), index) || index < -1 ||
+                    !object->TryGetBoolField(TEXT("mainTexture"), binding.bMainTexture) ||
+                    !definition.FluidPrograms.ContainsByPredicate([&](const auto& fluid) { return fluid.NodeId == binding.ProducerNodeId; }) ||
+                    (binding.OutputId != TEXT("ColorOutput") && binding.OutputId != TEXT("DyeOutput") && binding.OutputId != TEXT("FieldOutput")) ||
+                    (binding.bMainTexture && binding.OutputId != TEXT("ColorOutput")))
+                {
+                    return Fail(TEXT("Invalid or cross-scope generated draw source."));
+                }
+                binding.Parameter = FMaterialParameterInfo(*name, EMaterialParameterAssociation(association), index);
+                auto* draw = definition.Draws.FindByPredicate([&](const auto& item) { return item.Id == binding.NodeId; });
+                const auto* plane = definition.FlexiblePlanes.FindByPredicate([&](const auto& item) { return item.Definition.nodeId == binding.NodeId; });
+                if (binding.bMainTexture)
+                {
+                    if (!((draw && draw->bSprite && draw->bGeneratedMain) ||
+                        (plane && plane->Definition.assetPath == TEXT("builtin:generated-texture"))))
+                    {
+                        return Fail(TEXT("Generated main texture requires a Sprite or Flexible Plane marker."));
+                    }
+                    binding.Slot = 0;
+                    binding.Parameter = FMaterialParameterInfo(TEXT("Texture"));
+                }
+                else if (!draw || draw->bSprite || name.IsEmpty() || !draw->Materials.IsValidIndex(binding.Slot) ||
+                    !HasParameter(draw->Materials[binding.Slot].Get(), binding.Parameter, TEXT("texture")))
+                {
+                    return Fail(TEXT("Generated material texture parameter is unavailable."));
+                }
+                if (definition.GeneratedDrawTextures.ContainsByPredicate([&](const auto& other) {
+                    return other.NodeId == binding.NodeId && other.Slot == binding.Slot && other.Parameter == binding.Parameter;
+                }))
+                {
+                    return Fail(TEXT("Duplicate generated material texture binding."));
+                }
+                if (draw)
+                {
+                    draw->bOpaqueBatchCandidate = false;
+                }
+                definition.GeneratedDrawTextures.Add(MoveTemp(binding));
+            }
+        }
+        for (const auto& draw : definition.Draws)
+        {
+            if (draw.bGeneratedMain && !definition.GeneratedDrawTextures.ContainsByPredicate(
+                [&](const auto& binding) { return binding.NodeId == draw.Id && binding.bMainTexture; }))
+            {
+                return Fail(TEXT("Generated sprite marker has no executable source binding."));
+            }
+        }
+        for (const auto& plane : definition.FlexiblePlanes)
+        {
+            if (plane.Definition.assetPath == TEXT("builtin:generated-texture") &&
+                !definition.GeneratedDrawTextures.ContainsByPredicate([&](const auto& binding) {
+                    return binding.NodeId == plane.Definition.nodeId && binding.bMainTexture;
+                }))
+            {
+                return Fail(TEXT("Generated Flexible Plane marker has no executable source binding."));
+            }
+        }
         for (const auto& transform : definition.GpuDrawTransforms)
         {
             auto isParticle = definition.GpuNodeIds.Contains(transform.Key);
@@ -1020,6 +1128,36 @@ struct FLibraSpawnableRenderState::FImpl
         const auto parentTransform = root ? root->GetComponentTransform() : actor->GetActorTransform();
         instance->PresentationRootTransform = parentTransform;
         instance->bHasPresentationRootTransform = true;
+        const auto visible = !actor->IsHidden() && (!root || root->IsVisible());
+        const auto ownerMatrix = FMatrix44f(parentTransform.ToMatrixWithScale().GetTransposed());
+        for (const auto& fluid : instance->Definition->FluidPrograms)
+        {
+            auto runtime = TStrongObjectPtr<ULibraGpuEffectRuntime>(
+                NewObject<ULibraGpuEffectRuntime>(actor, NAME_None, RF_Transient));
+            runtime->Initialize(actor);
+            instance->Gpu.Add(MoveTemp(runtime));
+            instance->GpuRuntimeNodeIds.Add(fluid.NodeId);
+            instance->GpuRuntimeIsFluid.Add(true);
+            auto gpu = instance->Gpu.Last().Get();
+            auto drawTransform = FMatrix44f::Identity;
+            auto connected = false;
+            if (container.IsValid() &&
+                !ReadGpuDrawTransform(*instance->Definition, fluid.NodeId, container, id,
+                    drawTransform, connected))
+            {
+                return Fail(TEXT("GPU fluid Matrix binding is invalid."));
+            }
+            const auto localToWorld = connected ? drawTransform : ownerMatrix;
+            if (!gpu->SetFluid2D(fluid.Settings, fluid.SizeScale, localToWorld, visible, fluid.bAutomaticPlane) ||
+                !gpu->Play())
+                return Fail(TEXT("GPU fluid instance creation failed: ") + gpu->LastError);
+        }
+        const auto resolveGenerated = [&](const FGeneratedDrawTexture& binding) -> UTexture*
+        {
+            const auto sourceIndex = instance->GpuRuntimeNodeIds.IndexOfByKey(binding.ProducerNodeId);
+            return instance->Gpu.IsValidIndex(sourceIndex)
+                ? instance->Gpu[sourceIndex]->GetFluidOutputTexture(binding.OutputId) : nullptr;
+        };
         for (const auto& plane : instance->Definition->FlexiblePlanes)
         {
             if (!root)
@@ -1029,8 +1167,20 @@ struct FLibraSpawnableRenderState::FImpl
             auto renderer = TUniquePtr<FLibraFlexiblePlaneRenderer>{};
             auto error = FString{};
             const auto transform = root->GetComponentTransform();
+            auto* texture = plane.Texture.Get();
+            for (const auto& binding : instance->Definition->GeneratedDrawTextures)
+            {
+                if (binding.NodeId == plane.Definition.nodeId && binding.bMainTexture)
+                {
+                    texture = resolveGenerated(binding);
+                }
+            }
+            if (!texture)
+            {
+                return Fail(TEXT("Generated Flexible Plane texture is unavailable."));
+            }
             if (!FLibraFlexiblePlaneRenderer::Create(Owner, plane.Definition,
-                plane.Texture.Get(), plane.Material.Get(), transform,
+                texture, plane.Material.Get(), transform,
                 FName(TEXT("Texture")), renderer, error))
             {
                 return Fail(error);
@@ -1084,6 +1234,19 @@ struct FLibraSpawnableRenderState::FImpl
             for (const auto& texture : draw.Textures)
                 materialInstances[texture.Slot].Get()
                     ->SetTextureParameterValueByInfo(texture.Parameter, texture.Texture.Get());
+            for (const auto& binding : instance->Definition->GeneratedDrawTextures)
+            {
+                if (binding.NodeId != draw.Id)
+                {
+                    continue;
+                }
+                auto* texture = resolveGenerated(binding);
+                if (!texture || !materialInstances.IsValidIndex(binding.Slot))
+                {
+                    return Fail(TEXT("Generated material texture source is unavailable."));
+                }
+                materialInstances[binding.Slot]->SetTextureParameterValueByInfo(binding.Parameter, texture);
+            }
             auto primitive = MakeUnique<FLibraNativeMeshPrimitive>();
             if (!primitive->Create(Owner, draw.Mesh.Get(), MakeArrayView(materialOverrides),
                 parentTransform,
@@ -1109,6 +1272,24 @@ struct FLibraSpawnableRenderState::FImpl
             if (!gpu->SetEffect(asset.Get()) ||
                 !gpu->ConfigureEmitter(Owner.GpuSpawnPerSecond, static_cast<int32>(seed)))
                 return Fail(TEXT("GPU instance creation failed: ") + gpu->LastError);
+            for (const auto& texture : asset->GetTextures())
+            {
+                if (!texture.IsGenerated())
+                {
+                    continue;
+                }
+                FGuid producer;
+                if (!FGuid::Parse(texture.GeneratedProducerNodeId, producer))
+                {
+                    return Fail(TEXT("Generated texture producer identity is invalid."));
+                }
+                const auto producerIndex = instance->GpuRuntimeNodeIds.IndexOfByKey(producer);
+                if (!instance->Gpu.IsValidIndex(producerIndex) || !instance->GpuRuntimeIsFluid[producerIndex] ||
+                    !gpu->BindGeneratedTexture(texture.Id, instance->Gpu[producerIndex].Get(), texture.GeneratedOutputId))
+                {
+                    return Fail(TEXT("Generated texture producer is not active in the same scope."));
+                }
+            }
             auto drawTransform = FMatrix44f::Identity;
             auto connected = false;
             // Root values become available during the initial native advance.
@@ -1125,30 +1306,6 @@ struct FLibraSpawnableRenderState::FImpl
             }
             if (!gpu->Play())
                 return Fail(TEXT("GPU instance creation failed: ") + gpu->LastError);
-        }
-        const auto visible = !actor->IsHidden() && (!root || root->IsVisible());
-        const auto ownerMatrix = FMatrix44f(parentTransform.ToMatrixWithScale().GetTransposed());
-        for (const auto& fluid : instance->Definition->FluidPrograms)
-        {
-            auto runtime = TStrongObjectPtr<ULibraGpuEffectRuntime>(
-                NewObject<ULibraGpuEffectRuntime>(actor, NAME_None, RF_Transient));
-            runtime->Initialize(actor);
-            instance->Gpu.Add(MoveTemp(runtime));
-            instance->GpuRuntimeNodeIds.Add(fluid.NodeId);
-            instance->GpuRuntimeIsFluid.Add(true);
-            auto gpu = instance->Gpu.Last().Get();
-            auto drawTransform = FMatrix44f::Identity;
-            auto connected = false;
-            if (container.IsValid() &&
-                !ReadGpuDrawTransform(*instance->Definition, fluid.NodeId, container, id,
-                    drawTransform, connected))
-            {
-                return Fail(TEXT("GPU fluid Matrix binding is invalid."));
-            }
-            const auto localToWorld = connected ? drawTransform : ownerMatrix;
-            if (!gpu->SetFluid2D(fluid.Settings, fluid.SizeScale, localToWorld, visible) ||
-                !gpu->Play())
-                return Fail(TEXT("GPU fluid instance creation failed: ") + gpu->LastError);
         }
         GpuBytes += instance->Definition->GpuBytes;
         Instances.Add(MoveTemp(instance));

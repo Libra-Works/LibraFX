@@ -28,8 +28,14 @@ func run() -> void:
 	var draw := gpu_root.get_child(0) as MultiMeshInstance3D
 	if not check(draw != null and draw.multimesh.visible_instance_count > 0, "Child dispatch produced particles"):
 		return
-	var center := draw.multimesh.get_instance_transform(0).origin
-	if not check(absf(center.x - 250.0) < 10.0 and gpu_root.visible, "Draw Matrix placed the child particles"):
+	await RenderingServer.frame_post_draw
+	var child_fields: Dictionary = player._test_read_gpu_particles(0)
+	if not check(child_fields.get("result", -1) == 0, "Test-only child state readback"):
+		return
+	var child_state: PackedFloat32Array = child_fields.state
+	var draw_matrix: Transform3D = draw.material_override.get_shader_parameter("draw_matrix")
+	var center := draw_matrix * Vector3(child_state[0], child_state[1], child_state[2])
+	if not check(child_state[17] != 0.0 and absf(center.x - 250.0) < 10.0 and gpu_root.visible, "Draw Matrix placed the child particles"):
 		return
 	var camera := Camera3D.new()
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
@@ -74,8 +80,14 @@ func run() -> void:
 	draw = gpu_root.get_child(0) as MultiMeshInstance3D
 	if not check(draw != null and draw.multimesh.visible_instance_count > 0, "FlowMap produced particles"):
 		return
-	var flow_center := draw.multimesh.get_instance_transform(0).origin
-	var flow_size := draw.multimesh.get_instance_custom_data(0)
+	await RenderingServer.frame_post_draw
+	var flow_fields: Dictionary = player._test_read_gpu_particles(0)
+	if not check(flow_fields.get("result", -1) == 0, "Test-only FlowMap state readback"):
+		return
+	var flow_state: PackedFloat32Array = flow_fields.state
+	var flow_center := Vector3(flow_state[0], flow_state[1], flow_state[2])
+	var size_scale: float = draw.material_override.get_shader_parameter("particle_size_scale")
+	var flow_size := Color(flow_state[12] * size_scale, flow_state[13] * size_scale, 0, 0)
 	if not check(is_zero_approx(flow_center.x) and is_equal_approx(flow_center.z, 0.5)
 			and is_equal_approx(flow_size.r, 50.0) and is_equal_approx(flow_size.g, -50.0),
 			"FlowMap world mapping and clamped UV sampling: center=%s size=%s" % [flow_center, flow_size]):

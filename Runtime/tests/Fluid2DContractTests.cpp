@@ -36,7 +36,9 @@ auto verifyFluidContract(const char* fixture) -> void
                 (input != pass.write0 && input != pass.write1), "Fluid read/write resource alias.");
         }
     }
-    requireFluid(plan.passes[plan.count - 4].read1 == Fluid2DField::PressureScratch,
+    const auto* projection = std::find_if(plan.passes.data(), plan.passes.data() + plan.count,
+        [](const auto& pass) { return pass.pass == Fluid2DPass::ProjectVelocity; });
+    requireFluid(projection != plan.passes.data() + plan.count && projection->read1 == Fluid2DField::PressureScratch,
         "Odd pressure iteration projection uses the wrong ping-pong field.");
     auto frame = Fluid2DFrame{};
     requireFluid(makeFluid2DFrame(settings, 0, frame) && frame.substeps == 0,
@@ -53,6 +55,15 @@ auto verifyFluidContract(const char* fixture) -> void
     const auto previousCount = plan.count;
     requireFluid(!makeFluid2DPlan(invalid, plan) && plan.count == previousCount,
         "Failed fluid plan must not replace the previous plan.");
+    auto confined = settings;
+    confined.vorticity = 12.5f;
+    requireFluid(validFluid2DSettings(confined) &&
+        makeFluid2DUniforms(confined, confined.maximumStep).grid[3] == 12.5f,
+        "Vorticity must use the reserved grid.w uniform lane.");
+    confined.vorticity = std::numeric_limits<float>::quiet_NaN();
+    requireFluid(!validFluid2DSettings(confined), "Nonfinite vorticity accepted.");
+    confined.vorticity = -1;
+    requireFluid(!validFluid2DSettings(confined), "Negative vorticity accepted.");
     if (fixture == nullptr || *fixture == '\0')
     {
         return;
@@ -71,7 +82,7 @@ auto verifyFluidContract(const char* fixture) -> void
     requireFluid(read() == settings.width && read() == settings.height &&
         read() == settings.pressureIterations, "Compiler fluid dimensions differ from native planning.");
     const auto uniforms = makeFluid2DUniforms(settings, settings.maximumStep);
-    auto bits = std::array<std::uint32_t, 20>{};
+    auto bits = std::array<std::uint32_t, sizeof(Fluid2DUniforms) / sizeof(std::uint32_t)>{};
     std::memcpy(bits.data(), &uniforms, sizeof(uniforms));
     for (const auto value : bits)
     {

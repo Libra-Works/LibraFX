@@ -5,6 +5,8 @@
 #include "LibraGpuEffectRuntime.generated.h"
 
 class AActor;
+class UTexture;
+class ULibraFluidOutputTexture;
 class ULibraGpuEffectAsset;
 struct FLibraGpuState;
 struct FLibraGpuFluid2DConfiguration;
@@ -53,9 +55,11 @@ public:
     // Fluid scopes use the shipped LibraFluid2D global shader and an engine-owned
     // RGBA16F output texture. No author-created component or user shader is used.
     bool SetFluid2D(const liberafx::gpu::Fluid2DSettings& settings, float sizeScale,
-        const FMatrix44f& localToWorld, bool visible);
+        const FMatrix44f& localToWorld, bool visible, bool automaticPlane = true);
+    bool BindGeneratedTexture(const FString& resourceId, ULibraGpuEffectRuntime* producer, const FString& outputId);
     bool SetFluidPresentation(const FMatrix44f& localToWorld, bool visible);
     bool IsFluid2D() const;
+    UTexture* GetFluidOutputTexture(const FString& outputId);
 
     // Updates billboard placement only. Compute dispatches and particle storage
     // continue to use their original simulation-space positions.
@@ -74,6 +78,7 @@ public:
 #if !UE_BUILD_SHIPPING
     // Explicit development-only diagnostic; never used by gameplay rendering.
     bool VerifyGpuSmoke(FString& report);
+    bool VerifyGeneratedTextureFramebuffer(FString& report);
     bool VerifyFluid2DReadback(TArray<FLinearColor>& pixels, FString& report);
     bool VerifyFluid2DSettings(uint32 width, uint32 height, uint32 pressureIterations);
     bool VerifyFluid2DPresentation(const FMatrix44f& localToWorld, bool visible);
@@ -85,7 +90,12 @@ private:
 #if WITH_DEV_AUTOMATION_TESTS
     friend class FLibraGpuDefaultEmitterRendererTest;
     friend class FLibraGpuFluid2DExecutionTest;
+    friend class FLibraGpuFluid2DVorticityTest;
+    friend class FLibraGpuFluid2DModelsTest;
+    friend class FLibraGpuFluid2DFieldConsumersTest;
 #endif
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<ULibraFluidOutputTexture>> FluidOutputTextures;
     TSharedPtr<FLibraGpuState, ESPMode::ThreadSafe> State;
     TSharedPtr<FLibraGpuFluid2DConfiguration, ESPMode::ThreadSafe> FluidConfiguration;
     TSharedPtr<FLibraGpuViewExtension, ESPMode::ThreadSafe> ViewExtension;
@@ -99,4 +109,5 @@ private:
     FMatrix44f DrawTransform = FMatrix44f::Identity;
     FMatrix44f AuthoredDrawTransform = FMatrix44f::Identity;
     bool bHasDrawTransform = false;
+    TMap<FString, TWeakPtr<FLibraGpuState, ESPMode::ThreadSafe>> GeneratedTextureSources;
 };

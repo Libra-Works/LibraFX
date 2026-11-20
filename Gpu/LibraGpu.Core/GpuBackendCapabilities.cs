@@ -8,7 +8,7 @@ public sealed class GpuBackendCapabilities
 {
     private const ulong Budget = 256UL * 1024 * 1024;
     private static readonly GpuInstructionOpcode[] V1Operations =
-        Enum.GetValues<GpuInstructionOpcode>().Where(opcode => (uint)opcode <= 41).ToArray();
+        Enum.GetValues<GpuInstructionOpcode>().Where(opcode => (uint)opcode <= 43).ToArray();
 
     public static GpuBackendCapabilities Unreal { get; } = new("unreal-lgpk", GpuBackendInput.RegisterPackets, 1,
         V1Operations, [ResourceKind.Texture2D, ResourceKind.FlowMap2D], 256, Budget);

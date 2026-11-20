@@ -66,13 +66,18 @@ namespace LiberaFx.Unity
                 }
                 var renderParent = scope.scopeObject
                     ? scope.scopeObject.transform : owner;
+                foreach (var fluid in prepared.fluidPrograms ?? Array.Empty<LiberaFxPreparedFluidProgram>())
+                    scope.fluidPrograms.Add(new LibraFluid2DInstance(owner, fluid, statistics));
                 foreach (var node in prepared.renderNodes)
                 {
                     if (node.flexiblePlane != null)
                     {
                         scope.flexiblePlanes.Add(new LiberaFxFlexiblePlaneRenderer(
                             renderParent, node.flexiblePlane,
-                            scope.flexibleHistory, statistics));
+                            scope.flexibleHistory, statistics,
+                            node.generatedTextures.Length == 0 ? null : Resolve(node.generatedTextures[0].producerNodeId, node.generatedTextures[0].outputId),
+                            node.generatedTextures.Length != 0 && node.generatedTextures[0].outputId == "DyeOutput",
+                            node.generatedTextures.Length != 0 && node.generatedTextures[0].outputId == "FieldOutput"));
                     }
                     else if (node.debugDraw != null)
                     {
@@ -85,7 +90,7 @@ namespace LiberaFx.Unity
                     else
                     {
                         scope.renderNodes.Add(LiberaFxDirectRenderNodeInstance.Create(
-                            renderParent, node, statistics));
+                            renderParent, node, statistics, Resolve));
                     }
                 }
                 foreach (var cpuParticle in prepared.cpuParticles)
@@ -96,19 +101,32 @@ namespace LiberaFx.Unity
                 }
                 foreach (var gpu in prepared.gpuPrograms)
                 {
+                    var textures = new List<LibraGpuTextureBinding>(gpu.binding.textures ?? Array.Empty<LibraGpuTextureBinding>());
+                    foreach (var reference in gpu.generatedResources)
+                    {
+                        if (!scope.TryGetGeneratedOutput(reference.producerNodeId, reference.outputId, out var texture, out var source) || !texture)
+                            throw new InvalidOperationException("Generated GPU texture producer is unavailable in this scope.");
+                        textures.Add(new LibraGpuTextureBinding { resourceId = reference.resourceId, texture = texture,
+                            premultipliedAlpha = reference.outputId == "DyeOutput", generatedSource = source });
+                    }
                     var gpuObject = new GameObject("Libera FX GPU " + gpu.nodeId);
                     gpuObject.layer = scope.scopeObject.layer;
                     gpuObject.transform.SetParent(scope.scopeObject.transform, false);
                     var runtime = gpuObject.AddComponent<LibraGpuParticleRuntime>();
                     runtime.ConfigureForSpawnable(gpu.binding.computeShader, gpu.binding.metadata,
-                        gpu.binding.billboardMaterial, gpu.binding.textures,
+                        gpu.binding.billboardMaterial, textures.ToArray(),
                         SeedForProgram(seed, gpu.nodeId), gpu.binding.spawnRate, gpu.sizeScale);
                     scope.gpuPrograms.Add(runtime);
                     scope.gpuDrawTransforms.Add(runtime, gpu);
                 }
-                foreach (var fluid in prepared.fluidPrograms ?? Array.Empty<LiberaFxPreparedFluidProgram>())
-                    scope.fluidPrograms.Add(new LibraFluid2DInstance(owner, fluid, statistics));
                 return scope;
+
+                Texture Resolve(string producer, string output)
+                {
+                    if (!scope.TryGetGeneratedOutput(producer, output, out var texture, out _))
+                        throw new InvalidOperationException("Generated draw producer is unavailable in this scope.");
+                    return texture;
+                }
             }
             catch
             {
@@ -129,10 +147,10 @@ namespace LiberaFx.Unity
                 if (localTime > float.MaxValue)
                     throw new InvalidOperationException("GPU scope initial age exceeds Unity float range.");
                 var emitterPosition = owner.position;
+                foreach (var fluid in fluidPrograms) fluid.Step(localTime);
                 foreach (var gpu in gpuPrograms)
                     if (gpu && gpu.IsRunning)
                         gpu.StepSpawnable((float)localTime, emitterPosition);
-                foreach (var fluid in fluidPrograms) fluid.Step(localTime);
             }
             previousLocalTime = localTime;
         }
@@ -149,10 +167,10 @@ namespace LiberaFx.Unity
             if (delta > 0)
             {
                 var emitterPosition = owner.position;
+                foreach (var fluid in fluidPrograms) fluid.Step(delta);
                 foreach (var gpu in gpuPrograms)
                     if (gpu && gpu.IsRunning)
                         gpu.StepSpawnable((float)delta, emitterPosition);
-                foreach (var fluid in fluidPrograms) fluid.Step(delta);
             }
             previousLocalTime = localTime;
         }
@@ -239,11 +257,26 @@ namespace LiberaFx.Unity
 
         internal ulong ScopeInstanceId => instanceId;
 
-        internal bool TryGetFluidOutput(string nodeId, out RenderTexture texture)
+        internal bool TryGetFluidOutput(string nodeId, out RenderTexture texture, bool fields = false, bool straight = false)
         {
             foreach (var fluid in fluidPrograms)
-                if (fluid.NodeId == nodeId) { texture = fluid.Output; return texture; }
+                if (fluid.NodeId == nodeId) { texture = fields ? fluid.FieldOutput : straight ? fluid.ColorOutput : fluid.Output; return texture; }
             texture = null;
+            return false;
+        }
+
+        private bool TryGetGeneratedOutput(string nodeId, string output, out RenderTexture texture, out ILibraGpuFieldSource source)
+        {
+            texture = null; source = null;
+            foreach (var fluid in fluidPrograms)
+                if (fluid.NodeId == nodeId)
+                {
+                    source = fluid;
+                    if (output == "DyeOutput") texture = fluid.Output;
+                    else if (output == "ColorOutput") texture = fluid.ColorOutput;
+                    else if (output == "FieldOutput" || output == "VelocityOutput" || output == "DensityOutput") texture = fluid.FieldOutput;
+                    return texture;
+                }
             return false;
         }
 
@@ -280,14 +313,14 @@ namespace LiberaFx.Unity
                 gpu.StopSimulation();
                 gpu.Dispose();
             }
-            foreach (var fluid in fluidPrograms) fluid.Dispose();
-            fluidPrograms.Clear();
             foreach (var node in renderNodes) node.Dispose();
             foreach (var plane in flexiblePlanes)
             {
                 plane.Dispose();
             }
             flexiblePlanes.Clear();
+            foreach (var fluid in fluidPrograms) fluid.Dispose();
+            fluidPrograms.Clear();
             flexibleHistory.Reset();
             foreach (var cpuParticleRenderer in cpuParticleRenderers)
             {

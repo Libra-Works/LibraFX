@@ -1,26 +1,41 @@
 R"LGPK(
 uniform sampler2D particle_texture : source_color, filter_linear, repeat_disable;
 uniform bool use_particle_texture = false;
+uniform bool texture_premultiplied = false;
+uniform bool texture_flip_y = false;
 uniform bool use_draw_matrix = false;
+uniform sampler2D particle_state : filter_nearest, repeat_disable;
+uniform mat4 draw_matrix = mat4(1.0);
+uniform float particle_size_scale = 1.0;
 varying vec4 particle_color;
 
 void vertex() {
-    float s = sin(INSTANCE_CUSTOM.z);
-    float c = cos(INSTANCE_CUSTOM.z);
+    vec4 position_age = texelFetch(particle_state, ivec2(0, INSTANCE_ID), 0);
+    vec4 size_rotation = texelFetch(particle_state, ivec2(3, INSTANCE_ID), 0);
+    vec4 seed_alive = texelFetch(particle_state, ivec2(4, INSTANCE_ID), 0);
+    float s = sin(size_rotation.z);
+    float c = cos(size_rotation.z);
     vec2 offset = mat2(vec2(c, s), vec2(-s, c)) * VERTEX.xy;
-    vec3 center = (VIEW_MATRIX * MODEL_MATRIX[3]).xyz;
-    vec3 quad = vec3(offset * INSTANCE_CUSTOM.xy, 0.0);
+    mat4 particle_matrix = MODEL_MATRIX * draw_matrix;
+    vec3 center = (VIEW_MATRIX * particle_matrix * vec4(position_age.xyz, 1.0)).xyz;
+    vec3 quad = vec3(offset * size_rotation.xy * particle_size_scale, 0.0);
     if (use_draw_matrix) {
-        quad = mat3(VIEW_MATRIX) * mat3(MODEL_MATRIX) * mat3(INV_VIEW_MATRIX) * quad;
+        quad = mat3(VIEW_MATRIX) * mat3(particle_matrix) * mat3(INV_VIEW_MATRIX) * quad;
     }
-    VERTEX = center + quad;
-    particle_color = COLOR;
+    vec3 position = center + quad;
+    bool valid_position = all(lessThan(abs(position), vec3(3.0e38)));
+    VERTEX = valid_position ? position : vec3(0.0);
+    particle_color = texelFetch(particle_state, ivec2(2, INSTANCE_ID), 0);
+    if (seed_alive.y < 0.5 || !valid_position) particle_color = vec4(0.0);
 }
 
 void fragment() {
+    if (particle_color.a <= 0.0) discard;
     vec4 texel = vec4(1.0);
     if (use_particle_texture) {
-        texel = texture(particle_texture, UV);
+        vec2 uv = texture_flip_y ? vec2(UV.x, 1.0 - UV.y) : UV;
+        texel = texture(particle_texture, uv);
+        if (texture_premultiplied) texel.rgb /= max(texel.a, 0.000001);
     }
     vec4 tint = texel * particle_color;
     ALBEDO = tint.rgb;

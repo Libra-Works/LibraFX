@@ -18,6 +18,7 @@
     "QuadMesh",
     "RDPipelineSpecializationConstant",
     "RDShaderSource",
+    "RDSamplerState",
     "RDShaderSPIRV",
     "RDTextureFormat",
     "RDTextureView",

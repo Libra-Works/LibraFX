@@ -10,6 +10,7 @@ namespace LiberaFx.Services;
 public sealed record GpuPosition(double X, double Y);
 public sealed record GpuTextDraft(string Text, List<GpuDiagnostic> Diagnostics);
 public sealed record GpuRendererSettings(string Material = "builtin:unlit-alpha", double SizeScale = 1);
+public sealed record GpuGeneratedTextureConsumer(Guid TargetNodeId, string ParameterId, string OutputId = "ColorOutput");
 public sealed record GpuEditorState
 {
     public GpuProgram Program { get; init; } = GpuSamples.CreateEmitter();
@@ -21,6 +22,14 @@ public sealed record GpuEditorState
     public Fluid2DSettings? Fluid2D { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public GpuRendererSettings? FluidRenderer { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, GeneratedGpuResourceReference>? GeneratedResources { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? FluidAutomaticPlane { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<GpuGeneratedTextureConsumer>? GeneratedConsumers { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GpuResourcePlan? ResourcePlanDraft { get; init; }
 }
 
 public sealed record GpuEdit
@@ -42,6 +51,10 @@ public sealed record GpuEdit
     public string? Material { get; init; }
     public double? SizeScale { get; init; }
     public Fluid2DSettings? Fluid2D { get; init; }
+    public GeneratedGpuResourceReference? GeneratedResource { get; init; }
+    public bool? AutomaticPlane { get; init; }
+    public Fluid2DForceNode? FluidForce { get; init; }
+    public GpuGeneratedTextureConsumer? GeneratedConsumer { get; init; }
 }
 
 /// <summary>Portable program plus non-portable authoring state, committed as one CPU undo command.</summary>
@@ -57,6 +70,23 @@ public static class GpuParticleEditorService
         MaxDepth = 32,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
+
+    public static IReadOnlyList<NodeParameterSnapshot>? RemapReferences(GraphNodeSnapshot node,
+        IReadOnlyDictionary<Guid, Guid> ids)
+    {
+        if (!IsGpu(node.Kind)) return node.Parameters;
+        var state = ReadState(node);
+        var mapped = state with
+        {
+            GeneratedResources = state.GeneratedResources?.ToDictionary(pair => pair.Key,
+                pair => ids.TryGetValue(pair.Value.ProducerNodeId, out var replacement)
+                    ? pair.Value with { ProducerNodeId = replacement } : pair.Value),
+            GeneratedConsumers = state.GeneratedConsumers?.Where(consumer => ids.ContainsKey(consumer.TargetNodeId))
+                .Select(consumer => consumer with { TargetNodeId = ids[consumer.TargetNodeId] }).ToArray()
+        };
+        return (node.Parameters ?? []).Where(parameter => parameter.Id != ParameterId)
+            .Append(new NodeParameterSnapshot(ParameterId, "gpuState", JsonSerializer.SerializeToElement(mapped, Json))).ToArray();
+    }
 
     public static bool IsGpu(GraphNodeKind kind) => kind == Kind;
     public static GpuEditorState ReadState(GraphNodeViewModel node) => IsGpu(node.Definition.Kind)
@@ -103,8 +133,21 @@ public static class GpuParticleEditorService
             {
                 Fluid2DCompiler.Validate(fluid);
             }
+            if (state.ResourcePlanDraft is { } plan)
+            {
+                _ = GpuResourcePlanCompiler.Serialize(plan);
+            }
+            if (state.GeneratedResources is { } generated &&
+                (generated.Count > 64 || generated.Any(pair => pair.Key is not { Length: > 0 and <= 128 } ||
+                    pair.Value is null || pair.Value.ProducerNodeId == Guid.Empty ||
+                    pair.Value.OutputId is not { Length: > 0 and <= 64 } || state.ResourceAssetPaths.ContainsKey(pair.Key))))
+                return false;
+            if (state.GeneratedConsumers is { } consumers && (consumers.Count > 64 || consumers.Any(consumer =>
+                consumer is null || consumer.TargetNodeId == Guid.Empty || consumer.ParameterId is not { Length: > 0 and <= 256 } ||
+                consumer.OutputId is not ("DyeOutput" or "ColorOutput" or "FieldOutput"))))
+                return false;
             if (state.FluidRenderer is { } renderer &&
-                (renderer.Material != "builtin:fluid-alpha" || !double.IsFinite(renderer.SizeScale) ||
+                (renderer.Material != Fluid2DPresets.RendererMaterial(state.Fluid2D?.Model ?? Fluid2DModel.Smoke) || !double.IsFinite(renderer.SizeScale) ||
                     renderer.SizeScale <= 0 || renderer.SizeScale > 10000))
             {
                 return false;
@@ -123,7 +166,7 @@ public static class GpuParticleEditorService
                     (r.Kind == ResourceKind.FlowMap2D) != (r.FlowMap is not null) ||
                     r.FlowMap is { } flowMap && (!Enum.IsDefined(flowMap.AxisU) || !Enum.IsDefined(flowMap.AxisV) ||
                         !double.IsFinite(flowMap.WorldMinimumU) || !double.IsFinite(flowMap.WorldMaximumU) ||
-                        !double.IsFinite(flowMap.WorldMinimumV) || !double.IsFinite(flowMap.WorldMaximumV))) ||
+                        !double.IsFinite(flowMap.WorldMinimumV) || !double.IsFinite(flowMap.WorldMaximumV) || !Enum.IsDefined(flowMap.Encoding) || !Enum.IsDefined(flowMap.Coordinates))) ||
                 p.Kernels.Any(k => k is null || k.Id is not { Length: > 0 and <= 128 } ||
                     !Enum.IsDefined(k.Stage) ||
                     k.Nodes is null || k.Writes is null || k.Nodes.Count > 4096 || k.Writes.Count > 4096 ||
@@ -150,7 +193,7 @@ public static class GpuParticleEditorService
                 return false;
             return true;
         }
-        catch (Exception e) when (e is JsonException or NotSupportedException or ArgumentException) { return false; }
+        catch (Exception e) when (e is JsonException or NotSupportedException or ArgumentException or GpuValidationException) { return false; }
     }
 
     public static GraphNodeViewModel Create(GraphWorkspaceViewModel graph, double x = 80, double y = 80)
@@ -196,18 +239,33 @@ public static class GpuParticleEditorService
 
     public static IReadOnlyList<GpuDiagnostic> Diagnostics(GpuEditorState state)
     {
+        if (state.ResourcePlanDraft is { } draft)
+        {
+            try
+            {
+                GpuResourcePlanCompiler.Compile(draft);
+                if (!ResourcePlanRuntimeSupported(state))
+                    return [new("ResourcePlanRuntimeUnsupported", LocalizationService.Shared.Get("Fluid.ResourcePlanRuntimeUnsupported"))];
+            }
+            catch (GpuValidationException error) { return error.Diagnostics; }
+        }
         if (state.Fluid2D is { } fluid)
         {
             try
             {
                 Fluid2DCompiler.Validate(fluid);
-                var renderer = state.FluidRenderer ?? new("builtin:fluid-alpha", 100);
-                if (renderer.Material != "builtin:fluid-alpha" || !double.IsFinite(renderer.SizeScale) ||
+                GpuResourcePlanCompiler.Compile(Fluid2DCompiler.ResourcePlan(fluid));
+                var renderer = state.FluidRenderer ?? new(Fluid2DPresets.RendererMaterial(fluid.Model), 100);
+                if (renderer.Material != Fluid2DPresets.RendererMaterial(fluid.Model) || !double.IsFinite(renderer.SizeScale) ||
                     renderer.SizeScale <= 0 || renderer.SizeScale > 10000)
                 {
-                    return [new("FluidRenderer", "2D fluid rendering requires builtin:fluid-alpha and a positive scale up to 10000.")];
+                    return [new("FluidRenderer", "2D fluid rendering requires the selected model's built-in renderer and a positive scale up to 10000.")];
                 }
                 return [];
+            }
+            catch (GpuValidationException e)
+            {
+                return e.Diagnostics;
             }
             catch (ArgumentException e)
             {
@@ -236,22 +294,71 @@ public static class GpuParticleEditorService
 
     private static GpuEditorState Stage(GpuEditorState state, GpuEdit edit)
     {
+        if (edit.Action == "resource-plan")
+            return state with { ResourcePlanDraft = GpuResourcePlanCompiler.Parse(edit.Text ?? throw new ArgumentException("Resource plan JSON required.")) };
+        if (edit.Action == "resource-plan-reset")
+            return state with { ResourcePlanDraft = null };
         if (edit.Action == "fluid-enable")
         {
-            return state with { Fluid2D = edit.Fluid2D ?? new(), FluidRenderer = new("builtin:fluid-alpha", 100) };
+            var fluid = edit.Fluid2D ?? new();
+            return state with { Fluid2D = fluid, FluidRenderer = new(Fluid2DPresets.RendererMaterial(fluid.Model), 100) };
         }
         if (edit.Action == "fluid-disable")
         {
-            return state with { Fluid2D = null, FluidRenderer = null };
+            return state with { Fluid2D = null, FluidRenderer = null, FluidAutomaticPlane = null };
         }
         if (edit.Action == "fluid-settings" && state.Fluid2D is not null)
         {
-            return state with { Fluid2D = edit.Fluid2D ?? throw new ArgumentException("Fluid settings are required.") };
+            var fluid = edit.Fluid2D ?? throw new ArgumentException("Fluid settings are required.");
+            return state with { Fluid2D = fluid,
+                FluidRenderer = new(Fluid2DPresets.RendererMaterial(fluid.Model), state.FluidRenderer?.SizeScale ?? 100) };
+        }
+        if ((edit.Action is "fluid-force-add" or "fluid-force-update" or "fluid-force-remove") && state.Fluid2D is { } forceSettings)
+        {
+            var forces = forceSettings.Forces?.ToList() ?? [];
+            if (edit.Action == "fluid-force-remove")
+            {
+                var removed = Guid.Parse(edit.NodeId!);
+                forces.RemoveAll(node => node.Id == removed);
+                forces = forces.Select(node => node with
+                {
+                    InputA = node.InputA == removed ? null : node.InputA,
+                    InputB = node.InputB == removed ? null : node.InputB
+                }).ToList();
+            }
+            else
+            {
+                var force = edit.FluidForce ?? throw new ArgumentException("Cell-force node required.");
+                var index = forces.FindIndex(node => node.Id == force.Id);
+                if (edit.Action == "fluid-force-add")
+                {
+                    if (force.Id == Guid.Empty) force = force with { Id = Guid.NewGuid() };
+                    forces.Add(force);
+                }
+                else if (index >= 0) forces[index] = force;
+                else throw new ArgumentException("Cell-force node not found.");
+            }
+            Fluid2DForceCompiler.Validate(forces);
+            return state with { Fluid2D = forceSettings with { Forces = forces.Count == 0 ? null : forces } };
+        }
+        if (edit.Action == "fluid-output" && state.Fluid2D is not null)
+            return state with { FluidAutomaticPlane = edit.AutomaticPlane };
+        if ((edit.Action is "fluid-consumer-bind" or "fluid-consumer-remove") && state.Fluid2D is not null)
+        {
+            var consumer = edit.GeneratedConsumer ?? throw new ArgumentException("Generated texture consumer required.");
+            var consumers = (state.GeneratedConsumers ?? []).Where(item =>
+                item.TargetNodeId != consumer.TargetNodeId || item.ParameterId != consumer.ParameterId).ToList();
+            if (edit.Action == "fluid-consumer-bind") consumers.Add(consumer);
+            return state with { GeneratedConsumers = consumers.Count == 0 ? null : consumers };
         }
         if (edit.Action == "fluid-renderer" && state.Fluid2D is not null)
         {
-            var renderer = state.FluidRenderer ?? new("builtin:fluid-alpha", 100);
-            return state with { FluidRenderer = new(edit.Material ?? renderer.Material, edit.SizeScale ?? renderer.SizeScale) };
+            var renderer = state.FluidRenderer ?? new(Fluid2DPresets.RendererMaterial(state.Fluid2D.Model), 100);
+            return state with
+            {
+                FluidRenderer = new(edit.Material ?? renderer.Material, edit.SizeScale ?? renderer.SizeScale),
+                FluidAutomaticPlane = edit.AutomaticPlane ?? state.FluidAutomaticPlane
+            };
         }
         if (state.Fluid2D is not null)
         {
@@ -302,10 +409,21 @@ public static class GpuParticleEditorService
             var resource = edit.Resource ?? throw new ArgumentException("Resource required.");
             var index = p.Resources.FindIndex(r => r.Id == resource.Id);
             if (index < 0) p.Resources.Add(resource); else p.Resources[index] = resource;
+            if (edit.GeneratedResource is { } generated)
+            {
+                if (edit.AssetPath is not null || generated.ProducerNodeId == Guid.Empty ||
+                    generated.OutputId is not { Length: > 0 and <= 64 } || resource.Kind is not (ResourceKind.Texture2D or ResourceKind.FlowMap2D))
+                    throw new ArgumentException("Generated texture binding requires a producer, an output and Texture2D.");
+                state.ResourceAssetPaths.Remove(resource.Id);
+                var bindings = new Dictionary<string, GeneratedGpuResourceReference>(state.GeneratedResources ?? []);
+                bindings[resource.Id] = generated;
+                return state with { GeneratedResources = bindings };
+            }
             if (edit.AssetPath is { } path)
             {
                 if (path.Length > 4096) throw new ArgumentException("Asset path too long.");
                 state.ResourceAssetPaths[resource.Id] = path;
+                state.GeneratedResources?.Remove(resource.Id);
             }
             return state;
         }
@@ -418,6 +536,7 @@ public static class GpuParticleEditorService
     }
     public static string Export(GpuEditorState state, string format)
     {
+        if (format == "resources") return GpuResourcePlanCompiler.Serialize(ResourcePlan(state));
         if (state.Fluid2D is { } fluid)
         {
             if (Diagnostics(state) is { Count: > 0 } errors)
@@ -447,6 +566,12 @@ public static class GpuParticleEditorService
         new string(id.Take(80).Select(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' ? c : '_').ToArray());
     public static object ExportMetadata(GpuEditorState state, string format)
     {
+        if (format == "resources") return new
+        {
+            purpose = "ResourcePlanSource", runtimeExecuted = false,
+            runtimeSupported = state.Fluid2D is not null && ResourcePlanRuntimeSupported(state),
+            compiled = GpuResourcePlanCompiler.Compile(ResourcePlan(state))
+        };
         var shaderFormat = format switch
         {
             "usf" => ShaderFormat.Usf, "hlsl" => ShaderFormat.HlslInclude, "compute" => ShaderFormat.UnityCompute,
@@ -459,6 +584,13 @@ public static class GpuParticleEditorService
         return state.Fluid2D is { } fluid ? Fluid2DCompiler.Metadata(fluid, shaderFormat)
             : Compile(state).GetExportMetadata(shaderFormat);
     }
+    public static GpuResourcePlan ResourcePlan(GpuEditorState state) => state.ResourcePlanDraft ??
+        (state.Fluid2D is { } fluid ? Fluid2DCompiler.ResourcePlan(fluid) : new GpuResourcePlan());
+
+    public static bool ResourcePlanRuntimeSupported(GpuEditorState state) => state.ResourcePlanDraft is null ||
+        state.Fluid2D is { } fluid && GpuResourcePlanCompiler.Serialize(state.ResourcePlanDraft) ==
+            GpuResourcePlanCompiler.Serialize(Fluid2DCompiler.ResourcePlan(fluid));
+
     public static async Task WriteAtomicAsync(string destination, string source)
     {
         var full = Path.GetFullPath(destination);

@@ -14,7 +14,8 @@ public enum GpuInstructionOpcode : uint
     Abs = 19, Floor = 20, Ceil = 21, Round = 22, Frac = 23, Mod = 24, Sign = 25,
     Pow = 26, Sqrt = 27, Exp = 28, Log = 29, Lerp = 30, Smoothstep = 31, Remap = 32,
     Dot = 33, Cross = 34, Distance = 35, Saturate = 36,
-    GradientNoise3D = 37, Fbm = 38, Turbulence = 39, CurlNoise = 40, SampleFlowMap = 41
+    GradientNoise3D = 37, Fbm = 38, Turbulence = 39, CurlNoise = 40, SampleFlowMap = 41,
+    GreaterThan = 42, LessThan = 43
 }
 public enum GpuAttributeSlot : uint { Position = 0, Velocity = 1, Color = 2, Size = 3, Rotation = 4, Age = 5, Lifetime = 6, Alive = 7, Seed = 8 }
 public enum GpuUniformSlot : uint { DeltaTime = 0, Time = 1, EmitterPosition = 2 }
@@ -100,7 +101,10 @@ public sealed class CompiledRegisterKernel
                 floats[2] = (float)(settings.WorldMaximumU - settings.WorldMinimumU);
                 floats[3] = (float)(settings.WorldMaximumV - settings.WorldMinimumV);
                 d = (uint)settings.AxisU | (uint)settings.AxisV << 2;
+                if (settings.Coordinates == FlowMapCoordinates.GeneratedPlane) d |= 0x100;
             }
+            if (n.Op == GpuOp.SampleFlowMap)
+                integer = (uint)resources[(int)aux].FlowMap!.Encoding;
             mappings.Add(new(instructions.Count, n.Id, "out", n.SourceSpan));
             instructions.Add(new((GpuInstructionOpcode)(uint)n.Op, registers[n.Id], Ref(0), Ref(1), Ref(2), d, n.Type, aux, new(floats[0], floats[1], floats[2], floats[3]), integer));
         }

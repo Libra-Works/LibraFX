@@ -5,7 +5,7 @@ namespace LibraGpu.Core;
 public enum TypePolicy
 {
     Literal, Attribute, Uniform, ArithmeticBroadcast, FloatUnary, VectorUnary, Length, Compose, Select, Random, Component,
-    NumericUnary, FloatBroadcast, Dot, Cross, Distance, Remap, GradientNoise, FractalNoise, FlowMapSample
+    NumericUnary, FloatBroadcast, Dot, Cross, Distance, Remap, GradientNoise, FractalNoise, FlowMapSample, ScalarComparison
 }
 public sealed record GpuInputDescriptor(string Id, GpuType DefaultType, IReadOnlyList<double> DefaultValue,
     bool OptionalInDsl = false, double? Minimum = null, double? Maximum = null);
@@ -27,7 +27,7 @@ public static class GpuOperationRegistry
             TypePolicy.FractalNoise => new[] { Input("position",GpuType.Float3),Input("seed",GpuType.UInt,optional:true),
                 Input("octaves",GpuType.Int,4,true,1,8),Input("gain",GpuType.Float,0.5,true,0,1) },
             TypePolicy.FlowMapSample => new[] { Input("coordinates", GpuType.Float2) },
-            TypePolicy.ArithmeticBroadcast => new[] { Input("a", GpuType.Float), Input("b", GpuType.Float, 1) },
+            TypePolicy.ArithmeticBroadcast or TypePolicy.ScalarComparison => new[] { Input("a", GpuType.Float), Input("b", GpuType.Float, 1) },
             TypePolicy.Remap => new[] { Input("value",GpuType.Float),new GpuInputDescriptor("sourceRange",GpuType.Float2,Array.AsReadOnly(new double[] {0,1})),
                 new GpuInputDescriptor("targetRange",GpuType.Float2,Array.AsReadOnly(new double[] {0,1})) },
             TypePolicy.Cross => new[] { Input("a", GpuType.Float3), Input("b", GpuType.Float3) },
@@ -76,6 +76,7 @@ public static class GpuOperationRegistry
             new(GpuOp.GradientNoise3D,2,2,TypePolicy.GradientNoise),new(GpuOp.Fbm,4,4,TypePolicy.FractalNoise),
             new(GpuOp.Turbulence,4,4,TypePolicy.FractalNoise),new(GpuOp.CurlNoise,4,4,TypePolicy.FractalNoise),
             new(GpuOp.SampleFlowMap,1,1,TypePolicy.FlowMapSample)
+            ,new(GpuOp.GreaterThan,2,2,TypePolicy.ScalarComparison),new(GpuOp.LessThan,2,2,TypePolicy.ScalarComparison)
         }.Select(Describe).ToDictionary(x => x.Op));
 
     public static bool TryInferType(GpuOp op, IReadOnlyList<GpuType> inputs, out GpuType result)
@@ -90,6 +91,7 @@ public static class GpuOperationRegistry
             TypePolicy.Cross => GpuType.Float3,
             TypePolicy.FractalNoise => op == GpuOp.CurlNoise ? GpuType.Float3 : GpuType.Float,
             TypePolicy.FlowMapSample => inputs[0],
+            TypePolicy.ScalarComparison => GpuType.Bool,
             TypePolicy.Compose => inputs.Count switch { 2 => GpuType.Float2, 3 => GpuType.Float3, 4 => GpuType.Float4, _ => GpuType.Float },
             TypePolicy.Select => inputs[1],
             TypePolicy.ArithmeticBroadcast or TypePolicy.FloatBroadcast => inputs.OrderByDescending(Components).First(),
@@ -122,6 +124,7 @@ public static class GpuOperationRegistry
             TypePolicy.FractalNoise => result == (op == GpuOp.CurlNoise ? GpuType.Float3 : GpuType.Float) &&
                 inputs[0] == GpuType.Float3 && inputs[1] == GpuType.UInt && inputs[2] == GpuType.Int && inputs[3] == GpuType.Float,
             TypePolicy.FlowMapSample => result == inputs[0] && (inputs[0] is GpuType.Float2 or GpuType.Float3),
+            TypePolicy.ScalarComparison => result == GpuType.Bool && inputs.All(type => type == GpuType.Float),
             _ => false
         };
     }

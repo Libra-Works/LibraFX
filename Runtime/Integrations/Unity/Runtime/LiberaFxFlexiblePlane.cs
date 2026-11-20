@@ -349,7 +349,8 @@ namespace LiberaFx.Unity
 
         internal LiberaFxFlexiblePlaneRenderer(Transform parent, LiberaFxPreparedFlexiblePlane definition,
             LiberaFxFlexiblePlaneHistoryScope history,
-            LiberaFxRenderStatisticsCounter statistics = null)
+            LiberaFxRenderStatisticsCounter statistics = null, Texture generatedTexture = null,
+            bool generatedPremultiplied = false, bool generatedFields = false)
         {
             if (!parent || definition == null || history == null)
             {
@@ -373,8 +374,13 @@ namespace LiberaFx.Unity
                 uv.Capacity = nativeVertices.Length;
                 colors.Capacity = nativeVertices.Length;
                 indices.Capacity = nativeIndices.Length;
-                propertyState = new LiberaFxDrawPropertyState(1);
-                propertyState.SetTexture(Shader.PropertyToID(definition.textureProperty), definition.texture);
+                propertyState = new LiberaFxDrawPropertyState(3);
+                propertyState.SetTexture(Shader.PropertyToID(definition.textureProperty), generatedTexture ? generatedTexture : definition.texture);
+                if (generatedTexture)
+                {
+                    propertyState.SetFloat(Shader.PropertyToID("_LibraGeneratedPremultiplied"), generatedPremultiplied ? 1 : 0);
+                    propertyState.SetFloat(Shader.PropertyToID("_LibraGeneratedFields"), generatedFields ? 1 : 0);
+                }
                 submission = new LiberaFxRenderSubmission(propertyState, statistics);
                 submission.owner = parent;
                 submission.Configure(createdMesh, definition.material, 0,

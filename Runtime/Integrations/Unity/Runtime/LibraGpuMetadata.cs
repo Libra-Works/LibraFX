@@ -19,6 +19,8 @@ namespace LiberaFx.Unity
     [Serializable] public sealed class LibraGpuFlowMapMetadata
     {
         public string axisU, axisV;
+        public string encoding;
+        public string coordinates;
         public float worldMinimumU, worldMaximumU, worldMinimumV, worldMaximumV;
     }
 
@@ -34,8 +36,14 @@ namespace LiberaFx.Unity
         public int byteOffset;
     }
 
+    [Serializable] public sealed class LibraGpuGeneratedFieldMappingMetadata
+    {
+        public string shaderName;
+        public int register, elements, stride;
+    }
     [Serializable] public sealed class LibraGpuMetadata
     {
+        public LibraGpuGeneratedFieldMappingMetadata generatedFieldMappings;
         public int version, capacity, particleStride, uniformBufferBytes;
         public string purpose, format, programId, contentHash, sourceHash, particleBuffer, uniformBuffer;
         public bool runtimeExecuted;
@@ -83,7 +91,10 @@ namespace LiberaFx.Unity
                     throw new ArgumentException("GPU resources must be uniquely identified Texture2D or FlowMap2D declarations.");
                 if (r.kind == "FlowMap2D")
                 {
-                    if (r.flowMap == null || !ValidAxis(r.flowMap.axisU) || !ValidAxis(r.flowMap.axisV) ||
+                    if (r.flowMap == null || r.flowMap.coordinates != null && r.flowMap.coordinates != "" && r.flowMap.coordinates != "WorldBounds" && r.flowMap.coordinates != "GeneratedPlane" ||
+                        r.flowMap.encoding != null && r.flowMap.encoding != "" && r.flowMap.encoding != "SignedNormalized" &&
+                        r.flowMap.encoding != "FloatVelocity" && r.flowMap.encoding != "FloatDensity" ||
+                        !ValidAxis(r.flowMap.axisU) || !ValidAxis(r.flowMap.axisV) ||
                         r.flowMap.axisU == r.flowMap.axisV ||
                         !Finite(r.flowMap.worldMinimumU) || !Finite(r.flowMap.worldMaximumU) ||
                         !Finite(r.flowMap.worldMinimumV) || !Finite(r.flowMap.worldMaximumV) ||
@@ -104,6 +115,15 @@ namespace LiberaFx.Unity
                 }
                 resources.Add(r.id, r);
             }
+            var generatedCoordinates = false;
+            foreach (var resource in m.resources)
+                generatedCoordinates |= resource.flowMap?.coordinates == "GeneratedPlane";
+            if (generatedCoordinates && (m.generatedFieldMappings == null || m.generatedFieldMappings.shaderName != "LibraGpuFieldMappings" ||
+                m.generatedFieldMappings.elements != 256 || m.generatedFieldMappings.stride != 16 ||
+                m.generatedFieldMappings.register < 0 || m.generatedFieldMappings.register > 127))
+                throw new ArgumentException("Generated-plane sampling requires the instance-owned mapping buffer metadata.");
+            if (!generatedCoordinates && m.generatedFieldMappings != null)
+                throw new ArgumentException("Unexpected generated field mapping buffer.");
             foreach (var kernel in m.kernels)
             {
                 var ids = kernel.flowMapResourceIds ?? Array.Empty<string>();

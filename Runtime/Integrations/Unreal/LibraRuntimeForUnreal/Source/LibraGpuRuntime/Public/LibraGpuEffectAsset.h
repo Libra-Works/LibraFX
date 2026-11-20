@@ -51,6 +51,18 @@ struct FLibraGpuTextureBinding
 
     UPROPERTY()
     bool bFlowMap = false;
+    UPROPERTY()
+    uint32 FlowEncoding = 0;
+    UPROPERTY()
+    bool bGeneratedPlaneCoordinates = false;
+
+    UPROPERTY()
+    FString GeneratedProducerNodeId;
+
+    UPROPERTY()
+    FString GeneratedOutputId;
+
+    bool IsGenerated() const { return !GeneratedProducerNodeId.IsEmpty(); }
 };
 
 USTRUCT()

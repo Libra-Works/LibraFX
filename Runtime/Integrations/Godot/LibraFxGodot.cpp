@@ -263,7 +263,7 @@ public:
         result = PackageGpuRenderer::create(package, textureBindings_, candidate->gpu, gpuError_);
         if (result == Result::Ok) {
             result = PackageRenderRenderer::create(package, meshBindings_, textureBindings_, materialBindings_,
-                candidate->renderer);
+                candidate->renderer, candidate->gpu.get());
         }
         if (result != Result::Ok) {
             return code(result);
@@ -446,6 +446,21 @@ public:
     String get_gpu_error() const { return Thread::is_main_thread() ? gpuError_ : String{}; }
 
 #ifdef LIBERAFX_GODOT_TEST_HOOKS
+    Dictionary _test_read_gpu_particles(std::int64_t emitter)
+    {
+        auto fields = Dictionary{};
+        if (!Thread::is_main_thread() || !playback_ || !playback_->gpu || emitter < 0)
+        {
+            fields["result"] = code(Result::NotReady);
+            return fields;
+        }
+        auto detail = String{};
+        const auto result = playback_->gpu->testReadParticleState(static_cast<std::size_t>(emitter), fields, detail);
+        fields["result"] = code(result);
+        fields["error"] = detail;
+        return fields;
+    }
+
     Dictionary _test_read_fluid_fields()
     {
         auto fields = Dictionary{};
@@ -790,6 +805,8 @@ protected:
         godot::ClassDB::bind_method(godot::D_METHOD("clear_material_binding", "asset_identity"), &LibraEffectPlayer::clear_material_binding);
         godot::ClassDB::bind_method(godot::D_METHOD("get_gpu_error"), &LibraEffectPlayer::get_gpu_error);
 #ifdef LIBERAFX_GODOT_TEST_HOOKS
+        godot::ClassDB::bind_method(godot::D_METHOD("_test_read_gpu_particles", "emitter"),
+            &LibraEffectPlayer::_test_read_gpu_particles);
         godot::ClassDB::bind_method(godot::D_METHOD("_test_read_fluid_fields"),
             &LibraEffectPlayer::_test_read_fluid_fields);
         godot::ClassDB::bind_method(godot::D_METHOD("_test_disable_fluid_source_and_zero_forces"),

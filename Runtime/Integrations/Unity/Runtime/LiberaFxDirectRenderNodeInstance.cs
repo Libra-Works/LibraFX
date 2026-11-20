@@ -35,7 +35,7 @@ namespace LiberaFx.Unity
             inputValues = new Vector4[prepared.inputs.Length];
             inputIndexes = new Dictionary<string, int>(StringComparer.Ordinal);
 
-            var propertyCapacity = 1 + prepared.inputs.Length + prepared.textures.Length;
+            var propertyCapacity = 3 + prepared.inputs.Length + prepared.textures.Length + prepared.generatedTextures.Length;
             for (var slot = 0; slot < propertyStates.Length; slot++)
             {
                 propertyStates[slot] = new LiberaFxDrawPropertyState(propertyCapacity + 1);
@@ -64,7 +64,8 @@ namespace LiberaFx.Unity
         internal string nodeId => definition.nodeId;
 
         internal static LiberaFxDirectRenderNodeInstance Create(Transform parent,
-            LiberaFxPreparedRenderNode prepared, LiberaFxRenderStatisticsCounter statistics)
+            LiberaFxPreparedRenderNode prepared, LiberaFxRenderStatisticsCounter statistics,
+            Func<string, string, Texture> generatedTexture = null)
         {
             var instance = new LiberaFxDirectRenderNodeInstance(prepared, parent, statistics);
             try
@@ -89,6 +90,18 @@ namespace LiberaFx.Unity
                         parent.gameObject.layer, statistics);
                 }
                 instance.SetStaticTextures();
+                foreach (var binding in prepared.generatedTextures)
+                {
+                    var texture = generatedTexture?.Invoke(binding.producerNodeId, binding.outputId);
+                    if (!texture) throw new InvalidOperationException("Generated material texture is unavailable.");
+                    var state = instance.propertyStates[binding.slot];
+                    state.SetTexture(Shader.PropertyToID(binding.name), texture);
+                    if (binding.mainTexture)
+                    {
+                        state.SetFloat(Shader.PropertyToID("_LibraGeneratedPremultiplied"), binding.outputId == "DyeOutput" ? 1 : 0);
+                        state.SetFloat(Shader.PropertyToID("_LibraGeneratedFields"), binding.outputId == "FieldOutput" ? 1 : 0);
+                    }
+                }
                 return instance;
             }
             catch
@@ -349,6 +362,7 @@ namespace LiberaFx.Unity
             {
                 new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1), new Vector2(0, 1)
             };
+            mesh.colors = new[] { Color.white, Color.white, Color.white, Color.white };
             mesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
             mesh.RecalculateBounds();
             return mesh;

@@ -23,6 +23,7 @@ public sealed record KernelMetadata(string Id, KernelStage Stage, string EntryPo
     public IReadOnlyList<string> FlowMapResourceIds { get; init; } = [];
 }
 public sealed record FlowMetadata(string Id, FlowKind Kind, string? KernelId, string? ResourceId);
+public sealed record GpuGeneratedFieldMappingMetadata(string ShaderName, int Register, int Elements, int Stride);
 public sealed record GpuExportMetadata
 {
     public int Version { get; init; } = 1;
@@ -41,6 +42,8 @@ public sealed record GpuExportMetadata
     public IReadOnlyList<FlowMetadata> Flow { get; init; } = [];
     public IReadOnlyList<ResourceMetadata> Resources { get; init; } = [];
     public IReadOnlyList<UniformMetadata> Uniforms { get; init; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GpuGeneratedFieldMappingMetadata? GeneratedFieldMappings { get; init; }
 }
 public sealed class ShaderSource
 {
@@ -123,7 +126,9 @@ public sealed class CompiledGpuProgram
             Kernels = Kernels,
             Flow = Flow,
             Resources = source.Resources,
-            Uniforms = Uniforms
+            Uniforms = Uniforms,
+            GeneratedFieldMappings = format == ShaderFormat.UnityCompute && snapshot.Resources.Any(resource => resource.FlowMap?.Coordinates == FlowMapCoordinates.GeneratedPlane)
+                ? new("LibraGpuFieldMappings", source.Bindings.TextureRegisterBase + snapshot.Resources.Count, 256, 16) : null
         };
     }
     public string ExportMetadataJson(ShaderFormat format = ShaderFormat.UnityCompute, ShaderBindings? bindings = null)

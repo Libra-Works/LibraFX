@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LibraFxGodotFlexiblePlane.h"
+#include "LibraFxGodotGpu.h"
 #include "LibraFxGodotRenderServer.h"
 #include "liberafx/LbSpawnableHost.h"
 #include <godot_cpp/variant/packed_float32_array.hpp>
@@ -48,7 +49,7 @@ class PackageRenderRenderer final {
 public:
     static auto create(const SpawnablePackage& package, const MeshBindings& meshBindings,
                        const TextureBindings& textureBindings, const MaterialBindings& materialBindings,
-                       std::unique_ptr<PackageRenderRenderer>& out) -> Result;
+                       std::unique_ptr<PackageRenderRenderer>& out, PackageGpuRenderer* gpu = nullptr) -> Result;
     ~PackageRenderRenderer();
 
     auto attach(godot::Node& owner) -> Result;
@@ -133,6 +134,7 @@ private:
         SpriteAnimation animation{};
         std::unordered_map<std::int32_t, godot::Ref<godot::Material>> materials;
         std::vector<Parameter> parameters;
+        std::vector<GeneratedGpuDrawTexture> generatedTextures;
     };
     struct RenderInstance final {
         godot::Ref<godot::Mesh> mesh;
@@ -206,6 +208,7 @@ private:
         bool visibleBeforeFlexibleFailure = true;
     };
 
+    PackageGpuRenderer* gpu_ = nullptr;
     PackageRenderRenderer(const MeshBindings& meshBindings,
                           const TextureBindings& textureBindings);
 
@@ -214,7 +217,8 @@ private:
                           const TextureBindings& textureBindings,
                           const MaterialBindings& materialBindings,
                           std::vector<Draw>& out,
-                          std::vector<CpuParticleDraw>* cpuParticles = nullptr) -> Result;
+                          std::vector<CpuParticleDraw>* cpuParticles = nullptr,
+                          const std::vector<GeneratedGpuDrawTexture>* generated = nullptr) -> Result;
     static auto applyMaterials(godot::Ref<godot::Mesh>& mesh, const Draw& draw,
                                RenderInstance& out) -> Result;
     auto updateMaterials(SpawnableHost& host, const Draw& draw, const RenderInstance& renderable,
@@ -222,11 +226,13 @@ private:
     static auto parseId(const godot::String& text, std::array<std::uint8_t, 16>& id) -> bool;
     static auto uuidString(const std::uint8_t* bytes) -> godot::String;
     auto makeRenderable(godot::Node3D& parent, const Draw& draw,
-                        RenderInstance& out) -> Result;
+                        RenderInstance& out, const std::array<std::uint8_t, 16>& container = {},
+                        std::uint64_t instance = 0) -> Result;
     auto makeCpuRenderable(godot::Node3D& parent, const CpuParticleDraw& draw,
                            CpuParticleRenderInstance& out) -> Result;
     auto makeScope(godot::Node& parent, const std::vector<Draw>& draws,
-                   godot::Node3D*& node, std::vector<RenderInstance>& renderables) -> Result;
+                   godot::Node3D*& node, std::vector<RenderInstance>& renderables,
+                   const std::array<std::uint8_t, 16>& container, std::uint64_t instance) -> Result;
     auto updateScope(SpawnableHost& host, const std::vector<Draw>& draws,
                      std::vector<RenderInstance>& renderables,
                      const VisualScope* child, double localTime,

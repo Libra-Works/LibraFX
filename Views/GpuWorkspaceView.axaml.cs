@@ -108,7 +108,7 @@ public partial class GpuWorkspaceView : UserControl
         };
         TypeChoice.ItemsSource = Enum.GetValues<GpuType>().Where(t => t != GpuType.Quaternion).ToArray();
         TypeChoice.SelectedItem = GpuType.Float;
-        ExportFormat.ItemsSource = new[] { "json", "usf", "hlsl", "compute" };
+        ExportFormat.ItemsSource = new[] { "json", "usf", "hlsl", "compute", "resources" };
         ExportFormat.SelectedItem = "usf";
     }
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -232,7 +232,7 @@ public partial class GpuWorkspaceView : UserControl
             {
                 foreach (var op in vm.Palette)
                 {
-                    var opButton = Button("+ " + op.DisplayName, () => AddPaletteNode(vm, op.Op));
+                    var opButton = Button("+ " + OperationDisplayName(op.Op), () => AddPaletteNode(vm, op.Op));
                     ToolTip.SetTip(opButton, OpDescription(op.Op));
                     AttachPaletteDrag(opButton, op.Op);
                     Palette.Children.Add(opButton);
@@ -271,6 +271,24 @@ public partial class GpuWorkspaceView : UserControl
         var vm = Workspace!;
         FlowPanel.Children.Clear();
         var map = GpuFlowVisualization.Create(vm.State);
+        var resourceText = LocalizationService.Shared;
+        var resources = new StackPanel { Spacing = 6 };
+        resources.Children.Add(new TextBlock { Text = resourceText.Get("Gpu.ResourcesTargets"), FontWeight = FontWeight.SemiBold });
+        resources.Children.Add(new TextBlock { Text = resourceText.Get("Gpu.ParticleStorage", vm.State.Program.Capacity), TextWrapping = TextWrapping.Wrap });
+        foreach (var resource in vm.State.Program.Resources)
+        {
+            var reference = vm.State.GeneratedResources?.GetValueOrDefault(resource.Id);
+            resources.Children.Add(new TextBlock
+            {
+                Text = $"{resource.Id} · {resource.Kind} · " + (reference is null
+                    ? resourceText.Get("Gpu.ExternalResource", vm.State.ResourceAssetPaths.GetValueOrDefault(resource.Id) ?? "")
+                    : resourceText.Get("Gpu.GeneratedResource", reference.ProducerNodeId, reference.OutputId)),
+                TextWrapping = TextWrapping.Wrap
+            });
+        }
+        resources.Children.Add(new TextBlock { Text = resourceText.Get("Gpu.ResourcePassAccess"), TextWrapping = TextWrapping.Wrap });
+        resources.Children.Add(BuildResourcePlanEditor());
+        FlowPanel.Children.Add(FluidCard(resources));
         FlowPanel.Children.Add(new TextBlock
         {
             Text = map.Summary,
@@ -774,10 +792,12 @@ public partial class GpuWorkspaceView : UserControl
             GpuOp.ReadUniform => LocalizationService.Shared.GetNodeLabel("Gpu.ReadUniform", "Read Uniform") + " · " +
                 UniformDisplayName(node.Uniform),
             GpuOp.SampleFlowMap => GpuOperationRegistry.Operations[node.Op].DisplayName + " · " + node.Resource,
-            _ => GpuOperationRegistry.Operations[node.Op].DisplayName
+            _ => OperationDisplayName(node.Op)
         };
         return $"{operation} : {node.Type}";
     }
+    private static string OperationDisplayName(GpuOp operation) => operation is GpuOp.GreaterThan or GpuOp.LessThan
+        ? LocalizationService.Shared.Get("Fluid.Operation." + operation) : GpuOperationRegistry.Operations[operation].DisplayName;
     private static string OutputDisplayName(GpuNode node) => node.Op switch
     {
         GpuOp.ReadAttribute => AttributeDisplayName(node.Attribute),
@@ -1378,6 +1398,14 @@ public partial class GpuWorkspaceView : UserControl
                     TextWrapping = TextWrapping.Wrap
                 });
                 var axes = Enum.GetValues<GpuAxis>();
+                var encoding = new ComboBox { ItemsSource = Enum.GetValues<FlowMapEncoding>().Select(value => LocalizationService.Shared.Get("Fluid.FieldEncoding." + value)).ToArray(),
+                    SelectedIndex = (int)settings.Encoding };
+                var coordinates = new ComboBox { ItemsSource = Enum.GetValues<FlowMapCoordinates>().Select(value => LocalizationService.Shared.Get("Fluid.FieldCoordinates." + value)).ToArray(),
+                    SelectedIndex = (int)settings.Coordinates };
+                BindingsPanel.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Fluid.FieldEncoding") });
+                BindingsPanel.Children.Add(encoding);
+                BindingsPanel.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Fluid.FieldCoordinates") });
+                BindingsPanel.Children.Add(coordinates);
                 var axisU = new ComboBox { ItemsSource = axes, SelectedItem = settings.AxisU };
                 var axisV = new ComboBox { ItemsSource = axes, SelectedItem = settings.AxisV };
                 BindingsPanel.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.FlowMapAxisU") });
@@ -1409,6 +1437,8 @@ public partial class GpuWorkspaceView : UserControl
                             {
                                 AxisU = (GpuAxis)axisU.SelectedItem!,
                                 AxisV = (GpuAxis)axisV.SelectedItem!,
+                                Encoding = (FlowMapEncoding)encoding.SelectedIndex,
+                                Coordinates = (FlowMapCoordinates)coordinates.SelectedIndex,
                                 WorldMinimumU = double.Parse(minimumU.Text!, CultureInfo.InvariantCulture),
                                 WorldMaximumU = double.Parse(maximumU.Text!, CultureInfo.InvariantCulture),
                                 WorldMinimumV = double.Parse(minimumV.Text!, CultureInfo.InvariantCulture),
@@ -1417,6 +1447,36 @@ public partial class GpuWorkspaceView : UserControl
                         },
                         AssetPath = vm.State.ResourceAssetPaths.GetValueOrDefault(resource.Id)
                     })));
+            }
+            if (resource.Kind is ResourceKind.Texture2D or ResourceKind.FlowMap2D)
+            {
+                var producers = GpuProgramDeliveryService.Containers(vm.Graph.CreateCurrentSnapshot())
+                    .Where(node => node.Id != vm.ContainerId && GpuParticleEditorService.ReadState(node).Fluid2D is not null).ToArray();
+                if (producers.Length != 0)
+                {
+                    BindingsPanel.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Fluid.GeneratedSource") });
+                    var current = vm.State.GeneratedResources?.GetValueOrDefault(resource.Id);
+                    var selection = new ComboBox
+                    {
+                        ItemsSource = producers.Select(node => node.Name + " · DyeOutput").ToArray(),
+                        SelectedIndex = Math.Max(0, Array.FindIndex(producers, node => node.Id == current?.ProducerNodeId)),
+                        IsEnabled = !vm.Graph.IsReadOnly
+                    };
+                    BindingsPanel.Children.Add(selection);
+                    var outputs = resource.Kind == ResourceKind.Texture2D ? new[] { "DyeOutput", "ColorOutput", "FieldOutput" } : new[] { "VelocityOutput", "DensityOutput" };
+                    var output = new ComboBox { ItemsSource = outputs, SelectedIndex = Math.Max(0, Array.IndexOf(outputs, current?.OutputId)), IsEnabled = !vm.Graph.IsReadOnly };
+                    BindingsPanel.Children.Add(output);
+                    BindingsPanel.Children.Add(Button(LocalizationService.Shared.Get("Fluid.BindGeneratedSource"), () =>
+                        vm.Edit(new()
+                        {
+                            Action = "resource", Resource = resource.Kind == ResourceKind.FlowMap2D ? resource with
+                            {
+                                FlowMap = (resource.FlowMap ?? new()) with { Encoding = output.SelectedIndex == 0 ? FlowMapEncoding.FloatVelocity : FlowMapEncoding.FloatDensity,
+                                    Coordinates = FlowMapCoordinates.GeneratedPlane }
+                            } : resource,
+                            GeneratedResource = new(producers[selection.SelectedIndex].Id, outputs[output.SelectedIndex])
+                        })));
+                }
             }
             var path = new TextBox { Text = vm.State.ResourceAssetPaths.GetValueOrDefault(resource.Id) ?? "",
                 PlaceholderText = LocalizationService.Shared.Get("Gpu.TexturePathHint") };

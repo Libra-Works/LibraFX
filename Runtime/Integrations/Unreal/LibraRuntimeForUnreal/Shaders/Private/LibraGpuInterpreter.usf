@@ -15,6 +15,7 @@ struct LibraParticle
 RWStructuredBuffer<LibraParticle> Particles;
 RWStructuredBuffer<uint4> Registers;
 RWStructuredBuffer<uint4> Instructions;
+float4 FieldMappings[256];
 #define LIBRA_GPU_FLOWMAP_TEXTURE(Index) Texture2D FlowMapTexture##Index;
 LIBRA_GPU_FLOWMAP_TEXTURE(0)
 LIBRA_GPU_FLOWMAP_TEXTURE(1)
@@ -418,7 +419,9 @@ void MainCS(uint3 threadId : SV_DispatchThreadID)
         {
             if (type == 4)
             {
-                float2 flow = SampleFlowMap(aux, saturate(asfloat(a.xy))).rg * 2.0f - 1.0f;
+                float4 sampled = SampleFlowMap(aux, saturate(asfloat(a.xy)));
+                float2 flow = integer.x == 2u ? sampled.ba : sampled.rg;
+                if (integer.x == 0u) flow = flow * 2.0f - 1.0f;
                 result = asuint(float4(flow, 0, 0));
             }
             else
@@ -426,16 +429,26 @@ void MainCS(uint3 threadId : SV_DispatchThreadID)
                 uint axisU = dIndex & 3u;
                 uint axisV = (dIndex >> 2) & 3u;
                 float4 bounds = asfloat(immediate);
-                float2 uv = saturate((float2(asfloat(a)[axisU], asfloat(a)[axisV]) - bounds.xy) / bounds.zw);
-                float2 flow = SampleFlowMap(aux, uv).rg * 2.0f - 1.0f;
+                float2 uv;
+                if ((dIndex & 0x100u) != 0u)
+                    uv = saturate(float2(dot(FieldMappings[aux * 4], float4(asfloat(a.xyz), 1)), dot(FieldMappings[aux * 4 + 1], float4(asfloat(a.xyz), 1))));
+                else
+                    uv = saturate((float2(asfloat(a)[axisU], asfloat(a)[axisV]) - bounds.xy) / bounds.zw);
+                float4 sampled = SampleFlowMap(aux, uv);
+                float2 flow = integer.x == 2u ? sampled.ba : sampled.rg;
+                if (integer.x == 0u) flow = flow * 2.0f - 1.0f;
                 // SM5 cannot dynamically write a temporary's lanes in the instruction loop.
                 float3 vector = float3(
                     axisV == 0 ? flow.y : (axisU == 0 ? flow.x : 0),
                     axisV == 1 ? flow.y : (axisU == 1 ? flow.x : 0),
                     axisV == 2 ? flow.y : (axisU == 2 ? flow.x : 0));
+                if (integer.x == 2u) vector = float3(flow, 0);
+                else if ((dIndex & 0x100u) != 0u) vector = FieldMappings[aux * 4 + 2].xyz * flow.x + FieldMappings[aux * 4 + 3].xyz * flow.y;
                 result = asuint(float4(vector, 0));
             }
         }
+        else if (op == 42) result.x = asfloat(a.x) > asfloat(b.x) ? 1u : 0u;
+        else if (op == 43) result.x = asfloat(a.x) < asfloat(b.x) ? 1u : 0u;
         if (op != 18)
         {
             Registers[i * RegisterCount + dst] = result;

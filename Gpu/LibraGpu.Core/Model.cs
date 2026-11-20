@@ -14,12 +14,15 @@ public enum GpuOp
     Abs = 19, Floor = 20, Ceil = 21, Round = 22, Frac = 23, Mod = 24, Sign = 25,
     Pow = 26, Sqrt = 27, Exp = 28, Log = 29, Lerp = 30, Smoothstep = 31, Remap = 32,
     Dot = 33, Cross = 34, Distance = 35, Saturate = 36,
-    GradientNoise3D = 37, Fbm = 38, Turbulence = 39, CurlNoise = 40, SampleFlowMap = 41
+    GradientNoise3D = 37, Fbm = 38, Turbulence = 39, CurlNoise = 40, SampleFlowMap = 41,
+    GreaterThan = 42, LessThan = 43
 }
 public enum KernelStage { Spawn, Update }
 public enum FlowKind { Spawn, Update, RenderBillboard, RenderStartTexture, ComputePass }
 public enum ResourceKind { Texture2D, StorageTexture2D, Buffer, FlowMap2D }
 public enum GpuAxis { X, Y, Z }
+public enum FlowMapEncoding { SignedNormalized, FloatVelocity, FloatDensity }
+public enum FlowMapCoordinates { WorldBounds, GeneratedPlane }
 public enum GpuSpawnShapeKind { Point, Box, Sphere, Circle }
 
 public sealed record GpuProgram
@@ -43,6 +46,10 @@ public sealed record ResourceDeclaration
 }
 public sealed record FlowMapSettings
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public FlowMapEncoding Encoding { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public FlowMapCoordinates Coordinates { get; init; }
     public GpuAxis AxisU { get; init; } = GpuAxis.X;
     public GpuAxis AxisV { get; init; } = GpuAxis.Z;
     public double WorldMinimumU { get; init; } = -1;

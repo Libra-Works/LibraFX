@@ -1,5 +1,10 @@
 #include "LibraFxGodotFluid2D.h"
+#include <godot_cpp/classes/array_mesh.hpp>
+#include <godot_cpp/variant/packed_vector2_array.hpp>
+#include <godot_cpp/variant/packed_vector3_array.hpp>
+#include <godot_cpp/variant/packed_int32_array.hpp>
 #include "LibraFluid2DShaderSource.h"
+#include "LibraFxGodotRenderTaskQueue.h"
 #include <godot_cpp/classes/quad_mesh.hpp>
 #include <godot_cpp/classes/rd_shader_source.hpp>
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
@@ -29,7 +34,6 @@
 #include <array>
 #include <cmath>
 #include <cstring>
-#include <deque>
 #include <functional>
 #include <limits>
 #include <mutex>
@@ -47,19 +51,56 @@ using liberafx::gpu::Fluid2DPlan;
 using liberafx::gpu::Fluid2DSettings;
 using liberafx::gpu::Fluid2DUniforms;
 
-constexpr auto passCount = 9u;
+constexpr auto passCount = 13u;
 constexpr auto fieldCount = 7u;
-constexpr auto uniformBytes = 80u;
+constexpr auto uniformBytes = sizeof(Fluid2DUniforms);
 constexpr auto maximumActiveFluids = 16u;
 constexpr auto fluidSpatialSource = R"(
 shader_type spatial;
 render_mode unshaded, cull_disabled, shadows_disabled, depth_draw_never, blend_premul_alpha;
 uniform sampler2D fluid_texture : filter_linear, repeat_disable;
+uniform sampler2D fluid_fields : filter_linear, repeat_disable;
+uniform int model_id = 0;
+uniform float initial_depth = 0.25;
+uniform float ignition_temperature = 0.5;
+uniform float height_scale = 1.0;
+uniform vec2 domain_size = vec2(1.0);
+uniform vec2 field_texel = vec2(0.0078125);
+
+float depth_at(vec2 uv) { return textureLod(fluid_fields, clamp(uv, vec2(0), vec2(1)), 0.0).b; }
+void vertex() {
+    if (model_id == 2) {
+        vec2 uv = vec2(UV.x, 1.0 - UV.y);
+        VERTEX.y += (depth_at(uv) - initial_depth) * height_scale;
+        float du = (depth_at(uv + vec2(field_texel.x, 0)) - depth_at(uv - vec2(field_texel.x, 0))) / (2.0 * field_texel.x * domain_size.x);
+        float dv = (depth_at(uv + vec2(0, field_texel.y)) - depth_at(uv - vec2(0, field_texel.y))) / (2.0 * field_texel.y * domain_size.y);
+        NORMAL = normalize(vec3(-du, 1.0, -dv));
+    }
+}
 
 void fragment() {
-    vec4 dye = texture(fluid_texture, vec2(UV.x, 1.0 - UV.y));
+    vec2 uv = vec2(UV.x, 1.0 - UV.y);
+    vec4 dye = texture(fluid_texture, uv);
     ALBEDO = dye.rgb;
     ALPHA = dye.a;
+    if (model_id == 3) {
+        vec4 field = texture(fluid_fields, uv);
+        float heat = max(field.a - ignition_temperature, 0.0);
+        vec3 fire = clamp(vec3(heat * 2.0, heat * 0.7, heat * 0.2), vec3(0), vec3(1));
+        ALBEDO = vec3(0.08, 0.08, 0.09) * dye.a;
+        EMISSION = fire * (1.0 + min(heat, 8.0)) * dye.a;
+    } else if (model_id == 1 || model_id == 2) {
+        vec4 field = texture(fluid_fields, uv);
+        vec3 normal = normalize(NORMAL);
+        float fresnel = 0.02 + 0.98 * pow(1.0 - clamp(abs(dot(VIEW, normal)), 0.0, 1.0), 5.0);
+        vec3 tint = dye.rgb / max(dye.a, 0.000001);
+        float light = 0.45 + 0.55 * clamp(dot(normal, normalize(vec3(0.3, 0.8, 0.5))), 0.0, 1.0);
+        vec3 water = mix(tint * light, vec3(0.45, 0.65, 0.85), fresnel);
+        float edge = model_id == 1 ? clamp(fwidth(field.b) * 4.0, 0.0, 1.0) : clamp(length(dFdx(normal)) + length(dFdy(normal)), 0.0, 1.0);
+        float foam = clamp(edge * (0.3 + length(field.rg) * 0.2), 0.0, 1.0);
+        water = mix(water, vec3(0.9, 0.96, 1.0), foam);
+        ALBEDO = water * dye.a;
+    }
 }
 )";
 
@@ -119,15 +160,21 @@ auto imageUniform(std::int32_t binding, const RID& resource) -> Ref<RDUniform>
 struct FluidResources final {
     std::array<RID, fieldCount> fields{};
     RID output;
+    RID fieldOutput;
+    RID colorOutput;
     RID uniforms;
     std::vector<RID> uniformSets;
+    std::shared_ptr<double> simulationTime = std::make_shared<double>(0);
 };
 
 class FluidRenderBridge final : public RefCounted {
     GDCLASS(FluidRenderBridge, RefCounted)
 
 public:
-    FluidRenderBridge() = default;
+    FluidRenderBridge()
+    {
+        queue_.instantiate();
+    }
 
     static void _bind_methods()
     {
@@ -224,7 +271,7 @@ public:
                 bindings.append(storageUniform(2, fieldRid(resources.fields, dispatch.write0, dummy_)));
                 bindings.append(storageUniform(3, fieldRid(resources.fields, dispatch.write1, dummy_)));
                 bindings.append(bufferUniform(4, resources.uniforms));
-                bindings.append(imageUniform(5, resources.output));
+                bindings.append(imageUniform(5, dispatch.pass == Fluid2DPass::RenderFields ? resources.fieldOutput : dispatch.pass == Fluid2DPass::RenderColor ? resources.colorOutput : resources.output));
                 const auto set = device_->uniform_set_create(bindings, shaders_[pass], 0);
                 if (!set.is_valid()) {
                     for (const auto& created : replacement) {
@@ -352,42 +399,9 @@ private:
 
     void enqueue(Task task)
     {
-        auto shouldSchedule = false;
+        if (!queue_->enqueue(std::move(task)))
         {
-            std::lock_guard<std::mutex> lock(queueMutex_);
-            tasks_.push_back(std::move(task));
-            if (!scheduled_) {
-                scheduled_ = true;
-                shouldSchedule = true;
-            }
-        }
-        if (shouldSchedule) {
-            if (auto* server = RenderingServer::get_singleton()) {
-                server->call_on_render_thread(
-                    create_custom_callable_function_pointer(this, &FluidRenderBridge::runTasks));
-            } else {
-                std::lock_guard<std::mutex> lock(queueMutex_);
-                tasks_.clear();
-                scheduled_ = false;
-                recordError("Godot RenderingServer is unavailable");
-            }
-        }
-    }
-
-    void runTasks()
-    {
-        for (;;) {
-            auto task = Task{};
-            {
-                std::lock_guard<std::mutex> lock(queueMutex_);
-                if (tasks_.empty()) {
-                    scheduled_ = false;
-                    return;
-                }
-                task = std::move(tasks_.front());
-                tasks_.pop_front();
-            }
-            task();
+            recordError("Godot RenderingServer is unavailable");
         }
     }
 
@@ -517,13 +531,42 @@ private:
             return error(detail, "Godot could not create a sampleable RGBA16F Fluid2D output texture "
                 "with storage usage", Result::UnsupportedBinary);
         }
+        if (!device_->texture_is_format_supported_for_usage(RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT, textureUsage))
+        {
+            releaseOnRenderThread(resources);
+            return error(detail, "Sampled RGBA32Float fluid fields are unsupported", Result::UnsupportedBinary);
+        }
+        format->set_format(RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT);
+        if (initialImage.resize(static_cast<std::int64_t>(cells * 16)) != OK)
+        {
+            releaseOnRenderThread(resources);
+            return error(detail, "Could not stage fluid field output", Result::InsufficientWork);
+        }
+        initialImage.fill(0);
+        textureData.clear(); textureData.append(initialImage);
+        resources.fieldOutput = device_->texture_create(format, view, textureData);
+        if (!resources.fieldOutput.is_valid())
+        {
+            releaseOnRenderThread(resources);
+            return error(detail, "Could not allocate fluid field output", Result::NotReady);
+        }
+        format->set_format(RenderingDevice::DATA_FORMAT_R16G16B16A16_SFLOAT);
+        initialImage.resize(static_cast<std::int64_t>(cells * 8)); initialImage.fill(0);
+        textureData.clear(); textureData.append(initialImage);
+        resources.colorOutput = device_->texture_create(format, view, textureData);
+        if (!resources.colorOutput.is_valid())
+        {
+            releaseOnRenderThread(resources);
+            return error(detail, "Could not allocate straight-alpha fluid color", Result::NotReady);
+        }
 
         auto initialUniforms = PackedByteArray{};
         if (initialUniforms.resize(uniformBytes) != OK) {
             releaseOnRenderThread(resources);
             return error(detail, "Could not allocate Fluid2D uniform data", Result::InsufficientWork);
         }
-        initialUniforms.fill(0);
+        const auto modelUniforms = liberafx::gpu::makeFluid2DUniforms(settings, 0);
+        std::memcpy(initialUniforms.ptrw(), &modelUniforms, uniformBytes);
         resources.uniforms = device_->uniform_buffer_create(uniformBytes, initialUniforms);
         if (!resources.uniforms.is_valid()) {
             releaseOnRenderThread(resources);
@@ -539,7 +582,7 @@ private:
             bindings.append(storageUniform(2, fieldRid(resources.fields, dispatch.write0, dummy_)));
             bindings.append(storageUniform(3, fieldRid(resources.fields, dispatch.write1, dummy_)));
             bindings.append(bufferUniform(4, resources.uniforms));
-            bindings.append(imageUniform(5, resources.output));
+            bindings.append(imageUniform(5, dispatch.pass == Fluid2DPass::RenderFields ? resources.fieldOutput : dispatch.pass == Fluid2DPass::RenderColor ? resources.colorOutput : resources.output));
             const auto set = device_->uniform_set_create(bindings, shaders_[pass], 0);
             if (!set.is_valid()) {
                 releaseOnRenderThread(resources);
@@ -547,6 +590,47 @@ private:
                     Result::NotReady);
             }
             resources.uniformSets.push_back(set);
+        }
+        if (settings.model == 1 || settings.model == 2)
+        {
+            const auto initialize = passIndex(Fluid2DPass::InitializeWater);
+            const auto render = passIndex(Fluid2DPass::RenderDye);
+            const auto renderFields = passIndex(Fluid2DPass::RenderFields);
+            const auto renderColor = passIndex(Fluid2DPass::RenderColor);
+            auto initializationSets = std::array<RID, 4>{};
+            for (auto index = 0u; index < 4; ++index)
+            {
+                auto bindings = TypedArray<RDUniform>{};
+                bindings.append(storageUniform(0, index == 1 || index == 3 ? resources.fields[2] : index == 2 ? resources.fields[0] : dummy_));
+                bindings.append(storageUniform(1, index == 2 ? resources.fields[2] : dummy_));
+                bindings.append(storageUniform(2, index == 0 ? resources.fields[2] : dummy_));
+                bindings.append(storageUniform(3, dummy_));
+                bindings.append(bufferUniform(4, resources.uniforms));
+                bindings.append(imageUniform(5, index == 2 ? resources.fieldOutput : index == 3 ? resources.colorOutput : resources.output));
+                initializationSets[index] = device_->uniform_set_create(bindings, shaders_[index == 0 ? initialize : index == 1 ? render : index == 2 ? renderFields : renderColor], 0);
+                if (!initializationSets[index].is_valid())
+                {
+                    for (const auto& set : initializationSets)
+                    {
+                        if (set.is_valid()) device_->free_rid(set);
+                    }
+                    releaseOnRenderThread(resources);
+                    return error(detail, "Could not initialize native water storage", Result::NotReady);
+                }
+            }
+            const auto list = device_->compute_list_begin();
+            for (auto index = 0u; index < 4; ++index)
+            {
+                device_->compute_list_bind_compute_pipeline(list, pipelines_[index == 0 ? initialize : index == 1 ? render : index == 2 ? renderFields : renderColor]);
+                device_->compute_list_bind_uniform_set(list, initializationSets[index], 0);
+                device_->compute_list_dispatch(list, (settings.width + 7) / 8, (settings.height + 7) / 8, 1);
+                device_->compute_list_add_barrier(list);
+            }
+            device_->compute_list_end();
+            for (const auto& set : initializationSets)
+            {
+                device_->free_rid(set);
+            }
         }
         return Result::Ok;
     }
@@ -558,7 +642,8 @@ private:
             return;
         }
         for (auto substep = 0u; substep < frame.substeps; ++substep) {
-            const auto uniforms = liberafx::gpu::makeFluid2DUniforms(settings, frame.stepDelta);
+            const auto uniforms = liberafx::gpu::makeFluid2DUniforms(settings, frame.stepDelta, *resources.simulationTime);
+            *resources.simulationTime += frame.stepDelta;
             auto bytes = PackedByteArray{};
             if (bytes.resize(uniformBytes) != OK) {
                 recordError("Could not stage Fluid2D step uniforms");
@@ -598,6 +683,15 @@ private:
             }
         }
         resources.uniformSets.clear();
+        if (resources.colorOutput.is_valid())
+        {
+            device_->free_rid(resources.colorOutput); resources.colorOutput = RID{};
+        }
+        if (resources.fieldOutput.is_valid())
+        {
+            device_->free_rid(resources.fieldOutput);
+            resources.fieldOutput = RID{};
+        }
         if (resources.uniforms.is_valid()) {
             device_->free_rid(resources.uniforms);
             resources.uniforms = RID{};
@@ -635,9 +729,7 @@ private:
         }
     }
 
-    std::mutex queueMutex_;
-    std::deque<Task> tasks_;
-    bool scheduled_ = false;
+    Ref<GpuRenderTaskQueue> queue_;
     std::mutex errorMutex_;
     String asyncError_;
     RenderingDevice* device_ = nullptr; // The renderer owns the global device.
@@ -651,7 +743,9 @@ struct FluidState final {
     Fluid2DPlan plan{};
     FluidResources resources;
     Ref<Texture2DRD> texture;
-    Ref<QuadMesh> mesh;
+    Ref<Texture2DRD> fieldTexture;
+    Ref<Texture2DRD> colorTexture;
+    Ref<Mesh> mesh;
     Ref<ShaderMaterial> material;
     Transform3D drawTransform;
     bool drawMatrixIsWorld = false; // Exported GPU Draw Matrices are already world-space.
@@ -715,6 +809,7 @@ using namespace detail;
 
 void registerFluid2DClasses()
 {
+    ClassDB::register_internal_class<GpuRenderTaskQueue>();
     ClassDB::register_internal_class<FluidRenderBridge>();
     ClassDB::register_internal_class<FluidRenderScopeNode>();
 }
@@ -747,10 +842,16 @@ struct PackageFluid2DRenderer::Impl {
     Ref<Shader> shader;
     std::uint64_t rootNodeId = 0;
     RenderingServer* server = nullptr;
+    std::uint64_t reservedBytes = 0;
 
     auto createState(const Fluid2DProgram& program, std::unique_ptr<FluidState>& output,
         String& detail) -> Result
     {
+        const auto bytes = static_cast<std::uint64_t>(program.settings.width) * program.settings.height * 144;
+        if (bytes > 256ull * 1024 * 1024 - reservedBytes)
+        {
+            return error(detail, "Active Fluid2D storage exceeds the 256 MiB effect budget", Result::InsufficientWork);
+        }
         auto state = std::make_unique<FluidState>();
         state->program = program;
         state->drawMatrixIsWorld = program.hasMatrix;
@@ -763,12 +864,20 @@ struct PackageFluid2DRenderer::Impl {
         }
         state->texture.instantiate();
         state->texture->set_texture_rd_rid(state->resources.output);
+        state->fieldTexture.instantiate();
+        state->fieldTexture->set_texture_rd_rid(state->resources.fieldOutput);
+        state->colorTexture.instantiate(); state->colorTexture->set_texture_rd_rid(state->resources.colorOutput);
+        reservedBytes += bytes;
         output = std::move(state);
         return Result::Ok;
     }
 
     auto attachState(FluidRenderScopeNode& root, FluidState& state, String& detail) -> Result
     {
+        if (!state.program.automaticPlane)
+        {
+            return Result::Ok;
+        }
         if (state.drawItem.is_valid()) {
             return error(detail, "Fluid2D draw item is already attached", Result::Busy);
         }
@@ -780,15 +889,55 @@ struct PackageFluid2DRenderer::Impl {
             return error(detail, "Fluid2D output size is outside Godot's 3D mesh range",
                 Result::InvalidArgument);
         }
-        state.mesh.instantiate();
         state.material.instantiate();
-        if (state.mesh.is_null() || state.material.is_null() || shader.is_null()) {
+        if (state.material.is_null() || shader.is_null()) {
             return error(detail, "Godot could not create the Fluid2D spatial material and plane");
         }
-        state.mesh->set_size(Vector2(static_cast<real_t>(width), static_cast<real_t>(height)));
         state.material->set_shader(shader);
         state.material->set_shader_parameter("fluid_texture", state.texture);
-        state.mesh->set_material(state.material);
+        state.material->set_shader_parameter("fluid_fields", state.fieldTexture);
+        state.material->set_shader_parameter("model_id", static_cast<int>(state.program.settings.model));
+        state.material->set_shader_parameter("initial_depth", state.program.settings.initialWaterDepth);
+        state.material->set_shader_parameter("ignition_temperature", state.program.settings.ignitionTemperature);
+        state.material->set_shader_parameter("height_scale", state.program.sizeScale);
+        state.material->set_shader_parameter("domain_size", Vector2(state.program.settings.domainWidth, state.program.settings.domainHeight));
+        state.material->set_shader_parameter("field_texel", Vector2(1.0 / state.program.settings.width, 1.0 / state.program.settings.height));
+        if (state.program.settings.model == 2)
+        {
+            auto mesh = Ref<ArrayMesh>{}; mesh.instantiate();
+            auto vertices = PackedVector3Array{}; auto uv = PackedVector2Array{}; auto indices = PackedInt32Array{};
+            const auto columns = std::min(state.program.settings.width - 1, 128u);
+            const auto rows = std::min(state.program.settings.height - 1, 128u);
+            for (auto y = 0u; y <= rows; ++y)
+                for (auto x = 0u; x <= columns; ++x)
+                {
+                    const auto u = static_cast<real_t>(x) / columns, v = static_cast<real_t>(y) / rows;
+                    vertices.append(Vector3((u - .5) * width, 0, (v - .5) * height));
+                    uv.append(Vector2(u, 1.0 - v));
+                }
+            for (auto y = 0u; y < rows; ++y)
+                for (auto x = 0u; x < columns; ++x)
+                {
+                    const auto index = y * (columns + 1) + x;
+                    for (const auto vertex : {index, index + columns + 1, index + 1, index + 1, index + columns + 1, index + columns + 2})
+                    {
+                        indices.append(static_cast<int>(vertex));
+                    }
+                }
+            auto arrays = Array{}; arrays.resize(Mesh::ARRAY_MAX);
+            arrays[Mesh::ARRAY_VERTEX] = vertices; arrays[Mesh::ARRAY_TEX_UV] = uv; arrays[Mesh::ARRAY_INDEX] = indices;
+            mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
+            mesh->surface_set_material(0, state.material);
+            const auto depth = state.program.settings.initialWaterDepth * state.program.sizeScale;
+            mesh->set_custom_aabb(AABB(Vector3(-width * .5, -depth, -height * .5), Vector3(width, depth * 16, height)));
+            state.mesh = mesh;
+        }
+        else
+        {
+            auto mesh = Ref<QuadMesh>{}; mesh.instantiate();
+            mesh->set_size(Vector2(static_cast<real_t>(width), static_cast<real_t>(height)));
+            mesh->set_material(state.material); state.mesh = mesh;
+        }
         state.drawItem = server->instance_create();
         if (!state.drawItem.is_valid()) {
             return error(detail, "Godot could not create a Fluid2D 3D rendering instance");
@@ -818,8 +967,17 @@ struct PackageFluid2DRenderer::Impl {
             state->texture->set_texture_rd_rid(RID{});
             state->texture.unref();
         }
+        for (auto* texture : {&state->fieldTexture, &state->colorTexture})
+        {
+            if (texture->is_valid())
+            {
+                (*texture)->set_texture_rd_rid(RID{});
+                texture->unref();
+            }
+        }
         auto detail = String{};
         bridge->release(std::move(state->resources), detail);
+        reservedBytes -= static_cast<std::uint64_t>(state->program.settings.width) * state->program.settings.height * 144;
         state.reset();
     }
 
@@ -1137,6 +1295,53 @@ void PackageFluid2DRenderer::synchronizePresentation(bool exiting)
 auto PackageFluid2DRenderer::isEmpty() const noexcept -> bool
 {
     return !impl_ || (impl_->active.empty() && impl_->templates.empty());
+}
+
+auto PackageFluid2DRenderer::outputTexture(const FluidNodeId& node, const FluidNodeId& container,
+    GeneratorInstanceId instance, bool fields, bool straight) const -> Ref<Texture2D>
+{
+    if (!impl_ || !Thread::is_main_thread())
+    {
+        return {};
+    }
+    for (const auto& state : impl_->active)
+    {
+        if (state->program.nodeId == node && state->program.containerId == container &&
+            state->program.instanceId == instance)
+        {
+            return fields ? state->fieldTexture : straight ? state->colorTexture : state->texture;
+        }
+    }
+    return {};
+}
+
+auto PackageFluid2DRenderer::fieldMapping(const FluidNodeId& node, const FluidNodeId& container,
+    GeneratorInstanceId instance, const Transform3D& consumerToWorld, std::array<Vector4, 4>& mapping, String& detail) const -> Result
+{
+    if (!impl_ || !Thread::is_main_thread()) return error(detail, "Field coordinates require the main thread", Result::NotReady);
+    auto* scope = Object::cast_to<FluidRenderScopeNode>(ObjectDB::get_instance(impl_->rootNodeId));
+    for (const auto& state : impl_->active)
+    {
+        if (state->program.nodeId != node || state->program.containerId != container || state->program.instanceId != instance) continue;
+        if (!scope) return error(detail, "No spatial field scope", Result::NotReady);
+        const auto source = state->drawMatrixIsWorld ? state->drawTransform : scope->get_global_transform();
+        if (std::abs(source.basis.determinant()) < 1.e-8 || std::abs(consumerToWorld.basis.determinant()) < 1.e-8)
+            return error(detail, "Field coordinates require invertible producer and consumer transforms", Result::InvalidArgument);
+        const auto inverse = source.affine_inverse() * consumerToWorld;
+        const auto toConsumer = consumerToWorld.basis.inverse();
+        const auto vAxis = state->program.settings.model == 2 ? 2 : 1;
+        const auto width = state->program.settings.domainWidth * state->program.sizeScale;
+        const auto height = state->program.settings.domainHeight * state->program.sizeScale;
+        const auto u = inverse.basis[0] / width, v = inverse.basis[vAxis] / height;
+        mapping[0] = Vector4(u.x, u.y, u.z, inverse.origin.x / width + .5);
+        mapping[1] = Vector4(v.x, v.y, v.z, inverse.origin[vAxis] / height + .5);
+        const auto velocityU = toConsumer.xform(source.basis.get_column(0) * state->program.sizeScale);
+        const auto velocityV = toConsumer.xform(source.basis.get_column(vAxis) * state->program.sizeScale);
+        mapping[2] = Vector4(velocityU.x, velocityU.y, velocityU.z, 0);
+        mapping[3] = Vector4(velocityV.x, velocityV.y, velocityV.z, 0);
+        return Result::Ok;
+    }
+    return error(detail, "Field producer is outside this scope", Result::InvalidArgument);
 }
 
 #ifdef LIBERAFX_GODOT_TEST_HOOKS

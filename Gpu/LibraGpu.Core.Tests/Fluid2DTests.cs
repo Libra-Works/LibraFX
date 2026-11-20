@@ -22,11 +22,11 @@ internal static partial class Program
                 var pressure = passes.Last(pass => pass.Pass == Fluid2DPass.Jacobi).Write0;
                 Check(passes.Single(pass => pass.Pass == Fluid2DPass.ProjectVelocity).Read1 == pressure,
                     "Pressure projection must read the final ping-pong version, including odd iteration counts.");
-                Check(passes[^2] is { Pass: Fluid2DPass.Publish, Write0: Fluid2DField.Velocity, Write1: Fluid2DField.Dye } &&
-                    passes[^1] is { Pass: Fluid2DPass.RenderDye, Read0: Fluid2DField.Dye },
+                Check(passes[^4] is { Pass: Fluid2DPass.Publish, Write0: Fluid2DField.Velocity, Write1: Fluid2DField.Dye } &&
+                    passes[^3] is { Pass: Fluid2DPass.RenderDye, Read0: Fluid2DField.Dye },
                     "Only published state may become the displayed density.");
                 var resources = Fluid2DCompiler.Resources(settings);
-                Check(resources.Sum(resource => (decimal)resource.Bytes) == settings.Width * settings.Height * 120m,
+                Check(resources.Sum(resource => (decimal)resource.Bytes) == settings.Width * settings.Height * 144m,
                     "Both ping-pong storage and the native output texture must fit the declared allocation.");
             }
         });
@@ -40,7 +40,7 @@ internal static partial class Program
                 Math.Abs(frame.DiscardedDelta + frame.StepDelta * frame.Substeps - 2) < 1e-6,
                 "A hitch must not cause unbounded GPU work or silently advance skipped time.");
             var uniforms = Fluid2DCompiler.Uniforms(settings with { SourceEnabled = false }, frame.StepDelta);
-            Check(uniforms.Length == 20 && uniforms[15] == 0 && uniforms[11] == settings.SourceDensity,
+            Check(uniforms.Length == 128 && uniforms[15] == 0 && uniforms[11] == settings.SourceDensity,
                 "Source gating must disable the source without changing the saved density or buoyancy.");
             uniforms[0] = 0;
             Check(Fluid2DCompiler.Uniforms(settings, frame.StepDelta)[0] == settings.Width,
@@ -56,7 +56,8 @@ internal static partial class Program
                 settings with { Version = 2 }, settings with { Width = 0 }, settings with { Height = 1025 },
                 settings with { MaximumStep = float.NaN }, settings with { SourceRadius = 0 },
                 settings with { DomainHeight = float.PositiveInfinity }, settings with { PressureIterations = 0 },
-                settings with { MaximumSubsteps = uint.MaxValue }, settings with { ColorA = -1 }
+                settings with { MaximumSubsteps = uint.MaxValue }, settings with { ColorA = -1 },
+                settings with { Vorticity = -1 }, settings with { Vorticity = float.NaN }, settings with { Vorticity = 101 }
             })
             {
                 try
@@ -92,6 +93,90 @@ internal static partial class Program
                 }
             }
         });
+        Run("fluid optional vorticity persistence and uniform ABI", () =>
+        {
+            var settings = new Fluid2DSettings();
+            Check(!Fluid2DCompiler.Serialize(settings).Contains("vorticity", StringComparison.Ordinal),
+                "Default projects and old manifest readers must keep their original property set.");
+            settings = settings with { Vorticity = 12.5f };
+            Check(Fluid2DCompiler.Parse(Fluid2DCompiler.Serialize(settings)) == settings &&
+                Fluid2DCompiler.Uniforms(settings, settings.MaximumStep)[3] == 12.5f,
+                "Vorticity must persist and retain the grid.w lane in the expanded solver uniforms.");
+        });
+        Run("generated field mapping buffer preserves the particle uniform ABI", () =>
+        {
+            var program = GpuSamples.CreateEmitter();
+            var resources = program.Resources.Append(new ResourceDeclaration
+            {
+                Id = "generatedField", Kind = ResourceKind.FlowMap2D,
+                FlowMap = new() { Encoding = FlowMapEncoding.FloatVelocity, Coordinates = FlowMapCoordinates.GeneratedPlane }
+            }).ToList();
+            var update = program.Kernels.Single(kernel => kernel.Stage == KernelStage.Update);
+            var replacement = GpuDsl.Compile("@Velocity = sampleFlowMap(\"generatedField\", @Position);", update.Id, update.Stage, resources: resources);
+            var compiled = GpuCompiler.Compile(program with
+            {
+                Resources = resources, Kernels = program.Kernels.Select(kernel => kernel.Id == update.Id ? replacement : kernel).ToList()
+            });
+            var metadata = compiled.GetExportMetadata(ShaderFormat.UnityCompute);
+            Check(metadata.UniformBufferBytes == 48 && metadata.GeneratedFieldMappings is { Elements: 256, Stride: 16 } mapping &&
+                mapping.Register == resources.Count && compiled.EmitUnityCompute().Text.Contains("StructuredBuffer<float4> LibraGpuFieldMappings", StringComparison.Ordinal),
+                "Generated-plane coordinates must use an explicit instance-owned buffer without overlapping particle constants.");
+            try
+            {
+                compiled.EmitUnityCompute(new ShaderBindings { TextureRegisterBase = 128 - resources.Count });
+                throw new InvalidOperationException("Mapping buffer overflowed the shader resource register range.");
+            }
+            catch (ArgumentException) { }
+        });
+        Run("cell force dependencies, masks and portable uniform layout", () =>
+        {
+            var position = new Fluid2DForceNode { Id = Guid.NewGuid(), Kind = Fluid2DForceKind.CellPosition };
+            var noise = new Fluid2DForceNode { Id = Guid.NewGuid(), Kind = Fluid2DForceKind.CurlNoise, InputA = position.Id };
+            var density = new Fluid2DForceNode { Id = Guid.NewGuid(), Kind = Fluid2DForceKind.Density };
+            var mask = new Fluid2DForceNode { Id = Guid.NewGuid(), Kind = Fluid2DForceKind.Multiply, InputA = noise.Id, InputB = density.Id };
+            Fluid2DForceNode[] nodes = [position, noise, density, mask];
+            var settings = new Fluid2DSettings { Forces = nodes };
+            var parsed = Fluid2DCompiler.Parse(Fluid2DCompiler.Serialize(settings));
+            Check(parsed.Forces!.SequenceEqual(nodes), "Force IDs, dependencies and field masks must survive persistence.");
+            var data = Fluid2DForceCompiler.Uniforms(nodes, 1.25);
+            Check(data.Length == 100 && data[0] == 4 && data[1] == 1.25 && data[4 + 12 + 9] == 1 &&
+                data[4 + 36 + 9] == 2 && data[4 + 36 + 10] == 3 && data[4 + 36 + 11] == 1 &&
+                data[4 + 12 + 11] == 0, "Only graph sinks apply force; dependencies must encode exact earlier indices.");
+            foreach (var invalid in new[] { new[] { noise, position }, new[] { position, position },
+                new[] { position with { InputA = position.Id } }, new[] { position with { InputB = Guid.NewGuid() } } })
+            {
+                try { Fluid2DForceCompiler.Validate(invalid); throw new InvalidOperationException("Invalid force dependency accepted."); }
+                catch (ArgumentException) { }
+            }
+        });
+        Run("water and combustion model contracts", () =>
+        {
+            foreach (var model in Enum.GetValues<Fluid2DModel>())
+            {
+                var settings = new Fluid2DSettings { Model = model, Width = 24, Height = 40,
+                    DomainWidth = 10, DomainHeight = 10, MaximumSubsteps = 16, InitialWaterDepth = .25f };
+                Check(Fluid2DCompiler.Parse(Fluid2DCompiler.Serialize(settings)) == settings,
+                    "The distinct simulation model must survive canonical settings persistence.");
+                var metadata = Fluid2DCompiler.Metadata(settings, ShaderFormat.UnityCompute);
+                Check(metadata.UniformBufferBytes == 512 && metadata.ResourcePlan is not null,
+                    "Every model must declare its complete uniform and resource contract.");
+                Check(Fluid2DCompiler.Uniforms(settings, 0)[20] == (float)model,
+                    "The GPU model selector must be separate from vorticity.");
+                var frame = Fluid2DCompiler.Frame(settings, .5);
+                Check(frame.Substeps <= 16 && frame.StepDelta <= Fluid2DCompiler.MaximumStableStep(settings) * 1.000001,
+                    "Water must obey its two-dimensional CFL bound and bounded catch-up work.");
+                if (model == Fluid2DModel.ShallowWater)
+                    Check(metadata.Passes.Count == 5 && metadata.Passes[0].Pass == Fluid2DPass.ShallowWater &&
+                        metadata.Passes.All(pass => pass.Pass != Fluid2DPass.Jacobi),
+                        "Shallow water must evolve depth/momentum without the incompressible smoke projection.");
+            }
+            foreach (var invalid in new[] { new Fluid2DSettings { Gravity = float.NaN }, new() { MaximumWaterSpeed = 0 },
+                new() { InitialWaterDepth = -1 }, new() { FuelBurnRate = -1 }, new() { Model = (Fluid2DModel)100 } })
+            {
+                try { Fluid2DCompiler.Validate(invalid); throw new InvalidOperationException("Invalid model setting accepted."); }
+                catch (ArgumentException) { }
+            }
+        });
     }
 
     private static void ExportFluid2D(string directory)
@@ -106,6 +191,8 @@ internal static partial class Program
         }
         var settings = new Fluid2DSettings { Width = 24, Height = 40, PressureIterations = 39 };
         File.WriteAllText(Path.Combine(directory, "fluid-settings.json"), Fluid2DCompiler.Serialize(settings));
+        File.WriteAllText(Path.Combine(directory, "fluid-vorticity-settings.json"),
+            Fluid2DCompiler.Serialize(settings with { Vorticity = 12.5f, DomainWidth = 2 }));
         using var stream = File.Create(Path.Combine(directory, "fluid-contract.bin"));
         var bytes = new byte[4];
         void Write(uint value)

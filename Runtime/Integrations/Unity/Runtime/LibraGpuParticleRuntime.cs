@@ -7,10 +7,17 @@ using UnityEngine.Rendering;
 
 namespace LiberaFx.Unity
 {
+    internal interface ILibraGpuFieldSource
+    {
+        void GetMapping(Matrix4x4 consumerToWorld, out Vector4 uvU, out Vector4 uvV, out Vector4 velocityU, out Vector4 velocityV);
+    }
     [Serializable] public sealed class LibraGpuTextureBinding
     {
         public string resourceId;
-        public Texture2D texture;
+        public Texture texture;
+        public bool premultipliedAlpha;
+        public bool flipY;
+        [NonSerialized] internal ILibraGpuFieldSource generatedSource;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -33,7 +40,7 @@ namespace LiberaFx.Unity
         [SerializeField] float billboardSizeScale = 1;
         [SerializeField] uint emitterSeed = 1;
         [SerializeField] Vector3 boundsSize = new Vector3(1000, 1000, 1000);
-        ComputeBuffer particles, args;
+        ComputeBuffer particles, args, fieldMappingBuffer;
         Mesh quad;
         MaterialPropertyBlock properties;
         Matrix4x4 drawTransform = Matrix4x4.identity;
@@ -41,8 +48,12 @@ namespace LiberaFx.Unity
         LibraGpuMetadata program;
         int[] flowKernels;
         Texture[] flowTextures;
+        int[] flowTextureFlags;
         Texture[] resourceTextures;
         int[][] flowMapResourceIndices;
+        ILibraGpuFieldSource[] fieldSources;
+        readonly Vector4[] fieldMappings = new Vector4[256];
+        bool hasFieldMappings;
         int particleId;
         uint cursor, frame;
         float elapsed, spawnFraction;
@@ -116,17 +127,33 @@ namespace LiberaFx.Unity
                 throw new ArgumentException("One or more GPU texture bindings do not belong to this program.");
             var resourceIndices = new Dictionary<string, int>(StringComparer.Ordinal);
             var nextResourceTextures = new Texture[next.resources.Length];
+            var nextFieldSources = new ILibraGpuFieldSource[next.resources.Length];
             for (int i = 0; i < next.resources.Length; i++)
             {
                 resourceIndices.Add(next.resources[i].id, i);
                 nextResourceTextures[i] = textureMap[next.resources[i].id];
+                if (next.resources[i].flowMap?.coordinates == "GeneratedPlane")
+                {
+                    nextFieldSources[i] = Array.Find(bindings, binding => binding.resourceId == next.resources[i].id)?.generatedSource;
+                    if (nextFieldSources[i] == null) throw new ArgumentException("Generated-plane field coordinates require a live producer mapping.");
+                }
             }
             var nextKernels = new int[next.flow.Length];
             var nextTextures = new Texture[next.flow.Length];
+            var textureFlags = (bindings ?? Array.Empty<LibraGpuTextureBinding>()).ToDictionary(binding => binding.resourceId,
+                binding => (binding.premultipliedAlpha ? 1 : 0) | (binding.flipY ? 2 : 0), StringComparer.Ordinal);
+            var nextTextureFlags = new int[next.flow.Length];
+            if (textureFlags.Values.Any(flags => flags != 0) &&
+                (!material.HasProperty("_LibraGpuTexturePremultiplied") || !material.HasProperty("_LibraGpuTextureFlipY")))
+                throw new ArgumentException("The billboard material cannot interpret generated texture alpha/orientation.");
             var nextFlowMapResourceIndices = new int[next.flow.Length][];
             for (int i = 0; i < next.flow.Length; i++)
             {
-                if (next.flow[i].kind == "RenderBillboard") nextTextures[i] = textureMap[next.flow[i].resourceId];
+                if (next.flow[i].kind == "RenderBillboard")
+                {
+                    nextTextures[i] = textureMap[next.flow[i].resourceId];
+                    nextTextureFlags[i] = textureFlags[next.flow[i].resourceId];
+                }
                 else
                 {
                     nextKernels[i] = lookup[next.flow[i].kernelId];
@@ -135,10 +162,12 @@ namespace LiberaFx.Unity
                         .Select(id => resourceIndices[id]).ToArray();
                 }
             }
-            ComputeBuffer nextParticles = null, nextArgs = null;
+            ComputeBuffer nextParticles = null, nextArgs = null, nextMappings = null;
             Mesh nextQuad = null;
             try
             {
+                if (nextFieldSources.Any(source => source != null))
+                    nextMappings = new ComputeBuffer(256, 16, ComputeBufferType.Structured);
                 nextParticles = new ComputeBuffer(next.capacity, 80, ComputeBufferType.Structured);
                 nextParticles.SetData(new LibraGpuParticle[next.capacity]);
                 nextQuad = CreateQuad();
@@ -147,14 +176,17 @@ namespace LiberaFx.Unity
             }
             catch
             {
-                nextParticles?.Release(); nextArgs?.Release();
+                nextParticles?.Release(); nextArgs?.Release(); nextMappings?.Release();
                 if (nextQuad != null) DestroyOwnedObject(nextQuad);
                 throw;
             }
             Release();
             compute = shader; metadata = sourceMetadata; billboardMaterial = material; textures = bindings;
+            flowTextureFlags = nextTextureFlags;
             program = next; particles = nextParticles; args = nextArgs; quad = nextQuad;
             flowKernels = nextKernels; flowTextures = nextTextures; resourceTextures = nextResourceTextures;
+            fieldSources = nextFieldSources; hasFieldMappings = nextFieldSources.Any(source => source != null);
+            fieldMappingBuffer = nextMappings;
             flowMapResourceIndices = nextFlowMapResourceIndices; particleId = Shader.PropertyToID(next.particleBuffer);
             properties = new MaterialPropertyBlock();
             properties.SetBuffer(DrawParticlesId, particles);
@@ -168,7 +200,7 @@ namespace LiberaFx.Unity
         // Performs the same imported-asset, shader-kernel and resource checks as
         // Configure, without allocating per-instance GPU buffers.
         public static LibraGpuMetadata ValidateSpawnableConfiguration(ComputeShader shader,
-            TextAsset sourceMetadata, Material material, LibraGpuTextureBinding[] bindings)
+            TextAsset sourceMetadata, Material material, LibraGpuTextureBinding[] bindings, ISet<string> deferredResources = null)
         {
             if (shader == null || sourceMetadata == null || material == null)
                 throw new ArgumentException("Compute shader, metadata and billboard material are required.");
@@ -210,6 +242,8 @@ namespace LiberaFx.Unity
                 if (binding == null || string.IsNullOrWhiteSpace(binding.resourceId) ||
                     !binding.texture || !resourceIds.Add(binding.resourceId))
                     throw new ArgumentException("GPU texture bindings contain an unresolved or duplicate resource.");
+            foreach (var deferred in deferredResources ?? new HashSet<string>())
+                if (!resourceIds.Add(deferred)) throw new ArgumentException("A resource has both generated and asset bindings.");
             if (resourceIds.Count != next.resources.Length ||
                 next.resources.Any(resource => !resourceIds.Contains(resource.id)))
                 throw new ArgumentException("GPU texture bindings do not exactly match metadata resources.");
@@ -345,6 +379,15 @@ namespace LiberaFx.Unity
                 throw new ArgumentOutOfRangeException(nameof(spawnCount), "Spawn range must fit capacity.");
             if (float.IsInfinity(elapsed + deltaTime)) throw new ArgumentOutOfRangeException(nameof(deltaTime), "GPU time overflow.");
             elapsed += deltaTime;
+            if (hasFieldMappings)
+            {
+                var consumerToWorld = drawTransformConnected ? RelativeToEmitter(drawTransform, emitterPosition) : Matrix4x4.identity;
+                for (var index = 0; index < fieldSources.Length; index++)
+                    if (fieldSources[index] != null)
+                        fieldSources[index].GetMapping(consumerToWorld, out fieldMappings[index * 4], out fieldMappings[index * 4 + 1],
+                            out fieldMappings[index * 4 + 2], out fieldMappings[index * 4 + 3]);
+                fieldMappingBuffer.SetData(fieldMappings);
+            }
             compute.SetInt(CapacityId, program.capacity); compute.SetInt(CountId, program.capacity);
             compute.SetFloat(DeltaId, deltaTime); compute.SetFloat(TimeId, elapsed);
             compute.SetInt(SeedId, unchecked((int)emitterSeed)); compute.SetInt(FrameId, unchecked((int)frame++));
@@ -355,6 +398,8 @@ namespace LiberaFx.Unity
                 if (program.flow[i].kind == "RenderBillboard")
                 {
                     properties.SetTexture(TextureId, flowTextures[i]);
+                    properties.SetFloat("_LibraGpuTexturePremultiplied", (flowTextureFlags[i] & 1) != 0 ? 1 : 0);
+                    properties.SetFloat("_LibraGpuTextureFlipY", (flowTextureFlags[i] & 2) != 0 ? 1 : 0);
                     properties.SetFloat(SizeScaleId, billboardSizeScale);
                     var appliedDrawTransform = drawTransformConnected
                         ? RelativeToEmitter(drawTransform, emitterPosition)
@@ -377,6 +422,8 @@ namespace LiberaFx.Unity
                 {
                     int kernel = flowKernels[i];
                     compute.SetBuffer(kernel, particleId, particles);
+                    if (hasFieldMappings && flowMapResourceIndices[i].Any(index => fieldSources[index] != null))
+                        compute.SetBuffer(kernel, Shader.PropertyToID(program.generatedFieldMappings.shaderName), fieldMappingBuffer);
                     foreach (var resourceIndex in flowMapResourceIndices[i])
                     {
                         var resource = program.resources[resourceIndex];
@@ -438,11 +485,14 @@ namespace LiberaFx.Unity
         {
             running = false;
             LibraGpuRetirement.Retire(particles, args, quad, submittedWork);
+            LibraGpuRetirement.Retire(fieldMappingBuffer, null, null, submittedWork);
+            fieldMappingBuffer = null;
             particles = null; args = null; quad = null;
             program = null; flowKernels = null; flowTextures = null; properties = null;
             drawTransform = Matrix4x4.identity;
             drawTransformConnected = false;
             spawnableStepMode = false;
+            fieldSources = null; hasFieldMappings = false;
             DrawCount = 0; submittedWork = false;
         }
         static void DestroyOwnedObject(UnityEngine.Object o) { if (Application.isPlaying) Destroy(o); else DestroyImmediate(o); }

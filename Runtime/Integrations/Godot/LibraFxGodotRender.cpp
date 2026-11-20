@@ -274,16 +274,17 @@ PackageRenderRenderer::PackageRenderRenderer(const MeshBindings& meshBindings,
 auto PackageRenderRenderer::create(const SpawnablePackage& package,
     const MeshBindings& meshBindings, const TextureBindings& textureBindings,
     const MaterialBindings& materialBindings,
-    std::unique_ptr<PackageRenderRenderer>& out) -> Result
+    std::unique_ptr<PackageRenderRenderer>& out, PackageGpuRenderer* gpu) -> Result
 {
     if (out) {
         return Result::Busy;
     }
     auto candidate = std::unique_ptr<PackageRenderRenderer>(
         new PackageRenderRenderer(meshBindings, textureBindings));
+    candidate->gpu_ = gpu;
     auto result = readDraws(package.rootRenderConfiguration, meshBindings,
         textureBindings, materialBindings, candidate->rootDraws_,
-        &candidate->rootCpuParticles_);
+        &candidate->rootCpuParticles_, gpu ? &gpu->drawBindings({}) : nullptr);
     if (result != Result::Ok) {
         return result;
     }
@@ -292,7 +293,8 @@ auto PackageRenderRenderer::create(const SpawnablePackage& package,
         auto definition = TemplateDraws{};
         definition.containerId = item.containerId;
         result = readDraws(item.renderConfiguration, meshBindings, textureBindings,
-            materialBindings, definition.draws, &definition.cpuParticles);
+            materialBindings, definition.draws, &definition.cpuParticles,
+            gpu ? &gpu->drawBindings(item.containerId) : nullptr);
         if (result != Result::Ok) {
             return result;
         }
@@ -310,7 +312,8 @@ PackageRenderRenderer::~PackageRenderRenderer()
 auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
     const MeshBindings& meshBindings, const TextureBindings& textureBindings,
     const MaterialBindings& materialBindings,
-    std::vector<Draw>& out, std::vector<CpuParticleDraw>* cpuParticles) -> Result
+    std::vector<Draw>& out, std::vector<CpuParticleDraw>* cpuParticles,
+    const std::vector<GeneratedGpuDrawTexture>* generated) -> Result
 {
     if (bytes.empty()) {
         return Result::Ok;
@@ -389,10 +392,37 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
         if (draw.assetIdentity.empty() || draw.assetIdentity.size() > 512) {
             return Result::InvalidBinary;
         }
+        if (generated)
+        {
+            for (const auto& binding : *generated)
+            {
+                if (binding.nodeId == draw.nodeId)
+                {
+                    draw.generatedTextures.push_back(binding);
+                }
+            }
+        }
+        auto resolvedBindings = textureBindings;
+        const auto generatedMain = std::any_of(draw.generatedTextures.begin(), draw.generatedTextures.end(),
+            [](const auto& binding) { return binding.mainTexture; });
+        if (draw.assetIdentity == "builtin:generated-texture")
+        {
+            if (!generatedMain || (!draw.sprite && !draw.flexiblePlane))
+            {
+                return Result::InvalidBinary;
+            }
+            auto image = godot::Image::create(1, 1, false, godot::Image::FORMAT_RGBA8);
+            image->fill(godot::Color(1, 1, 1, 1));
+            resolvedBindings[draw.assetIdentity] = godot::ImageTexture::create_from_image(image);
+        }
+        else if (generatedMain)
+        {
+            return Result::InvalidBinary;
+        }
         if (draw.flexiblePlane)
         {
-            auto texture = textureBindings.find(draw.assetIdentity);
-            if (texture == textureBindings.end() || !texture->second.is_valid() ||
+            auto texture = resolvedBindings.find(draw.assetIdentity);
+            if (texture == resolvedBindings.end() || !texture->second.is_valid() ||
                 texture->second->get_width() <= 0 || texture->second->get_height() <= 0)
             {
                 godot::UtilityFunctions::push_error(
@@ -410,8 +440,8 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
             continue;
         }
         if (draw.sprite) {
-            auto texture = textureBindings.find(draw.assetIdentity);
-            if (texture == textureBindings.end() || !texture->second.is_valid() ||
+            auto texture = resolvedBindings.find(draw.assetIdentity);
+            if (texture == resolvedBindings.end() || !texture->second.is_valid() ||
                 texture->second->get_width() <= 0 || texture->second->get_height() <= 0) {
                 return Result::InvalidArgument;
             }
@@ -563,6 +593,25 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
             }
         }
 
+        for (const auto& binding : draw.generatedTextures)
+        {
+            if (binding.mainTexture)
+            {
+                continue;
+            }
+            auto item = godot::Dictionary{};
+            item["slot"] = binding.slot;
+            item["name"] = binding.name;
+            item["association"] = binding.association;
+            item["index"] = binding.index;
+            auto image = godot::Image::create(1, 1, false, godot::Image::FORMAT_RGBA8);
+            image->fill(godot::Color(1, 1, 1, 1));
+            const auto result = addParameter(item, {}, godot::ImageTexture::create_from_image(image));
+            if (result != Result::Ok)
+            {
+                return result;
+            }
+        }
         auto inputs = godot::Array{};
         if (!readArray(node, "inputs", inputs) || inputs.size() > 256) {
             return Result::InvalidBinary;
@@ -792,9 +841,36 @@ auto PackageRenderRenderer::uuidString(const std::uint8_t* bytes) -> godot::Stri
     return godot::String::utf8(text.data());
 }
 
-auto PackageRenderRenderer::makeRenderable(godot::Node3D& parent, const Draw& draw,
-    RenderInstance& out) -> Result
+auto PackageRenderRenderer::makeRenderable(godot::Node3D& parent, const Draw& definition,
+    RenderInstance& out, const std::array<std::uint8_t, 16>& container,
+    const std::uint64_t instance) -> Result
 {
+    auto draw = definition;
+    auto mainTexture = godot::Ref<godot::Texture2D>{};
+    for (const auto& binding : draw.generatedTextures)
+    {
+        auto texture = gpu_ ? gpu_->outputTexture(binding.producerNodeId, container, instance, binding.outputId)
+            : godot::Ref<godot::Texture2D>{};
+        if (texture.is_null())
+        {
+            return Result::InvalidArgument;
+        }
+        if (binding.mainTexture)
+        {
+            mainTexture = texture;
+            draw.flexibleTexture = texture;
+        }
+        else
+        {
+            for (auto& parameter : draw.parameters)
+            {
+                if (parameter.slot == binding.slot && parameter.name == godot::StringName(binding.name))
+                {
+                    parameter.texture = texture;
+                }
+            }
+        }
+    }
     if (draw.flexiblePlane) {
         auto error = godot::String{};
         if (!FlexiblePlaneRenderer::create(parent, draw.flexibleDefinition,
@@ -808,7 +884,7 @@ auto PackageRenderRenderer::makeRenderable(godot::Node3D& parent, const Draw& dr
     }
     if (draw.sprite) {
         auto texture = textureBindings_.find(draw.assetIdentity);
-        if (texture == textureBindings_.end() || !texture->second.is_valid()) {
+        if (mainTexture.is_null() && (texture == textureBindings_.end() || !texture->second.is_valid())) {
             return Result::InvalidArgument;
         }
         auto quad = godot::Ref<godot::QuadMesh>{};
@@ -816,7 +892,8 @@ auto PackageRenderRenderer::makeRenderable(godot::Node3D& parent, const Draw& dr
         quad->set_size(godot::Vector2(1, 1));
         auto material = godot::Ref<godot::StandardMaterial3D>{};
         material.instantiate();
-        material->set_texture(godot::BaseMaterial3D::TEXTURE_ALBEDO, texture->second);
+        material->set_texture(godot::BaseMaterial3D::TEXTURE_ALBEDO,
+            mainTexture.is_valid() ? mainTexture : texture->second);
         material->set_shading_mode(godot::BaseMaterial3D::SHADING_MODE_UNSHADED);
         material->set_transparency(godot::BaseMaterial3D::TRANSPARENCY_ALPHA);
         material->set_cull_mode(godot::BaseMaterial3D::CULL_DISABLED);
@@ -1372,14 +1449,15 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host, const Spawna
 
 auto PackageRenderRenderer::makeScope(godot::Node& parent,
     const std::vector<Draw>& draws, godot::Node3D*& node,
-    std::vector<RenderInstance>& renderables) -> Result
+    std::vector<RenderInstance>& renderables,
+    const std::array<std::uint8_t, 16>& container, const std::uint64_t instance) -> Result
 {
     node = memnew(godot::Node3D);
     parent.add_child(node);
     renderables.reserve(draws.size());
     for (const auto& draw : draws) {
         auto renderable = RenderInstance{};
-        auto result = makeRenderable(*node, draw, renderable);
+        auto result = makeRenderable(*node, draw, renderable, container, instance);
         if (result != Result::Ok) {
             if (auto* scopeParent = node->get_parent()) {
                 scopeParent->remove_child(node);
@@ -1690,7 +1768,7 @@ auto PackageRenderRenderer::handleEvent(const SpawnableHostEvent& event, Package
         std::memcpy(child.containerId.data(), event.containerId, child.containerId.size());
         child.instanceId = event.instanceId;
         child.startTime = event.time;
-        auto result = makeScope(*root_, definition->draws, child.node, child.renderables);
+        auto result = makeScope(*root_, definition->draws, child.node, child.renderables, child.containerId, child.instanceId);
         if (result != Result::Ok) {
             return result;
         }
