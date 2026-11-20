@@ -47,6 +47,10 @@ internal static class AnythingSearchTests
             AnythingSearch.Find(items, "moon missing").Count != 0 ||
             AnythingSearch.Find(items, "", 2).Count != 2)
             throw new InvalidOperationException("Multi-term filtering or result limits failed.");
+        var favorites = items.Select(item => item.Id == "nested" ? item with { IsFavorite = true } : item).ToArray();
+        if (AnythingSearch.Find(favorites, "solar").First().Id != "nested" ||
+            AnythingSearch.Find(favorites, "missing").Count != 0)
+            throw new InvalidOperationException("Favorites must rank matching results first without bypassing the query.");
 
         VerifyKeyboardWorkflow();
     }

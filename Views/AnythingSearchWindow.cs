@@ -41,7 +41,7 @@ public sealed class AnythingSearchWindow : Window
                     Margin = new Thickness(4), Spacing = 2,
                     Children =
                     {
-                        new TextBlock { Text = item.Category + "  " + item.Name, FontWeight = FontWeight.SemiBold },
+                        new TextBlock { Text = (item.IsFavorite ? "★  " : "") + item.Category + "  " + item.Name, FontWeight = FontWeight.SemiBold },
                         new TextBlock { Text = item.Detail, TextTrimming = TextTrimming.CharacterEllipsis }
                     }
                 };
@@ -119,7 +119,19 @@ public sealed class AnythingSearchWindow : Window
             yield return Item("asset/" + group.Id, "Search.Group", name,
                 text.Get("Search.GroupDetail", group.Revision),
                 () => main.Graph.CreateGroupAssetNode(group.Id, 100, 100),
-                $"{text.GetNodeSearchTerms(nameKey, group.Name)} {group.Name} {group.Id:D}");
+                $"{text.GetNodeSearchTerms(nameKey, group.Name)} {group.Name} {group.Id:D}") with
+                { IsFavorite = NodeFavoritesService.Shared.Contains(NodeCatalogEntryViewModel.GroupPrefix + group.Id.ToString("D")) };
+        }
+        var editing = main.Graph.ActiveEditingWorkspace;
+        foreach (var definition in editing.AvailableNodeDefinitions.Where(definition =>
+                     !GraphPolymorphism.IsHiddenVariant(definition.Kind) && editing.CanCreateNode(definition.Kind, out _)))
+        {
+            var entry = new NodeCatalogEntryViewModel(definition);
+            yield return Item("create/" + entry.DragIdentifier, "Search.CreateNode", entry.Name, entry.Group,
+                () =>
+                {
+                    editing.CreateNode(definition.Kind, 100, 100, entry.IsPolymorphic);
+                }, entry.SearchTerms + " " + entry.KindName) with { IsFavorite = entry.IsFavorite };
         }
         foreach (var command in main.Extensions.Commands.ToArray())
             yield return new("extension/" + command.Id, text.Get("Search.Command"), command.Name,

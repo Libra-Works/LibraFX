@@ -1,7 +1,7 @@
 namespace LiberaFx.Services;
 
 public sealed record AnythingSearchItem(string Id, string Category, string Name, string Detail,
-    string Aliases, Func<Task> ExecuteAsync);
+    string Aliases, Func<Task> ExecuteAsync, bool IsFavorite = false);
 
 public static class AnythingSearch
 {
@@ -13,7 +13,7 @@ public static class AnythingSearch
         var terms = (query ?? "").Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         return items.Select((item, index) => (Item: item, Index: index, Score: Score(item, terms)))
             .Where(item => item.Score >= 0)
-            .OrderByDescending(item => item.Score).ThenBy(item => item.Index)
+            .OrderByDescending(item => item.Item.IsFavorite).ThenByDescending(item => item.Score).ThenBy(item => item.Index)
             .Take(limit).Select(item => item.Item).ToArray();
     }
 

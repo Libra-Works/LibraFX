@@ -5,6 +5,7 @@
   "Search.Keys": "上下: 選択   Enter: 開く・実行   Esc: キャンセル。アセットの候補からライブラリのGroupを追加できます。",
   "Search.Graph": "グラフ",
   "Search.Node": "ノード",
+  "Search.CreateNode": "ノードを追加",
   "Search.Asset": "アセット",
   "Search.Group": "グループ",
   "Search.GroupDetail": "再利用できるグラフグループ · リビジョン {0}",

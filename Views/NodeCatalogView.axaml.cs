@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.VisualTree;
 using LiberaFx.Models.Graph;
 using LiberaFx.ViewModels;
 
@@ -19,6 +20,8 @@ public partial class NodeCatalogView : UserControl
 
     private void OnNodePointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        if (e.Source is Visual visual && visual.GetSelfAndVisualAncestors().OfType<Button>().Any()) return;
+        if (sender is Control { DataContext: NodeCatalogEntryViewModel { CanCreate: false } }) return;
         if (sender is not Control source || !e.GetCurrentPoint(source).Properties.IsLeftButtonPressed)
         {
             return;

@@ -1,4 +1,9 @@
 {
+  "Editor.Favorites": "Favorites",
+  "Editor.AddFavorite": "Add to favorites",
+  "Editor.RemoveFavorite": "Remove from favorites",
+  "Editor.NewCpuParticle": "New CPU Particle",
+  "Editor.NewGpuParticle": "New GPU Particle",
   "Editor.SignalSend.Send": "Send",
   "Editor.SignalSend.AccessibleName": "Send Signal (preview only, root scope, works while paused)",
   "Editor.SignalSend.Help": "Preview only: send once at the current playhead in root scope, including ordinary Graph Groups. Works while paused without advancing time or changing the project. Requires a connected compiled-preview (v3) client.",

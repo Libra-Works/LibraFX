@@ -1,4 +1,9 @@
 {
+  "Editor.Favorites": "お気に入り",
+  "Editor.AddFavorite": "お気に入りに追加",
+  "Editor.RemoveFavorite": "お気に入りから外す",
+  "Editor.NewCpuParticle": "CPU Particle を追加",
+  "Editor.NewGpuParticle": "GPU Particle を追加",
   "Editor.SignalSend.Send": "送信",
   "Editor.SignalSend.AccessibleName": "Signalを送信（プレビュー専用・ルートスコープ・一時停止中も使用可能）",
   "Editor.SignalSend.Help": "プレビュー専用：通常のGraph Groupを含むルートスコープで、現在の再生位置に1回送信します。一時停止中も使用でき、時間やプロジェクトは変更しません。compiled-preview（v3）クライアントの接続が必要です。",

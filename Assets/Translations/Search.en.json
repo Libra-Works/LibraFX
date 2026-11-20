@@ -5,6 +5,7 @@
   "Search.Keys": "Up/Down: select   Enter: open or run   Esc: cancel. Asset results insert library Groups.",
   "Search.Graph": "Graph",
   "Search.Node": "Node",
+  "Search.CreateNode": "Add node",
   "Search.Asset": "Asset",
   "Search.Group": "Group",
   "Search.GroupDetail": "Reusable graph group · Revision {0}",

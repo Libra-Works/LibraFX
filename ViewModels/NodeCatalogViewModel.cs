@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using Dock.Model.Mvvm.Controls;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.ComponentModel;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services;
 
@@ -54,6 +55,14 @@ public sealed class NodeCatalogViewModel : Tool
         ObserveGraph(_activeGraph.Graph);
         RefreshEntries();
         MessageLocalization.Observe(this, static catalog => catalog.RefreshEntries());
+        var weakCatalog = new WeakReference<NodeCatalogViewModel>(this);
+        EventHandler? favoritesChanged = null;
+        favoritesChanged = (_, _) =>
+        {
+            if (weakCatalog.TryGetTarget(out var catalog)) catalog.RefreshGroups();
+            else NodeFavoritesService.Shared.Changed -= favoritesChanged;
+        };
+        NodeFavoritesService.Shared.Changed += favoritesChanged;
     }
 
     private void OnActiveGraphChanged(object? sender, PropertyChangedEventArgs e)
@@ -128,7 +137,7 @@ public sealed class NodeCatalogViewModel : Tool
     private void RefreshGroups()
     {
         var search = SearchText.Trim();
-        var groups = _entries
+        var groups = _entries.OrderByDescending(entry => entry.IsFavorite)
             .Where(entry => entry.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.OriginalName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.KindName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
@@ -137,7 +146,7 @@ public sealed class NodeCatalogViewModel : Tool
                             entry.Group.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.SearchTerms.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                             entry.ConversionDescription.Contains(search, StringComparison.OrdinalIgnoreCase))
-            .GroupBy(entry => entry.Group)
+            .GroupBy(entry => entry.IsFavorite ? LocalizationService.Shared.Get("Editor.Favorites") : entry.Group)
             .Select(group => new NodeCatalogGroupViewModel(group.Key, group.ToArray()))
             .ToArray();
         Groups.Clear();
@@ -155,8 +164,21 @@ public sealed class NodeCatalogGroupViewModel(string name, IReadOnlyList<NodeCat
     public IReadOnlyList<NodeCatalogEntryViewModel> Nodes { get; } = nodes;
 }
 
-public sealed class NodeCatalogEntryViewModel
+public sealed class NodeCatalogEntryViewModel : ObservableObject
 {
+    public bool IsFavorite => NodeFavoritesService.Shared.Contains(DragIdentifier);
+    public string FavoriteGlyph => IsFavorite ? "★" : "☆";
+    private string? _favoriteError;
+    public string FavoriteHelp => _favoriteError ?? LocalizationService.Shared.Get(IsFavorite ? "Editor.RemoveFavorite" : "Editor.AddFavorite");
+    private IRelayCommand? _toggleFavorite;
+    public IRelayCommand ToggleFavoriteCommand => _toggleFavorite ??= new RelayCommand(() =>
+    {
+        try { NodeFavoritesService.Shared.Toggle(DragIdentifier); _favoriteError = null; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { _favoriteError = error.Message; }
+        OnPropertyChanged(nameof(IsFavorite));
+        OnPropertyChanged(nameof(FavoriteGlyph));
+        OnPropertyChanged(nameof(FavoriteHelp));
+    });
     public const string GroupPrefix = "liberafx-group:";
     public const string PolymorphicPrefix = "liberafx-polymorphic:";
     public string Name { get; }
