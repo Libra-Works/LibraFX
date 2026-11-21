@@ -22,6 +22,14 @@ auto System::invoke(CustomNodeInvocation& call) noexcept -> Result
     }
     auto& particle = *system.current;
     auto operation = context.operation;
+    if (operation == 0x49) {
+        if (particle.life==0) return Result::DivideByZero;
+        const auto ratio=particle.age/particle.life;
+        if (!std::isfinite(ratio)) return Result::NonFinite;
+        call.outputs[0]=call.inputs[0]; call.outputs[1]=call.inputs[4]; call.outputs[2]=call.inputs[8];
+        call.outputs[3]=1-std::max(0.0,std::min(ratio,1.0));
+        return Result::Ok;
+    }
     if (operation >= 0x45 && operation <= 0x48) {
         auto sample = MeshEmissionSample{};
         const auto index = static_cast<std::uint32_t>(particle.draw.id);

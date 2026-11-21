@@ -9,13 +9,21 @@ namespace liberafx::cpu_particle_batch_tests {
 void require(bool condition, const char* message) { if (!condition) throw std::runtime_error(message); }
 void check(Result result) { require(result == Result::Ok, "Unexpected native result."); }
 void compare(const char* path, bool expectBatch, bool expectError = false, Result expectedFailure = Result::DivideByZero,
-    int errorFrame = 1, bool expectSpawn = true)
+    int errorFrame = 1, bool expectSpawn = true, int expectFusion = -1, const char* referencePath = nullptr, bool automaticBatching = true)
 {
     auto stream = std::ifstream(path, std::ios::binary);
     require(stream.good(), "Could not read compiled CPU fixture.");
     const auto bytes = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(stream), {});
     auto package = SpawnablePackage{};
     check(loadSpawnablePackage(bytes.data(),bytes.size(),package));
+    auto referencePackage=SpawnablePackage{};
+    if (referencePath) {
+        auto referenceStream=std::ifstream(referencePath,std::ios::binary);
+        require(referenceStream.good(),"Could not read the unoptimized reference package.");
+        const auto original=std::vector<std::uint8_t>(std::istreambuf_iterator<char>(referenceStream),{});
+        check(loadSpawnablePackage(original.data(),original.size(),referencePackage));
+        require(package.cpuPrograms.size()<referencePackage.cpuPrograms.size(),"Ahead-of-time compilation did not shrink the CPU binary.");
+    }
     std::vector<std::unique_ptr<cpu_particle_detail::System>> systems;
     check(cpu_particle_detail::parse(package.cpuPrograms.data(), package.cpuPrograms.size(),systems));
     require(!systems.empty(), "No CPU systems in the fixture.");
@@ -25,12 +33,19 @@ void compare(const char* path, bool expectBatch, bool expectError = false, Resul
         require(system->spawnBatch.enabled == (expectBatch && expectSpawn), "The intended birth execution path was not selected.");
         if (expectBatch && expectSpawn) require(!system->instances && system->sharedSpawn && system->sharedUpdate,
             "Isolated stages retained per-particle VM storage.");
+        if (expectFusion>=0) {
+            const auto fused=std::count_if(system->updateBatch.values.begin(),system->updateBatch.values.end(),
+                [](const auto& op) { return op.op==cpu_particle_detail::BatchOp::LifetimeColor; });
+            if (fused!=expectFusion) throw std::runtime_error(std::string(path)+": expected "+std::to_string(expectFusion)+
+                " fused lifetime operations, got "+std::to_string(fused));
+        }
     }
     auto automatic = std::unique_ptr<SpawnableHost>{}, reference = std::unique_ptr<SpawnableHost>{};
     auto options = SpawnableHostOptions{};
+    options.cpuParticleBatching=automaticBatching;
     check(SpawnableHost::create(package,options,automatic));
     options.cpuParticleBatching = false;
-    check(SpawnableHost::create(package,options,reference));
+    check(SpawnableHost::create(referencePath ? referencePackage : package,options,reference));
     auto time = 0.0;
     for (auto frame=0;frame<300;++frame) {
         if (frame==40 || frame==60 || frame==90) {
@@ -102,7 +117,17 @@ int main(int argc, char** argv)
     try {
         for (auto index=1;index<argc-1;++index) {
             const auto mode=std::string(argv[index]);
-            if (mode == "--spawn-fallback") {
+            if (mode == "--aot") {
+                if (index+2 >= argc-1) throw std::runtime_error("Supply original and preoptimized packages.");
+                const auto* original=argv[++index];
+                const auto* optimized=argv[++index];
+                liberafx::cpu_particle_batch_tests::compare(optimized,true,false,liberafx::Result::DivideByZero,1,true,1,original);
+                liberafx::cpu_particle_batch_tests::compare(optimized,true,false,liberafx::Result::DivideByZero,1,true,1,original,false);
+            } else if (mode == "--fused" || mode == "--unfused") {
+                if (++index >= argc-1) throw std::runtime_error("Supply the lifetime-color fixture.");
+                liberafx::cpu_particle_batch_tests::compare(argv[index],true,false,liberafx::Result::DivideByZero,1,true,
+                    mode=="--fused" ? 1 : 0);
+            } else if (mode == "--spawn-fallback") {
                 if (++index >= argc-1) throw std::runtime_error("Supply the unsupported Spawn fixture.");
                 liberafx::cpu_particle_batch_tests::compare(argv[index],true,false,liberafx::Result::DivideByZero,1,false);
             } else if (mode == "--birth-divide" || mode == "--birth-mixed") {

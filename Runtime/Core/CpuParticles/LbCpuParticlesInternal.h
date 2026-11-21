@@ -62,19 +62,30 @@ struct BatchInput final {
     std::uint8_t component = 0;
     std::array<double,4> constants{};
 };
-enum class BatchOp : std::uint8_t { Copy, Add, Subtract, Multiply, Divide, Broadcast, Clamp, Compose, Sphere,
+enum class BatchOp : std::uint8_t { Copy, Add, Subtract, Multiply, Divide, Broadcast, Clamp, Compose, Sphere, LifetimeColor,
     Position, Velocity, Color, Size, Life, Age, Id, Seed, Delta, SetPosition, SetVelocity, SetColor, SetSize, SetLife, Move };
-struct BatchInstruction final {
+struct DecodedBatchInstruction final {
     Id sourceNode{};
     BatchOp op{};
     std::uint32_t output = 0;
     std::uint8_t width = 0;
     std::array<BatchInput,4> inputs{};
 };
+// Hot execution record. High-bit operands address the shared constant pool;
+// other operands address a node/component register in the block scratch.
+struct BatchInstruction final {
+    std::uint16_t output = 0;
+    BatchOp op{};
+    std::uint8_t width = 0;
+    std::array<std::uint16_t,4> inputs{};
+};
+static_assert(sizeof(BatchInstruction) == 12);
 struct ParticleBatchPlan final {
     static constexpr std::size_t maximumNodes = 64, batchSize = 32;
     bool enabled = false;
     std::vector<BatchInstruction> values, commands;
+    std::vector<double> constants;
+    std::vector<Id> sourceNodes;
 };
 struct Slot final {
     double realStart = 0;
@@ -152,6 +163,7 @@ struct System final {
     Result run(Slot& slot, std::uint32_t stage, double time, const HostQualitySnapshot& quality) noexcept;
     void buildBatches();
     void buildBatch(std::uint32_t stageIndex);
+    void optimizeBatch(ParticleBatchPlan& plan);
     Result evaluateBatch(const ParticleBatchPlan& plan, Slot* const* particles, std::size_t size, bool* commandsStarted = nullptr) noexcept;
     Result spawnBatches(std::uint32_t count, double time, const HostQualitySnapshot& quality) noexcept;
     Result updateBatches(double time, const HostQualitySnapshot& quality) noexcept;

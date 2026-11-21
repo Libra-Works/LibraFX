@@ -148,8 +148,8 @@ auto System::initialize(const CustomNodeDescriptor* registry, std::size_t regist
     {
         inputSignalCount += std::count_if(stage.io.begin(), stage.io.end(), [](const auto& io) { return io.kind == 2; });
     }
-    callbacks.reserve(23 + inputSignalCount);
-    descriptors.reserve(23 + inputSignalCount + registryCount);
+    callbacks.reserve(24 + inputSignalCount);
+    descriptors.reserve(24 + inputSignalCount + registryCount);
     auto add = [&](std::uint8_t operation, std::uint8_t width, bool signal,
         std::initializer_list<std::uint8_t> inputs, bool color)
     {
@@ -188,6 +188,7 @@ auto System::initialize(const CustomNodeDescriptor* registry, std::size_t regist
     add(0x46, 3, false, {}, false);
     add(0x47, 2, false, {}, false);
     add(0x48, 4, false, {}, true);
+    add(0x49, 4, false, {1, 1, 1}, false);
     for (auto stageIndex = 0u; stageIndex < 2; ++stageIndex)
     {
         for (auto& io : stages[stageIndex].io)
