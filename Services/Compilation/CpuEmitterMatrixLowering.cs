@@ -40,7 +40,7 @@ internal static class CpuEmitterMatrixLowering
             var edges = current.Connections.ToList();
             // Ordinary groups are flattened before invoking this method, so all shapes share these row inputs.
             foreach (var shape in current.Nodes.Where(n => CpuParticleSchema.Name(n.Kind) is
-                         "CpuParticleEmitterBox" or "CpuParticleEmitterSphere" or "CpuParticleEmitterCircle"))
+                         "CpuParticleEmitterBox" or "CpuParticleEmitterSphere" or "CpuParticleEmitterCircle" or "CpuParticleMeshPosition"))
             {
                 var transform = Node("TransformPoint", Id(shape.Id, "point"));
                 for (var i = 0; i < edges.Count; i++)

@@ -106,7 +106,7 @@ public static class GraphValidator
                       effectiveDefinitions[target.Id].GetInputPortCategory(port) != GraphPortCategory.Signal &&
                       !occupiedInputs.Add((target.Id, port))) ||
                 !connections.Add((source.Id, connection.SourcePortId, target.Id, connection.TargetPortId)))
-                throw new InvalidDataException("The project contains an invalid graph connection.");
+                throw new InvalidDataException($"The project contains an invalid graph connection: {connection?.SourceNodeId}/{connection?.SourcePortId} -> {connection?.TargetNodeId}/{connection?.TargetPortId}.");
             if (effectiveDefinitions[source.Id].GetOutputPortCategory(connection.SourcePortId) == GraphPortCategory.Signal &&
                 !occupiedSignalOutputs.Add((source.Id, connection.SourcePortId)))
                 throw new InvalidDataException("A Signal output can have only one destination. Use a Sequence node to branch.");

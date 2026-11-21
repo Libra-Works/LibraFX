@@ -15,6 +15,7 @@ add_library(liberafx_runtime STATIC
     Core/LbBuiltinTimeNodes.cpp
     Core/LbMatrixMath.cpp
     Core/LbCoordinateBasis.cpp
+    Core/LbMeshEmission.cpp
     Core/LbDelayNode.cpp
     Core/LbGeneratorPool.cpp
     Core/LbGeneratorPoolEvaluation.cpp
@@ -87,6 +88,9 @@ if(LIBERAFX_BUILD_BENCHMARKS)
 endif()
 if(LIBERAFX_BUILD_TESTS)
     enable_testing()
+    add_executable(liberafx_mesh_emission_tests tests/MeshEmissionTests.cpp)
+    target_link_libraries(liberafx_mesh_emission_tests PRIVATE liberafx_runtime)
+    add_test(NAME liberafx_mesh_emission_tests COMMAND liberafx_mesh_emission_tests)
     add_executable(liberafx_fluid2d_contract_tests tests/Fluid2DContractTests.cpp)
     target_link_libraries(liberafx_fluid2d_contract_tests PRIVATE liberafx_runtime)
     add_test(NAME liberafx_fluid2d_contract_tests COMMAND liberafx_fluid2d_contract_tests)

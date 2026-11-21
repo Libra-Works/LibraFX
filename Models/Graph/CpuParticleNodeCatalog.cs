@@ -20,7 +20,9 @@ public static class CpuParticleNodeCatalog
             ("036", "CpuParticleInputSignal"), ("037", "CpuParticleOutputSignal"),
             ("038", "CpuParticleInputBool"), ("039", "CpuParticleOutputBool"),
             ("040", "EmitterRate"), ("041", "EmitterBurst"), ("042", "CpuParticleEmitterBox"),
-            ("043", "CpuParticleEmitterSphere"), ("044", "CpuParticleEmitterCircle")
+            ("043", "CpuParticleEmitterSphere"), ("044", "CpuParticleEmitterCircle"),
+            ("045", "CpuParticleMeshPosition"), ("046", "CpuParticleMeshNormal"),
+            ("047", "CpuParticleMeshUV"), ("048", "CpuParticleMeshColor")
         };
         foreach (var (suffix, name) in entries)
         {

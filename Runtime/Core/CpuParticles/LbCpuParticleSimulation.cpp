@@ -58,7 +58,7 @@ auto System::run(Slot& slot, std::uint32_t stageIndex, double time, const HostQu
     auto result = instance.setHostQuality(quality);
     if (result == Result::Ok)
     {
-        result = instance.setTimeContext(time, frameDelta);
+        result = instance.setTimeContext(time, frameDelta, realTime, std::max(0.0, realTime - slot.realStart), realDelta);
     }
     for (auto& io : stage.io)
     {
@@ -117,6 +117,10 @@ auto System::tick(Instance& root, double time, bool emitting, const HostQualityS
     {
         return Result::Ok;
     }
+    try {
+        const auto status = refreshEmitter(time);
+        if (status != Result::Ok) return status;
+    } catch (const std::bad_alloc&) { return Result::InsufficientWork; }
     stepDelta = lastTime < 0 ? 0 : time - lastTime;
     lastTime = time;
     for (auto& stage : stages)
@@ -209,6 +213,7 @@ auto System::tick(Instance& root, double time, bool emitting, const HostQualityS
         slot.draw.id = nextId++;
         slot.velocity = {};
         slot.age = 0;
+        slot.realStart = realTime;
         slot.life = 2;
         for (auto stageIndex = 0u; stageIndex < 2; ++stageIndex)
         {

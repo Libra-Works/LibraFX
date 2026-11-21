@@ -1,4 +1,8 @@
 {
+  "Editor.Node.CpuParticleMeshPosition": "メッシュ表面の位置",
+  "Editor.Node.CpuParticleMeshNormal": "メッシュ表面の法線",
+  "Editor.Node.CpuParticleMeshUV": "メッシュ表面のUV",
+  "Editor.Node.CpuParticleMeshColor": "メッシュ表面の頂点色",
   "Editor.Time.Real": "実時間",
   "Editor.Time.Scaled": "倍率適用後の時間",
   "Editor.Favorites": "お気に入り",

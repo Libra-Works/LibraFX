@@ -1,5 +1,7 @@
 #pragma once
 #include "liberafx/LbCpuParticles.h"
+#include "liberafx/LbMeshEmission.h"
+#include "liberafx/host/LbProceduralAdapter.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -54,6 +56,7 @@ struct Stage final {
     std::size_t workStride = 0, defaultStride = 0;
 };
 struct Slot final {
+    double realStart = 0;
     CpuParticleSnapshot draw;
     std::array<double, 3> velocity{};
     double age = 0, life = 2;
@@ -78,11 +81,20 @@ struct System final {
     ~System()
     {
         slots.reset();
+        if (emitterModel) libra_procedural_model_release(emitterModel);
     }
+    std::vector<std::uint8_t> emitterDefinitionBytes;
+    procedural_adapter::Definition emitterDefinition;
+    LibraProceduralModelInstance* emitterModel = nullptr;
+    std::uint64_t emitterVertexRevision = 0;
+    std::array<float, 3> emitterPivot{};
+    MeshEmissionSurface emitterSurface;
+    Result refreshEmitter(double time);
     Id id{}, emissionSource{};
     std::uint32_t capacity = 0, seed = 0, queueCapacity = 0, burst = 0, emissionComponent = 0;
     double rate = 0, remainder = 0, lastTotal = 0, lastTime = -1, stepDelta = 0;
     double frameDelta = 0;
+    double realTime = 0, realDelta = 0;
     std::uint64_t nextId = 1;
     std::size_t live = 0;
     Stage stages[2];

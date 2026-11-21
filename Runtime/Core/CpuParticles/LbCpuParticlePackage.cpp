@@ -78,7 +78,7 @@ auto parse(const std::uint8_t* bytes, std::size_t count,
     auto reader = Reader(bytes, count);
     auto version = std::uint32_t{};
     auto systemCount = std::uint32_t{};
-    if (!reader.u32(version) || version != 1 || !reader.u32(systemCount) || systemCount > 1024)
+    if (!reader.u32(version) || (version != 1 && version != 2) || !reader.u32(systemCount) || systemCount > 1024)
     {
         return Result::InvalidBinary;
     }
@@ -125,6 +125,8 @@ auto parse(const std::uint8_t* bytes, std::size_t count,
                 }
             }
         }
+        if (version >= 2 && (!reader.blob(system->emitterDefinitionBytes) || system->emitterDefinitionBytes.size() > 4096))
+            return Result::InvalidBinary;
         systems.push_back(std::move(system));
     }
     return reader.remaining() == 0 ? Result::Ok : Result::InvalidBinary;
@@ -132,13 +134,22 @@ auto parse(const std::uint8_t* bytes, std::size_t count,
 
 auto System::initialize(const CustomNodeDescriptor* registry, std::size_t registryCount) -> Result
 {
+    if (!emitterDefinitionBytes.empty()) {
+        auto status = procedural_adapter::decode(emitterDefinitionBytes.data(), emitterDefinitionBytes.size(), emitterDefinition);
+        if (status != LIBRA_OK || emitterDefinition.kind != 0) return Result::InvalidBinary;
+        status = libra_procedural_model_create(&emitterDefinition.model, emitterDefinition.modifiers.data(),
+            static_cast<std::uint32_t>(emitterDefinition.modifiers.size()), &emitterModel);
+        if (status != LIBRA_OK) return static_cast<Result>(status);
+        const auto result = refreshEmitter(0);
+        if (result != Result::Ok) return result;
+    }
     auto inputSignalCount = std::size_t{};
     for (auto& stage : stages)
     {
         inputSignalCount += std::count_if(stage.io.begin(), stage.io.end(), [](const auto& io) { return io.kind == 2; });
     }
-    callbacks.reserve(19 + inputSignalCount);
-    descriptors.reserve(19 + inputSignalCount + registryCount);
+    callbacks.reserve(23 + inputSignalCount);
+    descriptors.reserve(23 + inputSignalCount + registryCount);
     auto add = [&](std::uint8_t operation, std::uint8_t width, bool signal,
         std::initializer_list<std::uint8_t> inputs, bool color)
     {
@@ -173,6 +184,10 @@ auto System::initialize(const CustomNodeDescriptor* registry, std::size_t regist
     add(0x42, 3, false, {3, 3}, false);
     add(0x43, 3, false, {3, 1}, false);
     add(0x44, 3, false, {3, 1}, false);
+    add(0x45, 3, false, {}, false);
+    add(0x46, 3, false, {}, false);
+    add(0x47, 2, false, {}, false);
+    add(0x48, 4, false, {}, true);
     for (auto stageIndex = 0u; stageIndex < 2; ++stageIndex)
     {
         for (auto& io : stages[stageIndex].io)

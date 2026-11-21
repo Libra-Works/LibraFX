@@ -22,6 +22,18 @@ auto System::invoke(CustomNodeInvocation& call) noexcept -> Result
     }
     auto& particle = *system.current;
     auto operation = context.operation;
+    if (operation >= 0x45 && operation <= 0x48) {
+        auto sample = MeshEmissionSample{};
+        const auto index = static_cast<std::uint32_t>(particle.draw.id);
+        const auto status = system.emitterSurface.sample(math::randomUnit(system.seed, index, 11),
+            math::randomUnit(system.seed, index, 12), math::randomUnit(system.seed, index, 13), sample);
+        if (status != Result::Ok) return status;
+        if (operation == 0x45) std::copy(sample.position.begin(), sample.position.end(), call.outputs);
+        if (operation == 0x46) std::copy(sample.normal.begin(), sample.normal.end(), call.outputs);
+        if (operation == 0x47) std::copy(sample.uv.begin(), sample.uv.end(), call.outputs);
+        if (operation == 0x48) std::copy(sample.color.begin(), sample.color.end(), call.outputs);
+        return Result::Ok;
+    }
     if (operation == 5)
     {
         call.selectedBranch = 0;

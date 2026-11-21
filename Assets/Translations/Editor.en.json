@@ -1,4 +1,8 @@
 {
+  "Editor.Node.CpuParticleMeshPosition": "Mesh Surface Position",
+  "Editor.Node.CpuParticleMeshNormal": "Mesh Surface Normal",
+  "Editor.Node.CpuParticleMeshUV": "Mesh Surface UV",
+  "Editor.Node.CpuParticleMeshColor": "Mesh Surface Color",
   "Editor.Time.Real": "Real Time",
   "Editor.Time.Scaled": "Scaled Time",
   "Editor.Favorites": "Favorites",

@@ -133,6 +133,8 @@ auto CpuParticleWorld::advance(Instance& root, double time, bool emitting, const
     for (auto& system : impl_->systems)
     {
         system->frameDelta = frameDelta;
+        system->realTime = root.realEffectTime();
+        system->realDelta = root.realFrameDelta();
         auto result = system->tick(root, time, emitting, quality);
         if (result != Result::Ok)
         {
