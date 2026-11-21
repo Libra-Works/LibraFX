@@ -27,12 +27,22 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
     }
 
     public async Task<EngineAssetPage> CatalogAsync(string query = "", string assetClass = "", int offset = 0,
-        int limit = 32, Guid? clientId = null)
+        int limit = 32, Guid? clientId = null, CancellationToken cancellation = default)
     {
         if (query.Length > 256 || assetClass is not ("" or "model" or "texture" or "material") ||
             offset < 0 || limit is < 1 or > 64) throw new ArgumentException("Invalid asset catalog query.");
-        var response = await RequestAsync("catalog", clientId, request =>
-            new { type = "asset_catalog", requestId = request, query, assetClass, offset, limit });
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+        timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        JsonElement response;
+        var peer = SelectPeer(clientId);
+        do
+        {
+            response = await RequestAsync("catalog", peer, request =>
+                new { type = "asset_catalog", requestId = request, query, assetClass, offset, limit }, timeout.Token);
+            if (!response.TryGetProperty("pending", out var pending) || pending.ValueKind == JsonValueKind.False) break;
+            if (pending.ValueKind != JsonValueKind.True) throw new InvalidDataException("Invalid catalog indexing state.");
+            await Task.Delay(150, timeout.Token);
+        } while (true);
         var assets = response.GetProperty("assets").EnumerateArray().Select(ParseAsset).ToArray();
         var total = response.GetProperty("total").GetInt32();
         var receivedOffset = response.GetProperty("offset").GetInt32();
@@ -42,22 +52,23 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
         return new(assets, total, receivedOffset);
     }
 
-    public async Task<EngineAsset> DetailsAsync(string path, Guid? clientId = null)
+    public async Task<EngineAsset> DetailsAsync(string path, Guid? clientId = null, CancellationToken cancellation = default)
     {
         ValidateAssetPath(path);
         var response = await RequestAsync("details", clientId, request =>
-            new { type = "asset_details", requestId = request, path });
+            new { type = "asset_details", requestId = request, path }, cancellation);
         var asset = ParseAsset(response.GetProperty("asset"));
         if (asset.Path != path) throw new InvalidDataException("Asset details do not match the requested path.");
         return asset;
     }
 
-    public async Task<EngineAssetThumbnail> ThumbnailAsync(string path, int size = 128, Guid? clientId = null)
+    public async Task<EngineAssetThumbnail> ThumbnailAsync(string path, int size = 128, Guid? clientId = null,
+        CancellationToken cancellation = default)
     {
         ValidateAssetPath(path);
         if (size is < 16 or > 256) throw new ArgumentException("Thumbnail size must be 16..256.");
         var response = await RequestAsync("thumbnail", clientId, request =>
-            new { type = "asset_thumbnail", requestId = request, path, size });
+            new { type = "asset_thumbnail", requestId = request, path, size }, cancellation);
         var width = response.GetProperty("width").GetInt32();
         var height = response.GetProperty("height").GetInt32();
         var mime = response.GetProperty("mime").GetString();
@@ -204,8 +215,9 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
             ? path.GetString() : null;
     }
 
-    private async Task<JsonElement> RequestAsync(string operation, Guid? clientId, Func<Guid, object> command) =>
-        await RequestAsync(operation, clientId, "assets", "asset_result", command);
+    private async Task<JsonElement> RequestAsync(string operation, Guid? clientId, Func<Guid, object> command,
+        CancellationToken cancellation = default) =>
+        await RequestAsync(operation, clientId, "assets", "asset_result", command, cancellation);
 
     private async Task<JsonElement> RequestAsync(string operation, Guid? clientId, string capability,
         string resultType, Func<Guid, object> command, CancellationToken cancellation = default)

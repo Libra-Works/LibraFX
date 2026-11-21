@@ -49,6 +49,10 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
     private string _physicalFolderName = string.Empty;
     private string _physicalRootStatus = string.Empty;
     private AssetBrowserRootEntry? _selectedRootEntry;
+    private CancellationTokenSource? _physicalLoad;
+    private int _physicalOffset;
+    private bool _physicalHasMore;
+    public Task PhysicalLoadTask { get; private set; } = Task.CompletedTask;
 
     public ObservableCollection<AssetPeerOption> Peers { get; } = [];
     internal MainViewModel Main => _main;
@@ -241,6 +245,8 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
     public IRelayCommand RefreshPhysicalRootCommand { get; }
     public IRelayCommand OpenPhysicalFolderCommand { get; }
     public IRelayCommand NavigatePhysicalUpCommand { get; }
+    public IRelayCommand PreviousPhysicalPageCommand { get; }
+    public IRelayCommand NextPhysicalPageCommand { get; }
 
     public EngineAssetsWindowViewModel(MainViewModel main, AssetBrowserCoordinator? coordinator = null)
     {
@@ -268,6 +274,10 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
         RefreshPhysicalRootCommand = new RelayCommand(RefreshPhysicalRoot, () => !_disposed && HasPhysicalRoot);
         OpenPhysicalFolderCommand = new RelayCommand(OpenPhysicalFolder, () => !_disposed && CanOpenSelectedPhysicalFolder);
         NavigatePhysicalUpCommand = new RelayCommand(NavigatePhysicalUp, () => !_disposed && CanNavigatePhysicalUp);
+        PreviousPhysicalPageCommand = new RelayCommand(() =>
+        { _physicalOffset = Math.Max(0, _physicalOffset - 128); RefreshPhysicalRoot(); }, () => !_disposed && _physicalOffset > 0);
+        NextPhysicalPageCommand = new RelayCommand(() =>
+        { _physicalOffset += 128; RefreshPhysicalRoot(); }, () => !_disposed && _physicalHasMore);
         _main.PropertyChanged += OnMainPropertyChanged;
         AttachGraph();
         RefreshPhysicalRoot();
@@ -452,14 +462,26 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
 
     public void RefreshPhysicalRoot()
     {
+        PhysicalLoadTask = RefreshPhysicalRootAsync();
+    }
+
+    private async Task RefreshPhysicalRootAsync()
+    {
         if (_disposed) return;
+        _physicalLoad?.Cancel();
+        _physicalLoad?.Dispose();
+        var request = _physicalLoad = new CancellationTokenSource();
+        var cancellation = request.Token;
         var root = ProjectAssetRoot.FromProjectFileKey(_main.ActiveDocument?.FileKey);
         var oldRoot = _physicalRoot;
         _physicalRoot = root;
         var sameRoot = oldRoot is not null && root is not null &&
             string.Equals(oldRoot, root, OperatingSystem.IsWindows()
                 ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
-        if (!sameRoot) _physicalFolder = string.Empty;
+        if (!sameRoot) { _physicalFolder = string.Empty; _physicalOffset = 0; }
+        _physicalHasMore = false;
+        NextPhysicalPageCommand?.NotifyCanExecuteChanged();
+        PreviousPhysicalPageCommand?.NotifyCanExecuteChanged();
         var physicalSelection = _selectedRootEntry?.Root == AssetBrowserRootKind.PhysicalProject;
         var previousPath = sameRoot && physicalSelection
             ? _selectedRootEntry?.Path : null;
@@ -490,7 +512,12 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
         }
         try
         {
-            foreach (var entry in ProjectAssetRoot.List(root, _physicalFolder))
+            PhysicalRootStatus = LocalizationService.Shared.Get("Resources.PhysicalLoading");
+            var folder = _physicalFolder;
+            var offset = _physicalOffset;
+            var page = await Task.Run(() => ProjectAssetRoot.ListPage(root, folder, offset, 128, cancellation), cancellation);
+            if (_disposed || cancellation.IsCancellationRequested || !ReferenceEquals(_physicalLoad, request)) return;
+            foreach (var entry in page.Entries)
                 PhysicalRootEntries.Add(new(AssetBrowserRootKind.PhysicalProject, entry.Name,
                     entry.RelativePath, entry.IsDirectory, Length: entry.Length, ProjectRoot: root));
             if (physicalSelection)
@@ -504,12 +531,17 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(CanOpenSelectedPhysicalFolder));
                 OpenPhysicalFolderCommand?.NotifyCanExecuteChanged();
             }
-            PhysicalRootStatus = LocalizationService.Shared.Get("Resources.PhysicalItemCount",
-                PhysicalRootEntries.Count);
+            _physicalHasMore = page.HasMore;
+            NextPhysicalPageCommand?.NotifyCanExecuteChanged();
+            PreviousPhysicalPageCommand?.NotifyCanExecuteChanged();
+            PhysicalRootStatus = LocalizationService.Shared.Get("Resources.PhysicalPage",
+                PhysicalRootEntries.Count, offset / 128 + 1);
         }
+        catch (OperationCanceledException) { }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
                                            ArgumentException or NotSupportedException or System.Security.SecurityException)
         {
+            if (_disposed || cancellation.IsCancellationRequested) return;
             PhysicalRootStatus = LocalizationService.Shared.Get("Resources.PhysicalRootReadFailed",
                 exception.Message);
         }
@@ -551,6 +583,7 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
         if (SelectedRootEntry is not { Root: AssetBrowserRootKind.PhysicalProject, IsDirectory: true } entry)
             return;
         _physicalFolder = entry.Path;
+        _physicalOffset = 0;
         SelectedRootEntry = null;
         OnPropertyChanged(nameof(PhysicalFolderLabel));
         RefreshPhysicalRoot();
@@ -559,6 +592,7 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
     private void NavigatePhysicalUp()
     {
         if (!CanNavigatePhysicalUp) return;
+        _physicalOffset = 0;
         _physicalFolder = Path.GetDirectoryName(_physicalFolder) ?? string.Empty;
         SelectedRootEntry = null;
         OnPropertyChanged(nameof(PhysicalFolderLabel));
@@ -672,8 +706,9 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
         {
             request = BeginRequest();
             var cancellation = request.Token;
+            Status = LocalizationService.Shared.Get("Asset.Loading");
             var page = await _main.PreviewAssets.CatalogAsync(Query.Trim(), AssetClass,
-                offset, 32, peerId).WaitAsync(cancellation);
+                offset, 32, peerId, cancellation);
             cancellation.ThrowIfCancellationRequested();
             if (SelectedPeer?.ClientId != peerId) return;
             SetSelectedAsset(null, loadDetails: false);
@@ -716,8 +751,7 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
         {
             request = BeginRequest();
             var cancellation = request.Token;
-            var detail = await _main.PreviewAssets.DetailsAsync(selected.Path, peerId)
-                .WaitAsync(cancellation);
+            var detail = await _main.PreviewAssets.DetailsAsync(selected.Path, peerId, cancellation);
             cancellation.ThrowIfCancellationRequested();
             if (SelectedAsset?.Path != selected.Path || SelectedPeer?.ClientId != peerId) return;
             _updatingAssetSelection = true;
@@ -731,8 +765,7 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
             }
             finally { _updatingAssetSelection = false; }
             OnPropertyChanged(nameof(SelectedAsset));
-            var thumbnail = await _main.PreviewAssets.ThumbnailAsync(selected.Path, 256, peerId)
-                .WaitAsync(cancellation);
+            var thumbnail = await _main.PreviewAssets.ThumbnailAsync(selected.Path, 256, peerId, cancellation);
             cancellation.ThrowIfCancellationRequested();
             if (SelectedAsset?.Path != selected.Path || SelectedPeer?.ClientId != peerId) return;
             using var stream = new MemoryStream(thumbnail.Image, writable: false);
@@ -896,6 +929,7 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _physicalLoad?.Cancel(); _physicalLoad?.Dispose(); _physicalLoad = null;
         CancelRequest();
         _main.PropertyChanged -= OnMainPropertyChanged;
         if (_observedDocument is not null) _observedDocument.PropertyChanged -= OnDocumentPropertyChanged;

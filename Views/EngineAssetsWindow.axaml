@@ -175,7 +175,15 @@
                                               ToolTip.Tip="{DynamicResource Text.Resources.CreateFolder}"
                                               AutomationProperties.Name="{DynamicResource Text.Resources.CreateFolder}" />
                         </Grid>
-                        <TextBlock Grid.Row="5" Classes="editor-label" Text="{Binding PhysicalRootStatus}" TextWrapping="Wrap" />
+                        <Grid Grid.Row="5" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                            <views:IconButton Classes="editor-tool" Icon="Previous" Command="{Binding PreviousPhysicalPageCommand}"
+                                              ToolTip.Tip="{DynamicResource Text.Asset.Previous}"
+                                              AutomationProperties.Name="{DynamicResource Text.Asset.Previous}" />
+                            <TextBlock Grid.Column="1" Classes="editor-label" Text="{Binding PhysicalRootStatus}" TextWrapping="Wrap" />
+                            <views:IconButton Grid.Column="2" Classes="editor-tool" Icon="Next" Command="{Binding NextPhysicalPageCommand}"
+                                              ToolTip.Tip="{DynamicResource Text.Asset.Next}"
+                                              AutomationProperties.Name="{DynamicResource Text.Asset.Next}" />
+                        </Grid>
                     </Grid>
                 </Border>
             </Grid>

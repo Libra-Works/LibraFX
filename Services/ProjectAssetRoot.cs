@@ -7,6 +7,7 @@ public enum AssetBrowserRootKind
 }
 
 public sealed record ProjectAssetEntry(string Name, string RelativePath, bool IsDirectory, long? Length);
+public sealed record ProjectAssetPage(IReadOnlyList<ProjectAssetEntry> Entries, int Offset, bool HasMore);
 public sealed class ProjectFolderExistsException(string message) : IOException(message) { }
 
 public sealed record AssetBrowserRootEntry(AssetBrowserRootKind Root, string Name, string Path,
@@ -70,6 +71,34 @@ public static class ProjectAssetRoot
         }
         return entries.OrderByDescending(entry => entry.IsDirectory)
             .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    // Enumerate only far enough to fill this page. Never read file contents or recurse.
+    // File-system enumeration order defines page boundaries; each displayed page is sorted.
+    public static ProjectAssetPage ListPage(string root, string? relativeFolder = null,
+        int offset = 0, int limit = 128, CancellationToken cancellation = default)
+    {
+        cancellation.ThrowIfCancellationRequested();
+        if (offset < 0 || limit is < 1 or > 256) throw new ArgumentOutOfRangeException(nameof(limit));
+        var fullRoot = NormalizeRoot(root);
+        var folder = ResolveDirectory(fullRoot, relativeFolder);
+        var entries = new List<ProjectAssetEntry>(limit);
+        var skipped = 0;
+        var more = false;
+        foreach (var path in Directory.EnumerateFileSystemEntries(folder))
+        {
+            cancellation.ThrowIfCancellationRequested();
+            var attributes = File.GetAttributes(path);
+            if ((attributes & FileAttributes.ReparsePoint) != 0) continue;
+            var relative = Path.GetRelativePath(fullRoot, path);
+            if (!IsSafeRelativePath(relative)) continue;
+            if (skipped < offset) { skipped++; continue; }
+            if (entries.Count == limit) { more = true; break; }
+            var directory = (attributes & FileAttributes.Directory) != 0;
+            entries.Add(new(Path.GetFileName(path), relative, directory, directory ? null : new FileInfo(path).Length));
+        }
+        return new(entries.OrderByDescending(entry => entry.IsDirectory)
+            .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase).ToArray(), offset, more);
     }
 
     public static string CreateFolder(string root, AssetBrowserRootKind rootKind, string name,

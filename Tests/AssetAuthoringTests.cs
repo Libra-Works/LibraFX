@@ -13,6 +13,7 @@ internal static class AssetAuthoringTests
         VerifySpriteModes();
         VerifyLocalMetadata();
         VerifyProjectAssetRoot();
+        VerifyPagedProjectAssetRoot();
         VerifyTextureOnlyDrawAssignment("FlexiblePlaneDraw");
         VerifyCallerTargetBinding();
         VerifyCallerTargetBinding(inline: true);
@@ -227,6 +228,32 @@ internal static class AssetAuthoringTests
         {
             if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
         }
+    }
+
+    private static void VerifyPagedProjectAssetRoot()
+    {
+        var root = Path.Combine(AppDataDirectory.Root, "paged-assets-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        for (var index = 0; index < 513; index++)
+            File.WriteAllText(Path.Combine(root, $"asset-{index:D4}.txt"), "metadata only");
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var offset = 0; offset < 640; offset += 128)
+        {
+            var page = ProjectAssetRoot.ListPage(root, offset: offset);
+            if (page.Entries.Count > 128 || page.Offset != offset || page.HasMore != (offset + page.Entries.Count < 513))
+                throw new InvalidOperationException("Physical asset pages must be bounded and preserve next-page state.");
+            foreach (var entry in page.Entries)
+                if (!seen.Add(entry.RelativePath)) throw new InvalidOperationException("A physical asset was repeated across pages.");
+        }
+        if (seen.Count != 513) throw new InvalidOperationException("Pagination hid physical project assets.");
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        try
+        {
+            ProjectAssetRoot.ListPage(root, cancellation: cancelled.Token);
+            throw new InvalidOperationException("Physical folder cancellation was ignored.");
+        }
+        catch (OperationCanceledException) { }
     }
 
     private static void VerifyProjectAssetRoot()

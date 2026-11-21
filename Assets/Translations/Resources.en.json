@@ -1,4 +1,6 @@
 {
+  "Resources.PhysicalLoading": "Loading folder…",
+  "Resources.PhysicalPage": "{0} items · page {1}",
   "Resources.MaterialSlot": "Material {0}",
   "Resources.MaterialBrowseRequired": "Use the asset browser to select a material and load its exposed parameters.",
   "Resources.MaterialIdentityManaged": "This slot uses a portable resource identity. Update its material and parameter bindings in Resource Identity instead.",

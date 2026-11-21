@@ -25,6 +25,8 @@ internal static class PreviewAssetMcpTests
         var temporaryDirectory = Path.Combine(Path.GetTempPath(), "librafx-preview-mcp-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temporaryDirectory);
         var metadata = new AssetMetadataStore(Path.Combine(temporaryDirectory, "assets.json"));
+        var pendingCatalogReplies = 0;
+        var catalogRequests = 0;
         model.PreviewTelemetry.Connect(peer, 3, bytes =>
         {
             if (BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(6)) != (ushort)CompiledPreviewKind.Scene)
@@ -36,8 +38,16 @@ internal static class PreviewAssetMcpTests
             var root = command.RootElement;
             var requestId = root.GetProperty("requestId").GetGuid();
             var type = root.GetProperty("type").GetString();
+            if (type == "asset_catalog") catalogRequests++;
+            var catalogPending = type == "asset_catalog" && pendingCatalogReplies > 0;
+            if (catalogPending) pendingCatalogReplies--;
             object response = type switch
             {
+                "asset_catalog" when catalogPending => new
+                {
+                    type = "asset_result", requestId, operation = "catalog", pending = true,
+                    total = 0, offset = root.GetProperty("offset").GetInt32(), assets = Array.Empty<object>(), error = (string?)null
+                },
                 "asset_catalog" => new
                 {
                     type = "asset_result",
@@ -78,6 +88,19 @@ internal static class PreviewAssetMcpTests
             metadata, model.Playback, model);
         try
         {
+            pendingCatalogReplies = 2;
+            var indexed = await model.PreviewAssets.CatalogAsync(clientId: peer);
+            if (indexed.Assets.Count != 1 || catalogRequests != 3)
+                throw new InvalidOperationException("Background catalog indexing must retry without exposing an empty completed page.");
+            pendingCatalogReplies = int.MaxValue;
+            using (var cancellation = new CancellationTokenSource())
+            {
+                var pending = model.PreviewAssets.CatalogAsync(clientId: peer, cancellation: cancellation.Token);
+                cancellation.Cancel();
+                try { await pending; throw new InvalidOperationException("Cancelled indexing kept polling."); }
+                catch (OperationCanceledException) { }
+            }
+            pendingCatalogReplies = 0;
             using var client = new LocalPreviewMcpClient(host);
             var Call = client.CallAsync;
 
