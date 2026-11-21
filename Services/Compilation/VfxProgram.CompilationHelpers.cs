@@ -131,6 +131,7 @@ public sealed partial class VfxProgram
                     [new NodeParameterSnapshot("value", "float", node.Parameters?.SingleOrDefault(p => p.Id == "seconds")?.Value
                         ?? JsonSerializer.SerializeToElement(2d))] },
                 "SpawnOutputFloat" => node with { Kind = GraphNodeKind.Float },
+                "SpawnOutputBool" => node with { Kind = new GraphNodeKind("Bool") },
                 "SpawnOutputVector2" => node with { Kind = GraphNodeKind.FloatX2 },
                 "SpawnOutputVector3" => node with { Kind = GraphNodeKind.FloatX3 },
                 "SpawnOutputVector4" => node with { Kind = GraphNodeKind.FloatX4 },
@@ -163,7 +164,7 @@ public sealed partial class VfxProgram
 
     private static int Width(string portType) => portType switch
     {
-        "Float" or "Int32" => 1, "FloatX2" => 2, "FloatX3" => 3, "FloatX4" or "Color" => 4,
+        "Float" or "Int32" or "Bool" => 1, "FloatX2" => 2, "FloatX3" => 3, "FloatX4" or "Color" => 4,
         _ when GraphEnumBranchSchema.IsEnumPort(portType) => 1,
         _ => throw new InvalidDataException($"Port type '{portType}' is not supported by the runtime.")
     };
@@ -249,6 +250,7 @@ public sealed partial class VfxProgram
         opcode = kind switch
         {
             "Float" or "SpawnInputFloat" => VfxOpcode.Scalar, "Time" => VfxOpcode.Time,
+            "Bool" or "SpawnInputBool" or "BoolToFloat" => VfxOpcode.Scalar,
             "Int32" => VfxOpcode.Int32,
             "Int32Add" => VfxOpcode.Int32Add, "Int32Subtract" => VfxOpcode.Int32Subtract,
             "Int32Multiply" => VfxOpcode.Int32Multiply, "Int32Divide" => VfxOpcode.Int32Divide,

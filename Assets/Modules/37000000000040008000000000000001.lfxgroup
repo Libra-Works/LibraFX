@@ -2,7 +2,7 @@
   "FormatVersion": 5,
   "Id": "37000000-0000-4000-8000-000000000001",
   "Name": "Start / Loop / End",
-  "Revision": 1,
+  "Revision": 2,
   "Locked": true,
   "Graph": {
     "Nodes": [
@@ -11,7 +11,8 @@
       { "Id": "37010000-0000-4000-8000-000000000003", "Kind": "GroupInputFloat", "Name": "Start Length", "X": 0, "Y": 360, "PortType": "Float", "PortCategory": "Parameter", "Parameters": [{ "Id": "value", "Type": "float", "Value": 1 }] },
       { "Id": "37010000-0000-4000-8000-000000000004", "Kind": "GroupInputFloat", "Name": "Loop Length", "X": 0, "Y": 540, "PortType": "Float", "PortCategory": "Parameter", "Parameters": [{ "Id": "value", "Type": "float", "Value": 1 }] },
       { "Id": "37010000-0000-4000-8000-000000000005", "Kind": "GroupInputFloat", "Name": "Loop Count", "X": 0, "Y": 720, "PortType": "Float", "PortCategory": "Parameter", "Parameters": [{ "Id": "value", "Type": "float", "Value": 3 }] },
-      { "Id": "37010000-0000-4000-8000-000000000006", "Kind": "GroupInputFloat", "Name": "Limit Loop Count", "X": 0, "Y": 900, "PortType": "Float", "PortCategory": "Parameter", "Parameters": [{ "Id": "value", "Type": "float", "Value": 1 }] },
+      { "Id": "37010000-0000-4000-8000-000000000006", "Kind": "GroupInputBool", "Name": "Limit Loop Count", "X": 0, "Y": 900, "PortType": "Bool", "PortCategory": "Parameter", "Parameters": [{ "Id": "value", "Type": "bool", "Value": true }] },
+      { "Id": "37010000-0000-4000-8000-000000000020", "Kind": "BoolToFloat", "Name": "Limit Flag", "X": 220, "Y": 900, "PortType": "Float", "PortCategory": "Parameter" },
       { "Id": "37010000-0000-4000-8000-000000000007", "Kind": "GroupInputFloat", "Name": "End Length", "X": 0, "Y": 1080, "PortType": "Float", "PortCategory": "Parameter", "Parameters": [{ "Id": "value", "Type": "float", "Value": 1 }] },
       { "Id": "37010000-0000-4000-8000-000000000008", "Kind": "GroupInputSignal", "Name": "End Request (Loop only)", "X": 0, "Y": 1260, "PortType": "Signal", "PortCategory": "Signal" },
       { "Id": "37010000-0000-4000-8000-000000000009", "Kind": "e9778c40-209b-4ce8-918d-35c000000001", "Name": "Start Complete", "X": 350, "Y": 180, "PortType": "Float", "PortCategory": "Parameter", "Parameters": [{ "Id": "operation", "Type": "enum:e9778c40-209b-4ce8-918d-35c000000010", "Value": 4 }, { "Id": "mode", "Type": "enum:e9778c40-209b-4ce8-918d-35c000000011", "Value": 1 }] },
@@ -34,7 +35,8 @@
       { "SourceNodeId": "37010000-0000-4000-8000-000000000002", "TargetNodeId": "37010000-0000-4000-8000-000000000011", "TargetPortId": "time" },
       { "SourceNodeId": "37010000-0000-4000-8000-000000000004", "TargetNodeId": "37010000-0000-4000-8000-000000000011", "TargetPortId": "length" },
       { "SourceNodeId": "37010000-0000-4000-8000-000000000005", "TargetNodeId": "37010000-0000-4000-8000-000000000011", "TargetPortId": "count" },
-      { "SourceNodeId": "37010000-0000-4000-8000-000000000006", "TargetNodeId": "37010000-0000-4000-8000-000000000011", "TargetPortId": "bounded" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000006", "TargetNodeId": "37010000-0000-4000-8000-000000000020", "TargetPortId": "a" },
+      { "SourceNodeId": "37010000-0000-4000-8000-000000000020", "TargetNodeId": "37010000-0000-4000-8000-000000000011", "TargetPortId": "bounded" },
       { "SourceNodeId": "37010000-0000-4000-8000-000000000008", "TargetNodeId": "37010000-0000-4000-8000-000000000011", "TargetPortId": "arm" },
       { "SourceNodeId": "37010000-0000-4000-8000-000000000011", "TargetNodeId": "37010000-0000-4000-8000-000000000012", "SourcePortId": "complete", "TargetPortId": "signal" },
       { "SourceNodeId": "37010000-0000-4000-8000-000000000011", "TargetNodeId": "37010000-0000-4000-8000-000000000012", "SourcePortId": "armedBoundary", "TargetPortId": "signal" },
@@ -55,7 +57,7 @@
       { "Id": "3701ffff-0000-4000-8000-000000000001", "Name": "Start Length", "Description": "Seconds; one start interval.", "Category": "Lifecycle", "Order": 0, "Editor": "parameter", "Targets": [{ "NodeId": "37010000-0000-4000-8000-000000000003", "ParameterId": "value" }] },
       { "Id": "3701ffff-0000-4000-8000-000000000002", "Name": "Loop Length", "Description": "Seconds per interval. Zero requires a bounded count.", "Category": "Lifecycle", "Order": 1, "Editor": "parameter", "Targets": [{ "NodeId": "37010000-0000-4000-8000-000000000004", "ParameterId": "value" }] },
       { "Id": "3701ffff-0000-4000-8000-000000000003", "Name": "Loop Count", "Description": "Nonnegative whole intervals; captured at Loop entry.", "Category": "Lifecycle", "Order": 2, "Editor": "parameter", "Targets": [{ "NodeId": "37010000-0000-4000-8000-000000000005", "ParameterId": "value" }] },
-      { "Id": "3701ffff-0000-4000-8000-000000000004", "Name": "Limit Loop Count", "Description": "1: bounded; 0: wait for an external End Request during Loop.", "Category": "Lifecycle", "Order": 3, "Editor": "parameter", "Targets": [{ "NodeId": "37010000-0000-4000-8000-000000000006", "ParameterId": "value" }] },
+      { "Id": "3701ffff-0000-4000-8000-000000000004", "Name": "Limit Loop Count", "Description": "Checked: limit the number of loops. Unchecked: wait for an external End Request during Loop.", "Category": "Lifecycle", "Order": 3, "Editor": "parameter", "Targets": [{ "NodeId": "37010000-0000-4000-8000-000000000006", "ParameterId": "value" }] },
       { "Id": "3701ffff-0000-4000-8000-000000000005", "Name": "End Length", "Description": "Seconds until End Complete. Does not set Life Time.", "Category": "Lifecycle", "Order": 4, "Editor": "parameter", "Targets": [{ "NodeId": "37010000-0000-4000-8000-000000000007", "ParameterId": "value" }] }
     ],
     "AutoDestroyWhenIdle": false

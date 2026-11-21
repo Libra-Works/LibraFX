@@ -123,6 +123,7 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("7ef61949-53c4-41fb-aabd-840b0a4680f7")] = "FloatX3",
         [Guid.Parse("0a613e91-1039-478e-9ca7-b8555a67f988")] = "FloatX4",
         [Guid.Parse("c7410281-9b6e-46f0-9bb7-334cc3b40767")] = "Int32",
+        [Guid.Parse("b102696d-6e2b-4b90-b5be-fafc9df53cf6")] = "Bool",
         [Guid.Parse("a40e6f94-c2c1-48ed-9a7b-2087c422ad5a")] = "Signal",
         [Guid.Parse("48f83fc4-4030-4b67-8cb6-11198f4b1701")] = "Sequence",
         [Guid.Parse("f54171ee-4aa3-498b-b2ff-8c9983fc1501")] = "FloatFCurve",
@@ -144,6 +145,11 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("1774de17-a97b-4e31-b200-000000000017")] = "GroupOutputMatrix",
         [Guid.Parse("1774de17-a97b-4e31-b200-000000000018")] = "GroupInputInt32",
         [Guid.Parse("1774de17-a97b-4e31-b200-000000000019")] = "GroupOutputInt32",
+        [Guid.Parse("1774de17-a97b-4e31-b200-00000000001a")] = "GroupInputBool",
+        [Guid.Parse("1774de17-a97b-4e31-b200-00000000001b")] = "GroupOutputBool",
+        [Guid.Parse("bc2bc610-42ce-4b6a-9fd2-000000000007")] = "BoolToFloat",
+        [Guid.Parse("fb8c8a83-0c9d-4870-98a1-08c0ee800006")] = "SpawnInputBool",
+        [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000009")] = "SpawnOutputBool",
         [Guid.Parse("f43ba0db-ea8c-4c27-93ec-2da000000001")] = "InputProperty",
         [Guid.Parse("65a9b50f-23dd-47bc-b845-1d89bf630001")] = "InstanceInputProperty",
         [Guid.Parse("65a9b50f-23dd-47bc-b845-1d89bf630002")] = "InstanceOutputProperty",
@@ -170,8 +176,12 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e3")] = "OwnerDestroy",
         [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e4")] = "Delay",
         [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e5")] = "OnDestroy",
-        [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e6")] = "EffectAge",
+        [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e6")] = "RuntimeEffectAge",
         [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e7")] = "DeltaTime",
+        [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e8")] = "RealEffectAge",
+        [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249e9")] = "RealInstanceAge",
+        [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249ea")] = "RealDeltaTime",
+        [Guid.Parse("c982e1be-8f78-4d28-9a65-4f4aa45249eb")] = "EffectAge",
         [Guid.Parse("4a94e882-39e8-4efb-92c7-180000000001")] = "LifecycleRuntimeRemaining",
         [Guid.Parse("4a94e882-39e8-4efb-92c7-180000000002")] = "LifecycleRuntimeNormalizedAge",
         [Guid.Parse("eb710a39-f520-4c02-9140-ec1100000002")] = "OnStart",
@@ -331,6 +341,7 @@ public sealed record GraphNodeDefinition(
     public bool IsInternalRuntime => Namespace == "LiberaFx" &&
         (TypeName.StartsWith("MatrixRuntime", StringComparison.Ordinal) ||
          TypeName.StartsWith("LifecycleRuntime", StringComparison.Ordinal) ||
+         TypeName is "RuntimeEffectAge" or "RealEffectAge" or "RealInstanceAge" or "RealDeltaTime" ||
          TypeName.StartsWith("GameIoRuntime", StringComparison.Ordinal));
     public string? DisplayNameKey { get; init; }
     public string? DescriptionKey { get; init; }
@@ -357,6 +368,7 @@ public sealed record GraphNodeDefinition(
 
     public string? GetOutputPortType(string? portId)
     {
+        if (portId is null && Kind.Value == "InstanceAge") portId = "value";
         if (OutputPorts is null) return portId is null ? PortType : null;
         var port = OutputPorts.FirstOrDefault(port => port.Id == portId);
         return port?.PortType ?? (port is null ? null : PortType);
@@ -519,9 +531,9 @@ public sealed record GraphNodeDefinition(
                     ? null : port.DefaultValue.Clone();
                 var portType = port.PortType ?? node.PortType;
                 if (node.Runtime is not null && portCategory == GraphPortCategory.Parameter &&
-                    (portType is not ("Float" or "FloatX2" or "FloatX3" or "FloatX4" or "Color") ||
+                    (portType is not ("Float" or "Bool" or "FloatX2" or "FloatX3" or "FloatX4" or "Color") ||
                      defaultValue is { } numericDefault && !NodeParameter.IsValidValue(
-                         portType switch { "Float" => "float", "FloatX2" => "vector2", "FloatX3" => "vector3",
+                         portType switch { "Float" => "float", "Bool" => "bool", "FloatX2" => "vector2", "FloatX3" => "vector3",
                              "FloatX4" => "vector4", _ => "color" }, numericDefault)))
                     throw new InvalidDataException("Custom parameter input ports require a numeric type and valid default.");
                 if (node.Runtime is not null && portCategory == GraphPortCategory.Signal && portType != "Signal")
@@ -661,7 +673,7 @@ public sealed record GraphNodeDefinition(
     }
 
     private static bool IsRuntimeNumericType(string type) =>
-        type is "Float" or "FloatX2" or "FloatX3" or "FloatX4" or "Color";
+        type is "Float" or "Bool" or "FloatX2" or "FloatX3" or "FloatX4" or "Color";
 
     private static bool IsIdentifier(string? value) =>
         !string.IsNullOrEmpty(value) && (char.IsLetter(value[0]) || value[0] == '_') &&

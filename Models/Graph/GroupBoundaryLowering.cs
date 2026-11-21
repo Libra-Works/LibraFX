@@ -45,6 +45,7 @@ public static class GroupBoundaryLowering
                 var kind = node.PortType switch
                 {
                     "Float" => GraphNodeKind.Float,
+                    "Bool" => new GraphNodeKind("Bool"),
                     "FloatX2" => GraphNodeKind.FloatX2,
                     "FloatX3" => GraphNodeKind.FloatX3,
                     "FloatX4" => GraphNodeKind.FloatX4,

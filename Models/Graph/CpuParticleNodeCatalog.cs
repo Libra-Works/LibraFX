@@ -18,6 +18,7 @@ public static class CpuParticleNodeCatalog
             ("032", "CpuParticleInputVector3"), ("033", "CpuParticleOutputVector3"),
             ("034", "CpuParticleInputVector4"), ("035", "CpuParticleOutputVector4"),
             ("036", "CpuParticleInputSignal"), ("037", "CpuParticleOutputSignal"),
+            ("038", "CpuParticleInputBool"), ("039", "CpuParticleOutputBool"),
             ("040", "EmitterRate"), ("041", "EmitterBurst"), ("042", "CpuParticleEmitterBox"),
             ("043", "CpuParticleEmitterSphere"), ("044", "CpuParticleEmitterCircle")
         };

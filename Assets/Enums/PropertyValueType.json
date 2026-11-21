@@ -9,6 +9,7 @@
     { "value": 2, "name": "Vector3", "displayNameKey": "Editor.Option.PropertyVector3" },
     { "value": 3, "name": "Vector4", "displayNameKey": "Editor.Option.PropertyVector4" },
     { "value": 4, "name": "Color", "displayNameKey": "Editor.Option.PropertyColor" },
-    { "value": 5, "name": "Matrix", "displayNameKey": "Editor.Option.PropertyMatrix" }
+    { "value": 5, "name": "Matrix", "displayNameKey": "Editor.Option.PropertyMatrix" },
+    { "value": 6, "name": "Bool", "displayNameKey": "Editor.Option.PropertyBool" }
   ]
 }

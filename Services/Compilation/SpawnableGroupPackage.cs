@@ -430,7 +430,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
                         sourceId = output.Id;
                     }
                     else component = ParameterSourceComponent(source, sourceEdge.SourcePortId);
-                    var width = input.PortType switch { "Float" => 1, "FloatX2" => 2, "FloatX3" => 3, _ => 4 };
+                    var width = SpawnableGroupSchema.InputWidth(input.PortType);
                     captures.Add(new(input.Id, width, container, sourceId, component));
                 }
                 routes.Add(new(edge.SourceNodeId, target.Id, captures, delayId));

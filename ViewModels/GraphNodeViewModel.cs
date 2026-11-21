@@ -107,7 +107,10 @@ public sealed class GraphNodeViewModel : ObservableObject
     }
     public bool HasLegacyOutput => HasPorts && Definition.OutputPorts is null;
     public bool HasCustomOutputs => HasPorts && Definition.OutputPorts is { Count: > 0 };
-    public IReadOnlyList<GraphOutputPortDefinition> OutputPorts => Definition.OutputPorts ?? [];
+    public IReadOnlyList<GraphOutputPortDefinition> OutputPorts => BaseDefinition.Kind.Value is "EffectAge" or "InstanceAge"
+        ? (Definition.OutputPorts ?? []).Select(port => port with { Name = LocalizationService.Shared.Get(
+            port.Id == "real" ? "Editor.Time.Real" : "Editor.Time.Scaled") }).ToArray()
+        : Definition.OutputPorts ?? [];
     public double OutputPortOffset(string? portId)
     {
         for (var index = 0; index < OutputPorts.Count; index++)
@@ -295,6 +298,7 @@ public sealed class GraphNodeViewModel : ObservableObject
     internal void RefreshLocalizedText()
     {
         OnPropertyChanged(nameof(OriginalNodeName));
+        if (BaseDefinition.Kind.Value is "EffectAge" or "InstanceAge") OnPropertyChanged(nameof(OutputPorts));
         OnPropertyChanged(nameof(DisplayName));
         if (IsPreviewDebugDraw || ProceduralResourceSchema.IsMetadata(Definition.Kind)) OnPropertyChanged(nameof(InputPorts));
         OnPropertyChanged(nameof(Description));

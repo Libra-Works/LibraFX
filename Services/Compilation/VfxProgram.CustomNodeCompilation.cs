@@ -1,4 +1,5 @@
 using LiberaFx.Models.Graph;
+using System.Text.Json;
 
 namespace LiberaFx.Services.Compilation;
 
@@ -500,7 +501,7 @@ public sealed partial class VfxProgram
                     var defaults = new double[4];
                     var parameterType = portType switch
                     {
-                        "Float" => "float", "FloatX2" => "vector2", "FloatX3" => "vector3",
+                        "Float" => "float", "Bool" => "bool", "FloatX2" => "vector2", "FloatX3" => "vector3",
                         "FloatX4" => "vector4", "Color" => "color",
                         _ => throw new InvalidDataException($"Custom input '{port.Id}' is not numeric.")
                     };
@@ -513,7 +514,7 @@ public sealed partial class VfxProgram
                     {
                         if (!NodeParameter.IsValidValue(parameterType, portDefault))
                             throw new InvalidDataException($"Custom input '{port.Id}' has an invalid default.");
-                        if (width == 1) defaults[0] = portDefault.GetDouble();
+                        if (width == 1) defaults[0] = parameterType == "bool" ? portDefault.GetBoolean() ? 1 : 0 : portDefault.GetDouble();
                         else
                             for (var lane = 0; lane < width; lane++)
                                 defaults[lane] = portDefault[lane].GetDouble();
@@ -568,7 +569,7 @@ public sealed partial class VfxProgram
             var typeWidth = Width(node.PortType);
             if (node.PortCategory != GraphPortCategory.Parameter ||
                 (opcode == VfxOpcode.Time && incoming[node.Id].Any()) ||
-                (opcode == VfxOpcode.Scalar && incoming[node.Id].Any(connection => connection.TargetPortId is not null)) ||
+                (opcode == VfxOpcode.Scalar && definition.InputPorts is null && incoming[node.Id].Any(connection => connection.TargetPortId is not null)) ||
                 (IsArithmetic(opcode) && incoming[node.Id].Any(connection => connection.TargetPortId is not ("a" or "b"))) ||
                 (IsSingleInput(opcode) && incoming[node.Id].Any(connection => connection.TargetPortId != "a")))
                 throw new InvalidDataException($"Node '{node.Name}' has unsupported runtime ports.");
@@ -585,10 +586,13 @@ public sealed partial class VfxProgram
             var inputBIsColor = false;
             double Parameter(string id)
             {
-                var parameter = definition.Parameters.FirstOrDefault(item => item.Id == id && item.Type == "float")
+                var parameter = definition.Parameters.FirstOrDefault(item => item.Id == id && item.Type is "float" or "bool")
                     ?? throw new InvalidDataException($"Node '{node.Name}' is missing float parameter '{id}'.");
-                var value = node.Parameters?.FirstOrDefault(item => item.Id == id && item.Type == "float")?.Value
+                var value = node.Parameters?.FirstOrDefault(item => item.Id == id && item.Type == parameter.Type)?.Value
                     ?? parameter.DefaultValue;
+                if (parameter.Type == "bool")
+                    return value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.GetBoolean() ? 1 : 0 :
+                        throw new InvalidDataException($"Node '{node.Name}' has an invalid Bool parameter '{id}'.");
                 if (!value.TryGetDouble(out var number) || !double.IsFinite(number))
                     throw new InvalidDataException($"Node '{node.Name}' has invalid float parameter '{id}'.");
                 return number;
@@ -630,13 +634,13 @@ public sealed partial class VfxProgram
             else if (opcode is VfxOpcode.Scalar or VfxOpcode.Vector2 or VfxOpcode.Vector3 or VfxOpcode.Vector4 or VfxOpcode.Color)
             {
                 var width = outputWidth;
-                var values = node.PortType == "Float" ? [Parameter("value")] :
+                var values = node.PortType is "Float" or "Bool" ? [Parameter("value")] :
                     node.PortType == "Color" ? ReadColor(node, definition) : VectorParameter("value", width);
                 Array.Copy(values, defaultA, values.Length);
                 var inputPort = definition.InputPorts is null ? null : "a";
                 inputA = Input(node, definition, inputPort, width, out inputASourceComponent, out inputAIsColor);
                 inputAWidth = inputA < 0 ? 0 : width;
-                if (node.PortType == "Float" &&
+                if (node.PortType == "Float" && definition.InputPorts is null &&
                     incoming[node.Id].Any(connection => connection.TargetPortId is not null))
                     throw new InvalidDataException($"Node '{node.Name}' has an unsupported runtime input.");
             }

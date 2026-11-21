@@ -5,14 +5,14 @@ public static class SpawnableGroupSchema
     public const int MaxInputLanes = 256;
     public static int InputWidth(string portType) => portType switch
     {
-        "Float" => 1,
+        "Float" or "Bool" => 1,
         "FloatX2" => 2,
         "FloatX3" => 3,
         "FloatX4" or "Color" => 4,
         _ => throw new InvalidDataException($"Spawn input type '{portType}' is not supported.")
     };
     public static bool IsInput(GraphNodeKind kind) => kind.Value is
-        "SpawnInputFloat" or "SpawnInputVector2" or "SpawnInputVector3" or "SpawnInputVector4" or "SpawnInputColor";
+        "SpawnInputFloat" or "SpawnInputBool" or "SpawnInputVector2" or "SpawnInputVector3" or "SpawnInputVector4" or "SpawnInputColor";
     public static bool IsSignalInput(GraphNodeKind kind) => kind.Value == "SpawnInputSignal";
     public static bool IsSignalOutput(GraphNodeKind kind) => kind.Value == "SpawnOutputSignal";
     public static bool IsLive(GraphNodeSnapshot input)
@@ -26,7 +26,7 @@ public static class SpawnableGroupSchema
     }
     public static string PortId(Guid id) => "p_" + id.ToString("N");
     public static bool IsOutput(GraphNodeKind kind) => kind.Value is
-        "SpawnOutputFloat" or "SpawnOutputVector2" or "SpawnOutputVector3" or
+        "SpawnOutputFloat" or "SpawnOutputBool" or "SpawnOutputVector2" or "SpawnOutputVector3" or
         "SpawnOutputVector4" or "SpawnOutputColor";
     public static string OutputPortId(Guid id) => "o_" + id.ToString("N");
 

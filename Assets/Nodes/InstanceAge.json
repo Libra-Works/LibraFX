@@ -8,5 +8,9 @@
   "group": "Spawnable Group",
   "portType": "Float",
   "portCategory": "Parameter",
-  "inputPorts": []
+  "inputPorts": [],
+  "outputPorts": [
+    { "id": "value", "name": "Scaled Age", "portType": "Float", "category": "Parameter" },
+    { "id": "real", "name": "Real Age", "portType": "Float", "category": "Parameter" }
+  ]
 }

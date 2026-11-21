@@ -81,6 +81,7 @@ public sealed partial class GraphWorkspaceViewModel
         string? targetPortId = null,
         string? sourcePortId = null)
     {
+        if (sourcePortId is null && source.BaseDefinition.Kind.Value == "InstanceAge") sourcePortId = "value";
         if (!CanConnectNodes(source, target, out error, targetPortId, sourcePortId)) return false;
         targetPortId ??= target.Definition.InputPorts?.FirstOrDefault()?.Id;
         ExecuteEdit(new AddGraphConnectionCommand(this, source, target,
@@ -91,6 +92,7 @@ public sealed partial class GraphWorkspaceViewModel
     public bool CanConnectNodes(GraphNodeViewModel source, GraphNodeViewModel target, out string? error,
         string? targetPortId = null, string? sourcePortId = null)
     {
+        if (sourcePortId is null && source.BaseDefinition.Kind.Value == "InstanceAge") sourcePortId = "value";
         if (IsReadOnly) { error = LocalizationService.Shared.Get("Inline.Locked"); return false; }
         if (!Nodes.Contains(source) || !Nodes.Contains(target))
         {

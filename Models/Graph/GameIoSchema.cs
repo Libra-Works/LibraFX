@@ -130,6 +130,7 @@ public static class GameIoSchema
             var typeName = valueType switch
             {
                 "Float" => "Float",
+                "Bool" => "Bool",
                 "FloatX2" => "FloatX2",
                 "FloatX3" => "FloatX3",
                 "FloatX4" => "FloatX4",
@@ -229,7 +230,7 @@ public static class GameIoSchema
                 ? PropertyType(definition, node.Parameters) : "Signal";
             var width = type switch
             {
-                "Float" => 1,
+                "Float" or "Bool" => 1,
                 "FloatX2" => 2,
                 "FloatX3" => 3,
                 "FloatX4" or "Color" => 4,
@@ -258,6 +259,7 @@ public static class GameIoSchema
             3 => "FloatX4",
             4 => "Color",
             5 => "Matrix",
+            6 => "Bool",
             _ => throw new InvalidDataException("A Property node has an unsupported value type.")
         };
     }

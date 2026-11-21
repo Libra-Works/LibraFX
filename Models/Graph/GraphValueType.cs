@@ -19,6 +19,8 @@ public static class GraphValueTypeSchema
         valueType = portType switch
         {
             "Float" => GraphValueType.Float,
+            // Bool keeps its authoring identity; the stable runtime ABI stores false/true as 0/1.
+            "Bool" => GraphValueType.Float,
             "Int32" => GraphValueType.Int32,
             "FloatX2" => GraphValueType.Vector2,
             "FloatX3" => GraphValueType.Vector3,
