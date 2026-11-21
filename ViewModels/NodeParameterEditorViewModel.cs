@@ -80,6 +80,17 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
     public string BrowseResourceHint => LocalizationService.Shared.Get("Resources.BrowseParameter");
     public string RevealResourceHint => LocalizationService.Shared.Get("Resources.RevealParameter");
     public NodeParameterEditorDefinition? Editor => _definition.Editor;
+    public IReadOnlyList<NodeParameterChoice> StringChoices => (_definition.Editor?.Choices ?? [])
+        .Select(choice => choice with { Name = LocalizationService.Shared.GetOrDefault(choice.DisplayNameKey, choice.Name) }).ToArray();
+    public string StringChoice
+    {
+        get => Value.GetString() ?? "";
+        set
+        {
+            if (_definition.Editor?.Choices?.Any(choice => choice.Value == value) == true)
+                SetValue(JsonSerializer.SerializeToElement(value));
+        }
+    }
     public bool IsEnabled
     {
         get
@@ -330,6 +341,8 @@ public sealed class NodeParameterEditorViewModel : ObservableObject
         PublishCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(EnumValues));
         OnPropertyChanged(nameof(EnumValue));
+        OnPropertyChanged(nameof(StringChoices));
+        OnPropertyChanged(nameof(StringChoice));
         OnPropertyChanged(nameof(NumericValue));
         OnPropertyChanged(nameof(JsonValue));
         OnPropertyChanged(nameof(BoolValue));

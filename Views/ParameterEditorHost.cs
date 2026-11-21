@@ -60,7 +60,8 @@ public sealed class ParameterEditorHost : ContentControl
                 ? pluginService.CreateNamedEditor(editorKind["inspector:".Length..], parameter.Type, parameter)
                 : InspectorEditors.CreateNamedEditor(parameter, editorKind);
         _pluginEditor = custom as InspectorEditorHost;
-        var editor = custom ?? (editorKind == "slider" ? CreateSlider(parameter) : CreateStandard(parameter));
+        var editor = custom ?? (editorKind == "choices" ? CreateChoiceEditor(parameter) :
+            editorKind == "slider" ? CreateSlider(parameter) : CreateStandard(parameter));
         editor.Bind(IsEnabledProperty, new Binding(nameof(parameter.CanEditValue)));
         editor.Bind(AutomationProperties.NameProperty, new Binding(nameof(parameter.Name)));
         var status = new TextBlock { Name = "ParameterStatus", Foreground = Brushes.OrangeRed, TextWrapping = TextWrapping.Wrap };
@@ -75,16 +76,16 @@ public sealed class ParameterEditorHost : ContentControl
         _missingEditorMessage = new TextBlock
         {
             IsVisible = custom is null && (editorKind?.StartsWith("inspector:", StringComparison.Ordinal) == true ||
-                editorKind is not (null or "slider" or "text" or "radio" or "multiline")),
+                editorKind is not (null or "slider" or "text" or "radio" or "multiline" or "choices")),
             Foreground = Brushes.OrangeRed,
             TextWrapping = TextWrapping.Wrap
         };
         var missing = _missingEditorMessage;
         missing.IsVisible = custom is null && (editorKind?.StartsWith("inspector:", StringComparison.Ordinal) == true ||
-            editorKind is not (null or "slider" or "text" or "radio" or "multiline"));
+            editorKind is not (null or "slider" or "text" or "radio" or "multiline" or "choices"));
         var label = new TextBlock { FontWeight = FontWeight.Normal };
         label.Bind(TextBlock.TextProperty, new Binding(nameof(parameter.Name)));
-        label.TextTrimming = TextTrimming.CharacterEllipsis;
+        label.TextWrapping = TextWrapping.Wrap;
         label.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
         label.Bind(ToolTip.TipProperty, new Binding(nameof(parameter.Description)));
         if (parameter.Type is "float" or "int" && editor is TextBox scalar)
@@ -341,6 +342,30 @@ public sealed class ParameterEditorHost : ContentControl
             if (!syncing && combo.SelectedItem is GraphEnumValue value) parameter.EnumValue = value.Value;
         };
         parameter.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(parameter.EnumValue)) Refresh(); };
+        return combo;
+    }
+
+    private static Control CreateChoiceEditor(NodeParameterEditorViewModel parameter)
+    {
+        var combo = new ComboBox { DisplayMemberBinding = new Binding(nameof(NodeParameterChoice.Name)) };
+        var syncing = false;
+        void Refresh()
+        {
+            syncing = true;
+            var values = parameter.StringChoices;
+            combo.ItemsSource = values;
+            combo.SelectedItem = values.FirstOrDefault(choice => choice.Value == parameter.StringChoice);
+            syncing = false;
+        }
+        Refresh();
+        combo.SelectionChanged += (_, _) =>
+        {
+            if (!syncing && combo.SelectedItem is NodeParameterChoice choice) parameter.StringChoice = choice.Value;
+        };
+        parameter.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(parameter.StringChoice) or nameof(parameter.StringChoices)) Refresh();
+        };
         return combo;
     }
 

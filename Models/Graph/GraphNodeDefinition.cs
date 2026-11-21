@@ -598,7 +598,13 @@ public sealed record GraphNodeDefinition(
                          Math.Truncate(min) != min || Math.Truncate(max) != max ||
                          (config.Step is { } intStep && Math.Truncate(intStep) != intStep)))))
                     throw new InvalidDataException("Invalid slider editor definition.");
-                editor = new NodeParameterEditorDefinition(config.Kind, config.Minimum, config.Maximum, config.Step);
+                if (config.Kind == "choices" && (parameter.Type != "string" || config.Choices is not { Count: > 0 and <= 64 } ||
+                    config.Choices.Any(choice => choice is null || string.IsNullOrWhiteSpace(choice.Name) || choice.Name.Length > 256 ||
+                        choice.Value is null || choice.Value.Length > 256) ||
+                    config.Choices.Select(choice => choice.Value).Distinct(StringComparer.Ordinal).Count() != config.Choices.Count ||
+                    !config.Choices.Any(choice => choice.Value == parameter.DefaultValue.GetString())))
+                    throw new InvalidDataException("String choices require distinct labelled values and a matching default.");
+                editor = new NodeParameterEditorDefinition(config.Kind, config.Minimum, config.Maximum, config.Step, config.Choices);
             }
             if (parameter.EnabledWhen is { Expected.ValueKind: JsonValueKind.Undefined })
                 throw new InvalidDataException("Parameter enable condition requires a value.");
@@ -744,6 +750,7 @@ public sealed record GraphNodeDefinition(
 
     private sealed class ParameterEditorFile
     {
+        public List<NodeParameterChoice>? Choices { get; set; }
         public string? Kind { get; set; }
         public double? Minimum { get; set; }
         public double? Maximum { get; set; }

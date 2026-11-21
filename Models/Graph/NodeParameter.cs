@@ -2,7 +2,9 @@ using System.Text.Json;
 
 namespace LiberaFx.Models.Graph;
 
-public sealed record NodeParameterEditorDefinition(string Kind, double? Minimum, double? Maximum, double? Step);
+public sealed record NodeParameterChoice(string Value, string Name, string? DisplayNameKey = null);
+public sealed record NodeParameterEditorDefinition(string Kind, double? Minimum, double? Maximum, double? Step,
+    IReadOnlyList<NodeParameterChoice>? Choices = null);
 public sealed record NodeParameterCondition(string Parameter, JsonElement Expected);
 public sealed record NodeParameterDefinition(string Id, string Name, string Type, JsonElement DefaultValue)
 {
