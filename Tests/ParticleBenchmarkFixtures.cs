@@ -30,6 +30,9 @@ internal static class ParticleBenchmarkFixtures
             graph = graph with { Nodes = graph.Nodes.Select(Transform).ToArray() };
             File.WriteAllBytes(Path.Combine(directory, "CpuFountain-" + count + ".lfxb"),
                 SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(graph)));
+            var systemId = new byte[16];
+            graph.Nodes.Single(node => CpuParticleSchema.IsContainer(node.Kind)).Id.TryWriteBytes(systemId, true, out _);
+            File.WriteAllBytes(Path.Combine(directory, "CpuFountain-" + count + ".id"), systemId);
             if (count == 1000)
             {
                 GraphNodeSnapshot ShortLived(GraphNodeSnapshot node)

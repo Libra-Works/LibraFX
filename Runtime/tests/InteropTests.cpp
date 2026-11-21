@@ -561,6 +561,45 @@ static void verifyRawLogicalQuality(const std::filesystem::path& directory)
     assert(libra_program_release(program) == LIBRA_OK);
 }
 
+void verifyCpuParticleReadFixture(const std::filesystem::path& directory)
+{
+    auto file=std::ifstream(directory / "CpuFountain-1000.lfxb",std::ios::binary);
+    assert(file.good());
+    const auto bytes=std::vector<std::uint8_t>(std::istreambuf_iterator<char>(file),{});
+    auto idFile=std::ifstream(directory / "CpuFountain-1000.id",std::ios::binary);
+    auto id=std::array<std::uint8_t,16>{}, scope=std::array<std::uint8_t,16>{};
+    idFile.read(reinterpret_cast<char*>(id.data()),id.size());
+    assert(idFile.gcount()==16);
+    LibraSpawnableHostHandle host=0;
+    assert(libra_spawnable_host_create(bytes.data(),bytes.size(),8,4*1024*1024,128,10000,&host)==LIBRA_OK);
+    assert(libra_spawnable_host_advance(host,0,0)==LIBRA_OK);
+    assert(libra_spawnable_host_advance(host,1.0/60,1.0/60)==LIBRA_OK);
+    std::uint32_t count=0;
+    assert(libra_spawnable_host_cpu_particle_count(host,id.data(),&count)==LIBRA_OK && count==1000);
+    std::array<LibraCpuParticleSnapshot,258> snapshots{};
+    std::array<LibraCpuParticleTiming,258> timings{};
+    snapshots.front().id=snapshots.back().id=UINT64_MAX;
+    timings.front().age=timings.back().age=-123;
+    for (auto first=0u;first<count;first+=256) {
+        std::uint32_t written=999;
+        assert(libra_spawnable_host_scoped_cpu_particle_read(host,scope.data(),0,id.data(),first,
+            snapshots.data()+1,timings.data()+1,256,&written)==LIBRA_OK && written==std::min(256u,count-first));
+        assert(snapshots.front().id==UINT64_MAX && snapshots.back().id==UINT64_MAX && timings.front().age==-123 && timings.back().age==-123);
+        for (auto index=0u;index<written;++index) {
+            auto expected=LibraCpuParticleSnapshot{};
+            auto age=0.0, life=0.0;
+            assert(libra_spawnable_host_cpu_particle_at(host,id.data(),first+index,&expected)==LIBRA_OK);
+            assert(std::memcmp(&expected,&snapshots[index+1],sizeof(expected))==0);
+            assert(libra_spawnable_host_scoped_cpu_particle_timing(host,scope.data(),0,id.data(),first+index,&age,&life)==LIBRA_OK);
+            assert(age==timings[index+1].age && life==timings[index+1].life);
+        }
+    }
+    std::uint32_t written=999;
+    assert(libra_spawnable_host_scoped_cpu_particle_read(host,scope.data(),0,id.data(),count,snapshots.data(),nullptr,1,&written)==LIBRA_OK && written==0);
+    assert(libra_spawnable_host_scoped_cpu_particle_read(host,scope.data(),0,id.data(),count+1,snapshots.data(),nullptr,1,&written)==LIBRA_INVALID_ARGUMENT && written==0);
+    assert(libra_spawnable_host_release(host)==LIBRA_OK);
+}
+
 int main()
 {
 #if defined(_MSC_VER) && defined(_DEBUG)
@@ -569,6 +608,17 @@ int main()
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
     verifyEffectLifetime();
+    if (auto fixtures=std::getenv("LIBERAFX_CPU_READ_FIXTURE_DIR")) verifyCpuParticleReadFixture(fixtures);
+    {
+        auto scope=std::array<std::uint8_t,16>{};
+        auto id=std::array<std::uint8_t,16>{1};
+        auto snapshot=LibraCpuParticleSnapshot{};
+        auto written=std::uint32_t{99};
+        assert(libra_spawnable_host_scoped_cpu_particle_read(0,scope.data(),0,id.data(),0,&snapshot,nullptr,1,&written)==LIBRA_INVALID_HANDLE && written==0);
+        assert(libra_spawnable_host_scoped_cpu_particle_read(0,scope.data(),0,id.data(),0,&snapshot,nullptr,257,&written)==LIBRA_INVALID_ARGUMENT);
+        assert(libra_spawnable_host_scoped_cpu_particle_read(0,scope.data(),0,id.data(),0,nullptr,nullptr,1,&written)==LIBRA_INVALID_ARGUMENT);
+        assert(libra_spawnable_host_scoped_cpu_particle_read(0,scope.data(),1,id.data(),0,&snapshot,nullptr,1,&written)==LIBRA_INVALID_ARGUMENT);
+    }
     if (auto fixtureDirectory = std::getenv("LIBERAFX_INT32_FIXTURE_DIR"))
         verifyInt32InteropFixture(std::filesystem::path{fixtureDirectory});
     if (auto fixtures = std::getenv("LIBERAFX_DEBUG_QUALITY_FIXTURE_DIR"))

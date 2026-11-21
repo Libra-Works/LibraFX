@@ -48,16 +48,34 @@ void compare(const char* path, bool expectBatch, bool expectError = false, Resul
             check(automatic->cpuParticleCount(system->id.data(),count));
             check(reference->cpuParticleCount(system->id.data(),otherCount));
             require(count==otherCount, "Batch changed particle emission or retirement.");
+            std::array<CpuParticleSnapshot,39> copied{};
+            std::array<CpuParticleTiming,39> clocks{};
+            copied.front().id=copied.back().id=UINT64_MAX;
+            clocks.front().age=clocks.back().age=-123;
             for (auto index=0u;index<count;++index) {
+                if (index%37==0) {
+                    std::size_t written=999;
+                    check(automatic->cpuParticleRead({},system->id.data(),index,copied.data()+1,clocks.data()+1,37,written));
+                    require(written==std::min(std::size_t{37},count-index),"Bulk read returned the wrong range length.");
+                    require(copied.front().id==UINT64_MAX && copied.back().id==UINT64_MAX &&
+                        clocks.front().age==-123 && clocks.back().age==-123,"Bulk read overran caller buffers.");
+                }
                 auto a = CpuParticleSnapshot{}, b = CpuParticleSnapshot{};
                 check(automatic->cpuParticleAt(system->id.data(),index,a));
                 check(reference->cpuParticleAt(system->id.data(),index,b));
                 require(std::memcmp(&a,&b,sizeof(a))==0, "Batch changed full particle state or stable ordering.");
+                require(std::memcmp(&a,&copied[1+index%37],sizeof(a))==0,"Bulk read changed snapshot values or ordering.");
                 auto ta = CpuParticleTiming{}, tb = CpuParticleTiming{};
                 check(automatic->cpuParticleTiming({},system->id.data(),index,ta));
                 check(reference->cpuParticleTiming({},system->id.data(),index,tb));
                 require(ta.age==tb.age && ta.life==tb.life, "Batch changed particle age/lifetime.");
+                require(ta.age==clocks[1+index%37].age && ta.life==clocks[1+index%37].life,"Bulk read changed animation timing.");
             }
+            std::size_t written=999;
+            check(automatic->cpuParticleRead({},system->id.data(),count,copied.data(),nullptr,1,written));
+            require(written==0,"Bulk read at the end must be empty.");
+            require(automatic->cpuParticleRead({},system->id.data(),count+1,copied.data(),nullptr,1,written)==Result::InvalidArgument && written==0,
+                "Bulk read must reject an index past the live range.");
         }
         auto a = CpuParticleEvent{}, b = CpuParticleEvent{};
         for (;;) {

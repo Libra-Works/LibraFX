@@ -162,6 +162,48 @@ Use `SpawnableHostOptions::cpuParticleBatching = false` or the benchmark's
 bytecode/package format. The shared manager remains separate work: one reduces
 computation, the other schedules it.
 
+## Hot particle storage and bulk rendering reads
+
+Particle values now live separately from the per-particle VM objects. The VM
+array retains the original per-particle destruction order; VM cleanup happens
+before their borrowed programs/descriptors and particle data are released.
+This is a hot/cold split, not yet fully separate position/velocity/color columns.
+
+Eligible stateless Update stages also reuse one VM for spawn-time Update and
+ordered error fallback. They no longer initialize one Update VM per newborn
+particle or retain its per-particle work slab. Unsupported stages and explicit
+interpreter mode keep their independent VMs. Spawn itself still runs through
+the interpreter; large initial bursts remain a performance concern.
+
+Native `SpawnableHost::cpuParticleRead` copies a caller-sized range with optional
+age/lifetime data. The C export `libra_spawnable_host_scoped_cpu_particle_read`
+accepts 1–256 records and an optional timing array. It preserves the existing
+80-byte snapshot and stable live ordering, and supports root and child scopes.
+Unity, Godot and Unreal now read their CPU render data in 256-particle blocks.
+Unity reuses managed buffers and pins them only during each call. A 10,000-
+particle draw needs 40 snapshot calls instead of 10,000; Flipbook timing travels
+in the same call. Use matching updated native libraries and adapter sources.
+
+After the storage split, alternating individual and bulk reads for the same
+10,000 × 8 fixture produced these **snapshot-extraction-only** means:
+
+| Run | Individual reads (ms) | Bulk reads (ms) |
+| --- | --- | --- |
+| 1 | 0.570 | 0.205 |
+| 2 | 0.550 | 0.195 |
+| 3 | 0.551 | 0.223 |
+
+Update averaged about 1.17–1.25 ms in these runs. Initial emission still took
+about 36–37 ms. One 32-host run measured 5.743 ms Update and 1.534 ms bulk
+extraction. These exclude engine geometry conversion, submission and drawing.
+The benchmark accepts `--bulk` independently of `--interpreter`.
+
+Parity checks compare bulk records/timing against individual reads, including
+short tails, empty/end ranges, invalid ranges and buffer canaries. C ABI tests
+also compare 1,000 compiled particles and timing records across partial blocks.
+The disposable Windows release-gate native test build uses AddressSanitizer to
+check lifetime and memory access; distributed SDK builds remain uninstrumented.
+
 ## Engine comparison still required
 
 For a paired Niagara comparison use the same hardware, Unreal version, RHI,
