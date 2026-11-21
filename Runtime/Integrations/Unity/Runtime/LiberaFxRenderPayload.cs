@@ -17,12 +17,14 @@ namespace LiberaFx.Unity
         public LiberaFxCpuParticlePayload[] cpuParticles;
         public int cpuParticleVersion;
         public LiberaFxGpuDrawTransformPayload[] gpuDrawTransforms;
+        public LiberaFxGpuDrawTransformPayload[] gpuEmitterTransforms;
         public int proceduralVersion;
         public LiberaFxProceduralResourcePayload[] proceduralResources;
     }
 
     [Serializable] internal sealed class LiberaFxCpuParticlePayload
     {
+        public string[] drawMatrixRowNodeIds;
         public string nodeId;
         public string assetPath;
         public string blendMode;
@@ -238,11 +240,13 @@ namespace LiberaFx.Unity
 
     internal sealed class LiberaFxPreparedGpuProgram
     {
+        public float spawnRate;
         public string nodeId;
         public LiberaFxUnityGpuProgramBinding binding;
         public LibraGpuMetadata packageMetadata;
         public float sizeScale;
         public byte[][] drawMatrixRowNodeBytes;
+        public byte[][] emitterMatrixRowNodeBytes;
         internal LiberaFxGeneratedGpuResource[] generatedResources = Array.Empty<LiberaFxGeneratedGpuResource>();
     }
 
@@ -267,6 +271,7 @@ namespace LiberaFx.Unity
 
     internal sealed class LiberaFxPreparedCpuParticleRenderer
     {
+        public byte[][] drawRows;
         public string nodeId;
         public byte[] nodeIdBytes;
         public Texture texture;
@@ -359,7 +364,15 @@ namespace LiberaFx.Unity
                 proceduralResources = renderConfiguration.proceduralResources,
                 renderNodes = renderNodes.Select(ResolveRenderNode).ToArray(),
                 cpuParticles = cpuParticles,
-                gpuPrograms = gpuPrograms.Select(program => ResolveGpuProgram(program, transforms)).ToArray(),
+                gpuPrograms = gpuPrograms.Select(program =>
+                {
+                    var prepared = ResolveGpuProgram(program, transforms);
+                    prepared.emitterMatrixRowNodeBytes = renderConfiguration.gpuEmitterTransforms?
+                        .SingleOrDefault(transform => transform.nodeId == prepared.nodeId)?.rowNodeBytes;
+                    if (prepared.packageMetadata.emitterMatrix != (prepared.emitterMatrixRowNodeBytes != null))
+                        throw new InvalidOperationException("Emitter Matrix shader and scope binding do not match.");
+                    return prepared;
+                }).ToArray(),
                 fluidPrograms = fluidPrograms.Select(program =>
                 {
                     transforms.TryGetValue(program.nodeId, out var transform);
@@ -395,6 +408,8 @@ namespace LiberaFx.Unity
                 Texture texture;
                 if (item.assetPath == "builtin:white")
                     texture = Texture2D.whiteTexture;
+                else if (item.assetPath == "builtin:radial-glow")
+                    texture = LiberaFxBuiltinParticleTextures.RadialGlow;
                 else if (!renderAssets.TryGetValue(item.assetPath, out var asset) || !asset.texture)
                     throw new InvalidOperationException(
                         "No Unity Texture binding exists for CPU particle asset '" + item.assetPath + "'.");
@@ -406,6 +421,10 @@ namespace LiberaFx.Unity
                     texture = texture,
                     additive = item.blendMode == "Additive",
                     drawScale = (float)item.drawScale
+                    , drawRows = item.drawMatrixRowNodeIds == null ? null : item.drawMatrixRowNodeIds.Length == 4
+                        ? item.drawMatrixRowNodeIds.Select(id => TryCanonicalGuid(id, out var canonical)
+                            ? new NativeSignal(canonical).Id : throw new InvalidOperationException("Invalid CPU Draw Matrix row.")).ToArray()
+                        : throw new InvalidOperationException("CPU Draw Matrix requires four rows.")
                 };
             }
             return result;
@@ -721,6 +740,7 @@ namespace LiberaFx.Unity
                 nodeId = nodeId,
                 binding = configured,
                 packageMetadata = packageMetadata,
+                spawnRate = packageMetadata.version >= 3 ? packageMetadata.spawnRate : configured.spawnRate,
                 sizeScale = sizeScale,
                 generatedResources = generated,
                 drawMatrixRowNodeBytes = drawTransform?.rowNodeBytes
@@ -825,7 +845,7 @@ namespace LiberaFx.Unity
                 }
             }
             payload.cpuParticles = payload.cpuParticles ?? Array.Empty<LiberaFxCpuParticlePayload>();
-            if (payload.cpuParticleVersion != 1 && (payload.cpuParticleVersion != 0 || payload.cpuParticles.Length != 0))
+            if (payload.cpuParticleVersion != 1 && payload.cpuParticleVersion != 2 && (payload.cpuParticleVersion != 0 || payload.cpuParticles.Length != 0))
                 throw new NotSupportedException("Unsupported CPU particle scene metadata version.");
             var drawTransforms = new Dictionary<string, LiberaFxGpuDrawTransformPayload>(StringComparer.Ordinal);
             foreach (var transform in payload.gpuDrawTransforms ?? Array.Empty<LiberaFxGpuDrawTransformPayload>())
@@ -847,6 +867,18 @@ namespace LiberaFx.Unity
             if (drawTransforms.Count > 16)
                 throw new InvalidOperationException("Render configuration exceeds the 16 GPU draw Matrix binding limit.");
             payload.gpuDrawTransforms = drawTransforms.Values.ToArray();
+            var emitterIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var transform in payload.gpuEmitterTransforms ?? Array.Empty<LiberaFxGpuDrawTransformPayload>())
+            {
+                if (transform == null || !TryCanonicalGuid(transform.nodeId, out var nodeId) ||
+                    !emitterIds.Add(nodeId) || transform.rowNodeIds == null || transform.rowNodeIds.Length != 4)
+                    throw new InvalidOperationException("Invalid Emitter Matrix binding.");
+                transform.nodeId = nodeId;
+                transform.rowNodeBytes = transform.rowNodeIds.Select(id =>
+                    TryCanonicalGuid(id, out var canonical) ? new NativeSignal(canonical).Id :
+                    throw new InvalidOperationException("Invalid Emitter Matrix row identity.")).ToArray();
+            }
+            if (emitterIds.Count > 16) throw new InvalidOperationException("Too many Emitter Matrix bindings.");
             return payload;
         }
 

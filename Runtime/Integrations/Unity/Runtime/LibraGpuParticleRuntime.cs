@@ -44,6 +44,17 @@ namespace LiberaFx.Unity
         Mesh quad;
         MaterialPropertyBlock properties;
         Matrix4x4 drawTransform = Matrix4x4.identity;
+        Matrix4x4 emitterTransform = Matrix4x4.identity;
+        readonly Vector4[] emitterRows = new Vector4[4];
+        public void SetEmitterTransform(Matrix4x4 matrix)
+        {
+            for (var row = 0; row < 4; row++)
+                for (var column = 0; column < 4; column++)
+                    if (float.IsNaN(matrix[row, column]) || float.IsInfinity(matrix[row, column]))
+                        throw new ArgumentException("Emitter Matrix must be finite.");
+            if (matrix.GetRow(3) != new Vector4(0, 0, 0, 1)) throw new ArgumentException("Emitter Matrix must be affine.");
+            emitterTransform = matrix;
+        }
         bool drawTransformConnected;
         LibraGpuMetadata program;
         int[] flowKernels;
@@ -184,6 +195,7 @@ namespace LiberaFx.Unity
             compute = shader; metadata = sourceMetadata; billboardMaterial = material; textures = bindings;
             flowTextureFlags = nextTextureFlags;
             program = next; particles = nextParticles; args = nextArgs; quad = nextQuad;
+            if (next.version >= 3) spawnRate = next.spawnRate;
             flowKernels = nextKernels; flowTextures = nextTextures; resourceTextures = nextResourceTextures;
             fieldSources = nextFieldSources; hasFieldMappings = nextFieldSources.Any(source => source != null);
             fieldMappingBuffer = nextMappings;
@@ -392,6 +404,11 @@ namespace LiberaFx.Unity
             compute.SetFloat(DeltaId, deltaTime); compute.SetFloat(TimeId, elapsed);
             compute.SetInt(SeedId, unchecked((int)emitterSeed)); compute.SetInt(FrameId, unchecked((int)frame++));
             compute.SetVector(PositionId, emitterPosition); compute.SetInt(PaddingId, 0);
+            if (program.emitterMatrix)
+            {
+                for (var row = 0; row < 4; row++) emitterRows[row] = emitterTransform.GetRow(row);
+                compute.SetVectorArray("LibraGpuEmitterRows", emitterRows);
+            }
             submittedWork = true;
             for (int i = 0; i < program.flow.Length; i++)
             {

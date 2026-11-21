@@ -114,7 +114,7 @@ namespace LiberaFx.Unity
                     throw new InvalidOperationException("Duplicate active Spawn event for instance " + item.InstanceId + ".");
                 var scope = LiberaFxRenderScope.CreatePending(transform, definition, false,
                     item.ContainerId, item.InstanceId, item.Time, item.Seed, suppressPreviewDebugDraw,
-                    renderStatistics);
+                    renderStatistics, current.CoordinateBasis);
                 try
                 {
                     scope.Initialize(current, elapsed);

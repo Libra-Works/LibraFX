@@ -19,6 +19,7 @@ namespace LiberaFx.Unity
         [SerializeField] private LiberaFxUnityBindingAsset engineBindings;
         [SerializeField] private bool playOnEnable = true;
         [SerializeField, Min(0)] private float playRate = 1;
+        [SerializeField] private CoordinateBasis coordinateBasis = CoordinateBasis.Unity;
         [SerializeField, Min(1)] private int maxActivePerTemplate = 32;
         [SerializeField, Min(1024)] private int memoryBudgetBytesPerTemplate = 4 * 1024 * 1024;
         [SerializeField, Min(1)] private int eventCapacity = 128;
@@ -35,6 +36,7 @@ namespace LiberaFx.Unity
         private readonly Dictionary<string, LiberaFxRenderScope> instanceScopes =
             new Dictionary<string, LiberaFxRenderScope>(StringComparer.Ordinal);
         private double elapsed;
+        private double realElapsed;
         private bool rootFinished;
         private bool effectForced;
         private bool sourceInitialAdvancePending;
@@ -79,7 +81,11 @@ namespace LiberaFx.Unity
             var current = host;
             var result = current.DetachDebugger();
             if (result != NativeResult.Ok) return result;
-            if (debugPending && debugAdvance) elapsed = debugTime;
+            if (debugPending && debugAdvance)
+            {
+                realElapsed = debugTime;
+                if (current.GetTimeSnapshot(out var clock) == NativeResult.Ok) elapsed = clock.effectTime;
+            }
             debugging = debugPending = false;
             if (eventDrainDepth == 0) DrainEvents(current);
             return NativeResult.Ok;
@@ -105,6 +111,20 @@ namespace LiberaFx.Unity
         public bool IsRootFinished => rootFinished;
         public bool IsForceTerminated => effectForced;
         public double ElapsedTime => elapsed;
+        public double RealElapsedTime => realElapsed;
+        public double TimeScale
+        {
+            get => playRate;
+            set
+            {
+                UnityInstanceSession.RequireMainThread();
+                if (double.IsNaN(value) || double.IsInfinity(value) || value < 0 || value > 1000000)
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                if (host != null && host.SetTimeScale(value) != NativeResult.Ok)
+                    throw new InvalidOperationException("The effect time scale could not be changed.");
+                playRate = (float)value;
+            }
+        }
         public string LastError { get; private set; }
         public int ActiveRenderScopeCount => (rootRenderScope == null ? 0 : 1) + instanceScopes.Count;
 
@@ -275,7 +295,9 @@ namespace LiberaFx.Unity
                 return;
             }
 
-            AdvanceFrame(current, elapsed + frameDelta * rate, frameDelta);
+            var scaleResult = current.SetTimeScale(rate);
+            if (scaleResult != NativeResult.Ok) { FailPlayback(scaleResult, "Updating Time Scale failed.", current); return; }
+            AdvanceFrame(current, realElapsed + frameDelta, frameDelta);
         }
 
         public NativeResult AdvancePreview(double time)
@@ -306,7 +328,7 @@ namespace LiberaFx.Unity
             {
                 return NativeResult.NotReady;
             }
-            elapsed = time;
+            realElapsed = time;
             var qualityResult = current.SetHostQuality(UnityHostQuality.Read(qualityTierMapping, (ulong)Time.frameCount));
             if (qualityResult != NativeResult.Ok)
             {
@@ -317,7 +339,9 @@ namespace LiberaFx.Unity
             var result = NativeResult.QueueRejected;
             for (var attempt = 0; attempt < 16; ++attempt)
             {
-                result = current.Advance(elapsed, frameDelta);
+                result = current.Advance(realElapsed, frameDelta);
+                var clockResult = current.GetTimeSnapshot(out var clock);
+                if (clockResult == NativeResult.Ok) elapsed = clock.effectTime;
                 DrainEvents(current);
                 if (host != current || effectForced)
                 {
@@ -365,19 +389,21 @@ namespace LiberaFx.Unity
                     FailPlayback(result, "Debug Advance failed: " + result, current);
                     return;
                 }
-                elapsed = debugTime;
+                realElapsed = debugTime;
+                if (current.GetTimeSnapshot(out var clock) == NativeResult.Ok) elapsed = clock.effectTime;
                 FinishFrame(current);
                 return;
             }
             debugDelta = Time.deltaTime;
-            debugTime = elapsed + debugDelta * playRate;
+            debugTime = realElapsed + debugDelta;
             if (playRate < 0 || double.IsNaN(debugTime) || double.IsInfinity(debugTime))
             {
                 FailPlayback(NativeResult.InvalidArgument, "Invalid debugger playback time.", current);
                 return;
             }
             if (!PublishFrameInputs(current)) return;
-            var status = current.SetHostQuality(UnityHostQuality.Read(qualityTierMapping, (ulong)Time.frameCount));
+            var status = current.SetTimeScale(playRate);
+            if (status == NativeResult.Ok) status = current.SetHostQuality(UnityHostQuality.Read(qualityTierMapping, (ulong)Time.frameCount));
             if (status == NativeResult.Ok) status = current.SubmitDebugger(0, debugTime, debugDelta);
             if (status == NativeResult.Ok) { debugPending = debugAdvance = true; debugRetries = 0; }
             else FailPlayback(status, "Could not queue debug Advance: " + status, current);
@@ -445,11 +471,15 @@ namespace LiberaFx.Unity
                     (uint)Math.Max(1, maxActivePerTemplate),
                     (ulong)Math.Max(1024, memoryBudgetBytesPerTemplate),
                     (uint)Math.Max(1, eventCapacity), instructionBudget);
+                var clockSetup = candidate.SetTimeScale(manualPreviewTime ? 1 : playRate);
+                if (clockSetup != NativeResult.Ok) throw new InvalidOperationException("Invalid effect Time Scale: " + clockSetup);
+                NativeInstance.Check(candidate.SetCoordinateBasis(coordinateBasis));
                 var plan = Preflight(candidate, effect.PackageBytes);
 
                 host = candidate;
                 ownerThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId;
                 elapsed = 0;
+                realElapsed = 0;
                 rootFinished = false;
                 effectForced = false;
                 renderStatistics.Reset();
@@ -461,7 +491,7 @@ namespace LiberaFx.Unity
                 foreach (var pair in plan.templates) templateDefinitions.Add(pair.Key, pair.Value);
                 rootRenderScope = LiberaFxRenderScope.CreatePending(transform, plan.root,
                     true, null, 0, 0, plan.bindings.RootGpuSeed, suppressPreviewDebugDraw,
-                    renderStatistics);
+                    renderStatistics, coordinateBasis);
 
                 var current = host;
                 BindCurrentCamera(current);
@@ -615,6 +645,9 @@ namespace LiberaFx.Unity
                 result == NativeResult.Ok ? result : Report(result, "Game signal failed: " + result + ".");
         }
 
+        public NativeResult SetGameProperty(string name, bool value) =>
+            SetGameProperty(name, new double[] { value ? 1 : 0 });
+
         public NativeResult SetGameProperty(string name, double[] values)
         {
             var current = host;
@@ -629,6 +662,29 @@ namespace LiberaFx.Unity
             if (current == null) return NativeResult.NotReady;
             var result = current.SetOwnerMatrix(values);
             return result == NativeResult.Ok ? result : Report(result, "Owner matrix update failed: " + result + ".");
+        }
+
+        public NativeResult SetOwnerMatrix(Matrix4x4 matrix)
+        {
+            var values = new double[16];
+            for (var row = 0; row < 4; row++)
+                for (var column = 0; column < 4; column++) values[row * 4 + column] = matrix[row, column];
+            return SetOwnerMatrix(values);
+        }
+
+        // Opt-in automatic binding for moving previews and ordinary gameplay owners.
+        public NativeResult SynchronizeOwnerTransform()
+        {
+            var current = host;
+            if (current == null) return NativeResult.NotReady;
+            for (var index = 0u; index < 256; index++)
+            {
+                var result = current.GetGameIoPortName(index, out var name);
+                if (result == NativeResult.InvalidArgument) return NativeResult.Ok;
+                if (result != NativeResult.Ok) return result;
+                if (name == "OwnerMatrix") return SetOwnerMatrix(transform.localToWorldMatrix);
+            }
+            return NativeResult.Ok;
         }
 
         public NativeResult GetInstanceTarget(byte[] container, ulong instance, out ulong generation)

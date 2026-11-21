@@ -80,9 +80,11 @@ namespace LiberaFx.Unity
             }
             var camera = ResolveEffectCamera();
             var position = camera ? camera.transform.position : Vector3.zero;
-            currentCameraLanes[0] = position.x;
-            currentCameraLanes[1] = position.y;
-            currentCameraLanes[2] = position.z;
+            var canonical = current.CoordinateBasis.Convert(SpatialValueKind.Position, false,
+                new double[] { position.x, position.y, position.z });
+            currentCameraLanes[0] = canonical[0];
+            currentCameraLanes[1] = canonical[1];
+            currentCameraLanes[2] = canonical[2];
             currentCameraLanes[3] = camera ? 1 : 0;
             return current.SetGameProperty(CurrentCameraProperty, currentCameraLanes);
         }

@@ -47,6 +47,8 @@ namespace LiberaFx.Unity
         public int version, capacity, particleStride, uniformBufferBytes;
         public string purpose, format, programId, contentHash, sourceHash, particleBuffer, uniformBuffer;
         public bool runtimeExecuted;
+        public bool emitterMatrix;
+        public float spawnRate;
         public LibraGpuKernelMetadata[] kernels;
         public LibraGpuFlowMetadata[] flow;
         public LibraGpuResourceMetadata[] resources;
@@ -58,7 +60,8 @@ namespace LiberaFx.Unity
             LibraGpuMetadata m;
             try { m = JsonUtility.FromJson<LibraGpuMetadata>(json); }
             catch (Exception e) { throw new ArgumentException("Invalid GPU metadata JSON.", e); }
-            if (m == null || m.version != 1 || m.purpose != "SourceExport" || m.format != "UnityCompute" || m.runtimeExecuted)
+            if (m == null || m.version < 1 || m.version > 3 || m.purpose != "SourceExport" || m.format != "UnityCompute" || m.runtimeExecuted ||
+                m.version == 3 && (float.IsNaN(m.spawnRate) || float.IsInfinity(m.spawnRate) || m.spawnRate < 0 || m.spawnRate > 1000000))
                 throw new ArgumentException("Expected version 1 UnityCompute SourceExport GPU metadata.");
             if (m.capacity <= 0 || m.capacity > 3355443 || m.particleStride != 80 || m.uniformBufferBytes != 48)
                 throw new ArgumentException("GPU capacity or particle/uniform ABI is invalid.");
@@ -123,7 +126,14 @@ namespace LiberaFx.Unity
                 m.generatedFieldMappings.register < 0 || m.generatedFieldMappings.register > 127))
                 throw new ArgumentException("Generated-plane sampling requires the instance-owned mapping buffer metadata.");
             if (!generatedCoordinates && m.generatedFieldMappings != null)
-                throw new ArgumentException("Unexpected generated field mapping buffer.");
+            {
+                // Some Unity versions materialize an empty serializable object for an
+                // omitted JSON field. It has no mapping; retain rejection of real extras.
+                var mapping = m.generatedFieldMappings;
+                if (!string.IsNullOrEmpty(mapping.shaderName) || mapping.register != 0 || mapping.elements != 0 || mapping.stride != 0)
+                    throw new ArgumentException("Unexpected generated field mapping buffer.");
+                m.generatedFieldMappings = null;
+            }
             foreach (var kernel in m.kernels)
             {
                 var ids = kernel.flowMapResourceIds ?? Array.Empty<string>();

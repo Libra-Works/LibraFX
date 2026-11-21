@@ -97,9 +97,12 @@ namespace LiberaFx.Unity
             colors.Clear();
             indices.Clear();
             var localToWorld = parent.localToWorldMatrix;
-            var worldToLocal = parent.worldToLocalMatrix;
+            if (definition.drawRows != null)
+                localToWorld = host.CoordinateBasis.EffectToHostMatrix() *
+                    LiberaFxRenderScope.ReadDrawTransform(host, containerId == null, containerId, instanceId, definition.drawRows);
             if (localToWorld.determinant == 0)
                 throw new InvalidOperationException("CPU particle batch cannot use a singular owner transform.");
+            var worldToLocal = localToWorld.inverse;
             var ownerWidth = localToWorld.MultiplyVector(Vector3.right).magnitude;
             var ownerHeight = localToWorld.MultiplyVector(Vector3.up).magnitude;
             var localRadiusFactor = worldToLocal.MultiplyVector(Vector3.right).magnitude +

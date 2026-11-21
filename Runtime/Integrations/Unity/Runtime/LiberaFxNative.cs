@@ -370,6 +370,18 @@ namespace LiberaFx.Unity
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_set_owner_matrix(ulong host, double* values);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_coordinate_convert(ref CoordinateBasis basis, uint kind, uint toHost,
+            double[] source, uint width, [Out] double[] destination);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_set_coordinate_basis(ulong host, ref CoordinateBasis basis);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_set_time_scale(ulong host, double ratio);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_time_snapshot(ulong host, out EffectTimeSnapshot snapshot);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_set_game_spatial_property(ulong host, byte* name,
+            uint kind, double* values, uint width);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_request_natural_end(ulong host);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_stop(ulong host);
@@ -553,6 +565,28 @@ namespace LiberaFx.Unity
                     if (values == null || values.Length != 16) return NativeResult.InvalidArgument;
                     fixed (double* lanes = values)
                         return Native.libra_spawnable_host_set_owner_matrix(Alive, lanes);
+                }
+
+                public NativeResult SetGameProperty(string name, bool value) =>
+                    SetGameProperty(name, new double[] { value ? 1 : 0 });
+
+                public CoordinateBasis CoordinateBasis { get; private set; } = CoordinateBasis.Unity;
+                public NativeResult SetCoordinateBasis(CoordinateBasis basis)
+                {
+                    var result = Native.libra_spawnable_host_set_coordinate_basis(Alive, ref basis);
+                    if (result == NativeResult.Ok) CoordinateBasis = basis;
+                    return result;
+                }
+                public NativeResult SetTimeScale(double ratio) => Native.libra_spawnable_host_set_time_scale(Alive, ratio);
+                public NativeResult GetTimeSnapshot(out EffectTimeSnapshot snapshot) => Native.libra_spawnable_host_time_snapshot(Alive, out snapshot);
+
+                public NativeResult SetGameSpatialProperty(string name, SpatialValueKind kind, double[] values)
+                {
+                    if (name == null || values == null) return NativeResult.InvalidArgument;
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(name + "\0");
+                    fixed (byte* pointer = bytes)
+                    fixed (double* lanes = values)
+                        return Native.libra_spawnable_host_set_game_spatial_property(Alive, pointer, (uint)kind, lanes, (uint)values.Length);
                 }
 
                 public NativeResult GetInstanceTarget(byte[] container, ulong instance, out ulong generation)

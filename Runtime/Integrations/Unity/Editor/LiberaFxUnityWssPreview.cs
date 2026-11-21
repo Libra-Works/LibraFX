@@ -33,6 +33,26 @@ namespace LiberaFx.Unity
             diagnostic = null;
             var header = frame.AsSpan();
             var kind = header[6];
+            if (kind == 4)
+            {
+                var control = JsonUtility.FromJson<PreviewControl>(Encoding.UTF8.GetString(frame, 48, frame.Length - 48));
+                if (control?.type == "preview_motion")
+                {
+                    if (control.offset == null || control.offset.Length != 3 ||
+                        Array.Exists(control.offset, lane => double.IsNaN(lane) || double.IsInfinity(lane) || Math.Abs(lane) > 1000))
+                        return false;
+                    if (effect)
+                    {
+                        effect.transform.localPosition = new Vector3((float)control.offset[0], (float)control.offset[1], (float)control.offset[2]);
+                        effect.SynchronizeOwnerTransform();
+                    }
+                    return true;
+                }
+                if (control?.type != "preview_reset") return false;
+                Clear();
+                sequence = 0;
+                return true;
+            }
             var next = BinaryPrimitives.ReadUInt64LittleEndian(header.Slice(8));
             if (next == 0 || next < sequence)
             {
@@ -152,6 +172,7 @@ namespace LiberaFx.Unity
             Clear();
             viewport.Cleanup();
         }
+        [Serializable] private sealed class PreviewControl { public string type; public double[] offset; }
     }
 }
 #endif

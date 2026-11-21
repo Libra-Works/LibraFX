@@ -48,9 +48,9 @@ Shader "Libra/GPU Particle Billboard"
                 float4 position = float4(p.positionAge.xyz, 1);
                 float3 center = float3(dot(_LibraGpuDrawMatrixRow0, position),
                     dot(_LibraGpuDrawMatrixRow1, position), dot(_LibraGpuDrawMatrixRow2, position));
-                float3 offset = right * local.x + up * local.y;
-                offset = float3(dot(_LibraGpuDrawMatrixRow0.xyz, offset),
-                    dot(_LibraGpuDrawMatrixRow1.xyz, offset), dot(_LibraGpuDrawMatrixRow2.xyz, offset));
+                float sx = length(float3(_LibraGpuDrawMatrixRow0.x, _LibraGpuDrawMatrixRow1.x, _LibraGpuDrawMatrixRow2.x));
+                float sy = length(float3(_LibraGpuDrawMatrixRow0.y, _LibraGpuDrawMatrixRow1.y, _LibraGpuDrawMatrixRow2.y));
+                float3 offset = right * local.x * sx + up * local.y * sy;
                 float3 world = center + offset;
                 o.position = mul(UNITY_MATRIX_VP, float4(world, 1));
                 o.uv = v.uv;

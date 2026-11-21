@@ -219,6 +219,7 @@ namespace LiberaFx.Unity
                 1 => frame.Length > 56 && frame[48] == 'L' && frame[49] == 'F' && frame[50] == 'X' && frame[51] == 'U',
                 2 => frame.Length == HeaderSize,
                 3 => frame.Length <= HeaderSize + 4096,
+                4 => frame.Length > HeaderSize && frame.Length <= HeaderSize + 4096,
                 _ => false
             };
         }

@@ -49,7 +49,7 @@ namespace LiberaFx.Unity
         public static LiberaFxRenderScope CreatePending(Transform owner,
             LiberaFxPreparedScope prepared, bool isRoot, byte[] containerId,
             ulong instanceId, double startTime, ulong seed, bool suppressDebugDraw = false,
-            LiberaFxRenderStatisticsCounter statistics = null)
+            LiberaFxRenderStatisticsCounter statistics = null, CoordinateBasis? coordinateBasis = null)
         {
             var scope = new LiberaFxRenderScope(owner, isRoot, containerId,
                 instanceId, startTime, statistics);
@@ -59,13 +59,21 @@ namespace LiberaFx.Unity
                     prepared.gpuPrograms.Length == 0 && (prepared.fluidPrograms?.Length ?? 0) == 0)
                     return scope;
 
-                if (prepared.gpuPrograms.Length != 0)
+                if (prepared.gpuPrograms.Length != 0 || coordinateBasis.HasValue)
                 {
                     scope.scopeObject = new GameObject(isRoot
                         ? "Libera FX Root GPU Scope"
                         : "Libera FX Spawnable GPU " + prepared.templateId + " #" + instanceId);
                     scope.scopeObject.layer = owner.gameObject.layer;
                     scope.scopeObject.transform.SetParent(owner, false);
+                    if (coordinateBasis.HasValue)
+                    {
+                        var basis = coordinateBasis.Value.EffectToHostMatrix();
+                        var transform = scope.scopeObject.transform;
+                        transform.localRotation = Quaternion.LookRotation(basis.GetColumn(2), basis.GetColumn(1));
+                        var units = (float)coordinateBasis.Value.unitsPerMetre;
+                        transform.localScale = new Vector3(basis.determinant < 0 ? -units : units, units, units);
+                    }
                     scope.scopeObject.SetActive(false);
                 }
                 var renderParent = scope.scopeObject
@@ -83,7 +91,7 @@ namespace LiberaFx.Unity
                 foreach (var producer in scope.proceduralResources.Values)
                     if (producer.definition.kind == "ProceduralMaterial") scope.proceduralOrder.Add(producer);
                 foreach (var fluid in prepared.fluidPrograms ?? Array.Empty<LiberaFxPreparedFluidProgram>())
-                    scope.fluidPrograms.Add(new LibraFluid2DInstance(owner, fluid, statistics));
+                    scope.fluidPrograms.Add(new LibraFluid2DInstance(renderParent, fluid, statistics));
                 foreach (var node in prepared.renderNodes)
                 {
                     if (node.proceduralDraw != null)
@@ -135,7 +143,7 @@ namespace LiberaFx.Unity
                     var runtime = gpuObject.AddComponent<LibraGpuParticleRuntime>();
                     runtime.ConfigureForSpawnable(gpu.binding.computeShader, gpu.binding.metadata,
                         gpu.binding.billboardMaterial, textures.ToArray(),
-                        SeedForProgram(seed, gpu.nodeId), gpu.binding.spawnRate, gpu.sizeScale);
+                        SeedForProgram(seed, gpu.nodeId), gpu.spawnRate, gpu.sizeScale);
                     scope.gpuPrograms.Add(runtime);
                     scope.gpuDrawTransforms.Add(runtime, gpu);
                 }
@@ -166,7 +174,7 @@ namespace LiberaFx.Unity
             {
                 if (localTime > float.MaxValue)
                     throw new InvalidOperationException("GPU scope initial age exceeds Unity float range.");
-                var emitterPosition = owner.position;
+                var emitterPosition = Vector3.zero;
                 foreach (var fluid in fluidPrograms) fluid.Step(localTime);
                 foreach (var gpu in gpuPrograms)
                     if (gpu && gpu.IsRunning)
@@ -186,7 +194,7 @@ namespace LiberaFx.Unity
                 throw new InvalidOperationException("GPU scope local time delta is invalid.");
             if (delta > 0)
             {
-                var emitterPosition = owner.position;
+                var emitterPosition = Vector3.zero;
                 foreach (var fluid in fluidPrograms) fluid.Step(delta);
                 foreach (var gpu in gpuPrograms)
                     if (gpu && gpu.IsRunning)
@@ -218,14 +226,22 @@ namespace LiberaFx.Unity
             foreach (var draw in debugDraws)
                 draw.Update(host, rootScope, containerId, instanceId);
             foreach (var gpu in gpuPrograms)
-                gpu.SetDrawTransform(ReadDrawTransform(host, rootScope, containerId, instanceId,
-                    gpuDrawTransforms[gpu].drawMatrixRowNodeBytes), gpuDrawTransforms[gpu].drawMatrixRowNodeBytes != null);
+            {
+                gpu.SetEmitterTransform(ReadDrawTransform(host, rootScope, containerId, instanceId,
+                    gpuDrawTransforms[gpu].emitterMatrixRowNodeBytes));
+                var rows = gpuDrawTransforms[gpu].drawMatrixRowNodeBytes;
+                var draw = rows != null ? host.CoordinateBasis.EffectToHostMatrix() *
+                    ReadDrawTransform(host, rootScope, containerId, instanceId, rows) :
+                    (scopeObject ? scopeObject.transform.localToWorldMatrix : owner.localToWorldMatrix);
+                gpu.SetDrawTransform(draw, true);
+            }
             foreach (var fluid in fluidPrograms)
-                fluid.UpdateTransform(ReadDrawTransform(host, rootScope, containerId, instanceId, fluid.DrawRows));
+                fluid.UpdateTransform(host.CoordinateBasis.EffectToHostMatrix() *
+                    ReadDrawTransform(host, rootScope, containerId, instanceId, fluid.DrawRows));
             previousLocalTime = localTime;
         }
 
-        private static Matrix4x4 ReadDrawTransform(NativeInstance.NativeSpawnableHostBase host,
+        internal static Matrix4x4 ReadDrawTransform(NativeInstance.NativeSpawnableHostBase host,
             bool root, byte[] container, ulong instance, byte[][] rows)
         {
             if (rows == null) return Matrix4x4.identity;
