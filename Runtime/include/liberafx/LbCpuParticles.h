@@ -46,6 +46,10 @@ public:
     Result count(const std::uint8_t systemId[16], std::size_t& out) const noexcept;
     Result at(const std::uint8_t systemId[16], std::size_t index, CpuParticleSnapshot& out) const noexcept;
     Result timing(const std::uint8_t systemId[16], std::size_t index, CpuParticleTiming& out) const noexcept;
+    // Copies a bounded range in the same stable order as at(). Timing is optional.
+    Result read(const std::uint8_t systemId[16], std::size_t first,
+        CpuParticleSnapshot* snapshots, CpuParticleTiming* timings,
+        std::size_t capacity, std::size_t& written) const noexcept;
     bool popEvent(CpuParticleEvent& out) noexcept;
     std::size_t pendingEventCount() const noexcept;
     std::size_t activeCount() const noexcept;

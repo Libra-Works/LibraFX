@@ -19,6 +19,8 @@ namespace LiberaFx.Unity
         private Mesh mesh;
         private Material material;
         private bool disposed;
+        private readonly NativeCpuParticleSnapshot[] particleBatch = new NativeCpuParticleSnapshot[256];
+        private readonly NativeCpuParticleTiming[] timingBatch = new NativeCpuParticleTiming[256];
 
         private LiberaFxCpuParticleRenderInstance(Transform parent,
             LiberaFxPreparedCpuParticleRenderer definition,
@@ -111,8 +113,15 @@ namespace LiberaFx.Unity
             var radius = 0.0;
             for (var index = 0u; index < count; ++index)
             {
-                result = host.CpuParticleAt(containerId, instanceId, definition.nodeIdBytes, index, out var snapshot);
-                if (result != NativeResult.Ok || snapshot.Id == 0)
+                if (index % 256 == 0)
+                {
+                    result = host.CpuParticleRead(containerId, instanceId, definition.nodeIdBytes, index,
+                        particleBatch, definition.flipbook != null ? timingBatch : null, out var written);
+                    if (result != NativeResult.Ok || written != Math.Min(256u,count-index))
+                        throw new InvalidOperationException("Could not read CPU particle batch: " + result);
+                }
+                var snapshot = particleBatch[index % 256];
+                if (snapshot.Id == 0)
                     throw new InvalidOperationException("Could not read a live CPU particle snapshot: " + result);
                 var drawScale = definition.drawScale;
                 var center = new Vector3(
@@ -128,10 +137,9 @@ namespace LiberaFx.Unity
                 float u0=0, v0=0, u1=1, v1=1;
                 if (definition.flipbook != null)
                 {
-                    result = host.CpuParticleTiming(containerId,instanceId,definition.nodeIdBytes,index,out var age,out var life);
-                    if (result != NativeResult.Ok) throw new InvalidOperationException("Could not read particle animation time: "+result);
                     var atlas = definition.flipbook;
-                    var frame = atlas.Frame(age,life);
+                    var timing = timingBatch[index % 256];
+                    var frame = atlas.Frame(timing.Age,timing.Life);
                     u0 = (float)(frame % atlas.columns)/atlas.columns;
                     v0 = 1f-(float)(frame/atlas.columns+1)/atlas.rows;
                     u1 = u0+1f/atlas.columns; v1=v0+1f/atlas.rows;

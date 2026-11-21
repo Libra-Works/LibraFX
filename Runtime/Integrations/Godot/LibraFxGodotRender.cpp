@@ -1484,10 +1484,18 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host, const Spawna
         if (!std::isfinite(basis.determinant()) || basis.determinant() == 0) {
             return Result::InvalidArgument;
         }
+        std::array<CpuParticleSnapshot,256> particleBatch;
+        std::array<CpuParticleTiming,256> timingBatch;
         for (auto particleIndex = std::size_t{}; particleIndex < count; ++particleIndex) {
-            auto snapshot = CpuParticleSnapshot{};
-            result = host.cpuParticleAt(scope, draw.nodeId.data(), particleIndex, snapshot);
-            if (result != Result::Ok || snapshot.id == 0) {
+            if (particleIndex%256==0) {
+                std::size_t written=0;
+                result=host.cpuParticleRead(scope,draw.nodeId.data(),particleIndex,particleBatch.data(),
+                    draw.atlas.enabled ? timingBatch.data() : nullptr,particleBatch.size(),written);
+                if (result!=Result::Ok || written!=std::min(std::size_t{256},count-particleIndex))
+                    return result==Result::Ok ? Result::InvalidBinary : result;
+            }
+            const auto& snapshot=particleBatch[particleIndex%256];
+            if (snapshot.id == 0) {
                 return result == Result::Ok ? Result::InvalidBinary : result;
             }
             auto* data = buffer + particleIndex * instanceStride;
@@ -1503,9 +1511,7 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host, const Spawna
                 data[field] = static_cast<float>(values[field]);
             }
             if (draw.atlas.enabled) {
-                auto timing=CpuParticleTiming{};
-                result=host.cpuParticleTiming(scope,draw.nodeId.data(),particleIndex,timing);
-                if (result!=Result::Ok) return result;
+                const auto& timing=timingBatch[particleIndex%256];
                 const auto frame=draw.atlas.frame(timing.age,timing.life);
                 data[16]=static_cast<float>(frame%draw.atlas.columns)/draw.atlas.columns;
                 data[17]=static_cast<float>(frame/draw.atlas.columns)/draw.atlas.rows;

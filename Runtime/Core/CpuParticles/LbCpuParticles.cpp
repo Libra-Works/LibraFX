@@ -220,6 +220,26 @@ auto CpuParticleWorld::timing(const std::uint8_t systemId[16], std::size_t index
     return Result::InvalidHandle;
 }
 
+auto CpuParticleWorld::read(const std::uint8_t systemId[16], std::size_t first,
+    CpuParticleSnapshot* snapshots, CpuParticleTiming* timings, std::size_t capacity, std::size_t& written) const noexcept -> Result
+{
+    written = 0;
+    if (!systemId || !snapshots || capacity == 0) return Result::InvalidArgument;
+    for (const auto& system : impl_->systems) {
+        if (std::memcmp(systemId,system->id.data(),16)!=0) continue;
+        if (first > system->live) return Result::InvalidArgument;
+        const auto count = std::min(capacity,system->live-first);
+        for (auto index=std::size_t{};index<count;++index) {
+            const auto& slot=system->slots[system->activeIndices[first+index]];
+            snapshots[index]=slot.draw;
+            if (timings) timings[index]={slot.age,slot.life};
+        }
+        written=count;
+        return Result::Ok;
+    }
+    return Result::InvalidHandle;
+}
+
 auto CpuParticleWorld::popEvent(CpuParticleEvent& out) noexcept -> bool
 {
     for (auto& system : impl_->systems)

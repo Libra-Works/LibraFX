@@ -154,6 +154,32 @@ libra_spawnable_host_scoped_cpu_particle_pop_event(
         return LIBRA_OK;
     });
 }
+LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_scoped_cpu_particle_read(
+    LibraSpawnableHostHandle host, const uint8_t containerId[16], uint64_t instanceId,
+    const uint8_t systemId[16], uint32_t first, LibraCpuParticleSnapshot* snapshots,
+    LibraCpuParticleTiming* timings, uint32_t capacity, uint32_t* written)
+{
+    if (written) *written=0;
+    auto scope=liberafx::SpawnableScope{};
+    if (!systemId || !snapshots || !written || capacity==0 || capacity>256 ||
+        !readCpuParticleScope(containerId,instanceId,scope)) return LIBRA_INVALID_ARGUMENT;
+    return guardedSpawnable(host,[&]() -> LibraResult {
+        std::array<liberafx::CpuParticleSnapshot,256> particles;
+        std::array<liberafx::CpuParticleTiming,256> clocks;
+        std::size_t count=0;
+        const auto status=findSpawnableHost(host)->cpuParticleRead(scope,systemId,first,particles.data(),
+            timings ? clocks.data() : nullptr,capacity,count);
+        if (status==liberafx::Result::Ok) {
+            static_assert(sizeof(particles[0])==sizeof(*snapshots));
+            static_assert(sizeof(clocks[0])==sizeof(*timings));
+            std::memcpy(snapshots,particles.data(),count*sizeof(*snapshots));
+            if (timings) std::memcpy(timings,clocks.data(),count*sizeof(*timings));
+            *written=static_cast<uint32_t>(count);
+        }
+        return toLibraResult(status);
+    });
+}
+
 LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_cpu_particle_at(
     LibraSpawnableHostHandle host, const uint8_t* id, uint32_t index, LibraCpuParticleSnapshot* out)
 {

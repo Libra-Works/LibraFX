@@ -57,6 +57,13 @@ typedef struct LIBRA_INTEROP_ALIGN(8) LibraCpuParticleSnapshot {
     double color[4];
     double size[2];
 } LibraCpuParticleSnapshot;
+typedef struct LIBRA_INTEROP_ALIGN(8) LibraCpuParticleTiming { double age, life; } LibraCpuParticleTiming;
+/* Caller-owned arrays, capacity 1..256. timings may be NULL. Root scope uses a
+   zero container and instanceId=0. written may be shorter at the live range end. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_scoped_cpu_particle_read(
+    LibraSpawnableHostHandle host, const uint8_t containerId[16], uint64_t instanceId,
+    const uint8_t systemId[16], uint32_t first, LibraCpuParticleSnapshot* snapshots,
+    LibraCpuParticleTiming* timings, uint32_t capacity, uint32_t* written);
 typedef struct LIBRA_INTEROP_ALIGN(8) LibraCpuParticleEvent {
     uint8_t systemId[16];
     uint8_t nodeId[16];
@@ -215,6 +222,7 @@ typedef struct LIBRA_INTEROP_ALIGN(8) LibraSpawnableHostEvent {
 #ifdef LIBRA_INTEROP_ASSERT
 LIBRA_INTEROP_ASSERT(sizeof(LibraValue) == 40 && LIBRA_INTEROP_ALIGNOF(LibraValue) == 8);
 LIBRA_INTEROP_ASSERT(sizeof(LibraCpuParticleSnapshot) == 80 && offsetof(LibraCpuParticleSnapshot, color) == 32);
+LIBRA_INTEROP_ASSERT(sizeof(LibraCpuParticleTiming) == 16 && LIBRA_INTEROP_ALIGNOF(LibraCpuParticleTiming) == 8);
 LIBRA_INTEROP_ASSERT(sizeof(LibraCpuParticleEvent) == 88 && offsetof(LibraCpuParticleEvent, values) == 48);
 LIBRA_INTEROP_ASSERT(offsetof(LibraValue, x) == 0 && offsetof(LibraValue, y) == 8 &&
     offsetof(LibraValue, z) == 16 && offsetof(LibraValue, w) == 24 &&

@@ -5,7 +5,7 @@
 #include "LibraRuntimeTypes.h"
 #include "LibraSpawnableComponent.generated.h"
 
-namespace liberafx { class SpawnableHost; }
+namespace liberafx { class SpawnableHost; struct CpuParticleSnapshot; struct CpuParticleTiming; }
 class ULibraSpawnableAsset;
 class UCameraComponent;
 class UMaterialInterface;
@@ -229,6 +229,9 @@ public:
         FGuid systemId, uint32& count) const;
     ELibraRuntimeResult ReadCpuParticleTiming(FGuid containerId, int64 instanceId,
         FGuid systemId, SIZE_T index, double& age, double& life) const;
+    ELibraRuntimeResult ReadCpuParticleBatch(FGuid containerId, int64 instanceId, FGuid systemId,
+        SIZE_T first, liberafx::CpuParticleSnapshot* snapshots, liberafx::CpuParticleTiming* timings,
+        SIZE_T capacity, SIZE_T& written) const;
     ELibraRuntimeResult ReadCpuParticleAt(FGuid containerId, int64 instanceId,
         FGuid systemId, SIZE_T index, uint64& particleId,
         double& positionX, double& positionY, double& positionZ,

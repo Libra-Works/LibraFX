@@ -90,6 +90,20 @@ auto SpawnableHost::cpuParticleTiming(const SpawnableScope& scope, const std::ui
     return instance && instance->cpuParticles ? instance->cpuParticles->timing(id,index,out) : Result::InvalidHandle;
 }
 
+auto SpawnableHost::cpuParticleRead(const SpawnableScope& scope, const std::uint8_t id[16], std::size_t first,
+    CpuParticleSnapshot* snapshots, CpuParticleTiming* timings, std::size_t capacity, std::size_t& written) const noexcept -> Result
+{
+    written=0;
+    if (!id || !snapshots || capacity==0 || !spawnable_host_detail::validScope(scope)) return Result::InvalidArgument;
+    if (impl_->operationActive) return Result::Busy;
+    if (impl_->failure!=Result::Ok) return impl_->failure;
+    if (scope.kind==SpawnableScopeKind::Effect)
+        return impl_->cpuParticles ? impl_->cpuParticles->read(id,first,snapshots,timings,capacity,written) : Result::InvalidHandle;
+    const auto state=impl_->findTemplate(scope.containerId);
+    const auto instance=state ? impl_->findInstance(*state,scope.instanceId) : nullptr;
+    return instance && instance->cpuParticles ? instance->cpuParticles->read(id,first,snapshots,timings,capacity,written) : Result::InvalidHandle;
+}
+
 auto SpawnableHost::popCpuParticleEvent(CpuParticleEvent& out) noexcept -> bool
 {
     return popCpuParticleEvent(SpawnableScope{}, out);

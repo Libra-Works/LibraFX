@@ -1810,20 +1810,25 @@ struct FLibraSpawnableRenderState::FImpl
                 batch.Transforms.Reset();
                 batch.Colors.Reset();
                 for (auto& entry : batch.Frames) { entry.Value->Transforms.Reset(); entry.Value->Colors.Reset(); }
+                std::array<liberafx::CpuParticleSnapshot,256> particleBatch;
+                std::array<liberafx::CpuParticleTiming,256> timingBatch;
                 for (auto particleIndex = 0; particleIndex < count; ++particleIndex)
                 {
-                    auto particleId = uint64{};
-                    auto positionX = double{}, positionY = double{}, positionZ = double{};
-                    auto colorR = double{}, colorG = double{}, colorB = double{}, colorA = double{};
-                    auto sizeX = double{}, sizeY = double{};
-                    result = Owner.ReadCpuParticleAt(instance->Container, instance->Id,
-                        system.Id, static_cast<SIZE_T>(particleIndex),
-                        particleId, positionX, positionY, positionZ, colorR, colorG,
-                        colorB, colorA, sizeX, sizeY);
-                    if (result != ELibraRuntimeResult::Ok || particleId == 0)
+                    if (particleIndex%256==0) {
+                        SIZE_T written=0;
+                        result=Owner.ReadCpuParticleBatch(instance->Container,instance->Id,system.Id,particleIndex,
+                            particleBatch.data(),system.Atlas.enabled ? timingBatch.data() : nullptr,particleBatch.size(),written);
+                        if (result!=ELibraRuntimeResult::Ok || written!=static_cast<SIZE_T>(FMath::Min(256,count-particleIndex)))
+                            return Fail(TEXT("CPU particle batch read failed."));
+                    }
+                    const auto& particle=particleBatch[particleIndex%256];
+                    if (particle.id == 0)
                     {
                         return Fail(TEXT("CPU particle snapshot read failed."));
                     }
+                    const auto positionX=particle.position[0], positionY=particle.position[1], positionZ=particle.position[2];
+                    const auto colorR=particle.color[0], colorG=particle.color[1], colorB=particle.color[2], colorA=particle.color[3];
+                    const auto sizeX=particle.size[0], sizeY=particle.size[1];
                     const auto worldPosition = drawWorld.TransformPosition(FVector(
                         positionX * system.DrawScale,
                         positionY * system.DrawScale,
@@ -1839,10 +1844,8 @@ struct FLibraSpawnableRenderState::FImpl
                     auto* target = &batch;
                     if (system.Atlas.enabled)
                     {
-                        double age=0,life=0;
-                        if (Owner.ReadCpuParticleTiming(instance->Container,instance->Id,system.Id,particleIndex,age,life)!=ELibraRuntimeResult::Ok)
-                            return Fail(TEXT("Could not read CPU particle animation time."));
-                        const auto frame=system.Atlas.frame(age,life);
+                        const auto& timing=timingBatch[particleIndex%256];
+                        const auto frame=system.Atlas.frame(timing.age,timing.life);
                         auto& entry=batch.Frames.FindOrAdd(frame);
                         if (!entry) {
                             entry=MakeUnique<LibraCpuParticleRendering::FBatch>();

@@ -881,6 +881,20 @@ auto ULibraSpawnableComponent::ReadCpuParticleCount(FGuid containerId, int64 ins
     return ELibraRuntimeResult::Ok;
 }
 
+auto ULibraSpawnableComponent::ReadCpuParticleBatch(FGuid containerId, int64 instanceId, FGuid systemId,
+    SIZE_T first, liberafx::CpuParticleSnapshot* snapshots, liberafx::CpuParticleTiming* timings,
+    SIZE_T capacity, SIZE_T& written) const -> ELibraRuntimeResult
+{
+    check(IsInGameThread()); written=0;
+    if (DebugJobPending()) return ELibraRuntimeResult::Busy;
+    if (!NativeHost) return ELibraRuntimeResult::NotReady;
+    if (!systemId.IsValid() || instanceId<0 || containerId.IsValid()!=(instanceId>0)) return ELibraRuntimeResult::InvalidArgument;
+    uint8 bytes[16]{}; LibraNodeIdBytes(systemId,bytes);
+    auto scope=liberafx::SpawnableScope{};
+    if (containerId.IsValid()) { scope.kind=liberafx::SpawnableScopeKind::Instance; LibraNodeIdBytes(containerId,scope.containerId); scope.instanceId=instanceId; }
+    return ToLibraResult(NativeHost->cpuParticleRead(scope,bytes,first,snapshots,timings,capacity,written));
+}
+
 auto ULibraSpawnableComponent::ReadCpuParticleTiming(FGuid containerId, int64 instanceId,
     FGuid systemId, SIZE_T index, double& age, double& life) const -> ELibraRuntimeResult
 {

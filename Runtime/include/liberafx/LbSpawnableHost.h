@@ -118,6 +118,8 @@ public:
     Result cpuParticleAt(const std::uint8_t systemId[16], std::size_t index, CpuParticleSnapshot& out) const noexcept;
     Result cpuParticleTiming(const SpawnableScope& scope, const std::uint8_t systemId[16],
         std::size_t index, CpuParticleTiming& out) const noexcept;
+    Result cpuParticleRead(const SpawnableScope& scope, const std::uint8_t systemId[16], std::size_t first,
+        CpuParticleSnapshot* snapshots, CpuParticleTiming* timings, std::size_t capacity, std::size_t& written) const noexcept;
     bool popCpuParticleEvent(CpuParticleEvent& out) noexcept;
     Result cpuParticleCount(const SpawnableScope& scope,
                             const std::uint8_t systemId[16],

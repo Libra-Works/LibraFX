@@ -92,6 +92,9 @@ namespace LiberaFx.Unity
         [FieldOffset(72)] public double SizeY;
     }
 
+    [StructLayout(LayoutKind.Sequential, Pack = 8)]
+    internal struct NativeCpuParticleTiming { public double Age, Life; }
+
     [StructLayout(LayoutKind.Explicit, Pack = 8, Size = 88)]
     public unsafe struct CpuParticleEvent
     {
@@ -414,6 +417,10 @@ namespace LiberaFx.Unity
         internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_timing(
             ulong host, byte* containerId, ulong instance, byte* systemId, uint index, out double age, out double life);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_read(
+            ulong host, byte* containerId, ulong instance, byte* systemId, uint first,
+            NativeCpuParticleSnapshot* snapshots, NativeCpuParticleTiming* timings, uint capacity, out uint written);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_pop_event(
             ulong host, byte* containerId, ulong instance, out CpuParticleEvent particleEvent, out uint hasEvent);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
@@ -718,6 +725,21 @@ namespace LiberaFx.Unity
                 }
 
                 private static readonly byte[] CpuRootScopeContainer = new byte[16];
+                internal NativeResult CpuParticleRead(byte[] containerId, ulong instance, byte[] systemId, uint first,
+                    NativeCpuParticleSnapshot[] snapshots, NativeCpuParticleTiming[] timings, out uint written)
+                {
+                    written=0;
+                    var scope=containerId ?? CpuRootScopeContainer;
+                    if (scope.Length!=16 || systemId==null || systemId.Length!=16 || snapshots==null ||
+                        snapshots.Length<1 || snapshots.Length>256 || timings!=null && timings.Length<snapshots.Length)
+                        return NativeResult.InvalidArgument;
+                    fixed(byte* container=scope)
+                    fixed(byte* system=systemId)
+                    fixed(NativeCpuParticleSnapshot* particles=snapshots)
+                    fixed(NativeCpuParticleTiming* clocks=timings)
+                        return Native.libra_spawnable_host_scoped_cpu_particle_read(Alive,container,instance,system,first,
+                            particles,clocks,(uint)snapshots.Length,out written);
+                }
                 internal NativeResult CpuParticleTiming(byte[] containerId, ulong instance, byte[] systemId,
                     uint index, out double age, out double life)
                 {

@@ -30,10 +30,14 @@ int main(int argc, char** argv) {
     using namespace liberafx;
     using namespace particle_benchmarks;
     try {
-        if (argc != 4 && argc != 5) throw std::runtime_error("Usage: particle_host_benchmarks <CPU .lfxb> <instances 1..64> <frames 30..3600> [--interpreter]");
-        if (argc == 5 && std::string(argv[4]) != "--interpreter") throw std::runtime_error("Unknown execution mode.");
+        if (argc < 4 || argc > 6) throw std::runtime_error("Usage: particle_host_benchmarks <CPU .lfxb> <instances 1..64> <frames 30..3600> [--interpreter] [--bulk]");
         auto options = SpawnableHostOptions{};
-        options.cpuParticleBatching = argc != 5;
+        bool bulk=false;
+        for (auto index=4;index<argc;++index) {
+            if (std::string(argv[index])=="--interpreter") options.cpuParticleBatching=false;
+            else if (std::string(argv[index])=="--bulk") bulk=true;
+            else throw std::runtime_error("Unknown execution mode.");
+        }
         const auto instances = std::stoi(argv[2]), frames = std::stoi(argv[3]);
         if (instances < 1 || instances > 64 || frames < 30 || frames > 3600) throw std::runtime_error("Invalid benchmark limits.");
 #ifdef NDEBUG
@@ -61,6 +65,7 @@ int main(int argc, char** argv) {
         if (initialCount == 0) throw std::runtime_error("Fixture must emit an initial burst.");
         std::vector<double> simulation, extraction;
         double checksum = 0;
+        std::array<CpuParticleSnapshot,256> copied;
         for (int frame = 1; frame <= frames + 30; ++frame) {
             start = Clock::now();
             for (auto& host : hosts) require(host->advance(frame / 60.0, 1.0 / 60));
@@ -72,7 +77,14 @@ int main(int argc, char** argv) {
                 if (count != initialCount) throw std::runtime_error("Particle count changed during the measurement.");
                 for (std::size_t index = 0; index < count; ++index) {
                     CpuParticleSnapshot particle{};
-                    require(host->cpuParticleAt(system.data(),index,particle));
+                    if (bulk) {
+                        if (index%copied.size()==0) {
+                            std::size_t written=0;
+                            require(host->cpuParticleRead({},system.data(),index,copied.data(),nullptr,copied.size(),written));
+                            if (written!=std::min(copied.size(),count-index)) throw std::runtime_error("Incomplete bulk read.");
+                        }
+                        particle=copied[index%copied.size()];
+                    } else require(host->cpuParticleAt(system.data(),index,particle));
                     checksum += particle.position[1] + particle.color[3];
                 }
             }
@@ -83,6 +95,7 @@ int main(int argc, char** argv) {
                   << "# instances=" << instances << ",particles_per_instance=" << initialCount << ",measured_frames=" << frames
                   << ",warmup_frames=30,dt=1/60,owner_thread=serial,no_drawing,no_Niagara_comparison\n"
                   << "# particle_batching=" << (options.cpuParticleBatching ? "auto" : "disabled") << '\n'
+                  << "# snapshot_reads=" << (bulk ? "bulk256" : "individual") << '\n'
                   << "# create_all_ms=" << create << ",initial_spawn_all_ms=" << spawn << ",checksum=" << checksum << '\n'
                   << "phase,mean_ms,p50_ms,p95_ms,p99_ms,max_ms\n";
         report("simulation_all_instances", std::move(simulation));
