@@ -11,7 +11,7 @@ internal static class ParticleBenchmarkFixtures
             throw new ArgumentException("Use an absolute new isolated benchmark fixture directory.");
         Directory.CreateDirectory(directory);
         var referenceOptions = new VfxCompileOptions { OptimizeCpuParticleKernels = false };
-        foreach (var count in new[] { 1000, 10000 })
+        foreach (var count in new[] { 100, 512, 1000, 10000 })
         {
             var graph = ParticleSamples.Create("CpuFountain");
             GraphNodeSnapshot Transform(GraphNodeSnapshot node)

@@ -336,6 +336,33 @@ command's input format. Use the matching updated native runtime for the output.
 The release gate compares both source-compiled and binary-rewritten optimized
 packages against the unoptimized interpreter.
 
+## Smaller particle counts
+
+Three separate-process Release runs with one host, 30 warmup frames and 600
+measured frames per run used the binary-preoptimized Fountain. The table shows
+the median of three host-creation/spawn measurements and the median of three
+per-run Update means on the same Ryzen 9 9950X:
+
+| Particles | Host creation (ms) | Initial emission (ms) | Update per frame (ms) |
+| --- | --- | --- | --- |
+| 100 | 0.264 | 0.042 | 0.00086 |
+| 512 | 0.255 | 0.067 | 0.00411 |
+| 1,000 | 0.262 | 0.098 | 0.00796 |
+| 10,000 | 0.422 | 0.686 | 0.08106 |
+
+Creation and initial emission are separate one-time costs; add them when
+estimating the initial `create` + `advance(0,0)` work. Creation retains fixed
+program/descriptor and host setup costs, so it does not fall in direct
+proportion to particle count. The package was already loaded before timing;
+file IO, package deserialization, engine geometry/material work and drawing are
+excluded. Other graphs can have very different costs.
+
+`--particle-benchmark-fixtures` now emits 100/512-particle cases as well as
+1,000/10,000, each with original, source-preoptimized and binary-preoptimized
+packages. Run the ordinary benchmark with one host and `600 --bulk` to reproduce
+this comparison. Local raw measurements are in the ignored
+`build/cpu-particle-count-scaling.json` file.
+
 ## Engine comparison still required
 
 For a paired Niagara comparison use the same hardware, Unreal version, RHI,
