@@ -8,7 +8,7 @@ CpuParticleWorld::~CpuParticleWorld() = default;
 
 auto CpuParticleWorld::create(const std::uint8_t* payload, std::size_t bytes,
     const CustomNodeDescriptor* registry, std::size_t registryCount,
-    std::unique_ptr<CpuParticleWorld>& out) noexcept -> Result
+    std::unique_ptr<CpuParticleWorld>& out, bool enableBatching) noexcept -> Result
 {
     if ((!payload && bytes != 0) || (!registry && registryCount != 0))
     {
@@ -32,6 +32,7 @@ auto CpuParticleWorld::create(const std::uint8_t* payload, std::size_t bytes,
             {
                 return result;
             }
+            if (enableBatching) system->buildUpdateBatch();
             for (auto& callback : system->callbacks)
             {
                 if (callback.operation != 0x36)

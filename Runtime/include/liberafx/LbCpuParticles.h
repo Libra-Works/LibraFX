@@ -33,7 +33,7 @@ class LIBRA_RUNTIME_CORE_API CpuParticleWorld final {
 public:
     static Result create(const std::uint8_t* payload, std::size_t bytes,
         const CustomNodeDescriptor* registry, std::size_t registryCount,
-        std::unique_ptr<CpuParticleWorld>& out) noexcept;
+        std::unique_ptr<CpuParticleWorld>& out, bool enableBatching = true) noexcept;
     ~CpuParticleWorld();
     const CustomNodeDescriptor* signalDescriptors(std::size_t& count) const noexcept;
     // At a new effect step, deliver previous step's explicit LastById reductions

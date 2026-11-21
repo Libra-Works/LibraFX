@@ -40,6 +40,8 @@ struct SpawnableHostOptions final {
     std::size_t memoryBudgetBytesPerTemplate = 4 * 1024 * 1024;
     std::size_t eventCapacity = 128;
     std::size_t instructionBudget = 10000;
+    // Disable for interpreter comparisons; unsupported stages always use the VM.
+    bool cpuParticleBatching = true;
 };
 struct EffectTimeSnapshot final {
     double realTime = 0, effectTime = 0, realDelta = 0, effectDelta = 0, timeScale = 1;

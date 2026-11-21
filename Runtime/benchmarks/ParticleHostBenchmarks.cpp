@@ -30,7 +30,10 @@ int main(int argc, char** argv) {
     using namespace liberafx;
     using namespace particle_benchmarks;
     try {
-        if (argc != 4) throw std::runtime_error("Usage: particle_host_benchmarks <CPU .lfxb> <instances 1..64> <frames 30..3600>");
+        if (argc != 4 && argc != 5) throw std::runtime_error("Usage: particle_host_benchmarks <CPU .lfxb> <instances 1..64> <frames 30..3600> [--interpreter]");
+        if (argc == 5 && std::string(argv[4]) != "--interpreter") throw std::runtime_error("Unknown execution mode.");
+        auto options = SpawnableHostOptions{};
+        options.cpuParticleBatching = argc != 5;
         const auto instances = std::stoi(argv[2]), frames = std::stoi(argv[3]);
         if (instances < 1 || instances > 64 || frames < 30 || frames > 3600) throw std::runtime_error("Invalid benchmark limits.");
 #ifdef NDEBUG
@@ -48,7 +51,7 @@ int main(int argc, char** argv) {
         std::copy_n(package.cpuPrograms.data() + 8, 16, system.data());
         std::vector<std::unique_ptr<SpawnableHost>> hosts(instances);
         auto start = Clock::now();
-        for (auto& host : hosts) require(SpawnableHost::create(package, {}, host));
+        for (auto& host : hosts) require(SpawnableHost::create(package, options, host));
         const auto create = milliseconds(start);
         start = Clock::now();
         for (auto& host : hosts) require(host->advance(0,0));
@@ -79,6 +82,7 @@ int main(int argc, char** argv) {
         std::cout << std::fixed << std::setprecision(6)
                   << "# instances=" << instances << ",particles_per_instance=" << initialCount << ",measured_frames=" << frames
                   << ",warmup_frames=30,dt=1/60,owner_thread=serial,no_drawing,no_Niagara_comparison\n"
+                  << "# particle_batching=" << (options.cpuParticleBatching ? "auto" : "disabled") << '\n'
                   << "# create_all_ms=" << create << ",initial_spawn_all_ms=" << spawn << ",checksum=" << checksum << '\n'
                   << "phase,mean_ms,p50_ms,p95_ms,p99_ms,max_ms\n";
         report("simulation_all_instances", std::move(simulation));

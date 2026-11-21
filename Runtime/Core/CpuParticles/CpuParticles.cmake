@@ -4,4 +4,5 @@ target_sources(liberafx_runtime PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/LbCpuParticleNodes.cpp
     ${CMAKE_CURRENT_LIST_DIR}/LbCpuParticleMeshEmitter.cpp
     ${CMAKE_CURRENT_LIST_DIR}/LbCpuParticleSimulation.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/LbCpuParticleBatch.cpp
     ${CMAKE_CURRENT_LIST_DIR}/LbCpuParticleHost.cpp)

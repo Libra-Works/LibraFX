@@ -103,7 +103,7 @@ auto SpawnableHost::Impl::initialize() -> Result {
       result = CpuParticleWorld::create(
           state.data->cpuPrograms.data(), state.data->cpuPrograms.size(),
           projectDescriptors.data(), projectDescriptors.size(),
-          state.cpuDescriptorWorld);
+          state.cpuDescriptorWorld, options.cpuParticleBatching);
       if (result != Result::Ok) {
         return result;
       }
@@ -464,7 +464,7 @@ auto SpawnableHost::Impl::initialize() -> Result {
   parentDescriptors.insert(parentDescriptors.end(), projectDescriptors.begin(),
                            projectDescriptors.end());
   result = CpuParticleWorld::create(packageData.cpuPrograms.data(), packageData.cpuPrograms.size(),
-      projectDescriptors.data(), projectDescriptors.size(), cpuParticles);
+      projectDescriptors.data(), projectDescriptors.size(), cpuParticles, options.cpuParticleBatching);
   if (result != Result::Ok)
   {
     return result;
@@ -863,7 +863,7 @@ auto SpawnableHost::Impl::processPoolEvent(TemplateState &state,
       result = CpuParticleWorld::create(
           state.data->cpuPrograms.data(), state.data->cpuPrograms.size(),
           projectDescriptors.data(), projectDescriptors.size(),
-          instance->cpuParticles);
+          instance->cpuParticles, options.cpuParticleBatching);
       if (result != Result::Ok) {
         state.instances.pop_back();
         return result;

@@ -55,6 +55,25 @@ struct Stage final {
     Buffer work, defaults;
     std::size_t workStride = 0, defaultStride = 0;
 };
+struct BatchInput final {
+    std::uint32_t source = 0xffffffffu;
+    std::uint8_t component = 0;
+    std::array<double,4> constants{};
+};
+enum class BatchOp : std::uint8_t { Copy, Add, Subtract, Multiply, Divide, Broadcast, Clamp, Compose,
+    Position, Velocity, Color, Size, Life, Age, Id, Seed, Delta, SetPosition, SetVelocity, SetColor, SetSize, SetLife, Move };
+struct BatchInstruction final {
+    Id sourceNode{};
+    BatchOp op{};
+    std::uint32_t output = 0;
+    std::uint8_t width = 0;
+    std::array<BatchInput,4> inputs{};
+};
+struct UpdateBatchPlan final {
+    static constexpr std::size_t maximumNodes = 64, batchSize = 32;
+    bool enabled = false;
+    std::vector<BatchInstruction> values, commands;
+};
 struct Slot final {
     double realStart = 0;
     CpuParticleSnapshot draw;
@@ -98,6 +117,7 @@ struct System final {
     std::uint64_t nextId = 1;
     std::size_t live = 0;
     Stage stages[2];
+    UpdateBatchPlan updateBatch;
     std::unique_ptr<Slot[]> slots;
     std::vector<std::uint32_t> activeIndices;
     Slot* current = nullptr;
@@ -114,6 +134,8 @@ struct System final {
     Result initialize(const CustomNodeDescriptor* registry, std::size_t registryCount);
     Result tick(Instance& root, double time, bool emitting, const HostQualitySnapshot& quality) noexcept;
     Result run(Slot& slot, std::uint32_t stage, double time, const HostQualitySnapshot& quality) noexcept;
+    void buildUpdateBatch();
+    Result updateBatches(double time, const HostQualitySnapshot& quality) noexcept;
     Result publish(const Io& io, const double* values, double time) noexcept;
     Result collect(Slot& slot, std::uint32_t stage, double time) noexcept;
     static Result invoke(CustomNodeInvocation& call) noexcept;

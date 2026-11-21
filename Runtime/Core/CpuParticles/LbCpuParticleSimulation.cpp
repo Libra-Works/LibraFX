@@ -141,8 +141,13 @@ auto System::tick(Instance& root, double time, bool emitting, const HostQualityS
             std::copy_n(values.data() + io.component, io.width, io.sampled.data());
         }
     }
-    // Existing particles update exactly once. Stable slot order is not a reduction.
-    for (auto index = 0u; index < capacity; ++index)
+    // Plans contain only isolated numeric work and a linear local mutation chain.
+    if (updateBatch.enabled && incomingCount == 0)
+    {
+        const auto result = updateBatches(time, quality);
+        if (result != Result::Ok) return result;
+    }
+    else for (auto index = 0u; index < capacity; ++index)
     {
         auto& slot = slots[index];
         if (!slot.active)
