@@ -37,9 +37,27 @@ jobs:
           $created = ([DateTimeOffset]$run.created_at).ToOffset([TimeSpan]::FromHours(9))
           "value=$($created.Year).$($created.Month).$env:GITHUB_RUN_NUMBER" >> $env:GITHUB_OUTPUT
 
+  authoring-acceptance:
+    name: MCP authoring transitions (release gate)
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Verify MCP operations and state after each transition
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $env:LIBERAFX_DATA_ROOT = Join-Path $env:RUNNER_TEMP 'mcp-authoring-data'
+          dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release -- --mcp-authoring-transitions
+
   editor:
     name: ${{ matrix.name }}
-    needs: version
+    needs: [version, authoring-acceptance]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     strategy:
@@ -133,7 +151,7 @@ jobs:
 
   sdk:
     name: LibraSDK
-    needs: version
+    needs: [version, authoring-acceptance]
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -161,7 +179,7 @@ jobs:
 
   adapters:
     name: LibraFor${{ matrix.engine }}
-    needs: version
+    needs: [version, authoring-acceptance]
     runs-on: windows-2022
     timeout-minutes: 35
     strategy:

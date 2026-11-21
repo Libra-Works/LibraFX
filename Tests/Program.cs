@@ -39,6 +39,12 @@ internal static class Program
 
     private static void MainCore(string[] args)
     {
+        if (args is ["--mcp-authoring-transitions"])
+        {
+            InitializeIsolatedUi();
+            McpAuthoringTransitionTests.Run();
+            return;
+        }
         if (args is ["--procedural-resources"])
         {
             InitializeIsolatedUi();
