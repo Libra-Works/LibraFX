@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "Assets"
 INTERNAL_PREFIXES = ("MatrixRuntime", "LifecycleRuntime", "GameIoRuntime")
+INTERNAL_KINDS = {"RuntimeEffectAge", "RealEffectAge", "RealInstanceAge", "RealDeltaTime"}
 
 OPERATIONS = {
     "Abs": ("Absolute value.", "絶対値を求めます。"),
@@ -51,6 +52,11 @@ OPERATIONS = {
 }
 
 NOTES = {
+    "BoolToFloat": ("Convert false to 0 and true to 1 for numeric inputs.", "false を 0、true を 1 に変換し、数値入力へ渡します。"),
+    "CpuParticleMeshPosition": ("Sample a mesh surface position, weighted by triangle area. Connect a Procedural Model to the CPU Particle's Emitter Mesh input.", "三角形の面積に応じてメッシュ表面の位置を選びます。CPU Particle の Emitter Mesh 入力へ Procedural Model を接続してください。"),
+    "CpuParticleMeshNormal": ("Read the interpolated source-space normal at the same sampled surface point as Mesh Surface Position.", "メッシュ表面の位置と同じサンプリング地点で、元のメッシュ座標系の補間済み法線を読み取ります。"),
+    "CpuParticleMeshUV": ("Read interpolated UV coordinates at the same sampled mesh surface point.", "同じメッシュ表面のサンプリング地点で、補間済みの UV 座標を読み取ります。"),
+    "CpuParticleMeshColor": ("Read the interpolated linear vertex color at the same sampled mesh surface point. This does not sample a texture.", "同じメッシュ表面のサンプリング地点で、線形空間の頂点色を補間して読み取ります。テクスチャーの色は読み取りません。"),
     "ColorToVector4": ("Represent the RGBA lanes as a Vector4.", "RGBA の各成分を Vector4 として扱います。"),
     "Vector4ToColor": ("Represent the four lanes as RGBA.", "4 成分を RGBA として扱います。"),
     "ComposeVector4": ("Assemble four scalar inputs into a Vector4.", "4 個のスカラー入力を Vector4 に組み立てます。"),
@@ -63,9 +69,9 @@ NOTES = {
     "SpriteAnimation": ("Select a frame from an authored sprite animation.", "スプライトアニメーションからフレームを選びます。"),
     "SpriteComposition": ("Use an authored multi-part sprite composition.", "複数パーツからなるスプライト構成を使います。"),
     "GpuParticle": ("Author GPU particle work for a supported backend; consult the engine compatibility guide.", "対応バックエンド向けの GPU パーティクルを構成します。エンジンの対応範囲を確認してください。"),
-    "EffectAge": ("Read elapsed time for the whole effect.", "エフェクト全体の経過時間を読み取ります。"),
+    "EffectAge": ("Read elapsed time for the whole effect, with separate scaled-time and real-time outputs.", "エフェクト全体の経過時間を、時間倍率適用後と実時間の二つの出力で読み取ります。"),
     "DeltaTime": ("Read the current evaluation's time step.", "現在の評価で進んだ時間を読み取ります。"),
-    "InstanceAge": ("Read elapsed time for the current spawned instance.", "現在の生成済みインスタンスの経過時間を読み取ります。"),
+    "InstanceAge": ("Read elapsed time for the current spawned instance, with separate scaled-time and real-time outputs.", "現在の生成済みインスタンスの経過時間を、時間倍率適用後と実時間の二つの出力で読み取ります。"),
     "InstanceRemaining": ("Read the current instance's remaining lifetime.", "現在のインスタンスの残り寿命時間を読み取ります。"),
     "InstanceNormalizedAge": ("Read the current instance's age relative to its lifetime.", "現在のインスタンスの寿命に対する経過割合を読み取ります。"),
     "LifeTime": ("Set the current scope's lifetime deadline.", "現在のスコープの寿命の期限を設定します。"),
@@ -331,7 +337,7 @@ def main():
     target = parser.parse_args().site
     nodes = [load(path) for path in sorted((ASSETS / "Nodes").glob("*.json"))]
     nodes = [node for node in nodes if not (node["namespace"] == "LiberaFx" and
-                                           node["kind"].startswith(INTERNAL_PREFIXES))]
+                                           (node["kind"].startswith(INTERNAL_PREFIXES) or node["kind"] in INTERNAL_KINDS))]
     assert nodes and len(nodes) == len({node["kind"] for node in nodes})
     enums = {enum["typeId"]: enum for path in sorted((ASSETS / "Enums").glob("*.json")) if (enum := load(path))}
     modules = [module for module in load(ASSETS / "Modules" / "manifest.json") if not module.get("legacy")]
