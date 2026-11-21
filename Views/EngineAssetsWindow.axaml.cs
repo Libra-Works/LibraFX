@@ -12,6 +12,12 @@ public partial class EngineAssetsWindow : UserControl
     private EngineAssetsWindowViewModel? _viewModel;
     private ResourceIdentityPaneViewModel? _resourceIdentityViewModel;
 
+    private async void OnFilterSelectedFolder(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not EngineAssetsWindowViewModel { SelectedAsset: { } asset } model) return;
+        await model.ChooseEngineFolderAsync(EngineAssetFolder.Parent(asset.Path));
+    }
+
     public EngineAssetsWindow()
     {
         InitializeComponent();

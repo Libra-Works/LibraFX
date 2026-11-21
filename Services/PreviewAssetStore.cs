@@ -27,10 +27,11 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
     }
 
     public async Task<EngineAssetPage> CatalogAsync(string query = "", string assetClass = "", int offset = 0,
-        int limit = 32, Guid? clientId = null, CancellationToken cancellation = default)
+        int limit = 32, Guid? clientId = null, CancellationToken cancellation = default, string folder = "")
     {
         if (query.Length > 256 || assetClass is not ("" or "model" or "texture" or "material") ||
             offset < 0 || limit is < 1 or > 64) throw new ArgumentException("Invalid asset catalog query.");
+        folder = EngineAssetFolder.Normalize(folder);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         timeout.CancelAfter(TimeSpan.FromSeconds(20));
         JsonElement response;
@@ -38,18 +39,49 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
         do
         {
             response = await RequestAsync("catalog", peer, request =>
-                new { type = "asset_catalog", requestId = request, query, assetClass, offset, limit }, timeout.Token);
+                new { type = "asset_catalog", requestId = request, query, assetClass, offset, limit, folder }, timeout.Token);
             if (!response.TryGetProperty("pending", out var pending) || pending.ValueKind == JsonValueKind.False) break;
             if (pending.ValueKind != JsonValueKind.True) throw new InvalidDataException("Invalid catalog indexing state.");
             await Task.Delay(150, timeout.Token);
         } while (true);
         var assets = response.GetProperty("assets").EnumerateArray().Select(ParseAsset).ToArray();
+        if (folder.Length > 0 && (!response.TryGetProperty("folder", out var appliedFolder) ||
+            appliedFolder.ValueKind != JsonValueKind.String || appliedFolder.GetString() != folder))
+            throw new InvalidDataException("The engine adapter did not confirm folder filtering. Update the engine adapter.");
+        if (assets.Any(asset => !EngineAssetFolder.Contains(folder, asset.Path)))
+            throw new InvalidDataException("The engine returned assets outside the requested folder. Update the engine adapter to use folder filtering.");
         var total = response.GetProperty("total").GetInt32();
         var receivedOffset = response.GetProperty("offset").GetInt32();
         if (assets.Length > limit || total < 0 || receivedOffset != offset ||
             assets.Length > 0 && total < offset + assets.Length)
             throw new InvalidDataException("Invalid asset catalog response.");
         return new(assets, total, receivedOffset);
+    }
+
+    public async Task<EngineFolderPage> FoldersAsync(string folder = "", int offset = 0,
+        Guid? clientId = null, CancellationToken cancellation = default)
+    {
+        folder = EngineAssetFolder.Normalize(folder);
+        if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
+        var response = await RequestAsync("catalog", clientId, request => new
+            { type = "asset_catalog", requestId = request, folder, foldersOnly = true, offset, limit = 64 }, cancellation);
+        if (!response.TryGetProperty("folder", out var appliedFolder) || appliedFolder.GetString() != folder ||
+            !response.TryGetProperty("folders", out var values) || values.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException("Update the engine adapter to browse folders.");
+        var entries = values.EnumerateArray().Select(value =>
+        {
+            if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty("path", out var path) ||
+                path.ValueKind != JsonValueKind.String || !value.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String)
+                throw new InvalidDataException("Invalid engine folder entry.");
+            return new EngineFolderEntry(EngineAssetFolder.Normalize(path.GetString()!), name.GetString()!);
+        }).ToArray();
+        var total = response.GetProperty("total").GetInt32();
+        if (entries.Length > 64 || total < offset + entries.Length || response.GetProperty("offset").GetInt32() != offset ||
+            entries.Any(entry => entry.Path.Length == 0 || EngineAssetFolder.Parent(entry.Path) != folder ||
+                string.IsNullOrWhiteSpace(entry.Name) || entry.Name.Length > 256) ||
+            entries.Select(entry => entry.Path).Distinct(StringComparer.OrdinalIgnoreCase).Count() != entries.Length)
+            throw new InvalidDataException("Invalid engine folder page.");
+        return new(entries, total, offset);
     }
 
     public async Task<EngineAsset> DetailsAsync(string path, Guid? clientId = null, CancellationToken cancellation = default)

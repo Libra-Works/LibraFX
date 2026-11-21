@@ -7,6 +7,8 @@ public sealed record EngineMaterial(int Slot, string Path, string Name,
 public sealed record EngineAsset(string Path, string Name, string AssetClass, string Engine,
     int Width = 0, int Height = 0, IReadOnlyList<EngineMaterial>? Materials = null);
 public sealed record EngineAssetPage(IReadOnlyList<EngineAsset> Assets, int Total, int Offset);
+public sealed record EngineFolderEntry(string Path, string Name);
+public sealed record EngineFolderPage(IReadOnlyList<EngineFolderEntry> Folders, int Total, int Offset);
 public sealed record EngineAssetThumbnail(string Path, string Mime, byte[] Image, int Width, int Height);
 
 // Render delivery only depends on this UI-independent boundary, including in the standalone converter.

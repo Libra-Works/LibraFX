@@ -23,12 +23,21 @@ public sealed class AssetMcpTools
         [Description("model, texture, material, or empty for all classes.")] string assetClass = "",
         [Description("Zero-based page offset.")] int offset = 0,
         [Description("Maximum assets on this page.")] int limit = 32,
-        [Description("Optional editor peer GUID from libera_preview_clients.")] string? clientId = null)
+        [Description("Optional editor peer GUID from libera_preview_clients.")] string? clientId = null,
+        [Description("Optional engine folder, including descendants, e.g. /Game/VFX. Empty searches all permitted folders; tags are not required.")] string folder = "")
     {
-        var page = await assets.CatalogAsync(query, assetClass, offset, limit, Peer(clientId));
+        var page = await assets.CatalogAsync(query, assetClass, offset, limit, Peer(clientId), folder: folder);
         return Json(new { page.Total, page.Offset, assets = page.Assets.Select(asset => new
             { asset, metadata = metadata.Get(asset.Engine, asset.Path) }) });
     }
+
+    [McpServerTool(Name = "libera_asset_folders", ReadOnly = true, OpenWorld = false)]
+    [Description("Browse immediate child folders in a connected Unreal editor without loading asset objects. Empty folder lists /Game and /Engine. Results are paged; use a chosen path as libera_assets_search folder.")]
+    public static async Task<string> Folders(PreviewAssetStore assets,
+        [Description("Engine folder, e.g. /Game/VFX, or empty for roots.")] string folder = "",
+        [Description("Zero-based folder page offset.")] int offset = 0,
+        [Description("Optional editor peer GUID.")] string? clientId = null) =>
+        Json(await assets.FoldersAsync(folder, offset, Peer(clientId)));
 
     [McpServerTool(Name = "libera_asset_details", ReadOnly = true, OpenWorld = false)]
     [Description("Read actual mesh material slots, overridable scalar/vector/texture parameters, texture dimensions and local metadata. Material schema generates stable dynamic pin IDs including slot and parameter association.")]

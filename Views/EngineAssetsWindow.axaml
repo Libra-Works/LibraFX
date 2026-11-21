@@ -10,6 +10,7 @@
     <TabItem Header="{DynamicResource Text.Resources.Connected}">
     <Grid RowDefinitions="Auto,*,Auto" Margin="12" RowSpacing="10">
         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <StackPanel Spacing="6">
             <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="4">
                 <TextBlock Classes="editor-label" Text="{DynamicResource Text.Asset.Peer}" />
                 <ComboBox x:Name="PeerPicker" Width="240" ItemsSource="{Binding Peers}"
@@ -17,7 +18,41 @@
                 <TextBox Width="240" PlaceholderText="{DynamicResource Text.Asset.SearchHint}"
                          Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}" />
                 <ComboBox Width="130" ItemsSource="{Binding AssetClasses}" SelectedItem="{Binding AssetClass}" />
+                <TextBox x:Name="EngineFolderFilter" Width="220" Text="{Binding EngineFolder}"
+                         PlaceholderText="{DynamicResource Text.Asset.FolderHint}"
+                         ToolTip.Tip="{DynamicResource Text.Asset.FolderHint}"
+                         AutomationProperties.Name="{DynamicResource Text.Asset.Folder}" />
+                <views:IconButton Icon="Open" Click="OnFilterSelectedFolder" IsEnabled="{Binding HasSelectedAsset}"
+                                  ToolTip.Tip="{DynamicResource Text.Asset.SelectedFolder}"
+                                  AutomationProperties.Name="{DynamicResource Text.Asset.SelectedFolder}" />
             </WrapPanel>
+            <Expander x:Name="EngineFolderScopeSettings" Header="{DynamicResource Text.Asset.FolderSettings}" HorizontalAlignment="Stretch">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="{DynamicResource Text.Asset.FolderScopeHelp}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding BrowseEngineFolder}" />
+                    <WrapPanel ItemSpacing="6" LineSpacing="4">
+                        <Button Command="{Binding RefreshEngineFoldersCommand}" Content="{DynamicResource Text.Asset.FolderLoad}" />
+                        <Button Command="{Binding UpEngineFolderCommand}" Content="{DynamicResource Text.Asset.FolderUp}" />
+                        <Button Command="{Binding OpenEngineFolderCommand}" Content="{DynamicResource Text.Asset.FolderOpen}" />
+                        <views:IconButton Icon="Previous" Command="{Binding PreviousEngineFolderPageCommand}"
+                                          ToolTip.Tip="{DynamicResource Text.Asset.Previous}" AutomationProperties.Name="{DynamicResource Text.Asset.Previous}" />
+                        <views:IconButton Icon="Next" Command="{Binding NextEngineFolderPageCommand}"
+                                          ToolTip.Tip="{DynamicResource Text.Asset.Next}" AutomationProperties.Name="{DynamicResource Text.Asset.Next}" />
+                    </WrapPanel>
+                    <ListBox x:Name="EngineFolderList" ItemsSource="{Binding EngineFolders}" SelectedItem="{Binding SelectedEngineFolder}"
+                             Height="140">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="services:EngineFolderEntry"><TextBlock Text="{Binding Path}" /></DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <WrapPanel ItemSpacing="6" LineSpacing="4">
+                        <Button x:Name="ApplyEngineFolderButton" Command="{Binding UseEngineFolderCommand}" Content="{DynamicResource Text.Asset.FolderUse}" />
+                        <Button Command="{Binding AllEngineFoldersCommand}" Content="{DynamicResource Text.Asset.FolderAll}" />
+                    </WrapPanel>
+                    <TextBlock Text="{Binding EngineFolderStatus}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Expander>
+            </StackPanel>
             <Border Grid.Column="1" Classes="editor-toolbar-group" Padding="4,2">
                 <StackPanel Orientation="Horizontal" Spacing="2">
                     <views:IconButton Classes="editor-tool transport-primary" Icon="Refresh" Command="{Binding SearchCommand}"
@@ -31,15 +66,16 @@
         </Grid>
         <Grid Grid.Row="1" ColumnDefinitions="2*,3*" ColumnSpacing="14">
             <Grid RowDefinitions="*,Auto">
-                <ListBox ItemsSource="{Binding Assets}" SelectedItem="{Binding SelectedAsset}">
+                <ListBox x:Name="EngineAssetList" ItemsSource="{Binding Assets}" SelectedItem="{Binding SelectedAsset}">
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="services:EngineAsset">
-                            <Grid ColumnDefinitions="*,Auto" Margin="4">
-                                <StackPanel>
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="4">
+                                <views:EngineAssetThumbnail />
+                                <StackPanel Grid.Column="1">
                                     <TextBlock Classes="editor-heading" Text="{Binding Name}" />
                                     <TextBlock Classes="editor-label" Text="{Binding Path}" />
                                 </StackPanel>
-                                <TextBlock Grid.Column="1" Classes="editor-label" Text="{Binding AssetClass}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Classes="editor-label" Text="{Binding AssetClass}" VerticalAlignment="Center" />
                             </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
@@ -126,10 +162,13 @@
                                  SelectedItem="{Binding SelectedVirtualRootEntry}">
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="services:AssetBrowserRootEntry">
-                                    <StackPanel Margin="4">
-                                        <TextBlock Classes="editor-heading" Text="{Binding Name}" />
-                                        <TextBlock Classes="editor-label" Text="{Binding Path}" />
-                                    </StackPanel>
+                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="4">
+                                        <views:EngineAssetThumbnail />
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Classes="editor-heading" Text="{Binding Name}" />
+                                            <TextBlock Classes="editor-label" Text="{Binding Path}" />
+                                        </StackPanel>
+                                    </Grid>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>

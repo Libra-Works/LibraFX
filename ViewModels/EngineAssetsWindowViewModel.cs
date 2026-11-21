@@ -15,15 +15,31 @@ public sealed class AssetPeerOption(Guid clientId, string label)
     public override string ToString() => Label;
 }
 
-public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
+public sealed partial class EngineAssetsWindowViewModel : ObservableObject, IDisposable
 {
     private readonly MainViewModel _main;
     private readonly AssetBrowserCoordinator? _coordinator;
     private CancellationTokenSource? _requests;
     private bool _disposed;
+    private VisibleAssetThumbnails? _visibleThumbnails;
+    private EngineAssetThumbnail? _selectedThumbnailData;
+
+    public IDisposable? ObserveVisibleThumbnail(EngineAsset asset, Action<EngineAssetThumbnail> apply)
+    {
+        if (_disposed || SelectedPeer is null || !Assets.Any(item => item.Path == asset.Path)) return null;
+        var peer = SelectedPeer.ClientId;
+        _visibleThumbnails ??= new VisibleAssetThumbnails((path, cancellation) =>
+            _main.PreviewAssets.ThumbnailAsync(path, 256, peer, cancellation));
+        _visibleThumbnails.Select(SelectedAsset?.Path);
+        if (_selectedThumbnailData is { } selected && !_visibleThumbnails.TryGet(selected.Path, out _))
+            _visibleThumbnails.Store(selected);
+        return _visibleThumbnails.Observe(asset.Path, apply);
+    }
     private Bitmap? _thumbnail;
     private EngineAsset? _selectedAsset;
     private string _query = string.Empty;
+    private string _engineFolder = string.Empty;
+    public string EngineFolder { get => _engineFolder; set => SetProperty(ref _engineFolder, value); }
     private string _assetClass = string.Empty;
     private string _status = string.Empty;
     private string _description = string.Empty;
@@ -252,6 +268,7 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
     {
         _main = main;
         _coordinator = coordinator;
+        InitializeEngineFolders();
         ProjectResources = new ProjectResourcesViewModel(main);
         References = new AssetReferencesViewModel(main);
         InspectReferencesCommand = new RelayCommand(() =>
@@ -287,6 +304,7 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
 
     private void SetSelectedAsset(EngineAsset? value, bool loadDetails)
     {
+        _visibleThumbnails?.Select(value?.Path);
         if (!SetProperty(ref _selectedAsset, value)) return;
         _selectedAssetPeerId = value is not null && Assets.Contains(value) ? SelectedPeer?.ClientId : null;
         if (loadDetails)
@@ -319,6 +337,9 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
         if (userChanged) _explicitPeerId = value?.ClientId;
         if (changed) _coordinator?.OnPeerSelectionChanged(value?.ClientId);
         if (!changed) return;
+        _visibleThumbnails?.Dispose();
+        _visibleThumbnails = null;
+        ResetEngineFolders(value?.ClientId);
         CancelRequest();
         Assets.Clear();
         SelectedAsset = null;
@@ -664,6 +685,8 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
             RefreshAssignmentState();
             var thumbnail = await _main.PreviewAssets.ThumbnailAsync(path, 256, peerId);
             if (!_coordinator.IsCurrent(request, peerId) || SelectedAsset?.Path != path) return;
+            _selectedThumbnailData = thumbnail;
+            _visibleThumbnails?.Store(thumbnail);
             using var stream = new MemoryStream(thumbnail.Image, writable: false);
             Thumbnail = new Bitmap(stream);
             Status = LocalizationService.Shared.Get("Resources.AssetRevealed");
@@ -708,7 +731,7 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
             var cancellation = request.Token;
             Status = LocalizationService.Shared.Get("Asset.Loading");
             var page = await _main.PreviewAssets.CatalogAsync(Query.Trim(), AssetClass,
-                offset, 32, peerId, cancellation);
+                offset, 32, peerId, cancellation, EngineFolder);
             cancellation.ThrowIfCancellationRequested();
             if (SelectedPeer?.ClientId != peerId) return;
             SetSelectedAsset(null, loadDetails: false);
@@ -765,9 +788,12 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
             }
             finally { _updatingAssetSelection = false; }
             OnPropertyChanged(nameof(SelectedAsset));
-            var thumbnail = await _main.PreviewAssets.ThumbnailAsync(selected.Path, 256, peerId, cancellation);
+            var thumbnail = _visibleThumbnails?.TryGet(selected.Path, out var cached) == true ? cached! :
+                await _main.PreviewAssets.ThumbnailAsync(selected.Path, 256, peerId, cancellation);
             cancellation.ThrowIfCancellationRequested();
             if (SelectedAsset?.Path != selected.Path || SelectedPeer?.ClientId != peerId) return;
+            _selectedThumbnailData = thumbnail;
+            _visibleThumbnails?.Store(thumbnail);
             using var stream = new MemoryStream(thumbnail.Image, writable: false);
             Thumbnail = new Bitmap(stream);
             Status = detail.Materials?.Count > 0
@@ -907,7 +933,7 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
         request?.Dispose();
     }
 
-    private void ClearThumbnail() => Thumbnail = null;
+    private void ClearThumbnail() { _selectedThumbnailData = null; Thumbnail = null; }
 
     private static string FormatMaterials(IReadOnlyList<EngineMaterial>? materials)
     {
@@ -929,6 +955,10 @@ public sealed class EngineAssetsWindowViewModel : ObservableObject, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _folderRequests?.Cancel(); _folderRequests?.Dispose();
+        _projectScopeRequest?.Cancel();
+        _visibleThumbnails?.Dispose();
+        _visibleThumbnails = null;
         _physicalLoad?.Cancel(); _physicalLoad?.Dispose(); _physicalLoad = null;
         CancelRequest();
         _main.PropertyChanged -= OnMainPropertyChanged;

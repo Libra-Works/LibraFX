@@ -27,6 +27,7 @@ internal static class PreviewAssetMcpTests
         var metadata = new AssetMetadataStore(Path.Combine(temporaryDirectory, "assets.json"));
         var pendingCatalogReplies = 0;
         var catalogRequests = 0;
+        var requestedFolder = "";
         model.PreviewTelemetry.Connect(peer, 3, bytes =>
         {
             if (BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(6)) != (ushort)CompiledPreviewKind.Scene)
@@ -38,11 +39,20 @@ internal static class PreviewAssetMcpTests
             var root = command.RootElement;
             var requestId = root.GetProperty("requestId").GetGuid();
             var type = root.GetProperty("type").GetString();
-            if (type == "asset_catalog") catalogRequests++;
+            if (type == "asset_catalog")
+            {
+                catalogRequests++;
+                requestedFolder = root.GetProperty("folder").GetString()!;
+            }
             var catalogPending = type == "asset_catalog" && pendingCatalogReplies > 0;
             if (catalogPending) pendingCatalogReplies--;
             object response = type switch
             {
+                "asset_catalog" when root.TryGetProperty("foldersOnly", out var foldersOnly) && foldersOnly.GetBoolean() => new
+                {
+                    type = "asset_result", requestId, operation = "catalog", folder = requestedFolder, total = 1, offset = 0,
+                    folders = new[] { new { path = "/Game/Textures", name = "Textures" } }
+                },
                 "asset_catalog" when catalogPending => new
                 {
                     type = "asset_result", requestId, operation = "catalog", pending = true,
@@ -53,6 +63,7 @@ internal static class PreviewAssetMcpTests
                     type = "asset_result",
                     requestId,
                     operation = "catalog",
+                    folder = requestedFolder,
                     total = 1,
                     offset = root.GetProperty("offset").GetInt32(),
                     assets = new[] { new { path = AssetPath, name = "Smoke", assetClass = "texture", engine = "Unreal", width = 256, height = 256 } },
@@ -103,6 +114,11 @@ internal static class PreviewAssetMcpTests
             pendingCatalogReplies = 0;
             using var client = new LocalPreviewMcpClient(host);
             var Call = client.CallAsync;
+            using (var folders = JsonDocument.Parse(await Call("libera_asset_folders", new { folder = "/Game", clientId = peer.ToString("D") })))
+            {
+                if (folders.RootElement.GetProperty("folders")[0].GetProperty("path").GetString() != "/Game/Textures")
+                    throw new InvalidOperationException("MCP folder browser did not return engine folders.");
+            }
 
             using (var tools = await client.SendAsync("tools/list"))
             {
@@ -131,10 +147,11 @@ internal static class PreviewAssetMcpTests
             {
                 query = "smoke",
                 assetClass = "texture",
+                folder = "/Game/Textures",
                 clientId = peer.ToString("D")
             })))
             {
-                if (search.RootElement.GetProperty("assets").GetArrayLength() != 1 ||
+                if (requestedFolder != "/Game/Textures" || search.RootElement.GetProperty("assets").GetArrayLength() != 1 ||
                     search.RootElement.GetProperty("assets")[0].GetProperty("metadata").GetProperty("semanticUsage").GetString() !=
                     "smoke impact sprite")
                 {

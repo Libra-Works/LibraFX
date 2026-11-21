@@ -25,6 +25,7 @@ public static class ResourceWorkspaceTests
         VerifyLocalAndGroupResources();
         VerifyTypedTargets();
         VerifyEngineWindow();
+        VisibleAssetThumbnailTests.Run(CreatePng());
         Console.WriteLine("Resource origins, local/Group previews, explicit GPU/material targets, UI commands and Undo passed.");
     }
 

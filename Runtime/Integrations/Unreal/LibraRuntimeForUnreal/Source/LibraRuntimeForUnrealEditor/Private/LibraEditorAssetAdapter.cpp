@@ -235,10 +235,19 @@ namespace
     {
         auto query = FString{};
         auto assetClass = FString{};
+        auto folder = FString{};
         auto offset = 0;
         auto limit = 32;
         request->TryGetStringField(TEXT("query"), query);
         request->TryGetStringField(TEXT("assetClass"), assetClass);
+        if (request->HasField(TEXT("folder")) && !request->TryGetStringField(TEXT("folder"), folder))
+            return TEXT("Catalog folder must be a string.");
+        folder.TrimStartAndEndInline();
+        while (folder.EndsWith(TEXT("/"))) folder.LeftChopInline(1);
+        if (!folder.IsEmpty() && (folder.Len() > 512 ||
+            !(folder == TEXT("/Game") || folder == TEXT("/Engine") || folder.StartsWith(TEXT("/Game/")) || folder.StartsWith(TEXT("/Engine/"))) ||
+            !FPackageName::IsValidLongPackageName(folder, true)))
+            return TEXT("Catalog folder must be /Game or /Engine and optionally a subfolder.");
         auto number = double{0};
         if (request->TryGetNumberField(TEXT("offset"), number))
         {
@@ -252,9 +261,38 @@ namespace
                 return TEXT("Catalog limit must be from 1 to 64.");
             limit = static_cast<int32>(number);
         }
-        if (query.Len() > 128) return TEXT("Catalog query is too long.");
+        if (query.Len() > 256) return TEXT("Catalog query is too long.");
         if (!assetClass.IsEmpty() && assetClass != TEXT("model") && assetClass != TEXT("texture") &&
             assetClass != TEXT("material")) return TEXT("Unsupported Unreal asset class.");
+
+        bool foldersOnly = false;
+        if (request->HasField(TEXT("foldersOnly")) && !request->TryGetBoolField(TEXT("foldersOnly"), foldersOnly))
+            return TEXT("foldersOnly must be a boolean.");
+        if (foldersOnly)
+        {
+            TArray<FString> folders;
+            if (folder.IsEmpty()) folders = { TEXT("/Engine"), TEXT("/Game") };
+            else FAssetRegistryModule::GetRegistry().GetSubPaths(folder, folders, false);
+            folders.Sort();
+            TArray<TSharedPtr<FJsonValue>> values;
+            for (int32 index = offset; index < folders.Num() && values.Num() < limit; ++index)
+            {
+                auto entry = MakeShared<FJsonObject>();
+                entry->SetStringField(TEXT("path"), folders[index]);
+                entry->SetStringField(TEXT("name"), FPackageName::GetShortName(folders[index]));
+                values.Add(MakeShared<FJsonValueObject>(entry));
+            }
+            reply->SetStringField(TEXT("type"), TEXT("asset_result"));
+            reply->SetStringField(TEXT("requestId"), requestId);
+            reply->SetStringField(TEXT("operation"), TEXT("catalog"));
+            reply->SetStringField(TEXT("folder"), folder);
+            reply->SetArrayField(TEXT("folders"), MoveTemp(values));
+            reply->SetArrayField(TEXT("assets"), {});
+            reply->SetNumberField(TEXT("total"), folders.Num());
+            reply->SetNumberField(TEXT("offset"), offset);
+            reply->SetField(TEXT("error"), MakeShared<FJsonValueNull>());
+            return {};
+        }
 
         if (!CatalogIndex) CatalogIndex = MakeUnique<FCatalogIndex>();
         const auto* assets = CatalogIndex->Read();
@@ -263,7 +301,8 @@ namespace
         const TCHAR* kinds[] = { TEXT("model"), TEXT("texture"), TEXT("material") };
         if (assets) for (const auto& asset : *assets)
         {
-            if ((!assetClass.IsEmpty() && assetClass != kinds[asset.Kind]) ||
+            if ((!folder.IsEmpty() && !asset.Path.StartsWith(folder + TEXT("/"), ESearchCase::IgnoreCase)) ||
+                (!assetClass.IsEmpty() && assetClass != kinds[asset.Kind]) ||
                 (!query.IsEmpty() && !asset.Name.Contains(query, ESearchCase::IgnoreCase) &&
                     !asset.Path.Contains(query, ESearchCase::IgnoreCase))) continue;
             if (total++ < offset || entries.Num() >= limit) continue;
@@ -277,6 +316,7 @@ namespace
         reply->SetStringField(TEXT("type"), TEXT("asset_result"));
         reply->SetStringField(TEXT("requestId"), requestId);
         reply->SetStringField(TEXT("operation"), TEXT("catalog"));
+        reply->SetStringField(TEXT("folder"), folder);
         reply->SetArrayField(TEXT("assets"), MoveTemp(entries));
         reply->SetNumberField(TEXT("total"), total);
         reply->SetBoolField(TEXT("pending"), assets == nullptr);
@@ -331,8 +371,9 @@ namespace
         if (!request->TryGetStringField(TEXT("path"), path) || !IsAllowedAssetPath(path))
             return TEXT("Asset path must be a valid /Game or /Engine object path.");
         if (request->TryGetNumberField(TEXT("size"), requestedSize) &&
-            (!FMath::IsFinite(requestedSize) || requestedSize != 128))
-            return TEXT("Thumbnail size must be 128.");
+            (!FMath::IsFinite(requestedSize) || requestedSize < 16 || requestedSize > 256 || FMath::FloorToDouble(requestedSize) != requestedSize))
+            return TEXT("Thumbnail size must be an integer from 16 to 256.");
+        size = static_cast<int32>(requestedSize);
         auto asset = StaticLoadObject(UObject::StaticClass(), nullptr, *path);
         if (!asset || AssetClassFor(asset).IsEmpty()) return TEXT("Thumbnail asset is unsupported or unavailable.");
         auto target = NewObject<UTextureRenderTarget2D>(GetTransientPackage());

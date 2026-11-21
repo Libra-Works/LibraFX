@@ -79,7 +79,21 @@ Selecting an image previews the image. Selecting a group lets you insert it into
 For engine assets, select a connected editor in **Connected engine assets**, search, select an asset,
 then explicitly assign it to the intended target. Seeing an asset in the list does not assign it.
 
-Engine results use pages of 32; physical folders use pages of 128. Details and thumbnails are requested for the selected asset.
+Engine results use pages of 32; physical folders use pages of 128. The selected
+asset takes priority. Thumbnails also load for rows currently visible in the
+engine list, and follow the viewport when you scroll. Offscreen rows wait;
+one list thumbnail is fetched at a time and up to 64 images are cached per browser.
+
+To limit an Unreal connection to a content folder, expand **Engine content scope**,
+click **Load folders**, select `/Game` and choose **Open selected folder**.
+Continue to the folder you want, then choose **Use this folder**. Its descendants
+are included; **All folders** clears the restriction. You can also use the folder
+button beside an asset search to select the current asset's parent folder.
+The engine applies this scope before counting and paging results; tags are optional.
+Registered engine projects remember the choice locally under their project ID.
+Unregistered connections keep it for the current session. This browses engine
+metadata and thumbnails; it does not copy content files into the effect project.
+Folder browsing requires the matching updated Unreal adapter.
 
 ## 7. Play and inspect the result
 
