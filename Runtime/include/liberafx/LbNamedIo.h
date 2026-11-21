@@ -49,10 +49,13 @@ public:
     NamedIo(const NamedIo&) = delete;
     NamedIo& operator=(const NamedIo&) = delete;
 
+    // Rebind after the same Instance has been reinitialized. Keeps port/event
+    // storage, discards prior inputs/publications and attaches the new handles.
+    Result resetBindings() noexcept;
     Result setProperty(const char* name, const double* values, std::size_t width) noexcept;
     Result setOwnerMatrix(const double* values, std::size_t width) noexcept;
     // Must be called after initial input/binding setup. Calling it again is
-    // idempotent; an explicit restart uses a newly initialized instance/facade.
+    // idempotent; restart requires reinitializing the instance and resetting or replacing this facade.
     Result start(double time, const std::uint8_t* onStartNodeId,
                  std::size_t instructionBudget) noexcept;
     // Capture a finite duration from the initial evaluation before publishing

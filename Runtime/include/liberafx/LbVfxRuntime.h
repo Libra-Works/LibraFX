@@ -260,6 +260,9 @@ public:
     // The optional defaults buffer is caller-owned, separate from work, and has parameterValueCount() lanes.
     Result initialize(const Program& program, double* work, std::size_t workCount,
                       double* defaults, std::size_t defaultsCount) noexcept;
+    // Cleanup at an idle boundary without ending the Instance object's lifetime
+    // or freeing caller-owned buffers. Existing handles are invalidated.
+    Result deinitialize() noexcept;
     Result bindValue(const std::uint8_t nodeId[16], ValueHandle& out) const noexcept;
     Result bindParameter(const std::uint8_t nodeId[16], std::uint8_t inputSlot,
                          std::uint8_t component, ParameterHandle& out) const noexcept;

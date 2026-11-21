@@ -144,6 +144,21 @@ auto Instance::initialize(const Program &program, double *work,
 
 Instance::~Instance() { cleanupStates(); }
 
+auto Instance::deinitialize() noexcept -> Result {
+  if (dispatching_ || phase_.load(std::memory_order_acquire)==Phase::Running) return Result::Busy;
+  cleanupStates();
+  program_=nullptr; work_=defaults_=stateWork_=nullptr; generation_=0;
+  initializedStateCount_=0;
+  signalObserver_=nullptr; signalObserverContext_=nullptr;
+  deferredSignals_=nullptr; deferredCapacity_=deferredCount_=0;
+  logicalQueueHead_=logicalQueueCount_=0;
+  generatedQueueSeeded_=generatedSignalsPending_=false;
+  forceRequestsEnabled_=false; forceScope_=0;
+  profiling_={}; debugging_={}; result_=Result::NotReady;
+  phase_.store(Phase::Idle,std::memory_order_release);
+  return Result::Ok;
+}
+
 auto Instance::setProfiling(const ProfilingHooks &profiling) noexcept
     -> Result {
   if (dispatching_ ||

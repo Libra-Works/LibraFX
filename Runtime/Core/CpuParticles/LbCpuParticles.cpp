@@ -309,4 +309,40 @@ void CpuParticleWorld::clear() noexcept
         system->eventCount = 0;
     }
 }
+bool CpuParticleWorld::supportsPoolReuse() const noexcept
+{
+    for (const auto& system : impl_->systems) if (system->emitterModel) return false;
+    return true;
+}
+Result CpuParticleWorld::resetForPoolReuse() noexcept
+{
+    if (!supportsPoolReuse()) return Result::UnsupportedBinary;
+    clear();
+    for (auto& pointer : impl_->systems) {
+        auto& system=*pointer;
+        if (system.instances) for (auto i=0u;i<system.capacity;++i) for (auto stage=0u;stage<2;++stage) {
+            auto& instance=system.instances[i].stages[stage];
+            const auto status=instance.deinitialize();
+            if (status!=Result::Ok) return status;
+        }
+        for (auto stage=0u;stage<2;++stage) {
+            auto& shared=stage==0 ? system.sharedSpawn : system.sharedUpdate;
+            if (!shared) continue;
+            auto& work=stage==0 ? system.sharedSpawnWork : system.sharedUpdateWork;
+            auto& handle=stage==0 ? system.sharedSpawnEntry : system.sharedUpdateEntry;
+            const auto& program=system.stages[stage].program;
+            auto status=shared->initialize(program,static_cast<double*>(work.data),program.workBytes()/sizeof(double));
+            if (status==Result::Ok) status=shared->bindSignal(system.stages[stage].entry.data(),handle);
+            if (status!=Result::Ok) return status;
+        }
+        system.burst=system.initialBurst;
+        system.remainder=system.lastTotal=0; system.lastTime=-1;
+        system.stepDelta=system.frameDelta=system.realTime=system.realDelta=0;
+        system.nextId=1; system.current=nullptr; system.failure=Result::Ok;
+        system.spawnBatch.enabled=static_cast<bool>(system.sharedSpawn);
+        system.updateBatch.enabled=static_cast<bool>(system.sharedUpdate);
+    }
+    return Result::Ok;
+}
+
 }

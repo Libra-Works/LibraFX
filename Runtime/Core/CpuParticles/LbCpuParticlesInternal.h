@@ -134,6 +134,7 @@ struct System final {
     double rate = 0, remainder = 0, lastTotal = 0, lastTime = -1, stepDelta = 0;
     double frameDelta = 0;
     double realTime = 0, realDelta = 0;
+    std::uint32_t initialBurst = 0;
     std::uint64_t nextId = 1;
     std::size_t live = 0;
     Stage stages[2];

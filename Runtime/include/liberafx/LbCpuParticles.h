@@ -56,6 +56,8 @@ public:
     bool canEmit() const noexcept;
     bool hasPendingRoutes() const noexcept;
     void clear() noexcept;
+    bool supportsPoolReuse() const noexcept;
+    Result resetForPoolReuse() noexcept;
 private:
     struct Impl;
     explicit CpuParticleWorld(std::unique_ptr<Impl> impl) noexcept;

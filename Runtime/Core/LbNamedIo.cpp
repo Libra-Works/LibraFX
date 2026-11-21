@@ -176,4 +176,29 @@ auto NamedIo::create(Instance& instance, const NamedIoPort* ports, std::size_t c
         return Result::InvalidArgument;
     }
 }
+auto NamedIo::resetBindings() noexcept -> Result
+{
+    auto& value=*impl_;
+    if (value.executing || value.dispatching) return Result::Busy;
+    for (auto& port : value.ports) {
+        port.previous={}; port.published=false;
+        const auto width=port.width==16 ? 4u : port.width;
+        auto status=Result::Ok;
+        if (port.kind==NamedIoKind::InputProperty || port.kind==NamedIoKind::OwnerMatrix) {
+            for (auto row=0u;row<port.nodeCount && status==Result::Ok;++row)
+                for (auto lane=0u;lane<width && status==Result::Ok;++lane)
+                    status=value.instance.bindParameter(port.nodeIds[row].data(),0,static_cast<std::uint8_t>(lane),port.parameters[row*width+lane]);
+        } else if (port.kind==NamedIoKind::OutputProperty) {
+            for (auto row=0u;row<port.nodeCount && status==Result::Ok;++row)
+                status=value.instance.bindValue(port.nodeIds[row].data(),port.values[row]);
+        } else status=value.instance.bindSignal(port.nodeId.data(),port.signal);
+        if (status!=Result::Ok) return status;
+    }
+    value.head=value.count=0;
+    value.started=false; value.instructionBudget=10000;
+    const auto status=value.instance.setSignalObserver(&NamedIo::observeSignal,impl_.get());
+    if (status==Result::Ok) value.observerAttached=true;
+    return status;
+}
+
 }

@@ -134,6 +134,7 @@ auto parse(const std::uint8_t* bytes, std::size_t count,
 
 auto System::initialize(const CustomNodeDescriptor* registry, std::size_t registryCount, bool enableBatching) -> Result
 {
+    initialBurst=burst;
     if (!emitterDefinitionBytes.empty()) {
         auto status = procedural_adapter::decode(emitterDefinitionBytes.data(), emitterDefinitionBytes.size(), emitterDefinition);
         if (status != LIBRA_OK || emitterDefinition.kind != 0) return Result::InvalidBinary;
