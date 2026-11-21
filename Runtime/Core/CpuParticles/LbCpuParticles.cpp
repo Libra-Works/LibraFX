@@ -27,12 +27,11 @@ auto CpuParticleWorld::create(const std::uint8_t* payload, std::size_t bytes,
         }
         for (auto& system : impl->systems)
         {
-            auto result = system->initialize(registry, registryCount);
+            auto result = system->initialize(registry, registryCount, enableBatching);
             if (result != Result::Ok)
             {
                 return result;
             }
-            if (enableBatching) system->buildUpdateBatch();
             for (auto& callback : system->callbacks)
             {
                 if (callback.operation != 0x36)

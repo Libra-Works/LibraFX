@@ -53,7 +53,7 @@ auto System::collect(Slot& slot, std::uint32_t stageIndex, double time) noexcept
 auto System::run(Slot& slot, std::uint32_t stageIndex, double time, const HostQualitySnapshot& quality) noexcept -> Result
 {
     current = &slot;
-    auto& instance = stageIndex == 1 && sharedUpdate ? *sharedUpdate :
+    auto& instance = stageIndex == 0 && sharedSpawn ? *sharedSpawn : stageIndex == 1 && sharedUpdate ? *sharedUpdate :
         instances[static_cast<std::size_t>(&slot-slots.get())].stages[stageIndex];
     auto& stage = stages[stageIndex];
     auto result = instance.setHostQuality(quality);
@@ -96,7 +96,9 @@ auto System::run(Slot& slot, std::uint32_t stageIndex, double time, const HostQu
     }
     if (result == Result::Ok && nonzero(stage.entry))
     {
-        result = stageIndex == 1 && sharedUpdate
+        result = stageIndex == 0 && sharedSpawn
+            ? instance.dispatchSignal(sharedSpawnEntry, slot.age, 10000)
+            : stageIndex == 1 && sharedUpdate
             ? instance.dispatchSignal(sharedUpdateEntry, slot.age, 10000)
             : instance.dispatchSignal(stage.entry.data(), slot.age, 10000);
     }
@@ -210,6 +212,15 @@ auto System::tick(Instance& root, double time, bool emitting, const HostQualityS
         return Result::InsufficientWork;
     }
     auto remaining = static_cast<std::uint32_t>(requested);
+    if (spawnBatch.enabled && updateBatch.enabled && incomingCount==0 && remaining!=0)
+    {
+        const auto savedDelta=stepDelta;
+        stepDelta=0;
+        const auto result=spawnBatches(remaining,time,quality);
+        stepDelta=savedDelta;
+        if (result!=Result::Ok) return result;
+        remaining=0;
+    }
     for (auto index = 0u; index < capacity && remaining != 0; ++index)
     {
         auto& slot = slots[index];
@@ -225,7 +236,7 @@ auto System::tick(Instance& root, double time, bool emitting, const HostQualityS
         slot.life = 2;
         for (auto stageIndex = 0u; stageIndex < 2; ++stageIndex)
         {
-            if (stageIndex == 1 && sharedUpdate) continue;
+            if ((stageIndex == 0 && sharedSpawn) || (stageIndex == 1 && sharedUpdate)) continue;
             auto& stage = stages[stageIndex];
             auto work = static_cast<std::uint8_t*>(stage.work.data) + index * stage.workStride;
             auto defaults = stage.defaults.data ? static_cast<double*>(stage.defaults.data) + index * stage.defaultStride : nullptr;

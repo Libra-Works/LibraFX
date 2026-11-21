@@ -132,7 +132,7 @@ auto parse(const std::uint8_t* bytes, std::size_t count,
     return reader.remaining() == 0 ? Result::Ok : Result::InvalidBinary;
 }
 
-auto System::initialize(const CustomNodeDescriptor* registry, std::size_t registryCount) -> Result
+auto System::initialize(const CustomNodeDescriptor* registry, std::size_t registryCount, bool enableBatching) -> Result
 {
     if (!emitterDefinitionBytes.empty()) {
         auto status = procedural_adapter::decode(emitterDefinitionBytes.data(), emitterDefinitionBytes.size(), emitterDefinition);
@@ -242,11 +242,18 @@ auto System::initialize(const CustomNodeDescriptor* registry, std::size_t regist
             return Result::InsufficientWork;
         }
         totalMemory += perSlot * capacity;
-        stage.work.allocate(stage.workStride * capacity, alignment);
-        stage.defaults.allocate(stage.defaultStride * sizeof(double) * capacity, stage.program.defaultsAlignment());
+    }
+    // Decode before allocating per-slot VM storage: isolated stages only need
+    // one shared reference VM for ordered replay, not capacity copies.
+    if (enableBatching) buildBatches();
+    for (auto index=0u;index<2;++index) {
+        if ((index==0 && sharedSpawn) || (index==1 && sharedUpdate)) continue;
+        auto& stage=stages[index];
+        stage.work.allocate(stage.workStride * capacity,stage.program.workAlignment());
+        stage.defaults.allocate(stage.defaultStride * sizeof(double) * capacity,stage.program.defaultsAlignment());
     }
     slots = std::make_unique<Slot[]>(capacity);
-    instances = std::make_unique<ParticleVM[]>(capacity);
+    if (!sharedSpawn || !sharedUpdate) instances = std::make_unique<ParticleVM[]>(capacity);
     activeIndices.resize(capacity);
     incoming.resize(queueCapacity);
     pending.resize(queueCapacity);

@@ -1,17 +1,25 @@
 #include "LbCpuParticlesInternal.h"
 #include "../LbVfxRuntimeBinaryInternal.h"
+#include "liberafx/math/LbRandomMath.h"
 
 namespace liberafx::cpu_particle_detail {
 using namespace vfx_runtime_detail;
 
-void System::buildUpdateBatch()
+void System::buildBatches()
 {
-    const auto& stage = stages[1];
+    buildBatch(1);
+    // Births can be reordered only when both stages have no external effects.
+    if (updateBatch.enabled) buildBatch(0);
+}
+
+void System::buildBatch(std::uint32_t stageIndex)
+{
+    const auto& stage = stages[stageIndex];
     // Start with the validated linear V3 subset. Stateful/logical nodes, IO,
     // fanout, guards and later formats retain their full interpreter semantics.
-    if (stage.program.version() != 3 || stage.program.nodeCount() > UpdateBatchPlan::maximumNodes ||
+    if (stage.program.version() != 3 || stage.program.nodeCount() > ParticleBatchPlan::maximumNodes ||
         !stage.io.empty() || !nonzero(stage.entry)) return;
-    auto plan = UpdateBatchPlan{};
+    auto plan = ParticleBatchPlan{};
     const auto count = stage.program.nodeCount();
     std::vector<BatchInstruction> signals(count);
     std::vector<bool> isSignal(count), visited(count);
@@ -46,8 +54,11 @@ void System::buildUpdateBatch()
                     signals[index] = decoded;
                     continue;
                 }
-                if (operation < 0x10 || operation > 0x18) return;
-                decoded.op = static_cast<BatchOp>(static_cast<unsigned>(BatchOp::Position) + operation-0x10);
+                if (operation == 0x43) decoded.op = BatchOp::Sphere;
+                else {
+                    if (operation < 0x10 || operation > 0x18) return;
+                    decoded.op = static_cast<BatchOp>(static_cast<unsigned>(BatchOp::Position) + operation-0x10);
+                }
             } else {
                 auto builtinCount = std::size_t{};
                 const auto* builtins = builtinNodes(builtinCount);
@@ -87,25 +98,24 @@ void System::buildUpdateBatch()
     }
     for (auto index = 0u; index < count; ++index) if (isSignal[index] && !visited[index]) return;
     // Eligible stages have no persistent state or mutable inputs. A single VM
-    // can also serve their spawn-time Update and ordered error fallback.
-    sharedUpdateWork.allocate(stage.program.workBytes(), stage.program.workAlignment());
+    // serves unbatched births and ordered error fallback.
+    auto& work = stageIndex == 1 ? sharedUpdateWork : sharedSpawnWork;
+    auto& handle = stageIndex == 1 ? sharedUpdateEntry : sharedSpawnEntry;
+    work.allocate(stage.program.workBytes(), stage.program.workAlignment());
     auto reference = std::make_unique<Instance>();
-    if (reference->initialize(stage.program, static_cast<double*>(sharedUpdateWork.data),
+    if (reference->initialize(stage.program, static_cast<double*>(work.data),
             stage.program.workBytes()/sizeof(double)) != Result::Ok ||
-        reference->bindSignal(stage.entry.data(), sharedUpdateEntry) != Result::Ok) return;
-    sharedUpdate = std::move(reference);
-    stages[1].work.reset();
-    stages[1].defaults.reset();
+        reference->bindSignal(stage.entry.data(), handle) != Result::Ok) return;
+    (stageIndex == 1 ? sharedUpdate : sharedSpawn) = std::move(reference);
+    stages[stageIndex].work.reset();
+    stages[stageIndex].defaults.reset();
     plan.enabled = true;
-    updateBatch = std::move(plan);
+    (stageIndex == 1 ? updateBatch : spawnBatch) = std::move(plan);
 }
 
 auto System::updateBatches(double time, const HostQualitySnapshot& quality) noexcept -> Result
 {
-    constexpr auto lanes = UpdateBatchPlan::batchSize;
-    // Node/lane/particle layout makes the innermost arithmetic contiguous.
-    // This bounded scratch belongs to the call, not to each particle or host.
-    std::array<double,UpdateBatchPlan::maximumNodes*4*lanes> values;
+    constexpr auto lanes = ParticleBatchPlan::batchSize;
     std::array<Slot*,lanes> particles{};
     auto cursor = std::uint32_t{};
     while (cursor < capacity) {
@@ -118,9 +128,6 @@ auto System::updateBatches(double time, const HostQualitySnapshot& quality) noex
             else particles[size++] = &slot;
         }
         if (size == 0) continue;
-        auto input = [&](const BatchInput& source, unsigned lane, std::size_t particle) noexcept {
-            return source.source == noInput ? source.constants[lane] : values[(source.source*4+source.component+lane)*lanes+particle];
-        };
         auto referenceOnValueError = [&]() noexcept -> Result {
             // Batched pure evaluation visits instructions before particles.
             // Replay this untouched block in particle order to preserve which
@@ -142,65 +149,152 @@ auto System::updateBatches(double time, const HostQualitySnapshot& quality) noex
             }
             return Result::Ok;
         };
-        for (const auto& op : updateBatch.values) {
-            for (auto lane = 0u; lane < op.width; ++lane) {
-                auto* output = values.data() + (op.output*4+lane)*lanes;
-                // Dispatch each decoded operation once for a particle block.
-                switch (op.op) {
-                case BatchOp::Copy: for (auto p=0u;p<size;++p) output[p]=input(op.inputs[0],lane,p); break;
-                case BatchOp::Broadcast: for (auto p=0u;p<size;++p) output[p]=input(op.inputs[0],0,p); break;
-                case BatchOp::Add: for (auto p=0u;p<size;++p) output[p]=input(op.inputs[0],lane,p)+input(op.inputs[1],lane,p); break;
-                case BatchOp::Subtract: for (auto p=0u;p<size;++p) output[p]=input(op.inputs[0],lane,p)-input(op.inputs[1],lane,p); break;
-                case BatchOp::Multiply: for (auto p=0u;p<size;++p) output[p]=input(op.inputs[0],lane,p)*input(op.inputs[1],lane,p); break;
-                case BatchOp::Divide:
-                    for (auto p=0u;p<size;++p) {
-                        const auto divisor=input(op.inputs[1],lane,p);
-                        if (divisor==0) return referenceOnValueError();
-                        output[p]=input(op.inputs[0],lane,p)/divisor;
-                    } break;
-                case BatchOp::Clamp:
-                    for (auto p=0u;p<size;++p) {
-                        const auto lower=input(op.inputs[1],0,p), upper=input(op.inputs[2],0,p);
-                        if (lower>upper) return referenceOnValueError();
-                        output[p]=std::max(lower,std::min(input(op.inputs[0],0,p),upper));
-                    } break;
-                case BatchOp::Compose: for (auto p=0u;p<size;++p) output[p]=input(op.inputs[lane],0,p); break;
-                case BatchOp::Position: for (auto p=0u;p<size;++p) output[p]=particles[p]->draw.position[lane]; break;
-                case BatchOp::Velocity: for (auto p=0u;p<size;++p) output[p]=particles[p]->velocity[lane]; break;
-                case BatchOp::Color: for (auto p=0u;p<size;++p) output[p]=particles[p]->draw.color[lane]; break;
-                case BatchOp::Size: for (auto p=0u;p<size;++p) output[p]=particles[p]->draw.size[lane]; break;
-                case BatchOp::Life: for (auto p=0u;p<size;++p) output[p]=particles[p]->life; break;
-                case BatchOp::Age: for (auto p=0u;p<size;++p) output[p]=particles[p]->age; break;
-                case BatchOp::Id: for (auto p=0u;p<size;++p) output[p]=static_cast<double>(particles[p]->draw.id); break;
-                case BatchOp::Seed: for (auto p=0u;p<size;++p) output[p]=seed; break;
-                case BatchOp::Delta: for (auto p=0u;p<size;++p) output[p]=stepDelta; break;
-                default: return Result::InvalidBinary;
-                }
-                for (auto p=0u;p<size;++p) if (!std::isfinite(output[p])) return referenceOnValueError();
-            }
+        auto commandsStarted = false;
+        const auto status = evaluateBatch(updateBatch,particles.data(),size,&commandsStarted);
+        if (status != Result::Ok) {
+            // Commands already execute in particle order. Only pure-value
+            // failures need replay to determine the first observable failure.
+            if (commandsStarted) return status;
+            return referenceOnValueError();
         }
-        // All values are sampled before Signals, exactly as in the V3 VM.
-        // Fuse the validated local mutation chain without observers/callbacks.
-        for (auto p=0u;p<size;++p) {
-            auto& slot=*particles[p];
-            for (const auto& op : updateBatch.commands) {
-                if (op.op==BatchOp::Move) {
-                    for (auto lane=0u;lane<3;++lane) {
-                        slot.velocity[lane]+=input(op.inputs[0],lane,p)*stepDelta;
-                        slot.draw.position[lane]+=slot.velocity[lane]*stepDelta;
-                        if (!std::isfinite(slot.velocity[lane]) || !std::isfinite(slot.draw.position[lane])) return Result::InvalidArgument;
-                    }
-                } else {
-                    auto* target = op.op==BatchOp::SetPosition ? slot.draw.position : op.op==BatchOp::SetVelocity ? slot.velocity.data() :
-                        op.op==BatchOp::SetColor ? slot.draw.color : op.op==BatchOp::SetSize ? slot.draw.size : &slot.life;
-                    const auto width = op.op==BatchOp::SetColor ? 4u : op.op==BatchOp::SetSize ? 2u : op.op==BatchOp::SetLife ? 1u : 3u;
-                    if ((op.op==BatchOp::SetLife || op.op==BatchOp::SetSize) &&
-                        (input(op.inputs[0],0,p)<0 || (width==2 && input(op.inputs[0],1,p)<0))) return Result::InvalidArgument;
-                    for (auto lane=0u;lane<width;++lane) target[lane]=input(op.inputs[0],lane,p);
+    }
+    return Result::Ok;
+}
+
+auto System::evaluateBatch(const ParticleBatchPlan& plan, Slot* const* particles, std::size_t size, bool* commandsStarted) noexcept -> Result
+{
+    constexpr auto lanes = ParticleBatchPlan::batchSize;
+    // Node/component/particle scratch keeps arithmetic contiguous and bounded.
+    std::array<double,ParticleBatchPlan::maximumNodes*4*lanes> values;
+    auto input = [&](const BatchInput& source, unsigned lane, std::size_t particle) noexcept {
+        return source.source == noInput ? source.constants[lane] : values[(source.source*4+source.component+lane)*lanes+particle];
+    };
+    for (const auto& op : plan.values) {
+        if (op.op == BatchOp::Sphere) {
+            for (auto p=0u;p<size;++p) {
+                const auto radius=input(op.inputs[1],0,p);
+                if (radius<0) return Result::InvalidArgument;
+                const auto point=math::randomSpherePoint(seed,static_cast<std::uint32_t>(particles[p]->draw.id));
+                for (auto lane=0u;lane<3;++lane) {
+                    const auto value=input(op.inputs[0],lane,p)+point[lane]*radius;
+                    if (!std::isfinite(value)) return Result::InvalidArgument;
+                    values[(op.output*4+lane)*lanes+p]=value;
                 }
             }
-            if (slot.age>=slot.life) { slot.active=false; --live; }
+            continue;
         }
+        for (auto lane = 0u; lane < op.width; ++lane) {
+            auto* output = values.data() + (op.output*4+lane)*lanes;
+            // Dispatch each decoded operation once for a particle block.
+            switch (op.op) {
+            case BatchOp::Copy: for (auto p=0u;p<size;++p) output[p]=input(op.inputs[0],lane,p); break;
+            case BatchOp::Broadcast: for (auto p=0u;p<size;++p) output[p]=input(op.inputs[0],0,p); break;
+            case BatchOp::Add: for (auto p=0u;p<size;++p) output[p]=input(op.inputs[0],lane,p)+input(op.inputs[1],lane,p); break;
+            case BatchOp::Subtract: for (auto p=0u;p<size;++p) output[p]=input(op.inputs[0],lane,p)-input(op.inputs[1],lane,p); break;
+            case BatchOp::Multiply: for (auto p=0u;p<size;++p) output[p]=input(op.inputs[0],lane,p)*input(op.inputs[1],lane,p); break;
+            case BatchOp::Divide:
+                for (auto p=0u;p<size;++p) {
+                    const auto divisor=input(op.inputs[1],lane,p);
+                    if (divisor==0) return Result::InvalidArgument;
+                    output[p]=input(op.inputs[0],lane,p)/divisor;
+                } break;
+            case BatchOp::Clamp:
+                for (auto p=0u;p<size;++p) {
+                    const auto lower=input(op.inputs[1],0,p), upper=input(op.inputs[2],0,p);
+                    if (lower>upper) return Result::InvalidArgument;
+                    output[p]=std::max(lower,std::min(input(op.inputs[0],0,p),upper));
+                } break;
+            case BatchOp::Compose: for (auto p=0u;p<size;++p) output[p]=input(op.inputs[lane],0,p); break;
+            case BatchOp::Position: for (auto p=0u;p<size;++p) output[p]=particles[p]->draw.position[lane]; break;
+            case BatchOp::Velocity: for (auto p=0u;p<size;++p) output[p]=particles[p]->velocity[lane]; break;
+            case BatchOp::Color: for (auto p=0u;p<size;++p) output[p]=particles[p]->draw.color[lane]; break;
+            case BatchOp::Size: for (auto p=0u;p<size;++p) output[p]=particles[p]->draw.size[lane]; break;
+            case BatchOp::Life: for (auto p=0u;p<size;++p) output[p]=particles[p]->life; break;
+            case BatchOp::Age: for (auto p=0u;p<size;++p) output[p]=particles[p]->age; break;
+            case BatchOp::Id: for (auto p=0u;p<size;++p) output[p]=static_cast<double>(particles[p]->draw.id); break;
+            case BatchOp::Seed: for (auto p=0u;p<size;++p) output[p]=seed; break;
+            case BatchOp::Delta: for (auto p=0u;p<size;++p) output[p]=stepDelta; break;
+            default: return Result::InvalidBinary;
+            }
+            for (auto p=0u;p<size;++p) if (!std::isfinite(output[p])) return Result::InvalidArgument;
+        }
+    }
+    // All values are sampled before Signals, exactly as in the V3 VM.
+    // Fuse the validated local mutation chain without observers/callbacks.
+    // The Update caller requests ordered retirement as well as the marker
+    // that distinguishes pure failures from already committed commands.
+    if (commandsStarted) *commandsStarted = true;
+    for (auto p=0u;p<size;++p) {
+        auto& slot=*particles[p];
+        for (const auto& op : plan.commands) {
+            if (op.op==BatchOp::Move) {
+                for (auto lane=0u;lane<3;++lane) {
+                    slot.velocity[lane]+=input(op.inputs[0],lane,p)*stepDelta;
+                    slot.draw.position[lane]+=slot.velocity[lane]*stepDelta;
+                    if (!std::isfinite(slot.velocity[lane]) || !std::isfinite(slot.draw.position[lane])) return Result::InvalidArgument;
+                }
+            } else {
+                auto* target = op.op==BatchOp::SetPosition ? slot.draw.position : op.op==BatchOp::SetVelocity ? slot.velocity.data() :
+                    op.op==BatchOp::SetColor ? slot.draw.color : op.op==BatchOp::SetSize ? slot.draw.size : &slot.life;
+                const auto width = op.op==BatchOp::SetColor ? 4u : op.op==BatchOp::SetSize ? 2u : op.op==BatchOp::SetLife ? 1u : 3u;
+                if ((op.op==BatchOp::SetLife || op.op==BatchOp::SetSize) &&
+                    (input(op.inputs[0],0,p)<0 || (width==2 && input(op.inputs[0],1,p)<0))) return Result::InvalidArgument;
+                for (auto lane=0u;lane<width;++lane) target[lane]=input(op.inputs[0],lane,p);
+            }
+        }
+        if (commandsStarted && slot.age>=slot.life) { slot.active=false; --live; }
+    }
+    return Result::Ok;
+}
+
+auto System::spawnBatches(std::uint32_t count, double time, const HostQualitySnapshot& quality) noexcept -> Result
+{
+    constexpr auto lanes = ParticleBatchPlan::batchSize;
+    std::array<Slot*,lanes> particles{}, updating{};
+    auto cursor=std::uint32_t{};
+    const auto reset = [&](Slot& slot, std::uint64_t id) noexcept {
+        slot.draw={}; slot.draw.id=id; slot.velocity={}; slot.age=0;
+        slot.realStart=realTime; slot.life=2; slot.active=false;
+    };
+    while (count!=0) {
+        auto size=std::size_t{};
+        const auto firstId=nextId;
+        while (cursor<capacity && size<lanes && size<count) {
+            auto& slot=slots[cursor++];
+            if (slot.active) continue;
+            reset(slot,nextId++);
+            particles[size++]=&slot;
+        }
+        if (size==0) return Result::InsufficientWork;
+        auto status=evaluateBatch(spawnBatch,particles.data(),size);
+        if (status==Result::Ok) {
+            auto updateCount=std::size_t{};
+            for (auto p=0u;p<size;++p) if (particles[p]->life>0) updating[updateCount++]=particles[p];
+            if (updateCount!=0) status=evaluateBatch(updateBatch,updating.data(),updateCount);
+        }
+        if (status!=Result::Ok) {
+            // Restore the speculative block, then replay Spawn -> Update per
+            // particle so an earlier Update failure precedes a later Spawn one.
+            for (auto p=0u;p<size;++p) reset(*particles[p],0);
+            nextId=firstId;
+            spawnBatch.enabled=false;
+            for (auto p=0u;p<size;++p) {
+                auto& slot=*particles[p];
+                reset(slot,nextId++);
+                status=run(slot,0,time,quality);
+                if (status==Result::Ok && slot.life>0) status=run(slot,1,time,quality);
+                if (status!=Result::Ok) return status;
+                slot.active=slot.life>0;
+                live+=slot.active ? 1 : 0;
+            }
+        } else {
+            for (auto p=0u;p<size;++p) {
+                auto& slot=*particles[p];
+                slot.active=slot.life>0;
+                live+=slot.active ? 1 : 0;
+            }
+        }
+        count-=static_cast<std::uint32_t>(size);
     }
     return Result::Ok;
 }

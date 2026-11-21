@@ -62,7 +62,7 @@ struct BatchInput final {
     std::uint8_t component = 0;
     std::array<double,4> constants{};
 };
-enum class BatchOp : std::uint8_t { Copy, Add, Subtract, Multiply, Divide, Broadcast, Clamp, Compose,
+enum class BatchOp : std::uint8_t { Copy, Add, Subtract, Multiply, Divide, Broadcast, Clamp, Compose, Sphere,
     Position, Velocity, Color, Size, Life, Age, Id, Seed, Delta, SetPosition, SetVelocity, SetColor, SetSize, SetLife, Move };
 struct BatchInstruction final {
     Id sourceNode{};
@@ -71,7 +71,7 @@ struct BatchInstruction final {
     std::uint8_t width = 0;
     std::array<BatchInput,4> inputs{};
 };
-struct UpdateBatchPlan final {
+struct ParticleBatchPlan final {
     static constexpr std::size_t maximumNodes = 64, batchSize = 32;
     bool enabled = false;
     std::vector<BatchInstruction> values, commands;
@@ -107,6 +107,7 @@ struct System final {
         // Both kinds of VM borrow the stage programs and node descriptors.
         // Destroy them before member destruction releases those descriptors.
         sharedUpdate.reset();
+        sharedSpawn.reset();
         slots.reset();
         if (emitterModel) libra_procedural_model_release(emitterModel);
     }
@@ -125,7 +126,10 @@ struct System final {
     std::uint64_t nextId = 1;
     std::size_t live = 0;
     Stage stages[2];
-    UpdateBatchPlan updateBatch;
+    ParticleBatchPlan updateBatch, spawnBatch;
+    Buffer sharedSpawnWork;
+    std::unique_ptr<Instance> sharedSpawn;
+    SignalHandle sharedSpawnEntry{};
     Buffer sharedUpdateWork;
     std::unique_ptr<Instance> sharedUpdate;
     SignalHandle sharedUpdateEntry{};
@@ -143,10 +147,13 @@ struct System final {
     std::size_t eventHead = 0, eventCount = 0;
     Result failure = Result::Ok;
 
-    Result initialize(const CustomNodeDescriptor* registry, std::size_t registryCount);
+    Result initialize(const CustomNodeDescriptor* registry, std::size_t registryCount, bool enableBatching = false);
     Result tick(Instance& root, double time, bool emitting, const HostQualitySnapshot& quality) noexcept;
     Result run(Slot& slot, std::uint32_t stage, double time, const HostQualitySnapshot& quality) noexcept;
-    void buildUpdateBatch();
+    void buildBatches();
+    void buildBatch(std::uint32_t stageIndex);
+    Result evaluateBatch(const ParticleBatchPlan& plan, Slot* const* particles, std::size_t size, bool* commandsStarted = nullptr) noexcept;
+    Result spawnBatches(std::uint32_t count, double time, const HostQualitySnapshot& quality) noexcept;
     Result updateBatches(double time, const HostQualitySnapshot& quality) noexcept;
     Result publish(const Io& io, const double* values, double time) noexcept;
     Result collect(Slot& slot, std::uint32_t stage, double time) noexcept;

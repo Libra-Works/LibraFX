@@ -8,7 +8,8 @@
 namespace liberafx::cpu_particle_batch_tests {
 void require(bool condition, const char* message) { if (!condition) throw std::runtime_error(message); }
 void check(Result result) { require(result == Result::Ok, "Unexpected native result."); }
-void compare(const char* path, bool expectBatch, bool expectError = false, Result expectedFailure = Result::DivideByZero)
+void compare(const char* path, bool expectBatch, bool expectError = false, Result expectedFailure = Result::DivideByZero,
+    int errorFrame = 1, bool expectSpawn = true)
 {
     auto stream = std::ifstream(path, std::ios::binary);
     require(stream.good(), "Could not read compiled CPU fixture.");
@@ -19,9 +20,11 @@ void compare(const char* path, bool expectBatch, bool expectError = false, Resul
     check(cpu_particle_detail::parse(package.cpuPrograms.data(), package.cpuPrograms.size(),systems));
     require(!systems.empty(), "No CPU systems in the fixture.");
     for (auto& system : systems) {
-        check(system->initialize(nullptr,0));
-        system->buildUpdateBatch();
+        check(system->initialize(nullptr,0,true));
         require(system->updateBatch.enabled == expectBatch, "The intended batch/fallback execution path was not selected.");
+        require(system->spawnBatch.enabled == (expectBatch && expectSpawn), "The intended birth execution path was not selected.");
+        if (expectBatch && expectSpawn) require(!system->instances && system->sharedSpawn && system->sharedUpdate,
+            "Isolated stages retained per-particle VM storage.");
     }
     auto automatic = std::unique_ptr<SpawnableHost>{}, reference = std::unique_ptr<SpawnableHost>{};
     auto options = SpawnableHostOptions{};
@@ -38,7 +41,7 @@ void compare(const char* path, bool expectBatch, bool expectError = false, Resul
         time += delta;
         const auto actual = automatic->advance(time,delta), expected = reference->advance(time,delta);
         require(actual == expected, "Batch and interpreter returned different status codes.");
-        if (expectError && frame == 1) {
+        if (expectError && frame == errorFrame) {
             require(actual == expectedFailure, "Batched evaluation did not preserve the first failure in particle order.");
             return;
         }
@@ -99,7 +102,14 @@ int main(int argc, char** argv)
     try {
         for (auto index=1;index<argc-1;++index) {
             const auto mode=std::string(argv[index]);
-            if (mode == "--divide-zero" || mode == "--mixed-error") {
+            if (mode == "--spawn-fallback") {
+                if (++index >= argc-1) throw std::runtime_error("Supply the unsupported Spawn fixture.");
+                liberafx::cpu_particle_batch_tests::compare(argv[index],true,false,liberafx::Result::DivideByZero,1,false);
+            } else if (mode == "--birth-divide" || mode == "--birth-mixed") {
+                if (++index >= argc-1) throw std::runtime_error("Supply the birth failure fixture.");
+                liberafx::cpu_particle_batch_tests::compare(argv[index],true,true,
+                    mode=="--birth-mixed" ? liberafx::Result::InvalidArgument : liberafx::Result::DivideByZero,0);
+            } else if (mode == "--divide-zero" || mode == "--mixed-error") {
                 if (++index >= argc-1) throw std::runtime_error("Supply the division-by-zero fixture.");
                 liberafx::cpu_particle_batch_tests::compare(argv[index],true,true,
                     mode=="--mixed-error" ? liberafx::Result::InvalidArgument : liberafx::Result::DivideByZero);
