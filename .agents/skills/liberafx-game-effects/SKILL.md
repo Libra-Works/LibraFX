@@ -9,7 +9,7 @@ Turn the brief into an editable source graph and verify its appearance in a conn
 
 Discover available MCP tool schemas before editing. Read `libera_graph_read` and `libera_preview_clients` so the edit targets the intended document, graph scope and backend. Use one undoable template insertion, preserving existing nodes. If the selected scope cannot accept the template, navigate to the appropriate effect scope using the available navigation tools.
 
-Use `libera_create_game_effect` for `HitImpact`, `HitSlash`, `FireMagic`, `MagicCircle`, `DarkMagic`, `LightMagic`, `HealingMagic`, `DustPuff`, `Explosion`, `Rain`, `Snow` and `Lightning`. Themes are `auto`, `fire`, `dark`, `light`, `heal`, `ice`, `earth`; duration is seconds, with a per-template default when omitted. Use `libera_create_particle_sample` for `CpuRadial`, `CpuFountain`, `Fireworks`, `GpuCurl100k` and the Fluid2D starters. These are starting graphs to tune, not finished production assets. CPU starters include a generated radial glow; they do not need a texture import.
+Use `libera_create_game_effect` for `HitImpact`, `HitSlash`, `FireMagic`, `MagicCircle`, `DarkMagic`, `LightMagic`, `HealingMagic`, `DustPuff`, `Explosion`, `Rain`, `Snow` and `Lightning`. Themes are `auto`, `fire`, `dark`, `light`, `heal`, `ice`, `earth`; duration is seconds, with a per-template default when omitted. Use `libera_create_particle_sample` for `CpuRadial`, `CpuFountain`, `CpuMeshSurface`, `Fireworks`, `GpuCurl100k` and the Fluid2D starters. These are starting graphs to tune, not finished production assets. CPU starters include a generated radial glow; they do not need a texture import.
 
 Interpret references to FF, Dragon Quest or similar games as a brief about rhythm, silhouette, colour and gameplay readability. Extract the useful decisions: contact point versus area effect, anticipation/impact/decay, one-shot versus looping, ground alignment, scale and element. For an unspecified hit mark, clarify slash versus blunt impact when that distinction is needed; otherwise use a compact blunt-impact prototype and state that assumption. Do not make the user choose every numerical parameter before showing a useful first result.
 
@@ -33,3 +33,15 @@ Author in metres with X right, Y up, Z forward. Ground is XZ; upward acceleratio
 Inspect `libera_graph_list_node_types`, `libera_graph_describe_node_ports`, `libera_graph_describe_group` or `gpu_describe` before constructing unfamiliar connections. Reuse discoverable groups rather than rebuilding common motion/fade/orientation logic. Do not hand-edit version fields to enable capabilities: export through the current compiler. CPU lifecycle graphs compile with `libera_graph_compile_spawnable`; GPU source compilation alone is not proof of rendering.
 
 Preview at normal speed, then use `libera_preview_playback` with `timeScale` for timing inspection. Check `libera_render_status` / `gpu_runtime_status` and actual frames. Distinguish capacity from live count and exported shader source from GPU execution. Match the preview to the brief, adjust the graph, and report what was created plus any unverified appearance. Save to the user-authorized destination with the available project tools.
+
+## Hands-on authoring review
+
+When asked to improve usability, exercise complete artist tasks instead of waiting for the user to identify every problem. Work in an isolated document and preview connection. Include an empty-graph path as well as template insertion; bulk MCP edits can bypass the very controls whose usability needs review.
+
+- Build a simple fountain, change emission/lifetime/colour, select a glow texture, and inspect the result.
+- Move the emitter while existing particles remain in world space; check the coordinate preset and unit scale.
+- Enter and leave CPU/GPU/procedural workspaces, rename nodes, and inspect labels and pin connections at reduced zoom.
+- Preview, slow, stop, switch documents, reconnect, Undo/Redo, save and reopen. Check that stale particles and resources disappear.
+- Find an asset in a large catalog, change folders during loading, and verify that old results do not replace the current selection.
+
+For each finding, record the task, reproducible steps, expected/actual result, engine/backend and evidence. Inspect actual UI controls and captures where tools permit; successful MCP calls do not establish that controls are discoverable or readable. Report unavailable UI/graphics checks as unverified. Treat crashes, lost edits, coordinate errors and missing/stale output as blockers; then address confusing defaults, excessive steps and unclear labels. Fix small reproducible problems within the authorized scope, add a meaningful regression check, and repeat the same task before claiming it improved. Keep commits focused and distinguish starting-point visuals from polished game effects.
