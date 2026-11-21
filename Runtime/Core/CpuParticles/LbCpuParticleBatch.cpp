@@ -86,6 +86,16 @@ void System::buildUpdateBatch()
         next = read32(instruction(stage.bytes.data(),3,next)+208);
     }
     for (auto index = 0u; index < count; ++index) if (isSignal[index] && !visited[index]) return;
+    // Eligible stages have no persistent state or mutable inputs. A single VM
+    // can also serve their spawn-time Update and ordered error fallback.
+    sharedUpdateWork.allocate(stage.program.workBytes(), stage.program.workAlignment());
+    auto reference = std::make_unique<Instance>();
+    if (reference->initialize(stage.program, static_cast<double*>(sharedUpdateWork.data),
+            stage.program.workBytes()/sizeof(double)) != Result::Ok ||
+        reference->bindSignal(stage.entry.data(), sharedUpdateEntry) != Result::Ok) return;
+    sharedUpdate = std::move(reference);
+    stages[1].work.reset();
+    stages[1].defaults.reset();
     plan.enabled = true;
     updateBatch = std::move(plan);
 }

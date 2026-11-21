@@ -23,11 +23,13 @@ inline auto typeId(std::uint8_t suffix) noexcept -> Id
 struct Buffer final {
     void* data = nullptr;
     std::size_t alignment = 16;
-    ~Buffer()
+    ~Buffer() { reset(); }
+    void reset() noexcept
     {
         if (data)
         {
             ::operator delete(data, std::align_val_t{alignment});
+            data = nullptr;
         }
     }
     void allocate(std::size_t bytes, std::size_t align)
@@ -80,6 +82,8 @@ struct Slot final {
     std::array<double, 3> velocity{};
     double age = 0, life = 2;
     bool active = false;
+};
+struct ParticleVM final {
     Instance stages[2];
 };
 struct Inbound final {
@@ -99,6 +103,10 @@ struct Callback final {
 struct System final {
     ~System()
     {
+        instances.reset();
+        // Both kinds of VM borrow the stage programs and node descriptors.
+        // Destroy them before member destruction releases those descriptors.
+        sharedUpdate.reset();
         slots.reset();
         if (emitterModel) libra_procedural_model_release(emitterModel);
     }
@@ -118,7 +126,11 @@ struct System final {
     std::size_t live = 0;
     Stage stages[2];
     UpdateBatchPlan updateBatch;
+    Buffer sharedUpdateWork;
+    std::unique_ptr<Instance> sharedUpdate;
+    SignalHandle sharedUpdateEntry{};
     std::unique_ptr<Slot[]> slots;
+    std::unique_ptr<ParticleVM[]> instances;
     std::vector<std::uint32_t> activeIndices;
     Slot* current = nullptr;
     std::vector<CustomNodeDescriptor> descriptors;

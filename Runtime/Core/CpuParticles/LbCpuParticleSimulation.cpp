@@ -37,7 +37,7 @@ auto System::collect(Slot& slot, std::uint32_t stageIndex, double time) noexcept
         }
         auto values = std::array<double, 4>{};
         auto width = std::uint8_t{};
-        auto result = slot.stages[stageIndex].valueComponents(io.node.data(), values.data(), width);
+        auto result = instances[static_cast<std::size_t>(&slot-slots.get())].stages[stageIndex].valueComponents(io.node.data(), values.data(), width);
         if (result != Result::Ok || width != io.width)
         {
             return result == Result::Ok ? Result::InvalidBinary : result;
@@ -53,7 +53,8 @@ auto System::collect(Slot& slot, std::uint32_t stageIndex, double time) noexcept
 auto System::run(Slot& slot, std::uint32_t stageIndex, double time, const HostQualitySnapshot& quality) noexcept -> Result
 {
     current = &slot;
-    auto& instance = slot.stages[stageIndex];
+    auto& instance = stageIndex == 1 && sharedUpdate ? *sharedUpdate :
+        instances[static_cast<std::size_t>(&slot-slots.get())].stages[stageIndex];
     auto& stage = stages[stageIndex];
     auto result = instance.setHostQuality(quality);
     if (result == Result::Ok)
@@ -95,7 +96,9 @@ auto System::run(Slot& slot, std::uint32_t stageIndex, double time, const HostQu
     }
     if (result == Result::Ok && nonzero(stage.entry))
     {
-        result = instance.dispatchSignal(stage.entry.data(), slot.age, 10000);
+        result = stageIndex == 1 && sharedUpdate
+            ? instance.dispatchSignal(sharedUpdateEntry, slot.age, 10000)
+            : instance.dispatchSignal(stage.entry.data(), slot.age, 10000);
     }
     if (result == Result::Ok)
     {
@@ -222,14 +225,15 @@ auto System::tick(Instance& root, double time, bool emitting, const HostQualityS
         slot.life = 2;
         for (auto stageIndex = 0u; stageIndex < 2; ++stageIndex)
         {
+            if (stageIndex == 1 && sharedUpdate) continue;
             auto& stage = stages[stageIndex];
             auto work = static_cast<std::uint8_t*>(stage.work.data) + index * stage.workStride;
             auto defaults = stage.defaults.data ? static_cast<double*>(stage.defaults.data) + index * stage.defaultStride : nullptr;
-            auto result = slot.stages[stageIndex].initialize(stage.program, reinterpret_cast<double*>(work),
+            auto result = instances[index].stages[stageIndex].initialize(stage.program, reinterpret_cast<double*>(work),
                 stage.workStride / sizeof(double), defaults, stage.defaultStride);
             if (result == Result::Ok)
             {
-                result = slot.stages[stageIndex].setSignalObserver(observe, this);
+                result = instances[index].stages[stageIndex].setSignalObserver(observe, this);
             }
             if (result != Result::Ok)
             {
