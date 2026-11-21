@@ -229,7 +229,12 @@ auto System::initialize(const CustomNodeDescriptor* registry, std::size_t regist
         }
         auto alignment = stage.program.workAlignment();
         stage.workStride = std::max(alignment, (stage.program.workBytes() + alignment - 1) & ~(alignment - 1));
-        stage.defaultStride = stage.program.parameterValueCount();
+        // Unchanged constants can be read directly from the shared bytecode.
+        // Only connected stage inputs need mutable parameter defaults per slot.
+        const auto hasBoundInputs = std::any_of(stage.io.begin(), stage.io.end(), [](const auto& io) {
+            return io.kind == 0 && nonzero(io.root);
+        });
+        stage.defaultStride = hasBoundInputs ? stage.program.parameterValueCount() : 0;
         auto perSlot = stage.workStride + stage.defaultStride * sizeof(double);
         if (totalMemory > 512 * 1024 * 1024 || perSlot > 512 * 1024 * 1024 ||
             perSlot > (512 * 1024 * 1024 - totalMemory) / capacity)

@@ -39,6 +39,12 @@ internal static class Program
 
     private static void MainCore(string[] args)
     {
+        if (args is ["--particle-benchmark-fixtures", var benchmarkDirectory])
+        {
+            InitializeIsolatedUi();
+            ParticleBenchmarkFixtures.Write(benchmarkDirectory);
+            return;
+        }
         if (args is ["--write-authoring-samples", var authoringSampleOutput])
         {
             InitializeIsolatedUi();

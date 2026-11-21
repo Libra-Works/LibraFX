@@ -81,6 +81,8 @@ if(LIBERAFX_MATH_FORCE_SCALAR)
     target_compile_definitions(liberafx_runtime PUBLIC LIBERAFX_MATH_FORCE_SCALAR=1)
 endif()
 if(LIBERAFX_BUILD_BENCHMARKS)
+    add_executable(liberafx_particle_host_benchmarks benchmarks/ParticleHostBenchmarks.cpp)
+    target_link_libraries(liberafx_particle_host_benchmarks PRIVATE liberafx_runtime)
     add_executable(liberafx_math_backend_benchmarks benchmarks/MathBackendBenchmarks.cpp)
     target_link_libraries(liberafx_math_backend_benchmarks PRIVATE liberafx_runtime)
     target_compile_definitions(liberafx_math_backend_benchmarks PRIVATE
