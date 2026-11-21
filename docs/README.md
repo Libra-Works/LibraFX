@@ -8,6 +8,8 @@ The Markdown sources are also available on GitHub:
 
 ## References in this repository
 
+- Artist introduction: [editor tour](site/workspace-tour.md) and [first fountain](site/first-fountain.md).
+- 制作者向け入門：[はじめての画面操作](site/ja/workspace-tour.md)、[最初の噴水を作る](site/ja/first-fountain.md)。
 - [SDK distribution and compatibility](sdk-distribution.md)
 - [Unity integration](../Runtime/Integrations/Unity/USAGE.txt), [Unreal integration](../Runtime/Integrations/Unreal/USAGE.txt), and [Godot integration](../Runtime/Integrations/Godot/USAGE.txt)
 - [Bytecode format](../Runtime/BYTECODE.md), [GPU backends](gpu-backends.md), and [math backend measurements](../Runtime/MATH-BACKEND-MEASUREMENTS.md)
