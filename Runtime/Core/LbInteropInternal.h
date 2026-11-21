@@ -18,6 +18,7 @@
 #include "liberafx/LbNamedIo.h"
 #include "liberafx/LbSceneBindings.h"
 #include "liberafx/LbSpawnableHost.h"
+#include "liberafx/LbSpawnableHostPool.h"
 #include "liberafx/LbSpawnablePackage.h"
 #include "liberafx/LbVfxRuntime.h"
 #include <cmath>
@@ -137,10 +138,15 @@ struct NativeSpawnableDebug final {
   }
 };
 #endif
+struct NativeSpawnableHostPool;
 struct NativeSpawnableHost final {
   std::thread::id ownerThread;
   std::unique_ptr<liberafx::SpawnableHost> host;
   std::uint64_t packageIdentity = 0;
+  liberafx::SpawnableHost* pooledHost = nullptr;
+  std::shared_ptr<NativeSpawnableHostPool> poolOwner;
+  liberafx::SpawnableHostLease lease{};
+  auto get() const noexcept -> liberafx::SpawnableHost* { return host ? host.get() : pooledHost; }
 #if defined(_WIN32)
   std::unique_ptr<NativeSpawnableDebug> debug;
 #endif
@@ -157,6 +163,8 @@ extern std::unordered_map<LibraGeneratorPool,
 extern std::unordered_map<LibraSpawnableHostHandle, NativeSpawnableHost>
     spawnableHosts;
 extern std::uint64_t nextHandle;
+void reserveSpawnableHostHandles(std::size_t additionalPoolCapacity = 0);
+auto releasePooledSpawnableHost(LibraSpawnableHostHandle handle) -> LibraResult;
 
 auto toLibraResult(liberafx::Result result) noexcept -> LibraResult;
 auto findInstance(LibraInstance handle) -> NativeInstance *;

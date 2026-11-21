@@ -33,7 +33,7 @@ auto findInstance(LibraInstance handle) -> NativeInstance * {
 }
 auto findSpawnableHost(LibraSpawnableHostHandle handle) -> liberafx::SpawnableHost * {
   auto found = spawnableHosts.find(handle);
-  return found == spawnableHosts.end() ? nullptr : found->second.host.get();
+  return found == spawnableHosts.end() ? nullptr : found->second.get();
 }
 auto ownedSpawnableHost(LibraSpawnableHostHandle handle, liberafx::SpawnableHost *&out) -> LibraResult {
   auto found = spawnableHosts.find(handle);
@@ -45,7 +45,7 @@ auto ownedSpawnableHost(LibraSpawnableHostHandle handle, liberafx::SpawnableHost
   {
     return LIBRA_BUSY;
   }
-  out = found->second.host.get();
+  out = found->second.get();
   return LIBRA_OK;
 }
 auto readSpawnableScope(std::uint32_t kind, const std::uint8_t *container, LibraGeneratorInstance instance,

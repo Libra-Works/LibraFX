@@ -39,6 +39,7 @@ LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_create(
         liberafx::host::ExecutionDebugProtocol::programIdentity(
             bytes, static_cast<std::size_t>(byteCount));
 #endif
+    reserveSpawnableHostHandles();
     spawnableHosts.emplace(handle, std::move(owner));
     *outHost = handle;
     return LIBRA_OK;
@@ -53,6 +54,7 @@ libra_spawnable_host_release(LibraSpawnableHostHandle host) {
       return LIBRA_INVALID_HANDLE;
     if (found->second.ownerThread != std::this_thread::get_id())
       return LIBRA_BUSY;
+    if (found->second.poolOwner) return releasePooledSpawnableHost(host);
     spawnableHosts.erase(found);
     return LIBRA_OK;
   });
@@ -80,18 +82,18 @@ LibraResult LIBRA_INTEROP_CALL libra_spawnable_debug_attach(
       return LIBRA_BUSY;
     if (owner.debug)
       return LIBRA_BUSY;
-    if (generation != owner.host->debugGeneration())
+    if (generation != owner.get()->debugGeneration())
       return LIBRA_INVALID_HANDLE;
     auto scope = liberafx::SpawnableScope{};
     if (!readSpawnableScope(container ? 1 : 0, container, instance, scope))
       return LIBRA_INVALID_ARGUMENT;
     auto target = liberafx::SpawnableDebugTarget{};
-    auto result = owner.host->debugTarget(scope, target);
+    auto result = owner.get()->debugTarget(scope, target);
     if (result != liberafx::Result::Ok)
       return toLibraResult(result);
-    auto debug = std::make_unique<NativeSpawnableDebug>(*owner.host, target,
+    auto debug = std::make_unique<NativeSpawnableDebug>(*owner.get(), target,
                                                         owner.packageIdentity);
-    result = owner.host->setDebugHooks(target, debug->client.hooks());
+    result = owner.get()->setDebugHooks(target, debug->client.hooks());
     if (result != liberafx::Result::Ok)
       return toLibraResult(result);
     debug->hooked = true;

@@ -131,6 +131,9 @@ public:
                              CpuParticleEvent& out) noexcept;
 
 private:
+    friend class SpawnableHostPool;
+    bool supportsPoolReuse() const noexcept;
+    Result resetForPoolReuse() noexcept;
     struct Impl;
     explicit SpawnableHost(std::unique_ptr<Impl> impl) noexcept;
     std::unique_ptr<Impl> impl_;

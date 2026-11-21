@@ -217,6 +217,7 @@ try {
         'LbInteropSprite.cpp',
         'LbInteropGeneratorPool.cpp',
         'LbInteropSpawnableHost.cpp',
+        'LbInteropSpawnableHostPool.cpp',
         'LbInteropSession.cpp'
     )
     $sourcesWithHandwrittenWrappers = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)

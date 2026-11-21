@@ -509,10 +509,19 @@ auto SpawnableHost::Impl::forceTerminate(const SpawnableScope &scope)
     // Release facades before the instance and its caller-owned storage.
     // Even a failed first start can have initialized custom/deferred state.
     host.lifecycle.reset();
-    host.gameIo.reset();
-    host.rootInstance.reset();
-    host.rootDefaults.release();
-    host.rootWork.release();
+    if (host.retainForPool) {
+      // Cleanup instance state immediately, retaining the preallocated facade
+      // and slabs. Pool reset will rebind its handles before the next lease.
+      if (host.gameIo) (void)host.rootInstance->setSignalObserver(nullptr,nullptr);
+      const auto reset=host.rootInstance->deinitialize();
+      if (reset!=Result::Ok) return reset;
+    } else {
+      host.gameIo.reset();
+      host.rootInstance.reset();
+      host.rootDefaults.release();
+      host.rootWork.release();
+    }
+
     host.eventHead = host.eventCount = 0;
     host.pendingForceEvents.clear();
     host.pendingForceEventHead = 0;

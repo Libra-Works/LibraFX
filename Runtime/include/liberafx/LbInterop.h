@@ -31,6 +31,28 @@ typedef uint64_t LibraInstance;
 typedef uint64_t LibraGeneratorPool;
 typedef uint64_t LibraGeneratorInstance;
 typedef uint64_t LibraSpawnableHostHandle;
+typedef uint64_t LibraSpawnableHostPoolHandle;
+typedef struct LIBRA_INTEROP_ALIGN(4) LibraSpawnableHostPoolOptions {
+    uint32_t capacity, preparationWorkers, eventCapacity, instructionBudget;
+} LibraSpawnableHostPoolOptions;
+typedef struct LIBRA_INTEROP_ALIGN(4) LibraSpawnableHostPoolStats {
+    uint32_t capacity, active, available, preparationWorkers;
+} LibraSpawnableHostPoolStats;
+/* Preparation only: bounded workers initialize independent Core instances.
+   Root-only, Core-builtins-only; templates/procedural mesh emitters are unsupported.
+   NULL options use 8 instances, 4 preparation workers, 128 events, budget 10000.
+   Acquire never grows the pool. Return hosts with libra_spawnable_host_release.
+   All pool/host calls after preparation belong to the creating owner thread. */
+LIBRA_INTEROP_API int32_t LIBRA_INTEROP_CALL libra_spawnable_host_pool_create(
+    const uint8_t* bytes, uint64_t byteCount, const LibraSpawnableHostPoolOptions* options,
+    LibraSpawnableHostPoolHandle* outPool);
+LIBRA_INTEROP_API int32_t LIBRA_INTEROP_CALL libra_spawnable_host_pool_acquire(
+    LibraSpawnableHostPoolHandle pool, LibraSpawnableHostHandle* outHost);
+LIBRA_INTEROP_API int32_t LIBRA_INTEROP_CALL libra_spawnable_host_pool_stats(
+    LibraSpawnableHostPoolHandle pool, LibraSpawnableHostPoolStats* outStats);
+/* Busy while any host is checked out. */
+LIBRA_INTEROP_API int32_t LIBRA_INTEROP_CALL libra_spawnable_host_pool_release(LibraSpawnableHostPoolHandle pool);
+
 typedef uint32_t LibraBinding;
 typedef int32_t LibraResult;
 typedef struct LibraCoordinateBasis {

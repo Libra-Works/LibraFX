@@ -294,6 +294,7 @@ auto SpawnableHost::fireGameSignal(const char *name) -> Result {
 
 auto SpawnableHost::setGameProperty(const char *name, const double *values,
                                     std::size_t width) -> Result {
+  if (impl_->rootForced) return Result::NotReady;
   return impl_->gameIo ? impl_->gameIo->setProperty(name, values, width)
                        : Result::NotReady;
 }
@@ -422,6 +423,7 @@ auto SpawnableHost::setOwnerMatrix(const double *values, std::size_t width)
   auto converted = std::array<double, 16>{};
   const auto result = convertCoordinates(impl_->coordinateBasis, SpatialValueKind::Transform, false, values, width, converted.data());
   if (result != Result::Ok) return result;
+  if (impl_->rootForced) return Result::NotReady;
   return impl_->gameIo ? impl_->gameIo->setOwnerMatrix(converted.data(), width) : Result::NotReady;
 }
 
@@ -741,16 +743,9 @@ auto SpawnableHost::create(SpawnablePackage package,
       }
       impl->projectDescriptors.assign(registry, registry + registryCount);
     }
-    static auto generation = std::atomic<std::uint64_t>{1};
-    auto next = generation.load(std::memory_order_relaxed);
-    do {
-      if (next == UINT64_MAX) {
-        return Result::CounterOverflow;
-      }
-    } while (!generation.compare_exchange_weak(next, next + 1,
-                                               std::memory_order_relaxed));
-    impl->debugGeneration = next;
-    auto result = impl->initialize();
+    auto result = nextHostGeneration(impl->debugGeneration);
+    if (result != Result::Ok) return result;
+    result = impl->initialize();
     if (result != Result::Ok) {
       return result;
     }

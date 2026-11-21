@@ -16,6 +16,15 @@
 #include <vector>
 
 namespace liberafx::spawnable_host_detail {
+inline auto nextHostGeneration(std::uint64_t& out) noexcept -> Result {
+  static auto generation=std::atomic<std::uint64_t>{1};
+  auto next=generation.load(std::memory_order_relaxed);
+  do {
+    if (next==UINT64_MAX) return Result::CounterOverflow;
+  } while (!generation.compare_exchange_weak(next,next+1,std::memory_order_relaxed));
+  out=next;
+  return Result::Ok;
+}
 inline constexpr auto bytecodeHeaderBytes = std::size_t{16};
 inline constexpr auto typedInstructionBytes = std::size_t{96};
 inline constexpr auto customInstructionBytes = std::size_t{256};
@@ -239,6 +248,7 @@ struct SpawnableHost::Impl final {
   bool pendingPump = false;
   bool operationActive = false;
   bool rootForced = false;
+  bool retainForPool = false;
   Result failure = Result::Ok;
 
   Impl(SpawnablePackage value, const SpawnableHostOptions &configuration)

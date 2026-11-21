@@ -28,7 +28,8 @@ add_library(liberafx_runtime STATIC
     Core/LbSpawnableHost.cpp
     Core/LbSpawnableHostExecution.cpp
     Core/LbSpawnableHostScheduling.cpp
-    Core/LbSpawnableHostApi.cpp)
+    Core/LbSpawnableHostApi.cpp
+    Core/LbSpawnableHostPool.cpp)
 target_sources(liberafx_runtime PRIVATE Core/LbLogicalNodes.cpp)
 target_sources(liberafx_runtime PRIVATE Core/LbInstanceSession.cpp)
 target_sources(liberafx_runtime PRIVATE Core/LbPhasePrimitives.cpp)
@@ -54,6 +55,7 @@ if(LIBERAFX_BUILD_INTEROP)
         Core/LbInteropSprite.cpp
         Core/LbInteropGeneratorPool.cpp
         Core/LbInteropSpawnableHost.cpp
+        Core/LbInteropSpawnableHostPool.cpp
         Core/LbInteropCoordinates.cpp
         Core/LbInteropSession.cpp)
     target_sources(liberafx_native PRIVATE Core/CpuParticles/LbInteropCpuParticles.cpp)
@@ -81,6 +83,8 @@ if(LIBERAFX_MATH_FORCE_SCALAR)
     target_compile_definitions(liberafx_runtime PUBLIC LIBERAFX_MATH_FORCE_SCALAR=1)
 endif()
 if(LIBERAFX_BUILD_BENCHMARKS)
+    add_executable(liberafx_host_pool_benchmarks benchmarks/HostPoolBenchmarks.cpp)
+    target_link_libraries(liberafx_host_pool_benchmarks PRIVATE liberafx_runtime)
     add_executable(liberafx_particle_host_benchmarks benchmarks/ParticleHostBenchmarks.cpp)
     target_link_libraries(liberafx_particle_host_benchmarks PRIVATE liberafx_runtime)
     add_executable(liberafx_math_backend_benchmarks benchmarks/MathBackendBenchmarks.cpp)
@@ -90,6 +94,9 @@ if(LIBERAFX_BUILD_BENCHMARKS)
 endif()
 if(LIBERAFX_BUILD_TESTS)
     enable_testing()
+    add_executable(liberafx_spawnable_host_pool_tests tests/SpawnableHostPoolTests.cpp)
+    target_link_libraries(liberafx_spawnable_host_pool_tests PRIVATE liberafx_runtime)
+    add_test(NAME liberafx_spawnable_host_pool_tests COMMAND liberafx_spawnable_host_pool_tests)
     add_executable(liberafx_mesh_emission_tests tests/MeshEmissionTests.cpp)
     target_link_libraries(liberafx_mesh_emission_tests PRIVATE liberafx_runtime)
     add_test(NAME liberafx_mesh_emission_tests COMMAND liberafx_mesh_emission_tests)
@@ -200,6 +207,9 @@ if(LIBERAFX_BUILD_TESTS)
         add_test(NAME liberafx_interop_session_tests COMMAND liberafx_interop_session_tests)
         add_executable(liberafx_fireworks_lifecycle_tests tests/FireworksLifecycleTests.cpp)
         target_link_libraries(liberafx_fireworks_lifecycle_tests PRIVATE liberafx_native)
+        add_executable(liberafx_interop_host_pool_tests tests/InteropHostPoolTests.cpp)
+        target_link_libraries(liberafx_interop_host_pool_tests PRIVATE liberafx_native liberafx_runtime)
+        add_test(NAME liberafx_interop_host_pool_tests COMMAND liberafx_interop_host_pool_tests)
         add_executable(liberafx_interop_tests tests/InteropTests.cpp)
         target_link_libraries(liberafx_interop_tests PRIVATE liberafx_native)
         target_compile_features(liberafx_interop_tests PRIVATE cxx_std_17)
