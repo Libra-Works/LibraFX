@@ -111,7 +111,7 @@ public static class GpuParticleEditorService
     {
         Program = GpuSamples.CreateEmitter() with { Id = "gpu_" + id.ToString("N") },
         ResourceAssetPaths = new() { ["billboardTexture"] = "builtin:white" },
-        RendererSettings = new() { ["renderStep"] = new(SizeScale: 100) }
+        RendererSettings = new() { ["renderStep"] = new(SizeScale: 1) }
     };
     private static GpuEditorState ReadState(IReadOnlyList<NodeParameterSnapshot>? parameters, Guid id)
     {
@@ -272,7 +272,7 @@ public static class GpuParticleEditorService
             {
                 Fluid2DCompiler.Validate(fluid);
                 GpuResourcePlanCompiler.Compile(Fluid2DCompiler.ResourcePlan(fluid));
-                var renderer = state.FluidRenderer ?? new(Fluid2DPresets.RendererMaterial(fluid.Model), 100);
+                var renderer = state.FluidRenderer ?? new(Fluid2DPresets.RendererMaterial(fluid.Model), 1);
                 if (renderer.Material != Fluid2DPresets.RendererMaterial(fluid.Model) || !double.IsFinite(renderer.SizeScale) ||
                     renderer.SizeScale <= 0 || renderer.SizeScale > 10000)
                 {
@@ -326,7 +326,7 @@ public static class GpuParticleEditorService
         if (edit.Action == "fluid-enable")
         {
             var fluid = edit.Fluid2D ?? new();
-            return state with { Fluid2D = fluid, FluidRenderer = new(Fluid2DPresets.RendererMaterial(fluid.Model), 100) };
+            return state with { Fluid2D = fluid, FluidRenderer = new(Fluid2DPresets.RendererMaterial(fluid.Model), 1) };
         }
         if (edit.Action == "fluid-disable")
         {
@@ -336,7 +336,7 @@ public static class GpuParticleEditorService
         {
             var fluid = edit.Fluid2D ?? throw new ArgumentException("Fluid settings are required.");
             return state with { Fluid2D = fluid,
-                FluidRenderer = new(Fluid2DPresets.RendererMaterial(fluid.Model), state.FluidRenderer?.SizeScale ?? 100) };
+                FluidRenderer = new(Fluid2DPresets.RendererMaterial(fluid.Model), state.FluidRenderer?.SizeScale ?? 1) };
         }
         if ((edit.Action is "fluid-force-add" or "fluid-force-update" or "fluid-force-remove") && state.Fluid2D is { } forceSettings)
         {
@@ -378,7 +378,7 @@ public static class GpuParticleEditorService
         }
         if (edit.Action == "fluid-renderer" && state.Fluid2D is not null)
         {
-            var renderer = state.FluidRenderer ?? new(Fluid2DPresets.RendererMaterial(state.Fluid2D.Model), 100);
+            var renderer = state.FluidRenderer ?? new(Fluid2DPresets.RendererMaterial(state.Fluid2D.Model), 1);
             return state with
             {
                 FluidRenderer = new(edit.Material ?? renderer.Material, edit.SizeScale ?? renderer.SizeScale),

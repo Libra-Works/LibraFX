@@ -156,7 +156,7 @@ internal static class GpuParticleEditorTests
         Check(vm.Kernel is null && vm.State.Program.Flow.Count == 3, "GPU flow starter");
         var render = vm.State.Program.Flow.Single(f => f.Kind == FlowKind.RenderBillboard);
         Check(vm.State.ResourceAssetPaths[render.Resource!] == "builtin:white" &&
-            vm.State.RendererSettings[render.Id].SizeScale == 100, "New GPU starter explicitly binds a visible builtin billboard");
+            vm.State.RendererSettings[render.Id].SizeScale == 1, "New GPU starter uses canonical metres and binds a builtin billboard");
         var spawn = vm.State.Program.Flow.Single(flow => flow.Kind == FlowKind.Spawn);
         Check(spawn.SpawnShape?.Kind == GpuSpawnShapeKind.Point,
             "New GPU Spawn explicitly exposes Point independently of the billboard renderer");
@@ -202,7 +202,7 @@ internal static class GpuParticleEditorTests
             rendererDelivery.RendererBindings.Single() is { Renderer: "builtin:billboard", Material: "builtin:unlit-additive", SizeScale: 120 },
             "Authored GPU material and draw size reach live/export renderer bindings");
         history.Undo();
-        Check(vm.State.RendererSettings[render.Id] == new GpuRendererSettings(SizeScale: 100),
+        Check(vm.State.RendererSettings[render.Id] == new GpuRendererSettings(SizeScale: 1),
             "GPU renderer configuration is undoable");
         GpuParticleEditorService.AssignBillboardTexture(graph, graph.GetNode(container.Id),
             new EngineAsset("/Game/Textures/T_Test.T_Test", "T_Test", "texture", "Unreal"));

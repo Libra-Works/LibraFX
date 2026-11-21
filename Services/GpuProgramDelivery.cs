@@ -226,7 +226,7 @@ public static class GpuProgramDeliveryService
                 throw new GpuValidationException(errors);
             }
             return new GpuFluidProgram(item.Node.Id, item.State.Fluid2D!,
-                item.State.FluidRenderer ?? new(Fluid2DPresets.RendererMaterial(item.State.Fluid2D!.Model), 100))
+                item.State.FluidRenderer ?? new(Fluid2DPresets.RendererMaterial(item.State.Fluid2D!.Model), 1))
             {
                 AutomaticPlane = item.State.FluidAutomaticPlane ?? (consumers.Contains(item.Node.Id) ? false : null)
             };
