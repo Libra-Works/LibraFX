@@ -922,11 +922,20 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
         };
         connection->EditorGpuResetHandler = [this]
         {
+            if (previewActor.IsValid()) previewActor->SetActorLocation(FVector::ZeroVector);
+            for (auto& node : renderNodes)
+                if (node.component.IsValid()) node.component->DestroyComponent();
+            renderNodes.Reset();
+            renderProgramSequence = -1;
             if (debugDraw) debugDraw->Clear();
             acceptedRenderRootSequence = -1;
             pendingRenderNodes.Reset();
             pendingRenderProgramSequence = -1;
             if (gpuPreview) gpuPreview->Reset();
+        };
+        connection->EditorPreviewMotionHandler = [this](const FVector& offset)
+        {
+            if (previewActor.IsValid()) previewActor->SetActorLocation(FVector(offset.Z, offset.X, offset.Y) * 100);
         };
         connection->EditorGpuStatusHandler = [this](int64 sequence)
         {

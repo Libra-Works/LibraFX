@@ -76,7 +76,10 @@ auto PublishLibraFrameInputs(liberafx::SpawnableHost& host, const ULibraSpawnabl
                 valid = true;
             }
         }
-        const auto values = std::array<double, 4>{position.X, position.Y, position.Z, valid ? 1.0 : 0.0};
+        auto values = std::array<double, 4>{position.X, position.Y, position.Z, valid ? 1.0 : 0.0};
+        const auto converted = liberafx::convertCoordinates(host.coordinateBasis(), liberafx::SpatialValueKind::Position,
+            false, values.data(), 3, values.data());
+        if (converted != liberafx::Result::Ok) return converted;
         auto result = host.setGameProperty(portName, values.data(), values.size());
         if (result != liberafx::Result::Ok)
         {
@@ -253,9 +256,10 @@ void ULibraSpawnableComponent::ReleaseDebugger()
 {
 #if PLATFORM_WINDOWS
     if (DebugJobPending() && DebugState->last.operation == liberafx::host::SpawnableDebugOperation::Advance)
-        TimeSeconds = DebugState->last.time;
+        RealTimeSeconds = DebugState->last.time;
 #endif
     DebugState.Reset(); // Disconnect, then join, then remove hooks.
+    if (NativeHost) TimeSeconds = NativeHost->timeSnapshot().effectTime;
 }
 
 void ULibraSpawnableComponent::DetachExecutionDebugger()
@@ -296,6 +300,8 @@ void ULibraSpawnableComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
 auto ULibraSpawnableComponent::Play(bool bRestart) -> ELibraRuntimeResult
 {
     check(IsInGameThread());
+    const auto coordinates = liberafx::CoordinateBasis{{EffectAxes.X, EffectAxes.Y, EffectAxes.Z}, HostUnitsPerMetre};
+    if (!liberafx::validCoordinateBasis(coordinates)) return Report(ELibraRuntimeResult::InvalidArgument);
     if (!IsRegistered()) return Report(ELibraRuntimeResult::NotReady);
     if (!Package) return Report(ELibraRuntimeResult::InvalidArgument);
     if (bStopping) return Report(ELibraRuntimeResult::Busy);
@@ -329,6 +335,8 @@ auto ULibraSpawnableComponent::Play(bool bRestart) -> ELibraRuntimeResult
     const auto projectNodes = registry->ProjectDescriptors();
     result = liberafx::SpawnableHost::create(MoveTemp(package), options,
         projectNodes.GetData(), projectNodes.Num(), host);
+    if (result == liberafx::Result::Ok) result = host->setCoordinateBasis(coordinates);
+    if (result == liberafx::Result::Ok) result = host->setTimeScale(PlayRate);
     if (result != liberafx::Result::Ok) return Report(ToLibraResult(result));
     NativeHost.Reset(host.release());
 #if PLATFORM_WINDOWS
@@ -354,6 +362,7 @@ auto ULibraSpawnableComponent::Play(bool bRestart) -> ELibraRuntimeResult
     }
     TimeSeconds = 0;
     bRootFinished = false;
+    RealTimeSeconds = 0;
     bForceTerminated = false;
     CancelledBatchScopes.Reset();
     bIsPlaying = true;
@@ -539,6 +548,7 @@ auto ULibraSpawnableComponent::Stop() -> ELibraRuntimeResult
         ReleaseHost();
         bForceTerminated = bRootFinished = false;
         TimeSeconds = 0;
+        RealTimeSeconds = 0;
         return Report(ELibraRuntimeResult::Ok);
     }
     auto* current = NativeHost.Get();
@@ -555,6 +565,7 @@ auto ULibraSpawnableComponent::Stop() -> ELibraRuntimeResult
     bIsPlaying = false;
     bRootFinished = false;
     TimeSeconds = 0;
+    RealTimeSeconds = 0;
     SetComponentTickEnabled(false);
     LastResult = ELibraRuntimeResult::Ok;
     return LastResult;
@@ -620,6 +631,24 @@ auto ULibraSpawnableComponent::SetGameProperty(const FString& name, const TArray
     return Report(ToLibraResult(NativeHost->setGameProperty(utf8Name.Get(), values.GetData(), values.Num())));
 }
 
+FMatrix ULibraSpawnableComponent::EffectToHostMatrix() const
+{
+    const auto coordinates = NativeHost ? NativeHost->coordinateBasis() :
+        liberafx::CoordinateBasis{{EffectAxes.X, EffectAxes.Y, EffectAxes.Z}, HostUnitsPerMetre};
+    auto lanes = std::array<double, 16>{1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+    if (liberafx::convertCoordinates(coordinates, liberafx::SpatialValueKind::CanonicalDrawTransform,
+        true, lanes.data(), lanes.size(), lanes.data()) != liberafx::Result::Ok) return FMatrix::Identity;
+    auto matrix = FMatrix::Identity;
+    for (auto row = 0; row < 4; ++row)
+        for (auto column = 0; column < 4; ++column) matrix.M[column][row] = lanes[row * 4 + column];
+    return matrix;
+}
+
+auto ULibraSpawnableComponent::SetGameBoolProperty(const FString& name, bool value) -> ELibraRuntimeResult
+{
+    return SetGameProperty(name, TArray<double>{value ? 1.0 : 0.0});
+}
+
 auto ULibraSpawnableComponent::SetOwnerMatrix(const TArray<double>& values) -> ELibraRuntimeResult
 {
     check(IsInGameThread());
@@ -627,6 +656,18 @@ auto ULibraSpawnableComponent::SetOwnerMatrix(const TArray<double>& values) -> E
     if (values.Num() != 16) return Report(ELibraRuntimeResult::InvalidArgument);
     if (DebugJobPending()) return ELibraRuntimeResult::Busy;
     return Report(ToLibraResult(NativeHost->setOwnerMatrix(values.GetData(), values.Num())));
+}
+
+auto ULibraSpawnableComponent::SetTimeScale(double ratio) -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    if (!FMath::IsFinite(ratio) || ratio < 0 || ratio > 1000000) return Report(ELibraRuntimeResult::InvalidArgument);
+    if (NativeHost) {
+        const auto result = NativeHost->setTimeScale(ratio);
+        if (result != liberafx::Result::Ok) return Report(ToLibraResult(result));
+    }
+    PlayRate = ratio;
+    return Report(ELibraRuntimeResult::Ok);
 }
 
 auto ULibraSpawnableComponent::GetInstanceTarget(FGuid containerId, int64 instanceId, int64& generation) -> ELibraRuntimeResult
@@ -961,7 +1002,10 @@ void ULibraSpawnableComponent::TickDebugger(float deltaTime)
         state->scheduler.Wait();
         auto request = state->last;
         auto advance = request.operation == liberafx::host::SpawnableDebugOperation::Advance;
-        if (advance) TimeSeconds = request.time;
+        if (advance) {
+            RealTimeSeconds = request.time;
+            TimeSeconds = NativeHost->timeSnapshot().effectTime;
+        }
         DrainEvents();
         if (generation != HostGeneration || DebugState.Get() != state || bForceTerminated) return;
         if (advance && result == liberafx::Result::QueueRejected && ++state->attempts < 16)
@@ -980,7 +1024,7 @@ void ULibraSpawnableComponent::TickDebugger(float deltaTime)
     }
     if (!bIsPlaying) { SetComponentTickEnabled(false); return; }
     auto request = liberafx::host::SpawnableDebugJob::Request{};
-    request.time = TimeSeconds + static_cast<double>(deltaTime) * PlayRate;
+    request.time = RealTimeSeconds + static_cast<double>(deltaTime);
     request.frameDelta = deltaTime;
     if (!FMath::IsFinite(request.time) || !FMath::IsFinite(PlayRate) || PlayRate < 0)
     {
@@ -995,6 +1039,7 @@ void ULibraSpawnableComponent::TickDebugger(float deltaTime)
         result = PublishLibraFrameInputs(*NativeHost, *this);
     }
     state->attempts = 0;
+    if (result == liberafx::Result::Ok) result = NativeHost->setTimeScale(PlayRate);
     if (result == liberafx::Result::Ok) result = state->Submit(request);
     if (result != liberafx::Result::Ok)
     {
@@ -1020,7 +1065,7 @@ void ULibraSpawnableComponent::TickComponent(float deltaTime, ELevelTick tickTyp
     }
     auto* current = NativeHost.Get();
     auto generation = HostGeneration;
-    auto nextTime = TimeSeconds + static_cast<double>(deltaTime) * PlayRate;
+    auto nextTime = RealTimeSeconds + static_cast<double>(deltaTime);
     if (!FMath::IsFinite(nextTime))
     {
         ReleaseHost();
@@ -1056,20 +1101,23 @@ void ULibraSpawnableComponent::TickComponent(float deltaTime, ELevelTick tickTyp
         LastResult = ELibraRuntimeResult::Ok;
         return;
     }
-    TimeSeconds = nextTime;
+    RealTimeSeconds = nextTime;
     auto result = SkeletalPoseState
         ? SkeletalPoseState->Publish(*current, *this) : liberafx::Result::Ok;
     if (result == liberafx::Result::Ok)
     {
         result = PublishLibraFrameInputs(*current, *this);
     }
-    if (result == liberafx::Result::Ok) result = current->advance(TimeSeconds, deltaTime);
+    if (result == liberafx::Result::Ok) result = current->setTimeScale(PlayRate);
+    if (result == liberafx::Result::Ok) result = current->advance(RealTimeSeconds, deltaTime);
+    TimeSeconds = current->timeSnapshot().effectTime;
     DrainEvents();
     if (HostGeneration != generation) return;
     if (bForceTerminated) return;
     for (auto attempt = 0; result == liberafx::Result::QueueRejected && attempt < 16; ++attempt)
     {
-        result = current->advance(TimeSeconds, deltaTime);
+        result = current->advance(RealTimeSeconds, deltaTime);
+        TimeSeconds = current->timeSnapshot().effectTime;
         DrainEvents();
         if (HostGeneration != generation) return;
         if (bForceTerminated) return;

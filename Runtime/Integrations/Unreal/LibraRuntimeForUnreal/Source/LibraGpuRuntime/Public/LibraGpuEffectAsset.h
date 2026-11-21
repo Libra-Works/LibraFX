@@ -92,6 +92,7 @@ class LIBRAGPURUNTIME_API ULibraGpuEffectAsset : public UDataAsset
     GENERATED_BODY()
 
 public:
+    float GetAuthoredSpawnRate() const { return AuthoredSpawnRate; }
     static constexpr int32 MaximumBundleBytes = 16 * 1024 * 1024;
     static constexpr int32 MaximumRegisters = 256;
     static constexpr uint64 MaximumGpuBytes = 256ull * 1024 * 1024;
@@ -124,6 +125,8 @@ public:
 private:
     UPROPERTY()
     int32 Capacity = 0;
+    UPROPERTY()
+    float AuthoredSpawnRate = -1;
 
     UPROPERTY()
     FString CanonicalJson;

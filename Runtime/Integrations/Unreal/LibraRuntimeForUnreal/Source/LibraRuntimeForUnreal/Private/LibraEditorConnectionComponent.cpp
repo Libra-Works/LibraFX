@@ -360,7 +360,40 @@ auto ULibraEditorConnectionComponent::ApplyMessage(TConstArrayView<uint8> messag
         Status = TEXT("The editor sent an invalid compiled preview frame.");
         return false;
     }
-    if (frame.kind == wire::Kind::Control) return ApplyControl(*state, frame);
+    if (frame.kind == wire::Kind::Control)
+    {
+        const auto encoded = FUTF8ToTCHAR(reinterpret_cast<const ANSICHAR*>(frame.payload), static_cast<int32>(frame.payloadLength));
+        const auto reader = TJsonReaderFactory<>::Create(FString(encoded.Length(), encoded.Get()));
+        TSharedPtr<FJsonObject> object;
+        FString type;
+        if (FJsonSerializer::Deserialize(reader, object) && object && object->TryGetStringField(TEXT("type"), type))
+        {
+            if (type == TEXT("preview_motion") && object->Values.Num() == 2)
+            {
+                const TArray<TSharedPtr<FJsonValue>>* values = nullptr;
+                if (!object->TryGetArrayField(TEXT("offset"), values) || values->Num() != 3) return false;
+                auto offset = FVector::ZeroVector;
+                for (auto i = 0; i < 3; ++i)
+                {
+                    double lane;
+                    if (!(*values)[i].IsValid() || !(*values)[i]->TryGetNumber(lane) || !FMath::IsFinite(lane) || FMath::Abs(lane) > 1000) return false;
+                    offset[i] = lane;
+                }
+                if (EditorPreviewMotionHandler) EditorPreviewMotionHandler(offset);
+                return true;
+            }
+        }
+        // The JSON reader is forward-only; reuse the object parsed above.
+        if (object && object->TryGetStringField(TEXT("type"), type) &&
+            type == TEXT("preview_reset") && object->Values.Num() == 1)
+        {
+            state->pendingEvaluation = false;
+            if (auto target = state->target.Get()) target->Stop();
+            if (EditorGpuResetHandler) EditorGpuResetHandler();
+            return true;
+        }
+        return ApplyControl(*state, frame);
+    }
     if (static_cast<uint16>(frame.kind) == 5)
     {
         if (frame.payloadLength > 1024 * 1024)

@@ -92,6 +92,7 @@ float Time;
 uint EmitterSeed;
 uint FrameIndex;
 float3 EmitterPosition;
+float4 EmitterRows[4];
 uint RegisterCount;
 uint InstructionCount;
 uint Stage;
@@ -301,7 +302,8 @@ void MainCS(uint3 threadId : SV_DispatchThreadID)
         {
             if (aux == 0) result = asuint(float4(DeltaTime, 0, 0, 0));
             else if (aux == 1) result = asuint(float4(Time, 0, 0, 0));
-            else result = asuint(float4(EmitterPosition, 0));
+            else if (aux == 2) result = asuint(float4(EmitterPosition, 0));
+            else result = asuint(EmitterRows[aux - 3]);
         }
         else if ((op >= 3 && op <= 6) || (op >= 9 && op <= 11))
         {

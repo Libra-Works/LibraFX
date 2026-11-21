@@ -55,7 +55,7 @@ bool ValidatePacket(const FLibraGpuKernelPacket& packet, int32 capacity,
         return fail(TEXT("GPU packet or scratch memory limit exceeded."));
 
     static constexpr uint32 attrTypes[] = {5, 5, 6, 4, 0, 0, 0, 3, 2};
-    static constexpr uint32 uniformTypes[] = {0, 0, 5};
+    static constexpr uint32 uniformTypes[] = {0, 0, 5, 6, 6, 6, 6};
     TArray<uint32> types;
     types.Reserve(registers);
     uint32 writes = 0;
@@ -439,7 +439,7 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
     double capacityNumber = 0, stride = 0, uniformSize = 0;
     FString hash, sourceHash, format, metadataPurpose;
     bool metadataExecuted = true;
-    if (!(*metadata)->TryGetNumberField(TEXT("version"), version) || version != 1 ||
+    if (!(*metadata)->TryGetNumberField(TEXT("version"), version) || (version != 1 && version != 2 && version != 3) ||
         !(*metadata)->TryGetNumberField(TEXT("capacity"), capacityNumber) ||
         capacityNumber < 1 || capacityNumber > double(MAX_int32) || FMath::FloorToDouble(capacityNumber) != capacityNumber ||
         !(*metadata)->TryGetNumberField(TEXT("particleStride"), stride) || stride != 80 ||
@@ -490,6 +490,13 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
     if (hash != LibraGpuSha256(canonical) || sourceHash != LibraGpuSha256(source))
     {
         error = TEXT("GPU bundle IR or shader source hash mismatch.");
+        return false;
+    }
+    auto newSpawnRate = -1.0;
+    if (version >= 3 && (!(*metadata)->TryGetNumberField(TEXT("spawnRate"), newSpawnRate) ||
+        !FMath::IsFinite(newSpawnRate) || newSpawnRate < 0 || newSpawnRate > 1000000))
+    {
+        error = TEXT("Invalid authored GPU spawn rate.");
         return false;
     }
     auto newCapacity = int32(capacityNumber);
@@ -750,6 +757,7 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
         return false;
     }
     Capacity = newCapacity;
+    AuthoredSpawnRate = static_cast<float>(newSpawnRate);
     CanonicalJson = MoveTemp(canonical);
     OptimizedSourceExport = MoveTemp(source);
     ContentHash = MoveTemp(hash);

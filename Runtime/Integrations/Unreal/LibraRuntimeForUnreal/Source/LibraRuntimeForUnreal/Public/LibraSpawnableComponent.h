@@ -90,6 +90,14 @@ public:
     bool IsPreviewDebugDrawSuppressed() const { return bSuppressPreviewDebugDraw; }
     ULibraSpawnableComponent();
     static bool EnsureProceduralMaterialMasters(FString& error);
+    // Effect-space axes expressed in host axes: +X=1, +Y=2, +Z=3, with optional sign.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime|Coordinates")
+    FIntVector EffectAxes = FIntVector(2, 3, 1);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime|Coordinates", meta = (ClampMin = "0.000000001"))
+    double HostUnitsPerMetre = 100;
+
+    FMatrix EffectToHostMatrix() const;
     virtual ~ULibraSpawnableComponent() override;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime")
@@ -127,6 +135,10 @@ public:
 
     UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime")
     double TimeSeconds = 0;
+    UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime")
+    double RealTimeSeconds = 0;
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
+    ELibraRuntimeResult SetTimeScale(double ratio);
 
     UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime")
     bool bIsPlaying = false;
@@ -181,6 +193,9 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Game I/O")
     ELibraRuntimeResult SetGameProperty(const FString& name, const TArray<double>& values);
+
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Game I/O")
+    ELibraRuntimeResult SetGameBoolProperty(const FString& name, bool value);
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Instance Game I/O")
     ELibraRuntimeResult GetInstanceTarget(FGuid containerId, int64 instanceId, int64& generation);

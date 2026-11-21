@@ -40,11 +40,13 @@ VertexOutput MainVS(uint vertexId : SV_VertexID, uint instanceId : SV_InstanceID
     float angle = particle.sizeRotation.z;
     float s = sin(angle), c = cos(angle);
     float2 rotated = float2(c * corner.x - s * corner.y, s * corner.x + c * corner.y);
-    float3 offset = CameraRight * rotated.x * particle.sizeRotation.x * SizeScale +
-        CameraUp * rotated.y * particle.sizeRotation.y * SizeScale;
+    float sx = length(float3(DrawRow0.x, DrawRow1.x, DrawRow2.x));
+    float sy = length(float3(DrawRow0.y, DrawRow1.y, DrawRow2.y));
+    float3 offset = CameraRight * rotated.x * particle.sizeRotation.x * SizeScale * sx +
+        CameraUp * rotated.y * particle.sizeRotation.y * SizeScale * sy;
     float4 position = float4(particle.positionAge.xyz, 1);
     float3 world = float3(dot(DrawRow0, position), dot(DrawRow1, position), dot(DrawRow2, position));
-    world += float3(dot(DrawRow0.xyz, offset), dot(DrawRow1.xyz, offset), dot(DrawRow2.xyz, offset));
+    world += offset;
     world += PreViewTranslation;
     VertexOutput output;
     output.position = particle.seedAlive.y != 0 ? mul(float4(world, 1), ViewProjection) : float4(0, 0, 0, 0);

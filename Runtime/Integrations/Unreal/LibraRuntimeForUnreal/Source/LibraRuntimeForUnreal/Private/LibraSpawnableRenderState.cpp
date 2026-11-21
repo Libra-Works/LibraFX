@@ -245,6 +245,7 @@ struct FDraw
 
 struct FCpuParticleDraw
 {
+    TArray<FGuid> DrawRows;
     FGuid Id;
     float DrawScale = 1;
     bool bAdditive = false;
@@ -291,6 +292,7 @@ struct FDefinition
     TArray<FFluidProgram> FluidPrograms;
     TArray<FGeneratedDrawTexture> GeneratedDrawTextures;
     TMap<FGuid, TArray<FGuid>> GpuDrawTransforms;
+    TMap<FGuid, TArray<FGuid>> GpuEmitterTransforms;
     uint64 GpuBytes = 0;
 };
 
@@ -504,20 +506,29 @@ struct FLibraSpawnableRenderState::FImpl
             animation.Durations, start, end, billboard) || Fail(TEXT("Invalid layered sprite clock, order or pose keys."));
     }
 
-    UTexture2D* MakeWhiteTexture()
+    TStrongObjectPtr<UTexture2D> RadialGlow;
+    UTexture2D* MakeWhiteTexture(bool radial = false)
     {
-        auto* texture = UTexture2D::CreateTransient(1, 1, PF_B8G8R8A8);
+        if (radial && RadialGlow.IsValid()) return RadialGlow.Get();
+        const auto size = radial ? 64 : 1;
+        auto* texture = UTexture2D::CreateTransient(size, size, PF_B8G8R8A8);
         if (!texture || !texture->GetPlatformData() || texture->GetPlatformData()->Mips.IsEmpty())
             return nullptr;
         auto& mip = texture->GetPlatformData()->Mips[0];
         auto* pixel = static_cast<FColor*>(mip.BulkData.Lock(LOCK_READ_WRITE));
         if (!pixel)
         {
+            mip.BulkData.Unlock();
             return nullptr;
         }
-        *pixel = FColor::White;
+        for (auto y = 0; y < size; ++y) for (auto x = 0; x < size; ++x) {
+            const auto u = (x + .5) / size * 2 - 1, v = (y + .5) / size * 2 - 1;
+            const auto alpha = radial ? FMath::Clamp(1 - FMath::Sqrt(u * u + v * v), 0.0, 1.0) : 1.0;
+            pixel[y * size + x] = FColor(255, 255, 255, static_cast<uint8>(FMath::RoundToInt(alpha * 255)));
+        }
         mip.BulkData.Unlock();
         texture->UpdateResource();
+        if (radial) RadialGlow.Reset(texture);
         return texture;
     }
 
@@ -550,12 +561,15 @@ struct FLibraSpawnableRenderState::FImpl
         }
         auto cpuVersion = double{};
         if ((root->HasField(TEXT("cpuParticleVersion")) || (cpuParticles && !cpuParticles->IsEmpty())) &&
-            (!root->TryGetNumberField(TEXT("cpuParticleVersion"), cpuVersion) || cpuVersion != 1))
+            (!root->TryGetNumberField(TEXT("cpuParticleVersion"), cpuVersion) || (cpuVersion != 1 && cpuVersion != 2)))
         {
             return Fail(TEXT("Unsupported CPU particle scene metadata version."));
         }
+        for (const auto emitterBinding : {false, true})
+        {
+        auto& transformMap = emitterBinding ? definition.GpuEmitterTransforms : definition.GpuDrawTransforms;
         const TArray<TSharedPtr<FJsonValue>>* gpuDrawTransforms = nullptr;
-        if (root->TryGetArrayField(TEXT("gpuDrawTransforms"), gpuDrawTransforms))
+        if (root->TryGetArrayField(emitterBinding ? TEXT("gpuEmitterTransforms") : TEXT("gpuDrawTransforms"), gpuDrawTransforms))
         {
             if (gpuDrawTransforms->Num() > 16)
                 return Fail(TEXT("Render configuration exceeds the 16 GPU draw Matrix binding limit."));
@@ -567,7 +581,7 @@ struct FLibraSpawnableRenderState::FImpl
                 const TArray<TSharedPtr<FJsonValue>>* rowIds = nullptr;
                 if (!object || !object->TryGetStringField(TEXT("nodeId"), id) ||
                     !FGuid::Parse(id, nodeId) || !nodeId.IsValid() ||
-                    definition.GpuDrawTransforms.Contains(nodeId) ||
+                    transformMap.Contains(nodeId) ||
                     !object->TryGetArrayField(TEXT("rowNodeIds"), rowIds) || rowIds->Num() != 4)
                     return Fail(TEXT("Invalid or duplicate GPU draw Matrix binding."));
                 auto rows = TArray<FGuid>{};
@@ -581,8 +595,9 @@ struct FLibraSpawnableRenderState::FImpl
                         return Fail(TEXT("GPU draw Matrix contains an invalid FloatX4 row identity."));
                     rows.Add(rowId);
                 }
-                definition.GpuDrawTransforms.Add(nodeId, MoveTemp(rows));
+                transformMap.Add(nodeId, MoveTemp(rows));
             }
+        }
         }
         auto ids = TSet<FGuid>{};
         using EKind = ELibraPackageResourceKind;
@@ -781,8 +796,23 @@ struct FLibraSpawnableRenderState::FImpl
                 ids.Add(draw.Id);
                 draw.DrawScale = static_cast<float>(drawScale);
                 draw.bAdditive = blendMode == TEXT("Additive");
-                auto texture = asset == TEXT("builtin:white")
-                    ? MakeWhiteTexture() : Resolve<UTexture>(asset, EKind::Texture);
+                const auto rowValue = object->TryGetField(TEXT("drawMatrixRowNodeIds"));
+                if (rowValue.IsValid() && rowValue->Type != EJson::Null)
+                {
+                    const TArray<TSharedPtr<FJsonValue>>* rows = nullptr;
+                    if (cpuVersion != 2 || !object->TryGetArrayField(TEXT("drawMatrixRowNodeIds"), rows) || rows->Num() != 4)
+                        return Fail(TEXT("CPU Draw Matrix requires four row IDs."));
+                    for (const auto& matrixRowValue : *rows)
+                    {
+                        FString text;
+                        FGuid row;
+                        if (!matrixRowValue.IsValid() || !matrixRowValue->TryGetString(text) || !FGuid::Parse(text, row) || !row.IsValid())
+                            return Fail(TEXT("Invalid CPU Draw Matrix row identity."));
+                        draw.DrawRows.Add(row);
+                    }
+                }
+                auto texture = asset == TEXT("builtin:white") || asset == TEXT("builtin:radial-glow")
+                    ? MakeWhiteTexture(asset == TEXT("builtin:radial-glow")) : Resolve<UTexture>(asset, EKind::Texture);
                 if (!texture)
                 {
                     return Fail(TEXT("Missing CPU particle Texture binding: ") + asset);
@@ -861,7 +891,7 @@ struct FLibraSpawnableRenderState::FImpl
         }
         const auto markedFluids = expectedFluids;
         if (bytes.empty())
-            return (allExpected.IsEmpty() && definition.GpuDrawTransforms.IsEmpty()) ||
+            return (allExpected.IsEmpty() && definition.GpuDrawTransforms.IsEmpty() && definition.GpuEmitterTransforms.IsEmpty()) ||
                 Fail(TEXT("GPU containers or draw Matrix bindings have no executable program manifest; re-export the source graph."));
         auto root = TSharedPtr<FJsonObject>{};
         auto reader = TJsonReaderFactory<>::Create(Text(bytes));
@@ -1081,14 +1111,17 @@ struct FLibraSpawnableRenderState::FImpl
             if (!isParticle && !isFluid)
                 return Fail(TEXT("GPU draw Matrix binding does not match an executable GPU container."));
         }
+        for (const auto& transform : definition.GpuEmitterTransforms)
+            if (!definition.GpuNodeIds.Contains(transform.Key))
+                return Fail(TEXT("Emitter Matrix requires an executable particle container."));
         return true;
     }
 
     bool ReadGpuDrawTransform(const FDefinition& definition, FGuid nodeId,
         FGuid container, int64 instance,
-        FMatrix44f& matrix, bool& connected)
+        FMatrix44f& matrix, bool& connected, bool emitterBinding = false)
     {
-        const auto* rows = definition.GpuDrawTransforms.Find(nodeId);
+        const auto* rows = (emitterBinding ? definition.GpuEmitterTransforms : definition.GpuDrawTransforms).Find(nodeId);
         if (!rows)
         {
             matrix = FMatrix44f::Identity;
@@ -1111,6 +1144,7 @@ struct FLibraSpawnableRenderState::FImpl
             for (auto column = 0; column < 4; ++column)
                 matrix.M[row][column] = static_cast<float>(value[column]);
         }
+        if (!emitterBinding) matrix = FMatrix44f(Owner.EffectToHostMatrix().GetTransposed()) * matrix;
         return true;
     }
 
@@ -1142,7 +1176,7 @@ struct FLibraSpawnableRenderState::FImpl
         instance->PresentationRootTransform = parentTransform;
         instance->bHasPresentationRootTransform = true;
         const auto visible = !actor->IsHidden() && (!root || root->IsVisible());
-        const auto ownerMatrix = FMatrix44f(parentTransform.ToMatrixWithScale().GetTransposed());
+        const auto ownerMatrix = FMatrix44f((Owner.EffectToHostMatrix() * parentTransform.ToMatrixWithScale()).GetTransposed());
         instance->Procedural = MakeUnique<FLibraProceduralScope>();
         auto proceduralError = FString{};
         if (!instance->Procedural->Create(Owner, instance->Definition->Procedural, proceduralError))
@@ -1289,7 +1323,7 @@ struct FLibraSpawnableRenderState::FImpl
             instance->GpuRuntimeIsFluid.Add(false);
             auto gpu = instance->Gpu.Last().Get();
             if (!gpu->SetEffect(asset.Get()) ||
-                !gpu->ConfigureEmitter(Owner.GpuSpawnPerSecond, static_cast<int32>(seed)))
+                !gpu->ConfigureEmitter(Owner.GpuSpawnPerSecond, static_cast<int32>(seed), true))
                 return Fail(TEXT("GPU instance creation failed: ") + gpu->LastError);
             for (const auto& texture : asset->GetTextures())
             {
@@ -1318,10 +1352,18 @@ struct FLibraSpawnableRenderState::FImpl
             {
                 return Fail(TEXT("GPU draw Matrix binding is invalid."));
             }
-            if (!gpu->SetDrawTransform(drawTransform, connected))
+            if (!gpu->SetDrawTransform(connected ? drawTransform : ownerMatrix, true))
             {
                 return Fail(gpu->LastError.IsEmpty()
                     ? TEXT("GPU draw Matrix binding is invalid.") : gpu->LastError);
+            }
+            if (container.IsValid())
+            {
+                auto emitterMatrix = FMatrix44f::Identity;
+                auto emitterConnected = false;
+                if (!ReadGpuDrawTransform(*instance->Definition, instance->Definition->GpuNodeIds[gpuIndex],
+                    container, id, emitterMatrix, emitterConnected, true) || !gpu->SetEmitterTransform(emitterMatrix))
+                    return Fail(TEXT("Emitter Matrix binding is invalid."));
             }
             if (!gpu->Play())
                 return Fail(TEXT("GPU instance creation failed: ") + gpu->LastError);
@@ -1460,7 +1502,8 @@ struct FLibraSpawnableRenderState::FImpl
             {
                 auto* actor = Owner.GetOwner();
                 auto* root = actor ? actor->GetRootComponent() : nullptr;
-                const auto transform = root ? root->GetComponentTransform() : FTransform::Identity;
+                const auto transform = FTransform(Owner.EffectToHostMatrix() *
+                    (root ? root->GetComponentTransform().ToMatrixWithScale() : FMatrix::Identity));
                 auto error = FString{};
                 if (!instance->Procedural->Update([this, &instance](const liberafx::flexible_adapter::Id& id,
                     double* output, uint8& width) -> LibraResult
@@ -1495,7 +1538,7 @@ struct FLibraSpawnableRenderState::FImpl
                 {
                     return Fail(TEXT("Flexible Plane actor root was destroyed externally."));
                 }
-                const auto transform = root->GetComponentTransform();
+                const auto transform = FTransform(Owner.EffectToHostMatrix() * root->GetComponentTransform().ToMatrixWithScale());
                 auto* overrideCamera = Owner.EffectCameraOverride.Get();
                 auto* controller = Owner.GetWorld() ? Owner.GetWorld()->GetFirstPlayerController() : nullptr;
                 auto* camera = controller ? controller->PlayerCameraManager.Get() : nullptr;
@@ -1656,6 +1699,15 @@ struct FLibraSpawnableRenderState::FImpl
                     return Fail(TEXT("Native mesh rendering lost its actor owner."));
                 }
                 const auto rootTransform = root ? root->GetComponentTransform() : actor->GetActorTransform();
+                const auto coordinates = Owner.EffectToHostMatrix();
+                if (draw.bSprite && draw.bBillboard)
+                {
+                    pose.SetTranslation(coordinates.TransformPosition(pose.GetTranslation()));
+                    pose.SetScale3D(pose.GetScale3D() * coordinates.GetScaledAxis(EAxis::X).Size());
+                }
+                else
+                    pose = FTransform((draw.bSprite ? FMatrix::Identity : coordinates.Inverse()) *
+                        pose.ToMatrixWithScale() * coordinates);
                 instance->DrawLocalTransforms[index] = pose;
                 if (primitive)
                 {
@@ -1708,7 +1760,24 @@ struct FLibraSpawnableRenderState::FImpl
                     rotation = FRotationMatrix::MakeFromXY(view.GetRightVector(), view.GetUpVector()).ToQuat();
                 }
                 const auto ownerTransform = root->GetComponentTransform();
-                const auto ownerScale = ownerTransform.GetScale3D().GetAbs();
+                auto drawWorld = Owner.EffectToHostMatrix() * ownerTransform.ToMatrixWithScale();
+                if (!system.DrawRows.IsEmpty())
+                {
+                    for (auto row = 0; row < 4; ++row)
+                    {
+                        FVector4 value;
+                        auto width = int32{};
+                        const auto read = instance->Container.IsValid()
+                            ? Owner.ReadChildValue(instance->Container, instance->Id, system.DrawRows[row], value, width)
+                            : Owner.ReadRootValue(system.DrawRows[row], value, width);
+                        if (read != ELibraRuntimeResult::Ok || width != 4 || !Finite(value))
+                            return Fail(TEXT("Could not read CPU Draw Matrix."));
+                        for (auto column = 0; column < 4; ++column) drawWorld.M[column][row] = value[column];
+                    }
+                    drawWorld = drawWorld * Owner.EffectToHostMatrix();
+                }
+                const auto ownerScale = FVector(drawWorld.GetScaledAxis(EAxis::X).Size(),
+                    drawWorld.GetScaledAxis(EAxis::Y).Size(), drawWorld.GetScaledAxis(EAxis::Z).Size());
                 const auto count = static_cast<int32>(particleCount);
                 batch.Transforms.Reset();
                 batch.Colors.Reset();
@@ -1726,7 +1795,7 @@ struct FLibraSpawnableRenderState::FImpl
                     {
                         return Fail(TEXT("CPU particle snapshot read failed."));
                     }
-                    const auto worldPosition = ownerTransform.TransformPosition(FVector(
+                    const auto worldPosition = drawWorld.TransformPosition(FVector(
                         positionX * system.DrawScale,
                         positionY * system.DrawScale,
                         positionZ * system.DrawScale));
@@ -1766,7 +1835,7 @@ struct FLibraSpawnableRenderState::FImpl
             auto* ownerRoot = ownerActor ? ownerActor->GetRootComponent() : nullptr;
             if (!ownerActor) return Fail(TEXT("GPU presentation lost its actor owner."));
             const auto ownerTransform = ownerRoot ? ownerRoot->GetComponentTransform() : ownerActor->GetActorTransform();
-            const auto ownerMatrix = FMatrix44f(ownerTransform.ToMatrixWithScale().GetTransposed());
+            const auto ownerMatrix = FMatrix44f((Owner.EffectToHostMatrix() * ownerTransform.ToMatrixWithScale()).GetTransposed());
             const auto visible = !ownerActor->IsHidden() && (!ownerRoot || ownerRoot->IsVisible());
             if (instance->GpuRuntimeNodeIds.Num() != instance->Gpu.Num() ||
                 instance->GpuRuntimeIsFluid.Num() != instance->Gpu.Num())
@@ -1780,6 +1849,12 @@ struct FLibraSpawnableRenderState::FImpl
                 }
                 auto drawTransform = FMatrix44f::Identity;
                 auto connected = false;
+                auto emitterMatrix = FMatrix44f::Identity;
+                auto emitterConnected = false;
+                if (!ReadGpuDrawTransform(*instance->Definition, instance->GpuRuntimeNodeIds[gpuIndex],
+                        instance->Container, instance->Id, emitterMatrix, emitterConnected, true) ||
+                    !gpu->SetEmitterTransform(emitterMatrix))
+                    return Fail(TEXT("Emitter Matrix binding is invalid."));
                 if (!ReadGpuDrawTransform(*instance->Definition, instance->GpuRuntimeNodeIds[gpuIndex],
                         instance->Container, instance->Id, drawTransform, connected))
                     return Fail(TEXT("GPU draw Matrix binding is invalid."));
@@ -1790,7 +1865,7 @@ struct FLibraSpawnableRenderState::FImpl
                         return Fail(gpu->LastError.IsEmpty()
                             ? TEXT("GPU fluid presentation transform is invalid.") : gpu->LastError);
                 }
-                else if (!gpu->SetDrawTransform(drawTransform, connected))
+                else if (!gpu->SetDrawTransform(connected ? drawTransform : ownerMatrix, true))
                 {
                     return Fail(gpu->LastError.IsEmpty()
                         ? TEXT("GPU draw Matrix binding is invalid.") : gpu->LastError);
@@ -1872,10 +1947,11 @@ void FLibraSpawnableRenderState::UpdateOwnerPresentation()
     const auto visible = !actor->IsHidden() && (!root || root->IsVisible());
     for (auto& instance : Impl->Instances)
     {
-        if (instance->Procedural) instance->Procedural->SetPresentation(rootTransform, visible);
+        const auto canonicalRoot = FTransform(Impl->Owner.EffectToHostMatrix() * rootTransform.ToMatrixWithScale());
+        if (instance->Procedural) instance->Procedural->SetPresentation(canonicalRoot, visible);
         const auto transformChanged = !instance->bHasPresentationRootTransform ||
             !instance->PresentationRootTransform.Equals(rootTransform);
-        const auto ownerMatrix = FMatrix44f(rootTransform.ToMatrixWithScale().GetTransposed());
+        const auto ownerMatrix = FMatrix44f((Impl->Owner.EffectToHostMatrix() * rootTransform.ToMatrixWithScale()).GetTransposed());
         if (instance->GpuRuntimeNodeIds.Num() != instance->Gpu.Num() ||
             instance->GpuRuntimeIsFluid.Num() != instance->Gpu.Num())
         {
@@ -1884,8 +1960,7 @@ void FLibraSpawnableRenderState::UpdateOwnerPresentation()
         }
         for (auto gpuIndex = 0; gpuIndex < instance->Gpu.Num(); ++gpuIndex)
         {
-            if (!instance->GpuRuntimeIsFluid.IsValidIndex(gpuIndex) ||
-                !instance->GpuRuntimeIsFluid[gpuIndex] || !instance->Gpu[gpuIndex].IsValid())
+            if (!instance->GpuRuntimeIsFluid.IsValidIndex(gpuIndex) || !instance->Gpu[gpuIndex].IsValid())
                 continue;
             auto drawTransform = FMatrix44f::Identity;
             auto connected = false;
@@ -1893,7 +1968,10 @@ void FLibraSpawnableRenderState::UpdateOwnerPresentation()
                     instance->Container, instance->Id, drawTransform, connected))
                 return;
             const auto localToWorld = connected ? drawTransform : ownerMatrix;
-            if (!instance->Gpu[gpuIndex]->SetFluidPresentation(localToWorld, visible))
+            const auto updated = instance->GpuRuntimeIsFluid[gpuIndex]
+                ? instance->Gpu[gpuIndex]->SetFluidPresentation(localToWorld, visible)
+                : instance->Gpu[gpuIndex]->SetDrawTransform(localToWorld, true);
+            if (!updated)
             {
                 Impl->Fail(instance->Gpu[gpuIndex]->LastError);
                 return;
@@ -1938,15 +2016,17 @@ void FLibraSpawnableRenderState::UpdateOwnerPresentation()
         }
         if (transformChanged)
         {
-            for (auto& batch : instance->CpuDraws)
+            for (auto cpuIndex = 0; cpuIndex < instance->CpuDraws.Num(); ++cpuIndex)
             {
+                auto& batch = instance->CpuDraws[cpuIndex];
                 if (!batch.Primitive.IsValid())
                 {
                     continue;
                 }
                 for (auto& transform : batch.Transforms)
                 {
-                    transform = transform.GetRelativeTransform(instance->PresentationRootTransform) * rootTransform;
+                    if (instance->Definition->CpuParticles[cpuIndex].DrawRows.IsEmpty())
+                        transform = transform.GetRelativeTransform(instance->PresentationRootTransform) * rootTransform;
                 }
                 if (!batch.Primitive->Update(batch.Transforms, batch.Colors, rootTransform))
                 {
@@ -1956,7 +2036,7 @@ void FLibraSpawnableRenderState::UpdateOwnerPresentation()
             }
             for (auto& plane : instance->FlexiblePlanes)
             {
-                plane->SetOwnerPresentation(rootTransform, visible);
+                plane->SetOwnerPresentation(canonicalRoot, visible);
             }
             instance->PresentationRootTransform = rootTransform;
             instance->bHasPresentationRootTransform = true;
@@ -1972,7 +2052,7 @@ void FLibraSpawnableRenderState::UpdateOwnerPresentation()
             }
             for (auto& plane : instance->FlexiblePlanes)
             {
-                plane->SetOwnerPresentation(rootTransform, visible);
+                plane->SetOwnerPresentation(canonicalRoot, visible);
             }
         }
     }

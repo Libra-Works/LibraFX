@@ -118,6 +118,7 @@ class FLibraGpuInterpreterCS : public FGlobalShader
         SHADER_PARAMETER(uint32, EmitterSeed)
         SHADER_PARAMETER(uint32, FrameIndex)
         SHADER_PARAMETER(FVector3f, EmitterPosition)
+        SHADER_PARAMETER_ARRAY(FVector4f, EmitterRows, [4])
         SHADER_PARAMETER(uint32, RegisterCount)
         SHADER_PARAMETER(uint32, InstructionCount)
         SHADER_PARAMETER(uint32, Stage)
@@ -478,6 +479,7 @@ struct FLibraGpuFrame
     float Delta = 0;
     float Time = 0;
     FVector3f Position = FVector3f::ZeroVector;
+    FMatrix44f EmitterTransform = FMatrix44f::Identity;
 };
 
 static bool IsFiniteAffineDrawTransform(const FMatrix44f& matrix)
@@ -861,6 +863,9 @@ struct FLibraGpuState
                 parameters->EmitterSeed = frame.Seed;
                 parameters->FrameIndex = frame.Frame;
                 parameters->EmitterPosition = frame.Position;
+                for (auto row = 0; row < 4; ++row)
+                    parameters->EmitterRows[row] = FVector4f(frame.EmitterTransform.M[row][0], frame.EmitterTransform.M[row][1],
+                        frame.EmitterTransform.M[row][2], frame.EmitterTransform.M[row][3]);
                 parameters->RegisterCount = ComponentPacketWord(kernel.Bytes, 16);
                 parameters->InstructionCount = ComponentPacketWord(kernel.Bytes, 12);
                 parameters->Stage = kernel.bUpdate ? 1 : 0;
@@ -1144,16 +1149,25 @@ bool ULibraGpuEffectRuntime::BindGeneratedTexture(const FString& resourceId,
     return true;
 }
 
-bool ULibraGpuEffectRuntime::ConfigureEmitter(float emitterSpawnRate, int32 seed)
+bool ULibraGpuEffectRuntime::ConfigureEmitter(float emitterSpawnRate, int32 seed, bool canonicalSimulation)
 {
     if (!FMath::IsFinite(emitterSpawnRate) || emitterSpawnRate < 0)
     {
         LastError = TEXT("GPU spawn rate must be finite and nonnegative.");
         return false;
     }
-    SpawnPerSecond = emitterSpawnRate;
+    SpawnPerSecond = Effect && Effect->GetAuthoredSpawnRate() >= 0 ? Effect->GetAuthoredSpawnRate() : emitterSpawnRate;
     EmitterSeed = seed;
+    bCanonicalSimulation = canonicalSimulation;
     LastError.Reset();
+    return true;
+}
+
+bool ULibraGpuEffectRuntime::SetEmitterTransform(const FMatrix44f& matrix)
+{
+    check(IsInGameThread());
+    if (!IsFiniteAffineDrawTransform(matrix)) { LastError = TEXT("Emitter Matrix must be finite and affine."); return false; }
+    EmitterTransform = matrix;
     return true;
 }
 
@@ -1176,7 +1190,7 @@ bool ULibraGpuEffectRuntime::SetDrawTransform(const FMatrix44f& drawTransform, b
             LastError = TEXT("GPU draw Matrix requires a finite emitter anchor.");
             return false;
         }
-        auto anchor = FVector3f(owner->GetActorLocation());
+        auto anchor = bCanonicalSimulation ? FVector3f::ZeroVector : FVector3f(owner->GetActorLocation());
         if (!FMath::IsFinite(anchor.X) || !FMath::IsFinite(anchor.Y) || !FMath::IsFinite(anchor.Z))
         {
             LastError = TEXT("GPU draw Matrix emitter anchor exceeds finite float range.");
@@ -1419,7 +1433,7 @@ void ULibraGpuEffectRuntime::Tick(float deltaTime)
         return;
     }
     if (!FMath::IsFinite(SpawnPerSecond) || SpawnPerSecond < 0) return;
-    auto position = FVector3f(owner->GetActorLocation());
+    auto position = bCanonicalSimulation ? FVector3f::ZeroVector : FVector3f(owner->GetActorLocation());
     if (!FMath::IsFinite(position.X) || !FMath::IsFinite(position.Y) || !FMath::IsFinite(position.Z))
     {
         return;
@@ -1436,6 +1450,7 @@ void ULibraGpuEffectRuntime::Tick(float deltaTime)
     frame.Delta = deltaTime;
     frame.Time = float(FMath::Min(Elapsed, double(MAX_flt)));
     frame.Position = position;
+    frame.EmitterTransform = EmitterTransform;
     SpawnCursor = (SpawnCursor + count) % uint32(State->Capacity);
     auto state = State;
     ENQUEUE_RENDER_COMMAND(LibraGpuTick)([state, frame](FRHICommandListImmediate& commandList)

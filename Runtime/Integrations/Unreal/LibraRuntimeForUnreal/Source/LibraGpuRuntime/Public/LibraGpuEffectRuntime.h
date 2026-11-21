@@ -50,7 +50,7 @@ public:
 
     bool SetEffect(ULibraGpuEffectAsset* newEffect);
 
-    bool ConfigureEmitter(float emitterSpawnRate, int32 seed);
+    bool ConfigureEmitter(float emitterSpawnRate, int32 seed, bool canonicalSimulation = false);
 
     // Fluid scopes use the shipped LibraFluid2D global shader and an engine-owned
     // RGBA16F output texture. No author-created component or user shader is used.
@@ -64,6 +64,7 @@ public:
     // Updates billboard placement only. Compute dispatches and particle storage
     // continue to use their original simulation-space positions.
     bool SetDrawTransform(const FMatrix44f& drawTransform, bool connected);
+    bool SetEmitterTransform(const FMatrix44f& matrix);
 
     void LoadSoftEffect();
 
@@ -107,7 +108,9 @@ private:
     double Elapsed = 0;
     double SpawnRemainder = 0;
     FMatrix44f DrawTransform = FMatrix44f::Identity;
+    FMatrix44f EmitterTransform = FMatrix44f::Identity;
     FMatrix44f AuthoredDrawTransform = FMatrix44f::Identity;
     bool bHasDrawTransform = false;
+    bool bCanonicalSimulation = false;
     TMap<FString, TWeakPtr<FLibraGpuState, ESPMode::ThreadSafe>> GeneratedTextureSources;
 };

@@ -61,6 +61,7 @@ public:
     TFunction<void(const FString&, int64)> EditorGpuConfigHandler;
     TFunction<void(int64, bool, double, bool, double)> EditorGpuPlaybackHandler;
     TFunction<void()> EditorGpuResetHandler;
+    TFunction<void(const FVector&)> EditorPreviewMotionHandler;
     TFunction<FString(int64)> EditorGpuStatusHandler;
 
     bool QueueEditorMessage(const FString& message);
