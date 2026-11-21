@@ -1,4 +1,12 @@
 {
+  "Procedural.TexturePreview": "テクスチャープレビュー",
+  "Procedural.MeshPreview": "モデルプレビュー",
+  "Procedural.MeshPreviewHelp": "ドラッグで回転・ホイールで拡大縮小・ワイヤーフレーム表示（最大4,096三角形）",
+  "Procedural.PreviewTime": "プレビュー時刻（秒）",
+  "Procedural.PreviewPlay": "プレビューの再生／一時停止",
+  "Procedural.PreviewLocal": "ローカルプレビュー · エンジン接続不要",
+  "Procedural.PreviewDefaults": "設定値を表示中です。接続した値はエフェクトのruntimeで評価します。",
+  "Procedural.PreviewUnavailable": "プレビューできません:",
   "Procedural.Valid": "検証できました。",
   "Procedural.Group": "プロシージャル",
   "Procedural.ProceduralModel": "プロシージャルモデル",

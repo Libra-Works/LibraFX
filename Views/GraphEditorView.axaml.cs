@@ -906,6 +906,7 @@ public partial class GraphEditorView : UserControl
         var offset = new Vector(((left + right) / 2 + _graphOrigin.X) * _zoom - viewport.Width / 2,
                                 ((top + bottom) / 2 + _graphOrigin.Y) * _zoom - viewport.Height / 2);
         EnsureViewportExtent(offset);
+        GraphScrollViewer.UpdateLayout();
         GraphScrollViewer.Offset = offset;
     }
 

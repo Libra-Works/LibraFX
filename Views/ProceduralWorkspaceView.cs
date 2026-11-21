@@ -12,7 +12,7 @@ using LiberaFx.ViewModels;
 namespace LiberaFx.Views;
 
 /// <summary>One ordered Flow editor for all procedural producers. Every edit uses document history.</summary>
-public sealed class ProceduralWorkspaceView : UserControl
+public sealed partial class ProceduralWorkspaceView : UserControl
 {
     private GraphWorkspaceViewModel _workspace = null!;
     private Guid _nodeId;
@@ -50,7 +50,11 @@ public sealed class ProceduralWorkspaceView : UserControl
         body.Children.Add(palette);
         var flow = new ScrollViewer { Content = _flow };
         Grid.SetColumn(flow, 1); body.Children.Add(flow);
-        var inspector = new Border { Child = new ScrollViewer { Content = _inspector }, BorderThickness = new Thickness(1, 0, 0, 0) };
+        var inspectorBody = new Grid { RowDefinitions = new RowDefinitions("Auto,*") };
+        inspectorBody.Children.Add(CreateTexturePreview());
+        var inspectorScroll = new ScrollViewer { Content = _inspector };
+        Grid.SetRow(inspectorScroll, 1); inspectorBody.Children.Add(inspectorScroll);
+        var inspector = new Border { Child = inspectorBody, BorderThickness = new Thickness(1, 0, 0, 0) };
         inspector.Bind(Border.BorderBrushProperty, inspector.GetResourceObservable("EffectBorderBrush"));
         Grid.SetColumn(inspector, 2); body.Children.Add(inspector);
         grid.Children.Add(body);
@@ -80,6 +84,7 @@ public sealed class ProceduralWorkspaceView : UserControl
     }
     public void CloseWorkspace()
     {
+        ClearTexturePreview();
         LocalizationService.Shared.LanguageChanged -= LanguageChanged;
         if (_workspace is not null) _workspace.Nodes.CollectionChanged -= NodesChanged;
         if (_observedNode is not null) _observedNode.PropertyChanged -= NodeChanged;
@@ -292,6 +297,7 @@ public sealed class ProceduralWorkspaceView : UserControl
             }
         }
         finally { _refreshing = false; }
+        RefreshTexturePreview();
     }
     private void Toggle(Panel parent, string key, bool value, Action<bool> set)
     {

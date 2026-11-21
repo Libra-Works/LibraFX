@@ -1,4 +1,12 @@
 {
+  "Procedural.TexturePreview": "Texture preview",
+  "Procedural.MeshPreview": "Model preview",
+  "Procedural.MeshPreviewHelp": "Drag to orbit · scroll to zoom · wireframe preview (up to 4,096 triangles)",
+  "Procedural.PreviewTime": "Preview time (seconds)",
+  "Procedural.PreviewPlay": "Play / pause the preview",
+  "Procedural.PreviewLocal": "Local preview · no engine connection required",
+  "Procedural.PreviewDefaults": "Showing authored values. Connected values are evaluated by the effect runtime.",
+  "Procedural.PreviewUnavailable": "Preview unavailable:",
   "Procedural.Valid": "Validation passed.",
   "Procedural.Group": "Procedural",
   "Procedural.ProceduralModel": "Procedural Model",
