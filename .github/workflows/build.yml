@@ -54,6 +54,25 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $true
           $env:LIBERAFX_DATA_ROOT = Join-Path $env:RUNNER_TEMP 'mcp-authoring-data'
           dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release -- --mcp-authoring-transitions
+      - name: Compare batched CPU execution with the interpreter
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $env:LIBERAFX_DATA_ROOT = Join-Path $env:RUNNER_TEMP 'cpu-batch-data'
+          $fixtures = Join-Path $env:RUNNER_TEMP 'cpu-batch-fixtures'
+          $fallback = Join-Path $env:RUNNER_TEMP 'cpu-batch-fallback'
+          $build = Join-Path $env:RUNNER_TEMP 'cpu-batch-build'
+          dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --particle-benchmark-fixtures $fixtures
+          dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --cpu-particle-fixture $fallback
+          cmake -S Runtime -B $build -DLIBERAFX_BUILD_TESTS=ON -DLIBERAFX_BUILD_INTEROP=OFF
+          cmake --build $build --config Release --target liberafx_cpu_particle_batch_tests --parallel 2
+          & (Join-Path $build 'Release/liberafx_cpu_particle_batch_tests.exe') `
+            (Join-Path $fixtures 'CpuFountain-1000.lfxb') `
+            (Join-Path $fixtures 'CpuFountain-retirement.lfxb') `
+            (Join-Path $fixtures 'CpuBatch-math.lfxb') `
+            --divide-zero (Join-Path $fixtures 'CpuBatch-divide-zero.lfxb') `
+            --mixed-error (Join-Path $fixtures 'CpuBatch-error-order.lfxb') `
+            (Join-Path $fallback 'cpu-particles.lfxb')
 
   editor:
     name: ${{ matrix.name }}

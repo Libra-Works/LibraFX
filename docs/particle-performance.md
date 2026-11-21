@@ -1,7 +1,8 @@
 # Particle performance and shared scheduling
 
-Status: a measurement tool and baseline exist. The shared effect manager below
-is a proposed next implementation, not a shipped scheduling guarantee.
+Status: measurement tools, immutable constant sharing and a conservative CPU
+batch execution plan exist. The shared effect manager below is a proposed next
+implementation, not a shipped scheduling guarantee.
 
 ## Current baseline
 
@@ -61,6 +62,7 @@ CommentImageSmokeTests.exe --particle-benchmark-fixtures G:/LfxV/new-benchmark-f
 cmake -S Runtime -B Runtime/build-perf -DLIBERAFX_BUILD_BENCHMARKS=ON
 cmake --build Runtime/build-perf --config Release --target liberafx_particle_host_benchmarks
 Runtime/build-perf/Release/liberafx_particle_host_benchmarks.exe G:/LfxV/new-benchmark-fixtures/CpuFountain-10000.lfxb 8 120
+Runtime/build-perf/Release/liberafx_particle_host_benchmarks.exe G:/LfxV/new-benchmark-fixtures/CpuFountain-10000.lfxb 8 120 --interpreter
 ```
 
 The fixture directory must be new. The tool reports creation, initial emission,
@@ -116,8 +118,49 @@ ordinary interpreter. Preserve seed/ID behavior, coordinate conversion and
 real/scaled time. Differential tests must compare full particle state and event
 order against the interpreter, rather than accepting only a similar image.
 
-This execution plan is proposed, not implemented by the constant-sharing change.
-It complements the shared manager: one reduces work, the other schedules work.
+The first implementation decodes eligible V3 Update stages once and executes
+32-particle blocks using node/component/particle scratch arrays. Arithmetic is
+dispatched per block; a validated linear chain of local particle setters and
+movement is executed together. Source node IDs remain in the plan. There are
+no additional worker threads or per-particle/per-frame allocations.
+
+Eligibility is deliberately limited: at most 64 nodes, supported arithmetic,
+copy/broadcast, particle attributes, Clamp/Compose and local setters/movement;
+no external IO, stateful or unknown callbacks, branches, Signal fanout or later
+bytecode formats. Other stages automatically use the interpreter. Spawn remains
+interpreted. Persistent particle storage is still slot-based: this is batched
+SoA scratch, not yet a complete persistent SoA or cross-instance ECS manager.
+
+On the same 9950X/Release fixture, alternating interpreter and automatic execution
+three times gave the following **simulation-only** means for 10,000 particles ×
+8 hosts (120 measured frames per run):
+
+| Run | Interpreter (ms) | Batch plan (ms) |
+| --- | --- | --- |
+| 1 | 12.867 | 1.286 |
+| 2 | 12.793 | 1.287 |
+| 3 | 12.860 | 1.229 |
+
+Checksums matched. A separate automatic run measured 0.147 ms for one host and
+7.868 ms for 32 hosts. Snapshot extraction in the 32-host run still averaged
+5.522 ms. Eight-host initial emission was about 41 ms in both modes: the Update
+improvement does not eliminate burst spikes or establish end-to-end engine speed.
+
+The explicit `liberafx_cpu_particle_batch_tests` command compares every particle
+snapshot byte, age/lifetime, stable ordering and CPU event payload/order over 300
+frames, including varying delta, pause/slow, emission, retirement, slot reuse,
+vector/scalar math and Stop. Division-by-zero and mixed per-particle failures
+also compare the exact first error. On a pure-evaluation failure, the untouched
+block is replayed in interpreter order so a later particle's error cannot
+overtake an earlier particle's Signal failure. The test asserts eligible stages selected
+the batch plan and external-IO stages selected fallback. The release-gate job
+generates fixtures with the matching editor compiler and runs this comparison;
+generic CTest skips this fixture-dependent command without arguments.
+
+Use `SpawnableHostOptions::cpuParticleBatching = false` or the benchmark's
+`--interpreter` argument for controlled reference runs. This changes no saved
+bytecode/package format. The shared manager remains separate work: one reduces
+computation, the other schedules it.
 
 ## Engine comparison still required
 
