@@ -421,7 +421,9 @@ namespace LiberaFx.Unity
                     texture = texture,
                     additive = item.blendMode == "Additive",
                     drawScale = (float)item.drawScale
-                    , drawRows = item.drawMatrixRowNodeIds == null ? null : item.drawMatrixRowNodeIds.Length == 4
+                    // JsonUtility can materialize an omitted optional array as
+                    // an empty array. Both represent the default owner frame.
+                    , drawRows = item.drawMatrixRowNodeIds == null || item.drawMatrixRowNodeIds.Length == 0 ? null : item.drawMatrixRowNodeIds.Length == 4
                         ? item.drawMatrixRowNodeIds.Select(id => TryCanonicalGuid(id, out var canonical)
                             ? new NativeSignal(canonical).Id : throw new InvalidOperationException("Invalid CPU Draw Matrix row.")).ToArray()
                         : throw new InvalidOperationException("CPU Draw Matrix requires four rows.")
