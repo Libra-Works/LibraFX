@@ -1,5 +1,6 @@
 #include "LibraFxGodotRender.h"
 #include "LibraFxGodotGpu.h"
+#include "LibraFxGodotCoordinates.h"
 #include "liberafx/LbCpuParticles.h"
 #include "liberafx/LbSceneBindings.h"
 #include <godot_cpp/classes/base_material3d.hpp>
@@ -102,10 +103,16 @@ auto toReal(double value, godot::real_t& out) -> bool
     return std::isfinite(static_cast<double>(out));
 }
 
-auto makeWhiteTexture() -> godot::Ref<godot::Texture2D>
+auto makeWhiteTexture(bool radial = false) -> godot::Ref<godot::Texture2D>
 {
-    auto image = godot::Image::create_empty(1, 1, false, godot::Image::FORMAT_RGBA8);
+    const auto size = radial ? 64 : 1;
+    auto image = godot::Image::create_empty(size, size, false, godot::Image::FORMAT_RGBA8);
     image->fill(godot::Color(1, 1, 1, 1));
+    if (radial) for (auto y = 0; y < size; ++y) for (auto x = 0; x < size; ++x) {
+        const auto u = (x + .5) / size * 2 - 1, v = (y + .5) / size * 2 - 1;
+        const auto alpha = std::clamp(1 - std::sqrt(u * u + v * v), 0.0, 1.0);
+        image->set_pixel(x, y, godot::Color(1, 1, 1, alpha));
+    }
     return godot::ImageTexture::create_from_image(image);
 }
 
@@ -352,7 +359,7 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
     }
     auto cpuVersion = 0.0;
     if ((config.has("cpuParticleVersion") || !cpuNodes.is_empty()) &&
-        (!readNumber(config.get("cpuParticleVersion", godot::Variant{}), cpuVersion) || cpuVersion != 1)) {
+        (!readNumber(config.get("cpuParticleVersion", godot::Variant{}), cpuVersion) || (cpuVersion != 1 && cpuVersion != 2))) {
         return Result::UnsupportedBinary;
     }
     if (cpuParticles == nullptr && !cpuNodes.is_empty()) {
@@ -786,8 +793,19 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
             draw.assetIdentity = assetIdentity.utf8().get_data();
             draw.additive = blendMode == "Additive";
             draw.drawScale = scale;
-            if (draw.assetIdentity == "builtin:white") {
-                draw.texture = makeWhiteTexture();
+            const auto rowValues = item.get("drawMatrixRowNodeIds", godot::Variant{});
+            if (rowValues.get_type() != godot::Variant::NIL) {
+                if (cpuVersion != 2 || rowValues.get_type() != godot::Variant::ARRAY) return Result::InvalidBinary;
+                const auto rows = godot::Array(rowValues);
+                if (rows.size() != 4) return Result::InvalidBinary;
+                for (auto row = 0; row < 4; ++row) {
+                    auto id = std::array<std::uint8_t, 16>{};
+                    if (rows[row].get_type() != godot::Variant::STRING || !parseId(godot::String(rows[row]), id)) return Result::InvalidBinary;
+                    draw.drawRows.push_back(id);
+                }
+            }
+            if (draw.assetIdentity == "builtin:white" || draw.assetIdentity == "builtin:radial-glow") {
+                draw.texture = makeWhiteTexture(draw.assetIdentity == "builtin:radial-glow");
             } else {
                 auto texture = textureBindings.find(draw.assetIdentity);
                 if (texture != textureBindings.end()) {
@@ -1073,8 +1091,12 @@ auto PackageRenderRenderer::updateMaterials(SpawnableHost& host, const Draw& dra
     return Result::Ok;
 }
 
-auto PackageRenderRenderer::attach(godot::Node& owner) -> Result
+auto PackageRenderRenderer::attach(godot::Node& owner, const CoordinateBasis& coordinates) -> Result
 {
+    auto frame = godot::Transform3D{};
+    const auto converted = effectToHost(coordinates, {}, frame);
+    if (converted != Result::Ok) return converted;
+    coordinateFrame_ = frame;
     auto anyChildDraws = std::any_of(templates_.begin(), templates_.end(),
         [](const auto& item) { return !item.draws.empty() || !item.cpuParticles.empty(); });
     if (rootDraws_.empty() && rootCpuParticles_.empty() && !anyChildDraws && !procedural_->hasDraws()) {
@@ -1088,6 +1110,7 @@ auto PackageRenderRenderer::attach(godot::Node& owner) -> Result
     }
     root_->set_name(rootName);
     owner.add_child(root_);
+    root_->set_transform(frame);
     root_->setRenderer(this);
     const auto proceduralResult = procedural_->attach(*root_);
     if (proceduralResult != Result::Ok)
@@ -1386,7 +1409,26 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host, const Spawna
         if (!renderable.instance.isValid() || !renderable.multiMesh.isValid()) {
             return Result::InvalidBinary;
         }
-        updateInstance(renderable.instance, node, godot::Transform3D{});
+        auto drawTransform = node.get_global_transform();
+        if (!draw.drawRows.empty()) {
+            auto rows = std::array<std::array<double, 4>, 4>{};
+            for (auto row = 0u; row < 4; ++row) {
+                auto width = std::uint8_t{};
+                const auto result = scope.kind == SpawnableScopeKind::Effect
+                    ? host.rootValue(draw.drawRows[row].data(), rows[row].data(), width)
+                    : host.childValue(scope.containerId, scope.instanceId, draw.drawRows[row].data(), rows[row].data(), width);
+                if (result != Result::Ok || width != 4) return Result::InvalidValueType;
+                for (const auto value : rows[row]) if (!std::isfinite(value)) return Result::NonFinite;
+            }
+            const auto basis = godot::Basis(godot::Vector3(rows[0][0], rows[1][0], rows[2][0]),
+                godot::Vector3(rows[0][1], rows[1][1], rows[2][1]), godot::Vector3(rows[0][2], rows[1][2], rows[2][2]));
+            drawTransform = godot::Transform3D(basis, godot::Vector3(rows[0][3], rows[1][3], rows[2][3]));
+            const auto converted = effectToHost(host.coordinateBasis(), drawTransform, drawTransform);
+            if (converted != Result::Ok) return converted;
+        }
+        godot::RenderingServer::get_singleton()->instance_set_transform(renderable.instance.get(), drawTransform);
+        renderable.drawWorld = drawTransform;
+        renderable.hasDrawWorld = !draw.drawRows.empty();
         auto count = std::size_t{};
         auto result = host.cpuParticleCount(scope, draw.nodeId.data(), count);
         if (result != Result::Ok) {
@@ -1422,7 +1464,7 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host, const Spawna
             continue;
         }
         auto* buffer = renderable.buffer.ptrw();
-        const auto basis = node.get_global_transform().basis;
+        const auto basis = drawTransform.basis;
         if (!std::isfinite(basis.determinant()) || basis.determinant() == 0) {
             return Result::InvalidArgument;
         }
@@ -1564,6 +1606,10 @@ auto PackageRenderRenderer::updateScope(SpawnableHost& host,
                 godot::Vector3(r.x, r.y, r.z) * static_cast<godot::real_t>(0.017453292519943295769),
                 s);
             localTransform.origin = p;
+            auto coordinates = godot::Transform3D{};
+            const auto converted = effectToHost(host.coordinateBasis(), {}, coordinates);
+            if (converted != Result::Ok) return converted;
+            localTransform = localTransform * coordinates.affine_inverse();
             renderable.localTransform = localTransform;
             renderable.submitted = true;
             updateInstance(renderable.instance, *scopeNode, localTransform);

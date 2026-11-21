@@ -67,6 +67,7 @@ public:
     auto handleEvent(const SpawnableHostEvent& event, godot::String& error) -> Result;
     auto advance(SpawnableHost& host, double elapsed, double delta, godot::String& error) -> Result;
     void synchronizePresentation(bool exiting = false);
+    void setPreviewOffset(const godot::Vector3& offset);
     auto isEmpty() const noexcept -> bool;
     auto outputTexture(const FluidNodeId& node, const FluidNodeId& container,
         GeneratorInstanceId instance, bool fields = false, bool straight = false) const -> godot::Ref<godot::Texture2D>;

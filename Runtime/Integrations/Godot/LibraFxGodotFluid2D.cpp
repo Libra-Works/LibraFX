@@ -1,4 +1,5 @@
 #include "LibraFxGodotFluid2D.h"
+#include "LibraFxGodotCoordinates.h"
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/packed_vector3_array.hpp>
@@ -801,7 +802,8 @@ auto transformFor(SpawnableHost& host, const Fluid2DProgram& program,
             {{0, 0, 0, 1}}
         }};
     }
-    return transformFromRows(matrix, output, detail);
+    const auto result = transformFromRows(matrix, output, detail);
+    return result == Result::Ok ? effectToHost(host.coordinateBasis(), output, output) : result;
 }
 
 }
@@ -841,6 +843,7 @@ struct PackageFluid2DRenderer::Impl {
     std::vector<std::unique_ptr<FluidState>> active;
     Ref<Shader> shader;
     std::uint64_t rootNodeId = 0;
+    Vector3 previewOffset;
     RenderingServer* server = nullptr;
     std::uint64_t reservedBytes = 0;
 
@@ -1268,6 +1271,7 @@ void PackageFluid2DRenderer::synchronizePresentation(bool exiting)
             ownerVisible = spatialOwner->is_visible_in_tree();
             ownerTransform = spatialOwner->get_global_transform();
         }
+        ownerTransform.origin += ownerTransform.basis.xform(impl_->previewOffset);
         if (scope->get_global_transform() != ownerTransform) {
             scope->set_global_transform(ownerTransform);
         }
@@ -1285,11 +1289,17 @@ void PackageFluid2DRenderer::synchronizePresentation(bool exiting)
         impl_->server->instance_set_scenario(state->drawItem,
             world.is_valid() ? world->get_scenario() : RID{});
         const auto worldTransform = state->drawMatrixIsWorld
-            ? state->drawTransform : scope->get_global_transform();
+            ? state->drawTransform : scope->get_global_transform() * state->drawTransform;
         impl_->server->instance_set_transform(state->drawItem, worldTransform);
         impl_->server->instance_set_visible(state->drawItem,
             world.is_valid() && ownerVisible && scope->is_visible_in_tree());
     }
+}
+
+void PackageFluid2DRenderer::setPreviewOffset(const godot::Vector3& offset)
+{
+    impl_->previewOffset = offset;
+    synchronizePresentation();
 }
 
 auto PackageFluid2DRenderer::isEmpty() const noexcept -> bool
@@ -1324,7 +1334,7 @@ auto PackageFluid2DRenderer::fieldMapping(const FluidNodeId& node, const FluidNo
     {
         if (state->program.nodeId != node || state->program.containerId != container || state->program.instanceId != instance) continue;
         if (!scope) return error(detail, "No spatial field scope", Result::NotReady);
-        const auto source = state->drawMatrixIsWorld ? state->drawTransform : scope->get_global_transform();
+        const auto source = state->drawMatrixIsWorld ? state->drawTransform : scope->get_global_transform() * state->drawTransform;
         if (std::abs(source.basis.determinant()) < 1.e-8 || std::abs(consumerToWorld.basis.determinant()) < 1.e-8)
             return error(detail, "Field coordinates require invertible producer and consumer transforms", Result::InvalidArgument);
         const auto inverse = source.affine_inverse() * consumerToWorld;

@@ -39,6 +39,7 @@ public:
     auto advance(SpawnableHost& host, double elapsed, double delta, godot::String& error,
         double spawnPerSecond = 100.0) -> Result;
     auto emitterCount() const noexcept -> std::size_t;
+    void setPreviewOffset(const godot::Vector3& offset);
     auto drawBindings(const std::array<std::uint8_t, 16>& container) const
         -> const std::vector<GeneratedGpuDrawTexture>&;
     auto outputTexture(const std::array<std::uint8_t, 16>& producer,

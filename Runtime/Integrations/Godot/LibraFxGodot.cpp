@@ -104,6 +104,57 @@ class LibraEffectPlayer final : public Node {
     };
 
 public:
+    int set_time_scale(double ratio)
+    {
+        if (!Thread::is_main_thread() || !std::isfinite(ratio) || ratio < 0 || ratio > 1000000) return code(Result::InvalidArgument);
+        if (playback_ && playback_->packageHost) {
+            const auto result = playback_->packageHost->setTimeScale(ratio);
+            if (result != Result::Ok) return code(result);
+        }
+        timeScale_ = ratio;
+        return code(Result::Ok);
+    }
+    double get_time_scale() const { return timeScale_; }
+    Dictionary get_effect_time() const
+    {
+        auto result = Dictionary{};
+        if (playback_ && playback_->packageHost) {
+            const auto time = playback_->packageHost->timeSnapshot();
+            result["real_time"] = time.realTime; result["effect_time"] = time.effectTime;
+            result["real_delta"] = time.realDelta; result["effect_delta"] = time.effectDelta;
+        }
+        result["time_scale"] = timeScale_;
+        return result;
+    }
+    int set_coordinate_basis(int axisX, int axisY, int axisZ, double unitsPerMetre)
+    {
+        if (!Thread::is_main_thread()) return code(Result::InvalidArgument);
+        if (playback_) return code(Result::Busy);
+        const auto basis = CoordinateBasis{{axisX, axisY, axisZ}, unitsPerMetre};
+        if (!validCoordinateBasis(basis)) return code(Result::InvalidArgument);
+        coordinateBasis_ = basis;
+        return code(Result::Ok);
+    }
+    PackedFloat64Array convert_coordinates(const PackedFloat64Array& values, int kind, bool toHost) const
+    {
+        if (values.size() != 3 && values.size() != 16) return {};
+        auto source = std::array<double, 16>{}, destination = std::array<double, 16>{};
+        for (auto i = 0; i < values.size(); i++) source[i] = values[i];
+        if (convertCoordinates(coordinateBasis_, static_cast<SpatialValueKind>(kind), toHost,
+            source.data(), static_cast<std::size_t>(values.size()), destination.data()) != Result::Ok) return {};
+        auto result = PackedFloat64Array{}; result.resize(values.size());
+        for (auto i = 0; i < values.size(); i++) result.set(i, destination[i]);
+        return result;
+    }
+    int set_game_spatial_property(const String& name, int kind, const PackedFloat64Array& values)
+    {
+        if (!Thread::is_main_thread() || !playback_ || !playback_->packageHost) return code(Result::NotReady);
+        if (values.size() != 3 && values.size() != 16) return code(Result::InvalidArgument);
+        auto source = std::array<double, 16>{};
+        for (auto i = 0; i < values.size(); i++) source[i] = values[i];
+        return code(playback_->packageHost->setGameSpatialProperty(name.utf8().get_data(),
+            static_cast<SpatialValueKind>(kind), source.data(), static_cast<std::size_t>(values.size())));
+    }
     int play(const PackedByteArray& bytecode, double duration)
     {
         if (bytecode.size() >= 4 && bytecode[0] == 'L' && bytecode[1] == 'F' &&
@@ -272,11 +323,13 @@ public:
         const auto projectNodes = liberafx::host::projectNodes();
         result = SpawnableHost::create(std::move(package), options,
             projectNodes.descriptors, projectNodes.count, candidate->packageHost);
+        if (result == Result::Ok) result = candidate->packageHost->setCoordinateBasis(coordinateBasis_);
+        if (result == Result::Ok) result = candidate->packageHost->setTimeScale(timeScale_);
         if (result == Result::Ok) {
             result = updateCurrentCamera(*candidate->packageHost);
         }
         if (result == Result::Ok) {
-            result = candidate->renderer->attach(*this);
+            result = candidate->renderer->attach(*this, coordinateBasis_);
         }
         if (result == Result::Ok && candidate->gpu) {
             result = candidate->gpu->attach(*this, gpuError_);
@@ -315,9 +368,10 @@ public:
             }
             result = playback_->packageHost->advance(elapsed, delta);
             if (result == Result::Ok) {
+                const auto clock = playback_->packageHost->timeSnapshot();
                 playback_->elapsed = elapsed;
                 if (playback_->renderer) {
-                    result = playback_->renderer->advance(*playback_->packageHost, elapsed, playback_->gpu.get(), gpuError_);
+                    result = playback_->renderer->advance(*playback_->packageHost, clock.effectTime, playback_->gpu.get(), gpuError_);
                     if (result != Result::Ok) {
                         if (!gpuError_.is_empty()) {
                             stop();
@@ -325,7 +379,7 @@ public:
                         return code(result);
                     }
                     if (playback_->gpu) {
-                        result = playback_->gpu->advance(*playback_->packageHost, elapsed, delta,
+                        result = playback_->gpu->advance(*playback_->packageHost, clock.effectTime, clock.effectDelta,
                             gpuError_, gpuSpawnPerSecond_);
                         if (result != Result::Ok) {
                             stop();
@@ -343,9 +397,9 @@ public:
                         return code(Result::Ok);
                     }
                 }
-                if (playback_ && ((playback_->duration >= 0 && elapsed >= playback_->duration) ||
+                if (playback_ && ((playback_->duration >= 0 && clock.effectTime >= playback_->duration) ||
                     playback_->packageHost->rootFinished())) {
-                    if (playback_->duration >= 0 && elapsed >= playback_->duration &&
+                    if (playback_->duration >= 0 && clock.effectTime >= playback_->duration &&
                         !playback_->packageHost->rootFinished()) {
                         result = playback_->packageHost->stop();
                     }
@@ -573,6 +627,13 @@ public:
             lanes.data(), lanes.size()));
     }
 
+    int set_game_bool_property(const String& name, bool value)
+    {
+        auto lanes = PackedFloat64Array{};
+        lanes.push_back(value ? 1.0 : 0.0);
+        return set_game_property(name, lanes);
+    }
+
     int fire_game_signal(const String& name)
     {
         if (!Thread::is_main_thread() || !playback_ || !playback_->packageHost) {
@@ -629,6 +690,20 @@ public:
             lanes.push_back(values[index]);
         }
         return code(playback_->packageHost->setOwnerMatrix(lanes.data(), lanes.size()));
+    }
+
+    int set_preview_offset(const PackedFloat64Array& values)
+    {
+        if (!Thread::is_main_thread() || !playback_ || !playback_->packageHost) return code(Result::NotReady);
+        if (values.size() != 3) return code(Result::InvalidArgument);
+        auto lanes = std::array<double,3>{values[0], values[1], values[2]};
+        for (const auto value : lanes) if (!std::isfinite(value) || std::abs(value) > 1000) return code(Result::InvalidArgument);
+        const auto result = convertCoordinates(coordinateBasis_, SpatialValueKind::Position, true, lanes.data(), 3, lanes.data());
+        if (result != Result::Ok) return code(result);
+        const auto offset = godot::Vector3(lanes[0], lanes[1], lanes[2]);
+        if (playback_->renderer) playback_->renderer->setPreviewOffset(offset);
+        if (playback_->gpu) playback_->gpu->setPreviewOffset(offset);
+        return code(Result::Ok);
     }
 
     int set_mesh_binding(const String& identity, const Ref<Mesh>& mesh)
@@ -791,6 +866,7 @@ protected:
         godot::ClassDB::bind_method(godot::D_METHOD("read_value", "node_id"), &LibraEffectPlayer::read_value);
         godot::ClassDB::bind_method(godot::D_METHOD("get_game_io_ports"), &LibraEffectPlayer::get_game_io_ports);
         godot::ClassDB::bind_method(godot::D_METHOD("set_game_property", "name", "values"), &LibraEffectPlayer::set_game_property);
+        godot::ClassDB::bind_method(godot::D_METHOD("set_game_bool_property", "name", "value"), &LibraEffectPlayer::set_game_bool_property);
         godot::ClassDB::bind_method(godot::D_METHOD("fire_game_signal", "name"), &LibraEffectPlayer::fire_game_signal);
         godot::ClassDB::bind_method(godot::D_METHOD("bind_script_action", "signal_name", "handler", "result_property"),
             &LibraEffectPlayer::bind_script_action, String{});
@@ -798,6 +874,13 @@ protected:
             &LibraEffectPlayer::unbind_script_action);
         godot::ClassDB::bind_method(godot::D_METHOD("dispatch_signal", "node_id"), &LibraEffectPlayer::dispatch_signal);
         godot::ClassDB::bind_method(godot::D_METHOD("set_owner_matrix", "values"), &LibraEffectPlayer::set_owner_matrix);
+        godot::ClassDB::bind_method(godot::D_METHOD("set_preview_offset", "values"), &LibraEffectPlayer::set_preview_offset);
+        godot::ClassDB::bind_method(godot::D_METHOD("set_time_scale", "ratio"), &LibraEffectPlayer::set_time_scale);
+        godot::ClassDB::bind_method(godot::D_METHOD("get_time_scale"), &LibraEffectPlayer::get_time_scale);
+        godot::ClassDB::bind_method(godot::D_METHOD("get_effect_time"), &LibraEffectPlayer::get_effect_time);
+        godot::ClassDB::bind_method(godot::D_METHOD("set_coordinate_basis", "axis_x", "axis_y", "axis_z", "units_per_metre"), &LibraEffectPlayer::set_coordinate_basis);
+        godot::ClassDB::bind_method(godot::D_METHOD("convert_coordinates", "values", "kind", "to_host"), &LibraEffectPlayer::convert_coordinates);
+        godot::ClassDB::bind_method(godot::D_METHOD("set_game_spatial_property", "name", "kind", "values"), &LibraEffectPlayer::set_game_spatial_property);
         godot::ClassDB::bind_method(godot::D_METHOD("set_mesh_binding", "asset_identity", "mesh"), &LibraEffectPlayer::set_mesh_binding);
         godot::ClassDB::bind_method(godot::D_METHOD("clear_mesh_binding", "asset_identity"), &LibraEffectPlayer::clear_mesh_binding);
         godot::ClassDB::bind_method(godot::D_METHOD("set_texture_binding", "asset_identity", "texture"), &LibraEffectPlayer::set_texture_binding);
@@ -888,6 +971,9 @@ private:
             auto worldPosition = camera->get_global_position();
             position = {worldPosition.x, worldPosition.y, worldPosition.z, 1};
         }
+        const auto converted = convertCoordinates(host.coordinateBasis(), SpatialValueKind::Position, false,
+            position.data(), 3, position.data());
+        if (converted != Result::Ok) return converted;
         return host.setGameProperty("__LFX_CAMERA_V1", position.data(), position.size());
     }
 
@@ -1050,6 +1136,8 @@ private:
     }
 
     std::unique_ptr<Playback> playback_;
+    CoordinateBasis coordinateBasis_ = CoordinateBasis::godot();
+    double timeScale_ = 1;
     std::unique_ptr<SpawnableHost> completedCpuEventHost_;
     Dictionary scriptActions_;
     bool dispatchingScriptAction_ = false;

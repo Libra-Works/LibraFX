@@ -20,6 +20,7 @@ layout(push_constant, std430) uniform Frame {
     uint seed;
     uint frameIndex;
     vec4 emitterPosition;
+    vec4 emitterRows[4];
 } frame;
 
 // Each lane owns its own SSA registers; no cross-lane memory or barriers.
@@ -318,6 +319,7 @@ void main() {
             if (aux < 2u) {
                 value = vec4(frame.timing[aux], 0, 0, 0);
             }
+            else if (aux >= 3u) value = frame.emitterRows[aux - 3u];
             result = floatBitsToUint(value);
         } else if ((op >= 3u && op <= 6u) || (op >= 9u && op <= 11u)) {
             if (type == 1u || type == 2u) {

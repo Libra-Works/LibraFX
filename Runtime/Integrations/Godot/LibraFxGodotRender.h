@@ -53,7 +53,7 @@ public:
                        std::unique_ptr<PackageRenderRenderer>& out, PackageGpuRenderer* gpu = nullptr) -> Result;
     ~PackageRenderRenderer();
 
-    auto attach(godot::Node& owner) -> Result;
+    auto attach(godot::Node& owner, const CoordinateBasis& coordinates = {}) -> Result;
     auto advance(SpawnableHost& host, double effectTime, PackageGpuRenderer* gpu,
         godot::String& gpuError) -> Result;
     // Debug facades retain their own lifecycle event stream. Call handleEvent
@@ -63,6 +63,7 @@ public:
     auto updateValues(SpawnableHost& host, double effectTime) -> Result;
     auto renderStats() const -> godot::Dictionary;
     void synchronizePresentation(bool exiting = false);
+    void setPreviewOffset(const godot::Vector3& offset);
     // Call before an explicit non-contiguous seek; backwards time also resets automatically.
     void resetFlexibleHistories();
 
@@ -150,6 +151,7 @@ private:
         bool batched = false;
     };
     struct CpuParticleDraw final {
+        std::vector<std::array<std::uint8_t, 16>> drawRows;
         std::array<std::uint8_t, 16> nodeId{};
         std::string nodeName;
         std::string assetIdentity;
@@ -180,6 +182,8 @@ private:
         std::uint32_t capacity = 0;
         std::uint32_t activeCount = 0;
         godot::Basis boundsBasis;
+        godot::Transform3D drawWorld;
+        bool hasDrawWorld = false;
         bool boundsValid = false;
         OwnedRenderingRid multiMesh;
         OwnedRenderingRid instance;
@@ -270,6 +274,7 @@ private:
     std::vector<CpuParticleDraw> rootCpuParticles_;
     std::vector<TemplateDraws> templates_;
     LibraRenderScopeNode* root_ = nullptr;
+    godot::Transform3D coordinateFrame_;
     std::vector<RenderInstance> rootRenderables_;
     std::vector<CpuParticleRenderInstance> rootCpuRenderables_;
     std::vector<VisualScope> children_;

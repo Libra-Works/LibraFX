@@ -94,6 +94,31 @@ func consume(bytes: PackedByteArray) -> Dictionary:
 					or flags != 0 or length == 0 or length > MAX_SIGNAL_BYTES)):
 		return _fail("Invalid preview frame payload.")
 	if kind == 4:
+		var control: Variant = JSON.parse_string(bytes.slice(HEADER_BYTES).get_string_from_utf8())
+		if control is Dictionary and control.get("type") == "preview_motion" and control.size() == 2:
+			var offset: Variant = control.get("offset")
+			if not offset is Array or offset.size() != 3:
+				return _fail("Invalid preview motion offset.")
+			for lane in offset:
+				if not (lane is float or lane is int) or not is_finite(float(lane)) or abs(float(lane)) > 1000.0:
+					return _fail("Invalid preview motion offset.")
+			if _owns_player():
+				var result: int = _player.call("set_preview_offset", PackedFloat64Array(offset))
+				if result != 0:
+					return _fail("Cannot move the preview effect.", result)
+			return {"result": 0, "resync": false}
+		if control is Dictionary and control.get("type") == "preview_reset" and control.size() == 1:
+			if _owns_player():
+				_player.call("stop")
+			_package = PackedByteArray()
+			_generation = -1
+			_sequence = -1
+			_signal_sequence = -1
+			_has_program = false
+			_time = 0.0
+			_target = 0.0
+			_finished = false
+			return {"result": 0, "resync": false, "reset": true}
 		return _consume_signals(bytes.slice(HEADER_BYTES))
 	if sequence < _sequence:
 		return {"result": 0, "resync": false}

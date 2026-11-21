@@ -1,4 +1,5 @@
 #include "LibraFxGodotGpu.h"
+#include "LibraFxGodotCoordinates.h"
 #include "LibraFxGodotFluid2D.h"
 #include "LibraFxGodotRenderTaskQueue.h"
 #include <godot_cpp/classes/image.hpp>
@@ -48,7 +49,7 @@ using liberafx::gpu::Fluid2DSettings;
 constexpr auto particleStride = 80u;
 constexpr auto blockBytes = 64u;
 constexpr auto maxRegisters = 128u; // Must match the embedded interpreter.
-constexpr auto maxParticles = 16384u; // Aggregate per player; also bounds the sampled state texture height.
+constexpr auto maxParticles = 1'000'000u; // Aggregate per player; tiled presentation stays below 16K texture height.
 constexpr auto maxFlowResources = 64u;
 constexpr auto maxFlowBytes = 32u * 1024 * 1024;
 constexpr auto flowHeaderBytes = maxFlowResources * 16;
@@ -103,11 +104,15 @@ struct Emitter {
     GeneratorInstanceId instanceId = 0;
     double startTime = 0.0;
     MatrixRows matrixRows{};
+    MatrixRows emitterRows{};
+    std::array<float, 16> emitterTransform{1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+    bool hasEmitterMatrix = false;
     bool hasMatrix = false;
     bool generatedTexture = false;
     NodeId textureProducer{};
     String textureOutput;
     double remainder = 0.0;
+    double spawnRate = -1.0;
     std::uint32_t cursor = 0;
     std::uint32_t frame = 0;
 };
@@ -306,7 +311,7 @@ auto validatePacket(const Kernel& kernel, std::uint32_t stage,
     }
 
     constexpr auto attributeTypes = std::array{5u, 5u, 6u, 4u, 0u, 0u, 0u, 3u, 2u};
-    constexpr auto uniformTypes = std::array{0u, 0u, 5u};
+    constexpr auto uniformTypes = std::array{0u, 0u, 5u, 6u, 6u, 6u, 6u};
     auto types = std::array<std::uint32_t, maxRegisters>{};
     auto writes = 0u;
     for (auto i = 0u; i < count; ++i) {
@@ -538,7 +543,7 @@ auto readContainerManifest(const Bytes& containers, const Bytes& manifest,
 }
 
 auto readDrawMatrices(const Bytes& renderConfig, const std::vector<NodeId>& ids,
-    std::vector<std::pair<NodeId, MatrixRows>>& bindings, String& error) -> Result
+    std::vector<std::pair<NodeId, MatrixRows>>& bindings, String& error, const char* field = "gpuDrawTransforms") -> Result
 {
     if (renderConfig.empty()) {
         return Result::Ok;
@@ -547,9 +552,9 @@ auto readDrawMatrices(const Bytes& renderConfig, const std::vector<NodeId>& ids,
     if (!object(parseJson(renderConfig), configuration)) {
         return fail(error, "Invalid render configuration");
     }
-    if (configuration.has("gpuDrawTransforms")) {
+    if (configuration.has(field)) {
         auto transforms = Array{};
-        if (!array(configuration, "gpuDrawTransforms", transforms) ||
+        if (!array(configuration, field, transforms) ||
             static_cast<std::size_t>(transforms.size()) > ids.size()) {
             return fail(error, "Invalid GPU draw Matrix bindings");
         }
@@ -828,13 +833,19 @@ auto readEmitter(const Dictionary& delivery, const Textures& textures, Emitter& 
         return fail(error, "Missing packaged LGPK delivery fields");
     }
     const auto runtimeExecuted = metadata.get("runtimeExecuted", Variant{});
-    if (number(metadata, "version") != 1 || text(metadata, "purpose") != "SourceExport" ||
+    const auto metadataVersion = number(metadata, "version");
+    if ((metadataVersion != 1 && metadataVersion != 2 && metadataVersion != 3) || text(metadata, "purpose") != "SourceExport" ||
         runtimeExecuted.get_type() != Variant::BOOL || static_cast<bool>(runtimeExecuted) ||
         text(metadata, "format") != "Usf" || number(metadata, "particleStride") != particleStride ||
         number(metadata, "uniformBufferBytes") != 48 || number(delivery, "rendererBindingsVersion") != 1) {
         return fail(error, "Unsupported packaged LGPK metadata or renderer ABI", Result::UnsupportedBinary);
     }
     const auto canonical = text(delivery, "canonicalJson");
+    if (metadataVersion >= 3) {
+        emitter.spawnRate = number(metadata, "spawnRate");
+        if (!std::isfinite(emitter.spawnRate) || emitter.spawnRate < 0 || emitter.spawnRate > 1000000)
+            return fail(error, "Invalid authored spawn rate");
+    }
     const auto source = text(delivery, "shaderSource");
     if (canonical.is_empty() || source.is_empty() ||
         canonical.sha256_text() != text(metadata, "contentHash") ||
@@ -848,7 +859,7 @@ auto readEmitter(const Dictionary& delivery, const Textures& textures, Emitter& 
     if (capacity > maxParticles || packetEntries.size() != 2 || kernelEntries.size() != 2 ||
         flow.size() != 3 || renderers.size() != 1 || resources.is_empty() || resources.size() > maxFlowResources) {
         return fail(error, "Godot GPU requires one Spawn, Update and RenderBillboard, "
-            "two kernels and at most 16384 particles", Result::UnsupportedBinary);
+            "two kernels and at most 1000000 particles", Result::UnsupportedBinary);
     }
     emitter.capacity = static_cast<std::uint32_t>(capacity);
     auto used = std::array<std::array<bool, maxFlowResources>, 2>{};
@@ -1233,8 +1244,8 @@ auto setupEmitter(RenderingDevice& device, const RID& shader, const RID& publish
     format.instantiate();
     format->set_texture_type(RenderingDevice::TEXTURE_TYPE_2D);
     format->set_format(RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT);
-    format->set_width(5);
-    format->set_height(emitter.capacity);
+    format->set_width(5 * std::min(emitter.capacity, 64u));
+    format->set_height((emitter.capacity + 63u) / 64u);
     format->set_depth(1);
     format->set_array_layers(1);
     format->set_mipmaps(1);
@@ -1314,9 +1325,12 @@ auto publishParticles(Emitter& emitter, SpawnableHost& host, String& error, Tran
     }
     const auto basis = Basis(Vector3(matrix[0], matrix[4], matrix[8]),
         Vector3(matrix[1], matrix[5], matrix[9]), Vector3(matrix[2], matrix[6], matrix[10]));
-    if (drawTransform) *drawTransform = Transform3D(basis, Vector3(matrix[3], matrix[7], matrix[11]));
-    emitter.material->set_shader_parameter("draw_matrix", Transform3D(basis,
-        Vector3(matrix[3], matrix[7], matrix[11])));
+    auto applied = Transform3D{};
+    const auto converted = effectToHost(host.coordinateBasis(), Transform3D(basis, Vector3(matrix[3], matrix[7], matrix[11])), applied);
+    if (converted != Result::Ok) return fail(error, "GPU coordinate conversion failed", converted);
+    if (drawTransform) *drawTransform = applied;
+    emitter.material->set_shader_parameter("draw_matrix", applied);
+    emitter.material->set_shader_parameter("draw_is_world", emitter.hasMatrix);
     emitter.multiMesh->set_visible_instance_count(emitter.capacity);
     return Result::Ok;
 }
@@ -1562,6 +1576,9 @@ auto readEmitters(const Bytes& containers, const Bytes& manifest, const Bytes& r
         return result;
     }
     auto particleTotal = 0u;
+    auto emitterBindings = std::vector<std::pair<NodeId, MatrixRows>>{};
+    result = readDrawMatrices(renderConfig, ids, emitterBindings, error, "gpuEmitterTransforms");
+    if (result != Result::Ok) return result;
     for (auto i = 0; i < programs.size(); ++i) {
         auto program = godot::Dictionary{};
         auto delivery = godot::Dictionary{};
@@ -1584,11 +1601,16 @@ auto readEmitters(const Bytes& containers, const Bytes& manifest, const Bytes& r
             return result;
         }
         if (emitter.capacity > maxParticles - particleTotal) {
-            return fail(error, "Godot GPU scope capacity exceeds 16384 particles",
+            return fail(error, "Godot GPU scope capacity exceeds 1000000 particles",
                 Result::UnsupportedBinary);
         }
         particleTotal += emitter.capacity;
         emitter.seed = word(id.data()) ^ word(id.data() + 4) ^ word(id.data() + 8) ^ word(id.data() + 12);
+        const auto emitterBinding = std::find_if(emitterBindings.begin(), emitterBindings.end(), [&](const auto& item) { return item.first == id; });
+        if (emitterBinding != emitterBindings.end()) {
+            emitter.hasEmitterMatrix = true;
+            emitter.emitterRows = emitterBinding->second;
+        }
         auto binding = std::find_if(bindings.begin(), bindings.end(), [&](const auto& item) { return item.first == id; });
         if (binding != bindings.end()) {
             emitter.hasMatrix = true;
@@ -1776,7 +1798,7 @@ auto PackageGpuRenderer::create(const SpawnablePackage& package, const Textures&
             {
                 return fail(error, "Godot could not create GPU particle presentation pipeline", Result::NotReady);
             }
-            if (impl->parameters.resize(48) != godot::OK) {
+            if (impl->parameters.resize(112) != godot::OK) {
                 return fail(error, "Could not allocate LGPK dispatch uniforms", Result::InsufficientWork);
             }
             auto emptyFlow = PackedByteArray{};
@@ -1933,7 +1955,7 @@ auto PackageGpuRenderer::handleEvent(const SpawnableHostEvent& event, godot::Str
             auto capacity = impl_->activeCapacity;
             for (const auto& source : definition->emitters) {
                 if (source.capacity > maxParticles - capacity) {
-                    return fail(error, "Active Godot GPU particle capacity exceeds 16384",
+                    return fail(error, "Active Godot GPU particle capacity exceeds 1000000",
                         Result::InsufficientWork);
                 }
                 capacity += source.capacity;
@@ -2009,7 +2031,7 @@ auto PackageGpuRenderer::advance(SpawnableHost& host, double elapsed, double del
         auto consumer = Transform3D{};
         const auto presented = publishParticles(emitter, host, error, &consumer);
         if (presented != Result::Ok) return presented;
-        if (!emitter.hasMatrix) consumer = root ? root->get_global_transform() : Transform3D{};
+        if (!emitter.hasMatrix) consumer = (root ? root->get_global_transform() : Transform3D{}) * consumer;
         for (auto resource = 0u; resource < maxFlowResources; ++resource)
         {
             if (!emitter.generatedPlaneCoordinates[resource]) continue;
@@ -2027,6 +2049,23 @@ auto PackageGpuRenderer::advance(SpawnableHost& host, double elapsed, double del
     if (delta == 0)
     {
         return Result::Ok;
+    }
+    for (auto& emitter : impl_->emitters) {
+        if (!emitter.hasEmitterMatrix) continue;
+        for (auto row = 0u; row < 4; ++row) {
+            auto values = std::array<double, 4>{};
+            auto width = std::uint8_t{};
+            const auto result = emitter.instanceId == 0 ? host.rootValue(emitter.emitterRows[row].data(), values.data(), width)
+                : host.childValue(emitter.containerId.data(), emitter.instanceId, emitter.emitterRows[row].data(), values.data(), width);
+            if (result != Result::Ok || width != 4) return fail(error, "Could not read Emitter Matrix", Result::InvalidValueType);
+            for (auto column = 0u; column < 4; ++column) {
+                if (!std::isfinite(values[column]) || std::abs(values[column]) > std::numeric_limits<float>::max())
+                    return fail(error, "Emitter Matrix is not finite", Result::NonFinite);
+                if (row == 3 && std::abs(values[column] - (column == 3 ? 1.0 : 0.0)) > 1e-5)
+                    return fail(error, "Emitter Matrix must be affine", Result::InvalidArgument);
+                emitter.emitterTransform[row * 4 + column] = static_cast<float>(values[column]);
+            }
+        }
     }
     const auto dispatchResult = impl_->runOnRenderThread([&]() -> Result {
         auto& device = *impl_->device;
@@ -2046,7 +2085,7 @@ auto PackageGpuRenderer::advance(SpawnableHost& host, double elapsed, double del
             if (localDelta == 0) {
                 continue;
             }
-            emitter.remainder = std::min(emitter.remainder + spawnPerSecond * localDelta, double(emitter.capacity));
+            emitter.remainder = std::min(emitter.remainder + (emitter.spawnRate >= 0 ? emitter.spawnRate : spawnPerSecond) * localDelta, double(emitter.capacity));
             const auto count = static_cast<std::uint32_t>(emitter.remainder);
             emitter.remainder -= count;
             auto* parameters = impl_->parameters.ptrw();
@@ -2061,7 +2100,8 @@ auto PackageGpuRenderer::advance(SpawnableHost& host, double elapsed, double del
             // Simulation is emitter-local; authored Matrix applies only to presentation.
             std::fill_n(parameters + 32, 16, std::uint8_t{0});
             emitter.cursor = (emitter.cursor + count) % emitter.capacity;
-            device.compute_list_set_push_constant(list, impl_->parameters, 48);
+            for (auto i = 0u; i < 16; ++i) putFloat(parameters + 48 + i * 4, emitter.emitterTransform[i]);
+            device.compute_list_set_push_constant(list, impl_->parameters, 112);
             const auto groups = (emitter.capacity + 63) / 64;
             if (count != 0) {
                 device.compute_list_bind_uniform_set(list, emitter.kernels[0].uniforms, 0);
@@ -2087,6 +2127,13 @@ auto PackageGpuRenderer::advance(SpawnableHost& host, double elapsed, double del
         return dispatchResult;
     }
     return Result::Ok;
+}
+
+void PackageGpuRenderer::setPreviewOffset(const godot::Vector3& offset)
+{
+    if (auto* root = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(impl_->rootId)))
+        root->set_position(offset);
+    if (impl_->fluids) impl_->fluids->setPreviewOffset(offset);
 }
 
 auto PackageGpuRenderer::emitterCount() const noexcept -> std::size_t

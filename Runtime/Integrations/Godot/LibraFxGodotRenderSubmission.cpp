@@ -224,14 +224,24 @@ void PackageRenderRenderer::synchronizeCpuScope(godot::Node3D& scope,
 {
     for (auto& renderable : renderables)
     {
+        const auto transform = renderable.hasDrawWorld ? renderable.drawWorld : scope.get_global_transform();
         if (scope.is_inside_tree() && (!renderable.boundsValid ||
-            renderable.boundsBasis != scope.get_global_transform().basis))
+            renderable.boundsBasis != transform.basis))
         {
-            renderable.boundsValid = updateCpuBounds(renderable, scope.get_global_transform().basis);
+            renderable.boundsValid = updateCpuBounds(renderable, transform.basis);
         }
         updateInstance(renderable.instance, scope, godot::Transform3D{},
             enabled && renderable.boundsValid, exiting);
+        if (!exiting && renderable.hasDrawWorld && renderable.instance.isValid())
+            godot::RenderingServer::get_singleton()->instance_set_transform(renderable.instance.get(), transform);
     }
+}
+
+void PackageRenderRenderer::setPreviewOffset(const godot::Vector3& offset)
+{
+    coordinateFrame_.origin = offset;
+    if (root_) root_->set_transform(coordinateFrame_);
+    synchronizePresentation();
 }
 
 void PackageRenderRenderer::synchronizePresentation(bool exiting)
@@ -252,7 +262,7 @@ void PackageRenderRenderer::synchronizePresentation(bool exiting)
         auto* spatialOwner = godot::Object::cast_to<godot::Node3D>(ancestor);
         if (spatialOwner) {
             ownerVisible_ = spatialOwner->is_visible_in_tree();
-            const auto transform = spatialOwner->get_global_transform();
+            const auto transform = spatialOwner->get_global_transform() * coordinateFrame_;
             if (root_->get_global_transform() != transform) {
                 root_->set_global_transform(transform);
             }

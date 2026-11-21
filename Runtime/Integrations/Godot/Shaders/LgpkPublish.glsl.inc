@@ -12,12 +12,13 @@ layout(set = 0, binding = 0, std430) readonly buffer ParticleBuffer { Particle p
 layout(set = 0, binding = 1, rgba32f) uniform writeonly image2D particleOutput;
 void main() {
     uint index = gl_GlobalInvocationID.x;
-    if (index >= uint(imageSize(particleOutput).y)) return;
+    if (index >= uint(particles.length())) return;
+    ivec2 base = ivec2(int(index % 64u) * 5, int(index / 64u));
     Particle p = particles[index];
-    imageStore(particleOutput, ivec2(0, int(index)), p.positionAge);
-    imageStore(particleOutput, ivec2(1, int(index)), p.velocityLifetime);
-    imageStore(particleOutput, ivec2(2, int(index)), p.color);
-    imageStore(particleOutput, ivec2(3, int(index)), p.sizeRotation);
-    imageStore(particleOutput, ivec2(4, int(index)), vec4(p.seedAlive));
+    imageStore(particleOutput, base, p.positionAge);
+    imageStore(particleOutput, base + ivec2(1,0), p.velocityLifetime);
+    imageStore(particleOutput, base + ivec2(2,0), p.color);
+    imageStore(particleOutput, base + ivec2(3,0), p.sizeRotation);
+    imageStore(particleOutput, base + ivec2(4,0), vec4(p.seedAlive));
 }
 )LGPK"
