@@ -171,6 +171,43 @@ public sealed class AssetMcpTools
         [Description("Optional editor peer GUID from libera_preview_clients.")] string? clientId = null) =>
         Json(assets.RenderStatus(Peer(clientId)));
 
+    [McpServerTool(Name = "libera_create_game_effect", Destructive = false, OpenWorld = false)]
+    [Description("Append an editable game-effect prototype using ordinary CPU particle/procedural graphs. Archetypes: HitImpact (打撃), HitSlash (斬撃), FireMagic (炎), MagicCircle (魔法陣), DarkMagic (闇), LightMagic (光), HealingMagic (回復), DustPuff (土煙), Explosion (爆発), Rain (雨), Snow (雪), Lightning (雷). Rain/snow follow camera position; lightning stays world anchored. No imported images or dedicated effect nodes. Interpret FF/Dragon Quest references as timing, silhouette and palette briefs, then tune the source graph. Verify actual appearance with preview status and a captured frame.")]
+    public static async Task<string> CreateGameEffect(ActiveGraphProvider graph,
+        [Description("HitImpact, HitSlash, FireMagic, MagicCircle, DarkMagic, LightMagic, HealingMagic, DustPuff, Explosion, Rain, Snow or Lightning.")] string archetype,
+        [Description("Particle lifetime or fade duration, 0.05–30 seconds. Omit for a suitable per-template default.")] double? duration = null,
+        [Description("auto, fire, dark, light, heal, ice or earth.")] string theme = "auto") =>
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var seconds = duration ?? GameEffectTemplates.DefaultDuration(archetype);
+            var sample = GameEffectTemplates.Create(archetype, seconds, theme);
+            var before = graph.Graph.Nodes.Select(node => node.Id).ToHashSet();
+            graph.Graph.PasteSnapshot(sample, 40, 40);
+            return Json(new { archetype, duration = seconds, theme, runtimeExecuted = false,
+                addedNodes = graph.Graph.Nodes.Where(node => !before.Contains(node.Id)).Select(node => node.Id).ToArray() });
+        });
+
+    [McpServerTool(Name = "libera_create_particle_sample", Destructive = false, OpenWorld = false)]
+    [Description("Append an editable CPU/GPU particle or Fluid2D sample as one undoable edit. No imported assets or hand-written GPU JSON needed. Styles: CpuRadial, CpuFountain, CpuMeshSurface, Fireworks, GpuCurl100k, FluidSmoke, FluidInk, FluidWater, FluidShallowWater, FluidFire. All source graphs use X-right/Y-up/Z-forward and metres. GPU/fluid visibility requires a connected supported GPU host; capacity is not live count.")]
+    public static async Task<string> CreateParticleSample(ActiveGraphProvider graph, EditorPlayback playback,
+        [Description("Exact sample style; use CpuFountain for the simple fountain starter.")] string style = "CpuFountain",
+        [Description("Start playback with an appropriate timeline range.")] bool autoplay = false) =>
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var sample = ParticleSamples.Create(style);
+            var before = graph.Graph.Nodes.Select(node => node.Id).ToHashSet();
+            graph.Graph.PasteSnapshot(sample, 40, 40);
+            if (autoplay)
+            {
+                playback.Pause(); playback.StartText = "0";
+                playback.EndText = style == "Fireworks" ? "300" : "1200";
+                playback.Frame = 0; playback.Play();
+            }
+            return Json(new { style, coordinates = "X-right/Y-up/Z-forward; metres",
+                addedNodes = graph.Graph.Nodes.Where(node => !before.Contains(node.Id)).Select(node => node.Id).ToArray(),
+                runtimeExecuted = false });
+        });
+
     [McpServerTool(Name = "gpu_runtime_status", ReadOnly = true, OpenWorld = false)]
     [Description("Read the selected GPU-capable editor's last actual GPU preview feedback, interpreter mode, program sequence, container capacity, playback state and errors. Null means no feedback yet; capacity is not a live particle count. Source-export runtimeExecuted remains false.")]
     public static string GpuRuntimeStatus(PreviewAssetStore assets,
@@ -190,9 +227,15 @@ public sealed class AssetMcpTools
     [Description("Control the shared editor timeline directly, rather than graph-only keyboard simulation. Frame is clamped to the existing playback range.")]
     public static async Task<string> Playback(EditorPlayback playback,
         [Description("True plays, false pauses, and omission preserves the current state.")] bool? playing = null,
-        [Description("Optional frame number to seek to, not seconds.")] double? frame = null) =>
+        [Description("Optional frame number to seek to, not seconds.")] double? frame = null,
+        [Description("Playback speed multiplier: 0 pauses effect time, 0.25 is quarter speed, 1 is normal.")] double? timeScale = null) =>
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
+            if (timeScale is { } ratio)
+            {
+                if (!double.IsFinite(ratio) || ratio < 0 || ratio > 100) throw new McpException("Invalid Time Scale.");
+                playback.TimeScale = ratio;
+            }
             if (frame is { } value)
             {
                 if (!double.IsFinite(value)) throw new McpException("Invalid frame.");

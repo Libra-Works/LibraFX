@@ -95,6 +95,24 @@ internal static class McpAuthoringTransitionTests
                 Require(render.RootElement.GetProperty("gpuEmitterTransforms")[0].GetProperty("rowNodeIds").GetArrayLength() == 4,
                     "MCP Matrix connection must reach the executable render scope.");
             }
+            foreach (var sample in new[] { "CpuMeshSurface", "CpuFountain" })
+            {
+                var beforeSample = graph.CreateSnapshot();
+                using (await Call("libera_create_particle_sample", new { style = sample })) { }
+                using (await Call("libera_graph_compile_spawnable", new { })) { }
+                using (await Call("libera_graph_undo", new { })) { }
+                Require(GraphSnapshot.ContentEquals(beforeSample, graph.CreateSnapshot()),
+                    "Creating a particle sample through MCP must be a single undoable edit.");
+            }
+            foreach (var archetype in new[] { "Rain", "Snow", "Lightning", "MagicCircle" })
+            {
+                var beforeTemplate = graph.CreateSnapshot();
+                using (await Call("libera_create_game_effect", new { archetype })) { }
+                using (await Call("libera_graph_compile_spawnable", new { })) { }
+                using (await Call("libera_graph_undo", new { })) { }
+                Require(GraphSnapshot.ContentEquals(beforeTemplate, graph.CreateSnapshot()),
+                    "Creating a game effect through MCP must be a single undoable edit.");
+            }
             await Dispatcher.UIThread.InvokeAsync(() => EditorInterfaceTests.VerifyContainerPresentation());
             await Dispatcher.UIThread.InvokeAsync(() => EditorInterfaceTests.VerifyConstantEditors());
             await Dispatcher.UIThread.InvokeAsync(WorkspaceNavigationTests.Run);

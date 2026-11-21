@@ -1,0 +1,1338 @@
+{
+  "FormatVersion": 14,
+  "AutoDestroyWhenIdle": true,
+  "Nodes": [
+    {
+      "Id": "a4b47620-36e5-4392-ae51-3b5089620a81",
+      "Name": "Radial burst",
+      "Kind": "CpuParticle",
+      "X": 0,
+      "Y": 0,
+      "Curve": null,
+      "ChildGraph": {
+        "Nodes": [
+          {
+            "Id": "13a86b9c-df88-40ba-88eb-86f273e8347e",
+            "Kind": "CpuParticleSpawn",
+            "Name": "Spawn",
+            "X": 0,
+            "Y": 0,
+            "PortType": "Signal",
+            "PortCategory": "Signal",
+            "Curve": null,
+            "ChildGraph": {
+              "Nodes": [
+                {
+                  "Id": "39c5166b-4f09-4657-a0cc-bc805c61ca7b",
+                  "Kind": "CpuParticleStageEvent",
+                  "Name": "Spawn",
+                  "X": 0,
+                  "Y": 0,
+                  "PortType": "Signal",
+                  "PortCategory": "Signal",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                },
+                {
+                  "Id": "fa1fe91a-172c-4b0a-b959-e36a03c2dff1",
+                  "Kind": "CpuParticleSetPosition",
+                  "Name": "Initial position",
+                  "X": 300,
+                  "Y": 0,
+                  "PortType": "Signal",
+                  "PortCategory": "Signal",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                },
+                {
+                  "Id": "378cf872-7410-4804-a75a-b1f3799c33cb",
+                  "Kind": "CpuParticleEmitterSphere",
+                  "Name": "Deterministic random direction",
+                  "X": 600,
+                  "Y": 0,
+                  "PortType": "FloatX3",
+                  "PortCategory": "Parameter",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [
+                    {
+                      "Id": "radius",
+                      "Type": "float",
+                      "Value": 1
+                    }
+                  ],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                },
+                {
+                  "Id": "a33991f2-9904-431e-9ab4-603ef90d7c0b",
+                  "Kind": "NormalizeVector3",
+                  "Name": "Sphere direction",
+                  "X": 900,
+                  "Y": 0,
+                  "PortType": "FloatX3",
+                  "PortCategory": "Parameter",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                },
+                {
+                  "Id": "2f525b68-2026-43b2-9716-5b45412f2953",
+                  "Kind": "MultiplyVector3",
+                  "Name": "Outward speed",
+                  "X": 0,
+                  "Y": 210,
+                  "PortType": "FloatX3",
+                  "PortCategory": "Parameter",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [
+                    {
+                      "Id": "b",
+                      "Type": "vector3",
+                      "Value": [
+                        3,
+                        3,
+                        3
+                      ]
+                    }
+                  ],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                },
+                {
+                  "Id": "28ec40c3-d2bc-4b38-b7ea-e184bbc5f01f",
+                  "Kind": "CpuParticleSetVelocity",
+                  "Name": "Initial velocity",
+                  "X": 300,
+                  "Y": 210,
+                  "PortType": "Signal",
+                  "PortCategory": "Signal",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                },
+                {
+                  "Id": "b57378b7-e262-43dd-ac6c-de999047d50e",
+                  "Kind": "CpuParticleSetLife",
+                  "Name": "Particle lifetime",
+                  "X": 600,
+                  "Y": 210,
+                  "PortType": "Signal",
+                  "PortCategory": "Signal",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [
+                    {
+                      "Id": "value",
+                      "Type": "float",
+                      "Value": 3
+                    }
+                  ],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                },
+                {
+                  "Id": "196bf6b6-1005-437e-a123-6ca1eabd3913",
+                  "Kind": "CpuParticleSetSize",
+                  "Name": "Glow diameter",
+                  "X": 900,
+                  "Y": 210,
+                  "PortType": "Signal",
+                  "PortCategory": "Signal",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [
+                    {
+                      "Id": "value",
+                      "Type": "vector2",
+                      "Value": [
+                        0.14,
+                        0.14
+                      ]
+                    }
+                  ],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                },
+                {
+                  "Id": "459f781c-218a-4095-b2fb-ca742a01e2db",
+                  "Kind": "CpuParticleSetColor",
+                  "Name": "Initial tint",
+                  "X": 0,
+                  "Y": 420,
+                  "PortType": "Signal",
+                  "PortCategory": "Signal",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [
+                    {
+                      "Id": "value",
+                      "Type": "color",
+                      "Value": [
+                        0.2,
+                        0.65,
+                        1,
+                        1
+                      ]
+                    }
+                  ],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                }
+              ],
+              "Connections": [
+                {
+                  "SourceNodeId": "378cf872-7410-4804-a75a-b1f3799c33cb",
+                  "TargetNodeId": "a33991f2-9904-431e-9ab4-603ef90d7c0b",
+                  "TargetPortId": "a",
+                  "SourcePortId": "value"
+                },
+                {
+                  "SourceNodeId": "a33991f2-9904-431e-9ab4-603ef90d7c0b",
+                  "TargetNodeId": "2f525b68-2026-43b2-9716-5b45412f2953",
+                  "TargetPortId": "a",
+                  "SourcePortId": "value"
+                },
+                {
+                  "SourceNodeId": "2f525b68-2026-43b2-9716-5b45412f2953",
+                  "TargetNodeId": "28ec40c3-d2bc-4b38-b7ea-e184bbc5f01f",
+                  "TargetPortId": "value",
+                  "SourcePortId": null
+                },
+                {
+                  "SourceNodeId": "39c5166b-4f09-4657-a0cc-bc805c61ca7b",
+                  "TargetNodeId": "fa1fe91a-172c-4b0a-b959-e36a03c2dff1",
+                  "TargetPortId": "signal",
+                  "SourcePortId": "then"
+                },
+                {
+                  "SourceNodeId": "fa1fe91a-172c-4b0a-b959-e36a03c2dff1",
+                  "TargetNodeId": "28ec40c3-d2bc-4b38-b7ea-e184bbc5f01f",
+                  "TargetPortId": "signal",
+                  "SourcePortId": "then"
+                },
+                {
+                  "SourceNodeId": "28ec40c3-d2bc-4b38-b7ea-e184bbc5f01f",
+                  "TargetNodeId": "b57378b7-e262-43dd-ac6c-de999047d50e",
+                  "TargetPortId": "signal",
+                  "SourcePortId": "then"
+                },
+                {
+                  "SourceNodeId": "b57378b7-e262-43dd-ac6c-de999047d50e",
+                  "TargetNodeId": "196bf6b6-1005-437e-a123-6ca1eabd3913",
+                  "TargetPortId": "signal",
+                  "SourcePortId": "then"
+                },
+                {
+                  "SourceNodeId": "196bf6b6-1005-437e-a123-6ca1eabd3913",
+                  "TargetNodeId": "459f781c-218a-4095-b2fb-ca742a01e2db",
+                  "TargetPortId": "signal",
+                  "SourcePortId": "then"
+                }
+              ],
+              "ExposedItems": null,
+              "AutoDestroyWhenIdle": true,
+              "ResourceIdentities": null
+            },
+            "Parameters": [],
+            "GroupAsset": null,
+            "IsPolymorphic": false,
+            "GroupOverrides": null,
+            "SignalKeys": null,
+            "KindDomain": "Cpu"
+          },
+          {
+            "Id": "e645e2e6-5e27-4d7e-8c47-32486554075b",
+            "Kind": "CpuParticleUpdate",
+            "Name": "Update",
+            "X": 300,
+            "Y": 0,
+            "PortType": "Signal",
+            "PortCategory": "Signal",
+            "Curve": null,
+            "ChildGraph": {
+              "Nodes": [
+                {
+                  "Id": "a4b61b16-19d1-4b68-95ee-9e5bf90d9196",
+                  "Kind": "CpuParticleStageEvent",
+                  "Name": "Update",
+                  "X": 0,
+                  "Y": 0,
+                  "PortType": "Signal",
+                  "PortCategory": "Signal",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                },
+                {
+                  "Id": "62f6316e-f4e9-4eea-9b81-a7d5caf9a3d3",
+                  "Kind": "CpuParticleMove",
+                  "Name": "Velocity \u002B gravity",
+                  "X": 300,
+                  "Y": 0,
+                  "PortType": "Signal",
+                  "PortCategory": "Signal",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [
+                    {
+                      "Id": "acceleration",
+                      "Type": "vector3",
+                      "Value": [
+                        0,
+                        -1.5,
+                        0
+                      ]
+                    }
+                  ],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                },
+                {
+                  "Id": "7b40b712-760a-4000-b995-2de74789267f",
+                  "Kind": "CpuParticleAge",
+                  "Name": "Age",
+                  "X": 600,
+                  "Y": 0,
+                  "PortType": "Float",
+                  "PortCategory": "Parameter",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                },
+                {
+                  "Id": "2ca485ad-8c63-4446-96e1-b3975d00f694",
+                  "Kind": "CpuParticleLife",
+                  "Name": "Lifetime",
+                  "X": 900,
+                  "Y": 0,
+                  "PortType": "Float",
+                  "PortCategory": "Parameter",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                },
+                {
+                  "Id": "30fb1752-c431-4290-bea0-170b81d40363",
+                  "Kind": "Divide",
+                  "Name": "Age / lifetime",
+                  "X": 0,
+                  "Y": 210,
+                  "PortType": "Float",
+                  "PortCategory": "Parameter",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                },
+                {
+                  "Id": "8e7a8b65-7dd7-41c0-baa9-9f7f07655dc8",
+                  "Kind": "Clamp",
+                  "Name": "Saturate lifetime",
+                  "X": 300,
+                  "Y": 210,
+                  "PortType": "Float",
+                  "PortCategory": "Parameter",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                },
+                {
+                  "Id": "4b26fb24-7749-41d4-9a4b-a82da9157bb2",
+                  "Kind": "Subtract",
+                  "Name": "Fade out",
+                  "X": 600,
+                  "Y": 210,
+                  "PortType": "Float",
+                  "PortCategory": "Parameter",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [
+                    {
+                      "Id": "a",
+                      "Type": "float",
+                      "Value": 1
+                    }
+                  ],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                },
+                {
+                  "Id": "ef91c2fe-2a8a-4bbb-982c-5332076ce79a",
+                  "Kind": "ComposeVector4",
+                  "Name": "Tint and opacity",
+                  "X": 900,
+                  "Y": 210,
+                  "PortType": "FloatX4",
+                  "PortCategory": "Parameter",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [
+                    {
+                      "Id": "r",
+                      "Type": "float",
+                      "Value": 0.2
+                    },
+                    {
+                      "Id": "g",
+                      "Type": "float",
+                      "Value": 0.65
+                    },
+                    {
+                      "Id": "b",
+                      "Type": "float",
+                      "Value": 1
+                    }
+                  ],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                },
+                {
+                  "Id": "f3e78efe-ffcf-4228-8c2e-70d95dbb98af",
+                  "Kind": "Vector4ToColor",
+                  "Name": "Particle color",
+                  "X": 0,
+                  "Y": 420,
+                  "PortType": "Color",
+                  "PortCategory": "Parameter",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                },
+                {
+                  "Id": "a7085fb2-6c31-4bcf-a31d-eb3c1bb62fbe",
+                  "Kind": "CpuParticleSetColor",
+                  "Name": "Fade particle",
+                  "X": 300,
+                  "Y": 420,
+                  "PortType": "Signal",
+                  "PortCategory": "Signal",
+                  "Curve": null,
+                  "ChildGraph": null,
+                  "Parameters": [],
+                  "GroupAsset": null,
+                  "IsPolymorphic": false,
+                  "GroupOverrides": null,
+                  "SignalKeys": null,
+                  "KindDomain": "Cpu"
+                }
+              ],
+              "Connections": [
+                {
+                  "SourceNodeId": "a4b61b16-19d1-4b68-95ee-9e5bf90d9196",
+                  "TargetNodeId": "62f6316e-f4e9-4eea-9b81-a7d5caf9a3d3",
+                  "TargetPortId": "signal",
+                  "SourcePortId": "then"
+                },
+                {
+                  "SourceNodeId": "7b40b712-760a-4000-b995-2de74789267f",
+                  "TargetNodeId": "30fb1752-c431-4290-bea0-170b81d40363",
+                  "TargetPortId": "a",
+                  "SourcePortId": "value"
+                },
+                {
+                  "SourceNodeId": "2ca485ad-8c63-4446-96e1-b3975d00f694",
+                  "TargetNodeId": "30fb1752-c431-4290-bea0-170b81d40363",
+                  "TargetPortId": "b",
+                  "SourcePortId": "value"
+                },
+                {
+                  "SourceNodeId": "30fb1752-c431-4290-bea0-170b81d40363",
+                  "TargetNodeId": "8e7a8b65-7dd7-41c0-baa9-9f7f07655dc8",
+                  "TargetPortId": "a",
+                  "SourcePortId": null
+                },
+                {
+                  "SourceNodeId": "8e7a8b65-7dd7-41c0-baa9-9f7f07655dc8",
+                  "TargetNodeId": "4b26fb24-7749-41d4-9a4b-a82da9157bb2",
+                  "TargetPortId": "b",
+                  "SourcePortId": "value"
+                },
+                {
+                  "SourceNodeId": "4b26fb24-7749-41d4-9a4b-a82da9157bb2",
+                  "TargetNodeId": "ef91c2fe-2a8a-4bbb-982c-5332076ce79a",
+                  "TargetPortId": "a",
+                  "SourcePortId": null
+                },
+                {
+                  "SourceNodeId": "ef91c2fe-2a8a-4bbb-982c-5332076ce79a",
+                  "TargetNodeId": "f3e78efe-ffcf-4228-8c2e-70d95dbb98af",
+                  "TargetPortId": "a",
+                  "SourcePortId": "value"
+                },
+                {
+                  "SourceNodeId": "f3e78efe-ffcf-4228-8c2e-70d95dbb98af",
+                  "TargetNodeId": "a7085fb2-6c31-4bcf-a31d-eb3c1bb62fbe",
+                  "TargetPortId": "value",
+                  "SourcePortId": null
+                },
+                {
+                  "SourceNodeId": "62f6316e-f4e9-4eea-9b81-a7d5caf9a3d3",
+                  "TargetNodeId": "a7085fb2-6c31-4bcf-a31d-eb3c1bb62fbe",
+                  "TargetPortId": "signal",
+                  "SourcePortId": "then"
+                }
+              ],
+              "ExposedItems": null,
+              "AutoDestroyWhenIdle": true,
+              "ResourceIdentities": null
+            },
+            "Parameters": [],
+            "GroupAsset": null,
+            "IsPolymorphic": false,
+            "GroupOverrides": null,
+            "SignalKeys": null,
+            "KindDomain": "Cpu"
+          },
+          {
+            "Id": "f4cc8652-2347-415f-9c6f-9217e28674ca",
+            "Kind": "CpuParticleSpriteDraw",
+            "Name": "Generated radial glow",
+            "X": 600,
+            "Y": 0,
+            "PortType": "Float",
+            "PortCategory": "Parameter",
+            "Curve": null,
+            "ChildGraph": null,
+            "Parameters": [
+              {
+                "Id": "assetPath",
+                "Type": "string",
+                "Value": "builtin:radial-glow"
+              },
+              {
+                "Id": "textureSource",
+                "Type": "enum:ab42721e-d2c3-43e9-a96d-c80000000001",
+                "Value": 2
+              },
+              {
+                "Id": "blendMode",
+                "Type": "string",
+                "Value": "Additive"
+              }
+            ],
+            "GroupAsset": null,
+            "IsPolymorphic": false,
+            "GroupOverrides": null,
+            "SignalKeys": null,
+            "KindDomain": "Cpu"
+          }
+        ],
+        "Connections": [],
+        "ExposedItems": null,
+        "AutoDestroyWhenIdle": true,
+        "ResourceIdentities": null
+      },
+      "Parameters": [
+        {
+          "Id": "capacity",
+          "Type": "int",
+          "Value": 4096
+        },
+        {
+          "Id": "burst",
+          "Type": "int",
+          "Value": 256
+        },
+        {
+          "Id": "rate",
+          "Type": "float",
+          "Value": 0
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false,
+      "GroupOverrides": null,
+      "SignalKeys": null
+    },
+    {
+      "Id": "562212cc-32cc-4a53-b7d8-b0006aa9abf4",
+      "Name": "Sample guide",
+      "Kind": "Comment",
+      "X": 300,
+      "Y": 0,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "text",
+          "Type": "string",
+          "Value": "CpuRadial \u00B7 X right / Y up / Z forward \u00B7 metres\nCPU samples use a generated radial glow texture; no image import is required.\nGPU Curl: capacity 100,000; particles fill gradually. Fluid2D: edit typed Flow controls.\nSuggested preview: 60 FPS, frames 0\u20131200.\nY\u30A2\u30C3\u30D7\u30FB\u30E1\u30FC\u30C8\u30EB\u5358\u4F4D\u3002CPU\u306F\u751F\u6210\u30B0\u30ED\u30FC\u753B\u50CF\u3092\u4F7F\u7528\u3002GPU/\u30D5\u30EB\u30A4\u30C9\u306F\u5B9FGPU\u306E\u63A5\u7D9A\u5148\u3067\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
+        },
+        {
+          "Id": "width",
+          "Type": "float",
+          "Value": 680
+        },
+        {
+          "Id": "height",
+          "Type": "float",
+          "Value": 220
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false,
+      "GroupOverrides": null,
+      "SignalKeys": null
+    }
+  ],
+  "Connections": [],
+  "History": {
+    "RootId": "38550047-4209-4f3c-a8c2-3eeef949807b",
+    "CurrentNodeId": "38550047-4209-4f3c-a8c2-3eeef949807b",
+    "TimelineRevisionId": "931e9b43-9e53-468c-80d5-c28ff00af92c",
+    "NextBranchNumber": 1,
+    "Entries": [
+      {
+        "Id": "38550047-4209-4f3c-a8c2-3eeef949807b",
+        "ParentId": null,
+        "PreferredChildId": null,
+        "Description": "CpuRadial",
+        "BranchName": "Main",
+        "IsPinned": false,
+        "State": {
+          "Nodes": [
+            {
+              "Id": "a4b47620-36e5-4392-ae51-3b5089620a81",
+              "Kind": "CpuParticle",
+              "Name": "Radial burst",
+              "X": 0,
+              "Y": 0,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": {
+                "Nodes": [
+                  {
+                    "Id": "13a86b9c-df88-40ba-88eb-86f273e8347e",
+                    "Kind": "CpuParticleSpawn",
+                    "Name": "Spawn",
+                    "X": 0,
+                    "Y": 0,
+                    "PortType": "Signal",
+                    "PortCategory": "Signal",
+                    "Curve": null,
+                    "ChildGraph": {
+                      "Nodes": [
+                        {
+                          "Id": "39c5166b-4f09-4657-a0cc-bc805c61ca7b",
+                          "Kind": "CpuParticleStageEvent",
+                          "Name": "Spawn",
+                          "X": 0,
+                          "Y": 0,
+                          "PortType": "Signal",
+                          "PortCategory": "Signal",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        },
+                        {
+                          "Id": "fa1fe91a-172c-4b0a-b959-e36a03c2dff1",
+                          "Kind": "CpuParticleSetPosition",
+                          "Name": "Initial position",
+                          "X": 300,
+                          "Y": 0,
+                          "PortType": "Signal",
+                          "PortCategory": "Signal",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        },
+                        {
+                          "Id": "378cf872-7410-4804-a75a-b1f3799c33cb",
+                          "Kind": "CpuParticleEmitterSphere",
+                          "Name": "Deterministic random direction",
+                          "X": 600,
+                          "Y": 0,
+                          "PortType": "FloatX3",
+                          "PortCategory": "Parameter",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [
+                            {
+                              "Id": "radius",
+                              "Type": "float",
+                              "Value": 1
+                            }
+                          ],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        },
+                        {
+                          "Id": "a33991f2-9904-431e-9ab4-603ef90d7c0b",
+                          "Kind": "NormalizeVector3",
+                          "Name": "Sphere direction",
+                          "X": 900,
+                          "Y": 0,
+                          "PortType": "FloatX3",
+                          "PortCategory": "Parameter",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        },
+                        {
+                          "Id": "2f525b68-2026-43b2-9716-5b45412f2953",
+                          "Kind": "MultiplyVector3",
+                          "Name": "Outward speed",
+                          "X": 0,
+                          "Y": 210,
+                          "PortType": "FloatX3",
+                          "PortCategory": "Parameter",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [
+                            {
+                              "Id": "b",
+                              "Type": "vector3",
+                              "Value": [
+                                3,
+                                3,
+                                3
+                              ]
+                            }
+                          ],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        },
+                        {
+                          "Id": "28ec40c3-d2bc-4b38-b7ea-e184bbc5f01f",
+                          "Kind": "CpuParticleSetVelocity",
+                          "Name": "Initial velocity",
+                          "X": 300,
+                          "Y": 210,
+                          "PortType": "Signal",
+                          "PortCategory": "Signal",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        },
+                        {
+                          "Id": "b57378b7-e262-43dd-ac6c-de999047d50e",
+                          "Kind": "CpuParticleSetLife",
+                          "Name": "Particle lifetime",
+                          "X": 600,
+                          "Y": 210,
+                          "PortType": "Signal",
+                          "PortCategory": "Signal",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [
+                            {
+                              "Id": "value",
+                              "Type": "float",
+                              "Value": 3
+                            }
+                          ],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        },
+                        {
+                          "Id": "196bf6b6-1005-437e-a123-6ca1eabd3913",
+                          "Kind": "CpuParticleSetSize",
+                          "Name": "Glow diameter",
+                          "X": 900,
+                          "Y": 210,
+                          "PortType": "Signal",
+                          "PortCategory": "Signal",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [
+                            {
+                              "Id": "value",
+                              "Type": "vector2",
+                              "Value": [
+                                0.14,
+                                0.14
+                              ]
+                            }
+                          ],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        },
+                        {
+                          "Id": "459f781c-218a-4095-b2fb-ca742a01e2db",
+                          "Kind": "CpuParticleSetColor",
+                          "Name": "Initial tint",
+                          "X": 0,
+                          "Y": 420,
+                          "PortType": "Signal",
+                          "PortCategory": "Signal",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [
+                            {
+                              "Id": "value",
+                              "Type": "color",
+                              "Value": [
+                                0.2,
+                                0.65,
+                                1,
+                                1
+                              ]
+                            }
+                          ],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        }
+                      ],
+                      "Connections": [
+                        {
+                          "SourceNodeId": "378cf872-7410-4804-a75a-b1f3799c33cb",
+                          "TargetNodeId": "a33991f2-9904-431e-9ab4-603ef90d7c0b",
+                          "TargetPortId": "a",
+                          "SourcePortId": "value"
+                        },
+                        {
+                          "SourceNodeId": "a33991f2-9904-431e-9ab4-603ef90d7c0b",
+                          "TargetNodeId": "2f525b68-2026-43b2-9716-5b45412f2953",
+                          "TargetPortId": "a",
+                          "SourcePortId": "value"
+                        },
+                        {
+                          "SourceNodeId": "2f525b68-2026-43b2-9716-5b45412f2953",
+                          "TargetNodeId": "28ec40c3-d2bc-4b38-b7ea-e184bbc5f01f",
+                          "TargetPortId": "value",
+                          "SourcePortId": null
+                        },
+                        {
+                          "SourceNodeId": "39c5166b-4f09-4657-a0cc-bc805c61ca7b",
+                          "TargetNodeId": "fa1fe91a-172c-4b0a-b959-e36a03c2dff1",
+                          "TargetPortId": "signal",
+                          "SourcePortId": "then"
+                        },
+                        {
+                          "SourceNodeId": "fa1fe91a-172c-4b0a-b959-e36a03c2dff1",
+                          "TargetNodeId": "28ec40c3-d2bc-4b38-b7ea-e184bbc5f01f",
+                          "TargetPortId": "signal",
+                          "SourcePortId": "then"
+                        },
+                        {
+                          "SourceNodeId": "28ec40c3-d2bc-4b38-b7ea-e184bbc5f01f",
+                          "TargetNodeId": "b57378b7-e262-43dd-ac6c-de999047d50e",
+                          "TargetPortId": "signal",
+                          "SourcePortId": "then"
+                        },
+                        {
+                          "SourceNodeId": "b57378b7-e262-43dd-ac6c-de999047d50e",
+                          "TargetNodeId": "196bf6b6-1005-437e-a123-6ca1eabd3913",
+                          "TargetPortId": "signal",
+                          "SourcePortId": "then"
+                        },
+                        {
+                          "SourceNodeId": "196bf6b6-1005-437e-a123-6ca1eabd3913",
+                          "TargetNodeId": "459f781c-218a-4095-b2fb-ca742a01e2db",
+                          "TargetPortId": "signal",
+                          "SourcePortId": "then"
+                        }
+                      ],
+                      "ExposedItems": null,
+                      "AutoDestroyWhenIdle": true,
+                      "ResourceIdentities": null
+                    },
+                    "Parameters": [],
+                    "GroupAsset": null,
+                    "IsPolymorphic": false,
+                    "GroupOverrides": null,
+                    "SignalKeys": null,
+                    "KindDomain": "Cpu"
+                  },
+                  {
+                    "Id": "e645e2e6-5e27-4d7e-8c47-32486554075b",
+                    "Kind": "CpuParticleUpdate",
+                    "Name": "Update",
+                    "X": 300,
+                    "Y": 0,
+                    "PortType": "Signal",
+                    "PortCategory": "Signal",
+                    "Curve": null,
+                    "ChildGraph": {
+                      "Nodes": [
+                        {
+                          "Id": "a4b61b16-19d1-4b68-95ee-9e5bf90d9196",
+                          "Kind": "CpuParticleStageEvent",
+                          "Name": "Update",
+                          "X": 0,
+                          "Y": 0,
+                          "PortType": "Signal",
+                          "PortCategory": "Signal",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        },
+                        {
+                          "Id": "62f6316e-f4e9-4eea-9b81-a7d5caf9a3d3",
+                          "Kind": "CpuParticleMove",
+                          "Name": "Velocity \u002B gravity",
+                          "X": 300,
+                          "Y": 0,
+                          "PortType": "Signal",
+                          "PortCategory": "Signal",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [
+                            {
+                              "Id": "acceleration",
+                              "Type": "vector3",
+                              "Value": [
+                                0,
+                                -1.5,
+                                0
+                              ]
+                            }
+                          ],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        },
+                        {
+                          "Id": "7b40b712-760a-4000-b995-2de74789267f",
+                          "Kind": "CpuParticleAge",
+                          "Name": "Age",
+                          "X": 600,
+                          "Y": 0,
+                          "PortType": "Float",
+                          "PortCategory": "Parameter",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        },
+                        {
+                          "Id": "2ca485ad-8c63-4446-96e1-b3975d00f694",
+                          "Kind": "CpuParticleLife",
+                          "Name": "Lifetime",
+                          "X": 900,
+                          "Y": 0,
+                          "PortType": "Float",
+                          "PortCategory": "Parameter",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        },
+                        {
+                          "Id": "30fb1752-c431-4290-bea0-170b81d40363",
+                          "Kind": "Divide",
+                          "Name": "Age / lifetime",
+                          "X": 0,
+                          "Y": 210,
+                          "PortType": "Float",
+                          "PortCategory": "Parameter",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        },
+                        {
+                          "Id": "8e7a8b65-7dd7-41c0-baa9-9f7f07655dc8",
+                          "Kind": "Clamp",
+                          "Name": "Saturate lifetime",
+                          "X": 300,
+                          "Y": 210,
+                          "PortType": "Float",
+                          "PortCategory": "Parameter",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        },
+                        {
+                          "Id": "4b26fb24-7749-41d4-9a4b-a82da9157bb2",
+                          "Kind": "Subtract",
+                          "Name": "Fade out",
+                          "X": 600,
+                          "Y": 210,
+                          "PortType": "Float",
+                          "PortCategory": "Parameter",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [
+                            {
+                              "Id": "a",
+                              "Type": "float",
+                              "Value": 1
+                            }
+                          ],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        },
+                        {
+                          "Id": "ef91c2fe-2a8a-4bbb-982c-5332076ce79a",
+                          "Kind": "ComposeVector4",
+                          "Name": "Tint and opacity",
+                          "X": 900,
+                          "Y": 210,
+                          "PortType": "FloatX4",
+                          "PortCategory": "Parameter",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [
+                            {
+                              "Id": "r",
+                              "Type": "float",
+                              "Value": 0.2
+                            },
+                            {
+                              "Id": "g",
+                              "Type": "float",
+                              "Value": 0.65
+                            },
+                            {
+                              "Id": "b",
+                              "Type": "float",
+                              "Value": 1
+                            }
+                          ],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        },
+                        {
+                          "Id": "f3e78efe-ffcf-4228-8c2e-70d95dbb98af",
+                          "Kind": "Vector4ToColor",
+                          "Name": "Particle color",
+                          "X": 0,
+                          "Y": 420,
+                          "PortType": "Color",
+                          "PortCategory": "Parameter",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        },
+                        {
+                          "Id": "a7085fb2-6c31-4bcf-a31d-eb3c1bb62fbe",
+                          "Kind": "CpuParticleSetColor",
+                          "Name": "Fade particle",
+                          "X": 300,
+                          "Y": 420,
+                          "PortType": "Signal",
+                          "PortCategory": "Signal",
+                          "Curve": null,
+                          "ChildGraph": null,
+                          "Parameters": [],
+                          "GroupAsset": null,
+                          "IsPolymorphic": false,
+                          "GroupOverrides": null,
+                          "SignalKeys": null,
+                          "KindDomain": "Cpu"
+                        }
+                      ],
+                      "Connections": [
+                        {
+                          "SourceNodeId": "a4b61b16-19d1-4b68-95ee-9e5bf90d9196",
+                          "TargetNodeId": "62f6316e-f4e9-4eea-9b81-a7d5caf9a3d3",
+                          "TargetPortId": "signal",
+                          "SourcePortId": "then"
+                        },
+                        {
+                          "SourceNodeId": "7b40b712-760a-4000-b995-2de74789267f",
+                          "TargetNodeId": "30fb1752-c431-4290-bea0-170b81d40363",
+                          "TargetPortId": "a",
+                          "SourcePortId": "value"
+                        },
+                        {
+                          "SourceNodeId": "2ca485ad-8c63-4446-96e1-b3975d00f694",
+                          "TargetNodeId": "30fb1752-c431-4290-bea0-170b81d40363",
+                          "TargetPortId": "b",
+                          "SourcePortId": "value"
+                        },
+                        {
+                          "SourceNodeId": "30fb1752-c431-4290-bea0-170b81d40363",
+                          "TargetNodeId": "8e7a8b65-7dd7-41c0-baa9-9f7f07655dc8",
+                          "TargetPortId": "a",
+                          "SourcePortId": null
+                        },
+                        {
+                          "SourceNodeId": "8e7a8b65-7dd7-41c0-baa9-9f7f07655dc8",
+                          "TargetNodeId": "4b26fb24-7749-41d4-9a4b-a82da9157bb2",
+                          "TargetPortId": "b",
+                          "SourcePortId": "value"
+                        },
+                        {
+                          "SourceNodeId": "4b26fb24-7749-41d4-9a4b-a82da9157bb2",
+                          "TargetNodeId": "ef91c2fe-2a8a-4bbb-982c-5332076ce79a",
+                          "TargetPortId": "a",
+                          "SourcePortId": null
+                        },
+                        {
+                          "SourceNodeId": "ef91c2fe-2a8a-4bbb-982c-5332076ce79a",
+                          "TargetNodeId": "f3e78efe-ffcf-4228-8c2e-70d95dbb98af",
+                          "TargetPortId": "a",
+                          "SourcePortId": "value"
+                        },
+                        {
+                          "SourceNodeId": "f3e78efe-ffcf-4228-8c2e-70d95dbb98af",
+                          "TargetNodeId": "a7085fb2-6c31-4bcf-a31d-eb3c1bb62fbe",
+                          "TargetPortId": "value",
+                          "SourcePortId": null
+                        },
+                        {
+                          "SourceNodeId": "62f6316e-f4e9-4eea-9b81-a7d5caf9a3d3",
+                          "TargetNodeId": "a7085fb2-6c31-4bcf-a31d-eb3c1bb62fbe",
+                          "TargetPortId": "signal",
+                          "SourcePortId": "then"
+                        }
+                      ],
+                      "ExposedItems": null,
+                      "AutoDestroyWhenIdle": true,
+                      "ResourceIdentities": null
+                    },
+                    "Parameters": [],
+                    "GroupAsset": null,
+                    "IsPolymorphic": false,
+                    "GroupOverrides": null,
+                    "SignalKeys": null,
+                    "KindDomain": "Cpu"
+                  },
+                  {
+                    "Id": "f4cc8652-2347-415f-9c6f-9217e28674ca",
+                    "Kind": "CpuParticleSpriteDraw",
+                    "Name": "Generated radial glow",
+                    "X": 600,
+                    "Y": 0,
+                    "PortType": "Float",
+                    "PortCategory": "Parameter",
+                    "Curve": null,
+                    "ChildGraph": null,
+                    "Parameters": [
+                      {
+                        "Id": "assetPath",
+                        "Type": "string",
+                        "Value": "builtin:radial-glow"
+                      },
+                      {
+                        "Id": "textureSource",
+                        "Type": "enum:ab42721e-d2c3-43e9-a96d-c80000000001",
+                        "Value": 2
+                      },
+                      {
+                        "Id": "blendMode",
+                        "Type": "string",
+                        "Value": "Additive"
+                      }
+                    ],
+                    "GroupAsset": null,
+                    "IsPolymorphic": false,
+                    "GroupOverrides": null,
+                    "SignalKeys": null,
+                    "KindDomain": "Cpu"
+                  }
+                ],
+                "Connections": [],
+                "ExposedItems": null,
+                "AutoDestroyWhenIdle": true,
+                "ResourceIdentities": null
+              },
+              "Parameters": [
+                {
+                  "Id": "capacity",
+                  "Type": "int",
+                  "Value": 4096
+                },
+                {
+                  "Id": "burst",
+                  "Type": "int",
+                  "Value": 256
+                },
+                {
+                  "Id": "rate",
+                  "Type": "float",
+                  "Value": 0
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "GroupOverrides": null,
+              "SignalKeys": null,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "562212cc-32cc-4a53-b7d8-b0006aa9abf4",
+              "Kind": "Comment",
+              "Name": "Sample guide",
+              "X": 300,
+              "Y": 0,
+              "PortType": "Comment",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "text",
+                  "Type": "string",
+                  "Value": "CpuRadial \u00B7 X right / Y up / Z forward \u00B7 metres\nCPU samples use a generated radial glow texture; no image import is required.\nGPU Curl: capacity 100,000; particles fill gradually. Fluid2D: edit typed Flow controls.\nSuggested preview: 60 FPS, frames 0\u20131200.\nY\u30A2\u30C3\u30D7\u30FB\u30E1\u30FC\u30C8\u30EB\u5358\u4F4D\u3002CPU\u306F\u751F\u6210\u30B0\u30ED\u30FC\u753B\u50CF\u3092\u4F7F\u7528\u3002GPU/\u30D5\u30EB\u30A4\u30C9\u306F\u5B9FGPU\u306E\u63A5\u7D9A\u5148\u3067\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
+                },
+                {
+                  "Id": "width",
+                  "Type": "float",
+                  "Value": 680
+                },
+                {
+                  "Id": "height",
+                  "Type": "float",
+                  "Value": 220
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "GroupOverrides": null,
+              "SignalKeys": null,
+              "KindDomain": "Cpu"
+            }
+          ],
+          "Connections": [],
+          "ExposedItems": null,
+          "AutoDestroyWhenIdle": true,
+          "ResourceIdentities": null
+        },
+        "ArchiveIndex": 0
+      }
+    ],
+    "Archives": []
+  },
+  "ResourceIdentities": null
+}

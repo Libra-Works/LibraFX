@@ -39,6 +39,30 @@ internal static class Program
 
     private static void MainCore(string[] args)
     {
+        if (args is ["--write-authoring-samples", var authoringSampleOutput])
+        {
+            InitializeIsolatedUi();
+            Directory.CreateDirectory(authoringSampleOutput);
+            foreach (var name in LiberaFx.Services.ParticleSamples.Names)
+            {
+                using var buffer = new MemoryStream();
+                LiberaFx.Services.ParticleSamples.SaveAsync(buffer, name).GetAwaiter().GetResult();
+                File.WriteAllBytes(Path.Combine(authoringSampleOutput, name + ".lfxproj"), buffer.ToArray());
+            }
+            return;
+        }
+        if (args is ["--particle-samples"])
+        {
+            InitializeIsolatedUi();
+            ParticleSamplesTests.Run();
+            return;
+        }
+        if (args is ["--history-archives"])
+        {
+            InitializeIsolatedUi();
+            UndoHistoryArchiveTests.Run();
+            return;
+        }
         if (args is ["--mcp-authoring-transitions"])
         {
             InitializeIsolatedUi();
@@ -49,6 +73,12 @@ internal static class Program
         {
             InitializeIsolatedUi();
             LiberaFx.Tests.ProceduralResourceTests.Run();
+            return;
+        }
+        if (args is ["--procedural-local-preview"])
+        {
+            InitializeIsolatedUi();
+            ProceduralTexturePreviewTests.Run();
             return;
         }
         if (args is ["--procedural-fixtures", var proceduralDirectory])
@@ -244,6 +274,7 @@ internal static class Program
         {
             InitializeIsolatedUi();
             LiberaFx.Tests.Int32CompilationTests.Run();
+            LiberaFx.Tests.BoolCompilationTests.Run();
             return;
         }
         if (args is ["--inline-groups"])

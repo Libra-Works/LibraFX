@@ -24,6 +24,7 @@ TestResults/
 !/.agents/skills/liberafx-engine-acceptance/SKILL.md
 !/.agents/skills/liberafx-distribution-ci/SKILL.md
 !/.agents/skills/liberafx-structural-refactoring/SKILL.md
+!/.agents/skills/liberafx-game-effects/SKILL.md
 .mcp.json
 .vscode/mcp.json
 Assets/Inspectors/
