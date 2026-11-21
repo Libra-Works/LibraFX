@@ -67,7 +67,7 @@ jobs:
           dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --cpu-particle-fixture $fallback
           # Instrument only this disposable test build; exported SDKs remain normal Release builds.
           cmake -S Runtime -B $build -DLIBERAFX_BUILD_TESTS=ON -DLIBERAFX_BUILD_INTEROP=ON '-DCMAKE_CXX_FLAGS=/fsanitize=address /Zi /EHsc' '-DCMAKE_EXE_LINKER_FLAGS=/DEBUG /INCREMENTAL:NO'
-          cmake --build $build --config Release --target liberafx_cpu_particle_batch_tests liberafx_interop_tests liberafx_spawnable_host_pool_tests liberafx_interop_host_pool_tests --parallel 2
+          cmake --build $build --config Release --target liberafx_cpu_particle_batch_tests liberafx_interop_tests liberafx_spawnable_host_pool_tests liberafx_interop_host_pool_tests liberafx_effect_world_tests --parallel 2
           $compilerInfo = Get-ChildItem (Join-Path $build 'CMakeFiles') -Filter CMakeCXXCompiler.cmake -Recurse | Select-Object -First 1
           $compilerPath = [regex]::Match((Get-Content $compilerInfo.FullName -Raw), 'set\(CMAKE_CXX_COMPILER "([^"]+)"\)').Groups[1].Value
           $asanRuntime = Join-Path (Split-Path $compilerPath) 'clang_rt.asan_dynamic-x86_64.dll'
@@ -99,6 +99,9 @@ jobs:
           & (Join-Path $build 'Release/liberafx_interop_host_pool_tests.exe') `
             (Join-Path $fixtures 'CpuFountain-binary-100.lfxb') `
             (Join-Path $fixtures 'CpuPool-gameio.lfxb')
+          & (Join-Path $build 'Release/liberafx_effect_world_tests.exe') `
+            (Join-Path $fixtures 'CpuFountain-binary-100.lfxb') `
+            (Join-Path $fixtures 'CpuFountain-binary-retirement.lfxb')
 
   editor:
     name: ${{ matrix.name }}

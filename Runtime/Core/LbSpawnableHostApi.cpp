@@ -613,7 +613,9 @@ auto SpawnableHost::setDebugHooks(const SpawnableDebugTarget &target,
         (hooks.beforeNode && (impl_->rootFinished || impl_->rootForced))) {
       return Result::NotReady;
     }
-    return impl_->rootInstance->setDebugHooks(hooks);
+    const auto result = impl_->rootInstance->setDebugHooks(hooks);
+    if (result == Result::Ok) { impl_->executionDebugAttached = hooks.beforeNode != nullptr; }
+    return result;
   }
   auto state = impl_->findTemplate(target.scope.containerId);
   if (!state || !impl_->findInstance(*state, target.scope.instanceId)) {

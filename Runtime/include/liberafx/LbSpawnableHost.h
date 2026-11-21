@@ -49,7 +49,9 @@ struct EffectTimeSnapshot final {
 
 // Owner-thread lifecycle and routing host for one engine-neutral package.
 // Rendering and engine object operations remain the adapter's responsibility.
-// All calls are owner-thread only, never concurrent. Evaluation jobs are inline;
+// Ordinary calls are owner-thread only, never concurrent. EffectWorld may hand
+// an eligible host exclusively to a joined worker lane between input/publication
+// boundaries. Standalone evaluation jobs are inline;
 // reentrant lifecycle calls return Busy without freeing work. Submit force before
 // advance/notifications for same-tick priority. Already executed side effects
 // cannot be undone. Force discards queued target events before publishing its
@@ -103,6 +105,8 @@ public:
     Result debugTarget(const SpawnableScope& scope, SpawnableDebugTarget& out) noexcept;
     Result setDebugHooks(const SpawnableDebugTarget& target, const ExecutionDebugHooks& hooks) noexcept;
     std::uint64_t debugGeneration() const noexcept;
+    bool supportsWorkerExecution() const noexcept;
+    std::size_t simulationWorkEstimate() const noexcept;
 
     Result rootValue(const std::uint8_t nodeId[16], double out[4],
                      std::uint8_t& width) const;

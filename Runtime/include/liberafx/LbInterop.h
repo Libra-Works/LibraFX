@@ -53,6 +53,22 @@ LIBRA_INTEROP_API int32_t LIBRA_INTEROP_CALL libra_spawnable_host_pool_stats(
 /* Busy while any host is checked out. */
 LIBRA_INTEROP_API int32_t LIBRA_INTEROP_CALL libra_spawnable_host_pool_release(LibraSpawnableHostPoolHandle pool);
 
+typedef uint64_t LibraEffectWorldHandle;
+typedef struct LIBRA_INTEROP_ALIGN(8) LibraEffectFrame {
+    uint64_t host;
+    double time, delta;
+    int32_t result;
+    uint32_t reserved;
+} LibraEffectFrame;
+/* Owner thread, bounded shared workers, joined before returning. Results are
+   per frame; preflight errors execute nothing. Host handles may occur once. */
+LIBRA_INTEROP_API int32_t LIBRA_INTEROP_CALL libra_effect_world_create(
+    uint32_t maximumEffects, uint32_t workers, LibraEffectWorldHandle* outWorld);
+LIBRA_INTEROP_API int32_t LIBRA_INTEROP_CALL libra_effect_world_advance(
+    LibraEffectWorldHandle world, LibraEffectFrame* frames, uint32_t count);
+LIBRA_INTEROP_API int32_t LIBRA_INTEROP_CALL libra_effect_world_release(LibraEffectWorldHandle world);
+LIBRA_INTEROP_API int32_t LIBRA_INTEROP_CALL libra_spawnable_host_worker_safe(uint64_t host, uint32_t* outSafe);
+
 typedef uint32_t LibraBinding;
 typedef int32_t LibraResult;
 typedef struct LibraCoordinateBasis {
@@ -307,7 +323,8 @@ LIBRA_INTEROP_ASSERT(offsetof(LibraSpawnableHostEvent, containerId) == 8 &&
 /* All lengths are element counts except byteCount. Pointers are borrowed only
    during the call, must address valid storage, and must not alias output arrays.
    IDs are 16 bytes in compiler/Guid big-endian order, not Windows GUID layout.
-   Calls serialize internally; evaluation executes synchronously on the caller.
+   Calls serialize internally; ordinary evaluation executes on the caller.
+   Effect-world batches exclusively hand eligible Core work to joined lanes.
    Native work/default allocations are explicitly aligned to at least 16 bytes.
    No borrowed work/GPU buffer API is exposed. Output POD arrays need only their
    declared type alignment; never cast their lanes to aligned SIMD vectors.

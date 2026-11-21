@@ -1,4 +1,5 @@
 #include "liberafx/LbSpawnableHost.h"
+#include "liberafx/LbEffectWorld.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -30,12 +31,17 @@ int main(int argc, char** argv) {
     using namespace liberafx;
     using namespace particle_benchmarks;
     try {
-        if (argc < 4 || argc > 6) throw std::runtime_error("Usage: particle_host_benchmarks <CPU .lfxb> <instances 1..64> <frames 30..3600> [--interpreter] [--bulk]");
+        if (argc < 4 || argc > 8) throw std::runtime_error("Usage: particle_host_benchmarks <CPU .lfxb> <instances 1..64> <frames 30..3600> [--interpreter] [--bulk] [--world-workers 1..16]");
         auto options = SpawnableHostOptions{};
         bool bulk=false;
+        auto worldWorkers=std::size_t{};
         for (auto index=4;index<argc;++index) {
             if (std::string(argv[index])=="--interpreter") options.cpuParticleBatching=false;
             else if (std::string(argv[index])=="--bulk") bulk=true;
+            else if (std::string(argv[index])=="--world-workers" && index+1<argc) {
+                worldWorkers=std::stoul(argv[++index]);
+                if (!worldWorkers || worldWorkers>16) throw std::runtime_error("Invalid world worker limit.");
+            }
             else throw std::runtime_error("Unknown execution mode.");
         }
         const auto instances = std::stoi(argv[2]), frames = std::stoi(argv[3]);
@@ -54,11 +60,26 @@ int main(int argc, char** argv) {
         std::array<std::uint8_t,16> system{};
         std::copy_n(package.cpuPrograms.data() + 8, 16, system.data());
         std::vector<std::unique_ptr<SpawnableHost>> hosts(instances);
+        auto world=std::unique_ptr<EffectWorld>{};
+        std::vector<EffectFrame> submitted(instances);
+        const auto worldStart=Clock::now();
+        if (worldWorkers) {
+            auto worldOptions=EffectWorldOptions{}; worldOptions.workers=worldWorkers;
+            worldOptions.maximumEffects=static_cast<std::size_t>(instances);
+            require(EffectWorld::create(worldOptions,world));
+        }
+        const auto worldPreparation=milliseconds(worldStart);
         auto start = Clock::now();
         for (auto& host : hosts) require(SpawnableHost::create(package, options, host));
         const auto create = milliseconds(start);
         start = Clock::now();
-        for (auto& host : hosts) require(host->advance(0,0));
+        const auto advanceAll=[&](double time,double delta) {
+            if (!world) { for (auto& host:hosts) require(host->advance(time,delta)); return; }
+            for (auto index=0;index<instances;++index) submitted[index]={hosts[index].get(),time,delta};
+            require(world->advance(submitted.data(),submitted.size()));
+            for (const auto& frame:submitted) require(frame.result);
+        };
+        advanceAll(0,0);
         const auto spawn = milliseconds(start);
         std::size_t initialCount = 0;
         require(hosts.front()->cpuParticleCount(system.data(), initialCount));
@@ -68,7 +89,7 @@ int main(int argc, char** argv) {
         std::array<CpuParticleSnapshot,256> copied;
         for (int frame = 1; frame <= frames + 30; ++frame) {
             start = Clock::now();
-            for (auto& host : hosts) require(host->advance(frame / 60.0, 1.0 / 60));
+            advanceAll(frame / 60.0, 1.0 / 60);
             const auto step = milliseconds(start);
             start = Clock::now();
             for (auto& host : hosts) {
@@ -93,7 +114,9 @@ int main(int argc, char** argv) {
         }
         std::cout << std::fixed << std::setprecision(6)
                   << "# instances=" << instances << ",particles_per_instance=" << initialCount << ",measured_frames=" << frames
-                  << ",warmup_frames=30,dt=1/60,owner_thread=serial,no_drawing,no_Niagara_comparison\n"
+                  << ",warmup_frames=30,dt=1/60,no_drawing,no_Niagara_comparison\n"
+                  << "# shared_world_workers=" << (world ? world->stats().workers : 0) << ",world_preparation_ms=" << worldPreparation << '\n'
+                  << "# last_executing_lanes=" << (world ? world->stats().lastExecutingLanes : 1) << '\n'
                   << "# particle_batching=" << (options.cpuParticleBatching ? "auto" : "disabled") << '\n'
                   << "# snapshot_reads=" << (bulk ? "bulk256" : "individual") << '\n'
                   << "# create_all_ms=" << create << ",initial_spawn_all_ms=" << spawn << ",checksum=" << checksum << '\n'

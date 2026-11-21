@@ -16,6 +16,11 @@ void check(LibraResult result) { if (result!=LIBRA_OK) throw std::runtime_error(
 void fixture(const char* path) {
     auto stream=std::ifstream(path,std::ios::binary); require(stream.good(),"Missing compiled pool ABI fixture.");
     const auto bytes=std::vector<std::uint8_t>(std::istreambuf_iterator<char>(stream),{});
+    LibraEffectWorldHandle world=0;
+    check(libra_effect_world_create(3,2,&world));
+    auto wrongWorldOwner=LibraResult{LIBRA_OK};
+    std::thread worldOther([&] { wrongWorldOwner=libra_effect_world_advance(world,nullptr,0); }); worldOther.join();
+    require(wrongWorldOwner==LIBRA_BUSY,"ABI effect world ignored owner thread.");
     auto package=SpawnablePackage{};
     require(loadSpawnablePackage(bytes.data(),bytes.size(),package)==Result::Ok && package.cpuPrograms.size()>24,"Invalid CPU fixture.");
     std::array<std::uint8_t,16> id{}; std::copy_n(package.cpuPrograms.data()+8,16,id.data());
@@ -25,6 +30,19 @@ void fixture(const char* path) {
     require(stats.capacity==3 && stats.active==0 && stats.available==3 && stats.preparationWorkers<=2,"Invalid pool ABI stats.");
     std::array<LibraSpawnableHostHandle,3> held{};
     for (auto& handle:held) check(libra_spawnable_host_pool_acquire(pool,&handle));
+    std::array<LibraEffectFrame,3> frames{};
+    for (auto index=0u;index<held.size();++index) { frames[index]={held[index],0,0,LIBRA_NOT_READY,0}; }
+    const auto saved=frames[1]; frames[1]=frames[0];
+    require(libra_effect_world_advance(world,frames.data(),3)==LIBRA_INVALID_ARGUMENT,"ABI duplicate frame was not rejected.");
+    frames[1]=saved;
+    frames[2].reserved=1;
+    require(libra_effect_world_advance(world,frames.data(),3)==LIBRA_INVALID_ARGUMENT,"ABI accepted reserved frame flags.");
+    frames[2].reserved=0;
+    for (auto step=0;step<30;++step) {
+        for (auto& frame:frames) { frame.time=step/60.0; frame.delta=step==0 ? 0 : 1.0/60; }
+        check(libra_effect_world_advance(world,frames.data(),3));
+        for (const auto& frame:frames) { check(frame.result); }
+    }
     LibraSpawnableHostHandle extra=123;
     require(libra_spawnable_host_pool_acquire(pool,&extra)==LIBRA_INSUFFICIENT_WORK && extra==0,"Full ABI pool grew.");
     require(libra_spawnable_host_pool_release(pool)==LIBRA_BUSY,"Pool freed checked-out hosts.");
@@ -65,6 +83,9 @@ void fixture(const char* path) {
     }
     check(libra_spawnable_host_pool_stats(pool,&stats)); require(stats.available==3 && stats.active==0,"ABI pool leaked a slot.");
     check(libra_spawnable_host_pool_release(pool));
+    require(libra_effect_world_advance(world,frames.data(),3)==LIBRA_INVALID_HANDLE,"ABI reused stale frame handles.");
+    check(libra_effect_world_release(world));
+    require(libra_effect_world_release(world)==LIBRA_INVALID_HANDLE,"ABI double world release succeeded.");
     require(libra_spawnable_host_pool_release(pool)==LIBRA_INVALID_HANDLE,"ABI pool double release succeeded.");
 }
 }

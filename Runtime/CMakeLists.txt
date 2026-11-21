@@ -29,7 +29,9 @@ add_library(liberafx_runtime STATIC
     Core/LbSpawnableHostExecution.cpp
     Core/LbSpawnableHostScheduling.cpp
     Core/LbSpawnableHostApi.cpp
-    Core/LbSpawnableHostPool.cpp)
+    Core/LbSpawnableHostPool.cpp
+    Core/LbEffectWorld.cpp)
+target_sources(liberafx_runtime PRIVATE Core/LbPreparedPlayback.cpp)
 target_sources(liberafx_runtime PRIVATE Core/LbLogicalNodes.cpp)
 target_sources(liberafx_runtime PRIVATE Core/LbInstanceSession.cpp)
 target_sources(liberafx_runtime PRIVATE Core/LbPhasePrimitives.cpp)
@@ -56,6 +58,7 @@ if(LIBERAFX_BUILD_INTEROP)
         Core/LbInteropGeneratorPool.cpp
         Core/LbInteropSpawnableHost.cpp
         Core/LbInteropSpawnableHostPool.cpp
+        Core/LbInteropEffectWorld.cpp
         Core/LbInteropCoordinates.cpp
         Core/LbInteropSession.cpp)
     target_sources(liberafx_native PRIVATE Core/CpuParticles/LbInteropCpuParticles.cpp)
@@ -94,6 +97,9 @@ if(LIBERAFX_BUILD_BENCHMARKS)
 endif()
 if(LIBERAFX_BUILD_TESTS)
     enable_testing()
+    add_executable(liberafx_effect_world_tests tests/EffectWorldTests.cpp)
+    target_link_libraries(liberafx_effect_world_tests PRIVATE liberafx_runtime)
+    add_test(NAME liberafx_effect_world_tests COMMAND liberafx_effect_world_tests)
     add_executable(liberafx_spawnable_host_pool_tests tests/SpawnableHostPoolTests.cpp)
     target_link_libraries(liberafx_spawnable_host_pool_tests PRIVATE liberafx_runtime)
     add_test(NAME liberafx_spawnable_host_pool_tests COMMAND liberafx_spawnable_host_pool_tests)

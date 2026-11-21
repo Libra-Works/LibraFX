@@ -1,4 +1,5 @@
 #include "liberafx/LbSpawnableHostPool.h"
+#include "liberafx/LbEffectWorld.h"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -225,6 +226,29 @@ void fixture(const char* path,bool batching) {
     }
 }
 }
+static void sharedAllocationCheck(const char* path)
+{
+    using namespace liberafx;
+    using namespace liberafx::pool_tests;
+    auto stream=std::ifstream(path,std::ios::binary);
+    const auto bytes=std::vector<std::uint8_t>(std::istreambuf_iterator<char>(stream),{});
+    auto package=SpawnablePackage{}; check(loadSpawnablePackage(bytes.data(),bytes.size(),package));
+    auto pool=std::unique_ptr<SpawnableHostPool>{}; auto options=SpawnableHostPoolOptions{};
+    options.capacity=4; options.preparationWorkers=2;
+    check(SpawnableHostPool::create(package,options,pool));
+    auto world=std::unique_ptr<EffectWorld>{}; auto worldOptions=EffectWorldOptions{};
+    worldOptions.minimumParallelWork=0; check(EffectWorld::create(worldOptions,world));
+    std::array<SpawnableHostLease,4> leases{}; std::array<EffectFrame,4> frames{};
+    for (auto i=0u;i<frames.size();++i) { check(pool->acquire(leases[i],frames[i].host)); }
+    for (auto step=0;step<4;++step) {
+        for (auto& frame:frames) { frame.time=step/60.0; frame.delta=step ? 1.0/60 : 0; }
+        const auto before=allocation_check::count.load(); allocation_check::enabled=true;
+        const auto result=world->advance(frames.data(),frames.size()); allocation_check::enabled=false;
+        check(result); for (const auto& frame:frames) { check(frame.result); }
+        require(allocation_check::count.load()==before,"Shared Core frame allocated after preparation.");
+    }
+    for (const auto& lease:leases) { check(pool->release(lease)); }
+}
 int main(int argc,char** argv) {
     try {
         liberafx::pool_tests::instanceCleanup();
@@ -232,6 +256,7 @@ int main(int argc,char** argv) {
         for (auto index=1;index<argc;++index) {
             liberafx::pool_tests::fixture(argv[index],true);
             liberafx::pool_tests::fixture(argv[index],false);
+            sharedAllocationCheck(argv[index]);
         }
         std::cout<<"Pool preparation, allocation-free acquire/reset, lease isolation and fresh/reused state agree.\n";
         return 0;

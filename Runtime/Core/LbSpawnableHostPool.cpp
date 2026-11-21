@@ -11,6 +11,15 @@ bool SpawnableHost::supportsPoolReuse() const noexcept
     return impl_->templates.empty() && impl_->projectDescriptors.empty() &&
         (!impl_->cpuParticles || impl_->cpuParticles->supportsPoolReuse());
 }
+bool SpawnableHost::supportsWorkerExecution() const noexcept
+{
+    return supportsPoolReuse() && !impl_->operationActive && !impl_->executionDebugAttached;
+}
+std::size_t SpawnableHost::simulationWorkEstimate() const noexcept
+{
+    return std::max<std::size_t>(1,impl_->parentProgram.nodeCount()) +
+        (impl_->cpuParticles ? (impl_->started ? impl_->cpuParticles->activeCount() : impl_->cpuParticles->reservedCapacity()) : 0);
+}
 Result SpawnableHost::resetForPoolReuse() noexcept
 {
     auto& host=*impl_;
@@ -50,6 +59,7 @@ Result SpawnableHost::resetForPoolReuse() noexcept
     host.started=host.rootEnding=host.rootFinished=host.rootStopped=false;
     host.rootDestroySent=host.pendingPump=host.rootForced=false;
     host.failure=Result::Ok; host.debugGeneration=generation;
+    host.executionDebugAttached=false;
     return Result::Ok;
 }
 

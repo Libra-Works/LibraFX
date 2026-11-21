@@ -1,4 +1,5 @@
 #include "LbInteropInternal.h"
+#include "liberafx/host/LbProjectNodes.h"
 
 namespace liberafx::interop_detail {
 using HostMap=std::unordered_map<LibraSpawnableHostHandle,NativeSpawnableHost>;
@@ -42,6 +43,7 @@ LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_pool_create(const uint8_t* b
     *outPool=0;
     if (!bytes || !byteCount || byteCount>std::numeric_limits<std::size_t>::max()) return LIBRA_INVALID_ARGUMENT;
     return guarded([&]() -> LibraResult {
+        if (liberafx::host::projectNodes().count) return LIBRA_UNSUPPORTED_BINARY;
         auto package=liberafx::SpawnablePackage{};
         auto result=liberafx::loadSpawnablePackage(bytes,static_cast<std::size_t>(byteCount),package);
         if (result!=liberafx::Result::Ok) return toLibraResult(result);
