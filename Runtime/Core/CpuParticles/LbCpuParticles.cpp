@@ -201,7 +201,7 @@ auto CpuParticleWorld::at(const std::uint8_t systemId[16], std::size_t index, Cp
         {
             return Result::InvalidArgument;
         }
-        out = system->slots[system->activeIndices[index]].draw;
+        out = system->particleData.snapshot(system->activeIndices[index]);
         return Result::Ok;
     }
     return Result::InvalidHandle;
@@ -212,8 +212,8 @@ auto CpuParticleWorld::timing(const std::uint8_t systemId[16], std::size_t index
     for (const auto& system : impl_->systems) {
         if (std::memcmp(systemId, system->id.data(), 16) != 0) continue;
         if (index >= system->live) return Result::InvalidArgument;
-        const auto& slot = system->slots[system->activeIndices[index]];
-        out = {slot.age, slot.life};
+        const auto slot = system->activeIndices[index];
+        out = {system->particleData.age[slot], system->particleData.life[slot]};
         return Result::Ok;
     }
     return Result::InvalidHandle;
@@ -229,9 +229,9 @@ auto CpuParticleWorld::read(const std::uint8_t systemId[16], std::size_t first,
         if (first > system->live) return Result::InvalidArgument;
         const auto count = std::min(capacity,system->live-first);
         for (auto index=std::size_t{};index<count;++index) {
-            const auto& slot=system->slots[system->activeIndices[first+index]];
-            snapshots[index]=slot.draw;
-            if (timings) timings[index]={slot.age,slot.life};
+            const auto slot=system->activeIndices[first+index];
+            snapshots[index]=system->particleData.snapshot(slot);
+            if (timings) timings[index]={system->particleData.age[slot],system->particleData.life[slot]};
         }
         written=count;
         return Result::Ok;
@@ -299,7 +299,7 @@ void CpuParticleWorld::clear() noexcept
     {
         for (auto index = 0u; index < system->capacity; ++index)
         {
-            system->slots[index].active = false;
+            system->particleData.active[index] = false;
         }
         system->live = 0;
         system->incomingCount = 0;
@@ -313,6 +313,12 @@ bool CpuParticleWorld::supportsPoolReuse() const noexcept
 {
     for (const auto& system : impl_->systems) if (system->emitterModel) return false;
     return true;
+}
+std::size_t CpuParticleWorld::reservedCapacity() const noexcept
+{
+    auto total = std::size_t{};
+    for (const auto& system : impl_->systems) { total += system->capacity; }
+    return total;
 }
 Result CpuParticleWorld::resetForPoolReuse() noexcept
 {
@@ -338,7 +344,7 @@ Result CpuParticleWorld::resetForPoolReuse() noexcept
         system.burst=system.initialBurst;
         system.remainder=system.lastTotal=0; system.lastTime=-1;
         system.stepDelta=system.frameDelta=system.realTime=system.realDelta=0;
-        system.nextId=1; system.current=nullptr; system.failure=Result::Ok;
+        system.nextId=1; system.current=UINT32_MAX; system.failure=Result::Ok;
         system.spawnBatch.enabled=static_cast<bool>(system.sharedSpawn);
         system.updateBatch.enabled=static_cast<bool>(system.sharedUpdate);
     }

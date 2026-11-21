@@ -116,9 +116,9 @@ void scopedNodeTests()
 {
     using namespace cpu_particle_detail;
     auto system = System{};
-    auto slot = Slot{};
-    slot.draw.id = 23;
-    system.current = &slot;
+    system.particleData.initialize(1);
+    system.particleData.reset(0,23,0);
+    system.current = 0;
     system.seed = 7;
     system.stepDelta = 0.5;
     auto context = Callback{&system, {}, 0x21, 0};
@@ -130,7 +130,7 @@ void scopedNodeTests()
     context.operation = 0x25;
     inputs = {};
     assert(System::invoke(invocation) == Result::Ok);
-    assert(slot.draw.position[0] == 2 && slot.draw.position[1] == 1);
+    assert(system.particleData.position[0][0] == 2 && system.particleData.position[1][0] == 1);
     auto output = std::array<double, 4>{};
     invocation.outputs = output.data();
     context.operation = 0x16;
@@ -140,7 +140,7 @@ void scopedNodeTests()
     assert(System::invoke(invocation) == Result::Ok);
     auto first = output;
     assert(System::invoke(invocation) == Result::Ok && output == first);
-    slot.draw.id = 24;
+    system.particleData.id[0] = 24;
     assert(System::invoke(invocation) == Result::Ok && output != first);
     system.pending.resize(2);
     system.events.resize(2);

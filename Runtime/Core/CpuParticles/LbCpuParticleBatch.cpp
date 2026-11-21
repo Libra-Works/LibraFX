@@ -210,16 +210,16 @@ void System::optimizeBatch(ParticleBatchPlan& plan)
 auto System::updateBatches(double time, const HostQualitySnapshot& quality) noexcept -> Result
 {
     constexpr auto lanes = ParticleBatchPlan::batchSize;
-    std::array<Slot*,lanes> particles{};
+    std::array<std::uint32_t,lanes> particles{};
     auto cursor = std::uint32_t{};
     while (cursor < capacity) {
         auto size = std::size_t{};
         while (cursor < capacity && size < lanes) {
-            auto& slot = slots[cursor++];
-            if (!slot.active) continue;
-            slot.age += stepDelta;
-            if (slot.age >= slot.life) { slot.active = false; --live; }
-            else particles[size++] = &slot;
+            const auto slot = cursor++;
+            if (!particleData.active[slot]) continue;
+            particleData.age[slot] += stepDelta;
+            if (particleData.age[slot] >= particleData.life[slot]) { particleData.active[slot] = false; --live; }
+            else particles[size++] = slot;
         }
         if (size == 0) continue;
         auto referenceOnValueError = [&]() noexcept -> Result {
@@ -228,18 +228,18 @@ auto System::updateBatches(double time, const HostQualitySnapshot& quality) noex
             // failure wins (including an earlier particle's Signal failure).
             updateBatch.enabled = false;
             for (auto p=0u;p<size;++p) {
-                const auto status=run(*particles[p],1,time,quality);
+                const auto status=run(particles[p],1,time,quality);
                 if (status!=Result::Ok) return status;
-                if (particles[p]->age>=particles[p]->life) { particles[p]->active=false; --live; }
+                if (particleData.age[particles[p]]>=particleData.life[particles[p]]) { particleData.active[particles[p]]=false; --live; }
             }
             for (;cursor<capacity;++cursor) {
-                auto& slot=slots[cursor];
-                if (!slot.active) continue;
-                slot.age+=stepDelta;
-                if (slot.age>=slot.life) { slot.active=false; --live; continue; }
+                const auto slot=cursor;
+                if (!particleData.active[slot]) continue;
+                particleData.age[slot]+=stepDelta;
+                if (particleData.age[slot]>=particleData.life[slot]) { particleData.active[slot]=false; --live; continue; }
                 const auto status=run(slot,1,time,quality);
                 if (status!=Result::Ok) return status;
-                if (slot.age>=slot.life) { slot.active=false; --live; }
+                if (particleData.age[slot]>=particleData.life[slot]) { particleData.active[slot]=false; --live; }
             }
             return Result::Ok;
         };
@@ -255,7 +255,7 @@ auto System::updateBatches(double time, const HostQualitySnapshot& quality) noex
     return Result::Ok;
 }
 
-auto System::evaluateBatch(const ParticleBatchPlan& plan, Slot* const* particles, std::size_t size, bool* commandsStarted) noexcept -> Result
+auto System::evaluateBatch(const ParticleBatchPlan& plan, const std::uint32_t* particles, std::size_t size, bool* commandsStarted) noexcept -> Result
 {
     constexpr auto lanes = ParticleBatchPlan::batchSize;
     // Node/component/particle scratch keeps arithmetic contiguous and bounded.
@@ -267,8 +267,8 @@ auto System::evaluateBatch(const ParticleBatchPlan& plan, Slot* const* particles
         if (op.op == BatchOp::LifetimeColor) {
             const auto red=input(op.inputs[0],0,0), green=input(op.inputs[1],0,0), blue=input(op.inputs[2],0,0);
             for (auto p=0u;p<size;++p) {
-                if (particles[p]->life==0) return Result::InvalidArgument;
-                const auto ratio=particles[p]->age/particles[p]->life;
+                if (particleData.life[particles[p]]==0) return Result::InvalidArgument;
+                const auto ratio=particleData.age[particles[p]]/particleData.life[particles[p]];
                 if (!std::isfinite(ratio)) return Result::InvalidArgument;
                 values[(op.output*4)*lanes+p]=red;
                 values[(op.output*4+1)*lanes+p]=green;
@@ -281,7 +281,7 @@ auto System::evaluateBatch(const ParticleBatchPlan& plan, Slot* const* particles
             for (auto p=0u;p<size;++p) {
                 const auto radius=input(op.inputs[1],0,p);
                 if (radius<0) return Result::InvalidArgument;
-                const auto point=math::randomSpherePoint(seed,static_cast<std::uint32_t>(particles[p]->draw.id));
+                const auto point=math::randomSpherePoint(seed,static_cast<std::uint32_t>(particleData.id[particles[p]]));
                 for (auto lane=0u;lane<3;++lane) {
                     const auto value=input(op.inputs[0],lane,p)+point[lane]*radius;
                     if (!std::isfinite(value)) return Result::InvalidArgument;
@@ -312,13 +312,13 @@ auto System::evaluateBatch(const ParticleBatchPlan& plan, Slot* const* particles
                     output[p]=std::max(lower,std::min(input(op.inputs[0],0,p),upper));
                 } break;
             case BatchOp::Compose: for (auto p=0u;p<size;++p) output[p]=input(op.inputs[lane],0,p); break;
-            case BatchOp::Position: for (auto p=0u;p<size;++p) output[p]=particles[p]->draw.position[lane]; break;
-            case BatchOp::Velocity: for (auto p=0u;p<size;++p) output[p]=particles[p]->velocity[lane]; break;
-            case BatchOp::Color: for (auto p=0u;p<size;++p) output[p]=particles[p]->draw.color[lane]; break;
-            case BatchOp::Size: for (auto p=0u;p<size;++p) output[p]=particles[p]->draw.size[lane]; break;
-            case BatchOp::Life: for (auto p=0u;p<size;++p) output[p]=particles[p]->life; break;
-            case BatchOp::Age: for (auto p=0u;p<size;++p) output[p]=particles[p]->age; break;
-            case BatchOp::Id: for (auto p=0u;p<size;++p) output[p]=static_cast<double>(particles[p]->draw.id); break;
+            case BatchOp::Position: for (auto p=0u;p<size;++p) output[p]=particleData.position[lane][particles[p]]; break;
+            case BatchOp::Velocity: for (auto p=0u;p<size;++p) output[p]=particleData.velocity[lane][particles[p]]; break;
+            case BatchOp::Color: for (auto p=0u;p<size;++p) output[p]=particleData.color[lane][particles[p]]; break;
+            case BatchOp::Size: for (auto p=0u;p<size;++p) output[p]=particleData.size[lane][particles[p]]; break;
+            case BatchOp::Life: for (auto p=0u;p<size;++p) output[p]=particleData.life[particles[p]]; break;
+            case BatchOp::Age: for (auto p=0u;p<size;++p) output[p]=particleData.age[particles[p]]; break;
+            case BatchOp::Id: for (auto p=0u;p<size;++p) output[p]=static_cast<double>(particleData.id[particles[p]]); break;
             case BatchOp::Seed: for (auto p=0u;p<size;++p) output[p]=seed; break;
             case BatchOp::Delta: for (auto p=0u;p<size;++p) output[p]=stepDelta; break;
             default: return Result::InvalidBinary;
@@ -332,24 +332,29 @@ auto System::evaluateBatch(const ParticleBatchPlan& plan, Slot* const* particles
     // that distinguishes pure failures from already committed commands.
     if (commandsStarted) *commandsStarted = true;
     for (auto p=0u;p<size;++p) {
-        auto& slot=*particles[p];
+        const auto slot=particles[p];
         for (const auto& op : plan.commands) {
             if (op.op==BatchOp::Move) {
                 for (auto lane=0u;lane<3;++lane) {
-                    slot.velocity[lane]+=input(op.inputs[0],lane,p)*stepDelta;
-                    slot.draw.position[lane]+=slot.velocity[lane]*stepDelta;
-                    if (!std::isfinite(slot.velocity[lane]) || !std::isfinite(slot.draw.position[lane])) return Result::InvalidArgument;
+                    particleData.velocity[lane][slot]+=input(op.inputs[0],lane,p)*stepDelta;
+                    particleData.position[lane][slot]+=particleData.velocity[lane][slot]*stepDelta;
+                    if (!std::isfinite(particleData.velocity[lane][slot]) || !std::isfinite(particleData.position[lane][slot])) return Result::InvalidArgument;
                 }
             } else {
-                auto* target = op.op==BatchOp::SetPosition ? slot.draw.position : op.op==BatchOp::SetVelocity ? slot.velocity.data() :
-                    op.op==BatchOp::SetColor ? slot.draw.color : op.op==BatchOp::SetSize ? slot.draw.size : &slot.life;
                 const auto width = op.op==BatchOp::SetColor ? 4u : op.op==BatchOp::SetSize ? 2u : op.op==BatchOp::SetLife ? 1u : 3u;
                 if ((op.op==BatchOp::SetLife || op.op==BatchOp::SetSize) &&
                     (input(op.inputs[0],0,p)<0 || (width==2 && input(op.inputs[0],1,p)<0))) return Result::InvalidArgument;
-                for (auto lane=0u;lane<width;++lane) target[lane]=input(op.inputs[0],lane,p);
+                for (auto lane=0u;lane<width;++lane) {
+                    const auto value=input(op.inputs[0],lane,p);
+                    if (op.op==BatchOp::SetPosition) particleData.position[lane][slot]=value;
+                    else if (op.op==BatchOp::SetVelocity) particleData.velocity[lane][slot]=value;
+                    else if (op.op==BatchOp::SetColor) particleData.color[lane][slot]=value;
+                    else if (op.op==BatchOp::SetSize) particleData.size[lane][slot]=value;
+                    else particleData.life[slot]=value;
+                }
             }
         }
-        if (commandsStarted && slot.age>=slot.life) { slot.active=false; --live; }
+        if (commandsStarted && particleData.age[slot]>=particleData.life[slot]) { particleData.active[slot]=false; --live; }
     }
     return Result::Ok;
 }
@@ -357,48 +362,47 @@ auto System::evaluateBatch(const ParticleBatchPlan& plan, Slot* const* particles
 auto System::spawnBatches(std::uint32_t count, double time, const HostQualitySnapshot& quality) noexcept -> Result
 {
     constexpr auto lanes = ParticleBatchPlan::batchSize;
-    std::array<Slot*,lanes> particles{}, updating{};
+    std::array<std::uint32_t,lanes> particles{}, updating{};
     auto cursor=std::uint32_t{};
-    const auto reset = [&](Slot& slot, std::uint64_t id) noexcept {
-        slot.draw={}; slot.draw.id=id; slot.velocity={}; slot.age=0;
-        slot.realStart=realTime; slot.life=2; slot.active=false;
+    const auto reset = [&](std::uint32_t slot, std::uint64_t id) noexcept {
+        particleData.reset(slot, id, realTime);
     };
     while (count!=0) {
         auto size=std::size_t{};
         const auto firstId=nextId;
         while (cursor<capacity && size<lanes && size<count) {
-            auto& slot=slots[cursor++];
-            if (slot.active) continue;
+            const auto slot=cursor++;
+            if (particleData.active[slot]) continue;
             reset(slot,nextId++);
-            particles[size++]=&slot;
+            particles[size++]=slot;
         }
         if (size==0) return Result::InsufficientWork;
         auto status=evaluateBatch(spawnBatch,particles.data(),size);
         if (status==Result::Ok) {
             auto updateCount=std::size_t{};
-            for (auto p=0u;p<size;++p) if (particles[p]->life>0) updating[updateCount++]=particles[p];
+            for (auto p=0u;p<size;++p) if (particleData.life[particles[p]]>0) updating[updateCount++]=particles[p];
             if (updateCount!=0) status=evaluateBatch(updateBatch,updating.data(),updateCount);
         }
         if (status!=Result::Ok) {
             // Restore the speculative block, then replay Spawn -> Update per
             // particle so an earlier Update failure precedes a later Spawn one.
-            for (auto p=0u;p<size;++p) reset(*particles[p],0);
+            for (auto p=0u;p<size;++p) reset(particles[p],0);
             nextId=firstId;
             spawnBatch.enabled=false;
             for (auto p=0u;p<size;++p) {
-                auto& slot=*particles[p];
+                const auto slot=particles[p];
                 reset(slot,nextId++);
                 status=run(slot,0,time,quality);
-                if (status==Result::Ok && slot.life>0) status=run(slot,1,time,quality);
+                if (status==Result::Ok && particleData.life[slot]>0) status=run(slot,1,time,quality);
                 if (status!=Result::Ok) return status;
-                slot.active=slot.life>0;
-                live+=slot.active ? 1 : 0;
+                particleData.active[slot]=particleData.life[slot]>0;
+                live+=particleData.active[slot] ? 1 : 0;
             }
         } else {
             for (auto p=0u;p<size;++p) {
-                auto& slot=*particles[p];
-                slot.active=slot.life>0;
-                live+=slot.active ? 1 : 0;
+                const auto slot=particles[p];
+                particleData.active[slot]=particleData.life[slot]>0;
+                live+=particleData.active[slot] ? 1 : 0;
             }
         }
         count-=static_cast<std::uint32_t>(size);

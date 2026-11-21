@@ -28,7 +28,8 @@ static_assert(sizeof(CpuParticleEvent) == 88);
 
 // Whole-effect owner creates this once. All particles use contiguous caller
 // (effect-host)-owned work/default slabs; no per-node/per-frame allocations.
-// Descriptors and payload must outlive the world. All calls are owner-thread.
+// Descriptors and payload must outlive the world. Calls are serialized by the
+// owning host; EffectWorld may exclusively hand eligible hosts to joined workers.
 class LIBRA_RUNTIME_CORE_API CpuParticleWorld final {
 public:
     static Result create(const std::uint8_t* payload, std::size_t bytes,
@@ -53,6 +54,7 @@ public:
     bool popEvent(CpuParticleEvent& out) noexcept;
     std::size_t pendingEventCount() const noexcept;
     std::size_t activeCount() const noexcept;
+    std::size_t reservedCapacity() const noexcept;
     bool canEmit() const noexcept;
     bool hasPendingRoutes() const noexcept;
     void clear() noexcept;

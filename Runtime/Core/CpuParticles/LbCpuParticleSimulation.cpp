@@ -15,7 +15,7 @@ auto System::publish(const Io& io, const double* values, double time) noexcept -
     auto event = CpuParticleEvent{};
     std::copy(id.begin(), id.end(), event.systemId);
     std::copy(io.node.begin(), io.node.end(), event.nodeId);
-    event.particleId = current->draw.id;
+    event.particleId = particleData.id[current];
     event.kind = io.kind == 3 ? 2u : 1u;
     event.width = io.width;
     event.time = time;
@@ -27,7 +27,7 @@ auto System::publish(const Io& io, const double* values, double time) noexcept -
     events[(eventHead + eventCount++) % events.size()] = event;
     return Result::Ok;
 }
-auto System::collect(Slot& slot, std::uint32_t stageIndex, double time) noexcept -> Result
+auto System::collect(std::uint32_t slot, std::uint32_t stageIndex, double time) noexcept -> Result
 {
     for (auto& io : stages[stageIndex].io)
     {
@@ -37,7 +37,7 @@ auto System::collect(Slot& slot, std::uint32_t stageIndex, double time) noexcept
         }
         auto values = std::array<double, 4>{};
         auto width = std::uint8_t{};
-        auto result = instances[static_cast<std::size_t>(&slot-slots.get())].stages[stageIndex].valueComponents(io.node.data(), values.data(), width);
+        auto result = instances[slot].stages[stageIndex].valueComponents(io.node.data(), values.data(), width);
         if (result != Result::Ok || width != io.width)
         {
             return result == Result::Ok ? Result::InvalidBinary : result;
@@ -50,16 +50,16 @@ auto System::collect(Slot& slot, std::uint32_t stageIndex, double time) noexcept
     }
     return Result::Ok;
 }
-auto System::run(Slot& slot, std::uint32_t stageIndex, double time, const HostQualitySnapshot& quality) noexcept -> Result
+auto System::run(std::uint32_t slot, std::uint32_t stageIndex, double time, const HostQualitySnapshot& quality) noexcept -> Result
 {
-    current = &slot;
+    current = slot;
     auto& instance = stageIndex == 0 && sharedSpawn ? *sharedSpawn : stageIndex == 1 && sharedUpdate ? *sharedUpdate :
-        instances[static_cast<std::size_t>(&slot-slots.get())].stages[stageIndex];
+        instances[slot].stages[stageIndex];
     auto& stage = stages[stageIndex];
     auto result = instance.setHostQuality(quality);
     if (result == Result::Ok)
     {
-        result = instance.setTimeContext(time, frameDelta, realTime, std::max(0.0, realTime - slot.realStart), realDelta);
+        result = instance.setTimeContext(time, frameDelta, realTime, std::max(0.0, realTime - particleData.realStart[slot]), realDelta);
     }
     for (auto& io : stage.io)
     {
@@ -77,7 +77,7 @@ auto System::run(Slot& slot, std::uint32_t stageIndex, double time, const HostQu
     }
     if (result == Result::Ok)
     {
-        result = instance.updateAsync(slot.age, enqueueInline, nullptr);
+        result = instance.updateAsync(particleData.age[slot], enqueueInline, nullptr);
     }
     if (result == Result::Ok)
     {
@@ -91,16 +91,16 @@ auto System::run(Slot& slot, std::uint32_t stageIndex, double time, const HostQu
     {
         if (incoming[index].stage == stageIndex)
         {
-            result = instance.dispatchSignal(incoming[index].node.data(), slot.age, 10000);
+            result = instance.dispatchSignal(incoming[index].node.data(), particleData.age[slot], 10000);
         }
     }
     if (result == Result::Ok && nonzero(stage.entry))
     {
         result = stageIndex == 0 && sharedSpawn
-            ? instance.dispatchSignal(sharedSpawnEntry, slot.age, 10000)
+            ? instance.dispatchSignal(sharedSpawnEntry, particleData.age[slot], 10000)
             : stageIndex == 1 && sharedUpdate
-            ? instance.dispatchSignal(sharedUpdateEntry, slot.age, 10000)
-            : instance.dispatchSignal(stage.entry.data(), slot.age, 10000);
+            ? instance.dispatchSignal(sharedUpdateEntry, particleData.age[slot], 10000)
+            : instance.dispatchSignal(stage.entry.data(), particleData.age[slot], 10000);
     }
     if (result == Result::Ok)
     {
@@ -154,15 +154,15 @@ auto System::tick(Instance& root, double time, bool emitting, const HostQualityS
     }
     else for (auto index = 0u; index < capacity; ++index)
     {
-        auto& slot = slots[index];
-        if (!slot.active)
+        const auto slot = index;
+        if (!particleData.active[slot])
         {
             continue;
         }
-        slot.age += stepDelta;
-        if (slot.age >= slot.life)
+        particleData.age[slot] += stepDelta;
+        if (particleData.age[slot] >= particleData.life[slot])
         {
-            slot.active = false;
+            particleData.active[slot] = false;
             --live;
             continue;
         }
@@ -171,9 +171,9 @@ auto System::tick(Instance& root, double time, bool emitting, const HostQualityS
         {
             return result;
         }
-        if (slot.age >= slot.life)
+        if (particleData.age[slot] >= particleData.life[slot])
         {
-            slot.active = false;
+            particleData.active[slot] = false;
             --live;
         }
     }
@@ -223,17 +223,12 @@ auto System::tick(Instance& root, double time, bool emitting, const HostQualityS
     }
     for (auto index = 0u; index < capacity && remaining != 0; ++index)
     {
-        auto& slot = slots[index];
-        if (slot.active)
+        const auto slot = index;
+        if (particleData.active[slot])
         {
             continue;
         }
-        slot.draw = {};
-        slot.draw.id = nextId++;
-        slot.velocity = {};
-        slot.age = 0;
-        slot.realStart = realTime;
-        slot.life = 2;
+        particleData.reset(slot, nextId++, realTime);
         for (auto stageIndex = 0u; stageIndex < 2; ++stageIndex)
         {
             if ((stageIndex == 0 && sharedSpawn) || (stageIndex == 1 && sharedUpdate)) continue;
@@ -254,7 +249,7 @@ auto System::tick(Instance& root, double time, bool emitting, const HostQualityS
         auto savedDelta = stepDelta;
         stepDelta = 0;
         auto result = run(slot, 0, time, quality);
-        if (result == Result::Ok && slot.life > 0)
+        if (result == Result::Ok && particleData.life[slot] > 0)
         {
             result = run(slot, 1, time, quality);
         }
@@ -263,16 +258,16 @@ auto System::tick(Instance& root, double time, bool emitting, const HostQualityS
         {
             return result;
         }
-        slot.active = slot.life > 0;
-        live += slot.active ? 1 : 0;
+        particleData.active[slot] = particleData.life[slot] > 0;
+        live += particleData.active[slot] ? 1 : 0;
         --remaining;
     }
-    current = nullptr;
+    current = UINT32_MAX;
     incomingCount = 0;
     auto activeIndex = std::size_t{};
     for (auto index = 0u; index < capacity; ++index)
     {
-        if (slots[index].active)
+        if (particleData.active[index])
         {
             activeIndices[activeIndex++] = index;
         }

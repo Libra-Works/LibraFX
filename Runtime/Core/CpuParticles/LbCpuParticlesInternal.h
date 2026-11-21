@@ -87,12 +87,43 @@ struct ParticleBatchPlan final {
     std::vector<double> constants;
     std::vector<Id> sourceNodes;
 };
-struct Slot final {
-    double realStart = 0;
-    CpuParticleSnapshot draw;
-    std::array<double, 3> velocity{};
-    double age = 0, life = 2;
-    bool active = false;
+// Canonical simulation storage. Every component is contiguous across particles;
+// rendering snapshots are assembled only at the read boundary. Stable slot
+// indices retain ID, retirement and interpreter ordering without an AoS mirror.
+struct ParticleStorage final {
+    std::array<std::vector<double>, 3> position, velocity;
+    std::array<std::vector<double>, 4> color;
+    std::array<std::vector<double>, 2> size;
+    std::vector<double> age, life, realStart;
+    std::vector<std::uint64_t> id;
+    std::vector<std::uint8_t> active;
+    void initialize(std::size_t capacity)
+    {
+        for (auto& channel : position) { channel.resize(capacity); }
+        for (auto& channel : velocity) { channel.resize(capacity); }
+        for (auto& channel : color) { channel.resize(capacity, 1); }
+        for (auto& channel : size) { channel.resize(capacity, 1); }
+        age.resize(capacity); life.resize(capacity, 2); realStart.resize(capacity);
+        id.resize(capacity); active.resize(capacity);
+    }
+    void reset(std::uint32_t slot, std::uint64_t identity, double realTime) noexcept
+    {
+        for (auto& channel : position) { channel[slot] = 0; }
+        for (auto& channel : velocity) { channel[slot] = 0; }
+        for (auto& channel : color) { channel[slot] = 1; }
+        for (auto& channel : size) { channel[slot] = 1; }
+        id[slot] = identity; age[slot] = 0; life[slot] = 2;
+        realStart[slot] = realTime; active[slot] = 0;
+    }
+    CpuParticleSnapshot snapshot(std::uint32_t slot) const noexcept
+    {
+        auto out = CpuParticleSnapshot{};
+        out.id = id[slot];
+        for (auto lane = 0u; lane < 3; ++lane) { out.position[lane] = position[lane][slot]; }
+        for (auto lane = 0u; lane < 4; ++lane) { out.color[lane] = color[lane][slot]; }
+        for (auto lane = 0u; lane < 2; ++lane) { out.size[lane] = size[lane][slot]; }
+        return out;
+    }
 };
 struct ParticleVM final {
     Instance stages[2];
@@ -119,7 +150,6 @@ struct System final {
         // Destroy them before member destruction releases those descriptors.
         sharedUpdate.reset();
         sharedSpawn.reset();
-        slots.reset();
         if (emitterModel) libra_procedural_model_release(emitterModel);
     }
     std::vector<std::uint8_t> emitterDefinitionBytes;
@@ -145,10 +175,10 @@ struct System final {
     Buffer sharedUpdateWork;
     std::unique_ptr<Instance> sharedUpdate;
     SignalHandle sharedUpdateEntry{};
-    std::unique_ptr<Slot[]> slots;
+    ParticleStorage particleData;
     std::unique_ptr<ParticleVM[]> instances;
     std::vector<std::uint32_t> activeIndices;
-    Slot* current = nullptr;
+    std::uint32_t current = UINT32_MAX;
     std::vector<CustomNodeDescriptor> descriptors;
     std::vector<Callback> callbacks;
     std::vector<Inbound> incoming;
@@ -161,15 +191,15 @@ struct System final {
 
     Result initialize(const CustomNodeDescriptor* registry, std::size_t registryCount, bool enableBatching = false);
     Result tick(Instance& root, double time, bool emitting, const HostQualitySnapshot& quality) noexcept;
-    Result run(Slot& slot, std::uint32_t stage, double time, const HostQualitySnapshot& quality) noexcept;
+    Result run(std::uint32_t slot, std::uint32_t stage, double time, const HostQualitySnapshot& quality) noexcept;
     void buildBatches();
     void buildBatch(std::uint32_t stageIndex);
     void optimizeBatch(ParticleBatchPlan& plan);
-    Result evaluateBatch(const ParticleBatchPlan& plan, Slot* const* particles, std::size_t size, bool* commandsStarted = nullptr) noexcept;
+    Result evaluateBatch(const ParticleBatchPlan& plan, const std::uint32_t* particles, std::size_t size, bool* commandsStarted = nullptr) noexcept;
     Result spawnBatches(std::uint32_t count, double time, const HostQualitySnapshot& quality) noexcept;
     Result updateBatches(double time, const HostQualitySnapshot& quality) noexcept;
     Result publish(const Io& io, const double* values, double time) noexcept;
-    Result collect(Slot& slot, std::uint32_t stage, double time) noexcept;
+    Result collect(std::uint32_t slot, std::uint32_t stage, double time) noexcept;
     static Result invoke(CustomNodeInvocation& call) noexcept;
     static Result observe(void* context, const std::uint8_t nodeId[16]) noexcept;
 };

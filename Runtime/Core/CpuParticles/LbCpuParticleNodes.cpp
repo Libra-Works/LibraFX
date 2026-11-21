@@ -16,15 +16,16 @@ auto System::invoke(CustomNodeInvocation& call) noexcept -> Result
         call.selectedBranch = 0;
         return Result::Ok;
     }
-    if (!system.current)
+    if (system.current == UINT32_MAX)
     {
         return Result::NotReady;
     }
-    auto& particle = *system.current;
+    const auto particle = system.current;
+    auto& particleData = system.particleData;
     auto operation = context.operation;
     if (operation == 0x49) {
-        if (particle.life==0) return Result::DivideByZero;
-        const auto ratio=particle.age/particle.life;
+        if (particleData.life[particle]==0) return Result::DivideByZero;
+        const auto ratio=particleData.age[particle]/particleData.life[particle];
         if (!std::isfinite(ratio)) return Result::NonFinite;
         call.outputs[0]=call.inputs[0]; call.outputs[1]=call.inputs[4]; call.outputs[2]=call.inputs[8];
         call.outputs[3]=1-std::max(0.0,std::min(ratio,1.0));
@@ -32,7 +33,7 @@ auto System::invoke(CustomNodeInvocation& call) noexcept -> Result
     }
     if (operation >= 0x45 && operation <= 0x48) {
         auto sample = MeshEmissionSample{};
-        const auto index = static_cast<std::uint32_t>(particle.draw.id);
+        const auto index = static_cast<std::uint32_t>(particleData.id[particle]);
         const auto status = system.emitterSurface.sample(math::randomUnit(system.seed, index, 11),
             math::randomUnit(system.seed, index, 12), math::randomUnit(system.seed, index, 13), sample);
         if (status != Result::Ok) return status;
@@ -51,13 +52,13 @@ auto System::invoke(CustomNodeInvocation& call) noexcept -> Result
     {
         switch (operation)
         {
-        case 0x10: std::copy_n(particle.draw.position, 3, call.outputs); break;
-        case 0x11: std::copy_n(particle.velocity.data(), 3, call.outputs); break;
-        case 0x12: std::copy_n(particle.draw.color, 4, call.outputs); break;
-        case 0x13: std::copy_n(particle.draw.size, 2, call.outputs); break;
-        case 0x14: call.outputs[0] = particle.life; break;
-        case 0x15: call.outputs[0] = particle.age; break;
-        case 0x16: call.outputs[0] = static_cast<double>(particle.draw.id); break;
+        case 0x10: for (auto lane=0u; lane<3; ++lane) { call.outputs[lane]=particleData.position[lane][particle]; }; break;
+        case 0x11: for (auto lane=0u; lane<3; ++lane) { call.outputs[lane]=particleData.velocity[lane][particle]; }; break;
+        case 0x12: for (auto lane=0u; lane<4; ++lane) { call.outputs[lane]=particleData.color[lane][particle]; }; break;
+        case 0x13: for (auto lane=0u; lane<2; ++lane) { call.outputs[lane]=particleData.size[lane][particle]; }; break;
+        case 0x14: call.outputs[0] = particleData.life[particle]; break;
+        case 0x15: call.outputs[0] = particleData.age[particle]; break;
+        case 0x16: call.outputs[0] = static_cast<double>(particleData.id[particle]); break;
         case 0x17: call.outputs[0] = system.seed; break;
         case 0x18: call.outputs[0] = system.stepDelta; break;
         default: return Result::InvalidArgument;
@@ -68,15 +69,15 @@ auto System::invoke(CustomNodeInvocation& call) noexcept -> Result
     {
         if (operation == 0x20)
         {
-            std::copy_n(call.inputs, 3, particle.draw.position);
+            for (auto lane=0u; lane<3; ++lane) { particleData.position[lane][particle]=call.inputs[lane]; };
         }
         else if (operation == 0x21)
         {
-            std::copy_n(call.inputs, 3, particle.velocity.data());
+            for (auto lane=0u; lane<3; ++lane) { particleData.velocity[lane][particle]=call.inputs[lane]; };
         }
         else if (operation == 0x22)
         {
-            std::copy_n(call.inputs, 4, particle.draw.color);
+            for (auto lane=0u; lane<4; ++lane) { particleData.color[lane][particle]=call.inputs[lane]; };
         }
         else if (operation == 0x23)
         {
@@ -84,7 +85,7 @@ auto System::invoke(CustomNodeInvocation& call) noexcept -> Result
             {
                 return Result::InvalidArgument;
             }
-            std::copy_n(call.inputs, 2, particle.draw.size);
+            for (auto lane=0u; lane<2; ++lane) { particleData.size[lane][particle]=call.inputs[lane]; };
         }
         else if (operation == 0x24)
         {
@@ -92,15 +93,15 @@ auto System::invoke(CustomNodeInvocation& call) noexcept -> Result
             {
                 return Result::InvalidArgument;
             }
-            particle.life = call.inputs[0];
+            particleData.life[particle] = call.inputs[0];
         }
         else
         {
             for (auto lane = 0u; lane < 3; ++lane)
             {
-                particle.velocity[lane] += call.inputs[lane] * system.stepDelta;
-                particle.draw.position[lane] += particle.velocity[lane] * system.stepDelta;
-                if (!std::isfinite(particle.velocity[lane]) || !std::isfinite(particle.draw.position[lane]))
+                particleData.velocity[lane][particle] += call.inputs[lane] * system.stepDelta;
+                particleData.position[lane][particle] += particleData.velocity[lane][particle] * system.stepDelta;
+                if (!std::isfinite(particleData.velocity[lane][particle]) || !std::isfinite(particleData.position[lane][particle]))
                 {
                     return Result::InvalidArgument;
                 }
@@ -111,7 +112,7 @@ auto System::invoke(CustomNodeInvocation& call) noexcept -> Result
     }
     if (operation >= 0x42 && operation <= 0x44)
     {
-        auto index = static_cast<std::uint32_t>(particle.draw.id);
+        auto index = static_cast<std::uint32_t>(particleData.id[particle]);
         if (operation == 0x42)
         {
             for (auto lane = 0u; lane < 3; ++lane)
@@ -155,7 +156,7 @@ auto System::invoke(CustomNodeInvocation& call) noexcept -> Result
 auto System::observe(void* context, const std::uint8_t nodeId[16]) noexcept -> Result
 {
     auto& system = *static_cast<System*>(context);
-    if (!system.current)
+    if (system.current == UINT32_MAX)
     {
         return Result::NotReady;
     }

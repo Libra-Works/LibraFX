@@ -206,7 +206,7 @@ auto System::initialize(const CustomNodeDescriptor* registry, std::size_t regist
     {
         descriptors.push_back(registry[index]);
     }
-    auto totalMemory = (std::size_t{sizeof(Slot)} + sizeof(ParticleVM)) * capacity;
+    auto totalMemory = (std::size_t{(15 * sizeof(double) + sizeof(std::uint64_t) + sizeof(std::uint8_t))} + sizeof(ParticleVM)) * capacity;
     for (auto& stage : stages)
     {
         if (stage.bytes.size() < 16 || std::memcmp(stage.bytes.data(), "LFXB", 4) != 0)
@@ -254,7 +254,7 @@ auto System::initialize(const CustomNodeDescriptor* registry, std::size_t regist
         stage.work.allocate(stage.workStride * capacity,stage.program.workAlignment());
         stage.defaults.allocate(stage.defaultStride * sizeof(double) * capacity,stage.program.defaultsAlignment());
     }
-    slots = std::make_unique<Slot[]>(capacity);
+    particleData.initialize(capacity);
     if (!sharedSpawn || !sharedUpdate) instances = std::make_unique<ParticleVM[]>(capacity);
     activeIndices.resize(capacity);
     incoming.resize(queueCapacity);
