@@ -3,9 +3,10 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "LibraRuntimeTypes.h"
+#include <memory>
 #include "LibraSpawnableComponent.generated.h"
 
-namespace liberafx { class SpawnableHost; struct CpuParticleSnapshot; struct CpuParticleTiming; }
+namespace liberafx { class SpawnableHost; class SpawnableHostPool; struct CpuParticleSnapshot; struct CpuParticleTiming; }
 class ULibraSpawnableAsset;
 class UCameraComponent;
 class UMaterialInterface;
@@ -17,6 +18,9 @@ class FLibraSkeletalPoseRuntime;
 // vtable-helper translation unit, where only forward declarations are visible.
 struct FLibraSpawnableHostDeleter
 {
+    std::shared_ptr<liberafx::SpawnableHostPool> Pool;
+    uint32 LeaseSlot = UINT32_MAX;
+    uint64 LeaseGeneration = 0;
     void operator()(liberafx::SpawnableHost* value) const;
 };
 
@@ -129,6 +133,24 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime", meta = (ClampMin = "1"))
     int32 EventCapacity = 128;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime|Performance")
+    bool bUsePreparedHosts = true;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime|Performance", meta = (ClampMin = "1", ClampMax = "1024"))
+    int32 PreparedHostCapacity = 8;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime|Performance", meta = (ClampMin = "1", ClampMax = "16"))
+    int32 PreparationWorkers = 4;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime|Performance")
+    bool bUseSharedSimulation = true;
+    UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime|Performance")
+    int32 LastSimulationBatchSize = 0;
+    UFUNCTION(BlueprintPure, Category = "Libra Runtime|Performance")
+    bool UsesPreparedStorage() const;
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Performance")
+    ELibraRuntimeResult PrewarmEffect();
+
+    bool SharedFrameIsCurrent(liberafx::SpawnableHost* host, uint64 generation) const;
+    void CompleteSharedFrame(liberafx::SpawnableHost* host, uint64 generation, double delta, uint8 result, int32 batchSize = 1);
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime", meta = (ClampMin = "1"))
     int32 InstructionBudget = 10000;

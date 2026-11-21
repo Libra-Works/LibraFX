@@ -1,6 +1,12 @@
 LIBERA FX for Godot 4.7
 ======================
 
+Prepared/shared simulation: call player.prewarm_package(bytes, capacity, workers)
+from an in-tree player during loading. Normal play_package reuses the matching
+prepared pool. Normal _process gathers independent players into a shared bounded
+executor; explicit advance(delta) stays immediate. Exhaustion does not allocate
+another host. See source SDK docs/runtime-shared-simulation.md for limits.
+
 This Windows x86-64 GDExtension embeds the same portable C++ Core Runtime
 used by the other integrations. New .lfxb exports contain the existing LFXP
 Spawnable package envelope, including scalar-only roots. Legacy raw .lfxb

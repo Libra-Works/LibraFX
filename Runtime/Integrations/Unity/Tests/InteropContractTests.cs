@@ -19,11 +19,50 @@ namespace LiberaFx.Unity.Tests
             if (!string.IsNullOrEmpty(fixtureDirectory)) VerifyCompiledSpriteComposition(fixtureDirectory);
             var instanceDirectory = Environment.GetEnvironmentVariable("LIBERAFX_INSTANCE_GAMEIO_FIXTURES");
             if (!string.IsNullOrEmpty(instanceDirectory)) VerifyInstanceGameIo(instanceDirectory);
+            var worldFixture = Environment.GetEnvironmentVariable("LIBERAFX_EFFECT_WORLD_FIXTURE");
+            if (!string.IsNullOrEmpty(worldFixture)) VerifyPreparedWorld(worldFixture);
 #endif
             Console.WriteLine("LiberaFx POD layout, P/Invoke and allocation contracts passed.");
         }
 
 #if NET8_0
+        private static unsafe void VerifyPreparedWorld(string path)
+        {
+            Assert(System.Runtime.InteropServices.Marshal.SizeOf<SharedEffectFrame>() == 32 &&
+                System.Runtime.InteropServices.Marshal.SizeOf<PreparedHostOptions>() == 16);
+            var options = new PreparedHostOptions { capacity = 2, preparationWorkers = 2, eventCapacity = 128, instructionBudget = 10000 };
+            Assert(NativePreparedHostPool.Create(File.ReadAllBytes(path), options, out var pool) == NativeResult.Ok);
+            using (pool)
+            {
+                Assert(pool.Acquire(out var first) == NativeResult.Ok);
+                Assert(pool.Acquire(out var second) == NativeResult.Ok);
+                Assert(pool.Acquire(out var excess) == NativeResult.InsufficientWork && excess == null);
+                Assert(pool.Release() == NativeResult.Busy);
+                using (first) using (second)
+                {
+                    Assert(PreparedNative.libra_effect_world_create(2, 2, out var world) == NativeResult.Ok);
+                    try
+                    {
+                        var frames = new SharedEffectFrame[2];
+                        for (var step = 0; step < 60; ++step)
+                        {
+                            frames[0] = new SharedEffectFrame { host = first.RuntimeHandle, time = step / 60d, delta = step == 0 ? 0 : 1d / 60 };
+                            frames[1] = new SharedEffectFrame { host = second.RuntimeHandle, time = step / 60d, delta = step == 0 ? 0 : 1d / 60 };
+                            fixed (SharedEffectFrame* data = frames)
+                                Assert(PreparedNative.libra_effect_world_advance(world, data, 2) == NativeResult.Ok);
+                            Assert(frames[0].result == NativeResult.Ok && frames[1].result == NativeResult.Ok);
+                            Assert(first.GetTimeSnapshot(out var a) == NativeResult.Ok && second.GetTimeSnapshot(out var b) == NativeResult.Ok &&
+                                a.realTime == b.realTime && a.effectTime == b.effectTime);
+                        }
+                    }
+                    finally { Assert(PreparedNative.libra_effect_world_release(world) == NativeResult.Ok); }
+                }
+                Assert(pool.Acquire(out var recycled) == NativeResult.Ok);
+                using (recycled) Assert(recycled.Advance(0, 0) == NativeResult.Ok);
+            }
+            Console.WriteLine("Managed prepared-host pooling and shared-frame P/Invoke passed.");
+        }
+
         private static void VerifyInstanceGameIo(string directory)
         {
             using var host = new NativeSpawnableHost(File.ReadAllBytes(Path.Combine(directory, "InstanceGameIo.lfxp")));

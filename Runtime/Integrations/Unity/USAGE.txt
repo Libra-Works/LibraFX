@@ -1,6 +1,13 @@
 LiberaFx native Runtime -> Unity adapter
 =====================================
 
+Prepared/shared simulation: scene components prepare assigned effects in Awake
+when Use Prepared Hosts is enabled. Call PrewarmEffect during loading for dynamic
+assets. Configure Prepared Host Capacity before preparation; exhaustion is an
+explicit error. A shared late-frame manager joins bounded simulation workers
+before publishing rendering. Manual preview/debug paths stay immediate.
+See source SDK docs/runtime-shared-simulation.md for eligibility and lifetimes.
+
 Separation (no Unity APIs in the C++ Core):
   canonical .lfxb (LFXP) -> owned native SpawnableHost -> package component
   legacy raw LFXB -> owned native Program -> Instance evaluates numeric ports

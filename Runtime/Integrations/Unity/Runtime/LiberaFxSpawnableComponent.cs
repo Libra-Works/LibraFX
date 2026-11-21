@@ -24,10 +24,16 @@ namespace LiberaFx.Unity
         [SerializeField, Min(1024)] private int memoryBudgetBytesPerTemplate = 4 * 1024 * 1024;
         [SerializeField, Min(1)] private int eventCapacity = 128;
         [SerializeField] private uint instructionBudget = 10000;
+        [SerializeField] private bool usePreparedHosts = true;
+        [SerializeField, Min(1)] private int preparedHostCapacity = 8;
+        [SerializeField, Range(1, 16)] private int preparationWorkers = 4;
+        [SerializeField] private bool useSharedSimulation = true;
         [SerializeField, Tooltip("Explicit mapping from this project's Unity quality indices to LIBERA FX tiers. Unmapped levels remain Unknown.")]
         private HostQualityTier[] qualityTierMapping = Array.Empty<HostQualityTier>();
 
         private NativeSpawnableHost host;
+        public bool UsesPreparedStorage => host != null && host.UsesPreparedStorage;
+        public int LastSimulationBatchSize { get; private set; }
         private LiberaFxRenderScope rootRenderScope;
         private readonly LiberaFxRenderStatisticsCounter renderStatistics =
             new LiberaFxRenderStatisticsCounter();
@@ -248,6 +254,23 @@ namespace LiberaFx.Unity
             if (playOnEnable) Play();
         }
 
+        private PreparedHostOptions PreparedOptions => new PreparedHostOptions {
+            capacity = (uint)Math.Max(1, preparedHostCapacity), preparationWorkers = (uint)Math.Max(1, preparationWorkers),
+            eventCapacity = (uint)Math.Max(1, eventCapacity), instructionBudget = instructionBudget };
+
+        // Call while loading, before actors start casting. Awake also prepares
+        // assigned scene effects, once per shared asset/options combination.
+        public NativeResult PrewarmEffect()
+        {
+            UnityInstanceSession.RequireMainThread();
+            if (!Application.isPlaying || manualPreviewTime || !effect || effect.PackageBytes == null) return NativeResult.NotReady;
+            return LiberaFxSharedSimulation.Prewarm(effect.PackageBytes, PreparedOptions);
+        }
+        private void Awake()
+        {
+            if (usePreparedHosts && Application.isPlaying && effect) PrewarmEffect();
+        }
+
         // The default Unity Animator has completed its pose evaluation before
         // LateUpdate. Copy Source matrices here before queueing worker evaluation.
         private void LateUpdate()
@@ -297,7 +320,31 @@ namespace LiberaFx.Unity
 
             var scaleResult = current.SetTimeScale(rate);
             if (scaleResult != NativeResult.Ok) { FailPlayback(scaleResult, "Updating Time Scale failed.", current); return; }
+            if (useSharedSimulation && Application.isPlaying &&
+                PreparedNative.libra_spawnable_host_worker_safe(current.RuntimeHandle, out var safe) == NativeResult.Ok && safe != 0)
+            {
+                if (!PublishFrameInputs(current)) return;
+                var quality = current.SetHostQuality(UnityHostQuality.Read(qualityTierMapping, (ulong)Time.frameCount));
+                if (quality != NativeResult.Ok) { FailPlayback(quality, "Publishing host quality failed.", current); return; }
+                if (LiberaFxSharedSimulation.Queue(this, current, realElapsed + frameDelta, frameDelta)) return;
+            }
             AdvanceFrame(current, realElapsed + frameDelta, frameDelta);
+        }
+
+        internal bool SharedFrameIsCurrent(NativeSpawnableHost current) =>
+            isActiveAndEnabled && ReferenceEquals(host, current) && !rootFinished && !effectForced && !debugging;
+
+        internal void CompleteSharedFrame(NativeSpawnableHost current, double time, double delta, NativeResult result, int batchSize)
+        {
+            if (!SharedFrameIsCurrent(current)) return;
+            LastSimulationBatchSize = batchSize;
+            realElapsed = time;
+            if (current.GetTimeSnapshot(out var clock) == NativeResult.Ok) elapsed = clock.effectTime;
+            DrainEvents(current);
+            if (!SharedFrameIsCurrent(current)) return;
+            if (result == NativeResult.QueueRejected) { AdvanceFrame(current, time, delta); return; }
+            if (result != NativeResult.Ok) { FailPlayback(result, "Shared simulation failed: " + result, current); return; }
+            FinishFrame(current);
         }
 
         public NativeResult AdvancePreview(double time)
@@ -467,7 +514,12 @@ namespace LiberaFx.Unity
             NativeSpawnableHost candidate = null;
             try
             {
-                candidate = new NativeSpawnableHost(effect.PackageBytes,
+                var acquired = usePreparedHosts && Application.isPlaying && !manualPreviewTime
+                    ? LiberaFxSharedSimulation.Acquire(effect.PackageBytes, PreparedOptions, out candidate) : NativeResult.NotReady;
+                if (acquired == NativeResult.InsufficientWork) return Report(acquired, "Prepared host pool is full; increase its loading-time capacity.");
+                if (acquired != NativeResult.Ok && acquired != NativeResult.NotReady && acquired != NativeResult.UnsupportedBinary)
+                    return Report(acquired, "Prepared host acquisition failed.");
+                if (candidate == null) candidate = new NativeSpawnableHost(effect.PackageBytes,
                     (uint)Math.Max(1, maxActivePerTemplate),
                     (ulong)Math.Max(1024, memoryBudgetBytesPerTemplate),
                     (uint)Math.Max(1, eventCapacity), instructionBudget);
@@ -482,6 +534,7 @@ namespace LiberaFx.Unity
                 realElapsed = 0;
                 rootFinished = false;
                 effectForced = false;
+                LastSimulationBatchSize = 0;
                 renderStatistics.Reset();
                 sourceInitialAdvancePending = false;
                 skeletalPoseSources.Clear();

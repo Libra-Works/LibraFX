@@ -8,6 +8,7 @@
   <ItemGroup>
     <Compile Include="InteropContractTests.cs" />
     <Compile Include="..\Runtime\LiberaFxNative.cs" />
+    <Compile Include="..\Runtime\LiberaFxPreparedRuntime.cs" />
     <Compile Include="..\Runtime\LiberaFxCoordinates.cs" />
     <Compile Include="..\Runtime\LiberaFxExecutionDebugger.cs" />
     <Compile Include="..\Runtime\LiberaFxHostQuality.cs" />

@@ -514,6 +514,15 @@ namespace LiberaFx.Unity
             {
                 private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
                 private ulong handle;
+                internal ulong RuntimeHandle => Alive;
+                private Action returnedToPool;
+                public bool UsesPreparedStorage => returnedToPool != null;
+                internal NativeSpawnableHostBase(ulong preparedHandle, Action returned = null)
+                {
+                    if (preparedHandle == 0) throw new ArgumentException("Empty prepared host handle.");
+                    handle = preparedHandle;
+                    returnedToPool = returned;
+                }
                 private readonly Dictionary<uint, string> gameIoPortNames = new Dictionary<uint, string>();
                 public NativeSpawnableHostBase(byte[] compiledPackage, uint maxActivePerTemplate = 32,
                     ulong memoryBudgetBytesPerTemplate = 4 * 1024 * 1024, uint eventCapacity = 128,
@@ -974,11 +983,19 @@ namespace LiberaFx.Unity
 
                 public void Dispose()
                 {
-                    if (handle != 0) { Native.libra_spawnable_host_release(handle); handle = 0; }
+                    if (handle != 0) {
+                        NativeInstance.Check(Native.libra_spawnable_host_release(handle)); handle = 0;
+                        var returned = returnedToPool; returnedToPool = null; returned?.Invoke();
+                    }
                     GC.SuppressFinalize(this);
                 }
 
-                ~NativeSpawnableHostBase() { Dispose(); }
+                ~NativeSpawnableHostBase()
+                {
+                    // Native owner-thread rules also apply to pooled leases.
+                    // Unity/component owners must Dispose at their idle boundary.
+                    if (handle != 0) Native.libra_spawnable_host_release(handle);
+                }
             }
         internal static void Check(NativeResult result)
         {
@@ -1127,6 +1144,7 @@ namespace LiberaFx.Unity
 
     public sealed class NativeSpawnableHost : NativeInstance.NativeSpawnableHostBase
     {
+        internal NativeSpawnableHost(ulong preparedHandle, Action returned = null) : base(preparedHandle, returned) { }
         public NativeSpawnableHost(byte[] compiledPackage, uint maxActivePerTemplate = 32,
             ulong memoryBudgetBytesPerTemplate = 4 * 1024 * 1024, uint eventCapacity = 128,
             uint instructionBudget = 10000)

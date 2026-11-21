@@ -1,5 +1,12 @@
 LIBRA RUNTIME FOR UNREAL - SOURCE INTEGRATION
 
+Prepared/shared simulation
+  Spawnable components expose Use Prepared Hosts, Prepared Host Capacity,
+  Preparation Workers, Use Shared Simulation and Prewarm Effect under Performance.
+  BeginPlay prepares assigned packages before automatic playback. The game-world
+  service joins bounded UE tasks after actor ticks, then publishes rendering.
+  See source SDK docs/runtime-shared-simulation.md for eligibility and lifetimes.
+
 Scope
   Engine-independent CPU bytecode evaluation, project-native nodes, bound values
   and parameters, explicit game-thread signals, and live editor communication.

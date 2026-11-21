@@ -27,6 +27,7 @@
     "Resource",
     "RenderingDevice",
     "RenderingServer",
+    "SceneTree",
     "Shader",
     "ShaderMaterial",
     "StandardMaterial3D",
@@ -35,6 +36,7 @@
     "Texture2DRD",
     "Viewport",
     "VisualInstance3D",
-    "World3D"
+    "World3D",
+    "Window"
   ]
 }

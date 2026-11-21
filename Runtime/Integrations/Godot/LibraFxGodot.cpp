@@ -3,6 +3,8 @@
 #include "liberafx/LbLivePreview.h"
 #include "liberafx/LbCpuParticles.h"
 #include "liberafx/LbSpawnableHost.h"
+#include "liberafx/LbEffectWorld.h"
+#include "liberafx/host/LbPreparedPlayback.h"
 #include "LibraFxGodotRender.h"
 #include "LibraFxGodotGpu.h"
 #include "LibraFxGodotDebugPlayback.h"
@@ -12,6 +14,8 @@
 #include <godot_cpp/classes/thread.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/viewport.hpp>
+#include <godot_cpp/classes/scene_tree.hpp>
+#include <godot_cpp/classes/window.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/godot.hpp>
 #include <godot_cpp/variant/array.hpp>
@@ -52,12 +56,36 @@ using host::ProgramCompletion;
 using host::ProgramSession;
 using host::ProgramSessionOptions;
 
+class LibraEffectPlayer;
+class LibraSharedEffectWorld final : public Node {
+    GDCLASS(LibraSharedEffectWorld, Node)
+    struct Pending { uint64_t player = 0, generation = 0; double time = 0, delta = 0; uint64_t revision = 0; };
+    std::unique_ptr<EffectWorld> world_;
+    std::vector<Pending> pending_, ready_;
+    std::vector<EffectFrame> frames_;
+    std::vector<std::size_t> frameIndices_;
+protected:
+    static void _bind_methods() {}
+public:
+    host::PreparedPlaybackCache prepared;
+    LibraSharedEffectWorld()
+    {
+        pending_.reserve(1024); ready_.reserve(1024); frames_.resize(1024);
+        frameIndices_.resize(1024);
+        set_process_priority(2147483647);
+        set_process_mode(Node::PROCESS_MODE_ALWAYS);
+        EffectWorld::create({}, world_);
+    }
+    bool queue(LibraEffectPlayer& player, uint64_t generation, double time, double delta);
+    void _process(double delta) override;
+};
+
 class LibraEffectPlayer final : public Node {
     GDCLASS(LibraEffectPlayer, Node)
 
     struct Playback final {
         std::unique_ptr<ProgramSession> session;
-        std::unique_ptr<SpawnableHost> packageHost;
+        host::PlaybackHost packageHost;
         std::unique_ptr<PackageRenderRenderer> renderer;
         std::unique_ptr<PackageGpuRenderer> gpu;
         InstanceId instance{};
@@ -321,8 +349,17 @@ public:
         }
         auto options = SpawnableHostOptions{};
         const auto projectNodes = liberafx::host::projectNodes();
-        result = SpawnableHost::create(std::move(package), options,
-            projectNodes.descriptors, projectNodes.count, candidate->packageHost);
+        // Starting another valid package discards the previous terminal queue.
+        // Return its lease before acquiring, including when every pool slot was
+        // retained by completed event-producing playbacks.
+        completedCpuEventHost_.reset();
+        result = projectNodes.count ? Result::NotReady : shared_world()->prepared.acquireCompatible(packageBytes.ptr(),
+            static_cast<std::size_t>(packageBytes.size()), options, candidate->packageHost);
+        if (result == Result::NotReady) {
+            auto ordinary = std::unique_ptr<SpawnableHost>{};
+            result = SpawnableHost::create(std::move(package), options, projectNodes.descriptors, projectNodes.count, ordinary);
+            if (result == Result::Ok) { candidate->packageHost.reset(ordinary.release()); }
+        }
         if (result == Result::Ok) result = candidate->packageHost->setCoordinateBasis(coordinateBasis_);
         if (result == Result::Ok) result = candidate->packageHost->setTimeScale(timeScale_);
         if (result == Result::Ok) {
@@ -356,6 +393,7 @@ public:
         if (!playback_) {
             return code(Result::NotReady);
         }
+        ++sharedRevision_;
         auto elapsed = playback_->elapsed + delta;
         if (!std::isfinite(elapsed)) {
             return code(Result::InvalidArgument);
@@ -367,6 +405,47 @@ public:
                 return code(result);
             }
             result = playback_->packageHost->advance(elapsed, delta);
+            return complete_shared(generation, elapsed, result);
+        }
+        auto finished = false;
+        auto result = playback_->session->advance(playback_->instance, elapsed, delta, finished);
+        if (result != Result::Ok || finished) {
+            stop();
+        } else {
+            playback_->elapsed = elapsed;
+        }
+        return code(result);
+    }
+
+    LibraSharedEffectWorld* shared_world()
+    {
+        if (!get_tree()) { return nullptr; }
+        auto* root = get_tree()->get_root();
+        auto* found = godot::Object::cast_to<LibraSharedEffectWorld>(root->get_node_or_null(godot::NodePath("__LibraFxSharedWorld")));
+        if (!found) {
+            found = memnew(LibraSharedEffectWorld);
+            found->set_name("__LibraFxSharedWorld"); root->add_child(found);
+        }
+        return found;
+    }
+    int prewarm_package(const PackedByteArray& bytes, int capacity = 8, int workers = 4)
+    {
+        if (!Thread::is_main_thread() || !is_inside_tree()) { return code(Result::InvalidArgument); }
+        if (capacity < 1 || capacity > 1024 || workers < 1 || workers > 16) { return code(Result::InvalidArgument); }
+        if (host::projectNodes().count) { return code(Result::UnsupportedBinary); }
+        auto options = SpawnableHostPoolOptions{};
+        options.capacity = static_cast<std::size_t>(capacity); options.preparationWorkers = static_cast<std::size_t>(workers);
+        const auto result = shared_world()->prepared.prepare(bytes.ptr(), static_cast<std::size_t>(bytes.size()), options);
+        return code(result);
+    }
+    SpawnableHost* shared_host(uint64_t generation, uint64_t revision)
+    {
+        return playback_ && generation == playbackGeneration_ && revision == sharedRevision_ && playback_->packageHost &&
+            !dispatchingScriptAction_ && playback_->packageHost->supportsWorkerExecution() ? playback_->packageHost.get() : nullptr;
+    }
+    int complete_shared(uint64_t generation, double elapsed, Result result)
+    {
+        if (!playback_ || generation != playbackGeneration_) { return code(Result::NotReady); }
             if (result == Result::Ok) {
                 const auto clock = playback_->packageHost->timeSnapshot();
                 playback_->elapsed = elapsed;
@@ -413,15 +492,6 @@ public:
                     set_process(false);
                 }
             }
-            return code(result);
-        }
-        auto finished = false;
-        auto result = playback_->session->advance(playback_->instance, elapsed, delta, finished);
-        if (result != Result::Ok || finished) {
-            stop();
-        } else {
-            playback_->elapsed = elapsed;
-        }
         return code(result);
     }
 
@@ -433,6 +503,7 @@ public:
             }
             playback_.reset();
             set_process(false);
+            sharedFrameEffects_ = sharedFrameWorkers_ = 0;
         }
     }
 
@@ -831,14 +902,24 @@ public:
 
     godot::Dictionary get_render_stats() const
     {
-        return playback_ && playback_->renderer
+        auto result = playback_ && playback_->renderer
             ? playback_->renderer->renderStats() : godot::Dictionary{};
+        result["simulation_shared_frame_effects"] = sharedFrameEffects_;
+        result["simulation_workers"] = sharedFrameWorkers_;
+        result["prepared_host"] = playback_ && playback_->packageHost && static_cast<bool>(playback_->packageHost.get_deleter().pool);
+        return result;
     }
 
     void _process(double delta) override
     {
         const auto cpuPlayback = playback_ && playback_->packageHost &&
             hasCpuPrograms(playback_->packageHost->package());
+        if (playback_ && playback_->packageHost && playback_->packageHost->supportsWorkerExecution()) {
+            const auto time = playback_->elapsed + delta;
+            const auto input = updateCurrentCamera(*playback_->packageHost);
+            if (input == Result::Ok && std::isfinite(time) && delta >= 0 &&
+                shared_world()->queue(*this, playbackGeneration_, time, delta)) { return; }
+        }
         const auto result = advance(delta);
         if (cpuPlayback && result != code(Result::Ok)) {
             godot::UtilityFunctions::push_error(
@@ -858,6 +939,7 @@ protected:
         godot::ClassDB::bind_method(godot::D_METHOD("play", "bytecode", "duration"), &LibraEffectPlayer::play, -1.0);
         godot::ClassDB::bind_method(godot::D_METHOD("play_package", "package_bytes", "duration"), &LibraEffectPlayer::play_package, -1.0);
         godot::ClassDB::bind_method(godot::D_METHOD("advance", "delta"), &LibraEffectPlayer::advance);
+        godot::ClassDB::bind_method(godot::D_METHOD("prewarm_package", "package_bytes", "capacity", "workers"), &LibraEffectPlayer::prewarm_package, 8, 4);
         godot::ClassDB::bind_method(godot::D_METHOD("stop"), &LibraEffectPlayer::stop);
         godot::ClassDB::bind_method(godot::D_METHOD("is_playing"), &LibraEffectPlayer::is_playing);
         godot::ClassDB::bind_method(godot::D_METHOD("pop_cpu_particle_event"), &LibraEffectPlayer::pop_cpu_particle_event);
@@ -1138,7 +1220,7 @@ private:
     std::unique_ptr<Playback> playback_;
     CoordinateBasis coordinateBasis_ = CoordinateBasis::godot();
     double timeScale_ = 1;
-    std::unique_ptr<SpawnableHost> completedCpuEventHost_;
+    host::PlaybackHost completedCpuEventHost_;
     Dictionary scriptActions_;
     bool dispatchingScriptAction_ = false;
     MeshBindings meshBindings_;
@@ -1152,13 +1234,63 @@ private:
     NodePath cameraPath_;
     double gpuSpawnPerSecond_ = 100.0;
     std::uint64_t playbackGeneration_ = 0;
+public:
+    uint64_t shared_revision() const { return sharedRevision_; }
+    void record_shared_frame(std::size_t effects, std::size_t workers)
+    {
+        sharedFrameEffects_ = static_cast<int64_t>(effects); sharedFrameWorkers_ = static_cast<int64_t>(workers);
+    }
+private:
+    uint64_t sharedRevision_ = 0;
+    int64_t sharedFrameEffects_ = 0, sharedFrameWorkers_ = 0;
 };
+
+bool LibraSharedEffectWorld::queue(LibraEffectPlayer& player, uint64_t generation, double time, double delta)
+{
+    if (pending_.size() == 1024) { return false; }
+    if (!world_) {
+        const auto result = EffectWorld::create({}, world_);
+        if (result != Result::Ok) { return false; }
+    }
+    const auto id = static_cast<uint64_t>(player.get_instance_id());
+    for (const auto& pending : pending_) { if (pending.player == id) { return false; } }
+    pending_.push_back({id, generation, time, delta, player.shared_revision()});
+    return true;
+}
+void LibraSharedEffectWorld::_process(double)
+{
+    if (pending_.empty()) { return; }
+    pending_.swap(ready_);
+    auto count = std::size_t{};
+    for (auto entry = std::size_t{}; entry < ready_.size(); ++entry) {
+        const auto& next = ready_[entry];
+        frameIndices_[entry] = SIZE_MAX;
+        auto* player = godot::Object::cast_to<LibraEffectPlayer>(godot::ObjectDB::get_instance(next.player));
+        auto* host = player && player->is_inside_tree() ? player->shared_host(next.generation, next.revision) : nullptr;
+        if (host) { frameIndices_[entry] = count; frames_[count++] = {host, next.time, next.delta}; }
+    }
+    const auto status = world_->advance(frames_.data(), count);
+    for (auto entry = std::size_t{}; entry < ready_.size(); ++entry) {
+        const auto& next = ready_[entry];
+        const auto index = frameIndices_[entry];
+        auto* player = godot::Object::cast_to<LibraEffectPlayer>(godot::ObjectDB::get_instance(next.player));
+        auto* host = player && player->is_inside_tree() ? player->shared_host(next.generation, next.revision) : nullptr;
+        // Event handlers may stop/free/restart another player after the join.
+        if (host && index < count && frames_[index].host == host) {
+            player->record_shared_frame(count, world_->stats().lastExecutingLanes);
+            const auto result = status == Result::Ok ? frames_[index].result : host->advance(next.time, next.delta);
+            player->complete_shared(next.generation, next.time, result);
+        }
+    }
+    ready_.clear();
+}
 
 void initialize(godot::ModuleInitializationLevel level)
 {
     if (level == godot::MODULE_INITIALIZATION_LEVEL_SCENE) {
         godot::ClassDB::register_internal_class<LibraRenderScopeNode>();
         registerFluid2DClasses();
+        godot::ClassDB::register_internal_class<LibraSharedEffectWorld>();
         godot::ClassDB::register_class<LibraEffectPlayer>();
         registerGodotDebugPlayback();
     }

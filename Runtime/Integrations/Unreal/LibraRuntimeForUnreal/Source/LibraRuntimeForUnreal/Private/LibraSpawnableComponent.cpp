@@ -3,6 +3,7 @@
 #include "Materials/MaterialInterface.h"
 #include "LibraExecutionDebugAdapter.h"
 #include "LibraTaskScheduler.h"
+#include "LibraSharedEffectWorld.h"
 #include "liberafx/host/LbSpawnableDebugJob.h"
 
 #include "LibraNativeState.h"
@@ -173,7 +174,8 @@ public:
 
 void FLibraSpawnableHostDeleter::operator()(liberafx::SpawnableHost* value) const
 {
-    delete value;
+    if (Pool) { Pool->release({LeaseSlot,LeaseGeneration}); }
+    else { delete value; }
 }
 
 void FLibraSpawnableRenderStateDeleter::operator()(FLibraSpawnableRenderState* value) const
@@ -276,6 +278,7 @@ void ULibraSpawnableComponent::DetachExecutionDebugger()
 void ULibraSpawnableComponent::BeginPlay()
 {
     Super::BeginPlay();
+    if (bUsePreparedHosts) { PrewarmEffect(); }
     if (bAutoPlay) Play();
 }
 
@@ -330,15 +333,28 @@ auto ULibraSpawnableComponent::Play(bool bRestart) -> ELibraRuntimeResult
     options.memoryBudgetBytesPerTemplate = static_cast<std::size_t>(FMath::Max<int64>(1024, MemoryBudgetBytesPerTemplate));
     options.eventCapacity = static_cast<std::size_t>(FMath::Max(1, EventCapacity));
     options.instructionBudget = static_cast<std::size_t>(FMath::Max(1, InstructionBudget));
-    auto host = std::unique_ptr<liberafx::SpawnableHost>{};
+    auto host = liberafx::host::PlaybackHost{};
     const auto registry = LibraNativeNodeSnapshot();
     const auto projectNodes = registry->ProjectDescriptors();
-    result = liberafx::SpawnableHost::create(MoveTemp(package), options,
-        projectNodes.GetData(), projectNodes.Num(), host);
+    auto preparedOptions = liberafx::SpawnableHostPoolOptions{};
+    preparedOptions.capacity=static_cast<std::size_t>(FMath::Clamp(PreparedHostCapacity,1,1024));
+    preparedOptions.preparationWorkers=static_cast<std::size_t>(FMath::Clamp(PreparationWorkers,1,16));
+    preparedOptions.host=options;
+    result = bUsePreparedHosts && projectNodes.IsEmpty()
+        ? LibraSharedEffects::Acquire(GetWorld(),packageBytes.GetData(),packageBytes.Num(),preparedOptions,host)
+        : liberafx::Result::NotReady;
+    if (result==liberafx::Result::NotReady) {
+        auto ordinary=std::unique_ptr<liberafx::SpawnableHost>{};
+        result=liberafx::SpawnableHost::create(MoveTemp(package),options,projectNodes.GetData(),projectNodes.Num(),ordinary);
+        if (result==liberafx::Result::Ok) { host.reset(ordinary.release()); }
+    }
     if (result == liberafx::Result::Ok) result = host->setCoordinateBasis(coordinates);
     if (result == liberafx::Result::Ok) result = host->setTimeScale(PlayRate);
     if (result != liberafx::Result::Ok) return Report(ToLibraResult(result));
     NativeHost.Reset(host.release());
+    NativeHost.GetDeleter().Pool=host.get_deleter().pool;
+    NativeHost.GetDeleter().LeaseSlot=host.get_deleter().lease.slot;
+    NativeHost.GetDeleter().LeaseGeneration=host.get_deleter().lease.generation;
 #if PLATFORM_WINDOWS
     DebugPackageIdentity = liberafx::host::ExecutionDebugProtocol::programIdentity(packageBytes.GetData(), packageBytes.Num());
 #endif
@@ -1131,7 +1147,6 @@ void ULibraSpawnableComponent::TickComponent(float deltaTime, ELevelTick tickTyp
         LastResult = ELibraRuntimeResult::Ok;
         return;
     }
-    RealTimeSeconds = nextTime;
     auto result = SkeletalPoseState
         ? SkeletalPoseState->Publish(*current, *this) : liberafx::Result::Ok;
     if (result == liberafx::Result::Ok)
@@ -1139,7 +1154,27 @@ void ULibraSpawnableComponent::TickComponent(float deltaTime, ELevelTick tickTyp
         result = PublishLibraFrameInputs(*current, *this);
     }
     if (result == liberafx::Result::Ok) result = current->setTimeScale(PlayRate);
-    if (result == liberafx::Result::Ok) result = current->advance(RealTimeSeconds, deltaTime);
+    if (result == liberafx::Result::Ok && bUseSharedSimulation &&
+        LibraSharedEffects::Queue(*this,*current,generation,nextTime,deltaTime)) { return; }
+    if (result == liberafx::Result::Ok) result = current->advance(nextTime, deltaTime);
+    CompleteSharedFrame(current,generation,deltaTime,static_cast<uint8>(result));
+
+}
+
+bool ULibraSpawnableComponent::SharedFrameIsCurrent(liberafx::SpawnableHost* host,uint64 generation) const
+{
+    return NativeHost.Get()==host && HostGeneration==generation && bIsPlaying && !bForceTerminated && !DebugState;
+}
+bool ULibraSpawnableComponent::UsesPreparedStorage() const
+{
+    return NativeHost && static_cast<bool>(NativeHost.GetDeleter().Pool);
+}
+void ULibraSpawnableComponent::CompleteSharedFrame(liberafx::SpawnableHost* current,uint64 generation,double deltaTime,uint8 status,int32 batchSize)
+{
+    if (!SharedFrameIsCurrent(current,generation)) { return; }
+    LastSimulationBatchSize = batchSize;
+    auto result=static_cast<liberafx::Result>(status);
+    RealTimeSeconds = current->timeSnapshot().realTime;
     TimeSeconds = current->timeSnapshot().effectTime;
     DrainEvents();
     if (HostGeneration != generation) return;
@@ -1169,6 +1204,20 @@ void ULibraSpawnableComponent::TickComponent(float deltaTime, ELevelTick tickTyp
         bIsPlaying = false;
         SetComponentTickEnabled(false);
     }
+}
+
+ELibraRuntimeResult ULibraSpawnableComponent::PrewarmEffect()
+{
+    if (!IsInGameThread() || !Package) { return ELibraRuntimeResult::NotReady; }
+    const auto registry=LibraNativeNodeSnapshot();
+    if (!registry->ProjectDescriptors().IsEmpty()) { return ELibraRuntimeResult::UnsupportedBinary; }
+    auto options=liberafx::SpawnableHostPoolOptions{};
+    options.capacity=static_cast<std::size_t>(FMath::Clamp(PreparedHostCapacity,1,1024));
+    options.preparationWorkers=static_cast<std::size_t>(FMath::Clamp(PreparationWorkers,1,16));
+    options.host.eventCapacity=static_cast<std::size_t>(FMath::Max(1,EventCapacity));
+    options.host.instructionBudget=static_cast<std::size_t>(FMath::Max(1,InstructionBudget));
+    const auto bytes=Package->GetPackageBytes();
+    return ToLibraResult(LibraSharedEffects::Prepare(GetWorld(),bytes.GetData(),bytes.Num(),options));
 }
 
 auto ULibraSpawnableComponent::Report(ELibraRuntimeResult result) -> ELibraRuntimeResult
@@ -1309,6 +1358,7 @@ void ULibraSpawnableComponent::ReleaseHost()
     PrimaryComponentTick.TickGroup = TG_PrePhysics;
     RenderState.Reset();
     NativeHost.Reset();
+    LastSimulationBatchSize = 0;
     bIsPlaying = false;
     SetComponentTickEnabled(false);
 }
