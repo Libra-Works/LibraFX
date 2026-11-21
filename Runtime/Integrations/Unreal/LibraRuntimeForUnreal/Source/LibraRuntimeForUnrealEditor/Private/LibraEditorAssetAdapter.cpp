@@ -16,6 +16,9 @@
 #include "ObjectTools.h"
 #include "TextureResource.h"
 #include "UObject/SoftObjectPath.h"
+#include "Async/Async.h"
+#include <atomic>
+#include <memory>
 
 namespace
 {
@@ -36,6 +39,110 @@ namespace
         return FPackageName::IsValidObjectPath(path) &&
             (path.StartsWith(TEXT("/Game/")) || path.StartsWith(TEXT("/Engine/")));
     }
+
+    struct FCatalogEntry
+    {
+        FString Path, Name;
+        uint8 Kind = 0;
+    };
+
+    // Keep path/name/class metadata only. Neither listing nor indexing loads packages,
+    // textures, meshes, materials or thumbnails. All callers use the game thread.
+    class FCatalogIndex final
+    {
+    public:
+        FCatalogIndex()
+        {
+            auto& registry = FAssetRegistryModule::GetRegistry();
+            const auto revision = Revision;
+            Added = registry.OnAssetAdded().AddLambda([revision](const FAssetData&) { ++*revision; });
+            Removed = registry.OnAssetRemoved().AddLambda([revision](const FAssetData&) { ++*revision; });
+            Updated = registry.OnAssetUpdated().AddLambda([revision](const FAssetData&) { ++*revision; });
+            UpdatedOnDisk = registry.OnAssetUpdatedOnDisk().AddLambda([revision](const FAssetData&) { ++*revision; });
+            Renamed = registry.OnAssetRenamed().AddLambda([revision](const FAssetData&, const FString&) { ++*revision; });
+        }
+        ~FCatalogIndex()
+        {
+            if (FModuleManager::Get().IsModuleLoaded(TEXT("AssetRegistry")))
+            {
+                auto& registry = FAssetRegistryModule::GetRegistry();
+                registry.OnAssetAdded().Remove(Added);
+                registry.OnAssetRemoved().Remove(Removed);
+                registry.OnAssetUpdated().Remove(Updated);
+                registry.OnAssetUpdatedOnDisk().Remove(UpdatedOnDisk);
+                registry.OnAssetRenamed().Remove(Renamed);
+            }
+            if (Pending.IsValid()) Pending.Wait();
+        }
+        const TArray<FCatalogEntry>* Read()
+        {
+            if (Pending.IsValid() && Pending.IsReady())
+            {
+                Entries = MoveTemp(Pending.GetMutable());
+                Pending = {};
+                IndexedRevision = BuildingRevision;
+                Ready = true;
+            }
+            if (!Pending.IsValid() && (!Ready || IndexedRevision != Revision->load()))
+            {
+                BuildingRevision = Revision->load();
+                auto& registry = FAssetRegistryModule::GetRegistry();
+                TArray<FARFilter> filters;
+                for (const auto* type : { UStaticMesh::StaticClass(), UTexture2D::StaticClass(), UMaterialInterface::StaticClass() })
+                {
+                    FARFilter filter;
+                    filter.ClassPaths.Add(type->GetClassPathName());
+                    filter.PackagePaths = { FName(TEXT("/Game")), FName(TEXT("/Engine")) };
+                    filter.bRecursiveClasses = true;
+                    filter.bRecursivePaths = true;
+                    filters.Add(MoveTemp(filter));
+                }
+                // Include unsaved in-memory assets without accessing UObjects on workers.
+                TArray<FCatalogEntry> memory;
+                for (auto kind = 0; kind < filters.Num(); ++kind)
+                {
+                    TArray<FAssetData> assets;
+                    registry.GetInMemoryAssets(filters[kind], assets);
+                    for (const auto& asset : assets)
+                    {
+                        auto path = asset.GetSoftObjectPath().ToString();
+                        if (IsAllowedAssetPath(path)) memory.Add({MoveTemp(path), asset.AssetName.ToString(), static_cast<uint8>(kind)});
+                    }
+                    filters[kind].bIncludeOnlyOnDiskAssets = true;
+                }
+                Pending = Async(EAsyncExecution::ThreadPool, [&registry, filters = MoveTemp(filters), result = MoveTemp(memory)]() mutable
+                {
+                    for (auto kind = 0; kind < filters.Num(); ++kind)
+                        registry.EnumerateAssets(filters[kind], [&result, kind](const FAssetData& asset)
+                        {
+                            auto path = asset.GetSoftObjectPath().ToString();
+                            if (IsAllowedAssetPath(path)) result.Add({MoveTemp(path), asset.AssetName.ToString(), static_cast<uint8>(kind)});
+                            return true;
+                        });
+                    result.Sort([](const FCatalogEntry& left, const FCatalogEntry& right) { return left.Path < right.Path; });
+                    // A loaded asset may also appear in the on-disk registry.
+                    auto write = 0;
+                    for (auto read = 0; read < result.Num(); ++read)
+                        if (write == 0 || result[read].Path != result[write - 1].Path)
+                        {
+                            if (write != read) result[write] = MoveTemp(result[read]);
+                            ++write;
+                        }
+                    result.SetNum(write);
+                    return result;
+                });
+            }
+            return Ready && IndexedRevision == Revision->load() ? &Entries : nullptr;
+        }
+    private:
+        std::shared_ptr<std::atomic<uint64>> Revision = std::make_shared<std::atomic<uint64>>(1);
+        uint64 IndexedRevision = 0, BuildingRevision = 0;
+        bool Ready = false;
+        FDelegateHandle Added, Removed, Updated, UpdatedOnDisk, Renamed;
+        TArray<FCatalogEntry> Entries;
+        TFuture<TArray<FCatalogEntry>> Pending;
+    };
+    TUniquePtr<FCatalogIndex> CatalogIndex;
 
     FString Serialize(const TSharedRef<FJsonObject>& object)
     {
@@ -149,45 +256,21 @@ namespace
         if (!assetClass.IsEmpty() && assetClass != TEXT("model") && assetClass != TEXT("texture") &&
             assetClass != TEXT("material")) return TEXT("Unsupported Unreal asset class.");
 
-        auto assets = TArray<FAssetData>{};
-        auto& registry = FAssetRegistryModule::GetRegistry();
-        auto addClass = [&registry, &assets](UClass* type)
-        {
-            auto matching = TArray<FAssetData>{};
-            registry.GetAssetsByClass(type->GetClassPathName(), matching, true);
-            assets.Append(MoveTemp(matching));
-        };
-        if (assetClass.IsEmpty() || assetClass == TEXT("model")) addClass(UStaticMesh::StaticClass());
-        if (assetClass.IsEmpty() || assetClass == TEXT("texture")) addClass(UTexture2D::StaticClass());
-        if (assetClass.IsEmpty() || assetClass == TEXT("material")) addClass(UMaterialInterface::StaticClass());
-        auto seen = TSet<FString>{};
-        assets.RemoveAll([&query, &seen](const FAssetData& data)
-        {
-            auto path = data.GetSoftObjectPath().ToString();
-            if (!IsAllowedAssetPath(path) || seen.Contains(path)) return true;
-            seen.Add(path);
-            return
-                (!query.IsEmpty() && !data.AssetName.ToString().Contains(query, ESearchCase::IgnoreCase) &&
-                 !path.Contains(query, ESearchCase::IgnoreCase));
-        });
-        assets.Sort([](const FAssetData& left, const FAssetData& right)
-        {
-            return left.GetSoftObjectPath().ToString() < right.GetSoftObjectPath().ToString();
-        });
+        if (!CatalogIndex) CatalogIndex = MakeUnique<FCatalogIndex>();
+        const auto* assets = CatalogIndex->Read();
         auto entries = TArray<TSharedPtr<FJsonValue>>{};
-        auto start = FMath::Min(offset, assets.Num());
-        auto end = FMath::Min(start + limit, assets.Num());
-        for (auto index = start; index < end; ++index)
+        auto total = 0;
+        const TCHAR* kinds[] = { TEXT("model"), TEXT("texture"), TEXT("material") };
+        if (assets) for (const auto& asset : *assets)
         {
-            const auto& asset = assets[index];
+            if ((!assetClass.IsEmpty() && assetClass != kinds[asset.Kind]) ||
+                (!query.IsEmpty() && !asset.Name.Contains(query, ESearchCase::IgnoreCase) &&
+                    !asset.Path.Contains(query, ESearchCase::IgnoreCase))) continue;
+            if (total++ < offset || entries.Num() >= limit) continue;
             auto entry = MakeShared<FJsonObject>();
-            auto path = asset.GetSoftObjectPath().ToString();
-            entry->SetStringField(TEXT("path"), path);
-            entry->SetStringField(TEXT("name"), asset.AssetName.ToString());
-            entry->SetStringField(TEXT("assetClass"), assetClass.IsEmpty()
-                ? (asset.AssetClassPath == UStaticMesh::StaticClass()->GetClassPathName() ? TEXT("model")
-                    : asset.AssetClassPath == UTexture2D::StaticClass()->GetClassPathName() ? TEXT("texture") : TEXT("material"))
-                : assetClass);
+            entry->SetStringField(TEXT("path"), asset.Path);
+            entry->SetStringField(TEXT("name"), asset.Name);
+            entry->SetStringField(TEXT("assetClass"), kinds[asset.Kind]);
             entry->SetStringField(TEXT("engine"), TEXT("Unreal"));
             entries.Add(MakeShared<FJsonValueObject>(entry));
         }
@@ -195,7 +278,8 @@ namespace
         reply->SetStringField(TEXT("requestId"), requestId);
         reply->SetStringField(TEXT("operation"), TEXT("catalog"));
         reply->SetArrayField(TEXT("assets"), MoveTemp(entries));
-        reply->SetNumberField(TEXT("total"), assets.Num());
+        reply->SetNumberField(TEXT("total"), total);
+        reply->SetBoolField(TEXT("pending"), assets == nullptr);
         reply->SetNumberField(TEXT("offset"), offset);
         reply->SetField(TEXT("error"), MakeShared<FJsonValueNull>());
         return {};
@@ -281,6 +365,12 @@ namespace
         reply->SetField(TEXT("error"), MakeShared<FJsonValueNull>());
         return {};
     }
+}
+
+void FLibraEditorAssetAdapter::Shutdown()
+{
+    check(IsInGameThread());
+    CatalogIndex.Reset();
 }
 
 FString FLibraEditorAssetAdapter::ProcessRequest(const FString& requestText)

@@ -4,6 +4,7 @@
 #include "AssetToolsModule.h"
 #include "LibraAssetTypeActions.h"
 #include "LibraEditorPreviewSession.h"
+#include "LibraEditorAssetAdapter.h"
 #include "LibraEffectAsset.h"
 #include "LibraSourceProjectDetails.h"
 #include "LibraSpawnableAsset.h"
@@ -40,6 +41,7 @@ public:
     {
         FCoreDelegates::OnPostEngineInit.Remove(proceduralInit);
         preview.Stop();
+        FLibraEditorAssetAdapter::Shutdown();
         if (auto* assetTools = FModuleManager::GetModulePtr<FAssetToolsModule>("AssetTools"))
             for (const auto& actions : assetActions) assetTools->Get().UnregisterAssetTypeActions(actions);
         assetActions.Reset();
