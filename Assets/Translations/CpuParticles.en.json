@@ -1,4 +1,8 @@
 {
+  "Cpu.Texture.Source": "Texture source",
+  "Cpu.Texture.Assigned": "Assigned texture",
+  "Cpu.Texture.White": "White square",
+  "Cpu.Texture.RadialGlow": "Radial glow",
   "Cpu.Flow.Title":"CPU Particle Flow",
   "Cpu.Flow.Summary":"Fixed Spawn → Update → Draw phases, not Signal connections or a live trace. Inside a stage, use the normal CPU graph with Property and Signal inputs/outputs.",
   "Cpu.Flow.Spawn":"Spawn",

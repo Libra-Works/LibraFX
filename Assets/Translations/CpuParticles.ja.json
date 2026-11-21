@@ -1,4 +1,8 @@
 {
+  "Cpu.Texture.Source": "テクスチャーの種類",
+  "Cpu.Texture.Assigned": "割り当てたテクスチャー",
+  "Cpu.Texture.White": "白い四角",
+  "Cpu.Texture.RadialGlow": "グロー玉",
   "Cpu.Flow.Title":"CPU パーティクル Flow",
   "Cpu.Flow.Summary":"生成 → 更新 → 描画の固定フェーズです。Signal 接続や実行トレースではありません。ステージの内部は通常の CPU グラフで、Property／Signal の入出力を使えます。",
   "Cpu.Flow.Spawn":"生成",

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "typeId": "ab42721e-d2c3-43e9-a96d-c80000000001",
+  "namespace": "LiberaFx",
+  "name": "ParticleTextureSource",
+  "values": [
+    { "value": 0, "name": "AssignedTexture", "displayNameKey": "Cpu.Texture.Assigned" },
+    { "value": 1, "name": "White", "displayNameKey": "Cpu.Texture.White" },
+    { "value": 2, "name": "RadialGlow", "displayNameKey": "Cpu.Texture.RadialGlow" }
+  ]
+}

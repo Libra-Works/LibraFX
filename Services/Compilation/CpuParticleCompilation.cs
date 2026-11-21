@@ -302,9 +302,12 @@ public static class CpuParticleCompilation
             var system = item.Node;
             var draw = system.ChildGraph!.Nodes.Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleSpriteDraw");
             var path = Parameter(draw, "assetPath").GetString() ?? "";
+            var textureSource = Parameter(draw, "textureSource").GetInt32();
+            path = textureSource switch { 0 => path, 1 => "builtin:white", 2 => "builtin:radial-glow",
+                _ => throw new InvalidDataException("Unsupported CPU particle texture source.") };
             var scope = resources?.GetInstancePath(draw.Id, item.Scope) ?? item.Scope;
-            path = resources?.ResolvePath(draw.Id, "assetPath", "texture", path, scope) ?? path;
-            if (path != "builtin:white" &&
+            if (textureSource == 0) path = resources?.ResolvePath(draw.Id, "assetPath", "texture", path, scope) ?? path;
+            if (path is not ("builtin:white" or "builtin:radial-glow") &&
                 (resources is null || !resources.HasResourceUse(draw.Id, "assetPath", scope)))
             {
                 EngineAssetPath.Validate(path);

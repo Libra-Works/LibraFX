@@ -167,7 +167,7 @@ public sealed class AssetReferenceIndex
 
     public static ReferenceResource FromBinding(string scope, string binding, string assetClass)
     {
-        if (binding is "builtin:white" or "builtin:unlit-alpha" or "builtin:unlit-additive" or "builtin:unlit-color")
+        if (binding is "builtin:white" or "builtin:radial-glow" or "builtin:unlit-alpha" or "builtin:unlit-additive" or "builtin:unlit-color")
             return new(binding, ReferenceResourceKind.Builtin, binding, assetClass, binding);
         try
         {
