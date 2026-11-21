@@ -57,8 +57,58 @@ internal static class ParticleBenchmarkFixtures
                     SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(MathVariant(graph, divideByZero: true))));
                 File.WriteAllBytes(Path.Combine(directory, "CpuBatch-error-order.lfxb"),
                     SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(MathVariant(graph, mixedError: true))));
+                foreach (var mode in new[] { "divide", "mixed", "zero-life", "unsupported" })
+                    File.WriteAllBytes(Path.Combine(directory, "CpuBirth-" + mode + ".lfxb"),
+                        SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(BirthVariant(graph, mode))));
             }
         }
+    }
+
+    private static GraphSnapshot BirthVariant(GraphSnapshot graph, string mode)
+    {
+        var system = graph.Nodes.Single(node => CpuParticleSchema.IsContainer(node.Kind));
+        GraphNodeSnapshot TransformStage(GraphNodeSnapshot stage)
+        {
+            var stageName = CpuParticleSchema.Name(stage.Kind);
+            if (stageName is not ("CpuParticleSpawn" or "CpuParticleUpdate")) return stage;
+            var spawn = stageName == "CpuParticleSpawn";
+            var nodes = stage.ChildGraph!.Nodes.ToList();
+            var edges = stage.ChildGraph.Connections.ToList();
+            GraphNodeSnapshot Add(string kind, params (string Id, string Type, object Value)[] parameters)
+            {
+                var definition = GraphNodeDefinition.All.Single(item => item.TypeName == kind);
+                var node = new GraphNodeSnapshot(Guid.NewGuid(), definition.Kind, definition.Name, 0, 0,
+                    definition.PortType, definition.PortCategory, Parameters: parameters.Select(parameter =>
+                        new NodeParameterSnapshot(parameter.Id, parameter.Type, JsonSerializer.SerializeToElement(parameter.Value))).ToArray());
+                nodes.Add(node); return node;
+            }
+            void Wire(GraphNodeSnapshot source, GraphNodeSnapshot target, string input) => edges.Add(new(source.Id, target.Id, input,
+                GraphNodeDefinition.All.Single(item => item.Kind == source.Kind).OutputPorts?.FirstOrDefault()?.Id));
+            if (spawn && mode is "divide" or "mixed")
+            {
+                var id = Add("CpuParticleId");
+                var denominator = Add("Subtract", ("b", "float", 2d)); Wire(id, denominator, "a");
+                var division = Add("Divide", ("a", "float", 1d)); Wire(denominator, division, "b");
+            }
+            if (!spawn && mode == "mixed")
+            {
+                var command = Add("CpuParticleSetLife", ("value", "float", -1d));
+                var previous = nodes.Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleSetColor");
+                edges.Add(new(previous.Id, command.Id, "signal", "then"));
+            }
+            if (mode == "zero-life")
+            {
+                if (spawn)
+                    nodes = nodes.Select(node => CpuParticleSchema.Name(node.Kind) != "CpuParticleSetLife" ? node : node with
+                    { Parameters = [new("value", "float", JsonSerializer.SerializeToElement(0d))] }).ToList();
+                else Add("Divide", ("a", "float", 1d), ("b", "float", 0d));
+            }
+            if (spawn && mode == "unsupported") Add("Sin", ("value", "float", .3));
+            return stage with { ChildGraph = stage.ChildGraph with { Nodes = nodes.ToArray(), Connections = edges.ToArray() } };
+        }
+        system = system with { ChildGraph = system.ChildGraph! with
+            { Nodes = system.ChildGraph.Nodes.Select(TransformStage).ToArray() } };
+        return graph with { Nodes = graph.Nodes.Select(node => node.Id == system.Id ? system : node).ToArray() };
     }
 
     private static GraphSnapshot MathVariant(GraphSnapshot graph, bool divideByZero = false, bool mixedError = false)

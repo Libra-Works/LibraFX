@@ -77,6 +77,10 @@ jobs:
             (Join-Path $fixtures 'CpuFountain-1000.lfxb') `
             (Join-Path $fixtures 'CpuFountain-retirement.lfxb') `
             (Join-Path $fixtures 'CpuBatch-math.lfxb') `
+            (Join-Path $fixtures 'CpuBirth-zero-life.lfxb') `
+            --birth-divide (Join-Path $fixtures 'CpuBirth-divide.lfxb') `
+            --birth-mixed (Join-Path $fixtures 'CpuBirth-mixed.lfxb') `
+            --spawn-fallback (Join-Path $fixtures 'CpuBirth-unsupported.lfxb') `
             --divide-zero (Join-Path $fixtures 'CpuBatch-divide-zero.lfxb') `
             --mixed-error (Join-Path $fixtures 'CpuBatch-error-order.lfxb') `
             (Join-Path $fallback 'cpu-particles.lfxb')

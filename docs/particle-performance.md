@@ -127,8 +127,9 @@ no additional worker threads or per-particle/per-frame allocations.
 Eligibility is deliberately limited: at most 64 nodes, supported arithmetic,
 copy/broadcast, particle attributes, Clamp/Compose and local setters/movement;
 no external IO, stateful or unknown callbacks, branches, Signal fanout or later
-bytecode formats. Other stages automatically use the interpreter. Spawn remains
-interpreted. Persistent particle storage is still slot-based: this is batched
+bytecode formats. Other stages automatically use the interpreter. The first
+iteration covered Update only; eligible Spawn stages are now batched as described
+below. Persistent particle storage is still slot-based: this is batched
 SoA scratch, not yet a complete persistent SoA or cross-instance ECS manager.
 
 On the same 9950X/Release fixture, alternating interpreter and automatic execution
@@ -172,8 +173,8 @@ This is a hot/cold split, not yet fully separate position/velocity/color columns
 Eligible stateless Update stages also reuse one VM for spawn-time Update and
 ordered error fallback. They no longer initialize one Update VM per newborn
 particle or retain its per-particle work slab. Unsupported stages and explicit
-interpreter mode keep their independent VMs. Spawn itself still runs through
-the interpreter; large initial bursts remain a performance concern.
+interpreter mode keep their independent VMs. The measurements in this section
+predate the batched Spawn implementation below.
 
 Native `SpawnableHost::cpuParticleRead` copies a caller-sized range with optional
 age/lifetime data. The C export `libra_spawnable_host_scoped_cpu_particle_read`
@@ -203,6 +204,49 @@ short tails, empty/end ranges, invalid ranges and buffer canaries. C ABI tests
 also compare 1,000 compiled particles and timing records across partial blocks.
 The disposable Windows release-gate native test build uses AddressSanitizer to
 check lifetime and memory access; distributed SDK builds remain uninstrumented.
+
+## Batched initial emission
+
+Eligible Spawn and Update stages now both use 32-particle blocks. Birth batching
+requires both plans to be isolated: no external IO, mutable custom state or
+unrecognized operations. Sphere emission uses the same seeded random function,
+computed once per particle. The supported numeric/local-command subset is shared
+with Update. An unsupported Spawn retains its interpreter while an eligible
+Update can still batch normally.
+
+The runtime decodes plans before allocating particle VM storage. When both stages
+qualify, it allocates two shared reference VMs and hot particle slots, omitting
+all per-particle VM objects and stage work slabs. Shared VMs are destroyed before
+their borrowed programs/descriptors. There are no extra threads, per-frame
+allocations, delayed births or changes to package/ABI formats.
+
+Spawn and newborn Update run with zero particle delta. A zero Spawn lifetime
+skips newborn Update. If a speculative block fails, it is reset and replayed
+in original per-particle Spawn → Update order, preserving the first error even
+when one particle fails in Update before a later particle fails in Spawn.
+Normal frames preserve stable slot/ID ordering and lifetime retirement.
+
+Three Release runs on the same Ryzen 9 9950X, 10,000 particles × 8 hosts,
+180 measured frames after 30 warmup frames:
+
+| Run | Host creation (ms) | Initial emission (ms) | Update mean (ms) | Bulk snapshot mean (ms) |
+| --- | --- | --- | --- | --- |
+| 1 | 3.335 | 5.557 | 1.138 | 0.192 |
+| 2 | 2.995 | 5.452 | 1.142 | 0.195 |
+| 3 | 3.009 | 5.487 | 1.130 | 0.201 |
+
+Initial emission previously took about 36–37 ms after the hot/cold split.
+It now takes about 5.5 ms for all 80,000 births in that fixture. This is
+simulation and snapshot extraction on the calling thread, without geometry
+conversion or drawing; it does not establish Niagara parity or a frame budget
+for every effect. Complex/stateful Spawn graphs can still use the slower path.
+The benchmark reports host creation separately from initial emission.
+
+The matching-compiler differential fixtures now also cover birth-time division
+by zero, mixed Spawn/Update failure precedence, zero-lifetime births and an
+unsupported Spawn with batched Update. Tests assert that eligible stages omit
+per-particle VMs, compare full state/timing/events with the interpreter, and run
+under AddressSanitizer in the release gate.
 
 ## Engine comparison still required
 
