@@ -34,10 +34,15 @@ internal static class McpAuthoringTransitionTests
         var port = ((IPEndPoint)reservation.LocalEndpoint).Port;
         reservation.Stop();
         var host = new McpHost(port);
+        var graphProvider = new ActiveGraphProvider(graph);
         var timings = new List<object>();
         try
         {
-            await host.StartAsync(new ActiveGraphProvider(graph));
+            await host.StartAsync(graphProvider);
+            using var chatClient = new ChatMcpClient(host.ActualEndpoint, host.AccessToken);
+            await chatClient.ConnectAsync(CancellationToken.None);
+            Require(chatClient.Tools.Any(tool => tool.Name == "libera_graph_analyze_optimization"),
+                "Optimization analysis must be discoverable by the in-editor MCP chat client.");
             using var client = new LocalPreviewMcpClient(host);
             async Task<JsonDocument> Call(string name, object args)
             {
@@ -99,7 +104,30 @@ internal static class McpAuthoringTransitionTests
             {
                 var beforeSample = graph.CreateSnapshot();
                 using (await Call("libera_create_particle_sample", new { style = sample })) { }
-                using (await Call("libera_graph_compile_spawnable", new { })) { }
+                using (var compiled = await Call("libera_graph_compile_spawnable", new { }))
+                    Require(Convert.FromBase64String(compiled.RootElement.GetProperty("cpuProgramsBase64").GetString()!).Length > 0,
+                        "MCP compilation must expose executable root CPU programs.");
+                if (sample == "CpuFountain")
+                {
+                    var beforeAnalysis = graph.CreateSnapshot();
+                    var revision = graph.History.CurrentNodeId;
+                    using var report = await Call("libera_graph_analyze_optimization", new { });
+                    Require(!report.RootElement.GetProperty("runtimeExecuted").GetBoolean() &&
+                        report.RootElement.GetProperty("measuredFrameMilliseconds").ValueKind == JsonValueKind.Null &&
+                        report.RootElement.GetProperty("binary").GetProperty("cpuBytesSaved").GetInt64() >= 1280,
+                        "MCP must report actual CPU export savings without claiming runtime timings.");
+                    Require(revision == graph.History.CurrentNodeId && GraphSnapshot.ContentEquals(beforeAnalysis, graph.CreateSnapshot()),
+                        "Optimization analysis must preserve graph state and undo history.");
+                    Require(!ChatMcpClient.NeedsConfirmation("libera_graph_analyze_optimization"),
+                        "Read-only optimization analysis must not be treated as a graph edit.");
+                    using var lease = await Dispatcher.UIThread.InvokeAsync(() => ChatMcpExecution.Capture(graphProvider));
+                    using var chatReport = JsonDocument.Parse(await chatClient.CallAsync(new("optimization-analysis",
+                        "libera_graph_analyze_optimization", JsonSerializer.SerializeToElement(new { })), lease.Token, CancellationToken.None));
+                    Require(!chatReport.RootElement.TryGetProperty("isError", out var error) || !error.GetBoolean(),
+                        "Graph-scoped chat must be able to read optimization analysis.");
+                    Require(revision == graph.History.CurrentNodeId && GraphSnapshot.ContentEquals(beforeAnalysis, graph.CreateSnapshot()),
+                        "Chat optimization analysis must preserve source and history too.");
+                }
                 using (await Call("libera_graph_undo", new { })) { }
                 Require(GraphSnapshot.ContentEquals(beforeSample, graph.CreateSnapshot()),
                     "Creating a particle sample through MCP must be a single undoable edit.");

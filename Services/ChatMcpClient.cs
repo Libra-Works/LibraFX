@@ -19,7 +19,7 @@ public sealed class ChatMcpClient : IDisposable
     // Conservative allowlist: every exposed tool executes through the guarded UI dispatcher.
     private static readonly HashSet<string> Allowed = new(StringComparer.Ordinal)
     {
-        "libera_graph_read", "libera_graph_list_node_types", "libera_graph_list_enums", "libera_graph_describe_node_ports",
+        "libera_graph_analyze_optimization", "libera_graph_read", "libera_graph_list_node_types", "libera_graph_list_enums", "libera_graph_describe_node_ports",
         "libera_graph_describe_group", "libera_graph_describe_spawnable",
         "libera_graph_create_node", "libera_graph_connect_nodes", "libera_graph_rename_node",
         "libera_graph_move_node", "libera_graph_set_parameter", "libera_graph_delete_node",
@@ -28,7 +28,7 @@ public sealed class ChatMcpClient : IDisposable
     };
 
     public static bool NeedsConfirmation(string name) => name is not
-        ("libera_graph_read" or "libera_graph_list_node_types" or "libera_graph_list_enums" or "libera_graph_describe_node_ports" or
+        ("libera_graph_analyze_optimization" or "libera_graph_read" or "libera_graph_list_node_types" or "libera_graph_list_enums" or "libera_graph_describe_node_ports" or
          "libera_graph_describe_group" or "libera_graph_describe_spawnable" or "libera_graph_preview_layout");
 
     public ChatMcpClient(string endpoint, string token)
