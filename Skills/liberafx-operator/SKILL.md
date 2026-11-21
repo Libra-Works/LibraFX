@@ -185,8 +185,11 @@ A successful CPU/GPU export proves compilation, not a timing improvement or
 visible equivalence. If runtime timings or frames are unavailable, report the
 verified graph/binary change and leave speed/appearance unverified. Report source
 node changes separately from compiler optimizations already applied. Core host
-pool preparation is a loading/integration concern; reorganizing graph nodes does
-not enable pooling in an engine adapter.
+pool preparation is a loading/integration concern; reorganizing graph nodes
+does not itself prepare an engine pool. Matching Unity/Unreal components expose
+loading-time preparation and a shared simulation path; Godot exposes
+`prewarm_package`. Check the actual installed SDK and preparation status before
+claiming that normal playback used a pool or shared workers.
 
 ## Assets and material authoring
 

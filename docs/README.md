@@ -9,6 +9,7 @@ The Markdown sources are also available on GitHub:
 ## References in this repository
 
 - [Particle performance baseline and shared scheduling requirements](particle-performance.md)
+- [Prepared playback, shared simulation and persistent particle SoA](runtime-shared-simulation.md)
 
 - Artist introduction: [editor tour](site/workspace-tour.md) and [first fountain](site/first-fountain.md).
 - 制作者向け入門：[はじめての画面操作](site/ja/workspace-tour.md)、[最初の噴水を作る](site/ja/first-fountain.md)。

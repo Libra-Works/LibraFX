@@ -57,7 +57,8 @@ foreach ($relative in $roots) {
         $files.Add($file)
     }
 }
-$extraFiles = @('LICENSE', 'Runtime\CMakeLists.txt', 'SDK\compatibility.json', 'docs\sdk-distribution.md')
+$extraFiles = @('LICENSE', 'Runtime\CMakeLists.txt', 'SDK\compatibility.json', 'docs\sdk-distribution.md',
+    'docs\runtime-shared-simulation.md', 'docs\particle-performance.md')
 if ($Engine -ne 'Core') {
     $extraFiles += 'Runtime\examples\CustomNodes\CustomScale.json', 'Runtime\examples\CustomNodes\CustomScaleNode.cpp'
 }

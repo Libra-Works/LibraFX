@@ -1,9 +1,11 @@
 # Particle performance and shared scheduling
 
-Status: measurement tools, immutable constant sharing and a conservative CPU
-batch execution plan and a prewarmed Core host pool exist. The shared effect
-manager below is a proposed next
-implementation, not a shipped scheduling guarantee.
+Status: measurement tools, CPU batch execution and prepared host pools now connect
+to a bounded shared effect-world executor and persistent component-wise particle
+storage. See [current integration and limits](runtime-shared-simulation.md).
+The historical measurements below predate this integration; the shared-manager
+requirements include further work such as mid-host slicing and asynchronous
+presentation, not guarantees supplied by the current executor.
 
 ## Current baseline
 
@@ -413,7 +415,7 @@ builtins, including CPU Stage IO and named Game IO/Owner Matrix. Spawnable
 hierarchies, external project-node callbacks and procedural mesh emitters use
 the existing ordinary host API. Renderer/GPU resource preparation is outside
 this Core pool and must follow the engine's own thread and ownership rules.
-Engine playback adapters have not been switched to automatic pooling; consumers
+At the pool-only revision, engine playback adapters had not been switched to automatic pooling; consumers
 opt in through this Core API or the new C ABI. Pool memory grows with reserved
 instance count; immutable package sharing across hosts remains separate work.
 
