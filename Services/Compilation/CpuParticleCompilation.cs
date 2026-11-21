@@ -314,6 +314,11 @@ public static class CpuParticleCompilation
             }
             var blend = Parameter(draw, "blendMode").GetString();
             var scale = Number(draw, "drawScale");
+            var flipbook = new ParticleAtlasSettings(Parameter(draw,"flipbookEnabled").GetBoolean(),
+                Parameter(draw,"atlasColumns").GetInt32(),Parameter(draw,"atlasRows").GetInt32(),
+                Number(draw,"atlasFps"),Parameter(draw,"atlasLoop").GetBoolean(),
+                Parameter(draw,"atlasStartFrame").GetInt32(),Parameter(draw,"atlasOverLife").GetBoolean());
+            if (!flipbook.IsValid) throw new InvalidDataException("Flipbook requires 1–64 columns/rows, at most 256 cells, a valid start cell and 0–1000 FPS.");
             if (path.Length == 0 || blend is not ("Alpha" or "Additive") || scale <= 0)
             {
                 throw new InvalidDataException("CPU Sprite Draw needs an explicit texture, Alpha/Additive blend and positive draw scale.");
@@ -321,7 +326,7 @@ public static class CpuParticleCompilation
             var rows = flat.Connections.Any(e => e.TargetNodeId == system.Id && e.TargetPortId == "drawMatrix")
                 ? CpuEmitterMatrixLowering.RowIds(system.Id, "draw") : null;
             return (object)new { nodeId = system.Id, assetPath = path, blendMode = blend, drawScale = scale, billboard = true,
-                drawMatrixRowNodeIds = rows };
+                drawMatrixRowNodeIds = rows, flipbook = flipbook.Enabled ? flipbook : null };
         }).ToArray();
     }
 
@@ -333,7 +338,8 @@ public static class CpuParticleCompilation
         }
         var root = System.Text.Json.Nodes.JsonNode.Parse(scene)!.AsObject();
         var draws = JsonSerializer.SerializeToNode(Draws(graph, resources));
-        root["cpuParticleVersion"] = draws!.AsArray().Any(d => d?["drawMatrixRowNodeIds"] is not null) ? 2 : 1;
+        root["cpuParticleVersion"] = draws!.AsArray().Any(d => d?["flipbook"] is not null) ? 3 :
+            draws.AsArray().Any(d => d?["drawMatrixRowNodeIds"] is not null) ? 2 : 1;
         root["cpuParticles"] = draws;
         return JsonSerializer.SerializeToUtf8Bytes(root);
     }

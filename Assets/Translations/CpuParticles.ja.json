@@ -64,5 +64,17 @@
   "Cpu.Help.Draw":"全生存 CPU 粒子をバッチ化したビルボード Sprite として描画します。テクスチャ、Alpha・Additive、正の描画倍率を指定します。更新版アダプターが必要で、Unreal はガイド記載のインスタンス RGBA 対応マテリアルも必要です。",
   "Cpu.Help.Rate":"毎秒の放出率から累積放出数を作り、CPU Particle の Emitted total へ接続します。端数は繰り越し、同じ時刻の再評価では重複放出しません。",
   "Cpu.Help.Burst":"Signal が届くたびに設定した固定数を累積放出数へ加算します。CPU Particle へ接続し、連続放出との併用は両方の累積値を Add で加算します。",
-  "Cpu.Help.Shape":"システム Seed と現在の粒子 ID から放出位置を決定的に求めます。Spawn の Set Particle Position へ接続します。Box は半径幅、Sphere は体積内、Circle は XY 円周です。"
+  "Cpu.Help.Shape":"システム Seed と現在の粒子 ID から放出位置を決定的に求めます。Spawn の Set Particle Position へ接続します。Box は半径幅、Sphere は体積内、Circle は XY 円周です。",
+  "Cpu.Parameter.Blend": "合成方式",
+  "Cpu.Blend.Alpha": "通常合成",
+  "Cpu.Blend.Additive": "加算合成",
+  "Cpu.Reduction.None": "集約しない",
+  "Cpu.Reduction.Last": "最後の粒子（ID順）",
+  "Cpu.Atlas.flipbookEnabled": "Flipbookを使う",
+  "Cpu.Atlas.atlasColumns": "列数",
+  "Cpu.Atlas.atlasRows": "行数",
+  "Cpu.Atlas.atlasFps": "毎秒のコマ数",
+  "Cpu.Atlas.atlasLoop": "ループ",
+  "Cpu.Atlas.atlasStartFrame": "開始コマ（0から）",
+  "Cpu.Atlas.atlasOverLife": "寿命全体に合わせる"
 }

@@ -391,7 +391,7 @@ bool ReadLibraPackageResourceDrawKeys(const std::vector<std::uint8_t>& bytes,
         auto cpuVersion = double{};
         if (cpuParticles->Num() > 128 ||
             (!cpuParticles->IsEmpty() && (!root->TryGetNumberField(TEXT("cpuParticleVersion"), cpuVersion) ||
-                cpuVersion != 1)))
+                (cpuVersion != 1 && cpuVersion != 2 && cpuVersion != 3))))
         {
             return false;
         }

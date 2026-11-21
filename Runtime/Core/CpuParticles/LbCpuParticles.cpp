@@ -206,6 +206,19 @@ auto CpuParticleWorld::at(const std::uint8_t systemId[16], std::size_t index, Cp
     }
     return Result::InvalidHandle;
 }
+auto CpuParticleWorld::timing(const std::uint8_t systemId[16], std::size_t index, CpuParticleTiming& out) const noexcept -> Result
+{
+    if (!systemId) return Result::InvalidArgument;
+    for (const auto& system : impl_->systems) {
+        if (std::memcmp(systemId, system->id.data(), 16) != 0) continue;
+        if (index >= system->live) return Result::InvalidArgument;
+        const auto& slot = system->slots[system->activeIndices[index]];
+        out = {slot.age, slot.life};
+        return Result::Ok;
+    }
+    return Result::InvalidHandle;
+}
+
 auto CpuParticleWorld::popEvent(CpuParticleEvent& out) noexcept -> bool
 {
     for (auto& system : impl_->systems)

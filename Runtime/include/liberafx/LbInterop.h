@@ -70,6 +70,11 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_cpu_partic
     LibraSpawnableHostHandle host, const uint8_t systemId[16], uint32_t* outCount);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_cpu_particle_at(
     LibraSpawnableHostHandle host, const uint8_t systemId[16], uint32_t index, LibraCpuParticleSnapshot* out);
+/* Optional animation timing. The existing 80-byte particle snapshot is unchanged.
+   A zero container UUID and instanceId=0 select the root effect. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_scoped_cpu_particle_timing(
+    LibraSpawnableHostHandle host, const uint8_t containerId[16], uint64_t instanceId,
+    const uint8_t systemId[16], uint32_t index, double* outAge, double* outLife);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_cpu_particle_pop_event(
     LibraSpawnableHostHandle host, LibraCpuParticleEvent* out, uint32_t* hasEvent);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_scoped_cpu_particle_count(

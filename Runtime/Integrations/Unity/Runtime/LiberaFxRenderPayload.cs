@@ -24,6 +24,7 @@ namespace LiberaFx.Unity
 
     [Serializable] internal sealed class LiberaFxCpuParticlePayload
     {
+        public ParticleAtlas flipbook;
         public string[] drawMatrixRowNodeIds;
         public string nodeId;
         public string assetPath;
@@ -271,6 +272,7 @@ namespace LiberaFx.Unity
 
     internal sealed class LiberaFxPreparedCpuParticleRenderer
     {
+        public ParticleAtlas flipbook;
         public byte[][] drawRows;
         public string nodeId;
         public byte[] nodeIdBytes;
@@ -416,6 +418,8 @@ namespace LiberaFx.Unity
                 else texture = asset.texture;
                 result[index] = new LiberaFxPreparedCpuParticleRenderer
                 {
+                    flipbook = item.flipbook != null && item.flipbook.enabled
+                        ? item.flipbook.IsValid ? item.flipbook : throw new InvalidOperationException("Invalid CPU Flipbook settings.") : null,
                     nodeId = nodeId,
                     nodeIdBytes = new NativeSignal(nodeId).Id,
                     texture = texture,
@@ -847,7 +851,7 @@ namespace LiberaFx.Unity
                 }
             }
             payload.cpuParticles = payload.cpuParticles ?? Array.Empty<LiberaFxCpuParticlePayload>();
-            if (payload.cpuParticleVersion != 1 && payload.cpuParticleVersion != 2 && (payload.cpuParticleVersion != 0 || payload.cpuParticles.Length != 0))
+            if (payload.cpuParticleVersion != 1 && payload.cpuParticleVersion != 2 && payload.cpuParticleVersion != 3 && (payload.cpuParticleVersion != 0 || payload.cpuParticles.Length != 0))
                 throw new NotSupportedException("Unsupported CPU particle scene metadata version.");
             var drawTransforms = new Dictionary<string, LiberaFxGpuDrawTransformPayload>(StringComparer.Ordinal);
             foreach (var transform in payload.gpuDrawTransforms ?? Array.Empty<LiberaFxGpuDrawTransformPayload>())

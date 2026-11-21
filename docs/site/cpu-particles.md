@@ -194,6 +194,33 @@ Godot `pop_scoped_cpu_particle_event`, or the native scoped CPU API. Unread even
 remain available under their original scope after natural retirement; explicit
 Stop/restart discards them.
 
+## Animate a texture sheet (Flipbook)
+
+Open **CPU Particle → Sprite Draw**, choose your texture, and enable **Flipbook**.
+Set **Columns** and **Rows** to the sheet layout. For a 4×4 sheet at 12 frames
+per second, enter 4, 4 and 12. Frames run left to right from the top row; the
+first frame is 0. Turn off **Loop** to hold the last frame, or enable
+**Fit animation to particle lifetime** to play the remaining cells once over
+each particle's lifetime. In lifetime mode FPS and Loop are ignored. A paused
+or slowed effect also pauses or slows its particle animation.
+
+Columns and rows must each be 1–64, with at most 256 cells in total. FPS may be
+0–1000; zero holds the start frame in FPS mode. These are Inspector fields:
+no extra nodes or handwritten JSON are required. Blend mode and output
+reduction also offer localized selection lists while retaining existing saved
+string values.
+
+Unity and Godot supply the atlas UV handling. In Unreal, the CPU particle
+material must expose a vector **AtlasRect** with default `(0,0,1,1)` and sample
+`Texture` at `TexCoord0 * AtlasRect.zw + AtlasRect.xy`. Existing particle color
+and opacity setup stays the same. Unreal groups particles by frame, with at
+most one instanced draw per occupied cell and emitter scope.
+
+Flipbook uses render metadata `cpuParticleVersion:3`; Draw Matrix alone uses
+version 2 and older CPU effects retain version 1. Use matching updated adapters
+and native libraries. The existing 80-byte snapshot ABI is unchanged; animation
+age and lifetime have a separate scoped native query.
+
 ## Limits, ownership and compatibility
 
 * Root, ordinary Graph Group and Spawnable Group CPU systems are supported.

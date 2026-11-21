@@ -1,5 +1,6 @@
 #include "liberafx/LbCpuParticles.h"
 #include "liberafx/LbSpawnableHost.h"
+#include "liberafx/LbParticleAtlas.h"
 #include "../Core/CpuParticles/LbCpuParticlesInternal.h"
 #ifdef NDEBUG
 #undef NDEBUG
@@ -61,6 +62,22 @@ auto inlineJob(void*, Job job, void* context) noexcept -> bool
 }
 void poolTests()
 {
+    auto atlas = ParticleAtlas{};
+    atlas.enabled = true;
+    atlas.columns = 2;
+    atlas.rows = 2;
+    atlas.fps = 4;
+    assert(atlas.valid() && atlas.frame(0, 2) == 0 && atlas.frame(0.25, 2) == 1);
+    assert(atlas.frame(0.75, 2) == 3 && atlas.frame(1, 2) == 0);
+    atlas.startFrame = 1;
+    assert(atlas.frame(0, 2) == 1 && atlas.frame(0.75, 2) == 0);
+    atlas.loop = false;
+    assert(atlas.frame(-1, 2) == 1 && atlas.frame(0.5, 2) == 3 && atlas.frame(1e100, 2) == 3);
+    atlas.overLife = true;
+    assert(atlas.frame(0, 3) == 1 && atlas.frame(1, 3) == 2 && atlas.frame(2, 3) == 3);
+    assert(atlas.frame(3, 3) == 3 && atlas.frame(0, 0) == 1);
+    atlas.columns = 0;
+    assert(!atlas.valid() && atlas.frame(1, 2) == 0);
     auto bytes = payload(8, 3, 0);
     auto world = std::unique_ptr<CpuParticleWorld>{};
     assert(CpuParticleWorld::create(bytes.data(), bytes.size(), nullptr, 0, world) == Result::Ok);
@@ -75,6 +92,7 @@ void poolTests()
     auto count = std::size_t{};
     assert(world->count(id.data(), count) == Result::Ok && count == 3);
     auto snapshot = CpuParticleSnapshot{};
+    auto timing = CpuParticleTiming{};
     for (auto index = 0u; index < 3; ++index)
     {
         assert(world->at(id.data(), index, snapshot) == Result::Ok && snapshot.id == index + 1);
@@ -82,6 +100,8 @@ void poolTests()
     }
     assert(world->advance(root, 0, true, {}) == Result::Ok && world->activeCount() == 3);
     assert(world->advance(root, 1, false, {}) == Result::Ok && world->activeCount() == 3);
+    assert(world->timing(id.data(), 0, timing) == Result::Ok && timing.age == 1 && timing.life == 2);
+    assert(world->timing(id.data(), 3, timing) != Result::Ok);
     assert(world->advance(root, 2, false, {}) == Result::Ok && world->activeCount() == 0);
     assert(world->advance(root, 1, true, {}) == Result::InvalidArgument);
     bytes = payload(2, 0, 3);

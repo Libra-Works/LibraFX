@@ -104,6 +104,25 @@ internal static class McpAuthoringTransitionTests
                 Require(GraphSnapshot.ContentEquals(beforeSample, graph.CreateSnapshot()),
                     "Creating a particle sample through MCP must be a single undoable edit.");
             }
+            var cpu = await Create("CpuParticle");
+            using (await Call("libera_graph_enter", new { nodeId = cpu })) { }
+            var cpuDraw = graph.Nodes.Single(node => CpuParticleSchema.Name(node.Definition.Kind) == "CpuParticleSpriteDraw").Id;
+            using (await Call("libera_graph_set_parameter", new { nodeId = cpuDraw, parameterId = "atlasColumns", value = 2 })) { }
+            using (await Call("libera_graph_set_parameter", new { nodeId = cpuDraw, parameterId = "atlasRows", value = 2 })) { }
+            using (await Call("libera_graph_set_parameter", new { nodeId = cpuDraw, parameterId = "atlasFps", value = 4 })) { }
+            var beforeFlipbook = graph.CreateSnapshot();
+            using (await Call("libera_graph_set_parameter", new { nodeId = cpuDraw, parameterId = "flipbookEnabled", value = true })) { }
+            using (await Call("libera_graph_up", new { })) { }
+            using (var compiled = await Call("libera_graph_compile_spawnable", new { }))
+            {
+                using var render = JsonDocument.Parse(Convert.FromBase64String(compiled.RootElement.GetProperty("rootRenderConfigurationBase64").GetString()!));
+                var scene = render.RootElement;
+                Require(scene.GetProperty("cpuParticleVersion").GetInt32() == 3 &&
+                    scene.GetProperty("cpuParticles")[0].GetProperty("flipbook").GetProperty("columns").GetInt32() == 2,
+                    "MCP Flipbook edits must reach the compiled particle renderer.");
+            }
+            using (await Call("libera_graph_undo", new { })) { }
+            Require(GraphSnapshot.ContentEquals(beforeFlipbook, graph.CreateSnapshot()), "Flipbook enable must be an undoable document edit.");
             foreach (var archetype in new[] { "Rain", "Snow", "Lightning", "MagicCircle" })
             {
                 var beforeTemplate = graph.CreateSnapshot();

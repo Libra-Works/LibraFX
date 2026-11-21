@@ -227,6 +227,8 @@ public:
         FLibraCpuParticleEvent& particleEvent, bool& hasEvent);
     ELibraRuntimeResult ReadCpuParticleCount(FGuid containerId, int64 instanceId,
         FGuid systemId, uint32& count) const;
+    ELibraRuntimeResult ReadCpuParticleTiming(FGuid containerId, int64 instanceId,
+        FGuid systemId, SIZE_T index, double& age, double& life) const;
     ELibraRuntimeResult ReadCpuParticleAt(FGuid containerId, int64 instanceId,
         FGuid systemId, SIZE_T index, uint64& particleId,
         double& positionX, double& positionY, double& positionZ,

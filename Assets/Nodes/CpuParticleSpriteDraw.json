@@ -1,1 +1,134 @@
-{"descriptionKey":"Cpu.Help.Draw","schemaVersion":1,"typeId":"7c7e1000-2521-4bdb-b8a0-210000000004","namespace":"LiberaFx","kind":"CpuParticleSpriteDraw","name":"CPU Particle Sprite Draw","displayNameKey":"Editor.Node.CpuParticleSpriteDraw","group":"Rendering","portType":"Float","portCategory":"Parameter","inputPorts":[],"outputPorts":[],"parameters":[{"id":"textureSource","name":"Texture source","displayNameKey":"Cpu.Texture.Source","type":"enum:ab42721e-d2c3-43e9-a96d-c80000000001","defaultValue":0},{"id":"assetPath","name":"Texture","type":"string","defaultValue":"builtin:white","enabledWhen":{"parameter":"textureSource","equals":0}},{"id":"blendMode","name":"Blend (Alpha / Additive)","type":"string","defaultValue":"Alpha"},{"id":"drawScale","name":"Draw scale","type":"float","defaultValue":1}]}
+{
+  "descriptionKey": "Cpu.Help.Draw",
+  "schemaVersion": 1,
+  "typeId": "7c7e1000-2521-4bdb-b8a0-210000000004",
+  "namespace": "LiberaFx",
+  "kind": "CpuParticleSpriteDraw",
+  "name": "CPU Particle Sprite Draw",
+  "displayNameKey": "Editor.Node.CpuParticleSpriteDraw",
+  "group": "Rendering",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "inputPorts": [],
+  "outputPorts": [],
+  "parameters": [
+    {
+      "id": "textureSource",
+      "name": "Texture source",
+      "displayNameKey": "Cpu.Texture.Source",
+      "type": "enum:ab42721e-d2c3-43e9-a96d-c80000000001",
+      "defaultValue": 0
+    },
+    {
+      "id": "assetPath",
+      "name": "Texture",
+      "type": "string",
+      "defaultValue": "builtin:white",
+      "enabledWhen": {
+        "parameter": "textureSource",
+        "equals": 0
+      }
+    },
+    {
+      "id": "blendMode",
+      "name": "Blend (Alpha / Additive)",
+      "type": "string",
+      "defaultValue": "Alpha",
+      "editor": {
+        "kind": "choices",
+        "choices": [
+          {
+            "value": "Alpha",
+            "name": "Alpha",
+            "displayNameKey": "Cpu.Blend.Alpha"
+          },
+          {
+            "value": "Additive",
+            "name": "Additive",
+            "displayNameKey": "Cpu.Blend.Additive"
+          }
+        ]
+      },
+      "displayNameKey": "Cpu.Parameter.Blend"
+    },
+    {
+      "id": "drawScale",
+      "name": "Draw scale",
+      "type": "float",
+      "defaultValue": 1
+    },
+    {
+      "id": "flipbookEnabled",
+      "name": "Flipbook",
+      "displayNameKey": "Cpu.Atlas.flipbookEnabled",
+      "type": "bool",
+      "defaultValue": false
+    },
+    {
+      "id": "atlasColumns",
+      "name": "Columns",
+      "displayNameKey": "Cpu.Atlas.atlasColumns",
+      "type": "int",
+      "defaultValue": 1,
+      "enabledWhen": {
+        "parameter": "flipbookEnabled",
+        "equals": true
+      }
+    },
+    {
+      "id": "atlasRows",
+      "name": "Rows",
+      "displayNameKey": "Cpu.Atlas.atlasRows",
+      "type": "int",
+      "defaultValue": 1,
+      "enabledWhen": {
+        "parameter": "flipbookEnabled",
+        "equals": true
+      }
+    },
+    {
+      "id": "atlasFps",
+      "name": "Frames per second",
+      "displayNameKey": "Cpu.Atlas.atlasFps",
+      "type": "float",
+      "defaultValue": 0,
+      "enabledWhen": {
+        "parameter": "flipbookEnabled",
+        "equals": true
+      }
+    },
+    {
+      "id": "atlasLoop",
+      "name": "Loop",
+      "displayNameKey": "Cpu.Atlas.atlasLoop",
+      "type": "bool",
+      "defaultValue": true,
+      "enabledWhen": {
+        "parameter": "flipbookEnabled",
+        "equals": true
+      }
+    },
+    {
+      "id": "atlasStartFrame",
+      "name": "First frame (zero-based)",
+      "displayNameKey": "Cpu.Atlas.atlasStartFrame",
+      "type": "int",
+      "defaultValue": 0,
+      "enabledWhen": {
+        "parameter": "flipbookEnabled",
+        "equals": true
+      }
+    },
+    {
+      "id": "atlasOverLife",
+      "name": "Fit animation to particle lifetime",
+      "displayNameKey": "Cpu.Atlas.atlasOverLife",
+      "type": "bool",
+      "defaultValue": false,
+      "enabledWhen": {
+        "parameter": "flipbookEnabled",
+        "equals": true
+      }
+    }
+  ]
+}

@@ -32,16 +32,40 @@
 #include "LibraSpriteCompositionRender.h"
 #include "liberafx/LbSpawnablePackage.h"
 #include <algorithm>
+#include "liberafx/LbParticleAtlas.h"
 
 namespace LibraCpuParticleRendering
 {
 struct FBatch
 {
+    TMap<uint32,TUniquePtr<FBatch>> Frames;
     TStrongObjectPtr<UMaterialInstanceDynamic> Material;
     TUniquePtr<FLibraNativeInstancedMeshPrimitive> Primitive;
     TArray<FTransform> Transforms;
     TArray<FLinearColor> Colors;
 };
+template<class Batch, class Visit> void ForEach(Batch& batch, Visit visit)
+{
+    visit(batch);
+    for (auto& pair : batch.Frames) visit(*pair.Value);
+}
+bool ReadAtlas(const TSharedPtr<FJsonObject>& object, liberafx::ParticleAtlas& out)
+{
+    const auto value=object->TryGetField(TEXT("flipbook"));
+    if (!value.IsValid() || value->Type==EJson::Null) return true;
+    const auto atlas=value->Type==EJson::Object?value->AsObject():nullptr;
+    if (!atlas || !atlas->TryGetBoolField(TEXT("enabled"),out.enabled) ||
+        !atlas->TryGetBoolField(TEXT("loop"),out.loop) || !atlas->TryGetBoolField(TEXT("overLife"),out.overLife) ||
+        !atlas->TryGetNumberField(TEXT("fps"),out.fps)) return false;
+    for (const auto field : {TEXT("columns"),TEXT("rows"),TEXT("startFrame")}) {
+        double number=0;
+        if (!atlas->TryGetNumberField(field,number) || !FMath::IsFinite(number) || number<0 || number>256 || FMath::FloorToDouble(number)!=number) return false;
+        if (FCString::Strcmp(field,TEXT("columns"))==0) out.columns=static_cast<uint32>(number);
+        if (FCString::Strcmp(field,TEXT("rows"))==0) out.rows=static_cast<uint32>(number);
+        if (FCString::Strcmp(field,TEXT("startFrame"))==0) out.startFrame=static_cast<uint32>(number);
+    }
+    return out.valid();
+}
 }
 
 namespace LibraOpaqueBatching
@@ -245,6 +269,7 @@ struct FDraw
 
 struct FCpuParticleDraw
 {
+    liberafx::ParticleAtlas Atlas;
     TArray<FGuid> DrawRows;
     FGuid Id;
     float DrawScale = 1;
@@ -561,7 +586,7 @@ struct FLibraSpawnableRenderState::FImpl
         }
         auto cpuVersion = double{};
         if ((root->HasField(TEXT("cpuParticleVersion")) || (cpuParticles && !cpuParticles->IsEmpty())) &&
-            (!root->TryGetNumberField(TEXT("cpuParticleVersion"), cpuVersion) || (cpuVersion != 1 && cpuVersion != 2)))
+            (!root->TryGetNumberField(TEXT("cpuParticleVersion"), cpuVersion) || (cpuVersion != 1 && cpuVersion != 2 && cpuVersion != 3)))
         {
             return Fail(TEXT("Unsupported CPU particle scene metadata version."));
         }
@@ -796,11 +821,12 @@ struct FLibraSpawnableRenderState::FImpl
                 ids.Add(draw.Id);
                 draw.DrawScale = static_cast<float>(drawScale);
                 draw.bAdditive = blendMode == TEXT("Additive");
+                if (!LibraCpuParticleRendering::ReadAtlas(object,draw.Atlas)) return Fail(TEXT("Invalid CPU Flipbook settings."));
                 const auto rowValue = object->TryGetField(TEXT("drawMatrixRowNodeIds"));
                 if (rowValue.IsValid() && rowValue->Type != EJson::Null)
                 {
                     const TArray<TSharedPtr<FJsonValue>>* rows = nullptr;
-                    if (cpuVersion != 2 || !object->TryGetArrayField(TEXT("drawMatrixRowNodeIds"), rows) || rows->Num() != 4)
+                    if (cpuVersion < 2 || !object->TryGetArrayField(TEXT("drawMatrixRowNodeIds"), rows) || rows->Num() != 4)
                         return Fail(TEXT("CPU Draw Matrix requires four row IDs."));
                     for (const auto& matrixRowValue : *rows)
                     {
@@ -834,6 +860,8 @@ struct FLibraSpawnableRenderState::FImpl
                         TEXT("use the requested blend mode and expose a Texture parameter."));
                 }
                 draw.Material.Reset(material);
+                if (draw.Atlas.enabled && !HasParameter(material,FMaterialParameterInfo(TEXT("AtlasRect")),TEXT("vector")))
+                    return Fail(TEXT("CPU Flipbook material must expose AtlasRect (top-left UV offset in XY, cell size in ZW)."));
                 auto* plane = Resolve<UStaticMesh>(TEXT("/Engine/BasicShapes/Plane.Plane"),
                     EKind::Model, false);
                 if (!plane)
@@ -1781,6 +1809,7 @@ struct FLibraSpawnableRenderState::FImpl
                 const auto count = static_cast<int32>(particleCount);
                 batch.Transforms.Reset();
                 batch.Colors.Reset();
+                for (auto& entry : batch.Frames) { entry.Value->Transforms.Reset(); entry.Value->Colors.Reset(); }
                 for (auto particleIndex = 0; particleIndex < count; ++particleIndex)
                 {
                     auto particleId = uint64{};
@@ -1807,27 +1836,51 @@ struct FLibraSpawnableRenderState::FImpl
                     {
                         return Fail(TEXT("CPU particle snapshot exceeds Unreal's finite float range."));
                     }
-                    batch.Transforms.Emplace(rotation, worldPosition, FVector(scaledX / 100, scaledY / 100, 1));
-                    batch.Colors.Emplace(static_cast<float>(colorR), static_cast<float>(colorG),
+                    auto* target = &batch;
+                    if (system.Atlas.enabled)
+                    {
+                        double age=0,life=0;
+                        if (Owner.ReadCpuParticleTiming(instance->Container,instance->Id,system.Id,particleIndex,age,life)!=ELibraRuntimeResult::Ok)
+                            return Fail(TEXT("Could not read CPU particle animation time."));
+                        const auto frame=system.Atlas.frame(age,life);
+                        auto& entry=batch.Frames.FindOrAdd(frame);
+                        if (!entry) {
+                            entry=MakeUnique<LibraCpuParticleRendering::FBatch>();
+                            auto* atlasMaterial=UMaterialInstanceDynamic::Create(system.Material.Get(),&Owner);
+                            atlasMaterial->SetTextureParameterValue(TEXT("Texture"),system.Texture.Get());
+                            atlasMaterial->SetVectorParameterValue(TEXT("AtlasRect"),FLinearColor(
+                                static_cast<float>(frame%system.Atlas.columns)/system.Atlas.columns,
+                                static_cast<float>(frame/system.Atlas.columns)/system.Atlas.rows,
+                                1.0f/system.Atlas.columns,1.0f/system.Atlas.rows));
+                            entry->Material.Reset(atlasMaterial);
+                        }
+                        target=entry.Get();
+                    }
+                    target->Transforms.Emplace(rotation, worldPosition, FVector(scaledX / 100, scaledY / 100, 1));
+                    target->Colors.Emplace(static_cast<float>(colorR), static_cast<float>(colorG),
                         static_cast<float>(colorB), static_cast<float>(colorA));
                 }
-                if (!batch.Primitive.IsValid() && !batch.Transforms.IsEmpty())
+                auto submitted = true;
+                LibraCpuParticleRendering::ForEach(batch,[&](auto& frameBatch) {
+                if (!frameBatch.Primitive.IsValid() && !frameBatch.Transforms.IsEmpty())
                 {
-                    batch.Primitive = MakeUnique<FLibraNativeInstancedMeshPrimitive>();
+                    frameBatch.Primitive = MakeUnique<FLibraNativeInstancedMeshPrimitive>();
                     auto materialOverrides = TArray<TObjectPtr<UMaterialInterface>>{
-                        batch.Material.Get()};
-                    if (!batch.Primitive->CreateWithInstances(Owner, system.Mesh.Get(),
-                        MakeArrayView(materialOverrides), MakeArrayView(batch.Transforms),
-                        MakeArrayView(batch.Colors), ownerTransform))
+                        frameBatch.Material.Get()};
+                    if (!frameBatch.Primitive->CreateWithInstances(Owner, system.Mesh.Get(),
+                        MakeArrayView(materialOverrides), MakeArrayView(frameBatch.Transforms),
+                        MakeArrayView(frameBatch.Colors), ownerTransform))
                     {
-                        return Fail(TEXT("Could not register the initial native CPU particle instances."));
+                        submitted = false;
                     }
                 }
-                else if (batch.Primitive.IsValid() &&
-                    !batch.Primitive->Update(batch.Transforms, batch.Colors, ownerTransform))
+                else if (frameBatch.Primitive.IsValid() &&
+                    !frameBatch.Primitive->Update(frameBatch.Transforms, frameBatch.Colors, ownerTransform))
                 {
-                    return Fail(TEXT("Could not submit CPU particle transforms and RGBA custom data."));
+                    submitted = false;
                 }
+                });
+                if (!submitted) return Fail(TEXT("Could not submit CPU particle atlas batches."));
             }
             auto delta = time - instance->Previous;
             if (!FMath::IsFinite(delta) || delta < 0 || delta > MAX_flt) return Fail(TEXT("Invalid GPU local time."));
@@ -2019,17 +2072,16 @@ void FLibraSpawnableRenderState::UpdateOwnerPresentation()
             for (auto cpuIndex = 0; cpuIndex < instance->CpuDraws.Num(); ++cpuIndex)
             {
                 auto& batch = instance->CpuDraws[cpuIndex];
-                if (!batch.Primitive.IsValid())
-                {
-                    continue;
-                }
-                for (auto& transform : batch.Transforms)
-                {
-                    if (instance->Definition->CpuParticles[cpuIndex].DrawRows.IsEmpty())
-                        transform = transform.GetRelativeTransform(instance->PresentationRootTransform) * rootTransform;
-                }
-                if (!batch.Primitive->Update(batch.Transforms, batch.Colors, rootTransform))
-                {
+                bool updated = true;
+                LibraCpuParticleRendering::ForEach(batch, [&](auto& frameBatch) {
+                    if (!frameBatch.Primitive.IsValid()) return;
+                    for (auto& transform : frameBatch.Transforms)
+                        if (instance->Definition->CpuParticles[cpuIndex].DrawRows.IsEmpty())
+                            transform = transform.GetRelativeTransform(instance->PresentationRootTransform) * rootTransform;
+                    updated = frameBatch.Primitive->Update(frameBatch.Transforms, frameBatch.Colors, rootTransform) && updated;
+                    frameBatch.Primitive->SetVisible(visible);
+                });
+                if (!updated) {
                     Impl->Fail(TEXT("Could not update cached CPU particle presentation after owner transform change."));
                     return;
                 }
@@ -2045,10 +2097,9 @@ void FLibraSpawnableRenderState::UpdateOwnerPresentation()
         {
             for (auto& batch : instance->CpuDraws)
             {
-                if (batch.Primitive.IsValid())
-                {
-                    batch.Primitive->SetVisible(visible);
-                }
+                LibraCpuParticleRendering::ForEach(batch, [&](auto& frameBatch) {
+                    if (frameBatch.Primitive.IsValid()) frameBatch.Primitive->SetVisible(visible);
+                });
             }
             for (auto& plane : instance->FlexiblePlanes)
             {
@@ -2127,14 +2178,14 @@ void FLibraSpawnableRenderState::GetNativeRenderSubmissionStats(int32& logicalRe
         }
         for (const auto& batch : instance->CpuDraws)
         {
-            ++cpuParticleBatches;
-            ++nativePrimitives;
-            if (batch.Primitive.IsValid())
-            {
-                liveCpuParticles += batch.Primitive->LiveInstanceCount;
-                allocatedInstanceCapacity += batch.Primitive->GetAllocatedInstanceCapacity();
-                submittedBytes += batch.Primitive->SubmittedBytes;
-            }
+            LibraCpuParticleRendering::ForEach(batch, [&](const auto& frameBatch) {
+                if (!frameBatch.Primitive.IsValid()) return;
+                ++cpuParticleBatches;
+                ++nativePrimitives;
+                liveCpuParticles += frameBatch.Primitive->LiveInstanceCount;
+                allocatedInstanceCapacity += frameBatch.Primitive->GetAllocatedInstanceCapacity();
+                submittedBytes += frameBatch.Primitive->SubmittedBytes;
+            });
         }
         nativePrimitives += instance->FlexiblePlanes.Num();
         for (const auto& plane : instance->FlexiblePlanes)

@@ -64,5 +64,17 @@
   "Cpu.Help.Draw":"Draws all live CPU particles as one batched billboard Sprite system. Set an explicit texture, Alpha/Additive blend and positive draw scale. Requires updated engine adapters; Unreal also requires its documented instanced RGBA material.",
   "Cpu.Help.Rate":"Produces a cumulative emitted-particle count from a rate per second. Connect Emitted total to CPU Particle. Fractional counts accumulate; repeated evaluation at the same time does not emit twice.",
   "Cpu.Help.Burst":"Each incoming Signal adds the configured fixed particle count. Connect Emitted total to CPU Particle; combine cumulative Rate and Burst values with Add.",
-  "Cpu.Help.Shape":"Samples an emitter position deterministically from the system Seed and the current particle ID. Connect to Set Particle Position in Spawn. Box uses half extents, Sphere samples volume, Circle samples its XY circumference."
+  "Cpu.Help.Shape":"Samples an emitter position deterministically from the system Seed and the current particle ID. Connect to Set Particle Position in Spawn. Box uses half extents, Sphere samples volume, Circle samples its XY circumference.",
+  "Cpu.Parameter.Blend": "Blend mode",
+  "Cpu.Blend.Alpha": "Alpha",
+  "Cpu.Blend.Additive": "Additive",
+  "Cpu.Reduction.None": "None",
+  "Cpu.Reduction.Last": "Last particle by ID",
+  "Cpu.Atlas.flipbookEnabled": "Flipbook",
+  "Cpu.Atlas.atlasColumns": "Columns",
+  "Cpu.Atlas.atlasRows": "Rows",
+  "Cpu.Atlas.atlasFps": "Frames per second",
+  "Cpu.Atlas.atlasLoop": "Loop",
+  "Cpu.Atlas.atlasStartFrame": "First frame (zero-based)",
+  "Cpu.Atlas.atlasOverLife": "Fit animation to particle lifetime"
 }

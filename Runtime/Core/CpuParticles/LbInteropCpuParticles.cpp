@@ -49,6 +49,22 @@ LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_cpu_particle_count(
     });
 }
 
+LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_scoped_cpu_particle_timing(
+    LibraSpawnableHostHandle host, const uint8_t* containerId, uint64_t instanceId,
+    const uint8_t* systemId, uint32_t index, double* age, double* life)
+{
+    if (!containerId || !systemId || !age || !life) return LIBRA_INVALID_ARGUMENT;
+    *age = 0; *life = 0;
+    auto scope = liberafx::SpawnableScope{};
+    if (!readCpuParticleScope(containerId, instanceId, scope)) return LIBRA_INVALID_ARGUMENT;
+    return guardedSpawnable(host, [&]() -> LibraResult {
+        auto timing = liberafx::CpuParticleTiming{};
+        const auto result = findSpawnableHost(host)->cpuParticleTiming(scope,systemId,index,timing);
+        if (result == liberafx::Result::Ok) { *age = timing.age; *life = timing.life; }
+        return toLibraResult(result);
+    });
+}
+
 LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_scoped_cpu_particle_count(
     LibraSpawnableHostHandle host, const uint8_t* containerId,
     uint64_t instanceId, const uint8_t* systemId, uint32_t* outCount)

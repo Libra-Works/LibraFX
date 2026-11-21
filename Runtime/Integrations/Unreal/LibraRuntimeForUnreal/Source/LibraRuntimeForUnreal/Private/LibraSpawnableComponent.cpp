@@ -881,6 +881,22 @@ auto ULibraSpawnableComponent::ReadCpuParticleCount(FGuid containerId, int64 ins
     return ELibraRuntimeResult::Ok;
 }
 
+auto ULibraSpawnableComponent::ReadCpuParticleTiming(FGuid containerId, int64 instanceId,
+    FGuid systemId, SIZE_T index, double& age, double& life) const -> ELibraRuntimeResult
+{
+    check(IsInGameThread()); age=life=0;
+    if (DebugJobPending()) return ELibraRuntimeResult::Busy;
+    if (!NativeHost) return ELibraRuntimeResult::NotReady;
+    if (!systemId.IsValid() || instanceId<0 || containerId.IsValid()!=(instanceId>0)) return ELibraRuntimeResult::InvalidArgument;
+    uint8 bytes[16]{}; LibraNodeIdBytes(systemId,bytes);
+    auto scope=liberafx::SpawnableScope{};
+    if (containerId.IsValid()) { scope.kind=liberafx::SpawnableScopeKind::Instance; LibraNodeIdBytes(containerId,scope.containerId); scope.instanceId=instanceId; }
+    auto timing=liberafx::CpuParticleTiming{};
+    const auto result=NativeHost->cpuParticleTiming(scope,bytes,index,timing);
+    if (result==liberafx::Result::Ok) { age=timing.age; life=timing.life; }
+    return ToLibraResult(result);
+}
+
 auto ULibraSpawnableComponent::ReadCpuParticleAt(FGuid systemId, SIZE_T index,
     uint64& particleId, double& positionX, double& positionY, double& positionZ,
     double& colorR, double& colorG, double& colorB, double& colorA,

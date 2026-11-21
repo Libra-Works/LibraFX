@@ -11,6 +11,7 @@ struct CpuParticleSnapshot final {
     double size[2]{1, 1};
 };
 static_assert(sizeof(CpuParticleSnapshot) == 80);
+struct CpuParticleTiming final { double age = 0, life = 0; };
 
 // Every outbound message retains its origin, including messages from particles
 // that died in the same step. Property=1, Signal=2. No engine callback is invoked.
@@ -44,6 +45,7 @@ public:
     Result queueSignal(const std::uint8_t nodeId[16]) noexcept;
     Result count(const std::uint8_t systemId[16], std::size_t& out) const noexcept;
     Result at(const std::uint8_t systemId[16], std::size_t index, CpuParticleSnapshot& out) const noexcept;
+    Result timing(const std::uint8_t systemId[16], std::size_t index, CpuParticleTiming& out) const noexcept;
     bool popEvent(CpuParticleEvent& out) noexcept;
     std::size_t pendingEventCount() const noexcept;
     std::size_t activeCount() const noexcept;

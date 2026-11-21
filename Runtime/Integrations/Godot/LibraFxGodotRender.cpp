@@ -1,4 +1,5 @@
 #include "LibraFxGodotRender.h"
+#include "LibraFxGodotAtlas.h"
 #include "LibraFxGodotGpu.h"
 #include "LibraFxGodotCoordinates.h"
 #include "liberafx/LbCpuParticles.h"
@@ -359,7 +360,7 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
     }
     auto cpuVersion = 0.0;
     if ((config.has("cpuParticleVersion") || !cpuNodes.is_empty()) &&
-        (!readNumber(config.get("cpuParticleVersion", godot::Variant{}), cpuVersion) || (cpuVersion != 1 && cpuVersion != 2))) {
+        (!readNumber(config.get("cpuParticleVersion", godot::Variant{}), cpuVersion) || (cpuVersion != 1 && cpuVersion != 2 && cpuVersion != 3))) {
         return Result::UnsupportedBinary;
     }
     if (cpuParticles == nullptr && !cpuNodes.is_empty()) {
@@ -780,6 +781,7 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
                 return Result::InvalidBinary;
             }
             auto draw = CpuParticleDraw{};
+            if (!readParticleAtlas(item.get("flipbook",godot::Variant{}),draw.atlas)) return Result::InvalidBinary;
             if (!parseId(idText, draw.nodeId) ||
                 std::any_of(draws.begin(), draws.end(), [&draw](const auto& existing) {
                     return existing.nodeId == draw.nodeId;
@@ -795,7 +797,7 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
             draw.drawScale = scale;
             const auto rowValues = item.get("drawMatrixRowNodeIds", godot::Variant{});
             if (rowValues.get_type() != godot::Variant::NIL) {
-                if (cpuVersion != 2 || rowValues.get_type() != godot::Variant::ARRAY) return Result::InvalidBinary;
+                if (cpuVersion < 2 || rowValues.get_type() != godot::Variant::ARRAY) return Result::InvalidBinary;
                 const auto rows = godot::Array(rowValues);
                 if (rows.size() != 4) return Result::InvalidBinary;
                 for (auto row = 0; row < 4; ++row) {
@@ -982,6 +984,20 @@ auto PackageRenderRenderer::makeCpuRenderable(godot::Node3D& parent,
     material->set_billboard_mode(godot::BaseMaterial3D::BILLBOARD_ENABLED);
     material->set_flag(godot::BaseMaterial3D::FLAG_BILLBOARD_KEEP_SCALE, true);
     quad->set_material(material);
+    if (draw.atlas.enabled) {
+        auto shader = godot::Ref<godot::Shader>{}; shader.instantiate();
+        shader->set_code(godot::String("shader_type spatial; render_mode unshaded,cull_disabled,depth_draw_never,") +
+            (draw.additive ? "blend_add;" : "blend_mix;") +
+            "uniform sampler2D particle_texture : source_color,filter_linear,repeat_disable;"
+            "void vertex(){UV=INSTANCE_CUSTOM.xy+UV*INSTANCE_CUSTOM.zw;"
+            "MODELVIEW_MATRIX=VIEW_MATRIX*mat4(INV_VIEW_MATRIX[0]*length(MODEL_MATRIX[0].xyz),"
+            "INV_VIEW_MATRIX[1]*length(MODEL_MATRIX[1].xyz),INV_VIEW_MATRIX[2]*length(MODEL_MATRIX[2].xyz),MODEL_MATRIX[3]);}"
+            "void fragment(){vec4 tint=texture(particle_texture,UV)*COLOR;ALBEDO=tint.rgb;ALPHA=tint.a;}");
+        auto atlasMaterial=godot::Ref<godot::ShaderMaterial>{}; atlasMaterial.instantiate();
+        atlasMaterial->set_shader(shader); atlasMaterial->set_shader_parameter("particle_texture",draw.texture);
+        quad->set_material(atlasMaterial);
+    }
+    out.instanceStride = draw.atlas.enabled ? 20 : 16;
     auto* server = godot::RenderingServer::get_singleton();
     if (!server || quad.is_null()) {
         return Result::InvalidArgument;
@@ -993,7 +1009,7 @@ auto PackageRenderRenderer::makeCpuRenderable(godot::Node3D& parent,
         return Result::InsufficientWork;
     }
     server->multimesh_allocate_data(out.multiMesh.get(), 1,
-        godot::RenderingServer::MULTIMESH_TRANSFORM_3D, true, false);
+        godot::RenderingServer::MULTIMESH_TRANSFORM_3D, true, draw.atlas.enabled);
     server->multimesh_set_mesh(out.multiMesh.get(), quad->get_rid());
     server->multimesh_set_visible_instances(out.multiMesh.get(), 0);
     out.instance = OwnedRenderingRid(server->instance_create());
@@ -1008,8 +1024,8 @@ auto PackageRenderRenderer::makeCpuRenderable(godot::Node3D& parent,
     server->instance_geometry_set_cast_shadows_setting(out.instance.get(),
         godot::RenderingServer::SHADOW_CASTING_SETTING_OFF);
     server->instance_set_visible(out.instance.get(), false);
-    out.buffer.resize(16);
-    if (out.buffer.size() != 16) {
+    out.buffer.resize(out.instanceStride);
+    if (out.buffer.size() != static_cast<std::int64_t>(out.instanceStride)) {
         return Result::InsufficientWork;
     }
     out.capacity = 1;
@@ -1372,7 +1388,7 @@ auto PackageRenderRenderer::updateCpuBounds(CpuParticleRenderInstance& renderabl
     auto bounds = godot::AABB{};
     const auto* values = renderable.buffer.ptr();
     for (auto index = std::uint32_t{}; index < renderable.activeCount; ++index) {
-        const auto* data = values + static_cast<std::size_t>(index) * 16;
+        const auto* data = values + static_cast<std::size_t>(index) * renderable.instanceStride;
         const auto center = godot::Vector3(data[3], data[7], data[11]);
         auto radius = godot::real_t{};
         if (!toReal(0.5 * std::hypot(static_cast<double>(data[0]) * ownerWidth,
@@ -1399,13 +1415,13 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host, const Spawna
     std::vector<CpuParticleRenderInstance>& renderables, godot::Node3D& node) -> Result
 {
     constexpr auto maximumParticles = std::uint32_t{1000000}; // Native system capacity limit.
-    constexpr auto instanceStride = std::size_t{16}; // 3x4 transform rows followed by RGBA.
     if (draws.size() != renderables.size()) {
         return Result::InvalidBinary;
     }
     for (auto index = std::size_t{}; index < draws.size(); ++index) {
         const auto& draw = draws[index];
         auto& renderable = renderables[index];
+        const auto instanceStride = renderable.instanceStride;
         if (!renderable.instance.isValid() || !renderable.multiMesh.isValid()) {
             return Result::InvalidBinary;
         }
@@ -1453,7 +1469,7 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host, const Spawna
             }
             server->multimesh_allocate_data(renderable.multiMesh.get(),
                 static_cast<std::int32_t>(capacity),
-                godot::RenderingServer::MULTIMESH_TRANSFORM_3D, true, false);
+                godot::RenderingServer::MULTIMESH_TRANSFORM_3D, true, draw.atlas.enabled);
             renderable.capacity = capacity;
         }
         if (count == 0) {
@@ -1475,7 +1491,7 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host, const Spawna
                 return result == Result::Ok ? Result::InvalidBinary : result;
             }
             auto* data = buffer + particleIndex * instanceStride;
-            const auto values = std::array<double, instanceStride>{
+            const auto values = std::array<double, 16>{
                 snapshot.size[0] * draw.drawScale, 0, 0, snapshot.position[0] * draw.drawScale,
                 0, snapshot.size[1] * draw.drawScale, 0, snapshot.position[1] * draw.drawScale,
                 0, 0, 1, snapshot.position[2] * draw.drawScale,
@@ -1485,6 +1501,15 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host, const Spawna
                     return Result::NonFinite;
                 }
                 data[field] = static_cast<float>(values[field]);
+            }
+            if (draw.atlas.enabled) {
+                auto timing=CpuParticleTiming{};
+                result=host.cpuParticleTiming(scope,draw.nodeId.data(),particleIndex,timing);
+                if (result!=Result::Ok) return result;
+                const auto frame=draw.atlas.frame(timing.age,timing.life);
+                data[16]=static_cast<float>(frame%draw.atlas.columns)/draw.atlas.columns;
+                data[17]=static_cast<float>(frame/draw.atlas.columns)/draw.atlas.rows;
+                data[18]=1.0f/draw.atlas.columns; data[19]=1.0f/draw.atlas.rows;
             }
         }
         auto* server = godot::RenderingServer::get_singleton();

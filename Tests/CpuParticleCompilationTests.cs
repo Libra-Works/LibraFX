@@ -12,6 +12,8 @@ public static class CpuParticleCompilationTests
     public static void Run()
     {
         VerifyMatrixInputs();
+        VerifyFlipbook();
+        ParticleAtlasTests.Run();
         var graph = Fixture();
         GraphValidator.ValidateDocument(graph);
         var saved = JsonSerializer.Deserialize<GraphSnapshot>(JsonSerializer.Serialize(graph))!;
@@ -176,6 +178,39 @@ public static class CpuParticleCompilationTests
         Require(package.CpuPrograms.Length > 0, "CPU emitter Matrix must retain executable particle stages.");
     }
 
+    private static void VerifyFlipbook()
+    {
+        var graph = MatrixFixture();
+        var system = graph.Nodes.Single(Cpu);
+        var child = system.ChildGraph!;
+        var draw = child.Nodes.Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleSpriteDraw");
+        GraphSnapshot WithAtlas(int columns) => graph with
+        {
+            Nodes = graph.Nodes.Select(node => node.Id != system.Id ? node : system with
+            {
+                ChildGraph = child with { Nodes = child.Nodes.Select(n => n.Id != draw.Id ? n : draw with
+                {
+                    Parameters = [Parameter("flipbookEnabled", "bool", true), Parameter("atlasColumns", "int", columns),
+                        Parameter("atlasRows", "int", 2), Parameter("atlasFps", "float", 12d),
+                        Parameter("atlasStartFrame", "int", 1), Parameter("atlasOverLife", "bool", true)]
+                }).ToArray() }
+            }).ToArray()
+        };
+        var source = WithAtlas(2);
+        var roundtrip = JsonSerializer.Deserialize<GraphSnapshot>(JsonSerializer.Serialize(source))!;
+        var package = SpawnableGroupPackageBinary.Deserialize(SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(roundtrip)));
+        using var render = JsonDocument.Parse(package.RootRenderConfiguration);
+        var scene = render.RootElement;
+        var item = scene.GetProperty("cpuParticles")[0];
+        var atlas = item.GetProperty("flipbook");
+        Require(scene.GetProperty("cpuParticleVersion").GetInt32() == 3 &&
+            item.GetProperty("drawMatrixRowNodeIds").GetArrayLength() == 4 &&
+            atlas.GetProperty("columns").GetInt32() == 2 && atlas.GetProperty("rows").GetInt32() == 2 &&
+            atlas.GetProperty("startFrame").GetInt32() == 1 && atlas.GetProperty("overLife").GetBoolean(),
+            "Flipbook must survive document/package serialization alongside Draw Matrix, with an explicit runtime version.");
+        Reject(() => SpawnableGroupPackage.Compile(WithAtlas(65)), "Out of range atlas");
+    }
+
     // Called only by an explicitly invoked fixture command; never runs a build/editor.
     public static void WriteNativeFixture(string directory)
     {
@@ -188,6 +223,18 @@ public static class CpuParticleCompilationTests
             SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(MatrixFixture())));
         File.WriteAllBytes(Path.Combine(directory, "cpu-particles.lfxb"),
             SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(Fixture())));
+        var atlasSystem = Node("CpuParticle", Parameter("rate", "float", 0d), Parameter("burst", "int", 1)) with
+        { ChildGraph = CpuParticleSchema.CreateChild(Definition("CpuParticle").Kind) };
+        atlasSystem = atlasSystem with { ChildGraph = atlasSystem.ChildGraph! with
+        {
+            Nodes = atlasSystem.ChildGraph!.Nodes.Select(node => CpuParticleSchema.Name(node.Kind) != "CpuParticleSpriteDraw" ? node : node with
+            {
+                Parameters = [Parameter("assetPath", "string", "/Game/LibraTests/Atlas.Atlas"), Parameter("flipbookEnabled", "bool", true),
+                    Parameter("atlasColumns", "int", 2), Parameter("atlasRows", "int", 2), Parameter("atlasFps", "float", 4d)]
+            }).ToArray()
+        } };
+        File.WriteAllBytes(Path.Combine(directory, "cpu-flipbook.lfxb"),
+            SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(new([atlasSystem], []))));
         var renderGraph = Fixture();
         var system = renderGraph.Nodes.Single(Cpu);
         var child = system.ChildGraph!;

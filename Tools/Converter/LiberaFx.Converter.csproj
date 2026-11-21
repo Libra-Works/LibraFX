@@ -16,6 +16,7 @@
     <Compile Include="..\..\Services\Compilation\CpuEmitterMatrixLowering.cs" Link="Services\CpuEmitterMatrixLowering.cs" />
     <Compile Include="..\..\Services\Compilation\TimeOutputLowering.cs" Link="Services\TimeOutputLowering.cs" />
     <Compile Include="..\..\Models\Graph\BuiltInAssets.cs" Link="Models\BuiltInAssets.cs" />
+    <Compile Include="..\..\Models\Graph\ParticleAtlasSettings.cs" Link="Models\ParticleAtlasSettings.cs" />
     <Compile Include="..\..\Models\Graph\CommentImage.cs" Link="Models\CommentImage.cs" />
     <Compile Include="..\..\Models\Graph\FCurve.cs" Link="Models\FCurve.cs" />
     <Compile Include="..\..\Models\Graph\SignalTimeline.cs" Link="Models\SignalTimeline.cs" />

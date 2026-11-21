@@ -411,6 +411,9 @@ namespace LiberaFx.Unity
             ulong host, byte* containerId, ulong instance, byte* systemId, uint index,
             out NativeCpuParticleSnapshot particle);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_timing(
+            ulong host, byte* containerId, ulong instance, byte* systemId, uint index, out double age, out double life);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_pop_event(
             ulong host, byte* containerId, ulong instance, out CpuParticleEvent particleEvent, out uint hasEvent);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
@@ -712,6 +715,18 @@ namespace LiberaFx.Unity
                     if (systemId == null || systemId.Length != 16) return NativeResult.InvalidArgument;
                     fixed (byte* pointer = systemId)
                         return Native.libra_spawnable_host_cpu_particle_count(Alive, pointer, out count);
+                }
+
+                private static readonly byte[] CpuRootScopeContainer = new byte[16];
+                internal NativeResult CpuParticleTiming(byte[] containerId, ulong instance, byte[] systemId,
+                    uint index, out double age, out double life)
+                {
+                    age = life = 0;
+                    var containerBytes = containerId ?? CpuRootScopeContainer;
+                    if (containerBytes.Length != 16 || systemId == null || systemId.Length != 16) return NativeResult.InvalidArgument;
+                    fixed (byte* container = containerBytes)
+                    fixed (byte* system = systemId)
+                        return Native.libra_spawnable_host_scoped_cpu_particle_timing(Alive, container, instance, system, index, out age, out life);
                 }
 
                 internal NativeResult CpuParticleAt(byte[] systemId, uint index,

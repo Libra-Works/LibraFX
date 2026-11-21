@@ -571,6 +571,13 @@ CPU particle Sprite billboards
   multiply texture RGB by instance RGB into Emissive and texture alpha by
   instance alpha into Opacity. Ordinary sprite Tint is not per-instance color.
 
+  CPU Flipbook (cpuParticleVersion 3) also requires vector parameter AtlasRect,
+  default (0,0,1,1). Sample Texture with TexCoord0 * AtlasRect.zw + AtlasRect.xy.
+  Cells are numbered left-to-right, top-to-bottom. Frame-specific dynamic
+  materials group particles into at most 256 instanced batches per emitter
+  scope. The matching native runtime supplies age/lifetime without changing
+  the 80-byte particle snapshot ABI.
+
   Native snapshots update the instanced planes on the game thread.
   `drawScale` multiplies effect-local position and XY size. The effect camera
   override or first player camera supplies billboard orientation; split-screen

@@ -114,6 +114,8 @@ public:
     const SpawnablePackage& package() const noexcept;
     Result cpuParticleCount(const std::uint8_t systemId[16], std::size_t& out) const noexcept;
     Result cpuParticleAt(const std::uint8_t systemId[16], std::size_t index, CpuParticleSnapshot& out) const noexcept;
+    Result cpuParticleTiming(const SpawnableScope& scope, const std::uint8_t systemId[16],
+        std::size_t index, CpuParticleTiming& out) const noexcept;
     bool popCpuParticleEvent(CpuParticleEvent& out) noexcept;
     Result cpuParticleCount(const SpawnableScope& scope,
                             const std::uint8_t systemId[16],

@@ -125,10 +125,21 @@ namespace LiberaFx.Unity
                     ToFloat(snapshot.ColorB), ToFloat(snapshot.ColorA));
                 radius = Math.Max(radius, Math.Sqrt((double)x * x + (double)y * y) * localRadiusFactor);
                 var first = centers.Count;
-                AddVertex(center, color, 0, 0, -x, -y);
-                AddVertex(center, color, 1, 0, x, -y);
-                AddVertex(center, color, 1, 1, x, y);
-                AddVertex(center, color, 0, 1, -x, y);
+                float u0=0, v0=0, u1=1, v1=1;
+                if (definition.flipbook != null)
+                {
+                    result = host.CpuParticleTiming(containerId,instanceId,definition.nodeIdBytes,index,out var age,out var life);
+                    if (result != NativeResult.Ok) throw new InvalidOperationException("Could not read particle animation time: "+result);
+                    var atlas = definition.flipbook;
+                    var frame = atlas.Frame(age,life);
+                    u0 = (float)(frame % atlas.columns)/atlas.columns;
+                    v0 = 1f-(float)(frame/atlas.columns+1)/atlas.rows;
+                    u1 = u0+1f/atlas.columns; v1=v0+1f/atlas.rows;
+                }
+                AddVertex(center, color, u0, v0, -x, -y);
+                AddVertex(center, color, u1, v0, x, -y);
+                AddVertex(center, color, u1, v1, x, y);
+                AddVertex(center, color, u0, v1, -x, y);
                 indices.Add(first);
                 indices.Add(first + 2);
                 indices.Add(first + 1);

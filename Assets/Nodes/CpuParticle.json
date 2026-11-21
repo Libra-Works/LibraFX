@@ -10,6 +10,6 @@
     {"id":"rate","name":"Default particles / second","displayNameKey":"Cpu.Parameter.Rate","type":"float","defaultValue":30},
     {"id":"burst","name":"Initial burst","displayNameKey":"Cpu.Parameter.Burst","type":"int","defaultValue":0},
     {"id":"queueCapacity","name":"Queue capacity","displayNameKey":"Cpu.Parameter.Queue","type":"int","defaultValue":4096},
-    {"id":"outputReduction","name":"Output reduction (None / LastById)","displayNameKey":"Cpu.Parameter.Reduction","type":"string","defaultValue":"None"}
+    {"id":"outputReduction","name":"Output reduction (None / LastById)","displayNameKey":"Cpu.Parameter.Reduction","type":"string","defaultValue":"None","editor":{"kind":"choices","choices":[{"value":"None","name":"None","displayNameKey":"Cpu.Reduction.None"},{"value":"LastById","name":"Last particle by ID","displayNameKey":"Cpu.Reduction.Last"}]}}
   ]
 }
