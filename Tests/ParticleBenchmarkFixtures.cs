@@ -40,6 +40,26 @@ internal static class ParticleBenchmarkFixtures
             File.WriteAllBytes(Path.Combine(directory, "CpuFountain-" + count + ".id"), systemId);
             if (count == 1000)
             {
+                GraphNodeSnapshot Port(string kind, string name, int? valueType = null)
+                {
+                    var definition = GraphNodeDefinition.All.Single(item => item.TypeName == kind);
+                    var parameters = new List<NodeParameterSnapshot>();
+                    if (definition.Parameters.Any(item => item.Id == "name")) parameters.Add(new("name", "string", JsonSerializer.SerializeToElement(name)));
+                    if (valueType is { } type) parameters.Add(new("valueType", definition.Parameters.Single(item => item.Id == "valueType").Type,
+                        JsonSerializer.SerializeToElement(type)));
+                    return new(Guid.NewGuid(), definition.Kind, name, 0, 0, definition.PortType, definition.PortCategory,
+                        Parameters: parameters.Count == 0 ? null : parameters.ToArray());
+                }
+                var input = Port("InputProperty", "position", 2);
+                var output = Port("OutputProperty", "echo", 2);
+                var trigger = Port("InputSignal", "trigger");
+                var done = Port("OutputSignal", "done");
+                var owner = Port("OwnerMatrix", "owner");
+                var withGameIo = graph with { Nodes = [.. graph.Nodes, input, output, trigger, done, owner],
+                    Connections = [.. graph.Connections, new(input.Id, output.Id, "value", "value"), new(trigger.Id, done.Id, "signal", "then")] };
+                File.WriteAllBytes(Path.Combine(directory, "CpuPool-gameio.lfxb"),
+                    SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(withGameIo)));
+
                 GraphNodeSnapshot ShortLived(GraphNodeSnapshot node)
                 {
                     var parameters = node.Parameters?.ToList() ?? [];

@@ -1,7 +1,8 @@
 # Particle performance and shared scheduling
 
 Status: measurement tools, immutable constant sharing and a conservative CPU
-batch execution plan exist. The shared effect manager below is a proposed next
+batch execution plan and a prewarmed Core host pool exist. The shared effect
+manager below is a proposed next
 implementation, not a shipped scheduling guarantee.
 
 ## Current baseline
@@ -362,6 +363,99 @@ excluded. Other graphs can have very different costs.
 packages. Run the ordinary benchmark with one host and `600 --bulk` to reproduce
 this comparison. Local raw measurements are in the ignored
 `build/cpu-particle-count-scaling.json` file.
+
+## Preallocated Core host pool and parallel preparation
+
+`SpawnableHostPool` prepares complete instances before gameplay, including their
+parsed programs, particle slots, VM buffers, defaults, handles and event queues.
+Acquire takes an already initialized slot; release resets its state and returns
+it to the free list. Neither operation allocates memory in the tested Core paths.
+This reuses whole instance storage rather than merely caching raw allocation
+blocks and repeating the same program setup on every cast.
+
+Preparation uses a bounded worker group (default four, configurable 1–16 and
+clamped to hardware/capacity). The caller participates; workers are joined before
+`create` returns. No worker thread is created per playback or per particle.
+The preparation time is a **loading cost**, separate from acquire, initial
+particle emission, regular Update and drawing. This does not parallelize the
+regular owner-thread Update or implement the proposed shared frame scheduler.
+
+```cpp
+#include "liberafx/LbSpawnableHostPool.h"
+
+liberafx::SpawnableHostPoolOptions options;
+options.capacity = 32;
+options.preparationWorkers = 4;
+std::unique_ptr<liberafx::SpawnableHostPool> pool;
+// During loading: check the Result before using the pool.
+auto result = liberafx::SpawnableHostPool::create(package, options, pool);
+
+// During playback, on the creating owner thread:
+liberafx::SpawnableHostLease lease;
+liberafx::SpawnableHost* host = nullptr;
+result = pool->acquire(lease, host);
+// Set coordinate basis, owner matrix, quality and initial inputs for this lease.
+// Then advance as usual. Return at an idle boundary when playback is finished.
+result = pool->release(lease);
+```
+
+Capacity is fixed. Exhaustion returns `InsufficientWork`, with no hidden heap
+growth or fallback allocation. Return resets clocks/time scale, basis/quality,
+authored parameter defaults, particle IDs/seed progression, emission counters,
+VM state, named inputs/outputs, event queues and debug hooks. Release discards
+this playback's events rather than dispatching new lifecycle signals. Force
+cleans state immediately but retains pooled storage. Stale/cross-pool leases and
+old debug targets cannot access a recycled playback. Failed resets quarantine
+a slot. A host pointer must not be retained after returning its lease.
+
+Initial eligibility is deliberately bounded: root-only packages using Core
+builtins, including CPU Stage IO and named Game IO/Owner Matrix. Spawnable
+hierarchies, external project-node callbacks and procedural mesh emitters use
+the existing ordinary host API. Renderer/GPU resource preparation is outside
+this Core pool and must follow the engine's own thread and ownership rules.
+Engine playback adapters have not been switched to automatic pooling; consumers
+opt in through this Core API or the new C ABI. Pool memory grows with reserved
+instance count; immutable package sharing across hosts remains separate work.
+
+The C ABI provides `libra_spawnable_host_pool_create`, `_acquire`, `_stats` and
+`_release`. Acquired handles work with existing `libra_spawnable_host_*` calls;
+`libra_spawnable_host_release` returns the slot. Reacquisition issues a fresh
+handle. Pool destruction returns Busy while any host is checked out. Native
+handle-map nodes and buckets are reserved during preparation too, so acquire
+can rekey existing nodes. C calls enforce the creating owner thread.
+
+On the same 9950X/Release Fountain, preparing **32 hosts of 100 particles** took
+6.94–8.43 ms with one worker and 3.63–3.97 ms with four in alternating runs.
+A further 180-cycle comparison after 30 warmup cycles measured all 32 hosts:
+
+| Operation | Fresh hosts, three means (ms) | Reused hosts, three means (ms) |
+| --- | --- | --- |
+| Create / acquire | 3.989 / 3.879 / 3.603 | 0.000118 / 0.000119 / 0.000129 |
+| Initial emission | 0.199 / 0.200 / 0.200 | 0.177 / 0.178 / 0.177 |
+| Destroy / reset and return | 1.509 / 1.417 / 1.306 | 0.00701 / 0.00684 / 0.00665 |
+
+Acquire is close to timer granularity; use "under 0.001 ms for all 32" rather
+than treating the last digits as a universal per-host latency. Fresh create and
+destroy showed substantial allocator-related variability. A separate 50-host
+run measured initial emission at 0.278 ms for 100 particles each, and 2.898 ms
+for 1,000 particles each. These are **Core-only** measurements without file IO,
+package loading, engine geometry/material conversion or drawing, not Niagara
+comparisons. Raw local logs are in ignored `build/host-pool-benchmarks.log`.
+
+Build `liberafx_host_pool_benchmarks` and run:
+
+```powershell
+liberafx_host_pool_benchmarks.exe CpuFountain-binary-100.lfxb 32 4 180
+liberafx_host_pool_benchmarks.exe CpuFountain-binary-100.lfxb 32 1 180 --fresh
+```
+
+Core tests count ordinary/aligned allocations across acquire and reset/return.
+They compare worker-prepared and repeatedly recycled instances with fresh hosts,
+including interpreter and batched CPU stages, slot reuse, lifetime retirement,
+pause/slow, errors, Stop/Force, Owner Matrix and named properties/signals.
+The C ABI tests check exhaustion, ownership, stale handles and snapshot equality.
+Both run with AddressSanitizer in the release gate; MCP authoring remains a
+separate required gate.
 
 ## Engine comparison still required
 
