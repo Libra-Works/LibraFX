@@ -4,6 +4,10 @@
 MCP. It is not a source-code development skill. The editor build and publish
 outputs include this directory so instructions travel with the matching API.
 Keep the skill in English; conversations may use the user's preferred language.
+It includes a node-optimization workflow: compare current compiler output,
+preserve appearance and gameplay semantics, edit through supported MCP tools,
+and verify runtime evidence. The read-only `libera_graph_analyze_optimization`
+reports export savings without editing the graph or claiming frame timings.
 
 ## Install or update
 

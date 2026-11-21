@@ -1,6 +1,6 @@
 ---
 name: liberafx-operator
-description: Operate LIBERA FX through MCP to open and save effects, edit graphs safely, and verify playback in connected Unity or Unreal editors. Use for effect authoring and troubleshooting, not for modifying LIBERA FX source code.
+description: Operate LIBERA FX through MCP to open and save effects, edit and optimize node graphs safely, and verify playback in connected engine previews. Use for effect authoring and troubleshooting, not for modifying LIBERA FX source code.
 ---
 
 # LIBERA FX operator
@@ -127,6 +127,66 @@ targets are unavailable. Following a reference preserves the explanatory
 conversation, but discards old tool results and selection instructions, revokes
 old tool permissions, and refreshes the current graph context before the next
 shared chat message.
+
+## Optimize an effect without changing its design
+
+Use this workflow when asked to make an existing effect lighter or simplify its
+nodes. Separate runtime optimization from graph readability. Node count, file
+size, MCP response time, loading/preparation, initial emission, regular Update
+and drawing are different costs. A Group can improve readability without
+reducing runtime work; a Spawnable Group changes runtime identity/lifetime.
+
+- Read the graph and effective ports, then call
+  `libera_graph_analyze_optimization` when available. It compiles the current
+  graph and descendants twice and reports actual distribution-export byte
+  savings without changing nodes or history. Call from effect scope, not an
+  isolated CPU Spawn/Update workspace. A missing tool is a compatibility gap;
+  use supported compile information and state the limitation.
+- Preserve the user's visual contract: silhouette, timing, density, lifetime,
+  seed/particle identity, motion, colour/alpha, material/blend, coordinate space
+  and real/scaled clocks. Reducing burst/rate, lifetime, texture quality, noise
+  detail or Fluid2D resolution is a quality tradeoff, not an equivalent rewrite.
+  Do not introduce that tradeoff without authorization.
+- Distribution export already fuses an eligible CPU lifetime-colour chain:
+  `Age / Life -> Clamp(0,1) -> 1-x -> Compose RGBA` with constant RGB. Live debug
+  retains source instructions. Keep the editable nodes; do not create an
+  internal runtime-kernel node or hand-edit version fields. Check the analyzer
+  before manually rewriting a chain the compiler already optimizes.
+- Fewer source nodes can make execution slower. In particular, merging cheap
+  Age/Life reads into a shared output can prevent the single-consumer fusion.
+  Share an expensive pure expression only when its inputs, evaluation scope,
+  clocks and seed/ID dependencies are truly identical. Do not hoist per-particle
+  random/noise, age, velocity or texture samples to one effect-wide value.
+- Preserve semantic boundaries: named Game/Instance IO, exposed group pins,
+  Signal entries and timeline keys, stateful/custom nodes, Spawn/Update order,
+  emitter/draw matrices and procedural resource producers/consumers. An unused
+  output is not proof that a node is removable: pure evaluation can raise errors,
+  and Signal or resource work may have other effects.
+- Inspect literal-only arithmetic, identity copies and duplicate expensive pure
+  work as candidates, not automatic deletions. Preserve types and each output
+  pin. Do not assume algebraic reassociation is bit-exact; zero, signed zero,
+  division by zero and nonfinite intermediates can change behavior. Reconnecting
+  constants can also remove an exposed artist control.
+- Make one bounded, undoable change at a time with the discovered edit tools.
+  `libera_graph_apply_plan` only adds nodes/wires declared in its plan; it cannot
+  transactionally rewrite existing nodes. Use exact pin IDs for
+  `libera_graph_disconnect_nodes` / `libera_graph_connect_nodes`, re-read and
+  compile before deleting a verified redundant node with
+  `libera_graph_delete_node`. For GPU IR, use `gpu_read_program` and
+  `gpu_apply_plan` with `requireValid=true` when those tools exist, preserving
+  attribute writes, flow order and resource hazards.
+- Compare the analyzer and compile results before/after, then repeat the Preview
+  and evidence checks below on the same backend, inputs, particle count, camera,
+  frame/time scale and playback phase. Check initial emission and the tail/Stop,
+  not just one still image. If behavior regresses, undo only this operation's
+  known edits after checking for intervening user changes.
+
+A successful CPU/GPU export proves compilation, not a timing improvement or
+visible equivalence. If runtime timings or frames are unavailable, report the
+verified graph/binary change and leave speed/appearance unverified. Report source
+node changes separately from compiler optimizations already applied. Core host
+pool preparation is a loading/integration concern; reorganizing graph nodes does
+not enable pooling in an engine adapter.
 
 ## Assets and material authoring
 

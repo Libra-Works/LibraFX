@@ -1,6 +1,6 @@
 ---
 name: liberafx-game-effects
-description: Create or tune editable LIBERA FX game-effect prototypes through its MCP tools, using gameplay briefs such as impact, slash, elemental spells, healing or magic circles.
+description: Create, tune or optimize editable LIBERA FX game effects through MCP, preserving the intended appearance and timing while improving measured cost or graph clarity.
 ---
 
 # LIBERA FX game effects
@@ -33,6 +33,39 @@ Author in metres with X right, Y up, Z forward. Ground is XZ; upward acceleratio
 Inspect `libera_graph_list_node_types`, `libera_graph_describe_node_ports`, `libera_graph_describe_group` or `gpu_describe` before constructing unfamiliar connections. Reuse discoverable groups rather than rebuilding common motion/fade/orientation logic. Do not hand-edit version fields to enable capabilities: export through the current compiler. CPU lifecycle graphs compile with `libera_graph_compile_spawnable`; GPU source compilation alone is not proof of rendering.
 
 Preview at normal speed, then use `libera_preview_playback` with `timeScale` for timing inspection. Check `libera_render_status` / `gpu_runtime_status` and actual frames. Distinguish capacity from live count and exported shader source from GPU execution. Match the preview to the brief, adjust the graph, and report what was created plus any unverified appearance. Save to the user-authorized destination with the available project tools.
+
+## Optimize an existing effect
+
+Read the source and the connected backend before editing. Use
+`libera_graph_analyze_optimization` when discovered to compare ordinary and
+CPU-preoptimized distribution output without changing the graph. Its byte savings
+are real export data, not measured frame time. Use effect scope; isolated CPU
+stage attributes are not standalone effects. `libera_graph_compile_spawnable`
+exposes root/template `cpuProgramsBase64` alongside other executable payloads.
+
+Preserve silhouette, anticipation/impact/decay, density, seed/ID behavior,
+lifetime, colour/alpha, blend and local/world spaces. Reducing particle count or
+noise/detail is a separate quality choice. Keep rain/snow emitter-follow behavior
+and existing particles' world space; do not substitute a draw transform that
+moves all live weather particles. Real/scaled time and per-instance/effect time
+are different dependencies even when their current values match.
+
+Prioritize repeated expensive pure math and invariant resource work, checking
+whether they really are invariant per particle, stage and frame. Do not merge
+Signal/state/IO nodes or remove a node just because its output is unwired.
+Preserve exposed controls and module boundaries. Distribution compilation already
+fuses eligible `Age / Life -> Clamp(0,1) -> 1-x -> Compose RGBA` with constant RGB;
+sharing cheap Age/Life outputs can block that single-consumer optimization.
+Do not replace the editable chain with an internal kernel node.
+
+Use discovered exact-pin edits and actual undo history; additive
+`libera_graph_apply_plan` is not a general graph rewrite tool. Prefer a validated
+`gpu_apply_plan` for GPU IR when available. Compare export information, actual
+frames, start/peak/tail/Stop and comparable runtime telemetry after each bounded
+change. Keep a change only when its behavior and claimed benefit are supported.
+If timing or visual checks are unavailable, state that limit. Loading/pool
+preparation, particle birth, Update and rendering require separate budgets;
+MCP latency and smaller source graphs do not establish runtime speed.
 
 ## Hands-on authoring review
 

@@ -1,4 +1,4 @@
 interface:
   display_name: "LIBERA FX Game Effects"
-  short_description: "Create editable game-effect prototypes through LIBERA FX MCP"
-  default_prompt: "Use $liberafx-game-effects to create an editable effect prototype in LIBERA FX."
+  short_description: "Create and optimize editable LIBERA FX game effects"
+  default_prompt: "Use $liberafx-game-effects to create or optimize an editable game effect in LIBERA FX."
