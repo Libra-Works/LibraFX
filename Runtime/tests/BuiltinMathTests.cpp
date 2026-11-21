@@ -76,7 +76,7 @@ int main(int argc, char** argv)
 #endif
     auto count = std::size_t{};
     auto registry = builtinNodes(count);
-    assert(registry != nullptr && count == 104);
+    assert(registry != nullptr && count == 107); // Includes the three real-time clock primitives.
     const std::uint8_t expectedPrefix[] = {0x74, 0x30, 0x5a, 0xc1, 0x91, 0xb2, 0x4c, 0x33, 0x8d, 0x44};
     assert(std::memcmp(registry[0].typeId, expectedPrefix, sizeof(expectedPrefix)) == 0);
     if (argc >= 2)
@@ -228,7 +228,7 @@ int main(int argc, char** argv)
 
     for (auto i = 0u; i < 10; ++i)
     {
-        auto& descriptor = registry[76 + i];
+        auto& descriptor = registry[79 + i];
         assert(std::memcmp(descriptor.typeId, expectedPrefix, sizeof(expectedPrefix)) == 0);
         assert(descriptor.typeId[15] == 48 + i && descriptor.abiVersion == 1 &&
                descriptor.outputWidth == 1);
@@ -239,52 +239,52 @@ int main(int argc, char** argv)
         assert(evaluate(descriptor, input, output) == Result::NonFinite);
     }
     input = {}; input[0] = -5.5; input[4] = 2;
-    assert(evaluate(registry[76], input, output) == Result::Ok && output[0] == -1.5);
+    assert(evaluate(registry[79], input, output) == Result::Ok && output[0] == -1.5);
     input[0] = 5.5; input[4] = -2;
-    assert(evaluate(registry[76], input, output) == Result::Ok && output[0] == 1.5);
+    assert(evaluate(registry[79], input, output) == Result::Ok && output[0] == 1.5);
     input[4] = 0;
-    assert(evaluate(registry[76], input, output) == Result::DivideByZero);
+    assert(evaluate(registry[79], input, output) == Result::DivideByZero);
     input = {}; input[0] = -1.25;
-    assert(evaluate(registry[77], input, output) == Result::Ok && output[0] == 0.75);
-    assert(evaluate(registry[78], input, output) == Result::Ok && output[0] == -1);
-    assert(evaluate(registry[85], input, output) == Result::Ok && output[0] == -1);
+    assert(evaluate(registry[80], input, output) == Result::Ok && output[0] == 0.75);
+    assert(evaluate(registry[81], input, output) == Result::Ok && output[0] == -1);
+    assert(evaluate(registry[88], input, output) == Result::Ok && output[0] == -1);
     input[0] = 0;
-    assert(evaluate(registry[79], input, output) == Result::Ok && output[0] == 1);
+    assert(evaluate(registry[82], input, output) == Result::Ok && output[0] == 1);
     input[0] = 3;
-    assert(evaluate(registry[80], input, output) == Result::Ok && output[0] == 8);
+    assert(evaluate(registry[83], input, output) == Result::Ok && output[0] == 8);
     input[0] = 10000;
-    assert(evaluate(registry[79], input, output) == Result::NonFinite);
-    assert(evaluate(registry[80], input, output) == Result::NonFinite);
-    input = {}; input[0] = 0.25; input[8] = 1;
-    assert(evaluate(registry[81], input, output) == Result::Ok && output[0] == 0.15625);
-    input[0] = -1;
-    assert(evaluate(registry[81], input, output) == Result::Ok && output[0] == 0);
-    input[0] = 2;
-    assert(evaluate(registry[81], input, output) == Result::Ok && output[0] == 1);
-    input[8] = 0;
-    assert(evaluate(registry[81], input, output) == Result::InvalidArgument);
-    input[8] = -1;
-    assert(evaluate(registry[81], input, output) == Result::InvalidArgument);
-    input[0] = 0; input[4] = -std::numeric_limits<double>::max();
-    input[8] = std::numeric_limits<double>::max();
-    assert(evaluate(registry[81], input, output) == Result::NonFinite);
-    input = {}; input[0] = 2; input[4] = 4; input[8] = 0;
-    assert(evaluate(registry[82], input, output) == Result::Ok && output[0] == 0.5);
-    input[0] = 6;
-    assert(evaluate(registry[82], input, output) == Result::Ok && output[0] == -0.5);
-    input[8] = 4;
-    assert(evaluate(registry[82], input, output) == Result::DivideByZero);
-    input[0] = 0; input[4] = -std::numeric_limits<double>::max();
-    input[8] = std::numeric_limits<double>::max();
     assert(evaluate(registry[82], input, output) == Result::NonFinite);
-    input = {}; input[0] = -2;
-    assert(evaluate(registry[83], input, output) == Result::Ok && output[0] == 0);
-    input[0] = 2;
-    assert(evaluate(registry[83], input, output) == Result::Ok && output[0] == 1);
-    input[4] = 2;
-    assert(evaluate(registry[84], input, output) == Result::Ok && output[0] == 1);
-    input[0] = 1;
+    assert(evaluate(registry[83], input, output) == Result::NonFinite);
+    input = {}; input[0] = 0.25; input[8] = 1;
+    assert(evaluate(registry[84], input, output) == Result::Ok && output[0] == 0.15625);
+    input[0] = -1;
     assert(evaluate(registry[84], input, output) == Result::Ok && output[0] == 0);
+    input[0] = 2;
+    assert(evaluate(registry[84], input, output) == Result::Ok && output[0] == 1);
+    input[8] = 0;
+    assert(evaluate(registry[84], input, output) == Result::InvalidArgument);
+    input[8] = -1;
+    assert(evaluate(registry[84], input, output) == Result::InvalidArgument);
+    input[0] = 0; input[4] = -std::numeric_limits<double>::max();
+    input[8] = std::numeric_limits<double>::max();
+    assert(evaluate(registry[84], input, output) == Result::NonFinite);
+    input = {}; input[0] = 2; input[4] = 4; input[8] = 0;
+    assert(evaluate(registry[85], input, output) == Result::Ok && output[0] == 0.5);
+    input[0] = 6;
+    assert(evaluate(registry[85], input, output) == Result::Ok && output[0] == -0.5);
+    input[8] = 4;
+    assert(evaluate(registry[85], input, output) == Result::DivideByZero);
+    input[0] = 0; input[4] = -std::numeric_limits<double>::max();
+    input[8] = std::numeric_limits<double>::max();
+    assert(evaluate(registry[85], input, output) == Result::NonFinite);
+    input = {}; input[0] = -2;
+    assert(evaluate(registry[86], input, output) == Result::Ok && output[0] == 0);
+    input[0] = 2;
+    assert(evaluate(registry[86], input, output) == Result::Ok && output[0] == 1);
+    input[4] = 2;
+    assert(evaluate(registry[87], input, output) == Result::Ok && output[0] == 1);
+    input[0] = 1;
+    assert(evaluate(registry[87], input, output) == Result::Ok && output[0] == 0);
 
     const std::uint8_t matrixPrefix[] = {0xb0, 0xaf, 0x61, 0xd2, 0x29, 0xf6, 0x4c, 0xc9, 0xa7, 0x1e};
     for (auto id = 1u; id <= 13; ++id)
