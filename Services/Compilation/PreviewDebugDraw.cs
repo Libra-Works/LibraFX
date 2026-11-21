@@ -8,6 +8,7 @@ namespace LiberaFx.Services.Compilation;
 public sealed record VfxCompileOptions
 {
     public bool IncludePreviewDebugDraw { get; init; }
+    public bool OptimizeCpuParticleKernels { get; init; } = true;
     public static VfxCompileOptions Distribution { get; } = new();
     public static VfxCompileOptions LiveTransfer { get; } = new() { IncludePreviewDebugDraw = true };
 }

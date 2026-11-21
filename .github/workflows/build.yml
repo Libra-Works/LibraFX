@@ -62,6 +62,7 @@ jobs:
           $fixtures = Join-Path $env:RUNNER_TEMP 'cpu-batch-fixtures'
           $fallback = Join-Path $env:RUNNER_TEMP 'cpu-batch-fallback'
           $build = Join-Path $env:RUNNER_TEMP 'cpu-batch-build'
+          dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --cpu-particles
           dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --particle-benchmark-fixtures $fixtures
           dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --cpu-particle-fixture $fallback
           # Instrument only this disposable test build; exported SDKs remain normal Release builds.
@@ -74,9 +75,13 @@ jobs:
           $env:PATH = (Split-Path $asanRuntime) + [IO.Path]::PathSeparator + $env:PATH
           $env:ASAN_OPTIONS = 'halt_on_error=1:alloc_dealloc_mismatch=1'
           & (Join-Path $build 'Release/liberafx_cpu_particle_batch_tests.exe') `
-            (Join-Path $fixtures 'CpuFountain-1000.lfxb') `
+            --aot (Join-Path $fixtures 'CpuFountain-1000.lfxb') (Join-Path $fixtures 'CpuFountain-aot-1000.lfxb') `
+            --aot (Join-Path $fixtures 'CpuFountain-retirement.lfxb') (Join-Path $fixtures 'CpuFountain-aot-retirement.lfxb') `
+            --aot (Join-Path $fixtures 'CpuFountain-1000.lfxb') (Join-Path $fixtures 'CpuFountain-binary-1000.lfxb') `
+            --aot (Join-Path $fixtures 'CpuFountain-retirement.lfxb') (Join-Path $fixtures 'CpuFountain-binary-retirement.lfxb') `
+            --fused (Join-Path $fixtures 'CpuFountain-1000.lfxb') `
             (Join-Path $fixtures 'CpuFountain-retirement.lfxb') `
-            (Join-Path $fixtures 'CpuBatch-math.lfxb') `
+            --unfused (Join-Path $fixtures 'CpuBatch-math.lfxb') `
             (Join-Path $fixtures 'CpuBirth-zero-life.lfxb') `
             --birth-divide (Join-Path $fixtures 'CpuBirth-divide.lfxb') `
             --birth-mixed (Join-Path $fixtures 'CpuBirth-mixed.lfxb') `

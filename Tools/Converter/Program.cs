@@ -16,7 +16,7 @@ internal static class Converter
         }
         if (args is ["batch", "--list", var listFile, var listOutput, .. var listOptions])
             args = ["batch-list", listFile, listOutput, .. listOptions];
-        if (args.Length < 3 || args[0] is not ("convert" or "batch" or "batch-list"))
+        if (args.Length < 3 || args[0] is not ("convert" or "batch" or "batch-list" or "optimize"))
         {
             Usage(Console.Error);
             return 2;
@@ -26,6 +26,12 @@ internal static class Converter
         {
             var input = Path.GetFullPath(args[1]);
             var output = Path.GetFullPath(args[2]);
+            if (args[0] == "optimize")
+            {
+                if (args.Length is < 3 or > 4 || (args.Length == 4 && args[3] != "--force"))
+                { Usage(Console.Error); return 2; }
+                return await OptimizeAsync(input, output, args.Length == 4);
+            }
             var force = false;
             var embedded = false;
             string? resourceMap = null, bindingSnapshot = null, targetEngine = null, targetProject = null;
@@ -113,6 +119,8 @@ internal static class Converter
     {
         writer.WriteLine("Usage: LiberaFxConverter convert <input.lfxproj> <output.lfxb|output.lfxrm> [options]");
         writer.WriteLine("       LiberaFxConverter batch <input-directory> <output-directory> [options]");
+        writer.WriteLine("       LiberaFxConverter optimize <input.lfxb> <output.lfxb> [--force]");
+        writer.WriteLine("Optimize: precompile supported CPU kernels from an existing package; use the matching updated native runtime.");
         writer.WriteLine("       LiberaFxConverter batch --list <effects.txt> <output-directory> [options]");
         writer.WriteLine("       LiberaFxConverter batch-list <effects.txt> <output-directory> [options]");
         writer.WriteLine("List: one input project per line, optionally TAB + relative output.lfxb. Input paths are relative to the list file. Blank lines and # comments are ignored.");
@@ -124,6 +132,32 @@ internal static class Converter
         writer.WriteLine("Legacy .lfxp and raw .lfxb remain runtime inputs; raw bytecode is no longer a converter output.");
         writer.WriteLine("Mapped .lfxrm: [--resource-map <file>] --binding-snapshot <file> --target-engine <engine> --target-project <guid>");
         writer.WriteLine("The project identity document is used unless an identical --resource-map is supplied. Snapshot assertions are not live verification.");
+    }
+
+    private static async Task<int> OptimizeAsync(string input, string output, bool force)
+    {
+        if (string.Equals(input, output, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            throw new IOException("Input and output must be different files.");
+        if (!Path.GetExtension(output).Equals(EffectBinary.FileExtension, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Optimized effects use .lfxb.");
+        if (!force && File.Exists(output)) throw new IOException($"Output already exists: {output}");
+        if (new FileInfo(input).Length > 512 * 1024 * 1024) throw new InvalidDataException("The input package exceeds 512 MiB.");
+        var source = await File.ReadAllBytesAsync(input);
+        var optimized = CpuParticleBinaryOptimizer.OptimizePackage(source);
+        var directory = Path.GetDirectoryName(output)!;
+        Directory.CreateDirectory(directory);
+        var temporary = Path.Combine(directory, $".liberafx-{Guid.NewGuid():N}.tmp");
+        try
+        {
+            await File.WriteAllBytesAsync(temporary, optimized);
+            File.Move(temporary, output, force);
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
+        Console.WriteLine($"{input} -> {output}: {source.Length} -> {optimized.Length} bytes; supported CPU kernels preoptimized.");
+        return 0;
     }
 
     private sealed record ExportOptions(string? ResourceMap, string Snapshot, EngineProjectIdentity Project);

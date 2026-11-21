@@ -248,6 +248,94 @@ unsupported Spawn with batched Update. Tests assert that eligible stages omit
 per-particle VMs, compare full state/timing/events with the interpreter, and run
 under AddressSanitizer in the release gate.
 
+## Compact execution records and fused numeric work
+
+The in-memory particle execution format now separates hot operations from cold
+constants and source IDs. Each hot instruction is 12 bytes: an operation, width,
+output register and four 16-bit operand addresses. A tagged operand addresses
+an immutable stage-level constant pool or a node/component scratch register. Identical
+constant vectors share storage, including preservation of signed-zero bit
+patterns. The old decoded records were 192 bytes on the measured x64 build;
+constants and diagnostic IDs still take separate storage in the new layout.
+This is an execution-layout change after loading, not a new on-disk LFXB version.
+
+Copies and identity color conversions redirect their consumers to the original
+register or constants. A recognized lifetime-color chain—Age / Life, Clamp(0,1),
+1 minus the result, then Compose RGBA with constant RGB—becomes one block
+operation. Fusion requires a single consumer for every removed intermediate;
+shared values retain the generic path. It samples age/life before all Signal
+commands, preserves the original binary64 operations and finite checks, and
+uses ordered interpreter replay for exceptional values. For legacy input, the authoring graph and original bytecode remain available,
+with original node IDs in the plan. Offline exports below retain the editable
+source separately and omit the fused intermediates from their runtime binary.
+
+Shrinking records alone did not produce a reliable speed improvement. A first
+operand-stride implementation regressed Update to about 1.45 ms and was removed.
+The compact addressed records plus lifetime fusion produced these alternating
+measurements against a separately built clean `2fe44d4` baseline, using the same
+MSVC Release configuration and the same 10,000-particle × 8-host fixture:
+
+| Run | Previous Update mean (ms) | Compact + fused mean (ms) |
+| --- | --- | --- |
+| 1 | 1.150 | 0.678 |
+| 2 | 1.146 | 0.688 |
+| 3 | 1.159 | 0.681 |
+
+All checksums matched. New initial emission was 5.050, 5.355 and 5.053 ms;
+host creation was 3.245, 4.026 and 3.039 ms. The improvement is approximately
+41% for **this matching lifetime-color workload**, measured without drawing.
+It does not imply that every graph or instance-creation path improved equally.
+The release-gate fixtures assert that the ordinary Fountain uses fusion and
+that a graph sharing its intermediate attributes keeps the generic path; both
+are compared byte-for-byte with the interpreter over varying time steps.
+
+Persistent SoA storage, a shared cross-instance scheduler, reusable prepared
+package definitions and broader precompiled kernels remain further work. A
+compact file by itself does not remove execution dispatch or per-instance
+state initialization; these need separate measurements.
+
+## Ahead-of-time CPU binary optimization
+
+Distribution compilation now performs lifetime-color fusion **before writing**
+the CPU stage bytecode. The optimized V3 program contains an internal CPU kernel
+instruction (`7c7e1000-2521-4bdb-b8a0-210000000049`) in place of five intermediate
+nodes. Numeric references and Signal destinations are relocated to the new node
+indices. This uses the existing registered-instruction mechanism rather than a
+new editor node, package envelope or LFXB record size.
+
+The editable graph is preserved. Live debug transfer keeps original source
+instructions for stepping. Set `VfxCompileOptions.OptimizeCpuParticleKernels`
+to `false` for an explicit unoptimized export. Unknown callbacks, IO boundaries,
+shared intermediate consumers, guards and newer bytecode formats retain the
+ordinary code. Previously exported files remain loadable; newly optimized
+exports need the matching updated native runtime/engine SDK, which supplies the
+internal kernel descriptor. Older runtimes cannot execute this new instruction.
+
+For the 10,000-particle Fountain fixture the full package shrank from 5,399 to
+4,119 bytes (1,280 bytes, approximately 24%). This optimization benefits the
+ordinary VM too: paired interpreter-only runs measured roughly 13.0–13.2 ms
+Update before and 9.3–9.4 ms after for eight hosts. Automatic compact/batched
+execution remains around 0.7 ms for the same fixture. These are CPU simulation
+measurements without drawing, not universal speed or instantiation guarantees.
+
+Tests compare **two different binaries**, unoptimized and ahead-of-time optimized,
+with automatic batching both enabled and disabled. All particle snapshot bytes,
+IDs, timing, events, retirement/reuse, pause/slow and Stop must agree over 300
+frames. The release gate also checks that export reduces the binary while
+preserving the source graph and live-debug code. Existing compiled packages can also be optimized without the source project:
+
+```powershell
+LiberaFxConverter optimize input.lfxb output.lfxb
+```
+
+Input and output must be different files. Existing outputs require `--force`;
+writing uses a temporary file and an atomic move. The command traverses root
+and nested-template CPU payloads, leaves unknown/unsupported stages unchanged,
+and is idempotent. Raw non-package bytecode and resource manifests are not this
+command's input format. Use the matching updated native runtime for the output.
+The release gate compares both source-compiled and binary-rewritten optimized
+packages against the unoptimized interpreter.
+
 ## Engine comparison still required
 
 For a paired Niagara comparison use the same hardware, Unreal version, RHI,

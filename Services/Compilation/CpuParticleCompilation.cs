@@ -176,6 +176,8 @@ public static class CpuParticleCompilation
                     throw new InvalidDataException("Particle stage graphs cannot contain Draw nodes; use CpuParticleSpriteDraw in the container.");
                 }
                 GuidId(writer, entry.SingleOrDefault()?.Id ?? Guid.Empty);
+                if (io.Count == 0 && options?.OptimizeCpuParticleKernels != false && options?.IncludePreviewDebugDraw != true)
+                    program = program.OptimizeCpuKernel();
                 var bytes = program.ToPackageBinary();
                 writer.Write(bytes.Length);
                 writer.Write(bytes);

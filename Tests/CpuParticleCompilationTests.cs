@@ -9,8 +9,44 @@ namespace LiberaFx.Tests;
 
 public static class CpuParticleCompilationTests
 {
+    private static void VerifyAheadOfTimeKernels()
+    {
+        var graph = LiberaFx.Services.ParticleSamples.Create("CpuFountain");
+        var saved = JsonSerializer.Deserialize<GraphSnapshot>(JsonSerializer.Serialize(graph))!;
+        var original = SpawnableGroupPackage.Compile(graph,
+            options: new VfxCompileOptions { OptimizeCpuParticleKernels = false });
+        var optimized = SpawnableGroupPackage.Compile(graph);
+        Require(original.CpuPrograms.Length - optimized.CpuPrograms.Length == 5 * 256,
+            "Distribution compilation must remove five lifetime-color intermediates before writing the CPU binary.");
+        Require(original.ParentBytecode.SequenceEqual(optimized.ParentBytecode),
+            "CPU kernel optimization must preserve the outer effect program.");
+        Require(GraphSnapshot.ContentEquals(graph, saved), "Offline optimization must preserve the editable source graph.");
+        var debug = SpawnableGroupPackage.Compile(graph, options: VfxCompileOptions.LiveTransfer);
+        Require(debug.CpuPrograms.SequenceEqual(original.CpuPrograms),
+            "Live debug transfer must retain source-node instructions for stepping.");
+        var restored = SpawnableGroupPackageBinary.Deserialize(SpawnableGroupPackageBinary.Serialize(optimized));
+        Require(restored.CpuPrograms.SequenceEqual(optimized.CpuPrograms),
+            "Preoptimized CPU code must survive ordinary package serialization.");
+        var originalBytes = SpawnableGroupPackageBinary.Serialize(original);
+        var savedBytes = originalBytes.ToArray();
+        var rewritten = CpuParticleBinaryOptimizer.OptimizePackage(originalBytes);
+        Require(rewritten.SequenceEqual(SpawnableGroupPackageBinary.Serialize(optimized)),
+            "Optimization from the binary must match optimization from the source program.");
+        Require(originalBytes.SequenceEqual(savedBytes), "Binary optimization must preserve its input buffer.");
+        Require(CpuParticleBinaryOptimizer.OptimizePackage(rewritten).SequenceEqual(rewritten),
+            "Optimizing an already optimized binary must be idempotent.");
+        Reject(() => CpuParticleBinaryOptimizer.OptimizePackage(originalBytes[..^1]), "Truncated binary optimization");
+        var fireworks = LiberaFx.Services.ParticleSamples.Create("Fireworks");
+        var nestedOriginal = SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(fireworks,
+            options: new VfxCompileOptions { OptimizeCpuParticleKernels = false }));
+        var nestedOptimized = SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(fireworks));
+        Require(CpuParticleBinaryOptimizer.OptimizePackage(nestedOriginal).SequenceEqual(nestedOptimized),
+            "Binary optimization must relocate CPU kernels inside nested Spawnable templates too.");
+    }
+
     public static void Run()
     {
+        VerifyAheadOfTimeKernels();
         VerifyMatrixInputs();
         VerifyFlipbook();
         ParticleAtlasTests.Run();

@@ -10,6 +10,7 @@ internal static class ParticleBenchmarkFixtures
         if (!Path.IsPathFullyQualified(directory) || Directory.Exists(directory))
             throw new ArgumentException("Use an absolute new isolated benchmark fixture directory.");
         Directory.CreateDirectory(directory);
+        var referenceOptions = new VfxCompileOptions { OptimizeCpuParticleKernels = false };
         foreach (var count in new[] { 1000, 10000 })
         {
             var graph = ParticleSamples.Create("CpuFountain");
@@ -29,7 +30,11 @@ internal static class ParticleBenchmarkFixtures
             }
             graph = graph with { Nodes = graph.Nodes.Select(Transform).ToArray() };
             File.WriteAllBytes(Path.Combine(directory, "CpuFountain-" + count + ".lfxb"),
+                SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(graph, options: referenceOptions)));
+            File.WriteAllBytes(Path.Combine(directory, "CpuFountain-aot-" + count + ".lfxb"),
                 SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(graph)));
+            File.WriteAllBytes(Path.Combine(directory, "CpuFountain-binary-" + count + ".lfxb"),
+                CpuParticleBinaryOptimizer.OptimizePackage(File.ReadAllBytes(Path.Combine(directory, "CpuFountain-" + count + ".lfxb"))));
             var systemId = new byte[16];
             graph.Nodes.Single(node => CpuParticleSchema.IsContainer(node.Kind)).Id.TryWriteBytes(systemId, true, out _);
             File.WriteAllBytes(Path.Combine(directory, "CpuFountain-" + count + ".id"), systemId);
@@ -50,16 +55,20 @@ internal static class ParticleBenchmarkFixtures
                 }
                 var shortLived = graph with { Nodes = graph.Nodes.Select(ShortLived).ToArray() };
                 File.WriteAllBytes(Path.Combine(directory, "CpuFountain-retirement.lfxb"),
+                    SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(shortLived, options: referenceOptions)));
+                File.WriteAllBytes(Path.Combine(directory, "CpuFountain-aot-retirement.lfxb"),
                     SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(shortLived)));
+                File.WriteAllBytes(Path.Combine(directory, "CpuFountain-binary-retirement.lfxb"),
+                    CpuParticleBinaryOptimizer.OptimizePackage(File.ReadAllBytes(Path.Combine(directory, "CpuFountain-retirement.lfxb"))));
                 File.WriteAllBytes(Path.Combine(directory, "CpuBatch-math.lfxb"),
-                    SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(MathVariant(graph))));
+                    SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(MathVariant(graph), options: referenceOptions)));
                 File.WriteAllBytes(Path.Combine(directory, "CpuBatch-divide-zero.lfxb"),
-                    SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(MathVariant(graph, divideByZero: true))));
+                    SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(MathVariant(graph, divideByZero: true), options: referenceOptions)));
                 File.WriteAllBytes(Path.Combine(directory, "CpuBatch-error-order.lfxb"),
-                    SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(MathVariant(graph, mixedError: true))));
+                    SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(MathVariant(graph, mixedError: true), options: referenceOptions)));
                 foreach (var mode in new[] { "divide", "mixed", "zero-life", "unsupported" })
                     File.WriteAllBytes(Path.Combine(directory, "CpuBirth-" + mode + ".lfxb"),
-                        SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(BirthVariant(graph, mode))));
+                        SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(BirthVariant(graph, mode), options: referenceOptions)));
             }
         }
     }
@@ -131,7 +140,9 @@ internal static class ParticleBenchmarkFixtures
         var velocity = Add("CpuParticleVelocity");
         var size = Add("CpuParticleSize");
         var color = Add("CpuParticleColor");
-        var life = Add("CpuParticleLife");
+        // Reuse the very same output in two expressions: separate attribute
+        // nodes would not exercise the optimizer's shared-register boundary.
+        var life = nodes.First(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleLife");
         var offset = Add("FloatX3", ("value", "vector3", new double[] { .25, -.1, .4 }));
         var moved = Add("AddVector3"); Wire(position, moved, "a"); Wire(offset, moved, "b");
         var accelerated = Add("MultiplyVector3", ("b", "vector3", new double[] { .99, 1.01, .98 })); Wire(velocity, accelerated, "a");
