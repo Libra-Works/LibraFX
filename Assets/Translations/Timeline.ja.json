@@ -1,4 +1,12 @@
 {
+  "Timeline.Motion": "プレビュー移動",
+  "Timeline.MotionStatic": "静止",
+  "Timeline.MotionCircle": "円運動",
+  "Timeline.MotionSphere": "球面移動",
+  "Timeline.MotionRadius": "半径（メートル）",
+  "Timeline.MotionSpeed": "速さ（ラジアン／秒）",
+  "Timeline.TimeScale": "速度 ×",
+  "Timeline.TimeScaleHelp": "エフェクトの再生速度。0で停止、0.25で4分の1、1で通常速度。FPSは変わりません。",
   "Timeline.PlayPause": "再生 / 一時停止",
   "Timeline.Stop": "停止して先頭に戻る",
   "Timeline.StepBack": "1 フレーム戻る",

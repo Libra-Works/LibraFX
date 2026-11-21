@@ -330,6 +330,14 @@ internal static class GodotPackagePreviewTests
             Require(BinaryPrimitives.ReadInt64LittleEndian(playback.AsSpan(16)) ==
                 sendSequence,
                 "Godot playback did not use the Send publication as its next baseline.");
+            await Dispatcher.UIThread.InvokeAsync(() => model.NewDocumentCommand.Execute(null));
+            var reset = await ReceiveAsync(CompiledPreviewKind.Control, cancellation.Token);
+            using (var resetDocument = JsonDocument.Parse(reset.AsMemory(48)))
+                Require(resetDocument.RootElement.GetProperty("type").GetString() == "preview_reset" &&
+                    resetDocument.RootElement.EnumerateObject().Count() == 1,
+                    "Changing effects must clear the previous preview before sending a replacement program.");
+            var replacement = await ReceiveAsync(CompiledPreviewKind.Program, cancellation.Token);
+            Require(replacement.AsSpan(48, 4).SequenceEqual("LFXP"u8), "The replacement effect must follow preview_reset.");
             Console.WriteLine("Godot package preview WSS PASS: pinned TLS, .lfxp snapshot, editor Send routing, and playback baseline.");
 
             async Task<byte[]> ReceiveAsync(CompiledPreviewKind expected, CancellationToken token)

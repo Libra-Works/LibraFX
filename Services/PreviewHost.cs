@@ -313,12 +313,23 @@ public sealed class PreviewHost : IDisposable
     private async Task SendAsync(WebSocket socket, Guid id, PreviewClient client, CancellationToken cancellation)
     {
         PreviewPublication? baseline = null;
-        using var compiled = new CompiledPreviewSender();
+        await using var compiled = new PreviewCompilationWorker();
         var godotPackage = new GodotPackagePreviewSender();
         var unityPackage = new UnityPackagePreviewSender();
         GraphSnapshot? resourceGraph = null;
         ResourceIdentityRenderContext? resourceContext = null;
         var resourceFailed = false;
+        string? displayedDocument = null;
+        double[]? lastMotion = null;
+        async Task SendMotionAsync(PreviewPublication publication, bool programChanged)
+        {
+            if (publication.Playback is not { } playback || playback.Motion == 0 && lastMotion is null) return;
+            var offset = EditorPlayback.PreviewOffset(playback);
+            if (!programChanged && lastMotion is not null && offset.SequenceEqual(lastMotion)) return;
+            var bytes = CompiledPreviewProtocol.CreateControl(JsonSerializer.SerializeToUtf8Bytes(new { type = "preview_motion", offset }));
+            await SendSerializedAsync(socket, client, bytes, WebSocketMessageType.Binary, cancellation);
+            lastMotion = playback.Motion == 0 ? null : offset;
+        }
         await foreach (var publication in client.Channel.Reader.ReadAllAsync(cancellation))
         {
             if (client.WaitForUnityPreview && _assets?.Supports(id, "unityPackagePreview") != true)
@@ -329,6 +340,16 @@ public sealed class PreviewHost : IDisposable
             var force = Interlocked.Exchange(ref client.ForceSnapshot, 0) != 0;
             if (client.Version == 3)
             {
+                if (displayedDocument is not null && displayedDocument != publication.DocumentId)
+                {
+                    // Clear the old effect before compiling or resolving assets for the new one.
+                    // A failed replacement must leave an empty viewport, not the previous document.
+                    var reset = CompiledPreviewProtocol.CreateControl("{\"type\":\"preview_reset\"}"u8);
+                    await SendSerializedAsync(socket, client, reset, WebSocketMessageType.Binary, cancellation);
+                    force = true;
+                    resourceGraph = null;
+                }
+                displayedDocument = publication.DocumentId;
                 var godotPreview = client.PackagePreview || _assets?.Supports(id, "godotPackagePreview") == true;
                 var unityPreview = !godotPreview && _assets?.Supports(id, "unityPackagePreview") == true;
                 var packagePreview = godotPreview || unityPreview;
@@ -355,7 +376,7 @@ public sealed class PreviewHost : IDisposable
                     }
                     message = unityPreview ? unityPackage.Prepare(publication, force, resourceContext) :
                         godotPreview ? godotPackage.Prepare(publication, force) :
-                            compiled.Prepare(publication, force, resourceContext);
+                            await compiled.PrepareAsync(publication, force, resourceContext);
                     if (message is not null && !packagePreview && renderPeer &&
                         (message.Kind == CompiledPreviewKind.Program || message.EvaluatedRenderScene is not null))
                     {
@@ -375,12 +396,13 @@ public sealed class PreviewHost : IDisposable
                     resourceFailed = true;
                     message = CompiledPreviewProtocol.CreateError(publication, ex.Message);
                 }
-                if (message is null) continue;
+                if (message is null) { await SendMotionAsync(publication, false); continue; }
                 if (message.Kind == CompiledPreviewKind.Program)
                     _telemetry?.ExpectProgramAcknowledgement(id, publication.Sequence);
                 await SendSerializedAsync(socket, client, message.Bytes, WebSocketMessageType.Binary, cancellation);
                 if (sceneFrame is not null)
                     await SendSerializedAsync(socket, client, sceneFrame, WebSocketMessageType.Binary, cancellation);
+                await SendMotionAsync(publication, message.Kind == CompiledPreviewKind.Program);
                 if (!packagePreview && message.Kind == CompiledPreviewKind.Program && _assets?.Supports(id, "gpuParticles") == true)
                 {
                     // Native lifecycle graphs reject GPU mixtures, but must
@@ -393,7 +415,7 @@ public sealed class PreviewHost : IDisposable
                 }
                 if (unityPreview) unityPackage.Sent(message);
                 else if (godotPreview) godotPackage.Sent(message);
-                else compiled.Sent(message);
+                else await compiled.SentAsync(message);
                 continue;
             }
             var payload = client.Version == 2 ? PreviewProtocol.Encode(publication, baseline, force) : publication.LegacyPayload;

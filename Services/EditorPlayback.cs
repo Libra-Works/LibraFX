@@ -17,6 +17,10 @@ public sealed record PreviewPlaybackState(bool Playing, double Frame, double Fra
     public long LoopCount { get; init; }
     public bool IncludeSignalStart { get; init; }
     public bool DebugDrawStopped { get; init; }
+    public double TimeScale { get; init; } = 1;
+    public int Motion { get; init; }
+    public double MotionRadius { get; init; } = 2;
+    public double MotionSpeed { get; init; } = 1;
 }
 
 public sealed class EditorPlayback : ObservableObject, IDisposable
@@ -39,6 +43,60 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
     private bool _includeSignalStart = true;
     private bool _hasStarted;
     private bool _debugDrawStopped;
+    private double _timeScale = 1;
+    private int _motion;
+    private double _motionRadius = 2, _motionSpeed = 1;
+    public IReadOnlyList<string> MotionOptions => new[] { "Static", "Circle", "Sphere" }
+        .Select(name => LocalizationService.Shared.Get("Timeline.Motion" + name)).ToArray();
+    public int Motion
+    {
+        get => _motion;
+        set { if (value is >= 0 and <= 2 && SetProperty(ref _motion, value)) StateChanged?.Invoke(this, EventArgs.Empty); }
+    }
+    public string MotionRadiusText
+    {
+        get => _motionRadius.ToString("G", CultureInfo.CurrentCulture);
+        set
+        {
+            if (double.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out var radius) &&
+                double.IsFinite(radius) && radius is >= 0 and <= 1000 && SetProperty(ref _motionRadius, radius))
+                StateChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+    public string MotionSpeedText
+    {
+        get => _motionSpeed.ToString("G", CultureInfo.CurrentCulture);
+        set
+        {
+            if (double.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out var speed) &&
+                double.IsFinite(speed) && speed is >= 0 and <= 100 && SetProperty(ref _motionSpeed, speed))
+                StateChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+    public static double[] PreviewOffset(PreviewPlaybackState state)
+    {
+        if (state.Motion == 0) return [0, 0, 0];
+        var angle = state.Frame / state.FramesPerSecond * state.MotionSpeed;
+        var elevation = state.Motion == 2 ? Math.Sin(angle * .7) * Math.PI * .5 : 0;
+        var horizontal = Math.Cos(elevation) * state.MotionRadius;
+        return [Math.Cos(angle) * horizontal, Math.Sin(elevation) * state.MotionRadius, Math.Sin(angle) * horizontal];
+    }
+    public double TimeScale
+    {
+        get => _timeScale;
+        set
+        {
+            if (!double.IsFinite(value) || value < 0 || value > 100 || !SetProperty(ref _timeScale, value)) return;
+            OnPropertyChanged(nameof(TimeScaleText));
+            _lastTick = Stopwatch.GetTimestamp();
+            StateChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+    public string TimeScaleText
+    {
+        get => TimeScale.ToString("G", CultureInfo.CurrentCulture);
+        set { if (double.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out var ratio)) TimeScale = ratio; }
+    }
 
     public event EventHandler? StateChanged;
     public IRelayCommand PlayPauseCommand { get; }
@@ -100,7 +158,8 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
     {
         SignalEpoch = _signalEpoch, ForwardSeconds = _forwardSeconds,
         SeekTimeSeconds = _seekTime, SignalStartSeconds = _signalStart, LoopCount = _loopCount,
-        IncludeSignalStart = _includeSignalStart, DebugDrawStopped = _debugDrawStopped
+        IncludeSignalStart = _includeSignalStart, DebugDrawStopped = _debugDrawStopped, TimeScale = _timeScale,
+        Motion = _motion, MotionRadius = _motionRadius, MotionSpeed = _motionSpeed
     };
 
     public double DisplayUnits(double timeSeconds) => _showSeconds ? timeSeconds : timeSeconds * _fps;
@@ -140,6 +199,7 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
         {
             playback.OnPropertyChanged(nameof(Status));
             playback.OnPropertyChanged(nameof(TimeUnitLabel));
+            playback.OnPropertyChanged(nameof(MotionOptions));
         });
     }
 
@@ -167,6 +227,7 @@ public sealed class EditorPlayback : ObservableObject, IDisposable
     public void Advance(double seconds)
     {
         if (!_playing || !double.IsFinite(seconds) || seconds < 0) return;
+        seconds *= _timeScale;
         var next = Frame + seconds * _fps;
         if (!double.IsFinite(next)) return;
         var progress = Loop ? seconds : Math.Min(seconds, (_end - Frame) / _fps);

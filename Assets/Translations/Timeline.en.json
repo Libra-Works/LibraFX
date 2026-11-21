@@ -1,4 +1,12 @@
 {
+  "Timeline.Motion": "Preview motion",
+  "Timeline.MotionStatic": "Stationary",
+  "Timeline.MotionCircle": "Circle",
+  "Timeline.MotionSphere": "Sphere",
+  "Timeline.MotionRadius": "Radius (metres)",
+  "Timeline.MotionSpeed": "Speed (radians/second)",
+  "Timeline.TimeScale": "Speed ×",
+  "Timeline.TimeScaleHelp": "Effect playback speed: 0 pauses simulation, 0.25 plays at quarter speed, 1 is normal. FPS stays unchanged.",
   "Timeline.PlayPause": "Play / pause",
   "Timeline.Stop": "Stop and rewind",
   "Timeline.StepBack": "Previous frame",

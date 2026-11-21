@@ -6,6 +6,15 @@
              x:DataType="services:EditorPlayback"
              x:Name="Transport">
     <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="4" VerticalAlignment="Center">
+        <Expander Header="{DynamicResource Text.Timeline.Motion}" ExpandDirection="Down">
+            <StackPanel Spacing="4" Margin="6">
+                <ComboBox ItemsSource="{Binding MotionOptions}" SelectedIndex="{Binding Motion}" MinWidth="100" />
+                <TextBlock Text="{DynamicResource Text.Timeline.MotionRadius}" />
+                <TextBox Text="{Binding MotionRadiusText, UpdateSourceTrigger=LostFocus}" Width="80" />
+                <TextBlock Text="{DynamicResource Text.Timeline.MotionSpeed}" />
+                <TextBox Text="{Binding MotionSpeedText, UpdateSourceTrigger=LostFocus}" Width="80" />
+            </StackPanel>
+        </Expander>
         <Border Classes="editor-toolbar-group" Padding="4,2">
             <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                 <views:IconButton Classes="editor-tool" Icon="StepBack" Command="{Binding StepBackCommand}"
@@ -57,6 +66,12 @@
                          ToolTip.Tip="{DynamicResource Text.Timeline.Fps}"
                          AutomationProperties.Name="{DynamicResource Text.Timeline.Fps}"
                          Text="{Binding FpsText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                <Border Classes="editor-toolbar-divider" />
+                <TextBlock Classes="editor-label" Text="{DynamicResource Text.Timeline.TimeScale}" />
+                <TextBox Classes="editor-field" Width="52" TextAlignment="Right"
+                         Text="{Binding TimeScaleText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                         ToolTip.Tip="{DynamicResource Text.Timeline.TimeScaleHelp}"
+                         AutomationProperties.Name="{DynamicResource Text.Timeline.TimeScale}" />
             </StackPanel>
         </Border>
         <Border Classes="editor-toolbar-group" Padding="4,2"

@@ -299,6 +299,15 @@ public sealed class PreviewTelemetryStore
         ValidateObject(root);
         switch (Text(root, "type", 32))
         {
+            case "preview_motion":
+                if (root.EnumerateObject().Count() != 2 ||
+                    root.GetProperty("offset").ValueKind != JsonValueKind.Array || root.GetProperty("offset").GetArrayLength() != 3 ||
+                    root.GetProperty("offset").EnumerateArray().Any(value => !value.TryGetDouble(out var lane) || !double.IsFinite(lane) || Math.Abs(lane) > 1000))
+                    throw new InvalidOperationException("Invalid preview motion offset.");
+                break;
+            case "preview_reset":
+                if (root.EnumerateObject().Count() != 1) throw new InvalidOperationException("Invalid preview reset.");
+                break;
             case "profile_control":
                 if (root.EnumerateObject().Count() != 5 || Int(root, "intervalMs") is < 100 or > 5000)
                     throw new InvalidOperationException("Invalid profile control.");

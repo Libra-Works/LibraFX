@@ -554,7 +554,7 @@ internal static class CompiledPreviewProtocolTests
             var edit = await ReceiveAsync(socket, token);
             Require(U16(edit, 6) == 1, "Graph edit must send a program.");
             await Dispatcher.UIThread.InvokeAsync(() => model.Graph.CreateNode(
-                GraphNodeDefinition.Core.Single(definition => definition.Name == "Bool").Kind));
+                GraphNodeDefinition.Core.Single(definition => definition.Name == "String").Kind));
             var failure = await ReceiveAsync(socket, token);
             Require(U16(failure, 6) == 3, "Unsupported node must send a compile error.");
             await socket.SendAsync(Encoding.UTF8.GetBytes("""{"type":"resync"}"""), WebSocketMessageType.Text, true, token);
@@ -569,6 +569,10 @@ internal static class CompiledPreviewProtocolTests
             Require(U16(resync, 6) == 1 && U64(resync, 8) == U64(recovered, 8),
                 "Resync must return the latest complete program.");
             await Dispatcher.UIThread.InvokeAsync(() => model.NewDocumentCommand.Execute(null));
+            var reset = await ReceiveAsync(socket, token);
+            Require(U16(reset, 6) == (ushort)CompiledPreviewKind.Control &&
+                Encoding.UTF8.GetString(reset, 48, reset.Length - 48).Contains("preview_reset", StringComparison.Ordinal),
+                "Switching documents must clear the previous preview before replacing its program.");
             var switched = await ReceiveAsync(socket, token);
             Require(U16(switched, 6) == 1, "Switching documents must send a program.");
             using var gpuSocket = new ClientWebSocket();
