@@ -516,6 +516,11 @@ auto GeneratorPool::setHostQuality(GeneratorInstanceId id,
 auto GeneratorPool::setTimeContext(GeneratorInstanceId id, double effectTime,
                                    double frameDelta) noexcept -> Result
 {
+    return setTimeContext(id, effectTime, frameDelta, effectTime, effectTime, frameDelta);
+}
+auto GeneratorPool::setTimeContext(GeneratorInstanceId id, double effectTime,
+    double frameDelta, double realEffectTime, double realInstanceAge, double realFrameDelta) noexcept -> Result
+{
     auto lock = std::lock_guard<std::mutex>(impl_->mutex);
     if (impl_->executing)
     {
@@ -530,7 +535,7 @@ auto GeneratorPool::setTimeContext(GeneratorInstanceId id, double effectTime,
     {
         return Result::NotReady;
     }
-    return slot->instance->setTimeContext(effectTime, frameDelta);
+    return slot->instance->setTimeContext(effectTime, frameDelta, realEffectTime, realInstanceAge, realFrameDelta);
 }
 
 auto GeneratorPool::withInstance(GeneratorInstanceId id,

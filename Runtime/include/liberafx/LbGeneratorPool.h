@@ -114,6 +114,8 @@ public:
                                std::size_t instructionBudget,
                                std::uint64_t ownerTag) noexcept;
     Result setTimeContext(GeneratorInstanceId id, double effectTime, double frameDelta) noexcept;
+    Result setTimeContext(GeneratorInstanceId id, double effectTime, double frameDelta,
+                          double realEffectTime, double realInstanceAge, double realFrameDelta) noexcept;
     Result withInstance(GeneratorInstanceId id, GeneratorInstanceAccess access,
                         void *context) noexcept;
     Result setHostQuality(GeneratorInstanceId id, const HostQualitySnapshot& snapshot) noexcept;

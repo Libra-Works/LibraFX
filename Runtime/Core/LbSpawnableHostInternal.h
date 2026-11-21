@@ -143,6 +143,7 @@ struct SpawnableHost::Impl final {
     bool retiring = false;
     std::uint64_t retirementSeed = 0;
     bool destroyPublished = false;
+    double realStart = 0;
   };
   struct TemplateState final {
     const SpawnablePackageTemplate *data = nullptr;
@@ -219,7 +220,12 @@ struct SpawnableHost::Impl final {
   std::vector<ScheduledRoute> scheduledRoutes;
   double time = -1;
   double rootAge = 0;
+  CoordinateBasis coordinateBasis{};
   double frameDelta = 0;
+  double realElapsed = 0, effectElapsed = 0, realFrameDelta = 0, timeScale = 1;
+  auto realTimeAt(double effectAt) const noexcept -> double {
+    return timeScale > 0 ? std::max(0.0, realElapsed - (effectElapsed - effectAt) / timeScale) : realElapsed;
+  }
   HostQualitySnapshot quality{};
   std::uint64_t nextToken = 1;
   std::uint64_t nextScopeTag = 1;

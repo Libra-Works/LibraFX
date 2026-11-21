@@ -209,6 +209,7 @@ try {
         'LbPhasePrimitives.cpp'
     )
     $excludedInteropSources = @(
+        'LbInteropCoordinates.cpp',
         'LbInterop.cpp',
         'LbInteropInstance.cpp',
         'LbInteropEffectLifecycle.cpp',

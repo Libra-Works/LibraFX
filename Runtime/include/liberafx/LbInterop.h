@@ -33,6 +33,24 @@ typedef uint64_t LibraGeneratorInstance;
 typedef uint64_t LibraSpawnableHostHandle;
 typedef uint32_t LibraBinding;
 typedef int32_t LibraResult;
+typedef struct LibraCoordinateBasis {
+    int32_t axisX, axisY, axisZ;
+    double unitsPerMetre;
+} LibraCoordinateBasis;
+/* Signed host axes for effect X/right,Y/up,Z/forward. Unity={1,2,3,1},
+   Unreal/BS2={2,3,1,100}, Godot={1,2,-3,1}. Spatial kinds: position=0,
+   physical vector=1, direction=2, normal=3, angular vector=4, transform=5,
+   canonical-vertex draw transform=6. Numeric colours are not spatial values. */
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_coordinate_convert(
+    const LibraCoordinateBasis* basis, uint32_t kind, uint32_t toHost,
+    const double* source, uint32_t width, double* destination);
+typedef struct LibraEffectTimeSnapshot {
+    double realTime, effectTime, realDelta, effectDelta, timeScale;
+} LibraEffectTimeSnapshot;
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_time_scale(
+    LibraSpawnableHostHandle host, double ratio);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_time_snapshot(
+    LibraSpawnableHostHandle host, LibraEffectTimeSnapshot* snapshot);
 typedef struct LIBRA_INTEROP_ALIGN(8) LibraCpuParticleSnapshot {
     uint64_t id;
     double position[3];
@@ -537,6 +555,10 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_copy_insta
     uint8_t* destination, uint64_t capacity, uint64_t* outByteCount);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_owner_matrix(
     LibraSpawnableHostHandle host, const double values[16]);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_coordinate_basis(
+    LibraSpawnableHostHandle host, const LibraCoordinateBasis* basis);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_game_spatial_property(
+    LibraSpawnableHostHandle host, const char* name, uint32_t kind, const double* values, uint32_t width);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_quality(
     LibraSpawnableHostHandle host, uint8_t availability, uint8_t tier, uint8_t source, uint64_t frameSerial);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_request_natural_end(

@@ -8,26 +8,27 @@
 
 namespace liberafx::builtin_time_detail
 {
-template <bool delta> auto evaluateHostTime(CustomNodeInvocation& call) noexcept -> Result
+template <unsigned kind> auto evaluateHostTime(CustomNodeInvocation& call) noexcept -> Result
 {
     if (!call.hasTimeContext)
     {
         return Result::NotReady;
     }
-    call.outputs[0] = delta ? call.frameDelta : call.effectTime;
+    call.outputs[0] = kind == 0 ? call.effectTime : kind == 1 ? call.frameDelta :
+        kind == 2 ? call.realEffectTime : kind == 3 ? call.realInstanceAge : call.realFrameDelta;
     return Result::Ok;
 }
 
-template <bool delta> auto makeHostTimeDescriptor() noexcept -> CustomNodeDescriptor
+template <unsigned kind> auto makeHostTimeDescriptor() noexcept -> CustomNodeDescriptor
 {
     auto descriptor = CustomNodeDescriptor{};
     const auto id = std::array<std::uint8_t, 16>{
         0xc9, 0x82, 0xe1, 0xbe, 0x8f, 0x78, 0x4d, 0x28,
-        0x9a, 0x65, 0x4f, 0x4a, 0xa4, 0x52, 0x49, delta ? std::uint8_t{0xe7} : std::uint8_t{0xe6}};
+        0x9a, 0x65, 0x4f, 0x4a, 0xa4, 0x52, 0x49, static_cast<std::uint8_t>(0xe6 + kind)};
     std::copy(id.begin(), id.end(), descriptor.typeId);
     descriptor.abiVersion = 1;
     descriptor.outputWidth = 1;
-    descriptor.function = evaluateHostTime<delta>;
+    descriptor.function = evaluateHostTime<kind>;
     return descriptor;
 }
 
@@ -85,7 +86,8 @@ auto lifetimeNodeDescriptors() noexcept -> const builtin_node_detail::LifetimeNo
 auto hostTimeNodeDescriptors() noexcept -> const builtin_node_detail::HostTimeNodeDescriptors&
 {
     static const auto descriptors =
-        builtin_node_detail::HostTimeNodeDescriptors{makeHostTimeDescriptor<false>(), makeHostTimeDescriptor<true>()};
+        builtin_node_detail::HostTimeNodeDescriptors{makeHostTimeDescriptor<0>(), makeHostTimeDescriptor<1>(),
+            makeHostTimeDescriptor<2>(), makeHostTimeDescriptor<3>(), makeHostTimeDescriptor<4>()};
     return descriptors;
 }
 } // namespace liberafx::builtin_time_detail

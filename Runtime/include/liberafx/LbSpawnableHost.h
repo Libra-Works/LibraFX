@@ -4,6 +4,7 @@
 #include "liberafx/LbGeneratorPool.h"
 #include "liberafx/LbSpawnablePackage.h"
 #include "liberafx/LbCpuParticles.h"
+#include "liberafx/LbCoordinateBasis.h"
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -40,6 +41,9 @@ struct SpawnableHostOptions final {
     std::size_t eventCapacity = 128;
     std::size_t instructionBudget = 10000;
 };
+struct EffectTimeSnapshot final {
+    double realTime = 0, effectTime = 0, realDelta = 0, effectDelta = 0, timeScale = 1;
+};
 
 // Owner-thread lifecycle and routing host for one engine-neutral package.
 // Rendering and engine object operations remain the adapter's responsibility.
@@ -61,6 +65,10 @@ public:
     SpawnableHost& operator=(const SpawnableHost&) = delete;
 
     Result advance(double time, double frameDelta);
+    // advance receives monotonic unscaled elapsed time and unscaled frame delta.
+    // Changing the ratio affects only future intervals, never elapsed history.
+    Result setTimeScale(double ratio);
+    EffectTimeSnapshot timeSnapshot() const noexcept;
     Result dispatchSignal(const std::uint8_t nodeId[16]);
     Result fireGameSignal(const char* name);
     Result setGameProperty(const char* name, const double* values, std::size_t width);
@@ -72,6 +80,9 @@ public:
     Result instancePortName(const std::uint8_t containerId[16], std::size_t index,
                             const char*& name) const noexcept;
     Result setOwnerMatrix(const double* values, std::size_t width);
+    Result setCoordinateBasis(const CoordinateBasis& basis);
+    CoordinateBasis coordinateBasis() const noexcept;
+    Result setGameSpatialProperty(const char* name, SpatialValueKind kind, const double* values, std::size_t width);
     Result setHostQuality(const HostQualitySnapshot& snapshot);
     Result requestNaturalEnd();
     Result stop();

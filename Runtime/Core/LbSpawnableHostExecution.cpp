@@ -602,7 +602,7 @@ auto SpawnableHost::Impl::startRoot(double initialFrameDelta) -> Result {
   if (result != Result::Ok) {
     return result;
   }
-  result = rootInstance->setTimeContext(0, initialFrameDelta);
+  result = rootInstance->setTimeContext(0, initialFrameDelta, realTimeAt(0), realTimeAt(0), realFrameDelta);
   if (result != Result::Ok) {
     return result;
   }
@@ -651,7 +651,7 @@ auto SpawnableHost::Impl::evaluateParent(double at) -> Result {
   if (result != Result::Ok) {
     return result;
   }
-  result = rootInstance->setTimeContext(at, frameDelta);
+  result = rootInstance->setTimeContext(at, frameDelta, realTimeAt(at), realTimeAt(at), realFrameDelta);
   if (result != Result::Ok) {
     return result;
   }
@@ -746,7 +746,8 @@ auto SpawnableHost::Impl::evaluateFrame(double at) -> Result {
         if (result != Result::Ok) {
           return result;
         }
-        result = state.pool->setTimeContext(id, at, frameDelta);
+        result = state.pool->setTimeContext(id, at, frameDelta, realTimeAt(at),
+            std::max(0.0, realTimeAt(at) - instance->realStart), realFrameDelta);
         if (result == Result::Ok) {
           result = applyCaptures(state, id, state.data->liveInputs, true,
                                  instance->ownerTag);
@@ -817,7 +818,7 @@ auto SpawnableHost::Impl::dispatchOwnerSignal(std::uint64_t ownerTag,
   if (!ownerTag) {
     auto result = evaluateParent(at);
     if (result == Result::Ok) {
-      result = rootInstance->setTimeContext(at, frameDelta);
+      result = rootInstance->setTimeContext(at, frameDelta, realTimeAt(at), realTimeAt(at), realFrameDelta);
     }
     if (result == Result::Ok) {
       result = lifecycle->validateSignalTime(at);
@@ -857,6 +858,7 @@ auto SpawnableHost::Impl::processPoolEvent(TemplateState &state,
     if (!instance) {
       return Result::InvalidHandle;
     }
+    instance->realStart = realTimeAt(event.startTime);
     if (!state.data->cpuPrograms.empty()) {
       result = CpuParticleWorld::create(
           state.data->cpuPrograms.data(), state.data->cpuPrograms.size(),
@@ -872,7 +874,7 @@ auto SpawnableHost::Impl::processPoolEvent(TemplateState &state,
       return result;
     }
     result = state.pool->setTimeContext(event.instanceId, event.startTime,
-                                        frameDelta);
+        frameDelta, realTimeAt(event.startTime), 0, realFrameDelta);
     if (result == Result::Ok) {
       result = applyCaptures(state, event.instanceId,
                              state.data->capturedInputs, false, parentTag);

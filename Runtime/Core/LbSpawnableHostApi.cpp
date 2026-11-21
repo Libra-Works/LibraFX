@@ -18,6 +18,13 @@ auto SpawnableHost::advance(double at, double delta) -> Result {
     return Result::Busy;
   }
   auto operation = OwnerOperation(host.operationActive);
+  const auto previousRealElapsed = host.realElapsed;
+  if (!std::isfinite(at) || at < host.realElapsed || !std::isfinite(delta) || delta < 0) return Result::InvalidArgument;
+  const auto realAt = at;
+  const auto scaledAt = host.effectElapsed + (at - host.realElapsed) * host.timeScale;
+  const auto scaledDelta = delta * host.timeScale;
+  if (!std::isfinite(scaledAt) || !std::isfinite(scaledDelta)) return Result::NonFinite;
+  at = scaledAt;
   if (!std::isfinite(at) || at < 0 || (host.time >= 0 && at < host.time) ||
       at < host.rootAge || !std::isfinite(delta) || delta < 0) {
     return Result::InvalidArgument;
@@ -32,6 +39,10 @@ auto SpawnableHost::advance(double at, double delta) -> Result {
     return Result::NotReady;
   }
   try {
+    host.realElapsed = realAt;
+    host.effectElapsed = scaledAt;
+    host.realFrameDelta = delta;
+    delta = scaledDelta;
     host.frameDelta = delta;
     auto result = Result::Ok;
     if (host.pendingPump) {
@@ -66,6 +77,22 @@ auto SpawnableHost::advance(double at, double delta) -> Result {
         host.failure = result;
       }
       return result;
+    }
+    if (!host.rootFinished && at == host.rootAge && host.realElapsed != previousRealElapsed) {
+      result = host.rootInstance->setTimeContext(at, delta, host.realTimeAt(at), host.realTimeAt(at), host.realFrameDelta);
+      if (result == Result::Ok) result = host.rootInstance->refreshTimeContext();
+      if (result != Result::Ok) return result;
+      struct RealRefresh { double effect, delta, real, age, realDelta; };
+      for (auto& state : host.templates) for (auto& instance : state->instances) {
+        if (instance.retiring) continue;
+        auto context = RealRefresh{at, delta, host.realElapsed, std::max(0.0, host.realElapsed - instance.realStart), host.realFrameDelta};
+        result = state->pool->withInstance(instance.id, [](void* pointer, Instance& value) noexcept -> Result {
+          const auto& clock = *static_cast<RealRefresh*>(pointer);
+          const auto status = value.setTimeContext(clock.effect, clock.delta, clock.real, clock.age, clock.realDelta);
+          return status == Result::Ok ? value.refreshTimeContext() : status;
+        }, &context);
+        if (result != Result::Ok) return result;
+      }
     }
     for (auto round = 0u; !host.rootFinished && round < 128; ++round) {
       auto nextDue = std::numeric_limits<double>::infinity();
@@ -162,6 +189,16 @@ auto SpawnableHost::setHostQuality(const HostQualitySnapshot &snapshot)
   return Result::Ok;
 }
 
+auto SpawnableHost::setTimeScale(double ratio) -> Result {
+  if (impl_->operationActive) return Result::Busy;
+  if (!std::isfinite(ratio) || ratio < 0 || ratio > 1000000) return Result::InvalidArgument;
+  impl_->timeScale = ratio;
+  return Result::Ok;
+}
+auto SpawnableHost::timeSnapshot() const noexcept -> EffectTimeSnapshot {
+  return {impl_->realElapsed, impl_->rootAge, impl_->realFrameDelta, impl_->frameDelta, impl_->timeScale};
+}
+
 auto SpawnableHost::dispatchSignal(const std::uint8_t nodeId[16]) -> Result {
   auto &host = *impl_;
   if (host.operationActive) {
@@ -179,7 +216,8 @@ auto SpawnableHost::dispatchSignal(const std::uint8_t nodeId[16]) -> Result {
     return host.failure;
   }
   auto result =
-      host.rootInstance->setTimeContext(host.rootAge, host.frameDelta);
+      host.rootInstance->setTimeContext(host.rootAge, host.frameDelta, host.realTimeAt(host.rootAge),
+          host.realTimeAt(host.rootAge), host.realFrameDelta);
   if (result == Result::Ok) {
     result = host.lifecycle->validateSignalTime(host.rootAge);
   }
@@ -381,8 +419,24 @@ auto SpawnableHost::instancePortName(const std::uint8_t containerId[16],
 
 auto SpawnableHost::setOwnerMatrix(const double *values, std::size_t width)
     -> Result {
-  return impl_->gameIo ? impl_->gameIo->setOwnerMatrix(values, width)
-                       : Result::NotReady;
+  auto converted = std::array<double, 16>{};
+  const auto result = convertCoordinates(impl_->coordinateBasis, SpatialValueKind::Transform, false, values, width, converted.data());
+  if (result != Result::Ok) return result;
+  return impl_->gameIo ? impl_->gameIo->setOwnerMatrix(converted.data(), width) : Result::NotReady;
+}
+
+auto SpawnableHost::setCoordinateBasis(const CoordinateBasis& basis) -> Result {
+  if (impl_->operationActive || impl_->started) return Result::Busy;
+  if (!validCoordinateBasis(basis)) return Result::InvalidArgument;
+  impl_->coordinateBasis = basis;
+  return Result::Ok;
+}
+auto SpawnableHost::coordinateBasis() const noexcept -> CoordinateBasis { return impl_->coordinateBasis; }
+auto SpawnableHost::setGameSpatialProperty(const char* name, SpatialValueKind kind,
+    const double* values, std::size_t width) -> Result {
+  auto converted = std::array<double, 16>{};
+  const auto result = convertCoordinates(impl_->coordinateBasis, kind, false, values, width, converted.data());
+  return result == Result::Ok ? setGameProperty(name, converted.data(), width) : result;
 }
 
 auto SpawnableHost::requestNaturalEnd() -> Result {

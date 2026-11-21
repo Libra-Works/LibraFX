@@ -302,6 +302,9 @@ auto Instance::evaluate(bool pureRefresh, const bool *dirty) noexcept
                                              effectTime_,
                                              frameDelta_,
                                              evaluatedTimeContext_};
+      invocation.realEffectTime = realEffectTime_;
+      invocation.realInstanceAge = realInstanceAge_;
+      invocation.realFrameDelta = realFrameDelta_;
       auto debugStatus =
           debugResolvedInputs(index, time_, inputs.data(), inputWidths.data(),
                               descriptor->inputIsColor);

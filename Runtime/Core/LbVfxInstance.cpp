@@ -647,18 +647,45 @@ auto Instance::setHostQuality(const HostQualitySnapshot &snapshot) noexcept
 
 auto Instance::setTimeContext(double effectTime, double frameDelta) noexcept
     -> Result {
+  return setTimeContext(effectTime, frameDelta, effectTime, effectTime, frameDelta);
+}
+auto Instance::setTimeContext(double effectTime, double frameDelta, double realEffectTime,
+    double realInstanceAge, double realFrameDelta) noexcept -> Result {
   if (dispatching_ ||
       phase_.load(std::memory_order_acquire) == Phase::Running) {
     return Result::Busy;
   }
   if (!program_ || !std::isfinite(effectTime) || !std::isfinite(frameDelta) ||
-      effectTime < 0 || frameDelta < 0) {
+      effectTime < 0 || frameDelta < 0 || !std::isfinite(realEffectTime) || !std::isfinite(realInstanceAge) ||
+      !std::isfinite(realFrameDelta) || realEffectTime < 0 || realInstanceAge < 0 || realFrameDelta < 0) {
     return Result::InvalidArgument;
   }
   pendingEffectTime_ = effectTime;
   pendingFrameDelta_ = frameDelta;
+  pendingRealEffectTime_ = realEffectTime;
+  pendingRealInstanceAge_ = realInstanceAge;
+  pendingRealFrameDelta_ = realFrameDelta;
   pendingTimeContext_ = true;
   return Result::Ok;
+}
+
+auto Instance::refreshTimeContext() noexcept -> Result {
+  if (dispatching_ || phase_.load(std::memory_order_acquire) == Phase::Running) return Result::Busy;
+  if (!program_ || !pendingTimeContext_) return Result::NotReady;
+  effectTime_ = pendingEffectTime_; frameDelta_ = pendingFrameDelta_;
+  realEffectTime_ = pendingRealEffectTime_; realInstanceAge_ = pendingRealInstanceAge_; realFrameDelta_ = pendingRealFrameDelta_;
+  evaluatedTimeContext_ = true; pendingTimeContext_ = false;
+  // Refresh only Core-owned pure values. Pausing must not execute stateful
+  // parameter callbacks, integrate particles, or dispatch Signals again.
+  if (program_->version_ == 1) return evaluate(false);
+  auto dirty = std::array<bool, maxNodes>{};
+  for (auto index = 0u; index < program_->nodeCount_; ++index) {
+    const auto current = instruction(program_->bytes_, program_->version_, index);
+    const auto opcode = current[16];
+    dirty[index] = (opcode >= 1 && opcode <= 39) || opcode == curveOpcode ||
+        (opcode == customParameterOpcode && isLatePureBuiltin(program_->bindings_[index].descriptor));
+  }
+  return evaluate(true, dirty.data());
 }
 
 auto Instance::clearTimeContext() noexcept -> Result {
@@ -699,6 +726,9 @@ auto Instance::updateAsync(double time, Enqueue enqueue,
   evaluatedTimeContext_ = pendingTimeContext_;
   effectTime_ = pendingEffectTime_;
   frameDelta_ = pendingFrameDelta_;
+  realEffectTime_ = pendingRealEffectTime_;
+  realInstanceAge_ = pendingRealInstanceAge_;
+  realFrameDelta_ = pendingRealFrameDelta_;
   pendingTimeContext_ = false;
   if (!enqueue(queueContext, &Instance::run, this)) {
     pendingTimeContext_ = evaluatedTimeContext_;

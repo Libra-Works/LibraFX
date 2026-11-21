@@ -579,6 +579,9 @@ auto Instance::drainLogicalSignals(std::size_t maxInstructions,
                                              frameDelta_,
                                              evaluatedTimeContext_};
       invocation.signalPayload = &activePayload;
+      invocation.realEffectTime = realEffectTime_;
+      invocation.realInstanceAge = realInstanceAge_;
+      invocation.realFrameDelta = realFrameDelta_;
       status = debugResolvedInputs(
           event.nodeIndex, time_, inputs.data(), inputWidths.data(),
           customDescriptor->inputIsColor,
@@ -930,6 +933,9 @@ auto Instance::dispatchSignalInternal(const SignalHandle &entry, double time,
                                            effectTime_,
                                            frameDelta_,
                                            evaluatedTimeContext_};
+    invocation.realEffectTime = realEffectTime_;
+    invocation.realInstanceAge = realInstanceAge_;
+    invocation.realFrameDelta = realFrameDelta_;
     status = descriptor->function(invocation);
     if (status != Result::Ok) {
       return status;

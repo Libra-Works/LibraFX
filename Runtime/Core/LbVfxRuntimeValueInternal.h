@@ -53,6 +53,11 @@ inline auto isLatePureBuiltin(const CustomNodeDescriptor *descriptor) noexcept
       0xb0, 0xaf, 0x61, 0xd2, 0x29, 0xf6, 0x4c, 0xc9,
       0xa7, 0x1e, 0,    0,    0,    0,    0};
   auto id = descriptor->typeId[15];
+  constexpr auto timePrefix = std::array<std::uint8_t, 15>{
+      0xc9, 0x82, 0xe1, 0xbe, 0x8f, 0x78, 0x4d, 0x28,
+      0x9a, 0x65, 0x4f, 0x4a, 0xa4, 0x52, 0x49};
+  if (std::memcmp(descriptor->typeId, timePrefix.data(), timePrefix.size()) == 0 && id >= 0xe6 && id <= 0xea)
+    return true;
   return (std::memcmp(descriptor->typeId, mathPrefix.data(),
                       mathPrefix.size()) == 0 &&
           id >= 1 && id <= 47) ||

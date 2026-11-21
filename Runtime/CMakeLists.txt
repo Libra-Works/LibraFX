@@ -14,6 +14,7 @@ add_library(liberafx_runtime STATIC
     Core/LbBuiltinSignalNodes.cpp
     Core/LbBuiltinTimeNodes.cpp
     Core/LbMatrixMath.cpp
+    Core/LbCoordinateBasis.cpp
     Core/LbDelayNode.cpp
     Core/LbGeneratorPool.cpp
     Core/LbGeneratorPoolEvaluation.cpp
@@ -52,6 +53,7 @@ if(LIBERAFX_BUILD_INTEROP)
         Core/LbInteropSprite.cpp
         Core/LbInteropGeneratorPool.cpp
         Core/LbInteropSpawnableHost.cpp
+        Core/LbInteropCoordinates.cpp
         Core/LbInteropSession.cpp)
     target_sources(liberafx_native PRIVATE Core/CpuParticles/LbInteropCpuParticles.cpp)
     target_sources(liberafx_native PRIVATE Core/LbFlexiblePlaneDraw.cpp)
@@ -197,6 +199,9 @@ if(LIBERAFX_BUILD_TESTS)
     target_link_libraries(liberafx_spawnable_package_tests PRIVATE liberafx_runtime)
     add_executable(liberafx_spawnable_host_tests tests/SpawnableHostTests.cpp)
     target_link_libraries(liberafx_spawnable_host_tests PRIVATE liberafx_runtime)
+    add_executable(liberafx_coordinate_time_tests tests/CoordinateTimeTests.cpp)
+    target_link_libraries(liberafx_coordinate_time_tests PRIVATE liberafx_runtime)
+    add_test(NAME liberafx_coordinate_time_tests COMMAND liberafx_coordinate_time_tests)
     add_executable(liberafx_nested_spawnable_tests tests/NestedSpawnableTests.cpp)
     target_link_libraries(liberafx_nested_spawnable_tests PRIVATE liberafx_runtime)
 endif()

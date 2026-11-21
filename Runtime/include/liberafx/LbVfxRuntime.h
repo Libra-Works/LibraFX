@@ -82,6 +82,9 @@ struct CustomNodeInvocation final {
     std::uint8_t forceScope = 0;
     std::uint8_t enterPhase = 0;
     const SignalPayload* signalPayload = nullptr;
+    double realEffectTime = 0;
+    double realInstanceAge = 0;
+    double realFrameDelta = 0;
 };
 
 struct CustomNodeBinding final {
@@ -269,6 +272,11 @@ public:
     // Set before each evaluation. Values are supplied by the effect host;
     // frameDelta is the game's frame delta, not an internal scheduler substep.
     Result setTimeContext(double effectTime, double frameDelta) noexcept;
+    Result setTimeContext(double effectTime, double frameDelta, double realEffectTime,
+                          double realInstanceAge, double realFrameDelta) noexcept;
+    Result refreshTimeContext() noexcept;
+    double realEffectTime() const noexcept { return realEffectTime_; }
+    double realFrameDelta() const noexcept { return realFrameDelta_; }
     Result clearTimeContext() noexcept;
     Result setHostQuality(const HostQualitySnapshot& snapshot) noexcept;
     Result enableForceRequests() noexcept;
@@ -334,6 +342,8 @@ private:
     double time_ = 0;
     double effectTime_ = 0, frameDelta_ = 0;
     double pendingEffectTime_ = 0, pendingFrameDelta_ = 0;
+    double realEffectTime_ = 0, realInstanceAge_ = 0, realFrameDelta_ = 0;
+    double pendingRealEffectTime_ = 0, pendingRealInstanceAge_ = 0, pendingRealFrameDelta_ = 0;
     bool pendingTimeContext_ = false, evaluatedTimeContext_ = false;
     std::uint64_t generation_ = 0;
     double* stateWork_ = nullptr;
