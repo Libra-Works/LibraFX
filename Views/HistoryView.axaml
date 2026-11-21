@@ -62,8 +62,11 @@
                                             HorizontalContentAlignment="Left" VerticalContentAlignment="Center"
                                             Padding="7,3" Command="{Binding NavigateCommand}">
                                         <StackPanel Spacing="1">
-                                            <TextBlock Text="{Binding Description}" FontSize="11.5" FontWeight="Medium"
-                                                       TextTrimming="CharacterEllipsis" />
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <views:EditorIconView Icon="Group" IsVisible="{Binding IsArchive}" />
+                                                <TextBlock Text="{Binding Description}" FontSize="11.5" FontWeight="Medium"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
                                             <TextBlock Text="{Binding BranchName}" FontSize="10"
                                                        TextTrimming="CharacterEllipsis"
                                                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />

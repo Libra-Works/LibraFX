@@ -301,7 +301,8 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
         };
         if (document is null)
         {
-            _history.Configure(CreateSnapshot, RestoreFromHistory, ValidateSnapshot);
+            _history.Configure(CreateSnapshot, RestoreFromHistory, ValidateSnapshot,
+                action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
         }
 
         MessageLocalization.Observe(this, static graph => graph.RefreshLocalizedText());

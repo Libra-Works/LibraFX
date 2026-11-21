@@ -9,7 +9,7 @@ namespace LiberaFx.Services;
 
 public static class ProjectDocumentReader
 {
-    public const int CurrentFormatVersion = 13;
+    public const int CurrentFormatVersion = 14;
     private static readonly JsonSerializerOptions Options = new()
     {
         Converters = { new JsonStringEnumConverter() }
@@ -49,6 +49,8 @@ public static class ProjectDocumentReader
         if (document.FormatVersion >= 2 && document.History is null)
             throw new InvalidDataException("The project file is missing its history timeline.");
         if (document.History is { } history) ValidateHistory(history, graph);
+        if (document.FormatVersion < 14 && document.History?.Archives.Count > 0)
+            throw new InvalidDataException("Compressed history requires project format 14 or later.");
         if (document.FormatVersion < 12 &&
             (SignalTimeline.ContainsKeys(graph) ||
              document.History?.Entries?.Any(entry => SignalTimeline.ContainsKeys(entry.State)) == true))

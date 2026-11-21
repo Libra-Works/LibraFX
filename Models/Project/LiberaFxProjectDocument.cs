@@ -6,7 +6,7 @@ namespace LiberaFx.Models.Project;
 
 public sealed record LiberaFxProjectDocument
 {
-    public int FormatVersion { get; init; } = 13;
+    public int FormatVersion { get; init; } = 14;
 
     public bool AutoDestroyWhenIdle { get; init; } = true;
 

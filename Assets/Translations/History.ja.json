@@ -1,0 +1,10 @@
+{
+  "History.Archive": "圧縮済み履歴 · {0}件",
+  "History.ArchiveHelp": "クリックで解凍・展開／折り畳みします。Undo用の状態は保持しています。",
+  "History.Settings": "Undo履歴",
+  "History.CompressionHelp": "最近の200件はそのまま保持し、古い連続した履歴を200件単位で圧縮します。Historyの圧縮済み履歴をクリックすると展開できます。",
+  "History.Unlimited": "全履歴を保存する（無制限）",
+  "History.Maximum": "履歴の最大保存件数",
+  "History.LimitHelp": "上限を指定すると、プロジェクト保存時に古い途中状態や枝を省略します。開いている文書の履歴は閉じるまで保持します。初期設定は無制限です。",
+  "History.InvalidLimit": "履歴の上限には1〜1000000を入力してください。"
+}

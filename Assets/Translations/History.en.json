@@ -1,0 +1,10 @@
+{
+  "History.Archive": "Archived history · {0}",
+  "History.ArchiveHelp": "Click to expand or collapse this compressed history block. Its undo states are retained.",
+  "History.Settings": "Undo history",
+  "History.CompressionHelp": "Keep the latest 200 states ready for editing. Older uninterrupted history is compressed in blocks of 200. Click an archive in History to expand it.",
+  "History.Unlimited": "Save all history (unlimited)",
+  "History.Maximum": "Maximum saved history entries",
+  "History.LimitHelp": "A finite limit shortens the history written to a project, including old intermediate states and branches. The open document retains its history until closed. The default is unlimited.",
+  "History.InvalidLimit": "Enter a history limit between 1 and 1000000."
+}

@@ -2,31 +2,18 @@ using LiberaFx.Models.Graph;
 
 namespace LiberaFx.Models.Commands;
 
-public sealed record UndoRedoHistoryEntry(
-    Guid Id,
-    Guid? ParentId,
-    Guid? PreferredChildId,
-    string Description,
-    string BranchName,
-    bool IsPinned,
-    GraphSnapshot State);
-
-public sealed record UndoRedoHistorySnapshot(
-    Guid RootId,
-    Guid CurrentNodeId,
-    Guid TimelineRevisionId,
-    int NextBranchNumber,
-    IReadOnlyList<UndoRedoHistoryEntry> Entries);
-
 public sealed record UndoRedoHistoryItem(
     Guid Id,
     string Description,
     string BranchName,
     int Depth,
     bool IsCurrent,
-    bool IsPinned);
+    bool IsPinned,
+    Guid? ParentId = null,
+    bool IsArchive = false,
+    int ArchiveCount = 0);
 
-public sealed class UndoRedoManager
+public sealed partial class UndoRedoManager
 {
     private readonly Dictionary<Guid, HistoryNode> _nodesById = [];
     private Func<GraphSnapshot>? _captureState;
@@ -57,7 +44,8 @@ public sealed class UndoRedoManager
     public void Configure(
         Func<GraphSnapshot> captureState,
         Action<GraphSnapshot> restoreState,
-        Action<GraphSnapshot> validateState)
+        Action<GraphSnapshot> validateState,
+        Action<Action>? scheduleCompressionResult = null)
     {
         ArgumentNullException.ThrowIfNull(captureState);
         ArgumentNullException.ThrowIfNull(restoreState);
@@ -70,6 +58,7 @@ public sealed class UndoRedoManager
         _captureState = captureState;
         _restoreState = restoreState;
         _validateState = validateState;
+        _publishCompression = scheduleCompressionResult ?? (action => action());
         ResetToCurrentState();
     }
 
@@ -96,6 +85,7 @@ public sealed class UndoRedoManager
         _timelineRevisionId = Guid.NewGuid();
         OnStateChanged();
         ActionPerformed?.Invoke(command.Description);
+        QueueColdCompression();
     }
 
     public bool Undo()
@@ -106,6 +96,7 @@ public sealed class UndoRedoManager
             return false;
         }
 
+        ExpandForNode(parent);
         RestoreState(parent.State);
         if (SetPreferredChild(parent, current.Id))
         {
@@ -128,6 +119,7 @@ public sealed class UndoRedoManager
             return false;
         }
 
+        ExpandForNode(child);
         RestoreState(child.State);
         if (SetPreferredChild(current, child.Id))
         {
@@ -152,6 +144,7 @@ public sealed class UndoRedoManager
             return true;
         }
 
+        ExpandForNode(target);
         RestoreState(target.State);
         if (SetPreferredPath(target))
         {
@@ -193,18 +186,19 @@ public sealed class UndoRedoManager
         return items;
     }
 
-    public UndoRedoHistorySnapshot CreateSnapshot()
+    public UndoRedoHistorySnapshot CreateSnapshot(bool forSaving = false)
     {
         var root = _root ?? throw new InvalidOperationException("The undo manager is not configured.");
         var current = RequireCurrent();
         var entries = new List<UndoRedoHistoryEntry>(_nodesById.Count);
         AppendEntries(root, entries);
-        return new UndoRedoHistorySnapshot(
+        var snapshot = new UndoRedoHistorySnapshot(
             root.Id,
             current.Id,
             _timelineRevisionId,
             _nextBranchNumber,
-            entries);
+            entries, _nodesById.Values.Select(node => node.Archive).OfType<UndoHistoryArchive>().DistinctBy(block => block.Id).ToArray());
+        return forSaving ? LimitSavedHistory(snapshot, UndoHistoryPreferences.MaximumSavedEntries) : snapshot;
     }
 
     public void LoadSnapshot(UndoRedoHistorySnapshot snapshot)
@@ -260,7 +254,7 @@ public sealed class UndoRedoManager
                 entry.Description,
                 entry.BranchName,
                 entry.IsPinned,
-                entry.State));
+                entry.UncompressedState) { Archive = entry.Archive, ArchiveIndex = entry.ArchiveIndex });
         foreach (var entry in snapshot.Entries)
         {
             var node = nodes[entry.Id];
@@ -290,6 +284,8 @@ public sealed class UndoRedoManager
             throw new InvalidDataException("The project history is disconnected or has no current entry.");
         }
 
+        _expandedArchives.Clear();
+        ExpandForNode(current);
         RestoreState(current.State);
         _nodesById.Clear();
         foreach (var node in nodes.Values)
@@ -307,14 +303,11 @@ public sealed class UndoRedoManager
 
         void Visit(HistoryNode node, HashSet<Guid> seen)
         {
-            if (!seen.Add(node.Id))
+            var pending = new Stack<HistoryNode>(); pending.Push(node);
+            while (pending.TryPop(out var next))
             {
-                throw new InvalidDataException("The project history contains a cycle.");
-            }
-
-            foreach (var child in node.Children)
-            {
-                Visit(child, seen);
+                if (!seen.Add(next.Id)) throw new InvalidDataException("The project history contains a cycle.");
+                foreach (var child in next.Children) pending.Push(child);
             }
         }
     }
@@ -335,6 +328,7 @@ public sealed class UndoRedoManager
         _current = root;
         _timelineRevisionId = Guid.NewGuid();
         _nextBranchNumber = 1;
+        _expandedArchives.Clear();
     }
 
     private bool SetPreferredPath(HistoryNode node)
@@ -379,32 +373,27 @@ public sealed class UndoRedoManager
 
     private void AppendItems(HistoryNode node, int depth, ICollection<UndoRedoHistoryItem> items)
     {
-        items.Add(new UndoRedoHistoryItem(
-            node.Id,
-            node.Description,
-            node.BranchName,
-            depth,
-            node == _current,
-            node.IsPinned));
-        foreach (var child in node.Children)
+        var pending = new Stack<(HistoryNode Node, int Depth)>(); pending.Push((node, depth));
+        while (pending.TryPop(out var item))
         {
-            AppendItems(child, depth + 1, items);
+            var current = item.Node;
+            items.Add(new(current.Id, current.Description, current.BranchName, item.Depth,
+                current == _current, current.IsPinned, current.Parent?.Id));
+            for (var index = current.Children.Count - 1; index >= 0; --index) pending.Push((current.Children[index], item.Depth + 1));
         }
     }
 
     private static void AppendEntries(HistoryNode node, ICollection<UndoRedoHistoryEntry> entries)
     {
-        entries.Add(new UndoRedoHistoryEntry(
-            node.Id,
-            node.Parent?.Id,
-            node.PreferredChildId,
-            node.Description,
-            node.BranchName,
-            node.IsPinned,
-            node.State));
-        foreach (var child in node.Children)
+        var pending = new Stack<HistoryNode>(); pending.Push(node);
+        while (pending.TryPop(out var current))
         {
-            AppendEntries(child, entries);
+            var entry = new UndoRedoHistoryEntry(current.Id, current.Parent?.Id, current.PreferredChildId,
+                current.Description, current.BranchName, current.IsPinned, current.UncompressedState,
+                current.Archive?.Id, current.ArchiveIndex);
+            if (current.Archive is { } archive) entry.AttachArchive(archive);
+            entries.Add(entry);
+            for (var index = current.Children.Count - 1; index >= 0; --index) pending.Push(current.Children[index]);
         }
     }
 
@@ -428,7 +417,7 @@ public sealed class UndoRedoManager
         string description,
         string branchName,
         bool isPinned,
-        GraphSnapshot state)
+        GraphSnapshot? state)
     {
         public Guid Id { get; } = id;
 
@@ -440,7 +429,11 @@ public sealed class UndoRedoManager
 
         public bool IsPinned { get; set; } = isPinned;
 
-        public GraphSnapshot State { get; } = state;
+        public GraphSnapshot? UncompressedState { get; set; } = state;
+        public UndoHistoryArchive? Archive { get; set; }
+        public int ArchiveIndex { get; set; }
+        public GraphSnapshot State => UncompressedState ?? Archive?.Read(ArchiveIndex)
+            ?? throw new InvalidDataException("History state is unavailable.");
 
         public List<HistoryNode> Children { get; } = [];
 

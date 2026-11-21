@@ -29,7 +29,7 @@ public sealed class ProjectFileService
         GraphValidator.ValidateDocument(snapshot);
         if (snapshot.ResourceIdentities is { } resourceIdentities)
             ResourceIdentityStore.Validate(resourceIdentities);
-        var history = workspace.History.CreateSnapshot();
+        var history = workspace.History.CreateSnapshot(forSaving: true);
         var document = new LiberaFxProjectDocument
         {
             FormatVersion = CurrentFormatVersion,

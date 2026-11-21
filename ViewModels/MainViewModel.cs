@@ -36,6 +36,7 @@ public partial class MainViewModel : ViewModelBase
     private object?[] _appearanceStatusArgs = [];
 
     public EditorLog Log { get; } = new();
+    public UndoHistorySettingsService HistorySettings { get; } = UndoHistorySettingsService.Shared;
     public PreviewTelemetryStore PreviewTelemetry { get; } = new();
     public PreviewAssetStore PreviewAssets { get; }
     public AssetMetadataStore AssetMetadata { get; } = new();

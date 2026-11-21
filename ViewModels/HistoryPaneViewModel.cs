@@ -100,48 +100,59 @@ public sealed class HistoryPaneViewModel : Tool
         PinCurrentCommand.NotifyCanExecuteChanged();
         Entries.Clear();
         Edges.Clear();
-        var snapshot = _history.CreateSnapshot();
-        var itemsById = _history.GetItems().ToDictionary(item => item.Id);
-        var children = snapshot.Entries.Where(entry => entry.ParentId is not null)
+        var items = _history.GetDisplayItems();
+        var rootId = items.Single(item => item.ParentId is null).Id;
+        var itemsById = items.ToDictionary(item => item.Id);
+        var children = items.Where(entry => entry.ParentId is not null)
             .GroupBy(entry => entry.ParentId!.Value)
             .ToDictionary(group => group.Key, group => group.Select(entry => entry.Id).ToArray());
 
         var widths = new Dictionary<Guid, double>();
-        double MeasureWidth(Guid id)
+        var measure = new Stack<(Guid Id, bool Visited)>();
+        measure.Push((rootId, false));
+        while (measure.TryPop(out var item))
         {
-            if (widths.TryGetValue(id, out var cached)) return cached;
-            if (!children.TryGetValue(id, out var childIds) || childIds.Length == 0)
-                return widths[id] = NodeWidth;
-            var total = childIds.Sum(MeasureWidth) + HorizontalGap * (childIds.Length - 1);
-            return widths[id] = Math.Max(NodeWidth, total);
+            if (!children.TryGetValue(item.Id, out var childIds) || childIds.Length == 0)
+            { widths[item.Id] = NodeWidth; continue; }
+            if (!item.Visited)
+            {
+                measure.Push((item.Id, true));
+                foreach (var child in childIds) measure.Push((child, false));
+            }
+            else widths[item.Id] = Math.Max(NodeWidth,
+                childIds.Sum(child => widths[child]) + HorizontalGap * (childIds.Length - 1));
         }
 
-        var rootWidth = MeasureWidth(snapshot.RootId);
+        var rootWidth = widths[rootId];
         var maxDepth = 0;
         var positions = new Dictionary<Guid, (double X, double Y)>();
-        void Layout(Guid id, double left, int depth)
+        var layout = new Stack<(Guid Id, double Left, int Depth)>();
+        layout.Push((rootId, CanvasMargin, 0));
+        while (layout.TryPop(out var next))
         {
+            var (id, left, depth) = next;
             maxDepth = Math.Max(maxDepth, depth);
             var subtreeWidth = widths[id];
             var x = left + (subtreeWidth - NodeWidth) * 0.5;
             var y = CanvasMargin + depth * (NodeHeight + VerticalGap);
             positions[id] = (x, y);
-            if (!children.TryGetValue(id, out var childIds) || childIds.Length == 0) return;
+            if (!children.TryGetValue(id, out var childIds) || childIds.Length == 0) continue;
             var totalChildrenWidth = childIds.Sum(child => widths[child]) + HorizontalGap * (childIds.Length - 1);
             var childLeft = left + Math.Max(0, (subtreeWidth - totalChildrenWidth) * 0.5);
             foreach (var childId in childIds)
             {
-                Layout(childId, childLeft, depth + 1);
-                var childPos = positions[childId];
-                Edges.Add(new HistoryEdgeViewModel(
-                    new Point(x + NodeWidth * 0.5, y + NodeHeight),
-                    new Point(childPos.X + NodeWidth * 0.5, childPos.Y),
-                    itemsById.TryGetValue(childId, out var childItem) && childItem.IsCurrent));
+                layout.Push((childId, childLeft, depth + 1));
                 childLeft += widths[childId] + HorizontalGap;
             }
         }
 
-        Layout(snapshot.RootId, CanvasMargin, 0);
+        foreach (var item in items.Where(item => item.ParentId is not null))
+        {
+            var parent = positions[item.ParentId!.Value];
+            var child = positions[item.Id];
+            Edges.Add(new HistoryEdgeViewModel(new Point(parent.X + NodeWidth * .5, parent.Y + NodeHeight),
+                new Point(child.X + NodeWidth * .5, child.Y), item.IsCurrent));
+        }
         CanvasWidth = Math.Max(320, rootWidth + CanvasMargin * 2);
         CanvasHeight = Math.Max(180, CanvasMargin * 2 + (maxDepth + 1) * NodeHeight + maxDepth * VerticalGap);
 
@@ -170,12 +181,13 @@ public sealed class HistoryEntryViewModel : ObservableObject
     public bool IsCurrent { get; }
 
     public bool IsPinned { get; }
+    public bool IsArchive { get; }
 
     public double X { get; }
     public double Y { get; }
     public double Width { get; }
     public double Height { get; }
-    public string ToolTipText => $"{Description}\n{BranchName}";
+    public string ToolTipText => IsArchive ? LocalizationService.Shared.Get("History.ArchiveHelp") : $"{Description}\n{BranchName}";
     public string PinButtonText => IsPinned ? "◆" : "◇";
     public string PinToolTip => LocalizationService.Shared.Get(IsPinned ? "Messages.UnpinState" : "Messages.PinState");
 
@@ -188,17 +200,18 @@ public sealed class HistoryEntryViewModel : ObservableObject
     {
         _history = history;
         Id = item.Id;
-        Description = item.Description;
+        Description = item.IsArchive ? LocalizationService.Shared.Get("History.Archive", item.ArchiveCount) : item.Description;
         BranchName = item.BranchName;
         Depth = item.Depth;
         IsCurrent = item.IsCurrent;
         IsPinned = item.IsPinned;
+        IsArchive = item.IsArchive;
         X = x;
         Y = y;
         Width = width;
         Height = height;
-        NavigateCommand = new RelayCommand(() => _history.NavigateTo(Id));
-        TogglePinCommand = new RelayCommand(() => _history.SetPinned(Id, !IsPinned));
+        NavigateCommand = new RelayCommand(() => { if (IsArchive) _history.ToggleArchive(Id); else _history.NavigateTo(Id); });
+        TogglePinCommand = new RelayCommand(() => _history.SetPinned(Id, !IsPinned), () => !IsArchive);
         MessageLocalization.Observe(this, static entry => entry.OnPropertyChanged(nameof(PinToolTip)));
     }
 }

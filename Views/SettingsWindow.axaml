@@ -354,7 +354,19 @@
                     </StackPanel>
                 </ScrollViewer>
                 </TabItem>
-              </TabControl>
+        <TabItem Header="{DynamicResource Text.History.Settings}">
+            <StackPanel Margin="10" Spacing="12">
+                <TextBlock Classes="editor-title" Text="{DynamicResource Text.History.Settings}" />
+                <TextBlock Text="{DynamicResource Text.History.CompressionHelp}" TextWrapping="Wrap" />
+                <CheckBox Content="{DynamicResource Text.History.Unlimited}" IsChecked="{Binding HistorySettings.Unlimited, Mode=TwoWay}" />
+                <TextBlock Text="{DynamicResource Text.History.Maximum}" />
+                <TextBox Width="140" HorizontalAlignment="Left" IsEnabled="{Binding !HistorySettings.Unlimited}"
+                         Text="{Binding HistorySettings.MaximumText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                <TextBlock Text="{DynamicResource Text.History.LimitHelp}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding HistorySettings.Status}" TextWrapping="Wrap" />
+            </StackPanel>
+        </TabItem>
+        </TabControl>
             </TabItem>
             </TabControl>
         <views:IconButton Grid.Row="1"

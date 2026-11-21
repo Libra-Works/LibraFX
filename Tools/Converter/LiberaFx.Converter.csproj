@@ -9,6 +9,8 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Gpu\LibraGpu.Core\LibraGpu.Core.csproj" />
+    <Compile Include="..\..\Models\Commands\UndoHistoryArchive.cs" Link="Models\Commands\UndoHistoryArchive.cs" />
+    <Compile Include="..\..\Models\Commands\UndoRedoManager.Archives.cs" Link="Models\Commands\UndoRedoManager.Archives.cs" />
     <Compile Include="..\..\Services\GpuParticleEditorService.cs" Link="Services\GpuParticleEditorService.cs" />
     <Compile Include="..\..\Services\GpuProgramDelivery.cs" Link="Services\GpuProgramDelivery.cs" />
     <Compile Include="..\..\Services\Compilation\CpuEmitterMatrixLowering.cs" Link="Services\CpuEmitterMatrixLowering.cs" />
