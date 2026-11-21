@@ -12,6 +12,8 @@ with the standalone converter, and play it through a game-engine integration.
 
 | Start here | What you will learn |
 | --- | --- |
+| [Workspace tour](workspace-tour.md) | Learn where each window is and how to select nodes, edit values, connect pins and preview an effect. |
+| [Make your first fountain](first-fountain.md) | Follow a practical CPU particle tutorial, starting with the bundled sample or an empty graph. |
 | [Preview update and upgrade guide](preview-update.md) | Review the new fluid, hierarchy and rendering features, matching SDK requirements and known limits. |
 | [Production workflow: Unity, Unreal and Godot](production-workflow.md) | Install, launch, obtain engine resources, transfer previews, create engine assets and prepare distribution. |
 | [Batch conversion](batch-conversion.md) | Automate supported CPU exports, resolve shared libraries, and fail safely before game builds. |

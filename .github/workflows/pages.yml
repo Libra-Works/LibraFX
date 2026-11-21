@@ -28,7 +28,7 @@ jobs:
           cp docs/site/_layouts/bilingual.html pages-source/_layouts/
           cp docs/site/assets/css/libradark.css pages-source/assets/css/
           cp Assets/Brand/LibraFx.ico pages-source/assets/libera-fx.ico
-          for file in getting-started.md engine-integration.md editor-reference.md authoring.md gpu-particles.md glossary.md scalar-math-nodes.md cpu-particles.md flexible-plane-draw.md quaternion-random.md fluid-2d.md procedural-resources.md preview-update.md production-workflow.md batch-conversion.md; do
+          for file in getting-started.md workspace-tour.md first-fountain.md engine-integration.md editor-reference.md authoring.md gpu-particles.md glossary.md scalar-math-nodes.md cpu-particles.md flexible-plane-draw.md quaternion-random.md fluid-2d.md procedural-resources.md preview-update.md production-workflow.md batch-conversion.md; do
             cp "docs/site/$file" pages-source/
             cp "docs/site/ja/$file" pages-source/ja/
           done
@@ -45,7 +45,7 @@ jobs:
           destination: ./pages-output
       - name: Verify the rendered pages
         run: |
-          for file in index.html getting-started.html engine-integration.html editor-reference.html authoring.html gpu-particles.html node-reference.html glossary.html scalar-math-nodes.html cpu-particles.html flexible-plane-draw.html quaternion-random.html fluid-2d.html procedural-resources.html preview-update.html production-workflow.html batch-conversion.html; do
+          for file in index.html getting-started.html workspace-tour.html first-fountain.html engine-integration.html editor-reference.html authoring.html gpu-particles.html node-reference.html glossary.html scalar-math-nodes.html cpu-particles.html flexible-plane-draw.html quaternion-random.html fluid-2d.html procedural-resources.html preview-update.html production-workflow.html batch-conversion.html; do
             test -s "pages-output/$file"
             test -s "pages-output/ja/$file"
             for lang in en ja; do
