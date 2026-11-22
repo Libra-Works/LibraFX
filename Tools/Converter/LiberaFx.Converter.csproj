@@ -26,6 +26,7 @@
     <Compile Include="..\..\Models\Graph\GameIoSchema.cs" Link="Models\GameIoSchema.cs" />
     <Compile Include="..\..\Models\Graph\SkeletalPoseSchema.cs" Link="Models\SkeletalPoseSchema.cs" />
     <Compile Include="..\..\Models\Graph\SequenceSchema.cs" Link="Models\SequenceSchema.cs" />
+    <Compile Include="..\..\Models\Graph\DynamicPinSchema.cs" Link="Models\DynamicPinSchema.cs" />
     <Compile Include="..\..\Models\Graph\GroupExposedItem.cs" Link="Models\GroupExposedItem.cs" />
     <Compile Include="..\..\Models\Graph\GraphNodeDefinition.cs" Link="Models\GraphNodeDefinition.cs" />
     <Compile Include="..\..\Models\Graph\QuaternionRandomNodeCatalog.cs" Link="Models\QuaternionRandomNodeCatalog.cs" />
