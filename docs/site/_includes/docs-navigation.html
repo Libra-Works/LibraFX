@@ -1,0 +1,18 @@
+{% for group in site.data.navigation.groups %}
+  <section class="nav-group">
+    <h2>{{ group[page.lang] }}</h2>
+    <ul class="nav nav-pills flex-column gap-1">
+      {% for item in group.items %}
+        {% if item.path == 'index.html' %}
+          {% assign destination = prefix %}
+        {% else %}
+          {% assign destination = prefix | append: item.path %}
+        {% endif %}
+        <li class="nav-item">
+          <a class="nav-link{% if route == destination %} active{% elsif page.release_version and item.path == 'release-notes.html' %} active{% endif %}"
+             href="{{ destination | relative_url }}"{% if route == destination %} aria-current="page"{% elsif page.release_version and item.path == 'release-notes.html' %} aria-current="location"{% endif %}>{{ item[page.lang] }}</a>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endfor %}

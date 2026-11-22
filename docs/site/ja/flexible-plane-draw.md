@@ -6,17 +6,17 @@ title: フレキシブルプレーン描画
 
 # フレキシブルプレーン描画
 
-順序付きの点からテクスチャ付きの帯を作ります。四角形やパーティクル
-シミュレーションではありません。Unity・Unreal・Godot のパッケージ描画は
-root と Spawnable 子に接続済みです。更新版 Preview では描画ごとのシーン Component を
-作らず、エンジンの描画機能へ渡します。固定点の帯は Unity 7 の Built-in／URP と
-Godot 4.7.2 で実ピクセルを確認していますが、すべての履歴・カメラ・対象環境を
-検証したことにはなりません。
-旧 SDK **2026.11.8 は新しいシンボルや描画機能を含みません**。
-対応する更新版を [Preview 配布ページ](https://github.com/Libra-Works/LibraFX/releases)から導入してください。
-公開済み 2026.11.22 は最初の帯実装を含みますが、その後の描画移行は含みません。
-[リリースノート](release-notes.md)と、
-[描画の検証範囲](engine-integration.md#rendering)も確認してください。
+**Flexible Plane Draw** は、順番に並んだ点をテクスチャ付きの帯にします。固定した形には点リスト、動いた跡を残す軌跡には位置の履歴を使います。
+
+軌跡は異なる位置が2点以上たまってから表示されます。テクスチャも指定してください。描画の実装は [SDK・ランタイムの詳細](engine-integration.md#rendering)で説明します。
+
+<details class="page-toc" markdown="1">
+<summary>このページの内容</summary>
+
+* TOC
+{:toc}
+
+</details>
 
 ## 作り方
 
@@ -151,3 +151,9 @@ C ABI は `Runtime/include/liberafx/LbFlexiblePlaneDraw.h`、実装は
 対応版のプラグイン／SDK が必要です。旧 SDK は未対応を明示し、
 描画を黙って省略してはいけません。`.lfxb` のメタデータは既存 LFXP
 コンテナーに残り、各コンシューマーの対応を意味するものではありません。
+
+## 次に進む
+
+- [エンジンに接続してエフェクトを再生する](production-workflow.md)。
+- [表示されない・思った動きにならないときの確認](troubleshooting.md)。
+- [標準ノードの働きを調べる](node-reference.md)。

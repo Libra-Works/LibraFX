@@ -4,7 +4,7 @@ title: "Production workflow: Unity, Unreal and Godot"
 
 # Production workflow: Unity, Unreal and Godot
 
-This is the **development process**, not the node Flow window:
+Choose your engine below and follow the path from installation to a playable game effect:
 
 **Install SDK → launch LIBERA FX → obtain/bind engine resources → author and
 preview → export → import and play without LIBERA FX → automate conversion.**
@@ -13,6 +13,14 @@ Choose [Unreal](#unreal), [Unity](#unity) or [Godot](#godot).
 For unattended builds, see [Batch conversion](batch-conversion.md).
 The [installation reference](engine-integration.md) and
 [release notes](release-notes.md) cover versions and platform limits.
+
+<details class="page-toc" markdown="1">
+<summary>On this page</summary>
+
+* TOC
+{:toc}
+
+</details>
 
 ## What moves between the tools?
 

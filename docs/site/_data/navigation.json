@@ -1,0 +1,145 @@
+{
+  "documentation_release": "2026.11.72",
+  "groups": [
+    {
+      "en": "Start here",
+      "ja": "はじめる",
+      "items": [
+        {
+          "path": "index.html",
+          "en": "Documentation home",
+          "ja": "ドキュメントのトップ"
+        },
+        {
+          "path": "getting-started.html",
+          "en": "Install and start",
+          "ja": "導入と最初の起動"
+        },
+        {
+          "path": "workspace-tour.html",
+          "en": "Learn the workspace",
+          "ja": "画面の基本操作"
+        },
+        {
+          "path": "first-fountain.html",
+          "en": "Make a fountain",
+          "ja": "最初の噴水を作る"
+        },
+        {
+          "path": "afterimage-gate.html",
+          "en": "Read Afterimage Gate",
+          "ja": "残像サンプルを読む"
+        }
+      ]
+    },
+    {
+      "en": "Create effects",
+      "ja": "エフェクトを作る",
+      "items": [
+        {
+          "path": "authoring.html",
+          "en": "Graph fundamentals",
+          "ja": "グラフ制作の基本"
+        },
+        {
+          "path": "cpu-particles.html",
+          "en": "CPU particles",
+          "ja": "CPU パーティクル"
+        },
+        {
+          "path": "gpu-particles.html",
+          "en": "GPU particles",
+          "ja": "GPU パーティクル"
+        },
+        {
+          "path": "sprite-animation.html",
+          "en": "Animate particle textures",
+          "ja": "パーティクルのアニメーション"
+        },
+        {
+          "path": "fluid-2d.html",
+          "en": "Fluid2D: smoke, water, fire",
+          "ja": "Fluid2D：煙・水・炎"
+        },
+        {
+          "path": "procedural-resources.html",
+          "en": "Procedural resources",
+          "ja": "プロシージャル素材"
+        },
+        {
+          "path": "flexible-plane-draw.html",
+          "en": "Ribbons and trails",
+          "ja": "帯・軌跡を作る"
+        }
+      ]
+    },
+    {
+      "en": "Use in a game",
+      "ja": "ゲームに組み込む",
+      "items": [
+        {
+          "path": "production-workflow.html",
+          "en": "Connect and deliver",
+          "ja": "接続からゲームでの再生まで"
+        },
+        {
+          "path": "engine-integration.html",
+          "en": "SDK and runtime reference",
+          "ja": "SDK・ランタイムの詳細"
+        },
+        {
+          "path": "batch-conversion.html",
+          "en": "Batch conversion",
+          "ja": "一括変換・ビルド連携"
+        }
+      ]
+    },
+    {
+      "en": "Look up a feature",
+      "ja": "操作・ノードを調べる",
+      "items": [
+        {
+          "path": "editor-reference.html",
+          "en": "Windows and panels",
+          "ja": "ウィンドウ・パネル一覧"
+        },
+        {
+          "path": "node-reference.html",
+          "en": "Node reference",
+          "ja": "標準ノード図鑑"
+        },
+        {
+          "path": "scalar-math-nodes.html",
+          "en": "Scalar math",
+          "ja": "数値の加工・補間"
+        },
+        {
+          "path": "quaternion-random.html",
+          "en": "Rotation and random values",
+          "ja": "回転・再現できる乱数"
+        },
+        {
+          "path": "glossary.html",
+          "en": "Glossary",
+          "ja": "用語集"
+        }
+      ]
+    },
+    {
+      "en": "Help and updates",
+      "ja": "困ったとき・更新情報",
+      "items": [
+        {
+          "path": "troubleshooting.html",
+          "en": "Troubleshooting",
+          "ja": "困ったときの確認"
+        },
+        {
+          "path": "release-notes.html",
+          "en": "Release notes",
+          "ja": "リリースノート"
+        }
+      ]
+    }
+  ]
+}

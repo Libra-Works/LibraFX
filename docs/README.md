@@ -1,21 +1,38 @@
 # LIBERA FX Documentation
 
-Read the documentation for the current Preview in
+Read the user documentation in
 [English](https://libra-works.github.io/LibraFX/) or
 [Japanese](https://libra-works.github.io/LibraFX/ja/).
 The Markdown sources are also available on GitHub:
 [English](site/index.md) and [Japanese](site/ja/index.md).
 
-## References in this repository
+## For effect artists
+
+Follow the public guides in order, or choose a topic from the grouped navigation:
+
+| Task | English | 日本語 |
+| --- | --- | --- |
+| Install and start | [Getting started](site/getting-started.md) | [導入と最初の起動](site/ja/getting-started.md) |
+| Find the controls | [Workspace tour](site/workspace-tour.md) | [はじめての画面操作](site/ja/workspace-tour.md) |
+| Make an effect | [First fountain](site/first-fountain.md) | [最初の噴水](site/ja/first-fountain.md) |
+| Animate particles | [Sprite animation](site/sprite-animation.md) | [パーティクルのアニメーション](site/ja/sprite-animation.md) |
+| Use it in a game | [Production workflow](site/production-workflow.md) | [ゲームへの組み込み](site/ja/production-workflow.md) |
+| Solve a problem | [Troubleshooting](site/troubleshooting.md) | [困ったときの確認](site/ja/troubleshooting.md) |
+
+The site has the step-by-step workflows. The repository references below describe
+implementation contracts and development evidence for SDK contributors.
+
+## SDK integration and performance
 
 - [Particle performance baseline and shared scheduling requirements](particle-performance.md)
 - [Prepared playback, shared simulation and persistent particle SoA](runtime-shared-simulation.md)
 - [Particle Sprite editor animations and engine acceptance](particle-sprite-animation.md)
 
-- Artist introduction: [editor tour](site/workspace-tour.md) and [first fountain](site/first-fountain.md).
-- 制作者向け入門：[はじめての画面操作](site/ja/workspace-tour.md)、[最初の噴水を作る](site/ja/first-fountain.md)。
 - [SDK distribution and compatibility](sdk-distribution.md)
 - [Unity integration](../Runtime/Integrations/Unity/USAGE.txt), [Unreal integration](../Runtime/Integrations/Unreal/USAGE.txt), and [Godot integration](../Runtime/Integrations/Godot/USAGE.txt)
+
+## Formats and authoring contracts
+
 - [Bytecode format](../Runtime/BYTECODE.md), [GPU backends](gpu-backends.md), and [math backend measurements](../Runtime/MATH-BACKEND-MEASUREMENTS.md)
 - [Procedural models, textures, materials and shared resources](procedural-resources.md)
 - [GPU resource plan compiler contract](gpu-resource-plan.md)
@@ -29,9 +46,12 @@ Update both language versions when published workflows or support limits change.
 Distinguish compilation, engine playback, and rendering evidence. Use the
 [documentation capture guide](documentation-capture.md) for sample screenshots.
 
-The [Pages workflow](../.github/workflows/pages.yml) stages an explicit list of
-pages and images. Adding a file here does not add it to the site. Review any
-new public content before adding it to the list.
+The [navigation manifest](site/_data/navigation.json) is the explicit bilingual
+page allowlist. The [Pages workflow](../.github/workflows/pages.yml) stages it
+with `Tools/Stage-Documentation.py` and copies only approved images. Adding a
+file elsewhere in `docs/` does not publish it. Review new public content before
+adding it to the manifest. Run `Tools/Test-RenderedDocumentation.py` on Jekyll's
+output to check local links, images, languages and heading anchors.
 
 Both languages share the Bootstrap layout in `site/_layouts/bilingual.html`.
 Keep `site/assets/css/libradark.css` aligned with the editor's LibraDark

@@ -12,6 +12,14 @@ Spawnable Group・CPU／GPU Particle・Fluid2Dを、エディターと同じ実�
 ネストしたスコープにも対応します。コンバーターとエンジンSDKは同じビルドを使ってください。
 Resource Identity登録済み文書は、通常の`.lfxb`一括出力ではなく末尾の診断用経路が対象です。
 
+<details class="page-toc" markdown="1">
+<summary>このページの内容</summary>
+
+* TOC
+{:toc}
+
+</details>
+
 ## 単体変換とフォルダー一括変換
 
 以下は Windows PowerShell で、配布物の `Converter` フォルダーから実行する例です。

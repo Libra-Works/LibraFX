@@ -15,6 +15,14 @@ Use matching converter and engine SDK builds. Portable Resource Identity
 projects need the diagnostic manifest path below, rather than normal `.lfxb`
 batch output.
 
+<details class="page-toc" markdown="1">
+<summary>On this page</summary>
+
+* TOC
+{:toc}
+
+</details>
+
 ## Single-file and directory conversion
 
 Examples use Windows PowerShell, from the release's `Converter` directory.

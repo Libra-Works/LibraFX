@@ -6,17 +6,17 @@ title: Flexible Plane Draw
 
 # Flexible Plane Draw
 
-Flexible Plane Draw turns ordered points into a textured ribbon, not a flat
-rectangle or a particle simulation. Unity, Unreal and Godot package renderers
-have root and spawned-child wiring. The updated Preview uses engine-native rendering
-without a per-Draw scene component. Fixed-point ribbons have rendered-pixel
-coverage in Unity 7 Built-in/URP and Godot 4.7.2; this does not certify every
-history, camera or target-platform combination.
-The earlier **2026.11.8 SDK does not include** these new symbols;
-use matching updated [Preview packages](https://github.com/Libra-Works/LibraFX/releases).
-The published 2026.11.22 archives include the original ribbon implementation,
-not the later renderer migration. Use the [release notes](release-notes.md)
-and see [rendering boundaries](engine-integration.md#rendering).
+Use **Flexible Plane Draw** to turn an ordered set of points into a textured ribbon. Use a point list for a fixed shape or point history for a moving trail.
+
+A trail becomes visible after at least two distinct positions have been sampled. Supply a texture explicitly. For host rendering details, see [SDK and runtime reference](engine-integration.md#rendering).
+
+<details class="page-toc" markdown="1">
+<summary>On this page</summary>
+
+* TOC
+{:toc}
+
+</details>
 
 ## Authoring
 
@@ -160,3 +160,9 @@ plugin/SDK builds; older SDKs must report the unsupported draw instead of
 silently omitting it. `.lfxb` package
 metadata remains in the existing LFXP container; no new compatibility is
 implied until each consumer supports this descriptor.
+
+## Next steps
+
+- [Connect to an engine and play the effect](production-workflow.md).
+- [Check a missing preview or unexpected result](troubleshooting.md).
+- [Look up a node](node-reference.md).

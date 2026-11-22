@@ -2,23 +2,26 @@
 layout: bilingual
 title: CPU particles and emitters
 lang: en
-translation_url: /ja/cpu-particles/
 ---
 
 # CPU particles and emitters
 
-> Requires the matching updated editor, converter, native library and engine adapter sources.
-> The earlier 2026.11.8 SDK does **not** include this feature. Use matching updated
-> packages from [Preview releases](https://github.com/Libra-Works/LibraFX/releases).
-> Build and regression results do not establish engine playback, UI usability or rendered pixels.
+Use **CPU Particle** to give each particle an initial position, motion, lifetime and Sprite appearance with ordinary graph nodes. Work through **Spawn → Update → Draw**.
+
+For a guided example, start with [Make a fountain](first-fountain.md). This page explains the editing stages and the settings you can change.
+
+<details class="page-toc" markdown="1">
+<summary>On this page</summary>
+
+* TOC
+{:toc}
+
+</details>
 
 ## Follow the five editor views
 
 These are real editor captures of an isolated example, not engine-rendered
 particles. Open an image at full size to read the pins and Inspector fields.
-The Flow overview requires the Preview update after 2026.11.22;
-the older archives still show the three structural nodes. See the
-[release notes](release-notes.md).
 
 ### 1. Parent graph: connect emission
 
@@ -71,10 +74,7 @@ This screen configures rendering but does not display engine playback.
 
 ### Does ordinary Draw create more MeshComponents?
 
-The older **2026.11.22 Preview** uses Unreal MeshComponents for ordinary
-Draw and one InstancedStaticMeshComponent per CPU particle system, not per
-particle. The Preview update after that release removes those draw components:
-the effect host owns native rendering data and compatible batches. Unity uses
+The effect host owns native rendering data and compatible batches. Unity uses
 direct drawing, Unreal native primitives/proxies, and Godot RenderingServer
 instances. The effect-level playback Component/Node remains.
 
@@ -82,8 +82,7 @@ Removing scene components does not remove mesh/material resources or guarantee
 one draw call. Different materials, shader parameters and transparent ordering
 can require separate submissions. Particle data, CPU work, memory, overdraw and
 transfer costs still scale with the content. See the
-[engine rendering boundary](engine-integration.md#rendering) before comparing
-the older archives with the updated Preview.
+[engine rendering boundary](engine-integration.md#rendering) for the adapter-specific details.
 
 ## Authoring a moving Sprite cloud
 
@@ -115,12 +114,10 @@ age reaches its life is removed before that step's Update.
 The sibling **CPU Particle Sprite Draw** renders the pool as a batch, not one
 engine actor/component per particle. Select a texture explicitly (`builtin:white`
 is an explicit built-in resource), Alpha/Additive and positive draw scale.
-Position and XY size are effect-local; draw scale affects both. In the migrated
-source, Unity directly submits a reusable combined mesh per emitter, Unreal uses
+Position and XY size are effect-local; draw scale affects both. Unity directly submits a reusable combined mesh per emitter, Unreal uses
 native instanced primitives, and Godot bulk-uploads MultiMesh data through
 RenderingServer RIDs. There is no per-particle scene object. Per-particle RGBA
-and XY size are retained; there is no per-particle transparent sorting. These
-renderer changes do not update previously downloaded 2026.11.22 SDKs.
+and XY size are retained; there is no per-particle transparent sorting. Use matching editor and SDK versions.
 
 Unreal requires the instanced-RGBA Sprite material documented in its adapter
 `USAGE.txt`; that material is **not supplied** by this implementation. A missing
@@ -323,7 +320,14 @@ age and lifetime have a separate scoped native query.
   ABI is 80 bytes; scoped event ABI is 88 bytes. Existing stable node IDs and
   existing value ABI are unchanged.
 
-The standalone converter exports CPU systems without editor startup. Its existing
-GPU rejection is retained. Focused authored regressions cover graph/package
+The standalone converter exports CPU systems without editor startup. The same compiler also exports GPU and Fluid2D effects. Focused authored regressions cover graph/package
 contracts and native pools. Compiler-produced fixtures additionally exercise
 native execution; these checks do not replace engine rendering acceptance.
+
+Follow [Animate particle textures](sprite-animation.md) for the steps to cut cells, arrange frames and apply them.
+
+## Next steps
+
+- [Connect to an engine and play the effect](production-workflow.md).
+- [Check a missing preview or unexpected result](troubleshooting.md).
+- [Look up a node](node-reference.md).

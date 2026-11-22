@@ -13,6 +13,14 @@ title: 用語集
 
 <span id="graphs"></span>
 
+<details class="page-toc" markdown="1">
+<summary>このページの内容</summary>
+
+* TOC
+{:toc}
+
+</details>
+
 ## グラフ
 
 | 用語 | 意味 |

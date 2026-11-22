@@ -6,16 +6,26 @@ title: Editor Window and Panel Reference
 
 # Editor Window and Panel Reference
 
+New to the editor? Follow the [workspace tour](workspace-tour.md) first. Use this page to find a panel by task or menu name.
+
 See [editor terms](glossary.md#editor) for dock, inspector, outliner, and MCP.
 
 Most editor tools are dockable panels rather than separate windows. Open them from
 **Window** or **View**. Panels that read the graph normally follow the active
-document tab. Menu labels and screenshots use the English UI. Screenshots show
+document tab. Menu names use the English UI. Captions identify localized captures. Screenshots show
 the editor with bundled sample data, not engine rendering.
 
 [Workspace and editing](#workspace-and-editing) · [Animation](#animation) ·
 [Engine connection and diagnostics](#engine-connection-and-diagnostics) ·
 [First launch and settings](#first-launch-and-settings)
+
+<details class="page-toc" markdown="1">
+<summary>On this page</summary>
+
+* TOC
+{:toc}
+
+</details>
 
 ## Authoring workspace
 
@@ -171,11 +181,13 @@ its keys produce values rather than triggering Signals.
 
 ### Sprite Animation
 
-![Sprite Animation before an atlas is loaded, showing the cell canvas, frame preview, and timeline](images/editor/sprite.png)
+![Sprite Animation with four loaded cells and a frame track](../images/sprite-animation-en.png)
+
+The image shows the released 2026.11.72 editor using a local preview atlas, without engine rendering. For loading, editing and applying the animation, follow [Animate particle textures](sprite-animation.md).
 
 1. Open a local source image or pick a supported texture from a connected editor. **Source dimensions** must be known to edit exact pixel rectangles.
 2. In **Cut cells**, draw or add a rectangle and refine its pixel position and size. For an evenly spaced atlas, enter its grid dimensions, enable snap if useful, and use **Fill track from grid**.
-3. Use the bottom **Timeline** to insert, reorder, and preview frames. Use **Arrange parts** if you need to layer parts and key their transforms separately. The **Frame preview** lets you review the result before applying it to the selected Sprite Draw.
+3. Use the bottom **Timeline** to insert, reorder, and preview frames. Use **Arrange parts** if you need to layer parts and key their transforms separately. The **Frame preview** lets you review the result before applying it to the selected CPU Particle, GPU Particle or Sprite Draw.
 
 ### Content and asset references
 

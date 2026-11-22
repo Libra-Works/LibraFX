@@ -4,15 +4,17 @@ title: Procedural models, textures and materials
 
 # Procedural models, textures and materials
 
-Create reusable model geometry, GPU-generated textures and materials in the
-effect graph. These features are included in the
-[2026.11.42 Preview](https://github.com/Libra-Works/LibraFX/releases/tag/v2026.11.42);
-use its matching editor and engine SDK. Earlier archives remain unchanged.
+Build reusable model geometry, textures and materials inside the effect graph. Choose the resource you want to make, open its Flow workspace, then connect its output to a compatible consumer.
 
-![Procedural Model Flow in the editor, with the modifier list, ordered steps, and inspector](images/editor/procedural-model-flow-en.png)
+For a glowing particle, begin with a texture and material. For a ring, plane or other generated shape, begin with a model.
 
-This is an editor capture of the authoring workspace, not an engine-rendered
-result.
+<details class="page-toc" markdown="1">
+<summary>On this page</summary>
+
+* TOC
+{:toc}
+
+</details>
 
 ## Create and connect resources
 
@@ -29,6 +31,14 @@ result.
 
 No imported engine mesh or image is required for these generated resources.
 Continuous numeric values can also be driven by graph connections.
+
+## Preview a resource without transferring it
+
+1. Double-click **Procedural Texture** or **Procedural Model** to open its Flow.
+2. Edit a step and inspect the local preview below the settings. Texture previews show the generated image; model previews show the generated geometry.
+3. Set the preview time or press Play to inspect time-dependent changes. This time control previews the resource; it does not start the whole effect.
+
+The local preview evaluates the resource recipe without an engine connection. Linked external stage inputs use preview defaults; inspect the status below the image. Use the target engine to confirm material shading, transparency, lighting and the complete effect.
 
 ## Limits and resource behavior
 
@@ -60,3 +70,9 @@ suppressed redispatch for unchanged output, independent animation and
 dependency lifetime. These editor-host checks do not certify exported players
 or Unreal cooking. UE 5.8 / 5.9 and other graphics backends need separate
 acceptance.
+
+## Next steps
+
+- [Connect to an engine and play the effect](production-workflow.md).
+- [Check a missing preview or unexpected result](troubleshooting.md).
+- [Look up a node](node-reference.md).

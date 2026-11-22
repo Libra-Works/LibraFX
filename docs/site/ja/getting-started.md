@@ -1,53 +1,59 @@
 ---
-title: はじめに
+title: 導入と最初の起動
 ---
 
-[ドキュメントのトップ](index.md) · [ゲームエンジンとの連携](engine-integration.md)
+# 導入と最初の起動
 
-# はじめに
+ダウンロードから、編集できるサンプルを開くまでを進めます。
+グラフを見るだけなら、エンジンの準備は後でも構いません。
+粒子の描画も確認する場合は、使うエンジンのプレビューを用意します。
 
-「ノード」「ピン」「Signal」が初めての方は、[グラフの用語](glossary.md#graphs)を参照してください。
+<span id="エディターを導入する"></span>
 
-同梱の **Afterimage Gate** を開き、紫のリングと、その少し後に現れる水色の残像を
-作る二つのシグナルをたどります。グラフを見るだけならゲームエンジンは不要です。
-実際の描画を確認する場合は Unreal のプレビューを使います。
+## 1. エディターを導入する
 
-## エディターを導入する
+[GitHub Releases](https://github.com/Libra-Works/LibraFX/releases)から、使うOS向けの配布物を選びます。
+エディターとSDKは**同じリリース**のものを使ってください。
+既存の環境を更新する場合は、先に[リリースノート](release-notes.md)を確認します。
 
-[最新 Preview](https://github.com/Libra-Works/LibraFX/releases)
-から、使っている OS に合うファイルをダウンロードします。
-エディターと SDK は一緒に更新してください。
-[リリースノート](release-notes.md)に追加機能・パッケージ形式・既知の制約をまとめています。
-導入からゲームへの組み込みまでは[エンジン別の制作フロー](production-workflow.md)、
-無人変換・ビルド運用は[一括コンバーター](batch-conversion.md)を参照してください。
-
-| プラットフォーム | 起動方法 |
+| 環境 | 起動方法 |
 | --- | --- |
-| Windows x64 | MSI を実行してスタートメニューから **LIBERA FX** を開くか、ポータブル ZIP をすべて展開して直下の `LiberaFx.exe` を開きます。`Editor` と `Converter` は同じ場所に置いたままにします。 |
-| macOS（Apple Silicon） | ZIP を展開してエディターの `.app` を開きます。アプリは署名・公証されていません。 |
-| Linux x64 | tarball を展開し、Avalonia に必要なシステム依存関係が入ったデスクトップ環境で `Editor/LiberaFx` を起動します。 |
+| Windows x64 | MSIで導入してスタートメニューから **LIBERA FX** を開くか、ポータブルZIPをすべて展開して直下の `LiberaFx.exe` を開きます。`Editor` と `Converter` は同じ場所に置きます。 |
+| macOS・Apple Silicon | ZIPを展開し、`.app` を開きます。Previewのアプリは未署名・未公証です。 |
+| Linux x64 | tarballを展開し、Avaloniaに必要なシステム依存関係が入ったデスクトップ環境で `Editor/LiberaFx` を起動します。 |
 
-## サンプルのグラフを読む
+エンジンへのSDK導入は別の作業です。Unity・Godot同梱のnative binaryはWindows x64用で、
+UnrealはソースプラグインのEditorビルドが必要です。[SDKの導入](engine-integration.md)で詳しく説明しています。
 
-1. エディターに同梱された `Assets/Samples/AfterimageGate.lfxproj` を開きます。
-   編集を試す場合は、まず別名で保存します。
-2. **Ignite** を見つけ、**Sequence** から出るシグナルをたどります。
-   一方は紫のリングを生成し、もう一方は **Delay** で 0.55 秒待ってから水色の残像を生成します。
-3. Spawnable Group を開き、**Time** と **Life Time** を確認します。
-   各インスタンスの Time がアニメーションに使われ、Life Time が寿命の期限を決めます。
-4. ノード、アセット、コマンドを探すときは、エニシング検索（既定は `Ctrl+P`）を使います。
-   エディター UI と組み込みノード名の言語は別々に設定できます。
+## 2. サンプルを開き、自分用のコピーを保存する
 
-## Unreal で描画を確認する
+1. **File → Open** で、配布物の `Assets/Samples/CpuFountain.lfxproj` を開きます。
+2. **File → Save As** で、自分の作業フォルダーへコピーを保存します。
+3. ノードを選ぶと、インスペクターに値が表示されます。画面の場所や子グラフからの戻り方は、
+   [画面の基本操作](workspace-tour.md)で順に試せます。
 
-検証用プロジェクトに [Unreal アダプター](engine-integration.md#unreal-engine) を導入します。
-Unreal で **Window → LIBERA FX Preview** を開き、**Connect to Libra** を選びます。
-LIBERA FX のタイムラインを 60 FPS、**End** を 144 に設定し、再生するか再生位置を動かします。
-54〜63 フレーム付近で、紫のリングと水色の残像が同時に見えます。
+`.lfxproj` は編集元のプロジェクトです。後で書き出す `.lfxb` はゲームで読み込むデータなので、
+編集元も残してください。
 
-ライブプレビューでは Unreal 標準の球メッシュと専用のアンリットマテリアルを使います。
-書き出した `.lfxb` パッケージを単体で再生する場合は、明示的なアセット割り当てが必要です。
-統合出力には更新後のエディターと SDK が必要です。旧リリースのパッケージ拡張子は `.lfxp` です。
-プレビューに必要なネイティブライブラリやカメラ位置は
-[同梱サンプルの説明（英語）](https://github.com/Libra-Works/LibraFX/blob/main/Assets/Samples/AfterimageGate.txt)
-を参照してください。
+## 3. プレビューの方法を選ぶ
+
+[接続からゲームでの再生まで](production-workflow.md)を開き、使うエンジンの手順を進めます。
+
+| エンジン | 最初に使うもの |
+| --- | --- |
+| Unreal Engine | 専用の **LIBERA FX Preview** ウィンドウと **Connect to Libra**。 |
+| Unity | SDKのエディタープレビューを有効にし、プロジェクトの素材を割り当てます。 |
+| Godot | SDKのPlayerと、スクリプトによるプレビュー接続を使います。 |
+
+接続表示だけでなく、エンジン側の画面にエフェクトが表示され、動くことを確認してください。
+テクスチャー・メッシュ・マテリアルには、エンジン側での割り当ても必要です。
+
+<span id="サンプルのグラフを読む"></span>
+<span id="unreal-で描画を確認する"></span>
+
+## 4. 最初の変更を試す
+
+[最初の噴水を作る](first-fountain.md)へ進みます。
+放出量・初速度・重力・大きさ・寿命を、どこで変更し、何を見比べるかを説明しています。
+慣れたら、[残像サンプル](afterimage-gate.md)でSignalの遅延と子インスタンスの寿命を読んでみましょう。
+表示されないときは、設定を一度に変える前に[困ったときの確認](troubleshooting.md)を使ってください。

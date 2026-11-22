@@ -7,14 +7,7 @@
   {% assign english = route %}
   {% assign japanese = route | prepend: '/ja' %}
 {% endif %}
-{% assign nav_items = 'index.html|workspace-tour.html|first-fountain.html|release-notes.html|getting-started.html|production-workflow.html|batch-conversion.html|editor-reference.html|authoring.html|gpu-particles.html|cpu-particles.html|fluid-2d.html|procedural-resources.html|flexible-plane-draw.html|node-reference.html|scalar-math-nodes.html|quaternion-random.html|engine-integration.html|glossary.html' | split: '|' %}
-{% if page.lang == 'ja' %}
-  {% assign prefix = '/ja/' %}
-  {% assign nav_labels = 'トップ|はじめての画面操作|最初の噴水|リリースノート|はじめに|制作フロー|一括変換|画面ガイド|グラフ制作|GPU パーティクル|CPU パーティクル|2D 煙・水・炎|プロシージャル|Flexible Plane Draw|標準ノード|スカラー演算|回転と乱数|エンジン連携|用語集' | split: '|' %}
-{% else %}
-  {% assign prefix = '/' %}
-  {% assign nav_labels = 'Home|Workspace tour|First fountain|Release notes|Getting started|Production workflow|Batch conversion|Editor guide|Graph authoring|GPU particles|CPU particles|2D smoke, water and fire|Procedural resources|Flexible Plane Draw|Built-in nodes|Scalar math|Quaternions and random|Engine integration|Glossary' | split: '|' %}
-{% endif %}
+{% if page.lang == 'ja' %}{% assign prefix = '/ja/' %}{% else %}{% assign prefix = '/' %}{% endif %}
 <html lang="{{ page.lang }}" data-bs-theme="dark">
   <head>
     <meta charset="utf-8">
@@ -49,24 +42,19 @@
     <div class="container-xxl py-3 py-md-4">
       <div class="row g-3 g-lg-4">
         <div class="col-lg-3 col-xl-2">
-          <nav class="site-panel docs-nav p-2" aria-label="{% if page.lang == 'ja' %}ドキュメント{% else %}Documentation{% endif %}">
-            <ul class="nav nav-pills flex-wrap flex-lg-column gap-1">
-              {% for item in nav_items %}
-                {% if item == 'index.html' %}
-                  {% assign destination = prefix %}
-                {% else %}
-                  {% assign destination = prefix | append: item %}
-                {% endif %}
-                <li class="nav-item">
-                  <a class="nav-link{% if route == destination %} active{% elsif page.release_version and item == 'release-notes.html' %} active{% endif %}"
-                     href="{{ destination | relative_url }}"{% if route == destination %} aria-current="page"{% elsif page.release_version and item == 'release-notes.html' %} aria-current="location"{% endif %}>{{ nav_labels[forloop.index0] }}</a>
-                </li>
-              {% endfor %}
-            </ul>
+          <nav class="site-panel docs-nav p-2 desktop-navigation" aria-label="{% if page.lang == 'ja' %}ドキュメント{% else %}Documentation{% endif %}">
+            {% include docs-navigation.html %}
           </nav>
+          <details class="site-panel docs-nav p-3 mobile-navigation">
+            <summary>{% if page.lang == 'ja' %}ドキュメントのメニュー{% else %}Documentation menu{% endif %}</summary>
+            <nav aria-label="{% if page.lang == 'ja' %}ドキュメント{% else %}Documentation{% endif %}">{% include docs-navigation.html %}</nav>
+          </details>
         </div>
         <main class="col-lg-9 col-xl-10" id="main-content" tabindex="-1">
           <article class="site-panel docs-content p-3 p-md-4 p-xl-5">
+            {% unless page.release_version or route == prefix or page.name == 'release-notes.md' %}
+              <p class="documentation-baseline">{% if page.lang == 'ja' %}対象リリース：{% else %}Documentation baseline: {% endif %}<a href="{{ prefix | append: 'releases/' | append: site.data.navigation.documentation_release | append: '.html' | relative_url }}">{{ site.data.navigation.documentation_release }}</a></p>
+            {% endunless %}
             {{ content }}
           </article>
         </main>

@@ -20,3 +20,6 @@ defaults:
     values:
       lang: ja
       description: グラフでエフェクトを作り、ゲームエンジンで再生する。
+
+kramdown:
+  toc_levels: "2..3"

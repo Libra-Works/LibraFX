@@ -4,7 +4,7 @@ title: 制作からゲーム組み込みまで：Unity・Unreal・Godot
 
 # 制作からゲーム組み込みまで：Unity・Unreal・Godot
 
-ここで扱うのはノードの Flow ウィンドウではなく、**開発・制作の進め方**です。
+使うエンジンを選び、導入からゲーム内での再生まで順番に進めます。
 
 **SDK 導入 → LIBERA FX 起動 → エンジン資源の取得・割り当て →
 制作とプレビュー転送 → 書き出し → エンジン用アセット化 →
@@ -13,6 +13,14 @@ LIBERA FX なしで再生 → 一括変換・ゲームビルド**の順に進め
 [Unreal](#unreal)・[Unity](#unity)・[Godot](#godot) の手順を選んでください。
 [一括コンバーター](batch-conversion.md)、[SDK 導入の詳細](engine-integration.md)、
 [リリースノート](release-notes.md)も参照できます。
+
+<details class="page-toc" markdown="1">
+<summary>このページの内容</summary>
+
+* TOC
+{:toc}
+
+</details>
 
 ## ツール間で何を受け渡すのか
 

@@ -4,12 +4,9 @@ title: Scalar math nodes
 
 # Scalar math nodes
 
-These portable Float nodes can drive other parameter inputs, for example to
-turn effect age into a repeating phase or a smooth opacity fade.
+Use these Float nodes to turn time, distance or another value into an effect parameter. For a repeating 0–1 phase, connect time to **Fraction**. To map a range into a blend amount, use **Inverse Lerp → Saturate → Lerp**.
 
-**Runtime requirement:** These nodes require a matching updated LIBERA FX
-runtime/SDK. The published 2026.11.8 downloads have not been rebuilt or
-released with them; an older runtime cannot execute their custom node IDs.
+These are CPU parameter nodes. Use the GPU kernel palette when editing a GPU particle calculation.
 
 | Node | Result |
 |---|---|
@@ -28,3 +25,9 @@ add Saturate between them for a clamped remap. All inputs must be finite.
 Non-finite calculations, including overflow, fail with `NonFinite`; Modulo
 and Inverse Lerp report `DivideByZero` for a zero divisor. Smoothstep reports
 `InvalidArgument` for equal or reversed bounds. Underflow may produce zero.
+
+## Next steps
+
+- [Connect to an engine and play the effect](production-workflow.md).
+- [Check a missing preview or unexpected result](troubleshooting.md).
+- [Look up a node](node-reference.md).

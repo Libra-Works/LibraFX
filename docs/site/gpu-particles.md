@@ -6,21 +6,22 @@ title: GPU Particle Authoring
 
 # GPU Particle Authoring
 
-See [GPU particle terms](glossary.md#gpu) for kernel, attribute, uniform, and IR.
-The Preview update after 2026.11.22 also provides a
-[resource-first 2D smoke, water and fire modes](fluid-2d.md) inside this workspace.
-That solver is not a particle kernel. Install matching updated SDKs;
-the older archives are unchanged.
+Use **GPU Particle** for large particle fields. Set initial values in **Spawn**, motion in **Update**, and appearance in **RenderBillboard**. Double-click the container to open its workspace.
 
-A **GPU Particle** node is a container on the main effect graph. Its contents
-are edited in a separate workspace: the outer graph owns effect scope and
-Signals, while a GPU kernel computes typed values for particles. A CPU Signal
-connection is not a GPU data wire.
+The outer graph controls effect timing and Signals; GPU kernels calculate particle values. For grid-based smoke, water or fire, use [Fluid2D](fluid-2d.md) in the same workspace. See [GPU terms](glossary.md#gpu) when you need a definition.
+
+<details class="page-toc" markdown="1">
+<summary>On this page</summary>
+
+* TOC
+{:toc}
+
+</details>
 
 ## Open the particle program
 
 1. In **Node List → Core / GPU**, add **GPU Particle** to the main graph.
-2. Double-click the node marked **GPU Program — double-click to edit**. The
+2. Double-click **GPU Particle**. The
    breadcrumb changes from the CPU graph to the GPU workspace.
 3. Use **Open kernel** on a Spawn or Update card to edit its calculations.
    **Flow** returns to the flow; **Main graph** returns to the main graph.
@@ -124,5 +125,12 @@ Use the target engine's integration to resolve bindings, build or import the
 backend artifacts, and verify simulated motion and rendering. Do not treat
 standalone shader source or legacy raw bytecode as a complete GPU effect.
 The editor exports GPU effects in the same `.lfxb` package as CPU effects;
-the standalone converter still rejects GPU graphs explicitly. Use the matching
-updated engine SDK. See [Engine integration](engine-integration.md).
+the standalone converter uses the same compiler for CPU, GPU and Fluid2D effects. Use an engine SDK from the same release. See [Engine integration](engine-integration.md).
+
+Follow [Animate particle textures](sprite-animation.md) for the steps to cut cells, arrange frames and apply them.
+
+## Next steps
+
+- [Connect to an engine and play the effect](production-workflow.md).
+- [Check a missing preview or unexpected result](troubleshooting.md).
+- [Look up a node](node-reference.md).

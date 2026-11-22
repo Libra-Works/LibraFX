@@ -14,9 +14,7 @@ and offline gameplay. See [Batch conversion](batch-conversion.md) for automation
 See [engine and file terms](glossary.md#engine) for SDK, runtime, editable projects, and compiled effects.
 
 Download the matching SDK from the latest [Preview release](https://github.com/Libra-Works/LibraFX/releases).
-The unified `.lfxb` package workflow below requires the updated editor,
-converter, and SDK from the same source revision. Do not mix these with
-2026.11.8 or earlier SDKs. Older `.lfxp` packages remain supported by updated SDKs.
+Use the editor, converter and SDK from the same release. Legacy `.lfxp` packages remain supported inputs.
 
 Existing raw-program assets do not automatically become package assets.
 When replacing a legacy raw `.lfxb` with a new package export, import it as a new
@@ -40,20 +38,39 @@ do not delete through a development junction.
 
 ### Verification boundaries
 
-The Preview update after 2026.11.22 includes the rendering, 2D smoke/dye and
-nested Spawnable/CPU changes below. Local acceptance includes real rendered
+The SDK supports the rendering, Fluid2D and nested Spawnable/CPU features below. Local acceptance includes real rendered
 pixels and cleanup in all three engines. Unreal has UE 5.7.4 Clang compilation
 (`-NoLink`), MSVC Editor linking and D3D11/SM5 rendered-pixel coverage.
 Clang compilation is not console SDK verification or linking against an
 MSVC-built engine. See the [release notes](release-notes.md) for the complete
 matrix; engine compilation/import tests alone are not visual acceptance.
 
+## Coordinates and units
+
+Author spatial values in **metres, X right, Y up, Z forward**. The runtime's coordinate basis converts spatial data at the host boundary; you should not rotate every effect graph to fit each engine.
+
+| Host default | Canonical X / Y / Z map to | Units per metre |
+| --- | --- | --- |
+| Unity | +X / +Y / +Z | 1 |
+| Unreal | +Y / +Z / +X | 100 |
+| Godot | +X / +Y / −Z | 1 |
+
+The SDK converts values according to their spatial role: position, vector, direction, normal, angular vector or transform. A colour or arbitrary numeric vector is not automatically a spatial value. Custom hosts must configure their signed axis mapping and units at the runtime boundary, including external spatial inputs. Do not apply the same conversion twice.
+
+There is no editor-side Y-up/Z-up selector in this workflow. Keep authored graphs in the canonical Y-up basis. For a custom host such as a Z-up game, configure the SDK basis for that host rather than changing the meaning of the graph's axes.
+
 <span id="rendering"></span>
+
+<details class="page-toc" markdown="1">
+<summary>On this page</summary>
+
+* TOC
+{:toc}
+
+</details>
 
 ## Drawing without per-Draw scene components
 
-The Preview update **after 2026.11.22** includes the renderer migration; that
-older release's archives do not change. Install matching updated adapters.
 The effect-level playback Component/Node remains. Ordinary Model/Sprite Draw,
 CPU Sprite particles and FlexiblePlane use engine-owned rendering resources
 without a MeshComponent, MeshRenderer or MeshInstance3D for each drawn item.
@@ -210,7 +227,7 @@ prepared storage and shared frames. Unity/Godot also verified visible particles,
 Stop clearing and replay; Unreal verified task/scene integration, without a
 cooked-player or framebuffer-equivalence claim for this path.
 
-These are updated-source capabilities. Install matching editor/converter and
+Install matching editor/converter and
 native integration revisions; older Preview binaries do not acquire them when
 the documentation changes. The [release notes](release-notes.md) explains
 how to keep the tools and SDK in sync.

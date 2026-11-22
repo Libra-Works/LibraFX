@@ -7,18 +7,23 @@ translation_url: /cpu-particles/
 
 # CPU パーティクルとエミッター
 
-> 対応する更新版エディター・コンバーター・native library・エンジンアダプターが必要です。
-> 旧 **2026.11.8 SDK には含まれません**。
-> [Preview 配布ページ](https://github.com/Libra-Works/LibraFX/releases)の更新版を組み合わせてください。
-> ビルドや回帰テストの結果だけでは、エンジン実行・UI 操作性・描画結果の確認にはなりません。
+**CPU Particle** では、通常のグラフノードを使って粒子の初期位置・動き・寿命・Sprite の見た目を作れます。編集は **Spawn（生成）→ Update（更新）→ Draw（描画）** の順に進めます。
+
+初めてなら [最初の噴水を作る](first-fountain.md)から進めてください。このページでは、各段階の編集画面と調整できる設定を説明します。
+
+<details class="page-toc" markdown="1">
+<summary>このページの内容</summary>
+
+* TOC
+{:toc}
+
+</details>
 
 ## 5つの実画面で編集の流れを確認する
 
 以下は、隔離したサンプルを実際のエディターで開いて撮影した画面です。
 エンジン上のパーティクル描画結果ではありません。画像を開くと、ピンや
 インスペクターの値を原寸で確認できます。
-以下の Flow 表示は 2026.11.22 より後の Preview 更新が必要です。
-旧アーカイブでは従来の三つの構造ノードを表示します。[リリースノート](release-notes.md)も参照してください。
 
 ### 1. 親グラフで放出数をつなぐ
 
@@ -70,17 +75,14 @@ Flow に戻り、**描画**の「描画設定を編集」を選びます。
 
 ### 通常の Draw では MeshComponent が増える？
 
-旧版の **2026.11.22 Preview** では、Unreal の通常 Draw に MeshComponent、
-CPU 粒子群ごとに一つの InstancedStaticMeshComponent を使います。
-粒子ごとの Component ではありません。その後の Preview 更新では、
-これらの描画 Component を廃止し、エフェクト側が描画データと互換なバッチを所有します。
+エフェクト側が描画データと互換なバッチを所有します。
 Unity は直接描画、Unreal は native primitive／proxy、Godot は RenderingServer の
 instance を使います。エフェクト全体を再生する Component／Node は残します。
 
 Component を消しても、メッシュ・マテリアルのリソースや描画命令までなくなるわけでは
 ありません。マテリアル、パラメーター、透明物の順序によっては描画を分けます。
 粒子データ、CPU・メモリ・転送・オーバードローの負荷も内容に応じて増えます。
-旧アーカイブと更新版の違いは[エンジンの描画範囲](engine-integration.md#rendering)を参照してください。
+詳しくは[エンジンの描画範囲](engine-integration.md#rendering)を参照してください。
 
 ## Sprite の粒子群を作る
 
@@ -114,10 +116,10 @@ Alpha/Additive、正の描画倍率を指定します。位置・XY サイズは
 直接描画、Unreal は native のインスタンス描画、Godot は RenderingServer の
 MultiMesh データ一括転送を使い、粒子ごとのシーンオブジェクトを作りません。
 RGBA・XY サイズを保持しますが、半透明の粒子単位ソートはありません。
-この変更がダウンロード済みの 2026.11.22 SDK に自動反映されることはありません。
+エディターと SDK は同じリリースを使ってください。
 
 Unreal は `USAGE.txt` 記載のインスタンス RGBA 対応 Sprite マテリアルが必要です。
-**そのマテリアル自体は今回同梱していません**。不足・非互換なら明示的に失敗し、
+**そのマテリアル自体は同梱していません**。不足・非互換なら明示的に失敗し、
 仮リソースへ置換しません。
 
 ## 放出・形状・決定的な乱数
@@ -296,6 +298,14 @@ Flipbook使用時の描画メタデータは`cpuParticleVersion:3`、Draw Matrix
 * 描画 metadata に `cpuParticleVersion:1` と `cpuParticles` を追加します。
   native snapshot は80バイト、scoped event は88バイトです。既存 UUID・値 ABI は変えません。
 
-standalone converter はエディター起動なしで CPU を出力します。既存の GPU 拒否は維持します。
+単体コンバーターは、エディターを起動せずに CPU・GPU・Fluid2D を出力します。
 グラフ・package・native pool の回帰テストと、コンパイラーで生成したバイナリーの
 native 実行を検証対象にしています。エンジン上の描画確認は別途必要です。
+
+セルの切り出し・コマの配置・適用の手順は [パーティクルのアニメーション](sprite-animation.md)を参照してください。
+
+## 次に進む
+
+- [エンジンに接続してエフェクトを再生する](production-workflow.md)。
+- [表示されない・思った動きにならないときの確認](troubleshooting.md)。
+- [標準ノードの働きを調べる](node-reference.md)。

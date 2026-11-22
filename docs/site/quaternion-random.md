@@ -4,20 +4,17 @@ title: Quaternion and seeded random nodes
 
 # Quaternion and seeded random nodes
 
-The updated converter fixes custom-node default values being overwritten by
-branch metadata in older output. Re-export existing effects from their editable
-`.lfxproj` files to recover the authored values; loading an already affected
-binary cannot reconstruct the overwritten bits.
+Use Quaternion nodes to rotate a direction or interpolate orientation. Use seeded Random nodes to vary particle positions and directions while keeping results repeatable.
 
-Use Quaternion nodes to orient an authored direction or interpolate an object's
-orientation, and Random nodes to give each particle a repeatable starting
-direction or position. These are portable native parameter callbacks, not GPU
-shader nodes or engine-specific quaternion casts.
+These are portable CPU parameter nodes. They are separate from GPU shader nodes and engine-specific quaternion types.
 
-**Requires an updated editor/converter and matching runtime/SDK.** The published
-2026.11.8 downloads do not contain these node IDs. Use matching updated
-[Preview packages](https://github.com/Libra-Works/LibraFX/releases); regression
-results are not a substitute for engine playback acceptance.
+<details class="page-toc" markdown="1">
+<summary>On this page</summary>
+
+* TOC
+{:toc}
+
+</details>
 
 ## Quaternion representation and rotation convention
 
@@ -143,3 +140,13 @@ produces **internal compiler-to-native raw program fixtures** using
 not unified `EffectBinary` containers. The native test reads them with
 `Program::load`. This helper does not invoke the standalone converter executable;
 neither fixture execution nor executable-converter integration has been verified.
+
+## Re-exporting older binaries
+
+Older converter output could overwrite custom-node defaults with branch metadata. Re-export an affected effect from its editable `.lfxproj`; a binary cannot recover overwritten values.
+
+## Next steps
+
+- [Connect to an engine and play the effect](production-workflow.md).
+- [Check a missing preview or unexpected result](troubleshooting.md).
+- [Look up a node](node-reference.md).

@@ -13,6 +13,14 @@ appear in the editor or Node List.
 
 <span id="graphs"></span>
 
+<details class="page-toc" markdown="1">
+<summary>On this page</summary>
+
+* TOC
+{:toc}
+
+</details>
+
 ## Graphs
 
 | Term | What it means |

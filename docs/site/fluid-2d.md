@@ -4,11 +4,17 @@ title: 2D fluids: smoke, water and fire
 
 # 2D fluids: smoke, water and fire
 
-The four fluid models, cell forces and ordinary-draw consumers are included in
-the [2026.11.42 Preview](https://github.com/Libra-Works/LibraFX/releases/tag/v2026.11.42).
-Use its matching editor and engine SDK; earlier archives remain unchanged. See
-[release notes](release-notes.md). These features have Windows GPU acceptance on
-the engine/backends listed below.
+Create smoke, ink, water and fire on a 2D simulation grid. Start with a preset, adjust the source and forces, then preview it through a connected engine.
+
+Fluid2D shares the GPU Particle workspace but simulates grid cells rather than individual particles. Start with a small grid so you can tune the motion before increasing detail.
+
+<details class="page-toc" markdown="1">
+<summary>On this page</summary>
+
+* TOC
+{:toc}
+
+</details>
 
 ## Make a water or fire effect
 
@@ -16,7 +22,7 @@ the engine/backends listed below.
 2. Select **Simulation model / preset**. Changing model loads that preset's settings and clears its previous force nodes; Undo restores them.
 3. Adjust the grid, domain, source and model settings. Start with a small grid. Source coordinates are normalized; radius and depth use simulation-domain distance units.
 4. Leave **Output plane: Auto / On / Off** at Auto to use the dedicated renderer. For a continuous root effect, disable **End automatically when idle**. A Spawnable template needs a Spawn Signal and an appropriate **Life Time**.
-5. Export the entire effect as `.lfxb` and play it through the matching engine SDK. The standalone CPU converter rejects GPU programs. Validate / compile and source export do not execute the GPU.
+5. Export the entire effect as `.lfxb` and play it through the matching engine SDK. The standalone converter also exports Fluid2D effects. Validate / compile and source export do not execute the GPU.
 
 ![Resource declarations and simulation passes in the editor](images/editor/fluid-2d-flow-en.png)
 ![Output and renderer settings in the editor](images/editor/fluid-2d-output-en.png)
@@ -124,3 +130,9 @@ The portable resource plan declares ownership, versions, explicit pass access, d
 `ColorOutput` uses the engine's ordinary image UV orientation. `DyeOutput` and `FieldOutput` retain solver coordinates with row zero at the lower edge; they are intended for explicit data sampling or materials that handle that orientation. Native ColorOutput publication flips rows on Unreal/Godot so ordinary draws need no special shader UV code.
 
 Unreal’s dedicated fluid surface currently draws after Tonemap through a view extension. It has no scene-depth occlusion or global transparent-object sorting. Unity and Godot use scene meshes. Lighting, refraction and full production-water composition need further renderer work.
+
+## Next steps
+
+- [Connect to an engine and play the effect](production-workflow.md).
+- [Check a missing preview or unexpected result](troubleshooting.md).
+- [Look up a node](node-reference.md).
