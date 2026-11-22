@@ -4,7 +4,9 @@ title: SDK and runtime reference
 
 [Documentation home](index.md) · [Getting started](getting-started.md)
 
-# Engine Integration
+<span id="engine-integration"></span>
+
+# SDK and runtime reference
 
 For the full development process, use the
 [Unity / Unreal / Godot production workflow](production-workflow.md):

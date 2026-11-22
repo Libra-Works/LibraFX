@@ -129,7 +129,9 @@ body {
 .docs-content :is(h2,h3,h4,[id]) { scroll-margin-top: 1rem; }
 .docs-content > p, .docs-content > ul, .docs-content > ol { max-width: 78ch; }
 .docs-content pre { overflow-x: auto; }
-.docs-content table { display: block; overflow-x: auto; }
+.table-scroll { overflow-x: auto; margin-bottom: 1.25rem; }
+.docs-content table { min-width: 34rem; margin-bottom: 0; }
+.docs-content > p:has(img) { max-width: none; }
 .docs-content summary { cursor: pointer; font-weight: 600; }
 .docs-content details { margin: 1.5rem 0; padding: .75rem 1rem; border: 1px solid var(--libra-border); border-radius: .45rem; }
 .documentation-baseline { font-size: .85rem; color: var(--libra-muted); }

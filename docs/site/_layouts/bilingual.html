@@ -55,7 +55,7 @@
             {% unless page.release_version or route == prefix or page.name == 'release-notes.md' %}
               <p class="documentation-baseline">{% if page.lang == 'ja' %}対象リリース：{% else %}Documentation baseline: {% endif %}<a href="{{ prefix | append: 'releases/' | append: site.data.navigation.documentation_release | append: '.html' | relative_url }}">{{ site.data.navigation.documentation_release }}</a></p>
             {% endunless %}
-            {{ content }}
+            {{ content | replace: '<table>', '<div class="table-scroll" tabindex="0"><table>' | replace: '</table>', '</table></div>' }}
           </article>
         </main>
       </div>

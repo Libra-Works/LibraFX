@@ -4,7 +4,9 @@ title: SDK・ランタイムの詳細
 
 [ドキュメントのトップ](index.md) · [はじめに](getting-started.md)
 
-# ゲームエンジンとの連携
+<span id="ゲームエンジンとの連携"></span>
+
+# SDK・ランタイムの詳細
 
 導入・起動・資源取得・プレビュー・アセット化・通常再生までの流れは
 [Unity／Unreal／Godot 別の制作フロー](production-workflow.md)を参照してください。
