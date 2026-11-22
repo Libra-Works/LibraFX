@@ -30,11 +30,13 @@ nor an asynchronous last-completed-frame presentation mode. One large system's
 internal 32-particle blocks still execute on its assigned lane. Engine rendering
 and custom callbacks are not made worker-safe by this scheduler.
 
-The shared worker path initially accepts root-only Core-built-in hosts without
-procedural mesh emitters or attached execution debug hooks. Unknown/project
-callbacks, nested Spawnables and mesh emitters retain ordinary owner-thread
-execution. Whole-effect clocks, seeds/IDs, stable particle order and the existing
-coordinate conversion remain per instance.
+The shared path accepts nested Spawnables and Core procedural mesh emitters.
+One host and all its descendants stay on one exclusive lane, preserving their
+Signal and retirement order. Attached execution debug hooks keep the host on
+the dedicated debugger path. Whole-effect clocks, seeds/IDs, stable particle
+order and coordinate conversion remain per instance.
+Unknown/project callbacks join the shared batch on its calling thread after
+workers finish. Only explicitly worker-safe callbacks run on workers.
 Gathered effects are independent: cross-effect script responses are published
 after the gathered simulation phase. Keep control chains that require the old
 same-tick producer/consumer order on the immediate path by disabling shared
@@ -50,8 +52,55 @@ retaining simulation storage. Configure each new lease before advancing it.
 `host::PreparedPlaybackCache` stores at most 64 byte-identified package/options
 combinations. It compares package contents so an edited asset cannot acquire a
 stale instance. Cache eviction keeps checked-out playbacks alive through shared
-pool ownership. Prepared memory scales with capacity; immutable program sharing
-between hosts is still a separate optimization.
+pool ownership. Prepared memory scales with capacity and, for each template,
+`maxActivePerTemplate` times its child VM and particle storage. Preparation
+reserves the complete configured capacity and fails if its generator memory
+budget is insufficient; it does not silently reduce that limit. Immutable
+program sharing between hosts is still a separate optimization.
+
+Core procedural mesh emitters evaluate their owned model before particle
+sampling and publish a read-only surface snapshot. Animated revisions may
+allocate a new surface during simulation. Nested routing also retains existing
+temporary allocations: allocation-free acquire/return is not a promise that
+every hierarchical or animated frame allocates nothing. This support covers
+procedural meshes, not external static/skinned mesh bindings.
+
+## Project callback policies
+
+`CustomNodeDescriptor` ABI-1 is unchanged. Native integrations declare a separate
+`CustomNodePolicy` matched against the complete descriptor, including context,
+function, initialization and cleanup. Only descriptors used by the root, its
+templates or their CPU programs affect eligibility.
+
+```cpp
+auto options = liberafx::SpawnableHostPoolOptions{};
+options.registry = descriptors;
+options.registryCount = descriptorCount;
+// Assert these properties only if the implementation actually guarantees them.
+options.host.customNodePolicies.push_back({descriptors[0], true, false, false});
+```
+
+The three booleans are independent:
+
+- `reusable`: state and external resources tolerate cleanup/reinitialization
+  between leases. Without it, a used project callback cannot enter a pool.
+- `workerSafe`: evaluation and any birth/retirement initialization or cleanup
+  may run on a shared worker. Without it, the host runs on the batch's caller
+  after all worker jobs have joined, in original owner-host submission order.
+- `parallelPreparation`: separate hosts may initialize concurrently, including
+  failure cleanup. Without it, the pool prepares on its creating thread.
+
+Unity's native bridge and Godot use the optional `policies`/`policyCount` fields
+of `host::ProjectNodeRegistry`. Unreal exposes the two-argument
+`FLibraNativeNodes::Register(descriptors, policies)` overload. Rebuild native
+project modules with the matching SDK; callback code and contexts must outlive
+all referencing hosts. Existing declarations default to no permissions.
+The allocation guarantees cover Core-managed storage. A project callback may
+allocate during its own initialization/reset; declaring it reusable does not
+make that implementation allocation-free.
+The additive C ABI `libra_spawnable_host_execution_capabilities` returns flags
+shared batch=1, worker=2, pool reuse=4 and parallel preparation=8. Worker safety
+alone is not the condition for joining a mixed shared batch.
 
 CPU positions, velocities, colours, sizes, age/lifetime, real start time and IDs
 now live in persistent arrays per component. The interpreter and batch executor
@@ -134,6 +183,22 @@ acceptance/rejection, owner/debug/duplicate guards, clock scaling, retirement,
 Stop/Force and cache eviction. The C ABI pool tests additionally exercise shared
 frames with stale handles and invalid reserved flags. The release gate includes
 these fixtures under AddressSanitizer.
+
+Extended preparation tests cover repeated nested ownership/capture/retirement,
+subtree Force, child CPU storage return, static and animated procedural mesh
+emission in canonical and BS2 bases, and fresh versus shared/reused snapshots.
+`liberafx_prepared_execution_tests` also checks callback policy identity,
+independent permissions, mixed owner/worker execution and exact cleanup.
+The allocation counter covers acquire/return with active child CPU systems.
+
+Windows acceptance of the extended paths used Unity 7000.0.0a16 with the
+isolated D3D11 unlit SRP (eight hosts), Godot 4.7.2/OpenGL (16 players), and
+Unreal 5.7's `Libra.Runtime.SharedSimulation` (eight components). Both a
+time-varying procedural mesh emitter and a nested CPU-retention fixture used
+prepared storage and shared frames. Unity/Godot additionally verified visible
+pixels, queued Stop/restart, reuse and framebuffer clearing. Unreal verified
+its task/scene integration with explicit alpha/additive material bindings;
+this is not a cooked-player or framebuffer-equivalence test.
 
 The existing performance tool accepts `--world-workers 1..16` alongside `--bulk`:
 Acceptance and benchmark sources live in the development repository; the source

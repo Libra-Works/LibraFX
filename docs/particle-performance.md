@@ -410,14 +410,17 @@ cleans state immediately but retains pooled storage. Stale/cross-pool leases and
 old debug targets cannot access a recycled playback. Failed resets quarantine
 a slot. A host pointer must not be retained after returning its lease.
 
-Initial eligibility is deliberately bounded: root-only packages using Core
-builtins, including CPU Stage IO and named Game IO/Owner Matrix. Spawnable
-hierarchies, external project-node callbacks and procedural mesh emitters use
-the existing ordinary host API. Renderer/GPU resource preparation is outside
-this Core pool and must follow the engine's own thread and ownership rules.
-At the pool-only revision, engine playback adapters had not been switched to automatic pooling; consumers
-opt in through this Core API or the new C ABI. Pool memory grows with reserved
-instance count; immutable package sharing across hosts remains separate work.
+Prepared pools support Core builtins, including CPU Stage IO, named Game IO,
+Owner Matrix, nested Spawnables and procedural mesh emitters. Used project
+callbacks require an explicit reuse policy; worker execution and parallel
+preparation are separate permissions. Owner-affine callbacks can participate
+in a mixed shared batch after its workers join. Renderer/GPU resource preparation
+remains the engine's responsibility. The engine adapters expose pool and shared
+simulation controls; see [shared simulation](runtime-shared-simulation.md).
+Memory grows with reserved hosts and child capacity per template. Animated
+mesh revisions and nested routing may still allocate during advance; the
+acquire/return allocation guarantee does not extend to those whole frames.
+Immutable package sharing across hosts remains separate work.
 
 The C ABI provides `libra_spawnable_host_pool_create`, `_acquire`, `_stats` and
 `_release`. Acquired handles work with existing `libra_spawnable_host_*` calls;
