@@ -156,6 +156,7 @@ outputs via `game_io_event`. Include `.lfxb` files in the export preset's
 non-resource filter if you ship them with the game.
 
 <a id="prepared-playback"></a>
+
 ## Prepare playback and share simulation work
 
 Updated source integrations can reserve effect instances during loading and
