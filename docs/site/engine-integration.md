@@ -155,6 +155,62 @@ for the first process tick before firing a game input signal. Observe authored
 outputs via `game_io_event`. Include `.lfxb` files in the export preset's
 non-resource filter if you ship them with the game.
 
+<a id="prepared-playback"></a>
+## Prepare playback and share simulation work
+
+Updated source integrations can reserve effect instances during loading and
+reuse them at playback. Independent effects share a bounded executor instead
+of each effect owning its own worker threads. Rendering and engine callbacks
+remain at their engine-thread boundaries.
+
+| Engine | Prepare during loading | Configure before preparation |
+| --- | --- | --- |
+| Unity | Assigned scene effects prepare in `Awake`; call `PrewarmEffect()` for dynamically assigned assets. | `usePreparedHosts`, `preparedHostCapacity`, `preparationWorkers`, `useSharedSimulation` on the Spawnable component. |
+| Unreal | Assigned effects prepare in `BeginPlay`; call **Prewarm Effect** earlier for dynamic packages. | **Use Prepared Hosts**, **Prepared Host Capacity**, **Preparation Workers**, **Use Shared Simulation** under `Libra Runtime\|Performance`. |
+| Godot | Call `prewarm_package(bytes, capacity, workers)` on an in-tree player. | Reserve the needed concurrent playback count before `play_package`. Normal processing shares simulation; explicit `advance(delta)` stays immediate. |
+
+Capacity means simultaneous effect playbacks, not the number of particles.
+For example, reserve eight hosts for eight copies of the same effect. Exhaustion
+reports `InsufficientWork`; it does not silently allocate a ninth host. Return a
+playback before reusing its capacity. Each new lease starts with reset clocks,
+inputs, matrices, particle identities and events, so configure it again.
+
+Nested Spawnables and [procedural mesh emitters](cpu-particles.md) are supported.
+Parent/child Signal and retirement order is kept within each host. Memory also
+scales with each template's configured child capacity. Animated mesh revisions
+and hierarchical routing may allocate during simulation: preparation does not
+make every possible frame allocation-free. Engine meshes, textures and materials
+still require their normal resource setup, including Unreal's CPU Sprite materials.
+
+### Native project callbacks
+
+Custom native nodes can separately declare `reusable`, `workerSafe` and
+`parallelPreparation` in `CustomNodePolicy`. Unity/Godot provide policies through
+`host::ProjectNodeRegistry`; Unreal uses
+`FLibraNativeNodes::Register(descriptors, policies)`. Rebuild project modules with
+the matching SDK. The existing descriptor ABI-1 layout is unchanged.
+
+With no declaration, a used custom callback cannot enter a prepared pool and
+runs on the shared batch's calling thread, after its worker jobs join.
+Declaring reuse alone does not permit worker execution or parallel initialization.
+Only assert these permissions when the callback, its initialization/cleanup and
+any shared external context satisfy the corresponding contract.
+
+### What was checked
+
+Windows tests covered fresh versus reused/shared particle state, child lifetime
+and Signal order, callback state/cleanup and thread affinity, and memory checks.
+Actual engine checks used Unity 7000.0.0a16/D3D11 with an isolated unlit SRP,
+Godot 4.7.2/OpenGL and Unreal 5.7. Procedural mesh and nested CPU effects used
+prepared storage and shared frames. Unity/Godot also verified visible particles,
+Stop clearing and replay; Unreal verified task/scene integration, without a
+cooked-player or framebuffer-equivalence claim for this path.
+
+These are updated-source capabilities. Install matching editor/converter and
+native integration revisions; older Preview binaries do not acquire them when
+the documentation changes. The [upgrade guide](preview-update.md) explains
+how to keep the tools and SDK in sync.
+
 ## Extend an effect
 
 - **C# or GDScript:** On the root graph, use an `action.*` Output Signal. Bind it

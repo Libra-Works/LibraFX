@@ -146,6 +146,41 @@ playback and are never reused when a pool slot is recycled. Exhaustion is an err
 Results are deterministic for the same graph, seed and simulation-step sequence;
 arbitrary frame partitions are not promised to produce identical trajectories.
 
+## Emit from a procedural mesh
+
+CPU particles can start on the surface of a **Procedural Model**. You can build
+the emitter shape entirely inside the tool, without importing an engine mesh.
+
+1. Add **Procedural Model** and **CPU Particle** to the parent graph. Set the
+   model's shape, for example Sphere, in its Inspector or Flow.
+2. Connect the model's output to **CPU Particle → Emitter Mesh**.
+3. Open **CPU Particle → Spawn**. Connect **Mesh Surface Position → Position**
+   to **Set Particle Position → Position**.
+4. Connect **CPU Stage Event** to **Set Particle Position** so the setter runs
+   for each new particle. Chain other initial setters after it.
+5. To launch particles away from the surface, multiply **Mesh Surface Normal**
+   by a speed and feed it to **Set Particle Velocity** in that Signal chain.
+6. Set an initial burst or emission rate, choose the Sprite Draw appearance,
+   and play the effect in the target engine. New particles should appear on
+   the shape and move outward along its normals.
+
+The `CpuMeshSurface` sample demonstrates the position and normal connections.
+**Mesh Surface UV** and **Mesh Surface Color** read the same sampled surface
+point. Color reads the mesh's vertex color; it does not automatically sample
+an image texture. Use **Emitter Matrix** on CPU Particle to place the emitter.
+
+A time-varying procedural mesh is evaluated before sampling. Newly born
+particles use its current surface; existing particles keep their simulated
+state rather than attaching to the mesh. This path is for **CPU particles and
+procedural meshes**. External engine Static Mesh, Skinned/Skeletal Mesh and
+GPU mesh emission are not provided by this implementation.
+
+Updated native integrations also support this emitter in prepared host pools
+and shared simulation, including inside nested Spawnables. See
+[prepared playback and shared simulation](engine-integration.md#prepared-playback).
+Use matching updated sources/native libraries: updating this page does not
+change an older downloaded Preview archive.
+
 ## Ordinary Property and Signal boundaries
 
 Inside either stage, add named Particle Input/Output Float, Vector3 or Vector4

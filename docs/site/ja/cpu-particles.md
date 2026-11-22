@@ -139,6 +139,39 @@ ID は再生中に単調増加する非ゼロ UInt32 で、スロット再利用
 枯渇はエラーです。同じグラフ・Seed・ステップ列での決定性であり、
 任意のフレーム分割が同じ軌跡になる保証ではありません。
 
+## プロシージャルメッシュの表面から放出する
+
+**Procedural Model** の表面を、CPU パーティクルの発生位置にできます。
+エンジンからメッシュを読み込まず、ツール内だけで放出形状を作れます。
+
+1. 親グラフに **Procedural Model** と **CPU Particle** を追加します。
+   モデルの Inspector または Flow で、Sphere などの形状を選びます。
+2. モデルの出力を **CPU Particle → Emitter Mesh** へ接続します。
+3. **CPU Particle → Spawn** を開き、**Mesh Surface Position → Position** を
+   **Set Particle Position → Position** へ接続します。
+4. **CPU Stage Event** から **Set Particle Position** へ Signal を接続します。
+   ほかの初期値設定も、その後ろへ順番につなぎます。
+5. 表面から外向きに飛ばすには、**Mesh Surface Normal** に速度を掛け、
+   同じ Signal の列にある **Set Particle Velocity** へ渡します。
+6. 初期放出数または放出レート、Sprite Draw の見た目を設定し、対象エンジンで再生します。
+   形状の表面に粒子が生まれ、法線の方向へ広がれば成功です。
+
+`CpuMeshSurface` サンプルで、位置と法線の接続を確認できます。
+**Mesh Surface UV** と **Mesh Surface Color** も同じ表面上の点を参照します。
+Color はメッシュの頂点色で、画像テクスチャーの色を自動取得する機能ではありません。
+エミッターの配置には CPU Particle の **Emitter Matrix** を使います。
+
+時間で変形するプロシージャルメッシュも、放出前に更新します。
+新しい粒子はその時点の表面から生まれ、既存の粒子はメッシュに貼り付かず、
+それぞれのシミュレーションを続けます。対象は **CPU パーティクルとプロシージャルメッシュ**です。
+外部エンジンの Static Mesh・Skinned／Skeletal Mesh、および GPU のメッシュ放出は未対応です。
+
+更新済みのネイティブ連携では、このエミッターを Spawnable の内部でも、
+事前確保・再利用・共有実行と組み合わせて使えます。
+[事前確保と共有実行](engine-integration.md#prepared-playback)も参照してください。
+対応するソース・ネイティブライブラリーへ揃えて更新してください。
+このページの更新だけで、以前ダウンロードした Preview の機能は変わりません。
+
 ## 通常の Property・Signal のやり取り
 
 Spawn・Update に名前付きの粒子 Float・Vector3・Vector4 入出力を追加すると、
