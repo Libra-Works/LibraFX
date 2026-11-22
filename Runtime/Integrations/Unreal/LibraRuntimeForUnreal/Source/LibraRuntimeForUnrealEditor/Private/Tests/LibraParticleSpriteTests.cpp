@@ -61,6 +61,8 @@ bool FLibraCpuParticleSpriteTest::RunTest(const FString &parameters)
     {
         auto value = NewObject<T>(material);
         material->GetExpressionCollection().AddExpression(value);
+        value->Material = material;
+        value->UpdateMaterialExpressionGuid(true, false);
         return value;
     };
     auto uv = expression.operator()<UMaterialExpressionTextureCoordinate>();
@@ -89,10 +91,12 @@ bool FLibraCpuParticleSpriteTest::RunTest(const FString &parameters)
     texture->ParameterName = TEXT("Texture");
     texture->Texture = LoadObject<UTexture2D>(nullptr,
         TEXT("/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture"));
+    texture->AutoSetSampleType();
     texture->Coordinates.Connect(0, shifted);
     material->GetEditorOnlyData()->EmissiveColor.Connect(0, texture);
     material->GetEditorOnlyData()->Opacity.Connect(4, texture);
     auto recompile = false;
+    material->UpdateCachedExpressionData();
     material->SetMaterialUsage(recompile, MATUSAGE_InstancedStaticMeshes);
     material->PostEditChange();
     for (const auto layered : {false, true})
