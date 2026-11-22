@@ -1,6 +1,8 @@
 LIBRA RUNTIME FOR UNREAL - SOURCE INTEGRATION
 
 Prepared/shared simulation
+  Prepared Host Capacity defaults to 256 per package/options pool, with 4
+  preparation workers. Explicit saved capacity overrides remain in effect.
   Spawnable components expose Use Prepared Hosts, Prepared Host Capacity,
   Preparation Workers, Use Shared Simulation and Prewarm Effect under Performance.
   BeginPlay prepares assigned packages before automatic playback. The game-world

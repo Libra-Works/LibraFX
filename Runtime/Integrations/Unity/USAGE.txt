@@ -7,6 +7,8 @@ assets. Configure Prepared Host Capacity before preparation; exhaustion is an
 explicit error. A shared late-frame manager joins bounded simulation workers
 before publishing rendering. Manual preview/debug paths stay immediate.
 See source SDK docs/runtime-shared-simulation.md for eligibility and lifetimes.
+Prepared Host Capacity defaults to 256 per package/options pool; preparation
+workers remain 4. Existing serialized capacities keep their saved values.
 Nested Spawnables and Core procedural mesh emitters support prepared/shared
 playback. Project native nodes declare independent reusable, workerSafe and
 parallelPreparation flags through ProjectNodeRegistry policies. Undeclared

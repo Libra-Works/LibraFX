@@ -171,6 +171,9 @@ remain at their engine-thread boundaries.
 | Godot | Call `prewarm_package(bytes, capacity, workers)` on an in-tree player. | Reserve the needed concurrent playback count before `play_package`. Normal processing shares simulation; explicit `advance(delta)` stays immediate. |
 
 Capacity means simultaneous effect playbacks, not the number of particles.
+The default reservation is **256 playbacks per package/options pool** with four
+preparation workers. Existing saved component values and explicit arguments
+keep their configured capacities; adjust those separately when needed.
 For example, reserve eight hosts for eight copies of the same effect. Exhaustion
 reports `InsufficientWork`; it does not silently allocate a ninth host. Return a
 playback before reusing its capacity. Each new lease starts with reset clocks,

@@ -44,7 +44,12 @@ simulation for those components, rather than treating them as independent jobs.
 
 ## Loading and memory
 
-Prepare capacity during level/resource loading. Acquiring a prepared host does
+Prepare capacity during level/resource loading.
+The default reservation is **256 simultaneous playbacks per package/options
+pool**, with four preparation workers. Explicit capacities and saved component
+settings are preserved; change existing saved values when increasing them.
+
+Acquiring a prepared host does
 not grow its pool; exhaustion returns `InsufficientWork`. Returning a playback
 resets clocks, inputs, matrices/basis, quality, IDs, emission and events while
 retaining simulation storage. Configure each new lease before advancing it.

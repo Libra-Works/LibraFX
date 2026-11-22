@@ -6,6 +6,8 @@ from an in-tree player during loading. Normal play_package reuses the matching
 prepared pool. Normal _process gathers independent players into a shared bounded
 executor; explicit advance(delta) stays immediate. Exhaustion does not allocate
 another host. See source SDK docs/runtime-shared-simulation.md for limits.
+prewarm_package(bytes) defaults to 256 hosts and 4 preparation workers;
+explicit capacity/worker arguments retain their requested values.
 Nested Spawnables and Core procedural mesh emitters support prepared/shared
 playback. Native projectNodes() may return policies/policyCount separately from
 descriptors. reusable, workerSafe and parallelPreparation are independent;
