@@ -25,7 +25,7 @@ namespace LiberaFx.Unity
         [SerializeField, Min(1)] private int eventCapacity = 128;
         [SerializeField] private uint instructionBudget = 10000;
         [SerializeField] private bool usePreparedHosts = true;
-        [SerializeField, Min(1)] private int preparedHostCapacity = 8;
+        [SerializeField, Min(1)] private int preparedHostCapacity = 256;
         [SerializeField, Range(1, 16)] private int preparationWorkers = 4;
         [SerializeField] private bool useSharedSimulation = true;
         [SerializeField, Tooltip("Explicit mapping from this project's Unity quality indices to LIBERA FX tiers. Unmapped levels remain Unknown.")]

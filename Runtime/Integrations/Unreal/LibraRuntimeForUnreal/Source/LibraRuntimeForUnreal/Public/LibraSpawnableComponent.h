@@ -137,7 +137,7 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime|Performance")
     bool bUsePreparedHosts = true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime|Performance", meta = (ClampMin = "1", ClampMax = "1024"))
-    int32 PreparedHostCapacity = 8;
+    int32 PreparedHostCapacity = 256;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime|Performance", meta = (ClampMin = "1", ClampMax = "16"))
     int32 PreparationWorkers = 4;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime|Performance")

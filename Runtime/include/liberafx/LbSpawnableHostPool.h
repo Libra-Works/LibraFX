@@ -7,7 +7,7 @@ struct SpawnableHostLease final {
     std::uint64_t generation = 0;
 };
 struct SpawnableHostPoolOptions final {
-    std::size_t capacity = 8;
+    std::size_t capacity = 256;
     // Bounded workers used only during preparation, including the caller.
     std::size_t preparationWorkers = 4;
     SpawnableHostOptions host;

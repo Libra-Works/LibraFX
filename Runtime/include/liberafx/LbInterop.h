@@ -39,8 +39,9 @@ typedef struct LIBRA_INTEROP_ALIGN(4) LibraSpawnableHostPoolStats {
     uint32_t capacity, active, available, preparationWorkers;
 } LibraSpawnableHostPoolStats;
 /* Preparation only: bounded workers initialize independent Core instances.
-   Root-only, Core-builtins-only; templates/procedural mesh emitters are unsupported.
-   NULL options use 8 instances, 4 preparation workers, 128 events, budget 10000.
+   Hierarchies and Core procedural mesh emitters are supported; project callbacks
+   require explicit reuse policies. Worker/preparation permissions are separate.
+   NULL options use 256 instances, 4 preparation workers, 128 events, budget 10000.
    Acquire never grows the pool. Return hosts with libra_spawnable_host_release.
    All pool/host calls after preparation belong to the creating owner thread. */
 LIBRA_INTEROP_API int32_t LIBRA_INTEROP_CALL libra_spawnable_host_pool_create(

@@ -437,7 +437,7 @@ public:
         }
         return found;
     }
-    int prewarm_package(const PackedByteArray& bytes, int capacity = 8, int workers = 4)
+    int prewarm_package(const PackedByteArray& bytes, int capacity = 256, int workers = 4)
     {
         if (!Thread::is_main_thread() || !is_inside_tree()) { return code(Result::InvalidArgument); }
         if (capacity < 1 || capacity > 1024 || workers < 1 || workers > 16) { return code(Result::InvalidArgument); }
@@ -962,7 +962,7 @@ protected:
         godot::ClassDB::bind_method(godot::D_METHOD("play", "bytecode", "duration"), &LibraEffectPlayer::play, -1.0);
         godot::ClassDB::bind_method(godot::D_METHOD("play_package", "package_bytes", "duration"), &LibraEffectPlayer::play_package, -1.0);
         godot::ClassDB::bind_method(godot::D_METHOD("advance", "delta"), &LibraEffectPlayer::advance);
-        godot::ClassDB::bind_method(godot::D_METHOD("prewarm_package", "package_bytes", "capacity", "workers"), &LibraEffectPlayer::prewarm_package, 8, 4);
+        godot::ClassDB::bind_method(godot::D_METHOD("prewarm_package", "package_bytes", "capacity", "workers"), &LibraEffectPlayer::prewarm_package, 256, 4);
         godot::ClassDB::bind_method(godot::D_METHOD("stop"), &LibraEffectPlayer::stop);
         godot::ClassDB::bind_method(godot::D_METHOD("is_playing"), &LibraEffectPlayer::is_playing);
         godot::ClassDB::bind_method(godot::D_METHOD("pop_cpu_particle_event"), &LibraEffectPlayer::pop_cpu_particle_event);
