@@ -7,6 +7,11 @@ assets. Configure Prepared Host Capacity before preparation; exhaustion is an
 explicit error. A shared late-frame manager joins bounded simulation workers
 before publishing rendering. Manual preview/debug paths stay immediate.
 See source SDK docs/runtime-shared-simulation.md for eligibility and lifetimes.
+Nested Spawnables and Core procedural mesh emitters support prepared/shared
+playback. Project native nodes declare independent reusable, workerSafe and
+parallelPreparation flags through ProjectNodeRegistry policies. Undeclared
+callbacks stay on the caller thread and cannot be pooled. Their owner phase
+runs after worker jobs join. Rebuild project modules with the matching SDK.
 
 Separation (no Unity APIs in the C++ Core):
   canonical .lfxb (LFXP) -> owned native SpawnableHost -> package component

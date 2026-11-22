@@ -444,6 +444,13 @@ Live editor connection
   Do not put credentials in config files, source, logs, URLs, or cooked content.
 
 Project-native nodes
+  Register(descriptors, policies) optionally declares CustomNodePolicy entries.
+  reusable, workerSafe and parallelPreparation are independent permissions.
+  Undeclared callbacks cannot be pooled; mixed shared batches execute their
+  hosts on the game thread after joining worker jobs. Registration without
+  policies preserves those defaults. Nested Spawnables and Core procedural
+  mesh emitters support prepared/shared playback. Rebuild native modules with
+  the matching SDK; descriptor ABI-1 itself is unchanged.
   Add LibraRuntimeForUnreal to your module's Build.cs dependencies.
   Register descriptors with FLibraNativeNodes::Register in your module startup.
   The same registry is used by raw programs (.lfxb) and by both the root and

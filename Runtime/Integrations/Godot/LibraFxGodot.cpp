@@ -349,12 +349,21 @@ public:
         }
         auto options = SpawnableHostOptions{};
         const auto projectNodes = liberafx::host::projectNodes();
+        if (projectNodes.policyCount && !projectNodes.policies)
+        {
+            return code(Result::InvalidArgument);
+        }
+        if (projectNodes.policyCount)
+        {
+            options.customNodePolicies.assign(projectNodes.policies, projectNodes.policies + projectNodes.policyCount);
+        }
         // Starting another valid package discards the previous terminal queue.
         // Return its lease before acquiring, including when every pool slot was
         // retained by completed event-producing playbacks.
         completedCpuEventHost_.reset();
-        result = projectNodes.count ? Result::NotReady : shared_world()->prepared.acquireCompatible(packageBytes.ptr(),
-            static_cast<std::size_t>(packageBytes.size()), options, candidate->packageHost);
+        result = shared_world()->prepared.acquireCompatible(
+            packageBytes.ptr(), static_cast<std::size_t>(packageBytes.size()), options, candidate->packageHost,
+            projectNodes.descriptors, projectNodes.count);
         if (result == Result::NotReady) {
             auto ordinary = std::unique_ptr<SpawnableHost>{};
             result = SpawnableHost::create(std::move(package), options, projectNodes.descriptors, projectNodes.count, ordinary);
@@ -432,16 +441,29 @@ public:
     {
         if (!Thread::is_main_thread() || !is_inside_tree()) { return code(Result::InvalidArgument); }
         if (capacity < 1 || capacity > 1024 || workers < 1 || workers > 16) { return code(Result::InvalidArgument); }
-        if (host::projectNodes().count) { return code(Result::UnsupportedBinary); }
         auto options = SpawnableHostPoolOptions{};
+        const auto registry = host::projectNodes();
+        if (registry.policyCount && !registry.policies)
+        {
+            return code(Result::InvalidArgument);
+        }
+        options.registry = registry.descriptors;
+        options.registryCount = registry.count;
+        if (registry.policyCount)
+        {
+            options.host.customNodePolicies.assign(registry.policies, registry.policies + registry.policyCount);
+        }
         options.capacity = static_cast<std::size_t>(capacity); options.preparationWorkers = static_cast<std::size_t>(workers);
         const auto result = shared_world()->prepared.prepare(bytes.ptr(), static_cast<std::size_t>(bytes.size()), options);
         return code(result);
     }
     SpawnableHost* shared_host(uint64_t generation, uint64_t revision)
     {
-        return playback_ && generation == playbackGeneration_ && revision == sharedRevision_ && playback_->packageHost &&
-            !dispatchingScriptAction_ && playback_->packageHost->supportsWorkerExecution() ? playback_->packageHost.get() : nullptr;
+        return playback_ && generation == playbackGeneration_ && revision == sharedRevision_ &&
+                       playback_->packageHost && !dispatchingScriptAction_ &&
+                       playback_->packageHost->supportsSharedExecution()
+                   ? playback_->packageHost.get()
+                   : nullptr;
     }
     int complete_shared(uint64_t generation, double elapsed, Result result)
     {
@@ -914,7 +936,8 @@ public:
     {
         const auto cpuPlayback = playback_ && playback_->packageHost &&
             hasCpuPrograms(playback_->packageHost->package());
-        if (playback_ && playback_->packageHost && playback_->packageHost->supportsWorkerExecution()) {
+        if (playback_ && playback_->packageHost && playback_->packageHost->supportsSharedExecution())
+        {
             const auto time = playback_->elapsed + delta;
             const auto input = updateCurrentCamera(*playback_->packageHost);
             if (input == Result::Ok && std::isfinite(time) && delta >= 0 &&

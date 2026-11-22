@@ -138,7 +138,7 @@ bool Queue(ULibraSpawnableComponent &component, liberafx::SpawnableHost &host, u
            double delta)
 {
     auto *world = component.GetWorld();
-    if (!world || !world->IsGameWorld() || !host.supportsWorkerExecution())
+    if (!world || !world->IsGameWorld() || !host.supportsSharedExecution())
     {
         return false;
     }

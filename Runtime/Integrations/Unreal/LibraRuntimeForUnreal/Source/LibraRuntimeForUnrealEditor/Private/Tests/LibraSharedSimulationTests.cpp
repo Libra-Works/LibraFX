@@ -68,6 +68,9 @@ bool FLibraSharedSimulationTest::RunTest(const FString &)
     auto needsRecompile = false;
     material->SetMaterialUsage(needsRecompile, MATUSAGE_InstancedStaticMeshes);
     material->PostEditChange();
+    auto *alphaMaterial = DuplicateObject<UMaterial>(material, GetTransientPackage());
+    alphaMaterial->BlendMode = BLEND_Translucent;
+    alphaMaterial->PostEditChange();
     TArray<ULibraSpawnableComponent *> effects;
     for (auto i = 0; i < 8; ++i)
     {
@@ -82,6 +85,7 @@ bool FLibraSharedSimulationTest::RunTest(const FString &)
         camera->RegisterComponent();
         effect->EffectCameraOverride = camera;
         effect->AssetBindings.Add({TEXT("builtin:cpu-particle-additive"), material});
+        effect->AssetBindings.Add({TEXT("builtin:cpu-particle-alpha"), alphaMaterial});
         actor->AddInstanceComponent(effect);
         effect->RegisterComponent();
         const auto prepared = effect->PrewarmEffect();

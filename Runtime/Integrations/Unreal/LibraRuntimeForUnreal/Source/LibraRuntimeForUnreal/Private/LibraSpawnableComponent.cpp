@@ -336,13 +336,20 @@ auto ULibraSpawnableComponent::Play(bool bRestart) -> ELibraRuntimeResult
     auto host = liberafx::host::PlaybackHost{};
     const auto registry = LibraNativeNodeSnapshot();
     const auto projectNodes = registry->ProjectDescriptors();
+    if (!registry->policies.IsEmpty())
+    {
+        options.customNodePolicies.assign(registry->policies.GetData(),
+                                          registry->policies.GetData() + registry->policies.Num());
+    }
     auto preparedOptions = liberafx::SpawnableHostPoolOptions{};
     preparedOptions.capacity=static_cast<std::size_t>(FMath::Clamp(PreparedHostCapacity,1,1024));
     preparedOptions.preparationWorkers=static_cast<std::size_t>(FMath::Clamp(PreparationWorkers,1,16));
     preparedOptions.host=options;
-    result = bUsePreparedHosts && projectNodes.IsEmpty()
-        ? LibraSharedEffects::Acquire(GetWorld(),packageBytes.GetData(),packageBytes.Num(),preparedOptions,host)
-        : liberafx::Result::NotReady;
+    preparedOptions.registry = projectNodes.GetData();
+    preparedOptions.registryCount = projectNodes.Num();
+    result = bUsePreparedHosts ? LibraSharedEffects::Acquire(GetWorld(), packageBytes.GetData(), packageBytes.Num(),
+                                                             preparedOptions, host)
+                               : liberafx::Result::NotReady;
     if (result==liberafx::Result::NotReady) {
         auto ordinary=std::unique_ptr<liberafx::SpawnableHost>{};
         result=liberafx::SpawnableHost::create(MoveTemp(package),options,projectNodes.GetData(),projectNodes.Num(),ordinary);
@@ -1210,12 +1217,22 @@ ELibraRuntimeResult ULibraSpawnableComponent::PrewarmEffect()
 {
     if (!IsInGameThread() || !Package) { return ELibraRuntimeResult::NotReady; }
     const auto registry=LibraNativeNodeSnapshot();
-    if (!registry->ProjectDescriptors().IsEmpty()) { return ELibraRuntimeResult::UnsupportedBinary; }
+    const auto projectNodes = registry->ProjectDescriptors();
     auto options=liberafx::SpawnableHostPoolOptions{};
     options.capacity=static_cast<std::size_t>(FMath::Clamp(PreparedHostCapacity,1,1024));
     options.preparationWorkers=static_cast<std::size_t>(FMath::Clamp(PreparationWorkers,1,16));
     options.host.eventCapacity=static_cast<std::size_t>(FMath::Max(1,EventCapacity));
     options.host.instructionBudget=static_cast<std::size_t>(FMath::Max(1,InstructionBudget));
+    options.host.maxActivePerTemplate = static_cast<std::size_t>(FMath::Max(1, MaxActivePerTemplate));
+    options.host.memoryBudgetBytesPerTemplate =
+        static_cast<std::size_t>(FMath::Max<int64>(1024, MemoryBudgetBytesPerTemplate));
+    if (!registry->policies.IsEmpty())
+    {
+        options.host.customNodePolicies.assign(registry->policies.GetData(),
+                                               registry->policies.GetData() + registry->policies.Num());
+    }
+    options.registry = projectNodes.GetData();
+    options.registryCount = projectNodes.Num();
     const auto bytes=Package->GetPackageBytes();
     return ToLibraResult(LibraSharedEffects::Prepare(GetWorld(),bytes.GetData(),bytes.Num(),options));
 }

@@ -6,6 +6,11 @@ from an in-tree player during loading. Normal play_package reuses the matching
 prepared pool. Normal _process gathers independent players into a shared bounded
 executor; explicit advance(delta) stays immediate. Exhaustion does not allocate
 another host. See source SDK docs/runtime-shared-simulation.md for limits.
+Nested Spawnables and Core procedural mesh emitters support prepared/shared
+playback. Native projectNodes() may return policies/policyCount separately from
+descriptors. reusable, workerSafe and parallelPreparation are independent;
+undeclared callbacks stay on the caller thread after workers join and cannot
+be pooled. Rebuild project modules with the matching SDK.
 
 This Windows x86-64 GDExtension embeds the same portable C++ Core Runtime
 used by the other integrations. New .lfxb exports contain the existing LFXP

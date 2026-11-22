@@ -321,7 +321,7 @@ namespace LiberaFx.Unity
             var scaleResult = current.SetTimeScale(rate);
             if (scaleResult != NativeResult.Ok) { FailPlayback(scaleResult, "Updating Time Scale failed.", current); return; }
             if (useSharedSimulation && Application.isPlaying &&
-                PreparedNative.libra_spawnable_host_worker_safe(current.RuntimeHandle, out var safe) == NativeResult.Ok && safe != 0)
+                PreparedNative.libra_spawnable_host_execution_capabilities(current.RuntimeHandle, out var capabilities) == NativeResult.Ok && (capabilities & 1) != 0)
             {
                 if (!PublishFrameInputs(current)) return;
                 var quality = current.SetHostQuality(UnityHostQuality.Read(qualityTierMapping, (ulong)Time.frameCount));

@@ -53,10 +53,17 @@ auto LibraNativeNodeSnapshot() -> TSharedRef<const FLibraNodeRegistrySnapshot, E
 
 auto FLibraNativeNodes::Register(TConstArrayView<liberafx::CustomNodeDescriptor> descriptors) -> ELibraRuntimeResult
 {
+    return Register(descriptors, {});
+}
+auto FLibraNativeNodes::Register(TConstArrayView<liberafx::CustomNodeDescriptor> descriptors,
+                                 TConstArrayView<liberafx::CustomNodePolicy> policies) -> ELibraRuntimeResult
+{
     check(IsInGameThread());
-    if (descriptors.IsEmpty()) return ELibraRuntimeResult::InvalidArgument;
+    if (descriptors.IsEmpty() && policies.IsEmpty())
+        return ELibraRuntimeResult::InvalidArgument;
     auto candidate = MakeShared<FLibraNodeRegistrySnapshot, ESPMode::ThreadSafe>();
     candidate->descriptors = CurrentRegistry()->descriptors;
+    candidate->policies = CurrentRegistry()->policies;
     for (const auto& descriptor : descriptors)
     {
         if (!IsValidDescriptor(descriptor)) return ELibraRuntimeResult::InvalidArgument;
@@ -65,6 +72,17 @@ auto FLibraNativeNodes::Register(TConstArrayView<liberafx::CustomNodeDescriptor>
                 FMemory::Memcmp(previous.typeId, descriptor.typeId, sizeof(descriptor.typeId)) == 0)
                 return ELibraRuntimeResult::InvalidArgument;
         candidate->descriptors.Add(descriptor);
+    }
+    for (const auto &policy : policies)
+    {
+        const auto found = candidate->descriptors.ContainsByPredicate(
+            [&](const auto &descriptor) { return liberafx::sameCustomNodeDescriptor(descriptor, policy.descriptor); });
+        const auto duplicate = candidate->policies.ContainsByPredicate(
+            [&](const auto &existing)
+            { return liberafx::sameCustomNodeDescriptor(existing.descriptor, policy.descriptor); });
+        if (!found || duplicate)
+            return ELibraRuntimeResult::InvalidArgument;
+        candidate->policies.Add(policy);
     }
     CurrentRegistry() = candidate;
     return ELibraRuntimeResult::Ok;

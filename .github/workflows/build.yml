@@ -61,13 +61,17 @@ jobs:
           $env:LIBERAFX_DATA_ROOT = Join-Path $env:RUNNER_TEMP 'cpu-batch-data'
           $fixtures = Join-Path $env:RUNNER_TEMP 'cpu-batch-fixtures'
           $fallback = Join-Path $env:RUNNER_TEMP 'cpu-batch-fallback'
+          $nested = Join-Path $env:RUNNER_TEMP 'prepared-nested-fixtures'
+          $nestedExtra = Join-Path $env:RUNNER_TEMP 'prepared-nested-extra-fixtures'
           $build = Join-Path $env:RUNNER_TEMP 'cpu-batch-build'
           dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --cpu-particles
           dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --particle-benchmark-fixtures $fixtures
           dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --cpu-particle-fixture $fallback
+          dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --spawnable-hierarchy-fixtures $nested
+          dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --spawnable-hierarchy-extra-fixtures $nestedExtra
           # Instrument only this disposable test build; exported SDKs remain normal Release builds.
           cmake -S Runtime -B $build -DLIBERAFX_BUILD_TESTS=ON -DLIBERAFX_BUILD_INTEROP=ON '-DCMAKE_CXX_FLAGS=/fsanitize=address /Zi /EHsc' '-DCMAKE_EXE_LINKER_FLAGS=/DEBUG /INCREMENTAL:NO'
-          cmake --build $build --config Release --target liberafx_cpu_particle_batch_tests liberafx_interop_tests liberafx_spawnable_host_pool_tests liberafx_interop_host_pool_tests liberafx_effect_world_tests --parallel 2
+          cmake --build $build --config Release --target liberafx_cpu_particle_batch_tests liberafx_interop_tests liberafx_spawnable_host_pool_tests liberafx_interop_host_pool_tests liberafx_effect_world_tests liberafx_prepared_execution_tests liberafx_nested_spawnable_tests --parallel 2
           $compilerInfo = Get-ChildItem (Join-Path $build 'CMakeFiles') -Filter CMakeCXXCompiler.cmake -Recurse | Select-Object -First 1
           $compilerPath = [regex]::Match((Get-Content $compilerInfo.FullName -Raw), 'set\(CMAKE_CXX_COMPILER "([^"]+)"\)').Groups[1].Value
           $asanRuntime = Join-Path (Split-Path $compilerPath) 'clang_rt.asan_dynamic-x86_64.dll'
@@ -92,6 +96,8 @@ jobs:
           $env:LIBERAFX_CPU_READ_FIXTURE_DIR = $fixtures
           & (Join-Path $build 'Release/liberafx_interop_tests.exe')
           & (Join-Path $build 'Release/liberafx_spawnable_host_pool_tests.exe') `
+            --hierarchy (Join-Path $nested 'nested-cpu-retention.lfxp') `
+            --hierarchy (Join-Path $nestedExtra 'nested-cpu-only-retention.lfxp') `
             (Join-Path $fixtures 'CpuFountain-binary-100.lfxb') `
             (Join-Path $fixtures 'CpuFountain-binary-retirement.lfxb') `
             (Join-Path $fixtures 'CpuPool-gameio.lfxb') `
@@ -102,6 +108,18 @@ jobs:
           & (Join-Path $build 'Release/liberafx_effect_world_tests.exe') `
             (Join-Path $fixtures 'CpuFountain-binary-100.lfxb') `
             (Join-Path $fixtures 'CpuFountain-binary-retirement.lfxb')
+          & (Join-Path $build 'Release/liberafx_prepared_execution_tests.exe') `
+            (Join-Path $nested 'nested-cpu-retention.lfxp') `
+            (Join-Path $nested 'nested-capture-isolation.lfxp') `
+            (Join-Path $nestedExtra 'same-parent-template-capture.lfxp') `
+            (Join-Path $nestedExtra 'nested-cpu-only-retention.lfxp') `
+            (Join-Path $fixtures 'CpuMesh-static.lfxb') `
+            (Join-Path $fixtures 'CpuMesh-animated.lfxb')
+          & (Join-Path $build 'Release/liberafx_nested_spawnable_tests.exe') `
+            (Join-Path $nested 'nested-cpu-retention.lfxp') `
+            (Join-Path $nested 'nested-capture-isolation.lfxp') `
+            (Join-Path $nestedExtra 'same-parent-template-capture.lfxp') `
+            (Join-Path $nestedExtra 'nested-cpu-only-retention.lfxp')
 
   editor:
     name: ${{ matrix.name }}

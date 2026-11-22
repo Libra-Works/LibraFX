@@ -28,6 +28,8 @@ namespace LiberaFx.Unity
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_worker_safe(ulong host, out uint safe);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_execution_capabilities(ulong host, out uint flags);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_effect_world_create(uint maximumEffects, uint workers, out ulong world);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_effect_world_advance(ulong world, SharedEffectFrame* frames, uint count);
