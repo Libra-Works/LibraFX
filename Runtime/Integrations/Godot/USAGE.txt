@@ -8,6 +8,14 @@ executor; explicit advance(delta) stays immediate. Exhaustion does not allocate
 another host. See source SDK docs/runtime-shared-simulation.md for limits.
 prewarm_package(bytes) defaults to 256 hosts and 4 preparation workers;
 explicit capacity/worker arguments retain their requested values.
+
+Sprite editor sequences/compositions support CPU and GPU particles in updated
+sources. Apply to selected node retains arbitrary cells, durations, range/loop
+and visible part transforms. Bind the source Texture with matching dimensions.
+CPU rendering uses per-particle age; GPU billboards sample an immutable timeline
+texture in the vertex shader without particle readback. Extra parts add vertices
+and overdraw, not simulated particles. CPU metadata 4 / GPU executable payload 4
+and renderer bindings 2 require the matching updated GDExtension/shaders.
 Nested Spawnables and Core procedural mesh emitters support prepared/shared
 playback. Native projectNodes() may return policies/policyCount separately from
 descriptors. reusable, workerSafe and parallelPreparation are independent;

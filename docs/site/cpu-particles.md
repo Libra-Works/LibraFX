@@ -231,6 +231,43 @@ Stop/restart discards them.
 
 ## Animate a texture sheet (Flipbook)
 
+### Use an animation made in the Sprite editor
+
+In updated source integrations, CPU particles can use the Sprite editor's
+arbitrary cells, frame order, individual frame durations, playback range and
+loop settings. Layered compositions also retain visible-part order and each
+part's position, rotation and scale keys.
+
+1. Open **Window → Sprite Animation**, select the source texture, and edit its
+   cells and timeline. Add parts when building a composition.
+2. Select the destination **CPU Particle** in the same graph, or select its
+   **Draw** node in Flow, then click **Apply to selected node** in the Sprite editor.
+   You do not need to create a separate Sprite Draw node or write JSON.
+3. Play the effect. Each newborn particle starts its own animation clock; an
+   effect's pause/slow motion also pauses/slows that clock. Non-looping clips
+   hold their last frame while the particle remains alive.
+4. Select that particle and use **Load selected node settings** to edit it again.
+   The source data survives save/reload and undo/redo.
+
+CPU Draw's **Use Sprite editor animation** checkbox temporarily disables the
+animation without deleting it. While enabled and populated, Sprite editor data
+takes precedence over the regular-grid Flipbook settings below. Its FPS/range/
+loop settings come from the Sprite editor; Flipbook's lifetime-fit option does
+not retime an authored Sprite editor sequence.
+
+Part offsets use the source image dimensions as the particle's canvas; part
+size and transform keys are applied to each particle's XY size. Hidden parts
+do not draw. This adds geometry for the visible parts, not extra particles or
+one scene object per particle. It does not add sorting between separate
+transparent particles.
+
+Bind the same-sized source texture in each engine. Unreal's CPU material also
+needs the existing **Texture** and **AtlasRect** contract. This feature uses
+CPU render metadata version **4** and needs matching updated integrations;
+older downloaded binaries are unchanged.
+
+### Use a regular grid directly
+
 Open **CPU Particle → Sprite Draw**, choose your texture, and enable **Flipbook**.
 Set **Columns** and **Rows** to the sheet layout. For a 4×4 sheet at 12 frames
 per second, enter 4, 4 and 12. Frames run left to right from the top row; the

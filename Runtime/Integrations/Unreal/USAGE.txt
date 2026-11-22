@@ -1,6 +1,13 @@
 LIBRA RUNTIME FOR UNREAL - SOURCE INTEGRATION
 
 Prepared/shared simulation
+  Sprite editor sequences/compositions can be applied to CPU/GPU Particle.
+  Source texture dimensions must match the authored cells. CPU Sprite materials
+  still expose Texture and AtlasRect; updated GPU billboards read their prepared
+  timeline buffer on the GPU. Visible parts add geometry, not simulation
+  instances. Particle age includes effect time scale. CPU render metadata 4,
+  GPU executable payload 4 / renderer bindings 2 require matching new sources.
+  The GPU asset serializes and validates its timeline for standalone playback.
   Prepared Host Capacity defaults to 256 per package/options pool, with 4
   preparation workers. Explicit saved capacity overrides remain in effect.
   Spawnable components expose Use Prepared Hosts, Prepared Host Capacity,

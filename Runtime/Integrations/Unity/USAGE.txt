@@ -9,6 +9,24 @@ before publishing rendering. Manual preview/debug paths stay immediate.
 See source SDK docs/runtime-shared-simulation.md for eligibility and lifetimes.
 Prepared Host Capacity defaults to 256 per package/options pool; preparation
 workers remain 4. Existing serialized capacities keep their saved values.
+
+Sprite editor animations (updated sources)
+  Select CPU Particle/its Draw or GPU Particle, then use Sprite Animation's
+  Apply to selected node. Sequences retain arbitrary cells, per-frame durations,
+  range and loop. Compositions retain visible part order and 2D transform keys.
+  Each particle starts at age zero and follows the effect's time scale.
+  CPU Draw and GPU renderer settings can disable the authored animation without
+  deleting it. CPU metadata version 4 / GPU executable payload 4, renderer
+  bindings 2, require matching updated adapters and billboard shaders.
+  Source Texture dimensions must match the authored sheet. GPU samples the
+  timeline in its vertex shader without particle readback; parts add geometry.
+  Regular-grid Flipbook remains available separately. Native/particle ABI and
+  compute packets are unchanged. Sprite timing uses FPS, not lifetime fitting.
+    All billboard steps in one Unity GPU program must share the same animation.
+    Local Windows/D3D11 acceptance used Unity 7000.0.0a16 and an isolated SRP
+    with explicit command-buffer GPU submission. Ordinary game camera submission
+    and Built-in/URP/HDRP are not certified by that harness; see the repository's
+    docs/particle-sprite-animation.md for the exact test boundaries.
 Nested Spawnables and Core procedural mesh emitters support prepared/shared
 playback. Project native nodes declare independent reusable, workerSafe and
 parallelPreparation flags through ProjectNodeRegistry policies. Undeclared

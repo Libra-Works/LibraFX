@@ -60,6 +60,32 @@ dimensions** on the Spawn card to save the values.
 Set **Particle capacity** at program level and apply the change with the
 checkmark. Capacity limits the particle storage; it is not an emission rate.
 
+## Use Sprite editor animation and layered parts
+
+Open **Window → Sprite Animation** and author the cells, frame order, individual
+durations or layered composition. Select **GPU Particle** in the same graph and
+choose **Apply to selected node**. **Load selected node settings** reopens the
+authored data. No animation kernel needs to be built by hand.
+
+The updated billboard renderer samples that timeline on the GPU using each
+particle's age. Visible parts retain their position/rotation/scale keys and
+order inside each particle. The parts share its simulation state; they do not
+create more simulated particles or require particle readback. More parts still
+mean more vertices and overdraw. Transparent particles are not globally sorted.
+
+In the GPU renderer settings, **Use Sprite editor animation** toggles the
+authored data without deleting it; apply the renderer settings to save the change.
+The editor's range, loop and FPS settings control playback, and effect time
+scaling controls particle age. The source texture binding must match the
+authored image dimensions. Frame/key times that collapse at GPU float precision
+are rejected explicitly.
+
+This requires GPU executable payload **4**, renderer bindings **2**, and matching
+updated native adapters and billboard shaders. The particle buffer layout and
+compute-kernel format are unchanged. Older Preview binaries are not updated by
+publishing this documentation. See [CPU Sprite animation](cpu-particles.md)
+for the authoring workflow and the distinction from a regular-grid Flipbook.
+
 ## Edit a kernel
 
 ![Spawn kernel graph with a typed operation palette, value nodes, and attribute writes](images/editor/gpu-kernel.png)
