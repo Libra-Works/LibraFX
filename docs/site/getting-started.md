@@ -15,7 +15,7 @@ without a game engine; to see the effect render, use the Unreal preview.
 ## Install the editor
 
 Download a package from the latest [Preview release](https://github.com/Libra-Works/LibraFX/releases).
-Update the editor and SDKs together; the [upgrade guide](preview-update.md)
+Update the editor and SDKs together; the [release notes](release-notes.md)
 lists the new features, package formats and known limits.
 For the complete install-to-game process, follow the
 [Unity / Unreal / Godot production workflow](production-workflow.md) and

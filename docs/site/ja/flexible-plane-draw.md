@@ -15,7 +15,7 @@ Godot 4.7.2 で実ピクセルを確認していますが、すべての履歴�
 旧 SDK **2026.11.8 は新しいシンボルや描画機能を含みません**。
 対応する更新版を [Preview 配布ページ](https://github.com/Libra-Works/LibraFX/releases)から導入してください。
 公開済み 2026.11.22 は最初の帯実装を含みますが、その後の描画移行は含みません。
-[Preview の更新手順](preview-update.md)と、
+[リリースノート](release-notes.md)と、
 [描画の検証範囲](engine-integration.md#rendering)も確認してください。
 
 ## 作り方

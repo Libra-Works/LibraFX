@@ -45,7 +45,7 @@ nested Spawnable/CPU changes below. Local acceptance includes real rendered
 pixels and cleanup in all three engines. Unreal has UE 5.7.4 Clang compilation
 (`-NoLink`), MSVC Editor linking and D3D11/SM5 rendered-pixel coverage.
 Clang compilation is not console SDK verification or linking against an
-MSVC-built engine. See the [update guide](preview-update.md) for the complete
+MSVC-built engine. See the [release notes](release-notes.md) for the complete
 matrix; engine compilation/import tests alone are not visual acceptance.
 
 <span id="rendering"></span>
@@ -212,7 +212,7 @@ cooked-player or framebuffer-equivalence claim for this path.
 
 These are updated-source capabilities. Install matching editor/converter and
 native integration revisions; older Preview binaries do not acquire them when
-the documentation changes. The [upgrade guide](preview-update.md) explains
+the documentation changes. The [release notes](release-notes.md) explains
 how to keep the tools and SDK in sync.
 
 ## Extend an effect

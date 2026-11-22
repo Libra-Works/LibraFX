@@ -2,10 +2,10 @@ name: Documentation
 
 on:
   pull_request:
-    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', '.github/workflows/pages.yml', 'Tools/Generate-NodeReference.py', 'Assets/Nodes/**', 'Assets/Enums/**', 'Assets/Translations/**', 'Assets/Modules/manifest.json', 'Assets/Brand/LibraFx.ico']
+    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', '.github/workflows/pages.yml', 'Tools/Generate-NodeReference.py', 'Tools/Stage-ReleaseNotes.py', 'Assets/Nodes/**', 'Assets/Enums/**', 'Assets/Translations/**', 'Assets/Modules/manifest.json', 'Assets/Brand/LibraFx.ico']
   push:
     branches: [main]
-    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', '.github/workflows/pages.yml', 'Tools/Generate-NodeReference.py', 'Assets/Nodes/**', 'Assets/Enums/**', 'Assets/Translations/**', 'Assets/Modules/manifest.json', 'Assets/Brand/LibraFx.ico']
+    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', '.github/workflows/pages.yml', 'Tools/Generate-NodeReference.py', 'Tools/Stage-ReleaseNotes.py', 'Assets/Nodes/**', 'Assets/Enums/**', 'Assets/Translations/**', 'Assets/Modules/manifest.json', 'Assets/Brand/LibraFx.ico']
   workflow_dispatch:
 
 permissions:
@@ -28,7 +28,7 @@ jobs:
           cp docs/site/_layouts/bilingual.html pages-source/_layouts/
           cp docs/site/assets/css/libradark.css pages-source/assets/css/
           cp Assets/Brand/LibraFx.ico pages-source/assets/libera-fx.ico
-          for file in getting-started.md workspace-tour.md first-fountain.md engine-integration.md editor-reference.md authoring.md gpu-particles.md glossary.md scalar-math-nodes.md cpu-particles.md flexible-plane-draw.md quaternion-random.md fluid-2d.md procedural-resources.md preview-update.md production-workflow.md batch-conversion.md; do
+          for file in getting-started.md workspace-tour.md first-fountain.md engine-integration.md editor-reference.md authoring.md gpu-particles.md glossary.md scalar-math-nodes.md cpu-particles.md flexible-plane-draw.md quaternion-random.md fluid-2d.md procedural-resources.md release-notes.md production-workflow.md batch-conversion.md; do
             cp "docs/site/$file" pages-source/
             cp "docs/site/ja/$file" pages-source/ja/
           done
@@ -39,13 +39,14 @@ jobs:
           cp docs/site/images/editor/fluid-2d-*.png pages-source/images/editor/
           cp docs/site/images/editor/procedural-model-flow-*.png pages-source/images/editor/
           python3 Tools/Generate-NodeReference.py pages-source
+          python3 Tools/Stage-ReleaseNotes.py pages-source
       - uses: actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1
         with:
           source: ./pages-source
           destination: ./pages-output
       - name: Verify the rendered pages
         run: |
-          for file in index.html getting-started.html workspace-tour.html first-fountain.html engine-integration.html editor-reference.html authoring.html gpu-particles.html node-reference.html glossary.html scalar-math-nodes.html cpu-particles.html flexible-plane-draw.html quaternion-random.html fluid-2d.html procedural-resources.html preview-update.html production-workflow.html batch-conversion.html; do
+          for file in index.html getting-started.html workspace-tour.html first-fountain.html engine-integration.html editor-reference.html authoring.html gpu-particles.html node-reference.html glossary.html scalar-math-nodes.html cpu-particles.html flexible-plane-draw.html quaternion-random.html fluid-2d.html procedural-resources.html release-notes.html production-workflow.html batch-conversion.html; do
             test -s "pages-output/$file"
             test -s "pages-output/ja/$file"
             for lang in en ja; do
@@ -62,6 +63,7 @@ jobs:
             grep -Fq "href=\"/LibraFX/$route\" hreflang=\"en\"" "pages-output/ja/$file"
           done
           test -s pages-output/assets/css/libradark.css
+          python3 Tools/Stage-ReleaseNotes.py pages-output --verify-rendered
           test -s pages-output/assets/libera-fx.ico
           test -s pages-output/images/afterimage-gate-editor.png
           for image in pages-source/images/editor/*.png; do

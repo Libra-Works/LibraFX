@@ -12,7 +12,7 @@ preview → export → import and play without LIBERA FX → automate conversion
 Choose [Unreal](#unreal), [Unity](#unity) or [Godot](#godot).
 For unattended builds, see [Batch conversion](batch-conversion.md).
 The [installation reference](engine-integration.md) and
-[Preview upgrade guide](preview-update.md) cover versions and platform limits.
+[release notes](release-notes.md) cover versions and platform limits.
 
 ## What moves between the tools?
 
@@ -317,4 +317,4 @@ rather than assuming timeline looping controls runtime lifetime.
 Keep editable sources, group/node libraries and engine bindings in source
 control. Never commit preview/debug invitations or tokens. Console SDKs,
 every rendering backend and exported players are not all verified; use the
-[verification boundaries](preview-update.md) for the actual acceptance scope.
+[release notes](release-notes.md) for the actual acceptance scope.

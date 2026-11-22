@@ -7,7 +7,7 @@ title: 2D フルイド：煙・水・炎
 4 方式の流体・セル外力・通常描画への接続は
 [2026.11.42 Preview](https://github.com/Libra-Works/LibraFX/releases/tag/v2026.11.42)
 に含まれます。対応するエディターと SDK を使ってください。それ以前の
-アーカイブは変更されません。[更新案内](preview-update.md)も参照してください。
+アーカイブは変更されません。[リリースノート](release-notes.md)も参照してください。
 下記の Windows 実 GPU 環境で受け入れ確認済みです。
 
 ## 水・炎のエフェクトを作る

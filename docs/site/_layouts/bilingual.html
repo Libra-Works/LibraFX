@@ -7,13 +7,13 @@
   {% assign english = route %}
   {% assign japanese = route | prepend: '/ja' %}
 {% endif %}
-{% assign nav_items = 'index.html|workspace-tour.html|first-fountain.html|preview-update.html|getting-started.html|production-workflow.html|batch-conversion.html|editor-reference.html|authoring.html|gpu-particles.html|cpu-particles.html|fluid-2d.html|procedural-resources.html|flexible-plane-draw.html|node-reference.html|scalar-math-nodes.html|quaternion-random.html|engine-integration.html|glossary.html' | split: '|' %}
+{% assign nav_items = 'index.html|workspace-tour.html|first-fountain.html|release-notes.html|getting-started.html|production-workflow.html|batch-conversion.html|editor-reference.html|authoring.html|gpu-particles.html|cpu-particles.html|fluid-2d.html|procedural-resources.html|flexible-plane-draw.html|node-reference.html|scalar-math-nodes.html|quaternion-random.html|engine-integration.html|glossary.html' | split: '|' %}
 {% if page.lang == 'ja' %}
   {% assign prefix = '/ja/' %}
-  {% assign nav_labels = 'トップ|はじめての画面操作|最初の噴水|今回の更新|はじめに|制作フロー|一括変換|画面ガイド|グラフ制作|GPU パーティクル|CPU パーティクル|2D 煙・水・炎|プロシージャル|Flexible Plane Draw|標準ノード|スカラー演算|回転と乱数|エンジン連携|用語集' | split: '|' %}
+  {% assign nav_labels = 'トップ|はじめての画面操作|最初の噴水|リリースノート|はじめに|制作フロー|一括変換|画面ガイド|グラフ制作|GPU パーティクル|CPU パーティクル|2D 煙・水・炎|プロシージャル|Flexible Plane Draw|標準ノード|スカラー演算|回転と乱数|エンジン連携|用語集' | split: '|' %}
 {% else %}
   {% assign prefix = '/' %}
-  {% assign nav_labels = 'Home|Workspace tour|First fountain|Preview update|Getting started|Production workflow|Batch conversion|Editor guide|Graph authoring|GPU particles|CPU particles|2D smoke, water and fire|Procedural resources|Flexible Plane Draw|Built-in nodes|Scalar math|Quaternions and random|Engine integration|Glossary' | split: '|' %}
+  {% assign nav_labels = 'Home|Workspace tour|First fountain|Release notes|Getting started|Production workflow|Batch conversion|Editor guide|Graph authoring|GPU particles|CPU particles|2D smoke, water and fire|Procedural resources|Flexible Plane Draw|Built-in nodes|Scalar math|Quaternions and random|Engine integration|Glossary' | split: '|' %}
 {% endif %}
 <html lang="{{ page.lang }}" data-bs-theme="dark">
   <head>
@@ -58,8 +58,8 @@
                   {% assign destination = prefix | append: item %}
                 {% endif %}
                 <li class="nav-item">
-                  <a class="nav-link{% if route == destination %} active{% endif %}"
-                     href="{{ destination | relative_url }}"{% if route == destination %} aria-current="page"{% endif %}>{{ nav_labels[forloop.index0] }}</a>
+                  <a class="nav-link{% if route == destination %} active{% elsif page.release_version and item == 'release-notes.html' %} active{% endif %}"
+                     href="{{ destination | relative_url }}"{% if route == destination %} aria-current="page"{% elsif page.release_version and item == 'release-notes.html' %} aria-current="location"{% endif %}>{{ nav_labels[forloop.index0] }}</a>
                 </li>
               {% endfor %}
             </ul>

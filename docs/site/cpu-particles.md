@@ -18,7 +18,7 @@ These are real editor captures of an isolated example, not engine-rendered
 particles. Open an image at full size to read the pins and Inspector fields.
 The Flow overview requires the Preview update after 2026.11.22;
 the older archives still show the three structural nodes. See the
-[upgrade guide](preview-update.md).
+[release notes](release-notes.md).
 
 ### 1. Parent graph: connect emission
 

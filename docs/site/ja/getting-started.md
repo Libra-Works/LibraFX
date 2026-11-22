@@ -17,7 +17,7 @@ title: はじめに
 [最新 Preview](https://github.com/Libra-Works/LibraFX/releases)
 から、使っている OS に合うファイルをダウンロードします。
 エディターと SDK は一緒に更新してください。
-[移行手順](preview-update.md)に追加機能・パッケージ形式・既知の制約をまとめています。
+[リリースノート](release-notes.md)に追加機能・パッケージ形式・既知の制約をまとめています。
 導入からゲームへの組み込みまでは[エンジン別の制作フロー](production-workflow.md)、
 無人変換・ビルド運用は[一括コンバーター](batch-conversion.md)を参照してください。
 

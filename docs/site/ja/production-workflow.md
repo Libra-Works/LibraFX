@@ -12,7 +12,7 @@ LIBERA FX なしで再生 → 一括変換・ゲームビルド**の順に進め
 
 [Unreal](#unreal)・[Unity](#unity)・[Godot](#godot) の手順を選んでください。
 [一括コンバーター](batch-conversion.md)、[SDK 導入の詳細](engine-integration.md)、
-[Preview の更新手順](preview-update.md)も参照できます。
+[リリースノート](release-notes.md)も参照できます。
 
 ## ツール間で何を受け渡すのか
 
@@ -310,4 +310,4 @@ FileAccess で読む `.lfxb` は Export Preset の
 編集ソース・Group／Node ライブラリ・エンジンの割り当てをバージョン管理し、
 Preview／debugger の招待やトークンはコミットしません。
 コンソール SDK・全描画 API・配布 Player の受入保証ではないため、
-[実際の確認範囲](preview-update.md)も確認してください。
+[リリースノート](release-notes.md)も確認してください。

@@ -112,7 +112,7 @@ The current source revision includes those renderer/authoring changes, four 2D
 fluid models (smoke/ink, free-surface water, shallow water and fuel/temperature
 combustion), cell forces, generated-resource consumers and nested Spawnable
 ownership with per-instance CPU systems.
-See the bilingual [update guide](site/preview-update.md),
+See the bilingual [release notes](site/release-notes.md),
 [production workflow](site/production-workflow.md) and
 [batch conversion guide](site/batch-conversion.md). GPU CLI conversion remains
 tracked in #72; the current converter explicitly rejects GPU graphs.

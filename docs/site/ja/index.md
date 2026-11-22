@@ -14,7 +14,7 @@ LIBERA FX は、Unity・Unreal Engine・Godot で再生するエフェクトを�
 | --- | --- |
 | [はじめての画面操作](workspace-tour.md) | 各ウィンドウの場所から、ノードの選択、値の編集、ピンの接続、プレビューまで順に操作します。 |
 | [最初の噴水を作る](first-fountain.md) | 同梱サンプルを触るコースと、空のグラフから作るコースで CPU パーティクルを体験します。 |
-| [今回の Preview 更新と移行手順](preview-update.md) | フルイド・ネスト・描画の追加内容、SDK の更新方法、未対応項目を確認できます。 |
+| [リリースノート](release-notes.md) | バージョンごとの変更内容・更新方法・確認済みの環境を読めます。 |
 | [制作からゲーム組み込みまで](production-workflow.md) | Unity・Unreal・Godot 別に、導入・起動・資源取得・プレビュー・アセット化・配布まで進めます。 |
 | [一括コンバーター](batch-conversion.md) | CPU 系の一括出力、共有ライブラリの解決、ゲームビルドへの組み込みを説明します。 |
 | [はじめに](getting-started.md) | エディターを導入し、同梱の **Afterimage Gate** を開いて、エフェクトを動かすシグナルをたどります。 |

@@ -15,7 +15,7 @@ history, camera or target-platform combination.
 The earlier **2026.11.8 SDK does not include** these new symbols;
 use matching updated [Preview packages](https://github.com/Libra-Works/LibraFX/releases).
 The published 2026.11.22 archives include the original ribbon implementation,
-not the later renderer migration. Use the [Preview update](preview-update.md)
+not the later renderer migration. Use the [release notes](release-notes.md)
 and see [rendering boundaries](engine-integration.md#rendering).
 
 ## Authoring
