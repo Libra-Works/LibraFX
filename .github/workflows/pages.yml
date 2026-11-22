@@ -41,6 +41,7 @@ jobs:
           destination: ./pages-output
       - name: Verify the rendered pages
         run: |
+          trap 'echo "Documentation check failed: $BASH_COMMAND" >&2' ERR
           for file in $(python3 Tools/Stage-Documentation.py --list-html); do
             test -s "pages-output/$file"
             test -s "pages-output/ja/$file"
