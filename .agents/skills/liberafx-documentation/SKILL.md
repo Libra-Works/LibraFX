@@ -10,6 +10,8 @@ description: Write or review LIBERA FX user documentation, versioned GitHub Page
 - Keep the root README a short English landing page: logo, one-line message, a real LibraDark editor screenshot with the graph prominent, and essential links. Put product explanations and operating instructions on the documentation site.
 - Draft documentation in `docs/`. Start with `docs/README.md` and the relevant topic. Keep the existing language of the target document unless the user requests a translation.
 - For a tutorial, lead with what the reader will make, then list prerequisites, exact steps using the visible UI labels, and what success looks like. Use a bundled sample rather than requiring users to edit a working project.
+- Organize public navigation by reader task: start, create, integrate, reference, help. Keep `docs/site/_data/navigation.json` as the reviewed bilingual page allowlist; use `Tools/Stage-Documentation.py` to stage it. Preserve existing URLs and heading anchors when reorganizing.
+- Keep beginner tutorials separate from SDK internals and historical migration notes. Name the documented release in the shared layout, review both languages, and caption screenshots with the relevant controls and expected result. Verify rendered local links and anchors with `Tools/Test-RenderedDocumentation.py`.
 
 ## Versioned release notes
 

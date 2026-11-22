@@ -2,10 +2,10 @@ name: Documentation
 
 on:
   pull_request:
-    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', '.github/workflows/pages.yml', 'Tools/Generate-NodeReference.py', 'Tools/Stage-ReleaseNotes.py', 'Assets/Nodes/**', 'Assets/Enums/**', 'Assets/Translations/**', 'Assets/Modules/manifest.json', 'Assets/Brand/LibraFx.ico']
+    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', 'docs/images/sprite-animation-en.png', 'docs/images/sprite-animation-ja.png', '.github/workflows/pages.yml', 'Tools/Generate-NodeReference.py', 'Tools/Stage-ReleaseNotes.py', 'Tools/Stage-Documentation.py', 'Tools/Test-RenderedDocumentation.py', 'Assets/Nodes/**', 'Assets/Enums/**', 'Assets/Translations/**', 'Assets/Modules/manifest.json', 'Assets/Brand/LibraFx.ico']
   push:
     branches: [main]
-    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', '.github/workflows/pages.yml', 'Tools/Generate-NodeReference.py', 'Tools/Stage-ReleaseNotes.py', 'Assets/Nodes/**', 'Assets/Enums/**', 'Assets/Translations/**', 'Assets/Modules/manifest.json', 'Assets/Brand/LibraFx.ico']
+    paths: ['docs/site/**', 'docs/images/afterimage-gate-editor.png', 'docs/images/sprite-animation-en.png', 'docs/images/sprite-animation-ja.png', '.github/workflows/pages.yml', 'Tools/Generate-NodeReference.py', 'Tools/Stage-ReleaseNotes.py', 'Tools/Stage-Documentation.py', 'Tools/Test-RenderedDocumentation.py', 'Assets/Nodes/**', 'Assets/Enums/**', 'Assets/Translations/**', 'Assets/Modules/manifest.json', 'Assets/Brand/LibraFx.ico']
   workflow_dispatch:
 
 permissions:
@@ -24,16 +24,11 @@ jobs:
         run: |
           mkdir -p pages-source/{images/editor,ja,_layouts,assets/css}
           cp docs/site/_config.yml pages-source/
-          sed 's|\.\./images/afterimage-gate-editor\.png|images/afterimage-gate-editor.png|g' docs/site/index.md > pages-source/index.md
+          python3 Tools/Stage-Documentation.py pages-source
           cp docs/site/_layouts/bilingual.html pages-source/_layouts/
           cp docs/site/assets/css/libradark.css pages-source/assets/css/
           cp Assets/Brand/LibraFx.ico pages-source/assets/libera-fx.ico
-          for file in getting-started.md workspace-tour.md first-fountain.md engine-integration.md editor-reference.md authoring.md gpu-particles.md glossary.md scalar-math-nodes.md cpu-particles.md flexible-plane-draw.md quaternion-random.md fluid-2d.md procedural-resources.md release-notes.md production-workflow.md batch-conversion.md; do
-            cp "docs/site/$file" pages-source/
-            cp "docs/site/ja/$file" pages-source/ja/
-          done
-          sed 's|\.\./\.\./images/afterimage-gate-editor\.png|../images/afterimage-gate-editor.png|g' docs/site/ja/index.md > pages-source/ja/index.md
-          cp docs/images/afterimage-gate-editor.png pages-source/images/
+          cp docs/images/{afterimage-gate-editor,sprite-animation-en,sprite-animation-ja}.png pages-source/images/
           cp docs/site/images/editor/{chat,content,crash-reports,engine-connection,f-curve,gpu-dsl,gpu-flow,gpu-kernel,history,inspector,live-game,log,node-list,outliner,profiler,revision-history,search,settings-appearance,settings-extensions,settings-inspectors,settings-projects,settings-servers,settings-shortcuts,sprite,startup,timeline,workspace}.png pages-source/images/editor/
           cp docs/site/images/editor/cpu-particles-*.png pages-source/images/editor/
           cp docs/site/images/editor/fluid-2d-*.png pages-source/images/editor/
@@ -46,7 +41,7 @@ jobs:
           destination: ./pages-output
       - name: Verify the rendered pages
         run: |
-          for file in index.html getting-started.html workspace-tour.html first-fountain.html engine-integration.html editor-reference.html authoring.html gpu-particles.html node-reference.html glossary.html scalar-math-nodes.html cpu-particles.html flexible-plane-draw.html quaternion-random.html fluid-2d.html procedural-resources.html release-notes.html production-workflow.html batch-conversion.html; do
+          for file in $(python3 Tools/Stage-Documentation.py --list-html); do
             test -s "pages-output/$file"
             test -s "pages-output/ja/$file"
             for lang in en ja; do
@@ -62,6 +57,7 @@ jobs:
             grep -Fq "href=\"/LibraFX/ja/$route\" hreflang=\"ja\"" "pages-output/$file"
             grep -Fq "href=\"/LibraFX/$route\" hreflang=\"en\"" "pages-output/ja/$file"
           done
+          python3 Tools/Test-RenderedDocumentation.py pages-output
           test -s pages-output/assets/css/libradark.css
           python3 Tools/Stage-ReleaseNotes.py pages-output --verify-rendered
           test -s pages-output/assets/libera-fx.ico
