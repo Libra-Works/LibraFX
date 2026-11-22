@@ -10,13 +10,20 @@
   "group": "Flexible Plane",
   "portType": "FlexiblePlanePoints",
   "portCategory": "Parameter",
-  "inputPorts": [
-    { "id": "position0", "name": "Position 0", "displayNameKey": "FlexiblePlane.Position0", "portType": "FloatX3" },
-    { "id": "position1", "name": "Position 1", "displayNameKey": "FlexiblePlane.Position1", "portType": "FloatX3" },
-    { "id": "position2", "name": "Position 2", "displayNameKey": "FlexiblePlane.Position2", "portType": "FloatX3" },
-    { "id": "position3", "name": "Position 3", "displayNameKey": "FlexiblePlane.Position3", "portType": "FloatX3" }
+  "dynamicPins": [
+    {
+      "parameterId": "pointCount",
+      "direction": "input",
+      "idPrefix": "position",
+      "nameTemplate": "Position {0}",
+      "portType": "FloatX3",
+      "portCategory": "Parameter",
+      "defaultCount": 2,
+      "minCount": 2,
+      "maxCount": 64
+    }
   ],
   "parameters": [
-    { "id": "pointData", "name": "Points", "displayNameKey": "FlexiblePlane.PointData", "type": "string", "defaultValue": "[{\"position\":[0,0,0],\"width\":1,\"color\":[1,1,1,1]},{\"position\":[1,0,0],\"width\":1,\"color\":[1,1,1,1]}]", "editor": { "kind": "flexiblePlanePoints" } }
+    { "id": "pointData", "name": "Points", "displayNameKey": "FlexiblePlane.PointData", "type": "string", "hidden": true, "defaultValue": "[{\"position\":[0,0,0],\"width\":1,\"color\":[1,1,1,1]},{\"position\":[1,0,0],\"width\":1,\"color\":[1,1,1,1]}]" }
   ]
 }

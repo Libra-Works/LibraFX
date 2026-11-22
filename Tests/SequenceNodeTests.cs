@@ -17,12 +17,65 @@ internal static class SequenceNodeTests
     public static void Run(string? directory = null)
     {
         VerifyAuthoring(directory);
+        VerifyDynamicPins();
         VerifyNativeExecution();
     }
 
     private static void Require(bool condition, string message)
     {
         if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private static void VerifyDynamicPins()
+    {
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"liberafx-dynpin-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDirectory);
+        try
+        {
+            var typeId = Guid.NewGuid();
+            var json = $$"""
+            {
+              "schemaVersion": 1,
+              "typeId": "{{typeId:D}}",
+              "namespace": "ProjectTest",
+              "kind": "DynamicMix",
+              "name": "Dynamic Mix",
+              "group": "Test",
+              "portType": "Float",
+              "portCategory": "Parameter",
+              "dynamicPins": [
+                { "parameterId": "inputCount", "direction": "input", "idPrefix": "in_", "nameTemplate": "In {1}", "portType": "Float", "portCategory": "Parameter", "defaultCount": 2, "minCount": 1, "maxCount": 4 },
+                { "parameterId": "outputCount", "direction": "output", "idPrefix": "out_", "nameTemplate": "Out {1}", "portType": "Float", "portCategory": "Parameter", "defaultCount": 1, "minCount": 1, "maxCount": 3 }
+              ]
+            }
+            """;
+            File.WriteAllText(Path.Combine(tempDirectory, "DynamicMix.json"), json);
+            var profiles = new TeamProfilesService(Path.Combine(tempDirectory, "profiles.json"));
+            Require(profiles.Save(null, "DynamicPinTest", "", tempDirectory), profiles.Status);
+            using var catalog = new NodeDefinitionCatalog(profiles);
+            var def = catalog.AvailableDefinitions.Single(item => item.TypeId == typeId);
+            var graph = new GraphWorkspaceViewModel(new UndoRedoManager(), nodeDefinitions: catalog);
+            var node = graph.CreateNode(def.Kind);
+            var source = graph.CreateNode(GraphNodeKind.Float);
+            Require(node.HasDynamicInputs && node.HasDynamicOutputs && node.HasDynamicPins &&
+                    node.InputPorts.Count == 2 && node.OutputPorts.Count == 1,
+                "Dynamic pin node did not initialize default ports.");
+            node.AddDynamicInputCommand.Execute(null);
+            node.AddDynamicOutputCommand.Execute(null);
+            Require(node.InputPorts.Count == 3 && node.InputPorts[2].Id == "in_2" && node.InputPorts[2].Name == "In 3" &&
+                    node.OutputPorts.Count == 2 && node.OutputPorts[1].Id == "out_1" && node.OutputPorts[1].Name == "Out 2",
+                "Dynamic pin add commands did not append expected ports.");
+            Require(graph.TryConnectNodes(source, node, out _, "in_2"), "Could not connect to dynamic input port.");
+            node.RemoveDynamicInputCommand.Execute(null);
+            Require(node.InputPorts.Count == 2 && graph.Connections.Count == 0,
+                "Removing dynamic input port did not prune its connection.");
+            Require(graph.History.Undo() && node.InputPorts.Count == 3 && graph.Connections.Count == 1,
+                "Undoing dynamic pin removal did not restore port and connection.");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory)) Directory.Delete(tempDirectory, true);
+        }
     }
 
     private static void VerifyAuthoring(string? directory)

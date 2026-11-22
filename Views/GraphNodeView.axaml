@@ -181,16 +181,27 @@
                        FontSize="11"
                        HorizontalAlignment="Center"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Left"
+                        Margin="8,2,8,6" Spacing="4" IsVisible="{Binding HasDynamicInputs}">
+                <views:IconButton x:Name="DynamicAddInputButton" Icon="Add"
+                                  Command="{Binding AddDynamicInputCommand}"
+                                  ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.AddInput}"
+                                  AutomationProperties.Name="{DynamicResource Text.Editor.DynamicPins.AddInput}" />
+                <views:IconButton x:Name="DynamicRemoveInputButton" Icon="Remove"
+                                  Command="{Binding RemoveDynamicInputCommand}"
+                                  ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.RemoveInput}"
+                                  AutomationProperties.Name="{DynamicResource Text.Editor.DynamicPins.RemoveInput}" />
+            </StackPanel>
             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right"
-                        Margin="8,2,8,6" Spacing="4" IsVisible="{Binding IsSequence}">
+                        Margin="8,2,8,6" Spacing="4" IsVisible="{Binding HasDynamicOutputs}">
                 <views:IconButton x:Name="SequenceAddOutputButton" Icon="Add"
-                                  Command="{Binding AddSequenceOutputCommand}"
-                                  ToolTip.Tip="{DynamicResource Text.Editor.Sequence.AddOutput}"
-                                  AutomationProperties.Name="{DynamicResource Text.Editor.Sequence.AddOutput}" />
+                                  Command="{Binding AddDynamicOutputCommand}"
+                                  ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.AddOutput}"
+                                  AutomationProperties.Name="{DynamicResource Text.Editor.DynamicPins.AddOutput}" />
                 <views:IconButton x:Name="SequenceRemoveOutputButton" Icon="Remove"
-                                  Command="{Binding RemoveSequenceOutputCommand}"
-                                  ToolTip.Tip="{DynamicResource Text.Editor.Sequence.RemoveOutput}"
-                                  AutomationProperties.Name="{DynamicResource Text.Editor.Sequence.RemoveOutput}" />
+                                  Command="{Binding RemoveDynamicOutputCommand}"
+                                  ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.RemoveOutput}"
+                                  AutomationProperties.Name="{DynamicResource Text.Editor.DynamicPins.RemoveOutput}" />
             </StackPanel>
             <Border Grid.Row="4" IsVisible="{Binding HasConstantEditor}" Padding="8,2,8,8">
                 <ItemsControl x:Name="ConstantEditors" ItemsSource="{Binding InlineParameters}">

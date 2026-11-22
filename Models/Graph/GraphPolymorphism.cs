@@ -126,8 +126,9 @@ public static class GraphPolymorphism
         var nodes = graph.Nodes.ToDictionary(item => item.Id);
         var result = graph.Nodes.ToDictionary(item => item.Id,
             item => GroupBoundarySchema.Effective(SpawnableGroupSchema.Effective(
-                SequenceSchema.Effective(GameIoSchema.Effective(
+                DynamicPinSchema.Effective(SequenceSchema.Effective(GameIoSchema.Effective(
                     RenderNodeSchema.Effective(all[item.Kind], item.Parameters), item.Parameters), item.Parameters),
+                    item.Parameters),
                 item.ChildGraph), item.ChildGraph));
         var incoming = graph.Connections.ToLookup(edge => edge.TargetNodeId);
         var outgoing = graph.Connections.ToLookup(edge => edge.SourceNodeId);

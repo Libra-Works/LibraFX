@@ -349,6 +349,7 @@ public sealed record GraphNodeDefinition(
     public IReadOnlyList<NodeParameterDefinition> Parameters { get; init; } = [];
     public IReadOnlyList<GraphInputPortDefinition>? InputPorts { get; init; }
     public IReadOnlyList<GraphOutputPortDefinition>? OutputPorts { get; init; }
+    public IReadOnlyList<DynamicPinGroupDefinition>? DynamicPins { get; init; }
     public GraphRuntimeDefinition? Runtime { get; init; }
     public IReadOnlyList<GraphConversionDefinition> Conversions { get; init; } = [];
     public string KindDomain => Services.GpuParticleEditorService.IsGpu(Kind) ? "GpuParticle" : "Cpu";
@@ -616,6 +617,35 @@ public sealed record GraphNodeDefinition(
                 Editor = editor, EnabledWhen = condition, DisplayNameKey = parameter.DisplayNameKey, Hidden = parameter.Hidden
             });
         }
+        List<DynamicPinGroupDefinition>? dynamicPins = null;
+        if (node.DynamicPins is not null)
+        {
+            dynamicPins = [];
+            foreach (var pinGroup in node.DynamicPins)
+            {
+                if (pinGroup is null || !IsIdentifier(pinGroup.ParameterId) || !IsIdentifier(pinGroup.IdPrefix) ||
+                    string.IsNullOrWhiteSpace(pinGroup.NameTemplate) ||
+                    pinGroup.Direction is not ("input" or "output") ||
+                    pinGroup.MinCount < 0 || pinGroup.MaxCount < pinGroup.MinCount ||
+                    pinGroup.MaxCount > DynamicPinSchema.AbsoluteMaxPins ||
+                    pinGroup.DefaultCount < pinGroup.MinCount || pinGroup.DefaultCount > pinGroup.MaxCount)
+                    throw new InvalidDataException("Invalid dynamic pin group definition.");
+                if (!TryPortCategory(pinGroup.PortCategory, category, out var pinCategory))
+                    throw new InvalidDataException("Invalid dynamic pin category.");
+                var isOutput = pinGroup.Direction == "output";
+                if (dynamicPins.Any(existing => existing.IsOutput == isOutput && existing.IdPrefix == pinGroup.IdPrefix))
+                    throw new InvalidDataException("Duplicate dynamic pin prefix.");
+                if (parameterIds.Add(pinGroup.ParameterId!))
+                {
+                    parameters.Add(new NodeParameterDefinition(
+                        pinGroup.ParameterId!, pinGroup.ParameterId!, "int",
+                        JsonSerializer.SerializeToElement(pinGroup.DefaultCount)) { Hidden = true });
+                }
+                dynamicPins.Add(new DynamicPinGroupDefinition(
+                    pinGroup.ParameterId!, isOutput, pinGroup.IdPrefix!, pinGroup.NameTemplate!,
+                    pinGroup.PortType, pinCategory, pinGroup.DefaultCount, pinGroup.MinCount, pinGroup.MaxCount));
+            }
+        }
         foreach (var parameter in parameters)
         {
             if (parameter.EnabledWhen is not { } condition) continue;
@@ -663,6 +693,7 @@ public sealed record GraphNodeDefinition(
             Parameters = parameters.AsReadOnly(),
             InputPorts = inputs?.AsReadOnly(),
             OutputPorts = outputs?.AsReadOnly(),
+            DynamicPins = dynamicPins?.AsReadOnly(),
             Runtime = runtime,
             Conversions = node.Conversions is { } conversions ? conversions.AsReadOnly() : []
         };
@@ -701,8 +732,22 @@ public sealed record GraphNodeDefinition(
         public List<NodeParameterFile>? Parameters { get; set; }
         public List<InputPortFile>? InputPorts { get; set; }
         public List<OutputPortFile>? OutputPorts { get; set; }
+        public List<DynamicPinFile>? DynamicPins { get; set; }
         public RuntimeFile? Runtime { get; set; }
         public List<GraphConversionDefinition>? Conversions { get; set; }
+    }
+
+    private sealed class DynamicPinFile
+    {
+        public string? ParameterId { get; set; }
+        public string? Direction { get; set; }
+        public string? IdPrefix { get; set; }
+        public string? NameTemplate { get; set; }
+        public string? PortType { get; set; }
+        public string? PortCategory { get; set; }
+        public int DefaultCount { get; set; } = 2;
+        public int MinCount { get; set; } = 1;
+        public int MaxCount { get; set; } = 32;
     }
 
     private sealed class InputPortFile

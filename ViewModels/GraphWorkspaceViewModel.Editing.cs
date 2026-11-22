@@ -196,6 +196,17 @@ public sealed partial class GraphWorkspaceViewModel
                     !valid.Contains(connection.SourcePortId ?? string.Empty)).Select(connection =>
                 (IUndoableCommand)new RemoveGraphConnectionCommand(this, connection)));
         }
+        else if (node.BaseDefinition.DynamicPins is { Count: > 0 } dynamicPins &&
+                 dynamicPins.Any(group => group.ParameterId == id))
+        {
+            var next = DynamicPinSchema.Effective(node.BaseDefinition, parameters);
+            var validInputs = next.InputPorts?.Select(port => port.Id).ToHashSet(StringComparer.Ordinal) ?? [];
+            var validOutputs = next.OutputPorts?.Select(port => port.Id).ToHashSet(StringComparer.Ordinal) ?? [];
+            commands.AddRange(Connections.Where(connection =>
+                    connection.Target == node && !validInputs.Contains(connection.TargetPortId ?? string.Empty) ||
+                    connection.Source == node && !validOutputs.Contains(connection.SourcePortId ?? string.Empty))
+                .Select(connection => (IUndoableCommand)new RemoveGraphConnectionCommand(this, connection)));
+        }
         commands.Add(new SetNodeParametersCommand(node, node.Parameters, parameters.AsReadOnly(), definition.Name));
         ExecuteEdit(commands.Count == 1 ? commands[0] :
             new CompositeUndoableCommand(LocalizationService.Shared.Get("Editor.Sequence.EditOutputs"), commands));

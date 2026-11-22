@@ -95,6 +95,23 @@ public static class FlexiblePlaneDrawSchema
         }
     }
 
+    private static Point[] ResolveListPoints(GraphNodeSnapshot source)
+    {
+        var parsed = ParsePoints(Parameter(source, "pointData").GetString()!);
+        var storedCount = source.Parameters?.FirstOrDefault(parameter => parameter.Id == "pointCount");
+        if (storedCount is null) return parsed;
+        if (storedCount.Type != "int" || storedCount.Value.ValueKind != JsonValueKind.Number ||
+            !storedCount.Value.TryGetInt32(out var count) || count is < 2 or > 64)
+            throw new InvalidDataException("Flexible Plane point count must be between 2 and 64.");
+        if (count == parsed.Length) return parsed;
+        if (count < parsed.Length) return parsed[..count];
+        var extended = new Point[count];
+        Array.Copy(parsed, extended, parsed.Length);
+        for (var index = parsed.Length; index < count; index++)
+            extended[index] = new([index, 0, 0], 1, [1, 1, 1, 1]);
+        return extended;
+    }
+
     /// <summary>
     /// Call after graph/group lowering, with nodes and target-indexed connections from
     /// the same instance scope. The caller adds the returned object to render_config.nodes.
@@ -115,7 +132,7 @@ public static class FlexiblePlaneDrawSchema
             throw new InvalidDataException("Flexible Plane Draw requires one connected point source.");
         }
         var isList = Is(source.Kind, ListId, "FlexiblePlanePointList");
-        var points = isList ? ParsePoints(Parameter(source, "pointData").GetString()!) : Array.Empty<Point>();
+        var points = isList ? ResolveListPoints(source) : Array.Empty<Point>();
         var inputs = new List<object>();
         void Input(GraphNodeSnapshot target, string port, string id, double[] defaults)
         {
@@ -163,18 +180,13 @@ public static class FlexiblePlaneDrawSchema
         var maxAge = 0d;
         if (isList)
         {
-            for (var index = 0; index < 4; index++)
+            for (var index = 0; index < points.Length; index++)
+                Input(source, $"position{index}", $"position{index}", points[index].Position);
+            foreach (var edge in connections[source.Id])
             {
-                var pin = $"position{index}";
-                if (index >= points.Length)
-                {
-                    if (connections[source.Id].Any(edge => edge.TargetPortId == pin))
-                    {
-                        throw new InvalidDataException($"{pin} has no corresponding list point.");
-                    }
-                    continue;
-                }
-                Input(source, pin, pin, points[index].Position);
+                if (edge.TargetPortId is { } pin && pin.StartsWith("position", StringComparison.Ordinal) &&
+                    int.TryParse(pin["position".Length..], out var index) && index >= points.Length)
+                    throw new InvalidDataException($"{pin} has no corresponding list point.");
             }
         }
         else

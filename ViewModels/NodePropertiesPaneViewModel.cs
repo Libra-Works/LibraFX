@@ -21,6 +21,7 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
     private readonly List<string> _unavailableExposedItems = [];
 
     public GraphWorkspaceViewModel Graph => _graph;
+    public GraphNodeViewModel? InspectorNode => _node;
     public bool HasInspectorTarget => _node is not null;
     public bool ShowRootEffectSettings => _graph.IsRootGraph && !HasInspectorTarget;
     public bool IsPinned => _pinnedNode is not null;
@@ -284,6 +285,7 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
         Parameters.Clear();
         _unavailableExposedItems.Clear();
         OnPropertyChanged(nameof(GroupExposedDiagnostics));
+        OnPropertyChanged(nameof(InspectorNode));
         OnPropertyChanged(nameof(HasInspectorTarget));
         OnPropertyChanged(nameof(ShowRootEffectSettings));
         OnPropertyChanged(nameof(IsPinned));

@@ -80,8 +80,9 @@ public static class GraphValidator
                     .Sum(child => SpawnableGroupSchema.InputWidth(child.PortType)) > SpawnableGroupSchema.MaxInputLanes)
                 throw new InvalidDataException($"A Spawnable Group supports at most {SpawnableGroupSchema.MaxInputLanes} input value lanes.");
             effectiveDefinitions.Add(node.Id, GroupBoundarySchema.Effective(SpawnableGroupSchema.Effective(
-                SequenceSchema.Effective(GameIoSchema.Effective(
+                DynamicPinSchema.Effective(SequenceSchema.Effective(GameIoSchema.Effective(
                     RenderNodeSchema.Effective(definition, node.Parameters), node.Parameters), node.Parameters),
+                    node.Parameters),
                 node.ChildGraph), node.ChildGraph));
         }
 

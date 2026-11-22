@@ -56,8 +56,6 @@ public sealed class ParameterEditorHost : ContentControl
             ? pluginService.HasConfiguredDefault(parameter.Type)
                 ? pluginService.CreateDefaultEditor(parameter.Type, parameter)
                 : InspectorEditors.CreateEditor(parameter)
-            : editorKind == "flexiblePlanePoints"
-                ? new FlexiblePlanePointsEditor(parameter)
             : editorKind.StartsWith("inspector:", StringComparison.Ordinal)
                 ? pluginService.CreateNamedEditor(editorKind["inspector:".Length..], parameter.Type, parameter)
                 : InspectorEditors.CreateNamedEditor(parameter, editorKind);

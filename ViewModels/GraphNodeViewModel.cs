@@ -59,6 +59,17 @@ public sealed class GraphNodeViewModel : ObservableObject
         ? "Editor.SignalSend.Help" : "Editor.SignalSend.InstanceTargetRequired");
     public bool CanAddSequenceOutput => IsSequence && OutputPorts.Count < SequenceSchema.MaximumOutputs;
     public bool CanRemoveSequenceOutput => IsSequence && OutputPorts.Count > 1;
+    private DynamicPinGroupDefinition? DynamicInputGroup => BaseDefinition.DynamicPins?.FirstOrDefault(group => !group.IsOutput);
+    private DynamicPinGroupDefinition? DynamicOutputGroup => BaseDefinition.DynamicPins?.FirstOrDefault(group => group.IsOutput);
+    public bool HasDynamicInputs => DynamicInputGroup is not null;
+    public bool HasDynamicOutputs => IsSequence || DynamicOutputGroup is not null;
+    public bool HasDynamicPins => HasDynamicInputs || HasDynamicOutputs;
+    public bool CanAddDynamicInput => DynamicInputGroup is { } group && DynamicPinSchema.Count(group, Parameters) < group.MaxCount;
+    public bool CanRemoveDynamicInput => DynamicInputGroup is { } group && DynamicPinSchema.Count(group, Parameters) > group.MinCount;
+    public bool CanAddDynamicOutput => IsSequence ? CanAddSequenceOutput :
+        DynamicOutputGroup is { } group && DynamicPinSchema.Count(group, Parameters) < group.MaxCount;
+    public bool CanRemoveDynamicOutput => IsSequence ? CanRemoveSequenceOutput :
+        DynamicOutputGroup is { } group && DynamicPinSchema.Count(group, Parameters) > group.MinCount;
     public bool IsLifecycleNode => IsSpawnableGroup ||
         Definition.Kind.Value is "LifeTime" or "Delay";
     public string LifecycleRoleLabel => !IsLifecycleNode ? string.Empty :
@@ -342,6 +353,10 @@ public sealed class GraphNodeViewModel : ObservableObject
     public IRelayCommand SelectOutputPortCommand { get; }
     public IRelayCommand AddSequenceOutputCommand { get; }
     public IRelayCommand RemoveSequenceOutputCommand { get; }
+    public IRelayCommand AddDynamicInputCommand { get; }
+    public IRelayCommand RemoveDynamicInputCommand { get; }
+    public IRelayCommand AddDynamicOutputCommand { get; }
+    public IRelayCommand RemoveDynamicOutputCommand { get; }
     public IRelayCommand SendPreviewSignalCommand { get; }
 
     public GraphNodeViewModel(
@@ -388,6 +403,32 @@ public sealed class GraphNodeViewModel : ObservableObject
         RemoveSequenceOutputCommand = new RelayCommand(() => _workspace.SetParameter(this,
             SequenceSchema.OutputCountParameter, JsonSerializer.SerializeToElement(OutputPorts.Count - 1)),
             () => CanRemoveSequenceOutput);
+        AddDynamicInputCommand = new RelayCommand(() =>
+        {
+            if (DynamicInputGroup is { } group)
+                _workspace.SetParameter(this, group.ParameterId,
+                    JsonSerializer.SerializeToElement(DynamicPinSchema.Count(group, Parameters) + 1));
+        }, () => CanAddDynamicInput);
+        RemoveDynamicInputCommand = new RelayCommand(() =>
+        {
+            if (DynamicInputGroup is { } group)
+                _workspace.SetParameter(this, group.ParameterId,
+                    JsonSerializer.SerializeToElement(DynamicPinSchema.Count(group, Parameters) - 1));
+        }, () => CanRemoveDynamicInput);
+        AddDynamicOutputCommand = new RelayCommand(() =>
+        {
+            if (IsSequence) AddSequenceOutputCommand.Execute(null);
+            else if (DynamicOutputGroup is { } group)
+                _workspace.SetParameter(this, group.ParameterId,
+                    JsonSerializer.SerializeToElement(DynamicPinSchema.Count(group, Parameters) + 1));
+        }, () => CanAddDynamicOutput);
+        RemoveDynamicOutputCommand = new RelayCommand(() =>
+        {
+            if (IsSequence) RemoveSequenceOutputCommand.Execute(null);
+            else if (DynamicOutputGroup is { } group)
+                _workspace.SetParameter(this, group.ParameterId,
+                    JsonSerializer.SerializeToElement(DynamicPinSchema.Count(group, Parameters) - 1));
+        }, () => CanRemoveDynamicOutput);
         SendPreviewSignalCommand = new RelayCommand(() => _workspace.RequestPreviewSignal(this),
             () => CanSendPreviewSignal);
     }
@@ -457,21 +498,23 @@ public sealed class GraphNodeViewModel : ObservableObject
         }
     }
 
-    private (JsonElement? Render, JsonElement? GameIo, int SequenceOutputs) SchemaValue(IReadOnlyList<NodeParameterSnapshot>? parameters)
+    private (JsonElement? Render, JsonElement? GameIo, int SequenceOutputs, string DynamicPins) SchemaValue(
+        IReadOnlyList<NodeParameterSnapshot>? parameters)
     {
         var schema = _baseDefinition.Parameters.FirstOrDefault(parameter => parameter.Id == "materialSchema");
         JsonElement? render = schema is null ? null :
             parameters?.FirstOrDefault(parameter => parameter.Id == schema.Id && parameter.Type == schema.Type)?.Value
             ?? schema.DefaultValue;
         return (render, GameIoSchema.ValueTypeValue(_baseDefinition, parameters),
-            IsSequence ? SequenceSchema.OutputCount(parameters) : 0);
+            IsSequence ? SequenceSchema.OutputCount(parameters) : 0,
+            DynamicPinSchema.SchemaKey(_baseDefinition, parameters));
     }
 
     private static bool SchemaValuesEqual(
-        (JsonElement? Render, JsonElement? GameIo, int SequenceOutputs) left,
-        (JsonElement? Render, JsonElement? GameIo, int SequenceOutputs) right) =>
+        (JsonElement? Render, JsonElement? GameIo, int SequenceOutputs, string DynamicPins) left,
+        (JsonElement? Render, JsonElement? GameIo, int SequenceOutputs, string DynamicPins) right) =>
         JsonValuesEqual(left.Render, right.Render) && JsonValuesEqual(left.GameIo, right.GameIo) &&
-        left.SequenceOutputs == right.SequenceOutputs;
+        left.SequenceOutputs == right.SequenceOutputs && left.DynamicPins == right.DynamicPins;
 
     private static bool JsonValuesEqual(JsonElement? left, JsonElement? right) =>
         left is null && right is null ||
@@ -495,8 +538,16 @@ public sealed class GraphNodeViewModel : ObservableObject
         OnPropertyChanged(nameof(HasLegacyOutput));
         OnPropertyChanged(nameof(CanAddSequenceOutput));
         OnPropertyChanged(nameof(CanRemoveSequenceOutput));
+        OnPropertyChanged(nameof(CanAddDynamicInput));
+        OnPropertyChanged(nameof(CanRemoveDynamicInput));
+        OnPropertyChanged(nameof(CanAddDynamicOutput));
+        OnPropertyChanged(nameof(CanRemoveDynamicOutput));
         AddSequenceOutputCommand.NotifyCanExecuteChanged();
         RemoveSequenceOutputCommand.NotifyCanExecuteChanged();
+        AddDynamicInputCommand.NotifyCanExecuteChanged();
+        RemoveDynamicInputCommand.NotifyCanExecuteChanged();
+        AddDynamicOutputCommand.NotifyCanExecuteChanged();
+        RemoveDynamicOutputCommand.NotifyCanExecuteChanged();
     }
 
     internal void ApplyResolvedDefinition(GraphNodeDefinition definition)
@@ -524,8 +575,9 @@ public sealed class GraphNodeViewModel : ObservableObject
     internal static GraphNodeDefinition EffectiveDefinition(GraphNodeDefinition definition,
         IReadOnlyList<NodeParameterSnapshot>? parameters, GraphSnapshot? childGraph) =>
         GroupBoundarySchema.Effective(SpawnableGroupSchema.Effective(
-            SequenceSchema.Effective(GameIoSchema.Effective(
-                RenderNodeSchema.Effective(definition, parameters), parameters), parameters), childGraph), childGraph);
+            DynamicPinSchema.Effective(SequenceSchema.Effective(GameIoSchema.Effective(
+                RenderNodeSchema.Effective(definition, parameters), parameters), parameters), parameters),
+            childGraph), childGraph);
 
     private IReadOnlyList<NodeParameterDefinition> VisibleParameters(GraphNodeDefinition definition) =>
         definition.Parameters.Where(parameter =>
