@@ -17,6 +17,6 @@
     { "id": "position3", "name": "Position 3", "displayNameKey": "FlexiblePlane.Position3", "portType": "FloatX3" }
   ],
   "parameters": [
-    { "id": "pointData", "name": "Points JSON", "displayNameKey": "FlexiblePlane.PointData", "type": "string", "defaultValue": "[{\"position\":[0,0,0],\"width\":1,\"color\":[1,1,1,1]},{\"position\":[1,0,0],\"width\":1,\"color\":[1,1,1,1]}]" }
+    { "id": "pointData", "name": "Points", "displayNameKey": "FlexiblePlane.PointData", "type": "string", "defaultValue": "[{\"position\":[0,0,0],\"width\":1,\"color\":[1,1,1,1]},{\"position\":[1,0,0],\"width\":1,\"color\":[1,1,1,1]}]", "editor": { "kind": "flexiblePlanePoints" } }
   ]
 }
