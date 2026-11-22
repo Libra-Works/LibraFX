@@ -175,8 +175,7 @@ GPU mesh emission are not provided by this implementation.
 Updated native integrations also support this emitter in prepared host pools
 and shared simulation, including inside nested Spawnables. See
 [prepared playback and shared simulation](engine-integration.md#prepared-playback).
-Use matching updated sources/native libraries: updating this page does not
-change an older downloaded Preview archive.
+Use matching editor and engine SDK releases.
 
 ## Ordinary Property and Signal boundaries
 
@@ -230,7 +229,7 @@ Stop/restart discards them.
 
 ### Use an animation made in the Sprite editor
 
-In updated source integrations, CPU particles can use the Sprite editor's
+CPU particles can use the Sprite editor's
 arbitrary cells, frame order, individual frame durations, playback range and
 loop settings. Layered compositions also retain visible-part order and each
 part's position, rotation and scale keys.
@@ -260,8 +259,7 @@ transparent particles.
 
 Bind the same-sized source texture in each engine. Unreal's CPU material also
 needs the existing **Texture** and **AtlasRect** contract. This feature uses
-CPU render metadata version **4** and needs matching updated integrations;
-older downloaded binaries are unchanged.
+CPU render metadata version **4**; use an SDK from the same release as the editor.
 
 ### Use a regular grid directly
 

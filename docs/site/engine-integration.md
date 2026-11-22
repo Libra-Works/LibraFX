@@ -1,5 +1,5 @@
 ---
-title: Engine Integration
+title: SDK and runtime reference
 ---
 
 [Documentation home](index.md) · [Getting started](getting-started.md)
@@ -45,6 +45,14 @@ Clang compilation is not console SDK verification or linking against an
 MSVC-built engine. See the [release notes](release-notes.md) for the complete
 matrix; engine compilation/import tests alone are not visual acceptance.
 
+<details class="page-toc" markdown="1">
+<summary>On this page</summary>
+
+* TOC
+{:toc}
+
+</details>
+
 ## Coordinates and units
 
 Author spatial values in **metres, X right, Y up, Z forward**. The runtime's coordinate basis converts spatial data at the host boundary; you should not rotate every effect graph to fit each engine.
@@ -61,13 +69,6 @@ There is no editor-side Y-up/Z-up selector in this workflow. Keep authored graph
 
 <span id="rendering"></span>
 
-<details class="page-toc" markdown="1">
-<summary>On this page</summary>
-
-* TOC
-{:toc}
-
-</details>
 
 ## Drawing without per-Draw scene components
 
@@ -176,7 +177,7 @@ non-resource filter if you ship them with the game.
 
 ## Prepare playback and share simulation work
 
-Updated source integrations can reserve effect instances during loading and
+The SDK can reserve effect instances during loading and
 reuse them at playback. Independent effects share a bounded executor instead
 of each effect owning its own worker threads. Rendering and engine callbacks
 remain at their engine-thread boundaries.

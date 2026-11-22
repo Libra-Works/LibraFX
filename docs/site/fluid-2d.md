@@ -78,7 +78,7 @@ Pressure iterations apply to smoke, free surface and combustion. Free surface wa
 
 For normal smoke, water and fire adjustments, use the fluid inspector: select a model, toggle the source checkbox and edit grid or velocity numbers. No handwritten JSON is required.
 
-To edit resource structure, expand **Resource declarations / pass plan (source contract)** in Resources / Targets. The following form controls are available in the development version.
+To edit resource structure, expand **Resource declarations / pass plan (source contract)** in Resources / Targets. Use the form controls below to edit the resource contract.
 
 1. Expand a resource name. Select its kind, format, lifetime and initialization, then enter width, height and depth. Buffer width is the element count. Use **Add resource** and **Remove** to change the rows.
 2. Expand a pass. Enter its operation and check **Run after these passes** to specify dependencies.

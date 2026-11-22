@@ -8,6 +8,10 @@ Build reusable model geometry, textures and materials inside the effect graph. C
 
 For a glowing particle, begin with a texture and material. For a ring, plane or other generated shape, begin with a model.
 
+![Procedural Model Flow with the step list and inspector](images/editor/procedural-model-flow-en.png)
+
+This editor capture shows how to select a step and edit its settings. It shows the authoring interface, not an engine-rendered result.
+
 <details class="page-toc" markdown="1">
 <summary>On this page</summary>
 
