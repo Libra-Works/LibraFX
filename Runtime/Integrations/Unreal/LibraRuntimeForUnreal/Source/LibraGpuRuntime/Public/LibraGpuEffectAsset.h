@@ -69,6 +69,12 @@ USTRUCT()
 struct FLibraGpuFlowStep
 {
     GENERATED_BODY()
+    UPROPERTY()
+    bool bSpriteAnimation = false;
+    UPROPERTY()
+    int32 SpritePartCount = 0;
+    UPROPERTY()
+    TArray<float> SpriteValues;
 
     UPROPERTY()
     FString Kind;

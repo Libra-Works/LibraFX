@@ -6,6 +6,7 @@
 #include "LibraFxGodotRenderServer.h"
 #include "liberafx/LbSpawnableHost.h"
 #include "liberafx/LbParticleAtlas.h"
+#include "liberafx/LbParticleSprite.h"
 #include <godot_cpp/variant/packed_float32_array.hpp>
 #include "liberafx/LbSceneBindings.h"
 #include <godot_cpp/classes/mesh.hpp>
@@ -152,6 +153,8 @@ private:
         bool batched = false;
     };
     struct CpuParticleDraw final {
+        bool hasSpriteAnimation = false;
+        ParticleSpriteAnimation spriteAnimation;
         ParticleAtlas atlas;
         std::vector<std::array<std::uint8_t, 16>> drawRows;
         std::array<std::uint8_t, 16> nodeId{};
@@ -178,6 +181,7 @@ private:
         OwnedRenderingRid instance;
     };
     struct CpuParticleRenderInstance final {
+        godot::Ref<godot::ShaderMaterial> spriteMaterial;
         std::size_t instanceStride = 16;
         godot::Ref<godot::QuadMesh> quad;
         godot::Ref<godot::StandardMaterial3D> material;

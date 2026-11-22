@@ -43,11 +43,11 @@ namespace LiberaFx.Unity
         {
             var result = new LiberaFxGpuResourceManifest();
             var root = Object(new Reader(json).Read(), "GPU manifest");
-            if (!root.TryGetValue("version", out var version) || !(version is double n) || (n != 2 && n != 3))
+            if (!root.TryGetValue("version", out var version) || !(version is double n) || (n != 2 && n != 3 && n!=4))
                 throw new InvalidOperationException("Invalid GPU manifest version.");
             var programs = Array(root, "programs");
             var fluids = Array(root, "fluidPrograms");
-            if (fluids.Count == 0 || programs.Count + fluids.Count > 16)
+            if ((fluids.Count == 0 && n!=4) || programs.Count + fluids.Count > 16)
                 throw new InvalidOperationException("GPU manifest program count is invalid.");
             var ids = new HashSet<string>(StringComparer.Ordinal);
             foreach (var item in programs)
@@ -59,7 +59,7 @@ namespace LiberaFx.Unity
                     var delivery = Object(deliveryValue, "particle delivery");
                     if (delivery.TryGetValue("generatedResources", out var generatedValue))
                     {
-                        if (n != 3) throw new InvalidOperationException("Generated resources require GPU payload version 3.");
+                        if (n < 3) throw new InvalidOperationException("Generated resources require GPU payload version 3.");
                         var generated = Object(generatedValue, "generated resources");
                         if (generated.Count > 64) throw new InvalidOperationException("Too many generated resources.");
                         var bindings = new List<LiberaFxGeneratedGpuResource>();
@@ -89,7 +89,7 @@ namespace LiberaFx.Unity
                 var automatic = true;
                 if (fluid.TryGetValue("automaticPlane", out var planeValue))
                 {
-                    if (n != 3 || !(planeValue is bool plane))
+                    if (n < 3 || !(planeValue is bool plane))
                         throw new InvalidOperationException("Automatic plane selection requires version 3 and a boolean.");
                     automatic = plane;
                 }

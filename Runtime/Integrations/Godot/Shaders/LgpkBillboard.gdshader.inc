@@ -15,12 +15,18 @@ void vertex() {
     vec4 position_age = texelFetch(particle_state, base, 0);
     vec4 size_rotation = texelFetch(particle_state, base + ivec2(3,0), 0);
     vec4 seed_alive = texelFetch(particle_state, base + ivec2(4,0), 0);
+    vec4 sprite_uv=vec4(0.0,0.0,1.0,1.0);vec2 sprite_offset=vec2(0.0),sprite_size=vec2(1.0);float sprite_angle=0.0;
+    if(sprite_enabled){sprite_sample(int(UV2.x),position_age.w,sprite_uv,sprite_offset,sprite_size,sprite_angle);}
+    UV=sprite_uv.xy+UV*sprite_uv.zw;
+    float cs=cos(sprite_angle),ss=sin(sprite_angle);
+    vec2 corner=VERTEX.xy*(sprite_enabled ? sprite_size*size_rotation.xy : vec2(1.0));
+    corner=mat2(vec2(cs,ss),vec2(-ss,cs))*corner+2.0*sprite_offset*size_rotation.xy;
     float s = sin(size_rotation.z);
     float c = cos(size_rotation.z);
-    vec2 offset = mat2(vec2(c, s), vec2(-s, c)) * VERTEX.xy;
+    vec2 offset = mat2(vec2(c, s), vec2(-s, c)) * corner;
     mat4 particle_matrix = draw_is_world ? draw_matrix : MODEL_MATRIX * draw_matrix;
     vec3 center = (VIEW_MATRIX * particle_matrix * vec4(position_age.xyz, 1.0)).xyz;
-    vec3 quad = vec3(offset * size_rotation.xy * particle_size_scale, 0.0);
+    vec3 quad = vec3(offset * (sprite_enabled ? vec2(1.0) : size_rotation.xy) * particle_size_scale, 0.0);
     quad.xy *= vec2(length(particle_matrix[0].xyz), length(particle_matrix[1].xyz));
     vec3 position = center + quad;
     bool valid_position = all(lessThan(abs(position), vec3(3.0e38)));

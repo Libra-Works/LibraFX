@@ -1,4 +1,5 @@
 #include "LibraFxGodotRender.h"
+#include "LibraFxParticleSprite.h"
 #include "LibraFxGodotAtlas.h"
 #include "LibraFxGodotGpu.h"
 #include "LibraFxGodotCoordinates.h"
@@ -360,7 +361,9 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
     }
     auto cpuVersion = 0.0;
     if ((config.has("cpuParticleVersion") || !cpuNodes.is_empty()) &&
-        (!readNumber(config.get("cpuParticleVersion", godot::Variant{}), cpuVersion) || (cpuVersion != 1 && cpuVersion != 2 && cpuVersion != 3))) {
+        (!readNumber(config.get("cpuParticleVersion", godot::Variant{}), cpuVersion) ||
+         (cpuVersion != 1 && cpuVersion != 2 && cpuVersion != 3 && cpuVersion != 4)))
+    {
         return Result::UnsupportedBinary;
     }
     if (cpuParticles == nullptr && !cpuNodes.is_empty()) {
@@ -781,7 +784,17 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
                 return Result::InvalidBinary;
             }
             auto draw = CpuParticleDraw{};
+            auto spriteResult = readParticleSprite(item.get("spriteAnimation", godot::Variant{}),
+                                                   draw.hasSpriteAnimation, draw.spriteAnimation);
+            if (spriteResult != Result::Ok || (draw.hasSpriteAnimation && cpuVersion != 4))
+            {
+                return Result::InvalidBinary;
+            }
             if (!readParticleAtlas(item.get("flipbook",godot::Variant{}),draw.atlas)) return Result::InvalidBinary;
+            if (draw.hasSpriteAnimation && draw.atlas.enabled)
+            {
+                return Result::InvalidBinary;
+            }
             if (!parseId(idText, draw.nodeId) ||
                 std::any_of(draws.begin(), draws.end(), [&draw](const auto& existing) {
                     return existing.nodeId == draw.nodeId;
@@ -816,6 +829,11 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
             }
             if (draw.texture.is_null() || draw.texture->get_width() <= 0 ||
                 draw.texture->get_height() <= 0) {
+                return Result::InvalidArgument;
+            }
+            if (draw.hasSpriteAnimation &&
+                !draw.spriteAnimation.textureMatches(draw.texture->get_width(), draw.texture->get_height()))
+            {
                 return Result::InvalidArgument;
             }
             particleDraws.push_back(std::move(draw));
@@ -997,7 +1015,29 @@ auto PackageRenderRenderer::makeCpuRenderable(godot::Node3D& parent,
         atlasMaterial->set_shader(shader); atlasMaterial->set_shader_parameter("particle_texture",draw.texture);
         quad->set_material(atlasMaterial);
     }
-    out.instanceStride = draw.atlas.enabled ? 20 : 16;
+    if (draw.hasSpriteAnimation)
+    {
+        auto shader = godot::Ref<godot::Shader>{};
+        shader.instantiate();
+        shader->set_code(
+            godot::String(
+                "shader_type spatial; render_mode unshaded,cull_disabled,depth_draw_never,skip_vertex_transform,") +
+            (draw.additive ? "blend_add;" : "blend_mix;") +
+            "uniform sampler2D particle_texture : source_color,filter_linear,repeat_disable;"
+            "uniform mat4 particle_owner=mat4(1.0);"
+            "uniform mat4 particle_owner_inverse=mat4(1.0);"
+            "void vertex(){UV=INSTANCE_CUSTOM.xy+UV*INSTANCE_CUSTOM.zw;"
+            "mat4 local=particle_owner_inverse*MODEL_MATRIX;"
+            "vec2 offset=local[0].xy*VERTEX.x+local[1].xy*VERTEX.y+local[2].xy;"
+            "offset*=vec2(length(particle_owner[0].xyz),length(particle_owner[1].xyz));"
+            "VERTEX=(VIEW_MATRIX*vec4(MODEL_MATRIX[3].xyz,1.0)).xyz+vec3(offset,0.0);}"
+            "void fragment(){vec4 tint=texture(particle_texture,UV)*COLOR;ALBEDO=tint.rgb;ALPHA=tint.a;}");
+        out.spriteMaterial.instantiate();
+        out.spriteMaterial->set_shader(shader);
+        out.spriteMaterial->set_shader_parameter("particle_texture", draw.texture);
+        quad->set_material(out.spriteMaterial);
+    }
+    out.instanceStride = draw.atlas.enabled || draw.hasSpriteAnimation ? 20 : 16;
     auto* server = godot::RenderingServer::get_singleton();
     if (!server || quad.is_null()) {
         return Result::InvalidArgument;
@@ -1008,8 +1048,8 @@ auto PackageRenderRenderer::makeCpuRenderable(godot::Node3D& parent,
     if (!out.multiMesh.isValid()) {
         return Result::InsufficientWork;
     }
-    server->multimesh_allocate_data(out.multiMesh.get(), 1,
-        godot::RenderingServer::MULTIMESH_TRANSFORM_3D, true, draw.atlas.enabled);
+    server->multimesh_allocate_data(out.multiMesh.get(), 1, godot::RenderingServer::MULTIMESH_TRANSFORM_3D, true,
+                                    draw.atlas.enabled || draw.hasSpriteAnimation);
     server->multimesh_set_mesh(out.multiMesh.get(), quad->get_rid());
     server->multimesh_set_visible_instances(out.multiMesh.get(), 0);
     out.instance = OwnedRenderingRid(server->instance_create());
@@ -1391,8 +1431,16 @@ auto PackageRenderRenderer::updateCpuBounds(CpuParticleRenderInstance& renderabl
         const auto* data = values + static_cast<std::size_t>(index) * renderable.instanceStride;
         const auto center = godot::Vector3(data[3], data[7], data[11]);
         auto radius = godot::real_t{};
-        if (!toReal(0.5 * std::hypot(static_cast<double>(data[0]) * ownerWidth,
-                static_cast<double>(data[5]) * ownerHeight) * localRadiusFactor, radius)) {
+        const auto sprite = renderable.spriteMaterial.is_valid();
+        const auto width = sprite ? std::hypot(static_cast<double>(data[0]), static_cast<double>(data[4]))
+                                  : std::abs(static_cast<double>(data[0]));
+        const auto height = sprite ? std::hypot(static_cast<double>(data[1]), static_cast<double>(data[5]))
+                                   : std::abs(static_cast<double>(data[5]));
+        const auto offset =
+            sprite ? std::hypot(static_cast<double>(data[2]) * ownerWidth, static_cast<double>(data[6]) * ownerHeight)
+                   : 0.0;
+        if (!toReal((offset + 0.5 * std::hypot(width * ownerWidth, height * ownerHeight)) * localRadiusFactor, radius))
+        {
             return false;
         }
         const auto padding = godot::Vector3(radius, radius, radius);
@@ -1453,10 +1501,18 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host, const Spawna
         if (count > maximumParticles) {
             return Result::InvalidArgument;
         }
+        const auto sourceCount = count;
+        const auto parts = draw.hasSpriteAnimation ? draw.spriteAnimation.partCount() : 1;
+        count *= parts;
+        if (renderable.spriteMaterial.is_valid())
+        {
+            renderable.spriteMaterial->set_shader_parameter("particle_owner", drawTransform);
+        }
         if (count > renderable.capacity) {
             auto capacity = std::max(std::uint32_t{1}, renderable.capacity);
             while (capacity < count) {
-                capacity = std::min(maximumParticles, capacity * 2);
+                capacity = std::min(static_cast<std::uint32_t>(maximumParticles * std::max(std::size_t{1}, parts)),
+                                    capacity * 2);
             }
             const auto bufferSize = static_cast<std::int64_t>(capacity * instanceStride);
             renderable.buffer.resize(bufferSize);
@@ -1467,9 +1523,9 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host, const Spawna
             if (!server) {
                 return Result::InvalidArgument;
             }
-            server->multimesh_allocate_data(renderable.multiMesh.get(),
-                static_cast<std::int32_t>(capacity),
-                godot::RenderingServer::MULTIMESH_TRANSFORM_3D, true, draw.atlas.enabled);
+            server->multimesh_allocate_data(renderable.multiMesh.get(), static_cast<std::int32_t>(capacity),
+                                            godot::RenderingServer::MULTIMESH_TRANSFORM_3D, true,
+                                            draw.atlas.enabled || draw.hasSpriteAnimation);
             renderable.capacity = capacity;
         }
         if (count == 0) {
@@ -1484,38 +1540,88 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host, const Spawna
         if (!std::isfinite(basis.determinant()) || basis.determinant() == 0) {
             return Result::InvalidArgument;
         }
+        if (renderable.spriteMaterial.is_valid())
+        {
+            renderable.spriteMaterial->set_shader_parameter("particle_owner_inverse", drawTransform.affine_inverse());
+        }
         std::array<CpuParticleSnapshot,256> particleBatch;
         std::array<CpuParticleTiming,256> timingBatch;
-        for (auto particleIndex = std::size_t{}; particleIndex < count; ++particleIndex) {
-            if (particleIndex%256==0) {
-                std::size_t written=0;
-                result=host.cpuParticleRead(scope,draw.nodeId.data(),particleIndex,particleBatch.data(),
-                    draw.atlas.enabled ? timingBatch.data() : nullptr,particleBatch.size(),written);
-                if (result!=Result::Ok || written!=std::min(std::size_t{256},count-particleIndex))
-                    return result==Result::Ok ? Result::InvalidBinary : result;
-            }
-            const auto& snapshot=particleBatch[particleIndex%256];
-            if (snapshot.id == 0) {
-                return result == Result::Ok ? Result::InvalidBinary : result;
-            }
-            auto* data = buffer + particleIndex * instanceStride;
-            const auto values = std::array<double, 16>{
-                snapshot.size[0] * draw.drawScale, 0, 0, snapshot.position[0] * draw.drawScale,
-                0, snapshot.size[1] * draw.drawScale, 0, snapshot.position[1] * draw.drawScale,
-                0, 0, 1, snapshot.position[2] * draw.drawScale,
-                snapshot.color[0], snapshot.color[1], snapshot.color[2], snapshot.color[3]};
-            for (auto field = std::size_t{}; field < values.size(); ++field) {
-                if (!std::isfinite(values[field]) || std::abs(values[field]) > std::numeric_limits<float>::max()) {
-                    return Result::NonFinite;
+        for (auto part = std::size_t{}; part < parts; ++part)
+        {
+            for (auto particleIndex = std::size_t{}; particleIndex < sourceCount; ++particleIndex)
+            {
+                if (particleIndex % 256 == 0)
+                {
+                    std::size_t written = 0;
+                    result = host.cpuParticleRead(scope, draw.nodeId.data(), particleIndex, particleBatch.data(),
+                                                  draw.atlas.enabled || draw.hasSpriteAnimation ? timingBatch.data()
+                                                                                                : nullptr,
+                                                  particleBatch.size(), written);
+                    if (result != Result::Ok || written != std::min(std::size_t{256}, sourceCount - particleIndex))
+                    {
+                        return result == Result::Ok ? Result::InvalidBinary : result;
+                    }
                 }
-                data[field] = static_cast<float>(values[field]);
-            }
-            if (draw.atlas.enabled) {
-                const auto& timing=timingBatch[particleIndex%256];
-                const auto frame=draw.atlas.frame(timing.age,timing.life);
-                data[16]=static_cast<float>(frame%draw.atlas.columns)/draw.atlas.columns;
-                data[17]=static_cast<float>(frame/draw.atlas.columns)/draw.atlas.rows;
-                data[18]=1.0f/draw.atlas.columns; data[19]=1.0f/draw.atlas.rows;
+                const auto &snapshot = particleBatch[particleIndex % 256];
+                if (snapshot.id == 0)
+                {
+                    return result == Result::Ok ? Result::InvalidBinary : result;
+                }
+                auto *data = buffer + (part * sourceCount + particleIndex) * instanceStride;
+                const auto values = std::array<double, 16>{snapshot.size[0] * draw.drawScale,
+                                                           0,
+                                                           0,
+                                                           snapshot.position[0] * draw.drawScale,
+                                                           0,
+                                                           snapshot.size[1] * draw.drawScale,
+                                                           0,
+                                                           snapshot.position[1] * draw.drawScale,
+                                                           0,
+                                                           0,
+                                                           1,
+                                                           snapshot.position[2] * draw.drawScale,
+                                                           snapshot.color[0],
+                                                           snapshot.color[1],
+                                                           snapshot.color[2],
+                                                           snapshot.color[3]};
+                for (auto field = std::size_t{}; field < values.size(); ++field)
+                {
+                    if (!std::isfinite(values[field]) || std::abs(values[field]) > std::numeric_limits<float>::max())
+                    {
+                        return Result::NonFinite;
+                    }
+                    data[field] = static_cast<float>(values[field]);
+                }
+                if (draw.hasSpriteAnimation)
+                {
+                    auto sprite = ParticleSpriteSample{};
+                    const auto status = draw.spriteAnimation.sample(part, timingBatch[particleIndex % 256].age, sprite);
+                    if (status != Result::Ok)
+                    {
+                        return status;
+                    }
+                    const auto sx = snapshot.size[0] * draw.drawScale, sy = snapshot.size[1] * draw.drawScale;
+                    const auto c = std::cos(sprite.rotation), s = std::sin(sprite.rotation);
+                    data[0] = static_cast<float>(c * sx * sprite.scaleX);
+                    data[1] = static_cast<float>(-s * sy * sprite.scaleY);
+                    data[4] = static_cast<float>(s * sx * sprite.scaleX);
+                    data[5] = static_cast<float>(c * sy * sprite.scaleY);
+                    data[2] = static_cast<float>(sx * sprite.x);
+                    data[6] = static_cast<float>(sy * sprite.y);
+                    for (auto lane = 0u; lane < 4; ++lane)
+                    {
+                        data[16 + lane] = static_cast<float>(sprite.uv[lane]);
+                    }
+                }
+                else if (draw.atlas.enabled)
+                {
+                    const auto &timing = timingBatch[particleIndex % 256];
+                    const auto frame = draw.atlas.frame(timing.age, timing.life);
+                    data[16] = static_cast<float>(frame % draw.atlas.columns) / draw.atlas.columns;
+                    data[17] = static_cast<float>(frame / draw.atlas.columns) / draw.atlas.rows;
+                    data[18] = 1.0f / draw.atlas.columns;
+                    data[19] = 1.0f / draw.atlas.rows;
+                }
             }
         }
         auto* server = godot::RenderingServer::get_singleton();

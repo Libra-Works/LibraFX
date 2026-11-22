@@ -10,6 +10,10 @@ struct LibraParticle
 };
 
 StructuredBuffer<LibraParticle> ParticleData;
+StructuredBuffer<float4> SpriteData;
+uint SpriteEnabled;
+float4 LibraSpriteRead(uint index) { return SpriteData[index]; }
+#include "/LibraGpu/Private/LibraParticleSprite.ush"
 float4x4 ViewProjection;
 float3 PreViewTranslation;
 float3 CameraRight;
@@ -36,21 +40,27 @@ VertexOutput MainVS(uint vertexId : SV_VertexID, uint instanceId : SV_InstanceID
         float2(-1, 1), float2(1, -1), float2(1, 1)
     };
     LibraParticle particle = ParticleData[instanceId];
-    float2 corner = corners[vertexId];
+    float2 corner = corners[vertexId%6];
+    float4 spriteUv=float4(0,0,1,1);float2 spriteOffset=0,spriteScale=1;float spriteAngle=0;
+    if (SpriteEnabled!=0) LibraSpriteSample(vertexId/6,particle.positionAge.w,spriteUv,spriteOffset,spriteScale,spriteAngle);
+    float2 shape=SpriteEnabled!=0 ? corner*spriteScale*particle.sizeRotation.xy : corner;
+    float cs=cos(spriteAngle),ss=sin(spriteAngle);
+    shape=float2(cs*shape.x-ss*shape.y,ss*shape.x+cs*shape.y)+2.0*spriteOffset*particle.sizeRotation.xy;
     float angle = particle.sizeRotation.z;
     float s = sin(angle), c = cos(angle);
-    float2 rotated = float2(c * corner.x - s * corner.y, s * corner.x + c * corner.y);
+    float2 rotated = float2(c * shape.x - s * shape.y, s * shape.x + c * shape.y);
+    if (SpriteEnabled==0) rotated*=particle.sizeRotation.xy;
     float sx = length(float3(DrawRow0.x, DrawRow1.x, DrawRow2.x));
     float sy = length(float3(DrawRow0.y, DrawRow1.y, DrawRow2.y));
-    float3 offset = CameraRight * rotated.x * particle.sizeRotation.x * SizeScale * sx +
-        CameraUp * rotated.y * particle.sizeRotation.y * SizeScale * sy;
+    float3 offset = CameraRight * rotated.x * SizeScale * sx +
+        CameraUp * rotated.y * SizeScale * sy;
     float4 position = float4(particle.positionAge.xyz, 1);
     float3 world = float3(dot(DrawRow0, position), dot(DrawRow1, position), dot(DrawRow2, position));
     world += offset;
     world += PreViewTranslation;
     VertexOutput output;
     output.position = particle.seedAlive.y != 0 ? mul(float4(world, 1), ViewProjection) : float4(0, 0, 0, 0);
-    output.uv = float2(corner.x * 0.5 + 0.5, 0.5 - corner.y * 0.5);
+    output.uv = spriteUv.xy+float2(corner.x * 0.5 + 0.5, 0.5 - corner.y * 0.5)*spriteUv.zw;
     output.color = particle.color;
     return output;
 }

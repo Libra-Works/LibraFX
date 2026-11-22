@@ -41,6 +41,8 @@ namespace LiberaFx.Unity
         [SerializeField] uint emitterSeed = 1;
         [SerializeField] Vector3 boundsSize = new Vector3(1000, 1000, 1000);
         ComputeBuffer particles, args, fieldMappingBuffer;
+        ComputeBuffer spriteBuffer;
+        ParticleSpriteAnimation spriteAnimation;
         Mesh quad;
         MaterialPropertyBlock properties;
         Matrix4x4 drawTransform = Matrix4x4.identity;
@@ -202,6 +204,7 @@ namespace LiberaFx.Unity
             flowMapResourceIndices = nextFlowMapResourceIndices; particleId = Shader.PropertyToID(next.particleBuffer);
             properties = new MaterialPropertyBlock();
             properties.SetBuffer(DrawParticlesId, particles);
+            ConfigureSpriteAnimation(null);
             drawTransform = Matrix4x4.identity;
             drawTransformConnected = false;
             billboardSizeScale = 1;
@@ -431,9 +434,12 @@ namespace LiberaFx.Unity
                     var bounds = drawTransformConnected
                         ? TransformBounds(new Bounds(Vector3.zero, boundsSize), drawTransform)
                         : new Bounds(emitterPosition, boundsSize);
-                    Graphics.DrawMeshInstancedIndirect(quad, 0, billboardMaterial, bounds, args, 0, properties,
-                        ShadowCastingMode.Off, false, gameObject.layer, camera);
-                    DrawCount++;
+                    if (spriteAnimation==null || spriteAnimation.partCount!=0)
+                    {
+                        Graphics.DrawMeshInstancedIndirect(quad, 0, billboardMaterial, bounds, args, 0, properties,
+                            ShadowCastingMode.Off, false, gameObject.layer, camera);
+                        DrawCount++;
+                    }
                 }
                 else
                 {
@@ -496,13 +502,55 @@ namespace LiberaFx.Unity
             cursor = (cursor + count) % (uint)program.capacity;
         }
         void OnDisable() => Release();
+        internal void ConfigureSpriteAnimation(ParticleSpriteAnimation animation)
+        {
+            animation?.ValidateGpuPrecision();
+            if (animation!=null && !billboardMaterial.HasProperty("_LibraSpriteEnabled"))
+                throw new InvalidOperationException("GPU sprite animation requires the updated Libra billboard shader.");
+            if (animation!=null)
+                for (var i=0;i<program.flow.Length;++i)
+                    if (program.flow[i].kind=="RenderBillboard" && !animation.TextureMatches(flowTextures[i].width,flowTextures[i].height))
+                        throw new InvalidOperationException("GPU particle sprite source image dimensions do not match its authored cells.");
+            var values=animation?.values;
+            var data=new Vector4[Math.Max(1,(values?.Length ?? 0)/4)];
+            for (var i=0;i<(values?.Length ?? 0);i+=4)
+                data[i/4]=new Vector4((float)values[i],(float)values[i+1],(float)values[i+2],(float)values[i+3]);
+            var next=new ComputeBuffer(data.Length,16,ComputeBufferType.Structured);
+            try { next.SetData(data); }
+            catch { next.Release(); throw; }
+            LibraGpuRetirement.Retire(spriteBuffer,null,null,submittedWork);
+            spriteBuffer=next; spriteAnimation=animation;
+            var nextQuad=CreateSpriteQuad(Math.Max(1,animation?.partCount ?? 1));
+            LibraGpuRetirement.Retire(null,null,quad,submittedWork);
+            quad=nextQuad;
+            args.SetData(new uint[] {quad.GetIndexCount(0),(uint)program.capacity,quad.GetIndexStart(0),quad.GetBaseVertex(0),0});
+            properties.SetBuffer("_LibraSpriteData",spriteBuffer);
+            properties.SetFloat("_LibraSpriteEnabled",animation==null ? 0 : 1);
+        }
         void OnDestroy() => Release();
+        private static Mesh CreateSpriteQuad(int parts)
+        {
+            var vertices=new Vector3[parts*4]; var uv=new Vector2[parts*4]; var partIds=new Vector2[parts*4];
+            var indices=new int[parts*6];
+            var corners=new[] {new Vector3(-.5f,-.5f),new Vector3(.5f,-.5f),new Vector3(.5f,.5f),new Vector3(-.5f,.5f)};
+            var texture=new[] {new Vector2(0,0),new Vector2(1,0),new Vector2(1,1),new Vector2(0,1)};
+            var triangles=new[] {0,1,2,0,2,3};
+            for (var part=0;part<parts;++part)
+            {
+                for (var i=0;i<4;++i) {vertices[part*4+i]=corners[i]; uv[part*4+i]=texture[i]; partIds[part*4+i]=new Vector2(part,0);}
+                for (var i=0;i<6;++i) indices[part*6+i]=part*4+triangles[i];
+            }
+            var result=new Mesh {name="Libra GPU sprite parts",vertices=vertices,uv=uv,uv2=partIds,triangles=indices};
+            result.UploadMeshData(true); return result;
+        }
         public void Dispose() => Release();
         void Release()
         {
             running = false;
             LibraGpuRetirement.Retire(particles, args, quad, submittedWork);
             LibraGpuRetirement.Retire(fieldMappingBuffer, null, null, submittedWork);
+            LibraGpuRetirement.Retire(spriteBuffer,null,null,submittedWork);
+            spriteBuffer=null; spriteAnimation=null;
             fieldMappingBuffer = null;
             particles = null; args = null; quad = null;
             program = null; flowKernels = null; flowTextures = null; properties = null;

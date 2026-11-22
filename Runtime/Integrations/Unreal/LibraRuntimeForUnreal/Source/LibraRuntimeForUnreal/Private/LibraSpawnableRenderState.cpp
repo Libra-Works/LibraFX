@@ -1,4 +1,5 @@
 #include "LibraSpawnableRenderState.h"
+#include "LibraParticleSpriteData.h"
 #include "LibraDebugDrawScope.h"
 #include "LibraFlexiblePlaneRenderer.h"
 #include "LibraProceduralScope.h"
@@ -269,6 +270,8 @@ struct FDraw
 
 struct FCpuParticleDraw
 {
+    bool HasSpriteAnimation = false;
+    liberafx::ParticleSpriteAnimation SpriteAnimation;
     liberafx::ParticleAtlas Atlas;
     TArray<FGuid> DrawRows;
     FGuid Id;
@@ -586,7 +589,8 @@ struct FLibraSpawnableRenderState::FImpl
         }
         auto cpuVersion = double{};
         if ((root->HasField(TEXT("cpuParticleVersion")) || (cpuParticles && !cpuParticles->IsEmpty())) &&
-            (!root->TryGetNumberField(TEXT("cpuParticleVersion"), cpuVersion) || (cpuVersion != 1 && cpuVersion != 2 && cpuVersion != 3)))
+            (!root->TryGetNumberField(TEXT("cpuParticleVersion"), cpuVersion) ||
+             (cpuVersion != 1 && cpuVersion != 2 && cpuVersion != 3 && cpuVersion != 4)))
         {
             return Fail(TEXT("Unsupported CPU particle scene metadata version."));
         }
@@ -822,6 +826,11 @@ struct FLibraSpawnableRenderState::FImpl
                 draw.DrawScale = static_cast<float>(drawScale);
                 draw.bAdditive = blendMode == TEXT("Additive");
                 if (!LibraCpuParticleRendering::ReadAtlas(object,draw.Atlas)) return Fail(TEXT("Invalid CPU Flipbook settings."));
+                if (!LibraParticleSpriteData::Read(object, draw.HasSpriteAnimation, draw.SpriteAnimation) ||
+                    (draw.HasSpriteAnimation && (cpuVersion != 4 || draw.Atlas.enabled)))
+                {
+                    return Fail(TEXT("Invalid CPU Sprite editor animation; metadata version 4 is required."));
+                }
                 const auto rowValue = object->TryGetField(TEXT("drawMatrixRowNodeIds"));
                 if (rowValue.IsValid() && rowValue->Type != EJson::Null)
                 {
@@ -844,6 +853,14 @@ struct FLibraSpawnableRenderState::FImpl
                     return Fail(TEXT("Missing CPU particle Texture binding: ") + asset);
                 }
                 draw.Texture.Reset(texture);
+                if (draw.HasSpriteAnimation)
+                {
+                    const auto *image = Cast<UTexture2D>(texture);
+                    if (!image || !draw.SpriteAnimation.textureMatches(image->GetSizeX(), image->GetSizeY()))
+                    {
+                        return Fail(TEXT("CPU particle sprite source dimensions do not match its authored cells."));
+                    }
+                }
                 const auto* materialIdentity = draw.bAdditive
                     ? TEXT("builtin:cpu-particle-additive") : TEXT("builtin:cpu-particle-alpha");
                 auto* material = Resolve<UMaterialInterface>(materialIdentity, EKind::Material);
@@ -860,8 +877,12 @@ struct FLibraSpawnableRenderState::FImpl
                         TEXT("use the requested blend mode and expose a Texture parameter."));
                 }
                 draw.Material.Reset(material);
-                if (draw.Atlas.enabled && !HasParameter(material,FMaterialParameterInfo(TEXT("AtlasRect")),TEXT("vector")))
-                    return Fail(TEXT("CPU Flipbook material must expose AtlasRect (top-left UV offset in XY, cell size in ZW)."));
+                if ((draw.Atlas.enabled || draw.HasSpriteAnimation) &&
+                    !HasParameter(material, FMaterialParameterInfo(TEXT("AtlasRect")), TEXT("vector")))
+                {
+                    return Fail(TEXT(
+                        "CPU Flipbook material must expose AtlasRect (top-left UV offset in XY, cell size in ZW)."));
+                }
                 auto* plane = Resolve<UStaticMesh>(TEXT("/Engine/BasicShapes/Plane.Plane"),
                     EKind::Model, false);
                 if (!plane)
@@ -927,9 +948,11 @@ struct FLibraSpawnableRenderState::FImpl
         const TArray<TSharedPtr<FJsonValue>>* programs = nullptr;
         const TArray<TSharedPtr<FJsonValue>>* fluids = nullptr;
         if (!FJsonSerializer::Deserialize(reader, root) || !root || !Integer(root, TEXT("version"), version) ||
-            (version != 1 && version != 2 && version != 3) ||
+            (version != 1 && version != 2 && version != 3 && version != 4) ||
             !root->TryGetArrayField(TEXT("programs"), programs))
+        {
             return Fail(TEXT("GPU program manifest does not match its containers."));
+        }
         if (version == 1 && (!expectedFluids.IsEmpty() || root->HasField(TEXT("fluidPrograms"))))
             return Fail(TEXT("This Unreal runtime requires GPU program manifest Version=2 for 2D fluids."));
         if (version == 1 && programs->Num() != expectedParticles.Num())
@@ -1057,7 +1080,7 @@ struct FLibraSpawnableRenderState::FImpl
         if (root->HasField(TEXT("generatedDrawBindings")))
         {
             const TArray<TSharedPtr<FJsonValue>>* entries = nullptr;
-            if (version != 3 || !root->TryGetArrayField(TEXT("generatedDrawBindings"), entries) || entries->Num() > 64)
+            if (version < 3 || !root->TryGetArrayField(TEXT("generatedDrawBindings"), entries) || entries->Num() > 64)
             {
                 return Fail(TEXT("Generated draw bindings require version 3 and at most 64 entries."));
             }
@@ -1812,58 +1835,100 @@ struct FLibraSpawnableRenderState::FImpl
                 for (auto& entry : batch.Frames) { entry.Value->Transforms.Reset(); entry.Value->Colors.Reset(); }
                 std::array<liberafx::CpuParticleSnapshot,256> particleBatch;
                 std::array<liberafx::CpuParticleTiming,256> timingBatch;
-                for (auto particleIndex = 0; particleIndex < count; ++particleIndex)
+                for (auto part = std::size_t{};
+                     part < (system.HasSpriteAnimation ? system.SpriteAnimation.partCount() : 1); ++part)
                 {
-                    if (particleIndex%256==0) {
-                        SIZE_T written=0;
-                        result=Owner.ReadCpuParticleBatch(instance->Container,instance->Id,system.Id,particleIndex,
-                            particleBatch.data(),system.Atlas.enabled ? timingBatch.data() : nullptr,particleBatch.size(),written);
-                        if (result!=ELibraRuntimeResult::Ok || written!=static_cast<SIZE_T>(FMath::Min(256,count-particleIndex)))
-                            return Fail(TEXT("CPU particle batch read failed."));
-                    }
-                    const auto& particle=particleBatch[particleIndex%256];
-                    if (particle.id == 0)
+                    for (auto particleIndex = 0; particleIndex < count; ++particleIndex)
                     {
-                        return Fail(TEXT("CPU particle snapshot read failed."));
-                    }
-                    const auto positionX=particle.position[0], positionY=particle.position[1], positionZ=particle.position[2];
-                    const auto colorR=particle.color[0], colorG=particle.color[1], colorB=particle.color[2], colorA=particle.color[3];
-                    const auto sizeX=particle.size[0], sizeY=particle.size[1];
-                    const auto worldPosition = drawWorld.TransformPosition(FVector(
-                        positionX * system.DrawScale,
-                        positionY * system.DrawScale,
-                        positionZ * system.DrawScale));
-                    const auto scaledX = sizeX * system.DrawScale * ownerScale.X;
-                    const auto scaledY = sizeY * system.DrawScale * ownerScale.Y;
-                    if (!Finite(FVector4(worldPosition.X, worldPosition.Y, worldPosition.Z, scaledX)) ||
-                        !Finite(FVector4(scaledY, 0, 0, 0)) ||
-                        !Finite(FVector4(colorR, colorG, colorB, colorA)))
-                    {
-                        return Fail(TEXT("CPU particle snapshot exceeds Unreal's finite float range."));
-                    }
-                    auto* target = &batch;
-                    if (system.Atlas.enabled)
-                    {
-                        const auto& timing=timingBatch[particleIndex%256];
-                        const auto frame=system.Atlas.frame(timing.age,timing.life);
-                        auto& entry=batch.Frames.FindOrAdd(frame);
-                        if (!entry) {
-                            entry=MakeUnique<LibraCpuParticleRendering::FBatch>();
-                            auto* atlasMaterial=UMaterialInstanceDynamic::Create(system.Material.Get(),&Owner);
-                            atlasMaterial->SetTextureParameterValue(TEXT("Texture"),system.Texture.Get());
-                            atlasMaterial->SetVectorParameterValue(TEXT("AtlasRect"),FLinearColor(
-                                static_cast<float>(frame%system.Atlas.columns)/system.Atlas.columns,
-                                static_cast<float>(frame/system.Atlas.columns)/system.Atlas.rows,
-                                1.0f/system.Atlas.columns,1.0f/system.Atlas.rows));
-                            entry->Material.Reset(atlasMaterial);
+                        if (particleIndex % 256 == 0)
+                        {
+                            SIZE_T written = 0;
+                            result = Owner.ReadCpuParticleBatch(
+                                instance->Container, instance->Id, system.Id, particleIndex, particleBatch.data(),
+                                system.Atlas.enabled || system.HasSpriteAnimation ? timingBatch.data() : nullptr,
+                                particleBatch.size(), written);
+                            if (result != ELibraRuntimeResult::Ok ||
+                                written != static_cast<SIZE_T>(FMath::Min(256, count - particleIndex)))
+                            {
+                                return Fail(TEXT("CPU particle batch read failed."));
+                            }
                         }
-                        target=entry.Get();
+                        const auto &particle = particleBatch[particleIndex % 256];
+                        if (particle.id == 0)
+                        {
+                            return Fail(TEXT("CPU particle snapshot read failed."));
+                        }
+                        const auto positionX = particle.position[0], positionY = particle.position[1],
+                                   positionZ = particle.position[2];
+                        const auto colorR = particle.color[0], colorG = particle.color[1], colorB = particle.color[2],
+                                   colorA = particle.color[3];
+                        const auto sizeX = particle.size[0], sizeY = particle.size[1];
+                        auto worldPosition = drawWorld.TransformPosition(FVector(
+                            positionX * system.DrawScale, positionY * system.DrawScale, positionZ * system.DrawScale));
+                        auto scaledX = sizeX * system.DrawScale * ownerScale.X;
+                        auto scaledY = sizeY * system.DrawScale * ownerScale.Y;
+                        auto particleRotation = rotation;
+                        auto sprite = liberafx::ParticleSpriteSample{};
+                        if (system.HasSpriteAnimation)
+                        {
+                            if (system.SpriteAnimation.sample(part, timingBatch[particleIndex % 256].age, sprite) !=
+                                liberafx::Result::Ok)
+                            {
+                                return Fail(TEXT("Invalid CPU sprite animation time."));
+                            }
+                            worldPosition +=
+                                rotation.GetAxisX() * (scaledX * sprite.x) + rotation.GetAxisY() * (scaledY * sprite.y);
+                            scaledX *= sprite.scaleX;
+                            scaledY *= sprite.scaleY;
+                            particleRotation = rotation * FQuat(FVector::UpVector, sprite.rotation);
+                        }
+                        if (!Finite(FVector4(worldPosition.X, worldPosition.Y, worldPosition.Z, scaledX)) ||
+                            !Finite(FVector4(scaledY, 0, 0, 0)) || !Finite(FVector4(colorR, colorG, colorB, colorA)))
+                        {
+                            return Fail(TEXT("CPU particle snapshot exceeds Unreal's finite float range."));
+                        }
+                        auto *target = &batch;
+                        if (system.Atlas.enabled || system.HasSpriteAnimation)
+                        {
+                            const auto &timing = timingBatch[particleIndex % 256];
+                            const auto frame = system.HasSpriteAnimation ? static_cast<uint32>(part * 512) + sprite.cell
+                                                                         : system.Atlas.frame(timing.age, timing.life);
+                            auto &entry = batch.Frames.FindOrAdd(frame);
+                            if (!entry)
+                            {
+                                entry = MakeUnique<LibraCpuParticleRendering::FBatch>();
+                                auto *atlasMaterial = UMaterialInstanceDynamic::Create(system.Material.Get(), &Owner);
+                                atlasMaterial->SetTextureParameterValue(TEXT("Texture"), system.Texture.Get());
+                                if (system.HasSpriteAnimation)
+                                {
+                                    atlasMaterial->SetVectorParameterValue(
+                                        TEXT("AtlasRect"),
+                                        FLinearColor(sprite.uv[0], sprite.uv[1], sprite.uv[2], sprite.uv[3]));
+                                }
+                                else
+                                {
+                                    atlasMaterial->SetVectorParameterValue(
+                                        TEXT("AtlasRect"),
+                                        FLinearColor(
+                                            static_cast<float>(frame % system.Atlas.columns) / system.Atlas.columns,
+                                            static_cast<float>(frame / system.Atlas.columns) / system.Atlas.rows,
+                                            1.0f / system.Atlas.columns, 1.0f / system.Atlas.rows));
+                                }
+                                entry->Material.Reset(atlasMaterial);
+                            }
+                            target = entry.Get();
+                        }
+                        target->Transforms.Emplace(particleRotation, worldPosition,
+                                                   FVector(scaledX / 100, scaledY / 100, 1));
+                        target->Colors.Emplace(static_cast<float>(colorR), static_cast<float>(colorG),
+                                               static_cast<float>(colorB), static_cast<float>(colorA));
                     }
-                    target->Transforms.Emplace(rotation, worldPosition, FVector(scaledX / 100, scaledY / 100, 1));
-                    target->Colors.Emplace(static_cast<float>(colorR), static_cast<float>(colorG),
-                        static_cast<float>(colorB), static_cast<float>(colorA));
                 }
                 auto submitted = true;
+                if (system.HasSpriteAnimation)
+                {
+                    batch.Frames.KeySort([](uint32 a, uint32 b) { return a < b; });
+                }
                 LibraCpuParticleRendering::ForEach(batch,[&](auto& frameBatch) {
                 if (!frameBatch.Primitive.IsValid() && !frameBatch.Transforms.IsEmpty())
                 {

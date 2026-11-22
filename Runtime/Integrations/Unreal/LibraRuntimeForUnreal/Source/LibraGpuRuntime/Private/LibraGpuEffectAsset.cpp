@@ -1,4 +1,5 @@
 #include "LibraGpuEffectAsset.h"
+#include "LibraParticleSpriteData.h"
 
 #include "Dom/JsonObject.h"
 #include "Engine/Texture2D.h"
@@ -316,6 +317,35 @@ bool ULibraGpuEffectAsset::ValidateProgram(FString& error) const
                 error = TEXT("Invalid GPU billboard texture, blend mode, or sizeScale.");
                 return false;
             }
+            if (step.bSpriteAnimation)
+            {
+                if (step.SpritePartCount < 0 || step.SpritePartCount > 32 || step.SpriteValues.Num() > 1'200'000)
+                {
+                    error = TEXT("Invalid saved particle sprite capacity.");
+                    return false;
+                }
+                auto values = TArray<double>{};
+                values.Reserve(step.SpriteValues.Num());
+                for (const auto value : step.SpriteValues)
+                {
+                    values.Add(value);
+                }
+                auto sprite = liberafx::ParticleSpriteAnimation{};
+                if (sprite.configure(values.GetData(), values.Num(), step.SpritePartCount) != liberafx::Result::Ok ||
+                    !sprite.gpuCompatible())
+                {
+                    error = TEXT("Invalid saved particle sprite timeline.");
+                    return false;
+                }
+                const auto &texture = Textures[step.Index];
+                const auto *image = texture.Texture.Get();
+                if (!texture.IsGenerated() &&
+                    !sprite.textureMatches(image ? image->GetSizeX() : 1, image ? image->GetSizeY() : 1))
+                {
+                    error = TEXT("GPU particle sprite source dimensions do not match its authored cells.");
+                    return false;
+                }
+            }
             seenRender = true;
         }
         else
@@ -506,15 +536,17 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
     TMap<FString, int32> kernelIndices, textureIndices;
     TMap<FString, ELibraGpuBillboardBlend> rendererBindings;
     TMap<FString, float> rendererSizeScales;
+    TMap<FString, liberafx::ParticleSpriteAnimation> rendererSprites;
     auto explicitRenderers = root->HasField(TEXT("rendererBindingsVersion")) || root->HasField(TEXT("rendererBindings"));
     if (explicitRenderers)
     {
         const TArray<TSharedPtr<FJsonValue>>* renderers = nullptr;
         double rendererVersion = 0;
-        if (!root->TryGetNumberField(TEXT("rendererBindingsVersion"), rendererVersion) || rendererVersion != 1 ||
+        if (!root->TryGetNumberField(TEXT("rendererBindingsVersion"), rendererVersion) ||
+            (rendererVersion != 1 && rendererVersion != 2) ||
             !root->TryGetArrayField(TEXT("rendererBindings"), renderers) || renderers->Num() > 128)
         {
-            error = TEXT("Invalid GPU renderer bindings: rendererBindingsVersion must be 1.");
+            error = TEXT("Invalid GPU renderer bindings: rendererBindingsVersion must be 1 or 2.");
             return false;
         }
         for (const auto& value : *renderers)
@@ -547,6 +579,22 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
                 return false;
             }
             rendererSizeScales.Add(flowId, float(sizeScale));
+            auto sprite = liberafx::ParticleSpriteAnimation{};
+            auto present = false;
+            if (!LibraParticleSpriteData::Read(object, present, sprite) || (present && rendererVersion != 2))
+            {
+                error = TEXT("Invalid GPU Sprite editor animation; renderer bindings version 2 is required.");
+                return false;
+            }
+            if (present && !sprite.gpuCompatible())
+            {
+                error = TEXT("Sprite timing exceeds GPU float precision.");
+                return false;
+            }
+            if (present)
+            {
+                rendererSprites.Add(flowId, MoveTemp(sprite));
+            }
             rendererBindings.Add(flowId, material == TEXT("builtin:unlit-additive") ?
                 ELibraGpuBillboardBlend::Additive : ELibraGpuBillboardBlend::Alpha);
         }
@@ -744,6 +792,16 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
                 }
                 step.BillboardBlend = *blend;
                 step.SizeScale = rendererSizeScales[step.Id];
+                if (const auto *sprite = rendererSprites.Find(step.Id))
+                {
+                    step.bSpriteAnimation = true;
+                    step.SpritePartCount = static_cast<int32>(sprite->partCount());
+                    step.SpriteValues.Reserve(static_cast<int32>(sprite->values().size()));
+                    for (const auto component : sprite->values())
+                    {
+                        step.SpriteValues.Add(static_cast<float>(component));
+                    }
+                }
                 usedRenderers.Add(step.Id);
             }
             seenRender = true;

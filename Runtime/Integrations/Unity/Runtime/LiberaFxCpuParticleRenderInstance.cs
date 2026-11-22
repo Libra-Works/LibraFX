@@ -87,7 +87,7 @@ namespace LiberaFx.Unity
                 throw new InvalidOperationException("Could not read CPU particle count for " + definition.nodeId + ": " + result);
             if (count > 1000000)
                 throw new InvalidOperationException("CPU particle count exceeds the native system capacity limit.");
-            if (count == 0)
+            if (count == 0 || definition.spriteAnimation?.partCount==0)
             {
                 submission.enabled = false;
                 return;
@@ -111,12 +111,14 @@ namespace LiberaFx.Unity
                 worldToLocal.MultiplyVector(Vector3.up).magnitude +
                 worldToLocal.MultiplyVector(Vector3.forward).magnitude;
             var radius = 0.0;
+            // Part-major submission preserves the Sprite editor's layer order.
+            for (var part=0;part<(definition.spriteAnimation?.partCount ?? 1);++part)
             for (var index = 0u; index < count; ++index)
             {
                 if (index % 256 == 0)
                 {
                     result = host.CpuParticleRead(containerId, instanceId, definition.nodeIdBytes, index,
-                        particleBatch, definition.flipbook != null ? timingBatch : null, out var written);
+                        particleBatch, definition.flipbook != null || definition.spriteAnimation!=null ? timingBatch : null, out var written);
                     if (result != NativeResult.Ok || written != Math.Min(256u,count-index))
                         throw new InvalidOperationException("Could not read CPU particle batch: " + result);
                 }
@@ -135,7 +137,16 @@ namespace LiberaFx.Unity
                 radius = Math.Max(radius, Math.Sqrt((double)x * x + (double)y * y) * localRadiusFactor);
                 var first = centers.Count;
                 float u0=0, v0=0, u1=1, v1=1;
-                if (definition.flipbook != null)
+                var sprite=default(ParticleSpriteSample);
+                if (definition.spriteAnimation!=null)
+                {
+                    sprite=definition.spriteAnimation.Sample(part,timingBatch[index%256].Age);
+                    u0=(float)sprite.u; v0=(float)(1-sprite.v-sprite.height);
+                    u1=u0+(float)sprite.width; v1=v0+(float)sprite.height;
+                    radius=Math.Max(radius,(2*Math.Abs(x*sprite.x)+2*Math.Abs(y*sprite.y)+
+                        Math.Sqrt(x*x*sprite.scaleX*sprite.scaleX+y*y*sprite.scaleY*sprite.scaleY))*localRadiusFactor);
+                }
+                else if (definition.flipbook != null)
                 {
                     var atlas = definition.flipbook;
                     var timing = timingBatch[index % 256];
@@ -144,10 +155,18 @@ namespace LiberaFx.Unity
                     v0 = 1f-(float)(frame/atlas.columns+1)/atlas.rows;
                     u1 = u0+1f/atlas.columns; v1=v0+1f/atlas.rows;
                 }
-                AddVertex(center, color, u0, v0, -x, -y);
-                AddVertex(center, color, u1, v0, x, -y);
-                AddVertex(center, color, u1, v1, x, y);
-                AddVertex(center, color, u0, v1, -x, y);
+                void Vertex(float u,float v,float ox,float oy)
+                {
+                    if (definition.spriteAnimation!=null)
+                    {
+                        var px=ox*sprite.scaleX; var py=oy*sprite.scaleY;
+                        var c=Math.Cos(sprite.rotation); var s=Math.Sin(sprite.rotation);
+                        ox=ToFloat(px*c-py*s+2*x*sprite.x); oy=ToFloat(px*s+py*c+2*y*sprite.y);
+                    }
+                    AddVertex(center,color,u,v,ox,oy);
+                }
+                Vertex(u0,v0,-x,-y); Vertex(u1,v0,x,-y);
+                Vertex(u1,v1,x,y); Vertex(u0,v1,-x,y);
                 indices.Add(first);
                 indices.Add(first + 2);
                 indices.Add(first + 1);

@@ -331,6 +331,8 @@ class FLibraGpuBillboardVS : public FGlobalShader
     SHADER_USE_PARAMETER_STRUCT(FLibraGpuBillboardVS, FGlobalShader);
     BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
         SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<LibraParticle>, ParticleData)
+        SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>, SpriteData)
+        SHADER_PARAMETER(uint32, SpriteEnabled)
         SHADER_PARAMETER(FMatrix44f, ViewProjection)
         SHADER_PARAMETER(FVector3f, PreViewTranslation)
         SHADER_PARAMETER(FVector3f, CameraRight)
@@ -370,12 +372,25 @@ BEGIN_SHADER_PARAMETER_STRUCT(FLibraGpuBillboardPassParameters, )
     SHADER_PARAMETER_STRUCT_INCLUDE(FLibraGpuBillboardPS::FParameters, PS)
 END_SHADER_PARAMETER_STRUCT()
 
-static void AddLibraGpuBillboardRasterPass(FRDGBuilder& graph,
-    FLibraGpuBillboardPassParameters* parameters, FIntRect rect, int32 count,
-    ERHIFeatureLevel::Type featureLevel, const TCHAR* profileName,
-    ELibraGpuBillboardBlend blend = ELibraGpuBillboardBlend::Alpha,
-    const FMatrix44f* drawTransform = nullptr)
+static void AddLibraGpuBillboardRasterPass(FRDGBuilder &graph, FLibraGpuBillboardPassParameters *parameters,
+                                           FIntRect rect, int32 count, ERHIFeatureLevel::Type featureLevel,
+                                           const TCHAR *profileName,
+                                           ELibraGpuBillboardBlend blend = ELibraGpuBillboardBlend::Alpha,
+                                           const FMatrix44f *drawTransform = nullptr,
+                                           FRDGBufferRef spriteBuffer = nullptr, uint32 spriteParts = 1,
+                                           bool spriteEnabled = false)
 {
+    if (spriteEnabled && spriteParts == 0)
+    {
+        return;
+    }
+    if (!spriteBuffer)
+    {
+        const auto zero = FVector4f(0, 0, 0, 0);
+        spriteBuffer = CreateStructuredBuffer(graph, TEXT("LibraGpu.EmptySprite"), 16, 1, &zero, sizeof(zero));
+    }
+    parameters->VS.SpriteData = graph.CreateSRV(spriteBuffer);
+    parameters->VS.SpriteEnabled = spriteEnabled ? 1u : 0u;
     auto matrix = drawTransform ? *drawTransform : FMatrix44f::Identity;
     parameters->VS.DrawRow0 = FVector4f(matrix.M[0][0], matrix.M[0][1], matrix.M[0][2], matrix.M[0][3]);
     parameters->VS.DrawRow1 = FVector4f(matrix.M[1][0], matrix.M[1][1], matrix.M[1][2], matrix.M[1][3]);
@@ -384,8 +399,9 @@ static void AddLibraGpuBillboardRasterPass(FRDGBuilder& graph,
     TShaderMapRef<FLibraGpuBillboardVS> vertexShader(shaderMap);
     TShaderMapRef<FLibraGpuBillboardPS> pixelShader(shaderMap);
     RDG_EVENT_SCOPE(graph, "LibraGpu.Billboards");
-    graph.AddPass(RDG_EVENT_NAME("%s.Billboards", profileName), parameters, ERDGPassFlags::Raster,
-        [parameters, vertexShader, pixelShader, rect, count, blend](FRHICommandList& commandList)
+    graph.AddPass(
+        RDG_EVENT_NAME("%s.Billboards", profileName), parameters, ERDGPassFlags::Raster,
+        [parameters, vertexShader, pixelShader, rect, count, blend, spriteParts](FRHICommandList &commandList)
         {
             FGraphicsPipelineStateInitializer pipeline;
             commandList.ApplyCachedRenderTargets(pipeline);
@@ -404,7 +420,7 @@ static void AddLibraGpuBillboardRasterPass(FRDGBuilder& graph,
             SetShaderParameters(commandList, vertexShader, vertexShader.GetVertexShader(), parameters->VS);
             SetShaderParameters(commandList, pixelShader, pixelShader.GetPixelShader(), parameters->PS);
             commandList.SetStreamSource(0, nullptr, 0);
-            commandList.DrawPrimitive(0, 2, count);
+            commandList.DrawPrimitive(0, 2 * spriteParts, count);
         });
 }
 
@@ -594,6 +610,22 @@ struct FLibraGpuState
     TArray<FLibraGpuRenderTexture> Textures;
     FMatrix44f DrawTransform = FMatrix44f::Identity;
     TRefCountPtr<FRDGPooledBuffer> Particles;
+    TMap<FString, TRefCountPtr<FRDGPooledBuffer>> SpriteBuffers;
+    FRDGBufferRef SpriteBuffer(FRDGBuilder &graph, const FLibraGpuFlowStep &step)
+    {
+        if (!step.bSpriteAnimation || step.SpriteValues.IsEmpty())
+        {
+            return nullptr;
+        }
+        auto &stored = SpriteBuffers.FindOrAdd(step.Id);
+        if (!stored)
+        {
+            auto data = CreateStructuredBuffer(graph, TEXT("LibraGpu.SpriteTimeline"), 16, step.SpriteValues.Num() / 4,
+                                               step.SpriteValues.GetData(), step.SpriteValues.Num() * sizeof(float));
+            stored = graph.ConvertToExternalBuffer(data);
+        }
+        return graph.RegisterExternalBuffer(stored);
+    }
     TRefCountPtr<FRDGPooledBuffer> Registers;
     TArray<TRefCountPtr<FRDGPooledBuffer>> Programs;
     bool bFluid2D = false;
@@ -1016,8 +1048,10 @@ public:
             parameters->PS.TextureFlags = State->Textures[step.Index].bGenerated ? (State->Textures[step.Index].bGeneratedStraight ? 0u : State->Textures[step.Index].bGeneratedFields ? 2u : 3u) : 0u;
             parameters->PS.BillboardSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
             parameters->PS.RenderTargets[0] = FRenderTargetBinding(output.Texture, ERenderTargetLoadAction::ELoad);
-            AddLibraGpuBillboardRasterPass(graph, parameters, output.ViewRect, State->Capacity,
-                view.GetFeatureLevel(), *State->ProfileName, step.BillboardBlend, &State->DrawTransform);
+            AddLibraGpuBillboardRasterPass(graph, parameters, output.ViewRect, State->Capacity, view.GetFeatureLevel(),
+                                           *State->ProfileName, step.BillboardBlend, &State->DrawTransform,
+                                           State->SpriteBuffer(graph, step),
+                                           step.bSpriteAnimation ? step.SpritePartCount : 1, step.bSpriteAnimation);
         }
         if (State->bFluid2D && State->bFluidVisible && State->FluidOutput)
         {
@@ -1580,8 +1614,11 @@ bool ULibraGpuEffectRuntime::VerifyGeneratedTextureFramebuffer(FString& report)
         draw->PS.TextureFlags = 3;
         draw->PS.BillboardSampler = TStaticSamplerState<SF_Bilinear>::GetRHI();
         draw->PS.RenderTargets[0] = FRenderTargetBinding(target, ERenderTargetLoadAction::ELoad);
-        AddLibraGpuBillboardRasterPass(graph, draw, FIntRect(0, 0, 128, 128), state->Capacity,
-            GMaxRHIFeatureLevel, TEXT("LibraGpu.GeneratedConsumer"), state->Flow.Last().BillboardBlend);
+        AddLibraGpuBillboardRasterPass(graph, draw, FIntRect(0, 0, 128, 128), state->Capacity, GMaxRHIFeatureLevel,
+                                       TEXT("LibraGpu.GeneratedConsumer"), state->Flow.Last().BillboardBlend, nullptr,
+                                       state->SpriteBuffer(graph, state->Flow.Last()),
+                                       state->Flow.Last().bSpriteAnimation ? state->Flow.Last().SpritePartCount : 1,
+                                       state->Flow.Last().bSpriteAnimation);
         AddEnqueueCopyPass(graph, &readback, target);
         graph.Execute();
         if (!WaitForLibraGpuReadback(commandList, readback)) return;
@@ -3232,5 +3269,7 @@ bool FLibraGpuFluid2DFieldConsumersTest::RunTest(const FString& parameters)
     world->DestroyWorld(false);
     return !HasAnyErrors();
 }
+
+#include "Tests/LibraGpuParticleSpriteTests.inl"
 
 #endif

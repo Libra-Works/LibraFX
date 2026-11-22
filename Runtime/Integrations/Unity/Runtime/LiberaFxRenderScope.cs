@@ -144,6 +144,7 @@ namespace LiberaFx.Unity
                     runtime.ConfigureForSpawnable(gpu.binding.computeShader, gpu.binding.metadata,
                         gpu.binding.billboardMaterial, textures.ToArray(),
                         SeedForProgram(seed, gpu.nodeId), gpu.spawnRate, gpu.sizeScale);
+                    runtime.ConfigureSpriteAnimation(gpu.spriteAnimation);
                     scope.gpuPrograms.Add(runtime);
                     scope.gpuDrawTransforms.Add(runtime, gpu);
                 }

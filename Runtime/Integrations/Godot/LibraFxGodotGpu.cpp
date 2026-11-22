@@ -1,4 +1,10 @@
 #include "LibraFxGodotGpu.h"
+#include "LibraFxParticleSprite.h"
+#include <godot_cpp/classes/array_mesh.hpp>
+#include <godot_cpp/classes/image_texture.hpp>
+#include <godot_cpp/variant/packed_vector3_array.hpp>
+#include <godot_cpp/variant/packed_vector2_array.hpp>
+#include <godot_cpp/variant/packed_int32_array.hpp>
 #include "LibraFxGodotCoordinates.h"
 #include "LibraFxGodotFluid2D.h"
 #include "LibraFxGodotRenderTaskQueue.h"
@@ -61,6 +67,9 @@ constexpr auto computeSource =
 constexpr auto billboardSource =
 #include "Shaders/LgpkBillboard.gdshader.inc"
 ;
+constexpr auto particleSpriteSource =
+#include "Shaders/ParticleSprite.gdshader.inc"
+    ;
 constexpr auto publishSource =
 #include "Shaders/LgpkPublish.glsl.inc"
 ;
@@ -76,6 +85,8 @@ using NodeId = std::array<std::uint8_t, 16>;
 using MatrixRows = std::array<NodeId, 4>;
 
 struct Emitter {
+    bool hasSpriteAnimation = false;
+    ParticleSpriteAnimation spriteAnimation;
     std::array<Kernel, 2> kernels;
     std::uint32_t capacity = 0;
     std::uint32_t seed = 0;
@@ -505,14 +516,18 @@ auto readContainerManifest(const Bytes& containers, const Bytes& manifest,
                 return fail(error, "Version 1 GPU manifests cannot contain Fluid2D programs",
                     Result::UnsupportedBinary);
             }
-        } else if (version == 2 || version == 3) {
+        }
+        else if (version == 2 || version == 3 || version == 4)
+        {
             version2 = true;
             if (!array(outer, "fluidPrograms", fluidPrograms)) {
                 return fail(error, "Version 2 GPU manifests require a fluidPrograms array");
             }
-        } else {
-            return fail(error, "Only GPU program manifest versions 1 and 2 are supported",
-                Result::UnsupportedBinary);
+        }
+        else
+        {
+            return fail(error, "Only GPU program manifest versions 1 through 4 are supported",
+                        Result::UnsupportedBinary);
         }
         if (version < 3)
         {
@@ -834,10 +849,12 @@ auto readEmitter(const Dictionary& delivery, const Textures& textures, Emitter& 
     }
     const auto runtimeExecuted = metadata.get("runtimeExecuted", Variant{});
     const auto metadataVersion = number(metadata, "version");
-    if ((metadataVersion != 1 && metadataVersion != 2 && metadataVersion != 3) || text(metadata, "purpose") != "SourceExport" ||
-        runtimeExecuted.get_type() != Variant::BOOL || static_cast<bool>(runtimeExecuted) ||
-        text(metadata, "format") != "Usf" || number(metadata, "particleStride") != particleStride ||
-        number(metadata, "uniformBufferBytes") != 48 || number(delivery, "rendererBindingsVersion") != 1) {
+    if ((metadataVersion != 1 && metadataVersion != 2 && metadataVersion != 3) ||
+        text(metadata, "purpose") != "SourceExport" || runtimeExecuted.get_type() != Variant::BOOL ||
+        static_cast<bool>(runtimeExecuted) || text(metadata, "format") != "Usf" ||
+        number(metadata, "particleStride") != particleStride || number(metadata, "uniformBufferBytes") != 48 ||
+        (number(delivery, "rendererBindingsVersion") != 1 && number(delivery, "rendererBindingsVersion") != 2))
+    {
         return fail(error, "Unsupported packaged LGPK metadata or renderer ABI", Result::UnsupportedBinary);
     }
     const auto canonical = text(delivery, "canonicalJson");
@@ -1084,6 +1101,21 @@ auto readEmitter(const Dictionary& delivery, const Textures& textures, Emitter& 
             Result::UnsupportedBinary);
     }
     emitter.additive = material == "builtin:unlit-additive";
+    const auto spriteResult = readParticleSprite(renderer.get("spriteAnimation", Variant{}), emitter.hasSpriteAnimation,
+                                                 emitter.spriteAnimation);
+    if (spriteResult != Result::Ok || (emitter.hasSpriteAnimation && number(delivery, "rendererBindingsVersion") != 2))
+    {
+        return fail(error, "Invalid GPU Sprite editor animation", Result::InvalidBinary);
+    }
+    if (emitter.hasSpriteAnimation && !emitter.spriteAnimation.gpuCompatible())
+    {
+        return fail(error, "Sprite timing exceeds GPU float precision", Result::InvalidBinary);
+    }
+    if (emitter.hasSpriteAnimation && emitter.texture.is_valid() &&
+        !emitter.spriteAnimation.textureMatches(emitter.texture->get_width(), emitter.texture->get_height()))
+    {
+        return fail(error, "GPU sprite source dimensions do not match its authored cells", Result::InvalidArgument);
+    }
     emitter.sizeScale = static_cast<float>(size);
     if (emitter.sizeScale == 0) {
         return fail(error, "LGPK billboard sizeScale is below the Godot GPU float range",
@@ -1331,7 +1363,8 @@ auto publishParticles(Emitter& emitter, SpawnableHost& host, String& error, Tran
     if (drawTransform) *drawTransform = applied;
     emitter.material->set_shader_parameter("draw_matrix", applied);
     emitter.material->set_shader_parameter("draw_is_world", emitter.hasMatrix);
-    emitter.multiMesh->set_visible_instance_count(emitter.capacity);
+    emitter.multiMesh->set_visible_instance_count(
+        emitter.hasSpriteAnimation && emitter.spriteAnimation.partCount() == 0 ? 0 : emitter.capacity);
     return Result::Ok;
 }
 
@@ -1478,7 +1511,7 @@ auto readGeneratedDrawBindings(const Bytes& manifest, const Bytes& renderConfig,
     {
         return Result::Ok;
     }
-    if (value.get_type() != Variant::ARRAY || number(document, "version") != 3)
+    if (value.get_type() != Variant::ARRAY || number(document, "version") < 3)
     {
         return fail(error, "Generated draw bindings require GPU payload version 3");
     }
@@ -1847,8 +1880,9 @@ void PackageGpuRenderer::Impl::attachEmitter(godot::Node3D& root, Emitter& emitt
         auto shader = godot::Ref<godot::Shader>{};
         shader.instantiate();
         shader->set_code(godot::String("shader_type spatial;\n"
-            "render_mode unshaded, cull_disabled, shadows_disabled, depth_draw_never, "
-            "skip_vertex_transform, ") + (emitter.additive ? "blend_add;\n" : "blend_mix;\n") + billboardSource);
+                                       "render_mode unshaded, cull_disabled, shadows_disabled, depth_draw_never, "
+                                       "skip_vertex_transform, ") +
+                         (emitter.additive ? "blend_add;\n" : "blend_mix;\n") + particleSpriteSource + billboardSource);
         auto material = godot::Ref<godot::ShaderMaterial>{};
         material.instantiate();
         material->set_shader(shader);
@@ -1857,6 +1891,22 @@ void PackageGpuRenderer::Impl::attachEmitter(godot::Node3D& root, Emitter& emitt
         emitter.outputTexture->set_texture_rd_rid(emitter.output);
         material->set_shader_parameter("particle_state", emitter.outputTexture);
         material->set_shader_parameter("particle_size_scale", emitter.sizeScale);
+        material->set_shader_parameter("sprite_enabled", emitter.hasSpriteAnimation);
+        if (emitter.hasSpriteAnimation && !emitter.spriteAnimation.values().empty())
+        {
+            const auto &source = emitter.spriteAnimation.values();
+            const auto height = static_cast<int>((source.size() / 4 + 255) / 256);
+            auto bytes = PackedByteArray{};
+            bytes.resize(static_cast<int64_t>(256) * height * 16);
+            auto *pixels = reinterpret_cast<float *>(bytes.ptrw());
+            std::fill_n(pixels, 256 * height * 4, 0.0f);
+            for (auto i = std::size_t{}; i < source.size(); ++i)
+            {
+                pixels[i] = static_cast<float>(source[i]);
+            }
+            auto image = Image::create_from_data(256, height, false, Image::FORMAT_RGBAF, bytes);
+            material->set_shader_parameter("sprite_timeline", ImageTexture::create_from_image(image));
+        }
         material->set_shader_parameter("use_draw_matrix", emitter.hasMatrix);
         material->set_shader_parameter("texture_premultiplied", emitter.generatedTexture && emitter.textureOutput == "DyeOutput");
         material->set_shader_parameter("texture_flip_y", emitter.generatedTexture && emitter.textureOutput != "ColorOutput");
@@ -1868,7 +1918,43 @@ void PackageGpuRenderer::Impl::attachEmitter(godot::Node3D& root, Emitter& emitt
         quad.instantiate();
         quad->set_size(godot::Vector2(2, 2));
         emitter.multiMesh.instantiate();
-        emitter.multiMesh->set_mesh(quad);
+        if (emitter.hasSpriteAnimation)
+        {
+            const auto parts = std::max(std::size_t{1}, emitter.spriteAnimation.partCount());
+            auto vertices = godot::PackedVector3Array{};
+            auto uv = godot::PackedVector2Array{}, ids = godot::PackedVector2Array{};
+            auto indices = godot::PackedInt32Array{};
+            const godot::Vector3 corners[] = {{-1, -1, 0}, {1, -1, 0}, {1, 1, 0}, {-1, 1, 0}};
+            const godot::Vector2 tex[] = {{0, 1}, {1, 1}, {1, 0}, {0, 0}};
+            const int triangles[] = {0, 1, 2, 0, 2, 3};
+            for (auto part = std::size_t{}; part < parts; ++part)
+            {
+                for (auto i = 0; i < 4; ++i)
+                {
+                    vertices.push_back(corners[i]);
+                    uv.push_back(tex[i]);
+                    ids.push_back(godot::Vector2(part, 0));
+                }
+                for (auto i : triangles)
+                {
+                    indices.push_back(static_cast<int32_t>(part * 4 + i));
+                }
+            }
+            auto arrays = Array{};
+            arrays.resize(godot::Mesh::ARRAY_MAX);
+            arrays[godot::Mesh::ARRAY_VERTEX] = vertices;
+            arrays[godot::Mesh::ARRAY_TEX_UV] = uv;
+            arrays[godot::Mesh::ARRAY_TEX_UV2] = ids;
+            arrays[godot::Mesh::ARRAY_INDEX] = indices;
+            auto mesh = Ref<godot::ArrayMesh>{};
+            mesh.instantiate();
+            mesh->add_surface_from_arrays(godot::Mesh::PRIMITIVE_TRIANGLES, arrays);
+            emitter.multiMesh->set_mesh(mesh);
+        }
+        else
+        {
+            emitter.multiMesh->set_mesh(quad);
+        }
         emitter.multiMesh->set_transform_format(godot::MultiMesh::TRANSFORM_3D);
         emitter.multiMesh->set_use_colors(false);
         emitter.multiMesh->set_use_custom_data(false);

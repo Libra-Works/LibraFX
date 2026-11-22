@@ -24,6 +24,8 @@ namespace LiberaFx.Unity
 
     [Serializable] internal sealed class LiberaFxCpuParticlePayload
     {
+        public ParticleSpriteAnimation spriteAnimation;
+        public bool __liberafxHasSpriteAnimation;
         public ParticleAtlas flipbook;
         public string[] drawMatrixRowNodeIds;
         public string nodeId;
@@ -179,6 +181,7 @@ namespace LiberaFx.Unity
 
     [Serializable] internal sealed class LiberaFxGpuUnrealProgram
     {
+        public int rendererBindingsVersion;
         public string canonicalJson;
         public LiberaFxGpuUnrealMetadata metadata;
         public LiberaFxGpuRendererBinding[] rendererBindings;
@@ -192,6 +195,8 @@ namespace LiberaFx.Unity
 
     [Serializable] internal sealed class LiberaFxGpuRendererBinding
     {
+        public ParticleSpriteAnimation spriteAnimation;
+        public bool __liberafxHasSpriteAnimation;
         public string flowId;
         public string renderer;
         public string material;
@@ -241,6 +246,7 @@ namespace LiberaFx.Unity
 
     internal sealed class LiberaFxPreparedGpuProgram
     {
+        public ParticleSpriteAnimation spriteAnimation;
         public float spawnRate;
         public string nodeId;
         public LiberaFxUnityGpuProgramBinding binding;
@@ -272,6 +278,7 @@ namespace LiberaFx.Unity
 
     internal sealed class LiberaFxPreparedCpuParticleRenderer
     {
+        public ParticleSpriteAnimation spriteAnimation;
         public ParticleAtlas flipbook;
         public byte[][] drawRows;
         public string nodeId;
@@ -416,8 +423,11 @@ namespace LiberaFx.Unity
                     throw new InvalidOperationException(
                         "No Unity Texture binding exists for CPU particle asset '" + item.assetPath + "'.");
                 else texture = asset.texture;
+                if (item.spriteAnimation!=null && !item.spriteAnimation.TextureMatches(texture.width,texture.height))
+                    throw new InvalidOperationException("CPU particle sprite source image dimensions do not match its authored cells.");
                 result[index] = new LiberaFxPreparedCpuParticleRenderer
                 {
+                    spriteAnimation = item.spriteAnimation,
                     flipbook = item.flipbook != null && item.flipbook.enabled
                         ? item.flipbook.IsValid ? item.flipbook : throw new InvalidOperationException("Invalid CPU Flipbook settings.") : null,
                     nodeId = nodeId,
@@ -720,6 +730,8 @@ namespace LiberaFx.Unity
                      reference.outputId == "DensityOutput" && resource.kind == "FlowMap2D" && resource.flowMap?.encoding == "FloatDensity")))
                     throw new InvalidOperationException("Generated output does not match the declared texture/sampling encoding: " + reference.resourceId);
             var renderBindings = program.unreal.rendererBindings ?? Array.Empty<LiberaFxGpuRendererBinding>();
+            if (program.unreal.rendererBindingsVersion!=1 && program.unreal.rendererBindingsVersion!=2)
+                throw new NotSupportedException("Unsupported GPU renderer bindings version.");
             var renderFlowCount = 0;
             foreach (var flow in packageMetadata.flow)
                 if (flow.kind == "RenderBillboard") ++renderFlowCount;
@@ -730,6 +742,13 @@ namespace LiberaFx.Unity
             var sizeScale = 1f;
             foreach (var renderer in renderBindings)
             {
+                if (renderer!=null)
+                {
+                    if (!renderer.__liberafxHasSpriteAnimation) renderer.spriteAnimation=null;
+                    renderer.spriteAnimation?.Validate();
+                    if (renderer.spriteAnimation!=null && program.unreal.rendererBindingsVersion!=2)
+                        throw new InvalidOperationException("GPU sprite animation requires renderer bindings version 2.");
+                }
                 if (renderer == null || renderer.renderer != "builtin:billboard" ||
                     renderer.material != configured.rendererMaterialIdentity ||
                     (renderer.material != "builtin:unlit-alpha" && renderer.material != "builtin:unlit-additive") ||
@@ -738,6 +757,14 @@ namespace LiberaFx.Unity
                     renderer.sizeScale > 10000 || Math.Abs(renderer.sizeScale - configured.sizeScale) > 0.0001)
                     throw new InvalidOperationException("Unity GPU renderer material/size binding is unsupported or mismatched for " + nodeId + ".");
                 sizeScale = (float)renderer.sizeScale;
+                var firstSprite = renderBindings[0].spriteAnimation;
+                if ((renderer.spriteAnimation == null) != (firstSprite == null) ||
+                    renderer.spriteAnimation != null &&
+                    (renderer.spriteAnimation.partCount != firstSprite.partCount ||
+                     !renderer.spriteAnimation.values.SequenceEqual(firstSprite.values)))
+                {
+                    throw new InvalidOperationException("Unity GPU billboard renderers in one program must share the same Sprite editor animation.");
+                }
             }
             LibraGpuParticleRuntime.ValidateSpawnableConfiguration(configured.computeShader,
                 configured.metadata, configured.billboardMaterial, configured.textures, generatedIds);
@@ -748,6 +775,7 @@ namespace LiberaFx.Unity
                 packageMetadata = packageMetadata,
                 spawnRate = packageMetadata.version >= 3 ? packageMetadata.spawnRate : configured.spawnRate,
                 sizeScale = sizeScale,
+                spriteAnimation=renderBindings.Length==0 ? null : renderBindings[0].spriteAnimation,
                 generatedResources = generated,
                 drawMatrixRowNodeBytes = drawTransform?.rowNodeBytes
             };
@@ -851,7 +879,15 @@ namespace LiberaFx.Unity
                 }
             }
             payload.cpuParticles = payload.cpuParticles ?? Array.Empty<LiberaFxCpuParticlePayload>();
-            if (payload.cpuParticleVersion != 1 && payload.cpuParticleVersion != 2 && payload.cpuParticleVersion != 3 && (payload.cpuParticleVersion != 0 || payload.cpuParticles.Length != 0))
+            foreach (var particle in payload.cpuParticles)
+            {
+                if (particle==null) throw new InvalidOperationException("Missing CPU particle renderer.");
+                if (!particle.__liberafxHasSpriteAnimation) particle.spriteAnimation=null;
+                particle.spriteAnimation?.Validate();
+                if (particle.spriteAnimation!=null && (payload.cpuParticleVersion!=4 || particle.flipbook?.enabled==true))
+                    throw new InvalidOperationException("CPU sprite animation needs metadata version 4 and cannot combine with Flipbook.");
+            }
+            if (payload.cpuParticleVersion != 1 && payload.cpuParticleVersion != 2 && payload.cpuParticleVersion != 3 && payload.cpuParticleVersion != 4 && (payload.cpuParticleVersion != 0 || payload.cpuParticles.Length != 0))
                 throw new NotSupportedException("Unsupported CPU particle scene metadata version.");
             var drawTransforms = new Dictionary<string, LiberaFxGpuDrawTransformPayload>(StringComparer.Ordinal);
             foreach (var transform in payload.gpuDrawTransforms ?? Array.Empty<LiberaFxGpuDrawTransformPayload>())
@@ -1083,9 +1119,12 @@ namespace LiberaFx.Unity
                 throw new InvalidOperationException("GPU executable payload exceeds 16 MiB.");
             LiberaFxGpuManifestPayload manifest;
             var json = Encoding.UTF8.GetString(bytes);
+            json=System.Text.RegularExpressions.Regex.Replace(json,@"""spriteAnimation""\s*:\s*\{",
+                "\"__liberafxHasSpriteAnimation\":true,\"spriteAnimation\":{",
+                System.Text.RegularExpressions.RegexOptions.CultureInvariant,TimeSpan.FromSeconds(1));
             try { manifest = JsonUtility.FromJson<LiberaFxGpuManifestPayload>(json); }
             catch (Exception error) { throw new InvalidOperationException("GPU executable payload JSON is malformed.", error); }
-            if (manifest == null || (manifest.version != 1 && manifest.version != 2 && manifest.version != 3) ||
+            if (manifest == null || (manifest.version != 1 && manifest.version != 2 && manifest.version != 3 && manifest.version != 4) ||
                 manifest.programs == null || manifest.programs.Length > 16)
                 throw new InvalidOperationException("GPU executable payload version or program count is invalid.");
             if (manifest.version == 1 && manifest.fluidPrograms != null && manifest.fluidPrograms.Length != 0)
@@ -1098,7 +1137,7 @@ namespace LiberaFx.Unity
                     program.generatedResources = resources.generated.TryGetValue(CanonicalGuid(program.nodeId), out var generated)
                         ? generated : Array.Empty<LiberaFxGeneratedGpuResource>();
                 fluids = manifest.fluidPrograms;
-                if (fluids == null || fluids.Length == 0 || fluids.Length + manifest.programs.Length > 16)
+                if (fluids == null || (fluids.Length == 0 && manifest.version!=4) || fluids.Length + manifest.programs.Length > 16)
                     throw new InvalidOperationException("GPU fluid program count is invalid.");
                 foreach (var fluid in fluids)
                 {

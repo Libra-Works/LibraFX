@@ -7,7 +7,7 @@ public class LibraGpuRuntime : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         CppStandard = CppStandardVersion.Cpp20;
-        PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine" });
+        PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "LibraRuntimeCore" });
         PrivateDependencyModuleNames.AddRange(new[] { "Projects", "RenderCore", "RHI", "Renderer", "Json" });
         AddEngineThirdPartyPrivateStaticDependencies(Target, "OpenSSL");
         var pluginRoot = Path.GetFullPath(Path.Combine(ModuleDirectory, "..", ".."));
