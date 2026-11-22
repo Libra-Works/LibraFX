@@ -19,7 +19,7 @@ LIBERA FXは、**Unity・Unreal Engine・Godotで再生するエフェクト**�
 グラフの編集は、エンジンと接続する前から始められます。
 パーティクル全体の見た目は、接続先エンジンのプレビューで確認します。
 
-[![グラフ・編集パネル・再生コントロールを表示したLIBERA FXの制作画面](../images/editor/workspace.png)](workspace-tour.md)
+[![グラフ・編集パネル・再生コントロールを表示したLIBERA FXの制作画面](../images/editor/workspace.png)](../images/editor/workspace.png)
 
 ## 作りたいものから探す
 

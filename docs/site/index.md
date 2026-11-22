@@ -20,7 +20,7 @@ SDK and programming details have their own section.
 Graph editing works without an engine connection. Use a connected engine preview
 to judge the complete particle effect's appearance.
 
-[![The effect graph, editing panels and playback controls in LIBERA FX](images/editor/workspace.png)](workspace-tour.md)
+[![The effect graph, editing panels and playback controls in LIBERA FX](images/editor/workspace.png)](images/editor/workspace.png)
 
 ## Choose what to make
 
