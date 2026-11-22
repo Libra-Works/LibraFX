@@ -211,7 +211,9 @@ internal static class InlineGroupTests
             Reject(() => child.RenameNode(scalar, "Forbidden"));
             Reject(() => child.SetParameter(scalar, "value", JsonSerializer.SerializeToElement(9d)));
             Reject(() => child.DeleteNode(scalar));
-            Reject(() => child.TryConnectNodes(scalar, child.Nodes.Last(), out _));
+            Require(!child.TryConnectNodes(scalar, child.Nodes.Last(), out var connectError) &&
+                    !string.IsNullOrWhiteSpace(connectError),
+                "A stale or locked inline connection was accepted.");
             Require(historyId == graph.History.CurrentNodeId && GraphSnapshot.ContentEquals(before, graph.CreateSnapshot()),
                 "A rejected locked edit changed the document/history.");
             graph.SetGroupInstanceValue(graph.GetNode(group.Id), new(itemId, [new(JsonSerializer.SerializeToElement(7d))]));

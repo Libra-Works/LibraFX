@@ -21,8 +21,11 @@ public sealed class TimelineCanvas : Control
     private double _end = 120;
     private TimelineTrackViewModel? _drag;
     private bool _scrubbing;
+    private bool _panning;
     private bool _stretching;
     private Point _pointerStart;
+    private double _panStartValue;
+    private double _panEndValue;
     private double _previewDelta;
     private Guid _revision;
     private Guid? _dragKey;
@@ -64,6 +67,16 @@ public sealed class TimelineCanvas : Control
     private double SnapDisplayTime(double displayTime) =>
         _model?.Playback.ShowSeconds == true ? displayTime : Math.Round(displayTime);
 
+    public void ZoomBy(double factor)
+    {
+        if (!double.IsFinite(factor) || factor <= 0) return;
+        var center = (_start + _end) * 0.5;
+        var duration = Math.Clamp((_end - _start) / factor, 1, 2_000_000);
+        _start = Math.Clamp(center - duration * 0.5, -1_000_000, 1_000_000 - duration);
+        _end = _start + duration;
+        InvalidateVisual();
+    }
+
     public void FrameAll()
     {
         _start = Math.Min(_model is null ? 0 : DisplayTime(_model.Playback.RangeStartSeconds),
@@ -103,6 +116,9 @@ public sealed class TimelineCanvas : Control
         {
             var track = _model.Tracks[index];
             var y = Header + index * 32;
+            if (track == _model.SelectedTrack)
+                context.DrawRectangle(new ImmutableSolidColorBrush(Colors.White, 0.04), null,
+                    new Rect(0, y, Bounds.Width, 31));
             context.DrawLine(grid, new(0, y + 31), new(Bounds.Width, y + 31));
             using (context.PushClip(new Rect(4, y, NameWidth - 8, 31)))
                 DrawText(context, track.Name, new(6, y + 8), label);
@@ -134,12 +150,48 @@ public sealed class TimelineCanvas : Control
             var end = DisplayTime(track.Start + track.Duration) +
                 (ReferenceEquals(track, _drag) && _stretching ? _previewDelta : 0);
             using (context.PushClip(new Rect(NameWidth, Header, Math.Max(0, Bounds.Width - NameWidth), Math.Max(0, Bounds.Height - Header))))
+            {
                 context.DrawRectangle(line, new Pen(track == _model.SelectedTrack ? selected : handle),
                     new Rect(X(start), y + 5, Math.Max(6, (end - start) * Scale), 21), 3, 3);
+                if (track.Node.Curve is { Keys.Count: > 0 } curve)
+                {
+                    var offset = ReferenceEquals(track, _drag) && !_stretching ? _previewDelta : 0;
+                    var stretchScale = ReferenceEquals(track, _drag) && _stretching && track.Duration > 0
+                        ? Math.Max(0.0001, (DisplayTime(track.Start + track.Duration) + _previewDelta - DisplayTime(track.Start)) / (DisplayTime(track.Start + track.Duration) - DisplayTime(track.Start)))
+                        : 1;
+                    var trackStartDisplay = DisplayTime(track.Start);
+                    foreach (var key in curve.Keys)
+                    {
+                        var keyDisplay = trackStartDisplay + (DisplayTime(key.TimeSeconds) - trackStartDisplay) * stretchScale + offset;
+                        var center = new Point(X(keyDisplay), y + 15.5);
+                        var diamond = new StreamGeometry();
+                        using (var g = diamond.Open())
+                        {
+                            g.BeginFigure(center + new Vector(0, -4), true);
+                            g.LineTo(center + new Vector(4, 0));
+                            g.LineTo(center + new Vector(0, 4));
+                            g.LineTo(center + new Vector(-4, 0));
+                            g.EndFigure(true);
+                        }
+                        context.DrawGeometry(handle, null, diamond);
+                    }
+                }
+            }
         }
         var playhead = X(DisplayTime(_model.Playback.TimeSeconds));
         if (playhead >= NameWidth)
+        {
             context.DrawLine(new Pen(selected, 2), new(playhead, 0), new(playhead, Bounds.Height));
+            var marker = new StreamGeometry();
+            using (var g = marker.Open())
+            {
+                g.BeginFigure(new Point(playhead - 6, 0), true);
+                g.LineTo(new Point(playhead + 6, 0));
+                g.LineTo(new Point(playhead, 9));
+                g.EndFigure(true);
+            }
+            context.DrawGeometry(selected, null, marker);
+        }
     }
 
     private static void DrawText(DrawingContext context, string value, Point point, IBrush brush) =>
@@ -149,42 +201,71 @@ public sealed class TimelineCanvas : Control
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
-        if (_model is null || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+        if (_model is null) return;
+        var point = e.GetCurrentPoint(this);
         var position = e.GetPosition(this);
-        if (position.X >= NameWidth && position.Y < Header) _scrubbing = true;
+        if (point.Properties.IsMiddleButtonPressed || point.Properties.IsRightButtonPressed)
+        {
+            if (position.X < NameWidth) return;
+            _panning = true;
+            _pointerStart = position;
+            _panStartValue = _start;
+            _panEndValue = _end;
+            e.Pointer.Capture(this);
+            e.Handled = true;
+            return;
+        }
+        if (!point.Properties.IsLeftButtonPressed) return;
+        if (position.X >= NameWidth && (position.Y < Header || e.KeyModifiers.HasFlag(KeyModifiers.Alt)))
+        {
+            _scrubbing = true;
+        }
         else
         {
             var index = (int)Math.Floor((position.Y - Header) / 32);
-            if (index < 0 || index >= _model.Tracks.Count) return;
-            var track = _model.Tracks[index];
-            _model.Select(track);
-            Focus();
-            if (track.IsSignal)
+            if (index < 0 || index >= _model.Tracks.Count)
             {
-                var key = track.SignalKeys.OrderBy(key => Math.Abs(X(DisplayTime(key.TimeSeconds)) - position.X))
-                    .FirstOrDefault();
-                if (position.X < NameWidth || key is null ||
-                    Math.Abs(X(DisplayTime(key.TimeSeconds)) - position.X) > 8)
-                {
-                    if (position.X >= NameWidth && e.ClickCount == 2)
-                        _model.AddSignalKey(track.SignalMode!.Value, track,
-                            TimeSeconds(SnapDisplayTime(DisplayPosition(position.X))));
-                    return;
-                }
-                _model.SelectSignalKey(track, key.Id);
-                _drag = track;
-                _dragKey = key.Id;
-                _revision = _model.Revision;
+                if (position.X < NameWidth) return;
+                _scrubbing = true;
             }
             else
             {
-            if (position.X < NameWidth || track.Node.Curve?.Keys.Count == 0) return;
-            if (position.X < X(DisplayTime(track.Start)) - 4 ||
-                position.X > X(DisplayTime(track.Start + track.Duration)) + 7) return;
-            _drag = track;
-            _stretching = track.CanStretch &&
-                Math.Abs(position.X - X(DisplayTime(track.Start + track.Duration))) <= 7;
-            _revision = _model.Revision;
+                var track = _model.Tracks[index];
+                _model.Select(track);
+                Focus();
+                if (track.IsSignal)
+                {
+                    var key = track.SignalKeys.OrderBy(key => Math.Abs(X(DisplayTime(key.TimeSeconds)) - position.X))
+                        .FirstOrDefault();
+                    if (position.X < NameWidth || key is null ||
+                        Math.Abs(X(DisplayTime(key.TimeSeconds)) - position.X) > 8)
+                    {
+                        if (position.X >= NameWidth && e.ClickCount == 2)
+                            _model.AddSignalKey(track.SignalMode!.Value, track,
+                                TimeSeconds(SnapDisplayTime(DisplayPosition(position.X))));
+                        return;
+                    }
+                    _model.SelectSignalKey(track, key.Id);
+                    _drag = track;
+                    _dragKey = key.Id;
+                    _revision = _model.Revision;
+                }
+                else
+                {
+                    if (position.X < NameWidth || track.Node.Curve?.Keys.Count == 0) return;
+                    if (position.X < X(DisplayTime(track.Start)) - 4 ||
+                        position.X > X(DisplayTime(track.Start + track.Duration)) + 7)
+                    {
+                        _scrubbing = true;
+                    }
+                    else
+                    {
+                        _drag = track;
+                        _stretching = track.CanStretch &&
+                            Math.Abs(position.X - X(DisplayTime(track.Start + track.Duration))) <= 7;
+                        _revision = _model.Revision;
+                    }
+                }
             }
         }
         _pointerStart = position;
@@ -198,12 +279,31 @@ public sealed class TimelineCanvas : Control
     {
         base.OnPointerMoved(e);
         if (_model is null) return;
+        var position = e.GetPosition(this);
+        if (_panning)
+        {
+            var delta = (position.X - _pointerStart.X) / Scale;
+            var duration = _panEndValue - _panStartValue;
+            _start = Math.Clamp(_panStartValue - delta, -1_000_000, 1_000_000 - duration);
+            _end = _start + duration;
+            InvalidateVisual();
+            return;
+        }
         if (_scrubbing)
-            _model.Playback.TimeSeconds = TimeSeconds(SnapDisplayTime(DisplayPosition(e.GetPosition(this).X)));
+            _model.Playback.TimeSeconds = TimeSeconds(SnapDisplayTime(DisplayPosition(position.X)));
         else if (_drag is not null)
         {
-            _previewDelta = (e.GetPosition(this).X - _pointerStart.X) / Scale;
+            _previewDelta = (position.X - _pointerStart.X) / Scale;
             if (_model.Playback.ShowSeconds == false) _previewDelta = Math.Round(_previewDelta);
+        }
+        else
+        {
+            var index = (int)Math.Floor((position.Y - Header) / 32);
+            if (index >= 0 && index < _model.Tracks.Count && _model.Tracks[index] is { IsSignal: false, CanStretch: true } hoverTrack &&
+                Math.Abs(position.X - X(DisplayTime(hoverTrack.Start + hoverTrack.Duration))) <= 7)
+                Cursor = new Cursor(StandardCursorType.SizeWestEast);
+            else
+                Cursor = Cursor.Default;
         }
         InvalidateVisual();
     }
@@ -226,6 +326,7 @@ public sealed class TimelineCanvas : Control
         _drag = null;
         _dragKey = null;
         _scrubbing = false;
+        _panning = false;
         _previewDelta = 0;
         e.Pointer.Capture(null);
         InvalidateVisual();
@@ -236,6 +337,7 @@ public sealed class TimelineCanvas : Control
         _drag = null;
         _dragKey = null;
         _scrubbing = false;
+        _panning = false;
         _previewDelta = 0;
         InvalidateVisual();
         base.OnPointerCaptureLost(e);

@@ -828,7 +828,6 @@ public partial class GraphEditorView : UserControl
             GraphCanvas.Width = Math.Max(GraphCanvas.Width, width);
             GraphCanvas.Height = Math.Max(GraphCanvas.Height, height);
             UpdateZoomExtent();
-            GraphScrollViewer.UpdateLayout();
         }
     }
 
@@ -919,9 +918,6 @@ public partial class GraphEditorView : UserControl
         _zoom = zoom;
         _graphScale.ScaleX = zoom;
         _graphScale.ScaleY = zoom;
-        UpdateZoomExtent();
-        ZoomHost.UpdateLayout();
-        GraphScrollViewer.UpdateLayout();
         var offset = new Vector((graphX + _graphOrigin.X) * zoom - anchor.X,
                                 (graphY + _graphOrigin.Y) * zoom - anchor.Y);
         var shiftX = offset.X < 0 ? Math.Ceiling(-offset.X / (OriginStep * zoom)) * OriginStep : 0;
@@ -931,7 +927,16 @@ public partial class GraphEditorView : UserControl
             ShiftOrigin(shiftX, shiftY);
             offset += new Vector(shiftX * zoom, shiftY * zoom);
         }
+        else
+        {
+            UpdateZoomExtent();
+        }
         EnsureViewportExtent(offset);
+        if (offset.X > GraphScrollViewer.Extent.Width - GraphScrollViewer.Viewport.Width ||
+            offset.Y > GraphScrollViewer.Extent.Height - GraphScrollViewer.Viewport.Height)
+        {
+            GraphScrollViewer.UpdateLayout();
+        }
         GraphScrollViewer.Offset = offset;
         UpdateSceneViewport();
         _updatingZoomSlider = true;

@@ -11,6 +11,17 @@
                         <views:IconButton Classes="editor-tool" Icon="Frame" Click="OnFrameAllClick"
                                           ToolTip.Tip="{DynamicResource Text.Panels.FrameAll}"
                                           AutomationProperties.Name="{DynamicResource Text.Panels.FrameAll}" />
+                        <views:IconButton Classes="editor-tool" Icon="ZoomOut" Click="OnZoomOutClick"
+                                          ToolTip.Tip="{DynamicResource Text.Panels.ZoomOut}"
+                                          AutomationProperties.Name="{DynamicResource Text.Panels.ZoomOut}" />
+                        <views:IconButton Classes="editor-tool" Icon="ZoomIn" Click="OnZoomInClick"
+                                          ToolTip.Tip="{DynamicResource Text.Panels.ZoomIn}"
+                                          AutomationProperties.Name="{DynamicResource Text.Panels.ZoomIn}" />
+                        <ToggleButton Classes="editor-tool" IsChecked="{Binding Playback.ShowSeconds}"
+                                      ToolTip.Tip="{DynamicResource Text.Timeline.UseSeconds}"
+                                      AutomationProperties.Name="{DynamicResource Text.Timeline.UseSeconds}">
+                            <views:EditorIconView Icon="Clock" />
+                        </ToggleButton>
                         <Border Classes="editor-toolbar-divider" />
                         <views:IconButton x:Name="AddPreviewSignalButton" Classes="editor-tool"
                                           Icon="SignalPreview" Command="{Binding AddPreviewSignalKeyCommand}"

@@ -14,9 +14,11 @@ namespace LiberaFx.Views;
 public partial class LogWindow : UserControl
 {
     private LogViewerViewModel? _viewer;
+    private MainViewModel? _attachedModel;
     public LogWindow()
     {
         InitializeComponent();
+        LogContent.DataContext = null;
         AttachedToVisualTree += (_, _) => AttachViewer();
         DetachedFromVisualTree += (_, _) => DetachViewer();
     }
@@ -24,14 +26,20 @@ public partial class LogWindow : UserControl
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
-        if (this.IsAttachedToVisualTree()) AttachViewer();
+        AttachViewer();
     }
 
     private void AttachViewer()
     {
         if (LogContent is null) return;
+        if (DataContext is not MainViewModel model)
+        {
+            DetachViewer();
+            return;
+        }
+        if (_viewer is not null && ReferenceEquals(_attachedModel, model)) return;
         DetachViewer();
-        if (DataContext is not MainViewModel model) return;
+        _attachedModel = model;
         _viewer = new LogViewerViewModel(model.Log);
         _viewer.PropertyChanged += OnViewerChanged;
         LogContent.DataContext = _viewer;
@@ -46,6 +54,7 @@ public partial class LogWindow : UserControl
             _viewer.Dispose();
         }
         _viewer = null;
+        _attachedModel = null;
         if (LogContent is not null) LogContent.DataContext = null;
     }
 

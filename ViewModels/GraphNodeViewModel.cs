@@ -79,7 +79,7 @@ public sealed class GraphNodeViewModel : ObservableObject
     public bool IsComment => Definition.Kind == GraphNodeKind.Comment;
     public bool HasPorts => !IsComment && (!IsGraphGroup ||
         IsSpawnableGroup || Definition.InputPorts is { Count: > 0 } || Definition.OutputPorts is { Count: > 0 });
-    public bool ShowPortType => !IsComment;
+    public bool ShowPortType => HasPorts && Definition.Kind != GraphNodeKind.GraphGroup;
     public string OriginalNodeName => LocalizationService.Shared.GetNodeLabel(BaseDefinition.DisplayNameKey, BaseDefinition.Name);
     public int InputColumnSpan => Definition.OutputPorts is { Count: 0 } ? 3 : 1;
     // These are authored sources. Keep old relay connections readable in saved projects,

@@ -593,6 +593,7 @@ void FLibraEditorPreviewSession::ApplyPendingConnection()
 void FLibraEditorPreviewSession::DisconnectPreview()
 {
     if (debugDraw) debugDraw->Clear();
+    if (proceduralPreview) proceduralPreview->Clear();
     discovery.Reset();
     discoveredPeers.Reset();
     pendingConnection.Reset();
@@ -928,6 +929,7 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
             renderNodes.Reset();
             renderProgramSequence = -1;
             if (debugDraw) debugDraw->Clear();
+            if (proceduralPreview) proceduralPreview->Clear();
             acceptedRenderRootSequence = -1;
             pendingRenderNodes.Reset();
             pendingRenderProgramSequence = -1;
