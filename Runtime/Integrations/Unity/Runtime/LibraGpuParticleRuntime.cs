@@ -43,6 +43,7 @@ namespace LiberaFx.Unity
         ComputeBuffer particles, args, fieldMappingBuffer;
         ComputeBuffer spriteBuffer;
         ParticleSpriteAnimation spriteAnimation;
+        LibraGpuBillboardSubmission billboardSubmission;
         Mesh quad;
         MaterialPropertyBlock properties;
         Matrix4x4 drawTransform = Matrix4x4.identity;
@@ -210,6 +211,7 @@ namespace LiberaFx.Unity
             billboardSizeScale = 1;
             cursor = frame = 0; elapsed = spawnFraction = 0;
             RuntimeExecuted = submittedWork = false; DispatchCount = DrawCount = 0;
+            billboardSubmission = new LibraGpuBillboardSubmission(transform, DrawBillboards);
         }
 
         // Performs the same imported-asset, shader-kernel and resource checks as
@@ -415,33 +417,7 @@ namespace LiberaFx.Unity
             submittedWork = true;
             for (int i = 0; i < program.flow.Length; i++)
             {
-                if (program.flow[i].kind == "RenderBillboard")
-                {
-                    properties.SetTexture(TextureId, flowTextures[i]);
-                    properties.SetFloat("_LibraGpuTexturePremultiplied", (flowTextureFlags[i] & 1) != 0 ? 1 : 0);
-                    properties.SetFloat("_LibraGpuTextureFlipY", (flowTextureFlags[i] & 2) != 0 ? 1 : 0);
-                    properties.SetFloat(SizeScaleId, billboardSizeScale);
-                    var appliedDrawTransform = drawTransformConnected
-                        ? RelativeToEmitter(drawTransform, emitterPosition)
-                        : Matrix4x4.identity;
-                    if (HasDrawTransformProperties(billboardMaterial))
-                    {
-                        properties.SetVector(DrawRow0Id, appliedDrawTransform.GetRow(0));
-                        properties.SetVector(DrawRow1Id, appliedDrawTransform.GetRow(1));
-                        properties.SetVector(DrawRow2Id, appliedDrawTransform.GetRow(2));
-                        properties.SetVector(DrawRow3Id, appliedDrawTransform.GetRow(3));
-                    }
-                    var bounds = drawTransformConnected
-                        ? TransformBounds(new Bounds(Vector3.zero, boundsSize), drawTransform)
-                        : new Bounds(emitterPosition, boundsSize);
-                    if (spriteAnimation==null || spriteAnimation.partCount!=0)
-                    {
-                        Graphics.DrawMeshInstancedIndirect(quad, 0, billboardMaterial, bounds, args, 0, properties,
-                            ShadowCastingMode.Off, false, gameObject.layer, camera);
-                        DrawCount++;
-                    }
-                }
-                else
+                if (program.flow[i].kind != "RenderBillboard")
                 {
                     int kernel = flowKernels[i];
                     compute.SetBuffer(kernel, particleId, particles);
@@ -467,14 +443,55 @@ namespace LiberaFx.Unity
                 }
             }
             RuntimeExecuted = true;
+            billboardSubmission.Update(emitterPosition, camera);
+        }
+
+        private void DrawBillboards(Camera camera, Vector3 emitterPosition)
+        {
+            if (!IsConfigured || spriteAnimation?.partCount == 0)
+            {
+                return;
+            }
+            var appliedDrawTransform = drawTransformConnected
+                ? RelativeToEmitter(drawTransform, emitterPosition) : Matrix4x4.identity;
+            if (HasDrawTransformProperties(billboardMaterial))
+            {
+                properties.SetVector(DrawRow0Id, appliedDrawTransform.GetRow(0));
+                properties.SetVector(DrawRow1Id, appliedDrawTransform.GetRow(1));
+                properties.SetVector(DrawRow2Id, appliedDrawTransform.GetRow(2));
+                properties.SetVector(DrawRow3Id, appliedDrawTransform.GetRow(3));
+            }
+            properties.SetFloat(SizeScaleId, billboardSizeScale);
+            var bounds = drawTransformConnected
+                ? TransformBounds(new Bounds(Vector3.zero, boundsSize), drawTransform)
+                : new Bounds(emitterPosition, boundsSize);
+            for (var i = 0; i < program.flow.Length; ++i)
+            {
+                if (program.flow[i].kind != "RenderBillboard")
+                {
+                    continue;
+                }
+                properties.SetTexture(TextureId, flowTextures[i]);
+                properties.SetFloat("_LibraGpuTexturePremultiplied", (flowTextureFlags[i] & 1) != 0 ? 1 : 0);
+                properties.SetFloat("_LibraGpuTextureFlipY", (flowTextureFlags[i] & 2) != 0 ? 1 : 0);
+                Graphics.DrawMeshInstancedIndirect(quad, 0, billboardMaterial, bounds, args, 0, properties,
+                    ShadowCastingMode.Off, false, gameObject.layer, camera);
+                submittedWork = true;
+                DrawCount++;
+            }
         }
 
         public void StartSimulation() { if (!IsConfigured) throw new InvalidOperationException("GPU runtime is not configured."); running = true; }
-        public void StopSimulation() { running = false; }
+        public void StopSimulation()
+        {
+            running = false;
+            billboardSubmission?.Clear();
+        }
         public void ResetSimulation()
         {
             if (!IsConfigured) throw new InvalidOperationException("GPU runtime is not configured.");
             particles.SetData(new LibraGpuParticle[program.capacity]);
+            billboardSubmission?.Clear();
             cursor = frame = 0; elapsed = spawnFraction = 0; RuntimeExecuted = false; DispatchCount = DrawCount = 0;
         }
         // Explicit diagnostics only; never called by the simulation or renderer.
@@ -547,6 +564,8 @@ namespace LiberaFx.Unity
         void Release()
         {
             running = false;
+            billboardSubmission?.Dispose();
+            billboardSubmission = null;
             LibraGpuRetirement.Retire(particles, args, quad, submittedWork);
             LibraGpuRetirement.Retire(fieldMappingBuffer, null, null, submittedWork);
             LibraGpuRetirement.Retire(spriteBuffer,null,null,submittedWork);

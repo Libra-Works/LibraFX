@@ -158,6 +158,17 @@ internal static class ParticleSpriteAnimationTests
                     var disabled = GpuParticleEditorService.ReadState(graph.GetNode(id)).RendererSettings[flow.Id];
                     Require(!disabled.SpriteAnimationEnabled && (layered ? disabled.SpriteComposition is not null : disabled.SpriteAnimation is not null),
                         "Changing GPU renderer settings discarded the authored animation.");
+                    var legacyPackage = SpawnableGroupPackage.Compile(graph.CreateSnapshot());
+                    using (var legacy = JsonDocument.Parse(legacyPackage.RootGpuPrograms))
+                    {
+                        Require(legacy.RootElement.GetProperty("version").GetInt32() != 4,
+                            "Disabling Sprite animation did not restore ordinary GPU delivery.");
+                    }
+                    if (directory is not null && !layered)
+                    {
+                        File.WriteAllBytes(Path.Combine(directory, "gpu-disabled.lfxb"), SpawnableGroupPackageBinary.Serialize(legacyPackage));
+                        File.WriteAllBytes(Path.Combine(directory, "gpu-disabled.json"), legacyPackage.RootGpuPrograms);
+                    }
                     Require(graph.History.Undo() && GraphSnapshot.ContentEquals(after, graph.CreateSnapshot()), "GPU animation toggle did not undo.");
                 }
             }

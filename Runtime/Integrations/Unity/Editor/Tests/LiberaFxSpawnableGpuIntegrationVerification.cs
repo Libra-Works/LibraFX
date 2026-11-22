@@ -208,10 +208,10 @@ namespace LiberaFx.Unity.Editor
                             Require(zeroDeltaRuntime != null && zeroDeltaBaseline != null &&
                                 component.ElapsedTime == 0 && ReferenceEquals(runtime, zeroDeltaRuntime) &&
                                 runtime.DispatchCount == zeroDeltaDispatchCount &&
-                                runtime.DrawCount == zeroDeltaDrawCount && ReadFrame(runtime) == zeroDeltaFrame &&
+                                runtime.DrawCount >= zeroDeltaDrawCount && ReadFrame(runtime) == zeroDeltaFrame &&
                                 ReadbackEquals(runtime, zeroDeltaBaseline),
                                 "PlayRate=0 dispatched GPU work, advanced its frame counter, or mutated its particle buffer.");
-                            proof.Add("PASS: PlayRate=0 left GPU dispatch/draw counters, frame counter and particle buffer untouched.");
+                            proof.Add("PASS: PlayRate=0 left compute dispatch, frame counter and particle buffer untouched; camera draws may retain the paused output.");
                             SetPlayRate(1);
                             releasedFinitePlayRate = true;
                             Next(0);
