@@ -1,4 +1,5 @@
 {
+  "Cpu.SpriteAnimationEnabled": "Use Sprite editor animation",
   "Cpu.Texture.Source": "Texture source",
   "Cpu.Texture.Assigned": "Assigned texture",
   "Cpu.Texture.White": "White square",

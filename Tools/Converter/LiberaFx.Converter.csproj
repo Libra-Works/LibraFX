@@ -65,6 +65,7 @@
     <Compile Include="..\..\Services\Compilation\ProceduralPixelCompilation.cs" Link="Services\ProceduralPixelCompilation.cs" />
     <Compile Include="..\..\Services\Compilation\PreviewDebugDraw.cs" Link="Services\PreviewDebugDraw.cs" />
     <Compile Include="..\..\Services\SpriteAnimationData.cs" Link="Services\SpriteAnimationData.cs" />
+    <Compile Include="..\..\Services\ParticleSpriteAnimation.cs" Link="Services\ParticleSpriteAnimation.cs" />
     <Compile Include="..\..\Services\SpriteCompositionData.cs" Link="Services\SpriteCompositionData.cs" />
     <Compile Include="..\..\Models\Resources\ResourceIdentity.cs" Link="Models\Resources\ResourceIdentity.cs" />
     <Compile Include="..\..\Models\Graph\GraphValueType.cs" Link="Models\Graph\GraphValueType.cs" />

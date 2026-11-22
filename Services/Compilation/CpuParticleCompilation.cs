@@ -316,6 +316,9 @@ public static class CpuParticleCompilation
             }
             var blend = Parameter(draw, "blendMode").GetString();
             var scale = Number(draw, "drawScale");
+            var spriteAnimation = Parameter(draw,"spriteAnimationEnabled").GetBoolean() ? ParticleSpriteAnimation.Compile(
+                SpriteAnimationData.Deserialize(Parameter(draw,"spriteData")),
+                SpriteCompositionData.Deserialize(Parameter(draw,"compositionData"))) : null;
             var flipbook = new ParticleAtlasSettings(Parameter(draw,"flipbookEnabled").GetBoolean(),
                 Parameter(draw,"atlasColumns").GetInt32(),Parameter(draw,"atlasRows").GetInt32(),
                 Number(draw,"atlasFps"),Parameter(draw,"atlasLoop").GetBoolean(),
@@ -328,7 +331,8 @@ public static class CpuParticleCompilation
             var rows = flat.Connections.Any(e => e.TargetNodeId == system.Id && e.TargetPortId == "drawMatrix")
                 ? CpuEmitterMatrixLowering.RowIds(system.Id, "draw") : null;
             return (object)new { nodeId = system.Id, assetPath = path, blendMode = blend, drawScale = scale, billboard = true,
-                drawMatrixRowNodeIds = rows, flipbook = flipbook.Enabled ? flipbook : null };
+                drawMatrixRowNodeIds = rows, flipbook = spriteAnimation is null && flipbook.Enabled ? flipbook : null,
+                spriteAnimation };
         }).ToArray();
     }
 
@@ -340,9 +344,12 @@ public static class CpuParticleCompilation
         }
         var root = System.Text.Json.Nodes.JsonNode.Parse(scene)!.AsObject();
         var draws = JsonSerializer.SerializeToNode(Draws(graph, resources));
-        root["cpuParticleVersion"] = draws!.AsArray().Any(d => d?["flipbook"] is not null) ? 3 :
+        root["cpuParticleVersion"] = draws!.AsArray().Any(d => d?["spriteAnimation"] is not null) ? 4 :
+            draws.AsArray().Any(d => d?["flipbook"] is not null) ? 3 :
             draws.AsArray().Any(d => d?["drawMatrixRowNodeIds"] is not null) ? 2 : 1;
         root["cpuParticles"] = draws;
-        return JsonSerializer.SerializeToUtf8Bytes(root);
+        var result=JsonSerializer.SerializeToUtf8Bytes(root);
+        if (result.Length>4*1024*1024) throw new InvalidDataException("CPU particle render configuration exceeds 4 MiB.");
+        return result;
     }
 }

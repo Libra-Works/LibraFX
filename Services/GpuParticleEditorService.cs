@@ -11,7 +11,8 @@ namespace LiberaFx.Services;
 
 public sealed record GpuPosition(double X, double Y);
 public sealed record GpuTextDraft(string Text, List<GpuDiagnostic> Diagnostics);
-public sealed record GpuRendererSettings(string Material = "builtin:unlit-alpha", double SizeScale = 1);
+public sealed record GpuRendererSettings(string Material = "builtin:unlit-alpha", double SizeScale = 1,
+    SpriteAnimationData? SpriteAnimation = null, SpriteCompositionData? SpriteComposition = null,bool SpriteAnimationEnabled=true);
 public sealed record GpuGeneratedTextureConsumer(Guid TargetNodeId, string ParameterId, string OutputId = "ColorOutput");
 public sealed record GpuEditorState
 {
@@ -53,6 +54,7 @@ public sealed record GpuEdit
     public string? AssetPath { get; init; }
     public string? Material { get; init; }
     public double? SizeScale { get; init; }
+    public bool? SpriteAnimationEnabled { get; init; }
     public Fluid2DSettings? Fluid2D { get; init; }
     public GeneratedGpuResourceReference? GeneratedResource { get; init; }
     public bool? AutomaticPlane { get; init; }
@@ -395,7 +397,8 @@ public static class GpuParticleEditorService
             var flow = p.Flow.SingleOrDefault(f => f.Id == edit.NodeId && f.Kind == FlowKind.RenderBillboard)
                 ?? throw new ArgumentException("Select a billboard render step.");
             var current = state.RendererSettings.GetValueOrDefault(flow.Id) ?? new GpuRendererSettings();
-            state.RendererSettings[flow.Id] = new(edit.Material ?? current.Material, edit.SizeScale ?? current.SizeScale);
+            state.RendererSettings[flow.Id] = current with {Material=edit.Material ?? current.Material,SizeScale=edit.SizeScale ?? current.SizeScale,
+                SpriteAnimationEnabled=edit.SpriteAnimationEnabled ?? current.SpriteAnimationEnabled};
             return state;
         }
         if (edit.Action == "capacity")

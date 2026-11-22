@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\Runtime\Integrations\Unity\Runtime\LiberaFxParticleAtlas.cs" Link="Contracts\LiberaFxParticleAtlas.cs" />
+    <Compile Include="..\Runtime\Integrations\Unity\Runtime\LiberaFxParticleSpriteAnimation.cs" Link="Contracts\LiberaFxParticleSpriteAnimation.cs" />
     <Compile Include="..\Runtime\Integrations\Unity\Runtime\LiveGameDebugLease.cs"
              Link="Contracts\LiveGameDebugLease.cs" />
     <None Update="Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />

@@ -1,4 +1,5 @@
 {
+  "Cpu.SpriteAnimationEnabled": "Spriteエディターのアニメーションを使う",
   "Cpu.Texture.Source": "テクスチャーの種類",
   "Cpu.Texture.Assigned": "割り当てたテクスチャー",
   "Cpu.Texture.White": "白い四角",

@@ -32,6 +32,11 @@ public static class SpriteEditorAuthoring
         ArgumentNullException.ThrowIfNull(asset);
         settings.Validate();
         spriteData?.Validate();
+        if (target is not null && ParticleSpriteAuthoring.Supports(target))
+        {
+            if (spriteData is null) throw new InvalidDataException("Create a sprite sequence before applying to particles.");
+            return ParticleSpriteAuthoring.Apply(graph,target,asset,spriteData,null);
+        }
         if (!string.Equals(asset.AssetClass, "texture", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Select an engine texture.", nameof(asset));
         var schema = RenderNodeSchema.Encode(asset);

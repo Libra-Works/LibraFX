@@ -13,6 +13,10 @@ public static class SpriteCompositionAuthoring
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(asset);
         ArgumentNullException.ThrowIfNull(data);
+        if (target is not null && ParticleSpriteAuthoring.Supports(target))
+        {
+            return ParticleSpriteAuthoring.Apply(graph,target,asset,null,data);
+        }
         if (!string.Equals(asset.AssetClass, "texture", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(asset.Path))
             throw new ArgumentException("Select an engine texture.", nameof(asset));
         EngineAssetPath.Validate(asset.Path);

@@ -7,7 +7,8 @@ using LiberaFx.Services.Compilation;
 namespace LiberaFx.Services;
 
 public sealed record GpuKernelPacket(string Id, KernelStage Stage, string Base64);
-public sealed record GpuRendererBinding(string FlowId, string Renderer, string Material, double SizeScale);
+public sealed record GpuRendererBinding(string FlowId, string Renderer, string Material, double SizeScale,
+    [property:JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ParticleSpriteAnimation? SpriteAnimation = null);
 public sealed record GpuProgramDelivery(
     long ProgramSequence, Guid NodeId, string CanonicalJson, GpuExportMetadata Metadata,
     string ShaderSource, IReadOnlyList<GpuKernelPacket> RegisterKernels,
@@ -249,9 +250,10 @@ public static class GpuProgramDeliveryService
                 compiled.ExportMetadataJson(ShaderFormat.UnityCompute), unityShader.Text);
         }).ToArray();
         var version = generatedBindings || drawBindings.Count != 0 || fluids.Any(fluid => fluid.AutomaticPlane is not null) ? 3 : fluids.Length == 0 ? 1 : 2;
+        if (programs.Any(p => p.Unreal.RendererBindings.Any(r => r.SpriteAnimation is not null))) version=4;
         return JsonSerializer.SerializeToUtf8Bytes(new GpuExecutablePayload(version, programs)
         {
-            FluidPrograms = fluids.Length == 0 ? null : fluids,
+            FluidPrograms = fluids.Length == 0 && version!=4 ? null : fluids,
             GeneratedDrawBindings = drawBindings.Count == 0 ? null : drawBindings
         }, PayloadJson);
     }
@@ -280,7 +282,10 @@ public static class GpuProgramDeliveryService
         var rendererBindings = state.Program.Flow.Where(f => f.Kind == FlowKind.RenderBillboard).Select(f =>
         {
             var settings = state.RendererSettings.GetValueOrDefault(f.Id) ?? new GpuRendererSettings();
-            return new GpuRendererBinding(f.Id, "builtin:billboard", settings.Material, settings.SizeScale);
+            var sprite=settings.SpriteAnimationEnabled ? ParticleSpriteAnimation.Compile(settings.SpriteAnimation,settings.SpriteComposition) : null;
+            sprite?.ValidateGpuPrecision();
+            return new GpuRendererBinding(f.Id, "builtin:billboard", settings.Material, settings.SizeScale,
+                sprite);
         }).ToArray();
         if (rendererBindings.Length != state.Program.Flow.Count(f => f.Kind == FlowKind.RenderBillboard) ||
             rendererBindings.Any(binding => !double.IsFinite(binding.SizeScale) || binding.SizeScale <= 0 ||
@@ -290,7 +295,7 @@ public static class GpuProgramDeliveryService
             compiled.GetExportMetadata(format), shader.Text,
             compiled.RegisterKernels.Select(k => new GpuKernelPacket(k.KernelId, k.Stage,
                 Convert.ToBase64String(k.SerializeLittleEndian()))).ToArray(),
-            new Dictionary<string, string>(state.ResourceAssetPaths), 1, rendererBindings)
+            new Dictionary<string, string>(state.ResourceAssetPaths), rendererBindings.Any(r => r.SpriteAnimation is not null) ? 2 : 1, rendererBindings)
         {
             GeneratedResources = state.GeneratedResources is { Count: > 0 }
                 ? new Dictionary<string, GeneratedGpuResourceReference>(state.GeneratedResources) : null

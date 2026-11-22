@@ -499,12 +499,24 @@ public sealed class SpriteEditorViewModel : ObservableObject, IDisposable
     public void LoadSelected()
     {
         var node = _main.ActiveDocument is null ? null : _main.ActiveGraphProvider.Graph.SelectedNode;
-        if (node?.Definition.TypeName == "SpriteComposition")
+        var particle = ParticleSpriteAuthoring.Supports(node);
+        (SpriteAnimationData? Animation,SpriteCompositionData? Composition,string Path) particleData=(null,null,"");
+        if (particle)
+        {
+            try { particleData=ParticleSpriteAuthoring.Read(node!); }
+            catch (Exception error) when (error is InvalidDataException or System.Text.Json.JsonException or ArgumentException)
+            {
+                Status=LocalizationService.Shared.Get("Sprite.InvalidSavedData",error.Message);
+                return;
+            }
+        }
+        if (node?.Definition.TypeName == "SpriteComposition" || particleData.Composition is not null)
         {
             try
             {
-                var parameter = node.Definition.Parameters.Single(item => item.Id == "compositionData");
-                var composition = SpriteCompositionData.Deserialize(node.GetParameterValue(parameter))
+                var composition = particle ? particleData.Composition : SpriteCompositionData.Deserialize(node!.GetParameterValue(
+                    node.Definition.Parameters.Single(item => item.Id == "compositionData")));
+                composition = composition
                     ?? throw new InvalidDataException("Missing sprite composition.");
                 _loadedComposition = composition;
                 _loadedData = null;
@@ -528,7 +540,7 @@ public sealed class SpriteEditorViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(HasSpriteData));
                 OnPropertyChanged(nameof(IsComposition));
                 OnPropertyChanged(nameof(TotalFrames));
-                Status = LocalizationService.Shared.Get("Sprite.Loaded", node.GetParameterValue(
+                Status = LocalizationService.Shared.Get("Sprite.Loaded", particle ? particleData.Path : node!.GetParameterValue(
                     node.Definition.Parameters.Single(item => item.Id == "assetPath")).GetString() ?? "");
                 CaptureContext();
             }
@@ -538,22 +550,28 @@ public sealed class SpriteEditorViewModel : ObservableObject, IDisposable
             }
             return;
         }
-        if (node?.Definition.TypeName is not ("SpriteDraw" or "SpriteAnimation")) return;
+        if (!particle && node?.Definition.TypeName is not ("SpriteDraw" or "SpriteAnimation")) return;
         _loadedComposition = null;
         ClearParts();
         AddPart();
-        string Read(string id) => node.GetParameterValue(node.Definition.Parameters.Single(p => p.Id == id)).ToString();
+        string Read(string id) => particle ? id switch
+        {
+            "columns" or "rows" => "1",
+            "fps" => (particleData.Animation?.Fps ?? 12).ToString(CultureInfo.InvariantCulture),
+            "assetPath" => particleData.Path,
+            _ => ""
+        } : node!.GetParameterValue(node.Definition.Parameters.Single(p => p.Id == id)).ToString();
         Catalog.Columns = Read("columns");
         Catalog.Rows = Read("rows");
         Catalog.Fps = Read("fps");
-        var frame = node.GetParameterValue(node.Definition.Parameters.Single(p => p.Id == "frame")).GetDouble();
+        var frame = particle ? -1 : node!.GetParameterValue(node.Definition.Parameters.Single(p => p.Id == "frame")).GetDouble();
         Frame = Math.Max(0, (int)frame).ToString(CultureInfo.InvariantCulture);
-        var savedPlaying = frame < 0 && node.GetParameterValue(node.Definition.Parameters.Single(p => p.Id == "playing")).GetBoolean();
+        var savedPlaying = particle || frame < 0 && node!.GetParameterValue(node.Definition.Parameters.Single(p => p.Id == "playing")).GetBoolean();
         SetSourceSizeMismatch(false);
         try
         {
-            var dataParameter = node.Definition.Parameters.FirstOrDefault(parameter => parameter.Id == "spriteData");
-            _loadedData = dataParameter is null ? null :
+            var dataParameter = node!.Definition.Parameters.FirstOrDefault(parameter => parameter.Id == "spriteData");
+            _loadedData = particle ? particleData.Animation : dataParameter is null ? null :
                 SpriteAnimationData.Deserialize(node.GetParameterValue(dataParameter));
             if (_loadedData is { } data)
             {
@@ -607,6 +625,16 @@ public sealed class SpriteEditorViewModel : ObservableObject, IDisposable
             Status = LocalizationService.Shared.Get("Sprite.NoDocument");
             return;
         }
+        // Applying the retained draft to an explicitly selected particle target
+        // is allowed within the same document/graph. Cross-document retargets
+        // retain the existing context guard.
+        if (selected && ReferenceEquals(document,_document) && _graph is not null &&
+            ReferenceEquals(_main.ActiveGraphProvider.Graph,_graph) &&
+            ParticleSpriteAuthoring.Supports(_graph.SelectedNode) && !ReferenceEquals(_target,_graph.SelectedNode))
+        {
+            _target=_graph.SelectedNode;
+            _contextCurrent=true;
+        }
         if (!_contextCurrent || !ReferenceEquals(document, _document) || _graph is null ||
             !ReferenceEquals(_main.ActiveGraphProvider.Graph, _graph) ||
             (selected && (_target is null || !ReferenceEquals(_graph.SelectedNode, _target))))
@@ -633,7 +661,7 @@ public sealed class SpriteEditorViewModel : ObservableObject, IDisposable
                 Status = LocalizationService.Shared.Get("Sprite.InvalidComposition");
                 return;
             }
-            if (selected && _target?.Definition.TypeName != "SpriteComposition")
+            if (selected && _target?.Definition.TypeName != "SpriteComposition" && !ParticleSpriteAuthoring.Supports(_target))
             {
                 Status = LocalizationService.Shared.Get("Sprite.CreateCompositionFirst");
                 return;

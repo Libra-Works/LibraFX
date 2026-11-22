@@ -151,6 +151,22 @@ internal static class McpAuthoringTransitionTests
             }
             using (await Call("libera_graph_undo", new { })) { }
             Require(GraphSnapshot.ContentEquals(beforeFlipbook, graph.CreateSnapshot()), "Flipbook enable must be an undoable document edit.");
+            using (await Call("libera_graph_enter",new {nodeId=cpu})) { }
+            var beforeSprite=graph.CreateSnapshot();
+            var cell=new SpriteAnimationCell(Guid.NewGuid(),"White",0,0,1,1);
+            var sprite=new SpriteAnimationData {TextureWidth=1,TextureHeight=1,Fps=4,Cells=[cell],
+                Frames=[new(Guid.NewGuid(),cell.Id,1),new(Guid.NewGuid(),cell.Id,3)],StartFrame=0,EndFrame=1};
+            using (await Call("libera_graph_set_parameter",new {nodeId=cpuDraw,parameterId="spriteData",value=sprite})) { }
+            using (await Call("libera_graph_up",new { })) { }
+            using (var compiled=await Call("libera_graph_compile_spawnable",new { }))
+            {
+                using var render=JsonDocument.Parse(Convert.FromBase64String(compiled.RootElement.GetProperty("rootRenderConfigurationBase64").GetString()!));
+                Require(render.RootElement.GetProperty("cpuParticleVersion").GetInt32()==4 &&
+                    render.RootElement.GetProperty("cpuParticles")[0].GetProperty("spriteAnimation").GetProperty("partCount").GetInt32()==1,
+                    "MCP Sprite editor animation did not reach CPU rendering.");
+            }
+            using (await Call("libera_graph_undo",new { })) { }
+            Require(GraphSnapshot.ContentEquals(beforeSprite,graph.CreateSnapshot()),"Particle Sprite editor data edit did not undo atomically.");
             foreach (var archetype in new[] { "Rain", "Snow", "Lightning", "MagicCircle" })
             {
                 var beforeTemplate = graph.CreateSnapshot();

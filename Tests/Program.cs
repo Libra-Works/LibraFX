@@ -705,6 +705,11 @@ internal static class Program
             Console.WriteLine("Sprite composition authoring, timing, persistence and package checks passed.");
             return;
         }
+        if (args.Length is 1 or 2 && args[0]=="--particle-sprite")
+        {
+            ParticleSpriteAnimationTests.Run(args.Length==2 ? args[1] : null);
+            return;
+        }
         if (args.Length is 1 or 2 && args[0] == "--sprite-editor")
         {
             SpriteEditorTests.Run(args.Length == 2 ? args[1] : null);

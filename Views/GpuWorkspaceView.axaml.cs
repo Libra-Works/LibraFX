@@ -1410,11 +1410,14 @@ public partial class GpuWorkspaceView : UserControl
             BindingsPanel.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.DrawSizeMultiplier") });
             var scale = new TextBox { Text = settings.SizeScale.ToString("G", CultureInfo.InvariantCulture) };
             BindingsPanel.Children.Add(scale);
+            var spriteAnimation=new CheckBox {Content=LocalizationService.Shared.Get("Cpu.SpriteAnimationEnabled"),
+                IsChecked=settings.SpriteAnimationEnabled,IsEnabled=settings.SpriteAnimation is not null || settings.SpriteComposition is not null};
+            BindingsPanel.Children.Add(spriteAnimation);
             BindingsPanel.Children.Add(Button(LocalizationService.Shared.Get("Gpu.ApplyRenderer"), () =>
                 vm.Edit(new()
                 {
                     Action = "renderer", NodeId = flow.Id, Material = presets[material.SelectedIndex],
-                    SizeScale = double.Parse(scale.Text!, CultureInfo.InvariantCulture)
+                    SizeScale = double.Parse(scale.Text!, CultureInfo.InvariantCulture),SpriteAnimationEnabled=spriteAnimation.IsChecked==true
                 })));
         }
         foreach (var resource in vm.State.Program.Resources)
