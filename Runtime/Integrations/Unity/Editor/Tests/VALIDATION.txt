@@ -1,6 +1,26 @@
 Real Unity Editor verification
 ==============================
 
+Sprite editor particle animations and normal camera submission
+------------------------------------------------------------
+Generate a new absolute fixture directory with the editor smoke runner's
+--particle-sprite argument. In a DEDICATED Unity project, install the matching
+Runtime, Editor and native DLL, then set these absolute paths:
+  LIBRA_PARTICLE_SPRITE_FIXTURES=<generated fixture directory>
+  LIBRA_PARTICLE_SPRITE_VERIFICATION_DIR=<local output directory>
+Run -batchmode -force-d3d11 -executeMethod LiberaFxParticleSpriteCameraVerification.Run
+without -quit or -nographics. Unity 7 alpha also requires
+-enable-builtin-rp-fallback for the sample shaders. Set
+LIBRA_PARTICLE_SPRITE_PIPELINE=builtin to test Built-In; leave it unset for
+the isolated SRP. The check creates its own empty scene, imports synthetic
+fixtures, enters Play Mode and exits after completing the checks.
+camera-verification.txt and framebuffer PNGs record CPU/GPU authored sequences,
+composition transforms, an ordinary billboard with animation disabled, camera
+layer exclusion, zero-delta redraw without compute, Stop clear and replay.
+GPU draws come from the runtime's camera callbacks, not test command buffers.
+Unity 7000.0.0a16 / Windows / D3D11 / RX 6700 XT passed both pipeline variants.
+This Play Mode result does not certify URP/HDRP, player/IL2CPP or other platforms.
+
 LiberaFxEditorVerification.RunBatch is a synchronous executeMethod test for a
 DEDICATED project, not a user's normal scene/project. It creates and cleans up
 its own temporary Unity objects, uses the bundled v2 native bytecode fixture,

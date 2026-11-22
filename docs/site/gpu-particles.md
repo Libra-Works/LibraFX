@@ -86,6 +86,11 @@ compute-kernel format are unchanged. Older Preview binaries are not updated by
 publishing this documentation. See [CPU Sprite animation](cpu-particles.md)
 for the authoring workflow and the distinction from a regular-grid Flipbook.
 
+Unity separates GPU simulation updates from camera submission, retaining the last
+visible state while time is held. Ordinary camera rendering, Stop and replay were
+checked in Windows / Unity 7000.0.0a16 / D3D11 Play Mode. Unity 7 alpha needs
+`-enable-builtin-rp-fallback` when testing the bundled shaders.
+
 ## Edit a kernel
 
 ![Spawn kernel graph with a typed operation palette, value nodes, and attribute writes](images/editor/gpu-kernel.png)

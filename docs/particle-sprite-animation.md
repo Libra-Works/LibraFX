@@ -56,6 +56,18 @@ runs the fixture parity check with AddressSanitizer. The MCP authoring transitio
 test sets Sprite parameters through the HTTP tools, compiles metadata 4 and undoes
 the change.
 
+For a dedicated Unity project with the matching runtime, editor scripts and
+native plugin installed, set `LIBRA_PARTICLE_SPRITE_FIXTURES` to the fixture
+directory above and `LIBRA_PARTICLE_SPRITE_VERIFICATION_DIR` to a separate absolute
+output directory. Launch Unity with `-batchmode -force-d3d11` and
+`-executeMethod LiberaFxParticleSpriteCameraVerification.Run` (without `-quit` or
+`-nographics`). Unity 7 alpha also needs `-enable-builtin-rp-fallback`. Set
+`LIBRA_PARTICLE_SPRITE_PIPELINE=builtin` for Built-In; leave it unset for the
+isolated SRP. The check exits after five cases: CPU/GPU sequence and composition,
+plus an ordinary billboard with authored animation disabled. It tests actual
+camera pixels, layer exclusion, retained zero-delta output without extra compute,
+Stop clear and replay. It does not inject GPU draws from the test pipeline.
+
 Unreal automation accepts the same fixture directory with
 `-LibraParticleSpriteFixtures=<directory>`:
 
@@ -74,12 +86,14 @@ Windows, Radeon RX 6700 XT, isolated projects and the synthetic atlas above:
 | Adapter | Boundary observed |
 | --- | --- |
 | Godot 4.7.2, Vulkan Mobile | Compiled CPU/GPU packages visibly change red → blue → final frame; compositions show the gold part and changed coverage; time scale zero holds pixels; Stop clears and replay restarts. |
-| Unity 7000.0.0a16, D3D11 | CPU package rendering and CPU/GPU shader framebuffers in an isolated SRP; explicit command-buffer submission for GPU; authored frames/composition, zero delta, Stop and replay. |
+| Unity 7000.0.0a16, D3D11 | Built-In and isolated SRP Play Mode, ordinary camera submission: CPU/GPU authored sequences/compositions, disabled-animation billboard, camera layer exclusion, retained zero-delta output without compute, Stop and replay. Unity 7 compatibility flag enabled for Built-In. |
 | Unreal 5.7, D3D11 | CPU package scene application; GPU renderer import and actual raster framebuffer tests described above. |
 
-Unity's batch-mode harness needed explicit GPU command-buffer submission to capture
-the billboard. The unchanged ordinary `Graphics.DrawMeshInstancedIndirect` path did
-not produce pixels in that harness. This does not certify ordinary Unity game
-camera submission, Built-in, URP or HDRP. Packaged/cooked applications and other
-engine versions were not tested by this acceptance run. Raw logs and captures stay
-under the ignored local `build/` directory.
+Unity billboard submission now follows camera collection rather than simulation
+updates. Built-In pre-cull and SRP begin-camera callbacks draw retained output
+without dispatching compute, so paused/manual-preview particles remain visible.
+Stop/reset withdraw submissions; disposal removes callbacks. Callbacks respect
+camera layers and editor preview scenes. The repeatable check replaces the earlier
+test-side command-buffer workaround. URP/HDRP, player/IL2CPP, packaged Unreal
+applications, and other engine versions are not certified by the Play Mode/raster
+checks above. Raw logs and captures stay under the ignored local `build/` directory.

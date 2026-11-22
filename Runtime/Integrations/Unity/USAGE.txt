@@ -23,10 +23,15 @@ Sprite editor animations (updated sources)
   Regular-grid Flipbook remains available separately. Native/particle ABI and
   compute packets are unchanged. Sprite timing uses FPS, not lifetime fitting.
     All billboard steps in one Unity GPU program must share the same animation.
-    Local Windows/D3D11 acceptance used Unity 7000.0.0a16 and an isolated SRP
-    with explicit command-buffer GPU submission. Ordinary game camera submission
-    and Built-in/URP/HDRP are not certified by that harness; see the repository's
-    docs/particle-sprite-animation.md for the exact test boundaries.
+    GPU compute updates prepare retained output; Built-In pre-cull and SRP
+    beginCameraRendering callbacks submit billboards for each eligible camera.
+    Camera rendering does not dispatch compute or advance particle age. Stop,
+    reset and disposal withdraw retained output; disposal removes callbacks.
+    Local Windows/D3D11 Play Mode acceptance used Unity 7000.0.0a16, Built-In
+    and an isolated SRP, with ordinary camera submission and no test-side GPU
+    draws. Unity 7 alpha requires -enable-builtin-rp-fallback for these shaders.
+    URP/HDRP, IL2CPP and other platforms are not certified by that check; see
+    docs/particle-sprite-animation.md and Editor/Tests/VALIDATION.txt.
 Nested Spawnables and Core procedural mesh emitters support prepared/shared
 playback. Project native nodes declare independent reusable, workerSafe and
 parallelPreparation flags through ProjectNodeRegistry policies. Undeclared
