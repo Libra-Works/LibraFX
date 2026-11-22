@@ -1,13 +1,15 @@
 #pragma once
 
-#include "liberafx/LbNamedIo.h"
-#include "liberafx/LbGeneratorPool.h"
-#include "liberafx/LbSpawnablePackage.h"
-#include "liberafx/LbCpuParticles.h"
 #include "liberafx/LbCoordinateBasis.h"
+#include "liberafx/LbCpuParticles.h"
+#include "liberafx/LbCustomNodePolicy.h"
+#include "liberafx/LbGeneratorPool.h"
+#include "liberafx/LbNamedIo.h"
+#include "liberafx/LbSpawnablePackage.h"
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 namespace liberafx {
 
@@ -42,6 +44,7 @@ struct SpawnableHostOptions final {
     std::size_t instructionBudget = 10000;
     // Disable for interpreter comparisons; unsupported stages always use the VM.
     bool cpuParticleBatching = true;
+    std::vector<CustomNodePolicy> customNodePolicies;
 };
 struct EffectTimeSnapshot final {
     double realTime = 0, effectTime = 0, realDelta = 0, effectDelta = 0, timeScale = 1;
@@ -106,6 +109,9 @@ public:
     Result setDebugHooks(const SpawnableDebugTarget& target, const ExecutionDebugHooks& hooks) noexcept;
     std::uint64_t debugGeneration() const noexcept;
     bool supportsWorkerExecution() const noexcept;
+    bool supportsPoolReuse() const noexcept;
+    bool supportsSharedExecution() const noexcept;
+    bool supportsParallelPreparation() const noexcept;
     std::size_t simulationWorkEstimate() const noexcept;
 
     Result rootValue(const std::uint8_t nodeId[16], double out[4],
@@ -136,7 +142,7 @@ public:
 
 private:
     friend class SpawnableHostPool;
-    bool supportsPoolReuse() const noexcept;
+    Result prepareForPoolReuse() noexcept;
     Result resetForPoolReuse() noexcept;
     struct Impl;
     explicit SpawnableHost(std::unique_ptr<Impl> impl) noexcept;

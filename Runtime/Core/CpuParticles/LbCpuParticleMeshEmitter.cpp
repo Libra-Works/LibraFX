@@ -10,8 +10,9 @@ auto System::refreshEmitter(double time) -> Result {
     auto view = LibraProceduralModelView{};
     status = libra_procedural_model_view(emitterModel, &view);
     if (status != LIBRA_OK) return static_cast<Result>(status);
-    if (emitterSurface.triangleCount() && view.vertexRevision == emitterVertexRevision &&
-        std::equal(emitterPivot.begin(), emitterPivot.end(), view.pivot)) return Result::Ok;
+    if (emitterSurface && view.vertexRevision == emitterVertexRevision &&
+        std::equal(emitterPivot.begin(), emitterPivot.end(), view.pivot))
+        return Result::Ok;
     auto vertices = std::vector<MeshEmissionVertex>(view.vertexCount);
     for (auto i = 0u; i < view.vertexCount; ++i) {
         const auto& source = view.vertices[i];
@@ -22,8 +23,10 @@ auto System::refreshEmitter(double time) -> Result {
         std::copy_n(source.uv, 2, vertices[i].uv.begin());
         std::copy_n(source.color, 4, vertices[i].color.begin());
     }
-    const auto result = emitterSurface.configure(vertices.data(), vertices.size(), view.indices, view.indexCount);
+    auto snapshot = std::make_shared<MeshEmissionSurface>();
+    const auto result = snapshot->configure(vertices.data(), vertices.size(), view.indices, view.indexCount);
     if (result == Result::Ok) {
+        emitterSurface = std::move(snapshot);
         emitterVertexRevision = view.vertexRevision;
         std::copy_n(view.pivot, 3, emitterPivot.begin());
     }

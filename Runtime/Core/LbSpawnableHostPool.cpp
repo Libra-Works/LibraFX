@@ -8,17 +8,52 @@ using namespace spawnable_host_detail;
 
 bool SpawnableHost::supportsPoolReuse() const noexcept
 {
-    return impl_->templates.empty() && impl_->projectDescriptors.empty() &&
-        (!impl_->cpuParticles || impl_->cpuParticles->supportsPoolReuse());
+    return impl_->callbackReuseSafe;
 }
 bool SpawnableHost::supportsWorkerExecution() const noexcept
 {
-    return supportsPoolReuse() && !impl_->operationActive && !impl_->executionDebugAttached;
+    return supportsSharedExecution() && impl_->callbackWorkerSafe;
+}
+bool SpawnableHost::supportsSharedExecution() const noexcept
+{
+    if (impl_->operationActive || impl_->executionDebugAttached)
+    {
+        return false;
+    }
+    for (const auto &state : impl_->templates)
+    {
+        for (const auto &instance : state->instances)
+        {
+            if (instance.executionDebugAttached)
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+bool SpawnableHost::supportsParallelPreparation() const noexcept
+{
+    return impl_->callbackPreparationSafe;
 }
 std::size_t SpawnableHost::simulationWorkEstimate() const noexcept
 {
-    return std::max<std::size_t>(1,impl_->parentProgram.nodeCount()) +
-        (impl_->cpuParticles ? (impl_->started ? impl_->cpuParticles->activeCount() : impl_->cpuParticles->reservedCapacity()) : 0);
+    auto work = std::max<std::size_t>(1, impl_->parentProgram.nodeCount()) +
+                (impl_->cpuParticles
+                     ? (impl_->started ? impl_->cpuParticles->activeCount() : impl_->cpuParticles->reservedCapacity())
+                     : 0);
+    for (const auto &state : impl_->templates)
+    {
+        work += state->program.nodeCount() * state->instances.size();
+        for (const auto &instance : state->instances)
+        {
+            if (instance.cpuParticles)
+            {
+                work += instance.cpuParticles->activeCount();
+            }
+        }
+    }
+    return work;
 }
 Result SpawnableHost::resetForPoolReuse() noexcept
 {
@@ -29,6 +64,27 @@ Result SpawnableHost::resetForPoolReuse() noexcept
     auto generation=std::uint64_t{};
     auto status=nextHostGeneration(generation);
     if (status!=Result::Ok) return status;
+    for (auto &state : host.templates)
+    {
+        status = state->pool->resetForPoolReuse();
+        if (status != Result::Ok)
+        {
+            return status;
+        }
+        for (auto &instance : state->instances)
+        {
+            status = host.recycleCpuWorld(*state, instance);
+            if (status != Result::Ok)
+            {
+                return status;
+            }
+        }
+        state->instances.clear();
+        if (!state->data->cpuPrograms.empty() && state->idleCpuWorlds.size() != host.options.maxActivePerTemplate)
+        {
+            return Result::InsufficientWork;
+        }
+    }
     // The lifecycle detaches borrowed deferred storage before reinitialization.
     host.lifecycle.reset();
     status=host.rootInstance->setDebugHooks({});
@@ -83,17 +139,28 @@ Result SpawnableHostPool::create(const SpawnablePackage& package, const Spawnabl
     out.reset();
     if (!options.capacity || options.capacity>1024 || !options.preparationWorkers || options.preparationWorkers>16)
         return Result::InvalidArgument;
-    // No external registry is accepted: only independent Core-owned setup may
-    // execute on preparation workers. Engine/render resource work stays outside.
-    if (!package.templates.empty()) return Result::UnsupportedBinary;
+    if (options.registryCount && !options.registry)
+    {
+        return Result::InvalidArgument;
+    }
     try {
         auto impl=std::make_unique<Impl>();
         impl->slots.resize(options.capacity); impl->free.reserve(options.capacity);
-        auto status=SpawnableHost::create(package,options.host,impl->slots[0].host);
+        auto status =
+            SpawnableHost::create(package, options.host, options.registry, options.registryCount, impl->slots[0].host);
         if (status!=Result::Ok) return status;
         if (!impl->slots[0].host->supportsPoolReuse()) return Result::UnsupportedBinary;
+        status = impl->slots[0].host->prepareForPoolReuse();
+        if (status != Result::Ok)
+        {
+            return status;
+        }
         const auto hardware=std::max(1u,std::thread::hardware_concurrency());
         impl->workers=std::min({options.capacity,options.preparationWorkers,static_cast<std::size_t>(hardware)});
+        if (!impl->slots[0].host->supportsParallelPreparation())
+        {
+            impl->workers = 1;
+        }
         auto cursor=std::atomic<std::size_t>{1};
         auto failure=std::atomic<Result>{Result::Ok};
         const auto prepare=[&]() noexcept {
@@ -101,7 +168,15 @@ Result SpawnableHostPool::create(const SpawnablePackage& package, const Spawnabl
                 const auto index=cursor.fetch_add(1,std::memory_order_relaxed);
                 if (index>=options.capacity) break;
                 auto result=Result::Ok;
-                try { result=SpawnableHost::create(package,options.host,impl->slots[index].host); }
+                try
+                {
+                    result = SpawnableHost::create(package, options.host, options.registry, options.registryCount,
+                                                   impl->slots[index].host);
+                    if (result == Result::Ok)
+                    {
+                        result = impl->slots[index].host->prepareForPoolReuse();
+                    }
+                }
                 catch (const std::bad_alloc&) { result=Result::InsufficientWork; }
                 catch (...) { result=Result::NotReady; }
                 if (result!=Result::Ok) {

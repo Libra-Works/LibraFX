@@ -496,6 +496,14 @@ auto SpawnableHost::Impl::forceTerminate(const SpawnableScope &scope)
       if (result != Result::Ok) {
         return result;
       }
+      for (auto &instance : state->instances)
+      {
+          const auto recycled = host.recycleCpuWorld(*state, instance);
+          if (recycled != Result::Ok)
+          {
+              return recycled;
+          }
+      }
       state->instances.clear();
     }
     host.scheduledRoutes.clear();
@@ -642,6 +650,14 @@ auto SpawnableHost::Impl::forceTerminate(const SpawnableScope &scope)
     std::memcpy(childScope.containerId, owned.state->data->containerId.data(), 16);
     childScope.instanceId = owned.id;
     host.discardChildGameEvents(childScope);
+    if (auto *instance = host.findInstance(*owned.state, owned.id))
+    {
+        const auto recycled = host.recycleCpuWorld(*owned.state, *instance);
+        if (recycled != Result::Ok)
+        {
+            return recycled;
+        }
+    }
     owned.state->instances.erase(
         std::remove_if(owned.state->instances.begin(),
                        owned.state->instances.end(), [&](const auto &item) {

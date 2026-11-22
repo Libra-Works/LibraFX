@@ -34,8 +34,13 @@ auto System::invoke(CustomNodeInvocation& call) noexcept -> Result
     if (operation >= 0x45 && operation <= 0x48) {
         auto sample = MeshEmissionSample{};
         const auto index = static_cast<std::uint32_t>(particleData.id[particle]);
-        const auto status = system.emitterSurface.sample(math::randomUnit(system.seed, index, 11),
-            math::randomUnit(system.seed, index, 12), math::randomUnit(system.seed, index, 13), sample);
+        if (!system.emitterSurface)
+        {
+            return Result::NotReady;
+        }
+        const auto status = system.emitterSurface->sample(math::randomUnit(system.seed, index, 11),
+                                                          math::randomUnit(system.seed, index, 12),
+                                                          math::randomUnit(system.seed, index, 13), sample);
         if (status != Result::Ok) return status;
         if (operation == 0x45) std::copy(sample.position.begin(), sample.position.end(), call.outputs);
         if (operation == 0x46) std::copy(sample.normal.begin(), sample.normal.end(), call.outputs);

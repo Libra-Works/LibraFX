@@ -25,6 +25,10 @@ LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_create(
     options.instructionBudget = instructionBudget;
     auto host = std::unique_ptr<liberafx::SpawnableHost>{};
     const auto projectNodes = liberafx::host::projectNodes();
+    if (projectNodes.policyCount && !projectNodes.policies)
+        return LIBRA_INVALID_ARGUMENT;
+    if (projectNodes.policyCount)
+        options.customNodePolicies.assign(projectNodes.policies, projectNodes.policies + projectNodes.policyCount);
     result = liberafx::SpawnableHost::create(std::move(package), options,
         projectNodes.descriptors, projectNodes.count, host);
     if (result != liberafx::Result::Ok)

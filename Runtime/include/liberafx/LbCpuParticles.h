@@ -59,6 +59,7 @@ public:
     bool hasPendingRoutes() const noexcept;
     void clear() noexcept;
     bool supportsPoolReuse() const noexcept;
+    bool usesDescriptor(const CustomNodeDescriptor &) const noexcept;
     Result resetForPoolReuse() noexcept;
 private:
     struct Impl;

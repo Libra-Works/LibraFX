@@ -129,6 +129,7 @@ struct GeneratorPool::Impl final
     bool lifecycleConfigured = false;
     bool executing = false;
     bool rejectEnqueues = false;
+    bool preparedStorage = false;
     mutable std::mutex mutex;
 
     Impl(const Program &p, const std::uint8_t *id, std::size_t maximum,

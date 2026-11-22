@@ -10,6 +10,29 @@ internal static class ParticleBenchmarkFixtures
         if (!Path.IsPathFullyQualified(directory) || Directory.Exists(directory))
             throw new ArgumentException("Use an absolute new isolated benchmark fixture directory.");
         Directory.CreateDirectory(directory);
+        var meshGraph = ParticleSamples.Create("CpuMeshSurface");
+        File.WriteAllBytes(Path.Combine(directory, "CpuMesh-static.lfxb"),
+            SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(meshGraph)));
+        var animatedMesh = meshGraph with { Nodes = meshGraph.Nodes.Select(node =>
+        {
+            if (ProceduralResourceSchema.Name(node.Kind) == "ProceduralModel")
+            {
+                var recipe = new ProceduralRecipe { Shape = 11, Size = [2, 2, 2], SegmentsU = 24, SegmentsV = 12,
+                    Modifiers = [new() { Kind = 3, Values = [.4f, 2f, 0f, 1f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }] };
+                return node with { Parameters = [new("proceduralState", "proceduralState",
+                    JsonSerializer.SerializeToElement(ProceduralResourceSchema.Encode(recipe)))] };
+            }
+            if (CpuParticleSchema.IsContainer(node.Kind))
+            {
+                var parameters = node.Parameters?.Where(p => p.Id is not "rate" and not "burst").ToList() ?? [];
+                parameters.Add(new("rate", "float", JsonSerializer.SerializeToElement(80d)));
+                parameters.Add(new("burst", "int", JsonSerializer.SerializeToElement(16)));
+                return node with { Parameters = parameters.ToArray() };
+            }
+            return node;
+        }).ToArray() };
+        File.WriteAllBytes(Path.Combine(directory, "CpuMesh-animated.lfxb"),
+            SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(animatedMesh)));
         var referenceOptions = new VfxCompileOptions { OptimizeCpuParticleKernels = false };
         foreach (var count in new[] { 100, 512, 1000, 10000 })
         {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "liberafx/LbCustomNodePolicy.h"
 #include "liberafx/LbVfxRuntime.h"
 
 namespace liberafx::host {
@@ -7,6 +8,8 @@ namespace liberafx::host {
 struct ProjectNodeRegistry final {
     const CustomNodeDescriptor* descriptors = nullptr;
     std::size_t count = 0;
+    const CustomNodePolicy *policies = nullptr;
+    std::size_t policyCount = 0;
 };
 
 #ifdef LIBERAFX_HAS_PROJECT_NODES

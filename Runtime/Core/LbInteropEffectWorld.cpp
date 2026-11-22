@@ -60,6 +60,24 @@ int32_t LIBRA_INTEROP_CALL libra_spawnable_host_worker_safe(uint64_t handle, uin
         },
         true);
 }
+int32_t LIBRA_INTEROP_CALL libra_spawnable_host_execution_capabilities(uint64_t handle, uint32_t *flags)
+{
+    if (!flags)
+    {
+        return LIBRA_INVALID_ARGUMENT;
+    }
+    *flags = 0;
+    return guardedSpawnable(handle,
+                            [&]() -> LibraResult
+                            {
+                                const auto *host = findSpawnableHost(handle);
+                                *flags = (host->supportsSharedExecution() ? 1u : 0u) |
+                                         (host->supportsWorkerExecution() ? 2u : 0u) |
+                                         (host->supportsPoolReuse() ? 4u : 0u) |
+                                         (host->supportsParallelPreparation() ? 8u : 0u);
+                                return LIBRA_OK;
+                            });
+}
 int32_t LIBRA_INTEROP_CALL libra_effect_world_advance(LibraEffectWorldHandle handle, LibraEffectFrame *frames,
                                                       uint32_t count)
 {

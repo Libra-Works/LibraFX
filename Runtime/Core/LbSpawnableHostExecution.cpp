@@ -860,10 +860,22 @@ auto SpawnableHost::Impl::processPoolEvent(TemplateState &state,
     }
     instance->realStart = realTimeAt(event.startTime);
     if (!state.data->cpuPrograms.empty()) {
-      result = CpuParticleWorld::create(
-          state.data->cpuPrograms.data(), state.data->cpuPrograms.size(),
-          projectDescriptors.data(), projectDescriptors.size(),
-          instance->cpuParticles, options.cpuParticleBatching);
+        if (retainForPool)
+        {
+            if (state.idleCpuWorlds.empty())
+            {
+                return Result::InsufficientWork;
+            }
+            instance->cpuParticles = std::move(state.idleCpuWorlds.back());
+            state.idleCpuWorlds.pop_back();
+            result = Result::Ok;
+        }
+        else
+        {
+            result = CpuParticleWorld::create(state.data->cpuPrograms.data(), state.data->cpuPrograms.size(),
+                                              projectDescriptors.data(), projectDescriptors.size(),
+                                              instance->cpuParticles, options.cpuParticleBatching);
+        }
       if (result != Result::Ok) {
         state.instances.pop_back();
         return result;
@@ -891,6 +903,11 @@ auto SpawnableHost::Impl::processPoolEvent(TemplateState &state,
       result = state.pool->start(event.instanceId);
     }
     if (result != Result::Ok) {
+        const auto recycled = recycleCpuWorld(state, *instance);
+        if (recycled != Result::Ok)
+        {
+            return recycled;
+        }
       state.instances.erase(
           std::remove_if(state.instances.begin(), state.instances.end(),
                          [&](const auto &item) { return item.id == event.instanceId; }),
@@ -971,6 +988,15 @@ auto SpawnableHost::Impl::processPoolEvent(TemplateState &state,
   }
   if (event.kind == GeneratorEventKind::Stop) {
     const auto instanceId = event.instanceId;
+    auto *retiring = findInstance(state, instanceId);
+    if (retiring)
+    {
+        const auto recycled = recycleCpuWorld(state, *retiring);
+        if (recycled != Result::Ok)
+        {
+            return recycled;
+        }
+    }
     state.instances.erase(
         std::remove_if(state.instances.begin(), state.instances.end(),
                        [&](const auto &item) { return item.id == instanceId; }),

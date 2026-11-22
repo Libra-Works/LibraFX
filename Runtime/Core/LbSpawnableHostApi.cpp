@@ -621,7 +621,12 @@ auto SpawnableHost::setDebugHooks(const SpawnableDebugTarget &target,
   if (!state || !impl_->findInstance(*state, target.scope.instanceId)) {
     return Result::InvalidHandle;
   }
-  return state->pool->setDebugHooks(target.scope.instanceId, hooks);
+  const auto result = state->pool->setDebugHooks(target.scope.instanceId, hooks);
+  if (result == Result::Ok)
+  {
+      impl_->findInstance(*state, target.scope.instanceId)->executionDebugAttached = hooks.beforeNode != nullptr;
+  }
+  return result;
 }
 
 auto SpawnableHost::rootValue(const std::uint8_t nodeId[16], double out[4],
@@ -751,6 +756,7 @@ auto SpawnableHost::create(SpawnablePackage package,
     if (result != Result::Ok) {
       return result;
     }
+    impl->configureExecutionSafety();
     out.reset(new SpawnableHost(std::move(impl)));
     return Result::Ok;
   } catch (const std::bad_alloc &) {

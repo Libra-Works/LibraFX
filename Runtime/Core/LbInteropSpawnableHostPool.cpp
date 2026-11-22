@@ -42,38 +42,58 @@ LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_pool_create(const uint8_t* b
     if (!outPool) return LIBRA_INVALID_ARGUMENT;
     *outPool=0;
     if (!bytes || !byteCount || byteCount>std::numeric_limits<std::size_t>::max()) return LIBRA_INVALID_ARGUMENT;
-    return guarded([&]() -> LibraResult {
-        if (liberafx::host::projectNodes().count) return LIBRA_UNSUPPORTED_BINARY;
-        auto package=liberafx::SpawnablePackage{};
-        auto result=liberafx::loadSpawnablePackage(bytes,static_cast<std::size_t>(byteCount),package);
-        if (result!=liberafx::Result::Ok) return toLibraResult(result);
-        auto options=liberafx::SpawnableHostPoolOptions{};
-        if (configuration) {
-            options.capacity=configuration->capacity; options.preparationWorkers=configuration->preparationWorkers;
-            options.host.eventCapacity=configuration->eventCapacity; options.host.instructionBudget=configuration->instructionBudget;
-        }
-        auto owner=std::make_shared<NativeSpawnableHostPool>();
-        result=liberafx::SpawnableHostPool::create(package,options,owner->pool);
-        if (result!=liberafx::Result::Ok) return toLibraResult(result);
-        if (!nextHandle) return LIBRA_INSUFFICIENT_WORK;
-        owner->nodes.resize(options.capacity);
-        // Map nodes and buckets are prepared too: acquire rekeys an extracted
-        // node instead of allocating a new handle wrapper during playback.
-        HostMap spare;
-        for (auto index=0u;index<options.capacity;++index) {
-            spare.emplace(0,NativeSpawnableHost{});
-            owner->nodes[index]=spare.extract(0);
-        }
-        reserveSpawnableHostHandles(options.capacity);
+    return guarded(
+        [&]() -> LibraResult
+        {
+            const auto registry = liberafx::host::projectNodes();
+            if (registry.policyCount && !registry.policies)
+            {
+                return LIBRA_INVALID_ARGUMENT;
+            }
+            auto package = liberafx::SpawnablePackage{};
+            auto result = liberafx::loadSpawnablePackage(bytes, static_cast<std::size_t>(byteCount), package);
+            if (result != liberafx::Result::Ok)
+                return toLibraResult(result);
+            auto options = liberafx::SpawnableHostPoolOptions{};
+            options.registry = registry.descriptors;
+            options.registryCount = registry.count;
+            if (registry.policyCount)
+            {
+                options.host.customNodePolicies.assign(registry.policies, registry.policies + registry.policyCount);
+            }
+            if (configuration)
+            {
+                options.capacity = configuration->capacity;
+                options.preparationWorkers = configuration->preparationWorkers;
+                options.host.eventCapacity = configuration->eventCapacity;
+                options.host.instructionBudget = configuration->instructionBudget;
+            }
+            auto owner = std::make_shared<NativeSpawnableHostPool>();
+            result = liberafx::SpawnableHostPool::create(package, options, owner->pool);
+            if (result != liberafx::Result::Ok)
+                return toLibraResult(result);
+            if (!nextHandle)
+                return LIBRA_INSUFFICIENT_WORK;
+            owner->nodes.resize(options.capacity);
+            // Map nodes and buckets are prepared too: acquire rekeys an extracted
+            // node instead of allocating a new handle wrapper during playback.
+            HostMap spare;
+            for (auto index = 0u; index < options.capacity; ++index)
+            {
+                spare.emplace(0, NativeSpawnableHost{});
+                owner->nodes[index] = spare.extract(0);
+            }
+            reserveSpawnableHostHandles(options.capacity);
 #if defined(_WIN32)
-        owner->packageIdentity=liberafx::host::ExecutionDebugProtocol::programIdentity(bytes,static_cast<std::size_t>(byteCount));
+            owner->packageIdentity =
+                liberafx::host::ExecutionDebugProtocol::programIdentity(bytes, static_cast<std::size_t>(byteCount));
 #endif
-        const auto handle=nextHandle++;
-        hostPools.emplace(handle,std::move(owner));
-        reservedPoolCapacity+=options.capacity;
-        *outPool=handle;
-        return LIBRA_OK;
-    });
+            const auto handle = nextHandle++;
+            hostPools.emplace(handle, std::move(owner));
+            reservedPoolCapacity += options.capacity;
+            *outPool = handle;
+            return LIBRA_OK;
+        });
 }
 LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_pool_acquire(LibraSpawnableHostPoolHandle poolHandle,
     LibraSpawnableHostHandle* outHost) {

@@ -311,8 +311,24 @@ void CpuParticleWorld::clear() noexcept
 }
 bool CpuParticleWorld::supportsPoolReuse() const noexcept
 {
-    for (const auto& system : impl_->systems) if (system->emitterModel) return false;
     return true;
+}
+bool CpuParticleWorld::usesDescriptor(const CustomNodeDescriptor &descriptor) const noexcept
+{
+    for (const auto &system : impl_->systems)
+    {
+        for (const auto &stage : system->stages)
+        {
+            for (const auto &binding : stage.bindings)
+            {
+                if (binding.descriptor && sameCustomNodeDescriptor(*binding.descriptor, descriptor))
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 std::size_t CpuParticleWorld::reservedCapacity() const noexcept
 {

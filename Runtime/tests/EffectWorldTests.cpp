@@ -101,6 +101,10 @@ void fixture(const char *path, JobScheduler scheduler = {})
     auto compatible = host::PlaybackHost{};
     check(cache.acquireCompatible(bytes.data(), bytes.size(), options.host, compatible));
     compatible.reset();
+    auto incompatibleHost = options.host;
+    ++incompatibleHost.maxActivePerTemplate;
+    require(cache.acquireCompatible(bytes.data(), bytes.size(), incompatibleHost, compatible) == Result::NotReady,
+            "Changed child capacity acquired an incompatible prepared host.");
     auto changed = bytes;
     changed.back() ^= 1;
     require(cache.acquireCompatible(changed.data(), changed.size(), options.host, compatible) == Result::NotReady,
@@ -141,8 +145,7 @@ void fixture(const char *path, JobScheduler scheduler = {})
         check(hosts[1]->debugTarget({}, target));
         check(hosts[1]->setDebugHooks(target, {nullptr, debug}));
         frames[1] = {hosts[1].get(), 0, 0};
-        require(world->advance(frames.data(), 2) == Result::UnsupportedBinary,
-                "Debug callbacks ran on the shared workers.");
+        require(world->advance(frames.data(), 2) == Result::Busy, "Debug callbacks ran on the shared workers.");
         check(hosts[1]->setDebugHooks(target, {}));
         auto time = 0.0;
         for (auto frame = 0; frame < 120; ++frame)

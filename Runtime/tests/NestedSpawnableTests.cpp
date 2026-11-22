@@ -1,5 +1,6 @@
 #include "liberafx/LbCpuParticles.h"
 #include "liberafx/LbSpawnableHost.h"
+#include "liberafx/host/LbPreparedPlayback.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -8,6 +9,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -15,6 +17,8 @@
 
 namespace liberafx::nested_spawnable_tests {
 using Id = std::array<std::uint8_t, 16>;
+static bool prepared = false;
+static std::map<std::string, std::shared_ptr<SpawnableHostPool>> pools;
 
 void require(bool condition, const char* message)
 {
@@ -87,8 +91,7 @@ auto registry() -> std::vector<CustomNodeDescriptor>
     return result;
 }
 
-auto createHost(const std::string& path,
-                std::unique_ptr<SpawnableHost>& host) -> SpawnablePackage
+auto createHost(const std::string &path, host::PlaybackHost &host) -> SpawnablePackage
 {
     const auto bytes = read(path);
     auto package = SpawnablePackage{};
@@ -97,8 +100,37 @@ auto createHost(const std::string& path,
                 package.packageVersion == 13,
             "Native reader rejected a compiler-produced nested package.");
     const auto descriptors = registry();
-    const auto result = SpawnableHost::create(
-        std::move(package), {}, descriptors.data(), descriptors.size(), host);
+    auto result = Result::Ok;
+    if (prepared)
+    {
+        auto &pool = pools[path];
+        if (!pool)
+        {
+            auto options = SpawnableHostPoolOptions{};
+            options.capacity = 2;
+            options.registry = descriptors.data();
+            options.registryCount = descriptors.size();
+            auto created = std::unique_ptr<SpawnableHostPool>{};
+            result = SpawnableHostPool::create(package, options, created);
+            pool = std::move(created);
+        }
+        if (result == Result::Ok)
+        {
+            auto lease = SpawnableHostLease{};
+            SpawnableHost *value = nullptr;
+            result = pool->acquire(lease, value);
+            if (result == Result::Ok)
+            {
+                host = host::PlaybackHost(value, {pool, lease});
+            }
+        }
+    }
+    else
+    {
+        auto ordinary = std::unique_ptr<SpawnableHost>{};
+        result = SpawnableHost::create(std::move(package), {}, descriptors.data(), descriptors.size(), ordinary);
+        host.reset(ordinary.release());
+    }
     if (result != Result::Ok)
     {
         throw std::runtime_error("Native host rejected nested package with result " +
@@ -129,11 +161,16 @@ auto childSpawn(const SpawnableHostEvent& event, const Id& container)
 
 void verifyCpuRetention(const std::string& path)
 {
-    auto host = std::unique_ptr<SpawnableHost>{};
+    auto host = host::PlaybackHost{};
     const auto package = createHost(path, host);
-    const auto parentId = parseId("7c48aa90-2948-41ab-83de-d5bb346971e7");
-    const auto childId = parseId("be66a9d1-da67-46ad-9443-fb191b058d61");
-    const auto systemId = parseId("86dd68ee-bcba-4825-b23d-ba9e5fce5d0c");
+    const auto &parent = *std::find_if(package.templates.begin(), package.templates.end(),
+                                       [](const auto &t) { return !t.parentContainerId; });
+    const auto &child = *std::find_if(package.templates.begin(), package.templates.end(),
+                                      [](const auto &t) { return t.parentContainerId.has_value(); });
+    const auto parentId = parent.containerId, childId = child.containerId;
+    auto systemId = Id{};
+    require(parent.cpuPrograms.size() > 24, "Missing parent CPU system.");
+    std::copy_n(parent.cpuPrograms.data() + 8, 16, systemId.data());
     require(package.templates.size() == 2,
             "Retention fixture did not contain both static templates.");
     require(host->advance(0, 0) == Result::Ok,
@@ -173,12 +210,23 @@ void verifyCpuRetention(const std::string& path)
 
 void verifyCaptureIsolation(const std::string& path)
 {
-    auto host = std::unique_ptr<SpawnableHost>{};
-    (void)createHost(path, host);
-    auto firstParent = parseId("d61771e6-8114-453d-a4b7-b3af3a1b9a16");
-    auto secondParent = parseId("bb3a20aa-7021-425b-82db-8c54aa939420");
-    auto firstChild = parseId("643631b3-ce5b-414f-a2e3-6fb5a313a634");
-    auto secondChild = parseId("6b5a47a5-9e53-4ebd-966f-f2d576868f99");
+    auto host = host::PlaybackHost{};
+    const auto package = createHost(path, host);
+    auto parentTemplates = std::vector<const SpawnablePackageTemplate *>{};
+    for (const auto &t : package.templates)
+    {
+        if (!t.parentContainerId)
+        {
+            parentTemplates.push_back(&t);
+        }
+    }
+    require(parentTemplates.size() == 2, "Expected two parent templates.");
+    const auto firstParent = parentTemplates[0]->containerId, secondParent = parentTemplates[1]->containerId;
+    const auto &firstChildTemplate = *std::find_if(package.templates.begin(), package.templates.end(),
+                                                   [&](const auto &t) { return t.parentContainerId == firstParent; });
+    const auto &secondChildTemplate = *std::find_if(package.templates.begin(), package.templates.end(),
+                                                    [&](const auto &t) { return t.parentContainerId == secondParent; });
+    const auto firstChild = firstChildTemplate.containerId, secondChild = secondChildTemplate.containerId;
     require(host->advance(0, 0) == Result::Ok,
             "Could not evaluate nested capture fixture at start.");
     auto children = std::array<GeneratorInstanceId, 2>{};
@@ -205,41 +253,32 @@ void verifyCaptureIsolation(const std::string& path)
     }
     require(parents[0] && parents[1] && children[0] && children[1],
             "The two parent instances did not each spawn their own child.");
-    const auto assertValue = [&](const Id& container, GeneratorInstanceId instance,
-                                 const char* nodeText, double expected) {
-        const auto node = parseId(nodeText);
-        auto values = std::array<double, 4>{};
-        auto width = std::uint8_t{};
-        require(host->childValue(container.data(), instance, node.data(),
-                                 values.data(), width) == Result::Ok &&
-                    width == 1 && std::abs(values[0] - expected) < 1e-8,
-                "Nested CaptureAtSpawn did not resolve from the immediate parent instance.");
-    };
-    const auto firstTargets = std::array<const char*, 5>{
-        "78cba0c2-fc66-4fbc-81cc-b8a1941b3c92",
-        "d9637a38-2464-4d5c-8e71-ca61a2c90ff0",
-        "7ddd2565-01af-4aa3-bd08-4d907abf7bd6",
-        "f58fdd59-95ea-4175-8e73-e63fc4018e06",
-        "5ce0a336-4176-4c59-9e57-cf0d57df74f7"};
-    const auto secondTargets = std::array<const char*, 5>{
-        "86183d92-7ac1-46f5-a4cc-25532059704b",
-        "5b3c1e8c-3f74-47fc-b2ff-e8ed84bbe845",
-        "49e6eaa0-0368-45f3-b702-08924ad51588",
-        "14b47f2e-8554-4195-8b97-cd6cf14eca77",
-        "58e3f265-6e2d-4a4b-96a5-bec5d2a63eb8"};
-    for (auto index = 0u; index < 5; ++index)
+    const auto assertCaptures = [&](const SpawnablePackageTemplate &child, GeneratorInstanceId instance,
+                                    const Id &parent, GeneratorInstanceId parentInstance)
     {
-        assertValue(firstChild, children[0], firstTargets[index], index + 1);
-        assertValue(secondChild, children[1], secondTargets[index], index + 11);
-    }
+        require(child.capturedInputs && child.capturedInputs->size() == 5, "Expected five captures.");
+        for (const auto &capture : *child.capturedInputs)
+        {
+            double actual[4]{}, expected[4]{};
+            std::uint8_t width = 0, parentWidth = 0;
+            require(host->childValue(child.containerId.data(), instance, capture.targetNodeId.data(), actual, width) ==
+                            Result::Ok &&
+                        host->childValue(parent.data(), parentInstance, capture.sourceNodeId.data(), expected,
+                                         parentWidth) == Result::Ok &&
+                        width == 1 && std::abs(actual[0] - expected[capture.sourceComponent]) < 1e-8,
+                    "Capture did not resolve its immediate parent instance.");
+        }
+    };
+    assertCaptures(firstChildTemplate, children[0], firstParent, parents[0]);
+    assertCaptures(secondChildTemplate, children[1], secondParent, parents[1]);
     require(host->advance(1, 1) == Result::Ok,
             "Could not update Live captures from each parent instance.");
     auto liveFirst = std::array<double, 4>{};
     auto liveSecond = std::array<double, 4>{};
     auto widthFirst = std::uint8_t{};
     auto widthSecond = std::uint8_t{};
-    const auto liveFirstId = parseId("390c5ec6-a4c1-450d-9c52-fd5fba17c2c3");
-    const auto liveSecondId = parseId("916841cd-5351-40bf-a17e-dddd55c3e699");
+    const auto liveFirstId = firstChildTemplate.liveInputs->at(0).targetNodeId;
+    const auto liveSecondId = secondChildTemplate.liveInputs->at(0).targetNodeId;
     const auto firstLiveResult =
         host->childValue(firstChild.data(), children[0], liveFirstId.data(),
                          liveFirst.data(), widthFirst);
@@ -287,7 +326,7 @@ void verifyCaptureIsolation(const std::string& path)
 
 void verifySameParentTemplateCapture(const std::string& path)
 {
-    auto host = std::unique_ptr<SpawnableHost>{};
+    auto host = host::PlaybackHost{};
     (void)createHost(path, host);
     const auto parentId = parseId("30000000-0000-4000-8000-000000000004");
     const auto childId = parseId("30000000-0000-4000-8000-000000000007");
@@ -326,7 +365,7 @@ void verifySameParentTemplateCapture(const std::string& path)
 
 void verifyNestedCpuOnlyRetention(const std::string& path)
 {
-    auto host = std::unique_ptr<SpawnableHost>{};
+    auto host = host::PlaybackHost{};
     (void)createHost(path, host);
     const auto parentId = parseId("40000000-0000-4000-8000-000000000002");
     const auto childId = parseId("40000000-0000-4000-8000-000000000005");
@@ -388,7 +427,7 @@ void verifyNestedCpuOnlyRetention(const std::string& path)
 
 void verifyTerminalCpuEvents(const std::string& path)
 {
-    auto host = std::unique_ptr<SpawnableHost>{};
+    auto host = host::PlaybackHost{};
     (void)createHost(path, host);
     const auto child = parseId("40000000-0000-4000-8000-000000000005");
     auto scope = SpawnableScope{};
@@ -430,13 +469,23 @@ auto main(int argc, char** argv) -> int
     {
         require(argc == 5 || argc == 6,
                 "Usage: liberafx_nested_spawnable_tests <retention.lfxp> <capture.lfxp> <same-parent.lfxp> <cpu-retention.lfxp> [cpu-events.lfxp]");
-        verifyCpuRetention(argv[1]);
-        verifyCaptureIsolation(argv[2]);
-        verifySameParentTemplateCapture(argv[3]);
-        verifyNestedCpuOnlyRetention(argv[4]);
-        if (argc == 6)
+        for (auto cycle = 0; cycle < 4; ++cycle)
         {
-            verifyTerminalCpuEvents(argv[5]);
+            std::cout << "Nested fixture cycle " << cycle << std::endl;
+            prepared = cycle != 0;
+            verifyCpuRetention(argv[1]);
+            verifyCaptureIsolation(argv[2]);
+            verifySameParentTemplateCapture(argv[3]);
+            verifyNestedCpuOnlyRetention(argv[4]);
+            if (argc == 6)
+            {
+                verifyTerminalCpuEvents(argv[5]);
+            }
+            for (const auto &entry : pools)
+            {
+                require(entry.second->stats().active == 0 && entry.second->stats().available == 2,
+                        "Nested reuse quarantined or leaked a prepared slot.");
+            }
         }
         std::cout << "Nested Spawnable ownership and CPU retention fixtures passed.\n";
         return 0;

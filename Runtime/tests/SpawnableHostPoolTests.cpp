@@ -140,7 +140,7 @@ void contracts() {
     require(pool->stats().available==2 && pool->stats().active==0,"Pool accounting changed after reuse.");
     options.capacity=0; require(SpawnableHostPool::create(basic(),options,other)==Result::InvalidArgument,"Invalid capacity succeeded.");
     auto nested=basic(); nested.templates.emplace_back(); options.capacity=1;
-    require(SpawnableHostPool::create(nested,options,other)==Result::UnsupportedBinary,"Unsupported templates were silently pooled.");
+    require(SpawnableHostPool::create(nested, options, other) != Result::Ok, "Malformed template was silently pooled.");
 }
 void compare(SpawnableHost& actual,SpawnableHost& expected,const std::array<std::uint8_t,16>& system) {
     std::size_t a=0,b=0; check(actual.cpuParticleCount(system.data(),a)); check(expected.cpuParticleCount(system.data(),b));
@@ -249,11 +249,45 @@ static void sharedAllocationCheck(const char* path)
     }
     for (const auto& lease:leases) { check(pool->release(lease)); }
 }
+void hierarchicalAllocationCheck(const char *path)
+{
+    using namespace liberafx;
+    using namespace liberafx::pool_tests;
+    auto options = SpawnableHostPoolOptions{};
+    options.capacity = 2;
+    auto pool = std::unique_ptr<SpawnableHostPool>{};
+    check(SpawnableHostPool::create(load(path), options, pool));
+    for (auto cycle = 0; cycle < 3; ++cycle)
+    {
+        auto lease = SpawnableHostLease{};
+        SpawnableHost *host = nullptr;
+        auto before = allocation_check::count.load();
+        allocation_check::enabled = true;
+        auto result = pool->acquire(lease, host);
+        allocation_check::enabled = false;
+        check(result);
+        require(allocation_check::count.load() == before, "Hierarchical acquire allocated memory.");
+        check(host->advance(0, 0));
+        check(host->advance(.25, .25));
+        before = allocation_check::count.load();
+        allocation_check::enabled = true;
+        result = pool->release(lease);
+        allocation_check::enabled = false;
+        check(result);
+        require(allocation_check::count.load() == before, "Hierarchical reset/return allocated memory.");
+    }
+}
 int main(int argc,char** argv) {
     try {
         liberafx::pool_tests::instanceCleanup();
         liberafx::pool_tests::contracts();
         for (auto index=1;index<argc;++index) {
+            if (std::strcmp(argv[index], "--hierarchy") == 0)
+            {
+                liberafx::pool_tests::require(index + 1 < argc, "Missing hierarchy allocation fixture.");
+                hierarchicalAllocationCheck(argv[++index]);
+                continue;
+            }
             liberafx::pool_tests::fixture(argv[index],true);
             liberafx::pool_tests::fixture(argv[index],false);
             sharedAllocationCheck(argv[index]);

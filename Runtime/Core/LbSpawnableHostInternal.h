@@ -152,6 +152,7 @@ struct SpawnableHost::Impl final {
     bool retiring = false;
     std::uint64_t retirementSeed = 0;
     bool destroyPublished = false;
+    bool executionDebugAttached = false;
     double realStart = 0;
   };
   struct TemplateState final {
@@ -169,6 +170,7 @@ struct SpawnableHost::Impl final {
     std::unique_ptr<CpuParticleWorld> cpuDescriptorWorld;
     std::unique_ptr<GeneratorPool> pool;
     std::vector<InstanceInfo> instances;
+    std::vector<std::unique_ptr<CpuParticleWorld>> idleCpuWorlds;
   };
   struct SignalInputContext final {
     std::array<std::uint8_t, 16> typeId{};
@@ -203,6 +205,9 @@ struct SpawnableHost::Impl final {
   SpawnableHostOptions options;
   std::vector<CustomNodeDescriptor> projectDescriptors;
   bool executionDebugAttached = false;
+  bool callbackReuseSafe = true, callbackWorkerSafe = true, callbackPreparationSafe = true;
+  void configureExecutionSafety() noexcept;
+  Result recycleCpuWorld(TemplateState &state, InstanceInfo &instance) noexcept;
   std::vector<std::unique_ptr<TemplateState>> templates;
   std::vector<SpawnContextEntry> spawnContexts;
   std::vector<SignalInputContext> signalInputs;

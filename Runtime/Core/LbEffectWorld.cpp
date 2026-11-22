@@ -27,6 +27,7 @@ struct EffectWorld::Impl final
     };
     std::vector<Scheduled> order;
     std::vector<SpawnableHost *> unique;
+    std::vector<std::size_t> ownerIndices;
     ~Impl()
     {
         {
@@ -104,6 +105,7 @@ Result EffectWorld::create(const EffectWorldOptions &options, std::unique_ptr<Ef
         impl->options = options;
         impl->order.resize(options.maximumEffects);
         impl->unique.resize(options.maximumEffects);
+        impl->ownerIndices.resize(options.maximumEffects);
         impl->options.workers = std::min({options.workers, options.maximumEffects,
                                           static_cast<std::size_t>(std::max(1u, std::thread::hardware_concurrency()))});
         if (!options.scheduler.enqueue)
@@ -140,9 +142,9 @@ Result EffectWorld::advance(EffectFrame *frames, std::size_t count) noexcept
         {
             return Result::InvalidArgument;
         }
-        if (!frames[i].host->supportsWorkerExecution())
+        if (!frames[i].host->supportsSharedExecution())
         {
-            return Result::UnsupportedBinary;
+            return Result::Busy;
         }
         impl.unique[i] = frames[i].host;
     }
@@ -168,16 +170,23 @@ Result EffectWorld::advance(EffectFrame *frames, std::size_t count) noexcept
     // Let small effects finish before large jobs occupy lanes. Equal-cost jobs
     // rotate each frame. This is host-level fairness, not mid-host preemption.
     auto totalWork = std::size_t{};
+    auto workerCount = std::size_t{}, ownerCount = std::size_t{};
     for (auto i = std::size_t{}; i < count; ++i)
     {
-        impl.order[i] = {i, frames[i].host->simulationWorkEstimate(), (i + count - impl.rotation) % count};
-        totalWork += impl.order[i].work;
+        if (!frames[i].host->supportsWorkerExecution())
+        {
+            impl.ownerIndices[ownerCount++] = i;
+            continue;
+        }
+        impl.order[workerCount] = {i, frames[i].host->simulationWorkEstimate(), (i + count - impl.rotation) % count};
+        totalWork += impl.order[workerCount++].work;
     }
-    const auto parallel = count > 1 && impl.options.workers > 1 && totalWork >= impl.options.minimumParallelWork;
+    impl.count = workerCount;
+    const auto parallel = workerCount > 1 && impl.options.workers > 1 && totalWork >= impl.options.minimumParallelWork;
     impl.lastExecutingLanes = parallel ? impl.options.workers : 1;
     if (parallel)
     {
-        std::sort(impl.order.begin(), impl.order.begin() + count, [](const auto &left, const auto &right)
+        std::sort(impl.order.begin(), impl.order.begin() + workerCount, [](const auto &left, const auto &right)
                   { return left.work != right.work ? left.work < right.work : left.rank < right.rank; });
     }
     // Small frames stay inline without waking all the shared workers.
@@ -209,6 +218,20 @@ Result EffectWorld::advance(EffectFrame *frames, std::size_t count) noexcept
         impl.consume();
         auto lock = std::unique_lock<std::mutex>(impl.mutex);
         impl.done.wait(lock, [&] { return impl.pending == 0; });
+    }
+    // Unknown/owner-affine callbacks never overlap workers, including callbacks
+    // in a different host sharing their external context. Preserve owner order.
+    for (auto index = std::size_t{}; index < ownerCount; ++index)
+    {
+        auto &frame = frames[impl.ownerIndices[index]];
+        try
+        {
+            frame.result = frame.host->advance(frame.time, frame.delta);
+        }
+        catch (...)
+        {
+            frame.result = Result::NotReady;
+        }
     }
     ++impl.rotation;
     impl.frames = nullptr;

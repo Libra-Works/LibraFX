@@ -30,6 +30,12 @@ void fixture(const char* path) {
     require(stats.capacity==3 && stats.active==0 && stats.available==3 && stats.preparationWorkers<=2,"Invalid pool ABI stats.");
     std::array<LibraSpawnableHostHandle,3> held{};
     for (auto& handle:held) check(libra_spawnable_host_pool_acquire(pool,&handle));
+    for (auto handle : held)
+    {
+        std::uint32_t flags = 0;
+        check(libra_spawnable_host_execution_capabilities(handle, &flags));
+        require(flags == 15, "Builtin prepared host lost execution capabilities.");
+    }
     std::array<LibraEffectFrame,3> frames{};
     for (auto index=0u;index<held.size();++index) { frames[index]={held[index],0,0,LIBRA_NOT_READY,0}; }
     const auto saved=frames[1]; frames[1]=frames[0];
@@ -91,6 +97,11 @@ void fixture(const char* path) {
 }
 int main(int argc,char** argv) {
     try {
+        std::uint32_t flags = 123;
+        if (libra_spawnable_host_execution_capabilities(0, &flags) != LIBRA_INVALID_HANDLE || flags != 0)
+            throw std::runtime_error("Invalid capabilities handle retained flags.");
+        if (libra_spawnable_host_execution_capabilities(0, nullptr) != LIBRA_INVALID_ARGUMENT)
+            throw std::runtime_error("Null capabilities output was accepted.");
         LibraSpawnableHostPoolHandle pool=123;
         if (libra_spawnable_host_pool_create(nullptr,0,nullptr,&pool)!=LIBRA_INVALID_ARGUMENT || pool!=0)
             throw std::runtime_error("Invalid pool input did not clear its output.");

@@ -38,8 +38,8 @@ class LIBRA_RUNTIME_CORE_API PreparedPlaybackCache final
     Result acquire(const std::uint8_t *, std::size_t, const SpawnableHostPoolOptions &, PlaybackHost &out) noexcept;
     // Capacity/preparation workers describe reservation, not playback semantics.
     // An engine loader may prepare once for subsequently created players.
-    Result acquireCompatible(const std::uint8_t *, std::size_t, const SpawnableHostOptions &,
-                             PlaybackHost &out) noexcept;
+    Result acquireCompatible(const std::uint8_t *, std::size_t, const SpawnableHostOptions &, PlaybackHost &out,
+                             const CustomNodeDescriptor *registry = nullptr, std::size_t registryCount = 0) noexcept;
     void clear() noexcept;
 };
 } // namespace liberafx::host

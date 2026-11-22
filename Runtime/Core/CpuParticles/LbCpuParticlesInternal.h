@@ -1,5 +1,6 @@
 #pragma once
 #include "liberafx/LbCpuParticles.h"
+#include "liberafx/LbCustomNodePolicy.h"
 #include "liberafx/LbMeshEmission.h"
 #include "liberafx/host/LbProceduralAdapter.h"
 #include <algorithm>
@@ -157,7 +158,9 @@ struct System final {
     LibraProceduralModelInstance* emitterModel = nullptr;
     std::uint64_t emitterVertexRevision = 0;
     std::array<float, 3> emitterPivot{};
-    MeshEmissionSurface emitterSurface;
+    // Replaced only after a complete geometry revision has been validated.
+    // Particle callbacks borrow an immutable snapshot for the complete step.
+    std::shared_ptr<const MeshEmissionSurface> emitterSurface;
     Result refreshEmitter(double time);
     Id id{}, emissionSource{};
     std::uint32_t capacity = 0, seed = 0, queueCapacity = 0, burst = 0, emissionComponent = 0;

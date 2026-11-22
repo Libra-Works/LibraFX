@@ -29,8 +29,9 @@ struct EffectWorldStats final
 // One bounded simulation executor shared by all instances in an engine world.
 // Gather inputs first on the engine thread, advance, then publish render data.
 // Synchronous join is the publication/Stop boundary; no worker survives a frame.
-// Only independent Core-owned hosts are accepted. Custom callbacks, debug hooks,
-// nested ownership and procedural mesh emitters stay on the owner-thread path.
+// Independent hosts run on workers only when all used callbacks opt in. Unknown
+// or owner-affine callbacks execute on the owner after joining the worker phase.
+// Debug-hooked/busy hosts are rejected before any entry executes.
 class LIBRA_RUNTIME_CORE_API EffectWorld final
 {
   public:

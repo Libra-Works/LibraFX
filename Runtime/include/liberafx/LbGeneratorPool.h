@@ -85,6 +85,10 @@ public:
     Result finalize(GeneratorInstanceId id) noexcept;
     Result stop(GeneratorInstanceId id) noexcept;
     Result reset() noexcept;
+    // Loading-time slabs for every configured slot. Playback never grows this
+    // prepared pool; reset emits no events and restarts lease-local IDs/seeds.
+    Result prepareStorage() noexcept;
+    Result resetForPoolReuse() noexcept;
     // Force is distinct from Stop/Destroy. Owner-thread, job boundary only;
     // Busy never frees running work. No lifecycle callback or Stop event runs.
     // Purges the target's queued lifecycle/signal events, including unpublished

@@ -68,6 +68,9 @@ LIBRA_INTEROP_API int32_t LIBRA_INTEROP_CALL libra_effect_world_advance(
     LibraEffectWorldHandle world, LibraEffectFrame* frames, uint32_t count);
 LIBRA_INTEROP_API int32_t LIBRA_INTEROP_CALL libra_effect_world_release(LibraEffectWorldHandle world);
 LIBRA_INTEROP_API int32_t LIBRA_INTEROP_CALL libra_spawnable_host_worker_safe(uint64_t host, uint32_t* outSafe);
+/* Flags: shared batch=1, worker execution=2, pool reuse=4, parallel preparation=8. */
+LIBRA_INTEROP_API int32_t LIBRA_INTEROP_CALL libra_spawnable_host_execution_capabilities(uint64_t host,
+                                                                                         uint32_t *flags);
 
 typedef uint32_t LibraBinding;
 typedef int32_t LibraResult;

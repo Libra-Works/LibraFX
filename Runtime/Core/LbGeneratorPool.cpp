@@ -138,6 +138,10 @@ auto GeneratorPool::spawnTagged(double time, const GeneratorCapture *captures,
         }
         if (!slot)
         {
+            if (impl_->preparedStorage)
+            {
+                return Result::InsufficientWork;
+            }
             if (impl_->slotCost > impl_->budget - impl_->committed)
             {
                 return Result::InsufficientWork;
@@ -451,6 +455,60 @@ auto GeneratorPool::processSpawns(std::size_t maxCommands,
     return Result::Ok;
 }
 
+auto GeneratorPool::prepareStorage() noexcept -> Result
+{
+    auto lock = std::lock_guard<std::mutex>(impl_->mutex);
+    if (impl_->executing || impl_->active)
+    {
+        return Result::Busy;
+    }
+    try
+    {
+        while (impl_->slots.size() < impl_->maxActive)
+        {
+            if (impl_->slotCost > impl_->budget - impl_->committed)
+            {
+                return Result::InsufficientWork;
+            }
+            auto slot = std::make_unique<Slot>();
+            slot->work.allocate(impl_->workBytes, impl_->program.workAlignment());
+            slot->defaults.allocate(impl_->defaultBytes, impl_->program.defaultsAlignment());
+            impl_->slots.push_back(std::move(slot));
+            impl_->committed += impl_->slotCost;
+        }
+        impl_->preparedStorage = true;
+        return Result::Ok;
+    }
+    catch (...)
+    {
+        return Result::InsufficientWork;
+    }
+}
+auto GeneratorPool::resetForPoolReuse() noexcept -> Result
+{
+    auto lock = std::unique_lock<std::mutex>(impl_->mutex);
+    if (impl_->executing)
+    {
+        return Result::Busy;
+    }
+    impl_->executing = impl_->rejectEnqueues = true;
+    impl_->active = 0;
+    impl_->eventCount = impl_->signalEventCount = impl_->commandCount = 0;
+    for (auto &slot : impl_->slots)
+    {
+        slot->id = 0;
+    }
+    lock.unlock();
+    for (auto &slot : impl_->slots)
+    {
+        slot->instance.reset();
+    }
+    lock.lock();
+    impl_->eventHead = impl_->signalEventHead = impl_->commandHead = 0;
+    impl_->nextId = 1;
+    impl_->executing = impl_->rejectEnqueues = false;
+    return Result::Ok;
+}
 auto GeneratorPool::reset() noexcept -> Result
 {
     auto lock = std::unique_lock<std::mutex>(impl_->mutex);

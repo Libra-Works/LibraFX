@@ -11,6 +11,8 @@ struct SpawnableHostPoolOptions final {
     // Bounded workers used only during preparation, including the caller.
     std::size_t preparationWorkers = 4;
     SpawnableHostOptions host;
+    const CustomNodeDescriptor *registry = nullptr;
+    std::size_t registryCount = 0;
 };
 struct SpawnableHostPoolStats final {
     std::size_t capacity = 0, active = 0, available = 0, preparationWorkers = 0;
@@ -19,8 +21,9 @@ struct SpawnableHostPoolStats final {
 // never grows the pool. Release resets state while retaining programs, buffers
 // and queues. Host pointers are valid only for the current lease. Owner-thread
 // operations; preparation hands quiescent worker-built instances to that owner.
-// Initial support: root-only packages with Core builtins and no procedural mesh
-// emitter. Templates, project callbacks and engine resources use ordinary hosts.
+// Hierarchies and Core procedural mesh emitters are prepared recursively.
+// Used project callbacks require explicit reusable policies; worker execution
+// and parallel preparation are independent opt-ins. Engine objects stay outside.
 class LIBRA_RUNTIME_CORE_API SpawnableHostPool final {
 public:
     static Result create(const SpawnablePackage& package, const SpawnableHostPoolOptions& options,
