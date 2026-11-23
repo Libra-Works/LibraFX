@@ -237,7 +237,9 @@ jobs:
         shell: pwsh
         env:
           BUILD_VERSION: ${{ needs.version.outputs.value }}
-        run: ./Tools/Export-EngineSdk.ps1 -Engine Core -OutputDirectory (Join-Path $env:RUNNER_TEMP 'LibraSDK') -BuildVersion $env:BUILD_VERSION
+        run: |
+          ./Tools/Export-EngineSdk.ps1 -Engine Core -OutputDirectory (Join-Path $env:RUNNER_TEMP 'LibraSDK') -BuildVersion $env:BUILD_VERSION
+          ./Tests/Verify-EngineSdkPackaging.ps1 -Engine Core -ArtifactRoot (Join-Path $env:RUNNER_TEMP 'LibraSDK')
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: github.event_name == 'workflow_dispatch'
         with:
@@ -312,7 +314,9 @@ jobs:
       - name: Stage copy-ready Unity and Godot folders
         if: matrix.engine != 'Unreal'
         shell: pwsh
-        run: ./Tools/Stage-CopyReadyEngineFolder.ps1 -Engine ${{ matrix.engine }} -ArtifactRoot (Join-Path $env:RUNNER_TEMP 'sdk')
+        run: |
+          ./Tools/Stage-CopyReadyEngineFolder.ps1 -Engine ${{ matrix.engine }} -ArtifactRoot (Join-Path $env:RUNNER_TEMP 'sdk')
+          ./Tests/Verify-EngineSdkPackaging.ps1 -Engine ${{ matrix.engine }} -ArtifactRoot (Join-Path $env:RUNNER_TEMP 'sdk')
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: github.event_name == 'workflow_dispatch'
         with:
