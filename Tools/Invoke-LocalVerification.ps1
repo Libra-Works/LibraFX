@@ -206,13 +206,15 @@ try {
         }
     }
 
+    $ueOut = $null
     if ($wantUnreal) {
         $ueRoot = Find-UnrealRoot
         if (-not $ueRoot) {
             Add-Skip 'Engine: Unreal RunUAT BuildPlugin' 'Unreal Engine root not found; pass -UnrealEngineRoot.'
         } else {
             Invoke-Step "Engine: Unreal RunUAT BuildPlugin ($(Split-Path $ueRoot -Leaf))" {
-                $ueOut = Join-Path $workRoot 'ue-bin-real'
+                # Keep path short because UnrealBuildTool enforces a 260-char action path limit on Windows.
+                $ueOut = Join-Path ([IO.Path]::GetTempPath()) ('lfx-ue-' + [Guid]::NewGuid().ToString('N').Substring(0, 6))
                 $buildArgs = @{ UnrealEngineRoot = $ueRoot; OutputDirectory = $ueOut; BuildVersion = '2026.11.999' }
                 if (-not $StrictClean) { $buildArgs['AllowDirty'] = $true }
                 & (Join-Path $repository 'Tools\Build-UnrealBinaryPlugin.ps1') @buildArgs
@@ -244,9 +246,15 @@ try {
     if ($failed) { exit 1 }
 }
 finally {
-    if (-not $KeepScratch -and (Test-Path -LiteralPath $workRoot)) {
-        Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
-    } elseif ($KeepScratch) {
+    if (-not $KeepScratch) {
+        if (Test-Path -LiteralPath $workRoot) {
+            Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        if ($ueOut -and (Test-Path -LiteralPath $ueOut)) {
+            Remove-Item -LiteralPath $ueOut -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    } else {
         Write-Host "Scratch retained at: $workRoot" -ForegroundColor Yellow
+        if ($ueOut) { Write-Host "Unreal output retained at: $ueOut" -ForegroundColor Yellow }
     }
 }
