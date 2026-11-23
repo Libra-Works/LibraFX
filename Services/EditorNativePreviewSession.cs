@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -32,6 +33,9 @@ public sealed class EditorNativePreviewSession : IDisposable
     private readonly List<Guid> _pendingManualSignals = [];
     private readonly List<SpawnableSessionEvent> _events = [];
     private readonly List<EditorNativeGameIoEvent> _gameEvents = [];
+    public bool IsSeeking { get; private set; }
+    public double SeekTargetSeconds { get; private set; }
+    public bool HasManualSignals => _manualSignals;
     public double EvaluatedTimeSeconds => _exactTimeline ? Math.Max(0, _signalSampleTime) :
         _step < 0 ? 0 : (double)_step / StepsPerSecond;
     public int ActiveCount => _native?.ActiveCount ?? 0;
@@ -95,41 +99,53 @@ public sealed class EditorNativePreviewSession : IDisposable
     private static bool ContainsGpu(GraphSnapshot graph) => graph.Nodes.Any(node =>
         GpuParticleEditorService.IsGpu(node.Kind) || node.ChildGraph is { } child && ContainsGpu(child));
 
-    public byte[] EvaluateScene(double requestedTime, long programSequence, PreviewPlaybackState? playback = null)
+    public byte[] EvaluateScene(double requestedTime, long programSequence, PreviewPlaybackState? playback = null,
+        int? maxCatchupSteps = null, double? maxCatchupMilliseconds = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (!double.IsFinite(requestedTime) || requestedTime < 0 || requestedTime > MaximumReplaySeconds)
-            throw new InvalidDataException($"Editor-native preview supports a bounded 0..{MaximumReplaySeconds} second timeline. Shorten the timeline or seek within that range.");
+        if (!double.IsFinite(requestedTime) || requestedTime < 0)
+            throw new InvalidDataException("Editor-native preview requires a finite non-negative playback time.");
         if (programSequence < 1) throw new ArgumentOutOfRangeException(nameof(programSequence));
+        IsSeeking = false;
+        SeekTargetSeconds = requestedTime;
+        var stopwatch = maxCatchupMilliseconds is > 0 ? Stopwatch.StartNew() : null;
         if ((_hasSignalKeys || _manualSignals) && playback is not null)
         {
             _exactTimeline = true;
-            EvaluateSignalPlayback(playback, requestedTime);
+            EvaluateSignalPlayback(playback, requestedTime, maxCatchupSteps, stopwatch, maxCatchupMilliseconds);
         }
         else
         {
-        var step = checked((long)Math.Floor(requestedTime * StepsPerSecond + 1e-9));
-        if (step < _step)
-        {
-            // Stop/seek/loop never route teardown as natural Destroy. Recreate
-            // programs/pools/IDs/seeds and replay the same fixed native steps.
-            _native!.Dispose();
-            _native = null;
-            _native = new EditorNativeHostSession(_package, _library);
-            _collectedGameEvents = 0;
-            _collectedEvents = 0;
-            _step = -1;
-        }
-        if (_step < 0)
-        {
-            AdvanceNative(0, 0);
-            _step = 0;
-        }
-        while (_step < step)
-        {
-            AdvanceNative((double)(_step + 1) / StepsPerSecond, 1d / StepsPerSecond);
-            ++_step;
-        }
+            var step = checked((long)Math.Floor(requestedTime * StepsPerSecond + 1e-9));
+            if (step < _step)
+            {
+                // Stop/seek/loop never route teardown as natural Destroy. Recreate
+                // programs/pools/IDs/seeds and replay the same fixed native steps.
+                _native!.Dispose();
+                _native = null;
+                _native = new EditorNativeHostSession(_package, _library);
+                _collectedGameEvents = 0;
+                _collectedEvents = 0;
+                _step = -1;
+            }
+            if (_step < 0)
+            {
+                AdvanceNative(0, 0);
+                _step = 0;
+            }
+            var stepsTaken = 0;
+            while (_step < step)
+            {
+                if (maxCatchupSteps is > 0 && stepsTaken >= maxCatchupSteps ||
+                    stopwatch is not null && stepsTaken > 0 && stopwatch.Elapsed.TotalMilliseconds >= maxCatchupMilliseconds)
+                {
+                    IsSeeking = true;
+                    break;
+                }
+                AdvanceNative((double)(_step + 1) / StepsPerSecond, 1d / StepsPerSecond);
+                ++_step;
+                ++stepsTaken;
+            }
         }
         // Equal sampled time (pause/resume/resync) does not evaluate again.
         var nodes = new JsonArray();
@@ -151,6 +167,7 @@ public sealed class EditorNativePreviewSession : IDisposable
             ["standaloneEngineLifecycle"] = false,
             ["requestedTimeSeconds"] = requestedTime,
             ["evaluatedTimeSeconds"] = EvaluatedTimeSeconds,
+            ["seeking"] = IsSeeking,
             ["sampleRate"] = StepsPerSecond,
             ["activeInstances"] = ActiveCount,
             ["nodes"] = nodes
@@ -230,43 +247,60 @@ public sealed class EditorNativePreviewSession : IDisposable
         _signalSampleTime = -1;
     }
 
-    private void AdvanceSignalNative(double time, bool publish = true)
+    private bool AdvanceSignalNative(double time, bool publish = true,
+        int? maxCatchupSteps = null, Stopwatch? stopwatch = null, double? maxCatchupMilliseconds = null,
+        int? stepsCounter = null)
     {
         if (time < _signalSampleTime)
             throw new InvalidDataException("Signal playback cannot advance backwards without a seek epoch.");
         if (_signalSampleTime < 0) { AdvanceNative(0, 0, publish); _signalSampleTime = 0; }
+        var stepsTaken = stepsCounter ?? 0;
         while (_signalSampleTime < time)
         {
+            if (maxCatchupSteps is > 0 && stepsTaken >= maxCatchupSteps ||
+                stopwatch is not null && stepsTaken > 0 && stopwatch.Elapsed.TotalMilliseconds >= maxCatchupMilliseconds)
+            {
+                return false;
+            }
             var next = (Math.Floor(_signalSampleTime * StepsPerSecond + 1e-9) + 1) / StepsPerSecond;
             if (next <= _signalSampleTime) next = _signalSampleTime + 1d / StepsPerSecond;
             next = Math.Min(next, time);
             AdvanceNative(next, next - _signalSampleTime, publish);
             _signalSampleTime = next;
+            ++stepsTaken;
         }
+        return true;
     }
 
-    private void ReconstructSignalNative(double time, bool publishBoundary = false)
+    private bool ReconstructSignalNative(double time, bool publishBoundary = false,
+        int? maxCatchupSteps = null, Stopwatch? stopwatch = null, double? maxCatchupMilliseconds = null)
     {
         ResetSignalNative();
-        if (publishBoundary && time > 0) AdvanceSignalNative(Math.BitDecrement(time), false);
-        AdvanceSignalNative(time, publishBoundary);
+        if (publishBoundary && time > 0)
+        {
+            if (!AdvanceSignalNative(Math.BitDecrement(time), false, maxCatchupSteps, stopwatch, maxCatchupMilliseconds))
+                return false;
+        }
+        return AdvanceSignalNative(time, publishBoundary, maxCatchupSteps, stopwatch, maxCatchupMilliseconds);
     }
 
-    private void EvaluateSignalPlayback(PreviewPlaybackState state, double requestedTime)
+    private void EvaluateSignalPlayback(PreviewPlaybackState state, double requestedTime,
+        int? maxCatchupSteps = null, Stopwatch? stopwatch = null, double? maxCatchupMilliseconds = null)
     {
         var start = state.RangeStart / state.FramesPerSecond;
         var end = state.RangeEnd / state.FramesPerSecond;
         if (!double.IsFinite(state.ForwardSeconds) || state.ForwardSeconds < 0 ||
-            !double.IsFinite(state.SeekTimeSeconds) || state.SeekTimeSeconds is < 0 or > MaximumReplaySeconds ||
+            !double.IsFinite(state.SeekTimeSeconds) || state.SeekTimeSeconds < 0 ||
             state.SignalStartSeconds is { } signalStart &&
-                (!double.IsFinite(signalStart) || signalStart < 0 || signalStart > MaximumReplaySeconds) ||
+                (!double.IsFinite(signalStart) || signalStart < 0) ||
             !double.IsFinite(start) || !double.IsFinite(end) || start < 0 || end <= start ||
-            end > MaximumReplaySeconds || state.SignalEpoch < 0 || state.LoopCount < 0)
+            state.SignalEpoch < 0 || state.LoopCount < 0)
             throw new InvalidDataException("Invalid Signal timeline playback state.");
         var previous = _signalPlayback;
         if (previous is null)
         {
-            ReconstructSignalNative(requestedTime);
+            if (!ReconstructSignalNative(requestedTime, false, maxCatchupSteps, stopwatch, maxCatchupMilliseconds))
+                IsSeeking = true;
         }
         else
         {
@@ -276,15 +310,20 @@ public sealed class EditorNativePreviewSession : IDisposable
             var priorProgress = reset ? 0 : previous.ForwardSeconds;
             var loops = state.LoopCount - priorLoops;
             var progress = state.ForwardSeconds - priorProgress;
-            if (loops is < 0 or > 128 || progress < 0 || progress > MaximumReplaySeconds ||
-                loops > 0 && !state.Loop)
+            if (loops is < 0 or > 128 || progress < 0 || loops > 0 && !state.Loop)
                 throw new InvalidDataException("Signal timeline advance exceeds its replay budget; resync preview.");
             if (reset)
             {
                 var seeking = previous.SignalEpoch != state.SignalEpoch;
                 if (seeking) _pendingManualSignals.Clear();
-                ReconstructSignalNative(state.SeekTimeSeconds,
-                    state.SignalStartSeconds is not null && state.IncludeSignalStart);
+                if (!ReconstructSignalNative(state.SeekTimeSeconds,
+                        state.SignalStartSeconds is not null && state.IncludeSignalStart,
+                        maxCatchupSteps, stopwatch, maxCatchupMilliseconds))
+                {
+                    IsSeeking = true;
+                    _signalPlayback = state;
+                    return;
+                }
                 foreach (var node in _pendingManualSignals)
                 {
                     _native!.SendSignal(node);
@@ -294,11 +333,22 @@ public sealed class EditorNativePreviewSession : IDisposable
             }
             for (var index = 0L; index < loops; ++index)
             {
-                AdvanceSignalNative(end);
+                if (!AdvanceSignalNative(end, true, maxCatchupSteps, stopwatch, maxCatchupMilliseconds))
+                {
+                    IsSeeking = true;
+                    _signalPlayback = state with { LoopCount = priorLoops + index };
+                    return;
+                }
                 _pendingManualSignals.Clear();
-                ReconstructSignalNative(start, true);
+                if (!ReconstructSignalNative(start, true, maxCatchupSteps, stopwatch, maxCatchupMilliseconds))
+                {
+                    IsSeeking = true;
+                    _signalPlayback = state with { LoopCount = priorLoops + index + 1 };
+                    return;
+                }
             }
-            AdvanceSignalNative(requestedTime);
+            if (!AdvanceSignalNative(requestedTime, true, maxCatchupSteps, stopwatch, maxCatchupMilliseconds))
+                IsSeeking = true;
         }
         _signalPlayback = state;
     }

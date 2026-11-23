@@ -2,11 +2,11 @@ extends RefCounted
 ## Protocol-3 package receiver. The supplied player is exclusively reserved for preview.
 
 const HEADER_BYTES := 48
-const MAX_REPLAY_SECONDS := 120.0
 const MAX_SIGNAL_BYTES := 65536
 const MAX_SIGNAL_REQUESTS := 32
 const STEP := 1.0 / 60.0
 const STEPS_PER_FRAME := 60
+const MAX_CATCHUP_MS := 8.0
 
 var _player: Node
 var _generation: int = -1
@@ -17,7 +17,12 @@ var _package := PackedByteArray()
 var _time := 0.0
 var _target := 0.0
 var _finished := false
+var _seeking := false
 var error := ""
+
+
+func is_seeking() -> bool:
+	return _seeking
 
 
 func initialize(player: Node) -> void:
@@ -36,6 +41,7 @@ func close() -> void:
 	_time = 0.0
 	_target = 0.0
 	_finished = false
+	_seeking = false
 
 
 func _owns_player() -> bool:
@@ -84,7 +90,7 @@ func consume(bytes: PackedByteArray) -> Dictionary:
 	var flags := bytes.decode_u32(40)
 	var length := bytes.decode_u32(44)
 	if kind < 1 or kind > 4 or sequence < 0 or base < 0 or length != bytes.size() - HEADER_BYTES \
-			or not is_finite(time) or time < 0 or time > MAX_REPLAY_SECONDS \
+			or not is_finite(time) or time < 0 \
 			or not is_finite(rate) or rate < 0 or (flags & ~3) != 0:
 		return _fail("Invalid or unsupported preview frame.")
 	if (kind == 1 and (base != 0 or length == 0)) \
@@ -118,6 +124,7 @@ func consume(bytes: PackedByteArray) -> Dictionary:
 			_time = 0.0
 			_target = 0.0
 			_finished = false
+			_seeking = false
 			return {"result": 0, "resync": false, "reset": true}
 		return _consume_signals(bytes.slice(HEADER_BYTES))
 	if sequence < _sequence:
@@ -178,7 +185,7 @@ func _consume_signals(payload: PackedByteArray) -> Dictionary:
 		return _fail("Invalid Editor Send request sequence.")
 	if sequence <= _sequence:
 		return {"result": 0, "resync": false}
-	if not is_finite(time) or time < 0 or time > MAX_REPLAY_SECONDS:
+	if not is_finite(time) or time < 0:
 		return _fail("Invalid Editor Send request sequence.")
 	if _signal_sequence >= 0 and base != _signal_sequence:
 		return {"result": 0, "resync": true}
@@ -226,15 +233,20 @@ func tick() -> int:
 		result = _advance(0.0)
 		if result != 0:
 			return result
-	for _step in range(STEPS_PER_FRAME):
+	var start_usec := Time.get_ticks_usec()
+	for step_index in range(STEPS_PER_FRAME):
 		if _finished or _time + 0.000000001 >= _target:
+			break
+		if step_index > 0 and (Time.get_ticks_usec() - start_usec) >= MAX_CATCHUP_MS * 1000.0:
 			break
 		var delta: float = minf(STEP, _target - _time)
 		var step_result := _advance(delta)
 		if step_result != 0:
+			_seeking = false
 			error = "Package evaluation failed (result %d): %s" % [step_result, str(_player.call("get_gpu_error"))]
 			return step_result
 		_time += delta
+	_seeking = not _finished and (_time + 0.000000001 < _target)
 	return 0
 
 

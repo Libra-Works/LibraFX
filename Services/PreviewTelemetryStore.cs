@@ -328,7 +328,7 @@ public sealed class PreviewTelemetryStore
                 var timeSeconds = Finite(root.GetProperty("timeSeconds"));
                 var requests = Array(root, "requests", 32).EnumerateArray().ToArray();
                 if (sequence < 0 || baseSequence < 0 || baseSequence > long.MaxValue - requests.Length ||
-                    timeSeconds is < 0 or > 120 || requests.Length is < 1 or > 32)
+                    !double.IsFinite(timeSeconds) || timeSeconds < 0 || requests.Length is < 1 or > 32)
                     throw new InvalidOperationException("Invalid Godot signal control values.");
                 foreach (var request in requests)
                 {

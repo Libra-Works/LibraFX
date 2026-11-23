@@ -39,7 +39,10 @@ private:
     double lastRemoteTime = 0;
     double lastRemoteArrival = 0;
     double playbackRate = 1;
+    double currentTimeSeconds = 0;
+    double seekTargetSeconds = 0;
     bool hasRemoteTime = false;
     bool remotePlaying = false;
     bool seekBlocked = false;
+    bool seeking = false;
 };

@@ -213,11 +213,18 @@ void FLibraEditorGpuPreview::SetPlayback(int64 programSequence, bool playing, do
     if (programSequence < rootSequence) return;
     auto now = FPlatformTime::Seconds();
     rootSequence = programSequence;
-    if (hasRemoteTime && !programChanged && !emitters.IsEmpty())
+    if (programChanged)
+    {
+        seeking = false;
+        seekBlocked = false;
+        currentTimeSeconds = timeSeconds;
+        seekTargetSeconds = timeSeconds;
+    }
+    else if (hasRemoteTime && !emitters.IsEmpty())
     {
         auto delta = timeSeconds - lastRemoteTime;
         auto expected = remotePlaying ? FMath::Max(0.0, now - lastRemoteArrival) * playbackRate : 0.0;
-        if (delta < -0.00001 || (seekBlocked && timeSeconds <= 0.00001))
+        if (delta < -0.00001)
         {
             seekBlocked = false;
             for (auto& emitter : emitters)
@@ -226,14 +233,21 @@ void FLibraEditorGpuPreview::SetPlayback(int64 programSequence, bool playing, do
                 emitter.timeSeconds = 0;
                 emitter.executed = false;
             }
-            if (timeSeconds > 0.00001)
-                errors = {TEXT("GPU backward seek resets simulation to zero; arbitrary scrubbing is unsupported.")};
-            else errors.Reset();
+            currentTimeSeconds = 0;
+            seekTargetSeconds = timeSeconds;
+            seeking = timeSeconds > 0.00001;
+            errors.Reset();
         }
-        else if (!emitters.IsEmpty() && delta > expected + 0.25)
+        else if (delta > expected + 0.25)
         {
-            seekBlocked = true;
-            errors = {TEXT("GPU forward seek is unsupported. Return the timeline to zero to restart simulation.")};
+            seekBlocked = false;
+            seekTargetSeconds = timeSeconds;
+            seeking = seekTargetSeconds > currentTimeSeconds + 0.00001;
+            errors.Reset();
+        }
+        else if (seeking)
+        {
+            seekTargetSeconds = timeSeconds;
         }
     }
     playbackRate = rate;
@@ -241,8 +255,12 @@ void FLibraEditorGpuPreview::SetPlayback(int64 programSequence, bool playing, do
     hasRemoteTime = true;
     lastRemoteTime = timeSeconds;
     lastRemoteArrival = now;
+    if (!seeking)
+    {
+        seekTargetSeconds = timeSeconds;
+    }
     for (auto& emitter : emitters)
-        if (remotePlaying && !seekBlocked) emitter.runtime->Play();
+        if ((remotePlaying || seeking) && !seekBlocked) emitter.runtime->Play();
         else emitter.runtime->Pause();
 }
 
@@ -250,6 +268,49 @@ void FLibraEditorGpuPreview::Tick(float deltaTime, bool connected)
 {
     check(IsInGameThread());
     if (!FMath::IsFinite(deltaTime) || deltaTime <= 0) return;
+    if (!connected)
+    {
+        for (auto& emitter : emitters) emitter.runtime->Pause();
+        return;
+    }
+    if (seeking && !seekBlocked && !emitters.IsEmpty())
+    {
+        constexpr int32 MaxCatchupStepsPerFrame = 30;
+        constexpr double MaxCatchupSecondsPerFrame = 0.008;
+        const double tickStart = FPlatformTime::Seconds();
+        const double fixedStep = 1.0 / 60.0;
+        int32 steps = 0;
+        while (currentTimeSeconds + 1e-6 < seekTargetSeconds && steps < MaxCatchupStepsPerFrame)
+        {
+            if (steps > 0 && (FPlatformTime::Seconds() - tickStart) >= MaxCatchupSecondsPerFrame)
+            {
+                break;
+            }
+            const double stepDelta = FMath::Min(fixedStep, seekTargetSeconds - currentTimeSeconds);
+            for (auto& emitter : emitters)
+            {
+                auto runtime = emitter.runtime.Get();
+                if (!runtime->bIsPlaying && !runtime->Play()) continue;
+                runtime->Tick(static_cast<float>(stepDelta));
+                if (runtime->LastError.IsEmpty())
+                {
+                    emitter.timeSeconds += stepDelta;
+                    emitter.executed = true;
+                }
+            }
+            currentTimeSeconds += stepDelta;
+            ++steps;
+        }
+        if (currentTimeSeconds + 1e-6 >= seekTargetSeconds)
+        {
+            seeking = false;
+            if (!remotePlaying)
+            {
+                for (auto& emitter : emitters) emitter.runtime->Pause();
+            }
+        }
+        return;
+    }
     auto step = double(deltaTime) * playbackRate;
     if (!FMath::IsFinite(step) || step > TNumericLimits<float>::Max())
     {
@@ -259,7 +320,7 @@ void FLibraEditorGpuPreview::Tick(float deltaTime, bool connected)
     for (auto& emitter : emitters)
     {
         auto runtime = emitter.runtime.Get();
-        if (!connected || !remotePlaying || seekBlocked) { runtime->Pause(); continue; }
+        if (!remotePlaying || seekBlocked) { runtime->Pause(); continue; }
         if (!runtime->bIsPlaying && !runtime->Play()) continue;
         if (step <= 0) continue;
         runtime->Tick(static_cast<float>(step));
@@ -268,6 +329,10 @@ void FLibraEditorGpuPreview::Tick(float deltaTime, bool connected)
             emitter.timeSeconds += step;
             emitter.executed = true;
         }
+    }
+    if (remotePlaying && !seekBlocked && step > 0)
+    {
+        currentTimeSeconds += step;
     }
 }
 
@@ -279,8 +344,8 @@ void FLibraEditorGpuPreview::Reset()
     configurationError.Reset();
     rootSequence = 0;
     appliedSequence = -1;
-    hasRemoteTime = remotePlaying = seekBlocked = false;
-    lastRemoteTime = lastRemoteArrival = 0;
+    hasRemoteTime = remotePlaying = seekBlocked = seeking = false;
+    lastRemoteTime = lastRemoteArrival = currentTimeSeconds = seekTargetSeconds = 0;
     playbackRate = 1;
 }
 
@@ -293,6 +358,9 @@ FString FLibraEditorGpuPreview::Status(int64 programSequence) const
     if (appliedSequence >= 0 && appliedSequence != programSequence)
         status->SetNumberField(TEXT("requestedProgramSequence"), programSequence);
     status->SetStringField(TEXT("mode"), TEXT("GpuRegisterInterpreter"));
+    status->SetBoolField(TEXT("seeking"), seeking);
+    status->SetNumberField(TEXT("seekTargetSeconds"), seekTargetSeconds);
+    status->SetNumberField(TEXT("currentTimeSeconds"), currentTimeSeconds);
     auto executed = false;
     auto programs = TArray<TSharedPtr<FJsonValue>>{};
     for (const auto& emitter : emitters)

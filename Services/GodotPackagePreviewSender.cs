@@ -112,8 +112,8 @@ internal sealed class GodotPackagePreviewSender
         if (!double.IsFinite(playback.FramesPerSecond) || playback.FramesPerSecond <= 0)
             throw new InvalidDataException("Godot package preview needs a positive finite playback frame rate.");
         var time = playback.Frame / playback.FramesPerSecond;
-        if (!double.IsFinite(time) || time is < 0 or > 120)
-            throw new InvalidDataException("Godot package preview supports Editor Send playback times from 0 to 120 seconds.");
+        if (!double.IsFinite(time) || time < 0)
+            throw new InvalidDataException("Godot package preview needs a finite non-negative playback time.");
         return time;
     }
 

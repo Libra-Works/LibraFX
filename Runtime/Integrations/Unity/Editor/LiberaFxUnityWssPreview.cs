@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System;
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -9,14 +10,19 @@ namespace LiberaFx.Unity
 {
     internal sealed class LiberaFxUnityWssPreview : IDisposable
     {
+        private const int MaxCatchupStepsPerFrame = 60;
+        private const double MaxCatchupMilliseconds = 8.0;
         private readonly PreviewRenderUtility viewport = new PreviewRenderUtility();
         private LiberaFxSpawnableAsset package;
         private LiberaFxUnityBindingAsset bindings;
         private LiberaFxSpawnableComponent effect;
         private ulong sequence;
         private double time;
+        private double targetTime;
 
         internal GameObject PreviewObject => effect ? effect.gameObject : null;
+        internal bool IsSeeking => effect && !effect.IsRootFinished && effect.ElapsedTime + 1e-6 < targetTime;
+        internal double TargetTime => targetTime;
 
         internal LiberaFxUnityWssPreview()
         {
@@ -69,9 +75,9 @@ namespace LiberaFx.Unity
                 return false;
             }
             var target = BitConverter.Int64BitsToDouble(BinaryPrimitives.ReadInt64LittleEndian(header.Slice(24)));
-            if (double.IsNaN(target) || double.IsInfinity(target) || target < 0 || target > 120)
+            if (double.IsNaN(target) || double.IsInfinity(target) || target < 0)
             {
-                throw new InvalidOperationException("Unity preview supports playback times from 0 to 120 seconds.");
+                throw new InvalidOperationException("Unity preview requires a finite non-negative playback time.");
             }
             if (kind == 1)
             {
@@ -93,22 +99,38 @@ namespace LiberaFx.Unity
                 Restart();
             }
 
-            var steps = 0;
-            while (effect.ElapsedTime < target && !effect.IsRootFinished)
+            targetTime = target;
+            StepTowardTarget();
+            sequence = next;
+            acknowledgement = kind == 1 ? next : 0;
+            return true;
+        }
+
+        internal void StepTowardTarget()
+        {
+            if (!effect || effect.IsRootFinished || effect.ElapsedTime >= targetTime)
             {
-                if (++steps > 7201 || effect.AdvancePreview(Math.Min(target, effect.ElapsedTime + 1.0 / 60)) != NativeResult.Ok)
+                return;
+            }
+            var stopwatch = Stopwatch.StartNew();
+            var steps = 0;
+            while (effect.ElapsedTime < targetTime && !effect.IsRootFinished)
+            {
+                if (steps >= MaxCatchupStepsPerFrame || steps > 0 && stopwatch.Elapsed.TotalMilliseconds >= MaxCatchupMilliseconds)
+                {
+                    break;
+                }
+                if (effect.AdvancePreview(Math.Min(targetTime, effect.ElapsedTime + 1.0 / 60)) != NativeResult.Ok)
                 {
                     throw new InvalidOperationException("Could not advance Unity preview: " + effect.LastError);
                 }
+                ++steps;
             }
             if (!string.IsNullOrEmpty(effect.LastError))
             {
                 throw new InvalidOperationException(effect.LastError);
             }
-            time = target;
-            sequence = next;
-            acknowledgement = kind == 1 ? next : 0;
-            return true;
+            time = effect.ElapsedTime;
         }
 
         internal void Draw(Rect rect)
@@ -117,6 +139,7 @@ namespace LiberaFx.Unity
             {
                 return;
             }
+            StepTowardTarget();
             viewport.BeginPreview(rect, GUIStyle.none);
             viewport.Render(true);
             GUI.DrawTexture(rect, viewport.EndPreview(), ScaleMode.StretchToFill, false);
@@ -165,6 +188,7 @@ namespace LiberaFx.Unity
             package = null;
             bindings = null;
             time = 0;
+            targetTime = 0;
         }
 
         public void Dispose()

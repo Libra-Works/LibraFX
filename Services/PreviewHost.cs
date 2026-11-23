@@ -376,7 +376,7 @@ public sealed class PreviewHost : IDisposable
                     }
                     message = unityPreview ? unityPackage.Prepare(publication, force, resourceContext) :
                         godotPreview ? godotPackage.Prepare(publication, force) :
-                            await compiled.PrepareAsync(publication, force, resourceContext);
+                            await compiled.PrepareAsync(publication, force, resourceContext, 120, 10);
                     if (message is not null && !packagePreview && renderPeer &&
                         (message.Kind == CompiledPreviewKind.Program || message.EvaluatedRenderScene is not null))
                     {
@@ -416,6 +416,43 @@ public sealed class PreviewHost : IDisposable
                 if (unityPreview) unityPackage.Sent(message);
                 else if (godotPreview) godotPackage.Sent(message);
                 else await compiled.SentAsync(message);
+                if (!unityPreview && !godotPreview && message.IsSeeking)
+                {
+                    _model?.SetPreviewStatus("Preview.Status.Seeking", message.EvaluatedTimeSeconds, message.RequestedTimeSeconds);
+                    while (message.IsSeeking && !client.Channel.Reader.TryPeek(out _))
+                    {
+                        await Task.Delay(16, cancellation);
+                        if (client.Channel.Reader.TryPeek(out _)) break;
+                        var nextMessage = await compiled.PrepareAsync(publication, false, resourceContext, 120, 10);
+                        if (nextMessage is null) break;
+                        byte[]? nextSceneFrame = null;
+                        if (renderPeer && (nextMessage.Kind == CompiledPreviewKind.Program || nextMessage.EvaluatedRenderScene is not null))
+                        {
+                            var sceneFactory = ProceduralResourceSchema.Contains(publication.Graph)
+                                ? (Func<GraphSnapshot, long, IRenderResourceBindingContext?, VfxCompileOptions?, byte[]>)RenderProgramBindings.CreateProceduralScene
+                                : RenderProgramBindings.CreateScene;
+                            var nextScene = nextMessage.EvaluatedRenderScene ?? sceneFactory(publication.Graph,
+                                publication.Sequence, resourceContext,
+                                new VfxCompileOptions { IncludePreviewDebugDraw = publication.IncludePreviewDebugDraw &&
+                                    publication.Playback?.DebugDrawStopped != true });
+                            nextSceneFrame = CompiledPreviewProtocol.CreateScene(nextScene);
+                        }
+                        await SendSerializedAsync(socket, client, nextMessage.Bytes, WebSocketMessageType.Binary, cancellation);
+                        if (nextSceneFrame is not null)
+                            await SendSerializedAsync(socket, client, nextSceneFrame, WebSocketMessageType.Binary, cancellation);
+                        await compiled.SentAsync(nextMessage);
+                        message = nextMessage;
+                        if (message.IsSeeking)
+                            _model?.SetPreviewStatus("Preview.Status.Seeking", message.EvaluatedTimeSeconds, message.RequestedTimeSeconds);
+                    }
+                    if (!message.IsSeeking)
+                        _model?.SetPreviewStatus("Preview.Status.Running");
+                }
+                else if (!unityPreview && !godotPreview && message.Kind != CompiledPreviewKind.CompileError &&
+                    _model is not null && _model.PreviewStatus.Contains("...", StringComparison.Ordinal))
+                {
+                    _model.SetPreviewStatus("Preview.Status.Running");
+                }
                 continue;
             }
             var payload = client.Version == 2 ? PreviewProtocol.Encode(publication, baseline, force) : publication.LegacyPayload;

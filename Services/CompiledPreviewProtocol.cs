@@ -13,6 +13,9 @@ public sealed record CompiledPreviewMessage(byte[] Bytes, CompiledPreviewKind Ki
 {
     public byte[]? EvaluatedRenderScene { get; init; }
     public bool EditorNativeExecution { get; init; }
+    public bool IsSeeking { get; init; }
+    public double EvaluatedTimeSeconds { get; init; }
+    public double RequestedTimeSeconds { get; init; }
 }
 
 public static class CompiledPreviewProtocol
@@ -179,7 +182,8 @@ public sealed class CompiledPreviewSender : IDisposable
     public CompiledPreviewSender(string? nativeLibraryPath = null) => _nativeLibraryPath = nativeLibraryPath;
 
     public CompiledPreviewMessage? Prepare(PreviewPublication publication, bool forceSnapshot = false,
-        IRenderResourceBindingContext? resourceContext = null)
+        IRenderResourceBindingContext? resourceContext = null,
+        int? maxCatchupSteps = null, double? maxCatchupMilliseconds = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (forceSnapshot || _signalDocument != publication.DocumentId || !ReferenceEquals(_signalGraph, publication.Graph))
@@ -227,14 +231,22 @@ public sealed class CompiledPreviewSender : IDisposable
                 if (state is not null && (!double.IsFinite(state.FramesPerSecond) || state.FramesPerSecond <= 0))
                     throw new InvalidDataException("Editor-native preview needs a positive finite frame rate.");
                 var time = state is null ? 0 : state.Frame / state.FramesPerSecond;
-                var scene = _native.EvaluateScene(time, playback ? _good!.Sequence : publication.Sequence, state);
+                var scene = _native.EvaluateScene(time, playback ? _good!.Sequence : publication.Sequence, state,
+                    maxCatchupSteps, maxCatchupMilliseconds);
                 foreach (var request in requests) _native.SendSignal(request.NodeId);
                 if (requests.Length > 0)
-                    scene = _native.EvaluateScene(time, playback ? _good!.Sequence : publication.Sequence, state);
+                    scene = _native.EvaluateScene(time, playback ? _good!.Sequence : publication.Sequence, state,
+                        maxCatchupSteps, maxCatchupMilliseconds);
                 var kind = playback ? CompiledPreviewKind.Playback : CompiledPreviewKind.Program;
                 return CompiledPreviewProtocol.CreatePayload(publication, kind,
                     playback ? [] : EditorNativePreviewSession.TransportShell, checked((ulong)_lastSent), true)
-                    with { EvaluatedRenderScene = scene };
+                    with
+                    {
+                        EvaluatedRenderScene = scene,
+                        IsSeeking = _native.IsSeeking,
+                        EvaluatedTimeSeconds = _native.EvaluatedTimeSeconds,
+                        RequestedTimeSeconds = _native.SeekTargetSeconds
+                    };
             }
             catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
             {

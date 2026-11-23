@@ -178,8 +178,24 @@ internal static class EditorNativePreviewTests
         Require(restored.Kind == CompiledPreviewKind.Program && restored.EvaluatedRenderScene is not null, "Returning to lifecycle graph failed to recreate pools.");
         using (var bounded = new CompiledPreviewSender(library))
         {
-            var tooLong = bounded.Prepare(Publication(1, graph, EditorNativePreviewSession.MaximumReplaySeconds + 1))!;
-            Require(tooLong.Kind == CompiledPreviewKind.CompileError && tooLong.EvaluatedRenderScene is null, "Unbounded seek must fail explicitly.");
+            var longTime = bounded.Prepare(Publication(1, graph, EditorNativePreviewSession.MaximumReplaySeconds + 30))!;
+            Require(longTime.Kind == CompiledPreviewKind.Program && longTime.EvaluatedRenderScene is not null,
+                "Long playback beyond 120 seconds must succeed.");
+            var invalidNegative = bounded.Prepare(Publication(2, graph, -1))!;
+            Require(invalidNegative.Kind == CompiledPreviewKind.CompileError && invalidNegative.EvaluatedRenderScene is null,
+                "Negative playback time must fail explicitly.");
+            using (var chunked = new EditorNativePreviewSession(graph, library))
+            {
+                var firstChunk = JsonDocument.Parse(chunked.EvaluateScene(10.0, 1, maxCatchupSteps: 120));
+                Require(chunked.IsSeeking && chunked.EvaluatedTimeSeconds < 10.0 &&
+                    firstChunk.RootElement.GetProperty("seeking").GetBoolean(),
+                    "Budgeted seek must return an intermediate seeking snapshot instead of blocking.");
+                var safety = 0;
+                while (chunked.IsSeeking && ++safety < 20)
+                    _ = chunked.EvaluateScene(10.0, 1, maxCatchupSteps: 120);
+                Require(!chunked.IsSeeking && Math.Abs(chunked.EvaluatedTimeSeconds - 10.0) < 1e-6,
+                    "Budgeted seek must converge to the target time across ticks.");
+            }
             var burst = graph.Nodes.Single(node => node.Name == "Burst");
             var model = burst.ChildGraph!.Nodes.First(node => node.Kind.Value == "ModelDraw");
             var overflow = graph with { Nodes = graph.Nodes.Select(node => node.Id != burst.Id ? node : node with
@@ -187,7 +203,7 @@ internal static class EditorNativePreviewTests
                 ChildGraph = node.ChildGraph! with { Nodes = node.ChildGraph.Nodes.Concat(
                     Enumerable.Range(0, 117).Select(_ => model with { Id = Guid.NewGuid() })).ToArray() }
             }).ToArray() };
-            var tooMany = bounded.Prepare(Publication(2, overflow, 2))!;
+            var tooMany = bounded.Prepare(Publication(3, overflow, 2))!;
             Require(tooMany.Kind == CompiledPreviewKind.CompileError && tooMany.EvaluatedRenderScene is null,
                 "More than 128 renderers must fail explicitly.");
             var rootDraw = model with { Id = Guid.NewGuid(), Name = "Root draw for aggregate scene bound" };
@@ -196,13 +212,13 @@ internal static class EditorNativePreviewTests
                 ChildGraph = node.ChildGraph! with { Nodes = node.ChildGraph.Nodes.Concat(
                     Enumerable.Range(0, 116).Select(_ => model with { Id = Guid.NewGuid() })).ToArray() }
             }).Concat([rootDraw]).ToArray() };
-            var aggregateError = bounded.Prepare(Publication(3, aggregate, 2))!;
+            var aggregateError = bounded.Prepare(Publication(4, aggregate, 2))!;
             Require(aggregateError.Kind == CompiledPreviewKind.CompileError && aggregateError.EvaluatedRenderScene is null,
                 "Combined root/template renderer count above 128 was published.");
             var gpuDefinition = GraphNodeDefinition.All.Single(definition => definition.Kind == GpuParticleEditorService.Kind);
             var gpu = new GraphNodeSnapshot(Guid.NewGuid(), gpuDefinition.Kind, "Unsupported mixed GPU preview", 0, 0,
                 gpuDefinition.PortType, gpuDefinition.PortCategory);
-            var mixed = bounded.Prepare(Publication(4, graph with { Nodes = graph.Nodes.Concat([gpu]).ToArray() }, 0))!;
+            var mixed = bounded.Prepare(Publication(5, graph with { Nodes = graph.Nodes.Concat([gpu]).ToArray() }, 0))!;
             Require(mixed.Kind == CompiledPreviewKind.CompileError && mixed.EvaluatedRenderScene is null &&
                 Encoding.UTF8.GetString(mixed.Bytes, 48, mixed.Bytes.Length - 48).Contains("GPU"),
                 "Root GPU containers were silently dropped by native lifecycle preview.");

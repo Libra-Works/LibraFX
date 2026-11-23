@@ -31,7 +31,8 @@ internal sealed class PreviewCompilationWorker : IAsyncDisposable
         return completion.Task;
     }
     public Task<CompiledPreviewMessage?> PrepareAsync(PreviewPublication publication, bool force,
-        IRenderResourceBindingContext? resources) => InvokeAsync(() => _sender.Prepare(publication, force, resources));
+        IRenderResourceBindingContext? resources, int? maxCatchupSteps = null, double? maxCatchupMilliseconds = null) =>
+        InvokeAsync(() => _sender.Prepare(publication, force, resources, maxCatchupSteps, maxCatchupMilliseconds));
     public Task SentAsync(CompiledPreviewMessage message) => InvokeAsync(() => { _sender.Sent(message); return true; });
     public async ValueTask DisposeAsync()
     {

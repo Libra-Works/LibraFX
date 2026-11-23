@@ -175,6 +175,14 @@ the two add-key actions in the Timeline. **Preview Signal** is for editor previe
 diamond to retime it; select it before editing its time or deleting it. Neither
 kind of key is a substitute for a **Life Time** node.
 
+Continuous preview playback is no longer capped at 120 seconds, and long
+forward or backward timeline seeks catch up incrementally across frames within a
+per-frame step and time budget so the editor and engine viewports stay
+responsive. While catching up, the preview status shows seeking progress;
+issuing a new seek, pressing Stop, or editing the graph cancels the previous
+catch-up immediately. Manually sent Editor Send signals and external engine
+inputs cannot be replayed on arbitrary backward seeks.
+
 ### F-Curve
 
 ![F-Curve pane with key controls and the prompt to select a curve node](images/editor/f-curve.png)
