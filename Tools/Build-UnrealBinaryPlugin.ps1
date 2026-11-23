@@ -4,6 +4,8 @@ param(
     [string] $UnrealEngineRoot,
     [Parameter(Mandatory)]
     [string] $OutputDirectory,
+    [ValidatePattern('^[0-9]+\.[0-9]+$')]
+    [string] $EngineVersion,
     [string] $TargetPlatforms,
     [ValidatePattern('^[0-9]{4}\.(?:[1-9]|1[0-2])\.[1-9][0-9]*\z')]
     [string] $BuildVersion,
@@ -39,7 +41,18 @@ if (-not $DryRun) {
     if (-not (Test-Path -LiteralPath $uat -PathType Leaf)) {
         throw "Unreal Automation Tool not found at: $uat"
     }
+    if (-not $EngineVersion) {
+        $buildVersionFile = Join-Path $ueRoot 'Engine\Build\Build.version'
+        if (-not (Test-Path -LiteralPath $buildVersionFile -PathType Leaf)) {
+            throw "Cannot detect UE version (Build.version missing); specify -EngineVersion explicitly (e.g. 5.7, 5.8, 5.9, 6.0)."
+        }
+        $ueMeta = Get-Content -LiteralPath $buildVersionFile -Raw | ConvertFrom-Json
+        $EngineVersion = "$($ueMeta.MajorVersion).$($ueMeta.MinorVersion)"
+    }
+} elseif (-not $EngineVersion) {
+    $EngineVersion = '5.7'
 }
+$versionFolder = "UE$EngineVersion"
 
 $work = Join-Path $parent ('.libra-ue-bin-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($work) | Out-Null
@@ -65,19 +78,26 @@ try {
         throw "Missing staged .uplugin: $stagedUplugin"
     }
 
-    $packagedPlugin = Join-Path $output 'LibraRuntimeForUnreal'
+    $packagedPlugin = Join-Path $output "$versionFolder\LibraRuntimeForUnreal"
     $uatDisplay = if ($uat) { $uat } else { '<UnrealEngineRoot>/Engine/Build/BatchFiles/RunUAT' }
+    function Write-PluginVersionMetadata([string] $SourceVersionPath, [string] $DestinationDir) {
+        $meta = Get-Content -LiteralPath $SourceVersionPath -Raw | ConvertFrom-Json -AsHashtable
+        $meta['unrealEngineVersion'] = $EngineVersion
+        $meta['targetPlatforms'] = $TargetPlatforms
+        [IO.File]::WriteAllText((Join-Path $DestinationDir 'VERSION.json'),
+            ($meta | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
+    }
     if ($DryRun) {
-        [IO.Directory]::CreateDirectory($output) | Out-Null
+        [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($packagedPlugin)) | Out-Null
         Copy-Item -LiteralPath $stagedPlugin -Destination $packagedPlugin -Recurse
-        Copy-Item -LiteralPath (Join-Path $source 'VERSION.json') -Destination $packagedPlugin
+        Write-PluginVersionMetadata (Join-Path $source 'VERSION.json') $packagedPlugin
         Copy-Item -LiteralPath (Join-Path $source 'LICENSE') -Destination $packagedPlugin
         Write-Output "Dry-run Unreal plugin staged (no UAT BuildPlugin executed): $packagedPlugin"
         Write-Output "Command: `"$uatDisplay`" BuildPlugin -Plugin=`"$stagedUplugin`" -Package=`"$packagedPlugin`" -TargetPlatforms=$TargetPlatforms -Rocket"
         return
     }
 
-    [IO.Directory]::CreateDirectory($output) | Out-Null
+    [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($packagedPlugin)) | Out-Null
     & $uat BuildPlugin "-Plugin=$stagedUplugin" "-Package=$packagedPlugin" "-TargetPlatforms=$TargetPlatforms" -Rocket
     if ($LASTEXITCODE -ne 0) {
         throw "RunUAT BuildPlugin failed with exit code $LASTEXITCODE."
@@ -88,9 +108,9 @@ try {
         -not (Test-Path -LiteralPath $outBinaries -PathType Container)) {
         throw "Prebuilt Unreal plugin output is incomplete: $packagedPlugin"
     }
-    Copy-Item -LiteralPath (Join-Path $source 'VERSION.json') -Destination $packagedPlugin -Force
+    Write-PluginVersionMetadata (Join-Path $source 'VERSION.json') $packagedPlugin
     Copy-Item -LiteralPath (Join-Path $source 'LICENSE') -Destination $packagedPlugin -Force
-    Write-Output "Built compiler-free Unreal binary plugin ($TargetPlatforms): $packagedPlugin"
+    Write-Output "Built compiler-free Unreal binary plugin ($versionFolder / $TargetPlatforms): $packagedPlugin"
 }
 finally {
     if (Test-Path -LiteralPath $work) {

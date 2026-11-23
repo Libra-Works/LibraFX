@@ -20,12 +20,12 @@ auto toLibraResult(liberafx::Result result) noexcept -> LibraResult {
   return result == liberafx::Result::ArithmeticOverflow ? LIBRA_ARITHMETIC_OVERFLOW : static_cast<LibraResult>(result);
 }
 
-auto registryMutex = std::mutex{};
-auto programs = std::unordered_map<LibraProgram, std::shared_ptr<NativeProgram>>{};
-auto instances = std::unordered_map<LibraInstance, std::unique_ptr<NativeInstance>>{};
-auto generatorPools = std::unordered_map<LibraGeneratorPool, std::shared_ptr<NativeGeneratorPool>>{};
-auto spawnableHosts = std::unordered_map<LibraSpawnableHostHandle, NativeSpawnableHost>{};
-auto nextHandle = std::uint64_t{1};
+std::mutex registryMutex;
+std::unordered_map<LibraProgram, std::shared_ptr<NativeProgram>> programs;
+std::unordered_map<LibraInstance, std::unique_ptr<NativeInstance>> instances;
+std::unordered_map<LibraGeneratorPool, std::shared_ptr<NativeGeneratorPool>> generatorPools;
+std::unordered_map<LibraSpawnableHostHandle, NativeSpawnableHost> spawnableHosts;
+std::uint64_t nextHandle = 1;
 
 auto findInstance(LibraInstance handle) -> NativeInstance * {
   auto found = instances.find(handle);

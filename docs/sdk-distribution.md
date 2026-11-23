@@ -93,13 +93,16 @@ machine or self-hosted runner with Unreal Engine installed:
 ```powershell
 .\Tools\Build-UnrealBinaryPlugin.ps1 `
   -UnrealEngineRoot "C:\Program Files\Epic Games\UE_5.7" `
-  -OutputDirectory C:\SdkStaging\LibraUnrealBinary-UE5.7-Win64 `
+  -OutputDirectory C:\SdkStaging\LibraUnrealBinary `
   -TargetPlatforms Win64
 ```
 
+This writes a versioned directory such as `C:\SdkStaging\LibraUnrealBinary\UE5.7\LibraRuntimeForUnreal`
+(automatically detected from `Build.version`, or specified via `-EngineVersion 5.8` / `5.9` / `6.0`).
 Use `-DryRun` to stage and validate the plugin layout without invoking `RunUAT`.
-Prebuilt Unreal binaries are specific to each engine minor version (e.g. `5.7`)
-and target platform.
+Prebuilt Unreal binaries are specific to each engine minor version (e.g. `5.7`, `5.8`, `5.9`, `6.0`)
+and target platform; copy the inner `LibraRuntimeForUnreal` folder from the matching `UE<version>`
+directory into your project's `Plugins/` folder.
 
 ## Reproducible local staging
 
