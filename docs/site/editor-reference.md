@@ -161,7 +161,9 @@ view replaces the in-editor undo history or merges changes.
 For Fireworks, set the preview range to **0–240** at **60 FPS** for a four-second
 preview. The initial **0–120** range loops around the point where Launch expires
 and can hide the Burst. Scrub or step the playhead to inspect timing, then connect
-a supported engine viewer to see the rendered result.
+a supported engine viewer to see the rendered result. Use the timeline toolbar's
+**Zoom Out** / **Zoom In** buttons to adjust the visible time span and the clock
+toggle to switch ruler labels between frames and seconds.
 
 To author a timed Signal, select a compatible Signal input node and use one of
 the two add-key actions in the Timeline. **Preview Signal** is for editor preview;

@@ -3,7 +3,7 @@
   "FlexiblePlane.DrawDescription": "Draws a textured ribbon from a connected point list or position history, with width, tint, facing and UV controls.",
   "FlexiblePlane.Group": "Flexible Plane",
   "FlexiblePlane.List": "Flexible Plane Point List",
-  "FlexiblePlane.ListDescription": "Provides an ordered list of positions, widths and colors for a Flexible Plane Draw; the first four positions can be connected.",
+  "FlexiblePlane.ListDescription": "Provides an ordered list of positions for a Flexible Plane Draw; add or remove Position pins (2-64) on the node or inspector to connect them dynamically.",
   "FlexiblePlane.History": "Flexible Plane Point History",
   "FlexiblePlane.HistoryDescription": "Samples position, width and color over time to provide a capacity- and age-bounded trail to a Flexible Plane Draw.",
   "FlexiblePlane.Points": "Points",

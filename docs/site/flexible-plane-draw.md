@@ -25,10 +25,11 @@ List** or **Flexible Plane Point History** (Flexible Plane). Connect the
 source's output to Draw's **Points**. Supply an explicit Texture resource; no
 placeholder is substituted. To make a trail, connect an animated FloatX3
 position to History's Position; sampling starts with the instance and requires
-at least two distinct sampled positions before a ribbon appears. To create a
-free shape, edit Point List's Points JSON, and optionally connect FloatX3
-values to Position 0–3. Each connection replaces that list entry's position
-at runtime; later positions are authored only in JSON.
+at least two distinct sampled positions before a ribbon appears. To build a point
+chain from graph nodes, use **Flexible Plane Point List**, adjust the number of
+**Position** pins (`2`–`64`) with the **+** / **-** buttons on the node or in
+the inspector, and connect FloatX3 values to any **Position 0**–**Position 63**
+pin to drive each vertex position dynamically.
 
 The Texture property uses the existing texture-filtered resource browser.
 Assignment is undoable and changes only the primary texture; engine ribbon
@@ -41,20 +42,15 @@ a root-only package without templates is not auto-ended by that rule. To keep
 the ribbon until an explicit stop or finite duration, disable root
 `AutoDestroyWhenIdle` and manage the effect lifetime explicitly.
 
-Points JSON is a string containing an array of 2–64 objects, at most 4096
-characters total. Every object has exactly `position` (three numbers), `width`
-(nonnegative number), and `color` (four numbers); numbers must fit finite
-32-bit floats. Example:
-
-```json
-[{"position":[0,0,0],"width":1,"color":[1,1,1,1]},
- {"position":[1,0,0],"width":0.5,"color":[1,0.5,0,1]}]
-```
-
-Colors are linear, unpremultiplied RGBA; width is **full** width in the same
-coordinate units as positions. Each point supplies its own width and color,
-forming the width/color profile. Interpolation across each triangle is done by
-the renderer. A connected Position 0–3 must correspond to an existing point.
+Point List starts with two points (`[0,0,0]` and `[1,0,0]`, width `1`, white
+`[1,1,1,1]`). Adding more pins with **+** creates additional points defaulting
+to `[index,0,0]`, width `1`, and white `[1,1,1,1]`. Removing pins with **-**
+also disconnects edges attached to the removed pins in one undoable step. Each
+unconnected **Position** pin falls back to its default or stored point data
+(an internal `pointData` JSON parameter preserved for compatibility and hidden in
+the inspector). Width is **full** width in the same coordinate units as
+positions, and colors are linear, unpremultiplied RGBA. Interpolation across each
+triangle is done by the renderer.
 
 | Node | Input/parameter | Default and limit |
 |---|---|---|
@@ -66,8 +62,7 @@ the renderer. A connected Position 0–3 must correspond to an existing point.
 | Draw | Fixed up | `[0,1,0]`; finite vector in point coordinate space |
 | Draw | Repeat UV | false: stretch along total length; true: repeat |
 | Draw | Repeat length | 1; positive finite coordinate units per U repeat |
-| Point List | Points JSON | two white, width-1 points at `[0,0,0]` and `[1,0,0]` |
-| Point List | Position 0–3 | unconnected: matching JSON position; FloatX3 pins |
+| Point List | Position 0–63 (`pointCount`) | dynamic FloatX3 pins (`2`–`64`, default `2`, adjusted via **+** / **-**); defaults `[0,0,0]`, `[1,0,0]`, then `[index,0,0]` |
 | Point History | Position | `[0,0,0]`; finite FloatX3 pin |
 | Point History | Width | 1; finite nonnegative full width; Float pin |
 | Point History | Color | `[1,1,1,1]`; finite RGBA; FloatX4 pin |
@@ -92,7 +87,7 @@ entry with kind `flexiblePlane`, `nodeId`, `assetPath`, existing-format
 `inputs`, and `flexiblePlane` version 1. Its source is `list` or `history`;
 list `points` have `position`, `width`, `color`; history has `capacity` and
 `maxAge`. `facing`, `up`, `uvMode`, and `repeatLength` match the table.
-Binding IDs are Draw `width`, `tint`; list `position0`–`position3`; history
+Binding IDs are Draw `width`, `tint`; list `position0`–`position{N-1}` (up to `position63`); history
 `position`, `pointWidth`, `pointColor`. Source IDs and component indices
 refer to ordinary VM values. Metadata helpers must not become VM instructions,
 but their connected numeric sources must remain evaluated and bindable.

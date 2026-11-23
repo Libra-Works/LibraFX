@@ -148,12 +148,33 @@ def code(value):
 
 def ports(node, field, strings, japanese):
     declared = node.get(field)
-    if node["kind"] == "Comment" or declared == []:
+    direction = "input" if field == "inputPorts" else "output"
+    dynamic = [group for group in node.get("dynamicPins", []) if group.get("direction", "input") == direction]
+    if node["kind"] == "Comment" or (declared == [] and not dynamic):
         return "なし" if japanese else "None"
+    entries = []
     if declared is None:
-        return ("定義上の既定ピン" if japanese else "Implicit definition port") + f": {code(node['portType'])}"
-    return ", ".join(f"{label(port, strings)} {code(port['id'])}: {code(port.get('portType', node['portType']))}"
-                     for port in declared)
+        if not dynamic:
+            return ("定義上の既定ピン" if japanese else "Implicit definition port") + f": {code(node['portType'])}"
+    else:
+        entries.extend(
+            f"{label(port, strings)} {code(port['id'])}: {code(port.get('portType', node['portType']))}"
+            for port in declared
+        )
+    for group in dynamic:
+        min_count = group.get("minCount", 0)
+        max_count = group.get("maxCount", 64)
+        default_count = group.get("defaultCount", min_count)
+        prefix = group["idPrefix"]
+        template = group["nameTemplate"]
+        name_range = template.replace("{0}", f"0–{max_count - 1}")
+        id_range = f"{prefix}0..{max_count - 1}"
+        port_type = group.get("portType", node["portType"])
+        if japanese:
+            entries.append(f"{name_range} {code(id_range)}: {code(port_type)}（動的 {min_count}〜{max_count}、既定 {default_count}）")
+        else:
+            entries.append(f"{name_range} {code(id_range)}: {code(port_type)} (dynamic {min_count}–{max_count}, default {default_count})")
+    return ", ".join(entries)
 
 
 def parameters(node, strings, enums, japanese):

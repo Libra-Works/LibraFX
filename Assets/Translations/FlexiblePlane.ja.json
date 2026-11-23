@@ -3,7 +3,7 @@
   "FlexiblePlane.DrawDescription": "接続された点リストまたは位置履歴から、幅・色・向き・UV を調整できるテクスチャ付きの帯を描画します。",
   "FlexiblePlane.Group": "フレキシブルプレーン",
   "FlexiblePlane.List": "フレキシブルプレーン点リスト",
-  "FlexiblePlane.ListDescription": "位置・幅・色の順序付きリストをフレキシブルプレーン描画に渡します。先頭４点の位置は接続で指定できます。",
+  "FlexiblePlane.ListDescription": "位置の順序付きリストをフレキシブルプレーン描画に渡します。ノード上またはインスペクターで Position ピン（2〜64）を増減して動的に接続できます。",
   "FlexiblePlane.History": "フレキシブルプレーン点履歴",
   "FlexiblePlane.HistoryDescription": "位置・幅・色を時間ごとに記録し、点数と保持時間を制限した軌跡をフレキシブルプレーン描画に渡します。",
   "FlexiblePlane.Points": "点",

@@ -28,6 +28,11 @@ Try this on a copy of [Afterimage Gate](afterimage-gate.md): find the Delay
 between Sequence and the cyan afterimages, change its duration, and replay the
 same time range. The second cue moves while the first remains at ignition.
 
+Nodes that define variable pins (such as **Flexible Plane Point List**) show
+**+** / **-** controls on both the node and the inspector. Increasing the count
+adds numbered pins up to the node's limit; decreasing it also disconnects any
+edges on the removed pins as a single undoable edit.
+
 ## Use time, curves, and lifetime
 
 - **Time** follows the current scope; inside a Spawnable instance it is local to
