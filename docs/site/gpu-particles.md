@@ -18,6 +18,91 @@ The outer graph controls effect timing and Signals; GPU kernels calculate partic
 
 </details>
 
+## Try the bundled samples
+
+These are editable starting points, not templates requiring an imported image.
+Use a LIBERA FX build containing the samples and a matching engine integration
+that supports GPU particles and Fluid2D. Connect the engine preview as described
+in the [production workflow](production-workflow.md); compiling alone does not
+show the result. The expected appearances below are design intentions, not
+screenshots or verified engine results.
+
+| Sample in `Assets/Samples` | What it demonstrates |
+| --- | --- |
+| `GpuCurlTurbulence.lfxproj` | A small blue particle cloud following Curl Noise, with Turbulence changing its speed. Start here. |
+| `GpuFluidVelocity.lfxproj` | Particles sampling a Fluid2D smoke solver's velocity output. |
+| `GpuCurl100k.lfxproj` | The larger Curl Noise example: capacity 100,000 and 12,500 particles per second. Increase load only after checking your target GPU. |
+
+### Curl and turbulence: follow a moving field
+
+1. Use **File → Open** to open `Assets/Samples/GpuCurlTurbulence.lfxproj`,
+   then **Save As** to save a working copy. Double-click `GpuCurlTurbulence`.
+2. The flow has Spawn, Update and RenderBillboard. The capacity is `4096`;
+   **Particles per second** is `240`. Spawn uses a sphere of radius `1.5`,
+   lifetime `12` seconds, size `0.025` and a blue color. RenderBillboard uses
+   `builtin:white`; no texture file is needed.
+3. Set preview FPS to `60` and range to `0–1200`, connect the engine and play.
+   The intended result is a gradually filling, drifting blue cloud. Capacity is
+   a limit, not the number of immediately visible particles; allow several
+   seconds for emission and the one-second fade-in.
+4. Open **Update → Open kernel**, select **Typed DSL**, and paste the following
+   into the text editor. Press **Apply text → IR**. **Graph → text** generates
+   equivalent expressions with generated names, not necessarily these names.
+
+```text
+let frequency = 0.65;
+let strength = 1.2;
+let drift = float3(0, 0.3, 0);
+let animatedPosition = @Position * frequency + float3(0, time * 0.1, 0);
+let variation = turbulence(animatedPosition, 31u, 3i, 0.5);
+@Velocity = curlnoise(animatedPosition, 17u, 3i, 0.5) * strength * (0.35 + 0.65 * variation) + drift;
+@Position += @Velocity * dt;
+@Color.a = 0.4 * clamp(@Age, 0, 1) * clamp(@Lifetime - @Age, 0, 1);
+```
+
+`curlnoise` supplies a vector direction; scalar `turbulence` varies its
+strength, and `drift` adds upward motion. Try `strength = 0.5` for gentler
+motion or `frequency = 1.2` for a finer field. Apply the text and restart
+preview to compare. Set the multiplier `(0.35 + 0.65 * variation)` to `1` to
+compare without turbulence. This is a velocity field, not a fluid simulation.
+
+<span id="gpu-fluid-velocity"></span>
+
+### Fluid2D velocity: carry particles with the solver
+
+1. Open `Assets/Samples/GpuFluidVelocity.lfxproj` and save a separate copy.
+   The main graph contains `Fluid2D velocity source` and `Particles following
+   fluid` in the same scope. No graph wire is needed: the generated resource
+   binding is stored on the particle container.
+2. Open `Particles following fluid`. In its flow settings, `fluidVelocity` is a
+   FlowMap bound to the fluid node's `VelocityOutput`, using raw velocity and
+   generated-plane coordinates. The fluid solver runs before the consumer.
+   To rebind it, use **Generated output in this scope**, select the fluid node
+   and `VelocityOutput`, then **Use generated output**.
+3. Open **Update → Open kernel**. The particle velocity comes from
+   `sampleFlowMap("fluidVelocity", @Position)`; Position advances using
+   velocity and `dt`. Spawn places particles near the smoke source, with
+   capacity `2048`, `100` per second and a `4`-second lifetime.
+4. Connect a compatible engine, set preview to `60` FPS and `0–600`, and play.
+   The intended result is yellow particles carried by the smoke velocity.
+   The 64 × 64 fluid's output plane is off so the particles are easier to
+   see; simulation still runs. Turn **Output plane: Auto / On / Off** on in
+   the fluid workspace to compare with the smoke.
+
+For a slower response, replace the Update text with the following and apply it:
+
+```text
+@Velocity = sampleFlowMap("fluidVelocity", @Position) * 0.5;
+@Position += @Velocity * dt;
+@Color.a = 0.8 * clamp(@Age, 0, 1) * clamp(@Lifetime - @Age, 0, 1);
+```
+
+Outside the producer domain, sampling clamps to its edge. Both transforms
+must be invertible; moving the producer and consumer apart changes the sampled
+region. Parent/child resource sharing and same-frame cycles are unsupported.
+For density sampling and other output details, see
+[Fluid2D: Drive another GPU particle system](fluid-2d.md#drive-another-gpu-particle-system).
+
 ## Open the particle program
 
 1. In **Node List → Core / GPU**, add **GPU Particle** to the main graph.
@@ -27,6 +112,9 @@ The outer graph controls effect timing and Signals; GPU kernels calculate partic
    **Flow** returns to the flow; **Main graph** returns to the main graph.
 
 ![GPU Particle workspace showing the Spawn flow card, GPU palette, and renderer properties](images/editor/gpu-flow.png)
+
+This image shows an earlier UI and starter program, not the samples above.
+Its status message does not describe the current engine integrations.
 
 The center lists the authored execution order, **not** a trace of a running
 effect. Read the cards in this order:
@@ -96,6 +184,8 @@ checked in Windows / Unity 7000.0.0a16 / D3D11 Play Mode. Unity 7 alpha needs
 
 ![Spawn kernel graph with a typed operation palette, value nodes, and attribute writes](images/editor/gpu-kernel.png)
 
+This earlier UI image illustrates the graph layout, not the current sample.
+
 1. Open a Spawn kernel and select the value driving the **Lifetime** write.
    For a first experiment, change its Float constant, then compile. This
    changes particle lifetime, not the lifetime of the enclosing CPU effect.
@@ -115,6 +205,8 @@ text from the visual graph, and **Apply text → IR** to apply a text edit.
 Invalid text is kept as a draft without replacing the last valid graph.
 
 ![Typed DSL showing the starter Spawn kernel's uniform, constants, and attribute assignments](images/editor/gpu-dsl.png)
+
+This earlier UI image shows the starter Spawn text, not the Update examples above.
 
 ## Compile, export, and verify in the engine
 

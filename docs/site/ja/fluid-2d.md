@@ -100,6 +100,8 @@ GPU Particle と同じ編集画面を使いますが、個々の粒子ではな�
 
 ## 別の GPU 粒子を動かす
 
+編集できる完成例は [Fluid2D の速度で粒子を運ぶサンプル](gpu-particles.md#gpu-fluid-velocity)を参照してください。
+
 同じスコープの GPU コンテナに Flow Map リソースを追加し、生成元と `VelocityOutput` / `DensityOutput` を選びます。対応する生速度・密度のエンコードと生成元平面の座標系を選択します。静的 Flow Map は従来の符号付き正規化変換とワールド境界を維持します。
 
 `sampleFlowMap("field", @Position)` は粒子位置を生成元の平面へ変換し、領域外では端へクランプします。生速度は粒子の計算座標へ変換します。密度は密度 / 水深と温度を返します。

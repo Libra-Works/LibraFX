@@ -100,6 +100,8 @@ A draw consuming display color suppresses the automatic producer plane unless ex
 
 ## Drive another GPU particle system
 
+Try the ready-to-edit [Fluid2D velocity and GPU particle sample](gpu-particles.md#gpu-fluid-velocity).
+
 Add a Flow Map resource to a GPU particle container in the same scope. Select its generated producer and `VelocityOutput` or `DensityOutput`. The editor selects matching **raw velocity / density** encoding and **generated-plane** coordinates. Static flow maps keep their previous signed-normalized decoding and world bounds.
 
 `sampleFlowMap("field", @Position)` maps the particle position into the producer plane and clamps outside the domain. Raw velocity is transformed into the particle simulation space; density sampling returns density/depth and temperature. For example:
