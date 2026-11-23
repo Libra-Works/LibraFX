@@ -148,9 +148,17 @@ public sealed class LocalizationService : ObservableObject
         string.IsNullOrEmpty(key) ? fallback :
         _translations[_selectedNodeLanguage.Id].GetValueOrDefault(key) ?? GetEnglishOrDefault(key, fallback);
 
-    public string GetNodeSearchTerms(string? key, string fallback) =>
-        string.IsNullOrEmpty(key) ? fallback :
-        $"{GetEnglishOrDefault(key, fallback)} {_translations["ja"].GetValueOrDefault(key)}";
+    public string GetNodeSearchTerms(string? key, string fallback)
+    {
+        if (string.IsNullOrEmpty(key))
+        {
+            return fallback;
+        }
+        return string.Join(" ", new[] { fallback }
+            .Concat(_translations.Values.Select(strings => strings.GetValueOrDefault(key)))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal));
+    }
 
     private LanguageSettings LoadLanguage()
     {

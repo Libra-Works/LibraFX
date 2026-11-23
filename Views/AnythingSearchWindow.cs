@@ -16,12 +16,17 @@ public sealed class AnythingSearchWindow : Window
     private readonly TextBox _query;
     private readonly ListBox _results;
     private readonly TextBlock _status;
-    private readonly IReadOnlyList<AnythingSearchItem> _items;
+    private readonly MainViewModel _main;
+    private readonly Func<IEnumerable<AnythingSearchItem>> _additional;
+    private IReadOnlyList<AnythingSearchItem> _items = [];
     private bool _executing;
 
-    public AnythingSearchWindow(MainViewModel main, IEnumerable<AnythingSearchItem>? additional = null)
+    public AnythingSearchWindow(MainViewModel main, IEnumerable<AnythingSearchItem>? additional = null,
+        Func<IEnumerable<AnythingSearchItem>>? additionalFactory = null)
     {
         var text = LocalizationService.Shared;
+        _main = main;
+        _additional = additionalFactory ?? (() => additional ?? []);
         Title = text.Get("Search.Title");
         Width = 760;
         Height = 500;
@@ -55,12 +60,31 @@ public sealed class AnythingSearchWindow : Window
         layout.Children.Add(_results);
         layout.Children.Add(_status);
         Content = layout;
-        _items = CreateItems(main).Concat(additional ?? []).Take(50000).ToArray();
+        RebuildItems();
         _query.TextChanged += (_, _) => Refresh();
         _results.DoubleTapped += async (_, _) => await ExecuteAsync();
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
-        Opened += (_, _) => _query.Focus();
+        Opened += (_, _) =>
+        {
+            LocalizationService.Shared.LanguageChanged += OnLanguageChanged;
+            _query.Focus();
+        };
+        Closed += (_, _) => LocalizationService.Shared.LanguageChanged -= OnLanguageChanged;
         Refresh();
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        Title = LocalizationService.Shared.Get("Search.Title");
+        _query.PlaceholderText = LocalizationService.Shared.Get("Search.Hint");
+        Avalonia.Automation.AutomationProperties.SetName(_query, Title);
+        RebuildItems();
+        Refresh();
+    }
+
+    private void RebuildItems()
+    {
+        _items = CreateItems(_main).Concat(_additional()).Take(50000).ToArray();
     }
 
     private void Refresh()
@@ -106,20 +130,25 @@ public sealed class AnythingSearchWindow : Window
             foreach (var item in Nodes(document.Workspace.CreateSnapshot(), []))
             {
                 var (node, parent, detail) = item;
+                var aliases = node.Kind.Value;
+                if (GraphNodeDefinition.TryFind(node.Kind.Value, out var definition))
+                {
+                    var entry = new NodeCatalogEntryViewModel(definition!);
+                    aliases = $"{entry.SearchTerms} {entry.OriginalName} {entry.KindName} {entry.QualifiedName}";
+                }
                 yield return Item("node/" + document.Id + "/" + node.Id, "Search.Node", node.Name,
                     document.FileName + " / " + detail,
                     () => { main.ActivateDocument(document); document.Workspace.NavigateToNode(parent, node.Id); },
-                    GraphNodeDefinition.TryFind(node.Kind.Value, out var definition) ? definition!.Name : node.Kind.Value);
+                    aliases);
             }
         }
         foreach (var group in main.GroupAssets.CreatableAssets)
         {
-            var nameKey = main.GroupAssets.Metadata(group.Id)?.NameKey;
-            var name = text.GetNodeLabel(nameKey, group.Name);
-            yield return Item("asset/" + group.Id, "Search.Group", name,
+            var entry = new NodeCatalogEntryViewModel(group, main.GroupAssets);
+            yield return Item("asset/" + group.Id, "Search.Group", entry.Name,
                 text.Get("Search.GroupDetail", group.Revision),
                 () => main.Graph.CreateGroupAssetNode(group.Id, 100, 100),
-                $"{text.GetNodeSearchTerms(nameKey, group.Name)} {group.Name} {group.Id:D}") with
+                $"{entry.SearchTerms} {entry.OriginalName} {entry.QualifiedName} {group.Id:D}") with
                 { IsFavorite = NodeFavoritesService.Shared.Contains(NodeCatalogEntryViewModel.GroupPrefix + group.Id.ToString("D")) };
         }
         var editing = main.Graph.ActiveEditingWorkspace;
@@ -131,16 +160,18 @@ public sealed class AnythingSearchWindow : Window
                 () =>
                 {
                     editing.CreateNode(definition.Kind, 100, 100, entry.IsPolymorphic);
-                }, entry.SearchTerms + " " + entry.KindName) with { IsFavorite = entry.IsFavorite };
+                }, $"{entry.SearchTerms} {entry.OriginalName} {entry.KindName} {entry.QualifiedName} {entry.Namespace}") with { IsFavorite = entry.IsFavorite };
         }
         foreach (var command in main.Extensions.Commands.ToArray())
             yield return new("extension/" + command.Id, text.Get("Search.Command"), command.Name,
-                command.Definition.Description, command.Id, () => main.Extensions.ExecuteAsync(command.Id));
+                command.Definition.Description, command.Id + " " + text.GetEnglishOrDefault("Search.Command", "Command"),
+                () => main.Extensions.ExecuteAsync(command.Id));
         yield return Item("command/new", "Search.Command", text.Get("Editor.New"), "",
             () => main.NewDocumentCommand.Execute(null), "new");
         yield return Item("command/open", "Search.Command", text.Get("Editor.Open"), "",
             () => main.OpenProjectCommand.Execute(null), "open");
-        yield return new("command/save", text.Get("Search.Command"), text.Get("Editor.Save"), "", "save",
+        yield return new("command/save", text.Get("Search.Command"), text.Get("Editor.Save"), "",
+            "save " + text.GetEnglishOrDefault("Search.Command", "Command"),
             () => main.SaveProjectCommand.ExecuteAsync(null));
         foreach (var (id, label) in new[]
                  {
@@ -151,12 +182,13 @@ public sealed class AnythingSearchWindow : Window
                      ("History", "History"), ("Timeline", "Timeline"), ("Curves", "Curves")
                  })
             yield return Item("panel/" + id, "Search.Panel", text.Get("Messages.Tool." + label), "",
-                () => main.ShowDockPanel(id), id);
+                () => main.ShowDockPanel(id), id + " " + text.GetEnglishOrDefault("Messages.Tool." + label, id));
     }
 
     internal static AnythingSearchItem Item(string id, string category, string name, string detail,
         Action action, string aliases = "") => new(id, LocalizationService.Shared.Get(category), name, detail,
-        aliases, () => { action(); return Task.CompletedTask; });
+        aliases + " " + LocalizationService.Shared.GetEnglishOrDefault(category, category),
+        () => { action(); return Task.CompletedTask; });
 
     private static IEnumerable<(GraphNodeSnapshot Node, Guid[] Parent, string Detail)> Nodes(
         GraphSnapshot graph, Guid[] parent, string prefix = "")

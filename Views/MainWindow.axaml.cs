@@ -116,14 +116,23 @@ public partial class MainWindow : Window
     {
         if (DataContext is not MainViewModel model) return;
         if (_anythingSearchWindow is not null) { _anythingSearchWindow.Activate(); return; }
+        var window = new AnythingSearchWindow(model, additionalFactory: () => CreateAdditionalSearchItems(model));
+        _anythingSearchWindow = window;
+        try { await window.ShowDialog(this); }
+        finally { _anythingSearchWindow = null; }
+    }
+
+    private IEnumerable<AnythingSearchItem> CreateAdditionalSearchItems(MainViewModel model)
+    {
+        var text = LocalizationService.Shared;
         var additional = new List<AnythingSearchItem>
         {
-            AnythingSearchWindow.Item("window/assets", "Search.Panel", LocalizationService.Shared.Get("Asset.Title"),
-                "", () => OnContentClick(null, new Avalonia.Interactivity.RoutedEventArgs()), "assets"),
-            AnythingSearchWindow.Item("window/sprite", "Search.Panel", LocalizationService.Shared.Get("Sprite.Title"),
-                "", () => model.ShowDockPanel("SpriteEditor"), "sprite"),
-            AnythingSearchWindow.Item("window/log", "Search.Panel", LocalizationService.Shared.Get("Editor.Log"),
-                "", () => model.ShowDockPanel("Log"), "log")
+            AnythingSearchWindow.Item("window/assets", "Search.Panel", text.Get("Asset.Title"),
+                "", () => OnContentClick(null, new Avalonia.Interactivity.RoutedEventArgs()), "assets " + text.GetEnglishOrDefault("Asset.Title", "assets")),
+            AnythingSearchWindow.Item("window/sprite", "Search.Panel", text.Get("Sprite.Title"),
+                "", () => model.ShowDockPanel("SpriteEditor"), "sprite " + text.GetEnglishOrDefault("Sprite.Title", "sprite")),
+            AnythingSearchWindow.Item("window/log", "Search.Panel", text.Get("Editor.Log"),
+                "", () => model.ShowDockPanel("Log"), "log " + text.GetEnglishOrDefault("Editor.Log", "log"))
         };
         if (SharedAssetBrowserViewModel is { } assets)
         {
@@ -139,10 +148,7 @@ public partial class MainWindow : Window
                             current.SelectedAsset = asset;
                     }));
         }
-        var window = new AnythingSearchWindow(model, additional);
-        _anythingSearchWindow = window;
-        try { await window.ShowDialog(this); }
-        finally { _anythingSearchWindow = null; }
+        return additional;
     }
 
     private async void OnSettingsClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

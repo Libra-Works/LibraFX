@@ -56,7 +56,8 @@ Spawn sets up new particles. Update moves living particles. Draw controls their 
 ## 5. Find and connect nodes
 
 1. Open **Window → Node List**.
-2. Search for `CPU` or `Velocity` in the node display language you use.
+2. Search for `CPU` or `Velocity`. Node names and categories can also be found
+   by their English names, regardless of the display language.
 3. Drag a node into the graph.
 4. Click its star to add a frequently used node to favourites.
 

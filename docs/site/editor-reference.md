@@ -123,6 +123,9 @@ Use **Node List** to look up a type and drag it onto the canvas. Finding a type
 doesn't establish whether it can connect to a particular pin. Check the pin type
 and whether it carries a value or a Signal before wiring it. See the
 [built-in node reference](node-reference.md) for the base pin definitions.
+Node List, the canvas node-add search and Search anything accept the original
+English node and category names as well as translated names. User-named nodes
+and assets keep their own names.
 
 ### Search anything
 
@@ -132,7 +135,8 @@ Open **Edit → Search anything** or press `Ctrl+P`. For example, type `Launch`
 in Fireworks and choose a **Node** result to navigate to it. Read the result's
 type before pressing Enter: a graph result opens a graph, a panel result opens a
 tool, and a Group library result can insert an instance. Use Escape to close
-without running anything.
+without running anything. Built-in result categories and panel names also accept
+their English names, independent of the interface language.
 
 ### History
 

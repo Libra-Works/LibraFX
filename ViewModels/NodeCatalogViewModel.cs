@@ -208,16 +208,18 @@ public sealed class NodeCatalogEntryViewModel : ObservableObject
             : unavailableReason;
         IsPolymorphic = GraphPolymorphism.TryFamily(definition.Kind, out var family);
         var text = LocalizationService.Shared;
+        var isCore = GraphNodeDefinition.Core.Contains(definition);
         var labelKey = family?.DisplayNameKey ?? definition.DisplayNameKey;
         Name = text.GetNodeLabel(labelKey, definition.Name);
-        SearchTerms = text.GetNodeSearchTerms(labelKey, definition.Name);
+        SearchTerms = $"{text.GetNodeSearchTerms(labelKey, definition.Name)} " +
+                      $"{text.GetNodeSearchTerms(definition.GroupNameKey, definition.Group)} " +
+                      (isCore ? text.GetEnglishOrDefault("Editor.CoreNodes", "Core") : projectName ?? definition.Namespace);
         OriginalName = definition.Name;
         KindName = definition.Kind.ToString();
         Namespace = definition.Namespace;
         QualifiedName = definition.QualifiedName;
         ConversionDescription = GraphConversionPresentation.Describe(definition);
-        var source = GraphNodeDefinition.Core.Contains(definition)
-            ? LocalizationService.Shared.Get("Editor.CoreNodes") : projectName ?? definition.Namespace;
+        var source = isCore ? text.Get("Editor.CoreNodes") : projectName ?? definition.Namespace;
         Group = $"{source} / {LocalizationService.Shared.GetOrDefault(definition.GroupNameKey, definition.Group)}";
         if (GraphEnumBranchSchema.TryGetEnumDefinition(definition.Kind, out var enumeration))
         {
@@ -251,7 +253,12 @@ public sealed class NodeCatalogEntryViewModel : ObservableObject
             ? $"{LocalizationService.Shared.Get("Modules.StandardLibrary")} / " +
               LocalizationService.Shared.GetOrDefault(metadata?.CategoryKey, "Modules")
             : LocalizationService.Shared.Get("Messages.ProjectGroups");
-        SearchTerms = $"{LocalizationService.Shared.GetNodeSearchTerms(metadata?.NameKey, asset.Name)} {string.Join(" ", metadata?.Keywords ?? [])}";
+        var text = LocalizationService.Shared;
+        var category = asset.Origin == GroupAssetOrigin.Standard
+            ? $"{text.GetNodeSearchTerms("Modules.StandardLibrary", "Standard Library")} " +
+              text.GetNodeSearchTerms(metadata?.CategoryKey, "Modules")
+            : text.GetNodeSearchTerms("Messages.ProjectGroups", "Project Groups");
+        SearchTerms = $"{text.GetNodeSearchTerms(metadata?.NameKey, asset.Name)} {category} {string.Join(" ", metadata?.Keywords ?? [])}";
         GroupAssetId = asset.Id;
         DragIdentifier = GroupPrefix + asset.Id.ToString("D");
     }
