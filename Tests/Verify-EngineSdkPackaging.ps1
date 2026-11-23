@@ -54,6 +54,32 @@ function Assert-PeX64Dll([string] $Path) {
     }
 }
 
+function Assert-ElfX64So([string] $Path) {
+    Assert-FileExists $Path 'Missing native Linux x64 shared library'
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -lt 64 -or $bytes[0] -ne 0x7F -or $bytes[1] -ne 0x45 -or $bytes[2] -ne 0x4C -or $bytes[3] -ne 0x46) {
+        throw "Invalid ELF magic in shared library: $Path"
+    }
+    if ($bytes[4] -ne 2 -or $bytes[5] -ne 1) {
+        throw "Linux shared library must be 64-bit little-endian ELF: $Path"
+    }
+    $eType = [BitConverter]::ToUInt16($bytes, 16)
+    $eMachine = [BitConverter]::ToUInt16($bytes, 18)
+    if ($eType -ne 3 -or $eMachine -ne 0x3E) {
+        throw "Linux shared library must be ET_DYN x86-64 (type=$eType, machine=0x$($eMachine.ToString('X4'))): $Path"
+    }
+}
+
+function Assert-MachODylib([string] $Path) {
+    Assert-FileExists $Path 'Missing native macOS dylib'
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -lt 32) { throw "macOS dylib is too small: $Path" }
+    $magic = [BitConverter]::ToUInt32($bytes, 0)
+    if ($magic -notin 0xFEEDFACFu, 0xCFFAEDFEu, 0xCAFEBABEu, 0xBEBAFECA) {
+        throw "Invalid Mach-O magic (0x$($magic.ToString('X8'))) in dylib: $Path"
+    }
+}
+
 $sourceRoot = if ($Engine -eq 'Core') { $ArtifactRoot } else { Join-Path $ArtifactRoot 'Source' }
 $manifestPath = Join-Path $sourceRoot 'sdk-manifest.json'
 Assert-FileExists $manifestPath 'Missing SDK source manifest'
@@ -101,6 +127,20 @@ if ($Engine -eq 'Unity') {
         throw "Copy-ready Unity package must not include internal Editor/Tests: $editorTests"
     }
     Assert-PeX64Dll (Join-Path $packageRoot 'Runtime\Plugins\x86_64\liberafx_native.dll')
+    $linuxSo = Join-Path $packageRoot 'Runtime\Plugins\Linux\x86_64\libliberafx_native.so'
+    if (Test-Path -LiteralPath $linuxSo) {
+        Assert-FileExists ($linuxSo + '.meta') 'Missing .meta for Linux native plugin'
+        Assert-ElfX64So $linuxSo
+    } elseif (Test-Path -LiteralPath ($linuxSo + '.meta')) {
+        throw "Dangling .meta without Linux binary: $($linuxSo).meta"
+    }
+    $macosDylib = Join-Path $packageRoot 'Runtime\Plugins\macOS\libliberafx_native.dylib'
+    if (Test-Path -LiteralPath $macosDylib) {
+        Assert-FileExists ($macosDylib + '.meta') 'Missing .meta for macOS native plugin'
+        Assert-MachODylib $macosDylib
+    } elseif (Test-Path -LiteralPath ($macosDylib + '.meta')) {
+        throw "Dangling .meta without macOS binary: $($macosDylib).meta"
+    }
     Write-Output 'Verified Unity binary distribution package (works.libra.liberafx).'
     exit 0
 }
@@ -121,6 +161,16 @@ if ($Engine -eq 'Godot') {
     $winLibRelative = $Matches[1].TrimStart('.', '/', '\')
     $winLibPath = Join-Path $addonRoot $winLibRelative
     Assert-PeX64Dll $winLibPath
+    if ($gdext -notmatch 'linux\.x86_64\s*=\s*"([^"]+)"') {
+        throw 'liberafx.gdextension is missing linux.x86_64 library entry.'
+    }
+    $linuxLibPath = Join-Path $addonRoot ($Matches[1].TrimStart('.', '/', '\'))
+    if (Test-Path -LiteralPath $linuxLibPath) { Assert-ElfX64So $linuxLibPath }
+    if ($gdext -notmatch 'macos\.arm64\s*=\s*"([^"]+)"') {
+        throw 'liberafx.gdextension is missing macos.arm64 library entry.'
+    }
+    $macosLibPath = Join-Path $addonRoot ($Matches[1].TrimStart('.', '/', '\'))
+    if (Test-Path -LiteralPath $macosLibPath) { Assert-MachODylib $macosLibPath }
     Write-Output 'Verified Godot binary distribution addon (liberafx).'
     exit 0
 }

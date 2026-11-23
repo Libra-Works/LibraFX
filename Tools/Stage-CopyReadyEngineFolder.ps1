@@ -29,8 +29,8 @@ if ($Engine -eq 'Unity') {
         @{ Source = 'win-x64\bin\liberafx_godot.dll'; Target = 'bin\liberafx_godot.dll' }
     )
     $optionalNative = @(
-        @{ Source = 'linux-x64\bin\libliberafx_godot.linux.template_release.x86_64.so'; Target = 'bin\libliberafx_godot.linux.template_release.x86_64.so' },
-        @{ Source = 'osx-arm64\bin\libliberafx_godot.macos.template_release.framework'; Target = 'bin\libliberafx_godot.macos.template_release.framework' }
+        @{ Source = 'linux-x64\bin\libliberafx_godot.so'; Target = 'bin\libliberafx_godot.so' },
+        @{ Source = 'osx-arm64\bin\libliberafx_godot.dylib'; Target = 'bin\libliberafx_godot.dylib' }
     )
 }
 
@@ -63,5 +63,23 @@ if ($Engine -eq 'Unity') {
     $editorTests = Join-Path $target 'Editor\Tests'
     if (Test-Path -LiteralPath $editorTests) {
         Remove-Item -LiteralPath $editorTests -Recurse -Force
+    }
+    foreach ($entry in $optionalNative) {
+        $placed = Join-Path $target $entry.Target
+        if (-not (Test-Path -LiteralPath $placed)) {
+            $danglingMeta = $placed + '.meta'
+            if (Test-Path -LiteralPath $danglingMeta) {
+                Remove-Item -LiteralPath $danglingMeta -Force
+            }
+            $dir = [IO.Path]::GetDirectoryName($placed)
+            while ($dir -and $dir.StartsWith((Join-Path $target 'Runtime\Plugins'), [StringComparison]::OrdinalIgnoreCase)) {
+                if ((Test-Path -LiteralPath $dir) -and @(Get-ChildItem -LiteralPath $dir -Force).Count -eq 0) {
+                    Remove-Item -LiteralPath $dir -Force
+                    $dir = [IO.Path]::GetDirectoryName($dir)
+                } else {
+                    break
+                }
+            }
+        }
     }
 }

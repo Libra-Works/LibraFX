@@ -5,6 +5,8 @@ reloadable = false
 
 [libraries]
 windows.x86_64 = "./bin/liberafx_godot.dll"
+linux.x86_64 = "./bin/libliberafx_godot.so"
+macos.arm64 = "./bin/libliberafx_godot.dylib"
 
 [icons]
 LibraEffectPlayer = "./icon.png"

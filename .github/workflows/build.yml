@@ -248,9 +248,46 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
 
+  unity-native:
+    name: Unity native (${{ matrix.rid }})
+    needs: [version, authoring-acceptance]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            rid: linux-x64
+            file: libliberafx_native.so
+          - runner: macos-15
+            rid: osx-arm64
+            file: libliberafx_native.dylib
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Build Unity native plugin
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $build = Join-Path $env:RUNNER_TEMP 'unity-native-build'
+          $cmakeArgs = @('-S', 'Runtime', '-B', $build, '-DCMAKE_BUILD_TYPE=Release')
+          if ('${{ matrix.rid }}' -eq 'osx-arm64') { $cmakeArgs += '-DCMAKE_OSX_ARCHITECTURES=arm64' }
+          cmake @cmakeArgs
+          cmake --build $build --target liberafx_native --parallel 2
+          $out = New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'unity-native-out')
+          Copy-Item -LiteralPath (Join-Path $build '${{ matrix.file }}') -Destination $out.FullName
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: unity-native-${{ matrix.rid }}
+          path: ${{ runner.temp }}/unity-native-out
+          retention-days: 1
+          if-no-files-found: error
+
   adapters:
     name: LibraFor${{ matrix.engine }}
-    needs: [version, authoring-acceptance]
+    needs: [version, authoring-acceptance, unity-native]
     runs-on: windows-2022
     timeout-minutes: 35
     strategy:
@@ -275,6 +312,7 @@ jobs:
         shell: pwsh
         run: |
           ./Tests/Verify-UnrealPluginPackaging.ps1 -UnrealSdkRoot (Join-Path $env:RUNNER_TEMP 'sdk/Source')
+          ./Tools/Build-UnrealBinaryPlugin.ps1 -OutputDirectory (Join-Path $env:RUNNER_TEMP 'ue-dryrun') -DryRun -BuildVersion '${{ needs.version.outputs.value }}'
           $project = Join-Path (New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'unreal-project')).FullName 'Smoke.uproject'
           Set-Content -LiteralPath $project -Value '{"FileVersion":3,"EngineAssociation":"5.7","Modules":[]}'
           & (Join-Path $env:RUNNER_TEMP 'sdk/Source/Runtime/Integrations/Unreal/Install-LibraRuntimeForUnreal.ps1') -ProjectPath $project
@@ -290,6 +328,16 @@ jobs:
           cmake --build $build --config Release --target liberafx_native --parallel 2
           $native = New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'sdk/Native/win-x64')
           Copy-Item -LiteralPath (Join-Path $build 'Release/liberafx_native.dll') -Destination $native.FullName
+      - uses: actions/download-artifact@v4
+        if: matrix.engine == 'Unity'
+        with:
+          name: unity-native-linux-x64
+          path: ${{ runner.temp }}/sdk/Native/linux-x64
+      - uses: actions/download-artifact@v4
+        if: matrix.engine == 'Unity'
+        with:
+          name: unity-native-osx-arm64
+          path: ${{ runner.temp }}/sdk/Native/osx-arm64
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         if: matrix.engine == 'Godot'
         with:

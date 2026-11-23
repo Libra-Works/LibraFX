@@ -71,6 +71,36 @@ On Linux, extract the inner `LibraFX-<version>-linux-x64.tar.gz` and launch `Edi
 from a graphical session with Avalonia's system dependencies installed.
 The tarball preserves executable permissions.
 
+### Distribution tracks
+
+LIBERA FX engine integrations follow two distribution tracks:
+
+- **Binary package (end users / artists)**: Copy-ready plugin/package containing
+  prebuilt native binaries (`works.libra.liberafx` for Unity, `liberafx` for
+  Godot, or a prebuilt `LibraRuntimeForUnreal` produced by `Build-UnrealBinaryPlugin.ps1`).
+  No C++ compiler is needed for supported prebuilt targets.
+- **Source package (`Source/` + `sdk-manifest.json`, developers / studios)**:
+  Full engine-independent C++ Core and adapter sources for adding project-native
+  nodes, targeting additional platforms, or rebuilding against custom engine versions.
+
+### Prebuilt Unreal binary plugin (compiler-free)
+
+GitHub Hosted Runners do not include an Unreal Engine installation, so CI
+publishes the copy-ready Unreal source plugin (`LibraRuntimeForUnreal`). To
+produce a compiler-free binary plugin (`Binaries/` + `Installed: true`) on a
+machine or self-hosted runner with Unreal Engine installed:
+
+```powershell
+.\Tools\Build-UnrealBinaryPlugin.ps1 `
+  -UnrealEngineRoot "C:\Program Files\Epic Games\UE_5.7" `
+  -OutputDirectory C:\SdkStaging\LibraUnrealBinary-UE5.7-Win64 `
+  -TargetPlatforms Win64
+```
+
+Use `-DryRun` to stage and validate the plugin layout without invoking `RunUAT`.
+Prebuilt Unreal binaries are specific to each engine minor version (e.g. `5.7`)
+and target platform.
+
 ## Reproducible local staging
 
 From PowerShell 7, export into a **new absolute directory outside the repository**:
