@@ -43,11 +43,19 @@ $copies = @(
     }
     foreach ($entry in $requiredNative) {
         @{ Source = (Join-Path $native $entry.Source); Target = (Join-Path $target $entry.Target) }
+        if ($Engine -eq 'Unity') {
+            $metaName = [IO.Path]::GetFileName($entry.Target) + '.meta'
+            @{ Source = (Join-Path $PSScriptRoot "Packaging\Unity\$metaName"); Target = (Join-Path $target ($entry.Target + '.meta')) }
+        }
     }
     foreach ($entry in $optionalNative) {
         $candidate = Join-Path $native $entry.Source
         if (Test-Path -LiteralPath $candidate) {
             @{ Source = $candidate; Target = (Join-Path $target $entry.Target) }
+            if ($Engine -eq 'Unity') {
+                $metaName = [IO.Path]::GetFileName($entry.Target) + '.meta'
+                @{ Source = (Join-Path $PSScriptRoot "Packaging\Unity\$metaName"); Target = (Join-Path $target ($entry.Target + '.meta')) }
+            }
         }
     }
 )
@@ -63,23 +71,5 @@ if ($Engine -eq 'Unity') {
     $editorTests = Join-Path $target 'Editor\Tests'
     if (Test-Path -LiteralPath $editorTests) {
         Remove-Item -LiteralPath $editorTests -Recurse -Force
-    }
-    foreach ($entry in $optionalNative) {
-        $placed = Join-Path $target $entry.Target
-        if (-not (Test-Path -LiteralPath $placed)) {
-            $danglingMeta = $placed + '.meta'
-            if (Test-Path -LiteralPath $danglingMeta) {
-                Remove-Item -LiteralPath $danglingMeta -Force
-            }
-            $dir = [IO.Path]::GetDirectoryName($placed)
-            while ($dir -and $dir.StartsWith((Join-Path $target 'Runtime\Plugins'), [StringComparison]::OrdinalIgnoreCase)) {
-                if ((Test-Path -LiteralPath $dir) -and @(Get-ChildItem -LiteralPath $dir -Force).Count -eq 0) {
-                    Remove-Item -LiteralPath $dir -Force
-                    $dir = [IO.Path]::GetDirectoryName($dir)
-                } else {
-                    break
-                }
-            }
-        }
     }
 }
