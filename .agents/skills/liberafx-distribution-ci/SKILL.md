@@ -12,6 +12,80 @@ description: Build, verify or publish LIBERA FX releases and prereleases, mainta
 - Follow the user's validation authorization. Prefer checks at the failed boundary: use the CI compiler/configuration when fixing portability, and inspect an extracted artifact when fixing packaging. Scheduled or queued jobs are not successful runs.
 - Keep ordinary CI separate from distribution. The current workflow retains artifacts on manual runs; it does not create GitHub Releases, publish to registries, deploy Pages, or push SDKs elsewhere. Do not add or trigger publication without separate approval.
 
+## Prerelease delivery checklist
+
+1. Confirm authorization to publish, the source commit, the previous release and the worktree. Never include unrelated changes. Read the actual commit range and current CI matrix; do not copy feature or platform claims from an earlier release.
+2. Run `build.yml` with `workflow_dispatch` on the intended ref. Record the resulting run ID, source SHA, run number and creation time. Derive the version from its JST creation date and run number, and wait for every required job to succeed. A push-triggered run does not retain release artifacts.
+3. Download that exact run's artifacts to a fresh directory outside the repository. Verify filenames, editor and converter entry points, license, matching version and full source SHA, Unix executable bits inside the desktop archives, SDK manifests and every source hash, install folders, hidden ownership files and native binaries actually included. Compare copy-ready files with their source/native counterparts where applicable. Do not confuse an outer Actions artifact ZIP with the inner desktop archive.
+4. Package the verified engine and Core SDK artifacts without dropping hidden files. Create `SHA256SUMS.txt` for the final release assets and verify the checksums. Do not publish incomplete or mismatched assets.
+5. Create a **draft prerelease**, not a stable release, with a new `v<version>` tag targeting the run's full source SHA. Upload the final assets and checksum file, then independently verify the draft's prerelease flag, target, asset names, sizes and server-side digests before publishing. After publication resolve the tag to the same SHA. If a release or tag already exists, stop and inspect it instead of overwriting it.
+6. Publish the release-specific bilingual Pages notes below. Commit and push only this task's files; the documentation commit may follow the release source commit. Confirm the Documentation workflow and the actual English and Japanese published pages. Report any unfinished step explicitly.
+
+### GitHub prerelease body template
+
+Replace every placeholder with evidence for **this** release; omit inapplicable bullets and never present the template itself as verification. Keep both languages aligned. Link each claimed engine observation to its actual environment and distinguish a build, package inspection and real rendering. Do not carry past observations forward as if they were rerun.
+
+```markdown
+## LIBERA FX <version> Preview
+
+<One or two sentences describing this release and the requirement to update the editor, converter and matching SDKs together.>
+
+### Highlights
+
+- **<User-facing feature>:** <what authors can do and any important limits>.
+- **<Additional change>:** <what changed since the preceding release>.
+
+### Installation and compatibility
+
+- <Identify the editor downloads and the actual copy-ready SDKs, platforms, source-only packages and required engine rebuilds.>
+- <Explain backup, migration and matching-version requirements; mention unsigned macOS and format compatibility where applicable.>
+
+### Validation
+
+[Packaging run <run-id>](<run-url>) passed <specific successful jobs> for source revision `<full-sha>`.
+<State exactly what was inspected in the downloaded assets. List engine, OS, graphics backend and host version only for observations actually performed; explicitly name unverified rendering and platform boundaries.>
+
+### Documentation
+
+- [Release notes](<version-specific-English-Pages-URL>) / [リリースノート](<version-specific-Japanese-Pages-URL>)
+- <Relevant user guides, if useful>
+
+### 日本語の概要
+
+<English summaryと同じ更新内容、導入・互換性、実際に確認した範囲と未確認事項を日本語で記載。>
+
+Source: `<full-sha>` · [Packaging run](<run-url>)
+```
+
+### Versioned Pages template
+
+Create separate English and Japanese pages, translating the same verified facts and retaining the appropriate language and links. Adapt the following structure for each language; placeholders are not factual claims.
+
+```markdown
+---
+title: <version> Preview release notes
+release_version: "<version>"
+---
+
+# <version> Preview
+
+Released <actual-publication-date>. [Download this version](https://github.com/Libra-Works/LibraFX/releases/tag/v<version>) · [All release notes](../release-notes.md)
+
+## What changed
+
+- <Author-facing changes and links to the relevant guides>
+
+## Upgrade together
+
+- <Backups, matching editor/converter/SDK versions, migration and engine-specific installation>
+
+## Verified for this release
+
+- <Exact CI, asset-inspection and actual engine observations, with unverified boundaries>
+
+Source: [<short-sha>](https://github.com/Libra-Works/LibraFX/commit/<full-sha>) · [Packaging run](<run-url>)
+```
+
 ## Finish every release with versioned Pages notes
 
 - Creating a release or prerelease also requires its dedicated English and Japanese Pages notes. Use the published tag, version, date, source revision and verified changes; do not infer released behavior from newer `main` sources. Follow the repository's existing release-body format.

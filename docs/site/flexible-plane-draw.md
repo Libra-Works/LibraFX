@@ -8,7 +8,7 @@ title: Flexible Plane Draw
 
 Use **Flexible Plane Draw** to turn an ordered set of points into a textured ribbon. Use a point list for a fixed shape or point history for a moving trail.
 
-A trail becomes visible after at least two distinct positions have been sampled. Supply a texture explicitly. For host rendering details, see [SDK and runtime reference](engine-integration.md#rendering).
+A trail becomes visible after at least two distinct positions have been sampled. Supply a texture or procedural resource. For host rendering details, see [SDK and runtime reference](engine-integration.md#rendering).
 
 <details class="page-toc" markdown="1">
 <summary>On this page</summary>
@@ -22,8 +22,9 @@ A trail becomes visible after at least two distinct positions have been sampled.
 
 Add **Flexible Plane Draw** (Rendering) and either **Flexible Plane Point
 List** or **Flexible Plane Point History** (Flexible Plane). Connect the
-source's output to Draw's **Points**. Supply an explicit Texture resource; no
-placeholder is substituted. To make a trail, connect an animated FloatX3
+source's output to Draw's **Points**. Supply a Texture resource or connect a
+**Procedural Texture** or **Procedural Material** output to the corresponding
+input. Missing resources are not replaced with placeholders. To make a trail, connect an animated FloatX3
 position to History's Position; sampling starts with the instance and requires
 at least two distinct sampled positions before a ribbon appears. To build a point
 chain from graph nodes, use **Flexible Plane Point List**, adjust the number of
@@ -32,9 +33,9 @@ the inspector, and connect FloatX3 values to any **Position 0**–**Position 63*
 pin to drive each vertex position dynamically.
 
 The Texture property uses the existing texture-filtered resource browser.
-Assignment is undoable and changes only the primary texture; engine ribbon
-materials are configured by the host rather than imported as graph material
-slots.
+Assignment is undoable and changes only the primary texture. Procedural resource
+connections and host material settings can also be exported; check the actual
+appearance with the engine integration you use.
 
 A standalone root ribbon or history does not itself keep an idle effect alive.
 `AutoDestroyWhenIdle` may end a root when its Spawnable templates become idle;
@@ -55,7 +56,8 @@ triangle is done by the renderer.
 | Node | Input/parameter | Default and limit |
 |---|---|---|
 | Draw | Points | required Point List or Point History connection |
-| Draw | Texture | empty; explicit resource required |
+| Draw | Texture | empty; supply a texture or procedural resource |
+| Draw | Procedural Texture / Procedural Material | connect the corresponding generated resource |
 | Draw | Width multiplier | 1; finite, nonnegative; numeric pin supported |
 | Draw | Tint | `[1,1,1,1]`; finite RGBA multiplier; numeric pin supported |
 | Draw | Camera facing | true; false uses Fixed up |
@@ -91,10 +93,11 @@ Binding IDs are Draw `width`, `tint`; list `position0`–`position{N-1}` (up to 
 `position`, `pointWidth`, `pointColor`. Source IDs and component indices
 refer to ordinary VM values. Metadata helpers must not become VM instructions,
 but their connected numeric sources must remain evaluated and bindable.
-`assetPath` carries the resolved primary texture; `materials` and `textures`
-are empty arrays and do not select a material. An integrated renderer must
-provide a texture-compatible default ribbon material, or report its absence;
-this metadata alone does not provide one.
+`assetPath` carries the resolved primary texture or a generated-resource
+identifier. Connected procedural resources and `materials`, `textures` and
+parameters from the host material schema can also be exported. The integrated
+renderer resolves and draws those resources; generating metadata alone does not
+verify rendering.
 
 The native C ABI is `Runtime/include/liberafx/LbFlexiblePlaneDraw.h`; implementation
 is `Runtime/Core/LbFlexiblePlaneDraw.cpp`. Build it into the native plugin with
