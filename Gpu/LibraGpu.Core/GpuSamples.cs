@@ -25,6 +25,50 @@ public static class GpuSamples
             Kernels = [spawn, update], Flow = program.Flow.Select(flow => flow.Kind == FlowKind.Spawn
                 ? flow with { SpawnShape = new() { Kind = GpuSpawnShapeKind.Sphere, Radius = 1.5 } } : flow).ToList() };
     }
+    public static GpuProgram CreateCurlTurbulence()
+    {
+        var program = CreateCurlCloud(4096);
+        var update = GpuDsl.Compile("""
+            let frequency = 0.65;
+            let strength = 1.2;
+            let drift = float3(0, 0.3, 0);
+            let animatedPosition = @Position * frequency + float3(0, time * 0.1, 0);
+            let variation = turbulence(animatedPosition, 31u, 3i, 0.5);
+            @Velocity = curlnoise(animatedPosition, 17u, 3i, 0.5) * strength * (0.35 + 0.65 * variation) + drift;
+            @Position += @Velocity * dt;
+            @Color.a = 0.4 * clamp(@Age, 0, 1) * clamp(@Lifetime - @Age, 0, 1);
+            """, "update", KernelStage.Update);
+        return program with { Id = "curlTurbulence", SpawnRate = 240,
+            Kernels = [program.Kernels.Single(kernel => kernel.Stage == KernelStage.Spawn), update] };
+    }
+    public static GpuProgram CreateFluidVelocityParticles()
+    {
+        var program = CreateEmitter(2048);
+        var resources = program.Resources.Append(new ResourceDeclaration
+        {
+            Id = "fluidVelocity",
+            Kind = ResourceKind.FlowMap2D,
+            FlowMap = new() { Encoding = FlowMapEncoding.FloatVelocity, Coordinates = FlowMapCoordinates.GeneratedPlane }
+        }).ToList();
+        var spawn = GpuDsl.Compile("""
+            @Position = emitterPosition + float3(0, -0.38, 0);
+            @Velocity = float3(0, 0, 0);
+            @Lifetime = 4;
+            @Size = float2(0.025, 0.025);
+            @Color = float4(1, 0.8, 0.2, 0.8);
+            """, "spawn", KernelStage.Spawn);
+        var update = GpuDsl.Compile("""
+            @Velocity = sampleFlowMap("fluidVelocity", @Position);
+            @Position += @Velocity * dt;
+            @Color.a = 0.8 * clamp(@Age, 0, 1) * clamp(@Lifetime - @Age, 0, 1);
+            """, "update", KernelStage.Update, resources: resources);
+        return program with
+        {
+            Id = "fluidVelocityParticles", SpawnRate = 100, Resources = resources, Kernels = [spawn, update],
+            Flow = program.Flow.Select(flow => flow.Kind == FlowKind.Spawn
+                ? flow with { SpawnShape = new() { Kind = GpuSpawnShapeKind.Circle, Radius = 0.06 } } : flow).ToList()
+        };
+    }
     public static GpuProgram CreateNoiseProbe(uint capacity = 256)
     {
         var k = GpuDsl.Compile("""

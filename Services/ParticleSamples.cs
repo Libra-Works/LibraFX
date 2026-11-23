@@ -10,12 +10,13 @@ namespace LiberaFx.Services;
 public static class ParticleSamples
 {
     public static IReadOnlyList<string> Names { get; } =
-        ["CpuRadial", "CpuFountain", "CpuMeshSurface", "GpuCurl100k", "FluidSmoke", "FluidInk", "FluidWater", "FluidShallowWater", "FluidFire", "Fireworks"];
+        ["CpuRadial", "CpuFountain", "CpuMeshSurface", "GpuCurl100k", "GpuCurlTurbulence", "GpuFluidVelocity", "FluidSmoke", "FluidInk", "FluidWater", "FluidShallowWater", "FluidFire", "Fireworks"];
 
     public static GraphSnapshot Create(string name)
     {
         if (!Names.Contains(name, StringComparer.Ordinal)) throw new ArgumentException("Unknown particle/fluid sample.", nameof(name));
         if (name == "Fireworks") return Fireworks();
+        if (name == "GpuFluidVelocity") return FluidVelocity();
         var root = new Builder();
         if (name is "CpuRadial" or "CpuFountain" or "CpuMeshSurface")
         {
@@ -36,7 +37,13 @@ public static class ParticleSamples
                 RendererSettings = new() { ["renderStep"] = new(SizeScale: 1) }
             };
             if (name == "GpuCurl100k")
+            {
                 state = state with { Program = GpuSamples.CreateCurlCloud() };
+            }
+            else if (name == "GpuCurlTurbulence")
+            {
+                state = state with { Program = GpuSamples.CreateCurlTurbulence() };
+            }
             else
             {
                 var model = name switch
@@ -58,11 +65,43 @@ public static class ParticleSamples
             root.Add("GpuParticle", name, (GpuParticleEditorService.ParameterId, "gpuState",
                 JsonSerializer.SerializeToElement(state, GpuParticleEditorService.Json)));
         }
-        root.Comment(name + " · X right / Y up / Z forward · metres\n" +
+        root.Comment(name == "GpuCurlTurbulence"
+            ? "GpuCurlTurbulence · X right / Y up / Z forward · metres\n" +
+              "Curl Noise moves the particles; Turbulence varies its strength.\n" +
+              "Capacity 4,096; 240 particles per second. Preview: 60 FPS, frames 0–1200.\n" +
+              "カールノイズで動かし、タービュランスで強さを変化。実 GPU の接続先で確認してください。"
+            : name + " · X right / Y up / Z forward · metres\n" +
             "CPU samples use a generated radial glow texture; no image import is required.\n" +
             "GPU Curl: capacity 100,000; particles fill gradually. Fluid2D: edit typed Flow controls.\n" +
             "Suggested preview: 60 FPS, frames 0–1200.\n" +
             "Yアップ・メートル単位。CPUは生成グロー画像を使用。GPU/フルイドは実GPUの接続先で確認してください。");
+        return root.Graph;
+    }
+
+    private static GraphSnapshot FluidVelocity()
+    {
+        var root = new Builder();
+        var fluid = new GpuEditorState
+        {
+            Fluid2D = Fluid2DPresets.Create(Fluid2DModel.Smoke, 64, 64),
+            FluidRenderer = new(Fluid2DPresets.RendererMaterial(Fluid2DModel.Smoke), 1),
+            FluidAutomaticPlane = false
+        };
+        var producer = root.Add("GpuParticle", "Fluid2D velocity source", (GpuParticleEditorService.ParameterId, "gpuState",
+            JsonSerializer.SerializeToElement(fluid, GpuParticleEditorService.Json)));
+        var particles = new GpuEditorState
+        {
+            Program = GpuSamples.CreateFluidVelocityParticles(),
+            ResourceAssetPaths = new() { ["billboardTexture"] = "builtin:white" },
+            RendererSettings = new() { ["renderStep"] = new(SizeScale: 1) },
+            GeneratedResources = new() { ["fluidVelocity"] = new(producer, "VelocityOutput") }
+        };
+        root.Add("GpuParticle", "Particles following fluid", (GpuParticleEditorService.ParameterId, "gpuState",
+            JsonSerializer.SerializeToElement(particles, GpuParticleEditorService.Json)));
+        root.Comment("GpuFluidVelocity · Fluid2D VelocityOutput → GPU particles\n" +
+            "The smoke solver runs first. Its velocity moves the particles; its plane is hidden.\n" +
+            "64 × 64 cells; 100 particles per second. Preview: 60 FPS, frames 0–600.\n" +
+            "フルイドの速度を粒子が読み取ります。対応する GPU 接続先で確認してください。");
         return root.Graph;
     }
 

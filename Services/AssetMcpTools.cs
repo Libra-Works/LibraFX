@@ -197,7 +197,7 @@ public sealed class AssetMcpTools
         });
 
     [McpServerTool(Name = "libera_create_particle_sample", Destructive = false, OpenWorld = false)]
-    [Description("Append an editable CPU/GPU particle or Fluid2D sample as one undoable edit. No imported assets or hand-written GPU JSON needed. Styles: CpuRadial, CpuFountain, CpuMeshSurface, Fireworks, GpuCurl100k, FluidSmoke, FluidInk, FluidWater, FluidShallowWater, FluidFire. All source graphs use X-right/Y-up/Z-forward and metres. GPU/fluid visibility requires a connected supported GPU host; capacity is not live count.")]
+    [Description("Append an editable CPU/GPU particle or Fluid2D sample as one undoable edit. No imported assets or hand-written GPU JSON needed. Styles: CpuRadial, CpuFountain, CpuMeshSurface, Fireworks, GpuCurl100k, GpuCurlTurbulence, GpuFluidVelocity, FluidSmoke, FluidInk, FluidWater, FluidShallowWater, FluidFire. All source graphs use X-right/Y-up/Z-forward and metres. GPU/fluid visibility requires a connected supported GPU host; capacity is not live count.")]
     public static async Task<string> CreateParticleSample(ActiveGraphProvider graph, EditorPlayback playback,
         [Description("Exact sample style; use CpuFountain for the simple fountain starter.")] string style = "CpuFountain",
         [Description("Start playback with an appropriate timeline range.")] bool autoplay = false) =>

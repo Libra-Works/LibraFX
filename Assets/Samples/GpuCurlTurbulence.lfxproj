@@ -1,0 +1,2320 @@
+{
+  "FormatVersion": 14,
+  "AutoDestroyWhenIdle": true,
+  "Nodes": [
+    {
+      "Id": "9e3e20a7-09cd-4068-ae50-4de5bad28450",
+      "Name": "GpuCurlTurbulence",
+      "Kind": "GpuParticle",
+      "X": 0,
+      "Y": 0,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "gpuState",
+          "Type": "gpuState",
+          "Value": {
+            "program": {
+              "version": 1,
+              "spawnRate": 240,
+              "id": "curlTurbulence",
+              "capacity": 4096,
+              "attributes": [
+                {
+                  "id": "Age",
+                  "type": "Float"
+                },
+                {
+                  "id": "Alive",
+                  "type": "Bool"
+                },
+                {
+                  "id": "Color",
+                  "type": "Float4"
+                },
+                {
+                  "id": "Lifetime",
+                  "type": "Float"
+                },
+                {
+                  "id": "Position",
+                  "type": "Float3"
+                },
+                {
+                  "id": "Rotation",
+                  "type": "Float"
+                },
+                {
+                  "id": "Seed",
+                  "type": "UInt"
+                },
+                {
+                  "id": "Size",
+                  "type": "Float2"
+                },
+                {
+                  "id": "Velocity",
+                  "type": "Float3"
+                }
+              ],
+              "resources": [
+                {
+                  "id": "billboardTexture",
+                  "kind": "Texture2D",
+                  "width": 0,
+                  "height": 0,
+                  "flowMap": null
+                }
+              ],
+              "kernels": [
+                {
+                  "id": "spawn",
+                  "stage": "Spawn",
+                  "nodes": [
+                    {
+                      "id": "text_000000",
+                      "op": "ReadUniform",
+                      "type": "Float3",
+                      "inputs": [],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": "emitterPosition",
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 12,
+                        "length": 15
+                      }
+                    },
+                    {
+                      "id": "text_000001",
+                      "op": "Constant",
+                      "type": "Float3",
+                      "inputs": [],
+                      "value": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 42,
+                        "length": 15
+                      }
+                    },
+                    {
+                      "id": "text_000002",
+                      "op": "Constant",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [
+                        12
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 72,
+                        "length": 2
+                      }
+                    },
+                    {
+                      "id": "text_000003",
+                      "op": "Constant",
+                      "type": "Float2",
+                      "inputs": [],
+                      "value": [
+                        0.025,
+                        0.025
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 85,
+                        "length": 20
+                      }
+                    },
+                    {
+                      "id": "text_000004",
+                      "op": "Constant",
+                      "type": "Float4",
+                      "inputs": [],
+                      "value": [
+                        0.12,
+                        0.65,
+                        1,
+                        0.4
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 117,
+                        "length": 26
+                      }
+                    }
+                  ],
+                  "writes": [
+                    {
+                      "id": "write_Color",
+                      "attribute": "Color",
+                      "value": "text_000004",
+                      "sourceSpan": {
+                        "start": 108,
+                        "length": 36
+                      }
+                    },
+                    {
+                      "id": "write_Lifetime",
+                      "attribute": "Lifetime",
+                      "value": "text_000002",
+                      "sourceSpan": {
+                        "start": 60,
+                        "length": 15
+                      }
+                    },
+                    {
+                      "id": "write_Position",
+                      "attribute": "Position",
+                      "value": "text_000000",
+                      "sourceSpan": {
+                        "start": 0,
+                        "length": 28
+                      }
+                    },
+                    {
+                      "id": "write_Size",
+                      "attribute": "Size",
+                      "value": "text_000003",
+                      "sourceSpan": {
+                        "start": 77,
+                        "length": 29
+                      }
+                    },
+                    {
+                      "id": "write_Velocity",
+                      "attribute": "Velocity",
+                      "value": "text_000001",
+                      "sourceSpan": {
+                        "start": 30,
+                        "length": 28
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "update",
+                  "stage": "Update",
+                  "nodes": [
+                    {
+                      "id": "text_000000",
+                      "op": "Constant",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [
+                        0.65
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 16,
+                        "length": 4
+                      }
+                    },
+                    {
+                      "id": "text_000001",
+                      "op": "Constant",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [
+                        1.2
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 37,
+                        "length": 3
+                      }
+                    },
+                    {
+                      "id": "text_000002",
+                      "op": "Constant",
+                      "type": "Float3",
+                      "inputs": [],
+                      "value": [
+                        0,
+                        0.3,
+                        0
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 54,
+                        "length": 17
+                      }
+                    },
+                    {
+                      "id": "text_000003",
+                      "op": "ReadAttribute",
+                      "type": "Float3",
+                      "inputs": [],
+                      "value": [],
+                      "attribute": "Position",
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 96,
+                        "length": 9
+                      }
+                    },
+                    {
+                      "id": "text_000004",
+                      "op": "Mul",
+                      "type": "Float3",
+                      "inputs": [
+                        "text_000003",
+                        "text_000000"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 96,
+                        "length": 21
+                      }
+                    },
+                    {
+                      "id": "text_000005",
+                      "op": "Constant",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [
+                        0
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 127,
+                        "length": 1
+                      }
+                    },
+                    {
+                      "id": "text_000006",
+                      "op": "ReadUniform",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": "time",
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 130,
+                        "length": 4
+                      }
+                    },
+                    {
+                      "id": "text_000007",
+                      "op": "Constant",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [
+                        0.1
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 137,
+                        "length": 3
+                      }
+                    },
+                    {
+                      "id": "text_000008",
+                      "op": "Mul",
+                      "type": "Float",
+                      "inputs": [
+                        "text_000006",
+                        "text_000007"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 130,
+                        "length": 10
+                      }
+                    },
+                    {
+                      "id": "text_000009",
+                      "op": "Constant",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [
+                        0
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 142,
+                        "length": 1
+                      }
+                    },
+                    {
+                      "id": "text_000010",
+                      "op": "Compose",
+                      "type": "Float3",
+                      "inputs": [
+                        "text_000005",
+                        "text_000008",
+                        "text_000009"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 120,
+                        "length": 24
+                      }
+                    },
+                    {
+                      "id": "text_000011",
+                      "op": "Add",
+                      "type": "Float3",
+                      "inputs": [
+                        "text_000004",
+                        "text_000010"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 96,
+                        "length": 48
+                      }
+                    },
+                    {
+                      "id": "text_000012",
+                      "op": "Constant",
+                      "type": "UInt",
+                      "inputs": [],
+                      "value": [
+                        31
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 191,
+                        "length": 3
+                      }
+                    },
+                    {
+                      "id": "text_000013",
+                      "op": "Constant",
+                      "type": "Int",
+                      "inputs": [],
+                      "value": [
+                        3
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 196,
+                        "length": 2
+                      }
+                    },
+                    {
+                      "id": "text_000014",
+                      "op": "Constant",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [
+                        0.5
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 200,
+                        "length": 3
+                      }
+                    },
+                    {
+                      "id": "text_000015",
+                      "op": "Turbulence",
+                      "type": "Float",
+                      "inputs": [
+                        "text_000011",
+                        "text_000012",
+                        "text_000013",
+                        "text_000014"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 162,
+                        "length": 42
+                      }
+                    },
+                    {
+                      "id": "text_000016",
+                      "op": "Constant",
+                      "type": "UInt",
+                      "inputs": [],
+                      "value": [
+                        17
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 246,
+                        "length": 3
+                      }
+                    },
+                    {
+                      "id": "text_000017",
+                      "op": "Constant",
+                      "type": "Int",
+                      "inputs": [],
+                      "value": [
+                        3
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 251,
+                        "length": 2
+                      }
+                    },
+                    {
+                      "id": "text_000018",
+                      "op": "Constant",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [
+                        0.5
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 255,
+                        "length": 3
+                      }
+                    },
+                    {
+                      "id": "text_000019",
+                      "op": "CurlNoise",
+                      "type": "Float3",
+                      "inputs": [
+                        "text_000011",
+                        "text_000016",
+                        "text_000017",
+                        "text_000018"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 218,
+                        "length": 41
+                      }
+                    },
+                    {
+                      "id": "text_000020",
+                      "op": "Mul",
+                      "type": "Float3",
+                      "inputs": [
+                        "text_000019",
+                        "text_000001"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 218,
+                        "length": 52
+                      }
+                    },
+                    {
+                      "id": "text_000021",
+                      "op": "Constant",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [
+                        0.35
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 274,
+                        "length": 4
+                      }
+                    },
+                    {
+                      "id": "text_000022",
+                      "op": "Constant",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [
+                        0.65
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 281,
+                        "length": 4
+                      }
+                    },
+                    {
+                      "id": "text_000023",
+                      "op": "Mul",
+                      "type": "Float",
+                      "inputs": [
+                        "text_000022",
+                        "text_000015"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 281,
+                        "length": 16
+                      }
+                    },
+                    {
+                      "id": "text_000024",
+                      "op": "Add",
+                      "type": "Float",
+                      "inputs": [
+                        "text_000021",
+                        "text_000023"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 274,
+                        "length": 23
+                      }
+                    },
+                    {
+                      "id": "text_000025",
+                      "op": "Mul",
+                      "type": "Float3",
+                      "inputs": [
+                        "text_000020",
+                        "text_000024"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 218,
+                        "length": 79
+                      }
+                    },
+                    {
+                      "id": "text_000026",
+                      "op": "Add",
+                      "type": "Float3",
+                      "inputs": [
+                        "text_000025",
+                        "text_000002"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 218,
+                        "length": 88
+                      }
+                    },
+                    {
+                      "id": "text_000027",
+                      "op": "ReadUniform",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": "deltaTime",
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 333,
+                        "length": 2
+                      }
+                    },
+                    {
+                      "id": "text_000028",
+                      "op": "Mul",
+                      "type": "Float3",
+                      "inputs": [
+                        "text_000026",
+                        "text_000027"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 321,
+                        "length": 14
+                      }
+                    },
+                    {
+                      "id": "text_000029",
+                      "op": "Add",
+                      "type": "Float3",
+                      "inputs": [
+                        "text_000003",
+                        "text_000028"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 308,
+                        "length": 28
+                      }
+                    },
+                    {
+                      "id": "text_000030",
+                      "op": "Constant",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [
+                        0.4
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 348,
+                        "length": 3
+                      }
+                    },
+                    {
+                      "id": "text_000031",
+                      "op": "ReadAttribute",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [],
+                      "attribute": "Age",
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 360,
+                        "length": 4
+                      }
+                    },
+                    {
+                      "id": "text_000032",
+                      "op": "Constant",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [
+                        0
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 366,
+                        "length": 1
+                      }
+                    },
+                    {
+                      "id": "text_000033",
+                      "op": "Constant",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [
+                        1
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 369,
+                        "length": 1
+                      }
+                    },
+                    {
+                      "id": "text_000034",
+                      "op": "Clamp",
+                      "type": "Float",
+                      "inputs": [
+                        "text_000031",
+                        "text_000032",
+                        "text_000033"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 354,
+                        "length": 17
+                      }
+                    },
+                    {
+                      "id": "text_000035",
+                      "op": "Mul",
+                      "type": "Float",
+                      "inputs": [
+                        "text_000030",
+                        "text_000034"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 348,
+                        "length": 23
+                      }
+                    },
+                    {
+                      "id": "text_000036",
+                      "op": "ReadAttribute",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [],
+                      "attribute": "Lifetime",
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 380,
+                        "length": 9
+                      }
+                    },
+                    {
+                      "id": "text_000037",
+                      "op": "Sub",
+                      "type": "Float",
+                      "inputs": [
+                        "text_000036",
+                        "text_000031"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 380,
+                        "length": 16
+                      }
+                    },
+                    {
+                      "id": "text_000038",
+                      "op": "Constant",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [
+                        0
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 398,
+                        "length": 1
+                      }
+                    },
+                    {
+                      "id": "text_000039",
+                      "op": "Constant",
+                      "type": "Float",
+                      "inputs": [],
+                      "value": [
+                        1
+                      ],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 401,
+                        "length": 1
+                      }
+                    },
+                    {
+                      "id": "text_000040",
+                      "op": "Clamp",
+                      "type": "Float",
+                      "inputs": [
+                        "text_000037",
+                        "text_000038",
+                        "text_000039"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 374,
+                        "length": 29
+                      }
+                    },
+                    {
+                      "id": "text_000041",
+                      "op": "Mul",
+                      "type": "Float",
+                      "inputs": [
+                        "text_000035",
+                        "text_000040"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 348,
+                        "length": 55
+                      }
+                    },
+                    {
+                      "id": "text_000042",
+                      "op": "ReadAttribute",
+                      "type": "Float4",
+                      "inputs": [],
+                      "value": [],
+                      "attribute": "Color",
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 337,
+                        "length": 67
+                      }
+                    },
+                    {
+                      "id": "text_000043",
+                      "op": "Component",
+                      "type": "Float",
+                      "inputs": [
+                        "text_000042"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": 0,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 337,
+                        "length": 67
+                      }
+                    },
+                    {
+                      "id": "text_000044",
+                      "op": "Component",
+                      "type": "Float",
+                      "inputs": [
+                        "text_000042"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": 1,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 337,
+                        "length": 67
+                      }
+                    },
+                    {
+                      "id": "text_000045",
+                      "op": "Component",
+                      "type": "Float",
+                      "inputs": [
+                        "text_000042"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": 2,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 337,
+                        "length": 67
+                      }
+                    },
+                    {
+                      "id": "text_000046",
+                      "op": "Compose",
+                      "type": "Float4",
+                      "inputs": [
+                        "text_000043",
+                        "text_000044",
+                        "text_000045",
+                        "text_000041"
+                      ],
+                      "value": [],
+                      "attribute": null,
+                      "uniform": null,
+                      "componentIndex": null,
+                      "resource": null,
+                      "sourceSpan": {
+                        "start": 337,
+                        "length": 67
+                      }
+                    }
+                  ],
+                  "writes": [
+                    {
+                      "id": "write_Color",
+                      "attribute": "Color",
+                      "value": "text_000046",
+                      "sourceSpan": {
+                        "start": 337,
+                        "length": 67
+                      }
+                    },
+                    {
+                      "id": "write_Position",
+                      "attribute": "Position",
+                      "value": "text_000029",
+                      "sourceSpan": {
+                        "start": 308,
+                        "length": 28
+                      }
+                    },
+                    {
+                      "id": "write_Velocity",
+                      "attribute": "Velocity",
+                      "value": "text_000026",
+                      "sourceSpan": {
+                        "start": 206,
+                        "length": 101
+                      }
+                    }
+                  ]
+                }
+              ],
+              "flow": [
+                {
+                  "id": "spawnStep",
+                  "kind": "Spawn",
+                  "kernel": "spawn",
+                  "resource": null,
+                  "spawnShape": {
+                    "kind": "Sphere",
+                    "halfExtents": [
+                      1,
+                      1,
+                      1
+                    ],
+                    "radius": 1.5
+                  }
+                },
+                {
+                  "id": "updateStep",
+                  "kind": "Update",
+                  "kernel": "update",
+                  "resource": null
+                },
+                {
+                  "id": "renderStep",
+                  "kind": "RenderBillboard",
+                  "kernel": null,
+                  "resource": "billboardTexture"
+                }
+              ]
+            },
+            "positions": {},
+            "drafts": {},
+            "resourceAssetPaths": {
+              "billboardTexture": "builtin:white"
+            },
+            "rendererSettings": {
+              "renderStep": {
+                "material": "builtin:unlit-alpha",
+                "sizeScale": 1
+              }
+            }
+          }
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false,
+      "GroupOverrides": null,
+      "SignalKeys": null
+    },
+    {
+      "Id": "3af8466f-6817-429f-897d-c1b66cf2c7c9",
+      "Name": "Sample guide",
+      "Kind": "Comment",
+      "X": 300,
+      "Y": 0,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [
+        {
+          "Id": "text",
+          "Type": "string",
+          "Value": "GpuCurlTurbulence · X right / Y up / Z forward · metres\nCurl Noise moves the particles; Turbulence varies its strength.\nCapacity 4,096; 240 particles per second. Preview: 60 FPS, frames 0–1200.\nカールノイズで動かし、タービュランスで強さを変化。実 GPU の接続先で確認してください。"
+        },
+        {
+          "Id": "width",
+          "Type": "float",
+          "Value": 680
+        },
+        {
+          "Id": "height",
+          "Type": "float",
+          "Value": 220
+        }
+      ],
+      "GroupAsset": null,
+      "IsPolymorphic": false,
+      "GroupOverrides": null,
+      "SignalKeys": null
+    }
+  ],
+  "Connections": [],
+  "History": {
+    "RootId": "bc8f6014-1d91-4b73-aec2-bf675c175d22",
+    "CurrentNodeId": "bc8f6014-1d91-4b73-aec2-bf675c175d22",
+    "TimelineRevisionId": "1c838ee0-daf9-4a17-8c7b-7adc6a79b04c",
+    "NextBranchNumber": 1,
+    "Entries": [
+      {
+        "Id": "bc8f6014-1d91-4b73-aec2-bf675c175d22",
+        "ParentId": null,
+        "PreferredChildId": null,
+        "Description": "GpuCurlTurbulence",
+        "BranchName": "Main",
+        "IsPinned": false,
+        "State": {
+          "Nodes": [
+            {
+              "Id": "9e3e20a7-09cd-4068-ae50-4de5bad28450",
+              "Kind": "GpuParticle",
+              "Name": "GpuCurlTurbulence",
+              "X": 0,
+              "Y": 0,
+              "PortType": "Float",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "gpuState",
+                  "Type": "gpuState",
+                  "Value": {
+                    "program": {
+                      "version": 1,
+                      "spawnRate": 240,
+                      "id": "curlTurbulence",
+                      "capacity": 4096,
+                      "attributes": [
+                        {
+                          "id": "Age",
+                          "type": "Float"
+                        },
+                        {
+                          "id": "Alive",
+                          "type": "Bool"
+                        },
+                        {
+                          "id": "Color",
+                          "type": "Float4"
+                        },
+                        {
+                          "id": "Lifetime",
+                          "type": "Float"
+                        },
+                        {
+                          "id": "Position",
+                          "type": "Float3"
+                        },
+                        {
+                          "id": "Rotation",
+                          "type": "Float"
+                        },
+                        {
+                          "id": "Seed",
+                          "type": "UInt"
+                        },
+                        {
+                          "id": "Size",
+                          "type": "Float2"
+                        },
+                        {
+                          "id": "Velocity",
+                          "type": "Float3"
+                        }
+                      ],
+                      "resources": [
+                        {
+                          "id": "billboardTexture",
+                          "kind": "Texture2D",
+                          "width": 0,
+                          "height": 0,
+                          "flowMap": null
+                        }
+                      ],
+                      "kernels": [
+                        {
+                          "id": "spawn",
+                          "stage": "Spawn",
+                          "nodes": [
+                            {
+                              "id": "text_000000",
+                              "op": "ReadUniform",
+                              "type": "Float3",
+                              "inputs": [],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": "emitterPosition",
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 12,
+                                "length": 15
+                              }
+                            },
+                            {
+                              "id": "text_000001",
+                              "op": "Constant",
+                              "type": "Float3",
+                              "inputs": [],
+                              "value": [
+                                0,
+                                0,
+                                0
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 42,
+                                "length": 15
+                              }
+                            },
+                            {
+                              "id": "text_000002",
+                              "op": "Constant",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [
+                                12
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 72,
+                                "length": 2
+                              }
+                            },
+                            {
+                              "id": "text_000003",
+                              "op": "Constant",
+                              "type": "Float2",
+                              "inputs": [],
+                              "value": [
+                                0.025,
+                                0.025
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 85,
+                                "length": 20
+                              }
+                            },
+                            {
+                              "id": "text_000004",
+                              "op": "Constant",
+                              "type": "Float4",
+                              "inputs": [],
+                              "value": [
+                                0.12,
+                                0.65,
+                                1,
+                                0.4
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 117,
+                                "length": 26
+                              }
+                            }
+                          ],
+                          "writes": [
+                            {
+                              "id": "write_Color",
+                              "attribute": "Color",
+                              "value": "text_000004",
+                              "sourceSpan": {
+                                "start": 108,
+                                "length": 36
+                              }
+                            },
+                            {
+                              "id": "write_Lifetime",
+                              "attribute": "Lifetime",
+                              "value": "text_000002",
+                              "sourceSpan": {
+                                "start": 60,
+                                "length": 15
+                              }
+                            },
+                            {
+                              "id": "write_Position",
+                              "attribute": "Position",
+                              "value": "text_000000",
+                              "sourceSpan": {
+                                "start": 0,
+                                "length": 28
+                              }
+                            },
+                            {
+                              "id": "write_Size",
+                              "attribute": "Size",
+                              "value": "text_000003",
+                              "sourceSpan": {
+                                "start": 77,
+                                "length": 29
+                              }
+                            },
+                            {
+                              "id": "write_Velocity",
+                              "attribute": "Velocity",
+                              "value": "text_000001",
+                              "sourceSpan": {
+                                "start": 30,
+                                "length": 28
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "id": "update",
+                          "stage": "Update",
+                          "nodes": [
+                            {
+                              "id": "text_000000",
+                              "op": "Constant",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [
+                                0.65
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 16,
+                                "length": 4
+                              }
+                            },
+                            {
+                              "id": "text_000001",
+                              "op": "Constant",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [
+                                1.2
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 37,
+                                "length": 3
+                              }
+                            },
+                            {
+                              "id": "text_000002",
+                              "op": "Constant",
+                              "type": "Float3",
+                              "inputs": [],
+                              "value": [
+                                0,
+                                0.3,
+                                0
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 54,
+                                "length": 17
+                              }
+                            },
+                            {
+                              "id": "text_000003",
+                              "op": "ReadAttribute",
+                              "type": "Float3",
+                              "inputs": [],
+                              "value": [],
+                              "attribute": "Position",
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 96,
+                                "length": 9
+                              }
+                            },
+                            {
+                              "id": "text_000004",
+                              "op": "Mul",
+                              "type": "Float3",
+                              "inputs": [
+                                "text_000003",
+                                "text_000000"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 96,
+                                "length": 21
+                              }
+                            },
+                            {
+                              "id": "text_000005",
+                              "op": "Constant",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [
+                                0
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 127,
+                                "length": 1
+                              }
+                            },
+                            {
+                              "id": "text_000006",
+                              "op": "ReadUniform",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": "time",
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 130,
+                                "length": 4
+                              }
+                            },
+                            {
+                              "id": "text_000007",
+                              "op": "Constant",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [
+                                0.1
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 137,
+                                "length": 3
+                              }
+                            },
+                            {
+                              "id": "text_000008",
+                              "op": "Mul",
+                              "type": "Float",
+                              "inputs": [
+                                "text_000006",
+                                "text_000007"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 130,
+                                "length": 10
+                              }
+                            },
+                            {
+                              "id": "text_000009",
+                              "op": "Constant",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [
+                                0
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 142,
+                                "length": 1
+                              }
+                            },
+                            {
+                              "id": "text_000010",
+                              "op": "Compose",
+                              "type": "Float3",
+                              "inputs": [
+                                "text_000005",
+                                "text_000008",
+                                "text_000009"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 120,
+                                "length": 24
+                              }
+                            },
+                            {
+                              "id": "text_000011",
+                              "op": "Add",
+                              "type": "Float3",
+                              "inputs": [
+                                "text_000004",
+                                "text_000010"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 96,
+                                "length": 48
+                              }
+                            },
+                            {
+                              "id": "text_000012",
+                              "op": "Constant",
+                              "type": "UInt",
+                              "inputs": [],
+                              "value": [
+                                31
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 191,
+                                "length": 3
+                              }
+                            },
+                            {
+                              "id": "text_000013",
+                              "op": "Constant",
+                              "type": "Int",
+                              "inputs": [],
+                              "value": [
+                                3
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 196,
+                                "length": 2
+                              }
+                            },
+                            {
+                              "id": "text_000014",
+                              "op": "Constant",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [
+                                0.5
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 200,
+                                "length": 3
+                              }
+                            },
+                            {
+                              "id": "text_000015",
+                              "op": "Turbulence",
+                              "type": "Float",
+                              "inputs": [
+                                "text_000011",
+                                "text_000012",
+                                "text_000013",
+                                "text_000014"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 162,
+                                "length": 42
+                              }
+                            },
+                            {
+                              "id": "text_000016",
+                              "op": "Constant",
+                              "type": "UInt",
+                              "inputs": [],
+                              "value": [
+                                17
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 246,
+                                "length": 3
+                              }
+                            },
+                            {
+                              "id": "text_000017",
+                              "op": "Constant",
+                              "type": "Int",
+                              "inputs": [],
+                              "value": [
+                                3
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 251,
+                                "length": 2
+                              }
+                            },
+                            {
+                              "id": "text_000018",
+                              "op": "Constant",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [
+                                0.5
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 255,
+                                "length": 3
+                              }
+                            },
+                            {
+                              "id": "text_000019",
+                              "op": "CurlNoise",
+                              "type": "Float3",
+                              "inputs": [
+                                "text_000011",
+                                "text_000016",
+                                "text_000017",
+                                "text_000018"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 218,
+                                "length": 41
+                              }
+                            },
+                            {
+                              "id": "text_000020",
+                              "op": "Mul",
+                              "type": "Float3",
+                              "inputs": [
+                                "text_000019",
+                                "text_000001"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 218,
+                                "length": 52
+                              }
+                            },
+                            {
+                              "id": "text_000021",
+                              "op": "Constant",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [
+                                0.35
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 274,
+                                "length": 4
+                              }
+                            },
+                            {
+                              "id": "text_000022",
+                              "op": "Constant",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [
+                                0.65
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 281,
+                                "length": 4
+                              }
+                            },
+                            {
+                              "id": "text_000023",
+                              "op": "Mul",
+                              "type": "Float",
+                              "inputs": [
+                                "text_000022",
+                                "text_000015"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 281,
+                                "length": 16
+                              }
+                            },
+                            {
+                              "id": "text_000024",
+                              "op": "Add",
+                              "type": "Float",
+                              "inputs": [
+                                "text_000021",
+                                "text_000023"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 274,
+                                "length": 23
+                              }
+                            },
+                            {
+                              "id": "text_000025",
+                              "op": "Mul",
+                              "type": "Float3",
+                              "inputs": [
+                                "text_000020",
+                                "text_000024"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 218,
+                                "length": 79
+                              }
+                            },
+                            {
+                              "id": "text_000026",
+                              "op": "Add",
+                              "type": "Float3",
+                              "inputs": [
+                                "text_000025",
+                                "text_000002"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 218,
+                                "length": 88
+                              }
+                            },
+                            {
+                              "id": "text_000027",
+                              "op": "ReadUniform",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": "deltaTime",
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 333,
+                                "length": 2
+                              }
+                            },
+                            {
+                              "id": "text_000028",
+                              "op": "Mul",
+                              "type": "Float3",
+                              "inputs": [
+                                "text_000026",
+                                "text_000027"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 321,
+                                "length": 14
+                              }
+                            },
+                            {
+                              "id": "text_000029",
+                              "op": "Add",
+                              "type": "Float3",
+                              "inputs": [
+                                "text_000003",
+                                "text_000028"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 308,
+                                "length": 28
+                              }
+                            },
+                            {
+                              "id": "text_000030",
+                              "op": "Constant",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [
+                                0.4
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 348,
+                                "length": 3
+                              }
+                            },
+                            {
+                              "id": "text_000031",
+                              "op": "ReadAttribute",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [],
+                              "attribute": "Age",
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 360,
+                                "length": 4
+                              }
+                            },
+                            {
+                              "id": "text_000032",
+                              "op": "Constant",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [
+                                0
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 366,
+                                "length": 1
+                              }
+                            },
+                            {
+                              "id": "text_000033",
+                              "op": "Constant",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [
+                                1
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 369,
+                                "length": 1
+                              }
+                            },
+                            {
+                              "id": "text_000034",
+                              "op": "Clamp",
+                              "type": "Float",
+                              "inputs": [
+                                "text_000031",
+                                "text_000032",
+                                "text_000033"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 354,
+                                "length": 17
+                              }
+                            },
+                            {
+                              "id": "text_000035",
+                              "op": "Mul",
+                              "type": "Float",
+                              "inputs": [
+                                "text_000030",
+                                "text_000034"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 348,
+                                "length": 23
+                              }
+                            },
+                            {
+                              "id": "text_000036",
+                              "op": "ReadAttribute",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [],
+                              "attribute": "Lifetime",
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 380,
+                                "length": 9
+                              }
+                            },
+                            {
+                              "id": "text_000037",
+                              "op": "Sub",
+                              "type": "Float",
+                              "inputs": [
+                                "text_000036",
+                                "text_000031"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 380,
+                                "length": 16
+                              }
+                            },
+                            {
+                              "id": "text_000038",
+                              "op": "Constant",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [
+                                0
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 398,
+                                "length": 1
+                              }
+                            },
+                            {
+                              "id": "text_000039",
+                              "op": "Constant",
+                              "type": "Float",
+                              "inputs": [],
+                              "value": [
+                                1
+                              ],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 401,
+                                "length": 1
+                              }
+                            },
+                            {
+                              "id": "text_000040",
+                              "op": "Clamp",
+                              "type": "Float",
+                              "inputs": [
+                                "text_000037",
+                                "text_000038",
+                                "text_000039"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 374,
+                                "length": 29
+                              }
+                            },
+                            {
+                              "id": "text_000041",
+                              "op": "Mul",
+                              "type": "Float",
+                              "inputs": [
+                                "text_000035",
+                                "text_000040"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 348,
+                                "length": 55
+                              }
+                            },
+                            {
+                              "id": "text_000042",
+                              "op": "ReadAttribute",
+                              "type": "Float4",
+                              "inputs": [],
+                              "value": [],
+                              "attribute": "Color",
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 337,
+                                "length": 67
+                              }
+                            },
+                            {
+                              "id": "text_000043",
+                              "op": "Component",
+                              "type": "Float",
+                              "inputs": [
+                                "text_000042"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": 0,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 337,
+                                "length": 67
+                              }
+                            },
+                            {
+                              "id": "text_000044",
+                              "op": "Component",
+                              "type": "Float",
+                              "inputs": [
+                                "text_000042"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": 1,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 337,
+                                "length": 67
+                              }
+                            },
+                            {
+                              "id": "text_000045",
+                              "op": "Component",
+                              "type": "Float",
+                              "inputs": [
+                                "text_000042"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": 2,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 337,
+                                "length": 67
+                              }
+                            },
+                            {
+                              "id": "text_000046",
+                              "op": "Compose",
+                              "type": "Float4",
+                              "inputs": [
+                                "text_000043",
+                                "text_000044",
+                                "text_000045",
+                                "text_000041"
+                              ],
+                              "value": [],
+                              "attribute": null,
+                              "uniform": null,
+                              "componentIndex": null,
+                              "resource": null,
+                              "sourceSpan": {
+                                "start": 337,
+                                "length": 67
+                              }
+                            }
+                          ],
+                          "writes": [
+                            {
+                              "id": "write_Color",
+                              "attribute": "Color",
+                              "value": "text_000046",
+                              "sourceSpan": {
+                                "start": 337,
+                                "length": 67
+                              }
+                            },
+                            {
+                              "id": "write_Position",
+                              "attribute": "Position",
+                              "value": "text_000029",
+                              "sourceSpan": {
+                                "start": 308,
+                                "length": 28
+                              }
+                            },
+                            {
+                              "id": "write_Velocity",
+                              "attribute": "Velocity",
+                              "value": "text_000026",
+                              "sourceSpan": {
+                                "start": 206,
+                                "length": 101
+                              }
+                            }
+                          ]
+                        }
+                      ],
+                      "flow": [
+                        {
+                          "id": "spawnStep",
+                          "kind": "Spawn",
+                          "kernel": "spawn",
+                          "resource": null,
+                          "spawnShape": {
+                            "kind": "Sphere",
+                            "halfExtents": [
+                              1,
+                              1,
+                              1
+                            ],
+                            "radius": 1.5
+                          }
+                        },
+                        {
+                          "id": "updateStep",
+                          "kind": "Update",
+                          "kernel": "update",
+                          "resource": null
+                        },
+                        {
+                          "id": "renderStep",
+                          "kind": "RenderBillboard",
+                          "kernel": null,
+                          "resource": "billboardTexture"
+                        }
+                      ]
+                    },
+                    "positions": {},
+                    "drafts": {},
+                    "resourceAssetPaths": {
+                      "billboardTexture": "builtin:white"
+                    },
+                    "rendererSettings": {
+                      "renderStep": {
+                        "material": "builtin:unlit-alpha",
+                        "sizeScale": 1
+                      }
+                    }
+                  }
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "GroupOverrides": null,
+              "SignalKeys": null,
+              "KindDomain": "GpuParticle"
+            },
+            {
+              "Id": "3af8466f-6817-429f-897d-c1b66cf2c7c9",
+              "Kind": "Comment",
+              "Name": "Sample guide",
+              "X": 300,
+              "Y": 0,
+              "PortType": "Comment",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [
+                {
+                  "Id": "text",
+                  "Type": "string",
+                  "Value": "GpuCurlTurbulence · X right / Y up / Z forward · metres\nCurl Noise moves the particles; Turbulence varies its strength.\nCapacity 4,096; 240 particles per second. Preview: 60 FPS, frames 0–1200.\nカールノイズで動かし、タービュランスで強さを変化。実 GPU の接続先で確認してください。"
+                },
+                {
+                  "Id": "width",
+                  "Type": "float",
+                  "Value": 680
+                },
+                {
+                  "Id": "height",
+                  "Type": "float",
+                  "Value": 220
+                }
+              ],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "GroupOverrides": null,
+              "SignalKeys": null,
+              "KindDomain": "Cpu"
+            }
+          ],
+          "Connections": [],
+          "ExposedItems": null,
+          "AutoDestroyWhenIdle": true,
+          "ResourceIdentities": null
+        },
+        "ArchiveIndex": 0
+      }
+    ],
+    "Archives": []
+  },
+  "ResourceIdentities": null
+}
