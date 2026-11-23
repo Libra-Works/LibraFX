@@ -557,7 +557,13 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
                     auto width = std::int64_t{};
                     auto component = std::int64_t{};
                     if (!readInteger(iItem, "width", width) || (width != 1 && width != 4) ||
-                        !readInteger(iItem, "sourceComponent", component))
+                        !readInteger(iItem, "sourceComponent", component) ||
+                        component < 0 || component > 4 - width)
+                    {
+                        return Result::InvalidBinary;
+                    }
+                    auto defaults = godot::Array{};
+                    if (!readArray(iItem, "defaults", defaults) || defaults.size() != width)
                     {
                         return Result::InvalidBinary;
                     }
@@ -565,15 +571,18 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
                     param.slot = 0;
                     param.name = godot::StringName(mpName);
                     param.input.width = static_cast<std::uint8_t>(width);
-                    param.input.component = static_cast<std::uint8_t>(component);
-                    if (!readArray(iItem.get("defaults", godot::Variant{}), param.input.width, param.input.defaults.data()))
+                    param.input.sourceComponent = static_cast<std::uint8_t>(component);
+                    for (auto lane = 0; lane < defaults.size(); ++lane)
                     {
-                        return Result::InvalidBinary;
+                        if (!readNumber(defaults[lane], param.input.defaults[lane]))
+                        {
+                            return Result::InvalidBinary;
+                        }
                     }
                     const auto srcVar = iItem.get("sourceNodeId", godot::Variant{});
                     if (srcVar.get_type() == godot::Variant::STRING)
                     {
-                        if (!parseGuid(static_cast<godot::String>(srcVar), param.input.source))
+                        if (!parseId(static_cast<godot::String>(srcVar), param.input.sourceNodeId))
                         {
                             return Result::InvalidBinary;
                         }
