@@ -31,22 +31,72 @@ function Assert-PeX64Dll([string] $Path) {
         if ($peSignature -ne 0x00004550) { throw "Invalid PE signature in native DLL: $Path" }
         $machine = $reader.ReadUInt16()
         if ($machine -ne 0x8664) { throw "Native DLL is not x86-64 (machine=0x$($machine.ToString('X4'))): $Path" }
-        $reader.ReadUInt16() | Out-Null # NumberOfSections
+        $numberOfSections = $reader.ReadUInt16()
         $reader.ReadUInt32() | Out-Null # TimeDateStamp
         $reader.ReadUInt32() | Out-Null # PointerToSymbolTable
         $reader.ReadUInt32() | Out-Null # NumberOfSymbols
         $optionalHeaderSize = $reader.ReadUInt16()
         $characteristics = $reader.ReadUInt16()
         if (($characteristics -band 0x2000) -eq 0) { throw "Native binary does not have DLL characteristic: $Path" }
-        if ($optionalHeaderSize -lt 112) { throw "Optional header too small in native DLL: $Path" }
+        if ($optionalHeaderSize -lt 128) { throw "Optional header too small in native DLL: $Path" }
         $peMagic = $reader.ReadUInt16()
         if ($peMagic -ne 0x020B) { throw "Native DLL is not PE32+ (magic=0x$($peMagic.ToString('X4'))): $Path" }
-        # Export directory RVA is at offset 112 inside PE32+ optional header.
+        # Export directory RVA is at offset 112 inside PE32+ optional header; Import directory is at 120.
         $stream.Position = $peOffset + 24 + 112
         $exportRva = $reader.ReadUInt32()
         $exportSize = $reader.ReadUInt32()
+        $importRva = $reader.ReadUInt32()
+        $importSize = $reader.ReadUInt32()
         if ($exportRva -eq 0 -or $exportSize -eq 0) {
             throw "Native DLL has an empty export directory: $Path"
+        }
+        if ($importRva -ne 0 -and $importSize -ge 20) {
+            $sections = @()
+            $stream.Position = $peOffset + 24 + $optionalHeaderSize
+            for ($i = 0; $i -lt $numberOfSections; $i++) {
+                $reader.ReadBytes(8) | Out-Null
+                $vSize = $reader.ReadUInt32()
+                $vAddr = $reader.ReadUInt32()
+                $rSize = $reader.ReadUInt32()
+                $rPtr = $reader.ReadUInt32()
+                $reader.ReadBytes(16) | Out-Null
+                $sections += [pscustomobject]@{ VirtualAddress = $vAddr; Size = [Math]::Max($vSize, $rSize); RawPtr = $rPtr }
+            }
+            $rvaToOffset = {
+                param([uint32] $Rva)
+                foreach ($sec in $sections) {
+                    if ($Rva -ge $sec.VirtualAddress -and $Rva -lt ($sec.VirtualAddress + $sec.Size)) {
+                        return $sec.RawPtr + ($Rva - $sec.VirtualAddress)
+                    }
+                }
+                return $null
+            }
+            $impOffset = & $rvaToOffset $importRva
+            if ($null -ne $impOffset) {
+                for ($entryIdx = 0; $entryIdx -lt 256; $entryIdx++) {
+                    $stream.Position = $impOffset + ($entryIdx * 20)
+                    if ($stream.Position + 20 -gt $stream.Length) { break }
+                    $origFirstThunk = $reader.ReadUInt32()
+                    $reader.ReadUInt32() | Out-Null
+                    $reader.ReadUInt32() | Out-Null
+                    $nameRva = $reader.ReadUInt32()
+                    $firstThunk = $reader.ReadUInt32()
+                    if ($origFirstThunk -eq 0 -and $nameRva -eq 0 -and $firstThunk -eq 0) { break }
+                    $nameOffset = & $rvaToOffset $nameRva
+                    if ($null -eq $nameOffset) { continue }
+                    $stream.Position = $nameOffset
+                    $nameBytes = [System.Collections.Generic.List[byte]]::new()
+                    while ($stream.Position -lt $stream.Length) {
+                        $b = $reader.ReadByte()
+                        if ($b -eq 0) { break }
+                        $nameBytes.Add($b)
+                    }
+                    $dllName = [Text.Encoding]::ASCII.GetString($nameBytes.ToArray())
+                    if ($dllName -imatch '^(vcruntime|msvcp|ucrtbase).*d\.dll$' -or $dllName -imatch 'clang_rt\.asan') {
+                        throw "Release native DLL depends on debug or sanitizer runtime '$dllName': $Path"
+                    }
+                }
+            }
         }
     }
     finally {

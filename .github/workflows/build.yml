@@ -285,9 +285,53 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  godot-native:
+    name: Godot native (${{ matrix.rid }})
+    needs: [version, authoring-acceptance]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            rid: linux-x64
+            file: libliberafx_godot.so
+          - runner: macos-15
+            rid: osx-arm64
+            file: libliberafx_godot.dylib
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: godotengine/godot-cpp
+          ref: 24b9df7a88d40bcaf1f157703d4220185cb71fbf
+          path: .ci/godot-cpp
+          persist-credentials: false
+      - name: Build Godot 4.7 native GDExtension
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $build = Join-Path $env:RUNNER_TEMP 'godot-native-build'
+          $godotCpp = Join-Path $env:GITHUB_WORKSPACE '.ci/godot-cpp'
+          $cmakeArgs = @('-S', 'Runtime/Integrations/Godot', '-B', $build, '-DCMAKE_BUILD_TYPE=Release', "-DGODOT_CPP_DIR=$godotCpp")
+          if ('${{ matrix.rid }}' -eq 'osx-arm64') { $cmakeArgs += '-DCMAKE_OSX_ARCHITECTURES=arm64' }
+          cmake @cmakeArgs
+          cmake --build $build --target liberafx_godot --parallel 2
+          $out = New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'godot-native-out/bin')
+          Copy-Item -LiteralPath (Join-Path $build 'bin/${{ matrix.file }}') -Destination $out.FullName
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: godot-native-${{ matrix.rid }}
+          path: ${{ runner.temp }}/godot-native-out
+          retention-days: 1
+          if-no-files-found: error
+
   adapters:
     name: LibraFor${{ matrix.engine }}
-    needs: [version, authoring-acceptance, unity-native]
+    needs: [version, authoring-acceptance, unity-native, godot-native]
     runs-on: windows-2022
     timeout-minutes: 35
     strategy:
@@ -359,6 +403,16 @@ jobs:
           $bin = New-Item -ItemType Directory -Path (Join-Path $native.FullName 'bin')
           Copy-Item -LiteralPath (Join-Path $build 'bin/Release/liberafx_godot.dll') -Destination $bin.FullName
           Copy-Item -LiteralPath (Join-Path $source 'liberafx.gdextension') -Destination $native.FullName
+      - uses: actions/download-artifact@v4
+        if: matrix.engine == 'Godot'
+        with:
+          name: godot-native-linux-x64
+          path: ${{ runner.temp }}/sdk/Native/linux-x64
+      - uses: actions/download-artifact@v4
+        if: matrix.engine == 'Godot'
+        with:
+          name: godot-native-osx-arm64
+          path: ${{ runner.temp }}/sdk/Native/osx-arm64
       - name: Stage copy-ready Unity and Godot folders
         if: matrix.engine != 'Unreal'
         shell: pwsh

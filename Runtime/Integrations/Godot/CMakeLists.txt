@@ -30,4 +30,6 @@ if(LIBERAFX_PROJECT_NODE_SOURCES)
     target_sources(liberafx_godot PRIVATE ${LIBERAFX_PROJECT_NODE_SOURCES})
     target_compile_definitions(liberafx_godot PRIVATE LIBERAFX_HAS_PROJECT_NODES=1)
 endif()
-set_target_properties(liberafx_godot PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set_target_properties(liberafx_godot PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
