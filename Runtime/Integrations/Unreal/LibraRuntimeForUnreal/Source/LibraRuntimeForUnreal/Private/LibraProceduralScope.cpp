@@ -92,7 +92,7 @@ bool FLibraProceduralScope::Create(ULibraSpawnableComponent& owner,
     const TSharedPtr<FLibraProceduralDefinition>& definition, FString& error)
 {
     Impl->Definition = definition;
-    if (!definition || definition->Draws.empty())
+    if (!definition || (definition->Draws.empty() && definition->Resources.empty()))
     {
         return true;
     }
@@ -274,3 +274,16 @@ void FLibraProceduralScope::SetPresentation(const FTransform& transform, bool vi
     }
 }
 int32 FLibraProceduralScope::DrawCount() const { return Impl->Draws.size(); }
+UTexture* FLibraProceduralScope::GetResourceTexture(const FString& resourceId) const
+{
+    if (!Impl || resourceId.IsEmpty())
+    {
+        return nullptr;
+    }
+    const auto found = Impl->Resources.find(resourceId);
+    if (found == Impl->Resources.end() || !found->second || !found->second->Gpu)
+    {
+        return nullptr;
+    }
+    return found->second->Gpu->GetTexture();
+}

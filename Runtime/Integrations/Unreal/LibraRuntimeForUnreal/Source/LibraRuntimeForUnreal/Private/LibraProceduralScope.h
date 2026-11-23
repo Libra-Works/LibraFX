@@ -3,6 +3,7 @@
 #include "liberafx/host/LbProceduralAdapter.h"
 
 class FJsonObject;
+class UTexture;
 class ULibraSpawnableComponent;
 struct FLibraProceduralDefinition;
 namespace LibraProcedural
@@ -21,6 +22,7 @@ public:
         const FTransform& ownerTransform, bool visible, FString& error);
     void SetPresentation(const FTransform& transform, bool visible);
     int32 DrawCount() const;
+    UTexture* GetResourceTexture(const FString& resourceId) const;
 private:
     struct FImpl;
     TUniquePtr<FImpl> Impl;

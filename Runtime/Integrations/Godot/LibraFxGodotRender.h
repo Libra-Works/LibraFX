@@ -124,6 +124,8 @@ private:
         bool sprite = false;
         bool billboard = false;
         bool flexiblePlane = false;
+        std::string proceduralTexture;
+        std::string proceduralMaterial;
         flexible_adapter::Definition flexibleDefinition;
         godot::Ref<godot::Texture2D> flexibleTexture;
         Input position{};

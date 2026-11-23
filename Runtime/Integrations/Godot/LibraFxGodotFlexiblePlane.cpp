@@ -126,7 +126,7 @@ auto parse(const godot::Dictionary& node, flexible_adapter::Definition& output) 
     auto textureArray = godot::Array{};
     materialArray = materials;
     textureArray = textures;
-    if (!materialArray.is_empty() || !textureArray.is_empty())
+    if (materialArray.size() > 1)
     {
         return false;
     }
@@ -193,7 +193,7 @@ auto parse(const godot::Dictionary& node, flexible_adapter::Definition& output) 
     }
     auto inputs = godot::Array{};
     inputs = inputValue;
-    if (inputs.size() > 6)
+    if (inputs.size() > 256)
     {
         return false;
     }
@@ -211,8 +211,16 @@ auto parse(const godot::Dictionary& node, flexible_adapter::Definition& output) 
         if (!text(item, "id", id) || !integer(item, "width", width) || width < 1 || width > 4 ||
             !integer(item, "sourceComponent", component) || component + width > 4 ||
             !array(item.get("defaults", godot::Variant{}), width, parsed.defaults.data()) ||
-            !item.has("sourceNodeId") || !item.has("materialParameter") ||
-            item.get("materialParameter", godot::Variant{}).get_type() != godot::Variant::NIL)
+            !item.has("sourceNodeId") || !item.has("materialParameter"))
+        {
+            return false;
+        }
+        const auto matParam = item.get("materialParameter", godot::Variant{});
+        if (matParam.get_type() == godot::Variant::DICTIONARY)
+        {
+            continue;
+        }
+        if (matParam.get_type() != godot::Variant::NIL)
         {
             return false;
         }
@@ -261,26 +269,43 @@ auto FlexiblePlaneRenderer::prepare(const godot::Dictionary& node,
 
 auto FlexiblePlaneRenderer::create(godot::Node3D& scope,
     const flexible_adapter::Definition& definition, const godot::Ref<godot::Texture2D>& texture,
-    std::unique_ptr<FlexiblePlaneRenderer>& output, godot::String& error) -> bool
+    std::unique_ptr<FlexiblePlaneRenderer>& output, godot::String& error,
+    const godot::Ref<godot::Material>& hostMaterial) -> bool
 {
-    if (!godot::Thread::is_main_thread() || !texture.is_valid() || !flexible_adapter::validate(definition))
+    if (!godot::Thread::is_main_thread() || (!texture.is_valid() && hostMaterial.is_null()) ||
+        !flexible_adapter::validate(definition))
     {
         error = "Flexible Plane definition or texture is invalid.";
         return false;
     }
     auto instance = std::unique_ptr<FlexiblePlaneRenderer>(new FlexiblePlaneRenderer(definition));
     instance->mesh_.instantiate();
-    instance->material_.instantiate();
-    if (instance->mesh_.is_null() || instance->material_.is_null()) {
+    if (hostMaterial.is_valid())
+    {
+        auto duplicated = hostMaterial->duplicate();
+        instance->hostMaterial_ = godot::Ref<godot::Material>(duplicated);
+        if (instance->hostMaterial_.is_null())
+        {
+            instance->hostMaterial_ = hostMaterial;
+        }
+    }
+    else
+    {
+        instance->material_.instantiate();
+    }
+    if (instance->mesh_.is_null() || (instance->material_.is_null() && instance->hostMaterial_.is_null())) {
         error = "Godot could not allocate Flexible Plane rendering resources.";
         return false;
     }
-    instance->material_->set_texture(godot::BaseMaterial3D::TEXTURE_ALBEDO, texture);
-    instance->material_->set_shading_mode(godot::BaseMaterial3D::SHADING_MODE_UNSHADED);
-    instance->material_->set_transparency(godot::BaseMaterial3D::TRANSPARENCY_ALPHA);
-    instance->material_->set_flag(godot::BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
-    instance->material_->set_flag(godot::BaseMaterial3D::FLAG_USE_TEXTURE_REPEAT, definition.options.uvMode == 1);
-    instance->material_->set_cull_mode(godot::BaseMaterial3D::CULL_DISABLED);
+    if (instance->material_.is_valid())
+    {
+        instance->material_->set_texture(godot::BaseMaterial3D::TEXTURE_ALBEDO, texture);
+        instance->material_->set_shading_mode(godot::BaseMaterial3D::SHADING_MODE_UNSHADED);
+        instance->material_->set_transparency(godot::BaseMaterial3D::TRANSPARENCY_ALPHA);
+        instance->material_->set_flag(godot::BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
+        instance->material_->set_flag(godot::BaseMaterial3D::FLAG_USE_TEXTURE_REPEAT, definition.options.uvMode == 1);
+        instance->material_->set_cull_mode(godot::BaseMaterial3D::CULL_DISABLED);
+    }
     auto maximumPoints = definition.history ? definition.capacity
         : static_cast<std::uint32_t>(definition.points.size());
     instance->maxVertices_ = maximumPoints * 2;
@@ -330,7 +355,9 @@ auto FlexiblePlaneRenderer::initializeSurface(godot::String& error) -> bool
         error = "Godot could not create the Flexible Plane dynamic mesh surface.";
         return false;
     }
-    mesh_->surface_set_material(0, material_);
+    mesh_->surface_set_material(0, hostMaterial_.is_valid()
+        ? hostMaterial_
+        : godot::Ref<godot::Material>(material_));
     auto* server = godot::RenderingServer::get_singleton();
     if (!server) {
         error = "Godot RenderingServer is unavailable.";
@@ -425,6 +452,46 @@ auto FlexiblePlaneRenderer::updateSurface(godot::String& error) -> bool
 FlexiblePlaneRenderer::~FlexiblePlaneRenderer()
 {
     instance_.reset();
+}
+
+void FlexiblePlaneRenderer::setTexture(const godot::Ref<godot::Texture2D>& texture)
+{
+    if (!texture.is_valid())
+    {
+        return;
+    }
+    if (material_.is_valid())
+    {
+        material_->set_texture(godot::BaseMaterial3D::TEXTURE_ALBEDO, texture);
+    }
+}
+
+void FlexiblePlaneRenderer::applyProceduralSettings(int blend, bool doubleSided, float emission)
+{
+    if (material_.is_null())
+    {
+        return;
+    }
+    material_->set_blend_mode(blend == 1
+        ? godot::BaseMaterial3D::BLEND_MODE_ADD
+        : godot::BaseMaterial3D::BLEND_MODE_MIX);
+    material_->set_cull_mode(doubleSided
+        ? godot::BaseMaterial3D::CULL_DISABLED
+        : godot::BaseMaterial3D::CULL_BACK);
+    material_->set_feature(godot::BaseMaterial3D::FEATURE_EMISSION, emission > 0.0f);
+    if (emission > 0.0f)
+    {
+        material_->set_emission(godot::Color(1.0f, 1.0f, 1.0f, 1.0f));
+        material_->set_emission_energy_multiplier(emission);
+    }
+}
+
+void FlexiblePlaneRenderer::setShaderParameter(const godot::StringName& name, const godot::Variant& value)
+{
+    if (auto shaderMat = godot::Ref<godot::ShaderMaterial>(hostMaterial_); shaderMat.is_valid())
+    {
+        shaderMat->set_shader_parameter(name, value);
+    }
 }
 
 void FlexiblePlaneRenderer::synchronize(godot::Node3D& scope, bool enabled, bool exiting)

@@ -105,7 +105,8 @@ namespace LiberaFx.Unity
                             scope.flexibleHistory, statistics,
                             node.generatedTextures.Length == 0 ? null : Resolve(node.generatedTextures[0].producerNodeId, node.generatedTextures[0].outputId),
                             node.generatedTextures.Length != 0 && node.generatedTextures[0].outputId == "DyeOutput",
-                            node.generatedTextures.Length != 0 && node.generatedTextures[0].outputId == "FieldOutput"));
+                            node.generatedTextures.Length != 0 && node.generatedTextures[0].outputId == "FieldOutput",
+                            scope.proceduralResources));
                     }
                     else if (node.debugDraw != null)
                     {

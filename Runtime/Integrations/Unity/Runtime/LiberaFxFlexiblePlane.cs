@@ -89,6 +89,12 @@ namespace LiberaFx.Unity
         internal string textureProperty;
         internal Camera camera;
         internal string historySignature;
+        internal string proceduralTexture;
+        internal string proceduralMaterial;
+        internal bool useProceduralShader;
+        internal LiberaFxPreparedTextureParameter[] textureParameters = Array.Empty<LiberaFxPreparedTextureParameter>();
+        internal LiberaFxRenderInputPayload[] materialInputs = Array.Empty<LiberaFxRenderInputPayload>();
+        internal string[] materialParameterPropertyNames = Array.Empty<string>();
 
         private static float Finite(double value)
         {
@@ -113,17 +119,23 @@ namespace LiberaFx.Unity
 
         internal static LiberaFxPreparedFlexiblePlane Prepare(LiberaFxRenderNodePayload node,
             LiberaFxFlexiblePlanePayload plane, Texture texture, Material material,
-            string textureProperty, Camera camera)
+            string textureProperty, Camera camera, bool useProceduralShader = false,
+            LiberaFxPreparedTextureParameter[] textureParameters = null,
+            string[] materialParameterPropertyNames = null)
         {
             if (node == null || node.kind != "flexiblePlane" || plane == null || plane.version != 1 ||
                 !Guid.TryParse(node.nodeId, out var drawId) || drawId == Guid.Empty ||
                 !Guid.TryParse(plane.sourceNodeId, out var sourceId) || sourceId == Guid.Empty ||
-                string.IsNullOrWhiteSpace(node.assetPath) || !texture || !material ||
-                string.IsNullOrWhiteSpace(textureProperty) || !material.HasProperty(textureProperty) ||
-                node.billboard || (node.materials != null && node.materials.Length != 0) ||
-                (node.textures != null && node.textures.Length != 0))
+                string.IsNullOrWhiteSpace(node.assetPath) || !texture || (!material && !useProceduralShader) ||
+                node.billboard || (node.materials != null && node.materials.Length > 1))
             {
                 throw new InvalidOperationException("Invalid Flexible Plane draw, texture, or material binding.");
+            }
+            if (material != null && !useProceduralShader &&
+                (node.materials == null || node.materials.Length == 0) &&
+                (string.IsNullOrWhiteSpace(textureProperty) || !material.HasProperty(textureProperty)))
+            {
+                throw new InvalidOperationException("Invalid Flexible Plane default material texture property.");
             }
             var history = plane.sourceKind == "history";
             if ((!history && plane.sourceKind != "list") ||
@@ -148,6 +160,11 @@ namespace LiberaFx.Unity
             {
                 payload = plane, inputs = node.inputs, texture = texture, material = material,
                 textureProperty = textureProperty, camera = camera,
+                proceduralTexture = node.proceduralTexture,
+                proceduralMaterial = node.proceduralMaterial,
+                useProceduralShader = useProceduralShader,
+                textureParameters = textureParameters ?? Array.Empty<LiberaFxPreparedTextureParameter>(),
+                materialParameterPropertyNames = materialParameterPropertyNames ?? Array.Empty<string>(),
                 points = new LiberaFxFlexiblePoint[history ? 0 : plane.points.Length],
                 byId = new Dictionary<string, LiberaFxRenderInputPayload>(StringComparer.Ordinal)
             };
@@ -176,10 +193,10 @@ namespace LiberaFx.Unity
             {
                 throw new InvalidOperationException("Flexible Plane inputs are missing.");
             }
+            var materialInputs = new List<LiberaFxRenderInputPayload>();
             foreach (var input in node.inputs)
             {
-                if (input == null || input.id == null || prepared.byId.ContainsKey(input.id) ||
-                    input.materialParameter != null || input.width < 1 || input.width > 4 ||
+                if (input == null || input.id == null || input.width < 1 || input.width > 4 ||
                     input.sourceComponent < 0 || input.sourceComponent + input.width > 4)
                 {
                     throw new InvalidOperationException("Invalid Flexible Plane input.");
@@ -193,7 +210,21 @@ namespace LiberaFx.Unity
                     }
                     input.sourceNodeBytes = new NativeSignal(input.sourceNodeId).Id;
                 }
+                if (input.materialParameter != null)
+                {
+                    materialInputs.Add(input);
+                    continue;
+                }
+                if (prepared.byId.ContainsKey(input.id))
+                {
+                    throw new InvalidOperationException("Duplicate Flexible Plane input: " + input.id);
+                }
                 prepared.byId.Add(input.id, input);
+            }
+            prepared.materialInputs = materialInputs.ToArray();
+            if (prepared.materialInputs.Length != prepared.materialParameterPropertyNames.Length)
+            {
+                throw new InvalidOperationException("Mismatched Flexible Plane material parameter property mapping.");
             }
             prepared.Require("width", 1);
             prepared.Require("tint", 4);
@@ -229,12 +260,21 @@ namespace LiberaFx.Unity
             }
             else
             {
-                var count = Math.Min(4, prepared.points.Length);
-                for (var index = 0; index < count; index++)
+                var requiredCount = Math.Min(4, prepared.points.Length);
+                for (var index = 0; index < requiredCount; index++)
                 {
                     prepared.Require("position" + index, 3);
                 }
-                if (prepared.byId.Count != count + 2)
+                var extraPositions = 0;
+                for (var index = 4; index < prepared.points.Length; index++)
+                {
+                    if (prepared.byId.ContainsKey("position" + index))
+                    {
+                        prepared.Require("position" + index, 3);
+                        extraPositions++;
+                    }
+                }
+                if (prepared.byId.Count != requiredCount + extraPositions + 2)
                 {
                     throw new InvalidOperationException("Unexpected Flexible Plane list inputs.");
                 }
@@ -344,13 +384,16 @@ namespace LiberaFx.Unity
         private readonly List<Vector2> uv = new List<Vector2>();
         private readonly List<Color> colors = new List<Color>();
         private readonly List<int> indices = new List<int>();
+        private readonly int[] materialParameterPropertyIds;
         private readonly int ownerThread;
+        private Material ownedMaterial;
         private bool disposed;
 
         internal LiberaFxFlexiblePlaneRenderer(Transform parent, LiberaFxPreparedFlexiblePlane definition,
             LiberaFxFlexiblePlaneHistoryScope history,
             LiberaFxRenderStatisticsCounter statistics = null, Texture generatedTexture = null,
-            bool generatedPremultiplied = false, bool generatedFields = false)
+            bool generatedPremultiplied = false, bool generatedFields = false,
+            Dictionary<string, LiberaFxProceduralResource> proceduralResources = null)
         {
             if (!parent || definition == null || history == null)
             {
@@ -365,7 +408,13 @@ namespace LiberaFx.Unity
             points = new LiberaFxFlexiblePoint[capacity];
             nativeVertices = new SpriteVertex[capacity * 2];
             nativeIndices = new uint[(capacity - 1) * 6];
+            materialParameterPropertyIds = new int[definition.materialParameterPropertyNames.Length];
+            for (var index = 0; index < materialParameterPropertyIds.Length; index++)
+            {
+                materialParameterPropertyIds[index] = Shader.PropertyToID(definition.materialParameterPropertyNames[index]);
+            }
             Mesh createdMesh = null;
+            Material createdMaterial = null;
             try
             {
                 createdMesh = new Mesh { name = "Flexible Plane", indexFormat = IndexFormat.UInt32 };
@@ -374,8 +423,65 @@ namespace LiberaFx.Unity
                 uv.Capacity = nativeVertices.Length;
                 colors.Capacity = nativeVertices.Length;
                 indices.Capacity = nativeIndices.Length;
-                propertyState = new LiberaFxDrawPropertyState(3);
-                propertyState.SetTexture(Shader.PropertyToID(definition.textureProperty), generatedTexture ? generatedTexture : definition.texture);
+                var activeMaterial = definition.material;
+                if (definition.useProceduralShader)
+                {
+                    var shader = Resources.Load<Shader>("LibraProcedural");
+                    if (!shader || !shader.isSupported)
+                    {
+                        throw new InvalidOperationException("Procedural draw shader is unavailable.");
+                    }
+                    createdMaterial = new Material(shader) { name = "Libera FX Flexible Plane Procedural Material" };
+                    activeMaterial = createdMaterial;
+                }
+                var activeTexture = generatedTexture ? generatedTexture : definition.texture;
+                if (!string.IsNullOrEmpty(definition.proceduralMaterial))
+                {
+                    if (proceduralResources == null ||
+                        !proceduralResources.TryGetValue(definition.proceduralMaterial, out var producer) ||
+                        producer.definition.kind != "ProceduralMaterial")
+                    {
+                        throw new InvalidOperationException("Flexible Plane procedural material is outside this resource scope.");
+                    }
+                    if (!generatedTexture)
+                    {
+                        activeTexture = producer.texture ? producer.texture : activeTexture;
+                    }
+                    if (definition.useProceduralShader && activeMaterial != null)
+                    {
+                        activeMaterial.SetFloat("_DstBlend", producer.definition.recipe.blend == "additive" ? 1 : 10);
+                        activeMaterial.SetFloat("_Cull", producer.definition.recipe.doubleSided ? 0 : 2);
+                        activeMaterial.SetFloat("_Emission", producer.definition.recipe.emission);
+                    }
+                }
+                else if (!string.IsNullOrEmpty(definition.proceduralTexture))
+                {
+                    if (proceduralResources == null ||
+                        !proceduralResources.TryGetValue(definition.proceduralTexture, out var producer) ||
+                        producer.definition.kind != "ProceduralTexture")
+                    {
+                        throw new InvalidOperationException("Flexible Plane procedural texture is outside this resource scope.");
+                    }
+                    if (!generatedTexture && producer.texture)
+                    {
+                        activeTexture = producer.texture;
+                    }
+                }
+                var propertyCapacity = 4 + definition.textureParameters.Length + materialParameterPropertyIds.Length;
+                propertyState = new LiberaFxDrawPropertyState(propertyCapacity);
+                if (!string.IsNullOrEmpty(definition.textureProperty) && activeMaterial != null &&
+                    activeMaterial.HasProperty(definition.textureProperty))
+                {
+                    propertyState.SetTexture(Shader.PropertyToID(definition.textureProperty), activeTexture);
+                }
+                if (definition.useProceduralShader)
+                {
+                    propertyState.SetVector(Shader.PropertyToID("_Color"), Vector4.one);
+                }
+                foreach (var texParam in definition.textureParameters)
+                {
+                    propertyState.SetTexture(Shader.PropertyToID(texParam.name), texParam.texture);
+                }
                 if (generatedTexture)
                 {
                     propertyState.SetFloat(Shader.PropertyToID("_LibraGeneratedPremultiplied"), generatedPremultiplied ? 1 : 0);
@@ -383,15 +489,17 @@ namespace LiberaFx.Unity
                 }
                 submission = new LiberaFxRenderSubmission(propertyState, statistics);
                 submission.owner = parent;
-                submission.Configure(createdMesh, definition.material, 0,
+                submission.Configure(createdMesh, activeMaterial, 0,
                     parent.gameObject.layer, statistics);
             }
             catch
             {
                 DestroyOwned(createdMesh);
+                DestroyOwned(createdMaterial);
                 throw;
             }
             mesh = createdMesh;
+            ownedMaterial = createdMaterial;
         }
 
         internal void Update(NativeInstance.NativeSpawnableHostBase host, bool root, byte[] container,
@@ -420,12 +528,29 @@ namespace LiberaFx.Unity
             {
                 Array.Copy(definition.points, points, points.Length);
                 count = (uint)points.Length;
-                for (var index = 0; index < Math.Min(4, points.Length); index++)
+                for (var index = 0; index < points.Length; index++)
                 {
+                    if (index >= 4 && !definition.byId.ContainsKey("position" + index))
+                    {
+                        continue;
+                    }
                     var p = Read(host, root, container, instance, "position" + index);
                     points[index].x = p.x;
                     points[index].y = p.y;
                     points[index].z = p.z;
+                }
+            }
+            for (var index = 0; index < definition.materialInputs.Length; index++)
+            {
+                var matInput = definition.materialInputs[index];
+                var matValue = ReadInput(host, root, container, instance, matInput);
+                if (matInput.width == 1)
+                {
+                    propertyState.SetFloat(materialParameterPropertyIds[index], matValue.x);
+                }
+                else
+                {
+                    propertyState.SetVector(materialParameterPropertyIds[index], matValue);
                 }
             }
             var width = Read(host, root, container, instance, "width").x;
@@ -508,7 +633,12 @@ namespace LiberaFx.Unity
         private Vector4 Read(NativeInstance.NativeSpawnableHostBase host, bool root, byte[] container,
             ulong instance, string id)
         {
-            var input = definition.byId[id];
+            return ReadInput(host, root, container, instance, definition.byId[id]);
+        }
+
+        private static Vector4 ReadInput(NativeInstance.NativeSpawnableHostBase host, bool root, byte[] container,
+            ulong instance, LiberaFxRenderInputPayload input)
+        {
             if (string.IsNullOrEmpty(input.sourceNodeId))
             {
                 var defaults = input.defaults;
@@ -571,6 +701,7 @@ namespace LiberaFx.Unity
             disposed = true;
             submission.Dispose();
             DestroyOwned(mesh);
+            DestroyOwned(ownedMaterial);
         }
 
         private static void DestroyOwned(UnityEngine.Object value)

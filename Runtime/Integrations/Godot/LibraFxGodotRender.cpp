@@ -425,9 +425,11 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
         auto resolvedBindings = textureBindings;
         const auto generatedMain = std::any_of(draw.generatedTextures.begin(), draw.generatedTextures.end(),
             [](const auto& binding) { return binding.mainTexture; });
-        if (draw.assetIdentity == "builtin:generated-texture")
+        const auto isProceduralPlane = draw.flexiblePlane &&
+            (draw.assetIdentity == "builtin:procedural-texture" || draw.assetIdentity == "builtin:procedural-material");
+        if (draw.assetIdentity == "builtin:generated-texture" || isProceduralPlane)
         {
-            if (!generatedMain || (!draw.sprite && !draw.flexiblePlane))
+            if (draw.assetIdentity == "builtin:generated-texture" && (!generatedMain || (!draw.sprite && !draw.flexiblePlane)))
             {
                 return Result::InvalidBinary;
             }
@@ -441,6 +443,16 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
         }
         if (draw.flexiblePlane)
         {
+            const auto procTex = node.get("proceduralTexture", godot::Variant{});
+            if (procTex.get_type() == godot::Variant::STRING)
+            {
+                draw.proceduralTexture = static_cast<godot::String>(procTex).utf8().get_data();
+            }
+            const auto procMat = node.get("proceduralMaterial", godot::Variant{});
+            if (procMat.get_type() == godot::Variant::STRING)
+            {
+                draw.proceduralMaterial = static_cast<godot::String>(procMat).utf8().get_data();
+            }
             auto texture = resolvedBindings.find(draw.assetIdentity);
             if (texture == resolvedBindings.end() || !texture->second.is_valid() ||
                 texture->second->get_width() <= 0 || texture->second->get_height() <= 0)
@@ -456,6 +468,121 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
                 return Result::InvalidBinary;
             }
             draw.flexibleTexture = texture->second;
+            const auto materialsValue = node.get("materials", godot::Variant{});
+            if (materialsValue.get_type() == godot::Variant::ARRAY)
+            {
+                auto materials = godot::Array{};
+                materials = materialsValue;
+                if (materials.size() > 1)
+                {
+                    return Result::InvalidBinary;
+                }
+                for (auto mIndex = 0; mIndex < materials.size(); ++mIndex)
+                {
+                    if (materials[mIndex].get_type() != godot::Variant::DICTIONARY) return Result::InvalidBinary;
+                    auto mItem = godot::Dictionary{};
+                    mItem = materials[mIndex];
+                    auto slot = std::int64_t{};
+                    auto identity = godot::String{};
+                    if (!readInteger(mItem, "slot", slot) || slot != 0 ||
+                        !readString(mItem, "path", identity) || identity.is_empty())
+                    {
+                        return Result::InvalidBinary;
+                    }
+                    auto foundMat = materialBindings.find(identity.utf8().get_data());
+                    if (foundMat == materialBindings.end() || !foundMat->second.is_valid())
+                    {
+                        return Result::InvalidArgument;
+                    }
+                    draw.materials.emplace(0, foundMat->second);
+                }
+            }
+            const auto hostMatIt = draw.materials.find(0);
+            const auto shaderMat = hostMatIt != draw.materials.end()
+                ? godot::Ref<godot::ShaderMaterial>(hostMatIt->second)
+                : godot::Ref<godot::ShaderMaterial>{};
+            const auto texturesValue = node.get("textures", godot::Variant{});
+            if (texturesValue.get_type() == godot::Variant::ARRAY)
+            {
+                auto textures = godot::Array{};
+                textures = texturesValue;
+                for (auto tIndex = 0; tIndex < textures.size(); ++tIndex)
+                {
+                    if (textures[tIndex].get_type() != godot::Variant::DICTIONARY) return Result::InvalidBinary;
+                    auto tItem = godot::Dictionary{};
+                    tItem = textures[tIndex];
+                    auto tSlot = std::int64_t{};
+                    auto tName = godot::String{};
+                    auto tPath = godot::String{};
+                    if (!readInteger(tItem, "slot", tSlot) || tSlot != 0 ||
+                        !readString(tItem, "name", tName) || tName.is_empty() ||
+                        !readString(tItem, "path", tPath))
+                    {
+                        return Result::InvalidBinary;
+                    }
+                    if (tPath.is_empty()) continue;
+                    auto foundTex = textureBindings.find(tPath.utf8().get_data());
+                    if (foundTex == textureBindings.end() || !foundTex->second.is_valid()) return Result::InvalidArgument;
+                    if (shaderMat.is_null()) return Result::InvalidArgument;
+                    Draw::Parameter param{};
+                    param.slot = 0;
+                    param.name = godot::StringName(tName);
+                    param.texture = foundTex->second;
+                    param.type = godot::Variant::OBJECT;
+                    draw.parameters.push_back(std::move(param));
+                }
+            }
+            const auto inputsValue = node.get("inputs", godot::Variant{});
+            if (inputsValue.get_type() == godot::Variant::ARRAY)
+            {
+                auto inputs = godot::Array{};
+                inputs = inputsValue;
+                for (auto iIndex = 0; iIndex < inputs.size(); ++iIndex)
+                {
+                    if (inputs[iIndex].get_type() != godot::Variant::DICTIONARY) return Result::InvalidBinary;
+                    auto iItem = godot::Dictionary{};
+                    iItem = inputs[iIndex];
+                    const auto matParamVar = iItem.get("materialParameter", godot::Variant{});
+                    if (matParamVar.get_type() != godot::Variant::DICTIONARY) continue;
+                    if (shaderMat.is_null()) return Result::InvalidArgument;
+                    auto mp = godot::Dictionary{};
+                    mp = matParamVar;
+                    auto mpSlot = std::int64_t{};
+                    auto mpName = godot::String{};
+                    if (!readInteger(mp, "slot", mpSlot) || mpSlot != 0 ||
+                        !readString(mp, "name", mpName) || mpName.is_empty())
+                    {
+                        return Result::InvalidBinary;
+                    }
+                    auto width = std::int64_t{};
+                    auto component = std::int64_t{};
+                    if (!readInteger(iItem, "width", width) || (width != 1 && width != 4) ||
+                        !readInteger(iItem, "sourceComponent", component))
+                    {
+                        return Result::InvalidBinary;
+                    }
+                    Draw::Parameter param{};
+                    param.slot = 0;
+                    param.name = godot::StringName(mpName);
+                    param.input.width = static_cast<std::uint8_t>(width);
+                    param.input.component = static_cast<std::uint8_t>(component);
+                    if (!readArray(iItem.get("defaults", godot::Variant{}), param.input.width, param.input.defaults.data()))
+                    {
+                        return Result::InvalidBinary;
+                    }
+                    const auto srcVar = iItem.get("sourceNodeId", godot::Variant{});
+                    if (srcVar.get_type() == godot::Variant::STRING)
+                    {
+                        if (!parseGuid(static_cast<godot::String>(srcVar), param.input.source))
+                        {
+                            return Result::InvalidBinary;
+                        }
+                        param.input.connected = true;
+                    }
+                    param.type = width == 1 ? godot::Variant::FLOAT : godot::Variant::VECTOR4;
+                    draw.parameters.push_back(std::move(param));
+                }
+            }
             draws.push_back(std::move(draw));
             continue;
         }
@@ -920,12 +1047,23 @@ auto PackageRenderRenderer::makeRenderable(godot::Node3D& parent, const Draw& de
     }
     if (draw.flexiblePlane) {
         auto error = godot::String{};
+        const auto hostMatIt = draw.materials.find(0);
+        const auto hostMaterial = hostMatIt != draw.materials.end()
+            ? hostMatIt->second
+            : godot::Ref<godot::Material>{};
         if (!FlexiblePlaneRenderer::create(parent, draw.flexibleDefinition,
-                draw.flexibleTexture, out.flexiblePlane, error))
+                draw.flexibleTexture, out.flexiblePlane, error, hostMaterial))
         {
             godot::UtilityFunctions::push_error(error.is_empty()
                 ? godot::String("Flexible Plane scope is unavailable.") : error);
             return Result::InvalidArgument;
+        }
+        for (const auto& parameter : draw.parameters)
+        {
+            if (parameter.texture.is_valid())
+            {
+                out.flexiblePlane->setShaderParameter(parameter.name, parameter.texture);
+            }
         }
         return Result::Ok;
     }
@@ -1691,6 +1829,51 @@ auto PackageRenderRenderer::updateScope(SpawnableHost& host,
         {
             auto* camera = currentFlexibleCamera();
             auto error = godot::String{};
+            if (renderable.flexiblePlane && procedural_ &&
+                (!draw.proceduralMaterial.empty() || !draw.proceduralTexture.empty()))
+            {
+                const auto& resourceId = !draw.proceduralMaterial.empty()
+                    ? draw.proceduralMaterial
+                    : draw.proceduralTexture;
+                auto procTexture = godot::Ref<godot::Texture2D>{};
+                auto blend = 0;
+                auto doubleSided = true;
+                auto emission = 1.0f;
+                if (procedural_->resolveResourceTexture(
+                        child ? child->containerId.data() : nullptr,
+                        child ? child->instanceId : 0,
+                        resourceId, procTexture, blend, doubleSided, emission))
+                {
+                    renderable.flexiblePlane->setTexture(procTexture);
+                    if (!draw.proceduralMaterial.empty())
+                    {
+                        renderable.flexiblePlane->applyProceduralSettings(blend, doubleSided, emission);
+                    }
+                }
+            }
+            if (renderable.flexiblePlane)
+            {
+                for (const auto& parameter : draw.parameters)
+                {
+                    if (parameter.texture.is_valid()) continue;
+                    auto values = std::array<double, 4>{};
+                    const auto paramResult = updateInput(host, parameter.input, child, values);
+                    if (paramResult != Result::Ok)
+                    {
+                        return paramResult;
+                    }
+                    if (parameter.input.width == 1)
+                    {
+                        renderable.flexiblePlane->setShaderParameter(parameter.name, static_cast<float>(values[0]));
+                    }
+                    else
+                    {
+                        renderable.flexiblePlane->setShaderParameter(parameter.name,
+                            godot::Vector4(static_cast<float>(values[0]), static_cast<float>(values[1]),
+                                static_cast<float>(values[2]), static_cast<float>(values[3])));
+                    }
+                }
+            }
             if (!scopeNode || !renderable.flexiblePlane ||
                 !renderable.flexiblePlane->update(*scopeNode, host,
                     child ? child->containerId.data() : nullptr,

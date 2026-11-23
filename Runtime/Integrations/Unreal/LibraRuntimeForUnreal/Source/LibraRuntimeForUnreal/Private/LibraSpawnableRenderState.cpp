@@ -287,6 +287,7 @@ struct FFlexiblePlaneDraw
     FLibraFlexiblePlaneDefinition Definition;
     TStrongObjectPtr<UTexture> Texture;
     TStrongObjectPtr<UMaterialInterface> Material;
+    TArray<TPair<FName, TStrongObjectPtr<UTexture>>> HostTextures;
 };
 
 struct FDrawBatch
@@ -649,12 +650,35 @@ struct FLibraSpawnableRenderState::FImpl
                 {
                     return Fail(error.IsEmpty() ? TEXT("Duplicate Flexible Plane identity.") : error);
                 }
-                plane.Texture.Reset(Resolve<UTexture>(plane.Definition.assetPath, EKind::Texture));
-                plane.Material.Reset(Resolve<UMaterialInterface>(TEXT("builtin:flexible-plane"), EKind::Material));
-                if ((!plane.Texture.IsValid() && plane.Definition.assetPath != TEXT("builtin:generated-texture")) || !plane.Material.IsValid() ||
-                    !HasParameter(plane.Material.Get(), FMaterialParameterInfo(TEXT("Texture")), TEXT("texture")))
+                const bool isProceduralPlane = plane.Definition.assetPath == TEXT("builtin:procedural-texture") ||
+                    plane.Definition.assetPath == TEXT("builtin:procedural-material");
+                if (isProceduralPlane)
                 {
-                    return Fail(TEXT("Flexible Plane requires its Texture binding and a builtin:flexible-plane Material with a Texture parameter and vertex colors."));
+                    plane.Texture.Reset(MakeWhiteTexture());
+                }
+                else
+                {
+                    plane.Texture.Reset(Resolve<UTexture>(plane.Definition.assetPath, EKind::Texture));
+                }
+                const auto materialIdentity = plane.Definition.hostMaterialPath.IsEmpty()
+                    ? FString(TEXT("builtin:flexible-plane"))
+                    : plane.Definition.hostMaterialPath;
+                plane.Material.Reset(Resolve<UMaterialInterface>(materialIdentity, EKind::Material));
+                if ((!plane.Texture.IsValid() && plane.Definition.assetPath != TEXT("builtin:generated-texture")) ||
+                    !plane.Material.IsValid() ||
+                    (plane.Definition.hostMaterialPath.IsEmpty() &&
+                     !HasParameter(plane.Material.Get(), FMaterialParameterInfo(TEXT("Texture")), TEXT("texture"))))
+                {
+                    return Fail(TEXT("Flexible Plane requires its Texture binding and a compatible Material."));
+                }
+                for (const auto& hostTex : plane.Definition.hostTextures)
+                {
+                    auto* resolvedTex = Resolve<UTexture>(hostTex.Value, EKind::Texture);
+                    if (!resolvedTex)
+                    {
+                        return Fail(TEXT("Missing Flexible Plane host material texture: ") + hostTex.Value);
+                    }
+                    plane.HostTextures.Emplace(hostTex.Key, TStrongObjectPtr<UTexture>(resolvedTex));
                 }
                 ids.Add(plane.Definition.nodeId);
                 definition.FlexiblePlanes.Add(MoveTemp(plane));
@@ -1272,6 +1296,17 @@ struct FLibraSpawnableRenderState::FImpl
             auto error = FString{};
             const auto transform = root->GetComponentTransform();
             auto* texture = plane.Texture.Get();
+            if (instance->Procedural &&
+                (!plane.Definition.proceduralMaterial.IsEmpty() || !plane.Definition.proceduralTexture.IsEmpty()))
+            {
+                const auto& procId = !plane.Definition.proceduralMaterial.IsEmpty()
+                    ? plane.Definition.proceduralMaterial
+                    : plane.Definition.proceduralTexture;
+                if (auto* procTexture = instance->Procedural->GetResourceTexture(procId))
+                {
+                    texture = procTexture;
+                }
+            }
             for (const auto& binding : instance->Definition->GeneratedDrawTextures)
             {
                 if (binding.NodeId == plane.Definition.nodeId && binding.bMainTexture)
@@ -1279,7 +1314,7 @@ struct FLibraSpawnableRenderState::FImpl
                     texture = resolveGenerated(binding);
                 }
             }
-            if (!texture)
+            if (!texture && plane.Definition.hostMaterialPath.IsEmpty())
             {
                 return Fail(TEXT("Generated Flexible Plane texture is unavailable."));
             }
@@ -1288,6 +1323,10 @@ struct FLibraSpawnableRenderState::FImpl
                 FName(TEXT("Texture")), renderer, error))
             {
                 return Fail(error);
+            }
+            for (const auto& hostTex : plane.HostTextures)
+            {
+                renderer->SetTexture(hostTex.Value.Get(), hostTex.Key);
             }
             instance->FlexiblePlanes.Add(MoveTemp(renderer));
         }
@@ -1606,6 +1645,18 @@ struct FLibraSpawnableRenderState::FImpl
                     return Fail(TEXT("Flexible Plane rendering requires a current effect or player camera."));
                 }
                 auto error = FString{};
+                const auto& planeDef = instance->Definition->FlexiblePlanes[planeIndex].Definition;
+                if (instance->Procedural &&
+                    (!planeDef.proceduralMaterial.IsEmpty() || !planeDef.proceduralTexture.IsEmpty()))
+                {
+                    const auto& procId = !planeDef.proceduralMaterial.IsEmpty()
+                        ? planeDef.proceduralMaterial
+                        : planeDef.proceduralTexture;
+                    if (auto* procTexture = instance->Procedural->GetResourceTexture(procId))
+                    {
+                        plane->SetTexture(procTexture, FName(TEXT("Texture")));
+                    }
+                }
                 if (!plane->Update(time - instance->Started, transform, cameraPosition,
                     [this, &instance](const uint8* source, double* output, uint8& width) -> LibraResult
                     {

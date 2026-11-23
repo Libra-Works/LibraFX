@@ -76,17 +76,59 @@ auto parse(const TSharedPtr<FJsonObject>& node, FLibraFlexiblePlaneDefinition& o
     const TArray<TSharedPtr<FJsonValue>>* materials = nullptr;
     const TArray<TSharedPtr<FJsonValue>>* textures = nullptr;
     auto billboard = false;
-    if (!node->TryGetArrayField(TEXT("materials"), materials) || !materials->IsEmpty() ||
-        !node->TryGetArrayField(TEXT("textures"), textures) || !textures->IsEmpty() ||
+    if (!node->TryGetArrayField(TEXT("materials"), materials) || materials->Num() > 1 ||
+        !node->TryGetArrayField(TEXT("textures"), textures) ||
         !node->HasTypedField(TEXT("billboard"), EJson::Boolean) ||
         !node->TryGetBoolField(TEXT("billboard"), billboard) || billboard)
     {
         return false;
     }
+    if (materials->Num() == 1)
+    {
+        const auto matObj = (*materials)[0].IsValid() && (*materials)[0]->Type == EJson::Object
+            ? (*materials)[0]->AsObject() : nullptr;
+        auto slot = 0;
+        if (!matObj || !integer(matObj, TEXT("slot"), slot) || slot != 0 ||
+            !matObj->HasTypedField(TEXT("path"), EJson::String) ||
+            !matObj->TryGetStringField(TEXT("path"), output.hostMaterialPath) ||
+            output.hostMaterialPath.TrimStartAndEnd().IsEmpty())
+        {
+            return false;
+        }
+    }
+    for (const auto& texValue : *textures)
+    {
+        const auto texObj = texValue.IsValid() && texValue->Type == EJson::Object ? texValue->AsObject() : nullptr;
+        auto slot = 0;
+        auto texName = FString{}, texPath = FString{};
+        if (!texObj || !integer(texObj, TEXT("slot"), slot) || slot != 0 ||
+            !texObj->TryGetStringField(TEXT("name"), texName) || texName.TrimStartAndEnd().IsEmpty() ||
+            !texObj->TryGetStringField(TEXT("path"), texPath))
+        {
+            return false;
+        }
+        if (!texPath.IsEmpty())
+        {
+            output.hostTextures.Emplace(FName(*texName), texPath);
+        }
+    }
+    auto procTex = FString{}, procMat = FString{};
+    if (node->TryGetStringField(TEXT("proceduralTexture"), procTex))
+    {
+        FGuid parsedGuid;
+        if (!FGuid::Parse(procTex, parsedGuid) || !parsedGuid.IsValid()) return false;
+        output.proceduralTexture = parsedGuid.ToString(EGuidFormats::DigitsWithHyphens).ToLower();
+    }
+    if (node->TryGetStringField(TEXT("proceduralMaterial"), procMat))
+    {
+        FGuid parsedGuid;
+        if (!FGuid::Parse(procMat, parsedGuid) || !parsedGuid.IsValid()) return false;
+        output.proceduralMaterial = parsedGuid.ToString(EGuidFormats::DigitsWithHyphens).ToLower();
+    }
     const TSharedPtr<FJsonObject>* plane = nullptr;
     const TArray<TSharedPtr<FJsonValue>>* inputs = nullptr;
     if (!node->TryGetObjectField(TEXT("flexiblePlane"), plane) || !plane->IsValid() ||
-        !node->TryGetArrayField(TEXT("inputs"), inputs) || inputs->Num() > 6)
+        !node->TryGetArrayField(TEXT("inputs"), inputs) || inputs->Num() > 256)
     {
         return false;
     }
@@ -159,7 +201,7 @@ auto parse(const TSharedPtr<FJsonObject>& node, FLibraFlexiblePlaneDefinition& o
             return false;
         }
         const auto materialValue = item->TryGetField(TEXT("materialParameter"));
-        if (!materialValue.IsValid() || materialValue->Type != EJson::Null)
+        if (!materialValue.IsValid())
         {
             return false;
         }
@@ -180,6 +222,28 @@ auto parse(const TSharedPtr<FJsonObject>& node, FLibraFlexiblePlaneDefinition& o
         parsed.id = TCHAR_TO_UTF8(*id);
         parsed.width = static_cast<uint32>(width);
         parsed.component = static_cast<uint32>(component);
+        if (materialValue->Type == EJson::Object)
+        {
+            const auto mpObj = materialValue->AsObject();
+            auto mpSlot = 0;
+            auto mpName = FString{};
+            if (!mpObj || !integer(mpObj, TEXT("slot"), mpSlot) || mpSlot != 0 ||
+                !mpObj->TryGetStringField(TEXT("name"), mpName) || mpName.TrimStartAndEnd().IsEmpty() ||
+                (width != 1 && width != 4))
+            {
+                return false;
+            }
+            output.materialInputs.Add(FLibraFlexibleMaterialInput{
+                FName(*mpName),
+                width == 1,
+                MoveTemp(parsed)
+            });
+            continue;
+        }
+        if (materialValue->Type != EJson::Null)
+        {
+            return false;
+        }
         definition.inputs.push_back(std::move(parsed));
     }
     return validate(definition);
@@ -220,10 +284,11 @@ bool FLibraFlexiblePlaneRenderer::Create(ULibraSpawnableComponent& owner,
     const auto hasParameter = parameters.ContainsByPredicate([textureParameter](const FMaterialParameterInfo& item) {
         return item.Name == textureParameter && item.Association == GlobalParameter && item.Index == INDEX_NONE;
     });
-    if (!texture || !material || textureParameter.IsNone() || !hasParameter ||
-        !liberafx::flexible_adapter::validate(definition.native))
+    const bool hasHostMaterial = !definition.hostMaterialPath.IsEmpty();
+    if (!material || !liberafx::flexible_adapter::validate(definition.native) ||
+        (!hasHostMaterial && (!texture || textureParameter.IsNone() || !hasParameter)))
     {
-        error = TEXT("Flexible Plane requires a texture and material with the named global texture parameter.");
+        error = TEXT("Flexible Plane requires a compatible material and texture binding.");
         return false;
     }
     auto renderer = TUniquePtr<FLibraFlexiblePlaneRenderer>(new FLibraFlexiblePlaneRenderer(definition));
@@ -233,7 +298,10 @@ bool FLibraFlexiblePlaneRenderer::Create(ULibraSpawnableComponent& owner,
         error = TEXT("Could not create Flexible Plane material.");
         return false;
     }
-    dynamic->SetTextureParameterValue(textureParameter, texture);
+    if (texture && hasParameter)
+    {
+        dynamic->SetTextureParameterValue(textureParameter, texture);
+    }
     renderer->materialInstance_.Reset(dynamic);
     renderer->primitive_ = MakeUnique<FLibraNativeFlexiblePlanePrimitive>();
     if (!renderer->primitive_->Create(owner, dynamic, worldTransform))
@@ -257,6 +325,15 @@ void FLibraFlexiblePlaneRenderer::SetOwnerPresentation(const FTransform& worldTr
     {
         primitive_->SetTransform(worldTransform);
         primitive_->SetVisible(visible);
+    }
+}
+
+void FLibraFlexiblePlaneRenderer::SetTexture(UTexture* texture, FName textureParameter)
+{
+    check(IsInGameThread());
+    if (materialInstance_.IsValid() && texture && !textureParameter.IsNone())
+    {
+        materialInstance_->SetTextureParameterValue(textureParameter, texture);
     }
 }
 
@@ -292,6 +369,38 @@ bool FLibraFlexiblePlaneRenderer::Update(double time, const FTransform& worldTra
     {
         error = FString::Printf(TEXT("Flexible Plane native evaluation failed: %d."), result);
         return false;
+    }
+    for (const auto& matInput : definition_.materialInputs)
+    {
+        auto values = std::array<double, 4>{ matInput.Native.defaults[0], matInput.Native.defaults[1],
+            matInput.Native.defaults[2], matInput.Native.defaults[3] };
+        if (matInput.Native.connected)
+        {
+            auto readWidth = std::uint8_t{};
+            const auto readResult = read(matInput.Native.source.data(), values.data(), readWidth);
+            if (readResult != LIBRA_OK || matInput.Native.component + matInput.Native.width > readWidth)
+            {
+                error = TEXT("Flexible Plane material parameter evaluation failed.");
+                return false;
+            }
+            if (matInput.Native.component != 0)
+            {
+                for (auto c = 0u; c < matInput.Native.width; ++c)
+                {
+                    values[c] = values[matInput.Native.component + c];
+                }
+            }
+        }
+        if (matInput.bScalar)
+        {
+            materialInstance_->SetScalarParameterValue(matInput.ParameterName, static_cast<float>(values[0]));
+        }
+        else
+        {
+            materialInstance_->SetVectorParameterValue(matInput.ParameterName,
+                FLinearColor(static_cast<float>(values[0]), static_cast<float>(values[1]),
+                    static_cast<float>(values[2]), static_cast<float>(values[3])));
+        }
     }
     auto& upload = geometryUploadBuffers_[nextGeometryUploadBuffer_];
     if (!upload.Fence.IsFenceComplete())

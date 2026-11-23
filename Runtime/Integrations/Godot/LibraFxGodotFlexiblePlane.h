@@ -5,7 +5,9 @@
 #include "liberafx/LbSpawnableHost.h"
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
+#include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/node3d.hpp>
+#include <godot_cpp/classes/shader_material.hpp>
 #include <godot_cpp/classes/standard_material3d.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
 #include <godot_cpp/core/object.hpp>
@@ -26,7 +28,8 @@ public:
                         flexible_adapter::Definition& definition, godot::String& error) -> bool;
     static auto create(godot::Node3D& scope, const flexible_adapter::Definition& definition,
                        const godot::Ref<godot::Texture2D>& texture,
-                       std::unique_ptr<FlexiblePlaneRenderer>& output, godot::String& error) -> bool;
+                       std::unique_ptr<FlexiblePlaneRenderer>& output, godot::String& error,
+                       const godot::Ref<godot::Material>& hostMaterial = godot::Ref<godot::Material>{}) -> bool;
     ~FlexiblePlaneRenderer();
 
     // Shared history belongs to exactly one root/child scope. container == nullptr means root.
@@ -34,6 +37,9 @@ public:
                 double time, godot::Camera3D* camera, flexible_adapter::HistoryScope& history,
                 godot::String& error) -> bool;
     void synchronize(godot::Node3D& scope, bool enabled, bool exiting = false);
+    void setTexture(const godot::Ref<godot::Texture2D>& texture);
+    void applyProceduralSettings(int blend, bool doubleSided, float emission);
+    void setShaderParameter(const godot::StringName& name, const godot::Variant& value);
     auto hasAllocatedInstance() const -> bool { return instance_.isValid(); }
     auto surfaceUpdates() const -> std::uint64_t { return surfaceUpdates_; }
 private:
@@ -46,6 +52,7 @@ private:
     OwnedRenderingRid instance_;
     godot::Ref<godot::ArrayMesh> mesh_;
     godot::Ref<godot::StandardMaterial3D> material_;
+    godot::Ref<godot::Material> hostMaterial_;
     godot::PackedVector3Array vertices_;
     godot::PackedVector2Array uv_;
     godot::PackedColorArray colors_;

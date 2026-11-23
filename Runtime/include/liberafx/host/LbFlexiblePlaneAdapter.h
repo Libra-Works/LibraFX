@@ -83,17 +83,21 @@ inline auto validate(const Definition& definition) -> bool
             }
         }
     }
+    if (definition.inputs.size() > 256)
+    {
+        return false;
+    }
     if (definition.history)
     {
         return definition.points.empty() && definition.capacity >= 2 && definition.capacity <= 4096 &&
-            finiteFloat(definition.maxAge) && definition.maxAge > 0 && definition.inputs.size() == 5 &&
+            finiteFloat(definition.maxAge) && definition.maxAge > 0 && definition.inputs.size() >= 5 &&
             has("position", 3) && has("pointWidth", 1) && has("pointColor", 4) &&
             input(definition, "width")->defaults[0] >= 0 &&
             input(definition, "pointWidth")->defaults[0] >= 0;
     }
     if (definition.points.size() < 2 || definition.points.size() > 64 ||
         definition.capacity != 0 || definition.maxAge != 0 ||
-        definition.inputs.size() != 2 + std::min<std::size_t>(4, definition.points.size()) ||
+        definition.inputs.size() < 2 + std::min<std::size_t>(4, definition.points.size()) ||
         input(definition, "width")->defaults[0] < 0)
     {
         return false;
@@ -101,6 +105,13 @@ inline auto validate(const Definition& definition) -> bool
     for (auto index = std::size_t{}; index < std::min<std::size_t>(4, definition.points.size()); ++index)
     {
         if (!has("position" + std::to_string(index), 3))
+        {
+            return false;
+        }
+    }
+    for (auto index = std::size_t{4}; index < definition.points.size(); ++index)
+    {
+        if (const auto* extra = input(definition, "position" + std::to_string(index)); extra && extra->width != 3)
         {
             return false;
         }
@@ -290,9 +301,13 @@ public:
         {
             std::copy(definition.points.begin(), definition.points.end(), points_.begin());
             count = static_cast<std::uint32_t>(definition.points.size());
-            for (auto index = 0u; index < std::min(4u, count); ++index)
+            for (auto index = 0u; index < count; ++index)
             {
                 const auto name = "position" + std::to_string(index);
+                if (index >= 4u && !input(definition, name))
+                {
+                    continue;
+                }
                 result = readInput(definition, name.c_str(), read, position);
                 if (result != LIBRA_OK)
                 {

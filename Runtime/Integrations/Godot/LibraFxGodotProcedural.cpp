@@ -320,7 +320,7 @@ using namespace procedural_godot;
 auto ProceduralPackageRenderer::Impl::create(const Definition& definition, const Id& container,
     std::uint64_t instance, double time) -> Result
 {
-    if (definition.draws.empty())
+    if (definition.draws.empty() && definition.resources.empty())
     {
         return Result::Ok;
     }
@@ -602,5 +602,38 @@ auto ProceduralPackageRenderer::drawCount() const -> std::size_t
         count += scope->draws.size();
     }
     return count;
+}
+auto ProceduralPackageRenderer::resolveResourceTexture(const std::uint8_t* container, std::uint64_t instance,
+    const std::string& resourceId, godot::Ref<godot::Texture2D>& outTexture,
+    int& outBlend, bool& outDoubleSided, float& outEmission) const -> bool
+{
+    if (!impl_ || resourceId.empty())
+    {
+        return false;
+    }
+    auto targetContainer = procedural_godot::Id{};
+    if (container)
+    {
+        std::memcpy(targetContainer.data(), container, targetContainer.size());
+    }
+    for (const auto& scope : impl_->scopes)
+    {
+        if (scope->container != targetContainer || scope->instance != instance)
+        {
+            continue;
+        }
+        const auto found = scope->resources.find(resourceId);
+        if (found == scope->resources.end() || !found->second || !found->second->gpu)
+        {
+            return false;
+        }
+        outTexture = godot::Ref<godot::Texture2D>(found->second->gpu->texture());
+        const auto& def = found->second->native->definition();
+        outBlend = def.blend;
+        outDoubleSided = def.doubleSided;
+        outEmission = def.emission;
+        return outTexture.is_valid();
+    }
+    return false;
 }
 }

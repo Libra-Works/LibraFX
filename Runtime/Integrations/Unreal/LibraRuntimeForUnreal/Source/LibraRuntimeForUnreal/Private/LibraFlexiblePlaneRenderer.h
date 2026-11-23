@@ -17,10 +17,22 @@ class FJsonObject;
 using FLibraFlexiblePlaneHistoryScope = liberafx::flexible_adapter::HistoryScope;
 using FLibraFlexiblePlaneRead = TFunction<LibraResult(const uint8*, double*, uint8&)>;
 
+struct FLibraFlexibleMaterialInput
+{
+    FName ParameterName;
+    bool bScalar = true;
+    liberafx::flexible_adapter::Input Native;
+};
+
 struct FLibraFlexiblePlaneDefinition
 {
     liberafx::flexible_adapter::Definition native;
     FString assetPath;
+    FString proceduralTexture;
+    FString proceduralMaterial;
+    FString hostMaterialPath;
+    TArray<TPair<FName, FString>> hostTextures;
+    TArray<FLibraFlexibleMaterialInput> materialInputs;
     FGuid nodeId;
 };
 
@@ -43,6 +55,7 @@ public:
         const FLibraFlexiblePlaneRead& read,
         FLibraFlexiblePlaneHistoryScope& history, FString& error);
     void SetOwnerPresentation(const FTransform& worldTransform, bool visible);
+    void SetTexture(UTexture* texture, FName textureParameter = FName(TEXT("Texture")));
     uint64 GetSubmittedBytes() const;
 private:
     struct FGeometryUploadBuffer

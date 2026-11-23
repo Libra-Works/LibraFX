@@ -46,7 +46,7 @@ namespace LiberaFx.Unity
     {
         public string nodeId;
         public string kind;
-        public string proceduralModel, proceduralMaterial;
+        public string proceduralModel, proceduralTexture, proceduralMaterial;
         public LiberaFxFlexiblePlanePayload flexiblePlane;
         public string assetPath;
         public LiberaFxRenderMaterialPayload[] materials;
@@ -467,14 +467,77 @@ namespace LiberaFx.Unity
             {
                 if (generated.Any(binding => !binding.mainTexture))
                     throw new InvalidOperationException("Flexible Plane supports only its generated main texture.");
-                var planeAsset = builtIn;
-                if (planeAsset == null) renderAssets.TryGetValue(node.assetPath, out planeAsset);
-                if (planeAsset == null ||
-                    !planeAsset.texture || planeAsset.defaultMaterials == null ||
-                    planeAsset.defaultMaterials.Length != 1 || !planeAsset.defaultMaterials[0])
+                if ((node.materials ?? Array.Empty<LiberaFxRenderMaterialPayload>()).Length > 1)
+                    throw new InvalidOperationException("Unity Flexible Plane rendering supports only material slot zero.");
+                var planeTexture = Texture2D.whiteTexture;
+                Material planeMaterial = null;
+                LiberaFxUnityMaterialBinding slotZeroBinding = null;
+                var useProceduralShader = false;
+                if (node.assetPath == "builtin:generated-texture")
                 {
-                    throw new InvalidOperationException(
-                        "Flexible Plane requires a Texture binding with exactly one vertex-colored Material.");
+                    planeMaterial = builtIn.defaultMaterials[0];
+                }
+                else if (node.assetPath == "builtin:procedural-texture" || node.assetPath == "builtin:procedural-material")
+                {
+                    useProceduralShader = true;
+                }
+                else
+                {
+                    if (!renderAssets.TryGetValue(node.assetPath, out var planeAsset) ||
+                        !planeAsset.texture || planeAsset.defaultMaterials == null ||
+                        planeAsset.defaultMaterials.Length != 1 || !planeAsset.defaultMaterials[0])
+                    {
+                        throw new InvalidOperationException(
+                            "Flexible Plane requires a Texture binding with exactly one vertex-colored Material.");
+                    }
+                    planeTexture = planeAsset.texture;
+                    planeMaterial = planeAsset.defaultMaterials[0];
+                }
+                if (node.materials != null && node.materials.Length == 1)
+                {
+                    var mat = node.materials[0];
+                    if (mat == null || mat.slot != 0 ||
+                        !materials.TryGetValue(mat.path ?? string.Empty, out var binding) || !binding.material)
+                    {
+                        throw new InvalidOperationException("No Unity Material binding exists for Flexible Plane material slot 0.");
+                    }
+                    planeMaterial = binding.material;
+                    slotZeroBinding = binding;
+                    useProceduralShader = false;
+                }
+                var planeTexParams = new List<LiberaFxPreparedTextureParameter>();
+                foreach (var texture in node.textures ?? Array.Empty<LiberaFxRenderTexturePayload>())
+                {
+                    ValidateUnityAssociation(texture.association, texture.index);
+                    if (texture.slot != 0 || string.IsNullOrWhiteSpace(texture.name) || planeMaterial == null)
+                        throw new InvalidOperationException("Flexible Plane texture parameter has an invalid slot or material.");
+                    if (string.IsNullOrEmpty(texture.path)) continue;
+                    if (!renderAssets.TryGetValue(texture.path, out var textureBinding) || !textureBinding.texture)
+                        throw new InvalidOperationException("No Unity Texture binding exists for material texture '" + texture.path + "'.");
+                    var unityPropertyName = ResolveMappedProperty(slotZeroBinding, texture.name, 0, "texture");
+                    ValidateMappedPropertyType(planeMaterial, unityPropertyName, texture.name, "texture");
+                    planeTexParams.Add(new LiberaFxPreparedTextureParameter
+                    {
+                        name = unityPropertyName,
+                        slot = 0,
+                        texture = textureBinding.texture
+                    });
+                }
+                var planeMatPropNames = new List<string>();
+                foreach (var input in node.inputs ?? Array.Empty<LiberaFxRenderInputPayload>())
+                {
+                    if (input?.materialParameter == null) continue;
+                    ValidateUnityAssociation(input.materialParameter.association, input.materialParameter.index);
+                    if (input.materialParameter.slot != 0 || string.IsNullOrWhiteSpace(input.materialParameter.name) || planeMaterial == null)
+                        throw new InvalidOperationException("Flexible Plane material parameter has an invalid slot or material.");
+                    if (input.materialParameter.kind == "scalar" && input.width != 1 ||
+                        input.materialParameter.kind == "vector" && input.width != 4 ||
+                        input.materialParameter.kind != "scalar" && input.materialParameter.kind != "vector")
+                        throw new InvalidOperationException("Flexible Plane material parameter type is unsupported by Unity.");
+                    var propertyKind = input.materialParameter.kind == "scalar" ? "scalar" : "vector";
+                    var unityPropertyName = ResolveMappedProperty(slotZeroBinding, input.materialParameter.name, 0, propertyKind);
+                    ValidateMappedPropertyType(planeMaterial, unityPropertyName, input.materialParameter.name, propertyKind);
+                    planeMatPropNames.Add(unityPropertyName);
                 }
                 return new LiberaFxPreparedRenderNode
                 {
@@ -482,7 +545,8 @@ namespace LiberaFx.Unity
                     inputs = node.inputs,
                     generatedTextures = generated,
                     flexiblePlane = LiberaFxPreparedFlexiblePlane.Prepare(node, node.flexiblePlane,
-                        planeAsset.texture, planeAsset.defaultMaterials[0], "_MainTex", Camera.main)
+                        planeTexture, planeMaterial, "_MainTex", Camera.main,
+                        useProceduralShader, planeTexParams.ToArray(), planeMatPropNames.ToArray())
                 };
             }
             if (node.kind == "debugText" || node.kind == "debugModel")
@@ -866,11 +930,20 @@ namespace LiberaFx.Unity
                 if (recipe.modifiers.Any(m => m == null) || recipe.operations.Any(op => op == null))
                     throw new InvalidOperationException("Null procedural operation.");
             }
-            foreach (var draw in payload.nodes.Where(n => n.kind == "proceduralModel"))
+            foreach (var draw in payload.nodes.Where(n => n.kind == "proceduralModel" || n.kind == "flexiblePlane"))
             {
-                if (!TryCanonicalGuid(draw.proceduralModel, out var source) || !resourceIds.Contains(source))
-                    throw new InvalidOperationException("Procedural draw is missing its scoped producer.");
-                draw.proceduralModel = source;
+                if (draw.kind == "proceduralModel")
+                {
+                    if (!TryCanonicalGuid(draw.proceduralModel, out var source) || !resourceIds.Contains(source))
+                        throw new InvalidOperationException("Procedural draw is missing its scoped producer.");
+                    draw.proceduralModel = source;
+                }
+                if (!string.IsNullOrEmpty(draw.proceduralTexture))
+                {
+                    if (!TryCanonicalGuid(draw.proceduralTexture, out var textureId) || !resourceIds.Contains(textureId))
+                        throw new InvalidOperationException("Procedural draw texture is missing its scoped producer.");
+                    draw.proceduralTexture = textureId;
+                }
                 if (!string.IsNullOrEmpty(draw.proceduralMaterial))
                 {
                     if (!TryCanonicalGuid(draw.proceduralMaterial, out var material) || !resourceIds.Contains(material))
