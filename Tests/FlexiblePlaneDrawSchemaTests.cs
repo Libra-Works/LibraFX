@@ -101,5 +101,83 @@ public static class FlexiblePlaneDrawSchemaTests
             "History defaults must reach metadata.");
         Reject(() => FlexiblePlaneDrawSchema.CreateDraw(draw, nodes,
             Array.Empty<GraphConnectionSnapshot>().ToLookup(edge => edge.TargetNodeId)));
+
+        var procTexDef = GraphNodeDefinition.All.Single(d => d.TypeName == "ProceduralTexture");
+        var procMatDef = GraphNodeDefinition.All.Single(d => d.TypeName == "ProceduralMaterial");
+        var floatDef = GraphNodeDefinition.All.Single(d => d.Kind == GraphNodeKind.Float);
+        var procTex = new GraphNodeSnapshot(Guid.NewGuid(), procTexDef.Kind, "ProcTex", 0, 0,
+            procTexDef.PortType, procTexDef.PortCategory);
+        var procMat = new GraphNodeSnapshot(Guid.NewGuid(), procMatDef.Kind, "ProcMat", 0, 0,
+            procMatDef.PortType, procMatDef.PortCategory);
+        var procDrawTexOnly = Node(FlexiblePlaneDrawSchema.DrawId);
+        var procTexExport = SpawnableGroupPackageBinary.Deserialize(
+            EffectBinary.Compile(new GraphSnapshot(
+                [procDrawTexOnly, list, procTex],
+                [new(list.Id, procDrawTexOnly.Id, "points"),
+                 new(procTex.Id, procDrawTexOnly.Id, "proceduralTexture", "value")])));
+        using (var scene = JsonDocument.Parse(procTexExport.RootRenderConfiguration))
+        {
+            var root = scene.RootElement;
+            var planeNode = root.GetProperty("nodes").EnumerateArray().Single();
+            Require(planeNode.GetProperty("assetPath").GetString() == "builtin:procedural-texture" &&
+                planeNode.GetProperty("proceduralTexture").GetGuid() == procTex.Id &&
+                planeNode.GetProperty("proceduralMaterial").ValueKind == JsonValueKind.Null &&
+                root.GetProperty("procedural_resources").EnumerateArray().Any(r => r.GetProperty("nodeId").GetGuid() == procTex.Id),
+                "FlexiblePlaneDraw must compile with an attached ProceduralTexture and collect it into procedural_resources.");
+        }
+
+        var procDrawMat = Node(FlexiblePlaneDrawSchema.DrawId);
+        var procMatExport = SpawnableGroupPackageBinary.Deserialize(
+            EffectBinary.Compile(new GraphSnapshot(
+                [procDrawMat, list, procMat, procTex],
+                [new(list.Id, procDrawMat.Id, "points"),
+                 new(procMat.Id, procDrawMat.Id, "proceduralMaterial", "value"),
+                 new(procTex.Id, procMat.Id, "texture0", "value")])));
+        using (var scene = JsonDocument.Parse(procMatExport.RootRenderConfiguration))
+        {
+            var root = scene.RootElement;
+            var planeNode = root.GetProperty("nodes").EnumerateArray().Single();
+            var resourceIds = root.GetProperty("procedural_resources").EnumerateArray()
+                .Select(r => r.GetProperty("nodeId").GetGuid()).ToHashSet();
+            Require(planeNode.GetProperty("assetPath").GetString() == "builtin:procedural-material" &&
+                planeNode.GetProperty("proceduralMaterial").GetGuid() == procMat.Id &&
+                resourceIds.Contains(procMat.Id) && resourceIds.Contains(procTex.Id),
+                "FlexiblePlaneDraw must compile with ProceduralMaterial and collect both material and its sampled textures.");
+        }
+
+        var hostSchema = RenderNodeSchema.EncodeMaterials([new EngineMaterial(0, "/Game/M_Ribbon", "M_Ribbon",
+        [
+            new EngineMaterialParameter("Opacity", "scalar", JsonSerializer.SerializeToElement(0.5), 2, -1),
+            new EngineMaterialParameter("MaskTex", "texture", JsonSerializer.SerializeToElement("/Game/T_Mask"), 2, -1)
+        ])]);
+        var hostDrawDef = RenderNodeSchema.Effective(GraphNodeDefinition.All.Single(d => d.Kind == draw.Kind),
+            [Parameter("materialSchema", "string", hostSchema)]);
+        var opacityParamId = RenderNodeSchema.Read(hostDrawDef, [Parameter("materialSchema", "string", hostSchema)])
+            .Single(p => p.Name == "Opacity").Id;
+        var opacitySource = new GraphNodeSnapshot(Guid.NewGuid(), floatDef.Kind, "OpacitySrc", 0, 0,
+            floatDef.PortType, floatDef.PortCategory);
+        var hostDraw = Node(FlexiblePlaneDrawSchema.DrawId,
+            Parameter("assetPath", "string", "/Game/T_Ribbon"),
+            Parameter("materialSchema", "string", hostSchema));
+        var hostExport = SpawnableGroupPackageBinary.Deserialize(
+            EffectBinary.Compile(new GraphSnapshot(
+                [hostDraw, list, opacitySource],
+                [new(list.Id, hostDraw.Id, "points"),
+                 new(opacitySource.Id, hostDraw.Id, opacityParamId)])));
+        using (var scene = JsonDocument.Parse(hostExport.RootRenderConfiguration))
+        {
+            var planeNode = scene.RootElement.GetProperty("nodes").EnumerateArray().Single();
+            var matSlot = planeNode.GetProperty("materials").EnumerateArray().Single();
+            var texEntry = planeNode.GetProperty("textures").EnumerateArray().Single();
+            var matInput = planeNode.GetProperty("inputs").EnumerateArray()
+                .Single(item => item.GetProperty("id").GetString() == opacityParamId);
+            Require(matSlot.GetProperty("slot").GetInt32() == 0 &&
+                matSlot.GetProperty("path").GetString() == "/Game/M_Ribbon" &&
+                texEntry.GetProperty("name").GetString() == "MaskTex" &&
+                texEntry.GetProperty("path").GetString() == "/Game/T_Mask" &&
+                matInput.GetProperty("sourceNodeId").GetGuid() == opacitySource.Id &&
+                matInput.GetProperty("materialParameter").GetProperty("name").GetString() == "Opacity",
+                "FlexiblePlaneDraw must export host material slots, textures, and animated material parameters.");
+        }
     }
 }

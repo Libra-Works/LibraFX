@@ -128,7 +128,7 @@ public static class RenderProgramBindings
                     throw new InvalidDataException("A render scope supports at most 128 draws.");
                 }
                 renderNodes.Add(FlexiblePlaneDrawSchema.CreateDraw(node, nodes, connections, resourceContext, instancePath,
-                    generatedByNode[node.Id].Any(binding => binding.MainTexture)));
+                    generatedByNode[node.Id].Any(binding => binding.MainTexture), instanceScopes));
                 continue;
             }
             if (PreviewDebugDraw.IsDebugNode(node.Kind))
@@ -210,7 +210,7 @@ public static class RenderProgramBindings
                 var mapped = mappedParameters[entry.Id];
                 mappedGenerated[(binding.NodeId, binding.Slot, binding.Name, binding.MainTexture)] = binding with
                 {
-                    Name = mapped?.Name ?? entry.Name, Association = mapped?.Association ?? MaterialAssociation(entry),
+                    Name = mapped?.Name ?? entry.Name, Association = mapped?.Association ?? RenderNodeSchema.MaterialAssociation(entry),
                     Index = mapped?.Index ?? entry.Index
                 };
             }
@@ -222,7 +222,7 @@ public static class RenderProgramBindings
                 return new
                 {
                     name = mapped?.Name ?? entry.Name, kind = entry.Kind, slot = entry.Slot,
-                    association = mapped?.Association ?? MaterialAssociation(entry), index = mapped?.Index ?? entry.Index
+                    association = mapped?.Association ?? RenderNodeSchema.MaterialAssociation(entry), index = mapped?.Index ?? entry.Index
                 };
             }
             var inputs = new List<object>();
@@ -294,7 +294,7 @@ public static class RenderProgramBindings
                 .Select(entry => new { name = mappedParameters[entry.Id]?.Name ?? entry.Name, slot = entry.Slot,
                     path = generatedByNode[node.Id].Any(binding => !binding.MainTexture && binding.Slot == entry.Slot && binding.Name == entry.Name) ? "" : resourceContext?.ResolvePath(node.Id, "texture:" + entry.Id, "texture",
                         Parameter(entry.Id).GetString() ?? "", instancePath) ?? Parameter(entry.Id).GetString(),
-                    association = mappedParameters[entry.Id]?.Association ?? MaterialAssociation(entry),
+                    association = mappedParameters[entry.Id]?.Association ?? RenderNodeSchema.MaterialAssociation(entry),
                     index = mappedParameters[entry.Id]?.Index ?? entry.Index }).ToArray();
             var materials = materialSlots
                 .Where(slot => !string.IsNullOrEmpty(slot.Path) ||
@@ -391,10 +391,6 @@ public static class RenderProgramBindings
             hash[8] = (byte)((hash[8] & 0x3F) | 0x80);
             return new Guid(hash.AsSpan(0, 16), bigEndian: true);
         }
-    // Older schemas used Layer/-1 for global parameters; keep their pin IDs while correcting delivery.
-    private static int MaterialAssociation(RenderMaterialParameter parameter) =>
-        parameter.Association == 0 && parameter.Index == -1 ? 2 : parameter.Association;
-
     private static IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> CollectInstanceScopes(GraphSnapshot graph)
     {
         var result = new Dictionary<Guid, IReadOnlyList<Guid>>();

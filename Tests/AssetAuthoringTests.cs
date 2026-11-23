@@ -14,7 +14,8 @@ internal static class AssetAuthoringTests
         VerifyLocalMetadata();
         VerifyProjectAssetRoot();
         VerifyPagedProjectAssetRoot();
-        VerifyTextureOnlyDrawAssignment("FlexiblePlaneDraw");
+        VerifyTextureOnlyDrawAssignment("CpuParticleSpriteDraw");
+        VerifyFlexiblePlaneMaterialAssignment();
         VerifyCallerTargetBinding();
         VerifyCallerTargetBinding(inline: true);
         VerifyCallerTargetBinding(material: true);
@@ -56,6 +57,27 @@ internal static class AssetAuthoringTests
         {
             throw new InvalidOperationException($"{typeName} texture assignment must be redoable.");
         }
+    }
+
+    private static void VerifyFlexiblePlaneMaterialAssignment()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var definition = GraphNodeDefinition.All.Single(item => item.TypeName == "FlexiblePlaneDraw");
+        var node = graph.CreateNode(definition.Kind);
+        var texture = new EngineAsset("/Game/Textures/T_Ribbon", "Ribbon", "texture", "Unreal");
+        var textureTargets = ResourceAssignment.Targets(node, texture);
+        if (textureTargets.Count != 1 || textureTargets[0].Kind != ResourceTargetKind.RenderAsset)
+            throw new InvalidOperationException("FlexiblePlaneDraw must expose a primary texture target.");
+        ResourceAssignment.Assign(graph, node, texture, textureTargets[0]);
+        var material = new EngineAsset("/Game/Materials/M_Ribbon", "M_Ribbon", "material", "Unreal",
+            Materials: [new(0, "/Game/Materials/M_Ribbon", "M_Ribbon",
+                [new("Opacity", "scalar", JsonSerializer.SerializeToElement(0.5), 2, -1)])]);
+        var materialTargets = ResourceAssignment.Targets(graph.GetNode(node.Id), material);
+        if (materialTargets.Count != 1 || materialTargets[0].Kind != ResourceTargetKind.RenderMaterial)
+            throw new InvalidOperationException("FlexiblePlaneDraw must expose a host material slot target.");
+        ResourceAssignment.Assign(graph, graph.GetNode(node.Id), material, materialTargets[0]);
+        if (!graph.GetNode(node.Id).InputPorts.Any(port => port.Name == "Opacity"))
+            throw new InvalidOperationException("FlexiblePlaneDraw host material assignment must expose material parameters.");
     }
 
     private static void VerifyMaterialAssociationDelivery()

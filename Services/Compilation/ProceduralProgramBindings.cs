@@ -31,11 +31,16 @@ internal static class ProceduralProgramBindings
             return ProceduralResourceSchema.Name(node.Kind) == "ProceduralModel" ? r : ProceduralPixelCompilation.Prune(r);
         }
         var used = new HashSet<Guid>();
-        foreach (var draw in nodes.Values.Where(n => GraphNodeDefinition.All.Single(d => d.Kind == n.Kind).TypeName == "ModelDraw"))
+        foreach (var draw in nodes.Values.Where(n =>
+            GraphNodeDefinition.All.Single(d => d.Kind == n.Kind).TypeName == "ModelDraw" ||
+            FlexiblePlaneDrawSchema.IsNode(n.Kind)))
         {
-            var model = Source(draw, "proceduralModel", "ProceduralModel", nodes, incoming, scopes);
+            var isPlane = FlexiblePlaneDrawSchema.IsNode(draw.Kind);
+            var model = isPlane ? null : Source(draw, "proceduralModel", "ProceduralModel", nodes, incoming, scopes);
+            var directTexture = isPlane ? Source(draw, "proceduralTexture", "ProceduralTexture", nodes, incoming, scopes) : null;
             var material = Source(draw, "proceduralMaterial", "ProceduralMaterial", nodes, incoming, scopes);
             if (model is { } modelId) used.Add(modelId);
+            if (directTexture is { } directTextureId) used.Add(directTextureId);
             if (material is { } materialId)
             {
                 used.Add(materialId);

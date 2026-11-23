@@ -7,6 +7,8 @@
   "FlexiblePlane.History": "フレキシブルプレーン点履歴",
   "FlexiblePlane.HistoryDescription": "位置・幅・色を時間ごとに記録し、点数と保持時間を制限した軌跡をフレキシブルプレーン描画に渡します。",
   "FlexiblePlane.Points": "点",
+  "FlexiblePlane.ProceduralTexture": "プロシージャルテクスチャ",
+  "FlexiblePlane.ProceduralMaterial": "プロシージャルマテリアル",
   "FlexiblePlane.Texture": "テクスチャ",
   "FlexiblePlane.WidthMultiplier": "幅の倍率",
   "FlexiblePlane.Tint": "乗算色",

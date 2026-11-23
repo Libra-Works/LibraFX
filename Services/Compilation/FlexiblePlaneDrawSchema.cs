@@ -21,9 +21,9 @@ public static class FlexiblePlaneDrawSchema
 
     public sealed record Point(double[] Position, double Width, double[] Color);
 
-    private static JsonElement Parameter(GraphNodeSnapshot node, string id)
+    private static JsonElement Parameter(GraphNodeSnapshot node, string id, GraphNodeDefinition? definition = null)
     {
-        var definition = GraphNodeDefinition.All.Single(item => item.Kind == node.Kind);
+        definition ??= GraphNodeDefinition.All.Single(item => item.Kind == node.Kind);
         var declared = definition.Parameters.Single(item => item.Id == id);
         var saved = node.Parameters?.SingleOrDefault(item => item.Id == id);
         if (saved is not null && saved.Type != declared.Type)
@@ -119,12 +119,17 @@ public static class FlexiblePlaneDrawSchema
     public static object CreateDraw(GraphNodeSnapshot node,
         IReadOnlyDictionary<Guid, GraphNodeSnapshot> nodes,
         ILookup<Guid, GraphConnectionSnapshot> connections,
-        IRenderResourceBindingContext? resources = null, IReadOnlyList<Guid>? instancePath = null, bool generatedTexture = false)
+        IRenderResourceBindingContext? resources = null, IReadOnlyList<Guid>? instancePath = null, bool generatedTexture = false,
+        IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>? instanceScopes = null)
     {
         if (!IsNode(node.Kind))
         {
             throw new InvalidDataException("Expected Flexible Plane Draw.");
         }
+        var definition = RenderNodeSchema.Effective(GraphNodeDefinition.All.Single(item => item.Kind == node.Kind), node.Parameters);
+        var scopes = instanceScopes ?? new Dictionary<Guid, IReadOnlyList<Guid>>();
+        var proceduralTexture = ProceduralProgramBindings.Source(node, "proceduralTexture", "ProceduralTexture", nodes, connections, scopes);
+        var proceduralMaterial = ProceduralProgramBindings.Source(node, "proceduralMaterial", "ProceduralMaterial", nodes, connections, scopes);
         var sources = connections[node.Id].Where(edge => edge.TargetPortId == "points").ToArray();
         if (sources.Length != 1 || sources[0].SourcePortId is not null ||
             !nodes.TryGetValue(sources[0].SourceNodeId, out var source) || !IsHelper(source.Kind))
@@ -134,7 +139,7 @@ public static class FlexiblePlaneDrawSchema
         var isList = Is(source.Kind, ListId, "FlexiblePlanePointList");
         var points = isList ? ResolveListPoints(source) : Array.Empty<Point>();
         var inputs = new List<object>();
-        void Input(GraphNodeSnapshot target, string port, string id, double[] defaults)
+        void Input(GraphNodeSnapshot target, string port, string id, double[] defaults, object? materialParameter = null)
         {
             var matches = connections[target.Id].Where(edge => edge.TargetPortId == port).ToArray();
             if (matches.Length > 1)
@@ -149,16 +154,16 @@ public static class FlexiblePlaneDrawSchema
                 {
                     throw new InvalidDataException($"Flexible Plane '{port}' requires a numeric source.");
                 }
-                var definition = GraphNodeDefinition.All.Single(item => item.Kind == valueNode.Kind);
-                var outputType = definition.GetOutputPortType(edge.SourcePortId);
+                var valueDefinition = GraphNodeDefinition.All.Single(item => item.Kind == valueNode.Kind);
+                var outputType = valueDefinition.GetOutputPortType(edge.SourcePortId);
                 var expected = defaults.Length switch { 1 => "Float", 3 => "FloatX3", _ => "FloatX4" };
                 if (outputType != expected)
                 {
                     throw new InvalidDataException($"Flexible Plane '{port}' expects {expected}.");
                 }
-                if (definition.TypeName.StartsWith("BreakVector", StringComparison.Ordinal))
+                if (valueDefinition.TypeName.StartsWith("BreakVector", StringComparison.Ordinal))
                 {
-                    component = definition.OutputPorts!.ToList().FindIndex(output => output.Id == edge.SourcePortId);
+                    component = valueDefinition.OutputPorts!.ToList().FindIndex(output => output.Id == edge.SourcePortId);
                     if (component < 0)
                     {
                         throw new InvalidDataException("Invalid source component.");
@@ -166,16 +171,16 @@ public static class FlexiblePlaneDrawSchema
                 }
             }
             inputs.Add(new { id, width = defaults.Length, sourceNodeId = edge?.SourceNodeId,
-                sourceComponent = component, defaults, materialParameter = (object?)null });
+                sourceComponent = component, defaults, materialParameter });
         }
 
-        var width = Number(Parameter(node, "width"), "width multiplier");
+        var width = Number(Parameter(node, "width", definition), "width multiplier");
         if (width < 0)
         {
             throw new InvalidDataException("Width multiplier must be nonnegative.");
         }
         Input(node, "width", "width", [width]);
-        Input(node, "tint", "tint", Vector(Parameter(node, "tint"), 4, "tint"));
+        Input(node, "tint", "tint", Vector(Parameter(node, "tint", definition), 4, "tint"));
         var capacity = 0;
         var maxAge = 0d;
         if (isList)
@@ -202,34 +207,83 @@ public static class FlexiblePlaneDrawSchema
             Input(source, "width", "pointWidth", [pointWidth]);
             Input(source, "color", "pointColor", Vector(Parameter(source, "color"), 4, "color"));
         }
-        var repeatLength = Number(Parameter(node, "repeatLength"), "repeat length");
+        var repeatLength = Number(Parameter(node, "repeatLength", definition), "repeat length");
         if (repeatLength <= 0)
         {
             throw new InvalidDataException("Repeat length must be positive.");
         }
-        resources?.ValidateRenderNode(node.Id, Array.Empty<(string Id, string Kind, int Slot)>(),
-            instancePath ?? [], Array.Empty<int>());
-        var path = generatedTexture ? "builtin:generated-texture" : Parameter(node, "assetPath").GetString()!;
-        if (!generatedTexture) path = resources?.ResolvePath(node.Id, "assetPath", "texture", path, instancePath ?? []) ?? path;
+        var materialEntries = RenderNodeSchema.Read(definition, node.Parameters);
+        var materialSlots = RenderNodeSchema.ReadMaterials(definition, node.Parameters);
+        resources?.ValidateRenderNode(node.Id,
+            materialEntries.Select(entry => (entry.Id, entry.Kind, entry.Slot)),
+            instancePath ?? [], materialSlots.Select(slot => slot.Slot).ToArray());
+        var mappedParameters = materialEntries.ToDictionary(entry => entry.Id, entry =>
+            resources?.ResolveParameter(node.Id, entry.Id, entry.Slot, entry.Kind, instancePath ?? []));
+        foreach (var entry in materialEntries.Where(item => item.Kind is "scalar" or "vector"))
+        {
+            var mapped = mappedParameters[entry.Id];
+            var materialParameter = new
+            {
+                name = mapped?.Name ?? entry.Name,
+                kind = entry.Kind,
+                slot = entry.Slot,
+                association = mapped?.Association ?? RenderNodeSchema.MaterialAssociation(entry),
+                index = mapped?.Index ?? entry.Index
+            };
+            var value = Parameter(node, entry.Id, definition);
+            var defaults = entry.Kind == "scalar"
+                ? [Number(value, entry.Name)]
+                : Vector(value, 4, entry.Name);
+            Input(node, entry.Id, entry.Id, defaults, materialParameter);
+        }
+        var rawPath = Parameter(node, "assetPath", definition).GetString() ?? "";
+        var path = generatedTexture
+            ? "builtin:generated-texture"
+            : resources?.ResolvePath(node.Id, "assetPath", "texture", rawPath, instancePath ?? []) ?? rawPath;
         if (string.IsNullOrWhiteSpace(path))
         {
-            throw new InvalidDataException("Flexible Plane Draw requires a texture.");
+            if (proceduralMaterial is not null) path = "builtin:procedural-material";
+            else if (proceduralTexture is not null) path = "builtin:procedural-texture";
+            else throw new InvalidDataException("Flexible Plane Draw requires a texture.");
         }
-        if (!generatedTexture && resources?.HasResourceUse(node.Id, "assetPath", instancePath ?? []) != true)
+        if (!generatedTexture &&
+            path is not ("builtin:procedural-material" or "builtin:procedural-texture") &&
+            resources?.HasResourceUse(node.Id, "assetPath", instancePath ?? []) != true)
         {
             EngineAssetPath.Validate(path);
         }
+        var textures = materialEntries.Where(entry => entry.Kind == "texture")
+            .Select(entry => new
+            {
+                name = mappedParameters[entry.Id]?.Name ?? entry.Name,
+                slot = entry.Slot,
+                path = resources?.ResolvePath(node.Id, "texture:" + entry.Id, "texture",
+                    Parameter(node, entry.Id, definition).GetString() ?? "", instancePath ?? []) ??
+                    Parameter(node, entry.Id, definition).GetString(),
+                association = mappedParameters[entry.Id]?.Association ?? RenderNodeSchema.MaterialAssociation(entry),
+                index = mappedParameters[entry.Id]?.Index ?? entry.Index
+            }).ToArray();
+        var materials = materialSlots
+            .Where(slot => !string.IsNullOrEmpty(slot.Path) ||
+                resources?.HasResourceUse(node.Id, $"material:{slot.Slot}", instancePath ?? []) == true)
+            .Select(slot => new
+            {
+                slot = slot.Slot,
+                path = resources?.ResolvePath(node.Id, $"material:{slot.Slot}", "material",
+                    slot.Path, instancePath ?? []) ?? slot.Path
+            }).ToArray();
         var plane = new
         {
             version = 1, sourceKind = isList ? "list" : "history", sourceNodeId = source.Id,
             points, capacity, maxAge,
-            facing = Parameter(node, "cameraFacing").GetBoolean() ? "camera" : "fixedUp",
-            up = Vector(Parameter(node, "up"), 3, "up"),
-            uvMode = Parameter(node, "repeat").GetBoolean() ? "repeat" : "stretch",
+            facing = Parameter(node, "cameraFacing", definition).GetBoolean() ? "camera" : "fixedUp",
+            up = Vector(Parameter(node, "up", definition), 3, "up"),
+            uvMode = Parameter(node, "repeat", definition).GetBoolean() ? "repeat" : "stretch",
             repeatLength
         };
         return new { nodeId = node.Id, kind = "flexiblePlane", assetPath = path,
-            inputs, flexiblePlane = plane, materials = Array.Empty<object>(), textures = Array.Empty<object>(),
+            proceduralTexture, proceduralMaterial,
+            inputs, flexiblePlane = plane, materials, textures,
             billboard = false };
     }
 }

@@ -25,10 +25,13 @@ public static class RenderNodeSchema
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public static bool IsRenderNode(GraphNodeDefinition definition) =>
-        definition.TypeName is "ModelDraw" or "SpriteDraw" or "SpriteAnimation" or "SpriteComposition";
+        definition.TypeName is "ModelDraw" or "SpriteDraw" or "SpriteAnimation" or "SpriteComposition" or "FlexiblePlaneDraw";
 
     public static bool IsTextureOnlyDraw(GraphNodeDefinition definition) =>
-        definition.TypeName is "FlexiblePlaneDraw" or "CpuParticleSpriteDraw";
+        definition.TypeName is "CpuParticleSpriteDraw";
+
+    public static int MaterialAssociation(RenderMaterialParameter parameter) =>
+        parameter.Association == 0 && parameter.Index == -1 ? 2 : parameter.Association;
 
     public static string Encode(EngineAsset asset)
     {

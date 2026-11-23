@@ -12,11 +12,14 @@
   "portCategory": "Parameter",
   "inputPorts": [
     { "id": "points", "name": "Points", "displayNameKey": "FlexiblePlane.Points", "portType": "FlexiblePlanePoints" },
+    { "id": "proceduralTexture", "name": "Procedural Texture", "displayNameKey": "FlexiblePlane.ProceduralTexture", "portType": "ProceduralTexture" },
+    { "id": "proceduralMaterial", "name": "Procedural Material", "displayNameKey": "FlexiblePlane.ProceduralMaterial", "portType": "ProceduralMaterial" },
     { "id": "width", "name": "Width multiplier", "displayNameKey": "FlexiblePlane.WidthMultiplier", "portType": "Float" },
     { "id": "tint", "name": "Tint", "displayNameKey": "FlexiblePlane.Tint", "portType": "FloatX4" }
   ],
   "parameters": [
     { "id": "assetPath", "name": "Texture", "displayNameKey": "FlexiblePlane.Texture", "type": "string", "defaultValue": "" },
+    { "id": "materialSchema", "name": "Material schema", "type": "string", "defaultValue": "[]" },
     { "id": "width", "name": "Width multiplier", "displayNameKey": "FlexiblePlane.WidthMultiplier", "type": "float", "defaultValue": 1 },
     { "id": "tint", "name": "Tint", "displayNameKey": "FlexiblePlane.Tint", "type": "vector4", "defaultValue": [1, 1, 1, 1] },
     { "id": "cameraFacing", "name": "Camera facing", "displayNameKey": "FlexiblePlane.CameraFacing", "type": "bool", "defaultValue": true },
