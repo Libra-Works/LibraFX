@@ -11,6 +11,7 @@
 #include "PrimitiveSceneProxy.h"
 #include "PrimitiveSceneProxyDesc.h"
 #include "RenderCommandFence.h"
+#include "SceneInterface.h"
 #include "SceneManagement.h"
 #include "SceneView.h"
 #include "StaticMeshSceneProxy.h"

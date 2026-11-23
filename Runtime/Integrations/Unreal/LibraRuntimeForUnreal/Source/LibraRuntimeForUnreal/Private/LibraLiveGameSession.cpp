@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
 #include "Components/SceneComponent.h"
+#include "UObject/Package.h"
 #include "UObject/StrongObjectPtr.h"
 #include "liberafx/host/LbLivePackage.h"
 #include <deque>

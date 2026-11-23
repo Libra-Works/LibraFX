@@ -13,6 +13,7 @@
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "RenderingThread.h"
+#include "TextureResource.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 

@@ -5,6 +5,7 @@
 #include "PrimitiveSceneInfoData.h"
 #include "PrimitiveSceneDesc.h"
 #include "RenderCommandFence.h"
+#include "SceneTypes.h"
 #include "UObject/StrongObjectPtr.h"
 
 class ULibraSpawnableComponent;

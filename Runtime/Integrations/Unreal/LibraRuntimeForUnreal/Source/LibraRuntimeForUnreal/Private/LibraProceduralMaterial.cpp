@@ -1,5 +1,6 @@
 #include "LibraProceduralMaterial.h"
 #include "Materials/Material.h"
+#include "TextureResource.h"
 #include "UObject/StrongObjectPtr.h"
 #include "Engine/Texture2D.h"
 #if WITH_EDITOR

@@ -214,7 +214,9 @@ bool FLibraOpaqueBatchRenderingTest::RunTest(const FString&)
         material->SetShadingModel(MSM_Unlit);
         auto needsRecompile = false;
         material->SetMaterialUsage(needsRecompile, MATUSAGE_InstancedStaticMeshes);
+#if WITH_EDITOR
         material->PostEditChange();
+#endif
         return material;
     };
     auto makeMesh = [&](UMaterialInterface* material)
@@ -377,16 +379,18 @@ bool FLibraCpuSpriteRenderingTest::RunTest(const FString&)
     material->BlendMode = BLEND_Translucent;
     material->TwoSided = true;
     material->SetShadingModel(MSM_Unlit);
+#if WITH_EDITOR
     auto textureParameter = NewObject<UMaterialExpressionTextureSampleParameter2D>(material);
     textureParameter->ParameterName = TEXT("Texture");
     material->GetExpressionCollection().AddExpression(textureParameter);
-#if WITH_EDITOR
     material->GetEditorOnlyData()->EmissiveColor.Connect(0, textureParameter);
     material->GetEditorOnlyData()->Opacity.Connect(1, textureParameter);
 #endif
     auto needsRecompile = false;
     material->SetMaterialUsage(needsRecompile, MATUSAGE_InstancedStaticMeshes);
+#if WITH_EDITOR
     material->PostEditChange();
+#endif
     if (!TestTrue(TEXT("CPU Sprite material exposes the required instanced texture state"),
         material->GetBlendMode() == BLEND_Translucent && material->IsTwoSided() &&
         material->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes)))
