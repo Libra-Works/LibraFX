@@ -23,6 +23,7 @@ public partial class MainWindow : Window
         DataContextChanged += OnGroupDataContextChanged;
         Opened += (_, _) => QueueGroupUpdateCheck();
         Opened += (_, _) => RestoreWindowWorkspace();
+        Opened += (_, _) => _ = CheckUpdatesOnStartupAsync();
         Closing += (_, _) =>
         {
             if (DataContext is MainViewModel model) model.WindowLayouts.SaveWorkspace();
@@ -180,6 +181,30 @@ public partial class MainWindow : Window
 
     private async void OnAboutClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
         await new AboutWindow().ShowDialog(this);
+
+    private async void OnCheckForUpdatesClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
+        await new UpdateWindow().ShowDialog(this);
+
+    private async Task CheckUpdatesOnStartupAsync()
+    {
+        if (!AppUpdateService.Shared.AutoCheckUpdates ||
+            !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")) ||
+            Environment.GetEnvironmentVariable("LIBERAFX_DISABLE_AUTO_UPDATE") == "1")
+        {
+            return;
+        }
+        try
+        {
+            var info = await AppUpdateService.Shared.CheckForUpdatesAsync();
+            if (info is { IsUpdateAvailable: true, IsSkipped: false } && IsVisible)
+            {
+                await new UpdateWindow(AppUpdateService.Shared, info).ShowDialog(this);
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+        }
+    }
 
     private void OnContentClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {

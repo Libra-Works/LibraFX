@@ -80,5 +80,10 @@
   "Modules.Billboard.Parameter.Tolerance.Name": "退化判定しきい値",
   "Modules.Billboard.Parameter.Tolerance.Description": "正の最小距離／軸しきい値で、1e-12 以上に制限されます。向きが無効な場合はゼロ行列を返します。",
   "Modules.Backend.GenericPortable": "汎用グラフ bytecode / ポータブル C++ Core。ホスト描画は別経路です。",
-  "Modules.Backend.GenericCurve": "ポータブル C++ Core と Converter のカーブ bytecode。Unity / Unreal の描画連携は本モジュールでは認証していません。"
+  "Modules.Backend.GenericCurve": "ポータブル C++ Core と Converter のカーブ bytecode。Unity / Unreal の描画連携は本モジュールでは認証していません。",
+  "Modules.SphereGlowTexture.Name": "スフィアグローテクスチャー",
+  "Modules.SphereGlowTexture.Description": "プロシージャルテクスチャーノードで作成したシンプルな放射スフィアグローです。",
+  "Modules.Units.SphereGlow": "正規化 UV (0～1)",
+  "Modules.Inputs.None": "なし",
+  "Modules.Outputs.SphereGlow": "プロシージャルテクスチャー（放射スフィアグロー）"
 }

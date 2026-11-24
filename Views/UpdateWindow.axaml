@@ -1,0 +1,36 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="LiberaFx.Views.UpdateWindow"
+        Title="{DynamicResource Text.Editor.UpdateTitle}"
+        Width="520"
+        MaxHeight="620"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource EffectWindowBackgroundBrush}">
+    <StackPanel Margin="20" Spacing="12">
+        <TextBlock x:Name="HeadingText" Classes="editor-title" Text="{DynamicResource Text.Editor.UpdateTitle}" />
+        <TextBlock x:Name="VersionSummaryText" Classes="editor-label" TextWrapping="Wrap" />
+        <TextBlock x:Name="NotesLabel" Classes="editor-heading" Text="{DynamicResource Text.Editor.UpdateReleaseNotes}" IsVisible="False" />
+        <Border x:Name="NotesBorder" BorderThickness="1" CornerRadius="4"
+                BorderBrush="{DynamicResource EffectBorderBrush}"
+                Background="{DynamicResource EffectSurfaceBrush}"
+                MaxHeight="260" IsVisible="False">
+            <ScrollViewer>
+                <TextBlock x:Name="ReleaseNotesText" Margin="10" TextWrapping="Wrap" />
+            </ScrollViewer>
+        </Border>
+        <CheckBox x:Name="AutoCheckBox" Content="{DynamicResource Text.Editor.UpdateAutoCheck}" />
+        <TextBlock x:Name="StatusText" Classes="editor-label" TextWrapping="Wrap" />
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+            <Button x:Name="SkipButton" Classes="editor-action"
+                    Content="{DynamicResource Text.Editor.UpdateSkip}"
+                    Click="OnSkipClick" IsVisible="False" />
+            <Button Grid.Column="2" x:Name="LaterButton" Classes="editor-action"
+                    Content="{DynamicResource Text.Editor.UpdateNotNow}"
+                    Click="OnLaterClick" IsCancel="True" />
+            <Button Grid.Column="3" x:Name="UpdateButton" Classes="editor-action"
+                    Content="{DynamicResource Text.Editor.UpdateApply}"
+                    Click="OnUpdateClick" IsDefault="True" IsVisible="False" />
+        </Grid>
+    </StackPanel>
+</Window>

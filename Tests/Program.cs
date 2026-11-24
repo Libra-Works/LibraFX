@@ -206,6 +206,7 @@ internal static class Program
         {
             InitializeIsolatedUi();
             GraphFlowLayoutTests.Run();
+            AppUpdateServiceTests.Run();
             ChatGraphReferenceTests.Run();
             return;
         }
@@ -214,6 +215,7 @@ internal static class Program
             InitializeIsolatedUi();
             OperatorSkillTests.Run();
             GraphFlowLayoutTests.Run();
+            AppUpdateServiceTests.Run();
             ChatGraphReferenceTests.Run();
             return;
         }

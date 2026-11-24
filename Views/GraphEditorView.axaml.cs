@@ -375,6 +375,7 @@ public partial class GraphEditorView : UserControl
         NewSpawnableGroupMenu.IsVisible = hitNode is null;
         AddRerouteMenu.IsVisible = hitNode is null &&
             GraphSceneLayer.HitTestConnection(graph, _pastePosition) is not null;
+        PopulateAddNodeMenu(graph);
         if (hitNode?.DataContext is GraphNodeViewModel node && !node.IsSelected && graph.SelectedNodes.Count < 2)
         {
             graph.SelectNode(node);
@@ -399,7 +400,48 @@ public partial class GraphEditorView : UserControl
     private async void OnCutClick(object? sender, RoutedEventArgs e) => await CopySelectionAsync(true);
 
     private async void OnPasteClick(object? sender, RoutedEventArgs e) => await PasteAsync();
-    private void OnAddNodeClick(object? sender, RoutedEventArgs e) => ShowNodeSearch(_pastePosition);
+    private void PopulateAddNodeMenu(GraphWorkspaceViewModel graph)
+    {
+        AddNodeMenu.Items.Clear();
+        var entries = NodeCatalogViewModel.BuildEntries(graph, graph.GroupAssets, graph.NodeDefinitions);
+        foreach (var group in NodeCatalogViewModel.GroupEntries(entries))
+        {
+            var categoryItem = new MenuItem { Header = group.Name };
+            foreach (var entry in group.Nodes)
+            {
+                var nodeItem = new MenuItem
+                {
+                    Header = entry.Name,
+                    IsEnabled = entry.CanCreate
+                };
+                if (!string.IsNullOrEmpty(entry.ToolTipText))
+                {
+                    ToolTip.SetTip(nodeItem, entry.ToolTipText);
+                }
+                var captured = entry;
+                nodeItem.Click += (_, _) => AddCatalogEntryAt(graph, captured, _pastePosition);
+                categoryItem.Items.Add(nodeItem);
+            }
+            AddNodeMenu.Items.Add(categoryItem);
+        }
+    }
+
+    private void AddCatalogEntryAt(GraphWorkspaceViewModel graph, NodeCatalogEntryViewModel entry, Point position)
+    {
+        try
+        {
+            if (entry.GroupAssetId is { } id) graph.CreateGroupAssetNode(id, position.X, position.Y);
+            else if (GraphNodeDefinition.TryFind(entry.KindName, out var definition, graph.AvailableNodeDefinitions))
+                graph.CreateNode(definition!.Kind, position.X, position.Y, entry.IsPolymorphic);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
+                                   InvalidOperationException or ArgumentException)
+        {
+            graph.ReportStatus(ex.Message);
+        }
+        Focus();
+    }
+
     private void OnAddRerouteClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not GraphWorkspaceViewModel graph) return;
@@ -607,19 +649,8 @@ public partial class GraphEditorView : UserControl
     {
         if (DataContext is not GraphWorkspaceViewModel graph ||
             NodeSearchResults.SelectedItem is not NodeCatalogEntryViewModel entry) return;
-        try
-        {
-            if (entry.GroupAssetId is { } id) graph.CreateGroupAssetNode(id, _nodeSearchPosition.X, _nodeSearchPosition.Y);
-            else if (GraphNodeDefinition.TryFind(entry.KindName, out var definition, graph.AvailableNodeDefinitions))
-                graph.CreateNode(definition!.Kind, _nodeSearchPosition.X, _nodeSearchPosition.Y, entry.IsPolymorphic);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or
-                                   InvalidOperationException or ArgumentException)
-        {
-            graph.ReportStatus(ex.Message);
-        }
+        AddCatalogEntryAt(graph, entry, _nodeSearchPosition);
         NodeSearchPopup.IsOpen = false;
-        Focus();
     }
 
     private async Task CopySelectionAsync(bool cut)

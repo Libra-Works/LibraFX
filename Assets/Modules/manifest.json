@@ -234,5 +234,19 @@
       { "itemId": "1ad78f76-5e88-041c-fff4-32ac6ff381ee", "nameKey": "Modules.Billboard.Parameter.Pivot.Name", "descriptionKey": "Modules.Billboard.Parameter.Pivot.Description" },
       { "itemId": "6bc8048a-a39f-47d7-8eb5-7098691880ee", "nameKey": "Modules.Billboard.Parameter.Tolerance.Name", "descriptionKey": "Modules.Billboard.Parameter.Tolerance.Description" }
     ]
+  },
+  {
+    "id": "c2000000-0000-4000-8000-000000000001",
+    "nameKey": "Modules.SphereGlowTexture.Name",
+    "descriptionKey": "Modules.SphereGlowTexture.Description",
+    "categoryKey": "Procedural.Group",
+    "phaseKey": "Modules.Phase.EffectTime",
+    "unitsKey": "Modules.Units.SphereGlow",
+    "inputsKey": "Modules.Inputs.None",
+    "outputsKey": "Modules.Outputs.SphereGlow",
+    "stateKey": "Modules.State.Stateless",
+    "backendKey": "Modules.Backend.GenericPortable",
+    "keywords": ["sphere", "glow", "radial", "procedural", "texture", "スフィア", "グロー", "放射", "プロシージャル", "テクスチャー"],
+    "parameters": []
   }
 ]

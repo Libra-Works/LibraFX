@@ -116,39 +116,55 @@ public sealed class NodeCatalogViewModel : Tool
     private void RefreshEntries()
     {
         var graph = _activeGraph.Graph;
-        _entries = (_definitions?.AvailableDefinitions ?? GraphNodeDefinition.AuthoringCore)
-            .Where(definition => !GraphPolymorphism.IsHiddenVariant(definition.Kind))
-            .Select(definition =>
-            {
-                var canCreate = graph.CanCreateNode(definition.Kind, out var reason);
-                return new NodeCatalogEntryViewModel(definition, ProjectName, canCreate, reason);
-            })
-            .Concat((_groups?.CreatableAssets ?? []).Select(asset =>
-            {
-                var canCreate = graph.CanCreateNode(GraphNodeKind.GraphGroup, out var reason);
-                return new NodeCatalogEntryViewModel(asset, _groups, canCreate, reason);
-            }))
-            .ToArray();
+        _entries = BuildEntries(graph, _groups, _definitions);
         OnPropertyChanged(nameof(LoadWarnings));
         OnPropertyChanged(nameof(ProjectName));
         RefreshGroups();
     }
 
-    private void RefreshGroups()
+    internal static IReadOnlyList<NodeCatalogEntryViewModel> BuildEntries(
+        GraphWorkspaceViewModel graph,
+        GroupAssetCatalog? groups,
+        NodeDefinitionCatalog? definitions)
     {
-        var search = SearchText.Trim();
-        var groups = _entries.OrderByDescending(entry => entry.IsFavorite)
-            .Where(entry => entry.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                            entry.OriginalName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                            entry.KindName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                            entry.QualifiedName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                            entry.Namespace.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                            entry.Group.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                            entry.SearchTerms.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                            entry.ConversionDescription.Contains(search, StringComparison.OrdinalIgnoreCase))
+        var projectName = definitions?.ProjectName ?? string.Empty;
+        return (definitions?.AvailableDefinitions ?? GraphNodeDefinition.AuthoringCore)
+            .Where(definition => !GraphPolymorphism.IsHiddenVariant(definition.Kind))
+            .Select(definition =>
+            {
+                var canCreate = graph.CanCreateNode(definition.Kind, out var reason);
+                return new NodeCatalogEntryViewModel(definition, projectName, canCreate, reason);
+            })
+            .Concat((groups?.CreatableAssets ?? []).Select(asset =>
+            {
+                var canCreate = graph.CanCreateNode(GraphNodeKind.GraphGroup, out var reason);
+                return new NodeCatalogEntryViewModel(asset, groups, canCreate, reason);
+            }))
+            .ToArray();
+    }
+
+    internal static IReadOnlyList<NodeCatalogGroupViewModel> GroupEntries(
+        IReadOnlyList<NodeCatalogEntryViewModel> entries, string search = "")
+    {
+        var trimmed = search.Trim();
+        return entries.OrderByDescending(entry => entry.IsFavorite)
+            .Where(entry => string.IsNullOrEmpty(trimmed) ||
+                            entry.Name.Contains(trimmed, StringComparison.OrdinalIgnoreCase) ||
+                            entry.OriginalName.Contains(trimmed, StringComparison.OrdinalIgnoreCase) ||
+                            entry.KindName.Contains(trimmed, StringComparison.OrdinalIgnoreCase) ||
+                            entry.QualifiedName.Contains(trimmed, StringComparison.OrdinalIgnoreCase) ||
+                            entry.Namespace.Contains(trimmed, StringComparison.OrdinalIgnoreCase) ||
+                            entry.Group.Contains(trimmed, StringComparison.OrdinalIgnoreCase) ||
+                            entry.SearchTerms.Contains(trimmed, StringComparison.OrdinalIgnoreCase) ||
+                            entry.ConversionDescription.Contains(trimmed, StringComparison.OrdinalIgnoreCase))
             .GroupBy(entry => entry.IsFavorite ? LocalizationService.Shared.Get("Editor.Favorites") : entry.Group)
             .Select(group => new NodeCatalogGroupViewModel(group.Key, group.ToArray()))
             .ToArray();
+    }
+
+    private void RefreshGroups()
+    {
+        var groups = GroupEntries(_entries, SearchText);
         Groups.Clear();
         foreach (var group in groups)
         {

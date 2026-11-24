@@ -80,5 +80,10 @@
   "Modules.Billboard.Parameter.Tolerance.Name": "Degeneracy Tolerance",
   "Modules.Billboard.Parameter.Tolerance.Description": "Positive minimum distance/axis threshold, clamped to at least 1e-12. Invalid orientation returns a zero matrix.",
   "Modules.Backend.GenericPortable": "Generic graph bytecode / portable C++ Core. Host rendering is separate.",
-  "Modules.Backend.GenericCurve": "Portable C++ Core and converter curve bytecode; Unity / Unreal rendering integration is not certified by this module."
+  "Modules.Backend.GenericCurve": "Portable C++ Core and converter curve bytecode; Unity / Unreal rendering integration is not certified by this module.",
+  "Modules.SphereGlowTexture.Name": "Sphere Glow Texture",
+  "Modules.SphereGlowTexture.Description": "A simple radial sphere glow built with a Procedural Texture node.",
+  "Modules.Units.SphereGlow": "Normalized UV (0–1)",
+  "Modules.Inputs.None": "None",
+  "Modules.Outputs.SphereGlow": "Procedural Texture (Radial sphere glow)"
 }

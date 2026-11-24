@@ -1,0 +1,30 @@
+{
+  "FormatVersion": 5,
+  "Id": "c2000000-0000-4000-8000-000000000001",
+  "Name": "Sphere Glow Texture",
+  "Revision": 1,
+  "Locked": true,
+  "Graph": {
+    "Nodes": [
+      {
+        "Id": "c2010000-0000-4000-8000-000000000001",
+        "Kind": "ProceduralTexture",
+        "Name": "Sphere Glow",
+        "X": 120,
+        "Y": 80,
+        "PortType": "ProceduralTexture",
+        "PortCategory": "Parameter",
+        "Parameters": [
+          {
+            "Id": "proceduralState",
+            "Type": "string",
+            "Value": "{\"operations\":[{\"id\":\"c201ffff-0000-4000-8000-000000000011\",\"kind\":5,\"inputA\":0,\"inputB\":0,\"inputC\":0,\"seed\":0,\"flags\":0,\"values\":[0.5,0.5,0.5,1,0,0,0,0,0,0,0,0]},{\"id\":\"c201ffff-0000-4000-8000-000000000012\",\"kind\":25,\"inputA\":1,\"inputB\":0,\"inputC\":0,\"seed\":0,\"flags\":0,\"values\":[0,0,0,0,0,0,0,0,0,0,0,0]}],\"outputRegister\":2}"
+          }
+        ]
+      }
+    ],
+    "Connections": [],
+    "ExposedItems": [],
+    "AutoDestroyWhenIdle": true
+  }
+}
