@@ -886,7 +886,7 @@ namespace LiberaFx.Unity
         private PlaybackPlan Preflight(NativeSpawnableHost candidate, byte[] packageBytes)
         {
             var autoDestroyWhenIdle = ReadAutoDestroyWhenIdle(packageBytes);
-            var bindings = new LiberaFxUnityBindingLookup(engineBindings);
+            var bindings = new LiberaFxUnityBindingLookup(engineBindings, effect);
             var renderResult = candidate.GetRootPayload(
                 SpawnableTemplatePayloadKind.RenderConfiguration, out var render);
             var rootRender = GetPayload(renderResult, render);

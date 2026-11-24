@@ -300,25 +300,66 @@ namespace LiberaFx.Unity
         private readonly Dictionary<string, LiberaFxUnityGpuProgramBinding> gpuPrograms;
         public uint RootGpuSeed { get; }
 
-        public LiberaFxUnityBindingLookup(LiberaFxUnityBindingAsset source)
+        public LiberaFxUnityBindingLookup(LiberaFxUnityBindingAsset source, LiberaFxSpawnableAsset packageAsset = null)
         {
             renderAssets = new Dictionary<string, LiberaFxUnityRenderAssetBinding>(StringComparer.Ordinal);
             materials = new Dictionary<string, LiberaFxUnityMaterialBinding>(StringComparer.Ordinal);
             materialPropertyMappings = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
             gpuPrograms = new Dictionary<string, LiberaFxUnityGpuProgramBinding>(StringComparer.Ordinal);
             RootGpuSeed = source ? source.RootGpuSeed : 1;
-            if (!source) return;
-            foreach (var binding in source.RenderAssets ?? Array.Empty<LiberaFxUnityRenderAssetBinding>())
+            if (packageAsset != null)
             {
-                if (binding == null || string.IsNullOrWhiteSpace(binding.assetIdentity) ||
-                    renderAssets.ContainsKey(binding.assetIdentity))
-                    throw new InvalidOperationException("Unity render asset bindings contain an empty or duplicate identity.");
-                renderAssets.Add(binding.assetIdentity, binding);
+                AddRenderAssets(packageAsset.AutoResolvedAssets, allowOverride: true, skipEmptyAsset: true);
+                AddRenderAssets(packageAsset.ResourceOverrides, allowOverride: true, skipEmptyAsset: true);
+                AddMaterials(packageAsset.AutoResolvedMaterials, allowOverride: true, skipMissingMaterial: true);
+                AddMaterials(packageAsset.MaterialOverrides, allowOverride: true, skipMissingMaterial: true);
             }
-            foreach (var binding in source.Materials ?? Array.Empty<LiberaFxUnityMaterialBinding>())
+            if (!source) return;
+            AddRenderAssets(source.RenderAssets, allowOverride: true, skipEmptyAsset: false, rejectDuplicatesInBatch: true);
+            AddMaterials(source.Materials, allowOverride: true, skipMissingMaterial: false, rejectDuplicatesInBatch: true);
+            foreach (var binding in source.GpuPrograms ?? Array.Empty<LiberaFxUnityGpuProgramBinding>())
             {
-                if (binding == null || string.IsNullOrWhiteSpace(binding.assetIdentity) || !binding.material ||
-                    materials.ContainsKey(binding.assetIdentity))
+                if (binding == null || !TryCanonicalGuid(binding.nodeId, out var key) ||
+                    gpuPrograms.ContainsKey(key))
+                    throw new InvalidOperationException("Unity GPU bindings contain an invalid or duplicate node GUID.");
+                gpuPrograms.Add(key, binding);
+            }
+        }
+
+        private void AddRenderAssets(LiberaFxUnityRenderAssetBinding[] items, bool allowOverride,
+            bool skipEmptyAsset, bool rejectDuplicatesInBatch = false)
+        {
+            var seen = rejectDuplicatesInBatch ? new HashSet<string>(StringComparer.Ordinal) : null;
+            foreach (var binding in items ?? Array.Empty<LiberaFxUnityRenderAssetBinding>())
+            {
+                if (binding == null || string.IsNullOrWhiteSpace(binding.assetIdentity))
+                {
+                    if (skipEmptyAsset) continue;
+                    throw new InvalidOperationException("Unity render asset bindings contain an empty or duplicate identity.");
+                }
+                if (skipEmptyAsset && !binding.mesh && !binding.texture) continue;
+                if (seen != null && !seen.Add(binding.assetIdentity))
+                    throw new InvalidOperationException("Unity render asset bindings contain an empty or duplicate identity.");
+                if (!allowOverride && renderAssets.ContainsKey(binding.assetIdentity))
+                    throw new InvalidOperationException("Unity render asset bindings contain an empty or duplicate identity.");
+                renderAssets[binding.assetIdentity] = binding;
+            }
+        }
+
+        private void AddMaterials(LiberaFxUnityMaterialBinding[] items, bool allowOverride,
+            bool skipMissingMaterial, bool rejectDuplicatesInBatch = false)
+        {
+            var seen = rejectDuplicatesInBatch ? new HashSet<string>(StringComparer.Ordinal) : null;
+            foreach (var binding in items ?? Array.Empty<LiberaFxUnityMaterialBinding>())
+            {
+                if (binding == null || string.IsNullOrWhiteSpace(binding.assetIdentity) || !binding.material)
+                {
+                    if (skipMissingMaterial) continue;
+                    throw new InvalidOperationException("Unity material bindings contain an empty/duplicate identity or missing Material.");
+                }
+                if (seen != null && !seen.Add(binding.assetIdentity))
+                    throw new InvalidOperationException("Unity material bindings contain an empty/duplicate identity or missing Material.");
+                if (!allowOverride && materials.ContainsKey(binding.assetIdentity))
                     throw new InvalidOperationException("Unity material bindings contain an empty/duplicate identity or missing Material.");
                 var authoredToUnity = new Dictionary<string, string>(StringComparer.Ordinal);
                 var unityTargets = new HashSet<string>(StringComparer.Ordinal);
@@ -341,15 +382,8 @@ namespace LiberaFx.Unity
                         throw new InvalidOperationException("Mapped Unity shader property '" + mapping.unityPropertyName +
                             "' does not exist on Material binding '" + binding.assetIdentity + "'.");
                 }
-                materials.Add(binding.assetIdentity, binding);
-                materialPropertyMappings.Add(binding.assetIdentity, authoredToUnity);
-            }
-            foreach (var binding in source.GpuPrograms ?? Array.Empty<LiberaFxUnityGpuProgramBinding>())
-            {
-                if (binding == null || !TryCanonicalGuid(binding.nodeId, out var key) ||
-                    gpuPrograms.ContainsKey(key))
-                    throw new InvalidOperationException("Unity GPU bindings contain an invalid or duplicate node GUID.");
-                gpuPrograms.Add(key, binding);
+                materials[binding.assetIdentity] = binding;
+                materialPropertyMappings[binding.assetIdentity] = authoredToUnity;
             }
         }
 

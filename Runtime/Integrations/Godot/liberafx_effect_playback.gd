@@ -25,6 +25,8 @@ func play() -> int:
 	_ensure_player()
 	if package == null or package.package_bytes.is_empty():
 		return ERR_INVALID_DATA
+	_apply_resource_map(package.auto_resolved_resources)
+	_apply_resource_map(package.resource_overrides)
 	for key in mesh_bindings:
 		var mesh := mesh_bindings[key] as Mesh
 		if mesh != null:
@@ -38,6 +40,17 @@ func play() -> int:
 		if mat != null:
 			_player.call("set_material_binding", str(key), mat)
 	return int(_player.call("play", package.package_bytes, duration_seconds))
+
+
+func _apply_resource_map(entries: Dictionary) -> void:
+	for key in entries:
+		var res: Variant = entries[key]
+		if res is Mesh:
+			_player.call("set_mesh_binding", str(key), res)
+		elif res is Texture2D:
+			_player.call("set_texture_binding", str(key), res)
+		elif res is Material:
+			_player.call("set_material_binding", str(key), res)
 
 
 func stop() -> void:

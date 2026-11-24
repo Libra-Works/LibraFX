@@ -52,4 +52,23 @@ func _import(source_file: String, save_path: String, _options: Dictionary,
 	var pkg: Resource = PackageScript.new()
 	pkg.set("package_bytes", bytes)
 	pkg.set("source_file", source_file)
+	pkg.set("auto_resolved_resources", _resolve_res_paths(bytes))
 	return ResourceSaver.save(pkg, "%s.%s" % [save_path, _get_save_extension()])
+
+
+func _resolve_res_paths(bytes: PackedByteArray) -> Dictionary:
+	var resolved: Dictionary = {}
+	var text := bytes.get_string_from_utf8()
+	if text.is_empty():
+		return resolved
+	var regex := RegEx.new()
+	if regex.compile("res://[A-Za-z0-9_./\\-]+") != OK:
+		return resolved
+	for m in regex.search_all(text):
+		var path := m.get_string()
+		if resolved.has(path) or not ResourceLoader.exists(path):
+			continue
+		var res := ResourceLoader.load(path)
+		if res is Mesh or res is Texture2D or res is Material:
+			resolved[path] = res
+	return resolved
