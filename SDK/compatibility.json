@@ -8,12 +8,14 @@
   "unity": {
     "package": "works.libra.liberafx",
     "minimumDeclaredEditor": "6000.0",
+    "targetLts": "6000.0",
     "previouslyExercised": "7000-series editor, URP and Built-in RP fallback, D3D11",
     "unity6Acceptance": "not yet verified",
     "nativeLibrary": "liberafx_native"
   },
   "unreal": {
     "minimumEditor": "5.7",
+    "supportedVersions": ["5.7", "5.8", "5.9"],
     "plugin": "LibraRuntimeForUnreal",
     "portableCompiler": "Clang",
     "finalWindowsIntegrationCompiler": "MSVC"
@@ -22,6 +24,7 @@
     "implemented": true,
     "extension": "liberafx_godot",
     "apiVersion": "4.7",
+    "ltsPolicy": "track active Godot 4.x LTS when targeted",
     "platforms": ["Windows x86-64", "Linux x86-64", "macOS arm64"],
     "maximumBytecodeVersion": 2,
     "spawnablePackages": true,
