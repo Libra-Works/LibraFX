@@ -181,9 +181,20 @@ public sealed class ResourceIdentityRenderContext : IRenderResourceBindingContex
         }
         var binding = Require(resolver.ResolveResource(use.ResourceId, kind), nodeId, location);
         if (resolver.Project.Engine == "Unreal" && binding.Format == "unreal.object-path")
+        {
+            if (!binding.Value.StartsWith("/Game/", StringComparison.Ordinal) &&
+                !binding.Value.StartsWith("/Engine/", StringComparison.Ordinal))
+                throw new InvalidDataException($"Resource {use.ResourceId}: invalid Unreal object path.");
             EngineAssetPath.Validate(binding.Value);
+        }
         else if (resolver.Project.Engine == "Unity" && binding.Format == "unity.asset-guid-local-id.v1")
             return NormalizeUnityAssetBinding(binding.Value);
+        else if (resolver.Project.Engine == "Godot" && binding.Format == "godot.res-path.v1")
+        {
+            if (!binding.Value.StartsWith("res://", StringComparison.Ordinal))
+                throw new InvalidDataException($"Resource {use.ResourceId}: invalid Godot res:// path.");
+            EngineAssetPath.Validate(binding.Value);
+        }
         else
             throw new InvalidDataException($"Resource {use.ResourceId}: render_config cannot deliver '{binding.Format}' for {resolver.Project.Engine}.");
         return binding.Value;

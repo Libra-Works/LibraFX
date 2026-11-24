@@ -350,8 +350,8 @@ namespace LiberaFx.Unity
                     detail = "Invalid resource identity request."
                 });
 
-            if (LiberaFxUnityAssetBrowser.CanHandle(request.type))
-                return LiberaFxUnityAssetBrowser.ProcessRequest(requestJson);
+            if (LiberaFx.UnityIntegration.Editor.LiberaFxUnityAssetBrowser.CanHandle(request.type))
+                return LiberaFx.UnityIntegration.Editor.LiberaFxUnityAssetBrowser.ProcessRequest(requestJson);
 
             if (request.type == "resource_identity_project")
             {

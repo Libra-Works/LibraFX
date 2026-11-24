@@ -505,7 +505,7 @@ namespace LiberaFx.Unity
                     throw new InvalidOperationException("Flexible Plane supports only its generated main texture.");
                 if ((node.materials ?? Array.Empty<LiberaFxRenderMaterialPayload>()).Length > 1)
                     throw new InvalidOperationException("Unity Flexible Plane rendering supports only material slot zero.");
-                var planeTexture = Texture2D.whiteTexture;
+                Texture planeTexture = Texture2D.whiteTexture;
                 Material planeMaterial = null;
                 LiberaFxUnityMaterialBinding slotZeroBinding = null;
                 var useProceduralShader = false;

@@ -57,6 +57,12 @@ internal static class Program
             }
             return;
         }
+        if (args is ["--issue71-e2e-fixtures", var issue71Output])
+        {
+            InitializeIsolatedUi();
+            Issue71E2EFixtures.Write(issue71Output);
+            return;
+        }
         if (args is ["--particle-samples"])
         {
             InitializeIsolatedUi();

@@ -33,6 +33,7 @@ namespace LiberaFx.Unity.Editor
         private sealed class ImportRenderNode
         {
             public string kind;
+            public string assetPath;
             public string assetIdentity;
             public ImportRenderMaterial[] materials;
         }
@@ -75,7 +76,7 @@ namespace LiberaFx.Unity.Editor
             }
         }
 
-        private static void ResolvePackageBindings(byte[] bytes, AssetImportContext context,
+        internal static void ResolvePackageBindings(byte[] bytes, AssetImportContext context,
             out LiberaFxUnityRenderAssetBinding[] resolvedAssets,
             out LiberaFxUnityMaterialBinding[] resolvedMaterials)
         {
@@ -111,11 +112,12 @@ namespace LiberaFx.Unity.Editor
             foreach (var node in config.nodes)
             {
                 if (node == null) continue;
-                if (!string.IsNullOrEmpty(node.assetIdentity) &&
-                    !node.assetIdentity.StartsWith("builtin:", StringComparison.Ordinal) &&
-                    seenIdentities.Add(node.assetIdentity))
+                var identity = !string.IsNullOrEmpty(node.assetPath) ? node.assetPath : node.assetIdentity;
+                if (!string.IsNullOrEmpty(identity) &&
+                    !identity.StartsWith("builtin:", StringComparison.Ordinal) &&
+                    seenIdentities.Add(identity))
                 {
-                    var obj = LoadEngineObject(node.assetIdentity, context, out _);
+                    var obj = LoadEngineObject(identity, context, out _);
                     if (obj != null)
                     {
                         var mesh = obj as Mesh ?? (obj is GameObject go ? go.GetComponentInChildren<MeshFilter>()?.sharedMesh : null);
@@ -124,7 +126,7 @@ namespace LiberaFx.Unity.Editor
                         {
                             assets.Add(new LiberaFxUnityRenderAssetBinding
                             {
-                                assetIdentity = node.assetIdentity,
+                                assetIdentity = identity,
                                 mesh = mesh,
                                 texture = tex
                             });
@@ -171,9 +173,16 @@ namespace LiberaFx.Unity.Editor
                 }
                 catch (ArgumentException) { }
             }
+            else
+            {
+                var colon = identity.IndexOf(':');
+                var guidPart = colon > 0 ? identity.Substring(0, colon) : identity;
+                if (Guid.TryParse(guidPart, out var parsedGuid) && parsedGuid != Guid.Empty)
+                    assetPath = AssetDatabase.GUIDToAssetPath(parsedGuid.ToString("N"));
+            }
             if (string.IsNullOrEmpty(assetPath)) return null;
             var obj = AssetDatabase.LoadMainAssetAtPath(assetPath);
-            if (obj != null) context.DependsOnSourceAsset(assetPath);
+            if (obj != null && context != null) context.DependsOnSourceAsset(assetPath);
             return obj;
         }
 
@@ -199,6 +208,40 @@ namespace LiberaFx.Unity.Editor
             return bytes != null && bytes.Length >= 4 &&
                 bytes[0] == signature[0] && bytes[1] == signature[1] &&
                 bytes[2] == signature[2] && bytes[3] == signature[3];
+        }
+    }
+
+    internal sealed class LiberaFxSpawnablePostprocessor : AssetPostprocessor
+    {
+        private static void OnPostprocessAllAssets(
+            string[] importedAssets,
+            string[] deletedAssets,
+            string[] movedAssets,
+            string[] movedFromAssetPaths)
+        {
+            if (importedAssets == null || importedAssets.Length == 0) return;
+            foreach (var path in importedAssets)
+            {
+                if (string.IsNullOrEmpty(path) ||
+                    (!path.EndsWith(".lfxb", StringComparison.OrdinalIgnoreCase) &&
+                     !path.EndsWith(".lfxp", StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                var asset = AssetDatabase.LoadAssetAtPath<LiberaFxSpawnableAsset>(path);
+                if (asset == null || asset.PackageBytes == null || asset.PackageBytes.Length < 4)
+                    continue;
+                if ((asset.AutoResolvedAssets != null && asset.AutoResolvedAssets.Length > 0) ||
+                    (asset.AutoResolvedMaterials != null && asset.AutoResolvedMaterials.Length > 0))
+                    continue;
+
+                LiberaFxSpawnableImporter.ResolvePackageBindings(
+                    asset.PackageBytes, null, out var resolvedAssets, out var resolvedMaterials);
+                if (resolvedAssets.Length > 0 || resolvedMaterials.Length > 0)
+                {
+                    asset.SetResolvedBindings(
+                        resolvedAssets, asset.ResourceOverrides, resolvedMaterials, asset.MaterialOverrides);
+                }
+            }
         }
     }
 }
