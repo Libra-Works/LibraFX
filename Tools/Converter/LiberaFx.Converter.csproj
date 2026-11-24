@@ -58,6 +58,7 @@
     <Compile Include="..\..\Services\Compilation\SpawnableGroupPackageBinary.cs" Link="Services\SpawnableGroupPackageBinary.cs" />
     <Compile Include="..\..\Services\Compilation\EffectBinary.cs" Link="Services\EffectBinary.cs" />
     <Compile Include="..\..\Services\Compilation\SignalTimelineLowering.cs" Link="Services\SignalTimelineLowering.cs" />
+    <Compile Include="..\..\Services\Compilation\RerouteLowering.cs" Link="Services\RerouteLowering.cs" />
     <Compile Include="..\..\Services\Compilation\RenderProgramBindings.cs" Link="Services\RenderProgramBindings.cs" />
     <Compile Include="..\..\Services\Compilation\FlexiblePlaneDrawSchema.cs" Link="Services\FlexiblePlaneDrawSchema.cs" />
     <Compile Include="..\..\Models\Graph\ProceduralResourceSchema.cs" Link="Models\ProceduralResourceSchema.cs" />
