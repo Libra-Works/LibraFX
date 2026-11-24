@@ -104,6 +104,17 @@ Prebuilt Unreal binaries are specific to each engine minor version (e.g. `5.7`, 
 and target platform; copy the inner `LibraRuntimeForUnreal` folder from the matching `UE<version>`
 directory into your project's `Plugins/` folder.
 
+For release publishing, `Tools/Package-UnrealBinaryReleases.ps1` auto-discovers installed
+Unreal Engine 5.7+ versions (or accepts `-UnrealEngineRoots`) and emits separate per-version
+release archives (`LibraForUnreal-<BuildVersion>-UE<Major>.<Minor>-win64.zip`) alongside
+the CI-built `LibraForUnreal-<BuildVersion>.zip` source plugin:
+
+```powershell
+.\Tools\Package-UnrealBinaryReleases.ps1 `
+  -BuildVersion 2026.11.99 `
+  -OutputDirectory C:\SdkStaging\ReleaseAssets
+```
+
 ## Reproducible local staging
 
 From PowerShell 7, export into a **new absolute directory outside the repository**:
