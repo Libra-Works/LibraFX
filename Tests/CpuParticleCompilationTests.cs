@@ -169,7 +169,10 @@ public static class CpuParticleCompilationTests
              new(id.Id, outputId.Id, null, "value"), new(inputSignal.Id, outputSignal.Id)]) };
         system = system with { ChildGraph = child with
         {
-            Nodes = child.Nodes.Select(node => node.Id == update.Id ? update : node).ToArray()
+            Nodes = child.Nodes.Select(node =>
+                node.Id == update.Id ? update :
+                CpuParticleSchema.Name(node.Kind) == "CpuParticleSpriteDraw" ? node with { Parameters = [Parameter("assetPath", "string", "builtin:white")] } :
+                node).ToArray()
         } };
         var velocity = Node("FloatX3", Parameter("value", "vector3", new[] { 10d, 0, 0 }));
         return new([system, velocity], [new(velocity.Id, system.Id, CpuParticleSchema.PortId(input.Id))]);
@@ -226,7 +229,8 @@ public static class CpuParticleCompilationTests
             {
                 ChildGraph = child with { Nodes = child.Nodes.Select(n => n.Id != draw.Id ? n : draw with
                 {
-                    Parameters = [Parameter("flipbookEnabled", "bool", true), Parameter("atlasColumns", "int", columns),
+                    Parameters = [Parameter("assetPath", "string", "builtin:white"),
+                        Parameter("flipbookEnabled", "bool", true), Parameter("atlasColumns", "int", columns),
                         Parameter("atlasRows", "int", 2), Parameter("atlasFps", "float", 12d),
                         Parameter("atlasStartFrame", "int", 1), Parameter("atlasOverLife", "bool", true)]
                 }).ToArray() }
