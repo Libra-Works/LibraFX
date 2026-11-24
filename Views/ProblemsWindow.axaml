@@ -6,14 +6,21 @@
         x:DataType="vm:GraphWorkspaceViewModel"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
     <Grid RowDefinitions="Auto,*" Margin="10" RowSpacing="6">
-        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
-            <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Messages.GraphProblemsTitle}" />
-            <Border Grid.Column="1" Background="Transparent" Padding="2"
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="6">
+            <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Messages.GraphProblemsTitle}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Classes="editor-label" Text="{Binding TypeProblems.Count, StringFormat='({0})'}"
+                       IsVisible="{Binding HasTypeProblems}" VerticalAlignment="Center" />
+            <Border Grid.Column="3" Background="Transparent" Padding="2"
                     ToolTip.Tip="{DynamicResource Text.Messages.GraphProblemsHelp}">
                 <views:EditorIconView Icon="Info" />
             </Border>
         </Grid>
-        <ScrollViewer Grid.Row="1">
+        <TextBlock Grid.Row="1" Classes="editor-label"
+                   Text="{DynamicResource Text.Messages.GraphProblemsEmpty}"
+                   IsVisible="{Binding !HasTypeProblems}"
+                   Foreground="{DynamicResource EffectMutedForegroundBrush}"
+                   TextWrapping="Wrap" Margin="2,4" />
+        <ScrollViewer Grid.Row="1" IsVisible="{Binding HasTypeProblems}">
             <ItemsControl ItemsSource="{Binding TypeProblems}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="vm:GraphProblemViewModel">

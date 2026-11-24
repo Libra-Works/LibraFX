@@ -85,6 +85,8 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
 
     public ObservableCollection<GraphConnectionViewModel> SelectedConnections { get; } = [];
     public ObservableCollection<GraphProblemViewModel> TypeProblems { get; } = [];
+    public bool HasTypeProblems => TypeProblems.Count > 0;
+    public bool IsGraphEmpty => Nodes.Count == 0 && CommentNodes.Count == 0;
 
     public IReadOnlyList<GraphNodeViewModel> SelectedNodes => _selectedNodes;
 
@@ -232,6 +234,9 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
         _history = history;
         _document = document ?? this;
         _graphPath.AddRange(path);
+        TypeProblems.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasTypeProblems));
+        Nodes.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsGraphEmpty));
+        CommentNodes.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsGraphEmpty));
         if (document is not null)
         {
             _rootSnapshot = document._rootSnapshot;

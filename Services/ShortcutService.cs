@@ -65,6 +65,11 @@ public sealed class ShortcutService : ObservableObject
 
     public ObservableCollection<ShortcutEntry> Entries { get; } =
     [
+        new("file.new", "New project", "Global", Key.N, KeyModifiers.Control),
+        new("file.open", "Open project", "Global", Key.O, KeyModifiers.Control),
+        new("file.save", "Save project", "Global", Key.S, KeyModifiers.Control),
+        new("file.saveAs", "Save project as", "Global", Key.S, KeyModifiers.Control | KeyModifiers.Shift),
+        new("file.export", "Export VFX binary", "Global", Key.E, KeyModifiers.Control),
         new("undo", "Undo", "Global", Key.Z, KeyModifiers.Control),
         new("redo", "Redo", "Global", Key.Y, KeyModifiers.Control),
         new("search.anything", "Search anything", "Global", Key.P, KeyModifiers.Control),

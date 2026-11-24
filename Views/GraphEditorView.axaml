@@ -166,6 +166,27 @@
 
                 <views:GraphSceneLayer x:Name="SceneLayer" DataContext="{Binding}" GridOnly="True" />
 
+                <Border IsVisible="{Binding IsGraphEmpty}"
+                        IsHitTestVisible="False"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Top"
+                        Margin="260,180,0,0"
+                        Padding="18,14"
+                        CornerRadius="8"
+                        BorderThickness="1"
+                        BorderBrush="{DynamicResource EffectBorderBrush}"
+                        Background="{DynamicResource EffectPanelBackgroundBrush}"
+                        Opacity="0.85">
+                    <StackPanel Spacing="6" MaxWidth="360">
+                        <TextBlock Classes="editor-heading"
+                                   Text="{DynamicResource Text.Panels.GraphEmptyTitle}" />
+                        <TextBlock Classes="editor-label"
+                                   Text="{DynamicResource Text.Panels.GraphEmptyHint}"
+                                   Foreground="{DynamicResource EffectMutedForegroundBrush}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
                 <ItemsControl ItemsSource="{Binding CommentNodes}">
                     <ItemsControl.ItemContainerTheme>
                         <ControlTheme TargetType="ContentPresenter">

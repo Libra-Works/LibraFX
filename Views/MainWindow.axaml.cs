@@ -99,16 +99,27 @@ public partial class MainWindow : Window
         {
             OnAnythingSearchClick(sender, e);
             e.Handled = true;
+            return;
         }
-        else if (model.Shortcuts.Matches("undo", e) && model.UndoCommand.CanExecute(null))
+
+        (string Id, System.Windows.Input.ICommand Command)[] commands =
+        [
+            ("file.new", model.NewDocumentCommand),
+            ("file.open", model.OpenProjectCommand),
+            ("file.save", model.SaveProjectCommand),
+            ("file.saveAs", model.SaveProjectAsCommand),
+            ("file.export", model.ExportVfxCommand),
+            ("undo", model.UndoCommand),
+            ("redo", model.RedoCommand)
+        ];
+        foreach (var (id, command) in commands)
         {
-            model.UndoCommand.Execute(null);
-            e.Handled = true;
-        }
-        else if (model.Shortcuts.Matches("redo", e) && model.RedoCommand.CanExecute(null))
-        {
-            model.RedoCommand.Execute(null);
-            e.Handled = true;
+            if (model.Shortcuts.Matches(id, e) && command.CanExecute(null))
+            {
+                command.Execute(null);
+                e.Handled = true;
+                return;
+            }
         }
     }
 
