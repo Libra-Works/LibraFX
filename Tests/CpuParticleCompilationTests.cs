@@ -254,6 +254,7 @@ public static class CpuParticleCompilationTests
 
     private static void VerifyParticleMaterials()
     {
+        var procTex = Node("ProceduralTexture");
         var procMat = Node("ProceduralMaterial");
         var system = Node("CpuParticle");
         var child = CpuParticleSchema.CreateChild(Definition("CpuParticle").Kind);
@@ -269,7 +270,8 @@ public static class CpuParticleCompilationTests
                 }).ToArray()
             }
         };
-        var cpuGraph = new GraphSnapshot([procMat, system], [new(procMat.Id, system.Id, "proceduralMaterial", "value")]);
+        var cpuGraph = new GraphSnapshot([procTex, procMat, system],
+            [new(procTex.Id, procMat.Id, "texture0", "value"), new(procMat.Id, system.Id, "proceduralMaterial", "value")]);
         var cpuPkg = SpawnableGroupPackage.Compile(cpuGraph);
         using (var render = JsonDocument.Parse(cpuPkg.RootRenderConfiguration))
         {
@@ -285,7 +287,8 @@ public static class CpuParticleCompilationTests
         }
 
         var gpu = Node("GpuParticle", Parameter("materialSchema", "string", matSchema));
-        var gpuGraph = new GraphSnapshot([procMat, gpu], [new(procMat.Id, gpu.Id, "proceduralMaterial", "value")]);
+        var gpuGraph = new GraphSnapshot([procTex, procMat, gpu],
+            [new(procTex.Id, procMat.Id, "texture0", "value"), new(procMat.Id, gpu.Id, "proceduralMaterial", "value")]);
         var gpuPkg = SpawnableGroupPackage.Compile(gpuGraph);
         using (var gpuRender = JsonDocument.Parse(gpuPkg.RootRenderConfiguration))
         {
