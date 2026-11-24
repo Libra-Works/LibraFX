@@ -3,7 +3,7 @@
   "name":"CPU Particle","displayNameKey":"Editor.Node.CpuParticle","group":"CPU Particles","groupNameKey":"Editor.NodeGroup.CpuParticles",
   "descriptionKey":"Cpu.Help.Container",
   "portType":"Float","portCategory":"Parameter",
-  "inputPorts":[{"id":"emitted","name":"Emitted total","portType":"Float","category":"Parameter"},{"id":"emitterMatrix","name":"Emitter Matrix","portType":"Matrix","category":"Parameter"},{"id":"drawMatrix","name":"Draw Matrix","portType":"Matrix","category":"Parameter"},{"id":"emitterMesh","name":"Emitter Mesh","portType":"ProceduralModel","category":"Parameter"}],"outputPorts":[],
+  "inputPorts":[{"id":"emitted","name":"Emitted total","portType":"Float","category":"Parameter"},{"id":"emitterMatrix","name":"Emitter Matrix","portType":"Matrix","category":"Parameter"},{"id":"drawMatrix","name":"Draw Matrix","portType":"Matrix","category":"Parameter"},{"id":"emitterMesh","name":"Emitter Mesh","portType":"ProceduralModel","category":"Parameter"},{"id":"proceduralTexture","name":"Procedural Texture","portType":"ProceduralTexture","category":"Parameter"},{"id":"proceduralMaterial","name":"Procedural Material","portType":"ProceduralMaterial","category":"Parameter"}],"outputPorts":[],
   "parameters":[
     {"id":"capacity","name":"Capacity","displayNameKey":"Cpu.Parameter.Capacity","type":"int","defaultValue":1024},
     {"id":"seed","name":"Seed (UInt32)","displayNameKey":"Cpu.Parameter.Seed","type":"float","defaultValue":1},

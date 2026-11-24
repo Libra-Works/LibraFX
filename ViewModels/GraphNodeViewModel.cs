@@ -25,6 +25,7 @@ public sealed class GraphNodeViewModel : ObservableObject
     private double? _previewY;
     private double? _previewWidth;
     private double? _previewHeight;
+    private bool? _previewExpanded;
     private bool _isSelected;
     private bool _isDetailsExpanded;
     private FCurveSnapshot? _curve;
@@ -83,10 +84,11 @@ public sealed class GraphNodeViewModel : ObservableObject
             Definition.Kind.Value == "LifeTime" ? "Editor.Lifecycle.InstanceLifeHelp" : "Editor.Lifecycle.DelayHelp");
     public IBrush LifecycleAccentBrush => ThemeSettingsService.EditorBrush(
         IsSpawnableGroup || Definition.Kind.Value == "LifeTime" ? "GraphParameter" : "GraphSignal");
-    public bool ShowGroupHint => IsGraphGroup && !IsSpawnableGroup && !HasCustomInputs && !HasCustomOutputs;
+    public bool ShowGroupHint => IsGraphGroup && !IsSpawnableGroup;
     public bool IsGpuParticle => GpuParticleEditorService.IsGpu(Definition.Kind);
     public bool IsProcedural => ProceduralResourceSchema.IsMetadata(Definition.Kind);
     public bool HasInlineWorkspace => IsGraphGroup || IsGpuParticle || IsProcedural;
+    public bool ShowCollapsedResizeGrip => HasInlineWorkspace && !IsInlineExpanded;
     public bool IsComment => Definition.Kind == GraphNodeKind.Comment;
     public bool IsReroute => BaseDefinition.Kind.Value == "Reroute";
     public bool HasPorts => !IsComment && (!IsGraphGroup ||
@@ -142,10 +144,10 @@ public sealed class GraphNodeViewModel : ObservableObject
         p.Id == NodeLockedId && p.Type == "bool")?.Value.ValueKind == JsonValueKind.True;
     public bool IsParameterLocked(string parameterId) => Parameters?.FirstOrDefault(p =>
         p.Id == ParameterLockId(parameterId) && p.Type == "bool")?.Value.ValueKind == JsonValueKind.True;
-    public bool IsInlineExpanded => HasInlineWorkspace && Parameters?.FirstOrDefault(p =>
-        p.Id == InlineExpandedId && p.Type == "bool")?.Value.ValueKind == JsonValueKind.True;
-    public double InlineWidth => _previewWidth ?? InlineNumber(InlineWidthId, 640, 420, 2400);
-    public double InlineHeight => _previewHeight ?? InlineNumber(InlineHeightId, 380, 260, 1600);
+    public bool IsInlineExpanded => HasInlineWorkspace && (_previewExpanded ?? (Parameters?.FirstOrDefault(p =>
+        p.Id == InlineExpandedId && p.Type == "bool")?.Value.ValueKind == JsonValueKind.True));
+    public double InlineWidth => _previewWidth ?? InlineNumber(InlineWidthId, 640, 280, 2400);
+    public double InlineHeight => _previewHeight ?? InlineNumber(InlineHeightId, 380, 160, 1600);
     public double RenderedWidth => IsComment ? CommentWidth : IsReroute ? 86 : IsInlineExpanded ? InlineWidth : CalculatedNodeWidth;
 
     private double CalculatedNodeWidth
@@ -183,15 +185,17 @@ public sealed class GraphNodeViewModel : ObservableObject
         RefreshLifecyclePresentation();
     }
 
-    internal void PreviewInlineSize(double width, double height)
+    internal void PreviewInlineSize(double width, double height, bool? expanded = null)
     {
-        _previewWidth = Math.Clamp(width, 420, 2400);
-        _previewHeight = Math.Clamp(height, 260, 1600);
+        _previewExpanded = expanded;
+        _previewWidth = Math.Clamp(width, 280, 2400);
+        _previewHeight = Math.Clamp(height, 160, 1600);
         RefreshInlinePresentation();
     }
 
     internal void CancelInlineSize()
     {
+        _previewExpanded = null;
         _previewWidth = null;
         _previewHeight = null;
         RefreshInlinePresentation();
@@ -200,6 +204,7 @@ public sealed class GraphNodeViewModel : ObservableObject
     private void RefreshInlinePresentation()
     {
         OnPropertyChanged(nameof(IsInlineExpanded));
+        OnPropertyChanged(nameof(ShowCollapsedResizeGrip));
         OnPropertyChanged(nameof(InlineWidth));
         OnPropertyChanged(nameof(InlineHeight));
         OnPropertyChanged(nameof(RenderedWidth));

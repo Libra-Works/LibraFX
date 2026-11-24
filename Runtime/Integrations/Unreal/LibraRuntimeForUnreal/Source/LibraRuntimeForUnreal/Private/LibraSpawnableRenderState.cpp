@@ -281,6 +281,9 @@ struct FCpuParticleDraw
     TStrongObjectPtr<UStaticMesh> Mesh;
     TStrongObjectPtr<UTexture> Texture;
     TStrongObjectPtr<UMaterialInterface> Material;
+    FString ProceduralTexture;
+    FString ProceduralMaterial;
+    bool bCustomMaterial = false;
 };
 
 struct FFlexiblePlaneDraw
@@ -592,7 +595,7 @@ struct FLibraSpawnableRenderState::FImpl
         auto cpuVersion = double{};
         if ((root->HasField(TEXT("cpuParticleVersion")) || (cpuParticles && !cpuParticles->IsEmpty())) &&
             (!root->TryGetNumberField(TEXT("cpuParticleVersion"), cpuVersion) ||
-             (cpuVersion != 1 && cpuVersion != 2 && cpuVersion != 3 && cpuVersion != 4)))
+             (cpuVersion != 1 && cpuVersion != 2 && cpuVersion != 3 && cpuVersion != 4 && cpuVersion != 5)))
         {
             return Fail(TEXT("Unsupported CPU particle scene metadata version."));
         }
@@ -852,7 +855,7 @@ struct FLibraSpawnableRenderState::FImpl
                 draw.bAdditive = blendMode == TEXT("Additive");
                 if (!LibraCpuParticleRendering::ReadAtlas(object,draw.Atlas)) return Fail(TEXT("Invalid CPU Flipbook settings."));
                 if (!LibraParticleSpriteData::Read(object, draw.HasSpriteAnimation, draw.SpriteAnimation) ||
-                    (draw.HasSpriteAnimation && (cpuVersion != 4 || draw.Atlas.enabled)))
+                    (draw.HasSpriteAnimation && (cpuVersion < 4 || draw.Atlas.enabled)))
                 {
                     return Fail(TEXT("Invalid CPU Sprite editor animation; metadata version 4 is required."));
                 }
@@ -871,7 +874,21 @@ struct FLibraSpawnableRenderState::FImpl
                         draw.DrawRows.Add(row);
                     }
                 }
-                auto texture = asset == TEXT("builtin:white") || asset == TEXT("builtin:radial-glow")
+                FString procTex, procMat;
+                if (object->TryGetStringField(TEXT("proceduralTexture"), procTex))
+                {
+                    FGuid parsed;
+                    draw.ProceduralTexture = FGuid::Parse(procTex, parsed)
+                        ? parsed.ToString(EGuidFormats::DigitsWithHyphens).ToLower() : procTex;
+                }
+                if (object->TryGetStringField(TEXT("proceduralMaterial"), procMat))
+                {
+                    FGuid parsed;
+                    draw.ProceduralMaterial = FGuid::Parse(procMat, parsed)
+                        ? parsed.ToString(EGuidFormats::DigitsWithHyphens).ToLower() : procMat;
+                }
+                auto texture = (asset == TEXT("builtin:white") || asset == TEXT("builtin:radial-glow") ||
+                                asset == TEXT("builtin:procedural-material") || asset == TEXT("builtin:procedural-texture"))
                     ? MakeWhiteTexture(asset == TEXT("builtin:radial-glow")) : Resolve<UTexture>(asset, EKind::Texture);
                 if (!texture)
                 {
@@ -886,27 +903,58 @@ struct FLibraSpawnableRenderState::FImpl
                         return Fail(TEXT("CPU particle sprite source dimensions do not match its authored cells."));
                     }
                 }
-                const auto* materialIdentity = draw.bAdditive
-                    ? TEXT("builtin:cpu-particle-additive") : TEXT("builtin:cpu-particle-alpha");
-                auto* material = Resolve<UMaterialInterface>(materialIdentity, EKind::Material);
-                if (!material)
+                FString customMaterialPath;
+                const TArray<TSharedPtr<FJsonValue>>* matArray = nullptr;
+                if (object->TryGetArrayField(TEXT("materials"), matArray) && matArray && !matArray->IsEmpty())
                 {
-                    return Fail(TEXT("Missing CPU particle Sprite material binding: ") + FString(materialIdentity));
+                    for (const auto& matVal : *matArray)
+                    {
+                        auto matObj = matVal.IsValid() && matVal->Type == EJson::Object ? matVal->AsObject() : nullptr;
+                        int32 matSlot = -1;
+                        FString matPath;
+                        if (matObj && matObj->TryGetNumberField(TEXT("slot"), matSlot) && matSlot == 0 &&
+                            matObj->TryGetStringField(TEXT("path"), matPath) && !matPath.IsEmpty())
+                        {
+                            customMaterialPath = matPath;
+                            break;
+                        }
+                    }
                 }
-                const auto expectedBlend = draw.bAdditive ? BLEND_Additive : BLEND_Translucent;
-                if (material->GetBlendMode() != expectedBlend || !material->IsTwoSided() ||
-                    !material->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes) ||
-                    !HasParameter(material, FMaterialParameterInfo(TEXT("Texture")), TEXT("texture")))
+                if (!customMaterialPath.IsEmpty())
                 {
-                    return Fail(TEXT("CPU particle material must be two-sided, support instanced static meshes, ")
-                        TEXT("use the requested blend mode and expose a Texture parameter."));
+                    auto* customMaterial = Resolve<UMaterialInterface>(customMaterialPath, EKind::Material);
+                    if (!customMaterial)
+                    {
+                        return Fail(TEXT("Missing CPU particle Material binding: ") + customMaterialPath);
+                    }
+                    customMaterial->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes);
+                    draw.Material.Reset(customMaterial);
+                    draw.bCustomMaterial = true;
                 }
-                draw.Material.Reset(material);
-                if ((draw.Atlas.enabled || draw.HasSpriteAnimation) &&
-                    !HasParameter(material, FMaterialParameterInfo(TEXT("AtlasRect")), TEXT("vector")))
+                else
                 {
-                    return Fail(TEXT(
-                        "CPU Flipbook material must expose AtlasRect (top-left UV offset in XY, cell size in ZW)."));
+                    const auto* materialIdentity = draw.bAdditive
+                        ? TEXT("builtin:cpu-particle-additive") : TEXT("builtin:cpu-particle-alpha");
+                    auto* material = Resolve<UMaterialInterface>(materialIdentity, EKind::Material);
+                    if (!material)
+                    {
+                        return Fail(TEXT("Missing CPU particle Sprite material binding: ") + FString(materialIdentity));
+                    }
+                    const auto expectedBlend = draw.bAdditive ? BLEND_Additive : BLEND_Translucent;
+                    if (material->GetBlendMode() != expectedBlend || !material->IsTwoSided() ||
+                        !material->CheckMaterialUsage(MATUSAGE_InstancedStaticMeshes) ||
+                        !HasParameter(material, FMaterialParameterInfo(TEXT("Texture")), TEXT("texture")))
+                    {
+                        return Fail(TEXT("CPU particle material must be two-sided, support instanced static meshes, ")
+                            TEXT("use the requested blend mode and expose a Texture parameter."));
+                    }
+                    draw.Material.Reset(material);
+                    if ((draw.Atlas.enabled || draw.HasSpriteAnimation) &&
+                        !HasParameter(material, FMaterialParameterInfo(TEXT("AtlasRect")), TEXT("vector")))
+                    {
+                        return Fail(TEXT(
+                            "CPU Flipbook material must expose AtlasRect (top-left UV offset in XY, cell size in ZW)."));
+                    }
                 }
                 auto* plane = Resolve<UStaticMesh>(TEXT("/Engine/BasicShapes/Plane.Plane"),
                     EKind::Model, false);
@@ -1846,6 +1894,16 @@ struct FLibraSpawnableRenderState::FImpl
                 if (!batch.Material.IsValid() || !root)
                 {
                     return Fail(TEXT("An owned CPU particle primitive or its actor root was destroyed externally."));
+                }
+                if (instance->Procedural && !system.bCustomMaterial &&
+                    (!system.ProceduralMaterial.IsEmpty() || !system.ProceduralTexture.IsEmpty()))
+                {
+                    const auto& procId = !system.ProceduralMaterial.IsEmpty()
+                        ? system.ProceduralMaterial : system.ProceduralTexture;
+                    if (auto* procTexture = instance->Procedural->GetResourceTexture(procId))
+                    {
+                        batch.Material->SetTextureParameterValue(TEXT("Texture"), procTexture);
+                    }
                 }
                 auto* world = Owner.GetWorld();
                 auto* controller = world ? world->GetFirstPlayerController() : nullptr;

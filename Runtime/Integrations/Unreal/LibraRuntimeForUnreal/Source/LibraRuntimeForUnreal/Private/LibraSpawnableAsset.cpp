@@ -391,7 +391,7 @@ bool ReadLibraPackageResourceDrawKeys(const std::vector<std::uint8_t>& bytes,
         auto cpuVersion = double{};
         if (cpuParticles->Num() > 128 ||
             (!cpuParticles->IsEmpty() && (!root->TryGetNumberField(TEXT("cpuParticleVersion"), cpuVersion) ||
-                (cpuVersion != 1 && cpuVersion != 2 && cpuVersion != 3))))
+                (cpuVersion != 1 && cpuVersion != 2 && cpuVersion != 3 && cpuVersion != 4 && cpuVersion != 5))))
         {
             return false;
         }
@@ -402,16 +402,36 @@ bool ReadLibraPackageResourceDrawKeys(const std::vector<std::uint8_t>& bytes,
             if (!particle || !particle->TryGetStringField(TEXT("assetPath"), identity) ||
                 !particle->TryGetStringField(TEXT("blendMode"), blendMode) ||
                 (blendMode != TEXT("Alpha") && blendMode != TEXT("Additive")) ||
-                (identity != TEXT("builtin:white") &&
+                (identity != TEXT("builtin:white") && identity != TEXT("builtin:radial-glow") &&
+                 identity != TEXT("builtin:procedural-material") && identity != TEXT("builtin:procedural-texture") &&
                     !AddLibraPackageResourceKey(keys, identity, ELibraPackageResourceKind::Texture)))
             {
                 return false;
             }
-            const auto* materialIdentity = blendMode == TEXT("Additive")
-                ? TEXT("builtin:cpu-particle-additive") : TEXT("builtin:cpu-particle-alpha");
-            if (!AddLibraPackageResourceKey(keys, materialIdentity, ELibraPackageResourceKind::Material))
+            const TArray<TSharedPtr<FJsonValue>>* materials = nullptr;
+            auto hasCustomMaterial = false;
+            if (particle->TryGetArrayField(TEXT("materials"), materials) && materials && !materials->IsEmpty())
             {
-                return false;
+                for (const auto& matVal : *materials)
+                {
+                    auto matObj = matVal.IsValid() && matVal->Type == EJson::Object ? matVal->AsObject() : nullptr;
+                    auto matPath = FString{};
+                    if (matObj && matObj->TryGetStringField(TEXT("path"), matPath) && !matPath.IsEmpty())
+                    {
+                        if (!AddLibraPackageResourceKey(keys, matPath, ELibraPackageResourceKind::Material))
+                            return false;
+                        hasCustomMaterial = true;
+                    }
+                }
+            }
+            if (!hasCustomMaterial)
+            {
+                const auto* materialIdentity = blendMode == TEXT("Additive")
+                    ? TEXT("builtin:cpu-particle-additive") : TEXT("builtin:cpu-particle-alpha");
+                if (!AddLibraPackageResourceKey(keys, materialIdentity, ELibraPackageResourceKind::Material))
+                {
+                    return false;
+                }
             }
         }
     }

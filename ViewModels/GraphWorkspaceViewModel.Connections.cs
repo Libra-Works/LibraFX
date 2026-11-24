@@ -33,7 +33,7 @@ public sealed partial class GraphWorkspaceViewModel
         ConnectionPreviewPoint = null;
         OnPropertyChanged(nameof(PendingOutputNode));
         OnPropertyChanged(nameof(PendingOutputPortId));
-        SetConnectionStatus("Messages.ChooseConnection");
+        ReportStatus(string.Empty);
     }
 
     public void CompleteConnection(GraphNodeViewModel target, string? targetPortId = null, string? sourcePortId = null)

@@ -15,6 +15,9 @@ namespace LiberaFx.Views;
 public sealed partial class ProceduralWorkspaceView
 {
     private readonly StackPanel _texturePreview = new() { Name = "LocalTexturePreview", Margin = new Thickness(12, 8), Spacing = 4 };
+    private readonly ColorSwatch _previewCheckerboard = new() { Color = Colors.Transparent };
+    private readonly Border _previewSolidBackground = new() { Background = new SolidColorBrush(Color.Parse("#181A20")), IsVisible = false };
+    private readonly CheckBox _previewCheckerToggle = new() { IsChecked = true, VerticalAlignment = VerticalAlignment.Center };
     private readonly Image _textureImage = new() { Name = "TexturePreviewImage", Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
     private readonly ProceduralMeshPreviewView _meshPreview = new() { Name = "MeshPreview", HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
     private readonly TextBlock _texturePreviewTitle = new();
@@ -31,11 +34,18 @@ public sealed partial class ProceduralWorkspaceView
 
     private Control CreateTexturePreview()
     {
-        var image = new Grid { Height = 220, Children = { new ColorSwatch { Color = Colors.Transparent }, _textureImage, _meshPreview } };
+        var image = new Grid { Height = 220, Children = { _previewSolidBackground, _previewCheckerboard, _textureImage, _meshPreview } };
+        _previewCheckerToggle.Content = T("PreviewCheckerboard");
+        _previewCheckerToggle.IsCheckedChanged += (_, _) =>
+        {
+            var showChecker = _previewCheckerToggle.IsChecked != false;
+            _previewCheckerboard.IsVisible = showChecker;
+            _previewSolidBackground.IsVisible = !showChecker;
+        };
         _texturePreview.Children.Add(_texturePreviewTitle);
         _texturePreview.Children.Add(image);
         _texturePreview.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6,
-            Children = { _texturePreviewPlay, _texturePreviewTime } });
+            Children = { _texturePreviewPlay, _texturePreviewTime, _previewCheckerToggle } });
         _texturePreview.Children.Add(_texturePreviewStatus);
         _texturePreviewTime.ValueChanged += (_, _) => { if (IsVisible) QueueTexturePreview(); };
         _texturePreviewPlay.Click += (_, _) =>

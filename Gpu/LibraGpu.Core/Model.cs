@@ -15,7 +15,7 @@ public enum GpuOp
     Pow = 26, Sqrt = 27, Exp = 28, Log = 29, Lerp = 30, Smoothstep = 31, Remap = 32,
     Dot = 33, Cross = 34, Distance = 35, Saturate = 36,
     GradientNoise3D = 37, Fbm = 38, Turbulence = 39, CurlNoise = 40, SampleFlowMap = 41,
-    GreaterThan = 42, LessThan = 43
+    GreaterThan = 42, LessThan = 43, FCurve = 44
 }
 public enum KernelStage { Spawn, Update }
 public enum FlowKind { Spawn, Update, RenderBillboard, RenderStartTexture, ComputePass }
@@ -68,6 +68,58 @@ public sealed record KernelGraph
     public List<GpuNode> Nodes { get; init; } = [];
     public List<AttributeWrite> Writes { get; init; } = [];
 }
+public sealed record GpuCurveKey(double Time, double Value, double InTangent = 0, double OutTangent = 0, int Interpolation = 0);
+
+public sealed record GpuCurveData
+{
+    public List<GpuCurveKey> Keys { get; init; } = [new(0, 0), new(1, 1)];
+
+    public static GpuCurveData DefaultLinear() => new() { Keys = [new(0, 0), new(1, 1)] };
+
+    public double Evaluate(double time)
+    {
+        if (Keys.Count == 0) return 0;
+        var sorted = Keys.OrderBy(k => k.Time).ToArray();
+        if (time <= sorted[0].Time) return sorted[0].Value;
+        if (time >= sorted[^1].Time) return sorted[^1].Value;
+        for (var i = 0; i < sorted.Length - 1; i++)
+        {
+            var a = sorted[i];
+            var b = sorted[i + 1];
+            if (time > b.Time) continue;
+            var dt = b.Time - a.Time;
+            if (dt <= 1e-9) return b.Value;
+            if (a.Interpolation == 2) return a.Value; // Constant/Step
+            var u = (time - a.Time) / dt;
+            if (a.Interpolation == 1) return a.Value + (b.Value - a.Value) * u; // Linear
+            var u2 = u * u;
+            var u3 = u2 * u;
+            var h00 = 2 * u3 - 3 * u2 + 1;
+            var h10 = u3 - 2 * u2 + u;
+            var h01 = -2 * u3 + 3 * u2;
+            var h11 = u3 - u2;
+            return h00 * a.Value + h10 * (a.OutTangent * dt) + h01 * b.Value + h11 * (b.InTangent * dt);
+        }
+        return sorted[^1].Value;
+    }
+
+    public (float MinTime, float MaxTime, float[] Samples) SampleTable(int count = 65)
+    {
+        if (Keys.Count == 0) return (0f, 1f, new float[count]);
+        var sorted = Keys.OrderBy(k => k.Time).ToArray();
+        var minT = (float)sorted[0].Time;
+        var maxT = (float)sorted[^1].Time;
+        if (maxT <= minT) maxT = minT + 1f;
+        var samples = new float[count];
+        for (var i = 0; i < count; i++)
+        {
+            var t = minT + (maxT - minT) * i / (count - 1);
+            samples[i] = (float)Evaluate(t);
+        }
+        return (minT, maxT, samples);
+    }
+}
+
 public sealed record GpuNode
 {
     public string Id { get; init; } = "";
@@ -80,6 +132,8 @@ public sealed record GpuNode
     public int? ComponentIndex { get; init; }
     public string? Resource { get; init; }
     public TextSpan? SourceSpan { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GpuCurveData? Curve { get; init; }
 }
 public sealed record AttributeWrite(string Id, string Attribute, string Value, TextSpan? SourceSpan = null);
 public sealed record FlowStep

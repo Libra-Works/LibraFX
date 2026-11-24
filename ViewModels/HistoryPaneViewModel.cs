@@ -54,6 +54,10 @@ public sealed class HistoryPaneViewModel : Tool
 
     public bool CanPinCurrent => !_history.IsCurrentPinned;
 
+    public Guid CurrentNodeId => _history.CurrentNodeId;
+
+    public bool DeleteHistoryEntry(Guid nodeId) => _history.DeleteNode(nodeId);
+
     public IRelayCommand PinCurrentCommand { get; }
 
     public HistoryPaneViewModel(ActiveGraphProvider activeGraph)

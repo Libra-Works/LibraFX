@@ -68,11 +68,16 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
     private GraphNodeViewModel? _pendingOutputNode;
     private string? _pendingOutputPortId;
     private Point? _connectionPreviewPoint;
-    private string _connectionStatus = LocalizationService.Shared.Get("Messages.ChooseConnection");
-    private string? _connectionStatusKey = "Messages.ChooseConnection";
+    private string _connectionStatus = string.Empty;
+    private string? _connectionStatusKey;
     private object?[] _connectionStatusArgs = [];
+    public sealed record GraphCameraState(double Zoom, double RelativeOffsetX, double RelativeOffsetY);
     private GraphSnapshot _rootSnapshot = new([], []);
     private readonly List<Guid> _graphPath = [];
+    internal Dictionary<string, GraphCameraState> CameraStates { get; } = new(StringComparer.Ordinal);
+    public string CurrentHierarchyKey => string.Join("/", _graphPath);
+    public event EventHandler<string>? HierarchyChanging;
+    public event EventHandler<string>? HierarchyChanged;
     public event EventHandler? FrameSelectionRequested;
     private GraphNodeViewModel? _containingSpawnable;
 

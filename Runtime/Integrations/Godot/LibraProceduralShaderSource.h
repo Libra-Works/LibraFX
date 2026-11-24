@@ -85,19 +85,13 @@ float pfractal(vec2 uv,PixelOperation op,bool ridged)
     }
     return result/max(total,1e-6);
 }
-layout(local_size_x=8,local_size_y=8,local_size_z=1) in;
-void main()
+vec4 EvalBasicPixelOp(PixelOperation op, vec4 reg0, vec4 a, vec4 b)
 {
-    uvec3 id=gl_GlobalInvocationID; if(any(greaterThanEqual(id.xy,uvec2(_Resolution)))) return;
-    vec4 regs[33]; regs[0]=vec4((vec2(id.xy)+.5)/_Resolution,0,1);
-     for(uint i=0;i<min(_OperationCount,32u);++i)
+    vec4 v=a;
+    vec2 uv=a.xy*op.p.xy+_LocalTime*op.p.zw;
+    switch(op.kind)
     {
-        PixelOperation op=_Operations[i];
-        vec4 a=regs[min(op.inputA,i)],b=regs[min(op.inputB,i)],v=a;
-        vec2 uv=a.xy*op.p.xy+_LocalTime*op.p.zw;
-        switch(op.kind)
-        {
-        case 0: v=regs[0]; break;
+    case 0: v=reg0; break;
         case 1: v=op.p; break;
         case 2: v=vec4(_LocalTime); break;
         case 3:
@@ -144,6 +138,45 @@ void main()
             }
             break;
         default: break;
+    }
+    return v;
+}
+float EvalHeightAt(vec2 suv, uint limit)
+{
+    if(limit==0u) return suv.x;
+    vec4 sub[33]; sub[0]=vec4(suv,0,1);
+    for(uint j=0u;j<min(limit,32u);++j)
+    {
+        PixelOperation sop=_Operations[j];
+        vec4 sv=sop.kind==32u?sub[min(sop.inputA,j)]:EvalBasicPixelOp(sop,sub[0],sub[min(sop.inputA,j)],sub[min(sop.inputB,j)]);
+        sub[j+1]=pfinite(sv)?clamp(sv,vec4(-65504.0),vec4(65504.0)):vec4(0,0,0,0);
+    }
+    return sub[min(limit,32u)].x;
+}
+layout(local_size_x=8,local_size_y=8,local_size_z=1) in;
+void main()
+{
+    uvec3 id=gl_GlobalInvocationID; if(any(greaterThanEqual(id.xy,uvec2(_Resolution)))) return;
+    vec4 regs[33]; regs[0]=vec4((vec2(id.xy)+.5)/_Resolution,0,1);
+    for(uint i=0u;i<min(_OperationCount,32u);++i)
+    {
+        PixelOperation op=_Operations[i];
+        vec4 v;
+        if(op.kind==32u)
+        {
+            float strength=op.p.x;
+            float eps=clamp(op.p.y>0.0?op.p.y:.005,1e-4,.25);
+            float flipY=op.p.z>=.5?1.0:-1.0;
+            float hL=EvalHeightAt(regs[0].xy-vec2(eps,0),op.inputA);
+            float hR=EvalHeightAt(regs[0].xy+vec2(eps,0),op.inputA);
+            float hD=EvalHeightAt(regs[0].xy-vec2(0,eps),op.inputA);
+            float hU=EvalHeightAt(regs[0].xy+vec2(0,eps),op.inputA);
+            vec3 n=normalize(vec3(-(hR-hL)*strength,(hU-hD)*strength*flipY,1.0));
+            v=vec4(n*.5+.5,1.0);
+        }
+        else
+        {
+            v=EvalBasicPixelOp(op,regs[0],regs[min(op.inputA,i)],regs[min(op.inputB,i)]);
         }
         // Half-float storage has a finite range, even when intermediate arithmetic overflows.
         regs[i+1]=pfinite(v)?clamp(v,vec4(-65504.0),vec4(65504.0)):vec4(0,0,0,0);

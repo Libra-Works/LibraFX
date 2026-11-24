@@ -57,6 +57,20 @@ try {
         (Compare-Object -ReferenceObject $expectedRules -DifferenceObject $moduleRules)) {
         throw 'RuntimeCore, Runtime and Editor module boundaries were not packaged.'
     }
+    $coreSourceDir = Join-Path $plugin 'Source\ThirdParty\LibraRuntimeCore\Core'
+    $wrapperDir = Join-Path $plugin 'Source\LibraRuntimeCore\Private'
+    $wrapperIncludes = (Get-ChildItem -LiteralPath $wrapperDir -Filter '*.cpp' |
+        ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
+    $missingCoreWrappers = @(Get-ChildItem -LiteralPath $coreSourceDir -Recurse -Filter '*.cpp' |
+        Where-Object { $_.Name -notmatch '^LbInterop' -and $_.Name -ne 'LbLivePreview.cpp' } |
+        Where-Object {
+            $relative = [IO.Path]::GetRelativePath($coreSourceDir, $_.FullName).Replace('\', '/')
+            $wrapperIncludes -notmatch [regex]::Escape($relative)
+        } |
+        ForEach-Object { [IO.Path]::GetRelativePath($coreSourceDir, $_.FullName).Replace('\', '/') })
+    if ($missingCoreWrappers.Count -gt 0) {
+        throw ("LibraRuntimeCore/Private is missing Unreal wrapper .cpp files for: " + ($missingCoreWrappers -join ', '))
+    }
     $local = Join-Path $plugin 'LocalNotes.txt'
     [IO.File]::WriteAllText($local, 'Unowned project-local content')
     & $installer -ProjectPath $root -Update

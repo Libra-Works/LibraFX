@@ -32,10 +32,9 @@ internal sealed class PortSnapFeedback : IDisposable
         var screenWidth = left is { } a && right is { } b ? ((Vector)(b - a)).Length : pin.Bounds.Width;
         var scale = Math.Max(1.35, 22 / Math.Max(1, screenWidth));
         pin.SetCurrentValue(Button.ForegroundProperty, Brushes.White);
-        pin.SetCurrentValue(Button.BackgroundProperty, pin.FindResource("EffectSelectionBorderBrush") as IBrush ?? Brushes.DodgerBlue);
-        pin.SetCurrentValue(Button.BorderBrushProperty, Brushes.White);
-        pin.SetCurrentValue(Button.BorderThicknessProperty, new Thickness(1.5 / scale));
-        pin.SetCurrentValue(Button.CornerRadiusProperty, new CornerRadius(100));
+        pin.SetCurrentValue(Button.BackgroundProperty, Brushes.Transparent);
+        pin.SetCurrentValue(Button.BorderBrushProperty, Brushes.Transparent);
+        pin.SetCurrentValue(Button.BorderThicknessProperty, new Thickness(0));
         pin.SetCurrentValue(Visual.RenderTransformOriginProperty, RelativePoint.Center);
         pin.SetCurrentValue(Visual.RenderTransformProperty, new ScaleTransform(scale, scale));
         pin.Classes.Add("connection-target");

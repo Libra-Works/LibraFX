@@ -188,14 +188,18 @@ public static class ResourceIdentityExport
             ParameterUses = merged.ParameterUses.Where(use => !debugKeys.Contains(
                 (ResourceIdentityScope.Key(use.InstancePath), use.NodeId))).ToArray()
         };
+        static bool SupportsResourceBinding(GraphNodeKind kind) =>
+            RenderProgramBindings.IsRenderNode(kind) ||
+            CpuParticleSchema.Name(kind) == "CpuParticleSpriteDraw" ||
+            GpuParticleEditorService.IsGpu(kind);
         var nodes = ScopedNodes(graph);
         foreach (var use in merged.Uses)
             if (!nodes.TryGetValue((ResourceIdentityScope.Key(use.InstancePath), use.NodeId), out var node) ||
-                !RenderProgramBindings.IsRenderNode(node.Kind))
+                !SupportsResourceBinding(node.Kind))
                 throw new InvalidDataException($"Resource mapping refers to a missing or unsupported render node {use.NodeId}.");
         foreach (var use in merged.ParameterUses)
             if (!nodes.TryGetValue((ResourceIdentityScope.Key(use.InstancePath), use.NodeId), out var node) ||
-                !RenderProgramBindings.IsRenderNode(node.Kind))
+                !SupportsResourceBinding(node.Kind))
                 throw new InvalidDataException($"Parameter mapping refers to a missing or unsupported render node {use.NodeId}.");
         var resolver = new ResourceIdentityResolver(merged, project, probe);
         var context = new ResourceIdentityRenderContext(resolver, requireMappings: true, graph: graph);

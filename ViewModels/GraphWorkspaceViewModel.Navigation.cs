@@ -55,10 +55,12 @@ public sealed partial class GraphWorkspaceViewModel
             }
         }
         CreateSnapshot();
+        HierarchyChanging?.Invoke(this, CurrentHierarchyKey);
         _graphPath.Add(node.Id);
         RestoreCurrentGraph(node.ChildGraph);
         RefreshBreadcrumbs();
         SetConnectionStatus("Messages.EditingNestedGraph");
+        HierarchyChanged?.Invoke(this, CurrentHierarchyKey);
         return true;
     }
 
@@ -70,17 +72,20 @@ public sealed partial class GraphWorkspaceViewModel
         }
 
         CreateSnapshot();
+        HierarchyChanging?.Invoke(this, CurrentHierarchyKey);
         _graphPath.RemoveRange(depth, _graphPath.Count - depth);
         RestoreCurrentGraph(GetCurrentGraph());
         RefreshBreadcrumbs();
         SetConnectionStatus("Messages.GraphLevelChanged");
+        HierarchyChanged?.Invoke(this, CurrentHierarchyKey);
     }
 
-    public void NavigateToNode(IReadOnlyList<Guid> parentPath, Guid nodeId)
+    public void NavigateToNode(IReadOnlyList<Guid> parentPath, Guid nodeId, bool frameSelection = true)
     {
         if (!_graphPath.SequenceEqual(parentPath))
         {
             CreateSnapshot();
+            var previousKey = CurrentHierarchyKey;
             var current = _rootSnapshot;
             foreach (var id in parentPath)
             {
@@ -112,17 +117,22 @@ public sealed partial class GraphWorkspaceViewModel
                 }
                 current = group.ChildGraph;
             }
+            HierarchyChanging?.Invoke(this, previousKey);
             _graphPath.Clear();
             _graphPath.AddRange(parentPath);
             RestoreCurrentGraph(current);
             RefreshBreadcrumbs();
             SetConnectionStatus("Messages.GraphLevelChanged");
+            HierarchyChanged?.Invoke(this, CurrentHierarchyKey);
         }
         var target = Nodes.FirstOrDefault(node => node.Id == nodeId);
         if (target is not null)
         {
             SelectNode(target);
-            FrameSelectionRequested?.Invoke(this, EventArgs.Empty);
+            if (frameSelection)
+            {
+                FrameSelectionRequested?.Invoke(this, EventArgs.Empty);
+            }
         }
     }
 

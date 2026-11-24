@@ -70,6 +70,8 @@ public sealed partial class ProceduralWorkspaceView : UserControl
             { _workspace.History.Undo(); e.Handled = true; }
             if (e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control) && e.Key == Avalonia.Input.Key.Y)
             { _workspace.History.Redo(); e.Handled = true; }
+            if (e.Key == Avalonia.Input.Key.Delete && _selected >= 0 && e.Source is not TextBox)
+            { Remove(_selected); e.Handled = true; }
         };
     }
     public void Open(GraphWorkspaceViewModel workspace, Guid nodeId)
@@ -90,17 +92,86 @@ public sealed partial class ProceduralWorkspaceView : UserControl
         if (_observedNode is not null) _observedNode.PropertyChanged -= NodeChanged;
         _observedNode = null; IsVisible = false;
     }
+    private readonly List<Button> _cards = [];
+    private int _dragSourceIndex = -1;
+    private int _dragTargetIndex = -1;
+    private Point _dragStart;
+    private bool _dragActive;
+
     private void Card(string text, int index)
     {
         if (_flow.Children.Count > 0) _flow.Children.Add(new TextBlock { Text = "↓", HorizontalAlignment = HorizontalAlignment.Center });
         var button = new Button { Content = text, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 64,
-            Padding = new Thickness(16), BorderThickness = new Thickness(_selected == index ? 2 : 1) };
+            Padding = new Thickness(16), BorderThickness = new Thickness(_selected == index ? 2 : 1),
+            Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand) };
         button.Bind(BackgroundProperty, button.GetResourceObservable("EffectSurfaceBrush"));
         button.Bind(BorderBrushProperty, button.GetResourceObservable(_selected == index ? "EffectSelectionBorderBrush" : "EffectBorderBrush"));
-        button.Click += (_, _) => { _selected = index; _selectedStage = null; Refresh(); };
+        button.AddHandler(PointerPressedEvent, (_, e) =>
+        {
+            if (index < 0 || !e.GetCurrentPoint(button).Properties.IsLeftButtonPressed) return;
+            _dragSourceIndex = index;
+            _dragTargetIndex = index;
+            _dragStart = e.GetPosition(_flow);
+            _dragActive = false;
+            e.Pointer.Capture(button);
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        button.AddHandler(PointerMovedEvent, (_, e) =>
+        {
+            if (index < 0 || _dragSourceIndex != index) return;
+            var pos = e.GetPosition(_flow);
+            if (!_dragActive && Math.Abs(pos.Y - _dragStart.Y) > 6)
+            {
+                _dragActive = true;
+                button.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.SizeNorthSouth);
+            }
+            if (!_dragActive) return;
+            var target = _dragSourceIndex;
+            for (var i = 0; i < _cards.Count; i++)
+            {
+                var bounds = _cards[i].Bounds;
+                if (pos.Y >= bounds.Top && pos.Y <= bounds.Bottom) { target = i; break; }
+                if (pos.Y > bounds.Bottom) target = i;
+            }
+            _dragTargetIndex = target;
+            for (var i = 0; i < _cards.Count; i++)
+            {
+                _cards[i].Opacity = i == _dragSourceIndex ? 0.55 : i == _dragTargetIndex ? 0.85 : 1.0;
+            }
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        button.AddHandler(PointerReleasedEvent, (_, e) =>
+        {
+            if (index < 0)
+            {
+                _selected = -1; _selectedStage = null; Refresh();
+                return;
+            }
+            if (_dragSourceIndex != index) return;
+            var from = _dragSourceIndex;
+            var to = _dragTargetIndex;
+            var wasDrag = _dragActive;
+            _dragSourceIndex = -1;
+            _dragTargetIndex = -1;
+            _dragActive = false;
+            button.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
+            foreach (var c in _cards) c.Opacity = 1.0;
+            e.Pointer.Capture(null);
+            if (wasDrag && from != to)
+            {
+                MoveTo(from, to);
+            }
+            else
+            {
+                _selected = index; _selectedStage = null; Refresh();
+            }
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        if (index >= 0) _cards.Add(button);
         _flow.Children.Add(button);
     }
-    private void LanguageChanged(object? sender, EventArgs e) => Refresh();
+    private void LanguageChanged(object? sender, EventArgs e)
+    {
+        _previewCheckerToggle.Content = T("PreviewCheckerboard");
+        Refresh();
+    }
     private void NodesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (_queued) return;
@@ -117,6 +188,8 @@ public sealed partial class ProceduralWorkspaceView : UserControl
     {
         if (!_refreshing && e.PropertyName is nameof(GraphNodeViewModel.Parameters) or nameof(GraphNodeViewModel.Definition)) Refresh();
     }
+    private bool _suppressInspectorRebuild;
+
     private void Save(ProceduralRecipe recipe)
     {
         try
@@ -148,19 +221,33 @@ public sealed partial class ProceduralWorkspaceView : UserControl
     private void Number(Panel parent, string label, float value, Action<float> set)
     {
         var box = new TextBox { Text = value.ToString("G9", CultureInfo.InvariantCulture), MinWidth = 85 };
-        box.LostFocus += (_, _) =>
+        var committed = value;
+        void Commit(bool live)
         {
             if (_refreshing || !IsVisible) return;
             if (float.TryParse(box.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) &&
-                float.IsFinite(number) && number != value)
+                float.IsFinite(number) && number != committed)
             {
-                try { set(number); }
+                var prev = _suppressInspectorRebuild;
+                _suppressInspectorRebuild = live;
+                try
+                {
+                    set(number);
+                    committed = number;
+                }
                 catch (Exception error) when (error is ArgumentException or InvalidOperationException or InvalidDataException)
                 {
                     _status.Text = T("Invalid") + " " + error.Message;
                 }
+                finally
+                {
+                    _suppressInspectorRebuild = prev;
+                }
             }
-        };
+        }
+        box.TextChanged += (_, _) => Commit(live: true);
+        box.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Enter) { Commit(live: false); e.Handled = true; } };
+        box.LostFocus += (_, _) => Commit(live: false);
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         row.Children.Add(new TextBlock { Text = label, MinWidth = 130, VerticalAlignment = VerticalAlignment.Center });
         row.Children.Add(box);
@@ -169,6 +256,11 @@ public sealed partial class ProceduralWorkspaceView : UserControl
     private void Refresh()
     {
         if (_refreshing || !IsVisible) return;
+        if (_suppressInspectorRebuild)
+        {
+            RefreshTexturePreview();
+            return;
+        }
         _refreshing = true;
         try
         {
@@ -186,6 +278,7 @@ public sealed partial class ProceduralWorkspaceView : UserControl
             _selectedStage = _selected < 0 ? null : Model ? r.Modifiers[_selected].Id : r.Operations[_selected].Id;
             _palette.IsEnabled = _inspector.IsEnabled = !_workspace.IsReadOnly;
             _breadcrumb.Text = T(ProceduralResourceSchema.Name(_node.Definition.Kind)!) + " / " + T("Flow");
+            _cards.Clear();
             _flow.Children.Clear(); _palette.Children.Clear(); _inspector.Children.Clear();
             _toolbar.Children.Clear();
             if (!UseDocumentNavigation)
@@ -209,7 +302,10 @@ public sealed partial class ProceduralWorkspaceView : UserControl
             {
             if (Model)
             {
-                Choice(_inspector, "Shape", ProceduralResourceSchema.ShapeNames.Select(n => T("Shape." + n)), r.Shape, i => Save(Recipe with { Shape = i }));
+                var shapeIndices = Enumerable.Range(1, ProceduralResourceSchema.ShapeNames.Length - 1).ToArray();
+                if (r.Shape == 0) shapeIndices = [0, .. shapeIndices];
+                Choice(_inspector, "Shape", shapeIndices.Select(idx => T("Shape." + ProceduralResourceSchema.ShapeNames[idx])),
+                    Math.Max(0, Array.IndexOf(shapeIndices, r.Shape)), i => Save(Recipe with { Shape = shapeIndices[i] }));
                 Number(_inspector, T("SegmentsU"), r.SegmentsU, v => Save(Recipe with { SegmentsU = Whole(v, 256) }));
                 Number(_inspector, T("SegmentsV"), r.SegmentsV, v => Save(Recipe with { SegmentsV = Whole(v, 128) }));
                 Vector(_inspector, "Size", r.Size, v => Save(Recipe with { Size = v }));
@@ -247,12 +343,6 @@ public sealed partial class ProceduralWorkspaceView : UserControl
                 if (_selected != index) continue;
                 var stage = _inspector;
                 stage.Children.Add(new TextBlock { Text = title, FontSize = 17 });
-                var buttons = new WrapPanel { Orientation = Orientation.Horizontal };
-                Button(buttons, "Up", () => Move(slot, -1));
-                Button(buttons, "Down", () => Move(slot, 1));
-                Button(buttons, "Duplicate", () => Duplicate(slot));
-                Button(buttons, "Remove", () => Remove(slot));
-                stage.Children.Add(buttons);
                 if (Model)
                 {
                     var m = r.Modifiers[index];
@@ -332,7 +422,7 @@ public sealed partial class ProceduralWorkspaceView : UserControl
             >= 9 and <= 15 => ["FrequencyU", "FrequencyV", "SpeedU", "SpeedV"],
             16 => ["Amplitude", "Center"], 22 => ["Blend"], 23 => ["Power"], 26 => ["Lower", "Upper"],
             27 => ["StartRed", "StartGreen", "StartBlue", "StartAlpha", "EndRed", "EndGreen", "EndBlue", "EndAlpha", "Lower", "Upper"],
-            28 => ["Channel"], 30 => ["TextureSlot"], _ => []
+            28 => ["Channel"], 30 => ["TextureSlot"], 32 => ["Strength", "Step", "FlipY"], _ => []
         };
         return index < names.Length ? names[index] : null;
     }
@@ -372,33 +462,27 @@ public sealed partial class ProceduralWorkspaceView : UserControl
             Save(r with { Operations = [.. r.Operations, ProceduralResourceSchema.CreatePixel((uint)kind, (uint)r.Operations.Length)], OutputRegister = (uint)r.Operations.Length + 1 });
         }
     }
-    private void Duplicate(int index)
+    private void MoveTo(int from, int to)
     {
         var r = Recipe;
+        var count = Model ? r.Modifiers.Length : r.Operations.Length;
+        if (from < 0 || from >= count || to < 0 || to >= count || from == to) return;
+        _selected = to;
         if (Model)
         {
-            var stages = r.Modifiers.ToList();
-            stages.Insert(index + 1, stages[index] with { Id = Guid.NewGuid(), Values = (float[])stages[index].Values.Clone() });
-            Save(r with { Modifiers = stages.ToArray() });
+            var list = r.Modifiers.ToList();
+            var item = list[from];
+            list.RemoveAt(from);
+            list.Insert(to, item);
+            Save(r with { Modifiers = list.ToArray() });
         }
         else
         {
-            var stages = r.Operations.ToList();
-            stages.Insert(index + 1, stages[index] with { Id = Guid.NewGuid(), Values = (float[])stages[index].Values.Clone() });
-            RemapPixels(r, stages.ToArray());
-        }
-    }
-    private void Move(int index, int delta)
-    {
-        var r = Recipe; var target = index + delta;
-        if (target < 0 || target >= (Model ? r.Modifiers.Length : r.Operations.Length)) return;
-        if (Model)
-        {
-            var a = (ProceduralModifier[])r.Modifiers.Clone(); (a[index], a[target]) = (a[target], a[index]); Save(r with { Modifiers = a });
-        }
-        else
-        {
-            var a = (ProceduralPixelOperation[])r.Operations.Clone(); (a[index], a[target]) = (a[target], a[index]); RemapPixels(r, a);
+            var list = r.Operations.ToList();
+            var item = list[from];
+            list.RemoveAt(from);
+            list.Insert(to, item);
+            RemapPixels(r, list.ToArray());
         }
     }
     private void Remove(int index)

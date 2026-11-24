@@ -62,8 +62,13 @@ public static class ParticleSamples
                 state = state with { Fluid2D = fluid,
                     FluidRenderer = new(Fluid2DPresets.RendererMaterial(model), 1) };
             }
-            root.Add("GpuParticle", name, (GpuParticleEditorService.ParameterId, "gpuState",
+            var gpuNode = root.Add("GpuParticle", name, (GpuParticleEditorService.ParameterId, "gpuState",
                 JsonSerializer.SerializeToElement(state, GpuParticleEditorService.Json)));
+            if (name == "GpuCurlTurbulence")
+            {
+                var tex = root.Add("ProceduralTexture", "Glow texture");
+                root.Wire(tex, gpuNode, "proceduralTexture", "value");
+            }
         }
         root.Comment(name == "GpuCurlTurbulence"
             ? "GpuCurlTurbulence · X right / Y up / Z forward · metres\n" +
@@ -96,8 +101,10 @@ public static class ParticleSamples
             RendererSettings = new() { ["renderStep"] = new(SizeScale: 1) },
             GeneratedResources = new() { ["fluidVelocity"] = new(producer, "VelocityOutput") }
         };
-        root.Add("GpuParticle", "Particles following fluid", (GpuParticleEditorService.ParameterId, "gpuState",
+        var gpuParticles = root.Add("GpuParticle", "Particles following fluid", (GpuParticleEditorService.ParameterId, "gpuState",
             JsonSerializer.SerializeToElement(particles, GpuParticleEditorService.Json)));
+        var gpuTex = root.Add("ProceduralTexture", "Glow texture");
+        root.Wire(gpuTex, gpuParticles, "proceduralTexture", "value");
         root.Comment("GpuFluidVelocity · Fluid2D VelocityOutput → GPU particles\n" +
             "The smoke solver runs first. Its velocity moves the particles; its plane is hidden.\n" +
             "64 × 64 cells; 100 particles per second. Preview: 60 FPS, frames 0–600.\n" +
@@ -234,11 +241,14 @@ public static class ParticleSamples
             var particle = new Builder();
             particle.AddChild("CpuParticleSpawn", "Spawn", spawn.Graph);
             particle.AddChild("CpuParticleUpdate", "Update", update.Graph);
-            particle.Add("CpuParticleSpriteDraw", "Generated radial glow", ("assetPath", "string", "builtin:radial-glow"),
-                ("textureSource", "enum:ab42721e-d2c3-43e9-a96d-c80000000001", 2),
+            particle.Add("CpuParticleSpriteDraw", "Procedural glow", ("assetPath", "string", ""),
+                ("textureSource", "enum:ab42721e-d2c3-43e9-a96d-c80000000001", 0),
                 ("blendMode", "string", "Additive"));
-            return (AddChild("CpuParticle", fountain ? "Fountain" : "Radial burst", particle.Graph,
-                ("capacity", "int", 4096), ("burst", "int", burst), ("rate", "float", rate)), positionInput);
+            var cpuNode = AddChild("CpuParticle", fountain ? "Fountain" : "Radial burst", particle.Graph,
+                ("capacity", "int", 4096), ("burst", "int", burst), ("rate", "float", rate));
+            var procTex = Add("ProceduralTexture", "Glow texture");
+            Wire(procTex, cpuNode, "proceduralTexture", "value");
+            return (cpuNode, positionInput);
         }
     }
 }

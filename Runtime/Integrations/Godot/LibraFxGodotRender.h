@@ -165,6 +165,9 @@ private:
         godot::Ref<godot::Texture2D> texture;
         bool additive = false;
         double drawScale = 1;
+        std::string proceduralTexture;
+        std::string proceduralMaterial;
+        godot::Ref<godot::Material> customMaterial;
     };
     struct ModelBatchMember final {
         RenderInstance* renderable = nullptr;

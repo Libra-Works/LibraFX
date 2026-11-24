@@ -68,7 +68,7 @@ public sealed class CompiledRegisterKernel
         KernelKey = Guid.TryParse(k.Id, out var guid) ? guid : new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(k.Id)).AsSpan(0, 16), bigEndian: true);
         var lookup = k.Nodes.ToDictionary(n => n.Id, StringComparer.Ordinal);
         var ordered = GpuCompiler.Topological(lookup);
-        RegisterCount = (uint)ordered.Count;
+        var nextReg = (uint)ordered.Count;
         var registers = ordered.Select((n, i) => (n.Id, Register: (uint)i)).ToDictionary(x => x.Id, x => x.Register, StringComparer.Ordinal);
         var resourceIndices = resources.Select((resource, index) => (resource.Id, Index: (uint)index))
             .ToDictionary(x => x.Id, x => x.Index, StringComparer.Ordinal);
@@ -77,6 +77,40 @@ public sealed class CompiledRegisterKernel
         foreach (var n in ordered)
         {
             uint Ref(int i) => i < n.Inputs.Count ? registers[n.Inputs[i]] : MissingRegister;
+            if (n.Op == GpuOp.FCurve)
+            {
+                var (minT, maxT, samples) = (n.Curve ?? GpuCurveData.DefaultLinear()).SampleTable(17);
+                uint EmitOp(GpuInstructionOpcode op, uint a, uint b = MissingRegister, uint c = MissingRegister,
+                    GpuType t = GpuType.Float, float f0 = 0f, uint? dst = null)
+                {
+                    var r = dst ?? nextReg++;
+                    mappings.Add(new(instructions.Count, n.Id, "out", n.SourceSpan));
+                    instructions.Add(new(op, r, a, b, c, MissingRegister, t, 0, new(f0, 0, 0, 0), 0));
+                    return r;
+                }
+                var minTReg = EmitOp(GpuInstructionOpcode.Constant, MissingRegister, f0: minT);
+                var invSpanReg = EmitOp(GpuInstructionOpcode.Constant, MissingRegister, f0: 16.0f / (maxT - minT));
+                var zeroReg = EmitOp(GpuInstructionOpcode.Constant, MissingRegister, f0: 0f);
+                var oneReg = EmitOp(GpuInstructionOpcode.Constant, MissingRegister, f0: 1f);
+                var sixteenReg = EmitOp(GpuInstructionOpcode.Constant, MissingRegister, f0: 16f);
+                var diff = EmitOp(GpuInstructionOpcode.Sub, Ref(0), minTReg);
+                var rawScaled = EmitOp(GpuInstructionOpcode.Mul, diff, invSpanReg);
+                var scaled = EmitOp(GpuInstructionOpcode.Clamp, rawScaled, zeroReg, sixteenReg);
+                var acc = EmitOp(GpuInstructionOpcode.Constant, MissingRegister, f0: samples[16]);
+                for (var seg = 15; seg >= 0; seg--)
+                {
+                    var segEdge = EmitOp(GpuInstructionOpcode.Constant, MissingRegister, f0: seg + 1f);
+                    var cond = EmitOp(GpuInstructionOpcode.LessThan, scaled, segEdge, t: GpuType.Bool);
+                    var segStart = EmitOp(GpuInstructionOpcode.Constant, MissingRegister, f0: seg);
+                    var localT = EmitOp(GpuInstructionOpcode.Sub, scaled, segStart);
+                    var clampedT = EmitOp(GpuInstructionOpcode.Clamp, localT, zeroReg, oneReg);
+                    var v0 = EmitOp(GpuInstructionOpcode.Constant, MissingRegister, f0: samples[seg]);
+                    var v1 = EmitOp(GpuInstructionOpcode.Constant, MissingRegister, f0: samples[seg + 1]);
+                    var segVal = EmitOp(GpuInstructionOpcode.Lerp, v0, v1, clampedT);
+                    acc = EmitOp(GpuInstructionOpcode.Select, cond, segVal, acc, dst: seg == 0 ? registers[n.Id] : null);
+                }
+                continue;
+            }
             uint aux = n.Op switch
             {
                 GpuOp.ReadAttribute => (uint)Enum.Parse<GpuAttributeSlot>(n.Attribute!),
@@ -115,6 +149,7 @@ public sealed class CompiledRegisterKernel
             instructions.Add(new(GpuInstructionOpcode.WriteAttribute, MissingRegister, registers[w.Value], MissingRegister, MissingRegister, MissingRegister,
                 lookup[w.Value].Type, (uint)Enum.Parse<GpuAttributeSlot>(w.Attribute), Vector4.Zero));
         }
+        RegisterCount = nextReg;
         Instructions = Array.AsReadOnly(instructions.ToArray()); Mappings = Array.AsReadOnly(mappings.ToArray());
     }
 

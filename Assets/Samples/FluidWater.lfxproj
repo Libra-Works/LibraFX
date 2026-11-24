@@ -3,7 +3,7 @@
   "AutoDestroyWhenIdle": true,
   "Nodes": [
     {
-      "Id": "d8d16776-8897-4051-a43f-2b801f35fa1b",
+      "Id": "138e7d8c-3c5b-4c6b-a4a0-54bac933619e",
       "Name": "FluidWater",
       "Kind": "GpuParticle",
       "X": 0,
@@ -656,7 +656,10 @@
             "rendererSettings": {
               "renderStep": {
                 "material": "builtin:unlit-alpha",
-                "sizeScale": 1
+                "sizeScale": 1,
+                "spriteAnimation": null,
+                "spriteComposition": null,
+                "spriteAnimationEnabled": true
               }
             },
             "fluid2D": {
@@ -689,7 +692,10 @@
             },
             "fluidRenderer": {
               "material": "builtin:fluid-water",
-              "sizeScale": 1
+              "sizeScale": 1,
+              "spriteAnimation": null,
+              "spriteComposition": null,
+              "spriteAnimationEnabled": true
             }
           }
         }
@@ -700,7 +706,7 @@
       "SignalKeys": null
     },
     {
-      "Id": "14985b8e-29b1-4cbe-9b27-0db131237c2d",
+      "Id": "ad32c0c6-efac-4ae1-b1c9-66ab6552c582",
       "Name": "Sample guide",
       "Kind": "Comment",
       "X": 300,
@@ -732,13 +738,13 @@
   ],
   "Connections": [],
   "History": {
-    "RootId": "377581cf-42de-4ef3-97db-e73f9999fb97",
-    "CurrentNodeId": "377581cf-42de-4ef3-97db-e73f9999fb97",
-    "TimelineRevisionId": "14c410d4-4009-4ce3-8249-cea612f54d5d",
+    "RootId": "3981c67e-c5e1-42b2-a764-a11bd1f4359f",
+    "CurrentNodeId": "3981c67e-c5e1-42b2-a764-a11bd1f4359f",
+    "TimelineRevisionId": "8bda03f6-a3bd-48b8-bc54-e7beec0d5403",
     "NextBranchNumber": 1,
     "Entries": [
       {
-        "Id": "377581cf-42de-4ef3-97db-e73f9999fb97",
+        "Id": "3981c67e-c5e1-42b2-a764-a11bd1f4359f",
         "ParentId": null,
         "PreferredChildId": null,
         "Description": "FluidWater",
@@ -747,7 +753,7 @@
         "State": {
           "Nodes": [
             {
-              "Id": "d8d16776-8897-4051-a43f-2b801f35fa1b",
+              "Id": "138e7d8c-3c5b-4c6b-a4a0-54bac933619e",
               "Kind": "GpuParticle",
               "Name": "FluidWater",
               "X": 0,
@@ -1402,7 +1408,10 @@
                     "rendererSettings": {
                       "renderStep": {
                         "material": "builtin:unlit-alpha",
-                        "sizeScale": 1
+                        "sizeScale": 1,
+                        "spriteAnimation": null,
+                        "spriteComposition": null,
+                        "spriteAnimationEnabled": true
                       }
                     },
                     "fluid2D": {
@@ -1435,7 +1444,10 @@
                     },
                     "fluidRenderer": {
                       "material": "builtin:fluid-water",
-                      "sizeScale": 1
+                      "sizeScale": 1,
+                      "spriteAnimation": null,
+                      "spriteComposition": null,
+                      "spriteAnimationEnabled": true
                     }
                   }
                 }
@@ -1447,7 +1459,7 @@
               "KindDomain": "GpuParticle"
             },
             {
-              "Id": "14985b8e-29b1-4cbe-9b27-0db131237c2d",
+              "Id": "ad32c0c6-efac-4ae1-b1c9-66ab6552c582",
               "Kind": "Comment",
               "Name": "Sample guide",
               "X": 300,

@@ -166,6 +166,18 @@ jobs:
           }
           $versionProperties = @("-p:InformationalVersion=$env:BUILD_VERSION", '-p:IncludeSourceRevisionInInformationalVersion=false')
           dotnet publish LiberaFx.csproj -c Release -r $env:TARGET_RID --self-contained true -o $editor @versionProperties
+          $nativeBuild = Join-Path $env:RUNNER_TEMP 'editor-native-build'
+          $nativeArgs = @('-S', 'Runtime', '-B', $nativeBuild, '-DCMAKE_BUILD_TYPE=Release')
+          if ($env:TARGET_RID -eq 'osx-arm64') { $nativeArgs += '-DCMAKE_OSX_ARCHITECTURES=arm64' }
+          cmake @nativeArgs
+          if ($env:TARGET_RID -eq 'win-x64') {
+              cmake --build $nativeBuild --config Release --target liberafx_native --parallel 2
+              Copy-Item -LiteralPath (Join-Path $nativeBuild 'Release/liberafx_native.dll') -Destination $editor
+          } else {
+              cmake --build $nativeBuild --target liberafx_native --parallel 2
+              $nativeFile = if ($env:TARGET_RID -eq 'osx-arm64') { 'libliberafx_native.dylib' } else { 'libliberafx_native.so' }
+              Copy-Item -LiteralPath (Join-Path $nativeBuild $nativeFile) -Destination $editor
+          }
           dotnet publish Tools/Converter/LiberaFx.Converter.csproj -c Release -r $env:TARGET_RID --self-contained true -o (Join-Path $package 'Converter') @versionProperties
           Copy-Item -LiteralPath 'LICENSE' -Destination $package
           [ordered]@{

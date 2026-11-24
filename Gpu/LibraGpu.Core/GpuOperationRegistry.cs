@@ -43,10 +43,11 @@ public static class GpuOperationRegistry
         if (d.Op == GpuOp.Clamp) inputs = [Input("value", GpuType.Float), Input("minimum", GpuType.Float), Input("maximum", GpuType.Float, 1)];
         if (d.Op == GpuOp.Lerp) inputs = [Input("a", GpuType.Float), Input("b", GpuType.Float, 1), Input("amount", GpuType.Float, 0.5)];
         if (d.Op == GpuOp.Smoothstep) inputs = [Input("edge0", GpuType.Float), Input("edge1", GpuType.Float, 1), Input("value", GpuType.Float, 0.5)];
+        if (d.Op == GpuOp.FCurve) inputs = [Input("time", GpuType.Float, 0)];
         if (d.Op is GpuOp.Div or GpuOp.Mod or GpuOp.Pow) inputs = [Input("a", GpuType.Float), Input("b", GpuType.Float, 1)];
         return d with
         {
-            DisplayName = d.Op switch { GpuOp.GradientNoise3D => "Gradient Noise 3D", GpuOp.Fbm => "FBM", GpuOp.CurlNoise => "Curl Noise", GpuOp.SampleFlowMap => "Flow Map", _ => d.Op.ToString() },
+            DisplayName = d.Op switch { GpuOp.GradientNoise3D => "Gradient Noise 3D", GpuOp.Fbm => "FBM", GpuOp.CurlNoise => "Curl Noise", GpuOp.SampleFlowMap => "Flow Map", GpuOp.FCurve => "F-Curve", _ => d.Op.ToString() },
             DslName = d.Op == GpuOp.SampleFlowMap ? "sampleFlowMap" : d.Op.ToString().ToLowerInvariant(),
             Inputs = Array.AsReadOnly(inputs)
         };
@@ -76,7 +77,8 @@ public static class GpuOperationRegistry
             new(GpuOp.GradientNoise3D,2,2,TypePolicy.GradientNoise),new(GpuOp.Fbm,4,4,TypePolicy.FractalNoise),
             new(GpuOp.Turbulence,4,4,TypePolicy.FractalNoise),new(GpuOp.CurlNoise,4,4,TypePolicy.FractalNoise),
             new(GpuOp.SampleFlowMap,1,1,TypePolicy.FlowMapSample)
-            ,new(GpuOp.GreaterThan,2,2,TypePolicy.ScalarComparison),new(GpuOp.LessThan,2,2,TypePolicy.ScalarComparison)
+            ,new(GpuOp.GreaterThan,2,2,TypePolicy.ScalarComparison),new(GpuOp.LessThan,2,2,TypePolicy.ScalarComparison),
+            new(GpuOp.FCurve,1,1,TypePolicy.FloatBroadcast)
         }.Select(Describe).ToDictionary(x => x.Op));
 
     public static bool TryInferType(GpuOp op, IReadOnlyList<GpuType> inputs, out GpuType result)

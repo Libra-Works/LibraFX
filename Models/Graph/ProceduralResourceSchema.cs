@@ -68,7 +68,7 @@ public static class ProceduralResourceSchema
     public static readonly string[] PixelNames = ["UV", "Constant", "Time", "TransformUV", "Linear", "Radial", "Ring",
         "Stripes", "Checker", "ValueNoise", "GradientNoise", "Cellular", "CellEdges", "Fractal", "Ridged", "Curl",
         "WarpUV", "Add", "Multiply", "Subtract", "Min", "Max", "Lerp", "Power", "Saturate", "Invert", "Smoothstep",
-        "ColorRamp", "Channel", "AlphaMask", "TextureSample", "Output"];
+        "ColorRamp", "Channel", "AlphaMask", "TextureSample", "Output", "NormalMap"];
     public static string? Name(GraphNodeKind kind) => kind.Value switch
     {
         ModelId or "ProceduralModel" => "ProceduralModel",
@@ -102,16 +102,20 @@ public static class ProceduralResourceSchema
             case 23: p[0] = 2; break;
             case 26: p[1] = 1; break;
             case 27: p[4] = p[5] = p[6] = p[7] = p[9] = 1; break;
+            case 32: p[0] = 2; p[1] = .005f; p[2] = 0; break;
         }
         return new() { Kind = kind, InputA = input, Values = p };
     }
-    public static ProceduralRecipe Default(string kind) => kind == "ProceduralModel" ? new() : new()
+    public static ProceduralRecipe Default(string kind) => kind == "ProceduralModel" ? new() { Shape = 14 } : new()
     {
         // An untouched producer can be read repeatedly before any recipe is
         // persisted. Its local stage identities must already be stable.
-        Operations = [new() { Id = new("89e9b18d-9ea2-48c0-bb26-a89000000011"), Kind = 9, Values = [8, 8, .1f, .05f, 0, 0, 0, 0, 0, 0, 0, 0] },
-            new() { Id = new("89e9b18d-9ea2-48c0-bb26-a89000000012"), Kind = 27, InputA = 1, Values = [0, 0, 0, 0, .2f, .6f, 1, 1, .2f, .8f, 0, 0] }],
-        OutputRegister = 2
+        Operations = [
+            new() { Id = new("89e9b18d-9ea2-48c0-bb26-a89000000011"), Kind = 5, Values = [.5f, .5f, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+            new() { Id = new("89e9b18d-9ea2-48c0-bb26-a89000000012"), Kind = 25, InputA = 1, Values = new float[12] },
+            new() { Id = new("89e9b18d-9ea2-48c0-bb26-a89000000013"), Kind = 24, InputA = 2, Values = new float[12] }
+        ],
+        OutputRegister = 3
     };
     public static ProceduralRecipe Read(GraphNodeDefinition definition, IReadOnlyList<NodeParameterSnapshot>? parameters)
     {
@@ -201,7 +205,7 @@ public static class ProceduralResourceSchema
         for (var i = 0; i < r.Operations.Length; ++i)
         {
             var op = r.Operations[i];
-            if (op is null || op.Id == Guid.Empty || !ids.Add(op.Id) || op.Kind >= 32 || op.InputA > i || op.InputB > i ||
+            if (op is null || op.Id == Guid.Empty || !ids.Add(op.Id) || op.Kind >= (uint)PixelNames.Length || op.InputA > i || op.InputB > i ||
                 !Finite(op.Values, 12) || op.Kind == 30 && kind != "ProceduralMaterial" ||
                 op.Kind is 13 or 14 && (op.Values[4] is < 1 or > 8 || op.Values[4] != MathF.Floor(op.Values[4]) || op.Values[5] is < 0 or > 1) ||
                 op.Kind == 28 && (op.Values[0] is < 0 or > 3 || op.Values[0] != MathF.Floor(op.Values[0])) ||

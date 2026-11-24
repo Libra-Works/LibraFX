@@ -15,6 +15,7 @@
     { "id": "spriteAnimationEnabled", "name": "Use Sprite editor animation", "displayNameKey": "Cpu.SpriteAnimationEnabled", "type": "bool", "defaultValue": true },
     { "id": "spriteData", "name": "Sprite animation data", "type": "spriteData", "defaultValue": {} },
     { "id": "compositionData", "name": "Sprite composition data", "type": "string", "defaultValue": "" },
+    { "id": "materialSchema", "name": "Material schema", "type": "string", "defaultValue": "[]" },
     {
       "id": "textureSource",
       "name": "Texture source",

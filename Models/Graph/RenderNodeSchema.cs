@@ -25,10 +25,9 @@ public static class RenderNodeSchema
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public static bool IsRenderNode(GraphNodeDefinition definition) =>
-        definition.TypeName is "ModelDraw" or "SpriteDraw" or "SpriteAnimation" or "SpriteComposition" or "FlexiblePlaneDraw";
+        definition.TypeName is "ModelDraw" or "SpriteDraw" or "SpriteAnimation" or "SpriteComposition" or "FlexiblePlaneDraw" or "CpuParticleSpriteDraw" or "GpuParticle";
 
-    public static bool IsTextureOnlyDraw(GraphNodeDefinition definition) =>
-        definition.TypeName is "CpuParticleSpriteDraw";
+    public static bool IsTextureOnlyDraw(GraphNodeDefinition definition) => false;
 
     public static int MaterialAssociation(RenderMaterialParameter parameter) =>
         parameter.Association == 0 && parameter.Index == -1 ? 2 : parameter.Association;
@@ -220,6 +219,7 @@ public static class RenderNodeSchema
         var assetPath = storedPath?.Value ?? pathDefinition?.DefaultValue;
         if (assetPath?.ValueKind == JsonValueKind.String &&
             assetPath.Value.GetString() is { Length: > 0 } path &&
+            !(definition.TypeName == "CpuParticleSpriteDraw" && path is "builtin:white" or "builtin:radial-glow") &&
             !IsSafeAssetPath(path))
             throw new InvalidDataException("The render node asset path is invalid.");
         var schema = Read(definition, parameters);

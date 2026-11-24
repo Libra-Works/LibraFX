@@ -266,6 +266,27 @@ internal static partial class Program
                 Check(c.SerializeLittleEndian()[0] == 'L', "Packet arrays are independent");
             });
             Run("all safe operations shader fixture", () => Check(GpuCompiler.Validate(AllOps()).Count == 0, "Fixture validates"));
+            Run("fcurve shader emission and register bytecode lowering", () =>
+            {
+                var curve = new GpuCurveData
+                {
+                    Keys = [new(0, 0), new(0.5, 1), new(1, 0.25)]
+                };
+                var p = WithWrite(One(
+                    new GpuNode { Id = "age", Op = GpuOp.ReadAttribute, Type = GpuType.Float, Attribute = "Age" },
+                    new GpuNode { Id = "fc", Op = GpuOp.FCurve, Type = GpuType.Float, Inputs = ["age"], Curve = curve }),
+                    "Rotation", "fc");
+                var compiled = GpuCompiler.Compile(p);
+                var usf = compiled.EmitUsf().Text;
+                var compute = compiled.EmitUnityCompute().Text;
+                Check(usf.Contains("LibraGpuCurveLut_"), "USF emits curve LUT");
+                Check(usf.Contains("LibraGpuEvalCurve_"), "USF emits curve evaluator");
+                Check(compute.Contains("LibraGpuEvalCurve_"), "Unity compute emits curve evaluator");
+                var rk = compiled.RegisterKernels[0];
+                Check(rk.RegisterCount >= 2, "RegisterCount includes lowered FCurve scratch registers");
+                Check(rk.Instructions.Any(i => i.Opcode == GpuInstructionOpcode.Lerp), "Bytecode lowers FCurve via Lerp/Select");
+                Check(rk.SerializeLittleEndian().Length == 64 + rk.Instructions.Count * 64, "Serialized packet length matches");
+            });
             RunExtensionTests();
             RunFluid2DTests();
             RunResourcePlanTests();

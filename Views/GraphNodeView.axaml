@@ -179,14 +179,26 @@
                 </Grid>
                 </StackPanel>
             </Grid>
-            <TextBlock x:Name="GroupHintLabel" Grid.Row="2" Margin="8" IsVisible="{Binding ShowGroupHint}"
-                       Text="{DynamicResource Text.Panels.DoubleClickToOpen}" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <TextBlock x:Name="GroupHintLabel" Grid.Row="3" Margin="8,0,8,6" IsVisible="{Binding ShowGroupHint}"
+                       Text="{Binding OriginalNodeName}"
+                       FontSize="11"
+                       HorizontalAlignment="Center"
+                       Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <TextBlock x:Name="PortTypeLabel" Grid.Row="3" Margin="8,0,8,6"
                        Text="{Binding OriginalNodeName}"
                        IsVisible="{Binding ShowPortType}"
                        FontSize="11"
                        HorizontalAlignment="Center"
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            <Border x:Name="CollapsedResizeGrip" Grid.Row="3" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Padding="6,1" Background="Transparent" Cursor="BottomRightCorner"
+                    IsVisible="{Binding ShowCollapsedResizeGrip}"
+                    ToolTip.Tip="{DynamicResource Text.Inline.Resize}"
+                    AutomationProperties.Name="{DynamicResource Text.Inline.Resize}"
+                    PointerPressed="OnResizePressed" PointerMoved="OnResizeMoved"
+                    PointerReleased="OnResizeReleased" PointerCaptureLost="OnResizeCaptureLost">
+                <TextBlock Text="◢" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
+            </Border>
             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Left"
                         Margin="8,2,8,6" Spacing="4" IsVisible="{Binding HasDynamicInputs}">
                 <views:IconButton x:Name="DynamicAddInputButton" Icon="Add"

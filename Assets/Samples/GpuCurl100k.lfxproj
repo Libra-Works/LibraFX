@@ -3,7 +3,7 @@
   "AutoDestroyWhenIdle": true,
   "Nodes": [
     {
-      "Id": "9e3e20a7-09cd-4068-ae50-4de5bad28450",
+      "Id": "b8eddb98-7ff6-4590-a6b2-0d7e0a3d6259",
       "Name": "GpuCurl100k",
       "Kind": "GpuParticle",
       "X": 0,
@@ -942,7 +942,10 @@
             "rendererSettings": {
               "renderStep": {
                 "material": "builtin:unlit-alpha",
-                "sizeScale": 1
+                "sizeScale": 1,
+                "spriteAnimation": null,
+                "spriteComposition": null,
+                "spriteAnimationEnabled": true
               }
             }
           }
@@ -954,7 +957,7 @@
       "SignalKeys": null
     },
     {
-      "Id": "3af8466f-6817-429f-897d-c1b66cf2c7c9",
+      "Id": "a296e3ff-b1b9-44e7-98e7-c11cb2f6e468",
       "Name": "Sample guide",
       "Kind": "Comment",
       "X": 300,
@@ -986,13 +989,13 @@
   ],
   "Connections": [],
   "History": {
-    "RootId": "bc8f6014-1d91-4b73-aec2-bf675c175d22",
-    "CurrentNodeId": "bc8f6014-1d91-4b73-aec2-bf675c175d22",
-    "TimelineRevisionId": "1c838ee0-daf9-4a17-8c7b-7adc6a79b04c",
+    "RootId": "31b75be2-67f5-46db-95c7-6a140237174b",
+    "CurrentNodeId": "31b75be2-67f5-46db-95c7-6a140237174b",
+    "TimelineRevisionId": "009886ac-cccd-4899-be5a-fd045a4d4435",
     "NextBranchNumber": 1,
     "Entries": [
       {
-        "Id": "bc8f6014-1d91-4b73-aec2-bf675c175d22",
+        "Id": "31b75be2-67f5-46db-95c7-6a140237174b",
         "ParentId": null,
         "PreferredChildId": null,
         "Description": "GpuCurl100k",
@@ -1001,7 +1004,7 @@
         "State": {
           "Nodes": [
             {
-              "Id": "9e3e20a7-09cd-4068-ae50-4de5bad28450",
+              "Id": "b8eddb98-7ff6-4590-a6b2-0d7e0a3d6259",
               "Kind": "GpuParticle",
               "Name": "GpuCurl100k",
               "X": 0,
@@ -1942,7 +1945,10 @@
                     "rendererSettings": {
                       "renderStep": {
                         "material": "builtin:unlit-alpha",
-                        "sizeScale": 1
+                        "sizeScale": 1,
+                        "spriteAnimation": null,
+                        "spriteComposition": null,
+                        "spriteAnimationEnabled": true
                       }
                     }
                   }
@@ -1955,7 +1961,7 @@
               "KindDomain": "GpuParticle"
             },
             {
-              "Id": "3af8466f-6817-429f-897d-c1b66cf2c7c9",
+              "Id": "a296e3ff-b1b9-44e7-98e7-c11cb2f6e468",
               "Kind": "Comment",
               "Name": "Sample guide",
               "X": 300,

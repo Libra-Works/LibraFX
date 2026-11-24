@@ -376,7 +376,8 @@ public sealed class ResourceIdentityPaneViewModel : ObservableObject, IDisposabl
         if (SelectedTargetNode is { } target && FindNode(Graph.CreateSnapshot(), target.Id, out _, out var node))
         {
             var definition = GraphNodeDefinition.All.Single(item => item.Kind == node.Kind);
-            Locations.Add(new("assetPath", "assetPath", StringParameter(node, "assetPath")));
+            if (definition.Parameters.Any(p => p.Id == "assetPath"))
+                Locations.Add(new("assetPath", "assetPath", StringParameter(node, "assetPath")));
             foreach (var material in RenderNodeSchema.ReadMaterials(definition, node.Parameters).OrderBy(slot => slot.Slot))
                 Locations.Add(new($"material:{material.Slot}", $"material:{material.Slot}", material.Path));
             foreach (var parameter in RenderNodeSchema.Read(definition, node.Parameters).Where(item => item.Kind == "texture"))

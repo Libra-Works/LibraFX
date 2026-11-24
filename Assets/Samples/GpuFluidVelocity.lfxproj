@@ -3,7 +3,7 @@
   "AutoDestroyWhenIdle": true,
   "Nodes": [
     {
-      "Id": "cb506769-0fe0-435e-8731-429765135779",
+      "Id": "56ec03ac-d62d-4940-9b49-ea1f70b7a281",
       "Name": "Fluid2D velocity source",
       "Kind": "GpuParticle",
       "X": 0,
@@ -650,15 +650,8 @@
             },
             "positions": {},
             "drafts": {},
-            "resourceAssetPaths": {
-              "billboardTexture": "builtin:white"
-            },
-            "rendererSettings": {
-              "renderStep": {
-                "material": "builtin:unlit-alpha",
-                "sizeScale": 1
-              }
-            },
+            "resourceAssetPaths": {},
+            "rendererSettings": {},
             "fluid2D": {
               "version": 1,
               "width": 64,
@@ -685,7 +678,10 @@
             },
             "fluidRenderer": {
               "material": "builtin:fluid-alpha",
-              "sizeScale": 1
+              "sizeScale": 1,
+              "spriteAnimation": null,
+              "spriteComposition": null,
+              "spriteAnimationEnabled": true
             },
             "fluidAutomaticPlane": false
           }
@@ -697,7 +693,7 @@
       "SignalKeys": null
     },
     {
-      "Id": "b1625651-a969-4f8c-994a-b8ab90f58e9b",
+      "Id": "a4e51c2d-8d2b-4831-882e-0d7b6dc6c610",
       "Name": "Particles following fluid",
       "Kind": "GpuParticle",
       "X": 300,
@@ -716,7 +712,31 @@
               "capacity": 2048,
               "attributes": [
                 {
+                  "id": "Position",
+                  "type": "Float3"
+                },
+                {
+                  "id": "Velocity",
+                  "type": "Float3"
+                },
+                {
+                  "id": "Color",
+                  "type": "Float4"
+                },
+                {
+                  "id": "Size",
+                  "type": "Float2"
+                },
+                {
+                  "id": "Rotation",
+                  "type": "Float"
+                },
+                {
                   "id": "Age",
+                  "type": "Float"
+                },
+                {
+                  "id": "Lifetime",
                   "type": "Float"
                 },
                 {
@@ -724,32 +744,8 @@
                   "type": "Bool"
                 },
                 {
-                  "id": "Color",
-                  "type": "Float4"
-                },
-                {
-                  "id": "Lifetime",
-                  "type": "Float"
-                },
-                {
-                  "id": "Position",
-                  "type": "Float3"
-                },
-                {
-                  "id": "Rotation",
-                  "type": "Float"
-                },
-                {
                   "id": "Seed",
                   "type": "UInt"
-                },
-                {
-                  "id": "Size",
-                  "type": "Float2"
-                },
-                {
-                  "id": "Velocity",
-                  "type": "Float3"
                 }
               ],
               "resources": [
@@ -849,7 +845,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 63,
+                        "start": 64,
                         "length": 15
                       }
                     },
@@ -866,7 +862,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 92,
+                        "start": 94,
                         "length": 1
                       }
                     },
@@ -884,7 +880,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 103,
+                        "start": 106,
                         "length": 20
                       }
                     },
@@ -904,7 +900,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 134,
+                        "start": 138,
                         "length": 24
                       }
                     }
@@ -915,7 +911,7 @@
                       "attribute": "Color",
                       "value": "text_000006",
                       "sourceSpan": {
-                        "start": 125,
+                        "start": 129,
                         "length": 34
                       }
                     },
@@ -924,7 +920,7 @@
                       "attribute": "Lifetime",
                       "value": "text_000004",
                       "sourceSpan": {
-                        "start": 80,
+                        "start": 82,
                         "length": 14
                       }
                     },
@@ -942,7 +938,7 @@
                       "attribute": "Size",
                       "value": "text_000005",
                       "sourceSpan": {
-                        "start": 95,
+                        "start": 98,
                         "length": 29
                       }
                     },
@@ -951,7 +947,7 @@
                       "attribute": "Velocity",
                       "value": "text_000003",
                       "sourceSpan": {
-                        "start": 51,
+                        "start": 52,
                         "length": 28
                       }
                     }
@@ -1004,7 +1000,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 80,
+                        "start": 81,
                         "length": 2
                       }
                     },
@@ -1022,7 +1018,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 68,
+                        "start": 69,
                         "length": 14
                       }
                     },
@@ -1040,7 +1036,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 55,
+                        "start": 56,
                         "length": 28
                       }
                     },
@@ -1057,7 +1053,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 95,
+                        "start": 97,
                         "length": 3
                       }
                     },
@@ -1072,7 +1068,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 107,
+                        "start": 109,
                         "length": 4
                       }
                     },
@@ -1089,7 +1085,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 113,
+                        "start": 115,
                         "length": 1
                       }
                     },
@@ -1106,7 +1102,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 116,
+                        "start": 118,
                         "length": 1
                       }
                     },
@@ -1125,7 +1121,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 101,
+                        "start": 103,
                         "length": 17
                       }
                     },
@@ -1143,7 +1139,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 95,
+                        "start": 97,
                         "length": 23
                       }
                     },
@@ -1158,7 +1154,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 127,
+                        "start": 129,
                         "length": 9
                       }
                     },
@@ -1176,7 +1172,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 127,
+                        "start": 129,
                         "length": 16
                       }
                     },
@@ -1193,7 +1189,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 145,
+                        "start": 147,
                         "length": 1
                       }
                     },
@@ -1210,7 +1206,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 148,
+                        "start": 150,
                         "length": 1
                       }
                     },
@@ -1229,7 +1225,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 121,
+                        "start": 123,
                         "length": 29
                       }
                     },
@@ -1247,7 +1243,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 95,
+                        "start": 97,
                         "length": 55
                       }
                     },
@@ -1262,7 +1258,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 84,
+                        "start": 86,
                         "length": 67
                       }
                     },
@@ -1279,7 +1275,7 @@
                       "componentIndex": 0,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 84,
+                        "start": 86,
                         "length": 67
                       }
                     },
@@ -1296,7 +1292,7 @@
                       "componentIndex": 1,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 84,
+                        "start": 86,
                         "length": 67
                       }
                     },
@@ -1313,7 +1309,7 @@
                       "componentIndex": 2,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 84,
+                        "start": 86,
                         "length": 67
                       }
                     },
@@ -1333,7 +1329,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 84,
+                        "start": 86,
                         "length": 67
                       }
                     }
@@ -1344,7 +1340,7 @@
                       "attribute": "Color",
                       "value": "text_000021",
                       "sourceSpan": {
-                        "start": 84,
+                        "start": 86,
                         "length": 67
                       }
                     },
@@ -1353,7 +1349,7 @@
                       "attribute": "Position",
                       "value": "text_000004",
                       "sourceSpan": {
-                        "start": 55,
+                        "start": 56,
                         "length": 28
                       }
                     },
@@ -1407,13 +1403,16 @@
             "rendererSettings": {
               "renderStep": {
                 "material": "builtin:unlit-alpha",
-                "sizeScale": 1
+                "sizeScale": 1,
+                "spriteAnimation": null,
+                "spriteComposition": null,
+                "spriteAnimationEnabled": true
               }
             },
             "generatedResources": {
               "fluidVelocity": {
-                "outputId": "VelocityOutput",
-                "producerNodeId": "cb506769-0fe0-435e-8731-429765135779"
+                "producerNodeId": "56ec03ac-d62d-4940-9b49-ea1f70b7a281",
+                "outputId": "VelocityOutput"
               }
             }
           }
@@ -1425,10 +1424,24 @@
       "SignalKeys": null
     },
     {
-      "Id": "a580914c-0dac-4f83-997e-5a195b5235b3",
+      "Id": "66d20130-6d82-48b5-9d51-da07c5975958",
+      "Name": "Glow texture",
+      "Kind": "ProceduralTexture",
+      "X": 600,
+      "Y": 0,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false,
+      "GroupOverrides": null,
+      "SignalKeys": null
+    },
+    {
+      "Id": "553993de-7da9-4393-b029-8be844ec99d5",
       "Name": "Sample guide",
       "Kind": "Comment",
-      "X": 600,
+      "X": 900,
       "Y": 0,
       "Curve": null,
       "ChildGraph": null,
@@ -1436,7 +1449,7 @@
         {
           "Id": "text",
           "Type": "string",
-          "Value": "GpuFluidVelocity · Fluid2D VelocityOutput → GPU particles\nThe smoke solver runs first. Its velocity moves the particles; its plane is hidden.\n64 × 64 cells; 100 particles per second. Preview: 60 FPS, frames 0–600.\nフルイドの速度を粒子が読み取ります。対応する GPU 接続先で確認してください。"
+          "Value": "GpuFluidVelocity \u00B7 Fluid2D VelocityOutput \u2192 GPU particles\nThe smoke solver runs first. Its velocity moves the particles; its plane is hidden.\n64 \u00D7 64 cells; 100 particles per second. Preview: 60 FPS, frames 0\u2013600.\n\u30D5\u30EB\u30A4\u30C9\u306E\u901F\u5EA6\u3092\u7C92\u5B50\u304C\u8AAD\u307F\u53D6\u308A\u307E\u3059\u3002\u5BFE\u5FDC\u3059\u308B GPU \u63A5\u7D9A\u5148\u3067\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
         },
         {
           "Id": "width",
@@ -1455,15 +1468,22 @@
       "SignalKeys": null
     }
   ],
-  "Connections": [],
+  "Connections": [
+    {
+      "SourceNodeId": "66d20130-6d82-48b5-9d51-da07c5975958",
+      "TargetNodeId": "a4e51c2d-8d2b-4831-882e-0d7b6dc6c610",
+      "TargetPortId": "proceduralTexture",
+      "SourcePortId": "value"
+    }
+  ],
   "History": {
-    "RootId": "16bad63d-4911-4f7f-87bb-b081f93355e0",
-    "CurrentNodeId": "16bad63d-4911-4f7f-87bb-b081f93355e0",
-    "TimelineRevisionId": "27d8d554-d6fb-4fed-a223-cfe9944e65bc",
+    "RootId": "387a0ab4-80a3-4213-bd1c-144b9fc08d4b",
+    "CurrentNodeId": "387a0ab4-80a3-4213-bd1c-144b9fc08d4b",
+    "TimelineRevisionId": "493c49cb-c389-4a7f-992d-68175fbdda71",
     "NextBranchNumber": 1,
     "Entries": [
       {
-        "Id": "16bad63d-4911-4f7f-87bb-b081f93355e0",
+        "Id": "387a0ab4-80a3-4213-bd1c-144b9fc08d4b",
         "ParentId": null,
         "PreferredChildId": null,
         "Description": "GpuFluidVelocity",
@@ -1472,7 +1492,7 @@
         "State": {
           "Nodes": [
             {
-              "Id": "cb506769-0fe0-435e-8731-429765135779",
+              "Id": "56ec03ac-d62d-4940-9b49-ea1f70b7a281",
               "Kind": "GpuParticle",
               "Name": "Fluid2D velocity source",
               "X": 0,
@@ -2121,15 +2141,8 @@
                     },
                     "positions": {},
                     "drafts": {},
-                    "resourceAssetPaths": {
-                      "billboardTexture": "builtin:white"
-                    },
-                    "rendererSettings": {
-                      "renderStep": {
-                        "material": "builtin:unlit-alpha",
-                        "sizeScale": 1
-                      }
-                    },
+                    "resourceAssetPaths": {},
+                    "rendererSettings": {},
                     "fluid2D": {
                       "version": 1,
                       "width": 64,
@@ -2156,7 +2169,10 @@
                     },
                     "fluidRenderer": {
                       "material": "builtin:fluid-alpha",
-                      "sizeScale": 1
+                      "sizeScale": 1,
+                      "spriteAnimation": null,
+                      "spriteComposition": null,
+                      "spriteAnimationEnabled": true
                     },
                     "fluidAutomaticPlane": false
                   }
@@ -2169,7 +2185,7 @@
               "KindDomain": "GpuParticle"
             },
             {
-              "Id": "b1625651-a969-4f8c-994a-b8ab90f58e9b",
+              "Id": "a4e51c2d-8d2b-4831-882e-0d7b6dc6c610",
               "Kind": "GpuParticle",
               "Name": "Particles following fluid",
               "X": 300,
@@ -2190,7 +2206,31 @@
                       "capacity": 2048,
                       "attributes": [
                         {
+                          "id": "Position",
+                          "type": "Float3"
+                        },
+                        {
+                          "id": "Velocity",
+                          "type": "Float3"
+                        },
+                        {
+                          "id": "Color",
+                          "type": "Float4"
+                        },
+                        {
+                          "id": "Size",
+                          "type": "Float2"
+                        },
+                        {
+                          "id": "Rotation",
+                          "type": "Float"
+                        },
+                        {
                           "id": "Age",
+                          "type": "Float"
+                        },
+                        {
+                          "id": "Lifetime",
                           "type": "Float"
                         },
                         {
@@ -2198,32 +2238,8 @@
                           "type": "Bool"
                         },
                         {
-                          "id": "Color",
-                          "type": "Float4"
-                        },
-                        {
-                          "id": "Lifetime",
-                          "type": "Float"
-                        },
-                        {
-                          "id": "Position",
-                          "type": "Float3"
-                        },
-                        {
-                          "id": "Rotation",
-                          "type": "Float"
-                        },
-                        {
                           "id": "Seed",
                           "type": "UInt"
-                        },
-                        {
-                          "id": "Size",
-                          "type": "Float2"
-                        },
-                        {
-                          "id": "Velocity",
-                          "type": "Float3"
                         }
                       ],
                       "resources": [
@@ -2323,7 +2339,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 63,
+                                "start": 64,
                                 "length": 15
                               }
                             },
@@ -2340,7 +2356,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 92,
+                                "start": 94,
                                 "length": 1
                               }
                             },
@@ -2358,7 +2374,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 103,
+                                "start": 106,
                                 "length": 20
                               }
                             },
@@ -2378,7 +2394,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 134,
+                                "start": 138,
                                 "length": 24
                               }
                             }
@@ -2389,7 +2405,7 @@
                               "attribute": "Color",
                               "value": "text_000006",
                               "sourceSpan": {
-                                "start": 125,
+                                "start": 129,
                                 "length": 34
                               }
                             },
@@ -2398,7 +2414,7 @@
                               "attribute": "Lifetime",
                               "value": "text_000004",
                               "sourceSpan": {
-                                "start": 80,
+                                "start": 82,
                                 "length": 14
                               }
                             },
@@ -2416,7 +2432,7 @@
                               "attribute": "Size",
                               "value": "text_000005",
                               "sourceSpan": {
-                                "start": 95,
+                                "start": 98,
                                 "length": 29
                               }
                             },
@@ -2425,7 +2441,7 @@
                               "attribute": "Velocity",
                               "value": "text_000003",
                               "sourceSpan": {
-                                "start": 51,
+                                "start": 52,
                                 "length": 28
                               }
                             }
@@ -2478,7 +2494,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 80,
+                                "start": 81,
                                 "length": 2
                               }
                             },
@@ -2496,7 +2512,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 68,
+                                "start": 69,
                                 "length": 14
                               }
                             },
@@ -2514,7 +2530,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 55,
+                                "start": 56,
                                 "length": 28
                               }
                             },
@@ -2531,7 +2547,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 95,
+                                "start": 97,
                                 "length": 3
                               }
                             },
@@ -2546,7 +2562,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 107,
+                                "start": 109,
                                 "length": 4
                               }
                             },
@@ -2563,7 +2579,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 113,
+                                "start": 115,
                                 "length": 1
                               }
                             },
@@ -2580,7 +2596,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 116,
+                                "start": 118,
                                 "length": 1
                               }
                             },
@@ -2599,7 +2615,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 101,
+                                "start": 103,
                                 "length": 17
                               }
                             },
@@ -2617,7 +2633,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 95,
+                                "start": 97,
                                 "length": 23
                               }
                             },
@@ -2632,7 +2648,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 127,
+                                "start": 129,
                                 "length": 9
                               }
                             },
@@ -2650,7 +2666,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 127,
+                                "start": 129,
                                 "length": 16
                               }
                             },
@@ -2667,7 +2683,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 145,
+                                "start": 147,
                                 "length": 1
                               }
                             },
@@ -2684,7 +2700,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 148,
+                                "start": 150,
                                 "length": 1
                               }
                             },
@@ -2703,7 +2719,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 121,
+                                "start": 123,
                                 "length": 29
                               }
                             },
@@ -2721,7 +2737,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 95,
+                                "start": 97,
                                 "length": 55
                               }
                             },
@@ -2736,7 +2752,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 84,
+                                "start": 86,
                                 "length": 67
                               }
                             },
@@ -2753,7 +2769,7 @@
                               "componentIndex": 0,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 84,
+                                "start": 86,
                                 "length": 67
                               }
                             },
@@ -2770,7 +2786,7 @@
                               "componentIndex": 1,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 84,
+                                "start": 86,
                                 "length": 67
                               }
                             },
@@ -2787,7 +2803,7 @@
                               "componentIndex": 2,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 84,
+                                "start": 86,
                                 "length": 67
                               }
                             },
@@ -2807,7 +2823,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 84,
+                                "start": 86,
                                 "length": 67
                               }
                             }
@@ -2818,7 +2834,7 @@
                               "attribute": "Color",
                               "value": "text_000021",
                               "sourceSpan": {
-                                "start": 84,
+                                "start": 86,
                                 "length": 67
                               }
                             },
@@ -2827,7 +2843,7 @@
                               "attribute": "Position",
                               "value": "text_000004",
                               "sourceSpan": {
-                                "start": 55,
+                                "start": 56,
                                 "length": 28
                               }
                             },
@@ -2881,13 +2897,16 @@
                     "rendererSettings": {
                       "renderStep": {
                         "material": "builtin:unlit-alpha",
-                        "sizeScale": 1
+                        "sizeScale": 1,
+                        "spriteAnimation": null,
+                        "spriteComposition": null,
+                        "spriteAnimationEnabled": true
                       }
                     },
                     "generatedResources": {
                       "fluidVelocity": {
-                        "outputId": "VelocityOutput",
-                        "producerNodeId": "cb506769-0fe0-435e-8731-429765135779"
+                        "producerNodeId": "56ec03ac-d62d-4940-9b49-ea1f70b7a281",
+                        "outputId": "VelocityOutput"
                       }
                     }
                   }
@@ -2900,10 +2919,27 @@
               "KindDomain": "GpuParticle"
             },
             {
-              "Id": "a580914c-0dac-4f83-997e-5a195b5235b3",
+              "Id": "66d20130-6d82-48b5-9d51-da07c5975958",
+              "Kind": "ProceduralTexture",
+              "Name": "Glow texture",
+              "X": 600,
+              "Y": 0,
+              "PortType": "ProceduralTexture",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "GroupOverrides": null,
+              "SignalKeys": null,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "553993de-7da9-4393-b029-8be844ec99d5",
               "Kind": "Comment",
               "Name": "Sample guide",
-              "X": 600,
+              "X": 900,
               "Y": 0,
               "PortType": "Comment",
               "PortCategory": "Parameter",
@@ -2913,7 +2949,7 @@
                 {
                   "Id": "text",
                   "Type": "string",
-                  "Value": "GpuFluidVelocity · Fluid2D VelocityOutput → GPU particles\nThe smoke solver runs first. Its velocity moves the particles; its plane is hidden.\n64 × 64 cells; 100 particles per second. Preview: 60 FPS, frames 0–600.\nフルイドの速度を粒子が読み取ります。対応する GPU 接続先で確認してください。"
+                  "Value": "GpuFluidVelocity \u00B7 Fluid2D VelocityOutput \u2192 GPU particles\nThe smoke solver runs first. Its velocity moves the particles; its plane is hidden.\n64 \u00D7 64 cells; 100 particles per second. Preview: 60 FPS, frames 0\u2013600.\n\u30D5\u30EB\u30A4\u30C9\u306E\u901F\u5EA6\u3092\u7C92\u5B50\u304C\u8AAD\u307F\u53D6\u308A\u307E\u3059\u3002\u5BFE\u5FDC\u3059\u308B GPU \u63A5\u7D9A\u5148\u3067\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
                 },
                 {
                   "Id": "width",
@@ -2933,7 +2969,14 @@
               "KindDomain": "Cpu"
             }
           ],
-          "Connections": [],
+          "Connections": [
+            {
+              "SourceNodeId": "66d20130-6d82-48b5-9d51-da07c5975958",
+              "TargetNodeId": "a4e51c2d-8d2b-4831-882e-0d7b6dc6c610",
+              "TargetPortId": "proceduralTexture",
+              "SourcePortId": "value"
+            }
+          ],
           "ExposedItems": null,
           "AutoDestroyWhenIdle": true,
           "ResourceIdentities": null

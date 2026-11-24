@@ -3,7 +3,7 @@
   "AutoDestroyWhenIdle": true,
   "Nodes": [
     {
-      "Id": "9e3e20a7-09cd-4068-ae50-4de5bad28450",
+      "Id": "b8436c43-5109-4c83-993d-256a71a181d6",
       "Name": "GpuCurlTurbulence",
       "Kind": "GpuParticle",
       "X": 0,
@@ -22,7 +22,31 @@
               "capacity": 4096,
               "attributes": [
                 {
+                  "id": "Position",
+                  "type": "Float3"
+                },
+                {
+                  "id": "Velocity",
+                  "type": "Float3"
+                },
+                {
+                  "id": "Color",
+                  "type": "Float4"
+                },
+                {
+                  "id": "Size",
+                  "type": "Float2"
+                },
+                {
+                  "id": "Rotation",
+                  "type": "Float"
+                },
+                {
                   "id": "Age",
+                  "type": "Float"
+                },
+                {
+                  "id": "Lifetime",
                   "type": "Float"
                 },
                 {
@@ -30,32 +54,8 @@
                   "type": "Bool"
                 },
                 {
-                  "id": "Color",
-                  "type": "Float4"
-                },
-                {
-                  "id": "Lifetime",
-                  "type": "Float"
-                },
-                {
-                  "id": "Position",
-                  "type": "Float3"
-                },
-                {
-                  "id": "Rotation",
-                  "type": "Float"
-                },
-                {
                   "id": "Seed",
                   "type": "UInt"
-                },
-                {
-                  "id": "Size",
-                  "type": "Float2"
-                },
-                {
-                  "id": "Velocity",
-                  "type": "Float3"
                 }
               ],
               "resources": [
@@ -244,7 +244,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 37,
+                        "start": 38,
                         "length": 3
                       }
                     },
@@ -263,7 +263,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 54,
+                        "start": 56,
                         "length": 17
                       }
                     },
@@ -278,7 +278,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 96,
+                        "start": 99,
                         "length": 9
                       }
                     },
@@ -296,7 +296,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 96,
+                        "start": 99,
                         "length": 21
                       }
                     },
@@ -313,7 +313,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 127,
+                        "start": 130,
                         "length": 1
                       }
                     },
@@ -328,7 +328,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 130,
+                        "start": 133,
                         "length": 4
                       }
                     },
@@ -345,7 +345,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 137,
+                        "start": 140,
                         "length": 3
                       }
                     },
@@ -363,7 +363,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 130,
+                        "start": 133,
                         "length": 10
                       }
                     },
@@ -380,7 +380,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 142,
+                        "start": 145,
                         "length": 1
                       }
                     },
@@ -399,7 +399,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 120,
+                        "start": 123,
                         "length": 24
                       }
                     },
@@ -417,7 +417,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 96,
+                        "start": 99,
                         "length": 48
                       }
                     },
@@ -434,7 +434,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 191,
+                        "start": 195,
                         "length": 3
                       }
                     },
@@ -451,7 +451,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 196,
+                        "start": 200,
                         "length": 2
                       }
                     },
@@ -468,7 +468,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 200,
+                        "start": 204,
                         "length": 3
                       }
                     },
@@ -488,7 +488,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 162,
+                        "start": 166,
                         "length": 42
                       }
                     },
@@ -505,7 +505,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 246,
+                        "start": 251,
                         "length": 3
                       }
                     },
@@ -522,7 +522,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 251,
+                        "start": 256,
                         "length": 2
                       }
                     },
@@ -539,7 +539,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 255,
+                        "start": 260,
                         "length": 3
                       }
                     },
@@ -559,7 +559,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 218,
+                        "start": 223,
                         "length": 41
                       }
                     },
@@ -577,7 +577,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 218,
+                        "start": 223,
                         "length": 52
                       }
                     },
@@ -594,7 +594,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 274,
+                        "start": 279,
                         "length": 4
                       }
                     },
@@ -611,7 +611,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 281,
+                        "start": 286,
                         "length": 4
                       }
                     },
@@ -629,7 +629,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 281,
+                        "start": 286,
                         "length": 16
                       }
                     },
@@ -647,7 +647,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 274,
+                        "start": 279,
                         "length": 23
                       }
                     },
@@ -665,7 +665,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 218,
+                        "start": 223,
                         "length": 79
                       }
                     },
@@ -683,7 +683,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 218,
+                        "start": 223,
                         "length": 88
                       }
                     },
@@ -698,7 +698,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 333,
+                        "start": 339,
                         "length": 2
                       }
                     },
@@ -716,7 +716,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 321,
+                        "start": 327,
                         "length": 14
                       }
                     },
@@ -734,7 +734,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 308,
+                        "start": 314,
                         "length": 28
                       }
                     },
@@ -751,7 +751,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 348,
+                        "start": 355,
                         "length": 3
                       }
                     },
@@ -766,7 +766,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 360,
+                        "start": 367,
                         "length": 4
                       }
                     },
@@ -783,7 +783,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 366,
+                        "start": 373,
                         "length": 1
                       }
                     },
@@ -800,7 +800,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 369,
+                        "start": 376,
                         "length": 1
                       }
                     },
@@ -819,7 +819,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 354,
+                        "start": 361,
                         "length": 17
                       }
                     },
@@ -837,7 +837,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 348,
+                        "start": 355,
                         "length": 23
                       }
                     },
@@ -852,7 +852,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 380,
+                        "start": 387,
                         "length": 9
                       }
                     },
@@ -870,7 +870,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 380,
+                        "start": 387,
                         "length": 16
                       }
                     },
@@ -887,7 +887,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 398,
+                        "start": 405,
                         "length": 1
                       }
                     },
@@ -904,7 +904,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 401,
+                        "start": 408,
                         "length": 1
                       }
                     },
@@ -923,7 +923,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 374,
+                        "start": 381,
                         "length": 29
                       }
                     },
@@ -941,7 +941,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 348,
+                        "start": 355,
                         "length": 55
                       }
                     },
@@ -956,7 +956,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 337,
+                        "start": 344,
                         "length": 67
                       }
                     },
@@ -973,7 +973,7 @@
                       "componentIndex": 0,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 337,
+                        "start": 344,
                         "length": 67
                       }
                     },
@@ -990,7 +990,7 @@
                       "componentIndex": 1,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 337,
+                        "start": 344,
                         "length": 67
                       }
                     },
@@ -1007,7 +1007,7 @@
                       "componentIndex": 2,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 337,
+                        "start": 344,
                         "length": 67
                       }
                     },
@@ -1027,7 +1027,7 @@
                       "componentIndex": null,
                       "resource": null,
                       "sourceSpan": {
-                        "start": 337,
+                        "start": 344,
                         "length": 67
                       }
                     }
@@ -1038,7 +1038,7 @@
                       "attribute": "Color",
                       "value": "text_000046",
                       "sourceSpan": {
-                        "start": 337,
+                        "start": 344,
                         "length": 67
                       }
                     },
@@ -1047,7 +1047,7 @@
                       "attribute": "Position",
                       "value": "text_000029",
                       "sourceSpan": {
-                        "start": 308,
+                        "start": 314,
                         "length": 28
                       }
                     },
@@ -1056,7 +1056,7 @@
                       "attribute": "Velocity",
                       "value": "text_000026",
                       "sourceSpan": {
-                        "start": 206,
+                        "start": 211,
                         "length": 101
                       }
                     }
@@ -1101,7 +1101,10 @@
             "rendererSettings": {
               "renderStep": {
                 "material": "builtin:unlit-alpha",
-                "sizeScale": 1
+                "sizeScale": 1,
+                "spriteAnimation": null,
+                "spriteComposition": null,
+                "spriteAnimationEnabled": true
               }
             }
           }
@@ -1113,10 +1116,24 @@
       "SignalKeys": null
     },
     {
-      "Id": "3af8466f-6817-429f-897d-c1b66cf2c7c9",
+      "Id": "5a6491d4-2136-4d7b-8151-9f43e46530cb",
+      "Name": "Glow texture",
+      "Kind": "ProceduralTexture",
+      "X": 300,
+      "Y": 0,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false,
+      "GroupOverrides": null,
+      "SignalKeys": null
+    },
+    {
+      "Id": "24f2c077-f715-47e6-8739-7440485f13bb",
       "Name": "Sample guide",
       "Kind": "Comment",
-      "X": 300,
+      "X": 600,
       "Y": 0,
       "Curve": null,
       "ChildGraph": null,
@@ -1124,7 +1141,7 @@
         {
           "Id": "text",
           "Type": "string",
-          "Value": "GpuCurlTurbulence · X right / Y up / Z forward · metres\nCurl Noise moves the particles; Turbulence varies its strength.\nCapacity 4,096; 240 particles per second. Preview: 60 FPS, frames 0–1200.\nカールノイズで動かし、タービュランスで強さを変化。実 GPU の接続先で確認してください。"
+          "Value": "GpuCurlTurbulence \u00B7 X right / Y up / Z forward \u00B7 metres\nCurl Noise moves the particles; Turbulence varies its strength.\nCapacity 4,096; 240 particles per second. Preview: 60 FPS, frames 0\u20131200.\n\u30AB\u30FC\u30EB\u30CE\u30A4\u30BA\u3067\u52D5\u304B\u3057\u3001\u30BF\u30FC\u30D3\u30E5\u30E9\u30F3\u30B9\u3067\u5F37\u3055\u3092\u5909\u5316\u3002\u5B9F GPU \u306E\u63A5\u7D9A\u5148\u3067\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
         },
         {
           "Id": "width",
@@ -1143,15 +1160,22 @@
       "SignalKeys": null
     }
   ],
-  "Connections": [],
+  "Connections": [
+    {
+      "SourceNodeId": "5a6491d4-2136-4d7b-8151-9f43e46530cb",
+      "TargetNodeId": "b8436c43-5109-4c83-993d-256a71a181d6",
+      "TargetPortId": "proceduralTexture",
+      "SourcePortId": "value"
+    }
+  ],
   "History": {
-    "RootId": "bc8f6014-1d91-4b73-aec2-bf675c175d22",
-    "CurrentNodeId": "bc8f6014-1d91-4b73-aec2-bf675c175d22",
-    "TimelineRevisionId": "1c838ee0-daf9-4a17-8c7b-7adc6a79b04c",
+    "RootId": "169c4761-2d9d-4df8-b582-3fb2227d1eaf",
+    "CurrentNodeId": "169c4761-2d9d-4df8-b582-3fb2227d1eaf",
+    "TimelineRevisionId": "fedeee7f-09bb-44b5-b523-b6b64a88b803",
     "NextBranchNumber": 1,
     "Entries": [
       {
-        "Id": "bc8f6014-1d91-4b73-aec2-bf675c175d22",
+        "Id": "169c4761-2d9d-4df8-b582-3fb2227d1eaf",
         "ParentId": null,
         "PreferredChildId": null,
         "Description": "GpuCurlTurbulence",
@@ -1160,7 +1184,7 @@
         "State": {
           "Nodes": [
             {
-              "Id": "9e3e20a7-09cd-4068-ae50-4de5bad28450",
+              "Id": "b8436c43-5109-4c83-993d-256a71a181d6",
               "Kind": "GpuParticle",
               "Name": "GpuCurlTurbulence",
               "X": 0,
@@ -1181,7 +1205,31 @@
                       "capacity": 4096,
                       "attributes": [
                         {
+                          "id": "Position",
+                          "type": "Float3"
+                        },
+                        {
+                          "id": "Velocity",
+                          "type": "Float3"
+                        },
+                        {
+                          "id": "Color",
+                          "type": "Float4"
+                        },
+                        {
+                          "id": "Size",
+                          "type": "Float2"
+                        },
+                        {
+                          "id": "Rotation",
+                          "type": "Float"
+                        },
+                        {
                           "id": "Age",
+                          "type": "Float"
+                        },
+                        {
+                          "id": "Lifetime",
                           "type": "Float"
                         },
                         {
@@ -1189,32 +1237,8 @@
                           "type": "Bool"
                         },
                         {
-                          "id": "Color",
-                          "type": "Float4"
-                        },
-                        {
-                          "id": "Lifetime",
-                          "type": "Float"
-                        },
-                        {
-                          "id": "Position",
-                          "type": "Float3"
-                        },
-                        {
-                          "id": "Rotation",
-                          "type": "Float"
-                        },
-                        {
                           "id": "Seed",
                           "type": "UInt"
-                        },
-                        {
-                          "id": "Size",
-                          "type": "Float2"
-                        },
-                        {
-                          "id": "Velocity",
-                          "type": "Float3"
                         }
                       ],
                       "resources": [
@@ -1403,7 +1427,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 37,
+                                "start": 38,
                                 "length": 3
                               }
                             },
@@ -1422,7 +1446,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 54,
+                                "start": 56,
                                 "length": 17
                               }
                             },
@@ -1437,7 +1461,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 96,
+                                "start": 99,
                                 "length": 9
                               }
                             },
@@ -1455,7 +1479,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 96,
+                                "start": 99,
                                 "length": 21
                               }
                             },
@@ -1472,7 +1496,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 127,
+                                "start": 130,
                                 "length": 1
                               }
                             },
@@ -1487,7 +1511,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 130,
+                                "start": 133,
                                 "length": 4
                               }
                             },
@@ -1504,7 +1528,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 137,
+                                "start": 140,
                                 "length": 3
                               }
                             },
@@ -1522,7 +1546,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 130,
+                                "start": 133,
                                 "length": 10
                               }
                             },
@@ -1539,7 +1563,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 142,
+                                "start": 145,
                                 "length": 1
                               }
                             },
@@ -1558,7 +1582,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 120,
+                                "start": 123,
                                 "length": 24
                               }
                             },
@@ -1576,7 +1600,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 96,
+                                "start": 99,
                                 "length": 48
                               }
                             },
@@ -1593,7 +1617,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 191,
+                                "start": 195,
                                 "length": 3
                               }
                             },
@@ -1610,7 +1634,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 196,
+                                "start": 200,
                                 "length": 2
                               }
                             },
@@ -1627,7 +1651,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 200,
+                                "start": 204,
                                 "length": 3
                               }
                             },
@@ -1647,7 +1671,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 162,
+                                "start": 166,
                                 "length": 42
                               }
                             },
@@ -1664,7 +1688,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 246,
+                                "start": 251,
                                 "length": 3
                               }
                             },
@@ -1681,7 +1705,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 251,
+                                "start": 256,
                                 "length": 2
                               }
                             },
@@ -1698,7 +1722,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 255,
+                                "start": 260,
                                 "length": 3
                               }
                             },
@@ -1718,7 +1742,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 218,
+                                "start": 223,
                                 "length": 41
                               }
                             },
@@ -1736,7 +1760,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 218,
+                                "start": 223,
                                 "length": 52
                               }
                             },
@@ -1753,7 +1777,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 274,
+                                "start": 279,
                                 "length": 4
                               }
                             },
@@ -1770,7 +1794,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 281,
+                                "start": 286,
                                 "length": 4
                               }
                             },
@@ -1788,7 +1812,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 281,
+                                "start": 286,
                                 "length": 16
                               }
                             },
@@ -1806,7 +1830,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 274,
+                                "start": 279,
                                 "length": 23
                               }
                             },
@@ -1824,7 +1848,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 218,
+                                "start": 223,
                                 "length": 79
                               }
                             },
@@ -1842,7 +1866,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 218,
+                                "start": 223,
                                 "length": 88
                               }
                             },
@@ -1857,7 +1881,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 333,
+                                "start": 339,
                                 "length": 2
                               }
                             },
@@ -1875,7 +1899,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 321,
+                                "start": 327,
                                 "length": 14
                               }
                             },
@@ -1893,7 +1917,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 308,
+                                "start": 314,
                                 "length": 28
                               }
                             },
@@ -1910,7 +1934,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 348,
+                                "start": 355,
                                 "length": 3
                               }
                             },
@@ -1925,7 +1949,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 360,
+                                "start": 367,
                                 "length": 4
                               }
                             },
@@ -1942,7 +1966,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 366,
+                                "start": 373,
                                 "length": 1
                               }
                             },
@@ -1959,7 +1983,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 369,
+                                "start": 376,
                                 "length": 1
                               }
                             },
@@ -1978,7 +2002,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 354,
+                                "start": 361,
                                 "length": 17
                               }
                             },
@@ -1996,7 +2020,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 348,
+                                "start": 355,
                                 "length": 23
                               }
                             },
@@ -2011,7 +2035,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 380,
+                                "start": 387,
                                 "length": 9
                               }
                             },
@@ -2029,7 +2053,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 380,
+                                "start": 387,
                                 "length": 16
                               }
                             },
@@ -2046,7 +2070,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 398,
+                                "start": 405,
                                 "length": 1
                               }
                             },
@@ -2063,7 +2087,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 401,
+                                "start": 408,
                                 "length": 1
                               }
                             },
@@ -2082,7 +2106,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 374,
+                                "start": 381,
                                 "length": 29
                               }
                             },
@@ -2100,7 +2124,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 348,
+                                "start": 355,
                                 "length": 55
                               }
                             },
@@ -2115,7 +2139,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 337,
+                                "start": 344,
                                 "length": 67
                               }
                             },
@@ -2132,7 +2156,7 @@
                               "componentIndex": 0,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 337,
+                                "start": 344,
                                 "length": 67
                               }
                             },
@@ -2149,7 +2173,7 @@
                               "componentIndex": 1,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 337,
+                                "start": 344,
                                 "length": 67
                               }
                             },
@@ -2166,7 +2190,7 @@
                               "componentIndex": 2,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 337,
+                                "start": 344,
                                 "length": 67
                               }
                             },
@@ -2186,7 +2210,7 @@
                               "componentIndex": null,
                               "resource": null,
                               "sourceSpan": {
-                                "start": 337,
+                                "start": 344,
                                 "length": 67
                               }
                             }
@@ -2197,7 +2221,7 @@
                               "attribute": "Color",
                               "value": "text_000046",
                               "sourceSpan": {
-                                "start": 337,
+                                "start": 344,
                                 "length": 67
                               }
                             },
@@ -2206,7 +2230,7 @@
                               "attribute": "Position",
                               "value": "text_000029",
                               "sourceSpan": {
-                                "start": 308,
+                                "start": 314,
                                 "length": 28
                               }
                             },
@@ -2215,7 +2239,7 @@
                               "attribute": "Velocity",
                               "value": "text_000026",
                               "sourceSpan": {
-                                "start": 206,
+                                "start": 211,
                                 "length": 101
                               }
                             }
@@ -2260,7 +2284,10 @@
                     "rendererSettings": {
                       "renderStep": {
                         "material": "builtin:unlit-alpha",
-                        "sizeScale": 1
+                        "sizeScale": 1,
+                        "spriteAnimation": null,
+                        "spriteComposition": null,
+                        "spriteAnimationEnabled": true
                       }
                     }
                   }
@@ -2273,10 +2300,27 @@
               "KindDomain": "GpuParticle"
             },
             {
-              "Id": "3af8466f-6817-429f-897d-c1b66cf2c7c9",
+              "Id": "5a6491d4-2136-4d7b-8151-9f43e46530cb",
+              "Kind": "ProceduralTexture",
+              "Name": "Glow texture",
+              "X": 300,
+              "Y": 0,
+              "PortType": "ProceduralTexture",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "GroupOverrides": null,
+              "SignalKeys": null,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "24f2c077-f715-47e6-8739-7440485f13bb",
               "Kind": "Comment",
               "Name": "Sample guide",
-              "X": 300,
+              "X": 600,
               "Y": 0,
               "PortType": "Comment",
               "PortCategory": "Parameter",
@@ -2286,7 +2330,7 @@
                 {
                   "Id": "text",
                   "Type": "string",
-                  "Value": "GpuCurlTurbulence · X right / Y up / Z forward · metres\nCurl Noise moves the particles; Turbulence varies its strength.\nCapacity 4,096; 240 particles per second. Preview: 60 FPS, frames 0–1200.\nカールノイズで動かし、タービュランスで強さを変化。実 GPU の接続先で確認してください。"
+                  "Value": "GpuCurlTurbulence \u00B7 X right / Y up / Z forward \u00B7 metres\nCurl Noise moves the particles; Turbulence varies its strength.\nCapacity 4,096; 240 particles per second. Preview: 60 FPS, frames 0\u20131200.\n\u30AB\u30FC\u30EB\u30CE\u30A4\u30BA\u3067\u52D5\u304B\u3057\u3001\u30BF\u30FC\u30D3\u30E5\u30E9\u30F3\u30B9\u3067\u5F37\u3055\u3092\u5909\u5316\u3002\u5B9F GPU \u306E\u63A5\u7D9A\u5148\u3067\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
                 },
                 {
                   "Id": "width",
@@ -2306,7 +2350,14 @@
               "KindDomain": "Cpu"
             }
           ],
-          "Connections": [],
+          "Connections": [
+            {
+              "SourceNodeId": "5a6491d4-2136-4d7b-8151-9f43e46530cb",
+              "TargetNodeId": "b8436c43-5109-4c83-993d-256a71a181d6",
+              "TargetPortId": "proceduralTexture",
+              "SourcePortId": "value"
+            }
+          ],
           "ExposedItems": null,
           "AutoDestroyWhenIdle": true,
           "ResourceIdentities": null

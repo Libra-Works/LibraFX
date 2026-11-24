@@ -100,7 +100,8 @@
                         </Flyout>
                     </Button.Flyout>
                 </views:IconButton>
-                <TextBlock Classes="editor-label" Text="{Binding ConnectionStatus}" />
+                <TextBlock Classes="editor-label" Text="{Binding ConnectionStatus}"
+                           IsVisible="{Binding ConnectionStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             </StackPanel>
             </StackPanel>
         </Border>
@@ -136,6 +137,9 @@
                             <MenuItem.Icon><views:EditorIconView Icon="Info" /></MenuItem.Icon>
                         </MenuItem>
                         <MenuItem x:Name="AddRerouteMenu" Header="{DynamicResource Text.Editor.AddReroute}" Click="OnAddRerouteClick" IsVisible="False">
+                            <MenuItem.Icon><views:EditorIconView Icon="Add" /></MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem x:Name="NewGraphGroupMenu" Header="{DynamicResource Text.Editor.NewGraphGroup}" Click="OnAddGraphGroupClick">
                             <MenuItem.Icon><views:EditorIconView Icon="Add" /></MenuItem.Icon>
                         </MenuItem>
                         <MenuItem x:Name="NewSpawnableGroupMenu" Header="{DynamicResource Text.Editor.NewSpawnableGroup}" Click="OnAddSpawnableGroupClick">

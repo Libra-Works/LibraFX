@@ -1296,6 +1296,73 @@ public partial class GpuWorkspaceView : UserControl
         var component = new TextBox { Text = (n.ComponentIndex ?? 0).ToString(CultureInfo.InvariantCulture) };
         if (n.Op == GpuOp.Component) { NodeInspector.Children.Add(new TextBlock { Text = "Component 0…3" }); NodeInspector.Children.Add(component); }
 
+        if (n.Op == GpuOp.FCurve)
+        {
+            NodeInspector.Children.Add(new TextBlock { Text = "F-Curve (double-click to add, right-click/Del to remove)" });
+            var curveCanvas = new GpuCurveCanvas { Curve = n.Curve ?? GpuCurveData.DefaultLinear() };
+            NodeInspector.Children.Add(curveCanvas);
+
+            var keyTimeBox = new TextBox();
+            var keyValueBox = new TextBox();
+            var interpBox = new ComboBox
+            {
+                ItemsSource = new[] { "Cubic", "Linear", "Constant" }
+            };
+            var syncingCurveUi = false;
+            void SyncSelectedKeyUi()
+            {
+                syncingCurveUi = true;
+                try
+                {
+                    var key = curveCanvas.SelectedKey;
+                    keyTimeBox.Text = key?.Time.ToString("0.###", CultureInfo.InvariantCulture) ?? "0";
+                    keyValueBox.Text = key?.Value.ToString("0.###", CultureInfo.InvariantCulture) ?? "0";
+                    interpBox.SelectedIndex = key is null ? 0 : Math.Clamp(key.Interpolation, 0, 2);
+                }
+                finally { syncingCurveUi = false; }
+            }
+            SyncSelectedKeyUi();
+            curveCanvas.SelectionChanged += SyncSelectedKeyUi;
+
+            void CommitCurve(GpuCurveData updatedCurve) => Run(() =>
+            {
+                var updated = n with { Curve = updatedCurve, SourceSpan = null };
+                if (updated != n)
+                    vm.Edit(new() { Action = "update", KernelId = vm.KernelId, Node = updated });
+            });
+            curveCanvas.CurveCommitted += CommitCurve;
+
+            void ApplySelectedKeyFields()
+            {
+                if (syncingCurveUi || curveCanvas.SelectedKey is not { } key) return;
+                if (!double.TryParse(keyTimeBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var t)) t = key.Time;
+                if (!double.TryParse(keyValueBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var v)) v = key.Value;
+                var interp = Math.Clamp(interpBox.SelectedIndex, 0, 2);
+                curveCanvas.UpdateSelectedKey(key with { Time = t, Value = v, Interpolation = interp });
+            }
+            keyTimeBox.LostFocus += (_, _) => ApplySelectedKeyFields();
+            keyTimeBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) { ApplySelectedKeyFields(); e.Handled = true; } };
+            keyValueBox.LostFocus += (_, _) => ApplySelectedKeyFields();
+            keyValueBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) { ApplySelectedKeyFields(); e.Handled = true; } };
+            interpBox.SelectionChanged += (_, _) => ApplySelectedKeyFields();
+
+            var keyRow = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 6 };
+            keyRow.Children.Add(new TextBlock { Text = "T", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
+            keyTimeBox.Width = 64;
+            keyRow.Children.Add(keyTimeBox);
+            keyRow.Children.Add(new TextBlock { Text = "V", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
+            keyValueBox.Width = 64;
+            keyRow.Children.Add(keyValueBox);
+            keyRow.Children.Add(interpBox);
+            NodeInspector.Children.Add(keyRow);
+
+            var presetRow = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 6 };
+            presetRow.Children.Add(Button("0→1", () => curveCanvas.SetPreset([new(0, 0), new(1, 1)])));
+            presetRow.Children.Add(Button("1→0", () => curveCanvas.SetPreset([new(0, 1), new(1, 0)])));
+            presetRow.Children.Add(Button("0→1→0", () => curveCanvas.SetPreset([new(0, 0), new(0.5, 1), new(1, 0)])));
+            NodeInspector.Children.Add(presetRow);
+        }
+
         void CommitInspector() => Run(() =>
         {
             var updated = n with

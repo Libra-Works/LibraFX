@@ -4,7 +4,7 @@ using LiberaFx.Services.Compilation;
 
 namespace LiberaFx.Services;
 
-internal sealed record ProceduralMeshPreviewFrame(float[] Positions, int[] Indices);
+internal sealed record ProceduralMeshPreviewFrame(float[] Positions, float[] Uvs, int[] Indices);
 internal static class ProceduralMeshPreview
 {
     public static ProceduralMeshPreviewFrame Render(GraphNodeSnapshot node, double time, CancellationToken cancellation)
@@ -46,9 +46,14 @@ internal static class ProceduralMeshPreview
             Marshal.Copy(Marshal.ReadIntPtr(view, 0), vertices, 0, vertices.Length);
             Marshal.Copy(Marshal.ReadIntPtr(view, 8), indices, 0, indices.Length);
             var positions = new float[vertexCount * 3];
-            for (var index = 0; index < vertexCount; index++) Array.Copy(vertices, index * 18, positions, index * 3, 3);
+            var uvs = new float[vertexCount * 2];
+            for (var index = 0; index < vertexCount; index++)
+            {
+                Array.Copy(vertices, index * 18, positions, index * 3, 3);
+                Array.Copy(vertices, index * 18 + 10, uvs, index * 2, 2);
+            }
             cancellation.ThrowIfCancellationRequested();
-            return new(positions, indices);
+            return new(positions, uvs, indices);
         }
         finally
         {

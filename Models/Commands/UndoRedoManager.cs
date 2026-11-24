@@ -175,6 +175,37 @@ public sealed partial class UndoRedoManager
         ActionPerformed?.Invoke($"{(isPinned ? "Pin" : "Unpin")}: {node.Description}");
     }
 
+    public bool DeleteNode(Guid nodeId)
+    {
+        if (!_nodesById.TryGetValue(nodeId, out var node) || node.Parent is null)
+        {
+            return false;
+        }
+        bool HasPinned(HistoryNode candidate) =>
+            candidate.IsPinned || candidate.Children.Any(HasPinned);
+        if (HasPinned(node))
+        {
+            return false;
+        }
+        bool Contains(HistoryNode root, HistoryNode? target) =>
+            target is not null && (ReferenceEquals(root, target) || root.Children.Any(child => Contains(child, target)));
+        if (Contains(node, _current) && !NavigateTo(node.Parent.Id))
+        {
+            return false;
+        }
+        node.Parent.Children.Remove(node);
+        void RemoveSubtree(HistoryNode current)
+        {
+            foreach (var child in current.Children) RemoveSubtree(child);
+            _nodesById.Remove(current.Id);
+        }
+        RemoveSubtree(node);
+        _timelineRevisionId = Guid.NewGuid();
+        OnStateChanged();
+        ActionPerformed?.Invoke($"Delete history: {node.Description}");
+        return true;
+    }
+
     public IReadOnlyList<UndoRedoHistoryItem> GetItems()
     {
         var items = new List<UndoRedoHistoryItem>(_nodesById.Count);

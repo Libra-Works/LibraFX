@@ -83,6 +83,74 @@ float pfractal(float2 uv,PixelOperation op,bool ridged)
     }
     return result/max(total,1e-6);
 }
+float4 EvalBasicPixelOp(PixelOperation op, float4 reg0, float4 a, float4 b)
+{
+    float4 v=a;
+    float2 uv=a.xy*op.p.xy+LibraProceduralLocalTime*op.p.zw;
+    switch(op.kind)
+    {
+    case 0: v=reg0; break;
+    case 1: v=op.p; break;
+    case 2: v=LibraProceduralLocalTime.xxxx; break;
+    case 3:
+    {
+        float angle=op.q.x*.0174532925199433;
+        float2 p=(a.xy-op.q.yz)*op.p.xy;
+        v.xy=float2(cos(angle)*p.x-sin(angle)*p.y,sin(angle)*p.x+cos(angle)*p.y)+op.q.yz+op.p.zw;
+        break;
+    }
+    case 4: v=dot(a.xy,op.p.xy)+op.p.z; break;
+    case 5: v=length(a.xy-op.p.xy)*op.p.z; break;
+    case 6: v=1-psmooth(op.p.w,op.p.w+max(op.q.x,1e-6),abs(length(a.xy-op.p.xy)-op.p.z)); break;
+    case 7: v=.5+.5*sin((dot(a.xy,op.p.xy)+op.p.z)*6.28318530718); break;
+    case 8: v=fmod(abs(floor(a.x*op.p.x)+floor(a.y*op.p.y)),2); break;
+    case 9: v=pvalue(uv,op.seed); break;
+    case 10: v=pgrad(uv,op.seed); break;
+    case 11: v=pcell(uv,op.seed,false); break;
+    case 12: v=pcell(uv,op.seed,true); break;
+    case 13: v=pfractal(uv,op,false); break;
+    case 14: v=pfractal(uv,op,true); break;
+    case 15: v=float4((pvalue(uv+float2(0,.01),op.seed)-pvalue(uv-float2(0,.01),op.seed))/.02,
+        -(pvalue(uv+float2(.01,0),op.seed)-pvalue(uv-float2(.01,0),op.seed))/.02,0,1); break;
+    case 16: v.xy=a.xy+(b.xy-op.p.yy)*op.p.x; break;
+    case 17: v=a+b; break;
+    case 18: v=a*b; break;
+    case 19: v=a-b; break;
+    case 20: v=min(a,b); break;
+    case 21: v=max(a,b); break;
+    case 22: v=lerp(a,b,op.p.x); break;
+    case 23: v=pow(max(a,1e-6),clamp(op.p.x,-32,32)); break;
+    case 24: v=saturate(a); break;
+    case 25: v=1-a; break;
+    case 26: v=float4(psmooth(op.p.x,op.p.y,a.x),psmooth(op.p.x,op.p.y,a.y),psmooth(op.p.x,op.p.y,a.z),psmooth(op.p.x,op.p.y,a.w)); break;
+    case 27: v=lerp(op.p,op.q,psmooth(op.r.x,op.r.y,a.x)); break;
+    case 28: v=a[min(uint(op.p.x),3u)]; break;
+    case 29: v.w=a.w*b.x; break;
+    case 30:
+        switch(uint(op.p.x))
+        {
+        case 0: v=LibraProceduralTexture0.SampleLevel(sampler_linear_repeat,a.xy,0); break;
+        case 1: v=LibraProceduralTexture1.SampleLevel(sampler_linear_repeat,a.xy,0); break;
+        case 2: v=LibraProceduralTexture2.SampleLevel(sampler_linear_repeat,a.xy,0); break;
+        default: v=LibraProceduralTexture3.SampleLevel(sampler_linear_repeat,a.xy,0); break;
+        }
+        break;
+    default: break;
+    }
+    return v;
+}
+float EvalHeightAt(float2 suv, uint limit)
+{
+    if(limit==0u) return suv.x;
+    float4 sub[33]; sub[0]=float4(suv,0,1);
+    [loop] for(uint j=0;j<min(limit,32u);++j)
+    {
+        PixelOperation sop=LibraProceduralOperations[j];
+        float4 sv=sop.kind==32u?sub[min(sop.inputA,j)]:EvalBasicPixelOp(sop,sub[0],sub[min(sop.inputA,j)],sub[min(sop.inputB,j)]);
+        sub[j+1]=pfinite(sv)?clamp(sv,-65504.0,65504.0):float4(0,0,0,0);
+    }
+    return sub[min(limit,32u)].x;
+}
 [numthreads(8,8,1)]
 void Generate(uint3 id : SV_DispatchThreadID)
 {
@@ -91,57 +159,22 @@ void Generate(uint3 id : SV_DispatchThreadID)
     [loop] for(uint i=0;i<min(LibraProceduralOperationCount,32u);++i)
     {
         PixelOperation op=LibraProceduralOperations[i];
-        float4 a=regs[min(op.inputA,i)],b=regs[min(op.inputB,i)],v=a;
-        float2 uv=a.xy*op.p.xy+LibraProceduralLocalTime*op.p.zw;
-        switch(op.kind)
+        float4 v;
+        if(op.kind==32u)
         {
-        case 0: v=regs[0]; break;
-        case 1: v=op.p; break;
-        case 2: v=LibraProceduralLocalTime.xxxx; break;
-        case 3:
-        {
-            float angle=op.q.x*.0174532925199433;
-            float2 p=(a.xy-op.q.yz)*op.p.xy;
-            v.xy=float2(cos(angle)*p.x-sin(angle)*p.y,sin(angle)*p.x+cos(angle)*p.y)+op.q.yz+op.p.zw;
-            break;
+            float strength=op.p.x;
+            float eps=clamp(op.p.y>0?op.p.y:.005,1e-4,.25);
+            float flipY=op.p.z>=.5?1:-1;
+            float hL=EvalHeightAt(regs[0].xy-float2(eps,0),op.inputA);
+            float hR=EvalHeightAt(regs[0].xy+float2(eps,0),op.inputA);
+            float hD=EvalHeightAt(regs[0].xy-float2(0,eps),op.inputA);
+            float hU=EvalHeightAt(regs[0].xy+float2(0,eps),op.inputA);
+            float3 n=normalize(float3(-(hR-hL)*strength,(hU-hD)*strength*flipY,1.0));
+            v=float4(n*.5+.5,1.0);
         }
-        case 4: v=dot(a.xy,op.p.xy)+op.p.z; break;
-        case 5: v=length(a.xy-op.p.xy)*op.p.z; break;
-        case 6: v=1-psmooth(op.p.w,op.p.w+max(op.q.x,1e-6),abs(length(a.xy-op.p.xy)-op.p.z)); break;
-        case 7: v=.5+.5*sin((dot(a.xy,op.p.xy)+op.p.z)*6.28318530718); break;
-        case 8: v=fmod(abs(floor(a.x*op.p.x)+floor(a.y*op.p.y)),2); break;
-        case 9: v=pvalue(uv,op.seed); break;
-        case 10: v=pgrad(uv,op.seed); break;
-        case 11: v=pcell(uv,op.seed,false); break;
-        case 12: v=pcell(uv,op.seed,true); break;
-        case 13: v=pfractal(uv,op,false); break;
-        case 14: v=pfractal(uv,op,true); break;
-        case 15: v=float4((pvalue(uv+float2(0,.01),op.seed)-pvalue(uv-float2(0,.01),op.seed))/.02,
-            -(pvalue(uv+float2(.01,0),op.seed)-pvalue(uv-float2(.01,0),op.seed))/.02,0,1); break;
-        case 16: v.xy=a.xy+(b.xy-op.p.yy)*op.p.x; break;
-        case 17: v=a+b; break;
-        case 18: v=a*b; break;
-        case 19: v=a-b; break;
-        case 20: v=min(a,b); break;
-        case 21: v=max(a,b); break;
-        case 22: v=lerp(a,b,op.p.x); break;
-        case 23: v=pow(max(a,1e-6),clamp(op.p.x,-32,32)); break;
-        case 24: v=saturate(a); break;
-        case 25: v=1-a; break;
-        case 26: v=float4(psmooth(op.p.x,op.p.y,a.x),psmooth(op.p.x,op.p.y,a.y),psmooth(op.p.x,op.p.y,a.z),psmooth(op.p.x,op.p.y,a.w)); break;
-        case 27: v=lerp(op.p,op.q,psmooth(op.r.x,op.r.y,a.x)); break;
-        case 28: v=a[min(uint(op.p.x),3u)]; break;
-        case 29: v.w=a.w*b.x; break;
-        case 30:
-            switch(uint(op.p.x))
-            {
-            case 0: v=LibraProceduralTexture0.SampleLevel(sampler_linear_repeat,a.xy,0); break;
-            case 1: v=LibraProceduralTexture1.SampleLevel(sampler_linear_repeat,a.xy,0); break;
-            case 2: v=LibraProceduralTexture2.SampleLevel(sampler_linear_repeat,a.xy,0); break;
-            default: v=LibraProceduralTexture3.SampleLevel(sampler_linear_repeat,a.xy,0); break;
-            }
-            break;
-        default: break;
+        else
+        {
+            v=EvalBasicPixelOp(op,regs[0],regs[min(op.inputA,i)],regs[min(op.inputB,i)]);
         }
         // Half-float storage has a finite range, even when intermediate arithmetic overflows.
         regs[i+1]=pfinite(v)?clamp(v,-65504.0,65504.0):float4(0,0,0,0);

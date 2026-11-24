@@ -162,6 +162,7 @@
   "Editor.Group": "選択したノードをグループ化",
   "Editor.AddNode": "ノードを追加(_A)...",
   "Editor.AddComment": "コメントを追加(_C)",
+  "Editor.NewGraphGroup": "グラフノードを追加",
   "Editor.NewSpawnableGroup": "スポーン可能グループを作成",
   "Panels.ContainingSpawnable": "編集中のSpawnable",
   "Panels.ContainingSpawnableHint": "子ノードが未選択です。このSpawnableインスタンスの公開値を編集できます。子グラフの既定値は変更しません。",

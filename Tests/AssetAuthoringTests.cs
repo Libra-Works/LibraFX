@@ -14,7 +14,8 @@ internal static class AssetAuthoringTests
         VerifyLocalMetadata();
         VerifyProjectAssetRoot();
         VerifyPagedProjectAssetRoot();
-        VerifyTextureOnlyDrawAssignment("CpuParticleSpriteDraw");
+        VerifyParticleDrawMaterialAssignment("CpuParticleSpriteDraw");
+        VerifyGpuParticleMaterialAssignment();
         VerifyFlexiblePlaneMaterialAssignment();
         VerifyCallerTargetBinding();
         VerifyCallerTargetBinding(inline: true);
@@ -22,7 +23,7 @@ internal static class AssetAuthoringTests
         VerifyCallerTargetBinding(inline: true, material: true);
     }
 
-    private static void VerifyTextureOnlyDrawAssignment(string typeName)
+    private static void VerifyParticleDrawMaterialAssignment(string typeName)
     {
         var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
         var definition = GraphNodeDefinition.All.Single(item => item.TypeName == typeName);
@@ -40,12 +41,26 @@ internal static class AssetAuthoringTests
             throw new InvalidOperationException($"{typeName} must expose one typed primary texture target.");
         }
         ResourceAssignment.Assign(graph, node, texture, targets[0]);
-        if (PathValue() != texture.Path ||
-            graph.GetNode(id).Parameters?.Any(parameter => parameter.Id == "materialSchema") == true ||
-            ResourceAssignment.Targets(graph.GetNode(id),
-                new EngineAsset("/Game/Materials/M_Ribbon", "Ribbon", "material", "Unreal")).Count != 0)
+        if (PathValue() != texture.Path)
         {
-            throw new InvalidOperationException($"{typeName} texture assignment must not invent material slots or schema.");
+            throw new InvalidOperationException($"{typeName} texture assignment failed.");
+        }
+        var material = new EngineAsset("/Game/Materials/M_Particle", "M_Particle", "material", "Unreal",
+            Materials: [new(0, "/Game/Materials/M_Particle", "M_Particle", [])]);
+        var matTargets = ResourceAssignment.Targets(graph.GetNode(id), material);
+        if (matTargets.Count != 1 || matTargets[0].Kind != ResourceTargetKind.RenderMaterial)
+        {
+            throw new InvalidOperationException($"{typeName} must expose a material slot 0 target.");
+        }
+        ResourceAssignment.Assign(graph, graph.GetNode(id), material, matTargets[0]);
+        if (RenderNodeSchema.ReadMaterials(definition, graph.GetNode(id).Parameters).Single().Path != material.Path)
+        {
+            throw new InvalidOperationException($"{typeName} material assignment must persist in materialSchema.");
+        }
+        graph.History.Undo();
+        if (PathValue() != texture.Path)
+        {
+            throw new InvalidOperationException($"{typeName} material assignment must be undoable.");
         }
         graph.History.Undo();
         if (PathValue() != original)
@@ -56,6 +71,25 @@ internal static class AssetAuthoringTests
         if (PathValue() != texture.Path)
         {
             throw new InvalidOperationException($"{typeName} texture assignment must be redoable.");
+        }
+    }
+
+    private static void VerifyGpuParticleMaterialAssignment()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var definition = GraphNodeDefinition.All.Single(item => item.TypeName == "GpuParticle");
+        var node = graph.CreateNode(definition.Kind);
+        var material = new EngineAsset("/Game/Materials/M_GpuParticle", "M_GpuParticle", "material", "Unreal",
+            Materials: [new(0, "/Game/Materials/M_GpuParticle", "M_GpuParticle", [])]);
+        var matTargets = ResourceAssignment.Targets(node, material);
+        if (matTargets.Count != 1 || matTargets[0].Kind != ResourceTargetKind.RenderMaterial)
+        {
+            throw new InvalidOperationException("GpuParticle must expose an implicit material slot 0 target.");
+        }
+        ResourceAssignment.Assign(graph, node, material, matTargets[0]);
+        if (RenderNodeSchema.ReadMaterials(definition, graph.GetNode(node.Id).Parameters).Single().Path != material.Path)
+        {
+            throw new InvalidOperationException("GpuParticle material assignment must persist in materialSchema.");
         }
     }
 

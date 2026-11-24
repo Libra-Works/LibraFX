@@ -33,11 +33,13 @@ internal static class ProceduralProgramBindings
         var used = new HashSet<Guid>();
         foreach (var draw in nodes.Values.Where(n =>
             GraphNodeDefinition.All.Single(d => d.Kind == n.Kind).TypeName == "ModelDraw" ||
-            FlexiblePlaneDrawSchema.IsNode(n.Kind)))
+            FlexiblePlaneDrawSchema.IsNode(n.Kind) ||
+            CpuParticleSchema.IsContainer(n.Kind) ||
+            GpuParticleEditorService.IsGpu(n.Kind)))
         {
-            var isPlane = FlexiblePlaneDrawSchema.IsNode(draw.Kind);
-            var model = isPlane ? null : Source(draw, "proceduralModel", "ProceduralModel", nodes, incoming, scopes);
-            var directTexture = isPlane ? Source(draw, "proceduralTexture", "ProceduralTexture", nodes, incoming, scopes) : null;
+            var isModel = GraphNodeDefinition.All.Single(d => d.Kind == draw.Kind).TypeName == "ModelDraw";
+            var model = isModel ? Source(draw, "proceduralModel", "ProceduralModel", nodes, incoming, scopes) : null;
+            var directTexture = isModel ? null : Source(draw, "proceduralTexture", "ProceduralTexture", nodes, incoming, scopes);
             var material = Source(draw, "proceduralMaterial", "ProceduralMaterial", nodes, incoming, scopes);
             if (model is { } modelId) used.Add(modelId);
             if (directTexture is { } directTextureId) used.Add(directTextureId);

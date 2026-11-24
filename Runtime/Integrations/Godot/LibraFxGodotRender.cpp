@@ -362,7 +362,7 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
     auto cpuVersion = 0.0;
     if ((config.has("cpuParticleVersion") || !cpuNodes.is_empty()) &&
         (!readNumber(config.get("cpuParticleVersion", godot::Variant{}), cpuVersion) ||
-         (cpuVersion != 1 && cpuVersion != 2 && cpuVersion != 3 && cpuVersion != 4)))
+         (cpuVersion != 1 && cpuVersion != 2 && cpuVersion != 3 && cpuVersion != 4 && cpuVersion != 5)))
     {
         return Result::UnsupportedBinary;
     }
@@ -922,7 +922,7 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
             auto draw = CpuParticleDraw{};
             auto spriteResult = readParticleSprite(item.get("spriteAnimation", godot::Variant{}),
                                                    draw.hasSpriteAnimation, draw.spriteAnimation);
-            if (spriteResult != Result::Ok || (draw.hasSpriteAnimation && cpuVersion != 4))
+            if (spriteResult != Result::Ok || (draw.hasSpriteAnimation && cpuVersion < 4))
             {
                 return Result::InvalidBinary;
             }
@@ -955,7 +955,34 @@ auto PackageRenderRenderer::readDraws(const std::vector<std::uint8_t>& bytes,
                     draw.drawRows.push_back(id);
                 }
             }
-            if (draw.assetIdentity == "builtin:white" || draw.assetIdentity == "builtin:radial-glow") {
+            const auto procTexVal = item.get("proceduralTexture", godot::Variant{});
+            if (procTexVal.get_type() == godot::Variant::STRING) {
+                draw.proceduralTexture = static_cast<godot::String>(procTexVal).utf8().get_data();
+            }
+            const auto procMatVal = item.get("proceduralMaterial", godot::Variant{});
+            if (procMatVal.get_type() == godot::Variant::STRING) {
+                draw.proceduralMaterial = static_cast<godot::String>(procMatVal).utf8().get_data();
+            }
+            const auto matsVal = item.get("materials", godot::Variant{});
+            if (matsVal.get_type() == godot::Variant::ARRAY) {
+                const auto mats = godot::Array(matsVal);
+                for (auto m = 0; m < mats.size(); ++m) {
+                    if (mats[m].get_type() != godot::Variant::DICTIONARY) continue;
+                    const auto matEntry = godot::Dictionary(mats[m]);
+                    auto slot = 0.0;
+                    auto matPath = godot::String{};
+                    if (readNumber(matEntry.get("slot", godot::Variant{}), slot) && slot == 0.0 &&
+                        readString(matEntry, "path", matPath) && !matPath.is_empty()) {
+                        const auto found = materialBindings.find(matPath.utf8().get_data());
+                        if (found == materialBindings.end() || found->second.is_null()) {
+                            return Result::InvalidArgument;
+                        }
+                        draw.customMaterial = found->second;
+                    }
+                }
+            }
+            if (draw.assetIdentity == "builtin:white" || draw.assetIdentity == "builtin:radial-glow" ||
+                draw.assetIdentity == "builtin:procedural-material" || draw.assetIdentity == "builtin:procedural-texture") {
                 draw.texture = makeWhiteTexture(draw.assetIdentity == "builtin:radial-glow");
             } else {
                 auto texture = textureBindings.find(draw.assetIdentity);
@@ -1183,6 +1210,10 @@ auto PackageRenderRenderer::makeCpuRenderable(godot::Node3D& parent,
         out.spriteMaterial->set_shader(shader);
         out.spriteMaterial->set_shader_parameter("particle_texture", draw.texture);
         quad->set_material(out.spriteMaterial);
+    }
+    if (draw.customMaterial.is_valid())
+    {
+        quad->set_material(draw.customMaterial);
     }
     out.instanceStride = draw.atlas.enabled || draw.hasSpriteAnimation ? 20 : 16;
     auto* server = godot::RenderingServer::get_singleton();
@@ -1640,6 +1671,35 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host, const Spawna
         godot::RenderingServer::get_singleton()->instance_set_transform(renderable.instance.get(), drawTransform);
         renderable.drawWorld = drawTransform;
         renderable.hasDrawWorld = !draw.drawRows.empty();
+        if (procedural_ && !draw.customMaterial.is_valid() &&
+            (!draw.proceduralMaterial.empty() || !draw.proceduralTexture.empty()))
+        {
+            const auto& resourceId = !draw.proceduralMaterial.empty()
+                ? draw.proceduralMaterial : draw.proceduralTexture;
+            auto procTexture = godot::Ref<godot::Texture2D>{};
+            auto blend = 0;
+            auto doubleSided = true;
+            auto emission = 1.0f;
+            const std::uint8_t* containerPtr = scope.kind == SpawnableScopeKind::Child ? scope.containerId.data() : nullptr;
+            if (procedural_->resolveResourceTexture(containerPtr, scope.instanceId,
+                    resourceId, procTexture, blend, doubleSided, emission) && procTexture.is_valid())
+            {
+                if (renderable.spriteMaterial.is_valid())
+                {
+                    renderable.spriteMaterial->set_shader_parameter("particle_texture", procTexture);
+                }
+                else if (renderable.material.is_valid())
+                {
+                    renderable.material->set_texture(godot::BaseMaterial3D::TEXTURE_ALBEDO, procTexture);
+                    if (!draw.proceduralMaterial.empty())
+                    {
+                        renderable.material->set_blend_mode(blend == 1
+                            ? godot::BaseMaterial3D::BLEND_MODE_ADD
+                            : godot::BaseMaterial3D::BLEND_MODE_MIX);
+                    }
+                }
+            }
+        }
         auto count = std::size_t{};
         auto result = host.cpuParticleCount(scope, draw.nodeId.data(), count);
         if (result != Result::Ok) {

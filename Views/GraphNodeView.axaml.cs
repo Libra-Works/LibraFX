@@ -33,6 +33,7 @@ public partial class GraphNodeView : UserControl
     private Point _resizeStart;
     private double _resizeWidth;
     private double _resizeHeight;
+    private bool _resizeStartExpanded;
     private Guid _resizeRevision;
     private GraphNodeViewModel? _imageNode;
     private Bitmap? _commentBitmap;
@@ -590,15 +591,16 @@ public partial class GraphNodeView : UserControl
 
     private void OnResizePressed(object? sender, PointerPressedEventArgs e)
     {
-        if (DataContext is not GraphNodeViewModel node || (!node.IsComment && !node.IsInlineExpanded) ||
+        if (DataContext is not GraphNodeViewModel node || (!node.IsComment && !node.HasInlineWorkspace) ||
             sender is not Control handle || !e.GetCurrentPoint(handle).Properties.IsLeftButtonPressed ||
             this.FindAncestorOfType<GraphEditorView>() is not { } editor) return;
         node.SelectCommand.Execute(null);
         _resizeNode = node;
         _resizeEditor = editor;
         _resizeStart = e.GetPosition(editor);
-        _resizeWidth = node.IsComment ? node.CommentWidth : node.InlineWidth;
-        _resizeHeight = node.IsComment ? node.CommentHeight : node.InlineHeight;
+        _resizeStartExpanded = node.IsInlineExpanded;
+        _resizeWidth = node.IsComment ? node.CommentWidth : node.IsInlineExpanded ? node.InlineWidth : node.RenderedWidth;
+        _resizeHeight = node.IsComment ? node.CommentHeight : node.IsInlineExpanded ? node.InlineHeight : 0;
         _resizeRevision = node.Workspace.History.CurrentNodeId;
         e.Pointer.Capture(handle);
         e.Handled = true;
@@ -609,7 +611,21 @@ public partial class GraphNodeView : UserControl
         if (_resizeNode is not { } node || _resizeEditor is not { } editor) return;
         var delta = (e.GetPosition(editor) - _resizeStart) / editor.DebugZoom;
         if (node.IsComment) node.PreviewCommentSize(_resizeWidth + delta.X, _resizeHeight + delta.Y);
-        else node.PreviewInlineSize(_resizeWidth + delta.X, _resizeHeight + delta.Y);
+        else if (_resizeStartExpanded)
+        {
+            var nextHeight = _resizeHeight + delta.Y;
+            if (nextHeight < 80)
+                node.PreviewInlineSize(_resizeWidth + delta.X, 160, expanded: false);
+            else
+                node.PreviewInlineSize(_resizeWidth + delta.X, nextHeight, expanded: true);
+        }
+        else
+        {
+            if (delta.Y >= 32)
+                node.PreviewInlineSize(Math.Max(_resizeWidth, _resizeWidth + delta.X), Math.Max(160, delta.Y), expanded: true);
+            else
+                node.PreviewInlineSize(_resizeWidth + delta.X, 160, expanded: false);
+        }
         e.Handled = true;
     }
 
@@ -618,17 +634,20 @@ public partial class GraphNodeView : UserControl
         if (_resizeNode is not { } node) return;
         var width = node.IsComment ? node.CommentWidth : node.InlineWidth;
         var height = node.IsComment ? node.CommentHeight : node.InlineHeight;
+        var expanded = node.IsInlineExpanded;
+        var wasExpanded = _resizeStartExpanded;
         _resizeNode = null;
         _resizeEditor = null;
         if (node.IsComment) node.CancelCommentSize();
         else node.CancelInlineSize();
         e.Pointer.Capture(null);
-        if (node.Workspace.History.CurrentNodeId == _resizeRevision)
+        if (node.Workspace.History.CurrentNodeId == _resizeRevision &&
+            (node.IsComment || expanded || wasExpanded))
         {
             node.Workspace.RunAuthoringAction(() =>
             {
                 if (node.IsComment) node.Workspace.SetCommentSize(node, width, height);
-                else node.Workspace.SetInlinePresentation(node, true, width, height);
+                else node.Workspace.SetInlinePresentation(node, expanded, width, height);
             });
         }
         e.Handled = true;

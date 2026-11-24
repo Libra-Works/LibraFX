@@ -49,6 +49,7 @@ public static class CpuParticleCompilationTests
         VerifyAheadOfTimeKernels();
         VerifyMatrixInputs();
         VerifyFlipbook();
+        VerifyParticleMaterials();
         ParticleAtlasTests.Run();
         var graph = Fixture();
         GraphValidator.ValidateDocument(graph);
@@ -249,6 +250,56 @@ public static class CpuParticleCompilationTests
             atlas.GetProperty("startFrame").GetInt32() == 1 && atlas.GetProperty("overLife").GetBoolean(),
             "Flipbook must survive document/package serialization alongside Draw Matrix, with an explicit runtime version.");
         Reject(() => SpawnableGroupPackage.Compile(WithAtlas(65)), "Out of range atlas");
+    }
+
+    private static void VerifyParticleMaterials()
+    {
+        var procMat = Node("ProceduralMaterial");
+        var system = Node("CpuParticle");
+        var child = CpuParticleSchema.CreateChild(Definition("CpuParticle").Kind);
+        var draw = child.Nodes.Single(n => CpuParticleSchema.Name(n.Kind) == "CpuParticleSpriteDraw");
+        var matSchema = RenderNodeSchema.EncodeMaterials([new(0, "/Game/Materials/M_CpuMat", "M_CpuMat", [])]);
+        system = system with
+        {
+            ChildGraph = child with
+            {
+                Nodes = child.Nodes.Select(n => n.Id != draw.Id ? n : n with
+                {
+                    Parameters = [Parameter("materialSchema", "string", matSchema)]
+                }).ToArray()
+            }
+        };
+        var cpuGraph = new GraphSnapshot([procMat, system], [new(procMat.Id, system.Id, "proceduralMaterial", "value")]);
+        var cpuPkg = SpawnableGroupPackage.Compile(cpuGraph);
+        using (var render = JsonDocument.Parse(cpuPkg.RootRenderConfiguration))
+        {
+            var root = render.RootElement;
+            Require(root.GetProperty("cpuParticleVersion").GetInt32() == 5, "CPU particle materials require version 5.");
+            var item = root.GetProperty("cpuParticles")[0];
+            Require(item.GetProperty("proceduralMaterial").GetGuid() == procMat.Id, "CPU particle must emit proceduralMaterial.");
+            Require(item.GetProperty("materials")[0].GetProperty("path").GetString() == "/Game/Materials/M_CpuMat",
+                "CPU particle must emit engine material slot 0.");
+            Require(root.GetProperty("proceduralResources").EnumerateArray()
+                .Any(r => r.GetProperty("nodeId").GetGuid() == procMat.Id),
+                "CPU particle proceduralMaterial must be included in proceduralResources.");
+        }
+
+        var gpu = Node("GpuParticle", Parameter("materialSchema", "string", matSchema));
+        var gpuGraph = new GraphSnapshot([procMat, gpu], [new(procMat.Id, gpu.Id, "proceduralMaterial", "value")]);
+        var gpuPkg = SpawnableGroupPackage.Compile(gpuGraph);
+        using (var gpuRender = JsonDocument.Parse(gpuPkg.RootRenderConfiguration))
+        {
+            Require(gpuRender.RootElement.GetProperty("proceduralResources").EnumerateArray()
+                .Any(r => r.GetProperty("nodeId").GetGuid() == procMat.Id),
+                "GPU particle proceduralMaterial must be included in proceduralResources.");
+        }
+        using var gpuPayload = JsonDocument.Parse(gpuPkg.RootGpuPrograms);
+        var rb = gpuPayload.RootElement.GetProperty("programs")[0].GetProperty("unreal").GetProperty("rendererBindings")[0];
+        Require(gpuPayload.RootElement.GetProperty("programs")[0].GetProperty("unreal").GetProperty("rendererBindingsVersion").GetInt32() == 3,
+            "GPU particle materials require rendererBindingsVersion 3.");
+        Require(rb.GetProperty("proceduralMaterial").GetGuid() == procMat.Id, "GPU particle must emit proceduralMaterial.");
+        Require(rb.GetProperty("materials")[0].GetProperty("path").GetString() == "/Game/Materials/M_CpuMat",
+            "GPU particle must emit engine material slot 0.");
     }
 
     // Called only by an explicitly invoked fixture command; never runs a build/editor.

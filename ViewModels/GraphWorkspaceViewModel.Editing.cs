@@ -243,6 +243,11 @@ public sealed partial class GraphWorkspaceViewModel
             SetParameter(node, "assetPath", JsonSerializer.SerializeToElement(asset.Path));
             return;
         }
+        if (Nodes.Contains(node) && node.Definition.TypeName == "GpuParticle")
+        {
+            GpuParticleEditorService.AssignBillboardTexture(this, node, asset);
+            return;
+        }
         if (!Nodes.Contains(node) || !RenderNodeSchema.IsRenderNode(node.Definition))
         {
             throw new InvalidOperationException("Select a model or sprite render node.");
@@ -258,13 +263,21 @@ public sealed partial class GraphWorkspaceViewModel
     public void AssignRenderMaterial(GraphNodeViewModel node, EngineAsset asset, int slot)
     {
         ArgumentNullException.ThrowIfNull(asset);
+        if (Nodes.Contains(node) && node.Definition.TypeName == "GpuParticle")
+        {
+            GpuParticleEditorService.AssignBillboardTexture(this, node, asset);
+            return;
+        }
         if (!Nodes.Contains(node) || !RenderNodeSchema.IsRenderNode(node.Definition))
         {
             throw new InvalidOperationException("Select a model or sprite render node.");
         }
 
         RenderNodeAuthoring.ValidateAssetClass(asset, "material");
-        if (!RenderNodeSchema.ReadMaterials(node.Definition, node.Parameters).Any(material => material.Slot == slot))
+        var existingMaterials = RenderNodeSchema.ReadMaterials(node.Definition, node.Parameters);
+        var allowImplicitSlotZero = slot == 0 && existingMaterials.Count == 0 &&
+            node.Definition.TypeName is "CpuParticleSpriteDraw" or "GpuParticle";
+        if (!allowImplicitSlotZero && !existingMaterials.Any(material => material.Slot == slot))
         {
             throw new ArgumentException("The selected material slot no longer exists.", nameof(slot));
         }

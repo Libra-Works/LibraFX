@@ -64,6 +64,7 @@ public partial class GraphEditorView : UserControl
                 {
                     Focus();
                     _pastePosition = ToGraphPoint(e.GetPosition(GraphCanvas));
+                    NewGraphGroupMenu.IsVisible = graph.CanCreateNode(GraphNodeKind.GraphGroup, out string? _);
                     NewSpawnableGroupMenu.IsVisible = true;
                     BeginViewportPan(e, MouseButton.Right,
                         ShortcutService.Shared.GraphPanButton is "Right" or "Right + Middle");
@@ -108,7 +109,14 @@ public partial class GraphEditorView : UserControl
         if (_observedGraph is not null)
         {
             _observedGraph.FrameSelectionRequested -= OnFrameSelectionRequested;
-            if (subscribe) _observedGraph.FrameSelectionRequested += OnFrameSelectionRequested;
+            _observedGraph.HierarchyChanging -= OnHierarchyChanging;
+            _observedGraph.HierarchyChanged -= OnHierarchyChanged;
+            if (subscribe)
+            {
+                _observedGraph.FrameSelectionRequested += OnFrameSelectionRequested;
+                _observedGraph.HierarchyChanging += OnHierarchyChanging;
+                _observedGraph.HierarchyChanged += OnHierarchyChanged;
+            }
         }
         if (_observedGraph?.NodeDefinitions is not { } definitions) return;
         definitions.Changed -= OnNodeDefinitionsChanged;
@@ -132,26 +140,98 @@ public partial class GraphEditorView : UserControl
         visual.GetSelfAndVisualAncestors().OfType<GraphEditorView>().FirstOrDefault() is not { } editor ||
         ReferenceEquals(editor, this);
 
+    private void OnHierarchyChanging(object? sender, string key)
+    {
+        if (sender is GraphWorkspaceViewModel graph)
+            SaveCameraState(graph, key);
+    }
+
+    private void OnHierarchyChanged(object? sender, string key)
+    {
+        if (sender is not GraphWorkspaceViewModel graph) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!ReferenceEquals(DataContext, graph) || TopLevel.GetTopLevel(this) is null) return;
+            RestoreCameraState(graph, key);
+        }, DispatcherPriority.Loaded);
+    }
+
+    private void SaveCameraState(GraphWorkspaceViewModel graph, string key)
+    {
+        if (!_viewportInitialized || GraphScrollViewer is null || GraphScrollViewer.Viewport.Width <= 0) return;
+        graph.CameraStates[key] = new GraphWorkspaceViewModel.GraphCameraState(
+            _zoom,
+            GraphScrollViewer.Offset.X - _graphOrigin.X * _zoom,
+            GraphScrollViewer.Offset.Y - _graphOrigin.Y * _zoom);
+    }
+
+    private void RestoreCameraState(GraphWorkspaceViewModel graph, string key)
+    {
+        InitializeViewport();
+        UpdateCanvasExtent();
+        if (graph.CameraStates.TryGetValue(key, out var state))
+        {
+            _zoom = Math.Clamp(state.Zoom, 0.05, 4);
+            UpdateZoomExtent();
+            UpdateSceneViewport();
+            var offset = new Vector(_graphOrigin.X * _zoom + state.RelativeOffsetX,
+                                    _graphOrigin.Y * _zoom + state.RelativeOffsetY);
+            EnsureViewportExtent(offset);
+            GraphScrollViewer.UpdateLayout();
+            GraphScrollViewer.Offset = offset;
+        }
+        else
+        {
+            _zoom = 1;
+            UpdateZoomExtent();
+            UpdateSceneViewport();
+            GraphScrollViewer.UpdateLayout();
+            GraphScrollViewer.Offset = _graphOrigin * _zoom;
+        }
+        _updatingZoomSlider = true;
+        ZoomSlider.Value = Math.Log2(_zoom);
+        _updatingZoomSlider = false;
+        ZoomText.Text = $"{_zoom:P0}";
+    }
+
     private void InitializeViewport()
     {
         if (_viewportInitialized) return;
         _viewportInitialized = true;
         UpdateCanvasExtent();
         GraphScrollViewer.UpdateLayout();
+        if (_observedGraph is { } graph && graph.CameraStates.TryGetValue(graph.CurrentHierarchyKey, out var state))
+        {
+            RestoreCameraState(graph, graph.CurrentHierarchyKey);
+            return;
+        }
         GraphScrollViewer.Offset = _graphOrigin * _zoom;
         UpdateSceneViewport();
     }
 
     protected override void OnDataContextChanged(EventArgs e)
     {
+        if (_observedGraph is not null)
+        {
+            SaveCameraState(_observedGraph, _observedGraph.CurrentHierarchyKey);
+            _observedGraph.Nodes.CollectionChanged -= OnNodesChanged;
+        }
         ObserveDefinitionChanges(false);
-        if (_observedGraph is not null) _observedGraph.Nodes.CollectionChanged -= OnNodesChanged;
         foreach (var node in _observedNodes) node.PropertyChanged -= OnNodePositionChanged;
         _observedNodes.Clear();
         _observedGraph = DataContext as GraphWorkspaceViewModel;
         if (_observedGraph is not null) _observedGraph.Nodes.CollectionChanged += OnNodesChanged;
         ObserveDefinitionChanges(TopLevel.GetTopLevel(this) is not null);
         SynchronizeNodes();
+        if (_observedGraph is not null && _viewportInitialized && TopLevel.GetTopLevel(this) is not null)
+        {
+            var graph = _observedGraph;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!ReferenceEquals(DataContext, graph) || TopLevel.GetTopLevel(this) is null) return;
+                RestoreCameraState(graph, graph.CurrentHierarchyKey);
+            }, DispatcherPriority.Loaded);
+        }
         base.OnDataContextChanged(e);
     }
 
@@ -372,6 +452,7 @@ public partial class GraphEditorView : UserControl
 
         _pastePosition = ToGraphPoint(e.GetPosition(GraphCanvas));
         var hitNode = FindHitNode(e.Source);
+        NewGraphGroupMenu.IsVisible = hitNode is null && graph.CanCreateNode(GraphNodeKind.GraphGroup, out string? _);
         NewSpawnableGroupMenu.IsVisible = hitNode is null;
         AddRerouteMenu.IsVisible = hitNode is null &&
             GraphSceneLayer.HitTestConnection(graph, _pastePosition) is not null;
@@ -458,6 +539,13 @@ public partial class GraphEditorView : UserControl
             var node = graph.CreateCommentAroundSelection(_pastePosition.X, _pastePosition.Y);
             graph.SelectNode(node);
         });
+    }
+
+    private void OnAddGraphGroupClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not GraphWorkspaceViewModel graph) return;
+        try { graph.CreateNode(GraphNodeKind.GraphGroup, _pastePosition.X, _pastePosition.Y); }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException) { graph.ReportStatus(ex.Message); }
     }
 
     private void OnAddSpawnableGroupClick(object? sender, RoutedEventArgs e)

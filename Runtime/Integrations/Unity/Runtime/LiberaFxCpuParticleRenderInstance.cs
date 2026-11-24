@@ -18,6 +18,7 @@ namespace LiberaFx.Unity
         private LiberaFxRenderSubmission submission;
         private Mesh mesh;
         private Material material;
+        private bool ownsMaterial;
         private bool disposed;
         private readonly NativeCpuParticleSnapshot[] particleBatch = new NativeCpuParticleSnapshot[256];
         private readonly NativeCpuParticleTiming[] timingBatch = new NativeCpuParticleTiming[256];
@@ -38,15 +39,15 @@ namespace LiberaFx.Unity
 
         public static LiberaFxCpuParticleRenderInstance Create(
             Transform parent, LiberaFxPreparedCpuParticleRenderer definition,
-            LiberaFxRenderStatisticsCounter statistics)
+            LiberaFxRenderStatisticsCounter statistics,
+            IReadOnlyDictionary<string, LiberaFxProceduralResource> proceduralResources = null)
         {
             var instance = new LiberaFxCpuParticleRenderInstance(parent, definition, statistics);
             try
             {
-                var shader = Resources.Load<Shader>("LiberaFxCpuParticle");
-                if (!shader || !shader.isSupported || !SystemInfo.supports32bitsIndexBuffer)
+                if (!SystemInfo.supports32bitsIndexBuffer)
                     throw new NotSupportedException(
-                        "CPU particles require the Libera FX billboard shader and 32-bit mesh indices.");
+                        "CPU particles require 32-bit mesh indices.");
                 instance.mesh = new Mesh
                 {
                     name = "Libera FX CPU particle batch",
@@ -54,15 +55,60 @@ namespace LiberaFx.Unity
                     indexFormat = IndexFormat.UInt32
                 };
                 instance.mesh.MarkDynamic();
-                instance.material = new Material(shader)
+                LiberaFxDrawPropertyState propertyState = null;
+                if (definition.customMaterial != null)
                 {
-                    hideFlags = HideFlags.DontSave,
-                    mainTexture = definition.texture
-                };
-                instance.material.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
-                instance.material.SetInt("_DstBlend", (int)(definition.additive
-                    ? BlendMode.One : BlendMode.OneMinusSrcAlpha));
-                instance.submission = new LiberaFxRenderSubmission(null, statistics);
+                    instance.material = definition.customMaterial;
+                    instance.ownsMaterial = false;
+                    var propCount = (definition.texturePropertyIds?.Length ?? 0) +
+                        (definition.materialParameterPropertyIds?.Length ?? 0);
+                    if (propCount > 0)
+                    {
+                        propertyState = new LiberaFxDrawPropertyState(propCount);
+                        for (var i = 0; i < (definition.texturePropertyIds?.Length ?? 0); ++i)
+                            propertyState.SetTexture(definition.texturePropertyIds[i], definition.textureValues[i]);
+                        for (var i = 0; i < (definition.materialParameterPropertyIds?.Length ?? 0); ++i)
+                        {
+                            var val = definition.materialParameterDefaults[i];
+                            if (val.Length == 1)
+                                propertyState.SetFloat(definition.materialParameterPropertyIds[i], val[0]);
+                            else
+                                propertyState.SetVector(definition.materialParameterPropertyIds[i],
+                                    new Vector4(val.Length > 0 ? val[0] : 0f, val.Length > 1 ? val[1] : 0f,
+                                        val.Length > 2 ? val[2] : 0f, val.Length > 3 ? val[3] : 0f));
+                        }
+                    }
+                }
+                else
+                {
+                    var shader = Resources.Load<Shader>("LiberaFxCpuParticle");
+                    if (!shader || !shader.isSupported)
+                        throw new NotSupportedException(
+                            "CPU particles require the Libera FX billboard shader.");
+                    var activeTexture = definition.texture;
+                    var additive = definition.additive;
+                    var proceduralId = !string.IsNullOrEmpty(definition.proceduralMaterial)
+                        ? definition.proceduralMaterial : definition.proceduralTexture;
+                    if (!string.IsNullOrEmpty(proceduralId))
+                    {
+                        if (proceduralResources == null ||
+                            !proceduralResources.TryGetValue(proceduralId, out var producer) || !producer.texture)
+                            throw new InvalidOperationException("CPU particle procedural material/texture is outside this resource scope.");
+                        activeTexture = producer.texture;
+                        if (!string.IsNullOrEmpty(definition.proceduralMaterial))
+                            additive = producer.definition.recipe.blend == "additive";
+                    }
+                    instance.material = new Material(shader)
+                    {
+                        hideFlags = HideFlags.DontSave,
+                        mainTexture = activeTexture
+                    };
+                    instance.ownsMaterial = true;
+                    instance.material.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
+                    instance.material.SetInt("_DstBlend", (int)(additive
+                        ? BlendMode.One : BlendMode.OneMinusSrcAlpha));
+                }
+                instance.submission = new LiberaFxRenderSubmission(propertyState, statistics);
                 instance.submission.owner = parent;
                 instance.submission.Configure(instance.mesh, instance.material, 0,
                     parent.gameObject.layer, statistics);
@@ -155,6 +201,10 @@ namespace LiberaFx.Unity
                     v0 = 1f-(float)(frame/atlas.columns+1)/atlas.rows;
                     u1 = u0+1f/atlas.columns; v1=v0+1f/atlas.rows;
                 }
+                var cam = definition.billboardCamera ? definition.billboardCamera : Camera.main;
+                var invWorld = localToWorld.inverse;
+                var camRight = cam ? invWorld.MultiplyVector(cam.transform.right).normalized : Vector3.right;
+                var camUp = cam ? invWorld.MultiplyVector(cam.transform.up).normalized : Vector3.up;
                 void Vertex(float u,float v,float ox,float oy)
                 {
                     if (definition.spriteAnimation!=null)
@@ -163,7 +213,10 @@ namespace LiberaFx.Unity
                         var c=Math.Cos(sprite.rotation); var s=Math.Sin(sprite.rotation);
                         ox=ToFloat(px*c-py*s+2*x*sprite.x); oy=ToFloat(px*s+py*c+2*y*sprite.y);
                     }
-                    AddVertex(center,color,u,v,ox,oy);
+                    var pos = definition.customMaterial != null
+                        ? center + camRight * ox + camUp * oy
+                        : center;
+                    AddVertex(pos,color,u,v,ox,oy);
                 }
                 Vertex(u0,v0,-x,-y); Vertex(u1,v0,x,-y);
                 Vertex(u1,v1,x,y); Vertex(u0,v1,-x,y);
@@ -212,7 +265,7 @@ namespace LiberaFx.Unity
             if (submission != null) submission.Dispose();
             submission = null;
             if (mesh) DestroyOwned(mesh);
-            if (material) DestroyOwned(material);
+            if (ownsMaterial && material) DestroyOwned(material);
         }
 
         private static void DestroyOwned(UnityEngine.Object value)

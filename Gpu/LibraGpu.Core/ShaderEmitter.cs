@@ -106,13 +106,28 @@ internal static partial class ShaderEmitter
             var nodeLookup = k.Nodes.ToDictionary(n => n.Id, StringComparer.Ordinal);
             var order = GpuCompiler.Topological(nodeLookup);
             var registers = order.Select((n, i) => (n.Id, Name: $"r{i:D4}")).ToDictionary(x => x.Id, x => x.Name, StringComparer.Ordinal);
+            var curveNames = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var n in order.Where(n => n.Op == GpuOp.FCurve))
+            {
+                var fnName = $"LibraGpuEvalCurve_{kernelIndex:D4}_{curveNames.Count:D4}";
+                curveNames[n.Id] = fnName;
+                var (minT, maxT, samples) = (n.Curve ?? GpuCurveData.DefaultLinear()).SampleTable(65);
+                var arrName = $"LibraGpuCurveLut_{kernelIndex:D4}_{curveNames.Count - 1:D4}";
+                var invSpan = (64.0 / (maxT - minT)).ToString("R", CultureInfo.InvariantCulture);
+                var minStr = minT.ToString("R", CultureInfo.InvariantCulture);
+                var literals = string.Join(", ", samples.Select(s => s.ToString("R", CultureInfo.InvariantCulture) + "f"));
+                Write($"static const float {arrName}[65] = {{ {literals} }};");
+                Write($"float {fnName}(float t) {{ float s = clamp((t - {minStr}f) * {invSpan}f, 0.0f, 64.0f); uint idx = min((uint)s, 63u); return lerp({arrName}[idx], {arrName}[idx + 1u], s - (float)idx); }}");
+            }
             Write($"void LibraGpuEvaluate_{kernelIndex:D4}(inout LibraGpuParticle p)");
             Write("{");
             foreach (var n in order)
             {
                 var args = n.Inputs.Select(id => registers[id]).ToArray();
                 var types = n.Inputs.Select(id => nodeLookup[id].Type).ToArray();
-                var expression = Expression(n, args, types, resourceIndices);
+                var expression = n.Op == GpuOp.FCurve
+                    ? $"{curveNames[n.Id]}({args[0]})"
+                    : Expression(n, args, types, resourceIndices);
                 Mapped($"    {HlslType(n.Type)} {registers[n.Id]} = {expression};", k, n.Id, "out");
             }
             // SSA reads the incoming particle snapshot; attribute stores happen only after evaluation.

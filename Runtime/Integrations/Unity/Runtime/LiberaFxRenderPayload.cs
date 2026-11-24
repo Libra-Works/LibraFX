@@ -33,6 +33,10 @@ namespace LiberaFx.Unity
         public string blendMode;
         public double drawScale;
         public bool billboard;
+        public string proceduralTexture, proceduralMaterial;
+        public LiberaFxRenderMaterialPayload[] materials;
+        public LiberaFxRenderTexturePayload[] textures;
+        public LiberaFxRenderInputPayload[] inputs;
     }
 
     [Serializable] internal sealed class LiberaFxGpuDrawTransformPayload
@@ -201,6 +205,10 @@ namespace LiberaFx.Unity
         public string renderer;
         public string material;
         public double sizeScale;
+        public string proceduralTexture, proceduralMaterial;
+        public LiberaFxRenderMaterialPayload[] materials;
+        public LiberaFxRenderTexturePayload[] textures;
+        public LiberaFxRenderInputPayload[] inputs;
     }
 
     [Serializable] internal sealed class LiberaFxGpuContainerSnapshot
@@ -256,6 +264,8 @@ namespace LiberaFx.Unity
         public byte[][] drawMatrixRowNodeBytes;
         public byte[][] emitterMatrixRowNodeBytes;
         internal LiberaFxGeneratedGpuResource[] generatedResources = Array.Empty<LiberaFxGeneratedGpuResource>();
+        public string proceduralTexture, proceduralMaterial;
+        public Material customMaterial;
     }
 
     internal sealed class LiberaFxPreparedFluidProgram
@@ -289,6 +299,12 @@ namespace LiberaFx.Unity
         public bool additive;
         public float drawScale;
         public Camera billboardCamera;
+        public string proceduralTexture, proceduralMaterial;
+        public Material customMaterial;
+        public int[] texturePropertyIds;
+        public Texture[] textureValues;
+        public int[] materialParameterPropertyIds;
+        public float[][] materialParameterDefaults;
     }
 
     internal sealed class LiberaFxUnityBindingLookup
@@ -451,7 +467,7 @@ namespace LiberaFx.Unity
                     item.drawScale <= 0 || !IsFiniteFloat(item.drawScale))
                     throw new InvalidOperationException("CPU particle renderer metadata is invalid or unsupported.");
                 Texture texture;
-                if (item.assetPath == "builtin:white")
+                if (item.assetPath is "builtin:white" or "builtin:procedural-material" or "builtin:procedural-texture")
                     texture = Texture2D.whiteTexture;
                 else if (item.assetPath == "builtin:radial-glow")
                     texture = LiberaFxBuiltinParticleTextures.RadialGlow;
@@ -459,6 +475,47 @@ namespace LiberaFx.Unity
                     throw new InvalidOperationException(
                         "No Unity Texture binding exists for CPU particle asset '" + item.assetPath + "'.");
                 else texture = asset.texture;
+
+                Material customMaterial = null;
+                var texturePropertyIds = Array.Empty<int>();
+                var textureValues = Array.Empty<Texture>();
+                var materialParameterPropertyIds = Array.Empty<int>();
+                var materialParameterDefaults = Array.Empty<float[]>();
+                if (item.materials != null && item.materials.Length > 0)
+                {
+                    if (item.materials.Length > 1 || item.materials[0] == null || item.materials[0].slot != 0)
+                        throw new InvalidOperationException("Unity CPU particle rendering supports only material slot zero.");
+                    if (!materials.TryGetValue(item.materials[0].path, out var matBinding) || !matBinding.material)
+                        throw new InvalidOperationException("No Unity Material binding exists for CPU particle material '" + item.materials[0].path + "'.");
+                    customMaterial = matBinding.material;
+                    var texList = new List<int>();
+                    var texValList = new List<Texture>();
+                    foreach (var texParam in item.textures ?? Array.Empty<LiberaFxRenderTexturePayload>())
+                    {
+                        if (texParam == null) continue;
+                        var propName = ResolveMappedPropertyName(matBinding, texParam.name, "texture", texParam.slot, texParam.association, texParam.index);
+                        if (!renderAssets.TryGetValue(texParam.path, out var texAsset) || !texAsset.texture)
+                            throw new InvalidOperationException("No Unity Texture binding exists for CPU particle material texture '" + texParam.path + "'.");
+                        texList.Add(Shader.PropertyToID(propName));
+                        texValList.Add(texAsset.texture);
+                    }
+                    texturePropertyIds = texList.ToArray();
+                    textureValues = texValList.ToArray();
+                    var paramIds = new List<int>();
+                    var paramDefaults = new List<float[]>();
+                    foreach (var input in item.inputs ?? Array.Empty<LiberaFxRenderInputPayload>())
+                    {
+                        if (input?.materialParameter == null) continue;
+                        var kind = input.defaults != null && input.defaults.Length == 1 ? "scalar" : "vector";
+                        var propName = ResolveMappedPropertyName(matBinding, input.materialParameter.name, kind,
+                            input.materialParameter.slot, input.materialParameter.association, input.materialParameter.index);
+                        paramIds.Add(Shader.PropertyToID(propName));
+                        paramDefaults.Add(input.defaults ?? new[] { 0f });
+                    }
+                    materialParameterPropertyIds = paramIds.ToArray();
+                    materialParameterDefaults = paramDefaults.ToArray();
+                }
+
                 if (item.spriteAnimation!=null && !item.spriteAnimation.TextureMatches(texture.width,texture.height))
                     throw new InvalidOperationException("CPU particle sprite source image dimensions do not match its authored cells.");
                 result[index] = new LiberaFxPreparedCpuParticleRenderer
@@ -470,7 +527,14 @@ namespace LiberaFx.Unity
                     nodeIdBytes = new NativeSignal(nodeId).Id,
                     texture = texture,
                     additive = item.blendMode == "Additive",
-                    drawScale = (float)item.drawScale
+                    drawScale = (float)item.drawScale,
+                    proceduralTexture = item.proceduralTexture,
+                    proceduralMaterial = item.proceduralMaterial,
+                    customMaterial = customMaterial,
+                    texturePropertyIds = texturePropertyIds,
+                    textureValues = textureValues,
+                    materialParameterPropertyIds = materialParameterPropertyIds,
+                    materialParameterDefaults = materialParameterDefaults
                     // JsonUtility can materialize an omitted optional array as
                     // an empty array. Both represent the default owner frame.
                     , drawRows = item.drawMatrixRowNodeIds == null || item.drawMatrixRowNodeIds.Length == 0 ? null : item.drawMatrixRowNodeIds.Length == 4
@@ -830,7 +894,8 @@ namespace LiberaFx.Unity
                      reference.outputId == "DensityOutput" && resource.kind == "FlowMap2D" && resource.flowMap?.encoding == "FloatDensity")))
                     throw new InvalidOperationException("Generated output does not match the declared texture/sampling encoding: " + reference.resourceId);
             var renderBindings = program.unreal.rendererBindings ?? Array.Empty<LiberaFxGpuRendererBinding>();
-            if (program.unreal.rendererBindingsVersion!=1 && program.unreal.rendererBindingsVersion!=2)
+            if (program.unreal.rendererBindingsVersion != 1 && program.unreal.rendererBindingsVersion != 2 &&
+                program.unreal.rendererBindingsVersion != 3)
                 throw new NotSupportedException("Unsupported GPU renderer bindings version.");
             var renderFlowCount = 0;
             foreach (var flow in packageMetadata.flow)
@@ -840,18 +905,33 @@ namespace LiberaFx.Unity
             if (renderBindings.Length > 1)
                 throw new InvalidOperationException("Unity GPU binding currently supports one billboard flow per GPU node.");
             var sizeScale = 1f;
+            Material customGpuMaterial = null;
+            string gpuProceduralTexture = null;
+            string gpuProceduralMaterial = null;
             foreach (var renderer in renderBindings)
             {
                 if (renderer!=null)
                 {
                     if (!renderer.__liberafxHasSpriteAnimation) renderer.spriteAnimation=null;
                     renderer.spriteAnimation?.Validate();
-                    if (renderer.spriteAnimation!=null && program.unreal.rendererBindingsVersion!=2)
-                        throw new InvalidOperationException("GPU sprite animation requires renderer bindings version 2.");
+                    if (renderer.spriteAnimation!=null && program.unreal.rendererBindingsVersion < 2)
+                        throw new InvalidOperationException("GPU sprite animation requires renderer bindings version 2 or higher.");
+                    gpuProceduralTexture = renderer.proceduralTexture;
+                    gpuProceduralMaterial = renderer.proceduralMaterial;
+                    if (renderer.materials != null && renderer.materials.Length > 0)
+                    {
+                        if (renderer.materials.Length > 1 || renderer.materials[0] == null || renderer.materials[0].slot != 0)
+                            throw new InvalidOperationException("Unity GPU particle rendering supports only material slot zero.");
+                        if (!materials.TryGetValue(renderer.materials[0].path, out var gpuMatBinding) || !gpuMatBinding.material)
+                            throw new InvalidOperationException("No Unity Material binding exists for GPU particle material '" + renderer.materials[0].path + "'.");
+                        customGpuMaterial = gpuMatBinding.material;
+                    }
                 }
                 if (renderer == null || renderer.renderer != "builtin:billboard" ||
-                    renderer.material != configured.rendererMaterialIdentity ||
-                    (renderer.material != "builtin:unlit-alpha" && renderer.material != "builtin:unlit-additive") ||
+                    (customGpuMaterial == null &&
+                     (renderer.material != configured.rendererMaterialIdentity ||
+                      (renderer.material != "builtin:unlit-alpha" && renderer.material != "builtin:unlit-additive" &&
+                       renderer.material != "builtin:procedural-material" && renderer.material != "builtin:procedural-texture"))) ||
                     double.IsNaN(renderer.sizeScale) || double.IsInfinity(renderer.sizeScale) ||
                     renderer.sizeScale <= 0 ||
                     renderer.sizeScale > 10000 || Math.Abs(renderer.sizeScale - configured.sizeScale) > 0.0001)
@@ -878,7 +958,10 @@ namespace LiberaFx.Unity
                 additiveBlend = renderBindings.Length > 0 && renderBindings[0].material == "builtin:unlit-additive",
                 spriteAnimation=renderBindings.Length==0 ? null : renderBindings[0].spriteAnimation,
                 generatedResources = generated,
-                drawMatrixRowNodeBytes = drawTransform?.rowNodeBytes
+                drawMatrixRowNodeBytes = drawTransform?.rowNodeBytes,
+                proceduralTexture = gpuProceduralTexture,
+                proceduralMaterial = gpuProceduralMaterial,
+                customMaterial = customGpuMaterial
             };
         }
 
@@ -994,10 +1077,10 @@ namespace LiberaFx.Unity
                 if (particle==null) throw new InvalidOperationException("Missing CPU particle renderer.");
                 if (!particle.__liberafxHasSpriteAnimation) particle.spriteAnimation=null;
                 particle.spriteAnimation?.Validate();
-                if (particle.spriteAnimation!=null && (payload.cpuParticleVersion!=4 || particle.flipbook?.enabled==true))
-                    throw new InvalidOperationException("CPU sprite animation needs metadata version 4 and cannot combine with Flipbook.");
+                if (particle.spriteAnimation!=null && (payload.cpuParticleVersion < 4 || particle.flipbook?.enabled==true))
+                    throw new InvalidOperationException("CPU sprite animation needs metadata version 4 or higher and cannot combine with Flipbook.");
             }
-            if (payload.cpuParticleVersion != 1 && payload.cpuParticleVersion != 2 && payload.cpuParticleVersion != 3 && payload.cpuParticleVersion != 4 && (payload.cpuParticleVersion != 0 || payload.cpuParticles.Length != 0))
+            if (payload.cpuParticleVersion != 1 && payload.cpuParticleVersion != 2 && payload.cpuParticleVersion != 3 && payload.cpuParticleVersion != 4 && payload.cpuParticleVersion != 5 && (payload.cpuParticleVersion != 0 || payload.cpuParticles.Length != 0))
                 throw new NotSupportedException("Unsupported CPU particle scene metadata version.");
             var drawTransforms = new Dictionary<string, LiberaFxGpuDrawTransformPayload>(StringComparer.Ordinal);
             foreach (var transform in payload.gpuDrawTransforms ?? Array.Empty<LiberaFxGpuDrawTransformPayload>())

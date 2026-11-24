@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Resources;
 
@@ -299,6 +300,9 @@ public static class CpuParticleCompilation
             }
         }
         Visit(graph, []);
+        var flatNodes = flat.Nodes.ToDictionary(n => n.Id);
+        var flatIncoming = flat.Connections.ToLookup(e => e.TargetNodeId);
+        var emptyScopes = new Dictionary<Guid, IReadOnlyList<Guid>>();
         return systems.Select(item =>
         {
             var system = item.Node;
@@ -309,7 +313,72 @@ public static class CpuParticleCompilation
                 _ => throw new InvalidDataException("Unsupported CPU particle texture source.") };
             var scope = resources?.GetInstancePath(draw.Id, item.Scope) ?? item.Scope;
             if (textureSource == 0) path = resources?.ResolvePath(draw.Id, "assetPath", "texture", path, scope) ?? path;
-            if (path is not ("builtin:white" or "builtin:radial-glow") &&
+
+            var proceduralTexture = ProceduralProgramBindings.Source(system, "proceduralTexture", "ProceduralTexture",
+                flatNodes, flatIncoming, emptyScopes);
+            var proceduralMaterial = ProceduralProgramBindings.Source(system, "proceduralMaterial", "ProceduralMaterial",
+                flatNodes, flatIncoming, emptyScopes);
+
+            var baseDrawDef = GraphNodeDefinition.All.Single(d => d.Kind == draw.Kind);
+            var drawDef = RenderNodeSchema.Effective(baseDrawDef, draw.Parameters);
+            var materialEntries = RenderNodeSchema.Read(drawDef, draw.Parameters);
+            var materialSlots = RenderNodeSchema.ReadMaterials(drawDef, draw.Parameters);
+            var materials = materialSlots
+                .Where(slot => !string.IsNullOrEmpty(slot.Path) ||
+                    resources?.HasResourceUse(draw.Id, $"material:{slot.Slot}", scope) == true)
+                .Select(slot => new
+                {
+                    slot = slot.Slot,
+                    path = resources?.ResolvePath(draw.Id, $"material:{slot.Slot}", "material",
+                        slot.Path, scope) ?? slot.Path
+                }).ToArray();
+            var textures = materialEntries.Where(entry => entry.Kind == "texture")
+                .Select(entry =>
+                {
+                    var rawTex = draw.Parameters?.FirstOrDefault(p => p.Id == entry.Id)?.Value.GetString()
+                        ?? drawDef.Parameters.Single(p => p.Id == entry.Id).DefaultValue.GetString() ?? "";
+                    return new
+                    {
+                        name = entry.Name,
+                        slot = entry.Slot,
+                        path = resources?.ResolvePath(draw.Id, "texture:" + entry.Id, "texture", rawTex, scope) ?? rawTex,
+                        association = RenderNodeSchema.MaterialAssociation(entry),
+                        index = entry.Index
+                    };
+                }).ToArray();
+            var inputs = materialEntries.Where(entry => entry.Kind != "texture")
+                .Select(entry =>
+                {
+                    var declared = drawDef.Parameters.Single(p => p.Id == entry.Id);
+                    var val = draw.Parameters?.FirstOrDefault(p => p.Id == entry.Id)?.Value ?? declared.DefaultValue;
+                    var defaults = entry.Kind == "scalar"
+                        ? new[] { val.GetDouble() }
+                        : val.EnumerateArray().Select(v => v.GetDouble()).ToArray();
+                    return new
+                    {
+                        id = entry.Id,
+                        width = defaults.Length,
+                        sourceNodeId = (Guid?)null,
+                        sourceComponent = 0,
+                        defaults,
+                        materialParameter = new
+                        {
+                            name = entry.Name,
+                            slot = entry.Slot,
+                            association = RenderNodeSchema.MaterialAssociation(entry),
+                            index = entry.Index
+                        }
+                    };
+                }).ToArray();
+
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                if (proceduralMaterial is not null) path = "builtin:procedural-material";
+                else if (proceduralTexture is not null) path = "builtin:procedural-texture";
+                else if (materials.Length > 0) path = "builtin:white";
+            }
+
+            if (path is not ("builtin:white" or "builtin:radial-glow" or "builtin:procedural-material" or "builtin:procedural-texture") &&
                 (resources is null || !resources.HasResourceUse(draw.Id, "assetPath", scope)))
             {
                 EngineAssetPath.Validate(path);
@@ -330,11 +399,32 @@ public static class CpuParticleCompilation
             }
             var rows = flat.Connections.Any(e => e.TargetNodeId == system.Id && e.TargetPortId == "drawMatrix")
                 ? CpuEmitterMatrixLowering.RowIds(system.Id, "draw") : null;
-            return (object)new { nodeId = system.Id, assetPath = path, blendMode = blend, drawScale = scale, billboard = true,
-                drawMatrixRowNodeIds = rows, flipbook = spriteAnimation is null && flipbook.Enabled ? flipbook : null,
-                spriteAnimation };
+            return (object)new CpuParticleDrawDescriptor(
+                system.Id, path, blend, scale, true, rows,
+                spriteAnimation is null && flipbook.Enabled ? flipbook : null,
+                spriteAnimation,
+                proceduralTexture,
+                proceduralMaterial,
+                materials.Length > 0 ? materials : null,
+                textures.Length > 0 ? textures : null,
+                inputs.Length > 0 ? inputs : null);
         }).ToArray();
     }
+
+    private sealed record CpuParticleDrawDescriptor(
+        [property: JsonPropertyName("nodeId")] Guid NodeId,
+        [property: JsonPropertyName("assetPath")] string AssetPath,
+        [property: JsonPropertyName("blendMode")] string BlendMode,
+        [property: JsonPropertyName("drawScale")] double DrawScale,
+        [property: JsonPropertyName("billboard")] bool Billboard,
+        [property: JsonPropertyName("drawMatrixRowNodeIds")] Guid[]? DrawMatrixRowNodeIds,
+        [property: JsonPropertyName("flipbook")] ParticleAtlasSettings? Flipbook,
+        [property: JsonPropertyName("spriteAnimation")] ParticleSpriteAnimation? SpriteAnimation,
+        [property: JsonPropertyName("proceduralTexture"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ProceduralTexture,
+        [property: JsonPropertyName("proceduralMaterial"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ProceduralMaterial,
+        [property: JsonPropertyName("materials"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] object[]? Materials,
+        [property: JsonPropertyName("textures"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] object[]? Textures,
+        [property: JsonPropertyName("inputs"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] object[]? Inputs);
 
     public static byte[] AddDraws(byte[] scene, GraphSnapshot graph, IRenderResourceBindingContext? resources)
     {
@@ -344,7 +434,41 @@ public static class CpuParticleCompilation
         }
         var root = System.Text.Json.Nodes.JsonNode.Parse(scene)!.AsObject();
         var draws = JsonSerializer.SerializeToNode(Draws(graph, resources));
-        root["cpuParticleVersion"] = draws!.AsArray().Any(d => d?["spriteAnimation"] is not null) ? 4 :
+        if (draws!.AsArray().Any(d => d?["proceduralMaterial"] is not null || d?["proceduralTexture"] is not null))
+        {
+            var flat = GroupBoundaryLowering.Lower(graph);
+            var flatNodes = flat.Nodes.Where(n => n.Kind != GraphNodeKind.SpawnableGroup).ToDictionary(n => n.Id);
+            var flatIncoming = flat.Connections.ToLookup(e => e.TargetNodeId);
+            var compiledProc = ProceduralProgramBindings.Resources(flatNodes, flatIncoming,
+                new Dictionary<Guid, IReadOnlyList<Guid>>());
+            if (compiledProc.Length > 0)
+            {
+                var procArray = root["proceduralResources"] as System.Text.Json.Nodes.JsonArray;
+                if (procArray is null)
+                {
+                    procArray = new System.Text.Json.Nodes.JsonArray();
+                    root["proceduralVersion"] = 1;
+                    root["proceduralResources"] = procArray;
+                }
+                var existingIds = procArray
+                    .Select(item => item?["nodeId"]?.GetValue<Guid>())
+                    .Where(id => id.HasValue)
+                    .Select(id => id!.Value)
+                    .ToHashSet();
+                var serializedProc = JsonSerializer.SerializeToNode(compiledProc, new JsonSerializerOptions(JsonSerializerDefaults.Web))!.AsArray();
+                foreach (var entry in serializedProc)
+                {
+                    if (entry?["nodeId"] is { } idNode && existingIds.Add(idNode.GetValue<Guid>()))
+                    {
+                        procArray.Add(entry.DeepClone());
+                    }
+                }
+            }
+        }
+        root["cpuParticleVersion"] = draws!.AsArray().Any(d =>
+            d?["proceduralMaterial"] is not null || d?["proceduralTexture"] is not null ||
+            d?["materials"] is not null) ? 5 :
+            draws.AsArray().Any(d => d?["spriteAnimation"] is not null) ? 4 :
             draws.AsArray().Any(d => d?["flipbook"] is not null) ? 3 :
             draws.AsArray().Any(d => d?["drawMatrixRowNodeIds"] is not null) ? 2 : 1;
         root["cpuParticles"] = draws;

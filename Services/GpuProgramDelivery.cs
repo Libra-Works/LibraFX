@@ -8,7 +8,12 @@ namespace LiberaFx.Services;
 
 public sealed record GpuKernelPacket(string Id, KernelStage Stage, string Base64);
 public sealed record GpuRendererBinding(string FlowId, string Renderer, string Material, double SizeScale,
-    [property:JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ParticleSpriteAnimation? SpriteAnimation = null);
+    [property:JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ParticleSpriteAnimation? SpriteAnimation = null,
+    [property:JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ProceduralTexture = null,
+    [property:JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ProceduralMaterial = null,
+    [property:JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<object>? Materials = null,
+    [property:JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<object>? Textures = null,
+    [property:JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<object>? Inputs = null);
 public sealed record GpuProgramDelivery(
     long ProgramSequence, Guid NodeId, string CanonicalJson, GpuExportMetadata Metadata,
     string ShaderSource, IReadOnlyList<GpuKernelPacket> RegisterKernels,
@@ -187,11 +192,17 @@ public static class GpuProgramDeliveryService
         }).ToArray();
     }
 
-    public static byte[] CreateExecutablePayload(GraphSnapshot graph, long programSequence = 0)
+    public static byte[] CreateExecutablePayload(GraphSnapshot graph, long programSequence = 0,
+        IRenderResourceBindingContext? resources = null)
     {
         var containers = Containers(graph).ToArray();
         if (containers.Length > MaximumProgramsPerScope)
             throw new InvalidDataException($"A GPU program scope supports at most {MaximumProgramsPerScope} programs.");
+
+        var flat = GroupBoundaryLowering.Lower(graph);
+        var flatNodes = flat.Nodes.ToDictionary(n => n.Id);
+        var flatIncoming = flat.Connections.ToLookup(e => e.TargetNodeId);
+        var emptyScopes = new Dictionary<Guid, IReadOnlyList<Guid>>();
 
         var states = containers.Select(node => (Node: node, State: StateForDelivery(graph, node))).ToArray();
         ulong ownedBytes = 0;
@@ -244,13 +255,19 @@ public static class GpuProgramDeliveryService
                     throw new InvalidDataException(
                         $"GPU resource '{resource.Id}' on node '{node.Id:D}' has no engine asset reference.");
 
-            var unreal = CreateDelivery(node.Id, state, compiled, programSequence, ShaderFormat.Usf);
+            var proceduralTexture = ProceduralProgramBindings.Source(node, "proceduralTexture", "ProceduralTexture",
+                flatNodes, flatIncoming, emptyScopes);
+            var proceduralMaterial = ProceduralProgramBindings.Source(node, "proceduralMaterial", "ProceduralMaterial",
+                flatNodes, flatIncoming, emptyScopes);
+            var drawMaterials = ReadMaterialBindings(node, resources);
+            var unreal = CreateDelivery(node.Id, state, compiled, programSequence, ShaderFormat.Usf,
+                proceduralTexture, proceduralMaterial, drawMaterials);
             var unityShader = compiled.EmitUnityCompute();
             return new GpuExecutableProgram(node.Id, unreal,
                 compiled.ExportMetadataJson(ShaderFormat.UnityCompute), unityShader.Text);
         }).ToArray();
         var version = generatedBindings || drawBindings.Count != 0 || fluids.Any(fluid => fluid.AutomaticPlane is not null) ? 3 : fluids.Length == 0 ? 1 : 2;
-        if (programs.Any(p => p.Unreal.RendererBindings.Any(r => r.SpriteAnimation is not null))) version=4;
+        if (programs.Any(p => p.Unreal.RendererBindingsVersion >= 2)) version=4;
         return JsonSerializer.SerializeToUtf8Bytes(new GpuExecutablePayload(version, programs)
         {
             FluidPrograms = fluids.Length == 0 && version!=4 ? null : fluids,
@@ -269,8 +286,71 @@ public static class GpuProgramDeliveryService
         }
     }
 
+    private sealed record GpuDrawMaterialData(object[] Materials, object[] Textures, object[] Inputs);
+
+    private static GpuDrawMaterialData? ReadMaterialBindings(GraphNodeSnapshot node, IRenderResourceBindingContext? resources)
+    {
+        var baseDef = GraphNodeDefinition.All.SingleOrDefault(d => d.Kind == node.Kind);
+        if (baseDef is null) return null;
+        var def = RenderNodeSchema.Effective(baseDef, node.Parameters);
+        var entries = RenderNodeSchema.Read(def, node.Parameters);
+        var slots = RenderNodeSchema.ReadMaterials(def, node.Parameters);
+        var scope = resources?.GetInstancePath(node.Id, Array.Empty<Guid>()) ?? Array.Empty<Guid>();
+        var materials = slots
+            .Where(slot => !string.IsNullOrEmpty(slot.Path) ||
+                resources?.HasResourceUse(node.Id, $"material:{slot.Slot}", scope) == true)
+            .Select(slot => (object)new
+            {
+                slot = slot.Slot,
+                path = resources?.ResolvePath(node.Id, $"material:{slot.Slot}", "material", slot.Path, scope) ?? slot.Path
+            }).ToArray();
+        var textures = entries.Where(entry => entry.Kind == "texture")
+            .Select(entry =>
+            {
+                var raw = node.Parameters?.FirstOrDefault(p => p.Id == entry.Id)?.Value.GetString()
+                    ?? def.Parameters.Single(p => p.Id == entry.Id).DefaultValue.GetString() ?? "";
+                return (object)new
+                {
+                    name = entry.Name,
+                    slot = entry.Slot,
+                    path = resources?.ResolvePath(node.Id, "texture:" + entry.Id, "texture", raw, scope) ?? raw,
+                    association = RenderNodeSchema.MaterialAssociation(entry),
+                    index = entry.Index
+                };
+            }).ToArray();
+        var inputs = entries.Where(entry => entry.Kind != "texture")
+            .Select(entry =>
+            {
+                var declared = def.Parameters.Single(p => p.Id == entry.Id);
+                var val = node.Parameters?.FirstOrDefault(p => p.Id == entry.Id)?.Value ?? declared.DefaultValue;
+                var defaults = entry.Kind == "scalar"
+                    ? new[] { val.GetDouble() }
+                    : val.EnumerateArray().Select(v => v.GetDouble()).ToArray();
+                return (object)new
+                {
+                    id = entry.Id,
+                    width = defaults.Length,
+                    sourceNodeId = (Guid?)null,
+                    sourceComponent = 0,
+                    defaults,
+                    materialParameter = new
+                    {
+                        name = entry.Name,
+                        slot = entry.Slot,
+                        association = RenderNodeSchema.MaterialAssociation(entry),
+                        index = entry.Index
+                    }
+                };
+            }).ToArray();
+        return materials.Length == 0 && textures.Length == 0 && inputs.Length == 0
+            ? null
+            : new GpuDrawMaterialData(materials, textures, inputs);
+    }
+
     private static GpuProgramDelivery CreateDelivery(Guid nodeId, GpuEditorState state,
-        CompiledGpuProgram compiled, long programSequence, ShaderFormat format)
+        CompiledGpuProgram compiled, long programSequence, ShaderFormat format,
+        Guid? proceduralTexture = null, Guid? proceduralMaterial = null,
+        GpuDrawMaterialData? drawMaterials = null)
     {
         var shader = format switch
         {
@@ -284,18 +364,29 @@ public static class GpuProgramDeliveryService
             var settings = state.RendererSettings.GetValueOrDefault(f.Id) ?? new GpuRendererSettings();
             var sprite=settings.SpriteAnimationEnabled ? ParticleSpriteAnimation.Compile(settings.SpriteAnimation,settings.SpriteComposition) : null;
             sprite?.ValidateGpuPrecision();
+            var hasMaterials = drawMaterials?.Materials.Length > 0;
             return new GpuRendererBinding(f.Id, "builtin:billboard", settings.Material, settings.SizeScale,
-                sprite);
+                sprite,
+                proceduralTexture,
+                proceduralMaterial,
+                hasMaterials ? drawMaterials!.Materials : null,
+                drawMaterials?.Textures.Length > 0 ? drawMaterials.Textures : null,
+                drawMaterials?.Inputs.Length > 0 ? drawMaterials.Inputs : null);
         }).ToArray();
         if (rendererBindings.Length != state.Program.Flow.Count(f => f.Kind == FlowKind.RenderBillboard) ||
             rendererBindings.Any(binding => !double.IsFinite(binding.SizeScale) || binding.SizeScale <= 0 ||
-                binding.SizeScale > 10000 || binding.Material is not ("builtin:unlit-alpha" or "builtin:unlit-additive")))
+                binding.SizeScale > 10000 ||
+                (binding.Materials is null &&
+                 binding.Material is not ("builtin:unlit-alpha" or "builtin:unlit-additive" or "builtin:procedural-material" or "builtin:procedural-texture"))))
             throw new InvalidDataException($"GPU renderer bindings for node '{nodeId:D}' are invalid.");
+        var bindingsVersion = rendererBindings.Any(r => r.ProceduralTexture is not null || r.ProceduralMaterial is not null || r.Materials is not null)
+            ? 3
+            : rendererBindings.Any(r => r.SpriteAnimation is not null) ? 2 : 1;
         return new GpuProgramDelivery(programSequence, nodeId, compiled.CanonicalJson,
             compiled.GetExportMetadata(format), shader.Text,
             compiled.RegisterKernels.Select(k => new GpuKernelPacket(k.KernelId, k.Stage,
                 Convert.ToBase64String(k.SerializeLittleEndian()))).ToArray(),
-            new Dictionary<string, string>(state.ResourceAssetPaths), rendererBindings.Any(r => r.SpriteAnimation is not null) ? 2 : 1, rendererBindings)
+            new Dictionary<string, string>(state.ResourceAssetPaths), bindingsVersion, rendererBindings)
         {
             GeneratedResources = state.GeneratedResources is { Count: > 0 }
                 ? new Dictionary<string, GeneratedGpuResourceReference>(state.GeneratedResources) : null

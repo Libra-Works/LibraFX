@@ -38,7 +38,7 @@ public partial class GraphEditorView
             !ReferenceEquals(source.Document, document)) return false;
         CloseSpecializedWorkspace();
         // Maximize an inline editor into its document's graph area, just like CPU Particle.
-        document.NavigateToNode(source.GraphPath, nodeId);
+        document.NavigateToNode(source.GraphPath, nodeId, frameSelection: false);
         if (!document.Nodes.Any(node => node.Id == nodeId)) return false;
         _specializedNodeId = nodeId;
         document.ActivateEditingWorkspace();

@@ -275,8 +275,17 @@ public static class GpuCompiler
                 n.Op != GpuOp.ReadAttribute && n.Attribute is not null ||
                 n.Op != GpuOp.ReadUniform && n.Uniform is not null ||
                 n.Op != GpuOp.Component && n.ComponentIndex is not null ||
-                n.Op != GpuOp.SampleFlowMap && n.Resource is not null)
+                n.Op != GpuOp.SampleFlowMap && n.Resource is not null ||
+                n.Op != GpuOp.FCurve && n.Curve is not null)
                 Add("Payload", "Unexpected operation payload.", n.Id);
+            if (n.Op == GpuOp.FCurve)
+            {
+                if (n.Curve is null || n.Curve.Keys is not { Count: >= 1 and <= 64 } ||
+                    n.Curve.Keys.Any(key => key is null || !double.IsFinite(key.Time) || !double.IsFinite(key.Value) ||
+                        !double.IsFinite(key.InTangent) || !double.IsFinite(key.OutTangent) ||
+                        Math.Abs(key.Time) > 1e6 || Math.Abs(key.Value) > 1e6))
+                    Add("Curve", "F-Curve requires 1-64 finite keys.", n.Id, "curve");
+            }
             if (n.Op == GpuOp.Constant)
             {
                 if (n.Value.Count != GpuOperationRegistry.Components(n.Type)) Add("Components", "Wrong literal component count.", n.Id, "value");

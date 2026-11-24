@@ -83,26 +83,15 @@ extern "C" LIBRA_PROCEDURAL_API LibraResult LIBRA_INTEROP_CALL libra_procedural_
     return LIBRA_OK;
 }
 
-extern "C" LIBRA_PROCEDURAL_API LibraResult LIBRA_INTEROP_CALL libra_procedural_pixel_sample(
+static auto evaluateRange(
     const LibraProceduralPixelProgram* program, const LibraProceduralPixelOperation* operations,
-    uint32_t count, float u, float v, double time, LibraProceduralPixelSampleTexture sampler,
-    void* context, float rgba[4])
+    uint32_t limitCount, float u, float v, double time, LibraProceduralPixelSampleTexture sampler,
+    void* context, int depth, std::array<liberafx::procedural_pixel::Pixel, LIBRA_PIXEL_MAX_OPERATIONS + 1>& registers) -> LibraResult
 {
     using namespace liberafx::procedural_pixel;
     namespace noise = liberafx::procedural_noise;
-    uint32_t usesTime = 0;
-    const auto validation = libra_procedural_pixel_validate(program, operations, count, &usesTime);
-    if (validation != LIBRA_OK)
-    {
-        return validation;
-    }
-    if (!rgba || !std::isfinite(u) || !std::isfinite(v) || !std::isfinite(time) || std::abs(time) > 1e9)
-    {
-        return LIBRA_INVALID_ARGUMENT;
-    }
-    std::array<Pixel, LIBRA_PIXEL_MAX_OPERATIONS + 1> registers{};
     registers[0] = {u, v, 0, 1};
-    for (auto i = 0u; i < count; ++i)
+    for (auto i = 0u; i < limitCount; ++i)
     {
         const auto& op = operations[i];
         const auto& a = registers[op.inputA];
@@ -159,6 +148,42 @@ extern "C" LIBRA_PROCEDURAL_API LibraResult LIBRA_INTEROP_CALL libra_procedural_
             }
             break;
         }
+        case LIBRA_PIXEL_NORMAL_MAP:
+        {
+            const auto strength = p[0];
+            const auto eps = std::clamp(p[1] > 0.0f ? p[1] : 0.005f, 1e-4f, 0.25f);
+            const auto flipY = p[2] >= 0.5f;
+            auto sampleHeight = [&](float su, float sv, float& outHeight) -> LibraResult
+            {
+                if (op.inputA == 0 || depth >= 1)
+                {
+                    outHeight = op.inputA == 0 ? su : a[0];
+                    return LIBRA_OK;
+                }
+                std::array<Pixel, LIBRA_PIXEL_MAX_OPERATIONS + 1> subRegs{};
+                const auto st = evaluateRange(program, operations, op.inputA, su, sv, time, sampler, context, depth + 1, subRegs);
+                if (st != LIBRA_OK) return st;
+                outHeight = subRegs[op.inputA][0];
+                return LIBRA_OK;
+            };
+            float hL = 0, hR = 0, hD = 0, hU = 0;
+            LibraResult st;
+            if ((st = sampleHeight(u - eps, v, hL)) != LIBRA_OK ||
+                (st = sampleHeight(u + eps, v, hR)) != LIBRA_OK ||
+                (st = sampleHeight(u, v - eps, hD)) != LIBRA_OK ||
+                (st = sampleHeight(u, v + eps, hU)) != LIBRA_OK)
+            {
+                return st;
+            }
+            const auto dx = (hR - hL) * strength;
+            const auto dy = (hU - hD) * strength;
+            const auto nx = -dx;
+            const auto ny = flipY ? dy : -dy;
+            const auto nz = 1.0f;
+            const auto invLen = 1.0f / std::sqrt(nx * nx + ny * ny + nz * nz);
+            result = {nx * invLen * 0.5f + 0.5f, ny * invLen * 0.5f + 0.5f, nz * invLen * 0.5f + 0.5f, 1.0f};
+            break;
+        }
         default:
             for (auto c = 0u; c < 4; ++c)
             {
@@ -188,6 +213,31 @@ extern "C" LIBRA_PROCEDURAL_API LibraResult LIBRA_INTEROP_CALL libra_procedural_
             }
         }
         registers[i + 1] = result;
+    }
+    return LIBRA_OK;
+}
+
+extern "C" LIBRA_PROCEDURAL_API LibraResult LIBRA_INTEROP_CALL libra_procedural_pixel_sample(
+    const LibraProceduralPixelProgram* program, const LibraProceduralPixelOperation* operations,
+    uint32_t count, float u, float v, double time, LibraProceduralPixelSampleTexture sampler,
+    void* context, float rgba[4])
+{
+    using namespace liberafx::procedural_pixel;
+    uint32_t usesTime = 0;
+    const auto validation = libra_procedural_pixel_validate(program, operations, count, &usesTime);
+    if (validation != LIBRA_OK)
+    {
+        return validation;
+    }
+    if (!rgba || !std::isfinite(u) || !std::isfinite(v) || !std::isfinite(time) || std::abs(time) > 1e9)
+    {
+        return LIBRA_INVALID_ARGUMENT;
+    }
+    std::array<Pixel, LIBRA_PIXEL_MAX_OPERATIONS + 1> registers{};
+    const auto status = evaluateRange(program, operations, count, u, v, time, sampler, context, 0, registers);
+    if (status != LIBRA_OK)
+    {
+        return status;
     }
     std::copy(registers[program->outputRegister].begin(), registers[program->outputRegister].end(), rgba);
     return LIBRA_OK;

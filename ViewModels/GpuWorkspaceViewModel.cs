@@ -147,6 +147,7 @@ public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
             Resource = op == GpuOp.SampleFlowMap
                 ? State.Program.Resources.FirstOrDefault(resource => resource.Kind == ResourceKind.FlowMap2D)?.Id
                 : null,
+            Curve = op == GpuOp.FCurve ? GpuCurveData.DefaultLinear() : null,
             Inputs = defaults.Select(d => d.Id).ToList()
         };
         position ??= new(350, k.Nodes.Select(node => GetPosition(node).Y + GpuGraphLayout.NodeHeight(node))

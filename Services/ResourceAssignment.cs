@@ -20,7 +20,7 @@ public static class ResourceAssignment
         {
             return null;
         }
-        if (parameterId == "assetPath")
+        if (parameterId == "assetPath" && node.Definition.TypeName != "GpuParticle")
             return new(node.Id, ResourceTargetKind.RenderAsset, parameterId,
                 LocalizationService.Shared.Get("Resources.RenderTarget", node.Name));
         if (RenderNodeSchema.IsTextureOnlyDraw(node.Definition))
@@ -61,7 +61,7 @@ public static class ResourceAssignment
             return targets;
         }
         var expected = node.Definition.TypeName == "ModelDraw" ? "model" : "texture";
-        if (asset.AssetClass == expected)
+        if (asset.AssetClass == expected && node.Definition.TypeName != "GpuParticle")
             targets.Add(new(node.Id, ResourceTargetKind.RenderAsset, "assetPath",
                 LocalizationService.Shared.Get("Resources.RenderTarget", node.Name)));
         if (RenderNodeSchema.IsTextureOnlyDraw(node.Definition))
@@ -69,10 +69,22 @@ public static class ResourceAssignment
             return targets;
         }
         if (asset.AssetClass == "material")
-            targets.AddRange(RenderNodeSchema.ReadMaterials(node.Definition, node.Parameters).Select(material =>
-                new ResourceAssignmentTarget(node.Id, ResourceTargetKind.RenderMaterial,
-                    RenderNodeSchema.MaterialSlotId(material.Slot),
-                    LocalizationService.Shared.Get("Resources.MaterialSlot", material.Slot))));
+        {
+            var materials = RenderNodeSchema.ReadMaterials(node.Definition, node.Parameters);
+            if (materials.Count == 0 && node.Definition.TypeName is "CpuParticleSpriteDraw" or "GpuParticle")
+            {
+                targets.Add(new(node.Id, ResourceTargetKind.RenderMaterial,
+                    RenderNodeSchema.MaterialSlotId(0),
+                    LocalizationService.Shared.Get("Resources.MaterialSlot", 0)));
+            }
+            else
+            {
+                targets.AddRange(materials.Select(material =>
+                    new ResourceAssignmentTarget(node.Id, ResourceTargetKind.RenderMaterial,
+                        RenderNodeSchema.MaterialSlotId(material.Slot),
+                        LocalizationService.Shared.Get("Resources.MaterialSlot", material.Slot))));
+            }
+        }
         if (asset.AssetClass == "texture")
             targets.AddRange(RenderNodeSchema.Read(node.Definition, node.Parameters)
                 .Where(parameter => parameter.Kind == "texture")

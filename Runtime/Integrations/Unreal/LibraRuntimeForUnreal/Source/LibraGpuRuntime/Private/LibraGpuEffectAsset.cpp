@@ -543,10 +543,10 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
         const TArray<TSharedPtr<FJsonValue>>* renderers = nullptr;
         double rendererVersion = 0;
         if (!root->TryGetNumberField(TEXT("rendererBindingsVersion"), rendererVersion) ||
-            (rendererVersion != 1 && rendererVersion != 2) ||
+            (rendererVersion != 1 && rendererVersion != 2 && rendererVersion != 3) ||
             !root->TryGetArrayField(TEXT("rendererBindings"), renderers) || renderers->Num() > 128)
         {
-            error = TEXT("Invalid GPU renderer bindings: rendererBindingsVersion must be 1 or 2.");
+            error = TEXT("Invalid GPU renderer bindings: rendererBindingsVersion must be 1, 2, or 3.");
             return false;
         }
         for (const auto& value : *renderers)
@@ -565,9 +565,11 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
                 error = TEXT("Unsupported GPU renderer. This backend supports only builtin:billboard.");
                 return false;
             }
-            if (material != TEXT("builtin:unlit-alpha") && material != TEXT("builtin:unlit-additive"))
+            if (material != TEXT("builtin:unlit-alpha") && material != TEXT("builtin:unlit-additive") &&
+                material != TEXT("builtin:procedural-material") && material != TEXT("builtin:procedural-texture") &&
+                !object->HasField(TEXT("materials")))
             {
-                error = FString::Printf(TEXT("Unsupported GPU material '%s'. The builtin billboard shader supports only builtin:unlit-alpha or builtin:unlit-additive; native UE materials are not evaluated."), *material);
+                error = FString::Printf(TEXT("Unsupported GPU material '%s'."), *material);
                 return false;
             }
             double sizeScale = 1;
@@ -581,7 +583,7 @@ bool ULibraGpuEffectAsset::ImportBundle(const FString& json, FString& error)
             rendererSizeScales.Add(flowId, float(sizeScale));
             auto sprite = liberafx::ParticleSpriteAnimation{};
             auto present = false;
-            if (!LibraParticleSpriteData::Read(object, present, sprite) || (present && rendererVersion != 2))
+            if (!LibraParticleSpriteData::Read(object, present, sprite) || (present && rendererVersion < 2))
             {
                 error = TEXT("Invalid GPU Sprite editor animation; renderer bindings version 2 is required.");
                 return false;

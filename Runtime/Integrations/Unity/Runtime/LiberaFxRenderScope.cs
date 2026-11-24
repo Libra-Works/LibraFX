@@ -126,7 +126,7 @@ namespace LiberaFx.Unity
                 {
                     scope.cpuParticleRenderers.Add(
                         LiberaFxCpuParticleRenderInstance.Create(
-                            renderParent, cpuParticle, statistics));
+                            renderParent, cpuParticle, statistics, scope.proceduralResources));
                 }
                 foreach (var gpu in prepared.gpuPrograms)
                 {
@@ -138,13 +138,27 @@ namespace LiberaFx.Unity
                         textures.Add(new LibraGpuTextureBinding { resourceId = reference.resourceId, texture = texture,
                             premultipliedAlpha = reference.outputId == "DyeOutput", generatedSource = source });
                     }
+                    var gpuAdditive = gpu.additiveBlend;
+                    var proceduralId = !string.IsNullOrEmpty(gpu.proceduralMaterial)
+                        ? gpu.proceduralMaterial : gpu.proceduralTexture;
+                    if (!string.IsNullOrEmpty(proceduralId))
+                    {
+                        if (!scope.proceduralResources.TryGetValue(proceduralId, out var proc) || !proc.texture)
+                            throw new InvalidOperationException("GPU particle procedural material/texture is outside this resource scope.");
+                        textures.RemoveAll(t => t.resourceId == "billboardTexture");
+                        textures.Add(new LibraGpuTextureBinding { resourceId = "billboardTexture", texture = proc.texture });
+                        if (!string.IsNullOrEmpty(gpu.proceduralMaterial))
+                        {
+                            gpuAdditive = proc.definition.recipe.blend == "additive";
+                        }
+                    }
                     var gpuObject = new GameObject("Libera FX GPU " + gpu.nodeId);
                     gpuObject.layer = scope.scopeObject.layer;
                     gpuObject.transform.SetParent(scope.scopeObject.transform, false);
                     var runtime = gpuObject.AddComponent<LibraGpuParticleRuntime>();
                     runtime.ConfigureForSpawnable(gpu.binding.computeShader, gpu.binding.metadata,
-                        gpu.binding.billboardMaterial, textures.ToArray(),
-                        SeedForProgram(seed, gpu.nodeId), gpu.spawnRate, gpu.sizeScale, gpu.additiveBlend);
+                        gpu.customMaterial ? gpu.customMaterial : gpu.binding.billboardMaterial, textures.ToArray(),
+                        SeedForProgram(seed, gpu.nodeId), gpu.spawnRate, gpu.sizeScale, gpuAdditive);
                     runtime.ConfigureSpriteAnimation(gpu.spriteAnimation);
                     scope.gpuPrograms.Add(runtime);
                     scope.gpuDrawTransforms.Add(runtime, gpu);

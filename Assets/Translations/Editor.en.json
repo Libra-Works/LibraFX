@@ -162,6 +162,7 @@
   "Editor.Group": "Group selected nodes",
   "Editor.AddNode": "_Add node...",
   "Editor.AddComment": "Add _comment",
+  "Editor.NewGraphGroup": "New Graph",
   "Editor.NewSpawnableGroup": "New Spawnable Group",
   "Panels.ContainingSpawnable": "Containing Spawnable",
   "Panels.ContainingSpawnableHint": "No child node selected. Edit this Spawnable instance's published values here; the child template defaults are unchanged.",

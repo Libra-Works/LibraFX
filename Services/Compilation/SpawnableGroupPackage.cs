@@ -182,7 +182,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
                     new(onStart.SingleOrDefault()?.Id, life.SingleOrDefault()?.Id, ownerDestroy.SingleOrDefault()?.Id),
                     outputs, liveInputs.AsReadOnly(), capturedInputs.AsReadOnly(), signalInputs, signalOutputs)
                 {
-                    GpuPrograms = CreateGpuPrograms(child, childBuild.RenderConfiguration),
+                    GpuPrograms = CreateGpuPrograms(child, childBuild.RenderConfiguration, scopeResources),
                     ParentContainerId = ownerContainerId,
                     CpuPrograms = childBuild.CpuPrograms
                 });
@@ -209,7 +209,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
             RootRenderConfiguration = rootBuild.RenderConfiguration,
             CpuPrograms = rootBuild.CpuPrograms,
             RootGpuContainers = CollectGpu(rootBuild.Graph).ToArray(),
-            RootGpuPrograms = CreateGpuPrograms(rootBuild.Graph, rootBuild.RenderConfiguration)
+            RootGpuPrograms = CreateGpuPrograms(rootBuild.Graph, rootBuild.RenderConfiguration, resourceContext)
         };
     }
 
@@ -281,9 +281,10 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
         }
     }
 
-    private static byte[] CreateGpuPrograms(GraphSnapshot graph, byte[] renderConfiguration)
+    private static byte[] CreateGpuPrograms(GraphSnapshot graph, byte[] renderConfiguration,
+        IRenderResourceBindingContext? resources)
     {
-        var bytes = LiberaFx.Services.GpuProgramDeliveryService.CreateExecutablePayload(graph);
+        var bytes = LiberaFx.Services.GpuProgramDeliveryService.CreateExecutablePayload(graph, resources: resources);
         if (renderConfiguration.Length == 0) return bytes;
         var render = JsonNode.Parse(renderConfiguration)!;
         var bindings = render["nodes"]!.AsArray().Where(node => node?["generatedTextures"] is JsonArray)
