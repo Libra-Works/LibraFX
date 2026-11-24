@@ -520,6 +520,7 @@ public:
     void stop()
     {
         if (Thread::is_main_thread()) {
+            paused_ = false;
             if (playback_) {
                 ++playbackGeneration_;
             }
@@ -528,6 +529,26 @@ public:
             sharedFrameEffects_ = sharedFrameWorkers_ = 0;
         }
     }
+
+    int pause()
+    {
+        if (!Thread::is_main_thread()) return code(Result::InvalidArgument);
+        if (!playback_) return code(Result::NotReady);
+        paused_ = true;
+        set_process(false);
+        return code(Result::Ok);
+    }
+
+    int resume()
+    {
+        if (!Thread::is_main_thread()) return code(Result::InvalidArgument);
+        if (!playback_) return code(Result::NotReady);
+        paused_ = false;
+        set_process(true);
+        return code(Result::Ok);
+    }
+
+    bool is_paused() const { return Thread::is_main_thread() && playback_ != nullptr && paused_; }
 
     bool is_playing() const { return Thread::is_main_thread() && playback_ != nullptr; }
 
@@ -964,6 +985,9 @@ protected:
         godot::ClassDB::bind_method(godot::D_METHOD("advance", "delta"), &LibraEffectPlayer::advance);
         godot::ClassDB::bind_method(godot::D_METHOD("prewarm_package", "package_bytes", "capacity", "workers"), &LibraEffectPlayer::prewarm_package, 256, 4);
         godot::ClassDB::bind_method(godot::D_METHOD("stop"), &LibraEffectPlayer::stop);
+        godot::ClassDB::bind_method(godot::D_METHOD("pause"), &LibraEffectPlayer::pause);
+        godot::ClassDB::bind_method(godot::D_METHOD("resume"), &LibraEffectPlayer::resume);
+        godot::ClassDB::bind_method(godot::D_METHOD("is_paused"), &LibraEffectPlayer::is_paused);
         godot::ClassDB::bind_method(godot::D_METHOD("is_playing"), &LibraEffectPlayer::is_playing);
         godot::ClassDB::bind_method(godot::D_METHOD("pop_cpu_particle_event"), &LibraEffectPlayer::pop_cpu_particle_event);
         godot::ClassDB::bind_method(godot::D_METHOD("pop_scoped_cpu_particle_event", "container_id", "instance_id"),
@@ -1243,6 +1267,7 @@ private:
     std::unique_ptr<Playback> playback_;
     CoordinateBasis coordinateBasis_ = CoordinateBasis::godot();
     double timeScale_ = 1;
+    bool paused_ = false;
     host::PlaybackHost completedCpuEventHost_;
     Dictionary scriptActions_;
     bool dispatchingScriptAction_ = false;

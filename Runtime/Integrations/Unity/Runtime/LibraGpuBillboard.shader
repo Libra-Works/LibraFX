@@ -12,11 +12,13 @@ Shader "Libra/GPU Particle Billboard"
         _LibraGpuDrawMatrixRow1 ("Libra GPU Draw Matrix Row 1", Vector) = (0,1,0,0)
         _LibraGpuDrawMatrixRow2 ("Libra GPU Draw Matrix Row 2", Vector) = (0,0,1,0)
         _LibraGpuDrawMatrixRow3 ("Libra GPU Draw Matrix Row 3", Vector) = (0,0,0,1)
+        [HideInInspector] _SrcBlend ("Source Blend", Float) = 5
+        [HideInInspector] _DstBlend ("Destination Blend", Float) = 10
     }
     SubShader
     {
         Tags { "Queue"="Transparent" "RenderType"="Transparent" }
-        Blend SrcAlpha OneMinusSrcAlpha
+        Blend [_SrcBlend] [_DstBlend]
         ZWrite Off
         Cull Off
         Pass

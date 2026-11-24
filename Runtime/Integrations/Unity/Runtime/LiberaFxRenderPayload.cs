@@ -252,6 +252,7 @@ namespace LiberaFx.Unity
         public LiberaFxUnityGpuProgramBinding binding;
         public LibraGpuMetadata packageMetadata;
         public float sizeScale;
+        public bool additiveBlend;
         public byte[][] drawMatrixRowNodeBytes;
         public byte[][] emitterMatrixRowNodeBytes;
         internal LiberaFxGeneratedGpuResource[] generatedResources = Array.Empty<LiberaFxGeneratedGpuResource>();
@@ -262,6 +263,7 @@ namespace LiberaFx.Unity
         public string nodeId;
         public LibraFluid2DSettings settings;
         public float sizeScale;
+        public bool additiveBlend;
         public byte[][] drawMatrixRowNodeBytes;
         internal bool automaticPlane = true;
     }
@@ -839,6 +841,7 @@ namespace LiberaFx.Unity
                 packageMetadata = packageMetadata,
                 spawnRate = packageMetadata.version >= 3 ? packageMetadata.spawnRate : configured.spawnRate,
                 sizeScale = sizeScale,
+                additiveBlend = renderBindings.Length > 0 && renderBindings[0].material == "builtin:unlit-additive",
                 spriteAnimation=renderBindings.Length==0 ? null : renderBindings[0].spriteAnimation,
                 generatedResources = generated,
                 drawMatrixRowNodeBytes = drawTransform?.rowNodeBytes

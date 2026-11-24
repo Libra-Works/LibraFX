@@ -116,6 +116,8 @@ namespace LiberaFx.Unity
 
         public bool IsRootFinished => rootFinished;
         public bool IsForceTerminated => effectForced;
+        public bool IsPaused => paused && host != null && !rootFinished && !effectForced;
+        private bool paused;
         public double ElapsedTime => elapsed;
         public double RealElapsedTime => realElapsed;
         public double TimeScale
@@ -276,7 +278,7 @@ namespace LiberaFx.Unity
         private void LateUpdate()
         {
             var current = host;
-            if (current == null || rootFinished || manualPreviewTime) return;
+            if (current == null || rootFinished || manualPreviewTime || paused) return;
             if (sourceInitialAdvancePending)
             {
                 if (!PublishFrameInputs(current)) return;
@@ -502,7 +504,13 @@ namespace LiberaFx.Unity
         {
             if (!effect || effect.PackageBytes == null || effect.PackageBytes.Length == 0)
                 return Report(NativeResult.InvalidArgument, "Assign a nonempty LiberaFx Spawnable package.");
-            if (host != null && !restart) return effectForced ? NativeResult.NotReady : NativeResult.Ok;
+            if (host != null && !restart)
+            {
+                if (effectForced) return NativeResult.NotReady;
+                paused = false;
+                return NativeResult.Ok;
+            }
+            paused = false;
             if (host != null)
             {
                 var stopResult = Stop();
@@ -823,8 +831,25 @@ namespace LiberaFx.Unity
             return host.GetRootPayload(kind, out payload);
         }
 
+        public NativeResult Pause()
+        {
+            UnityInstanceSession.RequireMainThread();
+            if (host == null || rootFinished || effectForced) return NativeResult.NotReady;
+            paused = true;
+            return NativeResult.Ok;
+        }
+
+        public NativeResult Resume()
+        {
+            UnityInstanceSession.RequireMainThread();
+            if (host == null || rootFinished || effectForced) return NativeResult.NotReady;
+            paused = false;
+            return NativeResult.Ok;
+        }
+
         public NativeResult Stop()
         {
+            paused = false;
             var current = host;
             if (current == null)
             {

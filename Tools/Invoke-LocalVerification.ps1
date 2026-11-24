@@ -169,6 +169,30 @@ try {
             'Unity binary package verified (PE exports/imports, .meta, layout)'
         }
 
+        Invoke-Step 'Godot Source SDK Export & Manifest Verify' {
+            $godotOut = Join-Path $workRoot 'sdk-godot'
+            $exportArgs = @{ Engine = 'Godot'; OutputDirectory = $godotOut }
+            if (-not $StrictClean) { $exportArgs['AllowDirty'] = $true }
+            & (Join-Path $repository 'Tools\Export-EngineSdk.ps1') @exportArgs
+            $manifestPath = Join-Path $godotOut 'sdk-manifest.json'
+            if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+                throw "Missing Godot sdk-manifest.json at $manifestPath"
+            }
+            $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+            foreach ($entry in $manifest.files) {
+                $full = Join-Path $godotOut $entry.path
+                if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { throw "Missing exported file: $($entry.path)" }
+                if ((Get-FileHash -LiteralPath $full -Algorithm SHA256).Hash.ToLowerInvariant() -ne $entry.sha256.ToLowerInvariant()) {
+                    throw "SHA-256 mismatch for $($entry.path)"
+                }
+            }
+            $gdext = Get-Content -LiteralPath (Join-Path $godotOut 'Runtime\Integrations\Godot\liberafx.gdextension') -Raw
+            foreach ($token in 'liberafx_godot_init', 'windows.x86_64', 'linux.x86_64', 'macos.arm64') {
+                if ($gdext -notmatch [regex]::Escape($token)) { throw "liberafx.gdextension missing $token" }
+            }
+            "Local Godot SDK source export verified ($($manifest.files.Count) files): $godotOut"
+        }
+
         Invoke-Step 'Unreal Source Packaging & Dry-Run Binary Stage' {
             & (Join-Path $repository 'Tests\Verify-UnrealPluginPackaging.ps1')
             $ueDryOut = Join-Path $workRoot 'ue-bin-dryrun'

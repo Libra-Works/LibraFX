@@ -33,6 +33,7 @@ namespace LiberaFx.Unity
         [SerializeField] ComputeShader compute;
         [SerializeField] TextAsset metadata;
         [SerializeField] Material billboardMaterial;
+        Material ownedBillboardMaterial;
         [SerializeField] LibraGpuTextureBinding[] textures = Array.Empty<LibraGpuTextureBinding>();
         [SerializeField] bool playOnEnable = true;
         [SerializeField] bool automaticUpdate = true;
@@ -270,13 +271,33 @@ namespace LiberaFx.Unity
         // Spawnable scopes own a separate buffer set and are stepped only by their
         // LiberaFxSpawnableComponent. They never use Unity's global frame delta.
         public void ConfigureForSpawnable(ComputeShader shader, TextAsset sourceMetadata,
-            Material material, LibraGpuTextureBinding[] bindings, uint seed, float rate, float sizeScale = 1)
+            Material material, LibraGpuTextureBinding[] bindings, uint seed, float rate,
+            float sizeScale = 1, bool additiveBlend = false)
         {
             if (float.IsNaN(rate) || float.IsInfinity(rate) || rate < 0)
                 throw new ArgumentOutOfRangeException(nameof(rate), "Spawn rate must be finite and nonnegative.");
             if (float.IsNaN(sizeScale) || float.IsInfinity(sizeScale) || sizeScale <= 0 || sizeScale > 10000)
                 throw new ArgumentOutOfRangeException(nameof(sizeScale), "Billboard size scale must be finite and positive.");
-            Configure(shader, sourceMetadata, material, bindings);
+            Material clonedMaterial = null;
+            var effectiveMaterial = material;
+            if (additiveBlend && material != null &&
+                material.HasProperty("_SrcBlend") && material.HasProperty("_DstBlend"))
+            {
+                clonedMaterial = new Material(material);
+                clonedMaterial.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+                clonedMaterial.SetFloat("_DstBlend", (float)BlendMode.One);
+                effectiveMaterial = clonedMaterial;
+            }
+            try
+            {
+                Configure(shader, sourceMetadata, effectiveMaterial, bindings);
+            }
+            catch
+            {
+                if (clonedMaterial != null) DestroyOwnedObject(clonedMaterial);
+                throw;
+            }
+            ownedBillboardMaterial = clonedMaterial;
             automaticUpdate = false;
             playOnEnable = false;
             spawnableStepMode = true;
@@ -577,6 +598,13 @@ namespace LiberaFx.Unity
             drawTransformConnected = false;
             spawnableStepMode = false;
             fieldSources = null; hasFieldMappings = false;
+            if (ownedBillboardMaterial != null)
+            {
+                if (ReferenceEquals(billboardMaterial, ownedBillboardMaterial))
+                    billboardMaterial = null;
+                DestroyOwnedObject(ownedBillboardMaterial);
+                ownedBillboardMaterial = null;
+            }
             DrawCount = 0; submittedWork = false;
         }
         static void DestroyOwnedObject(UnityEngine.Object o) { if (Application.isPlaying) Destroy(o); else DestroyImmediate(o); }

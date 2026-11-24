@@ -22,7 +22,7 @@
     "implemented": true,
     "extension": "liberafx_godot",
     "apiVersion": "4.7",
-    "platforms": ["Windows x86-64"],
+    "platforms": ["Windows x86-64", "Linux x86-64", "macOS arm64"],
     "maximumBytecodeVersion": 2,
     "spawnablePackages": true,
     "previouslyExercised": "Godot 4.7.2 Windows x86-64 headless playback and Vulkan GPU execution",
