@@ -414,8 +414,15 @@ internal static class SpawnableHierarchyTests
             Parameter("rate", "float", 0d),
             Parameter("burst", "int", 3)
         ]);
-        return system with { ChildGraph = CpuParticleSchema.CreateChild(system.Kind) };
+        return system with { ChildGraph = WithDefaultDrawAsset(CpuParticleSchema.CreateChild(system.Kind)) };
     }
+
+    private static GraphSnapshot WithDefaultDrawAsset(GraphSnapshot child) => child with
+    {
+        Nodes = child.Nodes.Select(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleSpriteDraw"
+            ? node with { Parameters = [Parameter("assetPath", "string", "builtin:white")] }
+            : node).ToArray()
+    };
 
     private static GraphSnapshot CreateCaptureFixture()
     {
@@ -519,7 +526,7 @@ internal static class SpawnableHierarchyTests
             Parameter("rate", "float", 0d),
             Parameter("burst", "int", 3)
         ]);
-        var stableChild = WithStableIds(CpuParticleSchema.CreateChild(cpuSystem.Kind), "cpu-only-retention-kernel");
+        var stableChild = WithStableIds(WithDefaultDrawAsset(CpuParticleSchema.CreateChild(cpuSystem.Kind)), "cpu-only-retention-kernel");
         var spawnStage = stableChild.Nodes.Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleSpawn");
         var velocity = spawnStage.ChildGraph!.Nodes.Single(node =>
             CpuParticleSchema.Name(node.Kind) == "CpuParticleSetVelocity");
