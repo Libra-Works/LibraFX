@@ -89,6 +89,7 @@ NOTES = {
     "Transform": ("Build a matrix from position, rotation and scale.", "位置・回転・スケールから行列を作ります。"),
     "TransformPoint": ("Transform a point, including translation.", "平行移動を含めて点を変換します。"),
     "TransformDirection": ("Transform a direction without translation.", "平行移動を除いて方向を変換します。"),
+    "Reroute": ("Pass a wire through a compact waypoint without changing its value.", "値を変えずに配線を中継するコンパクトな経由ノードです。"),
 }
 
 
