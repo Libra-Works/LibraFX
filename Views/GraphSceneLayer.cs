@@ -168,6 +168,52 @@ public sealed class GraphSceneLayer : Control
             connection.Source.Definition.GetOutputPortCategory(connection.SourcePortId), active);
     }
 
+    private static Point EvaluateCubicBezier(Point start, Point end, double t)
+    {
+        var controlOffset = Math.Max(48, Math.Abs(end.X - start.X) * 0.5);
+        var u = 1 - t;
+        var p1x = start.X + controlOffset;
+        var p2x = end.X - controlOffset;
+        var x = u * u * u * start.X + 3 * u * u * t * p1x + 3 * u * t * t * p2x + t * t * t * end.X;
+        var y = (u * u * u + 3 * u * u * t) * start.Y + (3 * u * t * t + t * t * t) * end.Y;
+        return new Point(x, y);
+    }
+
+    internal static GraphConnectionViewModel? HitTestConnection(
+        GraphWorkspaceViewModel workspace, Point graphPoint, double tolerance = 10)
+    {
+        var maxDistanceSquared = tolerance * tolerance;
+        GraphConnectionViewModel? best = null;
+        var bestDistance = maxDistanceSquared;
+        foreach (var connection in workspace.Connections)
+        {
+            var start = connection.StartPoint;
+            var end = connection.EndPoint;
+            const int segments = 24;
+            var prev = start;
+            for (var step = 1; step <= segments; step++)
+            {
+                var curr = EvaluateCubicBezier(start, end, step / (double)segments);
+                var dx = curr.X - prev.X;
+                var dy = curr.Y - prev.Y;
+                var lenSq = dx * dx + dy * dy;
+                var proj = lenSq > 1e-6
+                    ? Math.Clamp(((graphPoint.X - prev.X) * dx + (graphPoint.Y - prev.Y) * dy) / lenSq, 0, 1)
+                    : 0;
+                var px = prev.X + proj * dx - graphPoint.X;
+                var py = prev.Y + proj * dy - graphPoint.Y;
+                var distSq = px * px + py * py;
+                if (distSq <= bestDistance)
+                {
+                    bestDistance = distSq;
+                    best = connection;
+                }
+                prev = curr;
+            }
+        }
+        return best;
+    }
+
     private void DrawSignalOrder(DrawingContext context, GraphConnectionViewModel connection)
     {
         var start = connection.StartPoint + _graphOrigin;

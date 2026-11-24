@@ -251,9 +251,9 @@ public sealed class FCurveCanvas : Control
         base.OnPointerPressed(e);
         var point = e.GetPosition(this);
         var pointer = e.GetCurrentPoint(this).Properties;
-        if (ShortcutService.Shared.CurvePanButton == "Middle"
-            ? pointer.IsMiddleButtonPressed
-            : pointer.IsRightButtonPressed)
+        var panButton = ShortcutService.Shared.CurvePanButton;
+        if ((panButton is "Middle" or "Right + Middle" && pointer.IsMiddleButtonPressed) ||
+            (panButton is "Right" or "Right + Middle" && pointer.IsRightButtonPressed))
         {
             _dragMode = DragMode.Pan;
             _pointerStart = point;

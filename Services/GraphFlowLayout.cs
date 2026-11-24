@@ -110,7 +110,11 @@ public static class GraphFlowLayout
         var compactColumn = 0;
         foreach (var layer in nodes.GroupBy(node => mode == GraphLayoutMode.Flow ? levels[node.Id] : 0).OrderBy(group => group.Key))
         {
-            foreach (var node in layer.OrderBy(node => mode == GraphLayoutMode.Flow ? DesiredY(node) : order[node.Id])
+            foreach (var node in layer
+                         .OrderBy(node => mode == GraphLayoutMode.Flow
+                             ? (node.Definition.PortCategory == GraphPortCategory.Signal || node.IsLifecycleNode ? 0 : 1)
+                             : 0)
+                         .ThenBy(node => mode == GraphLayoutMode.Flow ? DesiredY(node) : order[node.Id])
                          .ThenBy(node => order[node.Id]).ToArray())
             {
                 if (fixedNodes.Contains(node.Id)) continue;

@@ -440,12 +440,15 @@ public sealed partial class GraphWorkspaceViewModel
 
         var index = _nextNodeIndex++;
         var nodeId = Guid.NewGuid();
+        var defaultX = Nodes.Count == 0
+            ? 80
+            : Nodes.Select(existing => GraphFlowLayout.Bounds(existing).Right + 120).Max();
         var node = new GraphNodeViewModel(
             this,
             definition,
             isPolymorphic ? LocalizationService.Shared.GetEnglishOrDefault(family?.DisplayNameKey ?? definition.DisplayNameKey, definition.Name) : definition.Name,
-            x ?? 80 + (index % 4) * 280,
-            y ?? 80 + (index / 4) * 160,
+            x ?? defaultX,
+            y ?? 80,
             id: nodeId,
             parameters: GpuParticleEditorService.IsGpu(kind) ? GpuParticleEditorService.InitialParameters(nodeId) : parameters,
             isPolymorphic: isPolymorphic);

@@ -5,7 +5,6 @@
   "name": "ParticleTextureSource",
   "values": [
     { "value": 0, "name": "AssignedTexture", "displayNameKey": "Cpu.Texture.Assigned" },
-    { "value": 1, "name": "White", "displayNameKey": "Cpu.Texture.White" },
-    { "value": 2, "name": "RadialGlow", "displayNameKey": "Cpu.Texture.RadialGlow" }
+    { "value": 1, "name": "White", "displayNameKey": "Cpu.Texture.White" }
   ]
 }

@@ -69,10 +69,12 @@ public static class RenderNodeAuthoring
             new NodeParameterSnapshot("assetPath", "string", JsonSerializer.SerializeToElement(asset.Path)),
             new NodeParameterSnapshot("materialSchema", "string", JsonSerializer.SerializeToElement(schema))
         }.Concat(extraParameters).ToArray();
-        var index = graph.Nodes.Count;
+        var defaultX = graph.Nodes.Count == 0
+            ? 80
+            : graph.Nodes.Select(existing => GraphFlowLayout.Bounds(existing).Right + 120).Max();
         graph.ApplyPlan(new LiberaGraphEditPlan(
             [new LiberaGraphNodeSpec("render", definition.Kind, asset.Name,
-                x ?? 80 + index % 4 * 280, y ?? 80 + index / 4 * 160, parameters)],
+                x ?? defaultX, y ?? 80, parameters)],
             []));
         return graph.SelectedNode
             ?? throw new InvalidOperationException("The render node was not added.");

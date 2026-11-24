@@ -135,6 +135,9 @@
                         <MenuItem Header="{DynamicResource Text.Editor.AddComment}" Click="OnAddCommentClick">
                             <MenuItem.Icon><views:EditorIconView Icon="Info" /></MenuItem.Icon>
                         </MenuItem>
+                        <MenuItem x:Name="AddRerouteMenu" Header="{DynamicResource Text.Editor.AddReroute}" Click="OnAddRerouteClick" IsVisible="False">
+                            <MenuItem.Icon><views:EditorIconView Icon="Add" /></MenuItem.Icon>
+                        </MenuItem>
                         <MenuItem x:Name="NewSpawnableGroupMenu" Header="{DynamicResource Text.Editor.NewSpawnableGroup}" Click="OnAddSpawnableGroupClick">
                             <MenuItem.Icon><views:EditorIconView Icon="Add" /></MenuItem.Icon>
                         </MenuItem>

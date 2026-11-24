@@ -26,7 +26,7 @@
       "id": "assetPath",
       "name": "Texture",
       "type": "string",
-      "defaultValue": "builtin:white",
+      "defaultValue": "",
       "enabledWhen": {
         "parameter": "textureSource",
         "equals": 0

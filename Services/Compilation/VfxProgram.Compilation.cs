@@ -11,6 +11,7 @@ public sealed partial class VfxProgram
         IRenderResourceBindingContext? resourceContext = null, VfxCompileOptions? options = null)
     {
         ValidateForCompilation(graph);
+        graph = RerouteLowering.Lower(graph);
         CpuParticleSchema.ValidateContext(graph);
         if (CpuParticleCompilation.Contains(graph))
         {
@@ -65,6 +66,7 @@ public sealed partial class VfxProgram
         IRenderResourceBindingContext? resourceContext = null, VfxCompileOptions? options = null)
     {
         ValidateForCompilation(graph);
+        graph = RerouteLowering.Lower(graph);
         graph = CpuParticleCompilation.LowerEmitters(graph);
         graph = TimeOutputLowering.Lower(graph);
         // Strip terminal observers before lowering; never run reachability pruning.

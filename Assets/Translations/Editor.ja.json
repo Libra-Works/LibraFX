@@ -80,6 +80,8 @@
   "Editor.NodeGroup.Lifecycle": "ライフサイクル",
   "Editor.Parameter.Seconds": "秒",
   "Editor.Node.OnStart": "開始時",
+  "Editor.Node.Reroute": "ルーター",
+  "Editor.AddReroute": "ルーターを追加",
   "Editor.Node.SpawnOutputVector3": "グループ出力 (Vector3)",
   "Editor.Node.SpawnOutputFloat": "グループ出力 (Float)",
   "Editor.Node.SpawnOutputVector2": "グループ出力 (Vector2)",

@@ -56,7 +56,34 @@ internal static class GraphFlowLayoutTests
             Require(GraphSnapshot.ContentEquals(loaded.Graph, graph.CreateSnapshot()), "Layout coordinates did not persist.");
         }
         VerifyPlanAndGeometry();
+        VerifyRerouteAndHorizontalPlacement();
         Console.WriteLine("Deterministic flow layout, scope/fixed guards, stale previews, plans, geometry and Undo/Redo passed.");
+    }
+
+    private static void VerifyRerouteAndHorizontalPlacement()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var created = Enumerable.Range(0, 6).Select(_ => graph.CreateNode(GraphNodeKind.Float)).ToArray();
+        Require(created.All(node => Math.Abs(node.Y - 80) < 0.01) &&
+                created.Zip(created.Skip(1)).All(pair => pair.First.X < pair.Second.X),
+            "Default node creation must stay horizontal left-to-right without 4-column wrapping.");
+
+        var sum = graph.CreateNode(GraphNodeKind.Add, 2200, 80);
+        Require(graph.TryConnectNodes(created[0], sum, out _, "a"), "Connect float to add.");
+        var originalBinary = VfxProgram.Compile(graph.CreateSnapshot()).ToBinary();
+        var connection = graph.Connections.Single();
+        var mid = new Point((connection.StartPoint.X + connection.EndPoint.X) * 0.5,
+            (connection.StartPoint.Y + connection.EndPoint.Y) * 0.5);
+        Require(GraphSceneLayer.HitTestConnection(graph, mid) == connection, "HitTestConnection must detect wire midpoint.");
+        var reroute = graph.InsertRerouteOnConnection(connection, mid.X, mid.Y);
+        Require(reroute is not null && reroute.IsReroute && graph.Connections.Count == 2,
+            "InsertRerouteOnConnection must insert one reroute node and split the wire.");
+        var reroutedBinary = VfxProgram.Compile(graph.CreateSnapshot()).ToBinary();
+        Require(originalBinary.SequenceEqual(reroutedBinary), "Reroute bypass must compile identically.");
+        Require(graph.History.Undo() && graph.Connections.Count == 1 && !graph.Nodes.Any(n => n.IsReroute),
+            "Undo must restore the original wire.");
+        Require(graph.History.Redo() && graph.Connections.Count == 2 && graph.Nodes.Any(n => n.IsReroute),
+            "Redo must reapply the reroute node.");
     }
 
     private static void VerifyPlanAndGeometry()

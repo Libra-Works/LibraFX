@@ -88,9 +88,10 @@ public sealed class GraphNodeViewModel : ObservableObject
     public bool IsProcedural => ProceduralResourceSchema.IsMetadata(Definition.Kind);
     public bool HasInlineWorkspace => IsGraphGroup || IsGpuParticle || IsProcedural;
     public bool IsComment => Definition.Kind == GraphNodeKind.Comment;
+    public bool IsReroute => BaseDefinition.Kind.Value == "Reroute";
     public bool HasPorts => !IsComment && (!IsGraphGroup ||
         IsSpawnableGroup || Definition.InputPorts is { Count: > 0 } || Definition.OutputPorts is { Count: > 0 });
-    public bool ShowPortType => HasPorts && Definition.Kind != GraphNodeKind.GraphGroup;
+    public bool ShowPortType => HasPorts && !IsReroute && Definition.Kind != GraphNodeKind.GraphGroup;
     public string OriginalNodeName => LocalizationService.Shared.GetNodeLabel(BaseDefinition.DisplayNameKey, BaseDefinition.Name);
     public int InputColumnSpan => Definition.OutputPorts is { Count: 0 } ? 3 : 1;
     // These are authored sources. Keep old relay connections readable in saved projects,
@@ -145,7 +146,7 @@ public sealed class GraphNodeViewModel : ObservableObject
         p.Id == InlineExpandedId && p.Type == "bool")?.Value.ValueKind == JsonValueKind.True;
     public double InlineWidth => _previewWidth ?? InlineNumber(InlineWidthId, 640, 420, 2400);
     public double InlineHeight => _previewHeight ?? InlineNumber(InlineHeightId, 380, 260, 1600);
-    public double RenderedWidth => IsComment ? CommentWidth : IsInlineExpanded ? InlineWidth : CalculatedNodeWidth;
+    public double RenderedWidth => IsComment ? CommentWidth : IsReroute ? 86 : IsInlineExpanded ? InlineWidth : CalculatedNodeWidth;
 
     private double CalculatedNodeWidth
     {

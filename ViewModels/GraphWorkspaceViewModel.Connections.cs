@@ -146,26 +146,35 @@ public sealed partial class GraphWorkspaceViewModel
             return false;
         }
 
-        if (source.Definition.GetOutputPortCategory(sourcePortId) == GraphPortCategory.Signal &&
+        var sourceEffective = source.IsReroute
+            ? ResolveReroutePort(source)
+            : (Category: source.Definition.GetOutputPortCategory(sourcePortId),
+               PortType: source.Definition.GetOutputPortType(sourcePortId) ?? source.PortType);
+        var targetEffective = target.IsReroute
+            ? ResolveReroutePort(target)
+            : (Category: target.Definition.GetInputPortCategory(targetPortId),
+               PortType: target.Definition.GetInputPortType(targetPortId) ?? target.PortType);
+
+        if (sourceEffective?.Category == GraphPortCategory.Signal &&
             Connections.Any(connection => connection.Source == source && connection.SourcePortId == sourcePortId))
         {
             error = LocalizationService.Shared.Get("Editor.Sequence.SingleDestination");
             return false;
         }
 
-        if (source.Definition.GetOutputPortCategory(sourcePortId) != target.Definition.GetInputPortCategory(targetPortId) ||
-            (!source.IsPolymorphic && !target.IsPolymorphic &&
-             source.Definition.GetOutputPortType(sourcePortId) != target.Definition.GetInputPortType(targetPortId)))
+        if (sourceEffective is { } srcEff && targetEffective is { } dstEff &&
+            (srcEff.Category != dstEff.Category ||
+             (!source.IsPolymorphic && !target.IsPolymorphic && !source.IsReroute && !target.IsReroute &&
+              srcEff.PortType != dstEff.PortType) ||
+             ((source.IsReroute || target.IsReroute) && srcEff.PortType != dstEff.PortType)))
         {
             error = "Port categories and data types must match.";
-            if (source.Definition.GetOutputPortCategory(sourcePortId) == GraphPortCategory.Parameter &&
-                target.Definition.GetInputPortCategory(targetPortId) == GraphPortCategory.Parameter)
+            if (srcEff.Category == GraphPortCategory.Parameter && dstEff.Category == GraphPortCategory.Parameter)
             {
                 error = LocalizationService.Shared.Get("Messages.Error.PortTypeMismatch") + " " +
                     GraphConversionPresentation.Describe(
                         new GraphConversionRegistry(AvailableNodeDefinitions).Resolve(
-                            source.Definition.GetOutputPortType(sourcePortId)!,
-                            target.Definition.GetInputPortType(targetPortId)!));
+                            srcEff.PortType, dstEff.PortType));
             }
 
             return false;
@@ -240,5 +249,82 @@ public sealed partial class GraphWorkspaceViewModel
         }
 
         return false;
+    }
+
+    public GraphNodeViewModel? InsertRerouteOnConnection(GraphConnectionViewModel connection, double x, double y)
+    {
+        if (IsReadOnly || !Connections.Contains(connection)) return null;
+        var definition = AvailableNodeDefinitions.FirstOrDefault(item => item.Kind.Value == "Reroute");
+        if (definition is null) return null;
+
+        var reroute = new GraphNodeViewModel(
+            this,
+            definition,
+            definition.Name,
+            x - 43,
+            y - 22,
+            id: Guid.NewGuid());
+        var first = new GraphConnectionViewModel(connection.Source, reroute, "in", connection.SourcePortId);
+        var second = new GraphConnectionViewModel(reroute, connection.Target, connection.TargetPortId, "out");
+        ExecuteEdit(new InsertRerouteCommand(this, connection, reroute, first, second));
+        SelectNode(reroute);
+        return reroute;
+    }
+
+    private (GraphPortCategory Category, string PortType)? ResolveReroutePort(
+        GraphNodeViewModel node, HashSet<Guid>? visited = null)
+    {
+        visited ??= [];
+        if (!visited.Add(node.Id)) return null;
+        foreach (var edge in Connections)
+        {
+            if (edge.Target == node)
+            {
+                if (!edge.Source.IsReroute)
+                {
+                    return (edge.Source.Definition.GetOutputPortCategory(edge.SourcePortId),
+                        edge.Source.Definition.GetOutputPortType(edge.SourcePortId) ?? edge.Source.PortType);
+                }
+                if (ResolveReroutePort(edge.Source, visited) is { } upstream) return upstream;
+            }
+            if (edge.Source == node)
+            {
+                if (!edge.Target.IsReroute)
+                {
+                    return (edge.Target.Definition.GetInputPortCategory(edge.TargetPortId),
+                        edge.Target.Definition.GetInputPortType(edge.TargetPortId) ?? edge.Target.PortType);
+                }
+                if (ResolveReroutePort(edge.Target, visited) is { } downstream) return downstream;
+            }
+        }
+        return null;
+    }
+
+    private sealed class InsertRerouteCommand(
+        GraphWorkspaceViewModel graph,
+        GraphConnectionViewModel original,
+        GraphNodeViewModel reroute,
+        GraphConnectionViewModel first,
+        GraphConnectionViewModel second) : IUndoableCommand
+    {
+        private int _originalIndex;
+        public string Description => $"Insert reroute between {original.Source.Name} and {original.Target.Name}";
+
+        public void Execute()
+        {
+            _originalIndex = graph.Connections.IndexOf(original);
+            graph.RemoveConnection(original);
+            graph.AddNode(reroute, graph.Nodes.Count);
+            graph.AddConnection(first, graph.Connections.Count);
+            graph.AddConnection(second, graph.Connections.Count);
+        }
+
+        public void Undo()
+        {
+            graph.RemoveConnection(second);
+            graph.RemoveConnection(first);
+            graph.RemoveNode(reroute);
+            graph.AddConnection(original, _originalIndex >= 0 ? _originalIndex : graph.Connections.Count);
+        }
     }
 }

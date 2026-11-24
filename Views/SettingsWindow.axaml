@@ -126,7 +126,7 @@
                         </StackPanel>
                         <StackPanel Grid.Row="1" Spacing="4">
                             <TextBlock Classes="editor-label" Text="{DynamicResource Text.Editor.CurvePan}" />
-                            <ComboBox ItemsSource="{Binding Shortcuts.PanOptions}" SelectedItem="{Binding Shortcuts.CurvePanButton}">
+                            <ComboBox ItemsSource="{Binding Shortcuts.GraphPanOptions}" SelectedItem="{Binding Shortcuts.CurvePanButton}">
                                 <ComboBox.ItemTemplate>
                                     <DataTemplate><views:LocalizedOptionText Value="{ReflectionBinding}" /></DataTemplate>
                                 </ComboBox.ItemTemplate>

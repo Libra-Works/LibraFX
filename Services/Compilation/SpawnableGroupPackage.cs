@@ -79,6 +79,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
         IRenderResourceBindingContext? resourceContext = null, VfxCompileOptions? options = null)
     {
         VfxProgram.ValidateForCompilation(graph);
+        graph = RerouteLowering.Lower(graph);
         CpuParticleSchema.ValidateContext(graph);
         if (options?.IncludePreviewDebugDraw != true) graph = PreviewDebugDraw.Strip(graph);
         RejectTemplateGameIo(graph, withinTemplate: false);

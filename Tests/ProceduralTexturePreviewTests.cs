@@ -60,6 +60,17 @@ internal static class ProceduralTexturePreviewTests
                 throw new InvalidOperationException("Closing the Flow must release its local preview bitmap.");
         }
         finally { window.Close(); }
+        var modelNode = graph.CreateNode(new("ProceduralModel"));
+        var modelSnapshot = graph.CreateSnapshot().Nodes.Single(n => n.Id == modelNode.Id);
+        var meshFrame = ProceduralMeshPreview.Render(modelSnapshot, 0, CancellationToken.None);
+        if (meshFrame.Positions.Length < 9 || meshFrame.Indices.Length < 3)
+            throw new InvalidOperationException("ProceduralModel default preview must produce visible geometry.");
+        var materialNode = graph.CreateNode(new("ProceduralMaterial"));
+        var materialSnapshot = graph.CreateSnapshot().Nodes.Single(n => n.Id == materialNode.Id);
+        var materialFrame = ProceduralTexturePreview.Render(materialSnapshot, 0, CancellationToken.None);
+        if (materialFrame.Pixels.Length != materialFrame.Width * materialFrame.Height * 4)
+            throw new InvalidOperationException("ProceduralMaterial default preview must render pixels.");
+
         Console.WriteLine("Local procedural texture preview: runtime pixels, transparency, animation and UI lifetime passed.");
     }
 }

@@ -136,14 +136,14 @@ public sealed partial class LiberaFxMcpTools
     }
 
     [McpServerTool(Name = "libera_graph_create_node", Destructive = false, OpenWorld = false)]
-    [Description("Create one editable node. layout='flow' appends to the right without viewport wrapping when coordinates are omitted; default compact preserves legacy placement. Explicit coordinates are always retained. For connected batches prefer apply_plan with layout='flow'. This never creates a runtime instance.")]
+    [Description("Create one editable node. Default layout='flow' appends to the right without viewport wrapping when coordinates are omitted; compact or manual preserves legacy/explicit placement. Explicit coordinates are always retained. For connected batches prefer apply_plan with layout='flow'. This never creates a runtime instance.")]
     public static async Task<string> CreateNode(
         ActiveGraphProvider activeGraph,
         [Description("Copy the exact kind field from libera_graph_list_node_types (either a name like Float or a UUID). The qualifiedName is also accepted; typeName alone is not a general identifier.")] string kind,
         [Description("Optional horizontal position.")] double? x = null,
         [Description("Optional vertical position.")] double? y = null,
         [Description("Override the family default; false creates an explicitly typed legacy node.")] bool? isPolymorphic = null,
-        [Description("compact (legacy default), flow, or manual.")] string layout = "compact") =>
+        [Description("flow (default), compact, or manual.")] string layout = "flow") =>
         await ChatMcpExecution.InvokeAsync(() =>
         {
             ValidatePosition(x, y);

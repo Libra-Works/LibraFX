@@ -15,8 +15,8 @@ namespace LiberaFx.Views;
 public sealed partial class ProceduralWorkspaceView
 {
     private readonly StackPanel _texturePreview = new() { Name = "LocalTexturePreview", Margin = new Thickness(12, 8), Spacing = 4 };
-    private readonly Image _textureImage = new() { Name = "TexturePreviewImage", Stretch = Stretch.Uniform };
-    private readonly ProceduralMeshPreviewView _meshPreview = new() { Name = "MeshPreview" };
+    private readonly Image _textureImage = new() { Name = "TexturePreviewImage", Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
+    private readonly ProceduralMeshPreviewView _meshPreview = new() { Name = "MeshPreview", HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
     private readonly TextBlock _texturePreviewTitle = new();
     private readonly TextBlock _texturePreviewStatus = new() { FontSize = 11, TextWrapping = TextWrapping.Wrap };
     private readonly NumericUpDown _texturePreviewTime = new() { Minimum = 0, Maximum = 1_000_000, Value = 0, Increment = .1m, Width = 115 };
@@ -57,6 +57,7 @@ public sealed partial class ProceduralWorkspaceView
             if (IsVisible && !_texturePreviewBusy)
                 _texturePreviewTime.Value = (decimal)Math.Min(1_000_000, _texturePreviewEpoch + _texturePreviewClock.Elapsed.TotalSeconds);
         };
+        _texturePreview.AttachedToVisualTree += (_, _) => { if (IsVisible && _nodeId != Guid.Empty) QueueTexturePreview(); };
         return _texturePreview;
     }
 

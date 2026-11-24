@@ -82,6 +82,8 @@
   "Editor.NodeGroup.Lifecycle": "Lifecycle",
   "Editor.Parameter.Seconds": "Seconds",
   "Editor.Node.OnStart": "On Start",
+  "Editor.Node.Reroute": "Reroute",
+  "Editor.AddReroute": "Add reroute",
   "Editor.Node.SpawnOutputVector3": "Group Output (Vector3)",
   "Editor.Node.SpawnOutputFloat": "Group Output (Float)",
   "Editor.Node.SpawnOutputVector2": "Group Output (Vector2)",

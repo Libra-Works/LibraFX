@@ -66,9 +66,9 @@ public partial class GraphEditorView
         _proceduralWorkspace.PropertyChanged -= OnSpecializedVisibilityChanged;
         _proceduralWorkspace.PropertyChanged += OnSpecializedVisibilityChanged;
         SpecializedWorkspace.Content = _proceduralWorkspace;
+        SpecializedWorkspace.IsVisible = true;
         // Open closes an earlier session before making the workspace visible.
         _proceduralWorkspace.Open(_specializedDocument!, nodeId);
-        SpecializedWorkspace.IsVisible = true;
         RefreshSpecializedBreadcrumbs(this, EventArgs.Empty);
     }
 

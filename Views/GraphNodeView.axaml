@@ -17,9 +17,15 @@
             AutomationProperties.HelpText="{Binding DiagnosticText}"
             BorderThickness="2"
             CornerRadius="4">
-        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
+              Background="Transparent"
+              PointerPressed="OnHeaderPointerPressed"
+              PointerMoved="OnHeaderPointerMoved"
+              PointerReleased="OnHeaderPointerReleased"
+              PointerCaptureLost="OnHeaderPointerCaptureLost">
             <Border Grid.Row="0"
                     x:Name="NodeHeader"
+                    IsVisible="{Binding !IsReroute}"
                     Padding="8"
                     Background="{DynamicResource EffectBorderBrush}"
                     ToolTip.Tip="{Binding HeaderHelpToolTip}"

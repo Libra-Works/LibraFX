@@ -287,13 +287,22 @@ public partial class GraphEditorView : UserControl
             sender is Control background && DataContext is GraphWorkspaceViewModel graph)
         {
             Focus();
+            var clickPoint = ToGraphPoint(e.GetPosition(GraphCanvas));
+            if (e.ClickCount >= 2 &&
+                GraphSceneLayer.HitTestConnection(graph, clickPoint) is { } hitConnection)
+            {
+                graph.CancelConnection();
+                graph.InsertRerouteOnConnection(hitConnection, clickPoint.X, clickPoint.Y);
+                e.Handled = true;
+                return;
+            }
             graph.CancelConnection();
             _isSelecting = true;
             _selectionStart = e.GetPosition(GraphCanvas);
             _selectionBefore = e.KeyModifiers.HasFlag(KeyModifiers.Control)
                 ? graph.SelectedNodes.ToArray()
                 : [];
-            _pastePosition = ToGraphPoint(_selectionStart);
+            _pastePosition = clickPoint;
             e.Pointer.Capture(background);
             e.Handled = true;
         }
@@ -364,6 +373,8 @@ public partial class GraphEditorView : UserControl
         _pastePosition = ToGraphPoint(e.GetPosition(GraphCanvas));
         var hitNode = FindHitNode(e.Source);
         NewSpawnableGroupMenu.IsVisible = hitNode is null;
+        AddRerouteMenu.IsVisible = hitNode is null &&
+            GraphSceneLayer.HitTestConnection(graph, _pastePosition) is not null;
         if (hitNode?.DataContext is GraphNodeViewModel node && !node.IsSelected && graph.SelectedNodes.Count < 2)
         {
             graph.SelectNode(node);
@@ -389,6 +400,14 @@ public partial class GraphEditorView : UserControl
 
     private async void OnPasteClick(object? sender, RoutedEventArgs e) => await PasteAsync();
     private void OnAddNodeClick(object? sender, RoutedEventArgs e) => ShowNodeSearch(_pastePosition);
+    private void OnAddRerouteClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not GraphWorkspaceViewModel graph) return;
+        if (GraphSceneLayer.HitTestConnection(graph, _pastePosition) is { } connection)
+        {
+            graph.InsertRerouteOnConnection(connection, _pastePosition.X, _pastePosition.Y);
+        }
+    }
     private void OnAddCommentClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not GraphWorkspaceViewModel graph) return;

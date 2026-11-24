@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "typeId": "c1a7f310-8e40-4b88-9000-000000000001",
+  "namespace": "LiberaFx",
+  "kind": "Reroute",
+  "name": "Reroute",
+  "displayNameKey": "Editor.Node.Reroute",
+  "group": "Flow",
+  "portType": "Float",
+  "portCategory": "Parameter",
+  "inputPorts": [
+    { "id": "in", "name": "In" }
+  ],
+  "outputPorts": [
+    { "id": "out", "name": "Out" }
+  ],
+  "parameters": []
+}

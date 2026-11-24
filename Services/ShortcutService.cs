@@ -53,7 +53,7 @@ public sealed class ShortcutEntry : ObservableObject
 public sealed class ShortcutService : ObservableObject
 {
     private readonly string _path;
-    private string _curvePanButton = "Middle";
+    private string _curvePanButton = "Right + Middle";
     private string _curveZoomModifier = "None";
     private string _graphPanButton = "Right + Middle";
     private string _graphZoomModifier = "None";
@@ -95,7 +95,7 @@ public sealed class ShortcutService : ObservableObject
     public string CurvePanButton
     {
         get => _curvePanButton;
-        set => SetMouseOption(ref _curvePanButton, value, PanOptions, nameof(CurvePanButton));
+        set => SetMouseOption(ref _curvePanButton, value, GraphPanOptions, nameof(CurvePanButton));
     }
     public string CurveZoomModifier
     {
@@ -176,7 +176,7 @@ public sealed class ShortcutService : ObservableObject
         var oldGraphPan = _graphPanButton;
         var oldGraphZoom = _graphZoomModifier;
         foreach (var entry in Entries) entry.Set(entry.DefaultKey, entry.DefaultModifiers);
-        _curvePanButton = "Middle";
+        _curvePanButton = "Right + Middle";
         _curveZoomModifier = "None";
         _graphPanButton = "Right + Middle";
         _graphZoomModifier = "None";
@@ -247,7 +247,7 @@ public sealed class ShortcutService : ObservableObject
                 }
                 for (var i = 0; i < Entries.Count; i++) Entries[i].Set(desired[i].Key, desired[i].Modifiers);
             }
-            if (PanOptions.Contains(file.CurvePanButton)) _curvePanButton = file.CurvePanButton!;
+            if (GraphPanOptions.Contains(file.CurvePanButton)) _curvePanButton = file.CurvePanButton!;
             if (ZoomOptions.Contains(file.CurveZoomModifier)) _curveZoomModifier = file.CurveZoomModifier!;
             if (GraphPanOptions.Contains(file.GraphPanButton)) _graphPanButton = file.GraphPanButton!;
             if (ZoomOptions.Contains(file.GraphZoomModifier)) _graphZoomModifier = file.GraphZoomModifier!;

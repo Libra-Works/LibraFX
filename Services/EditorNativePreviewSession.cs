@@ -55,7 +55,23 @@ public sealed class EditorNativePreviewSession : IDisposable
     public static string ResolveLibraryPath(string? explicitPath = null)
     {
         var path = explicitPath ?? Environment.GetEnvironmentVariable("LIBERAFX_PREVIEW_NATIVE_LIBRARY");
-        if (string.IsNullOrWhiteSpace(path)) path = Path.Combine(AppContext.BaseDirectory, "liberafx_native.dll");
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            var bundled = Path.Combine(AppContext.BaseDirectory, "liberafx_native.dll");
+            if (File.Exists(bundled))
+            {
+                path = bundled;
+            }
+            else
+            {
+                for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+                {
+                    var candidate = Path.Combine(dir.FullName, "Runtime", "build-native", "Release", "liberafx_native.dll");
+                    if (File.Exists(candidate)) { path = candidate; break; }
+                }
+                path ??= bundled;
+            }
+        }
         if (!Path.IsPathFullyQualified(path) || !File.Exists(path))
             throw new InvalidDataException("Editor-native lifecycle preview requires a built native runtime. Set " +
                 "LIBERAFX_PREVIEW_NATIVE_LIBRARY to an existing absolute liberafx_native.dll path, or place it beside the editor; then resync preview.");
