@@ -48,7 +48,7 @@ static func _handle_folders(req: Dictionary, req_id: String) -> String:
 			for sub in subdirs:
 				if sub.begins_with("."):
 					continue
-				var full := (folder.trim_suffix("/") + "/" + sub) if folder != "res://" else ("res://" + sub)
+				var full: String = (folder.trim_suffix("/") + "/" + sub) if folder != "res://" else ("res://" + sub)
 				entries.append({"path": full, "name": sub})
 	var page := entries.slice(offset, mini(entries.size(), offset + limit))
 	return JSON.stringify({
@@ -97,7 +97,7 @@ static func _scan_dir(dir_path: String, query: String, asset_class: String, out:
 			return
 		if file_name.begins_with(".") or file_name.ends_with(".import") or file_name.ends_with(".uid"):
 			continue
-		var full := (dir_path.trim_suffix("/") + "/" + file_name) if dir_path != "res://" else ("res://" + file_name)
+		var full: String = (dir_path.trim_suffix("/") + "/" + file_name) if dir_path != "res://" else ("res://" + file_name)
 		var kind := _classify_extension(file_name.get_extension().to_lower())
 		if kind.is_empty():
 			continue
@@ -116,7 +116,7 @@ static func _scan_dir(dir_path: String, query: String, asset_class: String, out:
 	for sub in dir.get_directories():
 		if sub.begins_with("."):
 			continue
-		var next := (dir_path.trim_suffix("/") + "/" + sub) if dir_path != "res://" else ("res://" + sub)
+		var next: String = (dir_path.trim_suffix("/") + "/" + sub) if dir_path != "res://" else ("res://" + sub)
 		_scan_dir(next, query, asset_class, out)
 
 

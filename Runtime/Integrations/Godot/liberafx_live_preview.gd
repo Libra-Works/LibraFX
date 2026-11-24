@@ -96,7 +96,7 @@ func _connect_local(player: Node, invitation: String, public_pem: String, packag
 	if package_mode:
 		_package_preview = package_script.new()
 		_package_preview.call("initialize", player)
-	var adapter_path := get_script().resource_path.get_base_dir().path_join("liberafx_resource_adapter.gd")
+	var adapter_path: String = (get_script() as Script).resource_path.get_base_dir().path_join("liberafx_resource_adapter.gd")
 	if ResourceLoader.exists(adapter_path):
 		_resource_adapter = load(adapter_path) as Script
 	_peer = socket

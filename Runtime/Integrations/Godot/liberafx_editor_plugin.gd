@@ -103,9 +103,8 @@ func _build_dock() -> void:
 	vp_container.add_child(_preview_viewport)
 
 	var cam := Camera3D.new()
-	cam.position = Vector3(0, 1.5, 4.5)
-	cam.look_at(Vector3.ZERO, Vector3.UP)
 	_preview_viewport.add_child(cam)
+	cam.look_at_from_position(Vector3(0, 1.5, 4.5), Vector3.ZERO, Vector3.UP)
 
 	var light := DirectionalLight3D.new()
 	light.rotation_degrees = Vector3(-45, 35, 0)
