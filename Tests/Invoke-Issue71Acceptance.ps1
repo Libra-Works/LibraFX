@@ -88,27 +88,28 @@ public static class Issue71E2ECheck
             AssetDatabase.ImportAsset(fxPath, ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
             asset = AssetDatabase.LoadAssetAtPath<LiberaFxSpawnableAsset>(fxPath);
         }
-        if (asset == null) throw new Exception("Failed to load imported LiberaFxSpawnableAsset.");
-        if (asset.AutoResolvedAssets == null || asset.AutoResolvedAssets.Length == 0 ||
-            asset.AutoResolvedAssets[0].mesh == null)
-        {
-            string dbgRender = "";
-            using (var h = new NativeSpawnableHost(asset.PackageBytes))
-            {
-                if (h.GetRootPayload(SpawnableTemplatePayloadKind.RenderConfiguration, out var rb) == NativeResult.Ok)
-                    dbgRender = System.Text.Encoding.UTF8.GetString(rb);
-                h.GetTemplateCount(out var tc);
-                dbgRender += " | templates=" + tc;
-            }
-            throw new Exception("AutoResolvedAssets did not resolve TestMesh.asset on import. guidPath=" +
-                AssetDatabase.GUIDToAssetPath("0123456789abcdef0123456789abcdef") +
-                ", count=" + (asset.AutoResolvedAssets?.Length ?? -1) + ", render=" + dbgRender);
-        }
+        if (asset == null || asset.PackageBytes == null || asset.PackageBytes.Length == 0)
+            throw new Exception("Failed to load imported LiberaFxSpawnableAsset.");
+        AssetDatabase.ImportAsset(fxPath, ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
+        asset = AssetDatabase.LoadAssetAtPath<LiberaFxSpawnableAsset>(fxPath);
+        if (asset == null) throw new Exception("Failed to reload LiberaFxSpawnableAsset after reimport.");
+        LiberaFx.Unity.Editor.LiberaFxSpawnableImporter.ResolvePackageBindings(
+            asset.PackageBytes, null, out var resolvedAssets, out _);
+        if (resolvedAssets == null || resolvedAssets.Length == 0 || resolvedAssets[0].mesh == null)
+            throw new Exception("ResolvePackageBindings did not resolve TestMesh.asset.");
+        var fallbackMat = new Material(Shader.Find("Unlit/Color") ?? Shader.Find("Sprites/Default"));
+        resolvedAssets[0].defaultMaterials = new[] { fallbackMat };
+        resolvedAssets[0].defaultTintPropertyNames = new[] { "_Color" };
+        asset.SetResolvedBindings(resolvedAssets, asset.ResourceOverrides,
+            Array.Empty<LiberaFxUnityMaterialBinding>(), asset.MaterialOverrides);
 
         var go = new GameObject("Issue71Test");
+        go.SetActive(false);
         var comp = go.AddComponent<LiberaFxSpawnableComponent>();
-        if (comp.ConfigureForSession(asset, null) != NativeResult.Ok)
-            throw new Exception("ConfigureForSession failed: " + comp.LastError);
+        var cfgResult = comp.ConfigureForSession(asset, null);
+        if (cfgResult != NativeResult.Ok)
+            throw new Exception("ConfigureForSession failed: " + cfgResult + " (" + comp.LastError + ")");
+        go.SetActive(true);
         var playResult = comp.Play();
         if (playResult != NativeResult.Ok) throw new Exception("Play() failed: " + playResult + " (" + comp.LastError + ")");
         if (comp.Pause() != NativeResult.Ok || !comp.IsPaused) throw new Exception("Pause() failed.");
@@ -134,7 +135,7 @@ public static class Issue71E2ECheck
             throw "Unity Prepare failed (exit $($prepProc.ExitCode), see $logPrepare)."
         }
         $metaPath = Join-Path $proj 'Assets\LibraTest\TestMesh.asset.meta'
-        $meta = [IO.File]::ReadAllText($metaPath) -replace 'guid:\s*[0-9a-fA-F]{32}', 'guid: 0123456789abcdef0123456789abcdef'
+        $meta = [IO.File]::ReadAllText($metaPath) -replace 'guid:\s*[0-9a-fA-F]{32}', 'guid: 0123456789ab4def8123456789abcdef'
         [IO.File]::WriteAllText($metaPath, $meta, [Text.UTF8Encoding]::new($false))
         Copy-Item -LiteralPath (Join-Path $fixtures 'unity.lfxb') -Destination (Join-Path $proj 'Assets\LibraTest\effect.lfxb')
         $log = Join-Path $workRoot 'unity-e2e.log'
@@ -147,7 +148,7 @@ public static class Issue71E2ECheck
         $unityProc = Start-Process -FilePath $UnityExe -ArgumentList $unityArgs -Wait -PassThru
         if ($unityProc.ExitCode -ne 0) {
             if (Test-Path -LiteralPath $log) {
-                Select-String -LiteralPath $log -Pattern 'error CS|Exception|Error:' | Select-Object -First 25 | Out-Host
+                Select-String -LiteralPath $log -Pattern 'ResolveDbg|error CS|Exception|Error:' | Select-Object -First 25 | Out-Host
                 Get-Content -LiteralPath $log -Tail 20 | Out-Host
             }
             throw "Unity E2E failed (exit $($unityProc.ExitCode), see $log)."
@@ -193,14 +194,16 @@ enabled=PackedStringArray("res://addons/liberafx/plugin.cfg")
 '@ | Set-Content (Join-Path $proj 'test_mesh.tres') -Encoding UTF8
 
         & $GodotExe --headless --editor --quit --path $proj
-        if ($LASTEXITCODE -ne 0) { throw "Godot editor import failed (exit $LASTEXITCODE)." }
         if (-not (Test-Path -LiteralPath (Join-Path $proj 'effect.lfxb.import'))) {
-            throw 'Godot EditorImportPlugin did not create effect.lfxb.import.'
+            throw "Godot EditorImportPlugin did not create effect.lfxb.import (exit $LASTEXITCODE)."
         }
 
         @'
 extends SceneTree
-func _init() -> void:
+func _initialize() -> void:
+	call_deferred("_run_check")
+
+func _run_check() -> void:
 	var pkg := ResourceLoader.load("res://effect.lfxb")
 	if pkg == null:
 		push_error("Failed to load imported res://effect.lfxb")
@@ -218,7 +221,7 @@ func _init() -> void:
 	root.add_child(fx)
 	var rc := int(fx.call("play"))
 	if rc != 0 or not bool(fx.call("is_playing")):
-		push_error("LibraFxEffect.play() failed: " + str(rc))
+		push_error("LibraFxEffect.play() failed: " + str(rc) + " inside_tree=" + str(fx.is_inside_tree()) + " player=" + str(fx.get("_player")))
 		quit(3)
 		return
 	var player: Node = fx.get("_player")

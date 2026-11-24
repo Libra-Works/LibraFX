@@ -76,7 +76,7 @@ namespace LiberaFx.Unity.Editor
             }
         }
 
-        internal static void ResolvePackageBindings(byte[] bytes, AssetImportContext context,
+        public static void ResolvePackageBindings(byte[] bytes, AssetImportContext context,
             out LiberaFxUnityRenderAssetBinding[] resolvedAssets,
             out LiberaFxUnityMaterialBinding[] resolvedMaterials)
         {
@@ -208,40 +208,6 @@ namespace LiberaFx.Unity.Editor
             return bytes != null && bytes.Length >= 4 &&
                 bytes[0] == signature[0] && bytes[1] == signature[1] &&
                 bytes[2] == signature[2] && bytes[3] == signature[3];
-        }
-    }
-
-    internal sealed class LiberaFxSpawnablePostprocessor : AssetPostprocessor
-    {
-        private static void OnPostprocessAllAssets(
-            string[] importedAssets,
-            string[] deletedAssets,
-            string[] movedAssets,
-            string[] movedFromAssetPaths)
-        {
-            if (importedAssets == null || importedAssets.Length == 0) return;
-            foreach (var path in importedAssets)
-            {
-                if (string.IsNullOrEmpty(path) ||
-                    (!path.EndsWith(".lfxb", StringComparison.OrdinalIgnoreCase) &&
-                     !path.EndsWith(".lfxp", StringComparison.OrdinalIgnoreCase)))
-                    continue;
-
-                var asset = AssetDatabase.LoadAssetAtPath<LiberaFxSpawnableAsset>(path);
-                if (asset == null || asset.PackageBytes == null || asset.PackageBytes.Length < 4)
-                    continue;
-                if ((asset.AutoResolvedAssets != null && asset.AutoResolvedAssets.Length > 0) ||
-                    (asset.AutoResolvedMaterials != null && asset.AutoResolvedMaterials.Length > 0))
-                    continue;
-
-                LiberaFxSpawnableImporter.ResolvePackageBindings(
-                    asset.PackageBytes, null, out var resolvedAssets, out var resolvedMaterials);
-                if (resolvedAssets.Length > 0 || resolvedMaterials.Length > 0)
-                {
-                    asset.SetResolvedBindings(
-                        resolvedAssets, asset.ResourceOverrides, resolvedMaterials, asset.MaterialOverrides);
-                }
-            }
         }
     }
 }

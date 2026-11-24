@@ -58,17 +58,24 @@ func _import(source_file: String, save_path: String, _options: Dictionary,
 
 func _resolve_res_paths(bytes: PackedByteArray) -> Dictionary:
 	var resolved: Dictionary = {}
-	var text := bytes.get_string_from_utf8()
-	if text.is_empty():
-		return resolved
-	var regex := RegEx.new()
-	if regex.compile("res://[A-Za-z0-9_./\\-]+") != OK:
-		return resolved
-	for m in regex.search_all(text):
-		var path := m.get_string()
-		if resolved.has(path) or not ResourceLoader.exists(path):
+	var size := bytes.size()
+	var i := 0
+	while i + 6 < size:
+		if bytes[i] == 114 and bytes[i + 1] == 101 and bytes[i + 2] == 115 and bytes[i + 3] == 58 and bytes[i + 4] == 47 and bytes[i + 5] == 47:
+			var j := i + 6
+			while j < size:
+				var b := bytes[j]
+				var ok := (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or (b >= 48 and b <= 57) or b == 95 or b == 46 or b == 47 or b == 45
+				if not ok:
+					break
+				j += 1
+			if j > i + 6:
+				var path := bytes.slice(i, j).get_string_from_ascii()
+				if not resolved.has(path) and ResourceLoader.exists(path):
+					var res := ResourceLoader.load(path)
+					if res is Mesh or res is Texture2D or res is Material:
+						resolved[path] = res
+			i = j
 			continue
-		var res := ResourceLoader.load(path)
-		if res is Mesh or res is Texture2D or res is Material:
-			resolved[path] = res
+		i += 1
 	return resolved
