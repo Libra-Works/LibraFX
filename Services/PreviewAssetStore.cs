@@ -380,8 +380,8 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
     private void ValidateProjectRequest(Guid clientId, EngineProjectIdentity project)
     {
         ArgumentNullException.ThrowIfNull(project);
-        if (project.ProjectId == Guid.Empty || project.Engine is not ("Unity" or "Unreal"))
-            throw new ArgumentException("A verified Unity or Unreal project identity is required.", nameof(project));
+        if (project.ProjectId == Guid.Empty || project.Engine is not ("Unity" or "Unreal" or "Godot"))
+            throw new ArgumentException("A verified Unity, Unreal, or Godot project identity is required.", nameof(project));
         var peer = telemetry.Clients(clientId).SingleOrDefault();
         if (peer is null || !Supports(clientId, "resourceIdentity") ||
             !string.Equals(peer.Engine, project.Engine, StringComparison.Ordinal))
@@ -447,7 +447,8 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
     {
         var asset = value.Deserialize<EngineAsset>(JsonOptions) ?? throw new InvalidDataException("Invalid asset.");
         ValidateAssetPath(asset.Path);
-        if (string.IsNullOrWhiteSpace(asset.Name) || asset.Name.Length > 256 || asset.Engine != "Unreal" ||
+        if (string.IsNullOrWhiteSpace(asset.Name) || asset.Name.Length > 256 ||
+            asset.Engine is not ("Unreal" or "Unity" or "Godot") ||
             asset.AssetClass is not ("model" or "texture" or "material") ||
             asset.Width < 0 || asset.Height < 0 || asset.Materials?.Count > 128)
             throw new InvalidDataException("Invalid engine asset metadata.");

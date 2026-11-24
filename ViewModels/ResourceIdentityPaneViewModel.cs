@@ -726,8 +726,13 @@ public sealed class ResourceIdentityPaneViewModel : ObservableObject, IDisposabl
             Status = LocalizationService.Shared.Get("Resources.IdentityParameterInvalid");
             return;
         }
-        var parameterBinding = new OpaqueBinding(capturedBindingFormat == "unreal.object-path"
-            ? "unreal.material-parameter.v1" : "unity.shader-property.v1",
+        var parameterFormat = capturedBindingFormat switch
+        {
+            "unreal.object-path" => "unreal.material-parameter.v1",
+            "godot.res-path.v1" => "godot.shader-parameter.v1",
+            _ => "unity.shader-property.v1"
+        };
+        var parameterBinding = new OpaqueBinding(parameterFormat,
             JsonSerializer.Serialize(new { name = capturedBindingName, association, index }));
         ResourceProbeResult probe;
         try
@@ -847,9 +852,11 @@ public sealed class ResourceIdentityPaneViewModel : ObservableObject, IDisposabl
         {
             "Unity" => "unity.asset-guid-local-id.v1",
             "Unreal" => "unreal.object-path",
+            "Godot" => "godot.res-path.v1",
             _ => ""
         };
         if (BindingFormat == "unreal.object-path" && string.IsNullOrEmpty(BindingValue)) BindingValue = "/Game/";
+        if (BindingFormat == "godot.res-path.v1" && string.IsNullOrEmpty(BindingValue)) BindingValue = "res://";
     }
 
     private static ResourceIdentityDocument EmptyDocument() => new(1, [], [], [], [], []);

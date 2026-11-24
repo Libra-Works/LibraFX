@@ -93,7 +93,7 @@ public static class ResourceIdentityExport
     public static byte[] CreateManifest(GraphSnapshot graph, ResourceIdentityDocument document,
         EngineProjectIdentity project, ResourceIdentitySnapshotProbe probe)
     {
-        if (project.Engine is not ("Unreal" or "Unity"))
+        if (project.Engine is not ("Unreal" or "Unity" or "Godot"))
             throw new InvalidDataException("This render manifest currently supports Unreal and Unity only.");
         if (probe.Project != project)
             throw new InvalidDataException("Binding snapshot belongs to a different engine project.");

@@ -15,6 +15,7 @@ var _player: Node
 var _deadline: int
 var _resync_pending := false
 var _package_preview: RefCounted
+var _resource_adapter: Script
 var _hello_sent := false
 
 
@@ -95,6 +96,9 @@ func _connect_local(player: Node, invitation: String, public_pem: String, packag
 	if package_mode:
 		_package_preview = package_script.new()
 		_package_preview.call("initialize", player)
+	var adapter_path := get_script().resource_path.get_base_dir().path_join("liberafx_resource_adapter.gd")
+	if ResourceLoader.exists(adapter_path):
+		_resource_adapter = load(adapter_path) as Script
 	_peer = socket
 	_deadline = Time.get_ticks_msec() + CONNECT_TIMEOUT_MS
 	_hello_sent = false
@@ -130,8 +134,12 @@ func _process(_delta: float) -> void:
 	if state != WebSocketPeer.STATE_OPEN:
 		return
 	if _package_preview != null and not _hello_sent:
+		var caps := ["godotPackagePreview"]
+		if _resource_adapter != null:
+			caps.append("assets")
+			caps.append("resourceIdentity")
 		var hello := JSON.stringify({"type": "hello", "engine": "Godot", "role": "editor",
-				"version": 1, "capabilities": ["godotPackagePreview"]})
+				"version": 1, "capabilities": caps})
 		if _peer.send_text(hello) != OK:
 			disconnect_preview()
 			connection_closed.emit()
@@ -141,7 +149,18 @@ func _process(_delta: float) -> void:
 		if _peer.get_available_packet_count() == 0:
 			break
 		var bytes := _peer.get_packet()
-		if _peer.was_string_packet() or bytes.size() > MAX_PACKET_BYTES:
+		if _peer.was_string_packet():
+			if _resource_adapter != null and bytes.size() <= MAX_PACKET_BYTES:
+				var reply := str(_resource_adapter.call("process_request", bytes.get_string_from_utf8()))
+				if not reply.is_empty() and _peer.send_text(reply) != OK:
+					disconnect_preview()
+					connection_closed.emit()
+					return
+				continue
+			disconnect_preview()
+			frame_rejected.emit(ERR_INVALID_DATA)
+			return
+		if bytes.size() > MAX_PACKET_BYTES:
 			disconnect_preview()
 			frame_rejected.emit(ERR_INVALID_DATA)
 			return

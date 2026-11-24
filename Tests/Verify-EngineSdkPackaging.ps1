@@ -198,7 +198,7 @@ if ($Engine -eq 'Unity') {
 if ($Engine -eq 'Godot') {
     $addonRoot = Join-Path $ArtifactRoot 'liberafx'
     foreach ($required in 'VERSION.json', 'LICENSE', 'USAGE.txt', 'LIVE_PREVIEW.txt',
-        'liberafx.gdextension', 'liberafx_live_preview.gd', 'liberafx_package_preview.gd', 'icon.png') {
+        'liberafx.gdextension', 'liberafx_live_preview.gd', 'liberafx_package_preview.gd', 'liberafx_resource_adapter.gd', 'icon.png') {
         Assert-FileExists (Join-Path $addonRoot $required) "Missing required Godot addon file: $required"
     }
     $gdext = Get-Content -LiteralPath (Join-Path $addonRoot 'liberafx.gdextension') -Raw

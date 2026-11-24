@@ -106,7 +106,7 @@ namespace LiberaFx.Unity
                     ? new UriBuilder(uri) { Query = "protocol=3&unityPackagePreview=1" }.Uri : uri;
                 await candidate.ConnectAsync(connectionUri, stop.Token);
                 var acceptedCapabilities = showLivePreview
-                    ? "\"resourceIdentity\",\"unityPackagePreview\"" : "\"resourceIdentity\"";
+                    ? "\"assets\",\"resourceIdentity\",\"unityPackagePreview\"" : "\"assets\",\"resourceIdentity\"";
                 var hello = Encoding.UTF8.GetBytes(
                     "{\"type\":\"hello\",\"engine\":\"Unity\",\"role\":\"editor\",\"version\":1," +
                     "\"capabilities\":[" + acceptedCapabilities + "],\"viewerName\":\"Unity Editor\"}");
