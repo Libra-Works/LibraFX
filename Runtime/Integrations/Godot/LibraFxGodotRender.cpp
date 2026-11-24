@@ -1680,7 +1680,7 @@ auto PackageRenderRenderer::updateCpuParticles(SpawnableHost& host, const Spawna
             auto blend = 0;
             auto doubleSided = true;
             auto emission = 1.0f;
-            const std::uint8_t* containerPtr = scope.kind == SpawnableScopeKind::Child ? scope.containerId.data() : nullptr;
+            const std::uint8_t* containerPtr = scope.kind == SpawnableScopeKind::Instance ? scope.containerId : nullptr;
             if (procedural_->resolveResourceTexture(containerPtr, scope.instanceId,
                     resourceId, procTexture, blend, doubleSided, emission) && procTexture.is_valid())
             {
