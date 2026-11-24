@@ -15,7 +15,8 @@ public sealed class GpuBackendRegistry
         var registered = new Dictionary<string, GpuBackendCapabilities>(StringComparer.Ordinal)
         {
             [GpuBackendCapabilities.Unreal.Id] = GpuBackendCapabilities.Unreal,
-            [GpuBackendCapabilities.Unity.Id] = GpuBackendCapabilities.Unity
+            [GpuBackendCapabilities.Unity.Id] = GpuBackendCapabilities.Unity,
+            [GpuBackendCapabilities.Godot.Id] = GpuBackendCapabilities.Godot
         };
         foreach (var profile in profiles)
         {

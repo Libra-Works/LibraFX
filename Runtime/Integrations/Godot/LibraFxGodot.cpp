@@ -761,6 +761,67 @@ public:
         return code(playback_->packageHost->fireGameSignal(utf8Name.get_data()));
     }
 
+    int request_natural_end()
+    {
+        if (!Thread::is_main_thread() || !playback_ || !playback_->packageHost) return code(Result::NotReady);
+        return code(playback_->packageHost->requestNaturalEnd());
+    }
+
+    int force_terminate()
+    {
+        if (!Thread::is_main_thread() || !playback_ || !playback_->packageHost) return code(Result::NotReady);
+        return code(playback_->packageHost->forceTerminate({}));
+    }
+
+    int force_terminate_child(const String& containerId, std::int64_t instanceId)
+    {
+        if (!Thread::is_main_thread() || !playback_ || !playback_->packageHost) return code(Result::NotReady);
+        auto id = std::array<std::uint8_t, 16>{};
+        if (instanceId <= 0 || !parse_node_id(containerId, id)) return code(Result::InvalidArgument);
+        auto scope = SpawnableScope{};
+        scope.kind = SpawnableScopeKind::Instance;
+        std::memcpy(scope.containerId, id.data(), id.size());
+        scope.instanceId = static_cast<GeneratorInstanceId>(instanceId);
+        return code(playback_->packageHost->forceTerminate(scope));
+    }
+
+    int set_instance_property(const String& containerId, std::int64_t instanceId,
+        const String& name, const PackedFloat64Array& values)
+    {
+        if (!Thread::is_main_thread() || !playback_ || !playback_->packageHost) return code(Result::NotReady);
+        auto id = std::array<std::uint8_t, 16>{};
+        if (instanceId <= 0 || !parse_node_id(containerId, id)) return code(Result::InvalidArgument);
+        auto scope = SpawnableScope{};
+        scope.kind = SpawnableScopeKind::Instance;
+        std::memcpy(scope.containerId, id.data(), id.size());
+        scope.instanceId = static_cast<GeneratorInstanceId>(instanceId);
+        auto target = SpawnableDebugTarget{};
+        const auto found = playback_->packageHost->debugTarget(scope, target);
+        if (found != Result::Ok) return code(found);
+        auto utf8Name = name.utf8();
+        auto lanes = std::vector<double>{};
+        lanes.reserve(static_cast<std::size_t>(values.size()));
+        for (auto index = 0; index < values.size(); ++index) lanes.push_back(values[index]);
+        return code(playback_->packageHost->setInstanceProperty(target, utf8Name.get_data(), lanes.data(), lanes.size()));
+    }
+
+    int fire_instance_signal(const String& containerId, std::int64_t instanceId, const String& name)
+    {
+        if (!Thread::is_main_thread() || !playback_ || !playback_->packageHost) return code(Result::NotReady);
+        if (dispatchingScriptAction_) return code(Result::Busy);
+        auto id = std::array<std::uint8_t, 16>{};
+        if (instanceId <= 0 || !parse_node_id(containerId, id)) return code(Result::InvalidArgument);
+        auto scope = SpawnableScope{};
+        scope.kind = SpawnableScopeKind::Instance;
+        std::memcpy(scope.containerId, id.data(), id.size());
+        scope.instanceId = static_cast<GeneratorInstanceId>(instanceId);
+        auto target = SpawnableDebugTarget{};
+        const auto found = playback_->packageHost->debugTarget(scope, target);
+        if (found != Result::Ok) return code(found);
+        auto utf8Name = name.utf8();
+        return code(playback_->packageHost->fireInstanceSignal(target, utf8Name.get_data()));
+    }
+
     bool bind_script_action(const String& signalName, const godot::Callable& handler, const String& resultProperty)
     {
         if (!Thread::is_main_thread() || !isScriptAction(signalName) ||
@@ -997,6 +1058,11 @@ protected:
         godot::ClassDB::bind_method(godot::D_METHOD("set_game_property", "name", "values"), &LibraEffectPlayer::set_game_property);
         godot::ClassDB::bind_method(godot::D_METHOD("set_game_bool_property", "name", "value"), &LibraEffectPlayer::set_game_bool_property);
         godot::ClassDB::bind_method(godot::D_METHOD("fire_game_signal", "name"), &LibraEffectPlayer::fire_game_signal);
+        godot::ClassDB::bind_method(godot::D_METHOD("request_natural_end"), &LibraEffectPlayer::request_natural_end);
+        godot::ClassDB::bind_method(godot::D_METHOD("force_terminate"), &LibraEffectPlayer::force_terminate);
+        godot::ClassDB::bind_method(godot::D_METHOD("force_terminate_child", "container_id", "instance_id"), &LibraEffectPlayer::force_terminate_child);
+        godot::ClassDB::bind_method(godot::D_METHOD("set_instance_property", "container_id", "instance_id", "name", "values"), &LibraEffectPlayer::set_instance_property);
+        godot::ClassDB::bind_method(godot::D_METHOD("fire_instance_signal", "container_id", "instance_id", "name"), &LibraEffectPlayer::fire_instance_signal);
         godot::ClassDB::bind_method(godot::D_METHOD("bind_script_action", "signal_name", "handler", "result_property"),
             &LibraEffectPlayer::bind_script_action, String{});
         godot::ClassDB::bind_method(godot::D_METHOD("unbind_script_action", "signal_name"),

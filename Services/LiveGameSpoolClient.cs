@@ -176,7 +176,7 @@ public sealed class LiveGameSpoolClient : IDisposable
     {
         if (endpoint.Protocol != 1 || endpoint.Transport != "isolated-local-spool" ||
             endpoint.Session is null || !SessionPattern.IsMatch(endpoint.Session) ||
-            endpoint.Engine is not ("Unity" or "Unreal") || endpoint.Process <= 0 ||
+            endpoint.Engine is not ("Unity" or "Unreal" or "Godot") || endpoint.Process <= 0 ||
             endpoint.SupportedUpdate != "restart-root-render-v1-v2")
             throw new InvalidDataException("Unsupported or malformed development endpoint descriptor.");
         if (endpoint.DebugDisconnect is not (null or "debug-lease-v1"))

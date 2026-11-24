@@ -24,7 +24,22 @@ internal sealed class UnityPackagePreviewSender
         {
             if (publication.SignalRequestSequence != _signalSequence)
             {
-                throw new NotSupportedException("Unity WSS package preview does not support manual Editor Send.");
+                if (!_loaded)
+                    throw new NotSupportedException("Unity WSS package preview has no loaded program for Editor Send.");
+                var requests = publication.SignalRequests
+                    .Where(request => request.Sequence > _signalSequence).ToArray();
+                if (publication.SignalRequestSequence < _signalSequence ||
+                    publication.SignalRequestSequence - _signalSequence != requests.Length ||
+                    requests.Length > 32 ||
+                    requests.Where((request, index) => request.Sequence != _signalSequence + index + 1).Any())
+                    throw new InvalidDataException("Preview Send history exceeded its bounded window; reconnect the Unity preview before sending again.");
+                _signalSequence = publication.SignalRequestSequence;
+                var signalPayload = JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    type = "unity_preview_signals",
+                    requests = requests.Select(request => new { nodeId = request.NodeId.ToString("D") })
+                }, JsonOptions);
+                return new(CompiledPreviewProtocol.CreateControl(signalPayload), CompiledPreviewKind.Control, publication);
             }
             return _loaded && _last!.Sequence < publication.Sequence
                 ? CompiledPreviewProtocol.CreatePayload(publication, CompiledPreviewKind.Playback, [],

@@ -54,6 +54,18 @@ namespace LiberaFx.Unity
                     }
                     return true;
                 }
+                if (control?.type == "unity_preview_signals")
+                {
+                    if (effect && control.requests != null)
+                    {
+                        foreach (var req in control.requests)
+                        {
+                            if (req != null && !string.IsNullOrEmpty(req.nodeId))
+                                effect.DispatchSignal(req.nodeId);
+                        }
+                    }
+                    return true;
+                }
                 if (control?.type != "preview_reset") return false;
                 Clear();
                 sequence = 0;
@@ -196,7 +208,8 @@ namespace LiberaFx.Unity
             Clear();
             viewport.Cleanup();
         }
-        [Serializable] private sealed class PreviewControl { public string type; public double[] offset; }
+        [Serializable] private sealed class SignalRequest { public string nodeId; }
+        [Serializable] private sealed class PreviewControl { public string type; public double[] offset; public SignalRequest[] requests; }
     }
 }
 #endif

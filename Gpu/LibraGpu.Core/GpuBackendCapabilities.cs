@@ -14,6 +14,8 @@ public sealed class GpuBackendCapabilities
         V1Operations, [ResourceKind.Texture2D, ResourceKind.FlowMap2D], 256, Budget);
     public static GpuBackendCapabilities Unity { get; } = new("unity-compute", GpuBackendInput.GeneratedShader, 1,
         V1Operations, [ResourceKind.Texture2D, ResourceKind.FlowMap2D], null, Budget);
+    public static GpuBackendCapabilities Godot { get; } = new("godot-lgpk", GpuBackendInput.RegisterPackets, 1,
+        V1Operations, [ResourceKind.Texture2D, ResourceKind.FlowMap2D], 128, Budget);
 
     public string Id { get; }
     public GpuBackendInput Input { get; }
