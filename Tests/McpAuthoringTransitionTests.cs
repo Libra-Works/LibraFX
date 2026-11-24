@@ -135,6 +135,7 @@ internal static class McpAuthoringTransitionTests
             var cpu = await Create("CpuParticle");
             using (await Call("libera_graph_enter", new { nodeId = cpu })) { }
             var cpuDraw = graph.Nodes.Single(node => CpuParticleSchema.Name(node.Definition.Kind) == "CpuParticleSpriteDraw").Id;
+            using (await Call("libera_graph_set_parameter", new { nodeId = cpuDraw, parameterId = "assetPath", value = "builtin:white" })) { }
             using (await Call("libera_graph_set_parameter", new { nodeId = cpuDraw, parameterId = "atlasColumns", value = 2 })) { }
             using (await Call("libera_graph_set_parameter", new { nodeId = cpuDraw, parameterId = "atlasRows", value = 2 })) { }
             using (await Call("libera_graph_set_parameter", new { nodeId = cpuDraw, parameterId = "atlasFps", value = 4 })) { }
