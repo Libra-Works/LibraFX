@@ -166,8 +166,9 @@ the invitation in assets, scripts, logs or source control.
 
 ### 3. Obtain exact Unity resource bindings
 
-Unity does **not** expose the Unreal-style full Content catalog. For mapped
-live authoring:
+Unity exposes `Assets/` and `Packages/` to **View → Content** (`catalog` /
+`folders` / `details` / `thumbnail`), and also supports mapped **Resource
+identity** live authoring (`unity.asset-guid-local-id.v1`):
 
 1. Choose **Tools → LiberaFx → Resources → Initialize or Resolve Project Identity**.
    If this is a clone, deliberately keep the shared identity or fork it.
@@ -231,8 +232,9 @@ Unity scenes, binding assets or Player builds.
 
 Close Godot. Extract `LibraForGodot` and copy `liberafx` to
 `<Project>\addons\liberafx`. Keep the `.gdextension` and its `bin` folder together.
-The supplied extension targets **Godot 4.7 / Windows x64**; other platforms need
-a matching build. Reopen Godot and confirm that `LibraEffectPlayer` is available.
+The supplied extension targets **Godot 4.7** with Windows x64, Linux x64 and
+macOS ARM64 binaries; other platforms need a matching build. Reopen Godot and
+confirm that `LibraEffectPlayer` is available.
 This is a GDExtension, not an EditorPlugin with a connection toolbar.
 
 ### 2. Launch LIBERA FX and prepare the scene
@@ -244,8 +246,10 @@ used by gameplay. Both the player and connection Node must be in the scene tree.
 
 ### 3. Bind resources in Godot
 
-There is no full Godot asset catalog or desktop Resource Identity mapping path.
-Load Godot Mesh/Texture2D/Material objects and bind them while the player is stopped:
+When connected via `liberafx_live_preview.gd` (with `liberafx_resource_adapter.gd`),
+Godot exposes `res://` browsing to **View → Content** and `godot.res-path.v1`
+mapping to **View → Content → Resource identity**. For runtime playback, load
+Godot Mesh/Texture2D/Material objects and bind them while the player is stopped:
 
 ```gdscript
 $LibraEffectPlayer.set_mesh_binding("/Engine/BasicShapes/Cube.Cube", BoxMesh.new())

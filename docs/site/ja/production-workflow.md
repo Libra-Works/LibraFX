@@ -162,8 +162,9 @@ LIBERA FX の **View → Preview connections → Copy manual connection informat
 
 ### 3. Unity の資源情報を取得して明示的に割り当て
 
-Unity 全資源の一覧検索は Unreal と同じ方式では提供していません。
-ID 対応付けを使うライブ制作は次の手順です。
+Unity でも **View → Content** から `Assets/`・`Packages/` の一覧検索・詳細・
+サムネイル取得が利用できます。ID 対応付け（`unity.asset-guid-local-id.v1`）を使う
+ライブ制作は次の手順です。
 
 1. Unity で **Tools → LiberaFx → Resources → Initialize or Resolve Project Identity**。
    複製プロジェクトの場合は共有 ID の維持／別 ID への分岐を意図的に選びます。
@@ -225,7 +226,8 @@ Unity シーン・割り当てアセット・Player ビルドは生成しませ�
 
 Godot を終了し、`LibraForGodot` の `liberafx` を `<Project>\addons\liberafx` へコピーします。
 `.gdextension` と `bin` をセットで維持してください。
-同梱版は **Godot 4.7／Windows x64 用**で、他環境は対応するビルドが必要です。
+同梱版は **Godot 4.7** 向け（Windows x64 / Linux x64 / macOS ARM64 対応）で、
+それ以外の環境では対応するビルドが必要です。
 開き直して `LibraEffectPlayer` が利用できることを確認します。
 これは GDExtension であり、接続ツールバーを持つ EditorPlugin ではありません。
 
@@ -238,8 +240,9 @@ Player と接続用 Node の両方をシーンツリーへ入れてから接続�
 
 ### 3. Godot 資源を明示的にバインド
 
-Godot の全資源カタログ取得・デスクトップの Resource Identity 対応付けは未対応です。
-停止中の Player に Mesh／Texture2D／Material を登録します。
+`liberafx_live_preview.gd`（`liberafx_resource_adapter.gd` 同梱）で接続すると、
+**View → Content** での `res://` ブラウズおよび **Resource identity**（`godot.res-path.v1`）
+が利用できます。ゲーム実行時は、停止中の Player に Mesh／Texture2D／Material を登録します。
 
 ```gdscript
 $LibraEffectPlayer.set_mesh_binding("/Engine/BasicShapes/Cube.Cube", BoxMesh.new())
