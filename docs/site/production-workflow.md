@@ -36,13 +36,13 @@ The [installation reference](engine-integration.md) and
 
 | Operation | Unreal | Unity | Godot |
 | --- | --- | --- | --- |
-| Browse an engine asset catalog in Content | Supported | No full catalog | No full catalog |
-| Exact resource/property lookup through Resource Identity | Supported | Supported | No desktop mapping integration |
+| Browse an engine asset catalog in Content | Supported (`/Game/`, `/Engine/`) | Supported (`Assets/`, `Packages/`) | Supported (`res://`, via `liberafx_live_preview.gd`) |
+| Exact resource/property lookup through Resource Identity | Supported | Supported | Supported (`godot.res-path.v1`) |
 | Desktop live preview | Dedicated Unreal preview window | Opt-in isolated Unity preview window | Script connection to a dedicated player |
 | Create a playable effect for the game | Import `.lfxb` | Import `.lfxb` and assign engine bindings | Load `.lfxb` bytes and register resources |
 
 **Portable Resource Identity mapping is not yet a complete offline export
-pipeline.** It supports verified Unreal/Unity live delivery, but normal
+pipeline.** It supports verified Unreal/Unity/Godot lookup and `.lfxrm` export, but normal
 **Export VFX...** and converter `.lfxb` export reject registered identity
 metadata. `.lfxrm` is a diagnostic mapping manifest, **not an importable effect**.
 Do not delete mappings to silence an export error. Use a deliberately maintained
