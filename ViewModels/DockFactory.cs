@@ -40,7 +40,7 @@ public sealed partial class DockFactory : Factory
             Id = "NodeList",
             Title = LocalizationService.Shared.Get("Messages.Tool.NodeList")
         };
-        var properties = new NodePropertiesPaneViewModel(_activeGraph, _main.Playback, _main.AssetBrowser)
+        var properties = new NodePropertiesPaneViewModel(_activeGraph, _main.Playback, _main.AssetBrowser, _main.ExecutionDebugger)
         {
             Id = "Properties",
             Title = LocalizationService.Shared.Get("Messages.Tool.Properties")
@@ -78,7 +78,7 @@ public sealed partial class DockFactory : Factory
         {
             var id = $"Properties{slot}";
             var key = $"Messages.Tool.{id}";
-            var inspector = new NodePropertiesPaneViewModel(_activeGraph, _main.Playback, _main.AssetBrowser)
+            var inspector = new NodePropertiesPaneViewModel(_activeGraph, _main.Playback, _main.AssetBrowser, _main.ExecutionDebugger)
             {
                 Id = id,
                 Title = LocalizationService.Shared.Get(key)

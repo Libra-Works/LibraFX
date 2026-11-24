@@ -18,7 +18,8 @@ internal sealed class GodotPackagePreviewSender
     private string? _signalDocument;
     private object? _signalGraph;
 
-    public CompiledPreviewMessage? Prepare(PreviewPublication publication, bool force)
+    public CompiledPreviewMessage? Prepare(PreviewPublication publication, bool force,
+        ResourceIdentityRenderContext? resources = null)
     {
         var sameSignalStream = _signalDocument == publication.DocumentId &&
             ReferenceEquals(_signalGraph, publication.Graph);
@@ -74,12 +75,24 @@ internal sealed class GodotPackagePreviewSender
         {
             if (SkeletalPoseSchema.ContainsSource(publication.Graph))
                 throw new NotSupportedException("Godot package preview does not support SOURCE skeletal poses.");
-            var package = SpawnableGroupPackage.Compile(publication.Graph, includePreviewSignalKeys: true,
+            if (!force && _good is { } prev &&
+                prev.DocumentId == publication.DocumentId &&
+                prev.IncludePreviewDebugDraw == publication.IncludePreviewDebugDraw &&
+                prev.Playback?.DebugDrawStopped == publication.Playback?.DebugDrawStopped &&
+                PackageParameterDelta.TryCreatePayload(prev.Graph, publication.Graph, publication.Sequence, out var deltaBytes))
+            {
+                return new(deltaBytes!, CompiledPreviewKind.Scene, publication);
+            }
+            var compileGraph = publication.Graph.AutoDestroyWhenIdle &&
+                GpuProgramDeliveryService.Containers(publication.Graph).Any()
+                ? publication.Graph with { AutoDestroyWhenIdle = false }
+                : publication.Graph;
+            var package = SpawnableGroupPackage.Compile(compileGraph, includePreviewSignalKeys: true,
                 options: new VfxCompileOptions
                 {
                     IncludePreviewDebugDraw = publication.IncludePreviewDebugDraw &&
                         publication.Playback?.DebugDrawStopped != true
-                });
+                }, resourceContext: resources);
             var bytes = SpawnableGroupPackageBinary.Serialize(package);
             if (bytes.Length > MaxPackageBytes)
                 throw new InvalidDataException("Godot preview package exceeds the 16 MiB packet limit.");
@@ -93,9 +106,10 @@ internal sealed class GodotPackagePreviewSender
 
     public void Sent(CompiledPreviewMessage message)
     {
-        _lastSent = message.Publication.Sequence;
+        if (message.Kind is CompiledPreviewKind.Program or CompiledPreviewKind.Playback)
+            _lastSent = message.Publication.Sequence;
         _signalSequence = message.Publication.SignalRequestSequence;
-        if (message.Kind == CompiledPreviewKind.Program) { _good = message.Publication; _failed = null; }
+        if (message.Kind is CompiledPreviewKind.Program or CompiledPreviewKind.Scene) { _good = message.Publication; _failed = null; }
         else if (message.Kind == CompiledPreviewKind.CompileError) _failed = message.Publication;
         else _failed = null;
     }

@@ -43,6 +43,38 @@
                                   ToolTip.Tip="{Binding NodeLockHint}"
                                   AutomationProperties.Name="{Binding NodeLockHint}" />
             </Grid>
+            <Border Classes="editor-card" IsVisible="{Binding HasLiveDebugValues}">
+                <StackPanel Spacing="4">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <TextBlock Classes="editor-heading" Text="{DynamicResource Text.ExecutionDebug.Title}" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
+                            <views:IconButton Classes="editor-tool" Icon="Pause" Command="{Binding DebugPauseCommand}"
+                                              ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Pause}" />
+                            <views:IconButton Classes="editor-tool" Icon="StepForward" Command="{Binding DebugStepCommand}"
+                                              ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Step}" />
+                            <views:IconButton Classes="editor-tool" Icon="Play" Command="{Binding DebugResumeCommand}"
+                                              ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Resume}" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Classes="editor-label" Text="{Binding LiveDebugNodeHeader}" TextWrapping="Wrap" />
+                    <TextBlock Classes="editor-label" Text="{Binding LiveDebugSignalSource}" TextWrapping="Wrap"
+                               IsVisible="{Binding LiveDebugSignalSource, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    <ItemsControl ItemsSource="{Binding LiveDebugInputs}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <TextBlock Text="{Binding}" TextWrapping="Wrap" FontFamily="Consolas,Menlo,monospace" FontSize="11" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <ItemsControl ItemsSource="{Binding LiveDebugAuthoredParameters}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <TextBlock Text="{Binding}" TextWrapping="Wrap" Foreground="{DynamicResource EffectMutedForegroundBrush}" FontSize="11" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
             <Border Classes="editor-toolbar-group" IsVisible="{Binding InspectorNode.HasDynamicPins, FallbackValue=False}" Padding="6,4">
                 <WrapPanel Orientation="Horizontal" ItemSpacing="10" LineSpacing="4" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center"

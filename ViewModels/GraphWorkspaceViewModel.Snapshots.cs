@@ -222,6 +222,7 @@ public sealed partial class GraphWorkspaceViewModel
         }
 
         ValidateSnapshot(snapshot);
+        _hierarchyCache.Clear();
         _rootSnapshot = snapshot;
         _graphPath.Clear();
         RestoreCurrentGraph(snapshot);
@@ -253,6 +254,7 @@ public sealed partial class GraphWorkspaceViewModel
     private void RestoreFromHistory(GraphSnapshot snapshot)
     {
         ValidateSnapshot(snapshot);
+        _hierarchyCache.Clear();
         _rootSnapshot = snapshot;
         OnPropertyChanged(nameof(AutoDestroyWhenIdle));
         var graph = snapshot;
@@ -307,15 +309,63 @@ public sealed partial class GraphWorkspaceViewModel
         }
     }
 
+    private void CacheCurrentHierarchy(string key) =>
+        _hierarchyCache[key] = new CachedHierarchyState(Nodes.ToArray(), Connections.ToArray());
+
+    private void RestoreHierarchy(GraphSnapshot snapshot)
+    {
+        if (_hierarchyCache.TryGetValue(CurrentHierarchyKey, out var cached) &&
+            cached.Nodes.Length == snapshot.Nodes.Count &&
+            cached.Connections.Length == snapshot.Connections.Count)
+        {
+            RestoreCachedHierarchy(cached, snapshot);
+            return;
+        }
+        RestoreCurrentGraph(snapshot);
+    }
+
+    private void RestoreCachedHierarchy(CachedHierarchyState cached, GraphSnapshot snapshot)
+    {
+        var selectedIds = SelectedNodes.Select(node => node.Id).ToArray();
+        var snapshotById = snapshot.Nodes.ToDictionary(n => n.Id);
+        foreach (var node in cached.Nodes)
+        {
+            if (snapshotById.TryGetValue(node.Id, out var spec) && spec.ChildGraph is not null)
+            {
+                node.SetChildGraphValue(spec.ChildGraph);
+            }
+        }
+        _restoringGraph = true;
+        try
+        {
+            SelectNode(null);
+            Connections.Clear();
+            Nodes.ReplaceAll(cached.Nodes);
+            Connections.ReplaceAll(cached.Connections);
+            var nodesById = cached.Nodes.ToDictionary(n => n.Id);
+            SetSelection(selectedIds.Where(nodesById.ContainsKey).Select(id => nodesById[id]));
+            _nextNodeIndex = Nodes.Count;
+            _pendingOutputNode = null;
+            _pendingOutputPortId = null;
+            ConnectionPreviewPoint = null;
+            OnPropertyChanged(nameof(PendingOutputNode));
+            OnPropertyChanged(nameof(PendingOutputPortId));
+        }
+        finally { _restoringGraph = false; }
+        RefreshSelectedConnections();
+        RefreshSignalOrder();
+        RefreshTypeDiagnostics();
+    }
+
     private void RestoreCurrentGraph(GraphSnapshot snapshot)
     {
         var selectedIds = SelectedNodes.Select(node => node.Id).ToArray();
         var expandedNodes = Nodes.Where(node => node.IsDetailsExpanded).Select(node => node.Id).ToHashSet();
-        var definitions = GraphNodeDefinition.All.ToDictionary(definition => definition.Kind);
-        var nodesById = new Dictionary<Guid, GraphNodeViewModel>();
+        var nodesById = new Dictionary<Guid, GraphNodeViewModel>(snapshot.Nodes.Count);
         foreach (var specification in snapshot.Nodes)
         {
-            var definition = definitions[specification.Kind];
+            var definition = GraphNodeDefinition.Find(specification.Kind)
+                ?? throw new KeyNotFoundException($"Graph node definition '{specification.Kind}' was not found.");
             var node = new GraphNodeViewModel(
                 this,
                 definition,

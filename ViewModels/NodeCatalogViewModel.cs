@@ -16,6 +16,7 @@ public sealed class NodeCatalogViewModel : Tool
     private IReadOnlyList<NodeCatalogEntryViewModel> _entries;
     private GroupAssetCatalog? _groups;
     private NodeDefinitionCatalog? _definitions;
+    private bool _lastIsReadOnly;
     private string _searchText = string.Empty;
 
     public ObservableCollection<NodeCatalogGroupViewModel> Groups { get; } = [];
@@ -68,7 +69,12 @@ public sealed class NodeCatalogViewModel : Tool
     private void OnActiveGraphChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(ActiveGraphProvider.Graph)) return;
-        ObserveGraph(_activeGraph.Graph);
+        var previousDefinitions = _definitions;
+        var graph = _activeGraph.Graph;
+        ObserveGraph(graph);
+        if (_entries.Count > 0 && ReferenceEquals(previousDefinitions, graph.NodeDefinitions) &&
+            _lastIsReadOnly == graph.IsReadOnly && !CreatabilityChanged(graph))
+            return;
         RefreshEntries();
     }
 
@@ -95,7 +101,8 @@ public sealed class NodeCatalogViewModel : Tool
 
     private void OnObservedGraphCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (ReferenceEquals(sender, _observedGraph?.Nodes) && _entries.Count > 0 && !CreatabilityChanged(_activeGraph.Graph))
+        if (_entries.Count > 0 && _lastIsReadOnly == _activeGraph.Graph.IsReadOnly &&
+            !CreatabilityChanged(_activeGraph.Graph))
             return;
         RefreshEntries();
     }
@@ -116,6 +123,7 @@ public sealed class NodeCatalogViewModel : Tool
     private void RefreshEntries()
     {
         var graph = _activeGraph.Graph;
+        _lastIsReadOnly = graph.IsReadOnly;
         _entries = BuildEntries(graph, _groups, _definitions);
         OnPropertyChanged(nameof(LoadWarnings));
         OnPropertyChanged(nameof(ProjectName));

@@ -12,7 +12,6 @@
   "portCategory": "Parameter",
   "inputPorts": [
     { "id": "points", "name": "Points", "displayNameKey": "FlexiblePlane.Points", "portType": "FlexiblePlanePoints" },
-    { "id": "proceduralTexture", "name": "Procedural Texture", "displayNameKey": "FlexiblePlane.ProceduralTexture", "portType": "ProceduralTexture" },
     { "id": "proceduralMaterial", "name": "Procedural Material", "displayNameKey": "FlexiblePlane.ProceduralMaterial", "portType": "ProceduralMaterial" },
     { "id": "width", "name": "Width multiplier", "displayNameKey": "FlexiblePlane.WidthMultiplier", "portType": "Float" },
     { "id": "tint", "name": "Tint", "displayNameKey": "FlexiblePlane.Tint", "portType": "FloatX4" }

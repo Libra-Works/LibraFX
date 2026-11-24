@@ -57,6 +57,8 @@ public sealed class ExecutionDebugPaneViewModel : ObservableObject, IDisposable
     public IRelayCommand ResumeCommand { get; }
     public IRelayCommand LocateCommand { get; }
     private bool IsPaused => _frame?.State == ExecutionDebugState.Paused;
+    public bool IsDebuggingPaused => IsPaused;
+    internal ExecutionDebugFrame? CurrentFrame => _frame;
     public string Status => T(!OperatingSystem.IsWindows() ? "ExecutionDebug.Windows" :
         _pendingControl is null ? _status : "ExecutionDebug.CommandPending", _error);
     public string Invitation => _connection?.Invitation ?? "";

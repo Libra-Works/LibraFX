@@ -31,9 +31,6 @@
 
     <Application.DataTemplates>
         <local:ViewLocator />
-        <DataTemplate DataType="vm:GraphDocumentViewModel">
-            <views:GraphEditorView DataContext="{Binding Workspace}" />
-        </DataTemplate>
         <DataTemplate DataType="vm:NodeCatalogViewModel">
             <views:NodeCatalogView />
         </DataTemplate>

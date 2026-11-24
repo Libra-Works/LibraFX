@@ -8,6 +8,7 @@
              x:DataType="vm:GraphWorkspaceViewModel">
     <UserControl.Resources>
         <views:GraphPositionConverter x:Key="GraphPositionConverter" />
+        <views:GraphNodeViewTemplate x:Key="GraphNodeViewTemplate" />
     </UserControl.Resources>
     <Grid RowDefinitions="Auto,*,Auto">
         <Border Grid.Row="0" Classes="editor-bar" BorderThickness="0,0,0,1"
@@ -162,6 +163,11 @@
                         <MenuItem Header="{DynamicResource Text.Editor.Paste}" Click="OnPasteClick">
                             <MenuItem.Icon><views:EditorIconView Icon="Paste" /></MenuItem.Icon>
                         </MenuItem>
+                        <Separator x:Name="BreakpointSeparator" IsVisible="{Binding HasSelection}" />
+                        <MenuItem x:Name="ToggleBreakpointMenu" Header="{DynamicResource Text.ExecutionDebug.Toggle}"
+                                  InputGesture="F9" IsVisible="{Binding HasSelection}" Click="OnToggleBreakpointClick">
+                            <MenuItem.Icon><views:EditorIconView Icon="Pin" /></MenuItem.Icon>
+                        </MenuItem>
                     </ContextMenu>
                 </Grid.ContextMenu>
                 <Border x:Name="GraphBackground"
@@ -217,7 +223,7 @@
                         <ItemsPanelTemplate><Canvas Classes="graphNodePanel" /></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="vm:GraphNodeViewModel"><views:GraphNodeView /></DataTemplate>
+                        <StaticResource ResourceKey="GraphNodeViewTemplate" />
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
                 <views:GraphSceneLayer x:Name="ConnectionLayer" DataContext="{Binding}" ConnectionsOnly="True" />
@@ -246,9 +252,7 @@
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="vm:GraphNodeViewModel">
-                            <views:GraphNodeView />
-                        </DataTemplate>
+                        <StaticResource ResourceKey="GraphNodeViewTemplate" />
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
                 <Canvas IsHitTestVisible="False">

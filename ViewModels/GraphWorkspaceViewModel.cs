@@ -72,6 +72,8 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
     private string? _connectionStatusKey;
     private object?[] _connectionStatusArgs = [];
     public sealed record GraphCameraState(double Zoom, double RelativeOffsetX, double RelativeOffsetY);
+    private sealed record CachedHierarchyState(GraphNodeViewModel[] Nodes, GraphConnectionViewModel[] Connections);
+    private readonly Dictionary<string, CachedHierarchyState> _hierarchyCache = new(StringComparer.Ordinal);
     private GraphSnapshot _rootSnapshot = new([], []);
     private readonly List<Guid> _graphPath = [];
     internal Dictionary<string, GraphCameraState> CameraStates { get; } = new(StringComparer.Ordinal);

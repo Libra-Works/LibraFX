@@ -67,7 +67,9 @@ public static class ParticleSamples
             if (name == "GpuCurlTurbulence")
             {
                 var tex = root.Add("ProceduralTexture", "Glow texture");
-                root.Wire(tex, gpuNode, "proceduralTexture", "value");
+                var mat = root.Add("ProceduralMaterial", "Glow material");
+                root.Wire(tex, mat, "texture0", "value");
+                root.Wire(mat, gpuNode, "proceduralMaterial", "value");
             }
         }
         root.Comment(name == "GpuCurlTurbulence"
@@ -104,7 +106,9 @@ public static class ParticleSamples
         var gpuParticles = root.Add("GpuParticle", "Particles following fluid", (GpuParticleEditorService.ParameterId, "gpuState",
             JsonSerializer.SerializeToElement(particles, GpuParticleEditorService.Json)));
         var gpuTex = root.Add("ProceduralTexture", "Glow texture");
-        root.Wire(gpuTex, gpuParticles, "proceduralTexture", "value");
+        var gpuMat = root.Add("ProceduralMaterial", "Glow material");
+        root.Wire(gpuTex, gpuMat, "texture0", "value");
+        root.Wire(gpuMat, gpuParticles, "proceduralMaterial", "value");
         root.Comment("GpuFluidVelocity · Fluid2D VelocityOutput → GPU particles\n" +
             "The smoke solver runs first. Its velocity moves the particles; its plane is hidden.\n" +
             "64 × 64 cells; 100 particles per second. Preview: 60 FPS, frames 0–600.\n" +
@@ -158,7 +162,48 @@ public static class ParticleSamples
     {
         private readonly List<GraphNodeSnapshot> _nodes = [];
         private readonly List<GraphConnectionSnapshot> _edges = [];
-        public GraphSnapshot Graph => new(_nodes.ToArray(), _edges.ToArray());
+        public GraphSnapshot Graph
+        {
+            get
+            {
+                var nonComments = _nodes.Where(n => n.Kind != GraphNodeKind.Comment).ToArray();
+                var depth = nonComments.ToDictionary(n => n.Id, _ => 0);
+                for (var pass = 0; pass < nonComments.Length; pass++)
+                {
+                    var changed = false;
+                    foreach (var edge in _edges)
+                    {
+                        if (depth.TryGetValue(edge.SourceNodeId, out var srcDepth) &&
+                            depth.TryGetValue(edge.TargetNodeId, out var dstDepth) &&
+                            dstDepth <= srcDepth)
+                        {
+                            depth[edge.TargetNodeId] = srcDepth + 1;
+                            changed = true;
+                        }
+                    }
+                    if (!changed) break;
+                }
+                var rowByDepth = new Dictionary<int, int>();
+                var laidOut = new List<GraphNodeSnapshot>(_nodes.Count);
+                var maxDepth = depth.Count > 0 ? depth.Values.Max() : 0;
+                var commentRow = 0;
+                foreach (var n in _nodes)
+                {
+                    if (n.Kind == GraphNodeKind.Comment)
+                    {
+                        laidOut.Add(n with { X = (maxDepth + 1) * 320, Y = commentRow++ * 240 });
+                    }
+                    else
+                    {
+                        var col = depth[n.Id];
+                        var row = rowByDepth.GetValueOrDefault(col);
+                        rowByDepth[col] = row + 1;
+                        laidOut.Add(n with { X = col * 320, Y = row * 210 });
+                    }
+                }
+                return new(laidOut.ToArray(), _edges.ToArray());
+            }
+        }
         public Guid Add(string kind, string name, params (string Id, string Type, object Value)[] values)
         {
             var definition = GraphNodeDefinition.All.Single(item => item.Kind.Value == kind);
@@ -247,7 +292,9 @@ public static class ParticleSamples
             var cpuNode = AddChild("CpuParticle", fountain ? "Fountain" : "Radial burst", particle.Graph,
                 ("capacity", "int", 4096), ("burst", "int", burst), ("rate", "float", rate));
             var procTex = Add("ProceduralTexture", "Glow texture");
-            Wire(procTex, cpuNode, "proceduralTexture", "value");
+            var procMat = Add("ProceduralMaterial", "Glow material");
+            Wire(procTex, procMat, "texture0", "value");
+            Wire(procMat, cpuNode, "proceduralMaterial", "value");
             return (cpuNode, positionInput);
         }
     }

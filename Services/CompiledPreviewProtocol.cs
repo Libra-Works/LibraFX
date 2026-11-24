@@ -42,7 +42,7 @@ public static class CompiledPreviewProtocol
                 type.GetString() is not ("asset_catalog" or "asset_details" or "asset_thumbnail" or
                     "resource_identity_project" or "resource_identity_probe" or "resource_identity_schema" or
                     "resource_identity_deliver" or
-                    "render_config" or "gpu_config" or "reconnect"))
+                    "render_config" or "gpu_config" or "reconnect" or "parameter_delta"))
                 throw new ArgumentException("Unknown scene command.");
             ValidateUniqueProperties(json.RootElement);
         }

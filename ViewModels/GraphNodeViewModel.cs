@@ -114,8 +114,18 @@ public sealed class GraphNodeViewModel : ObservableObject
             return ports.Select(port =>
             {
                 var label = names.FirstOrDefault(name => port.Name.Contains(". " + name + " · ", StringComparison.Ordinal));
-                return label is null ? port : port with { Name = port.Name.Replace(". " + label + " · ", ". " +
-                    LocalizationService.Shared.Get("Procedural." + (model ? "Modifier." : "Pixel.") + label) + " · ", StringComparison.Ordinal) };
+                if (label is null) return port;
+                var localized = port.Name.Replace(". " + label + " · ", ". " +
+                    LocalizationService.Shared.Get("Procedural." + (model ? "Modifier." : "Pixel.") + label) + " · ", StringComparison.Ordinal);
+                var sep = localized.IndexOf(" · ", StringComparison.Ordinal);
+                if (sep >= 0)
+                {
+                    var tail = localized[(sep + 3)..];
+                    var slots = tail.Split(" / ", StringSplitOptions.RemoveEmptyEntries)
+                        .Select(s => LocalizationService.Shared.GetOrDefault("Procedural.Parameter." + s, s));
+                    localized = localized[..(sep + 3)] + string.Join(" / ", slots);
+                }
+                return port with { Name = localized };
             }).ToArray();
         }
     }

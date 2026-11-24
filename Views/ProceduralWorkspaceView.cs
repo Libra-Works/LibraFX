@@ -395,37 +395,8 @@ public sealed partial class ProceduralWorkspaceView : UserControl
         box.IsCheckedChanged += (_, _) => { if (!_refreshing) set(box.IsChecked == true); };
         parent.Children.Add(box);
     }
-    private static string? ModelParameter(int kind, int index)
-    {
-        if (index is >= 12 and <= 14) return new[] { "CenterX", "CenterY", "CenterZ" }[index - 12];
-        string[] names = kind switch
-        {
-            0 or 1 => ["Angle"], 2 => ["EndScale"], 3 => ["Amplitude", "Frequency", "Phase", "Speed"],
-            4 => ["Angle", "Radius"], 5 => ["Amplitude", "Frequency", "Phase", "Speed", "Roughness"],
-            6 => ["Blend", "Radius"], 7 => ["Distance"],
-            8 => ["TranslateX", "TranslateY", "TranslateZ", "RotateX", "RotateY", "RotateZ", "ScaleX", "ScaleY", "ScaleZ"],
-            10 => ["TranslateX", "TranslateY", "TranslateZ", "RotateX", "RotateY", "RotateZ", "ScaleX", "ScaleY", "ScaleZ", "Radius", "Sweep"],
-            12 => ["Thickness", "Offset"], _ => []
-        };
-        return index < names.Length ? names[index] : null;
-    }
-    private static string? PixelParameter(int kind, int index)
-    {
-        string[] names = kind switch
-        {
-            1 => ["Red", "Green", "Blue", "Alpha"],
-            3 => ["ScaleU", "ScaleV", "OffsetU", "OffsetV", "Angle", "CenterU", "CenterV"],
-            4 => ["DirectionU", "DirectionV", "Offset"], 5 => ["CenterU", "CenterV", "Scale"],
-            6 => ["CenterU", "CenterV", "Radius", "Width", "Softness"],
-            7 => ["FrequencyU", "FrequencyV", "Phase"], 8 => ["RepeatU", "RepeatV"],
-            13 or 14 => ["FrequencyU", "FrequencyV", "SpeedU", "SpeedV", "Octaves", "Roughness"],
-            >= 9 and <= 15 => ["FrequencyU", "FrequencyV", "SpeedU", "SpeedV"],
-            16 => ["Amplitude", "Center"], 22 => ["Blend"], 23 => ["Power"], 26 => ["Lower", "Upper"],
-            27 => ["StartRed", "StartGreen", "StartBlue", "StartAlpha", "EndRed", "EndGreen", "EndBlue", "EndAlpha", "Lower", "Upper"],
-            28 => ["Channel"], 30 => ["TextureSlot"], 32 => ["Strength", "Step", "FlipY"], _ => []
-        };
-        return index < names.Length ? names[index] : null;
-    }
+    private static string? ModelParameter(int kind, int index) => ProceduralResourceSchema.ModelParameterName(kind, index);
+    private static string? PixelParameter(int kind, int index) => ProceduralResourceSchema.PixelParameterName(kind, index);
     private void Vector(Panel parent, string key, float[] values, Action<float[]> set)
     {
         for (var i = 0; i < 3; ++i)
@@ -493,14 +464,28 @@ public sealed partial class ProceduralWorkspaceView : UserControl
     }
     private void RemapPixels(ProceduralRecipe old, ProceduralPixelOperation[] next)
     {
-        uint Map(uint register)
+        if (next.Length == 0)
+        {
+            _status.Text = "At least one pixel operation is required.";
+            return;
+        }
+        uint Map(uint register, uint limit)
         {
             if (register == 0) return 0;
             var index = Array.FindIndex(next, op => op.Id == old.Operations[register - 1].Id);
-            return index < 0 ? 0 : (uint)index + 1;
+            if (index < 0) return 0;
+            var mapped = (uint)index + 1;
+            return mapped <= limit ? mapped : 0u;
         }
-        var output = Map(old.OutputRegister);
-        Save(old with { Operations = next.Select(op => op with { InputA = Map(op.InputA), InputB = Map(op.InputB) }).ToArray(),
-            OutputRegister = output != 0 ? output : (uint)next.Length });
+        var output = Map(old.OutputRegister, (uint)next.Length);
+        Save(old with
+        {
+            Operations = next.Select((op, i) => op with
+            {
+                InputA = Map(op.InputA, (uint)i),
+                InputB = Map(op.InputB, (uint)i)
+            }).ToArray(),
+            OutputRegister = output != 0 ? output : (uint)next.Length
+        });
     }
 }

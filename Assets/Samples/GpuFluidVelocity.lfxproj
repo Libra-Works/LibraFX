@@ -3,7 +3,7 @@
   "AutoDestroyWhenIdle": true,
   "Nodes": [
     {
-      "Id": "56ec03ac-d62d-4940-9b49-ea1f70b7a281",
+      "Id": "3936d237-6510-4744-8b01-4cceb5f6b029",
       "Name": "Fluid2D velocity source",
       "Kind": "GpuParticle",
       "X": 0,
@@ -693,10 +693,10 @@
       "SignalKeys": null
     },
     {
-      "Id": "a4e51c2d-8d2b-4831-882e-0d7b6dc6c610",
+      "Id": "8cc73f09-a58c-4e83-a7c4-c699ad1cc9c1",
       "Name": "Particles following fluid",
       "Kind": "GpuParticle",
-      "X": 300,
+      "X": 640,
       "Y": 0,
       "Curve": null,
       "ChildGraph": null,
@@ -1411,7 +1411,7 @@
             },
             "generatedResources": {
               "fluidVelocity": {
-                "producerNodeId": "56ec03ac-d62d-4940-9b49-ea1f70b7a281",
+                "producerNodeId": "3936d237-6510-4744-8b01-4cceb5f6b029",
                 "outputId": "VelocityOutput"
               }
             }
@@ -1424,10 +1424,24 @@
       "SignalKeys": null
     },
     {
-      "Id": "66d20130-6d82-48b5-9d51-da07c5975958",
+      "Id": "b47342ae-908d-4786-b37f-09b03daf3689",
       "Name": "Glow texture",
       "Kind": "ProceduralTexture",
-      "X": 600,
+      "X": 0,
+      "Y": 210,
+      "Curve": null,
+      "ChildGraph": null,
+      "Parameters": [],
+      "GroupAsset": null,
+      "IsPolymorphic": false,
+      "GroupOverrides": null,
+      "SignalKeys": null
+    },
+    {
+      "Id": "ebfdd499-c797-4b17-8dfe-a5beb05a3f4b",
+      "Name": "Glow material",
+      "Kind": "ProceduralMaterial",
+      "X": 320,
       "Y": 0,
       "Curve": null,
       "ChildGraph": null,
@@ -1438,10 +1452,10 @@
       "SignalKeys": null
     },
     {
-      "Id": "553993de-7da9-4393-b029-8be844ec99d5",
+      "Id": "88d4b184-c37f-4fc9-b157-70899421c322",
       "Name": "Sample guide",
       "Kind": "Comment",
-      "X": 900,
+      "X": 960,
       "Y": 0,
       "Curve": null,
       "ChildGraph": null,
@@ -1470,20 +1484,26 @@
   ],
   "Connections": [
     {
-      "SourceNodeId": "66d20130-6d82-48b5-9d51-da07c5975958",
-      "TargetNodeId": "a4e51c2d-8d2b-4831-882e-0d7b6dc6c610",
-      "TargetPortId": "proceduralTexture",
+      "SourceNodeId": "b47342ae-908d-4786-b37f-09b03daf3689",
+      "TargetNodeId": "ebfdd499-c797-4b17-8dfe-a5beb05a3f4b",
+      "TargetPortId": "texture0",
+      "SourcePortId": "value"
+    },
+    {
+      "SourceNodeId": "ebfdd499-c797-4b17-8dfe-a5beb05a3f4b",
+      "TargetNodeId": "8cc73f09-a58c-4e83-a7c4-c699ad1cc9c1",
+      "TargetPortId": "proceduralMaterial",
       "SourcePortId": "value"
     }
   ],
   "History": {
-    "RootId": "387a0ab4-80a3-4213-bd1c-144b9fc08d4b",
-    "CurrentNodeId": "387a0ab4-80a3-4213-bd1c-144b9fc08d4b",
-    "TimelineRevisionId": "493c49cb-c389-4a7f-992d-68175fbdda71",
+    "RootId": "3910bdd1-eca9-4753-bd7e-7e2a62214f50",
+    "CurrentNodeId": "3910bdd1-eca9-4753-bd7e-7e2a62214f50",
+    "TimelineRevisionId": "a1e63ba9-56a5-4733-bacf-e01516c1c355",
     "NextBranchNumber": 1,
     "Entries": [
       {
-        "Id": "387a0ab4-80a3-4213-bd1c-144b9fc08d4b",
+        "Id": "3910bdd1-eca9-4753-bd7e-7e2a62214f50",
         "ParentId": null,
         "PreferredChildId": null,
         "Description": "GpuFluidVelocity",
@@ -1492,7 +1512,7 @@
         "State": {
           "Nodes": [
             {
-              "Id": "56ec03ac-d62d-4940-9b49-ea1f70b7a281",
+              "Id": "3936d237-6510-4744-8b01-4cceb5f6b029",
               "Kind": "GpuParticle",
               "Name": "Fluid2D velocity source",
               "X": 0,
@@ -2185,10 +2205,10 @@
               "KindDomain": "GpuParticle"
             },
             {
-              "Id": "a4e51c2d-8d2b-4831-882e-0d7b6dc6c610",
+              "Id": "8cc73f09-a58c-4e83-a7c4-c699ad1cc9c1",
               "Kind": "GpuParticle",
               "Name": "Particles following fluid",
-              "X": 300,
+              "X": 640,
               "Y": 0,
               "PortType": "Float",
               "PortCategory": "Parameter",
@@ -2905,7 +2925,7 @@
                     },
                     "generatedResources": {
                       "fluidVelocity": {
-                        "producerNodeId": "56ec03ac-d62d-4940-9b49-ea1f70b7a281",
+                        "producerNodeId": "3936d237-6510-4744-8b01-4cceb5f6b029",
                         "outputId": "VelocityOutput"
                       }
                     }
@@ -2919,11 +2939,11 @@
               "KindDomain": "GpuParticle"
             },
             {
-              "Id": "66d20130-6d82-48b5-9d51-da07c5975958",
+              "Id": "b47342ae-908d-4786-b37f-09b03daf3689",
               "Kind": "ProceduralTexture",
               "Name": "Glow texture",
-              "X": 600,
-              "Y": 0,
+              "X": 0,
+              "Y": 210,
               "PortType": "ProceduralTexture",
               "PortCategory": "Parameter",
               "Curve": null,
@@ -2936,10 +2956,27 @@
               "KindDomain": "Cpu"
             },
             {
-              "Id": "553993de-7da9-4393-b029-8be844ec99d5",
+              "Id": "ebfdd499-c797-4b17-8dfe-a5beb05a3f4b",
+              "Kind": "ProceduralMaterial",
+              "Name": "Glow material",
+              "X": 320,
+              "Y": 0,
+              "PortType": "ProceduralMaterial",
+              "PortCategory": "Parameter",
+              "Curve": null,
+              "ChildGraph": null,
+              "Parameters": [],
+              "GroupAsset": null,
+              "IsPolymorphic": false,
+              "GroupOverrides": null,
+              "SignalKeys": null,
+              "KindDomain": "Cpu"
+            },
+            {
+              "Id": "88d4b184-c37f-4fc9-b157-70899421c322",
               "Kind": "Comment",
               "Name": "Sample guide",
-              "X": 900,
+              "X": 960,
               "Y": 0,
               "PortType": "Comment",
               "PortCategory": "Parameter",
@@ -2971,9 +3008,15 @@
           ],
           "Connections": [
             {
-              "SourceNodeId": "66d20130-6d82-48b5-9d51-da07c5975958",
-              "TargetNodeId": "a4e51c2d-8d2b-4831-882e-0d7b6dc6c610",
-              "TargetPortId": "proceduralTexture",
+              "SourceNodeId": "b47342ae-908d-4786-b37f-09b03daf3689",
+              "TargetNodeId": "ebfdd499-c797-4b17-8dfe-a5beb05a3f4b",
+              "TargetPortId": "texture0",
+              "SourcePortId": "value"
+            },
+            {
+              "SourceNodeId": "ebfdd499-c797-4b17-8dfe-a5beb05a3f4b",
+              "TargetNodeId": "8cc73f09-a58c-4e83-a7c4-c699ad1cc9c1",
+              "TargetPortId": "proceduralMaterial",
               "SourcePortId": "value"
             }
           ],

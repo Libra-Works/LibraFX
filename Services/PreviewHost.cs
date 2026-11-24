@@ -264,7 +264,8 @@ public sealed class PreviewHost : IDisposable
         var id = Guid.NewGuid();
         var client = new PreviewClient(version == "3" ? 3 : version == "2" ? 2 : 1,
             version == "3" && context.Request.Query["godotPackagePreview"] == "1",
-            version == "3" && context.Request.Query["unityPackagePreview"] == "1");
+            version == "3" && context.Request.Query["unityPackagePreview"] == "1",
+            version == "3" && context.Request.Query["unrealPackagePreview"] == "1");
         try
         {
             using var socket = await context.WebSockets.AcceptWebSocketAsync();
@@ -272,7 +273,8 @@ public sealed class PreviewHost : IDisposable
             lock (_sync)
             {
                 _clients.Add(id, client);
-                if (_latest is not null) client.Channel.Writer.TryWrite(_latest);
+                if (_latest is not null && !client.WaitForUnityPreview && !client.WaitForUnrealPreview)
+                    client.Channel.Writer.TryWrite(_latest);
             }
             UpdateClientCount();
             using var cancel = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
@@ -332,7 +334,8 @@ public sealed class PreviewHost : IDisposable
         }
         await foreach (var publication in client.Channel.Reader.ReadAllAsync(cancellation))
         {
-            if (client.WaitForUnityPreview && _assets?.Supports(id, "unityPackagePreview") != true)
+            if ((client.WaitForUnityPreview && _assets?.Supports(id, "unityPackagePreview") != true) ||
+                (client.WaitForUnrealPreview && _assets?.Supports(id, "unrealPackagePreview") != true))
             {
                 continue;
             }
@@ -352,7 +355,8 @@ public sealed class PreviewHost : IDisposable
                 displayedDocument = publication.DocumentId;
                 var godotPreview = client.PackagePreview || _assets?.Supports(id, "godotPackagePreview") == true;
                 var unityPreview = !godotPreview && _assets?.Supports(id, "unityPackagePreview") == true;
-                var packagePreview = godotPreview || unityPreview;
+                var unrealPackagePreview = !godotPreview && !unityPreview && _assets?.Supports(id, "unrealPackagePreview") == true;
+                var packagePreview = godotPreview || unityPreview || unrealPackagePreview;
                 var renderPeer = _assets?.Supports(id, "rendering") == true;
                 var message = default(CompiledPreviewMessage);
                 byte[]? sceneFrame = null;
@@ -375,7 +379,7 @@ public sealed class PreviewHost : IDisposable
                         if (resourceFailed) continue;
                     }
                     message = unityPreview ? unityPackage.Prepare(publication, force, resourceContext) :
-                        godotPreview ? godotPackage.Prepare(publication, force) :
+                        godotPreview || unrealPackagePreview ? godotPackage.Prepare(publication, force, resourceContext) :
                             await compiled.PrepareAsync(publication, force, resourceContext, 120, 10);
                     if (message is not null && !packagePreview && renderPeer &&
                         (message.Kind == CompiledPreviewKind.Program || message.EvaluatedRenderScene is not null))
@@ -414,9 +418,9 @@ public sealed class PreviewHost : IDisposable
                         WebSocketMessageType.Binary, cancellation);
                 }
                 if (unityPreview) unityPackage.Sent(message);
-                else if (godotPreview) godotPackage.Sent(message);
+                else if (godotPreview || unrealPackagePreview) godotPackage.Sent(message);
                 else await compiled.SentAsync(message);
-                if (!unityPreview && !godotPreview && message.IsSeeking)
+                if (!packagePreview && message.IsSeeking)
                 {
                     _model?.SetPreviewStatus("Preview.Status.Seeking", message.EvaluatedTimeSeconds, message.RequestedTimeSeconds);
                     while (message.IsSeeking && !client.Channel.Reader.TryPeek(out _))
@@ -511,7 +515,8 @@ public sealed class PreviewHost : IDisposable
                 {
                     if (type.GetString() == "package_preview_ack" && client.Version == 3 &&
                         (client.PackagePreview || _assets?.Supports(id, "godotPackagePreview") == true ||
-                         _assets?.Supports(id, "unityPackagePreview") == true) &&
+                         _assets?.Supports(id, "unityPackagePreview") == true ||
+                         _assets?.Supports(id, "unrealPackagePreview") == true) &&
                         request.RootElement.EnumerateObject().Count() == 2 &&
                         request.RootElement.TryGetProperty("programSequence", out var sequence) &&
                         sequence.TryGetInt64(out var acknowledged) && acknowledged >= 0)
@@ -527,7 +532,8 @@ public sealed class PreviewHost : IDisposable
                     if (type.GetString() == "hello" &&
                         (_assets?.Supports(id, "rendering") == true || _assets?.Supports(id, "gpuParticles") == true ||
                          !client.PackagePreview && (_assets?.Supports(id, "godotPackagePreview") == true ||
-                            _assets?.Supports(id, "unityPackagePreview") == true)))
+                            _assets?.Supports(id, "unityPackagePreview") == true ||
+                            _assets?.Supports(id, "unrealPackagePreview") == true)))
                     {
                         lock (_sync)
                         {
@@ -548,11 +554,12 @@ public sealed class PreviewHost : IDisposable
         }
     }
 
-    private sealed class PreviewClient(int version, bool packagePreview, bool waitForUnityPreview)
+    private sealed class PreviewClient(int version, bool packagePreview, bool waitForUnityPreview, bool waitForUnrealPreview)
     {
         public int Version { get; } = version;
         public bool PackagePreview { get; } = packagePreview;
         public bool WaitForUnityPreview { get; } = waitForUnityPreview;
+        public bool WaitForUnrealPreview { get; } = waitForUnrealPreview;
         public int ForceSnapshot;
         public SemaphoreSlim SendGate { get; } = new(1, 1);
         public SemaphoreSlim ControlSlots { get; } = new(16, 16);

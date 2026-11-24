@@ -58,7 +58,7 @@ public sealed class OutlinerViewModel : Tool
         _graph = _activeGraph.Graph;
         Subscribe();
         OnPropertyChanged(nameof(Graph));
-        Refresh();
+        ScheduleRefresh();
     }
 
     private void Subscribe()

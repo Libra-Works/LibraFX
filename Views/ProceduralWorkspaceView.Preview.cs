@@ -103,7 +103,27 @@ public sealed partial class ProceduralWorkspaceView
                 _texturePreviewStatus.Text = T("MeshPreviewHelp");
                 return;
             }
-            var frame = await Task.Run(() => ProceduralTexturePreview.Render(snapshot, time, cancellation.Token));
+            var textureInputs = new GraphNodeSnapshot?[4];
+            if (ProceduralResourceSchema.Name(node.BaseDefinition.Kind) == "ProceduralMaterial")
+            {
+                for (var slot = 0; slot < 4; slot++)
+                {
+                    var edge = _workspace.Connections.FirstOrDefault(e => e.Target.Id == node.Id && e.TargetPortId == "texture" + slot);
+                    if (edge?.Source is { } src && ProceduralResourceSchema.Name(src.BaseDefinition.Kind) == "ProceduralTexture")
+                    {
+                        textureInputs[slot] = new GraphNodeSnapshot(src.Id, src.BaseDefinition.Kind, src.Name, 0, 0,
+                            src.PortType, src.BaseDefinition.PortCategory, Parameters: src.Parameters);
+                    }
+                }
+            }
+            var frame = await Task.Run(() =>
+            {
+                var renderedInputs = new ProceduralTexturePreviewFrame?[4];
+                for (var slot = 0; slot < 4; slot++)
+                    if (textureInputs[slot] is { } texSnap)
+                        renderedInputs[slot] = ProceduralTexturePreview.Render(texSnap, time, cancellation.Token);
+                return ProceduralTexturePreview.Render(snapshot, time, cancellation.Token, textures: renderedInputs);
+            });
             if (cancellation.IsCancellationRequested || generation != _texturePreviewGeneration || !IsVisible) return;
             var bitmap = new WriteableBitmap(new PixelSize(frame.Width, frame.Height), new Vector(96, 96),
                 PixelFormat.Bgra8888, AlphaFormat.Premul);

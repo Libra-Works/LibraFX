@@ -16,7 +16,7 @@ public sealed record GraphLayoutPreview(Guid PreviewId, string Mode, IReadOnlyLi
 
 public static class GraphFlowLayout
 {
-    private const double HorizontalGap = 160;
+    private const double HorizontalGap = 180;
     private const double VerticalGap = 56;
     public const int MaximumNodes = 256;
 

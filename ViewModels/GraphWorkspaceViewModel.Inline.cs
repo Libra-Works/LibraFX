@@ -258,6 +258,7 @@ public sealed partial class GraphWorkspaceViewModel
             }
             else
             {
+                _document._hierarchyCache.Clear();
                 RestoreCurrentGraph(graph);
             }
         }

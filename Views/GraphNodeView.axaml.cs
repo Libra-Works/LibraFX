@@ -480,8 +480,18 @@ public partial class GraphNodeView : UserControl
         if (e.Source is Visual origin &&
             origin.GetSelfAndVisualAncestors().OfType<GraphNodeView>().FirstOrDefault() is { } nearest &&
             !ReferenceEquals(nearest, this)) return;
-        if (DataContext is not GraphNodeViewModel node ||
-            !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        if (DataContext is not GraphNodeViewModel node)
+        {
+            return;
+        }
+        var point = e.GetCurrentPoint(this);
+        if (point.Properties.IsRightButtonPressed)
+        {
+            if (!node.IsSelected)
+                node.Workspace.SelectNode(node);
+            return;
+        }
+        if (!point.Properties.IsLeftButtonPressed)
         {
             return;
         }

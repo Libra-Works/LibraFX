@@ -126,6 +126,131 @@ internal static class PreviewProtocolTests
             await host.StopAsync();
             await Dispatcher.UIThread.InvokeAsync(model.DisposeStorageFiles);
         }
+        VerifyPackageParameterDelta();
+        await VerifyUnrealPackagePreviewDoesNotResendProgramAsync();
+    }
+
+    private static void VerifyPackageParameterDelta()
+    {
+        var fountainPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Assets", "Samples", "CpuFountain.lfxproj");
+        if (!File.Exists(fountainPath))
+            fountainPath = Path.GetFullPath(Path.Combine("Assets", "Samples", "CpuFountain.lfxproj"));
+        using var stream = File.OpenRead(fountainPath);
+        var snapshot = Task.Run(() => ProjectDocumentReader.LoadAsync(stream)).GetAwaiter().GetResult().Graph;
+        var package = LiberaFx.Services.Compilation.SpawnableGroupPackage.Compile(snapshot, includePreviewSignalKeys: true);
+        var bytes = LiberaFx.Services.Compilation.SpawnableGroupPackageBinary.Serialize(package);
+        if (bytes.Length < 16 || !bytes.AsSpan(0, 4).SequenceEqual("LFXP"u8))
+            throw new InvalidOperationException("CpuFountain did not compile to a valid LFXP package.");
+
+        var beamPath = Path.Combine(Path.GetDirectoryName(fountainPath)!, "ProceduralBeam.lfxproj");
+        using var beamStream = File.OpenRead(beamPath);
+        var beamSnapshot = Task.Run(() => ProjectDocumentReader.LoadAsync(beamStream)).GetAwaiter().GetResult().Graph;
+        var beamPackage = LiberaFx.Services.Compilation.SpawnableGroupPackage.Compile(beamSnapshot, includePreviewSignalKeys: true);
+        var beamBytes = LiberaFx.Services.Compilation.SpawnableGroupPackageBinary.Serialize(beamPackage);
+        if (beamBytes.Length < 16 || !beamBytes.AsSpan(0, 4).SequenceEqual("LFXP"u8))
+            throw new InvalidOperationException("ProceduralBeam did not compile to a valid LFXP package.");
+        using (var beamScene = JsonDocument.Parse(beamPackage.RootRenderConfiguration))
+        {
+            foreach (var proc in beamScene.RootElement.GetProperty("proceduralResources").EnumerateArray())
+            {
+                var procKind = proc.GetProperty("kind").GetString();
+                var stages = procKind == "ProceduralModel"
+                    ? proc.GetProperty("recipe").GetProperty("modifiers").GetArrayLength()
+                    : proc.GetProperty("recipe").GetProperty("operations").GetArrayLength();
+                var blocks = procKind == "ProceduralModel" ? 4 : 3;
+                if (proc.GetProperty("inputs").GetArrayLength() != stages * blocks)
+                    throw new InvalidOperationException($"Procedural resource {procKind} input block count mismatch.");
+            }
+        }
+
+        var floatDef = LiberaFx.Models.Graph.GraphNodeDefinition.Find(new LiberaFx.Models.Graph.GraphNodeKind("Float"))!;
+        var floatNode = new LiberaFx.Models.Graph.GraphNodeSnapshot(
+            Guid.NewGuid(),
+            floatDef.Kind,
+            "Speed",
+            0,
+            0,
+            floatDef.PortType,
+            floatDef.PortCategory,
+            null,
+            null,
+            [new LiberaFx.Models.Graph.NodeParameterSnapshot("value", "float", JsonSerializer.SerializeToElement(10.0))]);
+        var baseGraph = new LiberaFx.Models.Graph.GraphSnapshot([floatNode], []);
+        var editedGraph = new LiberaFx.Models.Graph.GraphSnapshot(
+            [floatNode with { Parameters = [new LiberaFx.Models.Graph.NodeParameterSnapshot("value", "float", JsonSerializer.SerializeToElement(42.0))] }],
+            []);
+        if (!PackageParameterDelta.TryCreatePayload(baseGraph, editedGraph, 123, out var deltaBytes) || deltaBytes is null)
+            throw new InvalidOperationException("PackageParameterDelta did not emit a delta payload for Float value.");
+        var frameText = Encoding.UTF8.GetString(deltaBytes.AsSpan(LiberaFx.Services.CompiledPreviewProtocol.HeaderSize));
+        using var doc = JsonDocument.Parse(frameText);
+        if (doc.RootElement.GetProperty("type").GetString() != "parameter_delta" ||
+            doc.RootElement.GetProperty("updates").GetArrayLength() == 0)
+            throw new InvalidOperationException("PackageParameterDelta payload did not contain parameter_delta updates.");
+    }
+
+    private static async Task VerifyUnrealPackagePreviewDoesNotResendProgramAsync()
+    {
+        var probe = new TcpListener(IPAddress.Loopback, 0);
+        probe.Start();
+        var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+        probe.Stop();
+        using var host = new PreviewHost(port);
+        var model = new MainViewModel();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+        var token = cancellation.Token;
+        try
+        {
+            await host.StartAsync(model);
+            using var socket = new ClientWebSocket();
+            socket.Options.SetRequestHeader("X-LiberaFx-Preview-Token", host.AccessToken);
+            var fingerprint = Convert.FromHexString(host.Fingerprint);
+            socket.Options.RemoteCertificateValidationCallback = (_, certificate, _, _) =>
+                certificate is not null && CryptographicOperations.FixedTimeEquals(
+                    SHA256.HashData(certificate.GetRawCertData()), fingerprint);
+            await socket.ConnectAsync(new Uri($"wss://localhost:{port}/preview?protocol=3&unrealPackagePreview=1"), token);
+            var hello = Encoding.UTF8.GetBytes("""
+                {"type":"hello","engine":"Unreal","role":"editor","version":1,"capabilities":["unrealPackagePreview"]}
+                """);
+            await socket.SendAsync(hello, WebSocketMessageType.Text, true, token);
+
+            static async Task<byte[]> ReceiveBinaryFrameAsync(ClientWebSocket ws, CancellationToken ct)
+            {
+                while (true)
+                {
+                    using var ms = new MemoryStream();
+                    var buf = new byte[16384];
+                    ValueWebSocketReceiveResult res;
+                    do
+                    {
+                        res = await ws.ReceiveAsync(buf.AsMemory(), ct);
+                        ms.Write(buf, 0, res.Count);
+                    } while (!res.EndOfMessage);
+                    var bytes = ms.ToArray();
+                    if (bytes.Length >= CompiledPreviewProtocol.HeaderSize && bytes[6] != (byte)CompiledPreviewKind.Control)
+                        return bytes;
+                }
+            }
+
+            var first = await ReceiveBinaryFrameAsync(socket, token);
+            if ((CompiledPreviewKind)first[6] != CompiledPreviewKind.Program)
+                throw new InvalidOperationException("Initial unrealPackagePreview frame was not Program.");
+
+            await Dispatcher.UIThread.InvokeAsync(() => model.Playback.Frame = 5);
+            var second = await ReceiveBinaryFrameAsync(socket, token);
+            if ((CompiledPreviewKind)second[6] != CompiledPreviewKind.Playback)
+            {
+                var seq1 = System.Buffers.Binary.BinaryPrimitives.ReadInt64LittleEndian(first.AsSpan(8));
+                var seq2 = System.Buffers.Binary.BinaryPrimitives.ReadInt64LittleEndian(second.AsSpan(8));
+                throw new InvalidOperationException($"Playback update resent {(CompiledPreviewKind)second[6]} (seq1={seq1}, seq2={seq2}) instead of Playback for unrealPackagePreview.");
+            }
+
+            socket.Abort();
+        }
+        finally
+        {
+            await host.StopAsync();
+            await Dispatcher.UIThread.InvokeAsync(model.DisposeStorageFiles);
+        }
     }
 
     private static async Task<JsonDocument> ReceiveAsync(ClientWebSocket socket, CancellationToken cancellation)

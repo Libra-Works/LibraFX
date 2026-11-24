@@ -12,9 +12,28 @@ using LiberaFx.Services;
 using System.Text.Json;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using Avalonia.Controls.Templates;
 using Avalonia.Threading;
 
 namespace LiberaFx.Views;
+
+public sealed class GraphNodeViewTemplate : IDataTemplate
+{
+    private readonly ConditionalWeakTable<GraphNodeViewModel, GraphNodeView> _cache = new();
+
+    public Control? Build(object? param)
+    {
+        if (param is not GraphNodeViewModel node) return null;
+        if (_cache.TryGetValue(node, out var existing) && existing.Parent is null)
+            return existing;
+        var view = new GraphNodeView();
+        _cache.AddOrUpdate(node, view);
+        return view;
+    }
+
+    public bool Match(object? data) => data is GraphNodeViewModel;
+}
 
 public partial class GraphEditorView : UserControl
 {
@@ -24,6 +43,7 @@ public partial class GraphEditorView : UserControl
     private MouseButton _panButton;
     private Point _panStart;
     private Vector _panOffset;
+    private GraphConnectionViewModel? _contextMenuConnection;
     private double _zoom = 1;
     private bool _updatingZoomSlider;
     private const double OriginStep = 2400;
@@ -64,8 +84,10 @@ public partial class GraphEditorView : UserControl
                 {
                     Focus();
                     _pastePosition = ToGraphPoint(e.GetPosition(GraphCanvas));
+                    _contextMenuConnection = GraphSceneLayer.HitTestConnection(graph, _pastePosition);
                     NewGraphGroupMenu.IsVisible = graph.CanCreateNode(GraphNodeKind.GraphGroup, out string? _);
                     NewSpawnableGroupMenu.IsVisible = true;
+                    AddRerouteMenu.IsVisible = _contextMenuConnection is not null;
                     BeginViewportPan(e, MouseButton.Right,
                         ShortcutService.Shared.GraphPanButton is "Right" or "Right + Middle");
                 }
@@ -452,10 +474,11 @@ public partial class GraphEditorView : UserControl
 
         _pastePosition = ToGraphPoint(e.GetPosition(GraphCanvas));
         var hitNode = FindHitNode(e.Source);
+        var blankCanvasOrComment = hitNode is null || hitNode.IsBlankCommentArea(e);
+        _contextMenuConnection = blankCanvasOrComment ? GraphSceneLayer.HitTestConnection(graph, _pastePosition) : null;
         NewGraphGroupMenu.IsVisible = hitNode is null && graph.CanCreateNode(GraphNodeKind.GraphGroup, out string? _);
         NewSpawnableGroupMenu.IsVisible = hitNode is null;
-        AddRerouteMenu.IsVisible = hitNode is null &&
-            GraphSceneLayer.HitTestConnection(graph, _pastePosition) is not null;
+        AddRerouteMenu.IsVisible = _contextMenuConnection is not null;
         PopulateAddNodeMenu(graph);
         if (hitNode?.DataContext is GraphNodeViewModel node && !node.IsSelected && graph.SelectedNodes.Count < 2)
         {
@@ -526,7 +549,9 @@ public partial class GraphEditorView : UserControl
     private void OnAddRerouteClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not GraphWorkspaceViewModel graph) return;
-        if (GraphSceneLayer.HitTestConnection(graph, _pastePosition) is { } connection)
+        var connection = _contextMenuConnection ?? GraphSceneLayer.HitTestConnection(graph, _pastePosition);
+        _contextMenuConnection = null;
+        if (connection is not null)
         {
             graph.InsertRerouteOnConnection(connection, _pastePosition.X, _pastePosition.Y);
         }
@@ -595,6 +620,12 @@ public partial class GraphEditorView : UserControl
             .Any(id => shortcuts.Matches(id, e)))
         {
             graph.SetConnectionStatus("Inline.Locked");
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.F9 && TopLevel.GetTopLevel(this)?.DataContext is MainViewModel f9Main)
+        {
+            f9Main.ExecutionDebugger.BreakpointCommand.Execute(null);
             e.Handled = true;
             return;
         }
@@ -739,6 +770,12 @@ public partial class GraphEditorView : UserControl
             NodeSearchResults.SelectedItem is not NodeCatalogEntryViewModel entry) return;
         AddCatalogEntryAt(graph, entry, _nodeSearchPosition);
         NodeSearchPopup.IsOpen = false;
+    }
+
+    private void OnToggleBreakpointClick(object? sender, RoutedEventArgs e)
+    {
+        if (TopLevel.GetTopLevel(this)?.DataContext is MainViewModel main)
+            main.ExecutionDebugger.BreakpointCommand.Execute(null);
     }
 
     private async Task CopySelectionAsync(bool cut)

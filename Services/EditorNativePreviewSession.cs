@@ -169,12 +169,14 @@ public sealed class EditorNativePreviewSession : IDisposable
         }
         // Equal sampled time (pause/resume/resync) does not evaluate again.
         var nodes = new JsonArray();
-        if (_native!.RootVisible) Append(_rootRender, Guid.Empty, 0, 0, nodes);
+        var proceduralResources = new JsonArray();
+        var seenProcedural = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (_native!.RootVisible) Append(_rootRender, Guid.Empty, 0, 0, nodes, proceduralResources, seenProcedural);
         foreach (var instance in _native!.ActiveInstances)
         {
             var template = _package.Templates.Single(item => item.ContainerId == instance.Container);
             Append(template.RenderConfiguration, instance.Container, instance.Instance,
-                _native.InstanceStartTime(instance.Container, instance.Instance), nodes);
+                _native.InstanceStartTime(instance.Container, instance.Instance), nodes, proceduralResources, seenProcedural);
         }
         if (playback?.DebugDrawStopped == true)
             for (var index = nodes.Count - 1; index >= 0; --index)
@@ -192,6 +194,11 @@ public sealed class EditorNativePreviewSession : IDisposable
             ["activeInstances"] = ActiveCount,
             ["nodes"] = nodes
         };
+        if (proceduralResources.Count > 0)
+        {
+            result["proceduralVersion"] = 1;
+            result["proceduralResources"] = proceduralResources;
+        }
         var bytes = JsonSerializer.SerializeToUtf8Bytes(result);
         if (bytes.Length > CompiledPreviewProtocol.MaxSceneBytes)
             throw new InvalidDataException("Editor-native evaluated render snapshot exceeds the preview payload limit.");
@@ -373,9 +380,52 @@ public sealed class EditorNativePreviewSession : IDisposable
         _signalPlayback = state;
     }
 
-    private void Append(byte[] configuration, Guid container, ulong instance, double start, JsonArray nodes)
+    private void EvaluateInputs(JsonArray inputs, Guid container, ulong instance, Guid templateNode)
+    {
+        foreach (var inputValue in inputs)
+        {
+            var input = inputValue!.AsObject();
+            var width = input["width"]!.GetValue<int>();
+            var component = input["sourceComponent"]!.GetValue<int>();
+            if (input["sourceNodeId"] is { } sourceNode)
+            {
+                var sourceId = Guid.Parse(sourceNode.GetValue<string>());
+                var evaluated = container == Guid.Empty ? _native!.ReadRoot(sourceId) : _native!.Read(container, instance, sourceId);
+                if (width is < 1 or > 4 || component < 0 || component + width > evaluated.Width)
+                    throw new InvalidDataException($"Invalid native renderer input width: {templateNode}/{input["id"]}.");
+                var defaults = new JsonArray();
+                for (var lane = 0; lane < width; ++lane)
+                {
+                    var number = evaluated.Lanes[component + lane];
+                    if (!double.IsFinite(number)) throw new InvalidDataException($"Nonfinite native renderer value: {templateNode}.");
+                    defaults.Add(number);
+                }
+                input["defaults"] = defaults;
+            }
+            // Every transported lane is an authoritative native result
+            // or an authored unconnected default. UE has no source binding
+            // to the shell and cannot accidentally animate these values.
+            input["sourceNodeId"] = null;
+            input["sourceComponent"] = 0;
+        }
+    }
+
+    private void Append(byte[] configuration, Guid container, ulong instance, double start,
+        JsonArray nodes, JsonArray proceduralResources, HashSet<string> seenProcedural)
     {
         var config = JsonNode.Parse(configuration)!.AsObject();
+        if (config["proceduralResources"] is JsonArray resArray)
+        {
+            foreach (var resValue in resArray)
+            {
+                var res = resValue!.DeepClone().AsObject();
+                var resIdText = res["nodeId"]!.GetValue<string>();
+                if (!seenProcedural.Add(resIdText)) continue;
+                if (res["inputs"] is JsonArray resInputs)
+                    EvaluateInputs(resInputs, container, instance, Guid.Parse(resIdText));
+                proceduralResources.Add(res);
+            }
+        }
         foreach (var value in config["nodes"]!.AsArray())
         {
             var draw = value!.DeepClone().AsObject();
@@ -385,32 +435,7 @@ public sealed class EditorNativePreviewSession : IDisposable
             draw["containerId"] = container.ToString("D");
             draw["instanceId"] = instance;
             draw["localTimeSeconds"] = EvaluatedTimeSeconds - start;
-            foreach (var inputValue in draw["inputs"]!.AsArray())
-            {
-                var input = inputValue!.AsObject();
-                var width = input["width"]!.GetValue<int>();
-                var component = input["sourceComponent"]!.GetValue<int>();
-                if (input["sourceNodeId"] is { } sourceNode)
-                {
-                    var sourceId = Guid.Parse(sourceNode.GetValue<string>());
-                    var evaluated = container == Guid.Empty ? _native!.ReadRoot(sourceId) : _native!.Read(container, instance, sourceId);
-                    if (width is < 1 or > 4 || component < 0 || component + width > evaluated.Width)
-                        throw new InvalidDataException($"Invalid native renderer input width: {templateNode}/{input["id"]}.");
-                    var defaults = new JsonArray();
-                    for (var lane = 0; lane < width; ++lane)
-                    {
-                        var number = evaluated.Lanes[component + lane];
-                        if (!double.IsFinite(number)) throw new InvalidDataException($"Nonfinite native renderer value: {templateNode}.");
-                        defaults.Add(number);
-                    }
-                    input["defaults"] = defaults;
-                }
-                // Every transported lane is an authoritative native result
-                // or an authored unconnected default. UE has no source binding
-                // to the shell and cannot accidentally animate these values.
-                input["sourceNodeId"] = null;
-                input["sourceComponent"] = 0;
-            }
+            EvaluateInputs(draw["inputs"]!.AsArray(), container, instance, templateNode);
             nodes.Add(draw);
         }
     }

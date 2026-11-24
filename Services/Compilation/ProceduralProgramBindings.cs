@@ -60,9 +60,7 @@ internal static class ProceduralProgramBindings
             var kind = ProceduralResourceSchema.Name(node.Kind)!;
             var recipe = Recipe(node);
             var effective = ProceduralResourceSchema.Effective(definition, node.Parameters);
-            var ports = recipe.Modifiers.SelectMany(m => Enumerable.Range(0, 4).Select(b => ProceduralResourceSchema.Port(m.Id, b)))
-                .Concat(recipe.Operations.SelectMany(op => Enumerable.Range(0, 3).Select(b => ProceduralResourceSchema.Port(op.Id, b)))).ToHashSet(StringComparer.Ordinal);
-            var inputs = Inputs(node, effective with { InputPorts = effective.InputPorts!.Where(p => ports.Contains(p.Id)).ToArray() }, nodes, incoming);
+            var inputs = ResourceInputs(node, kind, recipe, effective, nodes, incoming);
             var slots = ProceduralPixelCompilation.TextureSlots(node, recipe, incoming);
             var textures = kind == "ProceduralMaterial" ? slots.Order().Select(slot => new
             {
@@ -79,19 +77,67 @@ internal static class ProceduralProgramBindings
         return result.ToArray();
     }
 
+    private static object[] ResourceInputs(GraphNodeSnapshot node, string kind, ProceduralRecipe recipe,
+        GraphNodeDefinition effective, IReadOnlyDictionary<Guid, GraphNodeSnapshot> nodes, ILookup<Guid, GraphConnectionSnapshot> incoming)
+    {
+        var active = Inputs(node, effective, nodes, incoming)
+            .ToDictionary(item => (string)item.GetType().GetProperty("id")!.GetValue(item)!, StringComparer.Ordinal);
+        var result = new List<object>();
+        if (kind == "ProceduralModel")
+        {
+            foreach (var modifier in recipe.Modifiers)
+            {
+                for (var block = 0; block < 4; block++)
+                {
+                    var id = ProceduralResourceSchema.Port(modifier.Id, block);
+                    if (active.TryGetValue(id, out var existing))
+                        result.Add(existing);
+                    else
+                        result.Add(DummyInput(id, modifier.Values, block));
+                }
+            }
+        }
+        else
+        {
+            foreach (var op in recipe.Operations)
+            {
+                for (var block = 0; block < 3; block++)
+                {
+                    var id = ProceduralResourceSchema.Port(op.Id, block);
+                    if (active.TryGetValue(id, out var existing))
+                        result.Add(existing);
+                    else
+                        result.Add(DummyInput(id, op.Values, block));
+                }
+            }
+        }
+        return result.ToArray();
+    }
+
+    private static object DummyInput(string id, float[] values, int block)
+    {
+        var offset = block * 4;
+        var defaults = new double[4];
+        for (var c = 0; c < 4 && offset + c < values.Length; c++)
+            defaults[c] = values[offset + c];
+        return new { id, width = 4, sourceNodeId = (Guid?)null, sourceComponent = 0, defaults, materialParameter = (object?)null };
+    }
+
     internal static object[] Inputs(GraphNodeSnapshot node, GraphNodeDefinition definition,
         IReadOnlyDictionary<Guid, GraphNodeSnapshot> nodes, ILookup<Guid, GraphConnectionSnapshot> incoming)
     {
         var inputs = new List<object>();
         foreach (var port in definition.InputPorts ?? [])
         {
-            var width = port.PortType switch { "Float" => 1, "FloatX3" => 3, "FloatX4" => 4, _ => 0 };
+            var width = port.PortType switch { "Float" => 1, "FloatX2" => 2, "FloatX3" => 3, "FloatX4" or "Color" => 4, _ => 0 };
             if (width == 0) continue;
             var parameter = definition.Parameters.Single(p => p.Id == port.Id);
             var value = node.Parameters?.FirstOrDefault(p => p.Id == port.Id)?.Value ?? parameter.DefaultValue;
             if (!NodeParameter.IsValidValue(parameter.Type, value))
                 throw new InvalidDataException("Invalid procedural input default.");
-            var defaults = width == 1 ? [value.GetDouble()] : value.EnumerateArray().Select(v => v.GetDouble()).ToArray();
+            var defaults = value.ValueKind == JsonValueKind.Number
+                ? [value.GetDouble()]
+                : value.EnumerateArray().Take(width).Select(v => v.GetDouble()).ToArray();
             var edges = incoming[node.Id].Where(e => e.TargetPortId == port.Id).ToArray();
             if (edges.Length > 1) throw new InvalidDataException("Multiple procedural input sources.");
             Guid? sourceNodeId = null;

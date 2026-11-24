@@ -14,6 +14,7 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
     private readonly ActiveGraphProvider _activeGraph;
     private readonly EditorPlayback? _playback;
     private readonly AssetBrowserCoordinator? _assetBrowser;
+    private readonly ExecutionDebugPaneViewModel? _debugger;
     private GraphWorkspaceViewModel _graph;
     private GraphNodeViewModel? _node;
     private GraphNodeViewModel? _pinnedNode;
@@ -111,11 +112,12 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
     }
 
     public NodePropertiesPaneViewModel(ActiveGraphProvider activeGraph, EditorPlayback? playback = null,
-        AssetBrowserCoordinator? assetBrowser = null)
+        AssetBrowserCoordinator? assetBrowser = null, ExecutionDebugPaneViewModel? debugger = null)
     {
         _activeGraph = activeGraph;
         _playback = playback;
         _assetBrowser = assetBrowser;
+        _debugger = debugger;
         _graph = activeGraph.Graph;
         SaveGroupCommand = new RelayCommand(() => RunGroupAction(_graph.SaveSelectedGroupAsset),
             () => CanManageGroup && _graph.GroupAssets?.HasLibraryDirectory == true &&
@@ -139,7 +141,34 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
         _graph.Nodes.CollectionChanged += OnNodesChanged;
         _graph.Connections.CollectionChanged += OnConnectionsChanged;
         if (_graph.GroupAssets is { } catalog) catalog.Changed += OnGroupAssetsChanged;
+        if (_debugger is not null) _debugger.PropertyChanged += OnDebuggerChanged;
         RefreshNode();
+    }
+
+    public bool HasLiveDebugValues =>
+        _debugger is { IsDebuggingPaused: true, CurrentFrame: { } frame } &&
+        InspectorNode is { } node && frame.Node == node.Id;
+    public string LiveDebugNodeHeader => _debugger?.CurrentNode ?? string.Empty;
+    public string LiveDebugSignalSource => _debugger?.CurrentSignalSource ?? string.Empty;
+    public IReadOnlyList<string> LiveDebugInputs => HasLiveDebugValues ? _debugger!.Inputs : [];
+    public IReadOnlyList<string> LiveDebugAuthoredParameters => HasLiveDebugValues ? _debugger!.AuthoredParameters : [];
+    public IRelayCommand? DebugPauseCommand => _debugger?.PauseCommand;
+    public IRelayCommand? DebugStepCommand => _debugger?.StepCommand;
+    public IRelayCommand? DebugResumeCommand => _debugger?.ResumeCommand;
+
+    private void OnDebuggerChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(ExecutionDebugPaneViewModel.Status) or
+            nameof(ExecutionDebugPaneViewModel.CurrentNode) or
+            nameof(ExecutionDebugPaneViewModel.Inputs) or
+            nameof(ExecutionDebugPaneViewModel.AuthoredParameters))
+        {
+            OnPropertyChanged(nameof(HasLiveDebugValues));
+            OnPropertyChanged(nameof(LiveDebugNodeHeader));
+            OnPropertyChanged(nameof(LiveDebugSignalSource));
+            OnPropertyChanged(nameof(LiveDebugInputs));
+            OnPropertyChanged(nameof(LiveDebugAuthoredParameters));
+        }
     }
 
     private void OnActiveGraphChanged(object? sender, PropertyChangedEventArgs e)
@@ -297,6 +326,11 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
         OnPropertyChanged(nameof(InspectorTitle));
         OnPropertyChanged(nameof(InspectorNodeName));
         OnPropertyChanged(nameof(InspectorNodeType));
+        OnPropertyChanged(nameof(HasLiveDebugValues));
+        OnPropertyChanged(nameof(LiveDebugNodeHeader));
+        OnPropertyChanged(nameof(LiveDebugSignalSource));
+        OnPropertyChanged(nameof(LiveDebugInputs));
+        OnPropertyChanged(nameof(LiveDebugAuthoredParameters));
         RefreshNodeLockState();
         RefreshGroupState();
         if (_node is null) return;

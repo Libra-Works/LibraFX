@@ -106,7 +106,12 @@ public static class ProceduralResourceSchema
         }
         return new() { Kind = kind, InputA = input, Values = p };
     }
-    public static ProceduralRecipe Default(string kind) => kind == "ProceduralModel" ? new() { Shape = 14 } : new()
+    public static ProceduralRecipe Default(string kind) => kind == "ProceduralModel" ? new() { Shape = 14 } :
+        kind == "ProceduralMaterial" ? new()
+        {
+            Operations = [new() { Id = new("89e9b18d-9ea2-48c0-bb26-a89000000014"), Kind = 30, Values = new float[12] }],
+            OutputRegister = 1
+        } : new()
     {
         // An untouched producer can be read repeatedly before any recipe is
         // persisted. Its local stage identities must already be stable.
@@ -265,6 +270,39 @@ public static class ProceduralResourceSchema
             Check();
         }
     }
+    public static string? ModelParameterName(int kind, int index)
+    {
+        if (index is >= 12 and <= 14) return new[] { "CenterX", "CenterY", "CenterZ" }[index - 12];
+        string[] names = kind switch
+        {
+            0 or 1 => ["Angle"], 2 => ["EndScale"], 3 => ["Amplitude", "Frequency", "Phase", "Speed"],
+            4 => ["Angle", "Radius"], 5 => ["Amplitude", "Frequency", "Phase", "Speed", "Roughness"],
+            6 => ["Blend", "Radius"], 7 => ["Distance"],
+            8 => ["TranslateX", "TranslateY", "TranslateZ", "RotateX", "RotateY", "RotateZ", "ScaleX", "ScaleY", "ScaleZ"],
+            10 => ["TranslateX", "TranslateY", "TranslateZ", "RotateX", "RotateY", "RotateZ", "ScaleX", "ScaleY", "ScaleZ", "Radius", "Sweep"],
+            12 => ["Thickness", "Offset"], _ => []
+        };
+        return index < names.Length ? names[index] : null;
+    }
+
+    public static string? PixelParameterName(int kind, int index)
+    {
+        string[] names = kind switch
+        {
+            1 => ["Red", "Green", "Blue", "Alpha"],
+            3 => ["ScaleU", "ScaleV", "OffsetU", "OffsetV", "Angle", "CenterU", "CenterV"],
+            4 => ["DirectionU", "DirectionV", "Offset"], 5 => ["CenterU", "CenterV", "Scale"],
+            6 => ["CenterU", "CenterV", "Radius", "Width", "Softness"],
+            7 => ["FrequencyU", "FrequencyV", "Phase"], 8 => ["RepeatU", "RepeatV"],
+            13 or 14 => ["FrequencyU", "FrequencyV", "SpeedU", "SpeedV", "Octaves", "Roughness"],
+            >= 9 and <= 15 => ["FrequencyU", "FrequencyV", "SpeedU", "SpeedV"],
+            16 => ["Amplitude", "Center"], 22 => ["Blend"], 23 => ["Power"], 26 => ["Lower", "Upper"],
+            27 => ["StartRed", "StartGreen", "StartBlue", "StartAlpha", "EndRed", "EndGreen", "EndBlue", "EndAlpha", "Lower", "Upper"],
+            28 => ["Channel"], 30 => ["TextureSlot"], 32 => ["Strength", "Step", "FlipY"], _ => []
+        };
+        return index < names.Length ? names[index] : null;
+    }
+
     public static GraphNodeDefinition Effective(GraphNodeDefinition definition, IReadOnlyList<NodeParameterSnapshot>? parameters)
     {
         if (!IsMetadata(definition.Kind))
@@ -274,19 +312,29 @@ public static class ProceduralResourceSchema
         var recipe = Read(definition, parameters);
         var ports = (definition.InputPorts ?? []).ToList();
         var values = definition.Parameters.ToList();
-        void Add(Guid id, float[] data, string label)
+        void Add(Guid id, float[] data, string label, Func<int, string?> nameOf, int maxBlocks)
         {
-            for (var block = 0; block < data.Length / 4; ++block)
+            for (var block = 0; block < Math.Min(data.Length / 4, maxBlocks); ++block)
             {
+                var slotNames = Enumerable.Range(block * 4, 4)
+                    .Select(nameOf)
+                    .Where(n => n is not null)
+                    .Cast<string>()
+                    .ToArray();
+                if (slotNames.Length == 0) continue;
                 var key = Port(id, block);
-                ports.Add(new(key, $"{label} · {block + 1}", "FloatX4"));
-                values.Add(new(key, label, "vector4", JsonSerializer.SerializeToElement(data.Skip(block * 4).Take(4))) { Hidden = true });
+                var portType = slotNames.Length switch { 1 => "Float", 2 => "FloatX2", 3 => "FloatX3", _ => "FloatX4" };
+                var fullName = $"{label} · {string.Join(" / ", slotNames)}";
+                ports.Add(new(key, fullName, portType));
+                values.Add(new(key, fullName, "vector4", JsonSerializer.SerializeToElement(data.Skip(block * 4).Take(4))));
             }
         }
         foreach (var (modifier, index) in recipe.Modifiers.Select((m, i) => (m, i)))
-            Add(modifier.Id, modifier.Values, $"{index + 1}. {ModifierNames[modifier.Kind]}");
+            Add(modifier.Id, modifier.Values, $"{index + 1}. {ModifierNames[modifier.Kind]}",
+                j => ModelParameterName((int)modifier.Kind, j), (modifier.Flags & 2) != 0 ? 4 : 3);
         foreach (var (op, index) in recipe.Operations.Select((op, i) => (op, i)))
-            Add(op.Id, op.Values, $"{index + 1}. {PixelNames[op.Kind]}");
+            Add(op.Id, op.Values, $"{index + 1}. {PixelNames[op.Kind]}",
+                j => PixelParameterName((int)op.Kind, j), 3);
         return definition with { InputPorts = ports, Parameters = values };
     }
 }

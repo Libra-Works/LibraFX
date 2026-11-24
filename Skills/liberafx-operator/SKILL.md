@@ -77,6 +77,8 @@ user-facing labels.
   wrapping to fit the screen. Explicit x/y pairs are fixed; existing graph
   nodes do not move. `layout: "compact"` is an explicit four-column alternative;
   the legacy `manual` plan mode requires coordinates.
+- **Lay out graphs strictly left-to-right (upstream on the left, downstream on the right).** Node outputs are on the right and inputs are on the left, so place source/producer nodes (e.g., `ProceduralTexture` -> `ProceduralMaterial`, math/emitter inputs, `OnStart`) to the left (`smaller X`) of the target nodes they feed (`CpuParticle`, `GpuParticle`, Draw nodes). Never place a source node to the right of its destination; use `libera_graph_preview_layout` + `libera_graph_apply_layout` (`flow` mode) when needed.
+- **Route textures through materials.** Particle and Draw nodes take `ProceduralMaterial`; connect `ProceduralTexture` to `ProceduralMaterial.texture0..3` and connect `ProceduralMaterial` to the particle or draw node.
 - For existing nodes, call `libera_graph_preview_layout` with explicit `nodeIds`
   from the active editing level. Inspect positions, deltas and warnings before
   calling `libera_graph_apply_layout` with its `previewId`. Include immutable

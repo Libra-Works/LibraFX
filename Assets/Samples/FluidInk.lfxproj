@@ -3,7 +3,7 @@
   "AutoDestroyWhenIdle": true,
   "Nodes": [
     {
-      "Id": "1aa73db2-8587-4f21-be9d-c5be65fa4c5f",
+      "Id": "44c7a1e2-2275-4d1b-a8e4-adda37c3f5f8",
       "Name": "FluidInk",
       "Kind": "GpuParticle",
       "X": 0,
@@ -703,10 +703,10 @@
       "SignalKeys": null
     },
     {
-      "Id": "302b35c6-99b7-4630-b248-56095355d06a",
+      "Id": "0c09f3c0-e1ca-40e6-8e9f-b90c050e266a",
       "Name": "Sample guide",
       "Kind": "Comment",
-      "X": 300,
+      "X": 320,
       "Y": 0,
       "Curve": null,
       "ChildGraph": null,
@@ -735,13 +735,13 @@
   ],
   "Connections": [],
   "History": {
-    "RootId": "9dec04c5-7173-405b-b83e-8a9cfd3e2f00",
-    "CurrentNodeId": "9dec04c5-7173-405b-b83e-8a9cfd3e2f00",
-    "TimelineRevisionId": "544c0b1c-990d-475c-81a7-529b187d9bdf",
+    "RootId": "7db8f740-e607-4908-9899-722fa0324532",
+    "CurrentNodeId": "7db8f740-e607-4908-9899-722fa0324532",
+    "TimelineRevisionId": "10240c62-611b-4186-b024-c4dc048f2587",
     "NextBranchNumber": 1,
     "Entries": [
       {
-        "Id": "9dec04c5-7173-405b-b83e-8a9cfd3e2f00",
+        "Id": "7db8f740-e607-4908-9899-722fa0324532",
         "ParentId": null,
         "PreferredChildId": null,
         "Description": "FluidInk",
@@ -750,7 +750,7 @@
         "State": {
           "Nodes": [
             {
-              "Id": "1aa73db2-8587-4f21-be9d-c5be65fa4c5f",
+              "Id": "44c7a1e2-2275-4d1b-a8e4-adda37c3f5f8",
               "Kind": "GpuParticle",
               "Name": "FluidInk",
               "X": 0,
@@ -1453,10 +1453,10 @@
               "KindDomain": "GpuParticle"
             },
             {
-              "Id": "302b35c6-99b7-4630-b248-56095355d06a",
+              "Id": "0c09f3c0-e1ca-40e6-8e9f-b90c050e266a",
               "Kind": "Comment",
               "Name": "Sample guide",
-              "X": 300,
+              "X": 320,
               "Y": 0,
               "PortType": "Comment",
               "PortCategory": "Parameter",

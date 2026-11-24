@@ -730,6 +730,12 @@ internal static class Program
             Console.WriteLine("Solar-system matrix authoring, saved project and render binding checks passed.");
             return;
         }
+        if (args is ["--preview-protocol"])
+        {
+            PreviewProtocolTests.Run();
+            Console.WriteLine("Preview protocol checks passed.");
+            return;
+        }
         if (args is ["--unreal-gpu-preview"])
         {
             CompiledPreviewProtocolTests.RunUnrealGpuPreview();

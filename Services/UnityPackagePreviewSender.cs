@@ -51,7 +51,19 @@ internal sealed class UnityPackagePreviewSender
         {
             throw new NotSupportedException("Unity WSS package preview does not support SOURCE skeletal poses.");
         }
-        var package = SpawnableGroupPackage.Compile(publication.Graph, includePreviewSignalKeys: true,
+        if (!force && _loaded && _last is { } prev &&
+            prev.DocumentId == publication.DocumentId &&
+            prev.IncludePreviewDebugDraw == publication.IncludePreviewDebugDraw &&
+            prev.Playback?.DebugDrawStopped == publication.Playback?.DebugDrawStopped &&
+            PackageParameterDelta.TryCreatePayload(prev.Graph, publication.Graph, publication.Sequence, out var deltaBytes))
+        {
+            return new(deltaBytes!, CompiledPreviewKind.Scene, publication);
+        }
+        var compileGraph = publication.Graph.AutoDestroyWhenIdle &&
+            GpuProgramDeliveryService.Containers(publication.Graph).Any()
+            ? publication.Graph with { AutoDestroyWhenIdle = false }
+            : publication.Graph;
+        var package = SpawnableGroupPackage.Compile(compileGraph, includePreviewSignalKeys: true,
             options: new VfxCompileOptions
             {
                 IncludePreviewDebugDraw = publication.IncludePreviewDebugDraw &&

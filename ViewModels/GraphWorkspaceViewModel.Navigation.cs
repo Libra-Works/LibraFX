@@ -54,10 +54,12 @@ public sealed partial class GraphWorkspaceViewModel
                 return false;
             }
         }
+        var previousKey = CurrentHierarchyKey;
+        CacheCurrentHierarchy(previousKey);
         CreateSnapshot();
-        HierarchyChanging?.Invoke(this, CurrentHierarchyKey);
+        HierarchyChanging?.Invoke(this, previousKey);
         _graphPath.Add(node.Id);
-        RestoreCurrentGraph(node.ChildGraph);
+        RestoreHierarchy(node.ChildGraph);
         RefreshBreadcrumbs();
         SetConnectionStatus("Messages.EditingNestedGraph");
         HierarchyChanged?.Invoke(this, CurrentHierarchyKey);
@@ -71,10 +73,12 @@ public sealed partial class GraphWorkspaceViewModel
             return;
         }
 
+        var previousKey = CurrentHierarchyKey;
+        CacheCurrentHierarchy(previousKey);
         CreateSnapshot();
-        HierarchyChanging?.Invoke(this, CurrentHierarchyKey);
+        HierarchyChanging?.Invoke(this, previousKey);
         _graphPath.RemoveRange(depth, _graphPath.Count - depth);
-        RestoreCurrentGraph(GetCurrentGraph());
+        RestoreHierarchy(GetCurrentGraph());
         RefreshBreadcrumbs();
         SetConnectionStatus("Messages.GraphLevelChanged");
         HierarchyChanged?.Invoke(this, CurrentHierarchyKey);
@@ -84,6 +88,7 @@ public sealed partial class GraphWorkspaceViewModel
     {
         if (!_graphPath.SequenceEqual(parentPath))
         {
+            CacheCurrentHierarchy(CurrentHierarchyKey);
             CreateSnapshot();
             var previousKey = CurrentHierarchyKey;
             var current = _rootSnapshot;
@@ -120,7 +125,7 @@ public sealed partial class GraphWorkspaceViewModel
             HierarchyChanging?.Invoke(this, previousKey);
             _graphPath.Clear();
             _graphPath.AddRange(parentPath);
-            RestoreCurrentGraph(current);
+            RestoreHierarchy(current);
             RefreshBreadcrumbs();
             SetConnectionStatus("Messages.GraphLevelChanged");
             HierarchyChanged?.Invoke(this, CurrentHierarchyKey);

@@ -20,9 +20,9 @@ internal static class ParticleSamplesTests
             {
                 using var render = JsonDocument.Parse(package.RootRenderConfiguration);
                 var cpuDraw = render.RootElement.GetProperty("cpuParticles")[0];
-                if (cpuDraw.GetProperty("assetPath").GetString() != "builtin:procedural-texture" ||
-                    cpuDraw.GetProperty("proceduralTexture").GetGuid() == Guid.Empty)
-                    throw new InvalidOperationException(name + " requires its procedural glow texture.");
+                if (cpuDraw.GetProperty("assetPath").GetString() != "builtin:procedural-material" ||
+                    cpuDraw.GetProperty("proceduralMaterial").GetGuid() == Guid.Empty)
+                    throw new InvalidOperationException(name + " requires its procedural glow material.");
             }
             if (name == "Fireworks" && (package.Templates.Count != 2 || package.DestroyRoutes.Count != 1 ||
                 package.Templates.Any(template => template.CpuPrograms.Length == 0)))

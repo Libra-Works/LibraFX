@@ -62,7 +62,7 @@ public static class PreviewProtocol
         nodeTypes = nodeTypes.Select(type => new { kind = type.Kind.Value, type.TypeId, type.Namespace, type.TypeName })
     }, Options);
 
-    private static bool Collect(GraphSnapshot previous, GraphSnapshot current, Guid[] path,
+    internal static bool Collect(GraphSnapshot previous, GraphSnapshot current, Guid[] path,
         List<PreviewParameterChange> changes)
     {
         if (ReferenceEquals(previous, current)) return true;

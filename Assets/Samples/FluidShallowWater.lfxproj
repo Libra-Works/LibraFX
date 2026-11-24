@@ -3,7 +3,7 @@
   "AutoDestroyWhenIdle": true,
   "Nodes": [
     {
-      "Id": "558e05f3-8da3-4d75-8ddb-2a8de06f9396",
+      "Id": "a4c99994-a5d7-43a0-bddb-7cdbb8262140",
       "Name": "FluidShallowWater",
       "Kind": "GpuParticle",
       "X": 0,
@@ -706,10 +706,10 @@
       "SignalKeys": null
     },
     {
-      "Id": "d3ff1435-297a-4be6-99b9-663cd89aadc7",
+      "Id": "2db9ce2f-14b1-472f-8f04-fa75bc21e07b",
       "Name": "Sample guide",
       "Kind": "Comment",
-      "X": 300,
+      "X": 320,
       "Y": 0,
       "Curve": null,
       "ChildGraph": null,
@@ -738,13 +738,13 @@
   ],
   "Connections": [],
   "History": {
-    "RootId": "5c97a175-2fb9-4cf1-8c72-ab4558cdc4e6",
-    "CurrentNodeId": "5c97a175-2fb9-4cf1-8c72-ab4558cdc4e6",
-    "TimelineRevisionId": "54f60491-6503-4ac8-904a-14b24be45559",
+    "RootId": "6ba9f816-b705-46be-8995-01bfebe1e1e4",
+    "CurrentNodeId": "6ba9f816-b705-46be-8995-01bfebe1e1e4",
+    "TimelineRevisionId": "4c84b328-7180-4856-a214-9f4975fdc4ec",
     "NextBranchNumber": 1,
     "Entries": [
       {
-        "Id": "5c97a175-2fb9-4cf1-8c72-ab4558cdc4e6",
+        "Id": "6ba9f816-b705-46be-8995-01bfebe1e1e4",
         "ParentId": null,
         "PreferredChildId": null,
         "Description": "FluidShallowWater",
@@ -753,7 +753,7 @@
         "State": {
           "Nodes": [
             {
-              "Id": "558e05f3-8da3-4d75-8ddb-2a8de06f9396",
+              "Id": "a4c99994-a5d7-43a0-bddb-7cdbb8262140",
               "Kind": "GpuParticle",
               "Name": "FluidShallowWater",
               "X": 0,
@@ -1459,10 +1459,10 @@
               "KindDomain": "GpuParticle"
             },
             {
-              "Id": "d3ff1435-297a-4be6-99b9-663cd89aadc7",
+              "Id": "2db9ce2f-14b1-472f-8f04-fa75bc21e07b",
               "Kind": "Comment",
               "Name": "Sample guide",
-              "X": 300,
+              "X": 320,
               "Y": 0,
               "PortType": "Comment",
               "PortCategory": "Parameter",

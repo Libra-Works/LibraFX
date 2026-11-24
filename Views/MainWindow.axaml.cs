@@ -246,7 +246,7 @@ public partial class MainWindow : Window
         if (DataContext is not MainViewModel model) return;
         _groupModel = model;
         model.GroupAssets.Changed += OnGroupCatalogChanged;
-        model.ActiveGraphProvider.PropertyChanged += OnActiveGraphChanged;
+        model.Documents.CollectionChanged += OnDocumentsChanged;
         if (IsVisible) QueueGroupUpdateCheck();
     }
 
@@ -254,15 +254,16 @@ public partial class MainWindow : Window
     {
         if (_groupModel is null) return;
         _groupModel.GroupAssets.Changed -= OnGroupCatalogChanged;
-        _groupModel.ActiveGraphProvider.PropertyChanged -= OnActiveGraphChanged;
+        _groupModel.Documents.CollectionChanged -= OnDocumentsChanged;
         _groupModel = null;
     }
 
     private void OnGroupCatalogChanged(object? sender, EventArgs e) => QueueGroupUpdateCheck();
 
-    private void OnActiveGraphChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private void OnDocumentsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(ActiveGraphProvider.Graph)) QueueGroupUpdateCheck();
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
+            QueueGroupUpdateCheck();
     }
 
     private void QueueGroupUpdateCheck()
