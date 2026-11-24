@@ -78,6 +78,32 @@ internal static class ResourceIdentityExportTests
         {
             Parameters = [new("assetPath", "string", JsonSerializer.SerializeToElement("/Game/Old/Old.Old"))]
         }], []), map, target, probe), "Legacy path cannot silently become portable");
+
+        var mappedLfxb = ResourceIdentityExport.CompileMappedBinary(loaded, map, target, probe);
+        var pkg = LiberaFx.Services.Compilation.SpawnableGroupPackageBinary.Deserialize(mappedLfxb);
+        Require(pkg.ParentBytecode.Length > 0 &&
+                System.Text.Encoding.UTF8.GetString(pkg.RootRenderConfiguration).Contains("/Game/New/New.New", StringComparison.Ordinal),
+            "CompileMappedBinary must emit a playable package with resolved engine resource paths.");
+
+        var godotProject = new EngineProjectIdentity("Godot", Guid.NewGuid());
+        var godotBinding = new OpaqueBinding("godot.res-path.v1", "res://models/cube.mesh");
+        var godotMap = new ResourceIdentityDocument(1, [new(id, "model", "Cube")],
+            [new(godotProject, id, "model", godotBinding)], [], [], []);
+        var godotProbe = new ResourceIdentitySnapshotProbe(new(1, godotProject, true,
+            [new(godotBinding, ResourceResolutionStatus.Resolved, "model")], []));
+        var godotLfxb = ResourceIdentityExport.CompileMappedBinary(loaded, godotMap, godotProject, godotProbe);
+        var godotPkg = LiberaFx.Services.Compilation.SpawnableGroupPackageBinary.Deserialize(godotLfxb);
+        Require(System.Text.Encoding.UTF8.GetString(godotPkg.RootRenderConfiguration).Contains("res://models/cube.mesh", StringComparison.Ordinal),
+            "Godot CompileMappedBinary must embed resolved res:// paths.");
+
+        EngineAssetPath.Validate("/Game/VFX/Cube.Cube");
+        EngineAssetPath.Validate("Assets/VFX/Cube.fbx");
+        EngineAssetPath.Validate("Packages/works.libra.liberafx/Cube.fbx");
+        EngineAssetPath.Validate("res://models/cube.mesh");
+        Require(EngineAssetFolder.Normalize("res://") == "res://", "Godot root folder normalization");
+        Require(EngineAssetFolder.Contains("res://", "res://models/cube.mesh"), "Godot root contains");
+        Require(EngineAssetFolder.Parent("res://models") == "res://", "Godot root parent");
+        Require(EngineAssetFolder.Normalize("Packages/works.libra.liberafx/") == "Packages/works.libra.liberafx", "Unity package folder normalization");
     }
 
     private static void Reject(Action action, string message)

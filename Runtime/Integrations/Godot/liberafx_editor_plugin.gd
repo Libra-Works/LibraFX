@@ -69,6 +69,16 @@ func _build_dock() -> void:
 	var buttons := HBoxContainer.new()
 	left.add_child(buttons)
 
+	var paste_inv_btn := Button.new()
+	paste_inv_btn.text = "Paste Invitation"
+	paste_inv_btn.pressed.connect(func() -> void: _invitation_edit.text = DisplayServer.clipboard_get().strip_edges())
+	buttons.add_child(paste_inv_btn)
+
+	var paste_pem_btn := Button.new()
+	paste_pem_btn.text = "Paste Certificate"
+	paste_pem_btn.pressed.connect(func() -> void: _pem_edit.text = DisplayServer.clipboard_get().strip_edges())
+	buttons.add_child(paste_pem_btn)
+
 	_connect_btn = Button.new()
 	_connect_btn.text = "Connect to LIBERA FX"
 	_connect_btn.pressed.connect(_on_connect_pressed)

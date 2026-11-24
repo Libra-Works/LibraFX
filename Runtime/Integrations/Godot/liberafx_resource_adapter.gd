@@ -205,7 +205,7 @@ static func _handle_project(req: Dictionary, req_id: String) -> String:
 	var operation := str(req.get("operation", "status"))
 	if operation == "register":
 		if str(ProjectSettings.get_setting(PROJECT_ID_SETTING, "")).is_empty():
-			ProjectSettings.set_setting(PROJECT_ID_SETTING, _deterministic_project_uuid())
+			ProjectSettings.set_setting(PROJECT_ID_SETTING, _generate_project_uuid())
 			ProjectSettings.save()
 	elif operation == "clear":
 		ProjectSettings.set_setting(PROJECT_ID_SETTING, "")
@@ -345,6 +345,10 @@ static func _uniform_kind(t: int) -> String:
 			return "texture"
 
 
-static func _deterministic_project_uuid() -> String:
-	var raw := ProjectSettings.globalize_path("res://").sha256_text()
-	return "%s-%s-4%s-a%s-%s" % [raw.substr(0, 8), raw.substr(8, 4), raw.substr(12, 3), raw.substr(15, 3), raw.substr(18, 12)]
+static func _generate_project_uuid() -> String:
+	var crypto := Crypto.new()
+	var bytes := crypto.generate_random_bytes(16)
+	bytes[6] = (bytes[6] & 0x0f) | 0x40
+	bytes[8] = (bytes[8] & 0x3f) | 0x80
+	var hex := bytes.hex_encode()
+	return "%s-%s-%s-%s-%s" % [hex.substr(0, 8), hex.substr(8, 4), hex.substr(12, 4), hex.substr(16, 4), hex.substr(20, 12)]
