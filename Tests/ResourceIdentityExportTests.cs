@@ -104,6 +104,26 @@ internal static class ResourceIdentityExportTests
         Require(EngineAssetFolder.Contains("res://", "res://models/cube.mesh"), "Godot root contains");
         Require(EngineAssetFolder.Parent("res://models") == "res://", "Godot root parent");
         Require(EngineAssetFolder.Normalize("Packages/works.libra.liberafx/") == "Packages/works.libra.liberafx", "Unity package folder normalization");
+
+        VerifyAtomicStorageWrite(godotLfxb);
+    }
+
+    private static void VerifyAtomicStorageWrite(byte[] payload)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "lfx-atomic-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var dest = Path.Combine(dir, "effect.lfxb");
+            File.WriteAllBytes(dest, [1, 2, 3, 4]);
+            LiberaFx.ViewModels.MainViewModel.WriteLocalFileAtomicallyAsync(dest, payload).GetAwaiter().GetResult();
+            Require(File.ReadAllBytes(dest).SequenceEqual(payload), "Atomic storage write did not replace target bytes.");
+            Require(Directory.GetFiles(dir, ".liberafx-*.tmp").Length == 0, "Atomic storage write left temporary files behind.");
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 
     private static void Reject(Action action, string message)

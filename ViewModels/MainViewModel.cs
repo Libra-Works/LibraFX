@@ -437,14 +437,7 @@ public partial class MainViewModel : ViewModelBase
                     string.Equals(open.FileKey, GetFileKey(file), StringComparison.OrdinalIgnoreCase)))
                 throw new IOException(LocalizationService.Shared.Get("Messages.Error.ChooseBinaryFile"));
 
-            await using var stream = await file.OpenWriteAsync();
-            if (stream.CanSeek)
-            {
-                stream.SetLength(0);
-                stream.Position = 0;
-            }
-            await stream.WriteAsync(bytes);
-            await stream.FlushAsync();
+            await WriteStorageFileAtomicallyAsync(file, bytes);
             SetFileStatus("Messages.BinaryExported", file.Name);
         }
         catch (Exception ex) when (IsFileOperationException(ex) ||
@@ -511,18 +504,7 @@ public partial class MainViewModel : ViewModelBase
 
             await using var buffer = new MemoryStream();
             var savedProject = await _projectFiles.SaveAsync(buffer, document.Workspace);
-            buffer.Position = 0;
-            await using (var stream = await file.OpenWriteAsync())
-            {
-                if (stream.CanSeek)
-                {
-                    stream.SetLength(0);
-                    stream.Position = 0;
-                }
-
-                await buffer.CopyToAsync(stream);
-                await stream.FlushAsync();
-            }
+            await WriteStorageFileAtomicallyAsync(file, buffer.GetBuffer().AsMemory(0, checked((int)buffer.Length)));
 
             var fileKey = GetFileKey(file);
             var oldFileKey = document.FileKey;
@@ -767,4 +749,54 @@ public partial class MainViewModel : ViewModelBase
     {
         Patterns = ["*.lfxb"]
     };
+
+    /// <summary>
+    /// Stages writes through a sibling temporary file when a local path is available so failed exports never expose partial output.
+    /// </summary>
+    internal static async Task WriteStorageFileAtomicallyAsync(IStorageFile file, ReadOnlyMemory<byte> bytes)
+    {
+        var localPath = file.TryGetLocalPath();
+        if (!string.IsNullOrWhiteSpace(localPath) && Path.IsPathFullyQualified(localPath))
+        {
+            await WriteLocalFileAtomicallyAsync(localPath, bytes);
+            return;
+        }
+
+        await using var stream = await file.OpenWriteAsync();
+        if (stream.CanSeek)
+        {
+            stream.SetLength(0);
+            stream.Position = 0;
+        }
+        await stream.WriteAsync(bytes);
+        await stream.FlushAsync();
+    }
+
+    internal static async Task WriteLocalFileAtomicallyAsync(string localPath, ReadOnlyMemory<byte> bytes)
+    {
+        var directory = Path.GetDirectoryName(localPath)
+            ?? throw new IOException("Destination directory could not be determined.");
+        var temporary = Path.Combine(directory, $".liberafx-{Guid.NewGuid():N}.tmp");
+        try
+        {
+            await using (var tempStream = new FileStream(
+                temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, useAsync: true))
+            {
+                await tempStream.WriteAsync(bytes);
+                await tempStream.FlushAsync();
+            }
+
+            File.Move(temporary, localPath, overwrite: true);
+            temporary = null;
+        }
+        finally
+        {
+            if (temporary is not null)
+            {
+                try { File.Delete(temporary); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+        }
+    }
 }

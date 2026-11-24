@@ -76,7 +76,8 @@ configuration. Unreal delivery accepts unreal.object-path and
 unreal.material-parameter.v1 (JSON name/association/index). Unity delivery accepts
 unity.asset-guid-local-id.v1 values formatted as <asset-guid>:<local-file-id> and
 unity.shader-property.v1 (the explicitly bound authored shader property name, with
-association/index fields retained in the render schema). Unsupported formats fail rather
+association/index fields retained in the render schema). Godot delivery accepts
+godot.res-path.v1 (validated res:// paths). Unsupported formats fail rather
 than being emitted as paths. Nested Group and Spawnable render contexts carry their ordered
 instance scope. Unselected legacy values remain unchanged and are NOT portable. Unity
 delivery populates the Unity runtime binding asset only when requested from the Resource
@@ -101,18 +102,21 @@ It is separate from the Unity Live Game path. GPU resource mappings and Godot pa
 preview mappings are not enabled by this path.
 
 Headless path (after the owner adds the source links and builds):
-  LiberaFxConverter convert effect.lfxproj effect.lfxrm
+  LiberaFxConverter convert effect.lfxproj effect.lfxb
     --binding-snapshot snapshot.json --target-engine Unreal --target-project <guid>
+  (or output effect.lfxrm for the diagnostic JSON manifest)
 Add --resource-map mapping.json only when the project does not already store the same
-identity document. Only convert with .lfxrm is accepted. .lfxrm
-is a JSON manifest containing the original Libera IDs, exact opaque project bindings,
-material definitions, compiled bytecode and resolved render_config. Spawnable projects also
-carry the compiled .lfxp package bytes. It remains a manifest rather than a direct importable
-engine asset. Its evidence field explicitly says caller-supplied-snapshot-not-live.
+identity document. .lfxproj is the editable authoring source and history (including portable
+Resource Identity mappings); .lfxb is the self-contained compiled runtime package for engine
+import and disconnected playback; .lfxrm is a diagnostic JSON manifest containing the original
+Libera IDs, exact opaque project bindings, material definitions, compiled bytecode, and
+resolved render_config. Spawnable projects also carry the compiled .lfxp package bytes in
+.lfxrm. Its evidence field explicitly says caller-supplied-snapshot-not-live.
 Legacy resource paths are never used as mapped resources; every nonempty asset/material/
 texture path needs an explicit use except the supported builtin material. An unassigned
 texture is allowed; material parameters must also have explicit parameter uses. Graph Groups
-and Spawnable packages retain instance scope. No fallback to an unmapped .lfxb/.lfxp occurs.
+and Spawnable packages retain instance scope. No fallback to an unmapped .lfxb/.lfxp occurs,
+and failed exports never publish partial files (staged via temporary file + atomic replace).
 Even without mapping options, the converter rejects portable identity metadata rather than
 silently exporting the legacy path. Source graph/map/snapshot are not rewritten.
 
