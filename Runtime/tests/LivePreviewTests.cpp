@@ -1,4 +1,5 @@
 #include "liberafx/LbLivePreview.h"
+#include "liberafx/host/LbPackagePreviewContract.h"
 
 #include <array>
 #include <cstdlib>
@@ -124,5 +125,62 @@ int main()
     put(bytes.data() + 6, 1, 2);
     put(bytes.data() + 16, 1, 8);
     require(decodeFrame(bytes.data(), bytes.size(), frame) == DecodeResult::InvalidFrame);
+
+    // Core PackagePreviewContract tests
+    {
+        using namespace liberafx::host;
+        struct MockAdapter final : public IPackagePreviewAdapter {
+            bool hasMaterials = false;
+            bool loaded = false;
+            bool playingState = false;
+            double rateState = 0.0;
+            std::vector<ParameterDeltaUpdate> applied;
+            auto loadPackage(const std::uint8_t*, std::size_t, bool playing, double rate) -> liberafx::Result override {
+                loaded = true;
+                playingState = playing;
+                rateState = rate;
+                return liberafx::Result::Ok;
+            }
+            auto setPlayback(bool playing, double rate) -> liberafx::Result override {
+                playingState = playing;
+                rateState = rate;
+                return liberafx::Result::Ok;
+            }
+            auto applyParameterDelta(const ParameterDeltaUpdate* updates, std::size_t count) -> liberafx::Result override {
+                applied.assign(updates, updates + count);
+                return liberafx::Result::Ok;
+            }
+            void resetPreview() override { loaded = false; }
+            auto hasBuiltinSpriteMaterials() const -> bool override { return hasMaterials; }
+        } adapter;
+
+        FrameView progFrame{};
+        progFrame.kind = Kind::Program;
+        progFrame.flags = 1;
+        progFrame.playbackRate = 1.5;
+        const std::uint8_t dummyPkg[4]{'L', 'F', 'X', 'P'};
+        progFrame.payload = dummyPkg;
+        progFrame.payloadLength = 4;
+        require(dispatchPackagePreviewFrame(progFrame, adapter) == liberafx::Result::NotReady);
+        adapter.hasMaterials = true;
+        require(dispatchPackagePreviewFrame(progFrame, adapter) == liberafx::Result::Ok &&
+                adapter.loaded && adapter.playingState && adapter.rateState == 1.5);
+
+        const char* deltaJson =
+            R"({"type":"parameter_delta","sequence":5,"updates":[{"containerId":"00000000-0000-0000-0000-000000000000","nodeId":"00112233-4455-6677-8899-aabbccddeeff","inputSlot":2,"component":1,"isInt32":false,"intValue":0,"floatValue":42.5}]})";
+        FrameView deltaFrame{};
+        deltaFrame.kind = Kind::Scene;
+        deltaFrame.payload = reinterpret_cast<const std::uint8_t*>(deltaJson);
+        deltaFrame.payloadLength = std::strlen(deltaJson);
+        require(dispatchPackagePreviewFrame(deltaFrame, adapter) == liberafx::Result::Ok);
+        require(adapter.applied.size() == 1 && adapter.applied[0].inputSlot == 2 &&
+                adapter.applied[0].component == 1 && !adapter.applied[0].isInt32 &&
+                adapter.applied[0].floatValue == 42.5f && adapter.applied[0].nodeId[0] == 0x00 &&
+                adapter.applied[0].nodeId[15] == 0xff);
+
+        const char* badJson = R"({"type":"other","updates":[]})";
+        std::vector<ParameterDeltaUpdate> out;
+        require(parseParameterDeltaJson(badJson, std::strlen(badJson), out) == liberafx::Result::UnsupportedBinary);
+    }
     return 0;
 }

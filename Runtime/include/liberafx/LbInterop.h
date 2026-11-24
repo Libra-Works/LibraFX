@@ -617,6 +617,11 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_game_s
     LibraSpawnableHostHandle host, const char* name, uint32_t kind, const double* values, uint32_t width);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_quality(
     LibraSpawnableHostHandle host, uint8_t availability, uint8_t tier, uint8_t source, uint64_t frameSerial);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_node_parameter(
+    LibraSpawnableHostHandle host, const uint8_t containerId[16], const uint8_t nodeId[16],
+    uint32_t inputSlot, uint32_t component, uint8_t isInt32, int32_t intValue, double floatValue);
+LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_apply_parameter_delta(
+    LibraSpawnableHostHandle host, const char* jsonUtf8, uint64_t length);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_request_natural_end(
     LibraSpawnableHostHandle host);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_stop(

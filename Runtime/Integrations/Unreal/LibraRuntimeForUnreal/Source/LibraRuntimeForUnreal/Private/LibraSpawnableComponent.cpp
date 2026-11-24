@@ -693,6 +693,21 @@ auto ULibraSpawnableComponent::SetTimeScale(double ratio) -> ELibraRuntimeResult
     return Report(ELibraRuntimeResult::Ok);
 }
 
+auto ULibraSpawnableComponent::SetNodeParameter(const FGuid& containerId, const FGuid& nodeId,
+    uint32 inputSlot, uint32 component, bool isInt32, int32 intValue, float floatValue) -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    if (!NativeHost) return ELibraRuntimeResult::NotReady;
+    if (DebugJobPending()) return ELibraRuntimeResult::Busy;
+    if (!nodeId.IsValid()) return ELibraRuntimeResult::InvalidArgument;
+    uint8 nativeContainer[16]{};
+    if (containerId.IsValid()) LibraNodeIdBytes(containerId, nativeContainer);
+    uint8 nativeNode[16]{};
+    LibraNodeIdBytes(nodeId, nativeNode);
+    return ToLibraResult(NativeHost->setNodeParameter(
+        nativeContainer, nativeNode, inputSlot, component, isInt32, intValue, floatValue));
+}
+
 auto ULibraSpawnableComponent::GetInstanceTarget(FGuid containerId, int64 instanceId, int64& generation) -> ELibraRuntimeResult
 {
     check(IsInGameThread());

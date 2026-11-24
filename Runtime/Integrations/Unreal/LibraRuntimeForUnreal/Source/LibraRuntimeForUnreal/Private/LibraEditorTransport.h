@@ -9,6 +9,7 @@ struct FLibraEditorTransportSettings
 	uint16 Port = 8766;
 	FString AccessToken;
 	FString CertificateFingerprint;
+	bool PackagePreview = false;
 };
 
 class FLibraEditorTransport

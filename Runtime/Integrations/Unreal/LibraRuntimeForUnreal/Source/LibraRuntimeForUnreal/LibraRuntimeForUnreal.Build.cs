@@ -8,6 +8,8 @@ public class LibraRuntimeForUnreal : ModuleRules
         CppStandard = CppStandardVersion.Cpp20;
         PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "LibraRuntimeCore", "LibraGpuRuntime" });
         PrivateDependencyModuleNames.AddRange(new[] { "RenderCore", "RHI", "Json" });
+        if (Target.bBuildEditor)
+            PrivateDependencyModuleNames.Add("UnrealEd");
         var supportsEditorTransport =
             Target.Platform == UnrealTargetPlatform.Win64 ||
             Target.Platform == UnrealTargetPlatform.Mac ||

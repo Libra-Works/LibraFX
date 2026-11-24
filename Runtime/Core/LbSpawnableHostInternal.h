@@ -171,6 +171,15 @@ struct SpawnableHost::Impl final {
     std::unique_ptr<GeneratorPool> pool;
     std::vector<InstanceInfo> instances;
     std::vector<std::unique_ptr<CpuParticleWorld>> idleCpuWorlds;
+    struct ParameterOverride final {
+      std::array<std::uint8_t, 16> nodeId{};
+      std::uint32_t inputSlot = 0;
+      std::uint32_t component = 0;
+      bool isInt32 = false;
+      std::int32_t intValue = 0;
+      double floatValue = 0;
+    };
+    std::vector<ParameterOverride> parameterOverrides;
   };
   struct SignalInputContext final {
     std::array<std::uint8_t, 16> typeId{};

@@ -13,6 +13,7 @@
 #include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Components/SceneCaptureComponent2D.h"
+#include "Camera/CameraComponent.h"
 #include "GameFramework/Actor.h"
 #include "InputKeyEventArgs.h"
 #include "LibraEditorAssetAdapter.h"
@@ -21,6 +22,7 @@
 #include "LibraPreviewConnectionInvitation.h"
 #include "LibraEffectComponent.h"
 #include "LibraEffectAsset.h"
+#include "LibraSpawnableComponent.h"
 #include "LibraEditorConnectionComponent.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -34,6 +36,7 @@
 #include "Materials/MaterialExpressionTextureSample.h"
 #include "Materials/MaterialExpressionTextureSampleParameter2D.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
+#include "Materials/MaterialExpressionPerInstanceCustomData.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "EditorViewportClient.h"
@@ -41,6 +44,7 @@
 #include "SCommonEditorViewportToolbarBase.h"
 #include "Editor/EditorPerProjectUserSettings.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Widgets/Input/SSpinBox.h"
 #include "Framework/Docking/TabManager.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
 #include "GenericPlatform/GenericApplication.h"
@@ -105,6 +109,7 @@ namespace
     {
 #if UE_VERSION_OLDER_THAN(5, 8, 0)
         scene.HandleToggleGrid();
+        viewport.EngineShowFlags.SetGrid(scene.IsGridEnabled());
 #else
         viewport.SetShowGrid();
 #endif
@@ -435,7 +440,65 @@ namespace
     }
 }
 
-FLibraEditorPreviewSession::FLibraEditorPreviewSession() = default;
+    UMaterial* GetBuiltinCpuParticlePreviewMaterial(bool additive)
+    {
+        static TStrongObjectPtr<UMaterial> cached[2];
+        const int32 idx = additive ? 1 : 0;
+        if (cached[idx].IsValid()) return cached[idx].Get();
+        auto* material = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+        material->MaterialDomain = MD_Surface;
+        material->BlendMode = additive ? BLEND_Additive : BLEND_Translucent;
+        material->SetShadingModel(MSM_Unlit);
+        material->TwoSided = true;
+        material->TranslucencyPass = MTP_BeforeDOF;
+        const auto addExpr = [material]<typename T>()
+        {
+            auto* expr = NewObject<T>(material);
+            material->GetExpressionCollection().AddExpression(expr);
+            expr->Material = material;
+            expr->UpdateMaterialExpressionGuid(true, false);
+            return expr;
+        };
+        auto* uv = addExpr.operator()<UMaterialExpressionTextureCoordinate>();
+        auto* rect = addExpr.operator()<UMaterialExpressionVectorParameter>();
+        rect->ParameterName = TEXT("AtlasRect");
+        rect->DefaultValue = FLinearColor(0, 0, 1, 1);
+        auto* offset = addExpr.operator()<UMaterialExpressionComponentMask>();
+        offset->R = true; offset->G = true; offset->B = false; offset->A = false;
+        offset->Input.Connect(5, rect);
+        auto* size = addExpr.operator()<UMaterialExpressionComponentMask>();
+        size->R = false; size->G = false; size->B = true; size->A = true;
+        size->Input.Connect(5, rect);
+        auto* scaled = addExpr.operator()<UMaterialExpressionMultiply>();
+        scaled->A.Connect(0, uv); scaled->B.Connect(0, size);
+        auto* shifted = addExpr.operator()<UMaterialExpressionAdd>();
+        shifted->A.Connect(0, scaled); shifted->B.Connect(0, offset);
+        auto* texture = addExpr.operator()<UMaterialExpressionTextureSampleParameter2D>();
+        texture->ParameterName = TEXT("Texture");
+        texture->Texture = LoadObject<UTexture2D>(nullptr, TEXT("/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture"));
+        texture->AutoSetSampleType();
+        texture->Coordinates.Connect(0, shifted);
+        auto* instanceColor = addExpr.operator()<UMaterialExpressionPerInstanceCustomData3Vector>();
+        instanceColor->DataIndex = 0;
+        instanceColor->ConstDefaultValue = FLinearColor::White;
+        auto* rgb = addExpr.operator()<UMaterialExpressionMultiply>();
+        rgb->A.Connect(0, texture); rgb->B.Connect(0, instanceColor);
+        auto* instanceAlpha = addExpr.operator()<UMaterialExpressionPerInstanceCustomData>();
+        instanceAlpha->DataIndex = 3;
+        instanceAlpha->ConstDefaultValue = 1.0f;
+        auto* alpha = addExpr.operator()<UMaterialExpressionMultiply>();
+        alpha->A.Connect(4, texture); alpha->B.Connect(0, instanceAlpha);
+        material->GetEditorOnlyData()->EmissiveColor.Connect(0, rgb);
+        material->GetEditorOnlyData()->Opacity.Connect(0, alpha);
+        auto needsRecompile = false;
+        material->UpdateCachedExpressionData();
+        material->SetMaterialUsage(needsRecompile, MATUSAGE_InstancedStaticMeshes);
+        material->PostEditChange();
+        cached[idx].Reset(material);
+        return material;
+    }
+
+    FLibraEditorPreviewSession::FLibraEditorPreviewSession() = default;
 FLibraEditorPreviewSession::~FLibraEditorPreviewSession() = default;
 
 void FLibraEditorPreviewSession::Start()
@@ -706,10 +769,28 @@ TSharedRef<SWidget> FLibraEditorPreviewSession::BuildPreviewContent()
                     makeToggle(TEXT("Floor"), NAME_None, &FAdvancedPreviewScene::IsFloorEnabled,
                         &FAdvancedPreviewScene::HandleToggleFloor)
                 ]
-                + SHorizontalBox::Slot().AutoWidth()
+                + SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 12, 0)
                 [
                     makeToggle(TEXT("Environment"), FName(TEXT("LibraFx.Preview.Environment")), &FAdvancedPreviewScene::IsEnvironmentEnabled,
                         &FAdvancedPreviewScene::HandleToggleEnvironment)
+                ]
+                + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 4, 0)
+                [
+                    SNew(STextBlock).Text(FText::FromString(TEXT("Units/m")))
+                ]
+                + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+                [
+                    SNew(SSpinBox<double>)
+                    .MinDesiredWidth(64.0f)
+                    .MinValue(0.01)
+                    .MaxValue(10000.0)
+                    .Value_Lambda([this] { return previewUnitsPerMetre; })
+                    .OnValueCommitted_Lambda([this](double newValue, ETextCommit::Type)
+                    {
+                        previewUnitsPerMetre = FMath::Clamp(newValue, 0.01, 10000.0);
+                        if (spawnable.IsValid()) spawnable->HostUnitsPerMetre = previewUnitsPerMetre;
+                        SavePreviewProfile();
+                    })
                 ]
                 + SHorizontalBox::Slot().AutoWidth().Padding(16, 0, 0, 0)
                 [
@@ -812,6 +893,7 @@ void FLibraEditorPreviewSession::SavePreviewProfile()
     {
         GConfig->SetString(PreviewSettingsSection, TEXT("ProfileName"), *profile->ProfileName, GEditorPerProjectIni);
         GConfig->SetBool(PreviewSettingsSection, TEXT("SettingsVisible"), bSettingsVisible, GEditorPerProjectIni);
+        GConfig->SetDouble(PreviewSettingsSection, TEXT("HostUnitsPerMetre"), previewUnitsPerMetre, GEditorPerProjectIni);
 #if !UE_VERSION_OLDER_THAN(5, 8, 0)
         if (viewportClient.IsValid())
             GConfig->SetBool(PreviewSettingsSection, TEXT("GridVisible"),
@@ -882,14 +964,31 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
         actor->SetRootComponent(rootComponent);
         actor->AddInstanceComponent(rootComponent);
         rootComponent->RegisterComponent();
+        GConfig->GetDouble(PreviewSettingsSection, TEXT("HostUnitsPerMetre"), previewUnitsPerMetre, GEditorPerProjectIni);
+        previewUnitsPerMetre = FMath::Clamp(previewUnitsPerMetre, 0.01, 10000.0);
         effect.Reset(NewObject<ULibraEffectComponent>(actor));
         effect->bAutoPlay = false;
         actor->AddInstanceComponent(effect.Get());
         effect->RegisterComponent();
+        spawnable.Reset(NewObject<ULibraSpawnableComponent>(actor));
+        spawnable->bAutoPlay = false;
+        spawnable->bUseSharedSimulation = false;
+        spawnable->HostUnitsPerMetre = previewUnitsPerMetre;
+        spawnable->AssetBindings.Add({TEXT("builtin:cpu-particle-additive"), GetBuiltinCpuParticlePreviewMaterial(true)});
+        spawnable->AssetBindings.Add({TEXT("builtin:cpu-particle-alpha"), GetBuiltinCpuParticlePreviewMaterial(false)});
+        spawnable->AssetBindings.Add({TEXT("builtin:unlit-color"), CreatePreviewColorMaterial()});
+        actor->AddInstanceComponent(spawnable.Get());
+        spawnable->RegisterComponent();
+        previewCamera.Reset(NewObject<UCameraComponent>(actor, NAME_None, RF_Transient));
+        previewCamera->SetupAttachment(rootComponent);
+        actor->AddInstanceComponent(previewCamera.Get());
+        previewCamera->RegisterComponent();
+        spawnable->EffectCameraOverride = previewCamera.Get();
         connection.Reset(NewObject<ULibraEditorConnectionComponent>(actor));
         gpuPreview = MakeUnique<FLibraEditorGpuPreview>(actor);
         debugDraw = MakeUnique<FLibraEditorDebugDraw>();
         connection->Target = effect.Get();
+        connection->SpawnableTarget = spawnable.Get();
         connection->Host = TEXT("127.0.0.1");
         auto port = int32{8766};
         auto portText = FPlatformMisc::GetEnvironmentVariable(TEXT("LIBRA_PREVIEW_PORT"));
@@ -955,7 +1054,11 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
             UE_LOG(LogTemp, Display, TEXT("LIBERA FX preview: transport connected and hello queued."));
         viewportWidget = SNew(SLibraPreviewViewport, previewScene.ToSharedRef(), actor);
         viewportClient = viewportWidget->GetViewportClient();
-#if !UE_VERSION_OLDER_THAN(5, 8, 0)
+        if (auto* floor = const_cast<UStaticMeshComponent*>(previewScene->GetFloorMeshComponent()))
+            floor->SetWorldScale3D(FVector(25.0f, 25.0f, 1.0f));
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
+        viewportClient->EngineShowFlags.SetGrid(previewScene->IsGridEnabled());
+#else
         auto gridVisible = viewportClient->IsSetShowGridChecked();
         GConfig->GetBool(PreviewSettingsSection, TEXT("GridVisible"), gridVisible, GEditorPerProjectIni);
         viewportClient->EngineShowFlags.SetGrid(gridVisible);
@@ -970,8 +1073,12 @@ bool FLibraEditorPreviewSession::Tick(float deltaTime)
     if (viewportClient.IsValid() && previewScene.IsValid())
         if (auto profile = previewScene->GetCurrentProfile())
             profile->SetShowFlags(viewportClient->EngineShowFlags);
+    if (viewportClient.IsValid() && previewCamera.IsValid())
+        previewCamera->SetWorldLocationAndRotation(viewportClient->GetViewLocation(), viewportClient->GetViewRotation());
     if (effect->IsComponentTickEnabled())
         effect->TickComponent(deltaTime, LEVELTICK_All, &effect->PrimaryComponentTick);
+    if (spawnable.IsValid() && spawnable->IsComponentTickEnabled() && connection->bEditorPlaying)
+        spawnable->TickComponent(deltaTime, LEVELTICK_All, &spawnable->PrimaryComponentTick);
     connection->TickComponent(deltaTime, LEVELTICK_All, &connection->PrimaryComponentTick);
     CommitPendingScene();
     if (gpuPreview) gpuPreview->Tick(deltaTime, connection->bIsConnected);
@@ -1819,9 +1926,16 @@ void FLibraEditorPreviewSession::Stop()
         effect->Stop();
         effect->UnregisterComponent();
     }
+    if (spawnable.IsValid())
+    {
+        spawnable->Stop();
+        spawnable->UnregisterComponent();
+    }
     if (previewActor.IsValid()) previewActor->Destroy();
     connection.Reset();
     effect.Reset();
+    spawnable.Reset();
+    previewCamera.Reset();
     previewActor.Reset();
     world.Reset();
     previewScene.Reset();

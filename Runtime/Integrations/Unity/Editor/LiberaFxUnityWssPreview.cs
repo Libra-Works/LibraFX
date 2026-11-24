@@ -82,6 +82,15 @@ namespace LiberaFx.Unity
                 diagnostic = Encoding.UTF8.GetString(frame, 48, frame.Length - 48);
                 return false;
             }
+            if (kind == 5)
+            {
+                if (!effect) return false;
+                var jsonBytes = new byte[frame.Length - 48];
+                Buffer.BlockCopy(frame, 48, jsonBytes, 0, jsonBytes.Length);
+                if (effect.ApplyParameterDelta(jsonBytes) != LiberaFxNative.NativeResult.Ok) return false;
+                sequence = next;
+                return true;
+            }
             if (kind == 2 && (!effect || BinaryPrimitives.ReadUInt64LittleEndian(header.Slice(16)) != sequence))
             {
                 return false;
@@ -210,6 +219,8 @@ namespace LiberaFx.Unity
         }
         [Serializable] private sealed class SignalRequest { public string nodeId; }
         [Serializable] private sealed class PreviewControl { public string type; public double[] offset; public SignalRequest[] requests; }
+        [Serializable] private sealed class ParameterUpdate { public string containerId; public string nodeId; public uint inputSlot; public uint component; public bool isInt32; public int intValue; public double floatValue; }
+        [Serializable] private sealed class ParameterDeltaPayload { public string type; public long sequence; public ParameterUpdate[] updates; }
     }
 }
 #endif

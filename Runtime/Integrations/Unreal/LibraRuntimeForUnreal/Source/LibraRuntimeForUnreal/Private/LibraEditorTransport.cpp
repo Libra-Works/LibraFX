@@ -93,6 +93,7 @@ struct FLibraEditorTransport::FImpl
 	std::atomic<bool> Failed{false};
 	std::atomic<bool> Connected{false};
 	std::atomic<bool> PinConfirmed{false};
+	bool PackagePreview = false;
 	std::atomic<bool> AuthHeaderAdded{false};
 	std::atomic<bool> ResyncRequested{false};
 	std::atomic<bool> CloseSent{false};
@@ -633,7 +634,7 @@ struct FLibraEditorTransport::FImpl
 		ConnectInfo.address = NumericAddress.c_str();
 		ConnectInfo.port = Port;
 		ConnectInfo.ssl_connection = LCCSCF_USE_SSL | LCCSCF_SKIP_SERVER_CERT_HOSTNAME_CHECK;
-		ConnectInfo.path = "/preview?protocol=3";
+		ConnectInfo.path = PackagePreview ? "/preview?protocol=3&unrealPackagePreview=1" : "/preview?protocol=3";
 		ConnectInfo.host = HostName.c_str();
 		ConnectInfo.protocol = nullptr;
 		ConnectInfo.ietf_version_or_minus_one = -1;
@@ -751,6 +752,7 @@ bool FLibraEditorTransport::Start(const FLibraEditorTransportSettings& Settings,
 	Impl->Host = Settings.Host;
 	Impl->Port = Settings.Port;
 	Impl->AccessToken = Settings.AccessToken;
+	Impl->PackagePreview = Settings.PackagePreview;
 	Impl->StopRequested.store(false);
 	Impl->Failed.store(false);
 	Impl->Connected.store(false);

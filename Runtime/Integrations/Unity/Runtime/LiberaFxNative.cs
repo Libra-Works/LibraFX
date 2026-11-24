@@ -346,6 +346,13 @@ namespace LiberaFx.Unity
         internal static extern NativeResult libra_spawnable_host_set_quality(
             ulong host, byte availability, byte tier, byte source, ulong frameSerial);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_set_node_parameter(
+            ulong host, byte* containerId, byte* nodeId, uint inputSlot, uint component,
+            byte isInt32, int intValue, double floatValue);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeResult libra_spawnable_host_apply_parameter_delta(
+            ulong host, byte* jsonUtf8, ulong length);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_instance_set_quality(
             ulong instance, byte availability, byte tier, byte source, ulong frameSerial);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
@@ -560,6 +567,28 @@ namespace LiberaFx.Unity
                     var id = new NativeSignal(nodeGuid).Id;
                     fixed (byte* pointer = id)
                         return Native.libra_spawnable_host_dispatch_signal(Alive, pointer);
+                }
+
+                public NativeResult SetNodeParameter(string containerGuid, string nodeGuid,
+                    uint inputSlot, uint component, bool isInt32, int intValue, double floatValue)
+                {
+                    var cid = string.IsNullOrEmpty(containerGuid)
+                        ? new byte[16]
+                        : new NativeSignal(containerGuid).Id;
+                    var nid = new NativeSignal(nodeGuid).Id;
+                    fixed (byte* cPtr = cid)
+                    fixed (byte* nPtr = nid)
+                        return Native.libra_spawnable_host_set_node_parameter(
+                            Alive, cPtr, nPtr, inputSlot, component,
+                            isInt32 ? (byte)1 : (byte)0, intValue, floatValue);
+                }
+
+                public NativeResult ApplyParameterDelta(byte[] jsonUtf8)
+                {
+                    if (jsonUtf8 == null || jsonUtf8.Length == 0) return NativeResult.InvalidArgument;
+                    fixed (byte* ptr = jsonUtf8)
+                        return Native.libra_spawnable_host_apply_parameter_delta(
+                            Alive, ptr, (ulong)jsonUtf8.Length);
                 }
 
                 public NativeResult FireGameSignal(string name)

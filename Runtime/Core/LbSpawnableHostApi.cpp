@@ -189,6 +189,77 @@ auto SpawnableHost::setHostQuality(const HostQualitySnapshot &snapshot)
   return Result::Ok;
 }
 
+auto SpawnableHost::setNodeParameter(const std::uint8_t containerId[16],
+                                     const std::uint8_t nodeId[16],
+                                     std::uint32_t inputSlot,
+                                     std::uint32_t component,
+                                     bool isInt32,
+                                     std::int32_t intValue,
+                                     double floatValue) -> Result {
+  if (impl_->operationActive) return Result::Busy;
+  if (impl_->rootForced || !impl_->rootInstance) return Result::NotReady;
+  if (!nodeId || inputSlot > 255u || component > 255u) return Result::InvalidArgument;
+  if (!isInt32 && !std::isfinite(floatValue)) return Result::InvalidArgument;
+
+  auto applyTo = [&](Instance& inst) noexcept -> Result {
+    ParameterHandle handle{};
+    auto r = inst.bindParameter(nodeId, static_cast<std::uint8_t>(inputSlot),
+                                static_cast<std::uint8_t>(component), handle);
+    if (r != Result::Ok) return r;
+    return isInt32 ? inst.setParameterInt32(handle, intValue)
+                   : inst.setParameter(handle, floatValue);
+  };
+
+  auto isZero = true;
+  if (containerId) {
+    for (auto i = 0; i < 16; ++i) {
+      if (containerId[i] != 0) { isZero = false; break; }
+    }
+  }
+  if (isZero) {
+    return applyTo(*impl_->rootInstance);
+  }
+
+  for (auto& state : impl_->templates) {
+    if (std::memcmp(state->data->containerId.data(), containerId, 16) != 0) continue;
+    Impl::TemplateState::ParameterOverride ov{};
+    std::memcpy(ov.nodeId.data(), nodeId, 16);
+    ov.inputSlot = inputSlot;
+    ov.component = component;
+    ov.isInt32 = isInt32;
+    ov.intValue = intValue;
+    ov.floatValue = floatValue;
+    auto updated = false;
+    for (auto& existing : state->parameterOverrides) {
+      if (existing.nodeId == ov.nodeId && existing.inputSlot == ov.inputSlot &&
+          existing.component == ov.component) {
+        existing = ov;
+        updated = true;
+        break;
+      }
+    }
+    if (!updated) state->parameterOverrides.push_back(ov);
+
+    struct ApplyCtx {
+      const Impl::TemplateState::ParameterOverride* ov;
+    } ctx{&ov};
+    for (const auto& instance : state->instances) {
+      auto r = state->pool->withInstance(instance.id, [](void* p, Instance& inst) noexcept -> Result {
+        const auto* c = static_cast<const ApplyCtx*>(p)->ov;
+        ParameterHandle handle{};
+        auto br = inst.bindParameter(c->nodeId.data(), static_cast<std::uint8_t>(c->inputSlot),
+                                     static_cast<std::uint8_t>(c->component), handle);
+        if (br != Result::Ok) return br;
+        return c->isInt32 ? inst.setParameterInt32(handle, c->intValue)
+                          : inst.setParameter(handle, c->floatValue);
+      }, &ctx);
+      if (r != Result::Ok) return r;
+    }
+    return Result::Ok;
+  }
+  return Result::NodeNotFound;
+}
+
 auto SpawnableHost::setTimeScale(double ratio) -> Result {
   if (impl_->operationActive) return Result::Busy;
   if (!std::isfinite(ratio) || ratio < 0 || ratio > 1000000) return Result::InvalidArgument;

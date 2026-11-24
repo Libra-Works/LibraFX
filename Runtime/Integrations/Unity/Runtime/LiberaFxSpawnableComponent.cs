@@ -691,6 +691,21 @@ namespace LiberaFx.Unity
                 result == NativeResult.Ok ? result : Report(result, "Signal dispatch failed: " + result + ".");
         }
 
+        public NativeResult SetNodeParameter(string containerGuid, string nodeGuid,
+            uint inputSlot, uint component, bool isInt32, int intValue, double floatValue)
+        {
+            var current = host;
+            if (current == null) return NativeResult.NotReady;
+            return current.SetNodeParameter(containerGuid, nodeGuid, inputSlot, component, isInt32, intValue, floatValue);
+        }
+
+        public NativeResult ApplyParameterDelta(byte[] jsonUtf8)
+        {
+            var current = host;
+            if (current == null) return NativeResult.NotReady;
+            return current.ApplyParameterDelta(jsonUtf8);
+        }
+
         public NativeResult FireGameSignal(string name)
         {
             if (scriptActionDepth != 0)

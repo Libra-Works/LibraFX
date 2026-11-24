@@ -1,4 +1,5 @@
 #include "LbInteropInternal.h"
+#include "liberafx/host/LbPackagePreviewContract.h"
 #include "liberafx/host/LbProjectNodes.h"
 
 using namespace liberafx::interop_detail;
@@ -700,5 +701,33 @@ LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_copy_root_payload(
     if (!payload.empty())
       std::memcpy(destination, payload.data(), payload.size());
     return LIBRA_OK;
+  });
+}
+
+LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_set_node_parameter(
+    LibraSpawnableHostHandle host, const uint8_t containerId[16],
+    const uint8_t nodeId[16], uint32_t inputSlot, uint32_t component,
+    uint8_t isInt32, int32_t intValue, double floatValue) {
+  return guardedSpawnable(host, [&]() -> LibraResult {
+    auto native = findSpawnableHost(host);
+    if (!native)
+      return LIBRA_INVALID_HANDLE;
+    return toLibraResult(native->setNodeParameter(
+        containerId, nodeId, inputSlot, component, isInt32 != 0, intValue,
+        floatValue));
+  });
+}
+
+LibraResult LIBRA_INTEROP_CALL libra_spawnable_host_apply_parameter_delta(
+    LibraSpawnableHostHandle host, const char *jsonUtf8, uint64_t length) {
+  if (!jsonUtf8 || length == 0 ||
+      length > std::numeric_limits<std::size_t>::max())
+    return LIBRA_INVALID_ARGUMENT;
+  return guardedSpawnable(host, [&]() -> LibraResult {
+    auto native = findSpawnableHost(host);
+    if (!native)
+      return LIBRA_INVALID_HANDLE;
+    return toLibraResult(liberafx::host::applyParameterDeltaJson(
+        *native, jsonUtf8, static_cast<std::size_t>(length)));
   });
 }

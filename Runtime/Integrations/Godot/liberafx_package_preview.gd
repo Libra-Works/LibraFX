@@ -89,7 +89,7 @@ func consume(bytes: PackedByteArray) -> Dictionary:
 	var rate := bytes.decode_double(32)
 	var flags := bytes.decode_u32(40)
 	var length := bytes.decode_u32(44)
-	if kind < 1 or kind > 4 or sequence < 0 or base < 0 or length != bytes.size() - HEADER_BYTES \
+	if kind < 1 or kind > 5 or sequence < 0 or base < 0 or length != bytes.size() - HEADER_BYTES \
 			or not is_finite(time) or time < 0 \
 			or not is_finite(rate) or rate < 0 or (flags & ~3) != 0:
 		return _fail("Invalid or unsupported preview frame.")
@@ -129,6 +129,13 @@ func consume(bytes: PackedByteArray) -> Dictionary:
 		return _consume_signals(bytes.slice(HEADER_BYTES))
 	if sequence < _sequence:
 		return {"result": 0, "resync": false}
+	if kind == 5:
+		if not _has_program or not _owns_player():
+			return {"result": 0, "resync": true}
+		if int(_player.call("apply_parameter_delta", bytes.slice(HEADER_BYTES))) != 0:
+			return {"result": 0, "resync": true}
+		_sequence = sequence
+		return {"result": 0, "resync": false, "sequence": sequence}
 	if kind == 2 and (not _has_program or base != _sequence or sequence == _sequence):
 		return {"result": 0, "resync": true}
 	if kind == 3:

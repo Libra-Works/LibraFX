@@ -111,7 +111,7 @@ bool LibraValidateFluidScope(const std::vector<std::uint8_t>& snapshotBytes,
     if (!FJsonSerializer::Deserialize(manifestReader, manifest) || !manifest)
         return reject(TEXT("GPU executable manifest JSON is invalid"));
     auto version = double{};
-    if (!manifest->TryGetNumberField(TEXT("version"), version) || (version != 1 && version != 2 && version != 3))
+    if (!manifest->TryGetNumberField(TEXT("version"), version) || (version != 1 && version != 2 && version != 3 && version != 4))
         return reject(TEXT("GPU executable manifest has an unsupported version"));
     TArray<TSharedPtr<FJsonValue>> snapshots;
     if (!snapshotBytes.empty())
@@ -188,7 +188,7 @@ bool LibraValidateFluidScope(const std::vector<std::uint8_t>& snapshotBytes,
             if (!markedFluids.Contains(guid))
                 return reject(TEXT("snapshot gpuState.fluid2D markers do not match Fluid2D manifest entries"));
     }
-    if (expectedFluids.IsEmpty())
+    if (version < 4 && expectedFluids.IsEmpty())
         return reject(TEXT("version-2 manifest contains no Fluid2D programs"));
     if (programs->Num() != expectedParticles.Num() || fluids->Num() != expectedFluids.Num())
     {

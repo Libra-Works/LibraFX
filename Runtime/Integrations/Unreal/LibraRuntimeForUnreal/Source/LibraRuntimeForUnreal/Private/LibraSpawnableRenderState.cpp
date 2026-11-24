@@ -26,6 +26,9 @@
 #include "Math/RotationMatrix.h"
 #include "Misc/PackageName.h"
 #include "RHI.h"
+#if WITH_EDITOR
+#include "LevelEditorViewport.h"
+#endif
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -188,7 +191,6 @@ bool ReadFluidProgram(const TSharedPtr<FJsonObject>& object, FFluidProgram& prog
     if (!object->TryGetStringField(TEXT("nodeId"), nodeId) || !FGuid::Parse(nodeId, parsedNodeId) ||
         !parsedNodeId.IsValid() || !object->TryGetObjectField(TEXT("settings"), settings) ||
         !object->TryGetObjectField(TEXT("renderer"), renderer) || !renderer->IsValid() ||
-        renderer->Get()->Values.Num() != 2 ||
         !renderer->Get()->TryGetStringField(TEXT("material"), material) ||
         !LibraFluidMaterialMatches(*settings, material) ||
         !renderer->Get()->TryGetNumberField(TEXT("sizeScale"), sizeScale) ||
@@ -1063,7 +1065,7 @@ struct FLibraSpawnableRenderState::FImpl
                     if (!markedFluids.Contains(guid))
                         return Fail(TEXT("gpuState.fluid2D markers do not match FluidPrograms entries."));
             }
-            if (expectedFluids.IsEmpty() || fluids->Num() != expectedFluids.Num() ||
+            if ((version < 4 && expectedFluids.IsEmpty()) || fluids->Num() != expectedFluids.Num() ||
                 programs->Num() != expectedParticles.Num())
                 return Fail(TEXT("Version=2 fluid manifest does not match its GPU container snapshots."));
         }
@@ -1679,7 +1681,8 @@ struct FLibraSpawnableRenderState::FImpl
                 }
                 const auto transform = FTransform(Owner.EffectToHostMatrix() * root->GetComponentTransform().ToMatrixWithScale());
                 auto* overrideCamera = Owner.EffectCameraOverride.Get();
-                auto* controller = Owner.GetWorld() ? Owner.GetWorld()->GetFirstPlayerController() : nullptr;
+                auto* world = Owner.GetWorld();
+                auto* controller = world ? world->GetFirstPlayerController() : nullptr;
                 auto* camera = controller ? controller->PlayerCameraManager.Get() : nullptr;
                 if (IsValid(overrideCamera))
                 {
@@ -1689,6 +1692,13 @@ struct FLibraSpawnableRenderState::FImpl
                 {
                     cameraPosition = camera->GetCameraLocation();
                 }
+#if WITH_EDITOR
+                else if (GCurrentLevelEditingViewportClient &&
+                    (!world || world->WorldType == EWorldType::Editor || world->WorldType == EWorldType::EditorPreview))
+                {
+                    cameraPosition = GCurrentLevelEditingViewportClient->GetViewLocation();
+                }
+#endif
                 else if (instance->Definition->FlexiblePlanes[planeIndex].Definition.native.options.facing == 1)
                 {
                     return Fail(TEXT("Flexible Plane rendering requires a current effect or player camera."));
@@ -1909,15 +1919,26 @@ struct FLibraSpawnableRenderState::FImpl
                 auto* controller = world ? world->GetFirstPlayerController() : nullptr;
                 auto* camera = controller ? controller->PlayerCameraManager.Get() : nullptr;
                 auto* overrideCamera = Owner.EffectCameraOverride.Get();
-                if (particleCount != 0 && !IsValid(overrideCamera) && !IsValid(camera))
+                auto hasEditorViewport = false;
+                auto editorViewQuat = FQuat::Identity;
+#if WITH_EDITOR
+                if (!IsValid(overrideCamera) && !IsValid(camera) && GCurrentLevelEditingViewportClient &&
+                    (!world || world->WorldType == EWorldType::Editor || world->WorldType == EWorldType::EditorPreview))
+                {
+                    hasEditorViewport = true;
+                    editorViewQuat = GCurrentLevelEditingViewportClient->GetViewRotation().Quaternion();
+                }
+#endif
+                if (particleCount != 0 && !IsValid(overrideCamera) && !IsValid(camera) && !hasEditorViewport)
                 {
                     return Fail(TEXT("CPU particle billboard rendering requires a player camera."));
                 }
                 auto rotation = FQuat::Identity;
-                if (IsValid(overrideCamera) || IsValid(camera))
+                if (IsValid(overrideCamera) || IsValid(camera) || hasEditorViewport)
                 {
                     const auto view = IsValid(overrideCamera) ? overrideCamera->GetComponentQuat()
-                        : camera->GetCameraRotation().Quaternion();
+                        : IsValid(camera) ? camera->GetCameraRotation().Quaternion()
+                        : editorViewQuat;
                     rotation = FRotationMatrix::MakeFromXY(view.GetRightVector(), view.GetUpVector()).ToQuat();
                 }
                 const auto ownerTransform = root->GetComponentTransform();

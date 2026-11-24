@@ -91,6 +91,9 @@ public:
     CoordinateBasis coordinateBasis() const noexcept;
     Result setGameSpatialProperty(const char* name, SpatialValueKind kind, const double* values, std::size_t width);
     Result setHostQuality(const HostQualitySnapshot& snapshot);
+    Result setNodeParameter(const std::uint8_t containerId[16], const std::uint8_t nodeId[16],
+                            std::uint32_t inputSlot, std::uint32_t component,
+                            bool isInt32, std::int32_t intValue, double floatValue);
     Result requestNaturalEnd();
     Result stop();
     // Notification only: nodeId is an explicit user-authored signal entry.

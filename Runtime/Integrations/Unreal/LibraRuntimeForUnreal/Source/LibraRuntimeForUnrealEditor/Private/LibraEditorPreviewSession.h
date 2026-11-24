@@ -20,7 +20,9 @@ class FLibraEditorGpuPreview;
 class FLibraProceduralPreview;
 class FLibraEditorDebugDraw;
 class UMaterialInstanceDynamic;
+class UCameraComponent;
 class ULibraEffectComponent;
+class ULibraSpawnableComponent;
 class ULibraEditorConnectionComponent;
 class UStaticMeshComponent;
 
@@ -126,6 +128,8 @@ private:
     TStrongObjectPtr<UWorld> world;
     TStrongObjectPtr<AActor> previewActor;
     TStrongObjectPtr<ULibraEffectComponent> effect;
+    TStrongObjectPtr<ULibraSpawnableComponent> spawnable;
+    TStrongObjectPtr<UCameraComponent> previewCamera;
     TStrongObjectPtr<ULibraEditorConnectionComponent> connection;
     TUniquePtr<FLibraEditorGpuPreview> gpuPreview;
     TUniquePtr<FLibraEditorDebugDraw> debugDraw;
@@ -153,6 +157,7 @@ private:
     bool bPreviewRequested = false;
     bool bTransportRequested = false;
     bool bAutoConnect = false;
+    double previewUnitsPerMetre = 100.0;
     int32 previousPreviewProfileIndex = INDEX_NONE;
     FString previousPreviewProfileName;
 };

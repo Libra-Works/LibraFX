@@ -1,6 +1,7 @@
 #include "liberafx/host/LbProgramSession.h"
 #include "liberafx/host/LbProjectNodes.h"
 #include "liberafx/LbLivePreview.h"
+#include "liberafx/host/LbPackagePreviewContract.h"
 #include "liberafx/LbCpuParticles.h"
 #include "liberafx/LbSpawnableHost.h"
 #include "liberafx/LbEffectWorld.h"
@@ -854,6 +855,41 @@ public:
         return code(playback_->packageHost->dispatchSignal(id.data()));
     }
 
+    int set_node_parameter(const String& containerId, const String& nodeId,
+        int inputSlot, int component, bool isInt32, int intValue, double floatValue)
+    {
+        if (!Thread::is_main_thread() || !playback_ || !playback_->packageHost) {
+            return code(Result::NotReady);
+        }
+        auto cid = std::array<std::uint8_t, 16>{};
+        if (!containerId.is_empty() && !parse_node_id(containerId, cid)) {
+            return code(Result::InvalidArgument);
+        }
+        auto nid = std::array<std::uint8_t, 16>{};
+        if (!parse_node_id(nodeId, nid)) {
+            return code(Result::InvalidArgument);
+        }
+        if (inputSlot < 0 || component < 0) {
+            return code(Result::InvalidArgument);
+        }
+        return code(playback_->packageHost->setNodeParameter(
+            cid.data(), nid.data(), static_cast<std::uint32_t>(inputSlot),
+            static_cast<std::uint32_t>(component), isInt32, intValue, floatValue));
+    }
+
+    int apply_parameter_delta(const PackedByteArray& jsonUtf8)
+    {
+        if (!Thread::is_main_thread() || !playback_ || !playback_->packageHost) {
+            return code(Result::NotReady);
+        }
+        if (jsonUtf8.is_empty()) {
+            return code(Result::InvalidArgument);
+        }
+        return code(liberafx::host::applyParameterDeltaJson(
+            *playback_->packageHost, reinterpret_cast<const char*>(jsonUtf8.ptr()),
+            static_cast<std::size_t>(jsonUtf8.size())));
+    }
+
     int set_owner_matrix(const PackedFloat64Array& values)
     {
         if (!Thread::is_main_thread() || !playback_ || !playback_->packageHost) {
@@ -1068,6 +1104,8 @@ protected:
         godot::ClassDB::bind_method(godot::D_METHOD("unbind_script_action", "signal_name"),
             &LibraEffectPlayer::unbind_script_action);
         godot::ClassDB::bind_method(godot::D_METHOD("dispatch_signal", "node_id"), &LibraEffectPlayer::dispatch_signal);
+        godot::ClassDB::bind_method(godot::D_METHOD("set_node_parameter", "container_id", "node_id", "input_slot", "component", "is_int32", "int_value", "float_value"), &LibraEffectPlayer::set_node_parameter);
+        godot::ClassDB::bind_method(godot::D_METHOD("apply_parameter_delta", "json_utf8"), &LibraEffectPlayer::apply_parameter_delta);
         godot::ClassDB::bind_method(godot::D_METHOD("set_owner_matrix", "values"), &LibraEffectPlayer::set_owner_matrix);
         godot::ClassDB::bind_method(godot::D_METHOD("set_preview_offset", "values"), &LibraEffectPlayer::set_preview_offset);
         godot::ClassDB::bind_method(godot::D_METHOD("set_time_scale", "ratio"), &LibraEffectPlayer::set_time_scale);

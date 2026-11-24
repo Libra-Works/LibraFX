@@ -8,6 +8,8 @@
 
 class ULibraEffectAsset;
 class ULibraEffectComponent;
+class ULibraSpawnableAsset;
+class ULibraSpawnableComponent;
 struct FLibraEditorConnectionState;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnLibraPreviewUpdated,
@@ -24,6 +26,9 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Editor")
     TObjectPtr<ULibraEffectComponent> Target;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Editor")
+    TObjectPtr<ULibraSpawnableComponent> SpawnableTarget;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Editor")
     FString Host = TEXT("127.0.0.1");
@@ -101,4 +106,7 @@ private:
 
     UPROPERTY(Transient)
     TObjectPtr<ULibraEffectAsset> OriginalEffect;
+
+    UPROPERTY(Transient)
+    TObjectPtr<ULibraSpawnableAsset> PreviewSpawnablePackage;
 };

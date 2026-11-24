@@ -162,6 +162,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult SetTimeScale(double ratio);
 
+    ELibraRuntimeResult SetNodeParameter(const FGuid& containerId, const FGuid& nodeId,
+        uint32 inputSlot, uint32 component, bool isInt32, int32 intValue, float floatValue);
+
     UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime")
     bool bIsPlaying = false;
 

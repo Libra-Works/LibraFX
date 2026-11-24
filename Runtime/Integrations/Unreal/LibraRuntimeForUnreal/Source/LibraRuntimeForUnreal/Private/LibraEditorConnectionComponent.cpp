@@ -4,7 +4,10 @@
 #include "LibraEditorTransport.h"
 #include "LibraEffectAsset.h"
 #include "LibraEffectComponent.h"
+#include "LibraSpawnableAsset.h"
+#include "LibraSpawnableComponent.h"
 #include "liberafx/LbLivePreview.h"
+#include "liberafx/host/LbPackagePreviewContract.h"
 #include "Dom/JsonObject.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 #include "Serialization/JsonReader.h"
@@ -19,6 +22,7 @@ struct FLibraEditorConnectionState final
 {
     FLibraEditorTransport transport;
     liberafx::livepreview::SequenceCursor sequence;
+    liberafx::host::PreviewClockState previewClock;
     TWeakObjectPtr<ULibraEffectComponent> target;
     double pendingTime = 0;
     bool pendingEvaluation = false;
@@ -249,9 +253,10 @@ auto ULibraEditorConnectionComponent::ConnectToEditor() -> bool
         return false;
     }
     if (!Target && GetOwner()) Target = GetOwner()->FindComponentByClass<ULibraEffectComponent>();
-    if (!Target || !Target->IsRegistered())
+    if (!SpawnableTarget && GetOwner()) SpawnableTarget = GetOwner()->FindComponentByClass<ULibraSpawnableComponent>();
+    if ((!Target || !Target->IsRegistered()) && (!SpawnableTarget || !SpawnableTarget->IsRegistered()))
     {
-        Status = TEXT("A registered Libra Effect component is required.");
+        Status = TEXT("A registered Libra Effect or Spawnable component is required.");
         return false;
     }
     auto candidate = MakeShared<FLibraEditorConnectionState, ESPMode::NotThreadSafe>();
@@ -260,11 +265,12 @@ auto ULibraEditorConnectionComponent::ConnectToEditor() -> bool
     settings.Port = static_cast<uint16>(Port);
     settings.AccessToken = AccessToken;
     settings.CertificateFingerprint = CertificateFingerprint;
+    settings.PackagePreview = (SpawnableTarget && SpawnableTarget->IsRegistered());
     if (!candidate->transport.Start(settings, Status)) return false;
     candidate->target = Target;
-    candidate->originalRecording = Target->bRecordProfiling;
-    candidate->originalNodes = Target->bProfileNodes;
-    candidate->originalAccessors = Target->bProfileAccessors;
+    candidate->originalRecording = Target ? Target->bRecordProfiling : false;
+    candidate->originalNodes = Target ? Target->bProfileNodes : false;
+    candidate->originalAccessors = Target ? Target->bProfileAccessors : false;
     auto hello = MakeShared<FJsonObject>();
     hello->SetStringField(TEXT("type"), TEXT("hello"));
     hello->SetStringField(TEXT("engine"), TEXT("Unreal"));
@@ -274,6 +280,8 @@ auto ULibraEditorConnectionComponent::ConnectToEditor() -> bool
     for (const auto& capability : {TEXT("profiling"), TEXT("values"), TEXT("assets"), TEXT("rendering"),
         TEXT("thumbnails"), TEXT("resourceIdentity")})
         capabilities.Add(MakeShared<FJsonValueString>(capability));
+    if (SpawnableTarget && SpawnableTarget->IsRegistered())
+        capabilities.Add(MakeShared<FJsonValueString>(TEXT("unrealPackagePreview")));
 #if WITH_EDITOR
     if (EditorGpuConfigHandler) capabilities.Add(MakeShared<FJsonValueString>(TEXT("gpuParticles")));
 #endif
@@ -301,9 +309,10 @@ auto ULibraEditorConnectionComponent::ConnectToEditor() -> bool
         Status = TEXT("The preview transport could not queue its viewer hello.");
         return false;
     }
-    OriginalEffect = Target->Effect;
+    OriginalEffect = Target ? Target->Effect : nullptr;
     State = MoveTemp(candidate);
-    AddTickPrerequisiteComponent(Target);
+    if (Target) AddTickPrerequisiteComponent(Target);
+    if (SpawnableTarget) AddTickPrerequisiteComponent(SpawnableTarget);
     LastResult = ELibraRuntimeResult::NotReady;
     LastAppliedSequence = 0;
     Status = TEXT("Connecting to the editor using certificate-pinned TLS.");
@@ -319,6 +328,15 @@ void ULibraEditorConnectionComponent::CloseConnection(bool restoreEffect)
     {
         if (EditorGpuResetHandler) EditorGpuResetHandler();
         if (auto target = previous->target.Get()) RemoveTickPrerequisiteComponent(target);
+        if (SpawnableTarget)
+        {
+            RemoveTickPrerequisiteComponent(SpawnableTarget);
+            if (PreviewSpawnablePackage && SpawnableTarget->Package == PreviewSpawnablePackage)
+            {
+                SpawnableTarget->Stop();
+                SpawnableTarget->Package = nullptr;
+            }
+        }
         previous->transport.Stop();
         if (restoreEffect)
             if (auto target = previous->target.Get(); target && PreviewEffect && target->Effect == PreviewEffect)
@@ -330,6 +348,7 @@ void ULibraEditorConnectionComponent::CloseConnection(bool restoreEffect)
     }
     PreviewEffect = nullptr;
     OriginalEffect = nullptr;
+    PreviewSpawnablePackage = nullptr;
     bIsConnected = false;
     bEditorPlaying = false;
     SetComponentTickEnabled(false);
@@ -390,6 +409,7 @@ auto ULibraEditorConnectionComponent::ApplyMessage(TConstArrayView<uint8> messag
         {
             state->pendingEvaluation = false;
             if (auto target = state->target.Get()) target->Stop();
+            if (SpawnableTarget) SpawnableTarget->Stop();
             if (EditorGpuResetHandler) EditorGpuResetHandler();
             return true;
         }
@@ -453,6 +473,43 @@ auto ULibraEditorConnectionComponent::ApplyMessage(TConstArrayView<uint8> messag
                 "\"errors\":[\"GPU preview requires an accepted root program and an editor GPU adapter.\"]}"));
 #endif
         }
+        else if (type == TEXT("parameter_delta"))
+        {
+            if (SpawnableTarget)
+            {
+                struct FDeltaOnlyAdapter final : public liberafx::host::IPackagePreviewAdapter
+                {
+                    ULibraSpawnableComponent& Target;
+                    explicit FDeltaOnlyAdapter(ULibraSpawnableComponent& InTarget) : Target(InTarget) {}
+                    auto loadPackage(const std::uint8_t*, std::size_t, bool, double) -> liberafx::Result override { return liberafx::Result::UnsupportedBinary; }
+                    auto setPlayback(bool, double) -> liberafx::Result override { return liberafx::Result::UnsupportedBinary; }
+                    auto applyParameterDelta(const liberafx::host::ParameterDeltaUpdate* updates, std::size_t updateCount) -> liberafx::Result override
+                    {
+                        auto toGuid = [](const std::array<std::uint8_t, 16>& id)
+                        {
+                            auto read32 = [&](int offset)
+                            {
+                                return (static_cast<uint32>(id[offset]) << 24) |
+                                       (static_cast<uint32>(id[offset + 1]) << 16) |
+                                       (static_cast<uint32>(id[offset + 2]) << 8) |
+                                       static_cast<uint32>(id[offset + 3]);
+                            };
+                            return FGuid(read32(0), read32(4), read32(8), read32(12));
+                        };
+                        for (std::size_t i = 0; i < updateCount; ++i)
+                        {
+                            const auto& u = updates[i];
+                            Target.SetNodeParameter(toGuid(u.containerId), toGuid(u.nodeId),
+                                u.inputSlot, u.component, u.isInt32, u.intValue, u.floatValue);
+                        }
+                        return liberafx::Result::Ok;
+                    }
+                    void resetPreview() override { Target.Stop(); }
+                    auto hasBuiltinSpriteMaterials() const -> bool override { return true; }
+                } adapter(*SpawnableTarget);
+                liberafx::host::dispatchPackagePreviewFrame(frame, adapter);
+            }
+        }
         else if (type == TEXT("reconnect"))
         {
             auto requestId = FString{};
@@ -499,6 +556,73 @@ auto ULibraEditorConnectionComponent::ApplyMessage(TConstArrayView<uint8> messag
         Status = TEXT("Editor compilation failed: ") + state->diagnostic;
         LastResult = ELibraRuntimeResult::UnsupportedBinary;
         OnPreviewUpdated.Broadcast(LastResult, static_cast<int64>(FMath::Min(frame.sequence, static_cast<uint64>(MAX_int64))));
+        return true;
+    }
+    if (frame.kind == wire::Kind::Program && SpawnableTarget && SpawnableTarget->IsRegistered() &&
+        frame.payloadLength >= 4 && FMemory::Memcmp(frame.payload, "LFXP", 4) == 0)
+    {
+        auto candidate = NewObject<ULibraSpawnableAsset>(this);
+        auto result = candidate->SetPackageBytes(TConstArrayView<uint8>(frame.payload, static_cast<int32>(frame.payloadLength)));
+        if (result == ELibraRuntimeResult::Ok)
+        {
+            SpawnableTarget->Stop();
+            SpawnableTarget->Package = candidate;
+            PreviewSpawnablePackage = candidate;
+            result = SpawnableTarget->Play(true);
+        }
+        if (result != ELibraRuntimeResult::Ok)
+        {
+            state->rejectedSnapshot = true;
+            state->awaitingSnapshot = false;
+            state->pendingEvaluation = false;
+            state->diagnostic = SpawnableTarget->LastError.IsEmpty()
+                ? TEXT("Runtime rejected the compiled spawnable package.")
+                : SpawnableTarget->LastError;
+            Status = state->diagnostic;
+            LastResult = result;
+            OnPreviewUpdated.Broadcast(result, static_cast<int64>(FMath::Min(frame.sequence, static_cast<uint64>(MAX_int64))));
+            return true;
+        }
+        if (auto target = state->target.Get()) target->Stop();
+        if (EditorGpuResetHandler) EditorGpuResetHandler();
+        PreviewEffect = nullptr;
+        state->programSequence = static_cast<int64>(FMath::Min(frame.sequence, static_cast<uint64>(MAX_int64)));
+        state->sceneProgramSequence = 0;
+        if (EditorSceneConfigHandler) EditorSceneConfigHandler(FString{}, state->programSequence);
+        state->profileSnapshot.Reset();
+        state->profilePending = false;
+        state->profileSnapshotId = 0;
+        state->nextFeedback = 0;
+        state->rejectedSnapshot = false;
+        state->awaitingSnapshot = false;
+        state->sequence.commit(frame);
+        state->previewClock = {};
+        state->diagnostic.Reset();
+        state->pendingTime = frame.timeSeconds;
+        state->pendingEvaluation = true;
+        bEditorPlaying = (frame.flags & 1u) != 0;
+        SpawnableTarget->SetTimeScale(frame.playbackRate);
+        QueueEditorMessage(FString::Printf(TEXT("{\"type\":\"package_preview_ack\",\"programSequence\":%lld}"), state->programSequence));
+        LastAppliedSequence = state->programSequence;
+        LastResult = ELibraRuntimeResult::Ok;
+        OnPreviewProgramChanged.Broadcast(LastResult, LastAppliedSequence);
+        if (State != state) return true;
+        OnPreviewUpdated.Broadcast(LastResult, LastAppliedSequence);
+        return true;
+    }
+    if (frame.kind == wire::Kind::Playback && PreviewSpawnablePackage && SpawnableTarget && SpawnableTarget->IsRegistered())
+    {
+        if (state->rejectedSnapshot || state->awaitingSnapshot) return true;
+        state->sequence.commit(frame);
+        state->diagnostic.Reset();
+        state->pendingTime = frame.timeSeconds;
+        state->pendingEvaluation = true;
+        bEditorPlaying = (frame.flags & 1u) != 0;
+        if (bEditorPlaying && !SpawnableTarget->bIsPlaying) SpawnableTarget->Play(false);
+        SpawnableTarget->SetTimeScale(frame.playbackRate);
+        LastAppliedSequence = static_cast<int64>(FMath::Min(frame.sequence, static_cast<uint64>(MAX_int64)));
+        LastResult = ELibraRuntimeResult::Ok;
+        OnPreviewUpdated.Broadcast(LastResult, LastAppliedSequence);
         return true;
     }
     auto target = state->target.Get();
@@ -606,7 +730,33 @@ void ULibraEditorConnectionComponent::TickComponent(float deltaTime, ELevelTick 
             }
         }
     }
-    if (state->pendingEvaluation)
+    if (PreviewSpawnablePackage && SpawnableTarget && SpawnableTarget->IsRegistered())
+    {
+        if (state->pendingEvaluation)
+        {
+            bool needsRestart = false;
+            double stepDelta = 1.0 / 60.0;
+            int stepCount = 0;
+            liberafx::host::computePreviewTimeStep(
+                state->previewClock, state->pendingTime, SpawnableTarget->TimeSeconds, bEditorPlaying,
+                needsRestart, stepDelta, stepCount);
+            if (needsRestart)
+                SpawnableTarget->Play(true);
+            for (int step = 0; step < stepCount && SpawnableTarget->TimeSeconds + 1e-5 < state->pendingTime && !SpawnableTarget->bRootFinished; ++step)
+            {
+                if (!SpawnableTarget->bIsPlaying) SpawnableTarget->Play(false);
+                const float dt = static_cast<float>(FMath::Min(stepDelta, state->pendingTime - SpawnableTarget->TimeSeconds));
+                SpawnableTarget->TickComponent(dt, LEVELTICK_All, &SpawnableTarget->PrimaryComponentTick);
+            }
+            if (SpawnableTarget->TimeSeconds + 1e-5 >= state->pendingTime || SpawnableTarget->bRootFinished || stepCount == 0)
+            {
+                state->pendingEvaluation = false;
+                if (!bEditorPlaying && SpawnableTarget->bIsPlaying)
+                    SpawnableTarget->Pause();
+            }
+        }
+    }
+    else if (state->pendingEvaluation)
     {
         auto target = state->target.Get();
         if (!target) { CloseConnection(false); return; }

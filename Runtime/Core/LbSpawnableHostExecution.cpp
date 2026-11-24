@@ -808,8 +808,27 @@ auto SpawnableHost::Impl::spawnRoute(const CapturedRoute &captured, double at)
     }
   }
   auto id = GeneratorInstanceId{};
-  return target->pool->spawnTagged(at, captures.data(), captures.size(),
-                                   captured.ownerTag, id);
+  auto spawnResult = target->pool->spawnTagged(at, captures.data(), captures.size(),
+                                               captured.ownerTag, id);
+  if (spawnResult != Result::Ok) return spawnResult;
+  if (!target->parameterOverrides.empty()) {
+    auto* overrides = &target->parameterOverrides;
+    auto applyResult = target->pool->withInstance(id, [](void* p, Instance& inst) noexcept -> Result {
+      const auto* list = static_cast<const std::vector<Impl::TemplateState::ParameterOverride>*>(p);
+      for (const auto& ov : *list) {
+        ParameterHandle handle{};
+        auto r = inst.bindParameter(ov.nodeId.data(), static_cast<std::uint8_t>(ov.inputSlot),
+                                    static_cast<std::uint8_t>(ov.component), handle);
+        if (r != Result::Ok) return r;
+        r = ov.isInt32 ? inst.setParameterInt32(handle, ov.intValue)
+                       : inst.setParameter(handle, ov.floatValue);
+        if (r != Result::Ok) return r;
+      }
+      return Result::Ok;
+    }, overrides);
+    if (applyResult != Result::Ok) return applyResult;
+  }
+  return Result::Ok;
 }
 
 auto SpawnableHost::Impl::dispatchOwnerSignal(std::uint64_t ownerTag,
