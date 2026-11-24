@@ -240,7 +240,9 @@ internal static class Converter
                     throw new InvalidDataException("The project has no registered resource identity document; register explicit IDs and project bindings in the editor or supply --resource-map.");
                 using var snapshotStream = File.OpenRead(export.Snapshot);
                 var probe = ResourceIdentitySnapshotProbe.Read(snapshotStream);
-                bytes = ResourceIdentityExport.CreateManifest(graph, map, export.Project, probe);
+                bytes = output.EndsWith(EffectBinary.FileExtension, StringComparison.OrdinalIgnoreCase)
+                    ? ResourceIdentityExport.CompileMappedBinary(graph, map, export.Project, probe)
+                    : ResourceIdentityExport.CreateManifest(graph, map, export.Project, probe);
             }
             else
             {

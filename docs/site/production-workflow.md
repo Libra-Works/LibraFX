@@ -36,18 +36,17 @@ The [installation reference](engine-integration.md) and
 
 | Operation | Unreal | Unity | Godot |
 | --- | --- | --- | --- |
-| Browse an engine asset catalog in Content | Supported (`/Game/`, `/Engine/`) | Supported (`Assets/`, `Packages/`) | Supported (`res://`, via `liberafx_live_preview.gd`) |
+| Browse an engine asset catalog in Content | Supported (`/Game/`, `/Engine/`) | Supported (`Assets/`, `Packages/`) | Supported (`res://`) |
 | Exact resource/property lookup through Resource Identity | Supported | Supported | Supported (`godot.res-path.v1`) |
-| Desktop live preview | Dedicated Unreal preview window | Opt-in isolated Unity preview window | Script connection to a dedicated player |
-| Create a playable effect for the game | Import `.lfxb` | Import `.lfxb` and assign engine bindings | Load `.lfxb` bytes and register resources |
+| Desktop live preview | Dedicated Unreal preview window | Unity preview window (with Paste Connection & preview on by default) | Godot EditorPlugin dock (or script connection) |
+| Create a playable effect for the game | Import `.lfxb` | Import `.lfxb` and assign engine bindings | Import `.lfxb` (`LibraFxPackage` / `LibraFxEffect`) |
 
-**Portable Resource Identity mapping is not yet a complete offline export
-pipeline.** It supports verified Unreal/Unity/Godot lookup and `.lfxrm` export, but normal
-**Export VFX...** and converter `.lfxb` export reject registered identity
-metadata. `.lfxrm` is a diagnostic mapping manifest, **not an importable effect**.
-Do not delete mappings to silence an export error. Use a deliberately maintained
-legacy-binding project for the currently supported offline package path.
-This limitation also applies to the Unity mapping steps below.
+**Mapped Resource Identity projects can now export directly to `.lfxb`.**
+Both **Export VFX...** in the GUI (with a connected Resource Identity editor) and
+`LiberaFx.Converter` (when outputting `.lfxb` with `--resource-export-project` and
+`--resource-snapshot`) resolve mappings into the compiled `.lfxb`, while `.lfxrm`
+remains available for diagnostic manifest inspection. Unresolved identities are still
+rejected rather than silently discarded.
 See the [identity specification](https://github.com/Libra-Works/LibraFX/blob/main/docs/resource-identity.txt).
 
 [Issue #71](https://github.com/Libra-Works/LibraFX/issues/71) tracks unifying

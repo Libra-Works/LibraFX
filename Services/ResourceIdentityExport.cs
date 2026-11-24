@@ -90,38 +90,18 @@ public static class ResourceIdentityExport
         return merged;
     }
 
+    public static byte[] CompileMappedBinary(GraphSnapshot graph, ResourceIdentityDocument document,
+        EngineProjectIdentity project, ResourceIdentitySnapshotProbe probe)
+    {
+        var (_, _, cleanedGraph, context) = PrepareContext(graph, document, project, probe);
+        return EffectBinary.Compile(cleanedGraph, context);
+    }
+
     public static byte[] CreateManifest(GraphSnapshot graph, ResourceIdentityDocument document,
         EngineProjectIdentity project, ResourceIdentitySnapshotProbe probe)
     {
-        if (project.Engine is not ("Unreal" or "Unity" or "Godot"))
-            throw new InvalidDataException("This render manifest currently supports Unreal and Unity only.");
-        if (probe.Project != project)
-            throw new InvalidDataException("Binding snapshot belongs to a different engine project.");
-        GraphValidator.ValidateDocument(graph);
-        var merged = MergeEmbedded(graph, document);
-        var debugKeys = ScopedNodes(graph).Where(item => PreviewDebugDraw.IsDebugNode(item.Value.Kind))
-            .Select(item => item.Key).ToHashSet();
-        if (merged.Uses.Count == 0 && debugKeys.Count == 0)
-            throw new InvalidDataException("No explicit resource uses were provided.");
-        graph = PreviewDebugDraw.Strip(graph);
-        merged = merged with
-        {
-            Uses = merged.Uses.Where(use => !debugKeys.Contains(
-                (ResourceIdentityScope.Key(use.InstancePath), use.NodeId))).ToArray(),
-            ParameterUses = merged.ParameterUses.Where(use => !debugKeys.Contains(
-                (ResourceIdentityScope.Key(use.InstancePath), use.NodeId))).ToArray()
-        };
-        var nodes = ScopedNodes(graph);
-        foreach (var use in merged.Uses)
-            if (!nodes.TryGetValue((ResourceIdentityScope.Key(use.InstancePath), use.NodeId), out var node) ||
-                !RenderProgramBindings.IsRenderNode(node.Kind))
-                throw new InvalidDataException($"Resource mapping refers to a missing or unsupported render node {use.NodeId}.");
-        foreach (var use in merged.ParameterUses)
-            if (!nodes.TryGetValue((ResourceIdentityScope.Key(use.InstancePath), use.NodeId), out var node) ||
-                !RenderProgramBindings.IsRenderNode(node.Kind))
-                throw new InvalidDataException($"Parameter mapping refers to a missing or unsupported render node {use.NodeId}.");
-        var resolver = new ResourceIdentityResolver(merged, project, probe);
-        var context = new ResourceIdentityRenderContext(resolver, requireMappings: true, graph: graph);
+        var (merged, resolver, cleanedGraph, context) = PrepareContext(graph, document, project, probe);
+        graph = cleanedGraph;
         byte[] bytecode;
         byte[] renderBytes;
         byte[]? spawnablePackage = null;
@@ -183,6 +163,43 @@ public static class ResourceIdentityExport
         }
         Visit(graph, Array.Empty<Guid>());
         return result;
+    }
+
+    private static (ResourceIdentityDocument Merged, ResourceIdentityResolver Resolver,
+        GraphSnapshot CleanedGraph, ResourceIdentityRenderContext Context) PrepareContext(
+        GraphSnapshot graph, ResourceIdentityDocument document,
+        EngineProjectIdentity project, ResourceIdentitySnapshotProbe probe)
+    {
+        if (project.Engine is not ("Unreal" or "Unity" or "Godot"))
+            throw new InvalidDataException("This render export supports Unreal, Unity, and Godot only.");
+        if (probe.Project != project)
+            throw new InvalidDataException("Binding snapshot belongs to a different engine project.");
+        GraphValidator.ValidateDocument(graph);
+        var merged = MergeEmbedded(graph, document);
+        var debugKeys = ScopedNodes(graph).Where(item => PreviewDebugDraw.IsDebugNode(item.Value.Kind))
+            .Select(item => item.Key).ToHashSet();
+        if (merged.Uses.Count == 0 && debugKeys.Count == 0)
+            throw new InvalidDataException("No explicit resource uses were provided.");
+        graph = PreviewDebugDraw.Strip(graph);
+        merged = merged with
+        {
+            Uses = merged.Uses.Where(use => !debugKeys.Contains(
+                (ResourceIdentityScope.Key(use.InstancePath), use.NodeId))).ToArray(),
+            ParameterUses = merged.ParameterUses.Where(use => !debugKeys.Contains(
+                (ResourceIdentityScope.Key(use.InstancePath), use.NodeId))).ToArray()
+        };
+        var nodes = ScopedNodes(graph);
+        foreach (var use in merged.Uses)
+            if (!nodes.TryGetValue((ResourceIdentityScope.Key(use.InstancePath), use.NodeId), out var node) ||
+                !RenderProgramBindings.IsRenderNode(node.Kind))
+                throw new InvalidDataException($"Resource mapping refers to a missing or unsupported render node {use.NodeId}.");
+        foreach (var use in merged.ParameterUses)
+            if (!nodes.TryGetValue((ResourceIdentityScope.Key(use.InstancePath), use.NodeId), out var node) ||
+                !RenderProgramBindings.IsRenderNode(node.Kind))
+                throw new InvalidDataException($"Parameter mapping refers to a missing or unsupported render node {use.NodeId}.");
+        var resolver = new ResourceIdentityResolver(merged, project, probe);
+        var context = new ResourceIdentityRenderContext(resolver, requireMappings: true, graph: graph);
+        return (merged, resolver, graph, context);
     }
 
     private static bool ContainsSpawnable(GraphSnapshot graph) => graph.Nodes.Any(node =>

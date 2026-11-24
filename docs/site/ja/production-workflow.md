@@ -36,17 +36,13 @@ LIBERA FX なしで再生 → 一括変換・ゲームビルド**の順に進め
 
 | 操作 | Unreal | Unity | Godot |
 | --- | --- | --- | --- |
-| 「コンテンツ」からエンジン資源を一覧検索 | 対応（`/Game/`・`/Engine/`） | 対応（`Assets/`・`Packages/`） | 対応（`res://`、`liberafx_live_preview.gd` 接続時） |
+| 「コンテンツ」からエンジン資源を一覧検索 | 対応（`/Game/`・`/Engine/`） | 対応（`Assets/`・`Packages/`） | 対応（`res://`） |
 | Resource Identity 経由の厳密な資源・プロパティ照会 | 対応 | 対応 | 対応（`godot.res-path.v1`） |
-| デスクトップからのプレビュー | Unreal 専用プレビュー画面 | 明示的に有効化する Unity 専用プレビュー画面 | スクリプトで専用 Player に接続 |
-| ゲーム内での通常再生 | `.lfxb` をインポート | `.lfxb` をインポートし Unity 資源を割り当て | `.lfxb` を読み込み資源を登録 |
+| デスクトップからのプレビュー | Unreal 専用プレビュー画面 | Unity 専用プレビュー画面（Paste Connection 対応） | Godot EditorPlugin ドック（またはスクリプト接続） |
+| ゲーム内での通常再生 | `.lfxb` をインポート | `.lfxb` をインポートし資源を割り当て | `.lfxb` をインポート（`LibraFxPackage` / `LibraFxEffect`） |
 
-**共通の Resource Identity 対応付けは、まだ通常配布まで一貫した出力経路ではありません。**
-Unreal／Unity／Godot の検証付き照会・`.lfxrm` 出力には使えますが、登録済み ID を持つ文書の
-通常の **Export VFX...**／コンバーター `.lfxb` 出力は、未解決 ID の破棄を防ぐため拒否します。
-`.lfxrm` は診断用マニフェストで、**エンジンへそのままインポートする再生アセットではありません**。
-エラーを消すために対応付けを削除せず、現行の通常配布には意図的に管理した
-従来キー方式のプロジェクトを使ってください。下記 Unity の ID 登録手順にもこの制限があります。
+**Resource Identity 対応付けの通常 `.lfxb` 出力にも対応しました。**
+GUI の **Export VFX...**（対応エンジン接続時）および Converter CLI（`--resource-export-project` と `--resource-snapshot` 指定時の `.lfxb` 出力）から、解決済みの `.lfxb` を直接書き出せます（`.lfxrm` 診断マニフェスト出力も引き続き利用可能です）。未接続・未解決 ID のままでは安全のため出力を拒否します。
 [資源 ID の仕様](https://github.com/Libra-Works/LibraFX/blob/main/docs/resource-identity.txt)に詳細があります。
 
 この工程差の解消と、ID 対応付けから通常配布までの完結は

@@ -34,18 +34,30 @@ namespace LiberaFx.Unity
         private readonly SemaphoreSlim sendGate = new SemaphoreSlim(1, 1);
         private bool connecting;
         private bool disposed;
-        private bool showLivePreview;
+        private bool showLivePreview = true;
         private int queuedPreviewBytes;
         private LiberaFxUnityWssPreview preview;
         internal GameObject PreviewObject => preview?.PreviewObject;
         internal string Status => status;
 
+        [Serializable]
+        private sealed class ManualConnectionInvitation
+        {
+            public string type;
+            public int version;
+            public string host;
+            public int port;
+            public string accessToken;
+            public string certificateFingerprint;
+        }
+
+        [MenuItem("Tools/LiberaFx/Preview/Connect to LIBERA FX")]
         [MenuItem("Tools/LiberaFx/Resources/Connect to LIBERA FX")]
         private static void Open()
         {
             var window = GetWindow<LiberaFxUnityResourceIdentityConnection>();
-            window.titleContent = new GUIContent("LIBERA FX Resource Identity");
-            window.minSize = new Vector2(460, 220);
+            window.titleContent = new GUIContent("LIBERA FX Preview");
+            window.minSize = new Vector2(460, 240);
             window.Show();
         }
 
@@ -63,7 +75,10 @@ namespace LiberaFx.Unity
             using (new EditorGUILayout.HorizontalScope())
             {
                 using (new EditorGUI.DisabledScope(socket != null || connecting))
+                {
+                    if (GUILayout.Button("Paste Connection")) PasteInvitation(EditorGUIUtility.systemCopyBuffer);
                     if (GUILayout.Button("Connect")) _ = ConnectAsync();
+                }
                 using (new EditorGUI.DisabledScope(socket == null))
                     if (GUILayout.Button("Disconnect")) Disconnect("Disconnected");
             }
@@ -76,6 +91,33 @@ namespace LiberaFx.Unity
             {
                 preview.Draw(GUILayoutUtility.GetRect(200, 240, GUILayout.ExpandWidth(true)));
             }
+        }
+
+        private void PasteInvitation(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                status = "Clipboard is empty. Copy manual connection information from LIBERA FX first.";
+                Repaint();
+                return;
+            }
+            ManualConnectionInvitation invitation = null;
+            try { invitation = JsonUtility.FromJson<ManualConnectionInvitation>(json.Trim()); }
+            catch (ArgumentException) { }
+            if (invitation == null || invitation.type != "librafx_preview_connection" ||
+                invitation.version != 1 || string.IsNullOrWhiteSpace(invitation.host) ||
+                invitation.port < 1 || invitation.port > 65535 ||
+                string.IsNullOrEmpty(invitation.accessToken) || string.IsNullOrEmpty(invitation.certificateFingerprint))
+            {
+                status = "Clipboard does not contain a valid LIBERA FX manual connection invitation.";
+                Repaint();
+                return;
+            }
+            endpoint = "wss://" + invitation.host + ":" + invitation.port.ToString(CultureInfo.InvariantCulture) + "/preview?protocol=3";
+            accessToken = invitation.accessToken;
+            certificateFingerprint = invitation.certificateFingerprint;
+            status = "Pasted connection invitation. Click Connect.";
+            Repaint();
         }
 
         private async Task ConnectAsync()

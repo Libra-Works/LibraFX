@@ -398,7 +398,32 @@ public partial class MainViewModel : ViewModelBase
         IStorageFile? file = null;
         try
         {
-            var bytes = EffectBinary.Compile(document.Workspace.CreateSnapshot());
+            var snapshot = document.Workspace.CreateSnapshot();
+            byte[] bytes;
+            if (PreviewResourceBindings.HasMappings(snapshot))
+            {
+                var identityPeers = PreviewTelemetry.Clients()
+                    .Where(peer => PreviewAssets.Supports(peer.ClientId, "resourceIdentity"))
+                    .ToArray();
+                if (identityPeers.Length == 1)
+                {
+                    var context = await PreviewResourceBindings.ResolveAsync(
+                        snapshot, PreviewAssets, identityPeers[0].ClientId, CancellationToken.None);
+                    bytes = EffectBinary.Compile(snapshot, context);
+                }
+                else if (identityPeers.Length > 1)
+                {
+                    throw new InvalidOperationException("Multiple Resource Identity editors are connected; keep one connected before exporting.");
+                }
+                else
+                {
+                    bytes = EffectBinary.Compile(snapshot);
+                }
+            }
+            else
+            {
+                bytes = EffectBinary.Compile(snapshot);
+            }
             file = await _storageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
                 Title = LocalizationService.Shared.Get("Messages.ExportBinaryTitle"),

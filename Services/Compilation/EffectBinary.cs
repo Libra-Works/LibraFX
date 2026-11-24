@@ -16,4 +16,10 @@ public static class EffectBinary
 
         return SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(graph));
     }
+
+    public static byte[] Compile(GraphSnapshot graph, ResourceIdentityRenderContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(graph, resourceContext: context));
+    }
 }
