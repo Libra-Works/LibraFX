@@ -9,6 +9,7 @@ Each release keeps its own page. Update the editor, converter and engine SDKs to
 
 | Version | Released | Changes |
 | --- | --- | --- |
+| [2026.11.138 Preview](releases/2026.11.138.md) | 2026-11-25 | `.lfxp`-only packages and live preview, parameter deltas, working reroutes and wire selection, breadcrumbs, Transform Parent input, and the MCP guide. |
 | [2026.11.128 Preview](releases/2026.11.128.md) | 2026-11-24 | GPU Particle F-Curve, Particle Material / ProceduralMaterial, NormalMap & UV checkerboard preview, collapsed nested-node resize, and Unreal/Godot native build fixes. |
 | [2026.11.123 Preview](releases/2026.11.123.md) | 2026-11-24 | Cascading right-click Add Node menus, Reroute wires, horizontal flow layout, F-Curve pan parity, Sphere Glow procedural group asset, and in-app update checker. |
 | [2026.11.99 Preview](releases/2026.11.99.md) | 2026-11-24 | Multi-platform Unity/Godot binaries, Content Window & Resource Identity parity, Pause/Resume & GPU additive blend. |
